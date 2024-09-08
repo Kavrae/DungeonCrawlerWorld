@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="utf-8"?>
+<PipelineBuildEvent xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:xsd="http://www.w3.org/2001/XMLSchema">
+  <SourceFile>C:/Users/crobe/source/repos/DungeonCrawlerWorld/DungeonCrawlerWorld/Content/defaultFont.spritefont</SourceFile>
+  <SourceTime>2022-07-26T06:44:10-05:00</SourceTime>
+  <DestFile>C:/Users/crobe/source/repos/DungeonCrawlerWorld/DungeonCrawlerWorld/Content/bin/DesktopGL/defaultFont.xnb</DestFile>
+  <DestTime>2024-08-04T19:28:38.6734858-05:00</DestTime>
+  <Importer>FontDescriptionImporter</Importer>
+  <ImporterTime>2022-07-26T06:44:56-05:00</ImporterTime>
+  <Processor>FontDescriptionProcessor</Processor>
+  <ProcessorTime>2022-07-26T06:44:56-05:00</ProcessorTime>
+  <Parameters>
+    <Key>PremultiplyAlpha</Key>
+    <Value>True</Value>
+  </Parameters>
+  <Parameters>
+    <Key>TextureFormat</Key>
+    <Value>Compressed</Value>
+  </Parameters>
+  <Dependencies />
+  <BuildAsset />
+  <BuildOutput />
+</PipelineBuildEvent>
