@@ -2,6 +2,7 @@
 
 namespace DungeonCrawlerWorld.Actions
 {
+    //TODO Unused. Sort out later.
     public class GameEvent
     {
         public int Priority { get; set; }

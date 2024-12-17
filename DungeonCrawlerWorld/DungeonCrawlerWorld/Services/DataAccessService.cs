@@ -4,21 +4,18 @@ namespace DungeonCrawlerWorld.Services
 {
     public interface IDataAccessService
     {
-        public DataAccess Connect();
+        public World RetrieveWorld();
     }
 
     public class DataAccessService : IDataAccessService
     {
-        private DataAccess _dataAccess;
+        private World _World;
 
-        public DataAccess Connect()
+        public World RetrieveWorld()
         {
-            if ( _dataAccess == null)
-            {
-                _dataAccess = new DataAccess();
-            }
+            _World ??= new World();
 
-            return _dataAccess;
+            return _World;
         }
     }
 }

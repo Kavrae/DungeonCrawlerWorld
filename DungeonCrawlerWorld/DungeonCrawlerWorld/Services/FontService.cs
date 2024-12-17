@@ -1,6 +1,7 @@
-﻿using Microsoft.Xna.Framework.Content;
+﻿using System.Collections.Generic;
+
+using Microsoft.Xna.Framework.Content;
 using Microsoft.Xna.Framework.Graphics;
-using System.Collections.Generic;
 
 namespace DungeonCrawlerWorld.Services
 {
@@ -11,19 +12,19 @@ namespace DungeonCrawlerWorld.Services
 
     public class FontService : IFontManager
     {
-        public ContentManager _contentManager;
+        public ContentManager contentManager;
 
-        private Dictionary<string, SpriteFont> _spriteFonts;
-        private readonly string _defaultFontName;
+        private Dictionary<string, SpriteFont> spriteFonts;
+        private readonly string defaultFontName;
 
         public FontService(ContentManager contentManager)
         {
-            _contentManager = contentManager;
+            this.contentManager = contentManager;
 
-            _defaultFontName = "defaultFont";
-            _spriteFonts = new Dictionary<string, SpriteFont>
+            defaultFontName = "defaultFont";
+            spriteFonts = new Dictionary<string, SpriteFont>
             {
-                { _defaultFontName, _contentManager.Load<SpriteFont>(_defaultFontName) }
+                { defaultFontName, this.contentManager.Load<SpriteFont>(defaultFontName) }
             };
         }
 
@@ -31,21 +32,21 @@ namespace DungeonCrawlerWorld.Services
         {
             SpriteFont font;
 
-            if ( _spriteFonts.ContainsKey(fontName))
+            if ( spriteFonts.ContainsKey(fontName))
             {
-                font = _spriteFonts[fontName];
+                font = spriteFonts[fontName];
             }
             else
             {
-                font = _contentManager.Load<SpriteFont>(fontName);
+                font = contentManager.Load<SpriteFont>(fontName);
 
                 if (font != null)
                 {
-                    _spriteFonts[fontName] = font;
+                    spriteFonts[fontName] = font;
                 }
                 else
                 {
-                    font = _spriteFonts[_defaultFontName];
+                    font = spriteFonts[defaultFontName];
                 }
             }
 

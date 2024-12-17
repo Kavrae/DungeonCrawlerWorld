@@ -11,7 +11,7 @@ namespace DungeonCrawlerWorld.Services
     public class SpriteBatchService : ISpriteManager
     {
         private GraphicsDevice _graphicsDevice;
-        private SpriteBatch _spriteBatch;
+        private SpriteBatch spriteBatch;
 
         public SpriteBatchService(GraphicsDevice graphicsDevice)
         {
@@ -20,15 +20,20 @@ namespace DungeonCrawlerWorld.Services
 
         public SpriteBatch StartSpriteBatch()
         {
-            _spriteBatch = new SpriteBatch(_graphicsDevice);
-            _spriteBatch.Begin();
-            return _spriteBatch;
+            spriteBatch = new SpriteBatch(_graphicsDevice);
+            spriteBatch.Begin();
+            return spriteBatch;
+        }
+
+        public SpriteBatch GetSpriteBatch()
+        {
+            return spriteBatch;
         }
 
         public void EndSpriteBatch()
         {
-            _spriteBatch.End();
-            _spriteBatch.Dispose();
+            spriteBatch.End();
+            spriteBatch.Dispose();
         }
     }
 }

@@ -24,3 +24,7 @@ C:\Users\crobe\source\repos\DungeonCrawlerWorld\DungeonCrawlerWorld\obj\Debug\ne
 C:\Users\crobe\source\repos\DungeonCrawlerWorld\DungeonCrawlerWorld\obj\Debug\net6.0\DungeonCrawlerWorld.pdb
 C:\Users\crobe\source\repos\DungeonCrawlerWorld\DungeonCrawlerWorld\obj\Debug\net6.0\DungeonCrawlerWorld.genruntimeconfig.cache
 C:\Users\crobe\source\repos\DungeonCrawlerWorld\DungeonCrawlerWorld\obj\Debug\net6.0\ref\DungeonCrawlerWorld.dll
+C:\Users\crobe\source\repos\DungeonCrawlerWorld\DungeonCrawlerWorld\obj\Debug\net6.0\DungeonCrawlerWorld.sourcelink.json
+C:\Users\crobe\source\repos\DungeonCrawlerWorld\DungeonCrawlerWorld\bin\Debug\net6.0\Content\DefaultHugeFont.xnb
+C:\Users\crobe\source\repos\DungeonCrawlerWorld\DungeonCrawlerWorld\bin\Debug\net6.0\Content\DefaultLargeFont.xnb
+C:\Users\crobe\source\repos\DungeonCrawlerWorld\DungeonCrawlerWorld\bin\Debug\net6.0\Content\DefaultMediumFont.xnb
