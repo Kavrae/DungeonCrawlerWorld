@@ -15,14 +15,10 @@ namespace DungeonCrawlerWorld.ComponentSystems
     /// Movable System
     /// Responsible for selecting the next MapNode to move to and then moving towards that node based upon the set movement type
     /// </summary>
-    /// <dependencies>
-    /// Actionable, Transform
-    /// </dependencies>
-    /// <todo>
-    /// Figure out targeted movement
-    /// </todo>
     public class MovementSystem : ComponentSystem
     {
+        public byte FramesPerUpdate => 15;
+
         private World world;
 
         private Random randomizer;
@@ -43,7 +39,6 @@ namespace DungeonCrawlerWorld.ComponentSystems
 
                 if (movementComponent.FramesToWait == 0)
                 {
-                    //TODO transform component is breaking it??
                     if (ComponentRepo.ActionEnergyComponents.TryGetValue(keyComponent.Key, out EnergyComponent actionEnergyComponent)
                         && actionEnergyComponent.CurrentEnergy >= movementComponent.EnergyToMove
                         && ComponentRepo.TransformComponents.TryGetValue(keyComponent.Key, out TransformComponent transformComponent))

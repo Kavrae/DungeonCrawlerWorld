@@ -10,6 +10,8 @@ namespace DungeonCrawlerWorld.ComponentSystems
     /// </summary>
     public class EnergyRechargeSystem : ComponentSystem
     {
+        public byte FramesPerUpdate => 10;
+
         public EnergyRechargeSystem() { }
 
         public void Update(GameTime gameTime)

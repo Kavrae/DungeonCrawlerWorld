@@ -14,7 +14,7 @@ namespace DungeonCrawlerWorld.GameManagers.MapBuilderManager
     //TODO refactor this manager to start using the EntityFactoryManager for terrain too.
     public class MapBuilderManager : IGameManager
     {
-        public bool CanUpdateWhilePaused { get { return false; } }
+        public bool CanUpdateWhilePaused => false;
 
         private Random randomizer;
         private World world;
@@ -75,7 +75,7 @@ namespace DungeonCrawlerWorld.GameManagers.MapBuilderManager
                             var crawler = new Crawler();
                             var crawlerTransform = new TransformComponent(crawler.EntityId, new Vector3Int(column, row, (int)MapHeight.Standing), new Vector3Int(1, 1, 1));
                             _ = new MovementComponent(crawler.EntityId, MovementMode.Random, 20);
-                            _ = new EnergyComponent(crawler.EntityId, (short)randomizer.Next(0, 100), 1, 100);
+                            _ = new EnergyComponent(crawler.EntityId, (short)randomizer.Next(0, 100), 10, 100);
                             world.MoveEntity(crawler.EntityId, crawlerTransform.Position);
                         }
                         if ((row - 5) % 5 == 0 && (column - 1) % 5 == 0) //40,000 Goblins
@@ -83,7 +83,7 @@ namespace DungeonCrawlerWorld.GameManagers.MapBuilderManager
                             var goblin = new Goblin();
                             var goblinTransform = new TransformComponent(goblin.EntityId, new Vector3Int(column, row, (int)MapHeight.Standing), new Vector3Int(1, 1, 1));
                             _ = new MovementComponent(goblin.EntityId, MovementMode.Random, 20);
-                            _ = new EnergyComponent(goblin.EntityId, (short)randomizer.Next(0, 100), 2, 30);
+                            _ = new EnergyComponent(goblin.EntityId, (short)randomizer.Next(0, 100), 20, 30);
                             world.MoveEntity(goblin.EntityId, goblinTransform.Position);
                         }
                     }
@@ -93,7 +93,7 @@ namespace DungeonCrawlerWorld.GameManagers.MapBuilderManager
             //Large crawler test
             var largeCrawler = new Crawler();
             var largeCrawlerTransform = new TransformComponent(largeCrawler.EntityId, new Vector3Int(2, 2, (int)MapHeight.Standing), new Vector3Int(2, 2, 1));
-            _ = new EnergyComponent(largeCrawler.EntityId, 0, 1, 100);
+            _ = new EnergyComponent(largeCrawler.EntityId, 0, 10, 100);
             _ = new MovementComponent(largeCrawler.EntityId, MovementMode.Random, 40);
             _ = new DisplayTextComponent(largeCrawler.EntityId, "Large Crawler", "Should take up 2x2 tiles");
             _ = new GlyphComponent(largeCrawler.EntityId, "Q", Color.Red, new Point(0, 0));
@@ -102,7 +102,7 @@ namespace DungeonCrawlerWorld.GameManagers.MapBuilderManager
             //Huge crawler test
             var hugeCrawler = new Crawler();
             var hugeCrawlerTransform = new TransformComponent(hugeCrawler.EntityId, new Vector3Int(6, 6, (int)MapHeight.Standing), new Vector3Int(3, 3, 1));
-            _ = new EnergyComponent(hugeCrawler.EntityId, 50, 1, 100);
+            _ = new EnergyComponent(hugeCrawler.EntityId, 50, 10, 100);
             _ = new MovementComponent(hugeCrawler.EntityId, MovementMode.Random, 40);
             _ = new DisplayTextComponent(hugeCrawler.EntityId, "Huge Crawler", "Should take up 3x3 tiles" );
             world.MoveEntity(hugeCrawler.EntityId, hugeCrawlerTransform.Position);

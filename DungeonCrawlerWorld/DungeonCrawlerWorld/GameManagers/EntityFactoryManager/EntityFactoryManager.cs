@@ -2,18 +2,12 @@
 
 using DungeonCrawlerWorld.Data;
 using DungeonCrawlerWorld.Services;
-using DungeonCrawlerWorld.Components;
 
 namespace DungeonCrawlerWorld.GameManagers.EntityFactoryManager
 {
-    //TODO the factory needs to call into the EntityManager to register the entity and its components.
-    //  This class is purely for the logic to pseudo-randomly generate entities.
-    //  Allows for the Factory to be replaced without compromising the ability to register and save entities.
-    //  This requires direct references between components. Apply that reference in the GameLoop's RegisterComponents
-    //  Should still call data access to create the entity
     public class EntityFactoryManager : IGameManager
     {
-        public bool CanUpdateWhilePaused { get { return false; } }
+        public bool CanUpdateWhilePaused => false;
 
         private World _dataAccess;
 
@@ -43,7 +37,7 @@ namespace DungeonCrawlerWorld.GameManagers.EntityFactoryManager
         }
 
         /*
-        private Entity BuildEntityFromTemplate<T>(Point position, Size size, params Component[] components) where T : Entity, new()
+        private Entity BuildEntityFromTemplate<T>(Point position, Size size)
         {
             var entity = new T();
             foreach (var component in components)

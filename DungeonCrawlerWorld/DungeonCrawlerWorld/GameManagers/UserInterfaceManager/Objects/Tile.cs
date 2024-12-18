@@ -2,7 +2,7 @@
 
 using DungeonCrawlerWorld.Utilities;
 
-namespace DungeonCrawlerWorld.Data
+namespace DungeonCrawlerWorld.GameManagers.UserInterfaceManager
 {
     public struct Tile
     {

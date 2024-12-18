@@ -11,7 +11,7 @@ namespace DungeonCrawlerWorld.GameManagers.UserInterfaceManager
 {
     public class UserInterfaceManager : IGameManager
     {
-        public bool CanUpdateWhilePaused { get { return true; } }
+        public bool CanUpdateWhilePaused => true;
 
         private World world;
         private GraphicsDevice graphicsDevice;

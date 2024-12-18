@@ -13,10 +13,10 @@ namespace DungeonCrawlerWorld.GameManagers.EntityEventManager
 
     public class EntityEventManager : IGameManager
     {
+        public bool CanUpdateWhilePaused => false;
+
         private World _dataAccess;
         private Queue<GameEvent> gameEventQueue;
-
-        public bool CanUpdateWhilePaused { get { return false; } }
 
         public EntityEventManager()
         {

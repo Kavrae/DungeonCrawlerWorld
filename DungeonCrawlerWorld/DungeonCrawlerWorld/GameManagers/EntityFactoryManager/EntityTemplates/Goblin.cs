@@ -12,11 +12,9 @@ namespace DungeonCrawlerWorld.GameManagers.EntityFactoryManager
 
             _ = new GlyphComponent(EntityId, "g", Color.DarkGreen, new Point(3, -2));
 
-            _ = new EnergyComponent(EntityId, 0, 1, 100);
+            _ = new EnergyComponent(EntityId, 0, 10, 100);
 
             _ = new MovementComponent(EntityId, MovementMode.SeekTarget, 60);
-
-            _ = new CollisionComponent(EntityId, ColliderType.Standard); ;
         }
     }
 }

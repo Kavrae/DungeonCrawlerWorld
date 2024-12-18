@@ -11,8 +11,6 @@ namespace DungeonCrawlerWorld.GameManagers.EntityFactoryManager
             _ = new DisplayTextComponent(EntityId, "Wall (Default)", "Basic wall. Default implementation.");
 
             _ = new GlyphComponent(EntityId, "[][]", Color.DarkGray, new Point (0, -1));
-
-            _ = new CollisionComponent(EntityId, ColliderType.Impassable);
         }
     }
 }

@@ -5,5 +5,6 @@ namespace DungeonCrawlerWorld.ComponentSystems
     public interface ComponentSystem
     {
         public void Update(GameTime gameTime);
+        public byte FramesPerUpdate { get; }
     }
 }
