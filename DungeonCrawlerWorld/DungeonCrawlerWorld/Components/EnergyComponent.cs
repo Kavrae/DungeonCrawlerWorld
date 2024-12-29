@@ -1,4 +1,5 @@
 ﻿using System;
+using System.Text;
 
 namespace DungeonCrawlerWorld.Components
 {
@@ -17,13 +18,19 @@ namespace DungeonCrawlerWorld.Components
             EnergyRecharge = energyRecharge;
             MaximumEnergy = maximumEnergy;
 
-            ComponentRepo.ActionEnergyComponents.Remove(entityId);
-            ComponentRepo.ActionEnergyComponents.Add(entityId, this);
+            ComponentRepo.EnergyComponents.Remove(entityId);
+            ComponentRepo.EnergyComponents.Add(entityId, this);
         }
 
         public override string ToString()
         {
-            return $"Energy : {CurrentEnergy} / {MaximumEnergy}";
+            var manaOutOf20 = (int)(((float)CurrentEnergy / MaximumEnergy) * 20);
+            var manaBarBuilder = new StringBuilder();
+            manaBarBuilder.Append("Mana : [");
+            manaBarBuilder.Append('=', manaOutOf20);
+            manaBarBuilder.Append('_', 20 - manaOutOf20);
+            manaBarBuilder.Append(']');
+            return manaBarBuilder.ToString();
         }
     }
 }

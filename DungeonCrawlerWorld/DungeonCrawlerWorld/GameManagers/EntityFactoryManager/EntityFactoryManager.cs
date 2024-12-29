@@ -36,6 +36,9 @@ namespace DungeonCrawlerWorld.GameManagers.EntityFactoryManager
         {
         }
 
+        //TODO next point of upgrade here
+        //Is there a way to provide common "options" for an entity build?  EntityOptions class?
+        //Use the templates to start, then apply options. Can replace components individually as needed
         /*
         private Entity BuildEntityFromTemplate<T>(Point position, Size size)
         {

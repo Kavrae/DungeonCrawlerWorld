@@ -50,7 +50,7 @@ namespace DungeonCrawlerWorld.GameManagers.UserInterfaceManager
             {
                 var currentLine = 0;
                 var mapCoordinatesPosition = GetLinePosition(currentLine, font);
-                spriteBatch.DrawString(font, $"{selectedMapNodes[0].Position.X},{selectedMapNodes[0].Position.Y}", mapCoordinatesPosition, Color.Blue);
+                spriteBatch.DrawString(font, $"{selectedMapNodes[0].Position.X},{selectedMapNodes[0].Position.Y}", mapCoordinatesPosition, Color.Black);
                 currentLine++;
 
                 foreach (var mapNode in selectedMapNodes)
@@ -60,12 +60,19 @@ namespace DungeonCrawlerWorld.GameManagers.UserInterfaceManager
                         if ( ComponentRepo.DisplayTextComponents.TryGetValue(mapNode.EntityId.Value, out DisplayTextComponent displayTextComponent) )
                         {
                             var namePosition = GetLinePosition(currentLine, font);
-                            spriteBatch.DrawString(font, displayTextComponent.Name, namePosition, Color.Blue);
+                            spriteBatch.DrawString(font, displayTextComponent.Name, namePosition, Color.Black);
                             currentLine++;
+
+                            if(ComponentRepo.EnergyComponents.TryGetValue(mapNode.EntityId.Value, out EnergyComponent energyComponent) && energyComponent.MaximumEnergy > 0)
+                            {
+                                var energyBarPosition = GetLinePosition(currentLine, font);
+                                spriteBatch.DrawString(font, energyComponent.ToString(), energyBarPosition, Color.Blue);
+                                currentLine++;
+                            }
 
                             var descriptionPosition = GetLinePosition(currentLine, font);
                             var formattedEntityDescription = StringUtility.FormatText(font, displayTextComponent.Description, descriptionSize.ToPoint(), true, true);
-                            spriteBatch.DrawString(font, formattedEntityDescription, descriptionPosition + tabOffset, Color.Blue);
+                            spriteBatch.DrawString(font, formattedEntityDescription, descriptionPosition + tabOffset, Color.Black);
                             currentLine += linesPerDescription;
                         }
                     }

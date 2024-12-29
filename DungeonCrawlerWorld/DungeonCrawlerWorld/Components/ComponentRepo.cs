@@ -7,7 +7,7 @@ namespace DungeonCrawlerWorld.Components
     {
         public static HashSet<Guid> Entities;
 
-        public static Dictionary<Guid, EnergyComponent> ActionEnergyComponents;
+        public static Dictionary<Guid, EnergyComponent> EnergyComponents;
         public static Dictionary<Guid, BackgroundComponent> DisplayBackgroundComponents;
         public static Dictionary<Guid, GlyphComponent> DisplayGlyphComponents;
         public static Dictionary<Guid, DisplayTextComponent> DisplayTextComponents;
@@ -18,10 +18,10 @@ namespace DungeonCrawlerWorld.Components
         {
             Entities = new HashSet<Guid>();
 
-            ActionEnergyComponents = new Dictionary<Guid, EnergyComponent>();
             DisplayBackgroundComponents = new Dictionary<Guid, BackgroundComponent>();
             DisplayGlyphComponents = new Dictionary<Guid, GlyphComponent>();
             DisplayTextComponents = new Dictionary<Guid, DisplayTextComponent>();
+            EnergyComponents = new Dictionary<Guid, EnergyComponent>();
             MovementComponents = new Dictionary<Guid, MovementComponent>();
             TransformComponents = new Dictionary<Guid, TransformComponent>();
         }

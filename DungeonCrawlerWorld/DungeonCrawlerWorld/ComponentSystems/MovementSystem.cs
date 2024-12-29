@@ -39,7 +39,7 @@ namespace DungeonCrawlerWorld.ComponentSystems
 
                 if (movementComponent.FramesToWait == 0)
                 {
-                    if (ComponentRepo.ActionEnergyComponents.TryGetValue(keyComponent.Key, out EnergyComponent actionEnergyComponent)
+                    if (ComponentRepo.EnergyComponents.TryGetValue(keyComponent.Key, out EnergyComponent actionEnergyComponent)
                         && actionEnergyComponent.CurrentEnergy >= movementComponent.EnergyToMove
                         && ComponentRepo.TransformComponents.TryGetValue(keyComponent.Key, out TransformComponent transformComponent))
                     {
@@ -78,7 +78,7 @@ namespace DungeonCrawlerWorld.ComponentSystems
             {
                 world.MoveEntity(movementComponent.EntityId, movementComponent.NextMapPosition.Value);
                 actionEnergyComponent.CurrentEnergy -= movementComponent.EnergyToMove;
-                ComponentRepo.ActionEnergyComponents[actionEnergyComponent.EntityId] = actionEnergyComponent;
+                ComponentRepo.EnergyComponents[actionEnergyComponent.EntityId] = actionEnergyComponent;
             }
         }
         public bool CanMove(CubeInt newPosition, Guid entityId)

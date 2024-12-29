@@ -16,9 +16,9 @@ namespace DungeonCrawlerWorld
     //TODO Redo MapHeight and movement based collision detection
     //TODO real map creation.
     //TODO Middle of screen popup for pausing and map loading.
-        //Note : In UserInterfaceManager
-        //Note2 : Has max width. Height based on wordwrap within that max width
-        //Note3 : center based on size.
+    //Note : In UserInterfaceManager
+    //Note2 : Has max width. Height based on wordwrap within that max width
+    //Note3 : center based on size.
     //Note : arterial hallways are 30 feet wide. (34 including the walls)
     //          Side hallways at 14 feet wide (18 including the walls)
     //Note2 : each tile is 2 feet wide (human shoulders are 1.5 feet)
@@ -64,7 +64,9 @@ namespace DungeonCrawlerWorld
             var dataAccessService = GameServices.GetService<DataAccessService>();
             world = dataAccessService.RetrieveWorld();
 
-          base.Initialize();
+            RunTest();
+
+            base.Initialize();
         }
 
         protected override void LoadContent()
@@ -91,7 +93,7 @@ namespace DungeonCrawlerWorld
 
             foreach (var component in updatableGameManagers)
             {
-                if( !gameVariables.IsPaused || component.CanUpdateWhilePaused)
+                if (!gameVariables.IsPaused || component.CanUpdateWhilePaused)
                 {
                     component.Update(gameTime, gameVariables);
                 }
@@ -133,6 +135,11 @@ namespace DungeonCrawlerWorld
             {
                 userInterfaceManager
             };
+        }
+
+        public void RunTest()
+        {
+            return;
         }
     }
 }

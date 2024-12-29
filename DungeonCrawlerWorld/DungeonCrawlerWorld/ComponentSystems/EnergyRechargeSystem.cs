@@ -16,7 +16,7 @@ namespace DungeonCrawlerWorld.ComponentSystems
 
         public void Update(GameTime gameTime)
         {
-            foreach (var keyComponent in ComponentRepo.ActionEnergyComponents)
+            foreach (var keyComponent in ComponentRepo.EnergyComponents)
             {
                 var actionEnergyComponent = keyComponent.Value;
                 if (actionEnergyComponent.EnergyRecharge != 0)
@@ -26,7 +26,7 @@ namespace DungeonCrawlerWorld.ComponentSystems
                     {
                         actionEnergyComponent.CurrentEnergy = actionEnergyComponent.MaximumEnergy;
                     }
-                    ComponentRepo.ActionEnergyComponents[keyComponent.Key] = actionEnergyComponent;
+                    ComponentRepo.EnergyComponents[keyComponent.Key] = actionEnergyComponent;
                 }
             }
         }
