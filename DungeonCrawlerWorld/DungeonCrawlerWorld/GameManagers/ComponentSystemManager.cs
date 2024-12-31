@@ -2,10 +2,10 @@
 using Microsoft.Xna.Framework.Graphics;
 
 using DungeonCrawlerWorld.ComponentSystems;
-using DungeonCrawlerWorld.Services;
 using DungeonCrawlerWorld.Data;
+using DungeonCrawlerWorld.Services;
 
-namespace DungeonCrawlerWorld.GameSystems
+namespace DungeonCrawlerWorld.GameManagers.ComponentSystemManager
 {
     /// <summary>
     /// Component System Manager

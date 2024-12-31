@@ -6,7 +6,6 @@ namespace DungeonCrawlerWorld.Components
 {
     public enum MovementMode : byte
     {
-        Stationary,
         Random,
         SeekTarget
     }
@@ -21,7 +20,6 @@ namespace DungeonCrawlerWorld.Components
         public Vector3Int? TargetMapPosition { get; set; }
         public Vector3Int? NextMapPosition { get; set; }
 
-        public MovementComponent(Guid entityId) : this(entityId, MovementMode.Stationary, 0, null, null) { }
         public MovementComponent(Guid entityId, MovementMode movementMode, short energyToMove) : this( entityId, movementMode, energyToMove, null, null) { }
         public MovementComponent(Guid entityId, MovementMode movementMode, short energyToMove, Vector3Int? targetMapPosition, Vector3Int? nextMapPosition)
         {

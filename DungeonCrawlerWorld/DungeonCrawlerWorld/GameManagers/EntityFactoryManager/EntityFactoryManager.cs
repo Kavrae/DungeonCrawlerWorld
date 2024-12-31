@@ -1,7 +1,11 @@
-﻿using Microsoft.Xna.Framework;
+﻿using System;
+
+using Microsoft.Xna.Framework;
 
 using DungeonCrawlerWorld.Data;
 using DungeonCrawlerWorld.Services;
+using DungeonCrawlerWorld.Components;
+using DungeonCrawlerWorld.Utilities;
 
 namespace DungeonCrawlerWorld.GameManagers.EntityFactoryManager
 {
@@ -9,7 +13,7 @@ namespace DungeonCrawlerWorld.GameManagers.EntityFactoryManager
     {
         public bool CanUpdateWhilePaused => false;
 
-        private World _dataAccess;
+        private static World world;
 
         public EntityFactoryManager()
         {
@@ -18,9 +22,7 @@ namespace DungeonCrawlerWorld.GameManagers.EntityFactoryManager
         public void Initialize()
         {
             var dataAccessService = GameServices.GetService<DataAccessService>();
-            _dataAccess = dataAccessService.RetrieveWorld();
-
-            //_BuildTestEntities();
+            world = dataAccessService.RetrieveWorld();
         }
 
         public void LoadContent()
@@ -36,35 +38,49 @@ namespace DungeonCrawlerWorld.GameManagers.EntityFactoryManager
         {
         }
 
-        //TODO next point of upgrade here
-        //Is there a way to provide common "options" for an entity build?  EntityOptions class?
-        //Use the templates to start, then apply options. Can replace components individually as needed
-        /*
-        private Entity BuildEntityFromTemplate<T>(Point position, Size size)
+        //TODO entity deletion that removes all components via entityId.
+
+        public static Guid Build<T>() where T : IBaseFactoryTemplate, new()
         {
-            var entity = new T();
-            foreach (var component in components)
-            {
-                entity.AddComponent(component);
-            }
-            _dataAccess.CreateEntity(entity, position, size);
-            return entity;
+            var entityId = Guid.NewGuid();
+            var template = new T();
+            template.Build(entityId);
+
+            return entityId;
         }
 
-        private void _BuildTestEntities()
+        public static Guid Build<T>(Point position) where T : IBaseFactoryTemplate, new()
         {
-            var defaultCrawler = new Crawler();
-            _dataAccess.CreateEntity(defaultCrawler, new Point(0,0 ), Size.Medium);
+            var entityId = Guid.NewGuid();
+            var template = new T();
+            template.Build(entityId);
 
-            var stationaryCrawler = new Crawler();
-            stationaryCrawler.AddComponent(new DisplayText { Name = "Static Entity", Description = "This is an immovable test entity. It doesn't move. Uses the default Movable component." });
-            stationaryCrawler.RemoveComponent<Movement>();
-            _dataAccess.CreateEntity(stationaryCrawler, new Point(11,11), Size.Medium);
+            if(ComponentRepo.TransformComponents.TryGetValue(entityId, out TransformComponent transformComponent))
+            {
+                world.MoveEntity(entityId, new Vector3Int(position.X, position.Y, transformComponent.Position.Z));
+            }
 
-            var movingCrawler = new Crawler();
-            movingCrawler.AddComponent(new DisplayText { Name = "Movable Entity", Description = "This is an movable test entity. It moves randomly around the map by overriding the Movable component." });
-            movingCrawler.AddComponent(new Movement { MovementMode = MovementMode.Random, EnergyToMove = 60 });
-            _dataAccess.CreateEntity(stationaryCrawler, new Point(12,2), Size.Medium);
-        }*/
+            return entityId;
+        }
+
+        public static Guid Build<T>(Vector3Int position) where T : IBaseFactoryTemplate, new()
+        {
+            var entityId = Guid.NewGuid();
+            var template = new T();
+            template.Build(entityId);
+
+            if (ComponentRepo.TransformComponents.TryGetValue(entityId, out TransformComponent transformComponent))
+            {
+                world.MoveEntity(entityId, position);
+            }
+
+            return entityId;
+        }
+
+        public static void Apply<T>(Guid entityId) where T : IModifierFactoryTemplate, new()
+        {
+            var template = new T();
+            template.Apply(entityId);
+        }
     }
 }

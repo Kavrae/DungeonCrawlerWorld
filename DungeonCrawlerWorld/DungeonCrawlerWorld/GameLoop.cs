@@ -5,11 +5,12 @@ using Microsoft.Xna.Framework.Graphics;
 
 using DungeonCrawlerWorld.Data;
 using DungeonCrawlerWorld.Services;
+using DungeonCrawlerWorld.GameManagers;
+using DungeonCrawlerWorld.GameManagers.ComponentSystemManager;
 using DungeonCrawlerWorld.GameManagers.MapBuilderManager;
 using DungeonCrawlerWorld.GameManagers.EntityEventManager;
 using DungeonCrawlerWorld.GameManagers.EntityFactoryManager;
 using DungeonCrawlerWorld.GameManagers.UserInterfaceManager;
-using DungeonCrawlerWorld.GameSystems;
 
 namespace DungeonCrawlerWorld
 {
@@ -126,9 +127,9 @@ namespace DungeonCrawlerWorld
             updatableGameManagers = new List<IGameManager>
             {
                 new ComponentSystemManager(),
+                new EntityFactoryManager(),
                 new MapBuilderManager(),
                 new EntityEventManager(),
-                new EntityFactoryManager(),
                 userInterfaceManager
             };
             drawableGameManagers = new List<IGameManager>

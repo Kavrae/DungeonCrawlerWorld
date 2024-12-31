@@ -11,7 +11,6 @@ using DungeonCrawlerWorld.Utilities;
 
 namespace DungeonCrawlerWorld.GameManagers.MapBuilderManager
 {
-    //TODO refactor this manager to start using the EntityFactoryManager for terrain too.
     public class MapBuilderManager : IGameManager
     {
         public bool CanUpdateWhilePaused => false;
@@ -53,71 +52,46 @@ namespace DungeonCrawlerWorld.GameManagers.MapBuilderManager
                 for (int row = 0; row < world.Map.Size.Y; row++)
                 {
                     if( (column == 0 || column == world.Map.Size.X - 1 || row == 0 || row == world.Map.Size.Y -1) //Border Wall
-                       || (column == 10 || column == 16) && (row < 10 || row > 16)  //Vertical hallway
-                       || (row == 10 || row == 16) && (column < 10 || column > 16) ) //Horizontal hallway
+                       || ((column == 10 || column == 16) && (row < 10 || row > 16))  //Vertical hallway
+                       || ((row == 10 || row == 16) && (column < 10 || column > 16)) ) //Horizontal hallway
                     {
-                        var wall = new Wall();
-                        var wallTransform = new TransformComponent(wall.EntityId, new Vector3Int(column, row, (int)MapHeight.Standing), new Vector3Int(1,1,1));
-                        world.MoveEntity(wall.EntityId, wallTransform.Position);
-
-                        var stoneFloor = new StoneFloor();
-                        var stoneFloorTransform = new TransformComponent(stoneFloor.EntityId, new Vector3Int(column, row, (int)MapHeight.Ground), new Vector3Int(1, 1, 1));
-                        world.MoveEntity(stoneFloor.EntityId, stoneFloorTransform.Position);
+                        EntityFactoryManager.EntityFactoryManager.Build<StoneFloor>(new Vector3Int(column, row, (int)MapHeight.Ground));
+                        EntityFactoryManager.EntityFactoryManager.Build<Wall>(new Vector3Int(column, row, (int)MapHeight.Standing));
                     }
                     else
                     {
-                        var dirt = new Dirt();
-                        var dirtTransform = new TransformComponent(dirt.EntityId, new Vector3Int(column, row, (int)MapHeight.Ground), new Vector3Int(1, 1, 1));
-                        world.MoveEntity(dirt.EntityId, dirtTransform.Position);
+                        EntityFactoryManager.EntityFactoryManager.Build<Dirt>(new Vector3Int(column, row, (int)MapHeight.Ground));
 
-                        if( (row-1) %10 == 0 && (column-1) %100 == 0) //1,000 Crawlers
+                        if ( (row-1) %10 == 0 && (column-1) %100 == 0) //1,000 goblin engineers
                         {
-                            var crawler = new Crawler();
-                            var crawlerTransform = new TransformComponent(crawler.EntityId, new Vector3Int(column, row, (int)MapHeight.Standing), new Vector3Int(1, 1, 1));
-                            _ = new MovementComponent(crawler.EntityId, MovementMode.Random, 20);
-                            _ = new EnergyComponent(crawler.EntityId, (short)randomizer.Next(0, 100), 10, 100);
-                            world.MoveEntity(crawler.EntityId, crawlerTransform.Position);
+                            EntityFactoryManager.EntityFactoryManager.Build<GoblinEngineerBlueprint>(new Vector3Int(column, row, (int)MapHeight.Standing));
                         }
                         if ((row - 5) % 5 == 0 && (column - 1) % 5 == 0) //40,000 Goblins
                         {
-                            var goblin = new Goblin();
-                            var goblinTransform = new TransformComponent(goblin.EntityId, new Vector3Int(column, row, (int)MapHeight.Standing), new Vector3Int(1, 1, 1));
-                            _ = new MovementComponent(goblin.EntityId, MovementMode.Random, 20);
-                            _ = new EnergyComponent(goblin.EntityId, (short)randomizer.Next(0, 100), 20, 30);
-                            world.MoveEntity(goblin.EntityId, goblinTransform.Position);
+                            EntityFactoryManager.EntityFactoryManager.Build<Goblin>(new Vector3Int(column, row, (int)MapHeight.Standing));
                         }
                     }
                 }
             }
 
-            //Large crawler test
-            var largeCrawler = new Crawler();
-            var largeCrawlerTransform = new TransformComponent(largeCrawler.EntityId, new Vector3Int(2, 2, (int)MapHeight.Standing), new Vector3Int(2, 2, 1));
-            _ = new EnergyComponent(largeCrawler.EntityId, 0, 10, 100);
-            _ = new MovementComponent(largeCrawler.EntityId, MovementMode.Random, 40);
-            _ = new DisplayTextComponent(largeCrawler.EntityId, "Large Crawler", "Should take up 2x2 tiles");
-            _ = new GlyphComponent(largeCrawler.EntityId, "Q", Color.Red, new Point(0, 0));
-            world.MoveEntity(largeCrawler.EntityId, largeCrawlerTransform.Position);
+            //Large goblin test
+            var largeGoblinEntityId = EntityFactoryManager.EntityFactoryManager.Build<Goblin>();
+            var largeCrawlerTransform = new TransformComponent(largeGoblinEntityId, new Vector3Int(2, 2, (int)MapHeight.Standing), new Vector3Int(2, 2, 1));
+            world.MoveEntity(largeGoblinEntityId, largeCrawlerTransform.Position);
+            
+            //Huge goblin test
+            var hugeGoblinEntityId = EntityFactoryManager.EntityFactoryManager.Build<Goblin>();
+            var hugeCrawlerTransform = new TransformComponent(hugeGoblinEntityId, new Vector3Int(5, 5, (int)MapHeight.Standing), new Vector3Int(3, 3, 1));
+            world.MoveEntity(hugeGoblinEntityId, hugeCrawlerTransform.Position);
 
-            //Huge crawler test
-            var hugeCrawler = new Crawler();
-            var hugeCrawlerTransform = new TransformComponent(hugeCrawler.EntityId, new Vector3Int(6, 6, (int)MapHeight.Standing), new Vector3Int(3, 3, 1));
-            _ = new EnergyComponent(hugeCrawler.EntityId, 50, 10, 100);
-            _ = new MovementComponent(hugeCrawler.EntityId, MovementMode.Random, 40);
-            _ = new DisplayTextComponent(hugeCrawler.EntityId, "Huge Crawler", "Should take up 3x3 tiles" );
-            world.MoveEntity(hugeCrawler.EntityId, hugeCrawlerTransform.Position);
-
-            //stationary Fairy test
-            var stationaryFairy = new Fairy();
-            var stationaryFairyTransform = new TransformComponent(stationaryFairy.EntityId, new Vector3Int(0, 0, (int)MapHeight.Flying), new Vector3Int(1, 1, 1));
-            _ = new MovementComponent(stationaryFairy.EntityId, MovementMode.Stationary, 100);
-            _ = new DisplayTextComponent(stationaryFairy.EntityId, "Stationary Fairy", "This fairy is lazy and refuses to move.");
-            world.MoveEntity(stationaryFairy.EntityId, stationaryFairyTransform.Position);
+            //Stationary Fairy engineer test
+            var fairyEngineerId = EntityFactoryManager.EntityFactoryManager.Build<Fairy>(new Vector3Int(1,1, (int)MapHeight.Floating));
+            EntityFactoryManager.EntityFactoryManager.Apply<Engineer>(fairyEngineerId);
+            ComponentRepo.MovementComponents.Remove(fairyEngineerId);
+            _ = new DisplayTextComponent(fairyEngineerId, "Stationary Fairy", "This fairy is lazy and refuses to move.");
 
             //Moving Fairy test
-            var fairy = new Fairy();
-            var fairyTransform = new TransformComponent(fairy.EntityId, new Vector3Int(17, 16, (int)MapHeight.Flying), new Vector3Int(1, 1, 1));
-            world.MoveEntity(fairy.EntityId, fairyTransform.Position);
+            EntityFactoryManager.EntityFactoryManager.Build<Fairy>(new Vector3Int(17,16, (int)MapHeight.Flying));
         }
     }
 }

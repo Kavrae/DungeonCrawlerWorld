@@ -73,7 +73,7 @@ namespace DungeonCrawlerWorld.GameManagers.UserInterfaceManager
                             var descriptionPosition = GetLinePosition(currentLine, font);
                             var formattedEntityDescription = StringUtility.FormatText(font, displayTextComponent.Description, descriptionSize.ToPoint(), true, true);
                             spriteBatch.DrawString(font, formattedEntityDescription, descriptionPosition + tabOffset, Color.Black);
-                            currentLine += linesPerDescription;
+                            currentLine += linesPerDescription + 1;
                         }
                     }
                 }

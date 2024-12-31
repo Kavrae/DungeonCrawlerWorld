@@ -57,11 +57,7 @@ namespace DungeonCrawlerWorld.ComponentSystems
 
         public void SetNextMapPosition(MovementComponent movementComponent, TransformComponent transformComponent)
         {
-            if (movementComponent.MovementMode == MovementMode.Stationary)
-            {
-                //Do nothing
-            }
-            else if (movementComponent.MovementMode == MovementMode.Random)
+            if (movementComponent.MovementMode == MovementMode.Random)
             {
                 SetRandomMapPosition(movementComponent, transformComponent);
 

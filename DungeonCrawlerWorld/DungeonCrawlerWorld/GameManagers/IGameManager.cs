@@ -2,7 +2,7 @@
 
 using DungeonCrawlerWorld.Data;
 
-namespace DungeonCrawlerWorld
+namespace DungeonCrawlerWorld.GameManagers
 {
     public interface IGameManager
     {

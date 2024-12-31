@@ -76,7 +76,7 @@ namespace DungeonCrawlerWorld.GameManagers.UserInterfaceManager
                 spriteBatch.DrawString(font, "Paused", new Vector2(Position.X + 120, Position.Y), Color.Red);
             }
 
-            spriteBatch.DrawString(font, $"Entities : {string.Format("{0:N0}", ComponentRepo.Entities.Count)}", new Vector2(Position.X + 180, Position.Y), Color.Black);
+            spriteBatch.DrawString(font, $"Entities : {string.Format("{0:N0}", ComponentRepo.TransformComponents.Count)}", new Vector2(Position.X + 180, Position.Y), Color.Black);
             spriteBatch.DrawString(font, $"Moving Entities : {string.Format("{0:N0}", ComponentRepo.MovementComponents.Count)}", new Vector2(Position.X + 300, Position.Y), Color.Black);
         }
     }

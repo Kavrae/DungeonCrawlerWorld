@@ -97,7 +97,7 @@ namespace DungeonCrawlerWorld.GameManagers.UserInterfaceManager
             selectionDisplay = new SelectionDisplay(
                     world,
                     new Point(1670, 15),
-                    new Point(180, 1440));
+                    new Point(170, 1440));
 
             displayComponents = new List<UserInterfaceComponent>
             {
