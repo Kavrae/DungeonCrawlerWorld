@@ -34,53 +34,70 @@ namespace DungeonCrawlerWorld.GameManagers.EntityFactoryManager
         {
         }
 
-        public void Update( GameTime gameTime, GameVariables gameVariables)
+        public void Update(GameTime gameTime, GameVariables gameVariables)
         {
         }
 
         //TODO entity deletion that removes all components via entityId.
 
-        public static Guid Build<T>() where T : IBaseFactoryTemplate, new()
+        public static Guid BuildFromBlueprint<T>() where T : IBlueprint, new()
         {
-            var entityId = Guid.NewGuid();
-            var template = new T();
-            template.Build(entityId);
-
-            return entityId;
+            var blueprint = new T();
+            return blueprint.EntityId;
         }
 
-        public static Guid Build<T>(Point position) where T : IBaseFactoryTemplate, new()
+        public static Guid BuildFromBlueprint<T>(Point position) where T : IBlueprint, new()
         {
-            var entityId = Guid.NewGuid();
-            var template = new T();
-            template.Build(entityId);
+            var blueprint = new T();
 
-            if(ComponentRepo.TransformComponents.TryGetValue(entityId, out TransformComponent transformComponent))
+            if (ComponentRepo.TransformComponents.TryGetValue(blueprint.EntityId, out TransformComponent transformComponent))
             {
-                world.MoveEntity(entityId, new Vector3Int(position.X, position.Y, transformComponent.Position.Z));
+                world.MoveEntity(blueprint.EntityId, new Vector3Int(position.X, position.Y, transformComponent.Position.Z));
             }
 
-            return entityId;
+            return blueprint.EntityId;
         }
 
-        public static Guid Build<T>(Vector3Int position) where T : IBaseFactoryTemplate, new()
+        public static Guid BuildFromBlueprint<T>(Vector3Int position) where T : IBlueprint, new()
         {
-            var entityId = Guid.NewGuid();
-            var template = new T();
-            template.Build(entityId);
+            var blueprint = new T();
 
-            if (ComponentRepo.TransformComponents.TryGetValue(entityId, out TransformComponent transformComponent))
+            if (ComponentRepo.TransformComponents.TryGetValue(blueprint.EntityId, out TransformComponent transformComponent))
             {
-                world.MoveEntity(entityId, position);
+                world.MoveEntity(blueprint.EntityId, position);
             }
 
-            return entityId;
+            return blueprint.EntityId;
         }
 
-        public static void Apply<T>(Guid entityId) where T : IModifierFactoryTemplate, new()
+        public static Guid BuildFromRace<T>() where T : RaceComponent, new()
         {
-            var template = new T();
-            template.Apply(entityId);
+            var blueprint = new T();
+            return blueprint.EntityId;
+        }
+
+        public static Guid BuildFromRace<T>(Point position) where T : RaceComponent, new()
+        {
+            var blueprint = new T();
+
+            if (ComponentRepo.TransformComponents.TryGetValue(blueprint.EntityId, out TransformComponent transformComponent))
+            {
+                world.MoveEntity(blueprint.EntityId, new Vector3Int(position.X, position.Y, transformComponent.Position.Z));
+            }
+
+            return blueprint.EntityId;
+        }
+
+        public static Guid BuildFromRace<T>(Vector3Int position) where T : RaceComponent, new()
+        {
+            var blueprint = new T();
+
+            if (ComponentRepo.TransformComponents.TryGetValue(blueprint.EntityId, out TransformComponent transformComponent))
+            {
+                world.MoveEntity(blueprint.EntityId, position);
+            }
+
+            return blueprint.EntityId;
         }
     }
 }

@@ -57,7 +57,7 @@ namespace DungeonCrawlerWorld.GameManagers.ComponentSystemManager
             {
                 movementSystem.Update(gameTime);
             }
-            if (( (currentFrame + 2) % healthRegenSystem.FramesPerUpdate == 0))
+            if ( (currentFrame + 2) % healthRegenSystem.FramesPerUpdate == 0)
             {
                 healthRegenSystem.Update(gameTime);
             }
