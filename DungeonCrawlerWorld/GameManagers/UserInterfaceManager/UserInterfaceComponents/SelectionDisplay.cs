@@ -1,5 +1,4 @@
-﻿
-using Microsoft.Xna.Framework;
+﻿using Microsoft.Xna.Framework;
 using Microsoft.Xna.Framework.Graphics;
 
 using DungeonCrawlerWorld.Components;
@@ -55,9 +54,9 @@ namespace DungeonCrawlerWorld.GameManagers.UserInterfaceManager
 
                 foreach (var mapNode in selectedMapNodes)
                 {
-                    if( mapNode.EntityId != null)
+                    if (mapNode.EntityId != null)
                     {
-                        if ( ComponentRepo.DisplayTextComponents.TryGetValue(mapNode.EntityId.Value, out DisplayTextComponent displayTextComponent) )
+                        if (ComponentRepo.DisplayTextComponents.TryGetValue(mapNode.EntityId.Value, out DisplayTextComponent displayTextComponent))
                         {
                             //TODO separate name and race name
                             var namePosition = GetLinePosition(currentLine, font);
@@ -91,6 +90,14 @@ namespace DungeonCrawlerWorld.GameManagers.UserInterfaceManager
                                 var classDescriptionPosition = GetLinePosition(currentLine, font);
                                 var formattedClassDescription = StringUtility.FormatText(font, displayTextComponent.ClassDescription, descriptionSize.ToPoint(), true, true);
                                 spriteBatch.DrawString(font, formattedClassDescription, classDescriptionPosition + tabOffset, Color.Black);
+                                currentLine += linesPerDescription + 1;
+                            }
+
+                            if (!string.IsNullOrWhiteSpace(displayTextComponent.Description))
+                            {
+                                var descriptionPosition = GetLinePosition(currentLine, font);
+                                var formattedDescription = StringUtility.FormatText(font, displayTextComponent.Description, descriptionSize.ToPoint(), true, true);
+                                spriteBatch.DrawString(font, formattedDescription, descriptionPosition + tabOffset, Color.Black);
                                 currentLine += linesPerDescription + 1;
                             }
                         }

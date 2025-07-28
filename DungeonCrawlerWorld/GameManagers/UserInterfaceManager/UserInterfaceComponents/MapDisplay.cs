@@ -6,7 +6,6 @@ using Microsoft.Xna.Framework.Graphics;
 using DungeonCrawlerWorld.Data;
 using DungeonCrawlerWorld.Services;
 using DungeonCrawlerWorld.Components;
-using DungeonCrawlerWorld.ComponentSystems;
 
 namespace DungeonCrawlerWorld.GameManagers.UserInterfaceManager
 {

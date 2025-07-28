@@ -36,7 +36,6 @@ namespace DungeonCrawlerWorld
 
         private List<IGameManager> updatableGameManagers;
         private List<IGameManager> drawableGameManagers;
-        private ComponentSystemManager componentSystemManager;
 
         public GameLoop()
         {
@@ -92,11 +91,11 @@ namespace DungeonCrawlerWorld
         {
             var gameVariables = world.RetrieveGameVariables();
 
-            foreach (var component in updatableGameManagers)
+            foreach (var gameManager in updatableGameManagers)
             {
-                if (!gameVariables.IsPaused || component.CanUpdateWhilePaused)
+                if (!gameVariables.IsPaused || gameManager.CanUpdateWhilePaused)
                 {
-                    component.Update(gameTime, gameVariables);
+                    gameManager.Update(gameTime, gameVariables);
                 }
             }
 

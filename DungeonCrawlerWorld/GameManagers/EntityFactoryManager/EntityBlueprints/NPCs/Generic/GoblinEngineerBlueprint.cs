@@ -27,7 +27,7 @@ namespace DungeonCrawlerWorld.GameManagers.EntityFactoryManager
                 ComponentRepo.DisplayTextComponents[EntityId] = displayTextComponent;
             }
 
-            //TODO temporary : goblin engineers have 10% more energy and energy recharge.
+            //TODO temporary : goblin engineers have 10% more energy and energy recharge on top of the engineering bonus
             if (ComponentRepo.EnergyComponents.TryGetValue(EntityId, out var energyComponent))
             {
                 energyComponent.MaximumEnergy = (short)(energyComponent.MaximumEnergy * 1.1m);

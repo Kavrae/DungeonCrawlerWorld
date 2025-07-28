@@ -49,7 +49,8 @@ namespace DungeonCrawlerWorld.GameManagers.ComponentSystemManager
         //Sequentially increment update checks by 1 frame so that not all updates happen on the same commonly divisible frames
         public void Update(GameTime gameTime, GameVariables gameVariables)
         {
-            if(currentFrame % energyRechargeSystem.FramesPerUpdate == 0)
+            //TODO which of these is taking the most time? Low updates per second
+            if (currentFrame % energyRechargeSystem.FramesPerUpdate == 0)
             {
                 energyRechargeSystem.Update(gameTime);
             }

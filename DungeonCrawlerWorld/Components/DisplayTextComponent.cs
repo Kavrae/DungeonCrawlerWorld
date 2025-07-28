@@ -16,6 +16,9 @@ namespace DungeonCrawlerWorld.Components
 
         public DisplayTextComponent(Guid entityId) : this(entityId, "", "", "", "", "", "") { }
         public DisplayTextComponent(Guid entityId, string name, string description) : this(entityId, name, description, "", "", "", "") { }
+
+        //TODO remove race and class specific strings. Replace them with arrays that can be formatted
+        //TODO when creating a race/class, what if a display text component already exists?  Update it instead.
         public DisplayTextComponent(Guid entityId, string name, string description, string raceName, string raceDescription, string className, string classDescription)
         {
             EntityId = entityId;
