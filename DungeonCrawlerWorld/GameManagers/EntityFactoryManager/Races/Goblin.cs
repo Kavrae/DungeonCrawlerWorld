@@ -8,6 +8,8 @@ namespace DungeonCrawlerWorld.GameManagers.EntityFactoryManager
 {
     public class Goblin : RaceComponent
     {
+        public override Guid RaceId => new("1aa7b1c2-0b54-4745-b616-8aaff734a7d6");
+
         private static string[] PersonalNames => new[]
         {
             "TestName1",

@@ -3,7 +3,7 @@ using System.Text;
 
 namespace DungeonCrawlerWorld.Components
 {
-    public struct EnergyComponent
+    public struct EnergyComponent : IEntityComponent
     {
         public Guid EntityId { get; set; }
         public short CurrentEnergy { get; set; }

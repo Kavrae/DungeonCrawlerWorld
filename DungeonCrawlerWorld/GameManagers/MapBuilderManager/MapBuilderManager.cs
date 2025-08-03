@@ -76,8 +76,11 @@ namespace DungeonCrawlerWorld.GameManagers.MapBuilderManager
 
             //Large goblin test
             var largeGoblinEntityId = EntityFactoryManager.EntityFactoryManager.BuildFromRace<Goblin>();
-            var largeCrawlerTransform = new TransformComponent(largeGoblinEntityId, new Vector3Int(2, 2, (int)MapHeight.Standing), new Vector3Int(2, 2, 1));
-            world.MoveEntity(largeGoblinEntityId, largeCrawlerTransform.Position);
+            var largeGoblinTransform = new TransformComponent(largeGoblinEntityId, new Vector3Int(2, 2, (int)MapHeight.Standing), new Vector3Int(2, 2, 1));
+            var largeGoblinDisplayText = ComponentRepo.DisplayTextComponents[largeGoblinEntityId];
+            largeGoblinDisplayText.Description = "ThisIsAReallyLongDescriptionToTestTheWordWrapCapabilitiesAroundHyphenatingLongWordsMultipleTimes";
+            ComponentRepo.DisplayTextComponents[largeGoblinEntityId] = largeGoblinDisplayText;
+            world.MoveEntity(largeGoblinEntityId, largeGoblinTransform.Position);
 
             //Huge goblin test
             var hugeGoblinEntityId = EntityFactoryManager.EntityFactoryManager.BuildFromBlueprint<GoblinEngineerBlueprint>();

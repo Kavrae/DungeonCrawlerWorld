@@ -38,8 +38,6 @@ namespace DungeonCrawlerWorld.GameManagers.EntityFactoryManager
         {
         }
 
-        //TODO entity deletion that removes all components via entityId.
-
         public static Guid BuildFromBlueprint<T>() where T : IBlueprint, new()
         {
             var blueprint = new T();

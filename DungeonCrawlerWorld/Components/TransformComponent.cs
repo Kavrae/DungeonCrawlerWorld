@@ -14,7 +14,7 @@ namespace DungeonCrawlerWorld.Components
         Flying = 5
     }
 
-    public struct TransformComponent
+    public struct TransformComponent : IEntityComponent
     {
         public Guid EntityId { get; set; }
         public Vector3Int Position { get; set; }

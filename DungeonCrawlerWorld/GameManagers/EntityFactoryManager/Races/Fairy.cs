@@ -8,17 +8,14 @@ namespace DungeonCrawlerWorld.GameManagers.EntityFactoryManager
 {
     public class Fairy : RaceComponent
     {
+        public override Guid RaceId => new("c22f6339-0a56-4528-b818-10052a831dc5");
+
         private static string[] Names => new[]
         {
             "Astrid",
             "Fairy2"
         };
 
-        //TODO this is backwards.  Base is called before child. So we can't assign things like name/description in the constructor then expect the base to assign it to the displayComponent.Fix
-        //Maybe what's needed is to separate stats from behaviors?
-        //Still need to be calculated values.
-        //Maybe go back to a Build function in Race that's called at the end of each constructor? 
-        //Figure out which components are common to all races vs per race
         public Fairy() : this(Guid.NewGuid()) { }
         public Fairy(Guid entityId)
         {

@@ -1,10 +1,15 @@
-﻿using Microsoft.Xna.Framework;
+﻿using System.Reflection;
+using System.Linq;
+
+using Microsoft.Xna.Framework;
 using Microsoft.Xna.Framework.Graphics;
 
 using DungeonCrawlerWorld.Components;
 using DungeonCrawlerWorld.Data;
+using DungeonCrawlerWorld.Utilities;
 using DungeonCrawlerWorld.Services;
 
+//TODO this is debugger mode. Player mode should be MUCH more limited and based on skills
 namespace DungeonCrawlerWorld.GameManagers.UserInterfaceManager
 {
     public class SelectionDisplay : UserInterfaceComponent
@@ -20,7 +25,7 @@ namespace DungeonCrawlerWorld.GameManagers.UserInterfaceManager
         private int linesPerDescription;
         private Vector2 descriptionSize;
 
-        public SelectionDisplay(World world, Point position, Point size) : base ( position, size )
+        public SelectionDisplay(World world, Point position, Point size) : base(position, size)
         {
             this.world = world;
         }
@@ -56,54 +61,45 @@ namespace DungeonCrawlerWorld.GameManagers.UserInterfaceManager
                 {
                     if (mapNode.EntityId != null)
                     {
-                        if (ComponentRepo.DisplayTextComponents.TryGetValue(mapNode.EntityId.Value, out DisplayTextComponent displayTextComponent))
+                        //TODO select each component for that entity
+                        //Just display the component
+                        //Add component click to expand and show all of that component's values
+                        //Click again to minimize
+                        //  Max/Min is just setting a boolen to display those values or not
+
+                        //TODO scroll?
+
+                        foreach (var component in ComponentRepo.GetAllComponents(mapNode.EntityId.Value))
                         {
-                            //TODO separate name and race name
-                            var namePosition = GetLinePosition(currentLine, font);
-                            var nameText = $"{displayTextComponent.Name} - {displayTextComponent.RaceName} {displayTextComponent.ClassName}";
-                            spriteBatch.DrawString(font, nameText, namePosition, Color.Black);
-                            currentLine++;
-
-                            if (ComponentRepo.HealthComponents.TryGetValue(mapNode.EntityId.Value, out HealthComponent healthComponent) && healthComponent.MaximumHealth > 0)
-                            {
-                                var healthBarPosition = GetLinePosition(currentLine, font);
-                                spriteBatch.DrawString(font, healthComponent.ToString(), healthBarPosition, Color.Red);
-                                currentLine++;
-                            }
-                            if (ComponentRepo.EnergyComponents.TryGetValue(mapNode.EntityId.Value, out EnergyComponent energyComponent) && energyComponent.MaximumEnergy > 0)
-                            {
-                                var energyBarPosition = GetLinePosition(currentLine, font);
-                                spriteBatch.DrawString(font, energyComponent.ToString(), energyBarPosition, Color.Blue);
-                                currentLine++;
-                            }
-
-                            if (!string.IsNullOrWhiteSpace(displayTextComponent.RaceDescription))
-                            {
-                                var raceDescriptionPosition = GetLinePosition(currentLine, font);
-                                var formattedRaceDescription = StringUtility.FormatText(font, displayTextComponent.RaceDescription, descriptionSize.ToPoint(), true, true);
-                                spriteBatch.DrawString(font, formattedRaceDescription, raceDescriptionPosition + tabOffset, Color.Black);
-                                currentLine += linesPerDescription + 1;
-                            }
-
-                            if (!string.IsNullOrWhiteSpace(displayTextComponent.ClassDescription))
-                            {
-                                var classDescriptionPosition = GetLinePosition(currentLine, font);
-                                var formattedClassDescription = StringUtility.FormatText(font, displayTextComponent.ClassDescription, descriptionSize.ToPoint(), true, true);
-                                spriteBatch.DrawString(font, formattedClassDescription, classDescriptionPosition + tabOffset, Color.Black);
-                                currentLine += linesPerDescription + 1;
-                            }
-
-                            if (!string.IsNullOrWhiteSpace(displayTextComponent.Description))
-                            {
-                                var descriptionPosition = GetLinePosition(currentLine, font);
-                                var formattedDescription = StringUtility.FormatText(font, displayTextComponent.Description, descriptionSize.ToPoint(), true, true);
-                                spriteBatch.DrawString(font, formattedDescription, descriptionPosition + tabOffset, Color.Black);
-                                currentLine += linesPerDescription + 1;
-                            }
+                            currentLine = DrawComponentDebugInfo(component, spriteBatch, currentLine) + 1;
                         }
                     }
                 }
             }
+        }
+
+        public int DrawComponentDebugInfo(IEntityComponent component, SpriteBatch spriteBatch, int currentLine)
+        {
+            spriteBatch.DrawString(font, component.GetType().Name, GetLinePosition(currentLine, font), Color.Black);
+            currentLine++;
+
+            foreach (PropertyInfo propertyInfo in component.GetType().GetProperties()
+                .Where(property => !property.GetGetMethod().GetParameters().Any()))
+            {
+                var displayText = StringUtility.FormatText(new FormatTextCriteria
+                {
+                    Font = font,
+                    MaximumPixelWidth = descriptionSize.X - tabOffset.X,
+                    TextToFormat = $"    {propertyInfo.Name} : {propertyInfo.GetValue(component, null)}",
+                    WordWrap = true
+                });
+                foreach (var line in displayText.FormattedTextLines)
+                {
+                    spriteBatch.DrawString(font, line, GetLinePosition(currentLine, font) + tabOffset, Color.Black);
+                    currentLine++;
+                }
+            }
+            return currentLine;
         }
 
         public Vector2 CalculateTextDisplaySize(int numberOfLines, SpriteFont font)

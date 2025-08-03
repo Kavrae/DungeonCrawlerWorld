@@ -3,7 +3,7 @@ using System.Text;
 
 namespace DungeonCrawlerWorld.Components
 {
-    public struct HealthComponent
+    public struct HealthComponent : IEntityComponent
     {
         public Guid EntityId { get; set; }
         public short CurrentHealth { get; set; }

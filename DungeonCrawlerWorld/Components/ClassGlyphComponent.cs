@@ -4,7 +4,7 @@ using Microsoft.Xna.Framework;
 
 namespace DungeonCrawlerWorld.Components
 {
-    public struct ClassGlyphComponent
+    public struct ClassGlyphComponent : IEntityComponent
     {
         public Guid EntityId { get; set; }
         public string Glyph { get; set; }

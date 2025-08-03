@@ -2,7 +2,7 @@
 
 namespace DungeonCrawlerWorld.Components
 {
-    public struct DisplayTextComponent
+    public struct DisplayTextComponent : IEntityComponent
     {
         public Guid EntityId { get; set; }
         public string Name { get; set; }

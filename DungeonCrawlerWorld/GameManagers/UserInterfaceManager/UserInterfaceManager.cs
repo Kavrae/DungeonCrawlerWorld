@@ -74,7 +74,6 @@ namespace DungeonCrawlerWorld.GameManagers.UserInterfaceManager
 
             foreach (var displayComponent in displayComponents)
             {
-                //TODO These don't overlap. can each of these be drawn in a separate thread?
                 displayComponent.Draw(gameTime, spriteBatch, unitRectangle);
             }
 
@@ -91,13 +90,13 @@ namespace DungeonCrawlerWorld.GameManagers.UserInterfaceManager
             mapDisplay = new MapDisplay(
                     world,
                     new Point(10, 15),
-                    new Point(1650, 920),
+                    new Point(1545, 920),
                     tileSize: new Point(12, 12));
 
             selectionDisplay = new SelectionDisplay(
                     world,
-                    new Point(1670, 15),
-                    new Point(170, 1440));
+                    new Point(1565, 15),
+                    new Point(275, 1440));
 
             displayComponents = new List<UserInterfaceComponent>
             {

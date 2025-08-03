@@ -4,7 +4,7 @@ using Microsoft.Xna.Framework;
 
 namespace DungeonCrawlerWorld.Components
 {
-    public struct BackgroundComponent
+    public struct BackgroundComponent : IEntityComponent
     {
         public Guid EntityId { get; set; }
         public Color? BackgroundColor { get; set; }

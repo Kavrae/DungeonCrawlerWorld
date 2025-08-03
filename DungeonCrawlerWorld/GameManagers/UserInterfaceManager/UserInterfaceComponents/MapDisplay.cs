@@ -288,13 +288,14 @@ namespace DungeonCrawlerWorld.GameManagers.UserInterfaceManager
             currentZoomLevel = newZoomLevel;
         }
 
+        //TODO scroll selected map node too
         public void UpdateScrollPosition(Point scrollChange)
         {
             currentScrollPosition = new Point
             {
                 X = MathHelper.Clamp(currentScrollPosition.X + scrollChange.X, 0, maxScrollPosition.X),
                 Y = MathHelper.Clamp(currentScrollPosition.Y + scrollChange.Y, 0, maxScrollPosition.Y)
-            }; 
+            };
             resetAllTiles = true;
             isScrolling = true;
         }

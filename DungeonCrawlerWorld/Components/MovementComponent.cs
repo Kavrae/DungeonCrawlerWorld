@@ -10,7 +10,7 @@ namespace DungeonCrawlerWorld.Components
         SeekTarget
     }
 
-    public struct MovementComponent
+    public struct MovementComponent : IEntityComponent
     {
         public Guid EntityId { get; set; }
         public MovementMode MovementMode { get; set; }

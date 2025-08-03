@@ -6,16 +6,16 @@ namespace DungeonCrawlerWorld.Components
 {
     public static class ComponentRepo
     {
-        public static Dictionary<Guid, List<ClassComponent>> ClassComponents;
-        public static Dictionary<Guid, ClassGlyphComponent> ClassGlyphComponents;
-        public static Dictionary<Guid, BackgroundComponent> BackgroundComponents;
-        public static Dictionary<Guid, DisplayTextComponent> DisplayTextComponents;
-        public static Dictionary<Guid, EnergyComponent> EnergyComponents;
-        public static Dictionary<Guid, GlyphComponent> GlyphComponents;
-        public static Dictionary<Guid, HealthComponent> HealthComponents;
-        public static Dictionary<Guid, MovementComponent> MovementComponents;
-        public static Dictionary<Guid, List<RaceComponent>> RaceComponents;
-        public static Dictionary<Guid, TransformComponent> TransformComponents;
+        public static Dictionary<Guid, List<ClassComponent>> ClassComponents { get; }
+        public static Dictionary<Guid, ClassGlyphComponent> ClassGlyphComponents { get; }
+        public static Dictionary<Guid, BackgroundComponent> BackgroundComponents { get; set; }
+        public static Dictionary<Guid, DisplayTextComponent> DisplayTextComponents { get; set; }
+        public static Dictionary<Guid, EnergyComponent> EnergyComponents { get; set; }
+        public static Dictionary<Guid, GlyphComponent> GlyphComponents { get; set; }
+        public static Dictionary<Guid, HealthComponent> HealthComponents { get; set; }
+        public static Dictionary<Guid, MovementComponent> MovementComponents { get; set; }
+        public static Dictionary<Guid, List<RaceComponent>> RaceComponents { get; set; }
+        public static Dictionary<Guid, TransformComponent> TransformComponents { get; set; }
 
         static ComponentRepo()
         {
@@ -85,6 +85,75 @@ namespace DungeonCrawlerWorld.Components
                     .Where(existingClass => existingClass.RaceId != raceId)
                     .ToList();
             }
+        }
+
+        public static List<IEntityComponent> GetAllComponents(Guid entityId)
+        {
+            List<IEntityComponent> components = new();
+
+            if (RaceComponents.TryGetValue(entityId, out List<RaceComponent> raceComponents))
+            {
+                foreach (var component in raceComponents)
+                {
+                    components.Add(component);
+                }
+            }
+            if (ClassComponents.TryGetValue(entityId, out List<ClassComponent> classComponents))
+            {
+                foreach (var component in classComponents)
+                {
+                    components.Add(component);
+                }
+            }
+            if (BackgroundComponents.TryGetValue(entityId, out BackgroundComponent backgroundComponent))
+            {
+                components.Add(backgroundComponent);
+            }
+            if (ClassGlyphComponents.TryGetValue(entityId, out ClassGlyphComponent classglyphComponent))
+            {
+                components.Add(classglyphComponent);
+            }
+            if (DisplayTextComponents.TryGetValue(entityId, out DisplayTextComponent displayTextComponent))
+            {
+                components.Add(displayTextComponent);
+            }
+            if (EnergyComponents.TryGetValue(entityId, out EnergyComponent energyComponent))
+            {
+                components.Add(energyComponent);
+            }
+            if (GlyphComponents.TryGetValue(entityId, out GlyphComponent glyphComponent))
+            {
+                components.Add(glyphComponent);
+            }
+            if (HealthComponents.TryGetValue(entityId, out HealthComponent healthComponent))
+            {
+                components.Add(healthComponent);
+            }
+            if (MovementComponents.TryGetValue(entityId, out MovementComponent movementComponent))
+            {
+                components.Add(movementComponent);
+            }
+            if (TransformComponents.TryGetValue(entityId, out TransformComponent transformComponent))
+            {
+                components.Add(transformComponent);
+            }
+
+            return components;
+        }
+
+        public static void RemoveAllComponents(Guid entityId)
+        {
+            RaceComponents.Remove(entityId);
+            ClassComponents.Remove(entityId);
+            
+            BackgroundComponents.Remove(entityId);
+            ClassGlyphComponents.Remove(entityId);
+            DisplayTextComponents.Remove(entityId);
+            EnergyComponents.Remove(entityId);
+            GlyphComponents.Remove(entityId);
+            HealthComponents.Remove(entityId);
+            MovementComponents.Remove(entityId);
+            TransformComponents.Remove(entityId);
         }
     }
 }

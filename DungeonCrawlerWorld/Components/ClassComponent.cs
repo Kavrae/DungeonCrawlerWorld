@@ -3,10 +3,10 @@ using System;
 //TODO ClassComponent on removal custom removal to do things like removal abilities/stats? Ex : former child actor
 namespace DungeonCrawlerWorld.Components
 {
-    public abstract class ClassComponent
+    public abstract class ClassComponent : IEntityComponent
     {
         public Guid EntityId  { get; set; }
-        public Guid ClassId { get; set; }
+        public virtual Guid ClassId { get; }
         public string Name { get; set; }
         public string Description  { get; set; }
 

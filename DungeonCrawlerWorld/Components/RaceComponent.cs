@@ -3,10 +3,10 @@ using System;
 //TODO RaceComponent on removal custom removal to do things like removal abilities/stats? Ex : changing race on floor 3
 namespace DungeonCrawlerWorld.Components
 {
-    public abstract class RaceComponent
+    public abstract class RaceComponent : IEntityComponent
     {
         public Guid EntityId { get; set; }
-        public Guid RaceId { get; set; }
+        public virtual Guid RaceId { get; }
         public string Name { get; set; }
         public string Description { get; set; }
 
