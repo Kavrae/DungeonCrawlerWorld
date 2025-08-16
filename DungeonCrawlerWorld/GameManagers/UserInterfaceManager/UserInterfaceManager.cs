@@ -17,13 +17,13 @@ namespace DungeonCrawlerWorld.GameManagers.UserInterfaceManager
         private GraphicsDevice graphicsDevice;
         private SpriteBatchService spriteBatchService;
 
-        private DebugDisplay debugDisplay;
-        private MapDisplay mapDisplay;
-        private SelectionDisplay selectionDisplay;
+        private DebugWindow debugWindow;
+        private MapWindow mapWindow;
+        private SelectionWindow selectionWindow;
 
         private Texture2D unitRectangle;
 
-        private List<UserInterfaceComponent> displayComponents;
+        private List<Window> displayComponents;
 
         private KeyboardState previousKeyboardState;
 
@@ -82,27 +82,47 @@ namespace DungeonCrawlerWorld.GameManagers.UserInterfaceManager
 
         public void CreateDisplayComponents()
         {
-            debugDisplay = new DebugDisplay(
+            debugWindow = new DebugWindow(
                     world,
-                    new Point(10, 0),
-                    new Point(1440, 20));
+                    new WindowOptions
+                    {
+                        RelativePosition = new Vector2(10, 0),
+                        Size = new Vector2(1536, 20),
+                        TitleText = "Debug Window",
+                        DisplayMode = WindowDisplayMode.Static,
+                    });
 
-            mapDisplay = new MapDisplay(
+            mapWindow = new MapWindow(
                     world,
-                    new Point(10, 15),
-                    new Point(1545, 920),
-                    tileSize: new Point(12, 12));
+                    tileSize: new Point(12, 12),
+                    new WindowOptions
+                    {
+                        RelativePosition = new Vector2(10, 15),
+                        Size = new Vector2(1536, 930),
+                        ShowBorder = false,
+                        ShowTitle = true,
+                        TitleText = "Dungeon Crawler World : Test Floor",
+                        DisplayMode = WindowDisplayMode.Static
+                    });
 
-            selectionDisplay = new SelectionDisplay(
+            selectionWindow = new SelectionWindow(
                     world,
-                    new Point(1565, 15),
-                    new Point(275, 1440));
+                    new WindowOptions
+                    {
+                        RelativePosition = new Vector2(1565, 15),
+                        Size = new Vector2(270, 1440),
+                        ShowTitle = true,
+                        TitleText = "No map nodes selected",
+                        CanContainChildWindows = true,
+                        ChildWindowTileMode = WindowTileMode.Vertical,
+                        DisplayMode = WindowDisplayMode.Static
+                    });
 
-            displayComponents = new List<UserInterfaceComponent>
+            displayComponents = new List<Window>
             {
-                debugDisplay,
-                mapDisplay,
-                selectionDisplay
+                debugWindow,
+                mapWindow,
+                selectionWindow
             };
         }
 
@@ -120,25 +140,32 @@ namespace DungeonCrawlerWorld.GameManagers.UserInterfaceManager
 
                 if (Keyboard.GetState().IsKeyDown(Keys.D))
                 {
-                    mapDisplay.UpdateScrollPosition(new Point(1,0));
+                    mapWindow.UpdateScrollPosition(new Point(1,0));
                 }
                 if (Keyboard.GetState().IsKeyDown(Keys.A))
                 {
-                    mapDisplay.UpdateScrollPosition(new Point(-1, 0));
+                    mapWindow.UpdateScrollPosition(new Point(-1, 0));
                 }
                 if (Keyboard.GetState().IsKeyDown(Keys.W))
                 {
-                    mapDisplay.UpdateScrollPosition(new Point(0, -1));
+                    mapWindow.UpdateScrollPosition(new Point(0, -1));
                 }
                 if (Keyboard.GetState().IsKeyDown(Keys.S))
                 {
-                    mapDisplay.UpdateScrollPosition(new Point(0, 1));
+                    mapWindow.UpdateScrollPosition(new Point(0, 1));
                 }
 
                 var mouseState = Mouse.GetState();
-                if (mouseState.LeftButton == ButtonState.Pressed && mapDisplay.IsInDisplayRectangle(mouseState.Position))
+                if (mouseState.LeftButton == ButtonState.Pressed)
                 {
-                    mapDisplay.SelectMapNodes(mouseState.Position);
+                    foreach (var displayComponent in displayComponents)
+                    {
+                        if (displayComponent.IsInDisplayRectangle(mouseState.Position))
+                        {
+                            displayComponent.HandleClickDown(mouseState.Position.ToVector2());
+                            break;
+                        }
+                    }
                 }
             }
 

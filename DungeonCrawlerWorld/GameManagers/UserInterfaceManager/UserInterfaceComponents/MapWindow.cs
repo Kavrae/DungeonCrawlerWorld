@@ -1,4 +1,5 @@
-﻿using System.Collections.Generic;
+﻿using System;
+using System.Collections.Generic;
 
 using Microsoft.Xna.Framework;
 using Microsoft.Xna.Framework.Graphics;
@@ -9,7 +10,7 @@ using DungeonCrawlerWorld.Components;
 
 namespace DungeonCrawlerWorld.GameManagers.UserInterfaceManager
 {
-    public class MapDisplay : UserInterfaceComponent
+    public class MapWindow : Window
     {
         private readonly World world;
         private GraphicsDevice graphicsDevice;
@@ -24,7 +25,7 @@ namespace DungeonCrawlerWorld.GameManagers.UserInterfaceManager
         private int tileColumns;
         private int tileRows;
         private int tileDepth;
-        private Point? selectedTileCoordinates;
+        private Vector2? selectedTileCoordinates;
         private bool resetAllTiles;
         private bool isScrolling;
         private bool skipUpdate;
@@ -32,9 +33,7 @@ namespace DungeonCrawlerWorld.GameManagers.UserInterfaceManager
         private ZoomLevel currentZoomLevel;
         private Dictionary<ZoomLevel, Point> tileSizes;
 
-        private Point mousePosition;
-
-        public MapDisplay(World world, Point position, Point size, Point? tileSize) : base(position, size)
+        public MapWindow(World world, Point? tileSize, WindowOptions windowOptions) : base(null, windowOptions)
         {
             this.world = world;
 
@@ -49,8 +48,7 @@ namespace DungeonCrawlerWorld.GameManagers.UserInterfaceManager
             };
 
             currentTileSize = tileSize ?? tileSizes[currentZoomLevel];
-            tileColumns = size.X / currentTileSize.X;
-            tileRows = size.Y / currentTileSize.Y;
+
             tileDepth = this.world.Map.Size.Z;
             resetAllTiles = false;
             isScrolling = false;
@@ -59,9 +57,10 @@ namespace DungeonCrawlerWorld.GameManagers.UserInterfaceManager
 
         public override void Initialize()
         {
+            base.Initialize();
+
             graphicsDevice = GameServices.GetService<GraphicsDevice>();
 
-            FontService = GameServices.GetService<FontService>();
             var defaultMediumFont = FontService.GetFont("DefaultMediumFont");
             var defaultLargeFont = FontService.GetFont("DefaultLargeFont");
             var defaultHugeFont = FontService.GetFont("DefaultHugeFont");
@@ -72,22 +71,28 @@ namespace DungeonCrawlerWorld.GameManagers.UserInterfaceManager
                 { FontType.DefaultHuge, defaultHugeFont }
             };
 
+            tileColumns = (int)Math.Floor(ContentSize.X / currentTileSize.X);
+            tileRows = (int)Math.Floor(ContentSize.Y / currentTileSize.Y);
+
             UpdateMaxScrollPosition();
             ResetTiles();
         }
 
-        public override void LoadContent() { }
-        
+        public override void LoadContent()
+        {
+            base.LoadContent();
+        }
+
         public override void Update(GameTime gameTime)
         {
-            if(isScrolling)
+            if (isScrolling)
             {
                 skipUpdate = !skipUpdate;
             }
 
-            if( skipUpdate || tiles == null)
-            { 
-                return; 
+            if (skipUpdate || tiles == null)
+            {
+                return;
             }
 
             for (var x = 0; x < tileColumns; x++)
@@ -99,7 +104,7 @@ namespace DungeonCrawlerWorld.GameManagers.UserInterfaceManager
 
                     var tile = tiles[x, y];
                     var mapNodePositionChanged = mapNodeX != tile.MapNodePosition.X || mapNodeY != tile.MapNodePosition.Y;
-                    if(mapNodePositionChanged)
+                    if (mapNodePositionChanged)
                     {
                         tile.MapNodePosition = new Point(mapNodeX, mapNodeY);
                     }
@@ -109,7 +114,7 @@ namespace DungeonCrawlerWorld.GameManagers.UserInterfaceManager
                         var mapNode = world.Map.MapNodes[mapNodeX, mapNodeY, z];
                         if (mapNode.HasChanged || mapNodePositionChanged)
                         {
-                            if(mapNode.HasChanged)
+                            if (mapNode.HasChanged)
                             {
                                 mapNode.HasChanged = false;
                                 world.Map.MapNodes[mapNodeX, mapNodeY, z] = mapNode;
@@ -145,7 +150,7 @@ namespace DungeonCrawlerWorld.GameManagers.UserInterfaceManager
                                 {
                                     glyphFound = ComponentRepo.GlyphComponents.TryGetValue(mapNode.EntityId.Value, out glyphComponent);
 
-                                    if(glyphFound)
+                                    if (glyphFound)
                                     {
                                         classGlyphFound = ComponentRepo.ClassGlyphComponents.TryGetValue(mapNode.EntityId.Value, out classGlyphComponent);
                                     }
@@ -173,14 +178,14 @@ namespace DungeonCrawlerWorld.GameManagers.UserInterfaceManager
                                 tile.ForegroundColor = glyphComponent.GlyphColor;
                                 tile.Glyph = glyphComponent.Glyph;
                                 tile.GlyphDrawPosition = new Vector2(
-                                    tile.DrawRectangle.Left + glyphComponent.GlyphOffset.X + ((transformComponent.Size.X -1) * currentTileSize.X/2),
+                                    tile.DrawRectangle.Left + glyphComponent.GlyphOffset.X + ((transformComponent.Size.X - 1) * currentTileSize.X / 2),
                                     tile.DrawRectangle.Top + glyphComponent.GlyphOffset.Y);
                                 tile.Size = transformComponent.Size;
 
-                                if(classGlyphFound)
+                                if (classGlyphFound)
                                 {
                                     tile.ClassGlypyh = classGlyphComponent.Glyph;
-                                    tile.ClassGlyphDrawPosition = tile.GlyphDrawPosition + new Vector2((int)(currentTileSize.X * (transformComponent.Size.X - 0.5)), currentTileSize.Y/-2);
+                                    tile.ClassGlyphDrawPosition = tile.GlyphDrawPosition + new Vector2((int)(currentTileSize.X * (transformComponent.Size.X - 0.5)), currentTileSize.Y / -2);
                                 }
                             }
                         }
@@ -191,9 +196,11 @@ namespace DungeonCrawlerWorld.GameManagers.UserInterfaceManager
 
             resetAllTiles = false;
             isScrolling = false;
+
+            base.Update(gameTime);
         }
 
-        public override void Draw(GameTime gameTime, SpriteBatch spriteBatch, Texture2D unitRectangle)
+        public override void DrawContent(GameTime gameTime, SpriteBatch spriteBatch, Texture2D unitRectangle)
         {
             if (tiles != null)
             {
@@ -263,14 +270,14 @@ namespace DungeonCrawlerWorld.GameManagers.UserInterfaceManager
             {
                 for (var row = 0; row < tileRows; row++)
                 {
-                    var tilePosition = new Point(
-                        Position.X + (column * currentTileSize.X),
-                        Position.X + (row * currentTileSize.Y)); ;
+                    var tilePosition = new Vector2(
+                        _contentAbsolutePosition.X + (column * currentTileSize.X),
+                        _contentAbsolutePosition.Y + (row * currentTileSize.Y));
 
                     var newTile = new Tile
                     {
-                        DrawRectangle = new Rectangle(tilePosition, currentTileSize),
-                        InnerDrawRectangle = new Rectangle(tilePosition.X + 1, tilePosition.Y + 1, currentTileSize.X - 2, currentTileSize.Y - 2),
+                        DrawRectangle = new Rectangle((int)tilePosition.X, (int)tilePosition.Y, currentTileSize.X, currentTileSize.Y),
+                        InnerDrawRectangle = new Rectangle((int)tilePosition.X + 1, (int)tilePosition.Y + 1, currentTileSize.X - 2, currentTileSize.Y - 2),
                         MapNodePosition = new Point(column, row)
                     };
                     tiles[column, row] = newTile;
@@ -300,25 +307,26 @@ namespace DungeonCrawlerWorld.GameManagers.UserInterfaceManager
             isScrolling = true;
         }
 
-        public void SelectMapNodes(Point mousePosition)
+        //TODO select mapNode vs select entity. Former stays on that mapNode. Latter follows the entity selected and updates selected tile
+        public void SelectMapNodes(Vector2 mousePosition)
         {
             if (tiles != null)
             {
-                var relativeMapDisplayMousePosition = mousePosition - Position;
-                var x = relativeMapDisplayMousePosition.X / currentTileSize.X;
-                var y = relativeMapDisplayMousePosition.Y / currentTileSize.Y;
+                var relativeMapDisplayMousePosition = mousePosition - _contentAbsolutePosition;
+                var x = (int)(relativeMapDisplayMousePosition.X / currentTileSize.X);
+                var y = (int)(relativeMapDisplayMousePosition.Y / currentTileSize.Y);
 
                 if (x < tileColumns && y < tileRows)
                 {
-                    var newTileCoordinates = new Point(x, y);
+                    var newTileCoordinates = new Vector2(x, y);
 
                     if (selectedTileCoordinates != newTileCoordinates)
                     {
                         if (selectedTileCoordinates != null)
                         {
-                            var oldTile = tiles[selectedTileCoordinates.Value.X, selectedTileCoordinates.Value.Y];
+                            var oldTile = tiles[(int)selectedTileCoordinates.Value.X, (int)selectedTileCoordinates.Value.Y];
                             oldTile.IsSelected = false;
-                            tiles[selectedTileCoordinates.Value.X, selectedTileCoordinates.Value.Y] = oldTile;
+                            tiles[(int)selectedTileCoordinates.Value.X, (int)selectedTileCoordinates.Value.Y] = oldTile;
                         }
 
                         selectedTileCoordinates = newTileCoordinates;
@@ -327,13 +335,23 @@ namespace DungeonCrawlerWorld.GameManagers.UserInterfaceManager
                         tiles[x, y] = newTile;
 
                         world.SelectedMapNodes ??= new MapNode[world.Map.Size.Z];
-                        for( var z = 0; z < world.Map.Size.Z; z++ )
+                        for (var z = 0; z < world.Map.Size.Z; z++)
                         {
                             world.SelectedMapNodes[z] = world.Map.MapNodes[newTile.MapNodePosition.X, newTile.MapNodePosition.Y, z];
                         }
                     }
                 }
             }
+        }
+
+        public override void HandleTitleClickDown(Vector2 mousePosition)
+        {
+            //Does nothing
+        }
+
+        public override void HandleContentClickDown(Vector2 mousePosition)
+        {
+            SelectMapNodes(mousePosition);
         }
     }
 }

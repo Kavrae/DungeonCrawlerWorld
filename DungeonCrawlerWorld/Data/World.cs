@@ -18,6 +18,7 @@ namespace DungeonCrawlerWorld.Data
             Map = new Map( new Vector3Int(0,0,0) );
             _GameVariables = new GameVariables
             {
+                IsDebugMode = true,
                 IsPaused = false
             };
         }
