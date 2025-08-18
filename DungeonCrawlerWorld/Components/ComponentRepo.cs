@@ -7,7 +7,6 @@ namespace DungeonCrawlerWorld.Components
     public static class ComponentRepo
     {
         public static Dictionary<Guid, List<ClassComponent>> ClassComponents { get; }
-        public static Dictionary<Guid, ClassGlyphComponent> ClassGlyphComponents { get; }
         public static Dictionary<Guid, BackgroundComponent> BackgroundComponents { get; set; }
         public static Dictionary<Guid, DisplayTextComponent> DisplayTextComponents { get; set; }
         public static Dictionary<Guid, EnergyComponent> EnergyComponents { get; set; }
@@ -21,7 +20,6 @@ namespace DungeonCrawlerWorld.Components
         {
             BackgroundComponents = new Dictionary<Guid, BackgroundComponent>();
             ClassComponents = new Dictionary<Guid, List<ClassComponent>>();
-            ClassGlyphComponents = new Dictionary<Guid, ClassGlyphComponent>();
             DisplayTextComponents = new Dictionary<Guid, DisplayTextComponent>();
             EnergyComponents = new Dictionary<Guid, EnergyComponent>();
             GlyphComponents = new Dictionary<Guid, GlyphComponent>();
@@ -109,10 +107,6 @@ namespace DungeonCrawlerWorld.Components
             {
                 components.Add(backgroundComponent);
             }
-            if (ClassGlyphComponents.TryGetValue(entityId, out ClassGlyphComponent classglyphComponent))
-            {
-                components.Add(classglyphComponent);
-            }
             if (DisplayTextComponents.TryGetValue(entityId, out DisplayTextComponent displayTextComponent))
             {
                 components.Add(displayTextComponent);
@@ -147,7 +141,6 @@ namespace DungeonCrawlerWorld.Components
             ClassComponents.Remove(entityId);
             
             BackgroundComponents.Remove(entityId);
-            ClassGlyphComponents.Remove(entityId);
             DisplayTextComponents.Remove(entityId);
             EnergyComponents.Remove(entityId);
             GlyphComponents.Remove(entityId);

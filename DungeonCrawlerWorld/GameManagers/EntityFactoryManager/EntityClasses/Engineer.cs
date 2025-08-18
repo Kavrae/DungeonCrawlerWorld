@@ -1,7 +1,5 @@
 ﻿using System;
 
-using Microsoft.Xna.Framework;
-
 using DungeonCrawlerWorld.Components;
 
 namespace DungeonCrawlerWorld.GameManagers.EntityFactoryManager
@@ -13,8 +11,6 @@ namespace DungeonCrawlerWorld.GameManagers.EntityFactoryManager
         {
             Name = "Engineer";
             Description = "TODO default engineer description";
-
-            _ = new ClassGlyphComponent(entityId, "e", Color.OrangeRed, new Point(0, 0));
 
             //TODO temporary : engineers have 5% more energy and energy recharge
             if (ComponentRepo.EnergyComponents.TryGetValue(EntityId, out var energyComponent))

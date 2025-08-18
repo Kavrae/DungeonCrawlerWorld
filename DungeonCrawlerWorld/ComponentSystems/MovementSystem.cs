@@ -37,7 +37,7 @@ namespace DungeonCrawlerWorld.ComponentSystems
             {
                 var movementComponent = keyComponent.Value;
 
-                if (movementComponent.FramesToWait == 0)
+                if (movementComponent.FramesToWait <= 0)
                 {
                     if (ComponentRepo.EnergyComponents.TryGetValue(keyComponent.Key, out EnergyComponent actionEnergyComponent)
                         && actionEnergyComponent.CurrentEnergy >= movementComponent.EnergyToMove
@@ -85,7 +85,8 @@ namespace DungeonCrawlerWorld.ComponentSystems
                 {
                     for (var z = newPosition.Position.Z; z < newPosition.Position.Z + newPosition.Size.Z; z++)
                     {
-                        if (world.Map.MapNodes[x, y, z].EntityId != null && world.Map.MapNodes[x, y, z].EntityId != entityId)
+                        var mapNodeEntityId = world.Map.MapNodes[x, y, z].EntityId;
+                        if (mapNodeEntityId != null && mapNodeEntityId != entityId)
                         {
                             return false;
                         }

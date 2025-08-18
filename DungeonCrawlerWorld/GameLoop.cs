@@ -44,7 +44,7 @@ namespace DungeonCrawlerWorld
             graphics = new GraphicsDeviceManager(this)
             {
                 PreferredBackBufferHeight = 1050,
-                PreferredBackBufferWidth = 1850
+                PreferredBackBufferWidth = 1850,
             };
 
             Content.RootDirectory = "Content";

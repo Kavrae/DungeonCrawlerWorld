@@ -1,5 +1,7 @@
 ﻿using System;
 
+using Microsoft.Xna.Framework;
+
 using DungeonCrawlerWorld.Components;
 using DungeonCrawlerWorld.Utilities;
 
@@ -11,7 +13,7 @@ namespace DungeonCrawlerWorld.Data
 
         public GameVariables _GameVariables{ get; set; }
 
-        public MapNode[] SelectedMapNodes { get; set; }
+        public Point? SelectedMapNodePosition { get; set; }
 
         public World()
         {
@@ -36,41 +38,36 @@ namespace DungeonCrawlerWorld.Data
 
         public void MoveEntity(Guid entityId, Vector3Int newPosition)
         {
-            if (IsOnMap(newPosition))
+            if (IsOnMap(newPosition) && ComponentRepo.TransformComponents.TryGetValue(entityId, out TransformComponent transformComponent))
             {
-                if (ComponentRepo.TransformComponents.TryGetValue(entityId, out TransformComponent transformComponent))
+                if (IsOnMap(transformComponent.Position))
                 {
-                    if (IsOnMap(transformComponent.Position))
+                    for (var x = transformComponent.Position.X; x < transformComponent.Position.X + transformComponent.Size.X; x++)
                     {
-                        for (var x = transformComponent.Position.X; x < transformComponent.Position.X + transformComponent.Size.X; x++)
+                        for (var y = transformComponent.Position.Y; y < transformComponent.Position.Y + transformComponent.Size.Y; y++)
                         {
-                            for (var y = transformComponent.Position.Y; y < transformComponent.Position.Y + transformComponent.Size.Y; y++)
-                            {
-                                var mapNode = Map.MapNodes[x, y, transformComponent.Position.Z];
-                                mapNode.EntityId = null;
-                                mapNode.HasChanged = true;
-                                Map.MapNodes[x, y, transformComponent.Position.Z] = mapNode;
-                            }
+                            var mapNode = Map.MapNodes[x, y, transformComponent.Position.Z];
+                            mapNode.EntityId = null;
+                            Map.MapNodes[x, y, transformComponent.Position.Z] = mapNode;
                         }
                     }
-
-                    for (var x = newPosition.X; x < newPosition.X + transformComponent.Size.X; x++)
-                    {
-                        for (var y = newPosition.Y; y < newPosition.Y + transformComponent.Size.Y; y++)
-                        {
-                            var mapNode = Map.MapNodes[x, y, newPosition.Z];
-                            if (mapNode.EntityId != entityId)
-                            {
-                                mapNode.EntityId = entityId;
-                                mapNode.HasChanged = true;
-                            }
-                            Map.MapNodes[x, y, newPosition.Z] = mapNode;
-                        }
-                    }
-
-                    transformComponent.Position = newPosition;
-                    ComponentRepo.TransformComponents[transformComponent.EntityId] = transformComponent;
                 }
+
+                for (var x = newPosition.X; x < newPosition.X + transformComponent.Size.X; x++)
+                {
+                    for (var y = newPosition.Y; y < newPosition.Y + transformComponent.Size.Y; y++)
+                    {
+                        var mapNode = Map.MapNodes[x, y, newPosition.Z];
+                        if (mapNode.EntityId != entityId)
+                        {
+                            mapNode.EntityId = entityId;
+                        }
+                        Map.MapNodes[x, y, newPosition.Z] = mapNode;
+                    }
+                }
+
+                transformComponent.Position = newPosition;
+                ComponentRepo.TransformComponents[transformComponent.EntityId] = transformComponent;
             }
         }
 

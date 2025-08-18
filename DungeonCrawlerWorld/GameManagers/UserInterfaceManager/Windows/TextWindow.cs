@@ -42,7 +42,13 @@ namespace DungeonCrawlerWorld.GameManagers.UserInterfaceManager
                     var line = FormattedText.FormattedTextLines[lineNumber];
                     if (!string.IsNullOrWhiteSpace(line))
                     {
-                        spriteBatch.DrawString(ContentFont, line, GetLinePosition(lineNumber, ContentFont), Color.Black);
+                        spriteBatch.DrawString(
+                            ContentFont,
+                            line,
+                            new Vector2(
+                                LinePadding,
+                                (ContentFont.LineSpacing * lineNumber) + (LinePadding * (lineNumber + 1))),
+                            Color.Black);
                     }
                 }
             }
@@ -90,7 +96,7 @@ namespace DungeonCrawlerWorld.GameManagers.UserInterfaceManager
                 WordWrap = true
             });
 
-            _contentSize.Y = CalculateTextHeight(FormattedText.FormattedTextLines.Count, ContentFont);
+            _contentSize.Y = ContentFont.LineSpacing * FormattedText.FormattedTextLines.Count + (LinePadding * (FormattedText.FormattedTextLines.Count + 1));
 
             _windowCurrentSize = _contentSize;
             if (_showTitle)
@@ -105,18 +111,6 @@ namespace DungeonCrawlerWorld.GameManagers.UserInterfaceManager
             {
                 _windowCurrentSize += Vector2.Multiply(_borderSize, 2);
             }
-        }
-
-        public int CalculateTextHeight(int numberOfLines, SpriteFont font)
-        {
-            return font.LineSpacing * numberOfLines + (LinePadding * (numberOfLines + 1));
-        }
-
-        public Vector2 GetLinePosition(int lineNumber, SpriteFont font)
-        {
-            return new Vector2(
-                _contentAbsolutePosition.X + LinePadding,
-                _contentAbsolutePosition.Y + (font.LineSpacing * lineNumber) + (LinePadding * (lineNumber + 1)));
         }
     }
 }

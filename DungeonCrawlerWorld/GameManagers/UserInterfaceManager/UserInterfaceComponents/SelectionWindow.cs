@@ -15,11 +15,12 @@ namespace DungeonCrawlerWorld.GameManagers.UserInterfaceManager
     {
         private readonly World world;
 
-        private MapNode[] selectedMapNodes;
+        private List<MapNode> selectedMapNodes;
 
         public SelectionWindow(World world, WindowOptions windowOptions) : base(null, windowOptions)
         {
             this.world = world;
+            selectedMapNodes = new List<MapNode>();
         }
 
         public override void Initialize()
@@ -34,27 +35,34 @@ namespace DungeonCrawlerWorld.GameManagers.UserInterfaceManager
 
         public override void Update(GameTime gameTime)
         {
-            selectedMapNodes = world.SelectedMapNodes;
-            if (selectedMapNodes != null && selectedMapNodes.Length > 0)
-            {
-                TitleText = $"Selected Map Node : {selectedMapNodes[0].Position.X},{selectedMapNodes[0].Position.Y}";
+            _childWindows = new List<Window>();
+            selectedMapNodes = new List<MapNode>();
 
-                _childWindows = new List<Window>();
-                foreach (var mapNode in selectedMapNodes.Where(mapNode => mapNode.EntityId != null))
+            if (world.SelectedMapNodePosition != null)
+            {
+                TitleText = $"Selected Map Node : {world.SelectedMapNodePosition.Value.X},{world.SelectedMapNodePosition.Value.Y}";
+
+                for (var z = world.Map.Size.Z - 1; z >= 0; z--)
                 {
-                    if (world._GameVariables.IsDebugMode)
+                    selectedMapNodes.Add(world.Map.MapNodes[world.SelectedMapNodePosition.Value.X, world.SelectedMapNodePosition.Value.Y, z]);
+                }
+
+                if (world._GameVariables.IsDebugMode)
+                {
+                    foreach (var selectedMapNode in selectedMapNodes.Where(mapNode => mapNode.EntityId != null))
                     {
-                        CreateComponentDebugInfoWindows(mapNode);
+                        CreateComponentDebugInfoWindows(selectedMapNode);
                     }
-                    else
-                    {
-                        //TODO Player's selection view
-                    }
+                }
+                else
+                {
+                    //TODO Player's selection view
                 }
             }
             else
             {
                 TitleText = "No map nodes selected";
+                selectedMapNodes = new List<MapNode>();
             }
 
             base.Update(gameTime);
@@ -62,8 +70,6 @@ namespace DungeonCrawlerWorld.GameManagers.UserInterfaceManager
 
         public void CreateComponentDebugInfoWindows(MapNode mapNode)
         {
-            _childWindows = new List<Window>();
-
             foreach (var component in ComponentRepo.GetAllComponents(mapNode.EntityId.Value))
             {
                 var text = new StringBuilder();

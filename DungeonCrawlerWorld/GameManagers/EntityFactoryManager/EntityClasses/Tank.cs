@@ -15,12 +15,10 @@ namespace DungeonCrawlerWorld.GameManagers.EntityFactoryManager
             Name = "Tank";
             Description = "Extra hit points";
 
-            _ = new ClassGlyphComponent(entityId, "t", Color.BlueViolet, new Point(0, 0));
-
             //TODO temporary : tanks have 10% more health and health regen
             if (ComponentRepo.HealthComponents.TryGetValue(EntityId, out var healthComponent))
             {
-                //TODO need to track additive and multiplicative bonuses, not just multiple them here. Otherwise order matters.
+                //TODO need to track additive and multiplicative bonuses, not just multiply them here. Otherwise order matters and introduces many bugs.
                 healthComponent.MaximumHealth = (short)(healthComponent.MaximumHealth * 1.10m);
                 healthComponent.HealthRegen = (short)(healthComponent.HealthRegen * 1.10m);
                 ComponentRepo.HealthComponents[EntityId] = healthComponent;

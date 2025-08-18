@@ -1,9 +1,7 @@
 ﻿using Microsoft.Xna.Framework;
-using Microsoft.Xna.Framework.Graphics;
 
 using DungeonCrawlerWorld.ComponentSystems;
 using DungeonCrawlerWorld.Data;
-using DungeonCrawlerWorld.Services;
 
 namespace DungeonCrawlerWorld.GameManagers.ComponentSystemManager
 {
@@ -22,9 +20,6 @@ namespace DungeonCrawlerWorld.GameManagers.ComponentSystemManager
         private HealthRegenSystem healthRegenSystem;
         private MovementSystem movementSystem;
 
-        private SpriteBatchService spriteBatchService;
-        private SpriteBatch spriteBatch;
-
         private byte currentFrame;
         private byte framesPerCycle;
 
@@ -38,8 +33,6 @@ namespace DungeonCrawlerWorld.GameManagers.ComponentSystemManager
             energyRechargeSystem = new EnergyRechargeSystem();
             healthRegenSystem = new HealthRegenSystem();
             movementSystem = new MovementSystem();
-
-            spriteBatchService = GameServices.GetService<SpriteBatchService>();
         }
 
         public void LoadContent() { }

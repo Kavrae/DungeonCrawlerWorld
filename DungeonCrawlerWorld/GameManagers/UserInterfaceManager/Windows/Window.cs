@@ -7,11 +7,6 @@ using Microsoft.Xna.Framework.Graphics;
 
 using DungeonCrawlerWorld.Services;
 
-//Float refactor as a separate commit that can be backed out out if too slow
-//   create floating point rectangle
-//   wrap XNA's scaling draw call to match the draw-by-rectangle call but using the new floating rectangle
-//   swap all tile stuff to floats with the new types and methods
-
 //TODO minimize and restore
 //TODO recalculate tiled sibling windows on minimize and restore
 //TODO close
@@ -26,6 +21,8 @@ namespace DungeonCrawlerWorld.GameManagers.UserInterfaceManager
     {
         protected Guid _windowId;
         public Guid WindowId { get { return _windowId; } }
+
+        private GraphicsDevice graphicsDevice;
 
         public FontService FontService;
 
@@ -109,6 +106,14 @@ namespace DungeonCrawlerWorld.GameManagers.UserInterfaceManager
 
         public Vector2 ContentPadding = new(5, 5);
 
+
+        /*========Viewport========*/
+        private Viewport _windowViewport;
+        public Viewport WindowViewport {get { return _windowViewport; }}
+
+        private Matrix _cameraTransform;
+        public Matrix CameraTransform{ get { return _cameraTransform; }}
+
         /*========User Controls========*/
         public bool CanUserClose { get; set; }
         public bool CanUserMinimize { get; set; }
@@ -121,6 +126,8 @@ namespace DungeonCrawlerWorld.GameManagers.UserInterfaceManager
         public Window(Window parentWindow, WindowOptions windowOptions)
         {
             _windowId = Guid.NewGuid();
+
+            graphicsDevice = GameServices.GetService<GraphicsDevice>();
 
             FontService = GameServices.GetService<FontService>();
             TitleFont = FontService.GetFont("defaultFont");
@@ -167,6 +174,10 @@ namespace DungeonCrawlerWorld.GameManagers.UserInterfaceManager
         {
             RecalculateSizeAndAbsolutePosition();
 
+            _windowViewport = new Viewport(_contentRectangle);
+            _cameraTransform = Matrix.CreateRotationZ(0) * // camera rotation, default 0
+                         Matrix.CreateScale(new Vector3(1, 1, 1)); //TODO zoom
+
             foreach (var childWindow in _childWindows)
             {
                 childWindow.Initialize();
@@ -204,8 +215,18 @@ namespace DungeonCrawlerWorld.GameManagers.UserInterfaceManager
 
             spriteBatch.Draw(unitRectangle, _contentRectangle, Color.White);
 
+            spriteBatch.End();
+
+            var previousViewport = graphicsDevice.Viewport;
+            graphicsDevice.Viewport = WindowViewport;
+            spriteBatch.Begin(SpriteSortMode.Deferred, BlendState.AlphaBlend, null, null, null, null, CameraTransform);
+
             DrawContent(gameTime, spriteBatch, unitRectangle);
 
+            spriteBatch.End();
+            graphicsDevice.Viewport = previousViewport;
+            spriteBatch.Begin(SpriteSortMode.Deferred, BlendState.AlphaBlend, null, null, null, null, null);
+            
             if (_childWindows != null)
             {
                 foreach (var childWindow in _childWindows)
@@ -295,7 +316,8 @@ namespace DungeonCrawlerWorld.GameManagers.UserInterfaceManager
                         );
                     }
                 }
-                newChildWindow.RecalculateSizeAndAbsolutePosition();
+
+                newChildWindow.Initialize();
             }
         }
 
@@ -310,6 +332,7 @@ namespace DungeonCrawlerWorld.GameManagers.UserInterfaceManager
                 if (childWindow.WindowId != windowId)
                 {
                     AddChildWindow(childWindow);
+                    childWindow.Initialize();
                 }
             }
         }

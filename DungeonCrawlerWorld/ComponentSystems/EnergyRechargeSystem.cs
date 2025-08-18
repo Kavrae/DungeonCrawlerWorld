@@ -26,6 +26,7 @@ namespace DungeonCrawlerWorld.ComponentSystems
                     {
                         actionEnergyComponent.CurrentEnergy = actionEnergyComponent.MaximumEnergy;
                     }
+
                     ComponentRepo.EnergyComponents[keyComponent.Key] = actionEnergyComponent;
                 }
             }

@@ -15,23 +15,21 @@ namespace DungeonCrawlerWorld.Data
         public Vector3Int? NeighborUp { get; set; }
         public Vector3Int? NeighborDown { get; set; }
 
-        public bool HasChanged { get; set; }
 
         public Guid? EntityId { get; set; }
 
-        public MapNode(Vector3Int mapCoordinate) 
+        public MapNode(int x, int y, int z, Vector3Int mapSize) 
         {
             Id = Guid.NewGuid();
-            Position = mapCoordinate;
-            NeighborNorth = null;
-            NeighborEast = null;
-            NeighborSouth = null;
-            NeighborWest = null;
-            NeighborUp = null;
-            NeighborDown = null;
-
-            HasChanged = false;
             EntityId = null;
+
+            Position = new Vector3Int(x, y, z);
+            NeighborNorth = y > 0 ? new Vector3Int(x, y - 1, z) : null;
+            NeighborSouth = y < mapSize.X - 1 ? new Vector3Int(x, y + 1, z) : null;
+            NeighborWest = x > 0 ? new Vector3Int(x - 1, y, z) : null;
+            NeighborEast = x < mapSize.Y - 1 ? new Vector3Int(x + 1, y, z) : null;
+            NeighborDown = z > 0 ? new Vector3Int(x, y, z + 1) : null;
+            NeighborUp = z < mapSize.Z - 1 ? new Vector3Int(x, y, z - 1) : null;
         }
     }
 }
