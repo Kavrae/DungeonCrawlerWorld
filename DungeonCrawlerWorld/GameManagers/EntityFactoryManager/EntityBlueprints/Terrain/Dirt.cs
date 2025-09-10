@@ -9,13 +9,13 @@ namespace DungeonCrawlerWorld.GameManagers.EntityFactoryManager
     public class Dirt : IBlueprint
     {
         
-        public Guid EntityId { get; set; }
+        public int EntityId { get; set; }
         public string Name { get; set; }
         public string Description { get; set; }
 
        public Dirt()
         {
-            EntityId = Guid.NewGuid();
+            EntityId = ComponentRepo.GetNextEntityId();
             Name = "Dirt";
             Description = "Ordinary dirt. Nothing special.";
 

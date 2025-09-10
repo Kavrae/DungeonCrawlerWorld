@@ -16,8 +16,8 @@ namespace DungeonCrawlerWorld.GameManagers.EntityFactoryManager
             "TestName2"
         };
 
-        public Goblin() : this(Guid.NewGuid()){}
-        public Goblin(Guid entityId)
+        public Goblin() : this(ComponentRepo.GetNextEntityId()){}
+        public Goblin(int entityId)
         {
             Name = "Goblin";
             Description = "Small, green and smart. What Goblins lack in physical strength they make up in pure spunk.";

@@ -38,29 +38,31 @@ namespace DungeonCrawlerWorld.GameManagers.EntityFactoryManager
         {
         }
 
-        public static Guid BuildFromBlueprint<T>() where T : IBlueprint, new()
+        public static int BuildFromBlueprint<T>() where T : IBlueprint, new()
         {
             var blueprint = new T();
             return blueprint.EntityId;
         }
 
-        public static Guid BuildFromBlueprint<T>(Point position) where T : IBlueprint, new()
+        public static int BuildFromBlueprint<T>(Point position) where T : IBlueprint, new()
         {
             var blueprint = new T();
 
-            if (ComponentRepo.TransformComponents.TryGetValue(blueprint.EntityId, out TransformComponent transformComponent))
+            var transformComponent = ComponentRepo.TransformComponents[blueprint.EntityId];
+            if (transformComponent != null)
             {
-                world.MoveEntity(blueprint.EntityId, new Vector3Int(position.X, position.Y, transformComponent.Position.Z));
+                world.MoveEntity(blueprint.EntityId, new Vector3Int(position.X, position.Y, transformComponent.Value.Position.Z));
             }
 
             return blueprint.EntityId;
         }
 
-        public static Guid BuildFromBlueprint<T>(Vector3Int position) where T : IBlueprint, new()
+        public static int BuildFromBlueprint<T>(Vector3Int position) where T : IBlueprint, new()
         {
             var blueprint = new T();
 
-            if (ComponentRepo.TransformComponents.TryGetValue(blueprint.EntityId, out TransformComponent transformComponent))
+            var transformComponent = ComponentRepo.TransformComponents[blueprint.EntityId];
+            if (transformComponent != null)
             {
                 world.MoveEntity(blueprint.EntityId, position);
             }
@@ -68,29 +70,31 @@ namespace DungeonCrawlerWorld.GameManagers.EntityFactoryManager
             return blueprint.EntityId;
         }
 
-        public static Guid BuildFromRace<T>() where T : RaceComponent, new()
+        public static int BuildFromRace<T>() where T : RaceComponent, new()
         {
             var blueprint = new T();
             return blueprint.EntityId;
         }
 
-        public static Guid BuildFromRace<T>(Point position) where T : RaceComponent, new()
+        public static int BuildFromRace<T>(Point position) where T : RaceComponent, new()
         {
             var blueprint = new T();
 
-            if (ComponentRepo.TransformComponents.TryGetValue(blueprint.EntityId, out TransformComponent transformComponent))
+            var transformComponent = ComponentRepo.TransformComponents[blueprint.EntityId];
+            if( transformComponent != null)
             {
-                world.MoveEntity(blueprint.EntityId, new Vector3Int(position.X, position.Y, transformComponent.Position.Z));
+                world.MoveEntity(blueprint.EntityId, new Vector3Int(position.X, position.Y, transformComponent.Value.Position.Z));
             }
 
             return blueprint.EntityId;
         }
 
-        public static Guid BuildFromRace<T>(Vector3Int position) where T : RaceComponent, new()
+        public static int BuildFromRace<T>(Vector3Int position) where T : RaceComponent, new()
         {
             var blueprint = new T();
 
-            if (ComponentRepo.TransformComponents.TryGetValue(blueprint.EntityId, out TransformComponent transformComponent))
+            var transformComponent = ComponentRepo.TransformComponents[blueprint.EntityId];
+            if(transformComponent != null)
             {
                 world.MoveEntity(blueprint.EntityId, position);
             }

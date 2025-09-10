@@ -1,6 +1,4 @@
 ﻿using System;
-using System.Collections.Generic;
-using System.Linq;
 
 using Microsoft.Xna.Framework;
 
@@ -33,25 +31,37 @@ namespace DungeonCrawlerWorld.ComponentSystems
 
         public void Update(GameTime gameTime)
         {
-            foreach (var keyComponent in ComponentRepo.MovementComponents)
+            foreach (var keyValuePair in ComponentRepo.MovementComponents)
             {
-                var movementComponent = keyComponent.Value;
+                int entityId = keyValuePair.Key;
+                var movementComponent = keyValuePair.Value;
 
-                if (movementComponent.FramesToWait <= 0)
-                {
-                    if (ComponentRepo.EnergyComponents.TryGetValue(keyComponent.Key, out EnergyComponent actionEnergyComponent)
-                        && actionEnergyComponent.CurrentEnergy >= movementComponent.EnergyToMove
-                        && ComponentRepo.TransformComponents.TryGetValue(keyComponent.Key, out TransformComponent transformComponent))
-                    {
-                        SetNextMapPosition(movementComponent, transformComponent);
-                        TryMoveToNextMapPosition(movementComponent, actionEnergyComponent);
-                    }
-                }
-                else
+                if (movementComponent.FramesToWait > 0)
                 {
                     movementComponent.FramesToWait -= 1;
-                    ComponentRepo.MovementComponents[movementComponent.EntityId] = movementComponent;
+                    ComponentRepo.MovementComponents[entityId] = movementComponent;
+                    continue;
                 }
+
+                if (!ComponentRepo.EnergyComponents.TryGetValue(entityId, out var actionEnergyComponent))
+                {
+                    continue;
+                }
+
+                if (actionEnergyComponent.CurrentEnergy < movementComponent.EnergyToMove)
+                {
+                    continue;
+                }
+
+                var transformComponentNullable = ComponentRepo.TransformComponents[entityId];
+                if (transformComponentNullable == null)
+                {
+                    continue;
+                }
+                var transformComponent = transformComponentNullable.Value;
+
+                SetNextMapPosition(movementComponent, transformComponent);
+                TryMoveToNextMapPosition(movementComponent, actionEnergyComponent);
             }
         }
 
@@ -77,7 +87,7 @@ namespace DungeonCrawlerWorld.ComponentSystems
                 ComponentRepo.EnergyComponents[actionEnergyComponent.EntityId] = actionEnergyComponent;
             }
         }
-        public bool CanMove(CubeInt newPosition, Guid entityId)
+        public bool CanMove(CubeInt newPosition, int entityId)
         {
             for (var x = newPosition.Position.X; x < newPosition.Position.X + newPosition.Size.X; x++)
             {
@@ -109,13 +119,15 @@ namespace DungeonCrawlerWorld.ComponentSystems
             {
                 var mapNode = world.Map.MapNodes[transformComponent.Position.X, transformComponent.Position.Y, transformComponent.Position.Z];
 
-                var validRandomMovementTargets = new List<Vector3Int>();
+                var movementCandidates = new Vector3Int[4];
+                var movementCandidateCount = 0;
+                
                 if (mapNode.NeighborNorth != null)
                 {
                     var newPositionCube = new CubeInt(mapNode.NeighborNorth.Value, transformComponent.Size);
                     if (CanMove(newPositionCube, movementComponent.EntityId))
                     {
-                        validRandomMovementTargets.Add(newPositionCube.Position);
+                        movementCandidates[movementCandidateCount++] = newPositionCube.Position;
                     }
                 }
                 if (mapNode.NeighborEast != null)
@@ -123,7 +135,7 @@ namespace DungeonCrawlerWorld.ComponentSystems
                     var newPositionCube = new CubeInt(mapNode.NeighborEast.Value, transformComponent.Size);
                     if (CanMove(newPositionCube, movementComponent.EntityId))
                     {
-                        validRandomMovementTargets.Add(newPositionCube.Position);
+                        movementCandidates[movementCandidateCount++] = newPositionCube.Position;
                     }
                 }
                 if (mapNode.NeighborSouth != null)
@@ -131,7 +143,7 @@ namespace DungeonCrawlerWorld.ComponentSystems
                     var newPositionCube = new CubeInt(mapNode.NeighborSouth.Value, transformComponent.Size);
                     if (CanMove(newPositionCube, movementComponent.EntityId))
                     {
-                        validRandomMovementTargets.Add(newPositionCube.Position);
+                        movementCandidates[movementCandidateCount++] = newPositionCube.Position;
                     }
                 }
                 if (mapNode.NeighborWest != null)
@@ -139,13 +151,13 @@ namespace DungeonCrawlerWorld.ComponentSystems
                     var newPositionCube = new CubeInt(mapNode.NeighborWest.Value, transformComponent.Size);
                     if (CanMove(newPositionCube, movementComponent.EntityId))
                     {
-                        validRandomMovementTargets.Add(newPositionCube.Position);
+                        movementCandidates[movementCandidateCount++] = newPositionCube.Position;
                     }
                 }
 
-                if (validRandomMovementTargets.Any())
+                if (movementCandidateCount> 0)
                 {
-                    movementComponent.NextMapPosition = validRandomMovementTargets[randomizer.Next(0, validRandomMovementTargets.Count)];
+                    movementComponent.NextMapPosition = movementCandidates[randomizer.Next(movementCandidateCount)];
                     ComponentRepo.MovementComponents[movementComponent.EntityId] = movementComponent;
                 }
                 else

@@ -7,7 +7,7 @@ namespace DungeonCrawlerWorld.GameManagers.EntityFactoryManager
     public class Engineer : ClassComponent
     {
         public override Guid ClassId => new("7b97d17d-5e77-42a1-8b4a-ed0bb97c730d");
-        public Engineer(Guid entityId)
+        public Engineer(int entityId)
         {
             Name = "Engineer";
             Description = "TODO default engineer description";

@@ -5,8 +5,6 @@ namespace DungeonCrawlerWorld.Data
 {
     public struct MapNode
     {
-        public Guid Id { get; set; }
-
         public Vector3Int Position { get; set; }
         public Vector3Int? NeighborNorth { get; set; }
         public Vector3Int? NeighborEast { get; set; }
@@ -16,11 +14,10 @@ namespace DungeonCrawlerWorld.Data
         public Vector3Int? NeighborDown { get; set; }
 
 
-        public Guid? EntityId { get; set; }
+        public int? EntityId { get; set; }
 
         public MapNode(int x, int y, int z, Vector3Int mapSize) 
         {
-            Id = Guid.NewGuid();
             EntityId = null;
 
             Position = new Vector3Int(x, y, z);

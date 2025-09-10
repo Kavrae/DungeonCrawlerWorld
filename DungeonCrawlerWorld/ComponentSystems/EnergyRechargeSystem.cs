@@ -1,6 +1,7 @@
 ﻿using Microsoft.Xna.Framework;
 
 using DungeonCrawlerWorld.Components;
+using System.Threading.Tasks;
 
 namespace DungeonCrawlerWorld.ComponentSystems
 {
@@ -16,20 +17,20 @@ namespace DungeonCrawlerWorld.ComponentSystems
 
         public void Update(GameTime gameTime)
         {
-            foreach (var keyComponent in ComponentRepo.EnergyComponents)
+            Parallel.ForEach(ComponentRepo.EnergyComponents, keyValuePair =>
             {
-                var actionEnergyComponent = keyComponent.Value;
+                var actionEnergyComponent = keyValuePair.Value;
                 if (actionEnergyComponent.EnergyRecharge != 0)
                 {
                     actionEnergyComponent.CurrentEnergy += actionEnergyComponent.EnergyRecharge;
-                    if( actionEnergyComponent.CurrentEnergy > actionEnergyComponent.MaximumEnergy)
+                    if (actionEnergyComponent.CurrentEnergy > actionEnergyComponent.MaximumEnergy)
                     {
                         actionEnergyComponent.CurrentEnergy = actionEnergyComponent.MaximumEnergy;
                     }
 
-                    ComponentRepo.EnergyComponents[keyComponent.Key] = actionEnergyComponent;
+                    ComponentRepo.EnergyComponents[keyValuePair.Key] = actionEnergyComponent;
                 }
-            }
+            });
         }
     }
 }

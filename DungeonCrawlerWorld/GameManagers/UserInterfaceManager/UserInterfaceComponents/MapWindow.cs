@@ -85,6 +85,8 @@ namespace DungeonCrawlerWorld.GameManagers.UserInterfaceManager
 
         public void DrawBackgrounds(GameTime gameTime, SpriteBatch spriteBatch, Texture2D unitRectangle)
         {
+            var innerTileSize = new Point(currentTileSize.X - 2, currentTileSize.Y - 2);
+
             for (var column = 0; column < tileColumns; column++)
             {
                 for (var row = 0; row < tileRows; row++)
@@ -95,33 +97,39 @@ namespace DungeonCrawlerWorld.GameManagers.UserInterfaceManager
                     for (var z = tileDepth - 1; z >= 0; z--)
                     {
                         var mapNode = world.Map.MapNodes[mapNodeX, mapNodeY, z];
-                        if (mapNode.EntityId != null && ComponentRepo.BackgroundComponents.TryGetValue(mapNode.EntityId.Value, out var backgroundComponent))
+                        if (mapNode.EntityId != null)
                         {
-                            var isSelected = world.SelectedMapNodePosition != null
-                                && world.SelectedMapNodePosition.Value.X == mapNodeX
-                                && world.SelectedMapNodePosition.Value.Y == mapNodeY;
-
-                            if (isSelected)
+                            var nullableBackgroundComponent = ComponentRepo.BackgroundComponents[mapNode.EntityId.Value];
+                            if (nullableBackgroundComponent != null)
                             {
-                                spriteBatch.Draw(
-                                    unitRectangle,
-                                    new Rectangle(column * currentTileSize.X, row * currentTileSize.Y, currentTileSize.X, currentTileSize.Y),
-                                    Color.Gold);
+                                var backgroundComponent = nullableBackgroundComponent.Value;
 
-                                spriteBatch.Draw(
-                                    unitRectangle,
-                                    new Rectangle(column * currentTileSize.X + 1, row * currentTileSize.Y + 1, currentTileSize.X - 2, currentTileSize.Y - 2),
-                                    backgroundComponent.BackgroundColor ?? Color.White);
-                            }
-                            else
-                            {
-                                spriteBatch.Draw(
-                                    unitRectangle,
-                                    new Rectangle(column * currentTileSize.X, row * currentTileSize.Y, currentTileSize.X, currentTileSize.Y),
-                                    backgroundComponent.BackgroundColor ?? Color.White);
-                            }
+                                var isSelected = world.SelectedMapNodePosition != null
+                                    && world.SelectedMapNodePosition.Value.X == mapNodeX
+                                    && world.SelectedMapNodePosition.Value.Y == mapNodeY;
 
-                            break;
+                                if (isSelected)
+                                {
+                                    spriteBatch.Draw(
+                                        unitRectangle,
+                                        new Rectangle(column * currentTileSize.X, row * currentTileSize.Y, currentTileSize.X, currentTileSize.Y),
+                                        Color.Gold);
+
+                                    spriteBatch.Draw(
+                                        unitRectangle,
+                                        new Rectangle(column * currentTileSize.X + 1, row * currentTileSize.Y + 1, innerTileSize.X, innerTileSize.Y),
+                                        backgroundComponent.BackgroundColor ?? Color.White);
+                                }
+                                else
+                                {
+                                    spriteBatch.Draw(
+                                        unitRectangle,
+                                        new Rectangle(column * currentTileSize.X, row * currentTileSize.Y, currentTileSize.X, currentTileSize.Y),
+                                        backgroundComponent.BackgroundColor ?? Color.White);
+                                }
+
+                                break;
+                            }
                         }
                     }
                 }
@@ -140,12 +148,24 @@ namespace DungeonCrawlerWorld.GameManagers.UserInterfaceManager
                     for (var z = tileDepth - 1; z >= 0; z--)
                     {
                         var mapNode = world.Map.MapNodes[mapNodeX, mapNodeY, z];
-                        if (mapNode.EntityId != null
-                            && ComponentRepo.GlyphComponents.TryGetValue(mapNode.EntityId.Value, out var glyphComponent)
-                            && ComponentRepo.TransformComponents.TryGetValue(mapNode.EntityId.Value, out var transformComponent)
-                            && transformComponent.Position.X == mapNodeX  //Multi-tile glyph fix. Only draw the top left tile to avoid duplication.
-                            && transformComponent.Position.Y == mapNodeY)
+
+                        //TODO use flags to determine if glyph is visible
+                        if (mapNode.EntityId != null)
                         {
+                            var entityId = mapNode.EntityId.Value;
+                            var nullableGlyphComponent = ComponentRepo.GlyphComponents[entityId];
+                            if (nullableGlyphComponent == null) break;
+
+                            var nullableTransformComponent = ComponentRepo.TransformComponents[entityId];
+                            if (nullableTransformComponent == null) break;
+
+                            var glyphComponent = nullableGlyphComponent.Value;
+                            var transformComponent = nullableTransformComponent.Value;
+
+                            //Multi-tile glyph fix. Only draw the top left tile to avoid duplication.
+                            if (transformComponent.Position.X != mapNodeX) break;
+                            if( transformComponent.Position.Y != mapNodeY) break;
+
                             SpriteFont glyphFont = null;
                             if (transformComponent.Size.X == 1)
                             {
@@ -203,11 +223,14 @@ namespace DungeonCrawlerWorld.GameManagers.UserInterfaceManager
             {
                 var relativeMapDisplayMousePosition = mousePosition - _contentAbsolutePosition;
                 var x = (int)(relativeMapDisplayMousePosition.X / currentTileSize.X);
-                var y = (int)(relativeMapDisplayMousePosition.Y / currentTileSize.Y);
 
-                if (x >= 0 && x < tileColumns && y >= 0 && y < tileRows)
+                if (x >= 0 && x < tileColumns)
                 {
-                    world.SelectedMapNodePosition = new Point(x, y);
+                    var y = (int)(relativeMapDisplayMousePosition.Y / currentTileSize.Y);
+                    if (y >= 0 && y < tileRows)
+                    {
+                        world.SelectedMapNodePosition = new Point(x, y);
+                    }
                 }
             }
         }

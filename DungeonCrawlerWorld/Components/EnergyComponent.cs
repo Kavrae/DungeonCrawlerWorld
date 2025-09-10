@@ -5,21 +5,20 @@ namespace DungeonCrawlerWorld.Components
 {
     public struct EnergyComponent : IEntityComponent
     {
-        public Guid EntityId { get; set; }
+        public int EntityId { get; set; }
         public short CurrentEnergy { get; set; }
         public short EnergyRecharge { get; set; }
         public short MaximumEnergy { get; set; }
 
-        public EnergyComponent(Guid entityId) : this(entityId, 0, 0, 0) { }
-        public EnergyComponent(Guid entityId, short currentEnergy, short energyRecharge, short maximumEnergy)
+        public EnergyComponent(int entityId) : this(entityId, 0, 0, 0) { }
+        public EnergyComponent(int entityId, short currentEnergy, short energyRecharge, short maximumEnergy)
         {
             EntityId = entityId;
             CurrentEnergy = currentEnergy;
             EnergyRecharge = energyRecharge;
             MaximumEnergy = maximumEnergy;
 
-            ComponentRepo.EnergyComponents.Remove(entityId);
-            ComponentRepo.EnergyComponents.Add(entityId, this);
+            ComponentRepo.EnergyComponents[entityId] = this;
         }
 
         public override string ToString()

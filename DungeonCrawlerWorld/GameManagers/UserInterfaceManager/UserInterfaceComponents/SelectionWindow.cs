@@ -35,8 +35,8 @@ namespace DungeonCrawlerWorld.GameManagers.UserInterfaceManager
 
         public override void Update(GameTime gameTime)
         {
-            _childWindows = new List<Window>();
-            selectedMapNodes = new List<MapNode>();
+            _childWindows.Clear();
+            selectedMapNodes.Clear();
 
             if (world.SelectedMapNodePosition != null)
             {
@@ -49,9 +49,13 @@ namespace DungeonCrawlerWorld.GameManagers.UserInterfaceManager
 
                 if (world._GameVariables.IsDebugMode)
                 {
-                    foreach (var selectedMapNode in selectedMapNodes.Where(mapNode => mapNode.EntityId != null))
+                    foreach (var selectedMapNode in selectedMapNodes)
                     {
-                        CreateComponentDebugInfoWindows(selectedMapNode);
+                        var entityId = selectedMapNode.EntityId;
+                        if (entityId != null)
+                        {
+                            CreateComponentDebugInfoWindows(entityId.Value);
+                        }
                     }
                 }
                 else
@@ -68,9 +72,9 @@ namespace DungeonCrawlerWorld.GameManagers.UserInterfaceManager
             base.Update(gameTime);
         }
 
-        public void CreateComponentDebugInfoWindows(MapNode mapNode)
+        public void CreateComponentDebugInfoWindows(int entityId)
         {
-            foreach (var component in ComponentRepo.GetAllComponents(mapNode.EntityId.Value))
+            foreach (var component in ComponentRepo.GetAllComponents(entityId))
             {
                 var text = new StringBuilder();
                 foreach (PropertyInfo propertyInfo in component.GetType().GetProperties()
