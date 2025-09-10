@@ -16,8 +16,8 @@ namespace DungeonCrawlerWorld.GameManagers.EntityFactoryManager
             "Fairy2"
         };
 
-        public Fairy() : this(Guid.NewGuid()) { }
-        public Fairy(Guid entityId)
+        public Fairy() : this(ComponentRepo.GetNextEntityId()) { }
+        public Fairy(int entityId)
         {
             Name = "Fairy"; ;
             Description = "TODO fairy description. Their magic is stored in their wings.";

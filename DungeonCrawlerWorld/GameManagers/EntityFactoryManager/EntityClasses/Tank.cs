@@ -10,7 +10,7 @@ namespace DungeonCrawlerWorld.GameManagers.EntityFactoryManager
     {
         public override Guid ClassId => new("1a260ce6-6dd7-4168-8669-aaef1e98b565");
 
-        public Tank(Guid entityId)
+        public Tank(int entityId)
         {
             Name = "Tank";
             Description = "Extra hit points";

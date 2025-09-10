@@ -1,152 +1,210 @@
 ﻿using System;
+using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Linq;
 
 namespace DungeonCrawlerWorld.Components
 {
+    //TODO tags. New collections of sparse components that are set based on other 
+    // components all being set, which requires setters for those components
     public static class ComponentRepo
     {
-        public static Dictionary<Guid, List<ClassComponent>> ClassComponents { get; }
-        public static Dictionary<Guid, BackgroundComponent> BackgroundComponents { get; set; }
-        public static Dictionary<Guid, DisplayTextComponent> DisplayTextComponents { get; set; }
-        public static Dictionary<Guid, EnergyComponent> EnergyComponents { get; set; }
-        public static Dictionary<Guid, GlyphComponent> GlyphComponents { get; set; }
-        public static Dictionary<Guid, HealthComponent> HealthComponents { get; set; }
-        public static Dictionary<Guid, MovementComponent> MovementComponents { get; set; }
-        public static Dictionary<Guid, List<RaceComponent>> RaceComponents { get; set; }
-        public static Dictionary<Guid, TransformComponent> TransformComponents { get; set; }
+        /* Dense Components */
+        private static BackgroundComponent?[] _backgroundComponents;
+        public static BackgroundComponent?[] BackgroundComponents
+        {
+            get => _backgroundComponents;
+            set => _backgroundComponents = value;
+        }
+
+        private static DisplayTextComponent?[] _displayTextComponents;
+        public static DisplayTextComponent?[] DisplayTextComponents
+        {
+            get => _displayTextComponents;
+            set => _displayTextComponents = value;
+        }
+
+        private static GlyphComponent?[] _glyphComponents;
+        public static GlyphComponent?[] GlyphComponents
+        {
+            get => _glyphComponents;
+            set => _glyphComponents = value;
+        }
+
+        private static TransformComponent?[] _transformComponents;
+        public static TransformComponent?[] TransformComponents
+        {
+            get => _transformComponents;
+            set => _transformComponents = value;
+        }
+
+        /* Sparse Components */
+        public static Dictionary<int, List<ClassComponent>> ClassComponents { get; }
+        public static Dictionary<int, List<RaceComponent>> RaceComponents { get; set; }
+        public static ConcurrentDictionary<int, EnergyComponent> EnergyComponents { get; set; }
+        public static ConcurrentDictionary<int, HealthComponent> HealthComponents { get; set; }
+        public static Dictionary<int, MovementComponent> MovementComponents { get; set; }
+
+        private static int currentMaxEntityId = 0;
+        public static int CurrentMaxEntityId { get => currentMaxEntityId; }
+
+        //TODO derive this from config file world size.
+        private static readonly int defaultDenseArraySize = 1000000;
+        private static readonly int denseArrayIncrementAmount = (int)(defaultDenseArraySize * 0.1f);
+        private static int currentDenseArraySize = defaultDenseArraySize;
 
         static ComponentRepo()
         {
-            BackgroundComponents = new Dictionary<Guid, BackgroundComponent>();
-            ClassComponents = new Dictionary<Guid, List<ClassComponent>>();
-            DisplayTextComponents = new Dictionary<Guid, DisplayTextComponent>();
-            EnergyComponents = new Dictionary<Guid, EnergyComponent>();
-            GlyphComponents = new Dictionary<Guid, GlyphComponent>();
-            HealthComponents = new Dictionary<Guid, HealthComponent>();
-            MovementComponents = new Dictionary<Guid, MovementComponent>();
-            RaceComponents = new Dictionary<Guid, List<RaceComponent>>();
-            TransformComponents = new Dictionary<Guid, TransformComponent>();
+            /* Dense Components */
+            _backgroundComponents = new BackgroundComponent?[defaultDenseArraySize];
+            _displayTextComponents = new DisplayTextComponent?[defaultDenseArraySize];
+            _glyphComponents = new GlyphComponent?[defaultDenseArraySize];
+            _transformComponents = new TransformComponent?[defaultDenseArraySize];
+
+            /* Sparse Components */
+            ClassComponents = new Dictionary<int, List<ClassComponent>>();
+            RaceComponents = new Dictionary<int, List<RaceComponent>>();
+            EnergyComponents = new ConcurrentDictionary<int, EnergyComponent>();
+            HealthComponents = new ConcurrentDictionary<int, HealthComponent>();
+            MovementComponents = new Dictionary<int, MovementComponent>();
         }
 
-        public static void AddClass(Guid entityId, ClassComponent newClass)
+        public static int GetNextEntityId()
         {
-            if (!ClassComponents.ContainsKey(entityId))
+            currentMaxEntityId++;
+
+            if (currentMaxEntityId >= currentDenseArraySize)
             {
-                ClassComponents.Add(entityId, new List<ClassComponent> { newClass });
+                IncrementAllDenseComponentArrays();
             }
-            else
+            return currentMaxEntityId;
+        }
+
+        private static void IncrementAllDenseComponentArrays()
+        {
+            currentDenseArraySize += denseArrayIncrementAmount;
+            Array.Resize(ref _backgroundComponents, currentDenseArraySize);
+            Array.Resize(ref _displayTextComponents, currentDenseArraySize);
+            Array.Resize(ref _glyphComponents, currentDenseArraySize);
+            Array.Resize(ref _transformComponents, currentDenseArraySize);
+        }
+
+        public static void AddClass(int entityId, ClassComponent newClass)
+        {
+            if (!ClassComponents.TryGetValue(entityId, out var classComponents))
             {
-                var existingClasses = ClassComponents[entityId];
-                if (!existingClasses.Any(existingClass => existingClass.ClassId == newClass.ClassId))
+                classComponents = new List<ClassComponent>();
+                ClassComponents[entityId] = classComponents;
+            }
+
+            if (!classComponents.Any(classComponent => classComponent.ClassId == newClass.ClassId))
+            {
+                classComponents.Add(newClass);
+            }
+        }
+
+        public static void RemoveClass(int entityId, Guid classId)
+        {
+            if (ClassComponents.TryGetValue(entityId, out var classComponents))
+            {
+                for (int i = 0; i < classComponents.Count; i++)
                 {
-                    ClassComponents[entityId] = ClassComponents[entityId]
-                        .Append(newClass)
-                        .ToList();
+                    if (classComponents[i].ClassId == classId)
+                    {
+                        classComponents.RemoveAt(i);
+                        break;
+                    }
+                }
+
+                if (classComponents.Count == 0)
+                {
+                    ClassComponents.Remove(entityId);
                 }
             }
         }
 
-        public static void RemoveClass(Guid entityId, Guid classId)
+        public static void AddRace(int entityId, RaceComponent newRace)
         {
-            if (ClassComponents.ContainsKey(entityId))
+            if (!RaceComponents.TryGetValue(entityId, out var raceComponents))
             {
-                ClassComponents[entityId] = ClassComponents[entityId]
-                    .Where(existingClass => existingClass.ClassId != classId)
-                    .ToList();
+                raceComponents = new List<RaceComponent>();
+                RaceComponents[entityId] = raceComponents;
+            }
+
+            if (!raceComponents.Any(raceComponent => raceComponent.RaceId == newRace.RaceId))
+            {
+                raceComponents.Add(newRace);
             }
         }
 
-        public static void AddRace(Guid entityId, RaceComponent newRace)
+        public static void RemoveRace(int entityId, Guid raceId)
         {
-            if (!RaceComponents.ContainsKey(entityId))
+            if (RaceComponents.TryGetValue(entityId, out var raceComponets))
             {
-                RaceComponents.Add(entityId, new List<RaceComponent> { newRace });
-            }
-            else
-            {
-                var existingRaces = RaceComponents[entityId];
-                if (!existingRaces.Any(existingRace => existingRace.RaceId == newRace.RaceId))
+                for (int i = 0; i < raceComponets.Count; i++)
                 {
-                    RaceComponents[entityId] = RaceComponents[entityId]
-                        .Append(newRace)
-                        .ToList();
+                    if (raceComponets[i].RaceId == raceId)
+                    {
+                        raceComponets.RemoveAt(i);
+                        break;
+                    }
+                }
+
+                if (raceComponets.Count == 0)
+                {
+                    RaceComponents.Remove(entityId);
                 }
             }
         }
 
-        public static void RemoveRace(Guid entityId, Guid raceId)
+        public static List<IEntityComponent> GetAllComponents(int entityId)
         {
-            if (RaceComponents.ContainsKey(entityId))
-            {
-                RaceComponents[entityId] = RaceComponents[entityId]
-                    .Where(existingClass => existingClass.RaceId != raceId)
-                    .ToList();
-            }
-        }
+            var components = new List<IEntityComponent>(8);
 
-        public static List<IEntityComponent> GetAllComponents(Guid entityId)
-        {
-            List<IEntityComponent> components = new();
+            // Dense components
+            var backgroundComponent = BackgroundComponents[entityId];
+            if (backgroundComponent != null) components.Add(backgroundComponent);
 
-            if (RaceComponents.TryGetValue(entityId, out List<RaceComponent> raceComponents))
-            {
-                foreach (var component in raceComponents)
-                {
-                    components.Add(component);
-                }
-            }
-            if (ClassComponents.TryGetValue(entityId, out List<ClassComponent> classComponents))
-            {
-                foreach (var component in classComponents)
-                {
-                    components.Add(component);
-                }
-            }
-            if (BackgroundComponents.TryGetValue(entityId, out BackgroundComponent backgroundComponent))
-            {
-                components.Add(backgroundComponent);
-            }
-            if (DisplayTextComponents.TryGetValue(entityId, out DisplayTextComponent displayTextComponent))
-            {
-                components.Add(displayTextComponent);
-            }
-            if (EnergyComponents.TryGetValue(entityId, out EnergyComponent energyComponent))
-            {
+            var displayTextComponent = DisplayTextComponents[entityId];
+            if (displayTextComponent != null) components.Add(displayTextComponent);
+
+            var glyphComponent = GlyphComponents[entityId];
+            if (glyphComponent != null) components.Add(glyphComponent);
+
+            var transformComponent = TransformComponents[entityId];
+            if (transformComponent != null) components.Add(transformComponent);
+
+            // Sparse components
+            if (RaceComponents.TryGetValue(entityId, out var raceComponentList))
+                components.AddRange(raceComponentList);
+
+            if (ClassComponents.TryGetValue(entityId, out var classComponentList))
+                components.AddRange(classComponentList);
+
+            if (EnergyComponents.TryGetValue(entityId, out var energyComponent))
                 components.Add(energyComponent);
-            }
-            if (GlyphComponents.TryGetValue(entityId, out GlyphComponent glyphComponent))
-            {
-                components.Add(glyphComponent);
-            }
-            if (HealthComponents.TryGetValue(entityId, out HealthComponent healthComponent))
-            {
+
+            if (HealthComponents.TryGetValue(entityId, out var healthComponent))
                 components.Add(healthComponent);
-            }
-            if (MovementComponents.TryGetValue(entityId, out MovementComponent movementComponent))
-            {
+
+            if (MovementComponents.TryGetValue(entityId, out var movementComponent))
                 components.Add(movementComponent);
-            }
-            if (TransformComponents.TryGetValue(entityId, out TransformComponent transformComponent))
-            {
-                components.Add(transformComponent);
-            }
 
             return components;
         }
 
-        public static void RemoveAllComponents(Guid entityId)
+        public static void RemoveAllComponents(int entityId)
         {
+            BackgroundComponents[entityId] = null;
+            DisplayTextComponents[entityId] = null;
+            GlyphComponents[entityId] = null;
+            TransformComponents[entityId] = null;
+            
             RaceComponents.Remove(entityId);
             ClassComponents.Remove(entityId);
-            
-            BackgroundComponents.Remove(entityId);
-            DisplayTextComponents.Remove(entityId);
-            EnergyComponents.Remove(entityId);
-            GlyphComponents.Remove(entityId);
-            HealthComponents.Remove(entityId);
+            EnergyComponents.TryRemove(entityId, out _);
+            HealthComponents.TryRemove(entityId, out _);
             MovementComponents.Remove(entityId);
-            TransformComponents.Remove(entityId);
         }
     }
 }

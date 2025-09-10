@@ -13,13 +13,13 @@ namespace DungeonCrawlerWorld.GameManagers.EntityFactoryManager
         //TODO burn icon on selection
 
         
-        public Guid EntityId { get; set; }
+        public int EntityId { get; set; }
         public string Name { get; set; }
         public string Description { get; set; }
 
        public Lava()
         {
-            EntityId = Guid.NewGuid();
+            EntityId = ComponentRepo.GetNextEntityId();
             Name = "Lava";
             Description = "Hot lava. I do not recommend stepping on it.";
 

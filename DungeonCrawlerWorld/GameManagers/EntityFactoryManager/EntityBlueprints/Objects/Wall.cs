@@ -8,13 +8,13 @@ namespace DungeonCrawlerWorld.GameManagers.EntityFactoryManager
 {
     public class Wall : IBlueprint
     {
-        public Guid EntityId { get; set; }
+        public int EntityId { get; set; }
         public string Name { get; set; }
         public string Description { get; set; }
 
         public Wall()
         {
-            EntityId = Guid.NewGuid();
+            EntityId = ComponentRepo.GetNextEntityId();
             Name = "Wall";
             Description = "Basic wall. Default implementation.";
 

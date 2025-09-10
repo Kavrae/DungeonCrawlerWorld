@@ -36,38 +36,44 @@ namespace DungeonCrawlerWorld.Data
             return _GameVariables.IsPaused;
         }
 
-        public void MoveEntity(Guid entityId, Vector3Int newPosition)
+        public void MoveEntity(int entityId, Vector3Int newPosition)
         {
-            if (IsOnMap(newPosition) && ComponentRepo.TransformComponents.TryGetValue(entityId, out TransformComponent transformComponent))
+            if (IsOnMap(newPosition))
             {
-                if (IsOnMap(transformComponent.Position))
+                var nullableTransformComponent = ComponentRepo.TransformComponents[entityId];
+                if (nullableTransformComponent != null)
                 {
-                    for (var x = transformComponent.Position.X; x < transformComponent.Position.X + transformComponent.Size.X; x++)
+                    var transformComponent = nullableTransformComponent.Value;
+
+                    if (IsOnMap(nullableTransformComponent.Value.Position))
                     {
-                        for (var y = transformComponent.Position.Y; y < transformComponent.Position.Y + transformComponent.Size.Y; y++)
+                        for (var x = transformComponent.Position.X; x < transformComponent.Position.X + transformComponent.Size.X; x++)
                         {
-                            var mapNode = Map.MapNodes[x, y, transformComponent.Position.Z];
-                            mapNode.EntityId = null;
-                            Map.MapNodes[x, y, transformComponent.Position.Z] = mapNode;
+                            for (var y = transformComponent.Position.Y; y < transformComponent.Position.Y + transformComponent.Size.Y; y++)
+                            {
+                                var mapNode = Map.MapNodes[x, y, transformComponent.Position.Z];
+                                mapNode.EntityId = null;
+                                Map.MapNodes[x, y, transformComponent.Position.Z] = mapNode;
+                            }
                         }
                     }
-                }
 
-                for (var x = newPosition.X; x < newPosition.X + transformComponent.Size.X; x++)
-                {
-                    for (var y = newPosition.Y; y < newPosition.Y + transformComponent.Size.Y; y++)
+                    for (var x = newPosition.X; x < newPosition.X + transformComponent.Size.X; x++)
                     {
-                        var mapNode = Map.MapNodes[x, y, newPosition.Z];
-                        if (mapNode.EntityId != entityId)
+                        for (var y = newPosition.Y; y < newPosition.Y + transformComponent.Size.Y; y++)
                         {
-                            mapNode.EntityId = entityId;
+                            var mapNode = Map.MapNodes[x, y, newPosition.Z];
+                            if (mapNode.EntityId != entityId)
+                            {
+                                mapNode.EntityId = entityId;
+                            }
+                            Map.MapNodes[x, y, newPosition.Z] = mapNode;
                         }
-                        Map.MapNodes[x, y, newPosition.Z] = mapNode;
                     }
-                }
 
-                transformComponent.Position = newPosition;
-                ComponentRepo.TransformComponents[transformComponent.EntityId] = transformComponent;
+                    transformComponent.Position = newPosition;
+                    ComponentRepo.TransformComponents[transformComponent.EntityId] = transformComponent;
+                }
             }
         }
 
