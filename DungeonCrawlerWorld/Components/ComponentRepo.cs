@@ -5,10 +5,11 @@ using System.Linq;
 
 namespace DungeonCrawlerWorld.Components
 {
-    //TODO tags. New collections of sparse components that are set based on other 
-    // components all being set, which requires setters for those components
     public static class ComponentRepo
     {
+        private static int currentMaxEntityId = 0;
+        public static int CurrentMaxEntityId { get => currentMaxEntityId; }
+
         /* Dense Components */
         private static BackgroundComponent?[] _backgroundComponents;
         public static BackgroundComponent?[] BackgroundComponents
@@ -44,9 +45,6 @@ namespace DungeonCrawlerWorld.Components
         public static ConcurrentDictionary<int, EnergyComponent> EnergyComponents { get; set; }
         public static ConcurrentDictionary<int, HealthComponent> HealthComponents { get; set; }
         public static Dictionary<int, MovementComponent> MovementComponents { get; set; }
-
-        private static int currentMaxEntityId = 0;
-        public static int CurrentMaxEntityId { get => currentMaxEntityId; }
 
         //TODO derive this from config file world size.
         private static readonly int defaultDenseArraySize = 1000000;
@@ -159,7 +157,7 @@ namespace DungeonCrawlerWorld.Components
 
         public static List<IEntityComponent> GetAllComponents(int entityId)
         {
-            var components = new List<IEntityComponent>(8);
+            var components = new List<IEntityComponent>(9);
 
             // Dense components
             var backgroundComponent = BackgroundComponents[entityId];
@@ -176,19 +174,29 @@ namespace DungeonCrawlerWorld.Components
 
             // Sparse components
             if (RaceComponents.TryGetValue(entityId, out var raceComponentList))
+            {
                 components.AddRange(raceComponentList);
+            }
 
             if (ClassComponents.TryGetValue(entityId, out var classComponentList))
+            {
                 components.AddRange(classComponentList);
+            }
 
             if (EnergyComponents.TryGetValue(entityId, out var energyComponent))
+            {
                 components.Add(energyComponent);
+            }
 
             if (HealthComponents.TryGetValue(entityId, out var healthComponent))
+            {
                 components.Add(healthComponent);
+            }
 
             if (MovementComponents.TryGetValue(entityId, out var movementComponent))
+            {
                 components.Add(movementComponent);
+            }
 
             return components;
         }
