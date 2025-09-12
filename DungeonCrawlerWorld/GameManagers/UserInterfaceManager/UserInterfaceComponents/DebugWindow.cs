@@ -22,6 +22,8 @@ namespace DungeonCrawlerWorld.GameManagers.UserInterfaceManager
         private double updatesPerSecond;
         private GameVariables gameVariables;
 
+        private SpriteFont font;
+
         public DebugWindow(World dataAccess, WindowOptions windowOptions) : base(null, windowOptions)
         {
             world = dataAccess;
@@ -33,6 +35,8 @@ namespace DungeonCrawlerWorld.GameManagers.UserInterfaceManager
 
             lastDrawTicks = DateTime.Now.Ticks;
             lastUpdateTicks = DateTime.Now.Ticks;
+
+            font = FontService.GetFont("defaultFont");
         }
 
         public override void LoadContent()
@@ -72,7 +76,6 @@ namespace DungeonCrawlerWorld.GameManagers.UserInterfaceManager
                 drawsSinceLastDisplayUpdate = 0;
             }
 
-            var font = FontService.GetFont("defaultFont");
             spriteBatch.DrawString(font, $"{string.Format("{0:N1}", updatesPerSecond)} ups", _contentAbsolutePosition, gameTime.IsRunningSlowly ? Color.Red : Color.Black);
 
             spriteBatch.DrawString(font, $"{string.Format("{0:N1}", drawsPerSecond)} fps", new Vector2(_contentAbsolutePosition.X + 60, _contentAbsolutePosition.Y), gameTime.IsRunningSlowly ? Color.Red : Color.Black);

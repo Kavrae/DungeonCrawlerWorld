@@ -133,36 +133,40 @@ namespace DungeonCrawlerWorld.GameManagers.UserInterfaceManager
 
             if (inputMode == InputMode.Map)
             {
-                if ( currentKeyboardState.IsKeyDown(Keys.Space) && !previousKeyboardState.IsKeyDown(Keys.Space))
+                if (currentKeyboardState.GetPressedKeyCount() > 0)
                 {
-                    world.ToggleIsPaused();
-                }
+                    if (currentKeyboardState.IsKeyDown(Keys.Space) && !previousKeyboardState.IsKeyDown(Keys.Space))
+                    {
+                        world.ToggleIsPaused();
+                    }
 
-                if (Keyboard.GetState().IsKeyDown(Keys.D))
-                {
-                    mapWindow.UpdateScrollPosition(new Point(1,0));
-                }
-                if (Keyboard.GetState().IsKeyDown(Keys.A))
-                {
-                    mapWindow.UpdateScrollPosition(new Point(-1, 0));
-                }
-                if (Keyboard.GetState().IsKeyDown(Keys.W))
-                {
-                    mapWindow.UpdateScrollPosition(new Point(0, -1));
-                }
-                if (Keyboard.GetState().IsKeyDown(Keys.S))
-                {
-                    mapWindow.UpdateScrollPosition(new Point(0, 1));
+                    if (Keyboard.GetState().IsKeyDown(Keys.D))
+                    {
+                        mapWindow.UpdateScrollPosition(new Point(1, 0));
+                    }
+                    if (Keyboard.GetState().IsKeyDown(Keys.A))
+                    {
+                        mapWindow.UpdateScrollPosition(new Point(-1, 0));
+                    }
+                    if (Keyboard.GetState().IsKeyDown(Keys.W))
+                    {
+                        mapWindow.UpdateScrollPosition(new Point(0, -1));
+                    }
+                    if (Keyboard.GetState().IsKeyDown(Keys.S))
+                    {
+                        mapWindow.UpdateScrollPosition(new Point(0, 1));
+                    }
                 }
 
                 var mouseState = Mouse.GetState();
                 if (mouseState.LeftButton == ButtonState.Pressed)
                 {
+                    var mousePosition = mouseState.Position.ToVector2();
                     foreach (var displayComponent in displayComponents)
                     {
-                        if (displayComponent.IsInDisplayRectangle(mouseState.Position))
+                        if (displayComponent.WindowRectangle.Contains(mouseState.Position))
                         {
-                            displayComponent.HandleClickDown(mouseState.Position.ToVector2());
+                            displayComponent.HandleClickDown(mousePosition);
                             break;
                         }
                     }

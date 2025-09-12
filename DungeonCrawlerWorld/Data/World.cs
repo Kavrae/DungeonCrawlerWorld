@@ -1,6 +1,4 @@
-﻿using System;
-
-using Microsoft.Xna.Framework;
+﻿using Microsoft.Xna.Framework;
 
 using DungeonCrawlerWorld.Components;
 using DungeonCrawlerWorld.Utilities;
@@ -45,6 +43,7 @@ namespace DungeonCrawlerWorld.Data
                 {
                     var transformComponent = nullableTransformComponent.Value;
 
+                    //If the entity is already on the map, empty its map nodes.
                     if (IsOnMap(nullableTransformComponent.Value.Position))
                     {
                         for (var x = transformComponent.Position.X; x < transformComponent.Position.X + transformComponent.Size.X; x++)
@@ -58,6 +57,7 @@ namespace DungeonCrawlerWorld.Data
                         }
                     }
 
+                    //Place the entity on the new map nodes.
                     for (var x = newPosition.X; x < newPosition.X + transformComponent.Size.X; x++)
                     {
                         for (var y = newPosition.Y; y < newPosition.Y + transformComponent.Size.Y; y++)
@@ -66,8 +66,8 @@ namespace DungeonCrawlerWorld.Data
                             if (mapNode.EntityId != entityId)
                             {
                                 mapNode.EntityId = entityId;
+                                Map.MapNodes[x, y, newPosition.Z] = mapNode;
                             }
-                            Map.MapNodes[x, y, newPosition.Z] = mapNode;
                         }
                     }
 

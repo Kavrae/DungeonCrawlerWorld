@@ -14,7 +14,7 @@ namespace DungeonCrawlerWorld.Services
     {
         public ContentManager contentManager;
 
-        private Dictionary<string, SpriteFont> spriteFonts;
+        private Dictionary<string, SpriteFont> spriteFontsCache;
         private readonly string defaultFontName;
 
         public FontService(ContentManager contentManager)
@@ -22,7 +22,7 @@ namespace DungeonCrawlerWorld.Services
             this.contentManager = contentManager;
 
             defaultFontName = "defaultFont";
-            spriteFonts = new Dictionary<string, SpriteFont>
+            spriteFontsCache = new Dictionary<string, SpriteFont>
             {
                 { defaultFontName, this.contentManager.Load<SpriteFont>(defaultFontName) }
             };
@@ -32,22 +32,16 @@ namespace DungeonCrawlerWorld.Services
         {
             SpriteFont font;
 
-            if ( spriteFonts.ContainsKey(fontName))
+            if ( spriteFontsCache.ContainsKey(fontName))
             {
-                font = spriteFonts[fontName];
+                font = spriteFontsCache[fontName];
             }
             else
             {
-                font = contentManager.Load<SpriteFont>(fontName);
+                font = contentManager.Load<SpriteFont>(fontName)
+                    ?? spriteFontsCache[defaultFontName];
 
-                if (font != null)
-                {
-                    spriteFonts[fontName] = font;
-                }
-                else
-                {
-                    font = spriteFonts[defaultFontName];
-                }
+                spriteFontsCache[fontName] = font;
             }
 
             return font;
