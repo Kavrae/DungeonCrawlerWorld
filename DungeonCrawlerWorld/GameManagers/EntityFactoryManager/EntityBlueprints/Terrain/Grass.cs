@@ -9,13 +9,13 @@ namespace DungeonCrawlerWorld.GameManagers.EntityFactoryManager
     public class Grass : IBlueprint
     {
         
-        public Guid EntityId { get; set; }
+        public int EntityId { get; set; }
         public string Name { get; set; }
         public string Description { get; set; }
 
        public Grass()
         {
-            EntityId = Guid.NewGuid();
+            EntityId = ComponentRepo.GetNextEntityId();
             Name = "Grass";
             Description = "Ordinary grass. Nothing special.";
 

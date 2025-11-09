@@ -1,13 +1,13 @@
 <?xml version="1.0" encoding="utf-8"?>
 <PipelineBuildEvent xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:xsd="http://www.w3.org/2001/XMLSchema">
-  <SourceFile>C:/Users/crobe/source/repos/DungeonCrawlerWorld/DungeonCrawlerWorld/Content/DefaultLargeFont.spritefont</SourceFile>
-  <SourceTime>2024-11-10T11:37:30.4433763-06:00</SourceTime>
-  <DestFile>C:/Users/crobe/source/repos/DungeonCrawlerWorld/DungeonCrawlerWorld/Content/bin/DesktopGL/Content/DefaultLargeFont.xnb</DestFile>
-  <DestTime>2024-11-10T11:37:42.7023159-06:00</DestTime>
+  <SourceFile>E:/Code/DungeonCrawlerWorld/DungeonCrawlerWorld/Content/DefaultLargeFont.spritefont</SourceFile>
+  <SourceTime>2025-09-09T17:16:56.0232065-06:00</SourceTime>
+  <DestFile>E:/Code/DungeonCrawlerWorld/DungeonCrawlerWorld/Content/bin/DesktopGL/Content/DefaultLargeFont.xnb</DestFile>
+  <DestTime>2025-09-09T17:39:52.4354957-06:00</DestTime>
   <Importer>FontDescriptionImporter</Importer>
-  <ImporterTime>2022-07-26T06:44:56-05:00</ImporterTime>
+  <ImporterTime>2022-07-26T05:44:56-06:00</ImporterTime>
   <Processor>FontDescriptionProcessor</Processor>
-  <ProcessorTime>2022-07-26T06:44:56-05:00</ProcessorTime>
+  <ProcessorTime>2022-07-26T05:44:56-06:00</ProcessorTime>
   <Parameters>
     <Key>PremultiplyAlpha</Key>
     <Value>True</Value>

@@ -1,6 +1,7 @@
 ﻿using Microsoft.Xna.Framework;
 
 using DungeonCrawlerWorld.Components;
+using System.Threading.Tasks;
 
 namespace DungeonCrawlerWorld.ComponentSystems
 {
@@ -12,19 +13,20 @@ namespace DungeonCrawlerWorld.ComponentSystems
 
         public void Update(GameTime gameTime)
         {
-            foreach (var keyComponent in ComponentRepo.HealthComponents)
+            Parallel.ForEach(ComponentRepo.HealthComponents, keyValuePair =>
             {
-                var healthComponent = keyComponent.Value;
+                var healthComponent = keyValuePair.Value;
                 if (healthComponent.HealthRegen != 0)
                 {
                     healthComponent.CurrentHealth += healthComponent.HealthRegen;
-                    if( healthComponent.CurrentHealth > healthComponent.MaximumHealth)
+                    if (healthComponent.CurrentHealth > healthComponent.MaximumHealth)
                     {
                         healthComponent.CurrentHealth = healthComponent.MaximumHealth;
                     }
-                    ComponentRepo.HealthComponents[keyComponent.Key] = healthComponent;
+                    
+                    ComponentRepo.HealthComponents[keyValuePair.Key] = healthComponent;
                 }
-            }
+            });
         }
     }
 }

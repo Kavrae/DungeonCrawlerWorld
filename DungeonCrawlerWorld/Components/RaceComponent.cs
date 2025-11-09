@@ -5,23 +5,20 @@ namespace DungeonCrawlerWorld.Components
 {
     public abstract class RaceComponent : IEntityComponent
     {
-        public Guid EntityId { get; set; }
+        public int EntityId { get; set; }
         public virtual Guid RaceId { get; }
         public string Name { get; set; }
         public string Description { get; set; }
 
         public string PersonalName { get; set; }
         
-        public void Build( Guid entityId )
+        public void Build( int entityId )
         {
             EntityId = entityId;
 
             ComponentRepo.AddRace(entityId, this);
-
-            if (!ComponentRepo.DisplayTextComponents.TryGetValue(entityId, out DisplayTextComponent displayTextComponent))
-            {
-                displayTextComponent = new DisplayTextComponent(entityId);
-            }
+            
+            var displayTextComponent = new DisplayTextComponent(entityId);
             displayTextComponent.Name += PersonalName; //TODO format
             displayTextComponent.RaceName += Name; //TODO format
             displayTextComponent.RaceDescription += Description; //TODO format

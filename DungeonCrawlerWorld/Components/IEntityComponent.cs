@@ -4,6 +4,6 @@ namespace DungeonCrawlerWorld.Components
 {
     public interface IEntityComponent
     {
-        Guid EntityId { get; set; }
+        int EntityId { get; set; }
     }
 }
