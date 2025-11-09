@@ -47,7 +47,7 @@ namespace DungeonCrawlerWorld.GameManagers.UserInterfaceManager
                     selectedMapNodes.Add(world.Map.MapNodes[world.SelectedMapNodePosition.Value.X, world.SelectedMapNodePosition.Value.Y, z]);
                 }
 
-                if (world._GameVariables.IsDebugMode)
+                if (_gameVariables.IsDebugMode)
                 {
                     foreach (var selectedMapNode in selectedMapNodes.Where(mapNode => mapNode.EntityId != null))
                     {

@@ -11,6 +11,7 @@ using DungeonCrawlerWorld.GameManagers.MapBuilderManager;
 using DungeonCrawlerWorld.GameManagers.EntityEventManager;
 using DungeonCrawlerWorld.GameManagers.EntityFactoryManager;
 using DungeonCrawlerWorld.GameManagers.UserInterfaceManager;
+using DungeonCrawlerWorld.GameManagers.NotificationManager;
 
 namespace DungeonCrawlerWorld
 {
@@ -32,6 +33,7 @@ namespace DungeonCrawlerWorld
         public readonly Game Game;
 
         private GraphicsDeviceManager graphics;
+        private DataAccessService dataAccessService;
         private World world;
 
         private List<IGameManager> updatableGameManagers;
@@ -61,10 +63,8 @@ namespace DungeonCrawlerWorld
                 component.Initialize();
             }
 
-            var dataAccessService = GameServices.GetService<DataAccessService>();
+            dataAccessService = GameServices.GetService<DataAccessService>();
             world = dataAccessService.RetrieveWorld();
-
-            RunTest();
 
             base.Initialize();
         }
@@ -89,7 +89,7 @@ namespace DungeonCrawlerWorld
 
         protected override void Update(GameTime gameTime)
         {
-            var gameVariables = world.RetrieveGameVariables();
+            var gameVariables = dataAccessService.RetrieveGameVariables();
 
             foreach (var gameManager in updatableGameManagers)
             {
@@ -123,23 +123,21 @@ namespace DungeonCrawlerWorld
         public void InitializeGameManagers()
         {
             var userInterfaceManager = new UserInterfaceManager();
+            var notificationManager = new NotificationManager();
             updatableGameManagers = new List<IGameManager>
             {
                 new ComponentSystemManager(),
                 new EntityFactoryManager(),
                 new MapBuilderManager(),
                 new EntityEventManager(),
-                userInterfaceManager
+                userInterfaceManager,
+                notificationManager
             };
             drawableGameManagers = new List<IGameManager>
             {
-                userInterfaceManager
+                userInterfaceManager,
+                notificationManager
             };
-        }
-
-        public void RunTest()
-        {
-            return;
         }
     }
 }

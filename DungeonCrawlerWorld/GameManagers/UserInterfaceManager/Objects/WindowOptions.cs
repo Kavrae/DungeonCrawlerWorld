@@ -15,14 +15,20 @@ namespace DungeonCrawlerWorld.GameManagers.UserInterfaceManager
         public Vector2? MinimumSize { get; set; }
         public Vector2? MaximumSize { get; set; }
         public Vector2? Size { get; set; }
+        public bool? IsVisible { get; set; }
+        public bool? IsTransparent { get; set; }
 
         /*========Title========*/
         public bool? ShowTitle { get; set; }
         public string TitleText { get; set; }
+        public Color? TitleColor { get; set; }
 
         /*========Border========*/
         public bool? ShowBorder { get; set; }
         public Vector2? BorderSize { get; set; }
+
+        /*========Content========*/
+        public Color? ContentColor { get; set; }
 
         /*========User Controls========*/
         public bool? CanUserClose { get; set; }

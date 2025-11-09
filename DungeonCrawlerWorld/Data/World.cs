@@ -11,29 +11,11 @@ namespace DungeonCrawlerWorld.Data
     {
         public Map Map { get; set; }
 
-        public GameVariables _GameVariables{ get; set; }
-
         public Point? SelectedMapNodePosition { get; set; }
 
         public World()
         {
             Map = new Map( new Vector3Int(0,0,0) );
-            _GameVariables = new GameVariables
-            {
-                IsDebugMode = true,
-                IsPaused = false
-            };
-        }
-
-        public GameVariables RetrieveGameVariables() 
-        { 
-            return _GameVariables; 
-        }
-
-        public bool ToggleIsPaused()
-        {
-            _GameVariables.IsPaused = !_GameVariables.IsPaused;
-            return _GameVariables.IsPaused;
         }
 
         public void MoveEntity(Guid entityId, Vector3Int newPosition)

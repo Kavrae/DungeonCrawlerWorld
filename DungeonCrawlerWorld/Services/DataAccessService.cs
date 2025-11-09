@@ -9,13 +9,26 @@ namespace DungeonCrawlerWorld.Services
 
     public class DataAccessService : IDataAccessService
     {
-        private World _World;
+        private GameVariables _gameVariables;
+        private World _world;
+
+        public GameVariables RetrieveGameVariables()
+        {
+            _gameVariables ??= new GameVariables
+            {
+                IsDebugMode = true,
+                IsAnnouncementPaused = false,
+                IsUserPaused = false,
+            };
+
+            return _gameVariables;
+        }
 
         public World RetrieveWorld()
         {
-            _World ??= new World();
+            _world ??= new World();
 
-            return _World;
+            return _world;
         }
     }
 }

@@ -20,7 +20,6 @@ namespace DungeonCrawlerWorld.GameManagers.UserInterfaceManager
         private long updatesSinceLastDisplayUpdate;
         private double drawsPerSecond;
         private double updatesPerSecond;
-        private GameVariables gameVariables;
 
         public DebugWindow(World dataAccess, WindowOptions windowOptions) : base(null, windowOptions)
         {
@@ -43,7 +42,6 @@ namespace DungeonCrawlerWorld.GameManagers.UserInterfaceManager
         public override void Update(GameTime gameTime)
         {
             updatesSinceLastDisplayUpdate += 1;
-            gameVariables = world.RetrieveGameVariables();
 
             var currentTicks = DateTime.Now.Ticks;
             var ticksSinceLastUpdate = currentTicks - lastUpdateTicks;
@@ -77,7 +75,7 @@ namespace DungeonCrawlerWorld.GameManagers.UserInterfaceManager
 
             spriteBatch.DrawString(font, $"{string.Format("{0:N1}", drawsPerSecond)} fps", new Vector2(_contentAbsolutePosition.X + 60, _contentAbsolutePosition.Y), gameTime.IsRunningSlowly ? Color.Red : Color.Black);
 
-            if (gameVariables.IsPaused)
+            if (_gameVariables.IsPaused)
             {
                 spriteBatch.DrawString(font, "Paused", new Vector2(_contentAbsolutePosition.X + 120, _contentAbsolutePosition.Y), Color.Red);
             }

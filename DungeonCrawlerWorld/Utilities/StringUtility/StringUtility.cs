@@ -106,67 +106,76 @@ namespace DungeonCrawlerWorld.Utilities
         {
             foreach (var textLine in criteria.TextLinesToFormat)
             {
-                var words = textLine.Split(' ');
-                var currentLineStringBuilder = new StringBuilder();
-                var remainingLineWidth = criteria.MaximumPixelWidth;
+                var textSize = criteria.Font.MeasureString(textLine).X;
 
-                foreach (var word in words)
+                if (textSize <= criteria.MaximumPixelWidth)
                 {
-                    if (remainingLineWidth != criteria.MaximumPixelWidth)
-                    {
-                        currentLineStringBuilder.Append(' ');
-                        remainingLineWidth -= criteria.FontSize.X;
-                    }
+                    displayText.FormattedTextLines.Add(textLine);
+                }
+                else
+                {
+                    var words = textLine.Split(' ');
+                    var currentLineStringBuilder = new StringBuilder();
+                    var remainingLineWidth = criteria.MaximumPixelWidth;
 
-                    var remainingWord = word;
-                    do
+                    foreach (var word in words)
                     {
-                        var wordSize = criteria.Font.MeasureString(remainingWord).X;
-
-                        //Word fits on the current line
-                        //Add and move on to the next word in the line
-                        if (remainingLineWidth - wordSize > 0)
+                        if (remainingLineWidth != criteria.MaximumPixelWidth)
                         {
-                            currentLineStringBuilder.Append(remainingWord);
-                            remainingLineWidth -= wordSize;
-                            break;
+                            currentLineStringBuilder.Append(' ');
+                            remainingLineWidth -= criteria.FontSize.X;
                         }
-                        //Word doesn't fit. Loop breaking the word up until the word is complete.
-                        else
-                        {
-                            var remainingHyphenatedLineWidth = remainingLineWidth - criteria.FontSize.X;
 
-                            //Enough space left to linebreak with '-' and string is long enought to break
-                            if (remainingHyphenatedLineWidth >= minimumWordSizeToLineBreak && remainingWord.Length >= minimumCharacterCountToLineBreak)
+                        var remainingWord = word;
+                        do
+                        {
+                            var wordSize = criteria.Font.MeasureString(remainingWord).X;
+
+                            //Word fits on the current line
+                            //Add and move on to the next word in the line
+                            if (remainingLineWidth - wordSize > 0)
                             {
-                                var percentageOfWordThatFits = remainingHyphenatedLineWidth / wordSize;
-                                var substringLength = (int)Math.Round(percentageOfWordThatFits * remainingWord.Length, MidpointRounding.ToZero);
-                                substringLength = Math.Max(substringLength, minimumCharactersBeforeLineBreak);
-                                substringLength = Math.Min(substringLength, remainingWord.Length - minimumCharactersAfterLineBreak);
-                                var hyphenatedSubstring = string.Concat(remainingWord[..substringLength], "-");
-                                currentLineStringBuilder.Append(hyphenatedSubstring);
-                                remainingLineWidth -= criteria.Font.MeasureString(hyphenatedSubstring).X;
-                                remainingWord = remainingWord[substringLength..];
+                                currentLineStringBuilder.Append(remainingWord);
+                                remainingLineWidth -= wordSize;
+                                break;
                             }
-                            //Not enough space left to linebreak or word is too small. Add the current line and start a new one.
+                            //Word doesn't fit. Loop breaking the word up until the word is complete.
                             else
                             {
-                                displayText.FormattedTextLines.Add(currentLineStringBuilder.ToString());
-                                remainingLineWidth = criteria.MaximumPixelWidth;
-                                currentLineStringBuilder.Clear();
+                                var remainingHyphenatedLineWidth = remainingLineWidth - criteria.FontSize.X;
+
+                                //Enough space left to linebreak with '-' and string is long enought to break
+                                if (remainingHyphenatedLineWidth >= minimumWordSizeToLineBreak && remainingWord.Length >= minimumCharacterCountToLineBreak)
+                                {
+                                    var percentageOfWordThatFits = remainingHyphenatedLineWidth / wordSize;
+                                    var substringLength = (int)Math.Round(percentageOfWordThatFits * remainingWord.Length, MidpointRounding.ToZero);
+                                    substringLength = Math.Max(substringLength, minimumCharactersBeforeLineBreak);
+                                    substringLength = Math.Min(substringLength, remainingWord.Length - minimumCharactersAfterLineBreak);
+                                    var hyphenatedSubstring = string.Concat(remainingWord[..substringLength], "-");
+                                    currentLineStringBuilder.Append(hyphenatedSubstring);
+                                    remainingLineWidth -= criteria.Font.MeasureString(hyphenatedSubstring).X;
+                                    remainingWord = remainingWord[substringLength..];
+                                }
+                                //Not enough space left to linebreak or word is too small. Add the current line and start a new one.
+                                else
+                                {
+                                    displayText.FormattedTextLines.Add(currentLineStringBuilder.ToString());
+                                    remainingLineWidth = criteria.MaximumPixelWidth;
+                                    currentLineStringBuilder.Clear();
+                                }
                             }
                         }
+                        while (remainingWord.Length > 0);
                     }
-                    while (remainingWord.Length > 0);
-                }
 
-                //Add last line if there's any text remaining
-                if (currentLineStringBuilder.Length > 0)
-                {
-                    var lastLine = currentLineStringBuilder.ToString();
-                    if (!string.IsNullOrWhiteSpace(lastLine))
+                    //Add last line if there's any text remaining
+                    if (currentLineStringBuilder.Length > 0)
                     {
-                        displayText.FormattedTextLines.Add(lastLine);
+                        var lastLine = currentLineStringBuilder.ToString();
+                        if (!string.IsNullOrWhiteSpace(lastLine))
+                        {
+                            displayText.FormattedTextLines.Add(lastLine);
+                        }
                     }
                 }
             }
