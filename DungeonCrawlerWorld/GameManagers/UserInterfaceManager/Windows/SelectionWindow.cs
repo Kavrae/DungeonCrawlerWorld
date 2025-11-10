@@ -95,15 +95,5 @@ namespace DungeonCrawlerWorld.GameManagers.UserInterfaceManager
                 }));
             }
         }
-
-        public override void HandleTitleClickDown(Vector2 mousePosition)
-        {
-            //Does nothing
-        }
-
-        public override void HandleContentClickDown(Vector2 mousePosition)
-        {
-            //Does nothing
-        }
     }
 }

@@ -98,7 +98,7 @@ namespace DungeonCrawlerWorld.GameManagers.UserInterfaceManager
                     tileSize: new Point(12, 12),
                     new WindowOptions
                     {
-                        RelativePosition = new Vector2(10, 15),
+                        RelativePosition = new Vector2(12, 12),
                         Size = new Vector2(1536, 930),
                         ShowBorder = false,
                         ShowTitle = true,
@@ -163,7 +163,7 @@ namespace DungeonCrawlerWorld.GameManagers.UserInterfaceManager
                     {
                         if (userInterfaceWindow.IsInDisplayRectangle(mouseState.Position))
                         {
-                            userInterfaceWindow.HandleClickDown(mouseState.Position.ToVector2());
+                            userInterfaceWindow.HandleClick(mouseState.Position.ToVector2());
                             break;
                         }
                     }

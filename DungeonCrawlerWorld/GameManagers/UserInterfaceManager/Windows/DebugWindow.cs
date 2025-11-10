@@ -83,15 +83,5 @@ namespace DungeonCrawlerWorld.GameManagers.UserInterfaceManager
             spriteBatch.DrawString(font, $"Entities : {string.Format("{0:N0}", ComponentRepo.CurrentMaxEntityId)}", new Vector2(_contentAbsolutePosition.X + 180, _contentAbsolutePosition.Y), Color.Black);
             spriteBatch.DrawString(font, $"Moving Entities : {string.Format("{0:N0}", ComponentRepo.MovementComponents.Count)}", new Vector2(_contentAbsolutePosition.X + 300, _contentAbsolutePosition.Y), Color.Black);
         }
-
-        public override void HandleTitleClickDown(Vector2 mousePosition)
-        {
-            //Does nothing
-        }
-
-        public override void HandleContentClickDown(Vector2 mousePosition)
-        {
-            //Does nothing
-        }
     }
 }

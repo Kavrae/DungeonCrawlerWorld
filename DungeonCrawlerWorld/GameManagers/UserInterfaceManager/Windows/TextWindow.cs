@@ -82,15 +82,7 @@ namespace DungeonCrawlerWorld.GameManagers.UserInterfaceManager
 
         public override void RecalculateGrowWindowSize()
         {
-            if (_parentWindow != null)
-            {
-                _contentSize.X = _parentWindow.ContentSize.X - _windowRelativePosition.X;
-            }
-            else
-            {
-                var gameVariables = DataAccessService.RetrieveGameVariables();
-                _contentSize.X = gameVariables.GameWindowSize.X * 0.5f;
-            }
+            _contentSize.X = _windowMaximumSize.X - _windowRelativePosition.X;
 
             if (_showBorder)
             {
@@ -138,6 +130,11 @@ namespace DungeonCrawlerWorld.GameManagers.UserInterfaceManager
                     RecalculateGrowWindowSize();
                     break;
             }
+        }
+
+        protected override void OnContentClickAction(Vector2 mousePosition)
+        {
+            //TODO copy text to clipboard
         }
     }
 }

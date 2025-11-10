@@ -45,7 +45,7 @@ namespace DungeonCrawlerWorld.GameManagers.NotificationManager
                 ChildWindowTileMode = WindowTileMode.Horizontal,
                 DisplayMode = WindowDisplayMode.Static,
                 IsTransparent = true,
-                RelativePosition = new Vector2(15, 40), //once we know this positions correctly, put the map back at 12/12 so it overlaps, make sure this is on top
+                RelativePosition = new Vector2(12, 30),
                 Size = new Vector2(1531, 25),
                 ShowTitle = false,
             });
@@ -71,11 +71,12 @@ namespace DungeonCrawlerWorld.GameManagers.NotificationManager
             }
 
             //TODO remove these tests
-            AddNotification(NotificationType.System, "System message", false);
-            AddNotification(NotificationType.System, "System message 2", false);
+            AddNotification(NotificationType.System, "System message", true);
+            AddNotification(NotificationType.System, "System message 2", true);
             AddNotification(NotificationType.System, "System message 3", true);
             AddNotification(NotificationType.Quest, "Quest message 1", true);
-            AddNotification(NotificationType.Quest, "Quest message 2", false);
+            AddNotification(NotificationType.Quest, "Quest message 2", true);
+            MinimizeAllNotifications();
         }
 
         public void LoadContent()
@@ -102,17 +103,19 @@ namespace DungeonCrawlerWorld.GameManagers.NotificationManager
             spriteBatchService.EndSpriteBatch();
         }
 
-        public void AddNotification(NotificationType notificationType, string message, bool isOpen)
+        public void AddNotification(NotificationType notificationType, string message, bool isActive)
         {
+            var offset = _activeNotifications.Count * 10;
             var notification = new Notification(message, notificationType);
 
-            if (isOpen)
+            if (isActive)
             {
                 var notificationWindow = new TextWindow(
                         null,
                         new TextWindowOptions
                         {
-                            RelativePosition = new Vector2(200, 200), //TODO middle of the screen. Maybe this should be a display mode?
+                            RelativePosition = new Vector2(200 + offset, 200 + offset),
+                            MaximumSize = new Vector2(400, 300),
                             CanContainChildWindows = false,
                             DisplayMode = WindowDisplayMode.Grow,
                             IsTransparent = false,
@@ -141,36 +144,49 @@ namespace DungeonCrawlerWorld.GameManagers.NotificationManager
             notificationTuple.summaryWindow.UpdateText($"{notificationType}: {count}");
         }
 
-        public void CloseNotification(Guid id)
+        public void CloseNotification(Guid notificationId)
         {
-            /*if (_activeNotificationWindows.ContainsKey(id))
+            if( _activeNotifications.Any(tuple => tuple.notification.Id == notificationId) )
             {
-                _activeNotificationWindows.Remove(id);
+                var notificationTuple = _activeNotifications.First(tuple => tuple.notification.Id == notificationId);
+                _activeNotifications.Remove(notificationTuple);
+                notificationTuple.activeWindow.Close();
             }
-            if (_notifications.Exists(notification => notification.Id == id))
-            {
-                _notifications.RemoveAll(notification => notification.Id == id);
-            }
-            */
-            //TODO remove from systemNotifications 
         }
 
         public void OpenNextNotification(NotificationType notificationType)
         {
-            //TODO remove from unreadNotificationWindows
-            //TODO add to activeNotificationWindows
+            var notificationList = _unreadNotifications
+                .First(tuple => tuple.notificationType == notificationType)
+                .notifications;
+
+            var notification = notificationList.FirstOrDefault();
+
+            if (notification != null)
+            {
+                AddNotification(notificationType, notification.Text, true);
+                notificationList.Remove(notification);
+                UpdateUnreadNotificationSummary(notificationType);
+            }
         }
 
         public void MinimizeNotification(Guid notificationId)
         {
-            //TODO add to unreadNotificationWindows
-            //TODO remove from activeNotificationWindows
+            var (notificationWindow, notification) = _activeNotifications.First(tuple => tuple.notification.Id == notificationId);
+
+            var (notificationType, unreadNotificationSummaryWindow, unreadNotificationList) = _unreadNotifications
+                .First(tuple => tuple.notificationType == notification.NotificationType);
+
+            AddNotification(notificationType, notification.Text, false);
+            CloseNotification(notificationId);
         }
 
         public void MinimizeAllNotifications()
         {
-            //TODO add to unreadNotificationWindows
-            //TODO remove from activeNotificationWindows
+            foreach( var (_, notification) in _activeNotifications.ToList() )
+            {
+                MinimizeNotification(notification.Id);
+            }
         }
     }
 }

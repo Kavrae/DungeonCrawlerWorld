@@ -9,11 +9,27 @@ using DungeonCrawlerWorld.Data;
 using DungeonCrawlerWorld.Services;
 
 //TODO minimize and restore
+//  DESIGN
+/*
+    Child should know if it's minimized or maximized and control its own state
+    Parent should be able to minimize or maximize a control as well by calling the same methods that the button clicks use
+    When minimized, child windows should be hidden and the parent should resize to only show the title bar
+    When restored, child windows should be shown again and the parent should resize to fit content
+    Parent controls where the minimized version goes OR, in the case of notifications, overrides how it displays minimized windows
+        Parent needs positions for both minimized and maximized controls. Don't need tabs (headers) for active children.
+        That would mean overriding how the child displays
+            That means separate draw calls for Minimized vs Active that can be overridden
+    OnMinimize -> change own state between specified states, then call OnChildMinimized on the parent window.
+    NotificationManager creates NotificationWindow (no, overruled, just use text window), inheriting from text window
+        overrides OnMinimize to call parent's OnChildMinimized and move itself to the summary container instead of hiding child windows.
+        Child doesn't know about the summary container, so that needs to call a parent action instead
+        NotificationWindow doesn't have a minimized display state, otherwise acts the same as a text window.
+            Others might need this feature... so just make it a TextWindow and window can have a bool _drawMinimized option.
+*/
 //TODO recalculate tiled sibling windows on minimize and restore
 //TODO close
 //TODO persist selectionWindow child windows until selection changes
 //TODO default selectionWindow child windows to minimized. Keep track of which components stay restored between selections
-
 //TODO click-and-drag create a semi-transparent "ghost" window that follows the curser. On mouse-up, delete the ghost window and position the original window in that spot. Then clamp to parent content rectangle.
 namespace DungeonCrawlerWorld.GameManagers.UserInterfaceManager
 {
@@ -232,7 +248,7 @@ namespace DungeonCrawlerWorld.GameManagers.UserInterfaceManager
             {
                 return;
             }
-            
+
             if (_showBorder)
             {
                 spriteBatch.Draw(unitRectangle, _windowRectangle, Color.Black);
@@ -254,6 +270,7 @@ namespace DungeonCrawlerWorld.GameManagers.UserInterfaceManager
 
             spriteBatch.End();
 
+            //Note : Creating a separate viewport for the content allows for windows to be individually scrolled and clipped
             var previousViewport = graphicsDevice.Viewport;
             graphicsDevice.Viewport = WindowViewport;
             spriteBatch.Begin(SpriteSortMode.Deferred, BlendState.AlphaBlend, null, null, null, null, CameraTransform);
@@ -280,30 +297,40 @@ namespace DungeonCrawlerWorld.GameManagers.UserInterfaceManager
             return _contentRectangle.Contains(point);
         }
 
-        public virtual void HandleClickDown(Vector2 mousePosition)
+        public void HandleClick(Vector2 mousePosition)
         {
             if (_titleRectangle.Contains(mousePosition))
             {
-                HandleTitleClickDown(mousePosition);
+                HandleTitleClick(mousePosition);
             }
             else if (_contentRectangle.Contains(mousePosition))
             {
-                HandleContentClickDown(mousePosition);
+                HandleContentClick(mousePosition);
             }
         }
 
-        public virtual void HandleTitleClickDown(Vector2 mousePosition)
+        private void HandleTitleClick(Vector2 mousePosition)
         {
-            //TODO handle title click options
+            OnTitleClickAction(mousePosition);
         }
 
-        public virtual void HandleContentClickDown(Vector2 mousePosition)
+        protected virtual void OnTitleClickAction(Vector2 mousePosition)
+        {
+            //Override in derived classes
+        }
+
+        private void HandleContentClick(Vector2 mousePosition)
+        {
+            OnContentClickAction(mousePosition);
+        }
+
+        protected virtual void OnContentClickAction(Vector2 mousePosition)
         {
             foreach (var childWindow in _childWindows)
             {
                 if (childWindow.WindowRectangle.Contains(mousePosition))
                 {
-                    childWindow.HandleClickDown(mousePosition);
+                    childWindow.HandleClick(mousePosition);
                 }
             }
         }
@@ -316,9 +343,10 @@ namespace DungeonCrawlerWorld.GameManagers.UserInterfaceManager
             }
 
             //Default to the end of the list
-            insertIndex = Math.Clamp(insertIndex ?? _childWindows.Count(),
+            var maximumIndex = _childWindows.Count();
+            insertIndex = Math.Clamp(insertIndex ?? maximumIndex,
                 0,
-                _childWindows.Count());
+                maximumIndex);
 
             _childWindows.Insert(insertIndex.Value, newChildWindow);
 
@@ -330,7 +358,7 @@ namespace DungeonCrawlerWorld.GameManagers.UserInterfaceManager
                 }
                 else if (updateIndex == 0)
                 {
-                    //First item. For now, default it to 0,0 within the parent.
+                    //First item. Default it to 0,0 within the parent's content rectangle.
                     newChildWindow._windowRelativePosition = new Vector2(0, 0);
                 }
                 else
@@ -502,11 +530,12 @@ namespace DungeonCrawlerWorld.GameManagers.UserInterfaceManager
         public void SetIsVisible(bool isVisible)
         {
             _isVisible = isVisible;
-            
-            if (_parentWindow != null)
-            {
-                _parentWindow.RecalculateChildrenSizeAndPosition();
-            }
+            _parentWindow?.RecalculateChildrenSizeAndPosition();
+        }
+
+        public void Close()
+        {
+            _parentWindow?.RemoveChildWindow(_windowId);
         }
     }
 }

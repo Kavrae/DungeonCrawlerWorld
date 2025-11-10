@@ -4,9 +4,9 @@
   <Platform>DesktopGL</Platform>
   <Config />
   <SourceFiles>
-    <File>E:/Code/DungeonCrawlerWorld/DungeonCrawlerWorld/Content/DefaultHugeFont.spritefont</File>
-    <File>E:/Code/DungeonCrawlerWorld/DungeonCrawlerWorld/Content/DefaultLargeFont.spritefont</File>
-    <File>E:/Code/DungeonCrawlerWorld/DungeonCrawlerWorld/Content/DefaultMediumFont.spritefont</File>
+    <File>C:/Users/crobe/source/repos/DungeonCrawlerWorld/DungeonCrawlerWorld/Content/DefaultHugeFont.spritefont</File>
+    <File>C:/Users/crobe/source/repos/DungeonCrawlerWorld/DungeonCrawlerWorld/Content/DefaultLargeFont.spritefont</File>
+    <File>C:/Users/crobe/source/repos/DungeonCrawlerWorld/DungeonCrawlerWorld/Content/DefaultMediumFont.spritefont</File>
   </SourceFiles>
   <DestFiles>
     <File xsi:nil="true" />
