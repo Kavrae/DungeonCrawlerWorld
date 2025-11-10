@@ -47,7 +47,7 @@ namespace DungeonCrawlerWorld.GameManagers.UserInterfaceManager
                     selectedMapNodes.Add(world.Map.MapNodes[world.SelectedMapNodePosition.Value.X, world.SelectedMapNodePosition.Value.Y, z]);
                 }
 
-                if (world._GameVariables.IsDebugMode)
+                if (_gameVariables.IsDebugMode)
                 {
                     foreach (var selectedMapNode in selectedMapNodes)
                     {
@@ -94,16 +94,6 @@ namespace DungeonCrawlerWorld.GameManagers.UserInterfaceManager
                     DisplayMode = WindowDisplayMode.Grow
                 }));
             }
-        }
-
-        public override void HandleTitleClickDown(Vector2 mousePosition)
-        {
-            //Does nothing
-        }
-
-        public override void HandleContentClickDown(Vector2 mousePosition)
-        {
-            //Does nothing
         }
     }
 }

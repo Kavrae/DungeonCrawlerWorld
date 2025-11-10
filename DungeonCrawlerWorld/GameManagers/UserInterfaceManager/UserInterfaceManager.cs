@@ -16,6 +16,7 @@ namespace DungeonCrawlerWorld.GameManagers.UserInterfaceManager
         private World world;
         private GraphicsDevice graphicsDevice;
         private SpriteBatchService spriteBatchService;
+        private DataAccessService dataAccessService;
 
         private DebugWindow debugWindow;
         private MapWindow mapWindow;
@@ -23,13 +24,13 @@ namespace DungeonCrawlerWorld.GameManagers.UserInterfaceManager
 
         private Texture2D unitRectangle;
 
-        private List<Window> displayComponents;
+        private List<Window> userInterfaceWindows;
 
         private KeyboardState previousKeyboardState;
 
         public void Initialize()
         {
-            var dataAccessService = GameServices.GetService<DataAccessService>();
+            dataAccessService = GameServices.GetService<DataAccessService>();
             world = dataAccessService.RetrieveWorld();
 
             graphicsDevice = GameServices.GetService<GraphicsDevice>();
@@ -41,30 +42,30 @@ namespace DungeonCrawlerWorld.GameManagers.UserInterfaceManager
             unitRectangle = new Texture2D(graphicsDevice, 1, 1);
             unitRectangle.SetData(new[] { Color.White });
 
-            CreateDisplayComponents();
-            foreach (var displayComponent in displayComponents)
+            CreateUserInterfaceWindows();
+            foreach (var userInterfaceWindow in userInterfaceWindows)
             {
-                displayComponent.Initialize();
+                userInterfaceWindow.Initialize();
             }
         }
 
         public void LoadContent()
         {
-            foreach (var displayComponent in displayComponents)
+            foreach (var userInterfaceWindow in userInterfaceWindows)
             {
-                displayComponent.LoadContent();
+                userInterfaceWindow.LoadContent();
             }
         }
 
         public void UnloadContent() { }
 
-        public void Update( GameTime gameTime, GameVariables gameVariables)
+        public void Update(GameTime gameTime, GameVariables gameVariables)
         {
             HandleUserInput();
 
-            foreach(var displayComponent in displayComponents)
+            foreach (var userInterfaceWindow in userInterfaceWindows)
             {
-                displayComponent.Update(gameTime);
+                userInterfaceWindow.Update(gameTime);
             }
         }
 
@@ -72,15 +73,15 @@ namespace DungeonCrawlerWorld.GameManagers.UserInterfaceManager
         {
             var spriteBatch = spriteBatchService.StartSpriteBatch();
 
-            foreach (var displayComponent in displayComponents)
+            foreach (var userInterfaceWindow in userInterfaceWindows)
             {
-                displayComponent.Draw(gameTime, spriteBatch, unitRectangle);
+                userInterfaceWindow.Draw(gameTime, spriteBatch, unitRectangle);
             }
 
             spriteBatchService.EndSpriteBatch();
         }
 
-        public void CreateDisplayComponents()
+        public void CreateUserInterfaceWindows()
         {
             debugWindow = new DebugWindow(
                     world,
@@ -97,7 +98,7 @@ namespace DungeonCrawlerWorld.GameManagers.UserInterfaceManager
                     tileSize: new Point(12, 12),
                     new WindowOptions
                     {
-                        RelativePosition = new Vector2(10, 15),
+                        RelativePosition = new Vector2(12, 12),
                         Size = new Vector2(1536, 930),
                         ShowBorder = false,
                         ShowTitle = true,
@@ -118,7 +119,7 @@ namespace DungeonCrawlerWorld.GameManagers.UserInterfaceManager
                         DisplayMode = WindowDisplayMode.Static
                     });
 
-            displayComponents = new List<Window>
+            userInterfaceWindows = new List<Window>
             {
                 debugWindow,
                 mapWindow,
@@ -133,40 +134,36 @@ namespace DungeonCrawlerWorld.GameManagers.UserInterfaceManager
 
             if (inputMode == InputMode.Map)
             {
-                if (currentKeyboardState.GetPressedKeyCount() > 0)
+                if (currentKeyboardState.IsKeyDown(Keys.Space) && !previousKeyboardState.IsKeyDown(Keys.Space))
                 {
-                    if (currentKeyboardState.IsKeyDown(Keys.Space) && !previousKeyboardState.IsKeyDown(Keys.Space))
-                    {
-                        world.ToggleIsPaused();
-                    }
+                    ToggleIsUserPaused();
+                }
 
-                    if (Keyboard.GetState().IsKeyDown(Keys.D))
-                    {
-                        mapWindow.UpdateScrollPosition(new Point(1, 0));
-                    }
-                    if (Keyboard.GetState().IsKeyDown(Keys.A))
-                    {
-                        mapWindow.UpdateScrollPosition(new Point(-1, 0));
-                    }
-                    if (Keyboard.GetState().IsKeyDown(Keys.W))
-                    {
-                        mapWindow.UpdateScrollPosition(new Point(0, -1));
-                    }
-                    if (Keyboard.GetState().IsKeyDown(Keys.S))
-                    {
-                        mapWindow.UpdateScrollPosition(new Point(0, 1));
-                    }
+                if (Keyboard.GetState().IsKeyDown(Keys.D))
+                {
+                    mapWindow.UpdateScrollPosition(new Point(1, 0));
+                }
+                if (Keyboard.GetState().IsKeyDown(Keys.A))
+                {
+                    mapWindow.UpdateScrollPosition(new Point(-1, 0));
+                }
+                if (Keyboard.GetState().IsKeyDown(Keys.W))
+                {
+                    mapWindow.UpdateScrollPosition(new Point(0, -1));
+                }
+                if (Keyboard.GetState().IsKeyDown(Keys.S))
+                {
+                    mapWindow.UpdateScrollPosition(new Point(0, 1));
                 }
 
                 var mouseState = Mouse.GetState();
                 if (mouseState.LeftButton == ButtonState.Pressed)
                 {
-                    var mousePosition = mouseState.Position.ToVector2();
-                    foreach (var displayComponent in displayComponents)
+                    foreach (var userInterfaceWindow in userInterfaceWindows)
                     {
-                        if (displayComponent.WindowRectangle.Contains(mouseState.Position))
+                        if (userInterfaceWindow.IsInDisplayRectangle(mouseState.Position))
                         {
-                            displayComponent.HandleClickDown(mousePosition);
+                            userInterfaceWindow.HandleClick(mouseState.Position.ToVector2());
                             break;
                         }
                     }
@@ -174,6 +171,12 @@ namespace DungeonCrawlerWorld.GameManagers.UserInterfaceManager
             }
 
             previousKeyboardState = currentKeyboardState;
+        }
+
+        private void ToggleIsUserPaused()
+        {
+            var gameVariables = dataAccessService.RetrieveGameVariables();
+            gameVariables.IsUserPaused = !gameVariables.IsUserPaused;
         }
     }
 }

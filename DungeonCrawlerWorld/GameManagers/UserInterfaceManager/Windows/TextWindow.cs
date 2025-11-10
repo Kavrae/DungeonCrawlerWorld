@@ -1,9 +1,8 @@
-using System.Collections.Generic;
-
 using Microsoft.Xna.Framework;
 using Microsoft.Xna.Framework.Graphics;
 
 using DungeonCrawlerWorld.Utilities;
+using DungeonCrawlerWorld.Services;
 
 namespace DungeonCrawlerWorld.GameManagers.UserInterfaceManager
 {
@@ -12,15 +11,16 @@ namespace DungeonCrawlerWorld.GameManagers.UserInterfaceManager
         public string OriginalText { get; set; }
         public DisplayText FormattedText { get; set; }
         public SpriteFont ContentFont { get; set; }
+        public Color TextColor { get; set; }
         private readonly int LinePadding = 3;
 
         public TextWindow(Window parentWindow, TextWindowOptions windowOptions) : base(parentWindow, windowOptions)
         {
             ContentFont = FontService.GetFont("defaultFont");
             OriginalText = windowOptions.Text;
+            TextColor = windowOptions.TextColor ?? Color.Black;
 
             _canContainChildWindows = false;
-            _childWindows = new List<Window>();
         }
 
         public override void Initialize()
@@ -48,7 +48,7 @@ namespace DungeonCrawlerWorld.GameManagers.UserInterfaceManager
                             new Vector2(
                                 LinePadding,
                                 (ContentFont.LineSpacing * lineNumber) + (LinePadding * (lineNumber + 1))),
-                            Color.Black);
+                            TextColor);
                     }
                 }
             }
@@ -82,7 +82,8 @@ namespace DungeonCrawlerWorld.GameManagers.UserInterfaceManager
 
         public override void RecalculateGrowWindowSize()
         {
-            _contentSize.X = _parentWindow.ContentSize.X - _windowRelativePosition.X;
+            _contentSize.X = _windowMaximumSize.X - _windowRelativePosition.X;
+
             if (_showBorder)
             {
                 _contentSize.X -= _borderSize.X * 2;
@@ -91,7 +92,7 @@ namespace DungeonCrawlerWorld.GameManagers.UserInterfaceManager
             FormattedText = StringUtility.FormatText(new FormatTextCriteria
             {
                 Font = ContentFont,
-                MaximumPixelWidth = _contentSize.X - (ContentPadding.X* 2),
+                MaximumPixelWidth = _contentSize.X - (ContentPadding.X * 2),
                 OriginalText = OriginalText,
                 WordWrap = true
             });
@@ -111,6 +112,29 @@ namespace DungeonCrawlerWorld.GameManagers.UserInterfaceManager
             {
                 _windowCurrentSize += Vector2.Multiply(_borderSize, 2);
             }
+        }
+
+        public void UpdateText(string newText)
+        {
+            OriginalText = newText;
+
+            switch (_windowDisplayMode)
+            {
+                case WindowDisplayMode.Static:
+                    RecalculateStaticWindowSize();
+                    break;
+                case WindowDisplayMode.Fill:
+                    RecalculateFillWindowSize();
+                    break;
+                case WindowDisplayMode.Grow:
+                    RecalculateGrowWindowSize();
+                    break;
+            }
+        }
+
+        protected override void OnContentClickAction(Vector2 mousePosition)
+        {
+            //TODO copy text to clipboard
         }
     }
 }

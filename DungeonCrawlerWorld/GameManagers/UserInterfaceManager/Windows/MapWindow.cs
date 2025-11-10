@@ -242,12 +242,7 @@ namespace DungeonCrawlerWorld.GameManagers.UserInterfaceManager
             }
         }
 
-        public override void HandleTitleClickDown(Vector2 mousePosition)
-        {
-            //Does nothing
-        }
-
-        public override void HandleContentClickDown(Vector2 mousePosition)
+        protected override void OnContentClickAction(Vector2 mousePosition)
         {
             SelectMapNodes(mousePosition);
         }

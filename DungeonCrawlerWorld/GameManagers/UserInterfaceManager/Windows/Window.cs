@@ -5,16 +5,32 @@ using System.Linq;
 using Microsoft.Xna.Framework;
 using Microsoft.Xna.Framework.Graphics;
 
+using DungeonCrawlerWorld.Data;
 using DungeonCrawlerWorld.Services;
 
 //TODO minimize and restore
+//  DESIGN
+/*
+    Child should know if it's minimized or maximized and control its own state
+    Parent should be able to minimize or maximize a control as well by calling the same methods that the button clicks use
+    When minimized, child windows should be hidden and the parent should resize to only show the title bar
+    When restored, child windows should be shown again and the parent should resize to fit content
+    Parent controls where the minimized version goes OR, in the case of notifications, overrides how it displays minimized windows
+        Parent needs positions for both minimized and maximized controls. Don't need tabs (headers) for active children.
+        That would mean overriding how the child displays
+            That means separate draw calls for Minimized vs Active that can be overridden
+    OnMinimize -> change own state between specified states, then call OnChildMinimized on the parent window.
+    NotificationManager creates NotificationWindow (no, overruled, just use text window), inheriting from text window
+        overrides OnMinimize to call parent's OnChildMinimized and move itself to the summary container instead of hiding child windows.
+        Child doesn't know about the summary container, so that needs to call a parent action instead
+        NotificationWindow doesn't have a minimized display state, otherwise acts the same as a text window.
+            Others might need this feature... so just make it a TextWindow and window can have a bool _drawMinimized option.
+*/
 //TODO recalculate tiled sibling windows on minimize and restore
 //TODO close
 //TODO persist selectionWindow child windows until selection changes
 //TODO default selectionWindow child windows to minimized. Keep track of which components stay restored between selections
-
 //TODO click-and-drag create a semi-transparent "ghost" window that follows the curser. On mouse-up, delete the ghost window and position the original window in that spot. Then clamp to parent content rectangle.
-
 namespace DungeonCrawlerWorld.GameManagers.UserInterfaceManager
 {
     public class Window
@@ -24,7 +40,10 @@ namespace DungeonCrawlerWorld.GameManagers.UserInterfaceManager
 
         private GraphicsDevice graphicsDevice;
 
-        public FontService FontService;
+        protected FontService FontService;
+        protected DataAccessService DataAccessService;
+
+        protected GameVariables _gameVariables;
 
         /*========Window hierarchy========*/
         protected Window _parentWindow;
@@ -64,6 +83,12 @@ namespace DungeonCrawlerWorld.GameManagers.UserInterfaceManager
         protected Rectangle _windowRectangle;
         public Rectangle WindowRectangle { get { return _windowRectangle; } }
 
+        protected bool _isVisible;
+        public bool IsVisible { get { return _isVisible; } }
+
+        protected bool _isTransparent;
+        public bool IsTransparent { get { return _isTransparent; } }
+
         /*========Title========*/
         protected SpriteFont TitleFont;
 
@@ -86,6 +111,9 @@ namespace DungeonCrawlerWorld.GameManagers.UserInterfaceManager
         protected Rectangle _titleRectangle;
         public Rectangle TitleRectangle { get { return _titleRectangle; } }
 
+        protected Color _titleBackgroundColor;
+        public Color TitleColor { get { return _titleBackgroundColor; } }
+
 
         /*========Border========*/
         protected bool _showBorder;
@@ -106,13 +134,16 @@ namespace DungeonCrawlerWorld.GameManagers.UserInterfaceManager
 
         public Vector2 ContentPadding = new(5, 5);
 
+        protected Color _contentBackgroundColor;
+        public Color ContentColor { get { return _contentBackgroundColor; } }
+
 
         /*========Viewport========*/
         private Viewport _windowViewport;
-        public Viewport WindowViewport {get { return _windowViewport; }}
+        public Viewport WindowViewport { get { return _windowViewport; } }
 
         private Matrix _cameraTransform;
-        public Matrix CameraTransform{ get { return _cameraTransform; }}
+        public Matrix CameraTransform { get { return _cameraTransform; } }
 
         /*========User Controls========*/
         public bool CanUserClose { get; set; }
@@ -132,6 +163,9 @@ namespace DungeonCrawlerWorld.GameManagers.UserInterfaceManager
             FontService = GameServices.GetService<FontService>();
             TitleFont = FontService.GetFont("defaultFont");
 
+            DataAccessService = GameServices.GetService<DataAccessService>();
+            _gameVariables = DataAccessService.RetrieveGameVariables();
+
             /*========Window hierarchy========*/
             _parentWindow = parentWindow;
             _canContainChildWindows = windowOptions.CanContainChildWindows ?? false;
@@ -150,15 +184,23 @@ namespace DungeonCrawlerWorld.GameManagers.UserInterfaceManager
             _windowOriginalSize = windowOptions.Size ?? new Vector2(0, 0);
             _windowCurrentSize = _windowOriginalSize;
 
+            _isVisible = windowOptions.IsVisible ?? true; //TODO combine these two into a visibility mode?
+            _isTransparent = windowOptions.IsTransparent ?? false;
+
             /*========Title========*/
             _showTitle = windowOptions.ShowTitle ?? false;
             _titleText = windowOptions.TitleText ?? string.Empty;
             _originalTitleSize = new Vector2(_windowOriginalSize.X, TitleFont.MeasureString(" ").Y + TitlePadding.Y * 2);
             _titleSize = _originalTitleSize;
+            _titleBackgroundColor = windowOptions.TitleColor ?? Color.LightBlue;
 
             /*========Border========*/
             _showBorder = windowOptions.ShowBorder ?? false;
             _borderSize = windowOptions.BorderSize ?? new Vector2(1, 1);
+
+
+            /*========Content========*/
+            _contentBackgroundColor = windowOptions.ContentColor ?? Color.White;
 
             /*========User Controls========*/
             CanUserClose = windowOptions.CanUserClose ?? false;
@@ -202,6 +244,11 @@ namespace DungeonCrawlerWorld.GameManagers.UserInterfaceManager
 
         public void Draw(GameTime gameTime, SpriteBatch spriteBatch, Texture2D unitRectangle)
         {
+            if (!_isVisible)
+            {
+                return;
+            }
+
             if (_showBorder)
             {
                 spriteBatch.Draw(unitRectangle, _windowRectangle, Color.Black);
@@ -209,14 +256,21 @@ namespace DungeonCrawlerWorld.GameManagers.UserInterfaceManager
 
             if (_showTitle)
             {
-                spriteBatch.Draw(unitRectangle, _titleRectangle, Color.LightBlue);
+                if (!_isTransparent)
+                {
+                    spriteBatch.Draw(unitRectangle, _titleRectangle, _titleBackgroundColor);
+                }
                 spriteBatch.DrawString(TitleFont, TitleText, _titleAbsolutePosition + TitlePadding, Color.Black);
             }
 
-            spriteBatch.Draw(unitRectangle, _contentRectangle, Color.White);
+            if (!_isTransparent)
+            {
+                spriteBatch.Draw(unitRectangle, _contentRectangle, _contentBackgroundColor);
+            }
 
             spriteBatch.End();
 
+            //Note : Creating a separate viewport for the content allows for windows to be individually scrolled and clipped
             var previousViewport = graphicsDevice.Viewport;
             graphicsDevice.Viewport = WindowViewport;
             spriteBatch.Begin(SpriteSortMode.Deferred, BlendState.AlphaBlend, null, null, null, null, CameraTransform);
@@ -226,7 +280,7 @@ namespace DungeonCrawlerWorld.GameManagers.UserInterfaceManager
             spriteBatch.End();
             graphicsDevice.Viewport = previousViewport;
             spriteBatch.Begin(SpriteSortMode.Deferred, BlendState.AlphaBlend, null, null, null, null, null);
-            
+
             if (_childWindows != null)
             {
                 foreach (var childWindow in _childWindows)
@@ -243,31 +297,40 @@ namespace DungeonCrawlerWorld.GameManagers.UserInterfaceManager
             return _contentRectangle.Contains(point);
         }
 
-        public virtual void HandleClickDown(Vector2 mousePosition)
+        public void HandleClick(Vector2 mousePosition)
         {
             if (_titleRectangle.Contains(mousePosition))
             {
-                HandleTitleClickDown(mousePosition);
+                HandleTitleClick(mousePosition);
             }
             else if (_contentRectangle.Contains(mousePosition))
             {
-                HandleContentClickDown(mousePosition);
+                HandleContentClick(mousePosition);
             }
         }
 
-
-        public virtual void HandleTitleClickDown(Vector2 mousePosition)
+        private void HandleTitleClick(Vector2 mousePosition)
         {
-            //TODO handle title click options
+            OnTitleClickAction(mousePosition);
         }
 
-        public virtual void HandleContentClickDown(Vector2 mousePosition)
+        protected virtual void OnTitleClickAction(Vector2 mousePosition)
+        {
+            //Override in derived classes
+        }
+
+        private void HandleContentClick(Vector2 mousePosition)
+        {
+            OnContentClickAction(mousePosition);
+        }
+
+        protected virtual void OnContentClickAction(Vector2 mousePosition)
         {
             foreach (var childWindow in _childWindows)
             {
                 if (childWindow.WindowRectangle.Contains(mousePosition))
                 {
-                    childWindow.HandleClickDown(mousePosition);
+                    childWindow.HandleClick(mousePosition);
                 }
             }
         }
@@ -280,9 +343,10 @@ namespace DungeonCrawlerWorld.GameManagers.UserInterfaceManager
             }
 
             //Default to the end of the list
-            insertIndex = Math.Clamp(insertIndex ?? _childWindows.Count(),
+            var maximumIndex = _childWindows.Count();
+            insertIndex = Math.Clamp(insertIndex ?? maximumIndex,
                 0,
-                _childWindows.Count());
+                maximumIndex);
 
             _childWindows.Insert(insertIndex.Value, newChildWindow);
 
@@ -294,7 +358,7 @@ namespace DungeonCrawlerWorld.GameManagers.UserInterfaceManager
                 }
                 else if (updateIndex == 0)
                 {
-                    //First item. For now, default it to 0,0 within the parent.
+                    //First item. Default it to 0,0 within the parent's content rectangle.
                     newChildWindow._windowRelativePosition = new Vector2(0, 0);
                 }
                 else
@@ -413,7 +477,7 @@ namespace DungeonCrawlerWorld.GameManagers.UserInterfaceManager
 
         public virtual void RecalculateGrowWindowSize()
         {
-            if (_canContainChildWindows && _childWindows != null)
+            if (_canContainChildWindows && _childWindows != null && _childWindows.Count > 0)
             {
                 _contentSize = new Vector2(
                     _childWindows.Max(childWindow => childWindow.WindowRectangle.Right),
@@ -461,6 +525,17 @@ namespace DungeonCrawlerWorld.GameManagers.UserInterfaceManager
                     childWindow.RecalculateSizeAndAbsolutePosition();
                 }
             }
+        }
+
+        public void SetIsVisible(bool isVisible)
+        {
+            _isVisible = isVisible;
+            _parentWindow?.RecalculateChildrenSizeAndPosition();
+        }
+
+        public void Close()
+        {
+            _parentWindow?.RemoveChildWindow(_windowId);
         }
     }
 }

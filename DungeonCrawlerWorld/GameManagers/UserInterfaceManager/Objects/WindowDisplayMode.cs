@@ -4,6 +4,6 @@ namespace DungeonCrawlerWorld.GameManagers.UserInterfaceManager
     {
         Static,
         Fill,
-        Grow
+        Grow //TODO split into GrowHorizontal, GrowVertical, and GrowAll
     }
 }
