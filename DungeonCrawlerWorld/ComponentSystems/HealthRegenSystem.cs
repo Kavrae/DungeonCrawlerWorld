@@ -1,7 +1,9 @@
-﻿using Microsoft.Xna.Framework;
+﻿using System.Threading.Tasks;
+
+using Microsoft.Xna.Framework;
 
 using DungeonCrawlerWorld.Components;
-using System.Threading.Tasks;
+
 
 namespace DungeonCrawlerWorld.ComponentSystems
 {

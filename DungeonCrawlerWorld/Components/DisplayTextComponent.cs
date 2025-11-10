@@ -1,6 +1,4 @@
-﻿using System;
-
-namespace DungeonCrawlerWorld.Components
+﻿namespace DungeonCrawlerWorld.Components
 {
     public struct DisplayTextComponent : IEntityComponent
     {

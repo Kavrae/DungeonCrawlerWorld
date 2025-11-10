@@ -20,6 +20,7 @@ namespace DungeonCrawlerWorld.GameManagers.UserInterfaceManager
         private Point maxScrollPosition;
 
         private Point currentTileSize;
+        private Point innerTileSize;
         private int tileColumns;
         private int tileRows;
         private int tileDepth;
@@ -42,6 +43,7 @@ namespace DungeonCrawlerWorld.GameManagers.UserInterfaceManager
             };
 
             currentTileSize = tileSize ?? tileSizes[currentZoomLevel];
+            innerTileSize = new Point(currentTileSize.X - 2, currentTileSize.Y - 2);
 
             tileDepth = this.world.Map.Size.Z;
         }
@@ -85,7 +87,8 @@ namespace DungeonCrawlerWorld.GameManagers.UserInterfaceManager
 
         public void DrawBackgrounds(GameTime gameTime, SpriteBatch spriteBatch, Texture2D unitRectangle)
         {
-            var innerTileSize = new Point(currentTileSize.X - 2, currentTileSize.Y - 2);
+            var drawRectangle = new Rectangle(0, 0, currentTileSize.X, currentTileSize.Y);
+            var innerDrawRectangle = new Rectangle(0, 0, innerTileSize.X, innerTileSize.Y);
 
             for (var column = 0; column < tileColumns; column++)
             {
@@ -108,23 +111,28 @@ namespace DungeonCrawlerWorld.GameManagers.UserInterfaceManager
                                     && world.SelectedMapNodePosition.Value.X == mapNodeX
                                     && world.SelectedMapNodePosition.Value.Y == mapNodeY;
 
+                                drawRectangle.X = column * currentTileSize.X;
+                                drawRectangle.Y = row * currentTileSize.Y;
                                 if (isSelected)
                                 {
                                     spriteBatch.Draw(
                                         unitRectangle,
-                                        new Rectangle(column * currentTileSize.X, row * currentTileSize.Y, currentTileSize.X, currentTileSize.Y),
+                                        drawRectangle,
                                         Color.Gold);
+
+                                    innerDrawRectangle.X = (column * currentTileSize.X) + 1;
+                                    innerDrawRectangle.Y = (row * currentTileSize.Y) + 1;
 
                                     spriteBatch.Draw(
                                         unitRectangle,
-                                        new Rectangle(column * currentTileSize.X + 1, row * currentTileSize.Y + 1, innerTileSize.X, innerTileSize.Y),
+                                        innerDrawRectangle,
                                         backgroundComponent.BackgroundColor ?? Color.White);
                                 }
                                 else
                                 {
                                     spriteBatch.Draw(
                                         unitRectangle,
-                                        new Rectangle(column * currentTileSize.X, row * currentTileSize.Y, currentTileSize.X, currentTileSize.Y),
+                                        drawRectangle,
                                         backgroundComponent.BackgroundColor ?? Color.White);
                                 }
 
@@ -149,7 +157,6 @@ namespace DungeonCrawlerWorld.GameManagers.UserInterfaceManager
                     {
                         var mapNode = world.Map.MapNodes[mapNodeX, mapNodeY, z];
 
-                        //TODO use flags to determine if glyph is visible
                         if (mapNode.EntityId != null)
                         {
                             var entityId = mapNode.EntityId.Value;
@@ -229,7 +236,7 @@ namespace DungeonCrawlerWorld.GameManagers.UserInterfaceManager
                     var y = (int)(relativeMapDisplayMousePosition.Y / currentTileSize.Y);
                     if (y >= 0 && y < tileRows)
                     {
-                        world.SelectedMapNodePosition = new Point(x, y);
+                        world.SelectedMapNodePosition = new Point(x + currentScrollPosition.X, y + currentScrollPosition.Y);
                     }
                 }
             }
