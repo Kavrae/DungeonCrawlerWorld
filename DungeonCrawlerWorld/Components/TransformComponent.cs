@@ -1,9 +1,15 @@
-﻿using System;
-
-using DungeonCrawlerWorld.Utilities;
+﻿using DungeonCrawlerWorld.Utilities;
 
 namespace DungeonCrawlerWorld.Components
 {
+    /// <summary>
+    /// Indicates the Z component of a mapNode or entity on the map
+    /// </summary>
+    /// <todo>
+    /// More mapHeights
+    /// Create a new MapCoordinate type with all values >0 and the z axis bound to the MapHeight enum.
+    /// Separate MapHeight into more granular properties to encapsulate things like Riding
+    /// </todo>
     public enum MapHeight : byte
     {
         UnderGround = 0,
@@ -14,6 +20,9 @@ namespace DungeonCrawlerWorld.Components
         Flying = 5
     }
 
+    /// <summary>
+    /// A core component that specifies the Position and Size of an entity.
+    /// </summary>
     public struct TransformComponent : IEntityComponent
     {
         public int EntityId { get; set; }

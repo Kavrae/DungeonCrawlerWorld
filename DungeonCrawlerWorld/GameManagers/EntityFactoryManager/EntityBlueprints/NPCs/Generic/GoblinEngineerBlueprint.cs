@@ -4,9 +4,12 @@ using DungeonCrawlerWorld.Components;
 
 namespace DungeonCrawlerWorld.GameManagers.EntityFactoryManager
 {
+    /// <summary>
+    /// Represents a goblin engineer NPC as a combination of the Goblin race and Engineer class.
+    /// This combination grants an additional bonus to energy and energy regeneration.
+    /// </summary>
     public class GoblinEngineerBlueprint : IBlueprint
     {
-
         public int EntityId { get; set; }
         public string Name { get; set; }
         public string Description { get; set; }

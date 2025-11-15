@@ -7,6 +7,10 @@ using DungeonCrawlerWorld.Components;
 
 namespace DungeonCrawlerWorld.ComponentSystems
 {
+    /// <summary>
+    /// Responsible for updating the health values on an entity. 
+    /// Health values are bound between a minimum (0) and maximum specified on the component.
+    /// </summary>
     public class HealthRegenSystem : ComponentSystem
     {
         public byte FramesPerUpdate => 10;

@@ -6,6 +6,14 @@ using DungeonCrawlerWorld.Components;
 
 namespace DungeonCrawlerWorld.GameManagers.EntityFactoryManager
 {
+    /// <summary>
+    /// Represents a patch of roughly shaped stone floor terrain.
+    /// </summary>
+    /// <components>
+    /// BackgroundComponent
+    /// DisplayTextComponent
+    /// TransformComponent
+    /// </components>
     public class StoneFloor : IBlueprint
     {
         public int EntityId { get; set; }

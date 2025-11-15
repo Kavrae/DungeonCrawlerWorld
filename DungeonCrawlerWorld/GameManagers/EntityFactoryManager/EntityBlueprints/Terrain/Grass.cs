@@ -6,6 +6,15 @@ using DungeonCrawlerWorld.Components;
 
 namespace DungeonCrawlerWorld.GameManagers.EntityFactoryManager
 {
+    /// <summary>
+    /// Represents a patch of ordinary grass terrain.
+    /// </summary>
+    /// <components>
+    /// BackgroundComponent
+    /// DisplayTextComponent
+    /// GlyphComponent
+    /// TransformComponent
+    /// </components>
     public class Grass : IBlueprint
     {
         

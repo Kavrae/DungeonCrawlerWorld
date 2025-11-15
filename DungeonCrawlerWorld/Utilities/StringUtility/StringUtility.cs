@@ -5,19 +5,37 @@ using System.Text;
 
 namespace DungeonCrawlerWorld.Utilities
 {
+    /// <summary>
+    /// Provides utility methods for formatting and manipulating strings to be displayed in the User Interface.
+    /// Performance of this class is critical as it is called frequently during UI rendering.
+    /// </summary>
     public static class StringUtility
     {
-        private static readonly int minimumCharacterCountToLineBreak = 6;
-        private static readonly int minimumCharactersBeforeLineBreak = 3;
-        private static readonly int minimumCharactersAfterLineBreak = minimumCharacterCountToLineBreak - minimumCharactersBeforeLineBreak;
+        /// <summary>
+        /// Minimum number of characters required to consider a line break. 
+        /// Words shorter than this value will be placed onto the next line instead of breaking.
+        /// </summary>
+        private const int minimumCharacterCountToLineBreak = 6;
 
+        /// <summary>
+        /// The minimum number of characters that must appear before a line break when hyphenating.
+        /// If the remaining characters in a line is less than this value, the entire word is moved to the next line.
+        /// </summary>
+        private const int minimumCharactersBeforeLineBreak = 3;
+
+        /// <summary>
+        /// The minimum number of characters that must appear after a line break when hyphenating.
+        /// This value is used to determine how many characters to place on the next line after hyphenating a word.
+        /// </summary>
+        private const int minimumCharactersAfterLineBreak = minimumCharacterCountToLineBreak - minimumCharactersBeforeLineBreak;
+
+        /// <summary>
+        /// Formats the given text based on the specified criteria, including options for truncation and word wrapping.
+        /// </summary>
+        /// <returns>DisplayText to be consumed by UserInterface draw calls.</returns>
         public static DisplayText FormatText(FormatTextCriteria criteria)
         {
-            var displayText = new DisplayText
-            {
-                OriginalText = criteria.OriginalText,
-                FormattedTextLines = new List<string>()
-            };
+            var displayText = new DisplayText(criteria.OriginalText);
 
             criteria.TextLinesToFormat = ParseNewlineCharacters(criteria.OriginalText);
 
@@ -37,6 +55,11 @@ namespace DungeonCrawlerWorld.Utilities
             return displayText;
         }
 
+        /// <summary>
+        /// Splits the original text into separate lines based on newline characters, allowing callers to specify manual line breaks.
+        /// </summary>
+        /// <param name="OriginalText"></param>
+        /// <returns>A list of strings, each representing a separate line of text, to be stored in the DisplayText's FormattedTextLines property.</returns>
         public static List<string> ParseNewlineCharacters(string OriginalText)
         {
             return OriginalText
@@ -44,6 +67,10 @@ namespace DungeonCrawlerWorld.Utilities
                 .ToList();
         }
 
+        /// <summary>
+        /// Truncates each text line to fit within the specified maximum pixel width.
+        /// Substring percentage calculations rounded to 0 are used to avoid characters running past the maximum width.
+        /// </summary>
         private static void Truncate(DisplayText displayText, FormatTextCriteria criteria)
         {
             foreach (var textLine in criteria.TextLinesToFormat)
@@ -65,9 +92,13 @@ namespace DungeonCrawlerWorld.Utilities
             }
         }
 
+        /// <summary>
+        /// Determines the appropriate word wrapping method based on the maximum pixel width and applies it to the display text.
+        /// Small text boxes do not have enough room for hyphenation and use a simpler word wrap method.
+        /// </summary>
         private static void WordWrap(DisplayText displayText, FormatTextCriteria criteria)
         {
-            var minimumWordSizeToHyphenate = minimumCharacterCountToLineBreak * criteria.FontSize.X;
+            var minimumWordSizeToHyphenate = minimumCharacterCountToLineBreak * criteria.CharacterWidth;
 
             if (criteria.MaximumPixelWidth >= minimumWordSizeToHyphenate)
             {
@@ -79,6 +110,9 @@ namespace DungeonCrawlerWorld.Utilities
             }
         }
 
+        /// <summary>
+        /// A simple more space efficient word wrap based on character pixel widths, similar to the Truncate method.
+        /// </summary>
         public static void SimpleWordWrap(DisplayText displayText, FormatTextCriteria criteria)
         {
             foreach (var textLine in criteria.TextLinesToFormat)
@@ -102,6 +136,11 @@ namespace DungeonCrawlerWorld.Utilities
             }
         }
         
+        /// <summary>
+        /// Applies word wrap to each text line in TextLinesToFormat, which allows each line to separately wrap without affecting the line order.
+        /// Words are first wrapped based on word breaks (spaces). If a word exceeds the maximum pixel width, it is hyphenated and broken across multiple lines.
+        /// Hyphenation positioning is basded on the minimum character counts before and after the line break.
+        /// </summary>
         private static void WordWrapWithHyphenation(DisplayText displayText, FormatTextCriteria criteria, float minimumWordSizeToLineBreak)
         {
             foreach (var textLine in criteria.TextLinesToFormat)
@@ -123,7 +162,7 @@ namespace DungeonCrawlerWorld.Utilities
                         if (remainingLineWidth != criteria.MaximumPixelWidth)
                         {
                             currentLineStringBuilder.Append(' ');
-                            remainingLineWidth -= criteria.FontSize.X;
+                            remainingLineWidth -= criteria.CharacterWidth;
                         }
 
                         var remainingWord = word;
@@ -142,7 +181,7 @@ namespace DungeonCrawlerWorld.Utilities
                             //Word doesn't fit. Loop breaking the word up until the word is complete.
                             else
                             {
-                                var remainingHyphenatedLineWidth = remainingLineWidth - criteria.FontSize.X;
+                                var remainingHyphenatedLineWidth = remainingLineWidth - criteria.CharacterWidth;
 
                                 //Enough space left to linebreak with '-' and string is long enought to break
                                 if (remainingHyphenatedLineWidth >= minimumWordSizeToLineBreak && remainingWord.Length >= minimumCharacterCountToLineBreak)

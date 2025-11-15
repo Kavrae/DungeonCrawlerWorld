@@ -8,6 +8,10 @@ namespace DungeonCrawlerWorld.Services
         void EndSpriteBatch();
     }
 
+    /// <summary>
+    /// Provides a service to manage the lifecycle of SpriteBatch instances.
+    /// Safer than having each manager or system create their own SpriteBatch instances and less boilerplate than passing them around.
+    /// </summary>
     public class SpriteBatchService : ISpriteManager
     {
         private GraphicsDevice _graphicsDevice;

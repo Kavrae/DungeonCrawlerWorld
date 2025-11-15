@@ -6,9 +6,16 @@ using DungeonCrawlerWorld.Components;
 
 namespace DungeonCrawlerWorld.GameManagers.EntityFactoryManager
 {
+    /// <summary>
+    /// Represents a patch of ordinary dirt terrain.
+    /// </summary>
+    /// <components>
+    /// BackgroundComponent
+    /// DisplayTextComponent
+    /// TransformComponent
+    /// </components>
     public class Dirt : IBlueprint
     {
-        
         public int EntityId { get; set; }
         public string Name { get; set; }
         public string Description { get; set; }

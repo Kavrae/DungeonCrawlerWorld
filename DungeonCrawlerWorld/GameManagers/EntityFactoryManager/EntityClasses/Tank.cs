@@ -24,7 +24,7 @@ namespace DungeonCrawlerWorld.GameManagers.EntityFactoryManager
                 ComponentRepo.HealthComponents[EntityId] = healthComponent;
             }
 
-            base.Build(entityId);
+            Build(entityId);
         }
     }
 }

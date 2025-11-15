@@ -34,7 +34,6 @@ namespace DungeonCrawlerWorld
 
         private GraphicsDeviceManager graphics;
         private DataAccessService dataAccessService;
-        private World world;
 
         private List<IGameManager> updatableGameManagers;
         private List<IGameManager> drawableGameManagers;
@@ -64,7 +63,6 @@ namespace DungeonCrawlerWorld
             }
 
             dataAccessService = GameServices.GetService<DataAccessService>();
-            world = dataAccessService.RetrieveWorld();
 
             base.Initialize();
         }

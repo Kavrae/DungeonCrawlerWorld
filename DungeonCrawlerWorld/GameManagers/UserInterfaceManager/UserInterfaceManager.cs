@@ -9,11 +9,26 @@ using DungeonCrawlerWorld.Services;
 
 namespace DungeonCrawlerWorld.GameManagers.UserInterfaceManager
 {
+    
+    /// <summary>
+    /// Manages the user interface components of the game.
+    /// </summary>
     public class UserInterfaceManager : IGameManager
     {
+        /// <summary>
+        /// Indicates that the User Interface Manager can update while the game is paused.
+        /// If this value is turned off, the screen will remain static while paused, preventing user input and UI updates.
+        /// </summary>
         public bool CanUpdateWhilePaused => true;
 
+        /// <summary>
+        /// An in-memory reference to the game world retrieved from the Data Access Service.
+        /// </summary>
+        /// <todo>
+        /// Only reference the portion of the world relevant to UI updates within a certain radius.
+        /// </todo>
         private World world;
+
         private GraphicsDevice graphicsDevice;
         private SpriteBatchService spriteBatchService;
         private DataAccessService dataAccessService;
@@ -22,10 +37,21 @@ namespace DungeonCrawlerWorld.GameManagers.UserInterfaceManager
         private MapWindow mapWindow;
         private SelectionWindow selectionWindow;
 
+        /// <summary>
+        /// A simple 1x1 pixel white rectangle texture used for drawing UI elements.
+        /// Improves performance by copying a common texture instead of creating new textures for each element.
+        /// </summary>
         private Texture2D unitRectangle;
 
+        /// <summary>
+        /// All UI elements are contained within user interface windows.
+        /// This allows each element to be easily repositioned, resized, drawn, and updated based on their settings.
+        /// </summary>
         private List<Window> userInterfaceWindows;
 
+        /// <summary>
+        /// Updated each frame, this allows for comparison of current and previous keyboard states to detect key presses.
+        /// </summary>
         private KeyboardState previousKeyboardState;
 
         public void Initialize()
@@ -81,6 +107,14 @@ namespace DungeonCrawlerWorld.GameManagers.UserInterfaceManager
             spriteBatchService.EndSpriteBatch();
         }
 
+        /// <summary>
+        /// Creates and initializes all root user interface windows.
+        /// All other windows are children of these root windows.
+        /// Update and draw order are determined by the order of windows in the userInterfaceWindows list.
+        /// </summary>
+        /// <todo>
+        /// Make default window creation values configurable via a settings file.
+        /// </todo>
         public void CreateUserInterfaceWindows()
         {
             debugWindow = new DebugWindow(
@@ -127,6 +161,16 @@ namespace DungeonCrawlerWorld.GameManagers.UserInterfaceManager
             };
         }
 
+        /// <summary>
+        /// Handles user input for the User Interface Manager.
+        /// Input is handled via a recursive pattern in which each layer checks the click position against the display rectangle of each child window
+        /// until a match is found. Each child window will do the same for its children until the deepest child window is found. That component
+        /// will then run its Header or Content click handler.
+        /// </summary>
+        /// <todo>
+        /// Recursive pattern to determine the correct window to handle keyboard actions. Move UpdateScrollPosition to the mapWindow's input handler.
+        /// Keymapping via config file
+        /// </todo>
         private void HandleUserInput()
         {
             var inputMode = InputMode.Map;
@@ -173,6 +217,11 @@ namespace DungeonCrawlerWorld.GameManagers.UserInterfaceManager
             previousKeyboardState = currentKeyboardState;
         }
 
+        /// <summary>
+        /// Toggles the paused state of the user based on the current state in gameVariables
+        /// By centralizing the isUserPaused variable, multiple managers and systems can pause the game. 
+        /// Ex : Unskippable system notifications.
+        /// </summary>
         private void ToggleIsUserPaused()
         {
             var gameVariables = dataAccessService.RetrieveGameVariables();

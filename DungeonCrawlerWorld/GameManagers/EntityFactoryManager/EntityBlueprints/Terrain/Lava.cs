@@ -6,6 +6,15 @@ using DungeonCrawlerWorld.Components;
 
 namespace DungeonCrawlerWorld.GameManagers.EntityFactoryManager
 {
+    /// <summary>
+    /// Represents a patch of hot lava terrain.
+    /// </summary>
+    /// <components>
+    /// BackgroundComponent
+    /// GlyphComponent
+    /// DisplayTextComponent
+    /// TransformComponent
+    /// </components>
     public class Lava : IBlueprint
     {
         //TODO spawn lava in pools around the map

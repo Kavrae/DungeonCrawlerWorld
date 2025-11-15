@@ -11,8 +11,15 @@ using DungeonCrawlerWorld.Services;
 
 namespace DungeonCrawlerWorld.GameManagers.NotificationManager
 {
+    /// <summary>
+    /// Manages the creation, display, and lifecycle of notifications within the game.
+    /// IN PROGRESS
+    /// </summary>
     public class NotificationManager : IGameManager
     {
+        /// <summary>
+        /// Notifications should update and display even when the game is paused.
+        /// </summary>
         public bool CanUpdateWhilePaused => true;
 
         private Window _notificationSummaryContainer;
@@ -76,7 +83,6 @@ namespace DungeonCrawlerWorld.GameManagers.NotificationManager
             AddNotification(NotificationType.System, "System message 3", true);
             AddNotification(NotificationType.Quest, "Quest message 1", true);
             AddNotification(NotificationType.Quest, "Quest message 2", true);
-            MinimizeAllNotifications();
         }
 
         public void LoadContent()

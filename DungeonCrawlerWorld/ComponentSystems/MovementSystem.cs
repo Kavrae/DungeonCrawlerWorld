@@ -10,8 +10,8 @@ using DungeonCrawlerWorld.Utilities;
 namespace DungeonCrawlerWorld.ComponentSystems
 {
     /// <summary>
-    /// Movable System
-    /// Responsible for selecting the next MapNode to move to and then moving towards that node based upon the set movement type
+    /// Responsible for selecting the next MapNode to path the entity towards and then moving towards that node based 
+    /// upon the set movement type.
     /// </summary>
     public class MovementSystem : ComponentSystem
     {
@@ -65,6 +65,9 @@ namespace DungeonCrawlerWorld.ComponentSystems
             }
         }
 
+        /// <summary>
+        /// Determine the next valid map node to move the entity to based upon the specified movement type
+        /// </summary>
         public void SetNextMapPosition(MovementComponent movementComponent, TransformComponent transformComponent)
         {
             if (movementComponent.MovementMode == MovementMode.Random)
@@ -78,6 +81,11 @@ namespace DungeonCrawlerWorld.ComponentSystems
             }
         }
 
+        /// <summary>
+        /// Attempt to move the entity to the selected mapNode.
+        /// MoveEntity checks for collision in case other entities have already moved into the selected space.
+        /// Energy from the EnergyComponent is consumed during movement, not during path selection.
+        /// </summary>
         public void TryMoveToNextMapPosition(MovementComponent movementComponent, EnergyComponent actionEnergyComponent)
         {
             if (movementComponent.NextMapPosition != null)
@@ -87,6 +95,12 @@ namespace DungeonCrawlerWorld.ComponentSystems
                 ComponentRepo.EnergyComponents[actionEnergyComponent.EntityId] = actionEnergyComponent;
             }
         }
+
+        /// <summary>
+        /// Determines if an entity can move to a cube of selected mapNodes.
+        /// Basic collision detection is run to determine if any of the mapNodes are already occupied.
+        /// Each map node can contain a single entity.
+        /// </summary>
         public bool CanMove(CubeInt newPosition, int entityId)
         {
             for (var x = newPosition.Position.X; x < newPosition.Position.X + newPosition.Size.X; x++)
@@ -111,6 +125,11 @@ namespace DungeonCrawlerWorld.ComponentSystems
 
         }
 
+        /// <summary>
+        /// Select a random neighboring map node to move to.
+        /// The map node must be on the map and not currently occupied.
+        /// All valid options are equally likely to be chosen.
+        /// </summary>
         public void SetRandomMapPosition(MovementComponent movementComponent, TransformComponent transformComponent)
         {
             short framesToWaitIfNoOptions = 10;

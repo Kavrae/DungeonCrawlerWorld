@@ -7,8 +7,9 @@ using DungeonCrawlerWorld.Components;
 namespace DungeonCrawlerWorld.ComponentSystems
 {
     /// <summary>
-    /// Actionable System
-    /// Responsible for updating the energy values on an entity. These energy values allow the entity to perform various actions such as movement.
+    /// Responsible for updating the energy values on an entity. 
+    /// These energy values allow the entity to perform various actions such as movement.
+    /// Energy values are bound between a minimum (0) and maximum specified on the component.
     /// </summary>
     public class EnergyRechargeSystem : ComponentSystem
     {

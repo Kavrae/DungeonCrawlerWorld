@@ -35,7 +35,7 @@ namespace DungeonCrawlerWorld.GameManagers.EntityFactoryManager
             _ = new HealthComponent(entityId, 100, 5, 100);
             _ = new MovementComponent(entityId, MovementMode.Random, 20);
 
-            base.Build(entityId);
+            Build(entityId);
         }
     }
 }

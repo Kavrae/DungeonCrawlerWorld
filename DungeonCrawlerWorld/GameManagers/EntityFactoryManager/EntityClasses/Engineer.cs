@@ -21,7 +21,7 @@ namespace DungeonCrawlerWorld.GameManagers.EntityFactoryManager
                 ComponentRepo.EnergyComponents[EntityId] = energyComponent;
             }
 
-            base.Build(entityId);
+            Build(entityId);
         }
     }
 }

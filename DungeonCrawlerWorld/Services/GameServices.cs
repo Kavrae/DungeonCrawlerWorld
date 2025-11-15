@@ -2,6 +2,10 @@
 
 namespace DungeonCrawlerWorld
 {
+    /// <summary>
+    /// Provides a centralized container for managing game services.
+    /// This avoids each manager and system needing references to multiple services.
+    /// </summary>
     public static class GameServices
     {
         private static GameServiceContainer container;

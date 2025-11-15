@@ -58,11 +58,10 @@ namespace DungeonCrawlerWorld.GameManagers.UserInterfaceManager
         {
             base.RecalculateStaticWindowSize();
 
-            FormattedText = StringUtility.FormatText(new FormatTextCriteria
+            FormattedText = StringUtility.FormatText(new FormatTextCriteria (OriginalText)
             {
                 Font = ContentFont,
                 MaximumPixelWidth = _contentSize.X - (ContentPadding.X * 2),
-                OriginalText = OriginalText,
                 WordWrap = true
             });
         }
@@ -71,11 +70,10 @@ namespace DungeonCrawlerWorld.GameManagers.UserInterfaceManager
         {
             base.RecalculateFillWindowSize();
 
-            FormattedText = StringUtility.FormatText(new FormatTextCriteria
+            FormattedText = StringUtility.FormatText(new FormatTextCriteria (OriginalText)
             {
                 Font = ContentFont,
                 MaximumPixelWidth = _contentSize.X - (ContentPadding.X * 2),
-                OriginalText = OriginalText,
                 WordWrap = true
             });
         }
@@ -89,11 +87,10 @@ namespace DungeonCrawlerWorld.GameManagers.UserInterfaceManager
                 _contentSize.X -= _borderSize.X * 2;
             }
 
-            FormattedText = StringUtility.FormatText(new FormatTextCriteria
+            FormattedText = StringUtility.FormatText(new FormatTextCriteria(OriginalText)
             {
                 Font = ContentFont,
                 MaximumPixelWidth = _contentSize.X - (ContentPadding.X * 2),
-                OriginalText = OriginalText,
                 WordWrap = true
             });
 

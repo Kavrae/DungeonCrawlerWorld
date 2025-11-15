@@ -1,8 +1,11 @@
-﻿using System;
-using System.Text;
+﻿using System.Text;
 
 namespace DungeonCrawlerWorld.Components
 {
+    /// <summary>
+    /// A core component that defines an entity's health bounds and regeneration.
+    /// This component should contain ONLY base health statistics. Additional health types should be separate components.
+    /// </summary>
     public struct HealthComponent : IEntityComponent
     {
         public int EntityId { get; set; }

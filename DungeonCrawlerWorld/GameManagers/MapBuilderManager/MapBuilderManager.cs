@@ -11,6 +11,14 @@ using DungeonCrawlerWorld.Utilities;
 
 namespace DungeonCrawlerWorld.GameManagers.MapBuilderManager
 {
+    /// <summary>
+    /// Manages the construction and layout of the game map.
+    /// </summary> 
+    /// <todo>
+    /// Actual map generation algorithms.
+    /// Retrieve currently explored map via saved game data
+    /// Set map size via configuration
+    /// </todo>
     public class MapBuilderManager : IGameManager
     {
         public bool CanUpdateWhilePaused => false;
@@ -45,6 +53,9 @@ namespace DungeonCrawlerWorld.GameManagers.MapBuilderManager
         {
         }
 
+        /// <summary>
+        /// A temporary map for testing various game improvements and performance
+        /// </summary>
         private void _BuildTestMap()
         {
             for (int column = 0; column < world.Map.Size.X; column++)

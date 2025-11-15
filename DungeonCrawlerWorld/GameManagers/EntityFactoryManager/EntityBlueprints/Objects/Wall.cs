@@ -6,6 +6,14 @@ using DungeonCrawlerWorld.Components;
 
 namespace DungeonCrawlerWorld.GameManagers.EntityFactoryManager
 {
+    /// <summary>
+    /// Represents a basic wall object.
+    /// </summary>
+    /// <components>
+    /// DisplayTextComponent
+    /// GlyphComponent
+    /// TransformComponent
+    /// </components>
     public class Wall : IBlueprint
     {
         public int EntityId { get; set; }

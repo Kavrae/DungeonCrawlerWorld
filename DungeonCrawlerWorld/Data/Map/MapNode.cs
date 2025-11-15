@@ -3,6 +3,11 @@ using DungeonCrawlerWorld.Utilities;
 
 namespace DungeonCrawlerWorld.Data
 {
+    /// <summary>
+    /// Represents a single position on a 3 dimensional map
+    /// Contains references to its neighboring mapNodes to greatly improve lookup performance.
+    /// Positions are specified as a Vector3Int, rather than a Vector3, to use them as array indexes without casting.
+    /// </summary>
     public struct MapNode
     {
         public Vector3Int Position { get; set; }
@@ -16,7 +21,11 @@ namespace DungeonCrawlerWorld.Data
 
         public int? EntityId { get; set; }
 
-        public MapNode(int x, int y, int z, Vector3Int mapSize) 
+        /// <summary>
+        /// Instantiates a new mapNode at a specified 3d coordinate.
+        /// The mapSize is specified to more efficiently avoid map bounds when calculating neighboring node references.
+        /// </summary>
+        public MapNode(int x, int y, int z, Vector3Int mapSize)
         {
             EntityId = null;
 

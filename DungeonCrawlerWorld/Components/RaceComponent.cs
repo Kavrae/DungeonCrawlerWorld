@@ -1,8 +1,14 @@
 using System;
 
-//TODO RaceComponent on removal custom removal to do things like removal abilities/stats? Ex : changing race on floor 3
 namespace DungeonCrawlerWorld.Components
 {
+    /// <summary>
+    /// A core component that specifies the racial details of an entity.
+    /// These are primarily display and narrative properties, but the race component will be frequently used by various systems.
+    /// </summary>
+    ///<todo> 
+    /// RaceComponent OnRemoval custom removal to do things like remove abilities and stats. Ex : changing race on floor 3
+    ///</todo>
     public abstract class RaceComponent : IEntityComponent
     {
         public int EntityId { get; set; }
