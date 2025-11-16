@@ -129,7 +129,6 @@ namespace DungeonCrawlerWorld.GameManagers.UserInterfaceManager
 
             mapWindow = new MapWindow(
                     world,
-                    tileSize: new Point(12, 12),
                     new WindowOptions
                     {
                         RelativePosition = new Vector2(12, 12),

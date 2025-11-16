@@ -12,6 +12,8 @@ using DungeonCrawlerWorld.GameManagers.EntityEventManager;
 using DungeonCrawlerWorld.GameManagers.EntityFactoryManager;
 using DungeonCrawlerWorld.GameManagers.UserInterfaceManager;
 using DungeonCrawlerWorld.GameManagers.NotificationManager;
+using DungeonCrawlerWorld.Components;
+using System.Diagnostics;
 
 namespace DungeonCrawlerWorld
 {
@@ -37,6 +39,9 @@ namespace DungeonCrawlerWorld
 
         private List<IGameManager> updatableGameManagers;
         private List<IGameManager> drawableGameManagers;
+
+        private Dictionary<int, MovementComponent> test1;
+        private Utilities.SparseSet<MovementComponent> test2;
 
         public GameLoop()
         {

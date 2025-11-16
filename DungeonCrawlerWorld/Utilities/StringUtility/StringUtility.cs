@@ -2,6 +2,7 @@
 using System.Collections.Generic;
 using System.Linq;
 using System.Text;
+using Microsoft.VisualBasic;
 
 namespace DungeonCrawlerWorld.Utilities
 {
@@ -28,6 +29,39 @@ namespace DungeonCrawlerWorld.Utilities
         /// This value is used to determine how many characters to place on the next line after hyphenating a word.
         /// </summary>
         private const int minimumCharactersAfterLineBreak = minimumCharacterCountToLineBreak - minimumCharactersBeforeLineBreak;
+
+        /// <summary>
+        /// Build a UI bar of a specified barSize, filled to a percentage based on the current value vs maximum value.
+        /// </summary>
+        public static string BuildPercentageBar(int currentValue, int maximumValue, int barSize)
+        {
+            int fillCount;
+            if (currentValue == 0)
+            {
+                fillCount = 0;
+            }
+            else
+            {
+                fillCount = (int)((float)barSize * currentValue / maximumValue);
+            }
+
+            var spanSize = barSize + 7;
+            // total length: "HP : [" (6) + 20 chars + "]" (1) = 27
+            return string.Create(spanSize, fillCount, (span, fillCount) =>
+            {
+                // prefix
+                span[0] = 'H'; span[1] = 'P'; span[2] = ' '; span[3] = ':'; span[4] = ' '; span[5] = '[';
+
+                // bars
+                for (int i = 0; i < maximumValue; i++)
+                {
+                    span[6 + i] = i < fillCount ? '=' : '_';
+                }
+                
+                // suffix
+                span[spanSize - 1] = ']';
+            });
+        }
 
         /// <summary>
         /// Formats the given text based on the specified criteria, including options for truncation and word wrapping.

@@ -1,4 +1,4 @@
-﻿using System.Text;
+﻿using DungeonCrawlerWorld.Utilities;
 
 namespace DungeonCrawlerWorld.Components
 {
@@ -26,13 +26,8 @@ namespace DungeonCrawlerWorld.Components
 
         public override string ToString()
         {
-            var healthOutOf20 = (int)(((float)CurrentHealth / MaximumHealth) * 20);
-            var healthBarBuilder = new StringBuilder();
-            healthBarBuilder.Append("HP : [");
-            healthBarBuilder.Append('=', healthOutOf20);
-            healthBarBuilder.Append('_', 20 - healthOutOf20);
-            healthBarBuilder.Append(']');
-            return healthBarBuilder.ToString();
+            var barSize = 20;
+            return StringUtility.BuildPercentageBar(CurrentHealth, MaximumHealth, barSize);
         }
     }
 }

@@ -343,14 +343,14 @@ namespace DungeonCrawlerWorld.GameManagers.UserInterfaceManager
             }
 
             //Default to the end of the list
-            var maximumIndex = _childWindows.Count();
+            var maximumIndex = _childWindows.Count;
             insertIndex = Math.Clamp(insertIndex ?? maximumIndex,
                 0,
                 maximumIndex);
 
             _childWindows.Insert(insertIndex.Value, newChildWindow);
 
-            for (var updateIndex = insertIndex.Value; updateIndex < _childWindows.Count(); updateIndex++)
+            for (var updateIndex = insertIndex.Value; updateIndex < _childWindows.Count; updateIndex++)
             {
                 if (_childWindowTileMode == WindowTileMode.Floating)
                 {
@@ -388,15 +388,13 @@ namespace DungeonCrawlerWorld.GameManagers.UserInterfaceManager
         //Empty and re-add so we recalculate the remaining sibling window positions.
         public void RemoveChildWindow(Guid windowId)
         {
-            var childWindowCopy = _childWindows.ToArray();
-            _childWindows = new List<Window>();
-
-            foreach (var childWindow in childWindowCopy)
+            var childWindowIndex = _childWindows.FindIndex(childWindow => childWindow.WindowId == windowId);
+            if( childWindowIndex >= 0)
             {
-                if (childWindow.WindowId != windowId)
+                _childWindows.RemoveAt(childWindowIndex);
+                for( var index = childWindowIndex; index < _childWindows.Count; index++)
                 {
-                    AddChildWindow(childWindow);
-                    childWindow.Initialize();
+                    _childWindows[index].Initialize();
                 }
             }
         }
@@ -479,9 +477,22 @@ namespace DungeonCrawlerWorld.GameManagers.UserInterfaceManager
         {
             if (_canContainChildWindows && _childWindows != null && _childWindows.Count > 0)
             {
-                _contentSize = new Vector2(
-                    _childWindows.Max(childWindow => childWindow.WindowRectangle.Right),
-                    _childWindows.Max(childWindow => childWindow.WindowRectangle.Bottom));
+                var maxRight = 0;
+                var maxBottom = 0;
+                for( var index = 0; index < _childWindows.Count; index++)
+                {
+                    var right = _childWindows[index].WindowRectangle.Right;
+                    var bottom = _childWindows[index].WindowRectangle.Bottom;
+                    if (right > maxRight)
+                    {
+                        maxRight = right;
+                    }
+                    if( bottom > maxBottom)
+                    {
+                        maxBottom = bottom;
+                    }
+                }
+                _contentSize = new Vector2(maxRight, maxBottom);
             }
             else
             {

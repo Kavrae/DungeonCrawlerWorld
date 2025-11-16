@@ -28,7 +28,13 @@ namespace DungeonCrawlerWorld.GameManagers.UserInterfaceManager
         private ZoomLevel currentZoomLevel;
         private Dictionary<ZoomLevel, Point> tileSizes;
 
-        public MapWindow(World world, Point? tileSize, WindowOptions windowOptions) : base(null, windowOptions)
+        Rectangle drawRectangle;
+        Rectangle innerDrawRectangle;
+
+        private Color?[] backgroundColorCache;
+        private RenderTarget2D backgroundRenderTarget;
+
+        public MapWindow(World world, WindowOptions windowOptions) : base(null, windowOptions)
         {
             this.world = world;
 
@@ -41,9 +47,6 @@ namespace DungeonCrawlerWorld.GameManagers.UserInterfaceManager
                 { ZoomLevel.Neighborhood, new Point(6,6)},
                 { ZoomLevel.Borough, new Point(3,3)}
             };
-
-            currentTileSize = tileSize ?? tileSizes[currentZoomLevel];
-            innerTileSize = new Point(currentTileSize.X - 2, currentTileSize.Y - 2);
 
             tileDepth = this.world.Map.Size.Z;
         }
@@ -62,11 +65,10 @@ namespace DungeonCrawlerWorld.GameManagers.UserInterfaceManager
                 { FontType.DefaultHuge, defaultHugeFont }
             };
 
-            //+1 to account for partial tiles when scrolling
-            tileColumns = (int)Math.Floor(ContentSize.X / currentTileSize.X) + 1;
-            tileRows = (int)Math.Floor(ContentSize.Y / currentTileSize.Y) + 1;
-
             UpdateMaxScrollPosition();
+            UpdateTileSizes();
+            UpdateDrawRectangles();
+            UpdateBackgroundColorCache();
         }
 
         public override void LoadContent()
@@ -87,57 +89,46 @@ namespace DungeonCrawlerWorld.GameManagers.UserInterfaceManager
 
         public void DrawBackgrounds(GameTime gameTime, SpriteBatch spriteBatch, Texture2D unitRectangle)
         {
-            var drawRectangle = new Rectangle(0, 0, currentTileSize.X, currentTileSize.Y);
-            var innerDrawRectangle = new Rectangle(0, 0, innerTileSize.X, innerTileSize.Y);
+            var selectedTileDrawn = false;
 
             for (var column = 0; column < tileColumns; column++)
             {
                 for (var row = 0; row < tileRows; row++)
                 {
-                    var mapNodeX = column + currentScrollPosition.X;
-                    var mapNodeY = row + currentScrollPosition.Y;
+                    var backgroundColor = backgroundColorCache[column + row * tileColumns];
 
-                    for (var z = tileDepth - 1; z >= 0; z--)
+                    if (backgroundColor != null)
                     {
-                        var mapNode = world.Map.MapNodes[mapNodeX, mapNodeY, z];
-                        if (mapNode.EntityId != null)
+                        drawRectangle.X = column * currentTileSize.X;
+                        drawRectangle.Y = row * currentTileSize.Y;
+
+                        var isSelected = !selectedTileDrawn && world.SelectedMapNodePosition != null
+                            && world.SelectedMapNodePosition.Value.X == column + currentScrollPosition.X
+                            && world.SelectedMapNodePosition.Value.Y == row + currentScrollPosition.Y;
+
+                        if (isSelected)
                         {
-                            var nullableBackgroundComponent = ComponentRepo.BackgroundComponents[mapNode.EntityId.Value];
-                            if (nullableBackgroundComponent != null)
-                            {
-                                var backgroundComponent = nullableBackgroundComponent.Value;
+                            spriteBatch.Draw(
+                                unitRectangle,
+                                drawRectangle,
+                                Color.Gold);
 
-                                var isSelected = world.SelectedMapNodePosition != null
-                                    && world.SelectedMapNodePosition.Value.X == mapNodeX
-                                    && world.SelectedMapNodePosition.Value.Y == mapNodeY;
+                            innerDrawRectangle.X = (column * currentTileSize.X) + 1;
+                            innerDrawRectangle.Y = (row * currentTileSize.Y) + 1;
 
-                                drawRectangle.X = column * currentTileSize.X;
-                                drawRectangle.Y = row * currentTileSize.Y;
-                                if (isSelected)
-                                {
-                                    spriteBatch.Draw(
-                                        unitRectangle,
-                                        drawRectangle,
-                                        Color.Gold);
+                            spriteBatch.Draw(
+                                unitRectangle,
+                                innerDrawRectangle,
+                                backgroundColor.Value);
 
-                                    innerDrawRectangle.X = (column * currentTileSize.X) + 1;
-                                    innerDrawRectangle.Y = (row * currentTileSize.Y) + 1;
-
-                                    spriteBatch.Draw(
-                                        unitRectangle,
-                                        innerDrawRectangle,
-                                        backgroundComponent.BackgroundColor ?? Color.White);
-                                }
-                                else
-                                {
-                                    spriteBatch.Draw(
-                                        unitRectangle,
-                                        drawRectangle,
-                                        backgroundComponent.BackgroundColor ?? Color.White);
-                                }
-
-                                break;
-                            }
+                            selectedTileDrawn = true;
+                        }
+                        else
+                        {
+                            spriteBatch.Draw(
+                                unitRectangle,
+                                drawRectangle,
+                                backgroundColor.Value);
                         }
                     }
                 }
@@ -213,6 +204,9 @@ namespace DungeonCrawlerWorld.GameManagers.UserInterfaceManager
         public void UpdateZoomLevel(ZoomLevel newZoomLevel)
         {
             currentZoomLevel = newZoomLevel;
+            UpdateTileSizes();
+            UpdateDrawRectangles();
+            UpdateBackgroundColorCache();
         }
 
         public void UpdateScrollPosition(Point scrollChange)
@@ -222,6 +216,52 @@ namespace DungeonCrawlerWorld.GameManagers.UserInterfaceManager
                 X = MathHelper.Clamp(currentScrollPosition.X + scrollChange.X, 0, maxScrollPosition.X),
                 Y = MathHelper.Clamp(currentScrollPosition.Y + scrollChange.Y, 0, maxScrollPosition.Y)
             };
+            UpdateBackgroundColorCache();
+        }
+
+        public void UpdateTileSizes()
+        {
+            currentTileSize = tileSizes[currentZoomLevel];
+            innerTileSize = new Point(currentTileSize.X - 2, currentTileSize.Y - 2);
+
+            //+1 to account for partial tiles when scrolling
+            tileColumns = (int)Math.Floor(ContentSize.X / currentTileSize.X) + 1;
+            tileRows = (int)Math.Floor(ContentSize.Y / currentTileSize.Y) + 1;
+
+            backgroundColorCache = new Color?[tileColumns * tileRows];
+        }
+
+        public void UpdateDrawRectangles()
+        {
+            drawRectangle = new Rectangle(0, 0, currentTileSize.X, currentTileSize.Y);
+            innerDrawRectangle = new Rectangle(0, 0, innerTileSize.X, innerTileSize.Y);
+        }
+
+        public void UpdateBackgroundColorCache()
+        {
+            for (var column = 0; column < tileColumns; column++)
+            {
+                for (var row = 0; row < tileRows; row++)
+                {
+                    var mapNodeX = column + currentScrollPosition.X;
+                    var mapNodeY = row + currentScrollPosition.Y;
+
+                    for (var z = tileDepth - 1; z >= 0; z--)
+                    {
+                        var mapNode = world.Map.MapNodes[mapNodeX, mapNodeY, z];
+                        if (mapNode.EntityId != null)
+                        {
+                            var nullableBackgroundComponent = ComponentRepo.BackgroundComponents[mapNode.EntityId.Value];
+                            if (nullableBackgroundComponent != null)
+                            {
+                                backgroundColorCache[column + row * tileColumns] = nullableBackgroundComponent.Value.BackgroundColor;
+
+                                break;
+                            }
+                        }
+                    }
+                }
+            }
         }
 
         public void SelectMapNodes(Vector2 mousePosition)

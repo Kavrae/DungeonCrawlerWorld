@@ -1,5 +1,4 @@
-﻿using System;
-using System.Text;
+﻿using DungeonCrawlerWorld.Utilities;
 
 namespace DungeonCrawlerWorld.Components
 {
@@ -29,13 +28,8 @@ namespace DungeonCrawlerWorld.Components
 
         public override string ToString()
         {
-            var manaOutOf20 = (int)(((float)CurrentEnergy / MaximumEnergy) * 20);
-            var manaBarBuilder = new StringBuilder();
-            manaBarBuilder.Append("Mana : [");
-            manaBarBuilder.Append('=', manaOutOf20);
-            manaBarBuilder.Append('_', 20 - manaOutOf20);
-            manaBarBuilder.Append(']');
-            return manaBarBuilder.ToString();
+            var barSize = 20;
+            return StringUtility.BuildPercentageBar(CurrentEnergy, MaximumEnergy, barSize);
         }
     }
 }
