@@ -3,7 +3,6 @@
 using Microsoft.Xna.Framework;
 using Microsoft.Xna.Framework.Graphics;
 
-using DungeonCrawlerWorld.Data;
 using DungeonCrawlerWorld.Services;
 using DungeonCrawlerWorld.GameManagers;
 using DungeonCrawlerWorld.GameManagers.ComponentSystemManager;
@@ -12,8 +11,6 @@ using DungeonCrawlerWorld.GameManagers.EntityEventManager;
 using DungeonCrawlerWorld.GameManagers.EntityFactoryManager;
 using DungeonCrawlerWorld.GameManagers.UserInterfaceManager;
 using DungeonCrawlerWorld.GameManagers.NotificationManager;
-using DungeonCrawlerWorld.Components;
-using System.Diagnostics;
 
 namespace DungeonCrawlerWorld
 {
@@ -39,9 +36,6 @@ namespace DungeonCrawlerWorld
 
         private List<IGameManager> updatableGameManagers;
         private List<IGameManager> drawableGameManagers;
-
-        private Dictionary<int, MovementComponent> test1;
-        private Utilities.SparseSet<MovementComponent> test2;
 
         public GameLoop()
         {
@@ -120,7 +114,7 @@ namespace DungeonCrawlerWorld
             GameServices.AddService(graphics.GraphicsDevice);
             GameServices.AddService(new DataAccessService());
             GameServices.AddService(new SpriteBatchService(graphics.GraphicsDevice));
-            GameServices.AddService(new FontService(Content));
+            GameServices.AddService(new FontService());
         }
 
         public void InitializeGameManagers()

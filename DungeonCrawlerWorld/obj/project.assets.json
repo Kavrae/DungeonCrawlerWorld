@@ -1,108 +1,494 @@
 {
   "version": 3,
   "targets": {
-    "net6.0": {
-      "MonoGame.Content.Builder.Task/3.8.1.303": {
-        "type": "package",
-        "build": {
-          "build/MonoGame.Content.Builder.Task.props": {},
-          "build/MonoGame.Content.Builder.Task.targets": {}
-        }
-      },
-      "MonoGame.Framework.DesktopGL/3.8.1.303": {
+    "net9.0": {
+      "Cyotek.Drawing.BitmapFont/2.0.4": {
         "type": "package",
         "compile": {
-          "lib/net6.0/MonoGame.Framework.dll": {}
+          "lib/net5.0/Cyotek.Drawing.BitmapFont.dll": {
+            "related": ".xml"
+          }
         },
         "runtime": {
-          "lib/net6.0/MonoGame.Framework.dll": {}
+          "lib/net5.0/Cyotek.Drawing.BitmapFont.dll": {
+            "related": ".xml"
+          }
+        }
+      },
+      "FNA.NET/2.1.2.2506": {
+        "type": "package",
+        "dependencies": {
+          "FNA.NET.NativeAssets": "2.0.1.2506",
+          "NVorbis": "0.10.5"
+        },
+        "compile": {
+          "lib/net8.0/FNA.NET.dll": {
+            "related": ".pdb"
+          }
+        },
+        "runtime": {
+          "lib/net8.0/FNA.NET.dll": {
+            "related": ".pdb"
+          }
         },
         "build": {
-          "build/MonoGame.Framework.DesktopGL.targets": {}
+          "buildTransitive/FNA.NET.targets": {}
+        }
+      },
+      "FNA.NET.FontStashSharp/2.0.0": {
+        "type": "package",
+        "dependencies": {
+          "Cyotek.Drawing.BitmapFont": "2.0.4",
+          "FNA.NET": "2.1.2.2506",
+          "FreeTypeSharp": "3.0.1",
+          "StbImageSharp": "2.30.15"
+        },
+        "compile": {
+          "lib/net8.0/FNA.NET.FontStashSharp.dll": {}
+        },
+        "runtime": {
+          "lib/net8.0/FNA.NET.FontStashSharp.dll": {}
+        }
+      },
+      "FNA.NET.NativeAssets/2.0.1.2506": {
+        "type": "package",
+        "compile": {
+          "lib/net8.0/FNA.NET.NativeAssets.dll": {}
+        },
+        "runtime": {
+          "lib/net8.0/FNA.NET.NativeAssets.dll": {}
         },
         "runtimeTargets": {
-          "runtimes/linux-x64/native/libSDL2-2.0.so.0": {
+          "runtimes/linux-arm64/native/libFAudio.so.0": {
+            "assetType": "native",
+            "rid": "linux-arm64"
+          },
+          "runtimes/linux-arm64/native/libFNA3D.so.0": {
+            "assetType": "native",
+            "rid": "linux-arm64"
+          },
+          "runtimes/linux-arm64/native/libSDL3.so.0": {
+            "assetType": "native",
+            "rid": "linux-arm64"
+          },
+          "runtimes/linux-arm64/native/libtheorafile.so": {
+            "assetType": "native",
+            "rid": "linux-arm64"
+          },
+          "runtimes/linux-x64/native/libFAudio.so.0": {
             "assetType": "native",
             "rid": "linux-x64"
           },
-          "runtimes/linux-x64/native/libopenal.so.1": {
+          "runtimes/linux-x64/native/libFNA3D.so.0": {
             "assetType": "native",
             "rid": "linux-x64"
           },
-          "runtimes/osx/native/libSDL2.dylib": {
+          "runtimes/linux-x64/native/libSDL3.so.0": {
+            "assetType": "native",
+            "rid": "linux-x64"
+          },
+          "runtimes/linux-x64/native/libtheorafile.so": {
+            "assetType": "native",
+            "rid": "linux-x64"
+          },
+          "runtimes/osx/native/libFAudio.0.dylib": {
             "assetType": "native",
             "rid": "osx"
           },
-          "runtimes/osx/native/libopenal.1.dylib": {
+          "runtimes/osx/native/libFNA3D.0.dylib": {
             "assetType": "native",
             "rid": "osx"
           },
-          "runtimes/win-x64/native/SDL2.dll": {
+          "runtimes/osx/native/libSDL3.0.dylib": {
+            "assetType": "native",
+            "rid": "osx"
+          },
+          "runtimes/osx/native/libtheorafile.dylib": {
+            "assetType": "native",
+            "rid": "osx"
+          },
+          "runtimes/win-x64/native/FAudio.dll": {
             "assetType": "native",
             "rid": "win-x64"
           },
-          "runtimes/win-x64/native/soft_oal.dll": {
+          "runtimes/win-x64/native/FNA3D.dll": {
             "assetType": "native",
             "rid": "win-x64"
           },
-          "runtimes/win-x86/native/SDL2.dll": {
+          "runtimes/win-x64/native/SDL3.dll": {
             "assetType": "native",
-            "rid": "win-x86"
+            "rid": "win-x64"
           },
-          "runtimes/win-x86/native/soft_oal.dll": {
+          "runtimes/win-x64/native/libtheorafile.dll": {
+            "assetType": "native",
+            "rid": "win-x64"
+          }
+        }
+      },
+      "FreeTypeSharp/3.0.1": {
+        "type": "package",
+        "compile": {
+          "lib/net8.0/FreeTypeSharp.dll": {
+            "related": ".pdb"
+          }
+        },
+        "runtime": {
+          "lib/net8.0/FreeTypeSharp.dll": {
+            "related": ".pdb"
+          }
+        },
+        "runtimeTargets": {
+          "runtimes/linux-x64/native/libfreetype.so": {
+            "assetType": "native",
+            "rid": "linux-x64"
+          },
+          "runtimes/osx/native/libfreetype.dylib": {
+            "assetType": "native",
+            "rid": "osx"
+          },
+          "runtimes/win-arm64/native/freetype.dll": {
+            "assetType": "native",
+            "rid": "win-arm64"
+          },
+          "runtimes/win-x64/native/freetype.dll": {
+            "assetType": "native",
+            "rid": "win-x64"
+          },
+          "runtimes/win-x86/native/freetype.dll": {
             "assetType": "native",
             "rid": "win-x86"
           }
+        }
+      },
+      "NVorbis/0.10.5": {
+        "type": "package",
+        "dependencies": {
+          "System.Memory": "4.5.3",
+          "System.ValueTuple": "4.5.0"
+        },
+        "compile": {
+          "lib/netstandard2.0/NVorbis.dll": {
+            "related": ".xml"
+          }
+        },
+        "runtime": {
+          "lib/netstandard2.0/NVorbis.dll": {
+            "related": ".xml"
+          }
+        }
+      },
+      "StbImageSharp/2.30.15": {
+        "type": "package",
+        "compile": {
+          "lib/netstandard2.0/StbImageSharp.dll": {}
+        },
+        "runtime": {
+          "lib/netstandard2.0/StbImageSharp.dll": {}
+        }
+      },
+      "System.Memory/4.5.3": {
+        "type": "package",
+        "compile": {
+          "ref/netcoreapp2.1/_._": {}
+        },
+        "runtime": {
+          "lib/netcoreapp2.1/_._": {}
+        }
+      },
+      "System.ValueTuple/4.5.0": {
+        "type": "package",
+        "compile": {
+          "ref/netcoreapp2.0/_._": {}
+        },
+        "runtime": {
+          "lib/netcoreapp2.0/_._": {}
         }
       }
     }
   },
   "libraries": {
-    "MonoGame.Content.Builder.Task/3.8.1.303": {
-      "sha512": "9Ilzzje62LhWElbPNEl7vh7XsRSbze+lvCJdZtTZUGu48FRgvYN6THURwIB9PN98EI33/Wnf6iuShNUtD7hL4Q==",
+    "Cyotek.Drawing.BitmapFont/2.0.4": {
+      "sha512": "iA6WehGVdMUuNbfsQQDq/Bt+mMd/OqHjiMUtKFLIQd/0pyYh4ehT7FEjTxN9/4OXNKQZsp9bAJgltP2nnswUJg==",
       "type": "package",
-      "path": "monogame.content.builder.task/3.8.1.303",
+      "path": "cyotek.drawing.bitmapfont/2.0.4",
       "files": [
         ".nupkg.metadata",
         ".signature.p7s",
-        "Icon.png",
-        "build/MonoGame.Content.Builder.Task.props",
-        "build/MonoGame.Content.Builder.Task.targets",
-        "monogame.content.builder.task.3.8.1.303.nupkg.sha512",
-        "monogame.content.builder.task.nuspec"
+        "cyotek.drawing.bitmapfont.2.0.4.nupkg.sha512",
+        "cyotek.drawing.bitmapfont.nuspec",
+        "icon.png",
+        "lib/net35/Cyotek.Drawing.BitmapFont.dll",
+        "lib/net35/Cyotek.Drawing.BitmapFont.xml",
+        "lib/net40/Cyotek.Drawing.BitmapFont.dll",
+        "lib/net40/Cyotek.Drawing.BitmapFont.xml",
+        "lib/net452/Cyotek.Drawing.BitmapFont.dll",
+        "lib/net452/Cyotek.Drawing.BitmapFont.xml",
+        "lib/net462/Cyotek.Drawing.BitmapFont.dll",
+        "lib/net462/Cyotek.Drawing.BitmapFont.xml",
+        "lib/net472/Cyotek.Drawing.BitmapFont.dll",
+        "lib/net472/Cyotek.Drawing.BitmapFont.xml",
+        "lib/net48/Cyotek.Drawing.BitmapFont.dll",
+        "lib/net48/Cyotek.Drawing.BitmapFont.xml",
+        "lib/net5.0/Cyotek.Drawing.BitmapFont.dll",
+        "lib/net5.0/Cyotek.Drawing.BitmapFont.xml",
+        "lib/netcoreapp2.1/Cyotek.Drawing.BitmapFont.dll",
+        "lib/netcoreapp2.1/Cyotek.Drawing.BitmapFont.xml",
+        "lib/netcoreapp2.2/Cyotek.Drawing.BitmapFont.dll",
+        "lib/netcoreapp2.2/Cyotek.Drawing.BitmapFont.xml",
+        "lib/netcoreapp3.1/Cyotek.Drawing.BitmapFont.dll",
+        "lib/netcoreapp3.1/Cyotek.Drawing.BitmapFont.xml",
+        "lib/netstandard1.3/Cyotek.Drawing.BitmapFont.dll",
+        "lib/netstandard1.3/Cyotek.Drawing.BitmapFont.xml",
+        "lib/netstandard2.0/Cyotek.Drawing.BitmapFont.dll",
+        "lib/netstandard2.0/Cyotek.Drawing.BitmapFont.xml",
+        "lib/netstandard2.1/Cyotek.Drawing.BitmapFont.dll",
+        "lib/netstandard2.1/Cyotek.Drawing.BitmapFont.xml"
       ]
     },
-    "MonoGame.Framework.DesktopGL/3.8.1.303": {
-      "sha512": "eGYhqn0n1olk8MNYeE9EuBmoNNECN1T18rPMaQpkzsEQ0H3nVyFPXC+uCo78v5pi5juQpJ3PSFnSkjzZJ1U58A==",
+    "FNA.NET/2.1.2.2506": {
+      "sha512": "4kmgwH3UXnpoNvW7A21e/X4PXOOt1pIXypxVAm9x8UIcGpKmVAHQo5I2XdcD9ezDsg4cyDP1sO+cpf8kRlz/Gw==",
       "type": "package",
-      "path": "monogame.framework.desktopgl/3.8.1.303",
+      "path": "fna.net/2.1.2.2506",
       "files": [
         ".nupkg.metadata",
         ".signature.p7s",
-        "Icon.png",
-        "build/MonoGame.Framework.DesktopGL.targets",
-        "lib/net6.0/MonoGame.Framework.dll",
-        "monogame.framework.desktopgl.3.8.1.303.nupkg.sha512",
-        "monogame.framework.desktopgl.nuspec",
-        "runtimes/linux-x64/native/libSDL2-2.0.so.0",
-        "runtimes/linux-x64/native/libopenal.so.1",
-        "runtimes/osx/native/libSDL2.dylib",
-        "runtimes/osx/native/libopenal.1.dylib",
-        "runtimes/win-x64/native/SDL2.dll",
-        "runtimes/win-x64/native/soft_oal.dll",
-        "runtimes/win-x86/native/SDL2.dll",
-        "runtimes/win-x86/native/soft_oal.dll"
+        "LICENSE",
+        "README.md",
+        "build/FNA.NET.targets",
+        "buildTransitive/FNA.NET.targets",
+        "contentFiles/FNA.NET.dll.config",
+        "fna.net.2.1.2.2506.nupkg.sha512",
+        "fna.net.nuspec",
+        "lib/net8.0-android34.0/FNA.NET.dll",
+        "lib/net8.0-android34.0/FNA.NET.pdb",
+        "lib/net8.0-android34.0/FNA.NET.xml",
+        "lib/net8.0-ios18.0/FNA.NET.dll",
+        "lib/net8.0-ios18.0/FNA.NET.pdb",
+        "lib/net8.0-tvos18.0/FNA.NET.dll",
+        "lib/net8.0-tvos18.0/FNA.NET.pdb",
+        "lib/net8.0-windows7.0/FNA.NET.dll",
+        "lib/net8.0-windows7.0/FNA.NET.pdb",
+        "lib/net8.0/FNA.NET.dll",
+        "lib/net8.0/FNA.NET.pdb",
+        "lib/netstandard2.0/FNA.NET.dll",
+        "lib/netstandard2.0/FNA.NET.pdb"
+      ]
+    },
+    "FNA.NET.FontStashSharp/2.0.0": {
+      "sha512": "0J+xt2hjlFvjaZ/blQYro6Dcy7W9iQe52+KCiWACHSQ5ZIrcpvvuCZbq2A+0nrdV+jIiEN3Ms2iVdHLy4jKcyA==",
+      "type": "package",
+      "path": "fna.net.fontstashsharp/2.0.0",
+      "files": [
+        ".nupkg.metadata",
+        ".signature.p7s",
+        "README.md",
+        "fna.net.fontstashsharp.2.0.0.nupkg.sha512",
+        "fna.net.fontstashsharp.nuspec",
+        "lib/net8.0/FNA.NET.FontStashSharp.dll",
+        "lib/net9.0-windows10.0.26100/FNA.NET.FontStashSharp.dll"
+      ]
+    },
+    "FNA.NET.NativeAssets/2.0.1.2506": {
+      "sha512": "q8PlBKzYw+U40kNgd5WYW6qUapIAOGwgBSJdYWKO4AckHLbLV8FhikSje4jU8qcAbvQhukESlzcuFeuiv5avkg==",
+      "type": "package",
+      "path": "fna.net.nativeassets/2.0.1.2506",
+      "files": [
+        ".nupkg.metadata",
+        ".signature.p7s",
+        "README.md",
+        "fna.net.nativeassets.2.0.1.2506.nupkg.sha512",
+        "fna.net.nativeassets.nuspec",
+        "lib/net8.0-android34.0/FNA.NET.NativeAssets.aar",
+        "lib/net8.0-android34.0/FNA.NET.NativeAssets.dll",
+        "lib/net8.0-android34.0/FNA.NET.NativeAssets.xml",
+        "lib/net8.0-ios18.0/FNA.NET.NativeAssets.dll",
+        "lib/net8.0-ios18.0/FNA.NET.NativeAssets.resources/FAudio.xcframework/Info.plist",
+        "lib/net8.0-ios18.0/FNA.NET.NativeAssets.resources/FAudio.xcframework/ios-arm64/libFAudio.a",
+        "lib/net8.0-ios18.0/FNA.NET.NativeAssets.resources/FNA3D.xcframework/Info.plist",
+        "lib/net8.0-ios18.0/FNA.NET.NativeAssets.resources/FNA3D.xcframework/ios-arm64/libFNA3D.a",
+        "lib/net8.0-ios18.0/FNA.NET.NativeAssets.resources/SDL3.xcframework/Info.plist",
+        "lib/net8.0-ios18.0/FNA.NET.NativeAssets.resources/SDL3.xcframework/ios-arm64/libSDL3.a",
+        "lib/net8.0-ios18.0/FNA.NET.NativeAssets.resources/manifest",
+        "lib/net8.0-ios18.0/FNA.NET.NativeAssets.resources/mojoshader.xcframework/Info.plist",
+        "lib/net8.0-ios18.0/FNA.NET.NativeAssets.resources/mojoshader.xcframework/ios-arm64/libmojoshader.a",
+        "lib/net8.0-ios18.0/FNA.NET.NativeAssets.resources/theorafile.xcframework/Info.plist",
+        "lib/net8.0-ios18.0/FNA.NET.NativeAssets.resources/theorafile.xcframework/ios-arm64/libtheorafile.a",
+        "lib/net8.0-tvos18.0/FNA.NET.NativeAssets.dll",
+        "lib/net8.0-tvos18.0/FNA.NET.NativeAssets.resources/FAudio.xcframework/Info.plist",
+        "lib/net8.0-tvos18.0/FNA.NET.NativeAssets.resources/FAudio.xcframework/tvos-arm64/libFAudio.a",
+        "lib/net8.0-tvos18.0/FNA.NET.NativeAssets.resources/FNA3D.xcframework/Info.plist",
+        "lib/net8.0-tvos18.0/FNA.NET.NativeAssets.resources/FNA3D.xcframework/tvos-arm64/libFNA3D.a",
+        "lib/net8.0-tvos18.0/FNA.NET.NativeAssets.resources/SDL3.xcframework/Info.plist",
+        "lib/net8.0-tvos18.0/FNA.NET.NativeAssets.resources/SDL3.xcframework/tvos-arm64/libSDL3.a",
+        "lib/net8.0-tvos18.0/FNA.NET.NativeAssets.resources/manifest",
+        "lib/net8.0-tvos18.0/FNA.NET.NativeAssets.resources/mojoshader.xcframework/Info.plist",
+        "lib/net8.0-tvos18.0/FNA.NET.NativeAssets.resources/mojoshader.xcframework/tvos-arm64/libmojoshader.a",
+        "lib/net8.0-tvos18.0/FNA.NET.NativeAssets.resources/theorafile.xcframework/Info.plist",
+        "lib/net8.0-tvos18.0/FNA.NET.NativeAssets.resources/theorafile.xcframework/tvos-arm64/libtheorafile.a",
+        "lib/net8.0-windows7.0/FNA.NET.NativeAssets.dll",
+        "lib/net8.0/FNA.NET.NativeAssets.dll",
+        "lib/netstandard2.0/FNA.NET.NativeAssets.dll",
+        "runtimes/linux-arm64/native/libFAudio.so.0",
+        "runtimes/linux-arm64/native/libFNA3D.so.0",
+        "runtimes/linux-arm64/native/libSDL3.so.0",
+        "runtimes/linux-arm64/native/libtheorafile.so",
+        "runtimes/linux-x64/native/libFAudio.so.0",
+        "runtimes/linux-x64/native/libFNA3D.so.0",
+        "runtimes/linux-x64/native/libSDL3.so.0",
+        "runtimes/linux-x64/native/libtheorafile.so",
+        "runtimes/osx/native/libFAudio.0.dylib",
+        "runtimes/osx/native/libFNA3D.0.dylib",
+        "runtimes/osx/native/libSDL3.0.dylib",
+        "runtimes/osx/native/libtheorafile.dylib",
+        "runtimes/win-x64/native/FAudio.dll",
+        "runtimes/win-x64/native/FNA3D.dll",
+        "runtimes/win-x64/native/SDL3.dll",
+        "runtimes/win-x64/native/libtheorafile.dll"
+      ]
+    },
+    "FreeTypeSharp/3.0.1": {
+      "sha512": "XRdbJhPAg94NI0xN0PczfIP7oSV/sA8hpbuWqtW/uR4ZM03v29OlxUONT7XS291rUTLsshoiMWG8ijeIUEvdkw==",
+      "type": "package",
+      "path": "freetypesharp/3.0.1",
+      "files": [
+        ".nupkg.metadata",
+        ".signature.p7s",
+        "README.md",
+        "freetypesharp.3.0.1.nupkg.sha512",
+        "freetypesharp.nuspec",
+        "lib/net8.0-android34.0/FreeTypeSharp.aar",
+        "lib/net8.0-android34.0/FreeTypeSharp.dll",
+        "lib/net8.0-android34.0/FreeTypeSharp.pdb",
+        "lib/net8.0-android34.0/FreeTypeSharp.xml",
+        "lib/net8.0-ios18.0/FreeTypeSharp.dll",
+        "lib/net8.0-ios18.0/FreeTypeSharp.pdb",
+        "lib/net8.0-ios18.0/FreeTypeSharp.resources/FreeType2.xcframework/Info.plist",
+        "lib/net8.0-ios18.0/FreeTypeSharp.resources/FreeType2.xcframework/ios-arm64/libfreetype.a",
+        "lib/net8.0-ios18.0/FreeTypeSharp.resources/FreeType2.xcframework/ios-arm64_x86_64-simulator/libfreetype.a",
+        "lib/net8.0-ios18.0/FreeTypeSharp.resources/manifest",
+        "lib/net8.0-tvos18.0/FreeTypeSharp.dll",
+        "lib/net8.0-tvos18.0/FreeTypeSharp.pdb",
+        "lib/net8.0-tvos18.0/FreeTypeSharp.resources/FreeType2.xcframework/Info.plist",
+        "lib/net8.0-tvos18.0/FreeTypeSharp.resources/FreeType2.xcframework/tvos-arm64/libfreetype.a",
+        "lib/net8.0-tvos18.0/FreeTypeSharp.resources/FreeType2.xcframework/tvos-arm64_x86_64-simulator/libfreetype.a",
+        "lib/net8.0-tvos18.0/FreeTypeSharp.resources/manifest",
+        "lib/net8.0/FreeTypeSharp.dll",
+        "lib/net8.0/FreeTypeSharp.pdb",
+        "lib/netcoreapp3.1/FreeTypeSharp.dll",
+        "lib/netcoreapp3.1/FreeTypeSharp.pdb",
+        "lib/netstandard2.0/FreeTypeSharp.dll",
+        "lib/netstandard2.0/FreeTypeSharp.pdb",
+        "runtimes/linux-x64/native/libfreetype.so",
+        "runtimes/osx/native/libfreetype.dylib",
+        "runtimes/win-arm64/native/freetype.dll",
+        "runtimes/win-x64/native/freetype.dll",
+        "runtimes/win-x86/native/freetype.dll"
+      ]
+    },
+    "NVorbis/0.10.5": {
+      "sha512": "o+IptCG4Avze39HrGeztC+xIp6fOOwGVAwkoa1J++4Ji1WmZ+KIKlFl5wsgxsXqBkmdpfs/vFSUproiLKYa2bw==",
+      "type": "package",
+      "path": "nvorbis/0.10.5",
+      "files": [
+        ".nupkg.metadata",
+        ".signature.p7s",
+        "LICENSE",
+        "lib/net45/NVorbis.dll",
+        "lib/net45/NVorbis.xml",
+        "lib/netstandard2.0/NVorbis.dll",
+        "lib/netstandard2.0/NVorbis.xml",
+        "nvorbis.0.10.5.nupkg.sha512",
+        "nvorbis.nuspec"
+      ]
+    },
+    "StbImageSharp/2.30.15": {
+      "sha512": "7QqbupVhz2kcFUPTgMw4iHR9rYDHGundzzee19Mwmd1typ2Lnv8EVJcLJxlkeBM2+4ex0NwsMtdbGSJctp1XCQ==",
+      "type": "package",
+      "path": "stbimagesharp/2.30.15",
+      "files": [
+        ".nupkg.metadata",
+        ".signature.p7s",
+        "lib/net471/StbImageSharp.dll",
+        "lib/netstandard2.0/StbImageSharp.dll",
+        "stbimagesharp.2.30.15.nupkg.sha512",
+        "stbimagesharp.nuspec"
+      ]
+    },
+    "System.Memory/4.5.3": {
+      "sha512": "3oDzvc/zzetpTKWMShs1AADwZjQ/36HnsufHRPcOjyRAAMLDlu2iD33MBI2opxnezcVUtXyqDXXjoFMOU9c7SA==",
+      "type": "package",
+      "path": "system.memory/4.5.3",
+      "files": [
+        ".nupkg.metadata",
+        ".signature.p7s",
+        "LICENSE.TXT",
+        "THIRD-PARTY-NOTICES.TXT",
+        "lib/netcoreapp2.1/_._",
+        "lib/netstandard1.1/System.Memory.dll",
+        "lib/netstandard1.1/System.Memory.xml",
+        "lib/netstandard2.0/System.Memory.dll",
+        "lib/netstandard2.0/System.Memory.xml",
+        "ref/netcoreapp2.1/_._",
+        "system.memory.4.5.3.nupkg.sha512",
+        "system.memory.nuspec",
+        "useSharedDesignerContext.txt",
+        "version.txt"
+      ]
+    },
+    "System.ValueTuple/4.5.0": {
+      "sha512": "okurQJO6NRE/apDIP23ajJ0hpiNmJ+f0BwOlB/cSqTLQlw5upkf+5+96+iG2Jw40G1fCVCyPz/FhIABUjMR+RQ==",
+      "type": "package",
+      "path": "system.valuetuple/4.5.0",
+      "files": [
+        ".nupkg.metadata",
+        ".signature.p7s",
+        "LICENSE.TXT",
+        "THIRD-PARTY-NOTICES.TXT",
+        "lib/MonoAndroid10/_._",
+        "lib/MonoTouch10/_._",
+        "lib/net461/System.ValueTuple.dll",
+        "lib/net461/System.ValueTuple.xml",
+        "lib/net47/System.ValueTuple.dll",
+        "lib/net47/System.ValueTuple.xml",
+        "lib/netcoreapp2.0/_._",
+        "lib/netstandard1.0/System.ValueTuple.dll",
+        "lib/netstandard1.0/System.ValueTuple.xml",
+        "lib/netstandard2.0/_._",
+        "lib/portable-net40+sl4+win8+wp8/System.ValueTuple.dll",
+        "lib/portable-net40+sl4+win8+wp8/System.ValueTuple.xml",
+        "lib/uap10.0.16299/_._",
+        "lib/xamarinios10/_._",
+        "lib/xamarinmac20/_._",
+        "lib/xamarintvos10/_._",
+        "lib/xamarinwatchos10/_._",
+        "ref/MonoAndroid10/_._",
+        "ref/MonoTouch10/_._",
+        "ref/net461/System.ValueTuple.dll",
+        "ref/net47/System.ValueTuple.dll",
+        "ref/netcoreapp2.0/_._",
+        "ref/netstandard2.0/_._",
+        "ref/portable-net40+sl4+win8+wp8/System.ValueTuple.dll",
+        "ref/uap10.0.16299/_._",
+        "ref/xamarinios10/_._",
+        "ref/xamarinmac20/_._",
+        "ref/xamarintvos10/_._",
+        "ref/xamarinwatchos10/_._",
+        "system.valuetuple.4.5.0.nupkg.sha512",
+        "system.valuetuple.nuspec",
+        "useSharedDesignerContext.txt",
+        "version.txt"
       ]
     }
   },
   "projectFileDependencyGroups": {
-    "net6.0": [
-      "MonoGame.Content.Builder.Task >= 3.8.1.303",
-      "MonoGame.Framework.DesktopGL >= 3.8.1.303"
+    "net9.0": [
+      "FNA.NET >= 2.1.2.2506",
+      "FNA.NET.FontStashSharp >= 2.0.0"
     ]
   },
   "packageFolders": {
-    "C:\\Users\\crobe\\.nuget\\packages\\": {}
+    "C:\\Users\\crobe\\.nuget\\packages\\": {},
+    "C:\\Program Files (x86)\\Microsoft Visual Studio\\Shared\\NuGetPackages": {}
   },
   "project": {
     "version": "1.0.0",
@@ -113,20 +499,24 @@
       "packagesPath": "C:\\Users\\crobe\\.nuget\\packages\\",
       "outputPath": "C:\\Users\\crobe\\source\\repos\\DungeonCrawlerWorld\\DungeonCrawlerWorld\\obj\\",
       "projectStyle": "PackageReference",
+      "fallbackFolders": [
+        "C:\\Program Files (x86)\\Microsoft Visual Studio\\Shared\\NuGetPackages"
+      ],
       "configFilePaths": [
         "C:\\Users\\crobe\\AppData\\Roaming\\NuGet\\NuGet.Config",
+        "C:\\Program Files (x86)\\NuGet\\Config\\Microsoft.VisualStudio.FallbackLocation.config",
         "C:\\Program Files (x86)\\NuGet\\Config\\Microsoft.VisualStudio.Offline.config"
       ],
       "originalTargetFrameworks": [
-        "net6.0"
+        "net9.0"
       ],
       "sources": {
         "C:\\Program Files (x86)\\Microsoft SDKs\\NuGetPackages\\": {},
         "https://api.nuget.org/v3/index.json": {}
       },
       "frameworks": {
-        "net6.0": {
-          "targetAlias": "net6.0",
+        "net9.0": {
+          "targetAlias": "net9.0",
           "projectReferences": {}
         }
       },
@@ -139,19 +529,20 @@
         "enableAudit": "true",
         "auditLevel": "low",
         "auditMode": "direct"
-      }
+      },
+      "SdkAnalysisLevel": "10.0.100"
     },
     "frameworks": {
-      "net6.0": {
-        "targetAlias": "net6.0",
+      "net9.0": {
+        "targetAlias": "net9.0",
         "dependencies": {
-          "MonoGame.Content.Builder.Task": {
+          "FNA.NET": {
             "target": "Package",
-            "version": "[3.8.1.303, )"
+            "version": "[2.1.2.2506, )"
           },
-          "MonoGame.Framework.DesktopGL": {
+          "FNA.NET.FontStashSharp": {
             "target": "Package",
-            "version": "[3.8.1.303, )"
+            "version": "[2.0.0, )"
           }
         },
         "imports": [
@@ -165,30 +556,12 @@
         ],
         "assetTargetFallback": true,
         "warn": true,
-        "downloadDependencies": [
-          {
-            "name": "Microsoft.AspNetCore.App.Ref",
-            "version": "[6.0.30, 6.0.30]"
-          },
-          {
-            "name": "Microsoft.NETCore.App.Host.win-x64",
-            "version": "[6.0.30, 6.0.30]"
-          },
-          {
-            "name": "Microsoft.NETCore.App.Ref",
-            "version": "[6.0.30, 6.0.30]"
-          },
-          {
-            "name": "Microsoft.WindowsDesktop.App.Ref",
-            "version": "[6.0.30, 6.0.30]"
-          }
-        ],
         "frameworkReferences": {
           "Microsoft.NETCore.App": {
             "privateAssets": "all"
           }
         },
-        "runtimeIdentifierGraphPath": "C:\\Program Files\\dotnet\\sdk\\8.0.400-preview.0.24324.5\\RuntimeIdentifierGraph.json"
+        "runtimeIdentifierGraphPath": "C:\\Program Files\\dotnet\\sdk\\10.0.100/PortableRuntimeIdentifierGraph.json"
       }
     }
   }

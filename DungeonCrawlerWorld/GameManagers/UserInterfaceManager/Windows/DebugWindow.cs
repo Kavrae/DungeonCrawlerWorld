@@ -1,5 +1,7 @@
 ﻿using System;
 
+using FontStashSharp;
+
 using Microsoft.Xna.Framework;
 using Microsoft.Xna.Framework.Graphics;
 
@@ -21,7 +23,7 @@ namespace DungeonCrawlerWorld.GameManagers.UserInterfaceManager
         private double drawsPerSecond;
         private double updatesPerSecond;
 
-        private SpriteFont font;
+        private SpriteFontBase font;
 
         public DebugWindow(World dataAccess, WindowOptions windowOptions) : base(null, windowOptions)
         {
@@ -35,7 +37,7 @@ namespace DungeonCrawlerWorld.GameManagers.UserInterfaceManager
             lastDrawTicks = DateTime.Now.Ticks;
             lastUpdateTicks = DateTime.Now.Ticks;
 
-            font = FontService.GetFont("defaultFont");
+            font = FontService.GetFont(8);
         }
 
         public override void LoadContent()

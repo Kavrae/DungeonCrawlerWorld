@@ -3,72 +3,47 @@
   "WorkspaceRootPath": "C:\\Users\\crobe\\source\\repos\\DungeonCrawlerWorld\\",
   "Documents": [
     {
-      "AbsoluteMoniker": "D:0:0:{69C0D33C-52BD-4CC3-AE28-917C39A2D336}|DungeonCrawlerWorld\\DungeonCrawlerWorld.csproj|c:\\users\\crobe\\source\\repos\\dungeoncrawlerworld\\dungeoncrawlerworld\\gamemanagers\\entityfactorymanager\\ibasefactorytemplate.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
-      "RelativeMoniker": "D:0:0:{69C0D33C-52BD-4CC3-AE28-917C39A2D336}|DungeonCrawlerWorld\\DungeonCrawlerWorld.csproj|solutionrelative:dungeoncrawlerworld\\gamemanagers\\entityfactorymanager\\ibasefactorytemplate.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}"
+      "AbsoluteMoniker": "D:0:0:{69C0D33C-52BD-4CC3-AE28-917C39A2D336}|DungeonCrawlerWorld\\DungeonCrawlerWorld.csproj|c:\\users\\crobe\\source\\repos\\dungeoncrawlerworld\\dungeoncrawlerworld\\gamemanagers\\userinterfacemanager\\windows\\mapwindow.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
+      "RelativeMoniker": "D:0:0:{69C0D33C-52BD-4CC3-AE28-917C39A2D336}|DungeonCrawlerWorld\\DungeonCrawlerWorld.csproj|solutionrelative:dungeoncrawlerworld\\gamemanagers\\userinterfacemanager\\windows\\mapwindow.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}"
     },
     {
-      "AbsoluteMoniker": "D:0:0:{69C0D33C-52BD-4CC3-AE28-917C39A2D336}|DungeonCrawlerWorld\\DungeonCrawlerWorld.csproj|c:\\users\\crobe\\source\\repos\\dungeoncrawlerworld\\dungeoncrawlerworld\\gamemanagers\\entityfactorymanager\\imodifierfactorytemplate.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
-      "RelativeMoniker": "D:0:0:{69C0D33C-52BD-4CC3-AE28-917C39A2D336}|DungeonCrawlerWorld\\DungeonCrawlerWorld.csproj|solutionrelative:dungeoncrawlerworld\\gamemanagers\\entityfactorymanager\\imodifierfactorytemplate.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}"
-    },
-    {
-      "AbsoluteMoniker": "D:0:0:{69C0D33C-52BD-4CC3-AE28-917C39A2D336}|DungeonCrawlerWorld\\DungeonCrawlerWorld.csproj|c:\\users\\crobe\\source\\repos\\dungeoncrawlerworld\\dungeoncrawlerworld\\gamemanagers\\entityfactorymanager\\entityfactorymanager.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
-      "RelativeMoniker": "D:0:0:{69C0D33C-52BD-4CC3-AE28-917C39A2D336}|DungeonCrawlerWorld\\DungeonCrawlerWorld.csproj|solutionrelative:dungeoncrawlerworld\\gamemanagers\\entityfactorymanager\\entityfactorymanager.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}"
+      "AbsoluteMoniker": "D:0:0:{69C0D33C-52BD-4CC3-AE28-917C39A2D336}|DungeonCrawlerWorld\\DungeonCrawlerWorld.csproj|c:\\users\\crobe\\source\\repos\\dungeoncrawlerworld\\dungeoncrawlerworld\\services\\fontservice.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
+      "RelativeMoniker": "D:0:0:{69C0D33C-52BD-4CC3-AE28-917C39A2D336}|DungeonCrawlerWorld\\DungeonCrawlerWorld.csproj|solutionrelative:dungeoncrawlerworld\\services\\fontservice.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}"
     },
     {
       "AbsoluteMoniker": "D:0:0:{69C0D33C-52BD-4CC3-AE28-917C39A2D336}|DungeonCrawlerWorld\\DungeonCrawlerWorld.csproj|c:\\users\\crobe\\source\\repos\\dungeoncrawlerworld\\dungeoncrawlerworld\\gamemanagers\\entityfactorymanager\\races\\goblin.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
       "RelativeMoniker": "D:0:0:{69C0D33C-52BD-4CC3-AE28-917C39A2D336}|DungeonCrawlerWorld\\DungeonCrawlerWorld.csproj|solutionrelative:dungeoncrawlerworld\\gamemanagers\\entityfactorymanager\\races\\goblin.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}"
     },
     {
-      "AbsoluteMoniker": "D:0:0:{69C0D33C-52BD-4CC3-AE28-917C39A2D336}|DungeonCrawlerWorld\\DungeonCrawlerWorld.csproj|c:\\users\\crobe\\source\\repos\\dungeoncrawlerworld\\dungeoncrawlerworld\\gamemanagers\\entityfactorymanager\\races\\fairy.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
-      "RelativeMoniker": "D:0:0:{69C0D33C-52BD-4CC3-AE28-917C39A2D336}|DungeonCrawlerWorld\\DungeonCrawlerWorld.csproj|solutionrelative:dungeoncrawlerworld\\gamemanagers\\entityfactorymanager\\races\\fairy.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}"
+      "AbsoluteMoniker": "D:0:0:{69C0D33C-52BD-4CC3-AE28-917C39A2D336}|DungeonCrawlerWorld\\DungeonCrawlerWorld.csproj|c:\\users\\crobe\\source\\repos\\dungeoncrawlerworld\\dungeoncrawlerworld\\gamemanagers\\userinterfacemanager\\windows\\window.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
+      "RelativeMoniker": "D:0:0:{69C0D33C-52BD-4CC3-AE28-917C39A2D336}|DungeonCrawlerWorld\\DungeonCrawlerWorld.csproj|solutionrelative:dungeoncrawlerworld\\gamemanagers\\userinterfacemanager\\windows\\window.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}"
     },
     {
-      "AbsoluteMoniker": "D:0:0:{69C0D33C-52BD-4CC3-AE28-917C39A2D336}|DungeonCrawlerWorld\\DungeonCrawlerWorld.csproj|c:\\users\\crobe\\source\\repos\\dungeoncrawlerworld\\dungeoncrawlerworld\\gamemanagers\\entityfactorymanager\\entityblueprints\\goblinengineerblueprint.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
-      "RelativeMoniker": "D:0:0:{69C0D33C-52BD-4CC3-AE28-917C39A2D336}|DungeonCrawlerWorld\\DungeonCrawlerWorld.csproj|solutionrelative:dungeoncrawlerworld\\gamemanagers\\entityfactorymanager\\entityblueprints\\goblinengineerblueprint.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}"
+      "AbsoluteMoniker": "D:0:0:{69C0D33C-52BD-4CC3-AE28-917C39A2D336}|DungeonCrawlerWorld\\DungeonCrawlerWorld.csproj|c:\\users\\crobe\\source\\repos\\dungeoncrawlerworld\\dungeoncrawlerworld\\gameloop.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
+      "RelativeMoniker": "D:0:0:{69C0D33C-52BD-4CC3-AE28-917C39A2D336}|DungeonCrawlerWorld\\DungeonCrawlerWorld.csproj|solutionrelative:dungeoncrawlerworld\\gameloop.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}"
+    },
+    {
+      "AbsoluteMoniker": "D:0:0:{A2FE74E1-B743-11D0-AE1A-00A0C90FFFC3}|\u003CMiscFiles\u003E|C:\\Users\\crobe\\source\\repos\\FNA\\src\\Game.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}"
+    },
+    {
+      "AbsoluteMoniker": "D:0:0:{69C0D33C-52BD-4CC3-AE28-917C39A2D336}|DungeonCrawlerWorld\\DungeonCrawlerWorld.csproj|c:\\users\\crobe\\source\\repos\\dungeoncrawlerworld\\dungeoncrawlerworld\\gamemanagers\\entityfactorymanager\\entityfactorymanager.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
+      "RelativeMoniker": "D:0:0:{69C0D33C-52BD-4CC3-AE28-917C39A2D336}|DungeonCrawlerWorld\\DungeonCrawlerWorld.csproj|solutionrelative:dungeoncrawlerworld\\gamemanagers\\entityfactorymanager\\entityfactorymanager.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}"
+    },
+    {
+      "AbsoluteMoniker": "D:0:0:{69C0D33C-52BD-4CC3-AE28-917C39A2D336}|DungeonCrawlerWorld\\DungeonCrawlerWorld.csproj|c:\\users\\crobe\\source\\repos\\dungeoncrawlerworld\\dungeoncrawlerworld\\gamemanagers\\entityfactorymanager\\imodifierfactorytemplate.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
+      "RelativeMoniker": "D:0:0:{69C0D33C-52BD-4CC3-AE28-917C39A2D336}|DungeonCrawlerWorld\\DungeonCrawlerWorld.csproj|solutionrelative:dungeoncrawlerworld\\gamemanagers\\entityfactorymanager\\imodifierfactorytemplate.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}"
+    },
+    {
+      "AbsoluteMoniker": "D:0:0:{69C0D33C-52BD-4CC3-AE28-917C39A2D336}|DungeonCrawlerWorld\\DungeonCrawlerWorld.csproj|c:\\users\\crobe\\source\\repos\\dungeoncrawlerworld\\dungeoncrawlerworld\\gamemanagers\\entityfactorymanager\\races\\fairy.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
+      "RelativeMoniker": "D:0:0:{69C0D33C-52BD-4CC3-AE28-917C39A2D336}|DungeonCrawlerWorld\\DungeonCrawlerWorld.csproj|solutionrelative:dungeoncrawlerworld\\gamemanagers\\entityfactorymanager\\races\\fairy.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}"
     },
     {
       "AbsoluteMoniker": "D:0:0:{69C0D33C-52BD-4CC3-AE28-917C39A2D336}|DungeonCrawlerWorld\\DungeonCrawlerWorld.csproj|c:\\users\\crobe\\source\\repos\\dungeoncrawlerworld\\dungeoncrawlerworld\\components\\componentrepo.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
       "RelativeMoniker": "D:0:0:{69C0D33C-52BD-4CC3-AE28-917C39A2D336}|DungeonCrawlerWorld\\DungeonCrawlerWorld.csproj|solutionrelative:dungeoncrawlerworld\\components\\componentrepo.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}"
     },
     {
-      "AbsoluteMoniker": "D:0:0:{69C0D33C-52BD-4CC3-AE28-917C39A2D336}|DungeonCrawlerWorld\\DungeonCrawlerWorld.csproj|c:\\users\\crobe\\source\\repos\\dungeoncrawlerworld\\dungeoncrawlerworld\\gamemanagers\\entityfactorymanager\\terrain\\lava.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
-      "RelativeMoniker": "D:0:0:{69C0D33C-52BD-4CC3-AE28-917C39A2D336}|DungeonCrawlerWorld\\DungeonCrawlerWorld.csproj|solutionrelative:dungeoncrawlerworld\\gamemanagers\\entityfactorymanager\\terrain\\lava.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}"
-    },
-    {
-      "AbsoluteMoniker": "D:0:0:{69C0D33C-52BD-4CC3-AE28-917C39A2D336}|DungeonCrawlerWorld\\DungeonCrawlerWorld.csproj|c:\\users\\crobe\\source\\repos\\dungeoncrawlerworld\\dungeoncrawlerworld\\gamemanagers\\mapbuildermanager\\mapbuildermanager.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
-      "RelativeMoniker": "D:0:0:{69C0D33C-52BD-4CC3-AE28-917C39A2D336}|DungeonCrawlerWorld\\DungeonCrawlerWorld.csproj|solutionrelative:dungeoncrawlerworld\\gamemanagers\\mapbuildermanager\\mapbuildermanager.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}"
-    },
-    {
       "AbsoluteMoniker": "D:0:0:{69C0D33C-52BD-4CC3-AE28-917C39A2D336}|DungeonCrawlerWorld\\DungeonCrawlerWorld.csproj|c:\\users\\crobe\\source\\repos\\dungeoncrawlerworld\\dungeoncrawlerworld\\gamemanagers\\entityfactorymanager\\entityclasses\\engineer.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
       "RelativeMoniker": "D:0:0:{69C0D33C-52BD-4CC3-AE28-917C39A2D336}|DungeonCrawlerWorld\\DungeonCrawlerWorld.csproj|solutionrelative:dungeoncrawlerworld\\gamemanagers\\entityfactorymanager\\entityclasses\\engineer.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}"
-    },
-    {
-      "AbsoluteMoniker": "D:0:0:{69C0D33C-52BD-4CC3-AE28-917C39A2D336}|DungeonCrawlerWorld\\DungeonCrawlerWorld.csproj|c:\\users\\crobe\\source\\repos\\dungeoncrawlerworld\\dungeoncrawlerworld\\gamemanagers\\userinterfacemanager\\userinterfacecomponents\\selectiondisplay.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
-      "RelativeMoniker": "D:0:0:{69C0D33C-52BD-4CC3-AE28-917C39A2D336}|DungeonCrawlerWorld\\DungeonCrawlerWorld.csproj|solutionrelative:dungeoncrawlerworld\\gamemanagers\\userinterfacemanager\\userinterfacecomponents\\selectiondisplay.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}"
-    },
-    {
-      "AbsoluteMoniker": "D:0:0:{69C0D33C-52BD-4CC3-AE28-917C39A2D336}|DungeonCrawlerWorld\\DungeonCrawlerWorld.csproj|c:\\users\\crobe\\source\\repos\\dungeoncrawlerworld\\dungeoncrawlerworld\\gamemanagers\\entityfactorymanager\\terrain\\stonefloor.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
-      "RelativeMoniker": "D:0:0:{69C0D33C-52BD-4CC3-AE28-917C39A2D336}|DungeonCrawlerWorld\\DungeonCrawlerWorld.csproj|solutionrelative:dungeoncrawlerworld\\gamemanagers\\entityfactorymanager\\terrain\\stonefloor.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}"
-    },
-    {
-      "AbsoluteMoniker": "D:0:0:{69C0D33C-52BD-4CC3-AE28-917C39A2D336}|DungeonCrawlerWorld\\DungeonCrawlerWorld.csproj|c:\\users\\crobe\\source\\repos\\dungeoncrawlerworld\\dungeoncrawlerworld\\gamemanagers\\entityfactorymanager\\terrain\\grass.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
-      "RelativeMoniker": "D:0:0:{69C0D33C-52BD-4CC3-AE28-917C39A2D336}|DungeonCrawlerWorld\\DungeonCrawlerWorld.csproj|solutionrelative:dungeoncrawlerworld\\gamemanagers\\entityfactorymanager\\terrain\\grass.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}"
-    },
-    {
-      "AbsoluteMoniker": "D:0:0:{69C0D33C-52BD-4CC3-AE28-917C39A2D336}|DungeonCrawlerWorld\\DungeonCrawlerWorld.csproj|c:\\users\\crobe\\source\\repos\\dungeoncrawlerworld\\dungeoncrawlerworld\\gamemanagers\\entityfactorymanager\\terrain\\dirt.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
-      "RelativeMoniker": "D:0:0:{69C0D33C-52BD-4CC3-AE28-917C39A2D336}|DungeonCrawlerWorld\\DungeonCrawlerWorld.csproj|solutionrelative:dungeoncrawlerworld\\gamemanagers\\entityfactorymanager\\terrain\\dirt.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}"
-    },
-    {
-      "AbsoluteMoniker": "D:0:0:{69C0D33C-52BD-4CC3-AE28-917C39A2D336}|DungeonCrawlerWorld\\DungeonCrawlerWorld.csproj|c:\\users\\crobe\\source\\repos\\dungeoncrawlerworld\\dungeoncrawlerworld\\gamemanagers\\entityfactorymanager\\objects\\wall.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
-      "RelativeMoniker": "D:0:0:{69C0D33C-52BD-4CC3-AE28-917C39A2D336}|DungeonCrawlerWorld\\DungeonCrawlerWorld.csproj|solutionrelative:dungeoncrawlerworld\\gamemanagers\\entityfactorymanager\\objects\\wall.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}"
-    },
-    {
-      "AbsoluteMoniker": "D:0:0:{69C0D33C-52BD-4CC3-AE28-917C39A2D336}|DungeonCrawlerWorld\\DungeonCrawlerWorld.csproj|c:\\users\\crobe\\source\\repos\\dungeoncrawlerworld\\dungeoncrawlerworld\\gamemanagers\\userinterfacemanager\\userinterfacecomponents\\mapdisplay.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
-      "RelativeMoniker": "D:0:0:{69C0D33C-52BD-4CC3-AE28-917C39A2D336}|DungeonCrawlerWorld\\DungeonCrawlerWorld.csproj|solutionrelative:dungeoncrawlerworld\\gamemanagers\\userinterfacemanager\\userinterfacecomponents\\mapdisplay.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}"
-    },
-    {
-      "AbsoluteMoniker": "D:0:0:{69C0D33C-52BD-4CC3-AE28-917C39A2D336}|DungeonCrawlerWorld\\DungeonCrawlerWorld.csproj|c:\\users\\crobe\\source\\repos\\dungeoncrawlerworld\\dungeoncrawlerworld\\components\\classglyphcomponent.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
-      "RelativeMoniker": "D:0:0:{69C0D33C-52BD-4CC3-AE28-917C39A2D336}|DungeonCrawlerWorld\\DungeonCrawlerWorld.csproj|solutionrelative:dungeoncrawlerworld\\components\\classglyphcomponent.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}"
     },
     {
       "AbsoluteMoniker": "D:0:0:{69C0D33C-52BD-4CC3-AE28-917C39A2D336}|DungeonCrawlerWorld\\DungeonCrawlerWorld.csproj|c:\\users\\crobe\\source\\repos\\dungeoncrawlerworld\\dungeoncrawlerworld\\gamemanagers\\componentsystemmanager.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
@@ -91,10 +66,6 @@
       "RelativeMoniker": "D:0:0:{69C0D33C-52BD-4CC3-AE28-917C39A2D336}|DungeonCrawlerWorld\\DungeonCrawlerWorld.csproj|solutionrelative:dungeoncrawlerworld\\components\\energycomponent.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}"
     },
     {
-      "AbsoluteMoniker": "D:0:0:{69C0D33C-52BD-4CC3-AE28-917C39A2D336}|DungeonCrawlerWorld\\DungeonCrawlerWorld.csproj|c:\\users\\crobe\\source\\repos\\dungeoncrawlerworld\\dungeoncrawlerworld\\gameloop.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
-      "RelativeMoniker": "D:0:0:{69C0D33C-52BD-4CC3-AE28-917C39A2D336}|DungeonCrawlerWorld\\DungeonCrawlerWorld.csproj|solutionrelative:dungeoncrawlerworld\\gameloop.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}"
-    },
-    {
       "AbsoluteMoniker": "D:0:0:{69C0D33C-52BD-4CC3-AE28-917C39A2D336}|DungeonCrawlerWorld\\DungeonCrawlerWorld.csproj|c:\\users\\crobe\\source\\repos\\dungeoncrawlerworld\\dungeoncrawlerworld\\componentsystems\\movementsystem.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
       "RelativeMoniker": "D:0:0:{69C0D33C-52BD-4CC3-AE28-917C39A2D336}|DungeonCrawlerWorld\\DungeonCrawlerWorld.csproj|solutionrelative:dungeoncrawlerworld\\componentsystems\\movementsystem.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}"
     },
@@ -111,10 +82,6 @@
       "RelativeMoniker": "D:0:0:{69C0D33C-52BD-4CC3-AE28-917C39A2D336}|DungeonCrawlerWorld\\DungeonCrawlerWorld.csproj|solutionrelative:dungeoncrawlerworld\\gamemanagers\\userinterfacemanager\\userinterfacemanager.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}"
     },
     {
-      "AbsoluteMoniker": "D:0:0:{69C0D33C-52BD-4CC3-AE28-917C39A2D336}|DungeonCrawlerWorld\\DungeonCrawlerWorld.csproj|c:\\users\\crobe\\source\\repos\\dungeoncrawlerworld\\dungeoncrawlerworld\\gamemanagers\\userinterfacemanager\\userinterfacecomponents\\userinterfacecomponent.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
-      "RelativeMoniker": "D:0:0:{69C0D33C-52BD-4CC3-AE28-917C39A2D336}|DungeonCrawlerWorld\\DungeonCrawlerWorld.csproj|solutionrelative:dungeoncrawlerworld\\gamemanagers\\userinterfacemanager\\userinterfacecomponents\\userinterfacecomponent.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}"
-    },
-    {
       "AbsoluteMoniker": "D:0:0:{69C0D33C-52BD-4CC3-AE28-917C39A2D336}|DungeonCrawlerWorld\\DungeonCrawlerWorld.csproj|c:\\users\\crobe\\source\\repos\\dungeoncrawlerworld\\dungeoncrawlerworld\\actions\\gameevent.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
       "RelativeMoniker": "D:0:0:{69C0D33C-52BD-4CC3-AE28-917C39A2D336}|DungeonCrawlerWorld\\DungeonCrawlerWorld.csproj|solutionrelative:dungeoncrawlerworld\\actions\\gameevent.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}"
     },
@@ -123,24 +90,12 @@
       "RelativeMoniker": "D:0:0:{69C0D33C-52BD-4CC3-AE28-917C39A2D336}|DungeonCrawlerWorld\\DungeonCrawlerWorld.csproj|solutionrelative:dungeoncrawlerworld\\data\\map\\map.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}"
     },
     {
-      "AbsoluteMoniker": "D:0:0:{69C0D33C-52BD-4CC3-AE28-917C39A2D336}|DungeonCrawlerWorld\\DungeonCrawlerWorld.csproj|c:\\users\\crobe\\source\\repos\\dungeoncrawlerworld\\dungeoncrawlerworld\\gamemanagers\\userinterfacemanager\\objects\\stringutility.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
-      "RelativeMoniker": "D:0:0:{69C0D33C-52BD-4CC3-AE28-917C39A2D336}|DungeonCrawlerWorld\\DungeonCrawlerWorld.csproj|solutionrelative:dungeoncrawlerworld\\gamemanagers\\userinterfacemanager\\objects\\stringutility.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}"
-    },
-    {
       "AbsoluteMoniker": "D:0:0:{69C0D33C-52BD-4CC3-AE28-917C39A2D336}|DungeonCrawlerWorld\\DungeonCrawlerWorld.csproj|c:\\users\\crobe\\source\\repos\\dungeoncrawlerworld\\dungeoncrawlerworld\\services\\dataaccessservice.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
       "RelativeMoniker": "D:0:0:{69C0D33C-52BD-4CC3-AE28-917C39A2D336}|DungeonCrawlerWorld\\DungeonCrawlerWorld.csproj|solutionrelative:dungeoncrawlerworld\\services\\dataaccessservice.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}"
     },
     {
       "AbsoluteMoniker": "D:0:0:{69C0D33C-52BD-4CC3-AE28-917C39A2D336}|DungeonCrawlerWorld\\DungeonCrawlerWorld.csproj|c:\\users\\crobe\\source\\repos\\dungeoncrawlerworld\\dungeoncrawlerworld\\program.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
       "RelativeMoniker": "D:0:0:{69C0D33C-52BD-4CC3-AE28-917C39A2D336}|DungeonCrawlerWorld\\DungeonCrawlerWorld.csproj|solutionrelative:dungeoncrawlerworld\\program.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}"
-    },
-    {
-      "AbsoluteMoniker": "D:0:0:{69C0D33C-52BD-4CC3-AE28-917C39A2D336}|DungeonCrawlerWorld\\DungeonCrawlerWorld.csproj|c:\\users\\crobe\\source\\repos\\dungeoncrawlerworld\\dungeoncrawlerworld\\services\\fontservice.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
-      "RelativeMoniker": "D:0:0:{69C0D33C-52BD-4CC3-AE28-917C39A2D336}|DungeonCrawlerWorld\\DungeonCrawlerWorld.csproj|solutionrelative:dungeoncrawlerworld\\services\\fontservice.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}"
-    },
-    {
-      "AbsoluteMoniker": "D:0:0:{69C0D33C-52BD-4CC3-AE28-917C39A2D336}|DungeonCrawlerWorld\\DungeonCrawlerWorld.csproj|c:\\users\\crobe\\source\\repos\\dungeoncrawlerworld\\dungeoncrawlerworld\\gamemanagers\\userinterfacemanager\\userinterfacecomponents\\announcementdisplay.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
-      "RelativeMoniker": "D:0:0:{69C0D33C-52BD-4CC3-AE28-917C39A2D336}|DungeonCrawlerWorld\\DungeonCrawlerWorld.csproj|solutionrelative:dungeoncrawlerworld\\gamemanagers\\userinterfacemanager\\userinterfacecomponents\\announcementdisplay.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}"
     },
     {
       "AbsoluteMoniker": "D:0:0:{69C0D33C-52BD-4CC3-AE28-917C39A2D336}|DungeonCrawlerWorld\\DungeonCrawlerWorld.csproj|c:\\users\\crobe\\source\\repos\\dungeoncrawlerworld\\dungeoncrawlerworld\\gamemanagers\\userinterfacemanager\\objects\\fonttype.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
@@ -178,8 +133,48 @@
       "AbsoluteMoniker": "D:0:0:{A2FE74E1-B743-11D0-AE1A-00A0C90FFFC3}|\u003CMiscFiles\u003E|C:\\Users\\crobe\\.nuget\\packages\\monogame.content.builder.task\\3.8.1.303\\build\\MonoGame.Content.Builder.Task.targets||{FA3CD31E-987B-443A-9B81-186104E8DAC1}|"
     },
     {
-      "AbsoluteMoniker": "D:0:0:{69C0D33C-52BD-4CC3-AE28-917C39A2D336}|DungeonCrawlerWorld\\DungeonCrawlerWorld.csproj|c:\\users\\crobe\\source\\repos\\dungeoncrawlerworld\\dungeoncrawlerworld\\content\\content.mgcb||{8B382828-6202-11D1-8870-0000F87579D2}",
-      "RelativeMoniker": "D:0:0:{69C0D33C-52BD-4CC3-AE28-917C39A2D336}|DungeonCrawlerWorld\\DungeonCrawlerWorld.csproj|solutionrelative:dungeoncrawlerworld\\content\\content.mgcb||{8B382828-6202-11D1-8870-0000F87579D2}"
+      "AbsoluteMoniker": "D:0:0:{A2FE74E1-B743-11D0-AE1A-00A0C90FFFC3}|\u003CMiscFiles\u003E|C:\\Users\\crobe\\source\\repos\\DungeonCrawlerWorld\\DungeonCrawlerWorld\\GameManagers\\UserInterfaceManager\\UserInterfaceComponents\\SelectionDisplay.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
+      "RelativeMoniker": "D:0:0:{A2FE74E1-B743-11D0-AE1A-00A0C90FFFC3}|\u003CMiscFiles\u003E|solutionrelative:DungeonCrawlerWorld\\GameManagers\\UserInterfaceManager\\UserInterfaceComponents\\SelectionDisplay.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}"
+    },
+    {
+      "AbsoluteMoniker": "D:0:0:{A2FE74E1-B743-11D0-AE1A-00A0C90FFFC3}|\u003CMiscFiles\u003E|C:\\Users\\crobe\\source\\repos\\DungeonCrawlerWorld\\DungeonCrawlerWorld\\GameManagers\\EntityFactoryManager\\EntityBlueprints\\GoblinEngineerBlueprint.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
+      "RelativeMoniker": "D:0:0:{A2FE74E1-B743-11D0-AE1A-00A0C90FFFC3}|\u003CMiscFiles\u003E|solutionrelative:DungeonCrawlerWorld\\GameManagers\\EntityFactoryManager\\EntityBlueprints\\GoblinEngineerBlueprint.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}"
+    },
+    {
+      "AbsoluteMoniker": "D:0:0:{A2FE74E1-B743-11D0-AE1A-00A0C90FFFC3}|\u003CMiscFiles\u003E|C:\\Users\\crobe\\source\\repos\\DungeonCrawlerWorld\\DungeonCrawlerWorld\\GameManagers\\EntityFactoryManager\\Objects\\Wall.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
+      "RelativeMoniker": "D:0:0:{A2FE74E1-B743-11D0-AE1A-00A0C90FFFC3}|\u003CMiscFiles\u003E|solutionrelative:DungeonCrawlerWorld\\GameManagers\\EntityFactoryManager\\Objects\\Wall.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}"
+    },
+    {
+      "AbsoluteMoniker": "D:0:0:{A2FE74E1-B743-11D0-AE1A-00A0C90FFFC3}|\u003CMiscFiles\u003E|C:\\Users\\crobe\\source\\repos\\DungeonCrawlerWorld\\DungeonCrawlerWorld\\Components\\ClassGlyphComponent.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
+      "RelativeMoniker": "D:0:0:{A2FE74E1-B743-11D0-AE1A-00A0C90FFFC3}|\u003CMiscFiles\u003E|solutionrelative:DungeonCrawlerWorld\\Components\\ClassGlyphComponent.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}"
+    },
+    {
+      "AbsoluteMoniker": "D:0:0:{A2FE74E1-B743-11D0-AE1A-00A0C90FFFC3}|\u003CMiscFiles\u003E|C:\\Users\\crobe\\source\\repos\\DungeonCrawlerWorld\\DungeonCrawlerWorld\\GameManagers\\EntityFactoryManager\\Terrain\\Lava.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
+      "RelativeMoniker": "D:0:0:{A2FE74E1-B743-11D0-AE1A-00A0C90FFFC3}|\u003CMiscFiles\u003E|solutionrelative:DungeonCrawlerWorld\\GameManagers\\EntityFactoryManager\\Terrain\\Lava.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}"
+    },
+    {
+      "AbsoluteMoniker": "D:0:0:{A2FE74E1-B743-11D0-AE1A-00A0C90FFFC3}|\u003CMiscFiles\u003E|C:\\Users\\crobe\\source\\repos\\DungeonCrawlerWorld\\DungeonCrawlerWorld\\GameManagers\\EntityFactoryManager\\Terrain\\Dirt.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
+      "RelativeMoniker": "D:0:0:{A2FE74E1-B743-11D0-AE1A-00A0C90FFFC3}|\u003CMiscFiles\u003E|solutionrelative:DungeonCrawlerWorld\\GameManagers\\EntityFactoryManager\\Terrain\\Dirt.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}"
+    },
+    {
+      "AbsoluteMoniker": "D:0:0:{A2FE74E1-B743-11D0-AE1A-00A0C90FFFC3}|\u003CMiscFiles\u003E|C:\\Users\\crobe\\source\\repos\\DungeonCrawlerWorld\\DungeonCrawlerWorld\\GameManagers\\EntityFactoryManager\\Terrain\\Grass.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
+      "RelativeMoniker": "D:0:0:{A2FE74E1-B743-11D0-AE1A-00A0C90FFFC3}|\u003CMiscFiles\u003E|solutionrelative:DungeonCrawlerWorld\\GameManagers\\EntityFactoryManager\\Terrain\\Grass.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}"
+    },
+    {
+      "AbsoluteMoniker": "D:0:0:{A2FE74E1-B743-11D0-AE1A-00A0C90FFFC3}|\u003CMiscFiles\u003E|C:\\Users\\crobe\\source\\repos\\DungeonCrawlerWorld\\DungeonCrawlerWorld\\GameManagers\\EntityFactoryManager\\Terrain\\StoneFloor.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
+      "RelativeMoniker": "D:0:0:{A2FE74E1-B743-11D0-AE1A-00A0C90FFFC3}|\u003CMiscFiles\u003E|solutionrelative:DungeonCrawlerWorld\\GameManagers\\EntityFactoryManager\\Terrain\\StoneFloor.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}"
+    },
+    {
+      "AbsoluteMoniker": "D:0:0:{A2FE74E1-B743-11D0-AE1A-00A0C90FFFC3}|\u003CMiscFiles\u003E|C:\\Users\\crobe\\source\\repos\\DungeonCrawlerWorld\\DungeonCrawlerWorld\\GameManagers\\UserInterfaceManager\\UserInterfaceComponents\\UserInterfaceComponent.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
+      "RelativeMoniker": "D:0:0:{A2FE74E1-B743-11D0-AE1A-00A0C90FFFC3}|\u003CMiscFiles\u003E|solutionrelative:DungeonCrawlerWorld\\GameManagers\\UserInterfaceManager\\UserInterfaceComponents\\UserInterfaceComponent.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}"
+    },
+    {
+      "AbsoluteMoniker": "D:0:0:{A2FE74E1-B743-11D0-AE1A-00A0C90FFFC3}|\u003CMiscFiles\u003E|C:\\Users\\crobe\\source\\repos\\DungeonCrawlerWorld\\DungeonCrawlerWorld\\GameManagers\\UserInterfaceManager\\Objects\\StringUtility.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
+      "RelativeMoniker": "D:0:0:{A2FE74E1-B743-11D0-AE1A-00A0C90FFFC3}|\u003CMiscFiles\u003E|solutionrelative:DungeonCrawlerWorld\\GameManagers\\UserInterfaceManager\\Objects\\StringUtility.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}"
+    },
+    {
+      "AbsoluteMoniker": "D:0:0:{A2FE74E1-B743-11D0-AE1A-00A0C90FFFC3}|\u003CMiscFiles\u003E|C:\\Users\\crobe\\source\\repos\\DungeonCrawlerWorld\\DungeonCrawlerWorld\\GameManagers\\UserInterfaceManager\\UserInterfaceComponents\\AnnouncementDisplay.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
+      "RelativeMoniker": "D:0:0:{A2FE74E1-B743-11D0-AE1A-00A0C90FFFC3}|\u003CMiscFiles\u003E|solutionrelative:DungeonCrawlerWorld\\GameManagers\\UserInterfaceManager\\UserInterfaceComponents\\AnnouncementDisplay.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}"
     }
   ],
   "DocumentGroupContainers": [
@@ -189,48 +184,23 @@
       "DocumentGroups": [
         {
           "DockedWidth": 200,
-          "SelectedChildIndex": 0,
+          "SelectedChildIndex": 6,
           "Children": [
             {
               "$type": "Document",
-              "DocumentIndex": 0,
-              "Title": "IBaseFactoryTemplate.cs",
-              "DocumentMoniker": "C:\\Users\\crobe\\source\\repos\\DungeonCrawlerWorld\\DungeonCrawlerWorld\\GameManagers\\EntityFactoryManager\\IBaseFactoryTemplate.cs",
-              "RelativeDocumentMoniker": "DungeonCrawlerWorld\\GameManagers\\EntityFactoryManager\\IBaseFactoryTemplate.cs",
-              "ToolTip": "C:\\Users\\crobe\\source\\repos\\DungeonCrawlerWorld\\DungeonCrawlerWorld\\GameManagers\\EntityFactoryManager\\IBaseFactoryTemplate.cs",
-              "RelativeToolTip": "DungeonCrawlerWorld\\GameManagers\\EntityFactoryManager\\IBaseFactoryTemplate.cs",
-              "ViewState": "AgIAAAAAAAAAAAAAAAAAABMAAAAAAAAAAAAAAA==",
+              "DocumentIndex": 1,
+              "Title": "FontService.cs",
+              "DocumentMoniker": "C:\\Users\\crobe\\source\\repos\\DungeonCrawlerWorld\\DungeonCrawlerWorld\\Services\\FontService.cs",
+              "RelativeDocumentMoniker": "DungeonCrawlerWorld\\Services\\FontService.cs",
+              "ToolTip": "C:\\Users\\crobe\\source\\repos\\DungeonCrawlerWorld\\DungeonCrawlerWorld\\Services\\FontService.cs",
+              "RelativeToolTip": "DungeonCrawlerWorld\\Services\\FontService.cs",
+              "ViewState": "AgIAAAAAAAAAAAAAAAAAAAcAAAAFAAAAAAAAAA==",
               "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000738|",
-              "WhenOpened": "2025-01-01T15:59:14.804Z",
-              "EditorCaption": ""
+              "WhenOpened": "2025-11-17T03:08:07.009Z"
             },
             {
               "$type": "Document",
               "DocumentIndex": 2,
-              "Title": "EntityFactoryManager.cs",
-              "DocumentMoniker": "C:\\Users\\crobe\\source\\repos\\DungeonCrawlerWorld\\DungeonCrawlerWorld\\GameManagers\\EntityFactoryManager\\EntityFactoryManager.cs",
-              "RelativeDocumentMoniker": "DungeonCrawlerWorld\\GameManagers\\EntityFactoryManager\\EntityFactoryManager.cs",
-              "ToolTip": "C:\\Users\\crobe\\source\\repos\\DungeonCrawlerWorld\\DungeonCrawlerWorld\\GameManagers\\EntityFactoryManager\\EntityFactoryManager.cs",
-              "RelativeToolTip": "DungeonCrawlerWorld\\GameManagers\\EntityFactoryManager\\EntityFactoryManager.cs",
-              "ViewState": "AgIAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA==",
-              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000738|",
-              "WhenOpened": "2025-01-01T15:54:13.648Z"
-            },
-            {
-              "$type": "Document",
-              "DocumentIndex": 8,
-              "Title": "MapBuilderManager.cs",
-              "DocumentMoniker": "C:\\Users\\crobe\\source\\repos\\DungeonCrawlerWorld\\DungeonCrawlerWorld\\GameManagers\\MapBuilderManager\\MapBuilderManager.cs",
-              "RelativeDocumentMoniker": "DungeonCrawlerWorld\\GameManagers\\MapBuilderManager\\MapBuilderManager.cs",
-              "ToolTip": "C:\\Users\\crobe\\source\\repos\\DungeonCrawlerWorld\\DungeonCrawlerWorld\\GameManagers\\MapBuilderManager\\MapBuilderManager.cs",
-              "RelativeToolTip": "DungeonCrawlerWorld\\GameManagers\\MapBuilderManager\\MapBuilderManager.cs",
-              "ViewState": "AgIAAAAAAAAAAAAAAAAAABgAAABRAAAAAAAAAA==",
-              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000738|",
-              "WhenOpened": "2025-01-01T01:56:19.88Z"
-            },
-            {
-              "$type": "Document",
-              "DocumentIndex": 3,
               "Title": "Goblin.cs",
               "DocumentMoniker": "C:\\Users\\crobe\\source\\repos\\DungeonCrawlerWorld\\DungeonCrawlerWorld\\GameManagers\\EntityFactoryManager\\Races\\Goblin.cs",
               "RelativeDocumentMoniker": "DungeonCrawlerWorld\\GameManagers\\EntityFactoryManager\\Races\\Goblin.cs",
@@ -242,55 +212,41 @@
             },
             {
               "$type": "Document",
-              "DocumentIndex": 15,
-              "Title": "MapDisplay.cs",
-              "DocumentMoniker": "C:\\Users\\crobe\\source\\repos\\DungeonCrawlerWorld\\DungeonCrawlerWorld\\GameManagers\\UserInterfaceManager\\UserInterfaceComponents\\MapDisplay.cs",
-              "RelativeDocumentMoniker": "DungeonCrawlerWorld\\GameManagers\\UserInterfaceManager\\UserInterfaceComponents\\MapDisplay.cs",
-              "ToolTip": "C:\\Users\\crobe\\source\\repos\\DungeonCrawlerWorld\\DungeonCrawlerWorld\\GameManagers\\UserInterfaceManager\\UserInterfaceComponents\\MapDisplay.cs",
-              "RelativeToolTip": "DungeonCrawlerWorld\\GameManagers\\UserInterfaceManager\\UserInterfaceComponents\\MapDisplay.cs",
-              "ViewState": "AgIAAKMAAAAAAAAAAAAAALAAAACSAAAAAAAAAA==",
-              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000738|",
-              "WhenOpened": "2024-12-15T18:51:24.833Z"
-            },
-            {
-              "$type": "Document",
-              "DocumentIndex": 4,
+              "DocumentIndex": 8,
               "Title": "Fairy.cs",
               "DocumentMoniker": "C:\\Users\\crobe\\source\\repos\\DungeonCrawlerWorld\\DungeonCrawlerWorld\\GameManagers\\EntityFactoryManager\\Races\\Fairy.cs",
               "RelativeDocumentMoniker": "DungeonCrawlerWorld\\GameManagers\\EntityFactoryManager\\Races\\Fairy.cs",
               "ToolTip": "C:\\Users\\crobe\\source\\repos\\DungeonCrawlerWorld\\DungeonCrawlerWorld\\GameManagers\\EntityFactoryManager\\Races\\Fairy.cs",
               "RelativeToolTip": "DungeonCrawlerWorld\\GameManagers\\EntityFactoryManager\\Races\\Fairy.cs",
-              "ViewState": "AgIAAAYAAAAAAAAAAAAAABgAAAAAAAAAAAAAAA==",
+              "ViewState": "AgIAAAAAAAAAAAAAAIBZwBgAAAAAAAAAAAAAAA==",
               "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000738|",
               "WhenOpened": "2025-01-01T00:02:44.013Z"
             },
             {
               "$type": "Document",
-              "DocumentIndex": 10,
+              "DocumentIndex": 33,
               "Title": "SelectionDisplay.cs",
               "DocumentMoniker": "C:\\Users\\crobe\\source\\repos\\DungeonCrawlerWorld\\DungeonCrawlerWorld\\GameManagers\\UserInterfaceManager\\UserInterfaceComponents\\SelectionDisplay.cs",
               "RelativeDocumentMoniker": "DungeonCrawlerWorld\\GameManagers\\UserInterfaceManager\\UserInterfaceComponents\\SelectionDisplay.cs",
               "ToolTip": "C:\\Users\\crobe\\source\\repos\\DungeonCrawlerWorld\\DungeonCrawlerWorld\\GameManagers\\UserInterfaceManager\\UserInterfaceComponents\\SelectionDisplay.cs",
               "RelativeToolTip": "DungeonCrawlerWorld\\GameManagers\\UserInterfaceManager\\UserInterfaceComponents\\SelectionDisplay.cs",
-              "ViewState": "AgIAAEUAAAAAAAAAAAAAAFUAAABHAAAAAAAAAA==",
               "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000738|",
               "WhenOpened": "2025-01-01T00:05:09.172Z"
             },
             {
               "$type": "Document",
-              "DocumentIndex": 5,
+              "DocumentIndex": 34,
               "Title": "GoblinEngineerBlueprint.cs",
               "DocumentMoniker": "C:\\Users\\crobe\\source\\repos\\DungeonCrawlerWorld\\DungeonCrawlerWorld\\GameManagers\\EntityFactoryManager\\EntityBlueprints\\GoblinEngineerBlueprint.cs",
               "RelativeDocumentMoniker": "DungeonCrawlerWorld\\GameManagers\\EntityFactoryManager\\EntityBlueprints\\GoblinEngineerBlueprint.cs",
               "ToolTip": "C:\\Users\\crobe\\source\\repos\\DungeonCrawlerWorld\\DungeonCrawlerWorld\\GameManagers\\EntityFactoryManager\\EntityBlueprints\\GoblinEngineerBlueprint.cs",
               "RelativeToolTip": "DungeonCrawlerWorld\\GameManagers\\EntityFactoryManager\\EntityBlueprints\\GoblinEngineerBlueprint.cs",
-              "ViewState": "AgIAAAAAAAAAAAAAAAAqwAkAAADiAAAAAAAAAA==",
               "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000738|",
               "WhenOpened": "2024-12-31T18:56:31.233Z"
             },
             {
               "$type": "Document",
-              "DocumentIndex": 1,
+              "DocumentIndex": 7,
               "Title": "IModifierFactoryTemplate.cs",
               "DocumentMoniker": "C:\\Users\\crobe\\source\\repos\\DungeonCrawlerWorld\\DungeonCrawlerWorld\\GameManagers\\EntityFactoryManager\\IModifierFactoryTemplate.cs",
               "RelativeDocumentMoniker": "DungeonCrawlerWorld\\GameManagers\\EntityFactoryManager\\IModifierFactoryTemplate.cs",
@@ -302,115 +258,170 @@
             },
             {
               "$type": "Document",
-              "DocumentIndex": 18,
+              "DocumentIndex": 0,
+              "Title": "MapWindow.cs",
+              "DocumentMoniker": "C:\\Users\\crobe\\source\\repos\\DungeonCrawlerWorld\\DungeonCrawlerWorld\\GameManagers\\UserInterfaceManager\\Windows\\MapWindow.cs",
+              "RelativeDocumentMoniker": "DungeonCrawlerWorld\\GameManagers\\UserInterfaceManager\\Windows\\MapWindow.cs",
+              "ToolTip": "C:\\Users\\crobe\\source\\repos\\DungeonCrawlerWorld\\DungeonCrawlerWorld\\GameManagers\\UserInterfaceManager\\Windows\\MapWindow.cs",
+              "RelativeToolTip": "DungeonCrawlerWorld\\GameManagers\\UserInterfaceManager\\Windows\\MapWindow.cs",
+              "ViewState": "AgIAAAcBAAAAAAAAAAAAABABAACeAAAAAAAAAA==",
+              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000738|",
+              "WhenOpened": "2025-11-17T02:46:54.672Z",
+              "EditorCaption": ""
+            },
+            {
+              "$type": "Document",
+              "DocumentIndex": 3,
+              "Title": "Window.cs",
+              "DocumentMoniker": "C:\\Users\\crobe\\source\\repos\\DungeonCrawlerWorld\\DungeonCrawlerWorld\\GameManagers\\UserInterfaceManager\\Windows\\Window.cs",
+              "RelativeDocumentMoniker": "DungeonCrawlerWorld\\GameManagers\\UserInterfaceManager\\Windows\\Window.cs",
+              "ToolTip": "C:\\Users\\crobe\\source\\repos\\DungeonCrawlerWorld\\DungeonCrawlerWorld\\GameManagers\\UserInterfaceManager\\Windows\\Window.cs",
+              "RelativeToolTip": "DungeonCrawlerWorld\\GameManagers\\UserInterfaceManager\\Windows\\Window.cs",
+              "ViewState": "AgIAAE0AAAAAAAAAAAAvwFwAAAAhAAAAAAAAAA==",
+              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000738|",
+              "WhenOpened": "2025-11-17T02:49:09.355Z"
+            },
+            {
+              "$type": "Document",
+              "DocumentIndex": 12,
               "Title": "HealthRegenSystem.cs",
               "DocumentMoniker": "C:\\Users\\crobe\\source\\repos\\DungeonCrawlerWorld\\DungeonCrawlerWorld\\ComponentSystems\\HealthRegenSystem.cs",
               "RelativeDocumentMoniker": "DungeonCrawlerWorld\\ComponentSystems\\HealthRegenSystem.cs",
               "ToolTip": "C:\\Users\\crobe\\source\\repos\\DungeonCrawlerWorld\\DungeonCrawlerWorld\\ComponentSystems\\HealthRegenSystem.cs",
               "RelativeToolTip": "DungeonCrawlerWorld\\ComponentSystems\\HealthRegenSystem.cs",
-              "ViewState": "AgIAAAAAAAAAAAAAAAAAAAQAAAAuAAAAAAAAAA==",
+              "ViewState": "AgIAAAAAAAAAAAAAAAAAAAQAAAAlAAAAAAAAAA==",
               "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000738|",
               "WhenOpened": "2025-01-01T00:01:17.007Z"
             },
             {
               "$type": "Document",
-              "DocumentIndex": 14,
+              "DocumentIndex": 4,
+              "Title": "GameLoop.cs",
+              "DocumentMoniker": "C:\\Users\\crobe\\source\\repos\\DungeonCrawlerWorld\\DungeonCrawlerWorld\\GameLoop.cs",
+              "RelativeDocumentMoniker": "DungeonCrawlerWorld\\GameLoop.cs",
+              "ToolTip": "C:\\Users\\crobe\\source\\repos\\DungeonCrawlerWorld\\DungeonCrawlerWorld\\GameLoop.cs",
+              "RelativeToolTip": "DungeonCrawlerWorld\\GameLoop.cs",
+              "ViewState": "AgIAAFwAAAAAAAAAAAAAAHQAAAAxAAAAAAAAAA==",
+              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000738|",
+              "WhenOpened": "2024-12-12T17:46:09.519Z"
+            },
+            {
+              "$type": "Document",
+              "DocumentIndex": 5,
+              "Title": "Game.cs",
+              "DocumentMoniker": "C:\\Users\\crobe\\source\\repos\\FNA\\src\\Game.cs",
+              "RelativeDocumentMoniker": "..\\FNA\\src\\Game.cs",
+              "ToolTip": "C:\\Users\\crobe\\source\\repos\\FNA\\src\\Game.cs",
+              "RelativeToolTip": "..\\FNA\\src\\Game.cs",
+              "ViewState": "AgIAAAAAAAAAAAAAAAAAABEAAAASAAAAAAAAAA==",
+              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000738|",
+              "WhenOpened": "2025-11-17T01:23:52.236Z"
+            },
+            {
+              "$type": "Document",
+              "DocumentIndex": 6,
+              "Title": "EntityFactoryManager.cs",
+              "DocumentMoniker": "C:\\Users\\crobe\\source\\repos\\DungeonCrawlerWorld\\DungeonCrawlerWorld\\GameManagers\\EntityFactoryManager\\EntityFactoryManager.cs",
+              "RelativeDocumentMoniker": "DungeonCrawlerWorld\\GameManagers\\EntityFactoryManager\\EntityFactoryManager.cs",
+              "ToolTip": "C:\\Users\\crobe\\source\\repos\\DungeonCrawlerWorld\\DungeonCrawlerWorld\\GameManagers\\EntityFactoryManager\\EntityFactoryManager.cs",
+              "RelativeToolTip": "DungeonCrawlerWorld\\GameManagers\\EntityFactoryManager\\EntityFactoryManager.cs",
+              "ViewState": "AgIAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA==",
+              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000738|",
+              "WhenOpened": "2025-01-01T15:54:13.648Z"
+            },
+            {
+              "$type": "Document",
+              "DocumentIndex": 35,
               "Title": "Wall.cs",
               "DocumentMoniker": "C:\\Users\\crobe\\source\\repos\\DungeonCrawlerWorld\\DungeonCrawlerWorld\\GameManagers\\EntityFactoryManager\\Objects\\Wall.cs",
               "RelativeDocumentMoniker": "DungeonCrawlerWorld\\GameManagers\\EntityFactoryManager\\Objects\\Wall.cs",
               "ToolTip": "C:\\Users\\crobe\\source\\repos\\DungeonCrawlerWorld\\DungeonCrawlerWorld\\GameManagers\\EntityFactoryManager\\Objects\\Wall.cs",
               "RelativeToolTip": "DungeonCrawlerWorld\\GameManagers\\EntityFactoryManager\\Objects\\Wall.cs",
-              "ViewState": "AgIAAAAAAAAAAAAAAAAqwAwAAABCAAAAAAAAAA==",
               "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000738|",
               "WhenOpened": "2024-12-17T02:52:54.541Z"
             },
             {
               "$type": "Document",
-              "DocumentIndex": 9,
+              "DocumentIndex": 10,
               "Title": "Engineer.cs",
               "DocumentMoniker": "C:\\Users\\crobe\\source\\repos\\DungeonCrawlerWorld\\DungeonCrawlerWorld\\GameManagers\\EntityFactoryManager\\EntityClasses\\Engineer.cs",
               "RelativeDocumentMoniker": "DungeonCrawlerWorld\\GameManagers\\EntityFactoryManager\\EntityClasses\\Engineer.cs",
               "ToolTip": "C:\\Users\\crobe\\source\\repos\\DungeonCrawlerWorld\\DungeonCrawlerWorld\\GameManagers\\EntityFactoryManager\\EntityClasses\\Engineer.cs",
               "RelativeToolTip": "DungeonCrawlerWorld\\GameManagers\\EntityFactoryManager\\EntityClasses\\Engineer.cs",
-              "ViewState": "AgIAAAAAAAAAAAAAAAAqwBgAAAAMAAAAAAAAAA==",
+              "ViewState": "AgIAAAAAAAAAAAAAAAAqwBgAAAAJAAAAAAAAAA==",
               "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000738|",
               "WhenOpened": "2024-12-30T01:12:15.591Z"
             },
             {
               "$type": "Document",
-              "DocumentIndex": 16,
+              "DocumentIndex": 36,
               "Title": "ClassGlyphComponent.cs",
               "DocumentMoniker": "C:\\Users\\crobe\\source\\repos\\DungeonCrawlerWorld\\DungeonCrawlerWorld\\Components\\ClassGlyphComponent.cs",
               "RelativeDocumentMoniker": "DungeonCrawlerWorld\\Components\\ClassGlyphComponent.cs",
               "ToolTip": "C:\\Users\\crobe\\source\\repos\\DungeonCrawlerWorld\\DungeonCrawlerWorld\\Components\\ClassGlyphComponent.cs",
               "RelativeToolTip": "DungeonCrawlerWorld\\Components\\ClassGlyphComponent.cs",
-              "ViewState": "AgIAAAAAAAAAAAAAAAAAABYAAABDAAAAAAAAAA==",
               "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000738|",
               "WhenOpened": "2025-01-01T00:57:19.106Z"
             },
             {
               "$type": "Document",
-              "DocumentIndex": 7,
+              "DocumentIndex": 37,
               "Title": "Lava.cs",
               "DocumentMoniker": "C:\\Users\\crobe\\source\\repos\\DungeonCrawlerWorld\\DungeonCrawlerWorld\\GameManagers\\EntityFactoryManager\\Terrain\\Lava.cs",
               "RelativeDocumentMoniker": "DungeonCrawlerWorld\\GameManagers\\EntityFactoryManager\\Terrain\\Lava.cs",
               "ToolTip": "C:\\Users\\crobe\\source\\repos\\DungeonCrawlerWorld\\DungeonCrawlerWorld\\GameManagers\\EntityFactoryManager\\Terrain\\Lava.cs",
               "RelativeToolTip": "DungeonCrawlerWorld\\GameManagers\\EntityFactoryManager\\Terrain\\Lava.cs",
-              "ViewState": "AgIAAAAAAAAAAAAAAAAAAA4AAAAhAAAAAAAAAA==",
               "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000738|",
               "WhenOpened": "2024-12-31T23:37:43.055Z"
             },
             {
               "$type": "Document",
-              "DocumentIndex": 6,
+              "DocumentIndex": 9,
               "Title": "ComponentRepo.cs",
               "DocumentMoniker": "C:\\Users\\crobe\\source\\repos\\DungeonCrawlerWorld\\DungeonCrawlerWorld\\Components\\ComponentRepo.cs",
               "RelativeDocumentMoniker": "DungeonCrawlerWorld\\Components\\ComponentRepo.cs",
               "ToolTip": "C:\\Users\\crobe\\source\\repos\\DungeonCrawlerWorld\\DungeonCrawlerWorld\\Components\\ComponentRepo.cs",
               "RelativeToolTip": "DungeonCrawlerWorld\\Components\\ComponentRepo.cs",
-              "ViewState": "AgIAAAAAAAAAAAAAAAAAABoAAAAxAAAAAAAAAA==",
+              "ViewState": "AgIAAAAAAAAAAAAAAAAAABoAAAAVAAAAAAAAAA==",
               "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000738|",
               "WhenOpened": "2024-12-31T23:58:33.349Z"
             },
             {
               "$type": "Document",
-              "DocumentIndex": 13,
+              "DocumentIndex": 38,
               "Title": "Dirt.cs",
               "DocumentMoniker": "C:\\Users\\crobe\\source\\repos\\DungeonCrawlerWorld\\DungeonCrawlerWorld\\GameManagers\\EntityFactoryManager\\Terrain\\Dirt.cs",
               "RelativeDocumentMoniker": "DungeonCrawlerWorld\\GameManagers\\EntityFactoryManager\\Terrain\\Dirt.cs",
               "ToolTip": "C:\\Users\\crobe\\source\\repos\\DungeonCrawlerWorld\\DungeonCrawlerWorld\\GameManagers\\EntityFactoryManager\\Terrain\\Dirt.cs",
               "RelativeToolTip": "DungeonCrawlerWorld\\GameManagers\\EntityFactoryManager\\Terrain\\Dirt.cs",
-              "ViewState": "AgIAAAAAAAAAAAAAAAAqwAgAAAARAAAAAAAAAA==",
               "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000738|",
               "WhenOpened": "2025-01-01T01:52:37.016Z"
             },
             {
               "$type": "Document",
-              "DocumentIndex": 12,
+              "DocumentIndex": 39,
               "Title": "Grass.cs",
               "DocumentMoniker": "C:\\Users\\crobe\\source\\repos\\DungeonCrawlerWorld\\DungeonCrawlerWorld\\GameManagers\\EntityFactoryManager\\Terrain\\Grass.cs",
               "RelativeDocumentMoniker": "DungeonCrawlerWorld\\GameManagers\\EntityFactoryManager\\Terrain\\Grass.cs",
               "ToolTip": "C:\\Users\\crobe\\source\\repos\\DungeonCrawlerWorld\\DungeonCrawlerWorld\\GameManagers\\EntityFactoryManager\\Terrain\\Grass.cs",
               "RelativeToolTip": "DungeonCrawlerWorld\\GameManagers\\EntityFactoryManager\\Terrain\\Grass.cs",
-              "ViewState": "AgIAAAAAAAAAAAAAAAAAAAwAAAAXAAAAAAAAAA==",
               "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000738|",
               "WhenOpened": "2025-01-01T01:52:51.528Z"
             },
             {
               "$type": "Document",
-              "DocumentIndex": 11,
+              "DocumentIndex": 40,
               "Title": "StoneFloor.cs",
               "DocumentMoniker": "C:\\Users\\crobe\\source\\repos\\DungeonCrawlerWorld\\DungeonCrawlerWorld\\GameManagers\\EntityFactoryManager\\Terrain\\StoneFloor.cs",
               "RelativeDocumentMoniker": "DungeonCrawlerWorld\\GameManagers\\EntityFactoryManager\\Terrain\\StoneFloor.cs",
               "ToolTip": "C:\\Users\\crobe\\source\\repos\\DungeonCrawlerWorld\\DungeonCrawlerWorld\\GameManagers\\EntityFactoryManager\\Terrain\\StoneFloor.cs",
               "RelativeToolTip": "DungeonCrawlerWorld\\GameManagers\\EntityFactoryManager\\Terrain\\StoneFloor.cs",
-              "ViewState": "AgIAAAAAAAAAAAAAAAAAAAoAAAA1AAAAAAAAAA==",
               "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000738|",
               "WhenOpened": "2025-01-01T01:52:56.282Z"
             },
             {
               "$type": "Document",
-              "DocumentIndex": 20,
+              "DocumentIndex": 14,
               "Title": "HealthComponent.cs",
               "DocumentMoniker": "C:\\Users\\crobe\\source\\repos\\DungeonCrawlerWorld\\DungeonCrawlerWorld\\Components\\HealthComponent.cs",
               "RelativeDocumentMoniker": "DungeonCrawlerWorld\\Components\\HealthComponent.cs",
@@ -422,7 +433,7 @@
             },
             {
               "$type": "Document",
-              "DocumentIndex": 17,
+              "DocumentIndex": 11,
               "Title": "ComponentSystemManager.cs",
               "DocumentMoniker": "C:\\Users\\crobe\\source\\repos\\DungeonCrawlerWorld\\DungeonCrawlerWorld\\GameManagers\\ComponentSystemManager.cs",
               "RelativeDocumentMoniker": "DungeonCrawlerWorld\\GameManagers\\ComponentSystemManager.cs",
@@ -434,43 +445,43 @@
             },
             {
               "$type": "Document",
-              "DocumentIndex": 19,
+              "DocumentIndex": 13,
               "Title": "EnergyRechargeSystem.cs",
               "DocumentMoniker": "C:\\Users\\crobe\\source\\repos\\DungeonCrawlerWorld\\DungeonCrawlerWorld\\ComponentSystems\\EnergyRechargeSystem.cs",
               "RelativeDocumentMoniker": "DungeonCrawlerWorld\\ComponentSystems\\EnergyRechargeSystem.cs",
               "ToolTip": "C:\\Users\\crobe\\source\\repos\\DungeonCrawlerWorld\\DungeonCrawlerWorld\\ComponentSystems\\EnergyRechargeSystem.cs",
               "RelativeToolTip": "DungeonCrawlerWorld\\ComponentSystems\\EnergyRechargeSystem.cs",
-              "ViewState": "AgIAAAYAAAAAAAAAAAAAABUAAAA+AAAAAAAAAA==",
+              "ViewState": "AgIAAAAAAAAAAAAAAIBZwBUAAAA+AAAAAAAAAA==",
               "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000738|",
               "WhenOpened": "2024-12-11T01:48:56.74Z"
             },
             {
               "$type": "Document",
-              "DocumentIndex": 21,
+              "DocumentIndex": 15,
               "Title": "EnergyComponent.cs",
               "DocumentMoniker": "C:\\Users\\crobe\\source\\repos\\DungeonCrawlerWorld\\DungeonCrawlerWorld\\Components\\EnergyComponent.cs",
               "RelativeDocumentMoniker": "DungeonCrawlerWorld\\Components\\EnergyComponent.cs",
               "ToolTip": "C:\\Users\\crobe\\source\\repos\\DungeonCrawlerWorld\\DungeonCrawlerWorld\\Components\\EnergyComponent.cs",
               "RelativeToolTip": "DungeonCrawlerWorld\\Components\\EnergyComponent.cs",
-              "ViewState": "AgIAAAIAAAAAAAAAAAAqwBgAAAApAAAAAAAAAA==",
+              "ViewState": "AgIAAAIAAAAAAAAAAAAqwBgAAAAAAAAAAAAAAA==",
               "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000738|",
               "WhenOpened": "2024-12-15T18:05:56.504Z"
             },
             {
               "$type": "Document",
-              "DocumentIndex": 23,
+              "DocumentIndex": 16,
               "Title": "MovementSystem.cs",
               "DocumentMoniker": "C:\\Users\\crobe\\source\\repos\\DungeonCrawlerWorld\\DungeonCrawlerWorld\\ComponentSystems\\MovementSystem.cs",
               "RelativeDocumentMoniker": "DungeonCrawlerWorld\\ComponentSystems\\MovementSystem.cs",
               "ToolTip": "C:\\Users\\crobe\\source\\repos\\DungeonCrawlerWorld\\DungeonCrawlerWorld\\ComponentSystems\\MovementSystem.cs",
               "RelativeToolTip": "DungeonCrawlerWorld\\ComponentSystems\\MovementSystem.cs",
-              "ViewState": "AgIAACwAAAAAAAAAAAAAADsAAAAMAAAAAAAAAA==",
+              "ViewState": "AgIAACYAAAAAAAAAAIBZwDsAAAAMAAAAAAAAAA==",
               "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000738|",
               "WhenOpened": "2024-12-31T17:45:50.218Z"
             },
             {
               "$type": "Document",
-              "DocumentIndex": 25,
+              "DocumentIndex": 18,
               "Title": "World.cs",
               "DocumentMoniker": "C:\\Users\\crobe\\source\\repos\\DungeonCrawlerWorld\\DungeonCrawlerWorld\\Data\\World.cs",
               "RelativeDocumentMoniker": "DungeonCrawlerWorld\\Data\\World.cs",
@@ -482,55 +493,42 @@
             },
             {
               "$type": "Document",
-              "DocumentIndex": 24,
+              "DocumentIndex": 17,
               "Title": "MovementComponent.cs",
               "DocumentMoniker": "C:\\Users\\crobe\\source\\repos\\DungeonCrawlerWorld\\DungeonCrawlerWorld\\Components\\MovementComponent.cs",
               "RelativeDocumentMoniker": "DungeonCrawlerWorld\\Components\\MovementComponent.cs",
               "ToolTip": "C:\\Users\\crobe\\source\\repos\\DungeonCrawlerWorld\\DungeonCrawlerWorld\\Components\\MovementComponent.cs",
               "RelativeToolTip": "DungeonCrawlerWorld\\Components\\MovementComponent.cs",
-              "ViewState": "AgIAAAsAAAAAAAAAAAAQwBQAAAA4AAAAAAAAAA==",
+              "ViewState": "AgIAAAsAAAAAAAAAAAAQwBQAAAAvAAAAAAAAAA==",
               "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000738|",
               "WhenOpened": "2024-12-31T18:18:13.999Z"
             },
             {
               "$type": "Document",
-              "DocumentIndex": 22,
-              "Title": "GameLoop.cs",
-              "DocumentMoniker": "C:\\Users\\crobe\\source\\repos\\DungeonCrawlerWorld\\DungeonCrawlerWorld\\GameLoop.cs",
-              "RelativeDocumentMoniker": "DungeonCrawlerWorld\\GameLoop.cs",
-              "ToolTip": "C:\\Users\\crobe\\source\\repos\\DungeonCrawlerWorld\\DungeonCrawlerWorld\\GameLoop.cs",
-              "RelativeToolTip": "DungeonCrawlerWorld\\GameLoop.cs",
-              "ViewState": "AgIAAAAAAAAAAAAAAAAAAAsAAAA8AAAAAAAAAA==",
-              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000738|",
-              "WhenOpened": "2024-12-12T17:46:09.519Z"
-            },
-            {
-              "$type": "Document",
-              "DocumentIndex": 26,
+              "DocumentIndex": 19,
               "Title": "UserInterfaceManager.cs",
               "DocumentMoniker": "C:\\Users\\crobe\\source\\repos\\DungeonCrawlerWorld\\DungeonCrawlerWorld\\GameManagers\\UserInterfaceManager\\UserInterfaceManager.cs",
               "RelativeDocumentMoniker": "DungeonCrawlerWorld\\GameManagers\\UserInterfaceManager\\UserInterfaceManager.cs",
               "ToolTip": "C:\\Users\\crobe\\source\\repos\\DungeonCrawlerWorld\\DungeonCrawlerWorld\\GameManagers\\UserInterfaceManager\\UserInterfaceManager.cs",
               "RelativeToolTip": "DungeonCrawlerWorld\\GameManagers\\UserInterfaceManager\\UserInterfaceManager.cs",
-              "ViewState": "AgIAAAAAAAAAAAAAAAAqwAsAAAARAAAAAAAAAA==",
+              "ViewState": "AgIAAAAAAAAAAAAAAAAqwAsAAAAEAAAAAAAAAA==",
               "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000738|",
               "WhenOpened": "2024-12-12T17:51:51.488Z"
             },
             {
               "$type": "Document",
-              "DocumentIndex": 27,
+              "DocumentIndex": 41,
               "Title": "UserInterfaceComponent.cs",
               "DocumentMoniker": "C:\\Users\\crobe\\source\\repos\\DungeonCrawlerWorld\\DungeonCrawlerWorld\\GameManagers\\UserInterfaceManager\\UserInterfaceComponents\\UserInterfaceComponent.cs",
               "RelativeDocumentMoniker": "DungeonCrawlerWorld\\GameManagers\\UserInterfaceManager\\UserInterfaceComponents\\UserInterfaceComponent.cs",
               "ToolTip": "C:\\Users\\crobe\\source\\repos\\DungeonCrawlerWorld\\DungeonCrawlerWorld\\GameManagers\\UserInterfaceManager\\UserInterfaceComponents\\UserInterfaceComponent.cs",
               "RelativeToolTip": "DungeonCrawlerWorld\\GameManagers\\UserInterfaceManager\\UserInterfaceComponents\\UserInterfaceComponent.cs",
-              "ViewState": "AgIAAAAAAAAAAAAAAAAAABkAAAA1AAAAAAAAAA==",
               "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000738|",
               "WhenOpened": "2024-12-17T02:12:52.114Z"
             },
             {
               "$type": "Document",
-              "DocumentIndex": 28,
+              "DocumentIndex": 20,
               "Title": "GameEvent.cs",
               "DocumentMoniker": "C:\\Users\\crobe\\source\\repos\\DungeonCrawlerWorld\\DungeonCrawlerWorld\\Actions\\GameEvent.cs",
               "RelativeDocumentMoniker": "DungeonCrawlerWorld\\Actions\\GameEvent.cs",
@@ -542,31 +540,30 @@
             },
             {
               "$type": "Document",
-              "DocumentIndex": 29,
+              "DocumentIndex": 21,
               "Title": "Map.cs",
               "DocumentMoniker": "C:\\Users\\crobe\\source\\repos\\DungeonCrawlerWorld\\DungeonCrawlerWorld\\Data\\Map\\Map.cs",
               "RelativeDocumentMoniker": "DungeonCrawlerWorld\\Data\\Map\\Map.cs",
               "ToolTip": "C:\\Users\\crobe\\source\\repos\\DungeonCrawlerWorld\\DungeonCrawlerWorld\\Data\\Map\\Map.cs",
               "RelativeToolTip": "DungeonCrawlerWorld\\Data\\Map\\Map.cs",
-              "ViewState": "AgIAAAEAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA==",
+              "ViewState": "AgIAAAAAAAAAAAAAAAAxwAAAAAAAAAAAAAAAAA==",
               "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000738|",
               "WhenOpened": "2024-12-15T02:52:10.6Z"
             },
             {
               "$type": "Document",
-              "DocumentIndex": 30,
+              "DocumentIndex": 42,
               "Title": "StringUtility.cs",
               "DocumentMoniker": "C:\\Users\\crobe\\source\\repos\\DungeonCrawlerWorld\\DungeonCrawlerWorld\\GameManagers\\UserInterfaceManager\\Objects\\StringUtility.cs",
               "RelativeDocumentMoniker": "DungeonCrawlerWorld\\GameManagers\\UserInterfaceManager\\Objects\\StringUtility.cs",
               "ToolTip": "C:\\Users\\crobe\\source\\repos\\DungeonCrawlerWorld\\DungeonCrawlerWorld\\GameManagers\\UserInterfaceManager\\Objects\\StringUtility.cs",
               "RelativeToolTip": "DungeonCrawlerWorld\\GameManagers\\UserInterfaceManager\\Objects\\StringUtility.cs",
-              "ViewState": "AgIAAAAAAAAAAAAAAAAAAAUAAAAAAAAAAAAAAA==",
               "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000738|",
               "WhenOpened": "2024-08-07T18:53:21.419Z"
             },
             {
               "$type": "Document",
-              "DocumentIndex": 31,
+              "DocumentIndex": 22,
               "Title": "DataAccessService.cs",
               "DocumentMoniker": "C:\\Users\\crobe\\source\\repos\\DungeonCrawlerWorld\\DungeonCrawlerWorld\\Services\\DataAccessService.cs",
               "RelativeDocumentMoniker": "DungeonCrawlerWorld\\Services\\DataAccessService.cs",
@@ -578,7 +575,7 @@
             },
             {
               "$type": "Document",
-              "DocumentIndex": 32,
+              "DocumentIndex": 23,
               "Title": "Program.cs",
               "DocumentMoniker": "C:\\Users\\crobe\\source\\repos\\DungeonCrawlerWorld\\DungeonCrawlerWorld\\Program.cs",
               "RelativeDocumentMoniker": "DungeonCrawlerWorld\\Program.cs",
@@ -590,31 +587,18 @@
             },
             {
               "$type": "Document",
-              "DocumentIndex": 33,
-              "Title": "FontService.cs",
-              "DocumentMoniker": "C:\\Users\\crobe\\source\\repos\\DungeonCrawlerWorld\\DungeonCrawlerWorld\\Services\\FontService.cs",
-              "RelativeDocumentMoniker": "DungeonCrawlerWorld\\Services\\FontService.cs",
-              "ToolTip": "C:\\Users\\crobe\\source\\repos\\DungeonCrawlerWorld\\DungeonCrawlerWorld\\Services\\FontService.cs",
-              "RelativeToolTip": "DungeonCrawlerWorld\\Services\\FontService.cs",
-              "ViewState": "AgIAABkAAAAAAAAAAAAqwBEAAAAgAAAAAAAAAA==",
-              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000738|",
-              "WhenOpened": "2024-12-17T02:20:22.107Z"
-            },
-            {
-              "$type": "Document",
-              "DocumentIndex": 34,
+              "DocumentIndex": 43,
               "Title": "AnnouncementDisplay.cs",
               "DocumentMoniker": "C:\\Users\\crobe\\source\\repos\\DungeonCrawlerWorld\\DungeonCrawlerWorld\\GameManagers\\UserInterfaceManager\\UserInterfaceComponents\\AnnouncementDisplay.cs",
               "RelativeDocumentMoniker": "DungeonCrawlerWorld\\GameManagers\\UserInterfaceManager\\UserInterfaceComponents\\AnnouncementDisplay.cs",
               "ToolTip": "C:\\Users\\crobe\\source\\repos\\DungeonCrawlerWorld\\DungeonCrawlerWorld\\GameManagers\\UserInterfaceManager\\UserInterfaceComponents\\AnnouncementDisplay.cs",
               "RelativeToolTip": "DungeonCrawlerWorld\\GameManagers\\UserInterfaceManager\\UserInterfaceComponents\\AnnouncementDisplay.cs",
-              "ViewState": "AgIAAAAAAAAAAAAAAAAAAAgAAAAqAAAAAAAAAA==",
               "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000738|",
               "WhenOpened": "2024-11-24T17:06:28.66Z"
             },
             {
               "$type": "Document",
-              "DocumentIndex": 35,
+              "DocumentIndex": 24,
               "Title": "FontType.cs",
               "DocumentMoniker": "C:\\Users\\crobe\\source\\repos\\DungeonCrawlerWorld\\DungeonCrawlerWorld\\GameManagers\\UserInterfaceManager\\Objects\\FontType.cs",
               "RelativeDocumentMoniker": "DungeonCrawlerWorld\\GameManagers\\UserInterfaceManager\\Objects\\FontType.cs",
@@ -626,7 +610,7 @@
             },
             {
               "$type": "Document",
-              "DocumentIndex": 36,
+              "DocumentIndex": 25,
               "Title": "InputMode.cs",
               "DocumentMoniker": "C:\\Users\\crobe\\source\\repos\\DungeonCrawlerWorld\\DungeonCrawlerWorld\\GameManagers\\UserInterfaceManager\\Objects\\InputMode.cs",
               "RelativeDocumentMoniker": "DungeonCrawlerWorld\\GameManagers\\UserInterfaceManager\\Objects\\InputMode.cs",
@@ -638,7 +622,7 @@
             },
             {
               "$type": "Document",
-              "DocumentIndex": 37,
+              "DocumentIndex": 26,
               "Title": "ZoomLevel.cs",
               "DocumentMoniker": "C:\\Users\\crobe\\source\\repos\\DungeonCrawlerWorld\\DungeonCrawlerWorld\\GameManagers\\UserInterfaceManager\\Objects\\ZoomLevel.cs",
               "RelativeDocumentMoniker": "DungeonCrawlerWorld\\GameManagers\\UserInterfaceManager\\Objects\\ZoomLevel.cs",
@@ -650,19 +634,19 @@
             },
             {
               "$type": "Document",
-              "DocumentIndex": 38,
+              "DocumentIndex": 27,
               "Title": "SpriteBatchService.cs",
               "DocumentMoniker": "C:\\Users\\crobe\\source\\repos\\DungeonCrawlerWorld\\DungeonCrawlerWorld\\Services\\SpriteBatchService.cs",
               "RelativeDocumentMoniker": "DungeonCrawlerWorld\\Services\\SpriteBatchService.cs",
               "ToolTip": "C:\\Users\\crobe\\source\\repos\\DungeonCrawlerWorld\\DungeonCrawlerWorld\\Services\\SpriteBatchService.cs",
               "RelativeToolTip": "DungeonCrawlerWorld\\Services\\SpriteBatchService.cs",
-              "ViewState": "AgIAABkAAAAAAAAAAAAcwA0AAAAcAAAAAAAAAA==",
+              "ViewState": "AgIAABkAAAAAAAAAAAAcwA0AAAASAAAAAAAAAA==",
               "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000738|",
               "WhenOpened": "2024-12-17T02:21:08.777Z"
             },
             {
               "$type": "Document",
-              "DocumentIndex": 39,
+              "DocumentIndex": 28,
               "Title": "GameServices.cs",
               "DocumentMoniker": "C:\\Users\\crobe\\source\\repos\\DungeonCrawlerWorld\\DungeonCrawlerWorld\\Services\\GameServices.cs",
               "RelativeDocumentMoniker": "DungeonCrawlerWorld\\Services\\GameServices.cs",
@@ -674,31 +658,31 @@
             },
             {
               "$type": "Document",
-              "DocumentIndex": 41,
+              "DocumentIndex": 30,
               "Title": "MapNode.cs",
               "DocumentMoniker": "C:\\Users\\crobe\\source\\repos\\DungeonCrawlerWorld\\DungeonCrawlerWorld\\Data\\Map\\MapNode.cs",
               "RelativeDocumentMoniker": "DungeonCrawlerWorld\\Data\\Map\\MapNode.cs",
               "ToolTip": "C:\\Users\\crobe\\source\\repos\\DungeonCrawlerWorld\\DungeonCrawlerWorld\\Data\\Map\\MapNode.cs",
               "RelativeToolTip": "DungeonCrawlerWorld\\Data\\Map\\MapNode.cs",
-              "ViewState": "AgIAAA0AAAAAAAAAAAA0wBIAAAAAAAAAAAAAAA==",
+              "ViewState": "AgIAAA4AAAAAAAAAAAA9wBIAAAAAAAAAAAAAAA==",
               "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000738|",
               "WhenOpened": "2024-12-17T01:54:01.305Z"
             },
             {
               "$type": "Document",
-              "DocumentIndex": 40,
+              "DocumentIndex": 29,
               "Title": "GameVariables.cs",
               "DocumentMoniker": "C:\\Users\\crobe\\source\\repos\\DungeonCrawlerWorld\\DungeonCrawlerWorld\\Data\\GameVariables.cs",
               "RelativeDocumentMoniker": "DungeonCrawlerWorld\\Data\\GameVariables.cs",
               "ToolTip": "C:\\Users\\crobe\\source\\repos\\DungeonCrawlerWorld\\DungeonCrawlerWorld\\Data\\GameVariables.cs",
               "RelativeToolTip": "DungeonCrawlerWorld\\Data\\GameVariables.cs",
-              "ViewState": "AgIAAAAAAAAAAAAAAAAAAAMAAAAFAAAAAAAAAA==",
+              "ViewState": "AgIAAAAAAAAAAAAAAAAAAAMAAAABAAAAAAAAAA==",
               "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000738|",
               "WhenOpened": "2024-08-31T21:38:08.666Z"
             },
             {
               "$type": "Document",
-              "DocumentIndex": 42,
+              "DocumentIndex": 31,
               "Title": "IAction.cs",
               "DocumentMoniker": "C:\\Users\\crobe\\source\\repos\\DungeonCrawlerWorld\\DungeonCrawlerWorld\\Actions\\IAction.cs",
               "RelativeDocumentMoniker": "DungeonCrawlerWorld\\Actions\\IAction.cs",
@@ -710,19 +694,7 @@
             },
             {
               "$type": "Document",
-              "DocumentIndex": 44,
-              "Title": "Content.mgcb",
-              "DocumentMoniker": "C:\\Users\\crobe\\source\\repos\\DungeonCrawlerWorld\\DungeonCrawlerWorld\\Content\\Content.mgcb",
-              "RelativeDocumentMoniker": "DungeonCrawlerWorld\\Content\\Content.mgcb",
-              "ToolTip": "C:\\Users\\crobe\\source\\repos\\DungeonCrawlerWorld\\DungeonCrawlerWorld\\Content\\Content.mgcb",
-              "RelativeToolTip": "DungeonCrawlerWorld\\Content\\Content.mgcb",
-              "ViewState": "AgIAAAAAAAAAAAAAAAAAABYAAAAAAAAAAAAAAA==",
-              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.001001|",
-              "WhenOpened": "2024-08-05T00:27:06.021Z"
-            },
-            {
-              "$type": "Document",
-              "DocumentIndex": 43,
+              "DocumentIndex": 32,
               "Title": "MonoGame.Content.Builder.Task.targets",
               "DocumentMoniker": "C:\\Users\\crobe\\.nuget\\packages\\monogame.content.builder.task\\3.8.1.303\\build\\MonoGame.Content.Builder.Task.targets",
               "RelativeDocumentMoniker": "..\\..\\..\\.nuget\\packages\\monogame.content.builder.task\\3.8.1.303\\build\\MonoGame.Content.Builder.Task.targets",

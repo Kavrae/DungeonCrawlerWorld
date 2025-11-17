@@ -1,7 +1,5 @@
+using FontStashSharp;
 using System.Collections.Generic;
-
-using Microsoft.Xna.Framework;
-using Microsoft.Xna.Framework.Graphics;
 
 namespace DungeonCrawlerWorld.Utilities
 {
@@ -14,8 +12,8 @@ namespace DungeonCrawlerWorld.Utilities
         /// The font can be specified for a specific display or default to the standard UI font.
         /// The CharacterWidth is calculated based on the given font to determine how many words/lines fit within the maximum pixel width for a line.
         /// </summary>
-        private SpriteFont _font;
-        public SpriteFont Font
+        private SpriteFontBase _font;
+        public SpriteFontBase Font
         {
             get
             {

@@ -1,4 +1,0 @@
-Source File,Dest File,Processor Type,Content Type,Source File Size,Dest File Size,Build Seconds
-"C:/Users/crobe/source/repos/DungeonCrawlerWorld/DungeonCrawlerWorld/Content/DefaultHugeFont.spritefont","C:/Users/crobe/source/repos/DungeonCrawlerWorld/DungeonCrawlerWorld/Content/bin/DesktopGL/DefaultHugeFont.xnb","FontDescriptionProcessor","SpriteFontContent",2068,70687,0.2266964
-"C:/Users/crobe/source/repos/DungeonCrawlerWorld/DungeonCrawlerWorld/Content/DefaultLargeFont.spritefont","C:/Users/crobe/source/repos/DungeonCrawlerWorld/DungeonCrawlerWorld/Content/bin/DesktopGL/DefaultLargeFont.xnb","FontDescriptionProcessor","SpriteFontContent",2068,37919,0.0226468
-"C:/Users/crobe/source/repos/DungeonCrawlerWorld/DungeonCrawlerWorld/Content/DefaultMediumFont.spritefont","C:/Users/crobe/source/repos/DungeonCrawlerWorld/DungeonCrawlerWorld/Content/bin/DesktopGL/DefaultMediumFont.xnb","FontDescriptionProcessor","SpriteFontContent",2067,13343,0.0157234

@@ -1,6 +1,7 @@
 ﻿using System;
 using System.Collections.Generic;
-using System.Linq;
+
+using FontStashSharp;
 
 using Microsoft.Xna.Framework;
 using Microsoft.Xna.Framework.Graphics;
@@ -90,7 +91,7 @@ namespace DungeonCrawlerWorld.GameManagers.UserInterfaceManager
         public bool IsTransparent { get { return _isTransparent; } }
 
         /*========Title========*/
-        protected SpriteFont TitleFont;
+        protected SpriteFontBase TitleFont;
 
         protected bool _showTitle;
         public bool ShowTitle { get { return _showTitle; } }
@@ -161,7 +162,7 @@ namespace DungeonCrawlerWorld.GameManagers.UserInterfaceManager
             graphicsDevice = GameServices.GetService<GraphicsDevice>();
 
             FontService = GameServices.GetService<FontService>();
-            TitleFont = FontService.GetFont("defaultFont");
+            TitleFont = FontService.GetFont(8);
 
             DataAccessService = GameServices.GetService<DataAccessService>();
             _gameVariables = DataAccessService.RetrieveGameVariables();
@@ -279,7 +280,7 @@ namespace DungeonCrawlerWorld.GameManagers.UserInterfaceManager
 
             spriteBatch.End();
             graphicsDevice.Viewport = previousViewport;
-            spriteBatch.Begin(SpriteSortMode.Deferred, BlendState.AlphaBlend, null, null, null, null, null);
+            spriteBatch.Begin(SpriteSortMode.Deferred, BlendState.AlphaBlend);
 
             if (_childWindows != null)
             {
@@ -292,12 +293,12 @@ namespace DungeonCrawlerWorld.GameManagers.UserInterfaceManager
 
         public virtual void DrawContent(GameTime gameTime, SpriteBatch spriteBatch, Texture2D unitRectangle) { }
 
-        public bool IsInDisplayRectangle(Point point)
+        public bool IsInDisplayRectangle(int x, int y)
         {
-            return _contentRectangle.Contains(point);
+            return _contentRectangle.Contains(x, y);
         }
 
-        public void HandleClick(Vector2 mousePosition)
+        public void HandleClick(Point mousePosition)
         {
             if (_titleRectangle.Contains(mousePosition))
             {
@@ -309,22 +310,22 @@ namespace DungeonCrawlerWorld.GameManagers.UserInterfaceManager
             }
         }
 
-        private void HandleTitleClick(Vector2 mousePosition)
+        private void HandleTitleClick(Point mousePosition)
         {
             OnTitleClickAction(mousePosition);
         }
 
-        protected virtual void OnTitleClickAction(Vector2 mousePosition)
+        protected virtual void OnTitleClickAction(Point mousePosition)
         {
             //Override in derived classes
         }
 
-        private void HandleContentClick(Vector2 mousePosition)
+        private void HandleContentClick(Point mousePosition)
         {
             OnContentClickAction(mousePosition);
         }
 
-        protected virtual void OnContentClickAction(Vector2 mousePosition)
+        protected virtual void OnContentClickAction(Point mousePosition)
         {
             foreach (var childWindow in _childWindows)
             {

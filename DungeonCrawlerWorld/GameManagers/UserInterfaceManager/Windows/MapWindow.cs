@@ -1,12 +1,15 @@
 ﻿using System;
 using System.Collections.Generic;
 
+using FontStashSharp;
+
 using Microsoft.Xna.Framework;
 using Microsoft.Xna.Framework.Graphics;
 
 using DungeonCrawlerWorld.Data;
 using DungeonCrawlerWorld.Services;
 using DungeonCrawlerWorld.Components;
+using DungeonCrawlerWorld.Utilities;
 
 namespace DungeonCrawlerWorld.GameManagers.UserInterfaceManager
 {
@@ -14,7 +17,7 @@ namespace DungeonCrawlerWorld.GameManagers.UserInterfaceManager
     {
         private readonly World world;
 
-        private Dictionary<FontType, SpriteFont> fonts;
+        private Dictionary<FontType, SpriteFontBase> fonts;
 
         private Point currentScrollPosition;
         private Point maxScrollPosition;
@@ -32,7 +35,6 @@ namespace DungeonCrawlerWorld.GameManagers.UserInterfaceManager
         Rectangle innerDrawRectangle;
 
         private Color?[] backgroundColorCache;
-        private RenderTarget2D backgroundRenderTarget;
 
         public MapWindow(World world, WindowOptions windowOptions) : base(null, windowOptions)
         {
@@ -55,10 +57,10 @@ namespace DungeonCrawlerWorld.GameManagers.UserInterfaceManager
         {
             base.Initialize();
 
-            var defaultMediumFont = FontService.GetFont("DefaultMediumFont");
-            var defaultLargeFont = FontService.GetFont("DefaultLargeFont");
-            var defaultHugeFont = FontService.GetFont("DefaultHugeFont");
-            fonts = new Dictionary<FontType, SpriteFont>
+            var defaultMediumFont = FontService.GetFont(8);
+            var defaultLargeFont = FontService.GetFont(16);
+            var defaultHugeFont = FontService.GetFont(14);
+            fonts = new Dictionary<FontType, SpriteFontBase>
             {
                 { FontType.DefaultMedium, defaultMediumFont },
                 { FontType.DefaultLarge, defaultLargeFont },
@@ -164,7 +166,7 @@ namespace DungeonCrawlerWorld.GameManagers.UserInterfaceManager
                             if (transformComponent.Position.X != mapNodeX) break;
                             if( transformComponent.Position.Y != mapNodeY) break;
 
-                            SpriteFont glyphFont = null;
+                            SpriteFontBase glyphFont = null;
                             if (transformComponent.Size.X == 1)
                             {
                                 glyphFont = fonts[FontType.DefaultMedium];
@@ -213,8 +215,8 @@ namespace DungeonCrawlerWorld.GameManagers.UserInterfaceManager
         {
             currentScrollPosition = new Point
             {
-                X = MathHelper.Clamp(currentScrollPosition.X + scrollChange.X, 0, maxScrollPosition.X),
-                Y = MathHelper.Clamp(currentScrollPosition.Y + scrollChange.Y, 0, maxScrollPosition.Y)
+                X = MathUtility.Clamp(currentScrollPosition.X + scrollChange.X, 0, maxScrollPosition.X),
+                Y = MathUtility.Clamp(currentScrollPosition.Y + scrollChange.Y, 0, maxScrollPosition.Y)
             };
             UpdateBackgroundColorCache();
         }
@@ -264,11 +266,11 @@ namespace DungeonCrawlerWorld.GameManagers.UserInterfaceManager
             }
         }
 
-        public void SelectMapNodes(Vector2 mousePosition)
+        public void SelectMapNodes(Point mousePosition)
         {
             if (world.Map.MapNodes != null && world.Map.MapNodes.Length > 0)
             {
-                var relativeMapDisplayMousePosition = mousePosition - _contentAbsolutePosition;
+                var relativeMapDisplayMousePosition = new Vector2(mousePosition.X - _contentAbsolutePosition.X, mousePosition.Y - _contentAbsolutePosition.Y);
                 var x = (int)(relativeMapDisplayMousePosition.X / currentTileSize.X);
 
                 if (x >= 0 && x < tileColumns)
@@ -282,7 +284,7 @@ namespace DungeonCrawlerWorld.GameManagers.UserInterfaceManager
             }
         }
 
-        protected override void OnContentClickAction(Vector2 mousePosition)
+        protected override void OnContentClickAction(Point mousePosition)
         {
             SelectMapNodes(mousePosition);
         }

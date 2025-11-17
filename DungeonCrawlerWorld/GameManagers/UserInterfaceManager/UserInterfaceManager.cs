@@ -199,14 +199,15 @@ namespace DungeonCrawlerWorld.GameManagers.UserInterfaceManager
                     mapWindow.UpdateScrollPosition(new Point(0, 1));
                 }
 
+                //TODO change to generic mouse handling
                 var mouseState = Mouse.GetState();
                 if (mouseState.LeftButton == ButtonState.Pressed)
                 {
                     foreach (var userInterfaceWindow in userInterfaceWindows)
                     {
-                        if (userInterfaceWindow.IsInDisplayRectangle(mouseState.Position))
+                        if (userInterfaceWindow.IsInDisplayRectangle(mouseState.X, mouseState.Y))
                         {
-                            userInterfaceWindow.HandleClick(mouseState.Position.ToVector2());
+                            userInterfaceWindow.HandleClick(new Point(mouseState.X, mouseState.Y));
                             break;
                         }
                     }

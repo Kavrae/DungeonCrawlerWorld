@@ -1,3 +1,5 @@
+using FontStashSharp;
+
 using Microsoft.Xna.Framework;
 using Microsoft.Xna.Framework.Graphics;
 
@@ -10,13 +12,13 @@ namespace DungeonCrawlerWorld.GameManagers.UserInterfaceManager
     {
         public string OriginalText { get; set; }
         public DisplayText FormattedText { get; set; }
-        public SpriteFont ContentFont { get; set; }
+        public SpriteFontBase ContentFont { get; set; }
         public Color TextColor { get; set; }
         private readonly int LinePadding = 3;
 
         public TextWindow(Window parentWindow, TextWindowOptions windowOptions) : base(parentWindow, windowOptions)
         {
-            ContentFont = FontService.GetFont("defaultFont");
+            ContentFont = FontService.GetFont(8);
             OriginalText = windowOptions.Text;
             TextColor = windowOptions.TextColor ?? Color.Black;
 
@@ -47,7 +49,7 @@ namespace DungeonCrawlerWorld.GameManagers.UserInterfaceManager
                             line,
                             new Vector2(
                                 LinePadding,
-                                (ContentFont.LineSpacing * lineNumber) + (LinePadding * (lineNumber + 1))),
+                                (ContentFont.LineHeight * lineNumber) + (LinePadding * (lineNumber + 1))),
                             TextColor);
                     }
                 }
@@ -94,7 +96,7 @@ namespace DungeonCrawlerWorld.GameManagers.UserInterfaceManager
                 WordWrap = true
             });
 
-            _contentSize.Y = ContentFont.LineSpacing * FormattedText.FormattedTextLines.Count + (LinePadding * (FormattedText.FormattedTextLines.Count + 1));
+            _contentSize.Y = ContentFont.LineHeight * FormattedText.FormattedTextLines.Count + (LinePadding * (FormattedText.FormattedTextLines.Count + 1));
 
             _windowCurrentSize = _contentSize;
             if (_showTitle)
@@ -129,7 +131,7 @@ namespace DungeonCrawlerWorld.GameManagers.UserInterfaceManager
             }
         }
 
-        protected override void OnContentClickAction(Vector2 mousePosition)
+        protected override void OnContentClickAction(Point mousePosition)
         {
             //TODO copy text to clipboard
         }

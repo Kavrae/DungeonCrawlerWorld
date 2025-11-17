@@ -1,59 +1,34 @@
-﻿using System.Collections.Generic;
+﻿using System.IO;
 
-using Microsoft.Xna.Framework.Content;
-using Microsoft.Xna.Framework.Graphics;
+using FontStashSharp;
 
 namespace DungeonCrawlerWorld.Services
 {
     public interface IFontManager
     {
-        public SpriteFont GetFont(string fontName);
+        public SpriteFontBase GetFont(int fontSize);
     }
 
     /// <summary>
-    /// Service to encapsulate the instantiation and retrieval of SpriteFont assets.
-    /// Each font will be loaded once during the first retrieval and then stored in the spriteFontsCache for future retrieval.
-    /// DefaultFont will be utilized whenever a font is missing, instead of crashing the game.
+    /// Service to encapsulate the instantiation and retrieval of Font assets.
     /// </summary>
     public class FontService : IFontManager
     {
-        public ContentManager contentManager;
+        private readonly FontSystem _fontSystem;
+        private const string _fontDirectory = "Content/Fonts";
 
-        private Dictionary<string, SpriteFont> spriteFontsCache;
-        private readonly string defaultFontName;
-
-        public FontService(ContentManager contentManager)
+        public FontService()
         {
-            this.contentManager = contentManager;
-
-            defaultFontName = "defaultFont";
-            spriteFontsCache = new Dictionary<string, SpriteFont>
-            {
-                { defaultFontName, this.contentManager.Load<SpriteFont>(defaultFontName) }
-            };
+            _fontSystem = new FontSystem(); 
+            _fontSystem.AddFont(File.ReadAllBytes($"{_fontDirectory}/DroidSans.ttf"));
         }
 
         /// <summary>
-        /// Retrieves the SpriteFont associated with the provided fontName.
-        /// TODO The input value needs to be replaced with a font enum for safety.
+        /// Retrieves a SpriteFontBase associated for the provided font size
         /// </summary>
-        public SpriteFont GetFont(string fontName)
+        public SpriteFontBase GetFont( int fontSize)
         {
-            SpriteFont font;
-
-            if (spriteFontsCache.ContainsKey(fontName))
-            {
-                font = spriteFontsCache[fontName];
-            }
-            else
-            {
-                font = contentManager.Load<SpriteFont>(fontName)
-                    ?? spriteFontsCache[defaultFontName];
-
-                spriteFontsCache[fontName] = font;
-            }
-
-            return font;
+            return _fontSystem.GetFont(fontSize);
         }
     }
 }

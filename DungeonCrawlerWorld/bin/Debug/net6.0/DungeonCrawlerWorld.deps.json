@@ -8,61 +8,119 @@
     ".NETCoreApp,Version=v6.0": {
       "DungeonCrawlerWorld/1.0.0": {
         "dependencies": {
-          "MonoGame.Content.Builder.Task": "3.8.1.303",
-          "MonoGame.Framework.DesktopGL": "3.8.1.303"
+          "FNA.NET": "2.1.2.2506"
         },
         "runtime": {
           "DungeonCrawlerWorld.dll": {}
         }
       },
-      "MonoGame.Content.Builder.Task/3.8.1.303": {},
-      "MonoGame.Framework.DesktopGL/3.8.1.303": {
+      "FNA.NET/2.1.2.2506": {
+        "dependencies": {
+          "FNA.NET.NativeAssets": "2.0.1.2506",
+          "NVorbis": "0.10.5"
+        },
         "runtime": {
-          "lib/net6.0/MonoGame.Framework.dll": {
-            "assemblyVersion": "3.8.1.303",
-            "fileVersion": "3.8.1.303"
+          "lib/netstandard2.0/FNA.NET.dll": {
+            "assemblyVersion": "25.6.0.0",
+            "fileVersion": "25.6.0.0"
+          }
+        }
+      },
+      "FNA.NET.NativeAssets/2.0.1.2506": {
+        "runtime": {
+          "lib/netstandard2.0/FNA.NET.NativeAssets.dll": {
+            "assemblyVersion": "2.0.1.2506",
+            "fileVersion": "2.0.1.2506"
           }
         },
         "runtimeTargets": {
-          "runtimes/linux-x64/native/libSDL2-2.0.so.0": {
+          "runtimes/linux-arm64/native/libFAudio.so.0": {
+            "rid": "linux-arm64",
+            "assetType": "native",
+            "fileVersion": "0.0.0.0"
+          },
+          "runtimes/linux-arm64/native/libFNA3D.so.0": {
+            "rid": "linux-arm64",
+            "assetType": "native",
+            "fileVersion": "0.0.0.0"
+          },
+          "runtimes/linux-arm64/native/libSDL3.so.0": {
+            "rid": "linux-arm64",
+            "assetType": "native",
+            "fileVersion": "0.0.0.0"
+          },
+          "runtimes/linux-arm64/native/libtheorafile.so": {
+            "rid": "linux-arm64",
+            "assetType": "native",
+            "fileVersion": "0.0.0.0"
+          },
+          "runtimes/linux-x64/native/libFAudio.so.0": {
             "rid": "linux-x64",
             "assetType": "native",
             "fileVersion": "0.0.0.0"
           },
-          "runtimes/linux-x64/native/libopenal.so.1": {
+          "runtimes/linux-x64/native/libFNA3D.so.0": {
             "rid": "linux-x64",
             "assetType": "native",
             "fileVersion": "0.0.0.0"
           },
-          "runtimes/osx/native/libSDL2.dylib": {
+          "runtimes/linux-x64/native/libSDL3.so.0": {
+            "rid": "linux-x64",
+            "assetType": "native",
+            "fileVersion": "0.0.0.0"
+          },
+          "runtimes/linux-x64/native/libtheorafile.so": {
+            "rid": "linux-x64",
+            "assetType": "native",
+            "fileVersion": "0.0.0.0"
+          },
+          "runtimes/osx/native/libFAudio.0.dylib": {
             "rid": "osx",
             "assetType": "native",
             "fileVersion": "0.0.0.0"
           },
-          "runtimes/osx/native/libopenal.1.dylib": {
+          "runtimes/osx/native/libFNA3D.0.dylib": {
             "rid": "osx",
             "assetType": "native",
             "fileVersion": "0.0.0.0"
           },
-          "runtimes/win-x64/native/SDL2.dll": {
-            "rid": "win-x64",
+          "runtimes/osx/native/libSDL3.0.dylib": {
+            "rid": "osx",
             "assetType": "native",
-            "fileVersion": "2.0.20.0"
+            "fileVersion": "0.0.0.0"
           },
-          "runtimes/win-x64/native/soft_oal.dll": {
+          "runtimes/osx/native/libtheorafile.dylib": {
+            "rid": "osx",
+            "assetType": "native",
+            "fileVersion": "0.0.0.0"
+          },
+          "runtimes/win-x64/native/FAudio.dll": {
             "rid": "win-x64",
             "assetType": "native",
             "fileVersion": "0.0.0.0"
           },
-          "runtimes/win-x86/native/SDL2.dll": {
-            "rid": "win-x86",
-            "assetType": "native",
-            "fileVersion": "2.0.20.0"
-          },
-          "runtimes/win-x86/native/soft_oal.dll": {
-            "rid": "win-x86",
+          "runtimes/win-x64/native/FNA3D.dll": {
+            "rid": "win-x64",
             "assetType": "native",
             "fileVersion": "0.0.0.0"
+          },
+          "runtimes/win-x64/native/SDL3.dll": {
+            "rid": "win-x64",
+            "assetType": "native",
+            "fileVersion": "3.2.16.0"
+          },
+          "runtimes/win-x64/native/libtheorafile.dll": {
+            "rid": "win-x64",
+            "assetType": "native",
+            "fileVersion": "0.0.0.0"
+          }
+        }
+      },
+      "NVorbis/0.10.5": {
+        "runtime": {
+          "lib/netstandard2.0/NVorbis.dll": {
+            "assemblyVersion": "0.10.5.0",
+            "fileVersion": "0.10.5.0"
           }
         }
       }
@@ -74,19 +132,26 @@
       "serviceable": false,
       "sha512": ""
     },
-    "MonoGame.Content.Builder.Task/3.8.1.303": {
+    "FNA.NET/2.1.2.2506": {
       "type": "package",
       "serviceable": true,
-      "sha512": "sha512-9Ilzzje62LhWElbPNEl7vh7XsRSbze+lvCJdZtTZUGu48FRgvYN6THURwIB9PN98EI33/Wnf6iuShNUtD7hL4Q==",
-      "path": "monogame.content.builder.task/3.8.1.303",
-      "hashPath": "monogame.content.builder.task.3.8.1.303.nupkg.sha512"
+      "sha512": "sha512-4kmgwH3UXnpoNvW7A21e/X4PXOOt1pIXypxVAm9x8UIcGpKmVAHQo5I2XdcD9ezDsg4cyDP1sO+cpf8kRlz/Gw==",
+      "path": "fna.net/2.1.2.2506",
+      "hashPath": "fna.net.2.1.2.2506.nupkg.sha512"
     },
-    "MonoGame.Framework.DesktopGL/3.8.1.303": {
+    "FNA.NET.NativeAssets/2.0.1.2506": {
       "type": "package",
       "serviceable": true,
-      "sha512": "sha512-eGYhqn0n1olk8MNYeE9EuBmoNNECN1T18rPMaQpkzsEQ0H3nVyFPXC+uCo78v5pi5juQpJ3PSFnSkjzZJ1U58A==",
-      "path": "monogame.framework.desktopgl/3.8.1.303",
-      "hashPath": "monogame.framework.desktopgl.3.8.1.303.nupkg.sha512"
+      "sha512": "sha512-q8PlBKzYw+U40kNgd5WYW6qUapIAOGwgBSJdYWKO4AckHLbLV8FhikSje4jU8qcAbvQhukESlzcuFeuiv5avkg==",
+      "path": "fna.net.nativeassets/2.0.1.2506",
+      "hashPath": "fna.net.nativeassets.2.0.1.2506.nupkg.sha512"
+    },
+    "NVorbis/0.10.5": {
+      "type": "package",
+      "serviceable": true,
+      "sha512": "sha512-o+IptCG4Avze39HrGeztC+xIp6fOOwGVAwkoa1J++4Ji1WmZ+KIKlFl5wsgxsXqBkmdpfs/vFSUproiLKYa2bw==",
+      "path": "nvorbis/0.10.5",
+      "hashPath": "nvorbis.0.10.5.nupkg.sha512"
     }
   }
 }
