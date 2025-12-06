@@ -33,7 +33,7 @@ namespace DungeonCrawlerWorld.GameManagers.MapBuilderManager
             var dataAccessService = GameServices.GetService<DataAccessService>();
             world = dataAccessService.RetrieveWorld();
 
-            var mapSize = new Vector3Int(1000, 1000, (int)Enum.GetValues(typeof(MapHeight)).Cast<MapHeight>().Max() + 1);
+            var mapSize = new Vector3Int(2000, 1000, (int)Enum.GetValues(typeof(MapHeight)).Cast<MapHeight>().Max() + 1);
 
             world.Map = new Map(mapSize);
 
@@ -73,11 +73,11 @@ namespace DungeonCrawlerWorld.GameManagers.MapBuilderManager
                     {
                         EntityFactoryManager.EntityFactoryManager.BuildFromBlueprint<Dirt>(new Vector3Int(column, row, (int)MapHeight.Ground));
 
-                        if ((row - 1) % 10 == 0 && (column - 1) % 100 == 0) //1,000 goblin engineers
+                        if ((row - 1) % 10 == 0 && (column - 1) % 100 == 0) //2,000 goblin engineers
                         {
                             EntityFactoryManager.EntityFactoryManager.BuildFromBlueprint<GoblinEngineerBlueprint>(new Vector3Int(column, row, (int)MapHeight.Standing));
                         }
-                        if ((row - 5) % 5 == 0 && (column - 1) % 5 == 0) //40,000 Goblins
+                        if ((row - 5) % 5 == 0 && (column - 1) % 5 == 0) //80,000 Goblins
                         {
                             EntityFactoryManager.EntityFactoryManager.BuildFromRace<Goblin>(new Vector3Int(column, row, (int)MapHeight.Standing));
                         }

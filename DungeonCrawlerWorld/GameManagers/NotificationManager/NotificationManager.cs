@@ -123,10 +123,12 @@ namespace DungeonCrawlerWorld.GameManagers.NotificationManager
                             RelativePosition = new Vector2(200 + offset, 200 + offset),
                             MaximumSize = new Vector2(400, 300),
                             CanContainChildWindows = false,
+                            CanUserMinimize = true,
                             DisplayMode = WindowDisplayMode.Grow,
                             IsTransparent = false,
                             ShowBorder = true,
                             ShowTitle = true,
+                            ShowTitleWhenMinimized = true,
                             TitleText = notificationType.ToString(),
                             Text = message
                         });

@@ -68,11 +68,17 @@ namespace DungeonCrawlerWorld.GameManagers.UserInterfaceManager
 
         /*========Title========*/
         /// <summary>
-        /// Determines whether the window title bar is displayed.
+        /// Determines whether the window title bar is displayed during non-minimized display modes.
         /// When displayed, the window's content size will be recalculated to account for the title bar height.
         /// </summary>
         public bool? ShowTitle { get; set; }
-        
+
+        /// <summary>
+        /// Determines whether the window title bar is displayed whenever the window is minimized.
+        /// This allows for otherwise title-less windows to minimize properly and not disappear.
+        /// </summary>
+        public bool? ShowTitleWhenMinimized { get; set; }
+
         /// <summary>
         /// The text to be displayed in the window's title bar.
         /// </summary>
@@ -146,12 +152,5 @@ namespace DungeonCrawlerWorld.GameManagers.UserInterfaceManager
         /// KEYS NOT YET DETERMINED
         /// </summary>
         public bool? CanUserScrollVertical { get; set; }
-        
-        /// <summary>
-        /// Indicates that the window is currently minimized.
-        /// Minimized state can be overridded, such as the Notification window which minimizes to a grouped summary.
-        /// </summary>
-        /// <value></value>
-        public bool? ContentIsMinimized { get; set; }
     }
 }

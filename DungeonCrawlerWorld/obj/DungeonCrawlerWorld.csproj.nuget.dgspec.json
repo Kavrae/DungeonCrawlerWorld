@@ -1,24 +1,20 @@
 {
   "format": 1,
   "restore": {
-    "C:\\Users\\crobe\\source\\repos\\DungeonCrawlerWorld\\DungeonCrawlerWorld\\DungeonCrawlerWorld.csproj": {}
+    "C:\\Code\\DungeonCrawlerWorld\\DungeonCrawlerWorld\\DungeonCrawlerWorld.csproj": {}
   },
   "projects": {
-    "C:\\Users\\crobe\\source\\repos\\DungeonCrawlerWorld\\DungeonCrawlerWorld\\DungeonCrawlerWorld.csproj": {
+    "C:\\Code\\DungeonCrawlerWorld\\DungeonCrawlerWorld\\DungeonCrawlerWorld.csproj": {
       "version": "1.0.0",
       "restore": {
-        "projectUniqueName": "C:\\Users\\crobe\\source\\repos\\DungeonCrawlerWorld\\DungeonCrawlerWorld\\DungeonCrawlerWorld.csproj",
+        "projectUniqueName": "C:\\Code\\DungeonCrawlerWorld\\DungeonCrawlerWorld\\DungeonCrawlerWorld.csproj",
         "projectName": "DungeonCrawlerWorld",
-        "projectPath": "C:\\Users\\crobe\\source\\repos\\DungeonCrawlerWorld\\DungeonCrawlerWorld\\DungeonCrawlerWorld.csproj",
+        "projectPath": "C:\\Code\\DungeonCrawlerWorld\\DungeonCrawlerWorld\\DungeonCrawlerWorld.csproj",
         "packagesPath": "C:\\Users\\crobe\\.nuget\\packages\\",
-        "outputPath": "C:\\Users\\crobe\\source\\repos\\DungeonCrawlerWorld\\DungeonCrawlerWorld\\obj\\",
+        "outputPath": "C:\\Code\\DungeonCrawlerWorld\\DungeonCrawlerWorld\\obj\\",
         "projectStyle": "PackageReference",
-        "fallbackFolders": [
-          "C:\\Program Files (x86)\\Microsoft Visual Studio\\Shared\\NuGetPackages"
-        ],
         "configFilePaths": [
           "C:\\Users\\crobe\\AppData\\Roaming\\NuGet\\NuGet.Config",
-          "C:\\Program Files (x86)\\NuGet\\Config\\Microsoft.VisualStudio.FallbackLocation.config",
           "C:\\Program Files (x86)\\NuGet\\Config\\Microsoft.VisualStudio.Offline.config"
         ],
         "originalTargetFrameworks": [

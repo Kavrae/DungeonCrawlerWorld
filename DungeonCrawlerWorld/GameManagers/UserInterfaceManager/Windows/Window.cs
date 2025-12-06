@@ -1,13 +1,10 @@
-﻿using System;
-using System.Collections.Generic;
-
+﻿using DungeonCrawlerWorld.Data;
+using DungeonCrawlerWorld.Services;
 using FontStashSharp;
-
 using Microsoft.Xna.Framework;
 using Microsoft.Xna.Framework.Graphics;
-
-using DungeonCrawlerWorld.Data;
-using DungeonCrawlerWorld.Services;
+using System;
+using System.Collections.Generic;
 
 //TODO minimize and restore
 //  DESIGN
@@ -63,6 +60,9 @@ namespace DungeonCrawlerWorld.GameManagers.UserInterfaceManager
         protected WindowDisplayMode _windowDisplayMode;
         public WindowDisplayMode WindowDisplay { get { return _windowDisplayMode; } }
 
+        protected WindowDisplayMode _previousWindowDisplayMode;
+        public WindowDisplayMode PreviousWindowDisplay { get { return _previousWindowDisplayMode; } }
+
         protected Vector2 _windowAbsolutePosition;
         public Vector2 WindowAbsolutePosition { get { return _windowAbsolutePosition; } }
 
@@ -96,6 +96,9 @@ namespace DungeonCrawlerWorld.GameManagers.UserInterfaceManager
         protected bool _showTitle;
         public bool ShowTitle { get { return _showTitle; } }
 
+        protected bool _showTitleWhenMinimized;
+        public bool ShowTitleWhenMinimized { get { return _showTitleWhenMinimized; } }
+
         protected string _titleText;
         public string TitleText { get { return _titleText; } set { _titleText = value; } }
         public Vector2 TitlePadding = new(5, 2);
@@ -114,6 +117,9 @@ namespace DungeonCrawlerWorld.GameManagers.UserInterfaceManager
 
         protected Color _titleBackgroundColor;
         public Color TitleColor { get { return _titleBackgroundColor; } }
+
+        protected List<Button> _titleButtons;
+        public List<Button> TitleButtons { get { return _titleButtons; } set { _titleButtons = value; } }
 
 
         /*========Border========*/
@@ -153,7 +159,6 @@ namespace DungeonCrawlerWorld.GameManagers.UserInterfaceManager
         public bool CanUserResize { get; set; }
         public bool CanUserScrollHorizontal { get; set; }
         public bool CanUserScrollVertical { get; set; }
-        public bool IsMinimized { get; set; }
 
         public Window(Window parentWindow, WindowOptions windowOptions)
         {
@@ -190,10 +195,12 @@ namespace DungeonCrawlerWorld.GameManagers.UserInterfaceManager
 
             /*========Title========*/
             _showTitle = windowOptions.ShowTitle ?? false;
+            _showTitleWhenMinimized = windowOptions.ShowTitleWhenMinimized ?? false;
             _titleText = windowOptions.TitleText ?? string.Empty;
             _originalTitleSize = new Vector2(_windowOriginalSize.X, TitleFont.MeasureString(" ").Y + TitlePadding.Y * 2);
             _titleSize = _originalTitleSize;
             _titleBackgroundColor = windowOptions.TitleColor ?? Color.LightBlue;
+            TitleButtons = [];
 
             /*========Border========*/
             _showBorder = windowOptions.ShowBorder ?? false;
@@ -210,7 +217,8 @@ namespace DungeonCrawlerWorld.GameManagers.UserInterfaceManager
             CanUserResize = windowOptions.CanUserResize ?? false;
             CanUserScrollHorizontal = windowOptions.CanUserScrollHorizontal ?? false;
             CanUserScrollVertical = windowOptions.CanUserScrollVertical ?? false;
-            IsMinimized = windowOptions.ContentIsMinimized ?? false;
+
+
         }
 
         public virtual void Initialize()
@@ -220,6 +228,52 @@ namespace DungeonCrawlerWorld.GameManagers.UserInterfaceManager
             _windowViewport = new Viewport(_contentRectangle);
             _cameraTransform = Matrix.CreateRotationZ(0) * // camera rotation, default 0
                          Matrix.CreateScale(new Vector3(1, 1, 1)); //TODO zoom
+
+            if (_showTitle)
+            {
+                var buttonSize = new Vector2(_originalTitleSize.Y - 4, _originalTitleSize.Y - 4);
+                if (CanUserMinimize)
+                {
+                    AddTitleButton(new Button(
+                        this,
+                        new ButtonOptions
+                        {
+                            Color = Color.LightGray,
+                            Font = TitleFont,
+                            Size = buttonSize,
+                            Text = "_",
+                            TextOffset = new Vector2(2, -4)
+                        }
+                    ));
+                    AddTitleButton(new Button(
+                        this,
+                        new ButtonOptions
+                        {
+                            Color = Color.LightGray,
+                            Font = TitleFont,
+                            Size = buttonSize,
+                            Text = "X",
+                            TextOffset = new Vector2(2, -1)
+                        }
+                    ));
+                    AddTitleButton(new Button(
+                        this,
+                        new ButtonOptions
+                        {
+                            Color = Color.LightGray,
+                            Font = TitleFont,
+                            Size = buttonSize,
+                            Text = "O",
+                            TextOffset = new Vector2(1, -1)
+                        }
+                    ));
+                }
+            }
+
+            foreach (var button in _titleButtons)
+            {
+                button.Initialize();
+            }
 
             foreach (var childWindow in _childWindows)
             {
@@ -237,10 +291,17 @@ namespace DungeonCrawlerWorld.GameManagers.UserInterfaceManager
 
         public virtual void Update(GameTime gameTime)
         {
+            foreach (var button in _titleButtons)
+            {
+                button.Update(gameTime);
+            }
+
             foreach (var childWindow in _childWindows)
             {
                 childWindow.Update(gameTime);
             }
+
+            //TODO update buttons
         }
 
         public void Draw(GameTime gameTime, SpriteBatch spriteBatch, Texture2D unitRectangle)
@@ -250,43 +311,52 @@ namespace DungeonCrawlerWorld.GameManagers.UserInterfaceManager
                 return;
             }
 
+            //TODO redo to put border around title and content separately in all display modes
             if (_showBorder)
             {
                 spriteBatch.Draw(unitRectangle, _windowRectangle, Color.Black);
             }
 
-            if (_showTitle)
+            if ((_windowDisplayMode != WindowDisplayMode.Minimized && _showTitle) || (_windowDisplayMode == WindowDisplayMode.Minimized && _showTitleWhenMinimized))
             {
                 if (!_isTransparent)
                 {
                     spriteBatch.Draw(unitRectangle, _titleRectangle, _titleBackgroundColor);
                 }
                 spriteBatch.DrawString(TitleFont, TitleText, _titleAbsolutePosition + TitlePadding, Color.Black);
-            }
 
-            if (!_isTransparent)
-            {
-                spriteBatch.Draw(unitRectangle, _contentRectangle, _contentBackgroundColor);
-            }
-
-            spriteBatch.End();
-
-            //Note : Creating a separate viewport for the content allows for windows to be individually scrolled and clipped
-            var previousViewport = graphicsDevice.Viewport;
-            graphicsDevice.Viewport = WindowViewport;
-            spriteBatch.Begin(SpriteSortMode.Deferred, BlendState.AlphaBlend, null, null, null, null, CameraTransform);
-
-            DrawContent(gameTime, spriteBatch, unitRectangle);
-
-            spriteBatch.End();
-            graphicsDevice.Viewport = previousViewport;
-            spriteBatch.Begin(SpriteSortMode.Deferred, BlendState.AlphaBlend);
-
-            if (_childWindows != null)
-            {
-                foreach (var childWindow in _childWindows)
+                foreach (var button in _titleButtons)
                 {
-                    childWindow.Draw(gameTime, spriteBatch, unitRectangle);
+                    button.Draw(gameTime, spriteBatch, unitRectangle);
+                }
+            }
+
+            if (_windowDisplayMode != WindowDisplayMode.Minimized)
+            {
+                if (!_isTransparent)
+                {
+                    spriteBatch.Draw(unitRectangle, _contentRectangle, _contentBackgroundColor);
+                }
+
+                spriteBatch.End();
+
+                //Note : Creating a separate viewport for the content allows for windows to be individually scrolled and clipped
+                var previousViewport = graphicsDevice.Viewport;
+                graphicsDevice.Viewport = WindowViewport;
+                spriteBatch.Begin(SpriteSortMode.Deferred, BlendState.AlphaBlend, null, null, null, null, CameraTransform);
+
+                DrawContent(gameTime, spriteBatch, unitRectangle);
+
+                spriteBatch.End();
+                graphicsDevice.Viewport = previousViewport;
+                spriteBatch.Begin(SpriteSortMode.Deferred, BlendState.AlphaBlend);
+
+                if (_childWindows != null)
+                {
+                    foreach (var childWindow in _childWindows)
+                    {
+                        childWindow.Draw(gameTime, spriteBatch, unitRectangle);
+                    }
                 }
             }
         }
@@ -317,7 +387,13 @@ namespace DungeonCrawlerWorld.GameManagers.UserInterfaceManager
 
         protected virtual void OnTitleClickAction(Point mousePosition)
         {
-            //Override in derived classes
+            foreach (var button in _titleButtons)
+            {
+                if (button.ButtonRectangle.Contains(mousePosition))
+                {
+                    button.HandleClick(mousePosition);
+                }
+            }
         }
 
         private void HandleContentClick(Point mousePosition)
@@ -332,6 +408,42 @@ namespace DungeonCrawlerWorld.GameManagers.UserInterfaceManager
                 if (childWindow.WindowRectangle.Contains(mousePosition))
                 {
                     childWindow.HandleClick(mousePosition);
+                }
+            }
+        }
+
+        public void AddTitleButton(Button newButton, int? insertIndex = null)
+        {
+            if (!_showTitle)
+            {
+                return;
+            }
+
+            //Default to the end of the list
+            var maximumIndex = _titleButtons.Count;
+            insertIndex = Math.Clamp(insertIndex ?? maximumIndex,
+                0,
+                maximumIndex);
+
+            _titleButtons.Insert(insertIndex.Value, newButton);
+
+            for (var updateIndex = insertIndex.Value; updateIndex < _titleButtons.Count; updateIndex++)
+            {
+                if (updateIndex == 0)
+                {
+                    //First item. Default it to right aligned with a 3 pixel buffer.
+                    newButton.ChangeRelativePosition(new Vector2(
+                        _titleSize.X - newButton.Size.X - 3,
+                        3));
+                }
+                else
+                {
+                    //Not first item. Tile horizontally with 3 pixel buffer.
+                    var previousButton = _titleButtons[updateIndex - 1];
+                    newButton.ChangeRelativePosition(new Vector2(
+                        previousButton.RelativePosition.X - previousButton.Size.X - 3,
+                        previousButton.RelativePosition.Y
+                    ));
                 }
             }
         }
@@ -390,10 +502,10 @@ namespace DungeonCrawlerWorld.GameManagers.UserInterfaceManager
         public void RemoveChildWindow(Guid windowId)
         {
             var childWindowIndex = _childWindows.FindIndex(childWindow => childWindow.WindowId == windowId);
-            if( childWindowIndex >= 0)
+            if (childWindowIndex >= 0)
             {
                 _childWindows.RemoveAt(childWindowIndex);
-                for( var index = childWindowIndex; index < _childWindows.Count; index++)
+                for (var index = childWindowIndex; index < _childWindows.Count; index++)
                 {
                     _childWindows[index].Initialize();
                 }
@@ -410,6 +522,9 @@ namespace DungeonCrawlerWorld.GameManagers.UserInterfaceManager
 
             switch (_windowDisplayMode)
             {
+                case WindowDisplayMode.Minimized:
+                    RecalculateMinimizedWindowSize();
+                    break;
                 case WindowDisplayMode.Static:
                     RecalculateStaticWindowSize();
                     break;
@@ -425,6 +540,7 @@ namespace DungeonCrawlerWorld.GameManagers.UserInterfaceManager
 
             RecalculateAbsolutePositions();
             RecalculateRectangles();
+            RecalculateButtonsSizeAndPosition();
             RecalculateChildrenSizeAndPosition();
         }
 
@@ -441,6 +557,25 @@ namespace DungeonCrawlerWorld.GameManagers.UserInterfaceManager
             _contentAbsolutePosition = new Vector2(
                 _windowAbsolutePosition.X + (_showBorder ? _borderSize.X : 0),
                 _windowAbsolutePosition.Y + (_showBorder ? _borderSize.Y : 0) + (_showTitle ? _titleSize.Y : 0));
+        }
+
+        public virtual void RecalculateMinimizedWindowSize()
+        {
+            var textSize = TitleFont.MeasureString(_titleText);
+            _titleSize = new Vector2(
+                textSize.X + (TitlePadding.X * 2),
+                textSize.Y + (TitlePadding.Y * 2));
+
+            _contentSize = new Vector2(0, 0);
+
+            var windowSize = new Vector2(
+                _titleSize.X + (_showBorder ? (_borderSize.X * 2) : 0),
+                _titleSize.Y + (_showBorder ? (_borderSize.Y * 2) : 0));
+
+            _windowCurrentSize = new Vector2(
+                MathHelper.Clamp(windowSize.X, _windowMinimumSize.X, _windowMaximumSize.X),
+                windowSize.Y
+            );
         }
 
         public virtual void RecalculateStaticWindowSize()
@@ -480,7 +615,7 @@ namespace DungeonCrawlerWorld.GameManagers.UserInterfaceManager
             {
                 var maxRight = 0;
                 var maxBottom = 0;
-                for( var index = 0; index < _childWindows.Count; index++)
+                for (var index = 0; index < _childWindows.Count; index++)
                 {
                     var right = _childWindows[index].WindowRectangle.Right;
                     var bottom = _childWindows[index].WindowRectangle.Bottom;
@@ -488,7 +623,7 @@ namespace DungeonCrawlerWorld.GameManagers.UserInterfaceManager
                     {
                         maxRight = right;
                     }
-                    if( bottom > maxBottom)
+                    if (bottom > maxBottom)
                     {
                         maxBottom = bottom;
                     }
@@ -528,6 +663,17 @@ namespace DungeonCrawlerWorld.GameManagers.UserInterfaceManager
             _contentRectangle = new Rectangle((int)_contentAbsolutePosition.X, (int)_contentAbsolutePosition.Y, (int)_contentSize.X, (int)_contentSize.Y);
         }
 
+        public void RecalculateButtonsSizeAndPosition()
+        {
+            if (_titleButtons != null)
+            {
+                foreach (var button in _titleButtons)
+                {
+                    button.CalculateButtonPositionAndRectangle();
+                }
+            }
+        }
+
         public void RecalculateChildrenSizeAndPosition()
         {
             if (_childWindows != null)
@@ -543,6 +689,13 @@ namespace DungeonCrawlerWorld.GameManagers.UserInterfaceManager
         {
             _isVisible = isVisible;
             _parentWindow?.RecalculateChildrenSizeAndPosition();
+        }
+
+        public void SetWindowDisplayMode(WindowDisplayMode newWindowDisplayMode)
+        {
+            _previousWindowDisplayMode = _windowDisplayMode;
+            _windowDisplayMode = newWindowDisplayMode;
+            RecalculateSizeAndAbsolutePosition();
         }
 
         public void Close()

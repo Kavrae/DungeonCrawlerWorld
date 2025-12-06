@@ -10,6 +10,10 @@ namespace DungeonCrawlerWorld.GameManagers.UserInterfaceManager
     public enum WindowDisplayMode
     {
         /// <summary>
+        /// The window is minimized. If ShowTitleWhenMinimized is set, hide the WindowContents and display the title bar regardless of other visibility settings.
+        /// </summary>
+        Minimized,
+        /// <summary>
         /// The window size is static and does not change based on content or parent container.
         /// The specified size will be used to determine text formatting.
         /// </summary>

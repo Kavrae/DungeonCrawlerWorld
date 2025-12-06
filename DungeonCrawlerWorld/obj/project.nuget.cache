@@ -1,8 +1,8 @@
 {
   "version": 2,
-  "dgSpecHash": "l4XiPwt2qDE=",
+  "dgSpecHash": "J+7S0BUsLRU=",
   "success": true,
-  "projectFilePath": "C:\\Users\\crobe\\source\\repos\\DungeonCrawlerWorld\\DungeonCrawlerWorld\\DungeonCrawlerWorld.csproj",
+  "projectFilePath": "C:\\Code\\DungeonCrawlerWorld\\DungeonCrawlerWorld\\DungeonCrawlerWorld.csproj",
   "expectedPackageFiles": [
     "C:\\Users\\crobe\\.nuget\\packages\\cyotek.drawing.bitmapfont\\2.0.4\\cyotek.drawing.bitmapfont.2.0.4.nupkg.sha512",
     "C:\\Users\\crobe\\.nuget\\packages\\fna.net\\2.1.2.2506\\fna.net.2.1.2.2506.nupkg.sha512",
