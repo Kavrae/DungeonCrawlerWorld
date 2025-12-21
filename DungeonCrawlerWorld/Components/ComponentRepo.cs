@@ -140,11 +140,11 @@ namespace DungeonCrawlerWorld.Components
         {
             if (!ClassComponents.TryGetValue(entityId, out var classComponents))
             {
-                classComponents = new List<ClassComponent>();
+                classComponents = [];
                 ClassComponents[entityId] = classComponents;
             }
 
-            if (!classComponents.Any(classComponent => classComponent.ClassId == newClass.ClassId))
+            if (!classComponents.Any(classComponent => classComponent.Id == newClass.Id))
             {
                 classComponents.Add(newClass);
             }
@@ -159,7 +159,7 @@ namespace DungeonCrawlerWorld.Components
             {
                 for (int i = 0; i < classComponents.Count; i++)
                 {
-                    if (classComponents[i].ClassId == classId)
+                    if (classComponents[i].Id == classId)
                     {
                         classComponents.RemoveAt(i);
                         break;
@@ -181,11 +181,11 @@ namespace DungeonCrawlerWorld.Components
         {
             if (!RaceComponents.TryGetValue(entityId, out var raceComponents))
             {
-                raceComponents = new List<RaceComponent>();
+                raceComponents = [];
                 RaceComponents[entityId] = raceComponents;
             }
 
-            if (!raceComponents.Any(raceComponent => raceComponent.RaceId == newRace.RaceId))
+            if (!raceComponents.Any(raceComponent => raceComponent.Id == newRace.Id))
             {
                 raceComponents.Add(newRace);
             }
@@ -200,7 +200,7 @@ namespace DungeonCrawlerWorld.Components
             {
                 for (int i = 0; i < raceComponets.Count; i++)
                 {
-                    if (raceComponets[i].RaceId == raceId)
+                    if (raceComponets[i].Id == raceId)
                     {
                         raceComponets.RemoveAt(i);
                         break;
@@ -235,12 +235,18 @@ namespace DungeonCrawlerWorld.Components
             // Sparse components
             if (RaceComponents.TryGetValue(entityId, out var raceComponentList))
             {
-                components.AddRange(raceComponentList);
+                for (var i = 0; i < raceComponentList.Count; i++)
+                {
+                    components.Add( raceComponentList[i] );
+                }
             }
 
             if (ClassComponents.TryGetValue(entityId, out var classComponentList))
             {
-                components.AddRange(classComponentList);
+                for (var i = 0; i < classComponentList.Count; i++)
+                {
+                    components.Add(classComponentList[i]);
+                }
             }
 
             if (EnergyComponents.TryGetValue(entityId, out var energyComponent))

@@ -1,9 +1,9 @@
-﻿using Microsoft.Xna.Framework;
-
+﻿using DungeonCrawlerWorld.Components;
 using DungeonCrawlerWorld.Data;
+using DungeonCrawlerWorld.Data.Blueprints;
 using DungeonCrawlerWorld.Services;
-using DungeonCrawlerWorld.Components;
 using DungeonCrawlerWorld.Utilities;
+using Microsoft.Xna.Framework;
 
 namespace DungeonCrawlerWorld.GameManagers.EntityFactoryManager
 {
@@ -53,8 +53,9 @@ namespace DungeonCrawlerWorld.GameManagers.EntityFactoryManager
         /// </summary>
         public static int BuildFromBlueprint<T>() where T : IBlueprint, new()
         {
-            var blueprint = new T();
-            return blueprint.EntityId;
+            var entityId = ComponentRepo.GetNextEntityId();
+            T.Build( entityId );
+            return entityId;
         }
 
         /// <summary>
@@ -62,17 +63,17 @@ namespace DungeonCrawlerWorld.GameManagers.EntityFactoryManager
         /// The Z axis will default to the blueprint's default map height transform value.
         /// This is primarily used to immediately spawn new entities onto the map.
         /// </summary>
-        public static int BuildFromBlueprint<T>(Point position) where T : IBlueprint, new()
+        public static int BuildFromBlueprint<T>( Point position ) where T : IBlueprint, new()
         {
-            var blueprint = new T();
+            var entityId = BuildFromBlueprint<T>();
 
-            var transformComponent = ComponentRepo.TransformComponents[blueprint.EntityId];
+            var transformComponent = ComponentRepo.TransformComponents[entityId];
             if (transformComponent != null)
             {
-                world.MoveEntity(blueprint.EntityId, new Vector3Int(position.X, position.Y, transformComponent.Value.Position.Z));
+                world.MoveEntity(entityId, new Vector3Int(position.X, position.Y, transformComponent.Value.Position.Z));
             }
 
-            return blueprint.EntityId;
+            return entityId;
         }
 
 
@@ -82,60 +83,15 @@ namespace DungeonCrawlerWorld.GameManagers.EntityFactoryManager
         /// </summary>
         public static int BuildFromBlueprint<T>(Vector3Int position) where T : IBlueprint, new()
         {
-            var blueprint = new T();
+            var entityId = BuildFromBlueprint<T>();
 
-            var transformComponent = ComponentRepo.TransformComponents[blueprint.EntityId];
+            var transformComponent = ComponentRepo.TransformComponents[entityId];
             if (transformComponent != null)
             {
-                world.MoveEntity(blueprint.EntityId, position);
+                world.MoveEntity(entityId, position);
             }
 
-            return blueprint.EntityId;
-        }
-
-        /// <summary>
-        /// Creates an entity from a race without specifying a position.
-        /// This is primarily used to create persistent simple entities that have not yet been spawned into the map.
-        /// </summary>
-        public static int BuildFromRace<T>() where T : RaceComponent, new()
-        {
-            var blueprint = new T();
-            return blueprint.EntityId;
-        }
-
-        /// <summary>
-        /// Creates an entity from a race while specifying a 2d position.
-        /// The Z axis will default to the race's default map height transform value.
-        /// This is primarily used to immediately spawn new entities onto the map.
-        /// </summary>
-        public static int BuildFromRace<T>(Point position) where T : RaceComponent, new()
-        {
-            var blueprint = new T();
-
-            var transformComponent = ComponentRepo.TransformComponents[blueprint.EntityId];
-            if( transformComponent != null)
-            {
-                world.MoveEntity(blueprint.EntityId, new Vector3Int(position.X, position.Y, transformComponent.Value.Position.Z));
-            }
-
-            return blueprint.EntityId;
-        }
-
-        /// <summary>
-        /// Creates an entity from a race while specifying a 3d position.
-        /// This is primarily used to immediately spawn new entities onto the map at a non-standard height.
-        /// </summary>
-        public static int BuildFromRace<T>(Vector3Int position) where T : RaceComponent, new()
-        {
-            var blueprint = new T();
-
-            var transformComponent = ComponentRepo.TransformComponents[blueprint.EntityId];
-            if (transformComponent != null)
-            {
-                world.MoveEntity(blueprint.EntityId, position);
-            }
-
-            return blueprint.EntityId;
+            return entityId;
         }
     }
 }

@@ -25,13 +25,11 @@ namespace DungeonCrawlerWorld.Components
     /// </summary>
     public struct TransformComponent : IEntityComponent
     {
-        public int EntityId { get; set; }
         public Vector3Int Position { get; set; }
         public Vector3Int Size { get; set; } //TODO the z component is assumed to always be 1 for now.
 
         public TransformComponent(int entityId, Vector3Int position, Vector3Int size)
         {
-            EntityId = entityId;
             Position = position;
             Size = size;
 

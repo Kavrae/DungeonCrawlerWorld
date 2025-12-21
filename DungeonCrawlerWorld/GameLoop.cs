@@ -56,11 +56,6 @@ namespace DungeonCrawlerWorld
             RegisterServices();
             InitializeGameManagers();
 
-            foreach (var component in updatableGameManagers)
-            {
-                component.Initialize();
-            }
-
             dataAccessService = GameServices.GetService<DataAccessService>();
 
             base.Initialize();
@@ -121,20 +116,25 @@ namespace DungeonCrawlerWorld
         {
             var userInterfaceManager = new UserInterfaceManager();
             var notificationManager = new NotificationManager();
-            updatableGameManagers = new List<IGameManager>
-            {
+            updatableGameManagers =
+            [
                 new ComponentSystemManager(),
                 new EntityFactoryManager(),
                 new MapBuilderManager(),
                 new EntityEventManager(),
                 userInterfaceManager,
                 notificationManager
-            };
-            drawableGameManagers = new List<IGameManager>
-            {
+            ];
+            drawableGameManagers =
+            [
                 userInterfaceManager,
                 notificationManager
-            };
+            ];
+
+            foreach (var gameManager in updatableGameManagers)
+            {
+                gameManager.Initialize();
+            }
         }
     }
 }

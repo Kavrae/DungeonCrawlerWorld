@@ -71,7 +71,7 @@ namespace DungeonCrawlerWorld.Data
                     }
 
                     transformComponent.Position = newPosition;
-                    ComponentRepo.TransformComponents[transformComponent.EntityId] = transformComponent;
+                    ComponentRepo.TransformComponents[entityId] = transformComponent;
                 }
             }
         }

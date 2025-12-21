@@ -16,7 +16,6 @@ namespace DungeonCrawlerWorld.Components
     /// </summary>
     public struct MovementComponent : IEntityComponent
     {
-        public int EntityId { get; set; }
         public MovementMode MovementMode { get; set; }
         public short EnergyToMove { get; set; }
         public short FramesToWait { get; set; }
@@ -35,7 +34,6 @@ namespace DungeonCrawlerWorld.Components
         public MovementComponent(int entityId, MovementMode movementMode, short energyToMove) : this(entityId, movementMode, energyToMove, null, null) { }
         public MovementComponent(int entityId, MovementMode movementMode, short energyToMove, Vector3Int? targetMapPosition, Vector3Int? nextMapPosition)
         {
-            EntityId = entityId;
             MovementMode = movementMode;
             EnergyToMove = energyToMove;
             TargetMapPosition = targetMapPosition;

@@ -12,23 +12,19 @@ namespace DungeonCrawlerWorld.Components
     /// Active abilities
     /// Level progression
     ///</todo>
-    public abstract class ClassComponent : IEntityComponent
+    public struct ClassComponent : IEntityComponent
     {
-        public int EntityId  { get; set; }
-        public virtual Guid ClassId { get; }
+        public Guid Id { get; }
         public string Name { get; set; }
-        public string Description  { get; set; }
+        public string Description { get; set; }
 
-        public void Build(int entityId)
+        public ClassComponent(int entityId, Guid id, string name, string description)
         {
-            EntityId = entityId;
+            Id = id;
+            Name = name;
+            Description = description;
 
-            ComponentRepo.AddClass(entityId, this );
-            
-            var displayTextComponent = new DisplayTextComponent(entityId);
-            displayTextComponent.ClassName += Name; //TODO format
-            displayTextComponent.ClassDescription += Description; //TODO format
-            ComponentRepo.DisplayTextComponents[entityId] = displayTextComponent;
+            ComponentRepo.AddClass(entityId, this);
         }
     }
 }

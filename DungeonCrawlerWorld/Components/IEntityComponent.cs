@@ -7,8 +7,5 @@ namespace DungeonCrawlerWorld.Components
     /// <warning>
     /// Keep component sizes under multiples of 16 bytes whenever possible to take advantage of processor cache retrieval and avoid cache misses.
     /// </warning>
-    public interface IEntityComponent
-    {
-        int EntityId { get; set; }
-    }
+    public interface IEntityComponent { }
 }

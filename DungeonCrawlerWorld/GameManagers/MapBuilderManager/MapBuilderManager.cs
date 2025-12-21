@@ -5,9 +5,13 @@ using Microsoft.Xna.Framework;
 
 using DungeonCrawlerWorld.Components;
 using DungeonCrawlerWorld.Data;
-using DungeonCrawlerWorld.GameManagers.EntityFactoryManager;
 using DungeonCrawlerWorld.Services;
 using DungeonCrawlerWorld.Utilities;
+using DungeonCrawlerWorld.Data.Blueprints.Races;
+using DungeonCrawlerWorld.Data.Blueprints.Terrain;
+using DungeonCrawlerWorld.Data.Blueprints.Objects;
+using DungeonCrawlerWorld.Data.Blueprints.Npcs;
+using DungeonCrawlerWorld.Data.Blueprints.Classes;
 
 namespace DungeonCrawlerWorld.GameManagers.MapBuilderManager
 {
@@ -79,14 +83,14 @@ namespace DungeonCrawlerWorld.GameManagers.MapBuilderManager
                         }
                         if ((row - 5) % 5 == 0 && (column - 1) % 5 == 0) //80,000 Goblins
                         {
-                            EntityFactoryManager.EntityFactoryManager.BuildFromRace<Goblin>(new Vector3Int(column, row, (int)MapHeight.Standing));
+                            EntityFactoryManager.EntityFactoryManager.BuildFromBlueprint<Goblin>(new Vector3Int(column, row, (int)MapHeight.Standing));
                         }
                     }
                 }
             }
 
             //Large goblin test
-            var largeGoblinEntityId = EntityFactoryManager.EntityFactoryManager.BuildFromRace<Goblin>();
+            var largeGoblinEntityId = EntityFactoryManager.EntityFactoryManager.BuildFromBlueprint<Goblin>();
             var largeGoblinTransform = new TransformComponent(largeGoblinEntityId, new Vector3Int(2, 2, (int)MapHeight.Standing), new Vector3Int(2, 2, 1));
             var largeGoblinDisplayText = ComponentRepo.DisplayTextComponents[largeGoblinEntityId].Value;
             largeGoblinDisplayText.Description = "ThisIsAReallyLongDescriptionToTestTheWordWrapCapabilitiesAroundHyphenatingLongWordsMultipleTimes";
@@ -99,21 +103,22 @@ namespace DungeonCrawlerWorld.GameManagers.MapBuilderManager
             world.MoveEntity(hugeGoblinEntityId, hugeCrawlerTransform.Position);
 
             //Stationary Fairy engineer test
-            var fairyEngineerId = EntityFactoryManager.EntityFactoryManager.BuildFromRace<Fairy>(new Vector3Int(1, 1, (int)MapHeight.Floating));
-            _ = new Engineer(fairyEngineerId);
+            var fairyEngineerId = EntityFactoryManager.EntityFactoryManager.BuildFromBlueprint<Fairy>(new Vector3Int(1, 1, (int)MapHeight.Floating));
+            Engineer.Build(fairyEngineerId);
             ComponentRepo.MovementComponents.Remove(fairyEngineerId);
 
             //Moving Fairy test
-            EntityFactoryManager.EntityFactoryManager.BuildFromRace<Fairy>(new Vector3Int(17, 16, (int)MapHeight.Flying));
+            EntityFactoryManager.EntityFactoryManager.BuildFromBlueprint<Fairy>(new Vector3Int(17, 16, (int)MapHeight.Flying));
 
             //Multiple races
-            var goblinFairyId = EntityFactoryManager.EntityFactoryManager.BuildFromRace<Goblin>(new Vector3Int(11, 1, (int)MapHeight.Flying));
-            _ = new Fairy(goblinFairyId);
+            //TODO fix multiple races with the blueprint builder.
+            /*var goblinFairyId = EntityFactoryManager.EntityFactoryManager.BuildFromBlueprint<Goblin>(new Vector3Int(11, 1, (int)MapHeight.Flying));
+            _ = new Fairy(goblinFairyId);*/
 
             //Multiple class
-            var tankEngineer = EntityFactoryManager.EntityFactoryManager.BuildFromRace<Goblin>(new Vector3Int(11, 2, (int)MapHeight.Ground));
-            _ = new Tank(tankEngineer);
-            _ = new Engineer(tankEngineer);
+            var tankEngineerId = EntityFactoryManager.EntityFactoryManager.BuildFromBlueprint<Goblin>(new Vector3Int(11, 2, (int)MapHeight.Ground));
+            Engineer.Build(tankEngineerId);
+            Tank.Build(tankEngineerId);
         }
     }
 }

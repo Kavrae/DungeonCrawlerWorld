@@ -57,14 +57,11 @@ namespace DungeonCrawlerWorld.GameManagers.UserInterfaceManager
         {
             base.Initialize();
 
-            var defaultMediumFont = FontService.GetFont(8);
-            var defaultLargeFont = FontService.GetFont(16);
-            var defaultHugeFont = FontService.GetFont(14);
             fonts = new Dictionary<FontType, SpriteFontBase>
             {
-                { FontType.DefaultMedium, defaultMediumFont },
-                { FontType.DefaultLarge, defaultLargeFont },
-                { FontType.DefaultHuge, defaultHugeFont }
+                { FontType.DefaultMedium, FontService.GetFont(8) },
+                { FontType.DefaultLarge, FontService.GetFont(16) },
+                { FontType.DefaultHuge, FontService.GetFont(14) }
             };
 
             UpdateMaxScrollPosition();
@@ -215,8 +212,8 @@ namespace DungeonCrawlerWorld.GameManagers.UserInterfaceManager
         {
             currentScrollPosition = new Point
             {
-                X = MathUtility.Clamp(currentScrollPosition.X + scrollChange.X, 0, maxScrollPosition.X),
-                Y = MathUtility.Clamp(currentScrollPosition.Y + scrollChange.Y, 0, maxScrollPosition.Y)
+                X = MathUtility.ClampInt(currentScrollPosition.X + scrollChange.X, 0, maxScrollPosition.X),
+                Y = MathUtility.ClampInt(currentScrollPosition.Y + scrollChange.Y, 0, maxScrollPosition.Y)
             };
             UpdateBackgroundColorCache();
         }

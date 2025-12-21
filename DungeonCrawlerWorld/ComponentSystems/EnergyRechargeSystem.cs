@@ -3,13 +3,13 @@
 using Microsoft.Xna.Framework;
 
 using DungeonCrawlerWorld.Components;
+using DungeonCrawlerWorld.Utilities;
 
 namespace DungeonCrawlerWorld.ComponentSystems
 {
     /// <summary>
-    /// Responsible for updating the energy values on an entity. 
+    /// Responsible for updating the energy values on an entity via passive regeneration.
     /// These energy values allow the entity to perform various actions such as movement.
-    /// Energy values are bound between a minimum (0) and maximum specified on the component.
     /// </summary>
     public class EnergyRechargeSystem : ComponentSystem
     {
@@ -25,10 +25,7 @@ namespace DungeonCrawlerWorld.ComponentSystems
                 if (actionEnergyComponent.EnergyRecharge != 0)
                 {
                     actionEnergyComponent.CurrentEnergy += actionEnergyComponent.EnergyRecharge;
-                    if (actionEnergyComponent.CurrentEnergy > actionEnergyComponent.MaximumEnergy)
-                    {
-                        actionEnergyComponent.CurrentEnergy = actionEnergyComponent.MaximumEnergy;
-                    }
+                    actionEnergyComponent.CurrentEnergy = MathUtility.ClampShort(actionEnergyComponent.CurrentEnergy, 0, actionEnergyComponent.MaximumEnergy);
 
                     ComponentRepo.EnergyComponents[keyValuePair.Key] = actionEnergyComponent;
                 }

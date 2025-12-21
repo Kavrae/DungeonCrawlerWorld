@@ -10,7 +10,6 @@ namespace DungeonCrawlerWorld.Components
     /// </summary>
     public struct EnergyComponent : IEntityComponent
     {
-        public int EntityId { get; set; }
         public short CurrentEnergy { get; set; }
         public short EnergyRecharge { get; set; }
         public short MaximumEnergy { get; set; }
@@ -18,7 +17,6 @@ namespace DungeonCrawlerWorld.Components
         public EnergyComponent(int entityId) : this(entityId, 0, 0, 0) { }
         public EnergyComponent(int entityId, short currentEnergy, short energyRecharge, short maximumEnergy)
         {
-            EntityId = entityId;
             CurrentEnergy = currentEnergy;
             EnergyRecharge = energyRecharge;
             MaximumEnergy = maximumEnergy;

@@ -7,8 +7,6 @@ namespace DungeonCrawlerWorld.Components
     /// </summary>
     public struct GlyphComponent : IEntityComponent
     {
-        public int EntityId { get; set; }
-
         /// <summary>
         /// The ASCII symbol drawn to the screen
         /// </summary>
@@ -28,7 +26,6 @@ namespace DungeonCrawlerWorld.Components
         public GlyphComponent(int entityId) : this(entityId, "", Color.Black, new(0, 0)) { }
         public GlyphComponent(int entityId, string glyph,  Color glyphColor, Point glyphOffset)
         {
-            EntityId = entityId;
             Glyph = glyph;
             GlyphColor = glyphColor;
             GlyphOffset = glyphOffset;

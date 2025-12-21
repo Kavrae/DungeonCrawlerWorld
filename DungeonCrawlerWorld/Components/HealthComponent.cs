@@ -8,7 +8,6 @@ namespace DungeonCrawlerWorld.Components
     /// </summary>
     public struct HealthComponent : IEntityComponent
     {
-        public int EntityId { get; set; }
         public short CurrentHealth { get; set; }
         public short HealthRegen { get; set; }
         public short MaximumHealth { get; set; }
@@ -16,7 +15,6 @@ namespace DungeonCrawlerWorld.Components
         public HealthComponent(int entityId) : this(entityId, 0, 0, 0) { }
         public HealthComponent(int entityId, short currentHealth, short healthRegen, short maximumHealth)
         {
-            EntityId = entityId;
             CurrentHealth = currentHealth;
             HealthRegen = healthRegen;
             MaximumHealth = maximumHealth;

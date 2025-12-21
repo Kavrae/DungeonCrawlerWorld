@@ -1,18 +1,18 @@
 {
   "version": 2,
-  "dgSpecHash": "J+7S0BUsLRU=",
+  "dgSpecHash": "av1e5M18GhY=",
   "success": true,
-  "projectFilePath": "C:\\Code\\DungeonCrawlerWorld\\DungeonCrawlerWorld\\DungeonCrawlerWorld.csproj",
+  "projectFilePath": "C:\\Users\\doork\\Documents\\Code\\DungeonCrawlerWorld\\DungeonCrawlerWorld\\DungeonCrawlerWorld.csproj",
   "expectedPackageFiles": [
-    "C:\\Users\\crobe\\.nuget\\packages\\cyotek.drawing.bitmapfont\\2.0.4\\cyotek.drawing.bitmapfont.2.0.4.nupkg.sha512",
-    "C:\\Users\\crobe\\.nuget\\packages\\fna.net\\2.1.2.2506\\fna.net.2.1.2.2506.nupkg.sha512",
-    "C:\\Users\\crobe\\.nuget\\packages\\fna.net.fontstashsharp\\2.0.0\\fna.net.fontstashsharp.2.0.0.nupkg.sha512",
-    "C:\\Users\\crobe\\.nuget\\packages\\fna.net.nativeassets\\2.0.1.2506\\fna.net.nativeassets.2.0.1.2506.nupkg.sha512",
-    "C:\\Users\\crobe\\.nuget\\packages\\freetypesharp\\3.0.1\\freetypesharp.3.0.1.nupkg.sha512",
-    "C:\\Users\\crobe\\.nuget\\packages\\nvorbis\\0.10.5\\nvorbis.0.10.5.nupkg.sha512",
-    "C:\\Users\\crobe\\.nuget\\packages\\stbimagesharp\\2.30.15\\stbimagesharp.2.30.15.nupkg.sha512",
-    "C:\\Users\\crobe\\.nuget\\packages\\system.memory\\4.5.3\\system.memory.4.5.3.nupkg.sha512",
-    "C:\\Users\\crobe\\.nuget\\packages\\system.valuetuple\\4.5.0\\system.valuetuple.4.5.0.nupkg.sha512"
+    "C:\\Users\\doork\\.nuget\\packages\\cyotek.drawing.bitmapfont\\2.0.4\\cyotek.drawing.bitmapfont.2.0.4.nupkg.sha512",
+    "C:\\Users\\doork\\.nuget\\packages\\fna.net\\2.1.2.2506\\fna.net.2.1.2.2506.nupkg.sha512",
+    "C:\\Users\\doork\\.nuget\\packages\\fna.net.fontstashsharp\\2.0.0\\fna.net.fontstashsharp.2.0.0.nupkg.sha512",
+    "C:\\Users\\doork\\.nuget\\packages\\fna.net.nativeassets\\2.0.1.2506\\fna.net.nativeassets.2.0.1.2506.nupkg.sha512",
+    "C:\\Users\\doork\\.nuget\\packages\\freetypesharp\\3.0.1\\freetypesharp.3.0.1.nupkg.sha512",
+    "C:\\Users\\doork\\.nuget\\packages\\nvorbis\\0.10.5\\nvorbis.0.10.5.nupkg.sha512",
+    "C:\\Users\\doork\\.nuget\\packages\\stbimagesharp\\2.30.15\\stbimagesharp.2.30.15.nupkg.sha512",
+    "C:\\Users\\doork\\.nuget\\packages\\system.memory\\4.5.3\\system.memory.4.5.3.nupkg.sha512",
+    "C:\\Users\\doork\\.nuget\\packages\\system.valuetuple\\4.5.0\\system.valuetuple.4.5.0.nupkg.sha512"
   ],
   "logs": []
 }
