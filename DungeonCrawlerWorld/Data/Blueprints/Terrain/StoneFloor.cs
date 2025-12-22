@@ -1,8 +1,5 @@
-﻿using System;
-
+﻿using DungeonCrawlerWorld.Components;
 using Microsoft.Xna.Framework;
-
-using DungeonCrawlerWorld.Components;
 
 namespace DungeonCrawlerWorld.Data.Blueprints.Terrain
 {
@@ -16,11 +13,24 @@ namespace DungeonCrawlerWorld.Data.Blueprints.Terrain
     /// </components>
     public class StoneFloor : IBlueprint
     {
-       public static void Build( int entityId )
+        public static void Build(int entityId)
         {
-            _ = new BackgroundComponent(entityId, Color.LightGray);
-            _ = new DisplayTextComponent(entityId, "Stone floor", "Roughly shaped stone floor.");
-            _ = new TransformComponent(entityId, new Utilities.Vector3Int(0, 0, (int)MapHeight.Ground), new Utilities.Vector3Int(1, 1, 1));
+            ComponentRepo.SaveBackgroundComponent(
+                entityId,
+                new BackgroundComponent(Color.LightGray),
+                ComponentSaveMode.Overwrite);
+
+            ComponentRepo.SaveDisplayTextComponent(
+                entityId,
+                new DisplayTextComponent("Stone floor", "Roughly shaped stone floor."),
+                ComponentSaveMode.Overwrite);
+
+            ComponentRepo.SaveTransformComponent(
+                entityId,
+                new TransformComponent(
+                    new Utilities.Vector3Int(0, 0, (int)MapHeight.Ground),
+                    new Utilities.Vector3Int(1, 1, 1)),
+                ComponentSaveMode.Overwrite);
         }
     }
 }

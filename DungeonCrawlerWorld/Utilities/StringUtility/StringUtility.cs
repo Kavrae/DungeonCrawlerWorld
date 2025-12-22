@@ -2,7 +2,6 @@
 using System.Collections.Generic;
 using System.Linq;
 using System.Text;
-using Microsoft.VisualBasic;
 
 namespace DungeonCrawlerWorld.Utilities
 {
@@ -57,7 +56,7 @@ namespace DungeonCrawlerWorld.Utilities
                 {
                     span[6 + i] = i < fillCount ? '=' : '_';
                 }
-                
+
                 // suffix
                 span[spanSize - 1] = ']';
             });
@@ -69,12 +68,12 @@ namespace DungeonCrawlerWorld.Utilities
         /// <returns>DisplayText to be consumed by UserInterface draw calls.</returns>
         public static DisplayText FormatText(FormatTextCriteria criteria)
         {
-            var displayText = new DisplayText(criteria.OriginalText);
-
-            criteria.TextLinesToFormat = ParseNewlineCharacters(criteria.OriginalText);
+            var displayText = new DisplayText(criteria.OriginalText ?? string.Empty);
 
             if (!string.IsNullOrWhiteSpace(criteria.OriginalText))
             {
+                criteria.TextLinesToFormat = ParseNewlineCharacters(criteria.OriginalText);
+
                 //Wordwrap overrides truncate
                 if (criteria.WordWrap)
                 {
@@ -169,7 +168,7 @@ namespace DungeonCrawlerWorld.Utilities
                 }
             }
         }
-        
+
         /// <summary>
         /// Applies word wrap to each text line in TextLinesToFormat, which allows each line to separately wrap without affecting the line order.
         /// Words are first wrapped based on word breaks (spaces). If a word exceeds the maximum pixel width, it is hyphenated and broken across multiple lines.

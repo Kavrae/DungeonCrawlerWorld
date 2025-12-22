@@ -1,5 +1,6 @@
-﻿using System;
-using System.Collections.Concurrent;
+﻿using DungeonCrawlerWorld.Utilities;
+using Microsoft.Xna.Framework;
+using System;
 using System.Collections.Generic;
 using System.Linq;
 
@@ -28,33 +29,101 @@ namespace DungeonCrawlerWorld.Components
         /// Dense components
         /// These components are utilized on the majority of entities
         /// They are stored in arrays for increased efficiency when used by Systems at the cost of wasted storage space for entities without those components.
+        /// A save method is created for each component to define Merges, which will handle permanent changes to an entity's components.
         /// </summary>
         private static BackgroundComponent?[] _backgroundComponents;
-        public static BackgroundComponent?[] BackgroundComponents
+        public static IReadOnlyList<BackgroundComponent?> BackgroundComponents { get => _backgroundComponents; }
+        public static void SaveBackgroundComponent(int entityId, BackgroundComponent backgroundComponent, ComponentSaveMode componentSaveMode)
         {
-            get => _backgroundComponents;
-            set => _backgroundComponents = value;
+            if (componentSaveMode == ComponentSaveMode.Merge)
+            {
+                var existingComponent = _backgroundComponents[entityId];
+                if (existingComponent != null)
+                {
+                    backgroundComponent.BackgroundColor = Color.Lerp(backgroundComponent.BackgroundColor, existingComponent.Value.BackgroundColor, 0.5f);
+                }
+            }
+            _backgroundComponents[entityId] = backgroundComponent;
+        }
+        public static void RemoveBackgroundComponent(int entityId)
+        {
+            _backgroundComponents[entityId] = null;
         }
 
         private static DisplayTextComponent?[] _displayTextComponents;
-        public static DisplayTextComponent?[] DisplayTextComponents
+        public static IReadOnlyList<DisplayTextComponent?> DisplayTextComponents
         {
             get => _displayTextComponents;
-            set => _displayTextComponents = value;
+        }
+        public static void SaveDisplayTextComponent(int entityId, DisplayTextComponent displayTextComponent, ComponentSaveMode componentSaveMode)
+        {
+            if (componentSaveMode == ComponentSaveMode.Merge)
+            {
+                var existingComponent = _displayTextComponents[entityId];
+                if (existingComponent != null)
+                {
+                    displayTextComponent.Name = existingComponent.Value.Name + " " + displayTextComponent.Name;
+                    displayTextComponent.Description = existingComponent.Value.Description + Environment.NewLine + displayTextComponent.Description;
+                }
+            }
+            _displayTextComponents[entityId] = displayTextComponent;
+        }
+        public static void RemoveDisplayTextComponent(int entityId)
+        {
+            _displayTextComponents[entityId] = null;
         }
 
         private static GlyphComponent?[] _glyphComponents;
-        public static GlyphComponent?[] GlyphComponents
+        public static IReadOnlyList<GlyphComponent?> GlyphComponents
         {
             get => _glyphComponents;
-            set => _glyphComponents = value;
+        }
+        public static void SaveGlyphComponent(int entityId, GlyphComponent glyphComponent, ComponentSaveMode componentSaveMode)
+        {
+            if (componentSaveMode == ComponentSaveMode.Merge)
+            {
+                var existingComponent = _glyphComponents[entityId];
+                if (existingComponent != null)
+                {
+                    //Keep the glyph and offset the same as this will be hard to calculate currently.
+                    glyphComponent.GlyphColor = Color.Lerp(glyphComponent.GlyphColor, existingComponent.Value.GlyphColor, 0.5f);
+                    glyphComponent.Glyph = existingComponent.Value.Glyph;
+                    glyphComponent.GlyphOffset = existingComponent.Value.GlyphOffset;
+                }
+            }
+            _glyphComponents[entityId] = glyphComponent;
+        }
+        public static void RemoveGlyphComponent(int entityId)
+        {
+            _glyphComponents[entityId] = null;
         }
 
         private static TransformComponent?[] _transformComponents;
-        public static TransformComponent?[] TransformComponents
+        public static IReadOnlyList<TransformComponent?> TransformComponents
         {
             get => _transformComponents;
-            set => _transformComponents = value;
+        }
+        public static void SaveTransformComponent(int entityId, TransformComponent transformComponent, ComponentSaveMode componentSaveMode)
+        {
+            if (componentSaveMode == ComponentSaveMode.Merge)
+            {
+                var existingComponent = _transformComponents[entityId];
+                if (existingComponent != null)
+                {
+                    //Do not change the position.
+                    transformComponent.Position = existingComponent.Value.Position;
+                    //Use the average size, rounding down. This will avoid collision issues that growing would cause.
+                    transformComponent.Size = new Vector3Int(
+                        (transformComponent.Size.X + existingComponent.Value.Size.X) / 2,
+                        (transformComponent.Size.Y + existingComponent.Value.Size.Y) / 2,
+                        (transformComponent.Size.Z + existingComponent.Value.Size.Z) / 2);
+                }
+            }
+            _transformComponents[entityId] = transformComponent;
+        }
+        public static void RemoveTransformComponent(int entityId)
+        {
+            _transformComponents[entityId] = null;
         }
 
         /// <summary>
@@ -64,11 +133,147 @@ namespace DungeonCrawlerWorld.Components
         /// Class and Race components are in get-only dictionaries to require the use of their Add and Remove methods with 
         /// additional logic to deal with an entity using multiple classes and races.
         /// </summary>
-        public static Dictionary<int, List<ClassComponent>> ClassComponents { get; }
-        public static Dictionary<int, List<RaceComponent>> RaceComponents { get; set; }
-        public static ConcurrentDictionary<int, EnergyComponent> EnergyComponents { get; set; }
-        public static ConcurrentDictionary<int, HealthComponent> HealthComponents { get; set; }
-        public static Dictionary<int, MovementComponent> MovementComponents { get; set; }
+        private static Dictionary<int, List<ClassComponent>> _classComponents { get; }
+        public static IReadOnlyDictionary<int, List<ClassComponent>> ClassComponents { get => _classComponents; }
+        public static void AddClassComponent(int entityId, ClassComponent newClass)
+        {
+            if (!ClassComponents.TryGetValue(entityId, out var classComponents))
+            {
+                classComponents = [];
+            }
+
+            if (!classComponents.Any(classComponent => classComponent.Id == newClass.Id))
+            {
+                classComponents.Add(newClass);
+                _classComponents[entityId] = classComponents;
+            }
+        }
+        public static void RemoveClassComponent(int entityId, Guid classId)
+        {
+            if (ClassComponents.TryGetValue(entityId, out var classComponents))
+            {
+                for (int i = 0; i < classComponents.Count; i++)
+                {
+                    if (classComponents[i].Id == classId)
+                    {
+                        classComponents.RemoveAt(i);
+                        _classComponents[entityId] = classComponents;
+                        break;
+                    }
+                }
+
+                if (classComponents.Count == 0)
+                {
+                    _classComponents.Remove(entityId);
+                }
+            }
+        }
+
+        private static Dictionary<int, List<RaceComponent>> _raceComponents { get; }
+        public static IReadOnlyDictionary<int, List<RaceComponent>> RaceComponents { get => _raceComponents; }
+        public static void AddRaceComponent(int entityId, RaceComponent newRace)
+        {
+            if (!RaceComponents.TryGetValue(entityId, out var raceComponents))
+            {
+                raceComponents = [];
+            }
+
+            if (!raceComponents.Any(raceComponent => raceComponent.Id == newRace.Id))
+            {
+                raceComponents.Add(newRace);
+                _raceComponents[entityId] = raceComponents;
+            }
+        }
+        public static void RemoveRaceComponent(int entityId, Guid raceId)
+        {
+            if (RaceComponents.TryGetValue(entityId, out var raceComponets))
+            {
+                for (int i = 0; i < raceComponets.Count; i++)
+                {
+                    if (raceComponets[i].Id == raceId)
+                    {
+                        raceComponets.RemoveAt(i);
+                        _raceComponents[entityId] = raceComponets;
+                        break;
+                    }
+                }
+
+                if (raceComponets.Count == 0)
+                {
+                    _raceComponents.Remove(entityId);
+                }
+            }
+        }
+
+        //TODO add SparseComponent SaveXyzComponent methods for merge logic.
+        //Probably need backing fields to prevent direct save access.
+        private static Dictionary<int, EnergyComponent> _energyComponents { get; set; }
+        public static IReadOnlyDictionary<int, EnergyComponent> EnergyComponents { get => _energyComponents; }
+        public static void SaveEnergyComponent(int entityId, EnergyComponent energyComponent, ComponentSaveMode componentSaveMode)
+        {
+            if (componentSaveMode == ComponentSaveMode.Merge)
+            {
+                if (_energyComponents.TryGetValue(entityId, out var existingComponent))
+                {
+                    energyComponent.EnergyRecharge = (short)((energyComponent.EnergyRecharge + existingComponent.EnergyRecharge) / 2);
+                    energyComponent.MaximumEnergy = (short)((energyComponent.MaximumEnergy + existingComponent.MaximumEnergy) / 2);
+                    energyComponent.CurrentEnergy = MathUtility.ClampShort(
+                        (short)((energyComponent.CurrentEnergy + existingComponent.CurrentEnergy) / 2),
+                        0,
+                        energyComponent.MaximumEnergy);
+                }
+            }
+            _energyComponents[entityId] = energyComponent;
+        }
+        public static void RemoveEnergyComponent(int entityId)
+        {
+            _energyComponents.Remove(entityId);
+        }
+
+        private static Dictionary<int, HealthComponent> _healthComponents { get; set; }
+        public static IReadOnlyDictionary<int, HealthComponent> HealthComponents { get => _healthComponents; }
+        public static void SaveHealthComponent(int entityId, HealthComponent healthComponent, ComponentSaveMode componentSaveMode)
+        {
+            if (componentSaveMode == ComponentSaveMode.Merge)
+            {
+                if (_healthComponents.TryGetValue(entityId, out var existingComponent))
+                {
+                    healthComponent.HealthRegen = (short)((healthComponent.HealthRegen + existingComponent.HealthRegen) / 2);
+                    healthComponent.MaximumHealth = (short)((healthComponent.MaximumHealth + existingComponent.MaximumHealth) / 2);
+                    healthComponent.CurrentHealth = MathUtility.ClampShort(
+                        (short)((healthComponent.CurrentHealth + existingComponent.CurrentHealth) / 2),
+                        0,
+                        healthComponent.MaximumHealth);
+                }
+            }
+            _healthComponents[entityId] = healthComponent;
+        }
+        public static void RemoveHealthComponent(int entityId)
+        {
+            _healthComponents.Remove(entityId);
+        }
+
+        private static Dictionary<int, MovementComponent> _movementComponents { get; set; }
+        public static IReadOnlyDictionary<int, MovementComponent> MovementComponents { get => _movementComponents; }
+        public static void SaveMovementComponent(int entityId, MovementComponent movementComponent, ComponentSaveMode componentSaveMode)
+        {
+            if (componentSaveMode == ComponentSaveMode.Merge)
+            {
+                if (_movementComponents.TryGetValue(entityId, out var existingComponent))
+                {
+                    movementComponent.MovementMode = (MovementMode)Math.Max((short)movementComponent.MovementMode, (short)existingComponent.MovementMode);
+                    movementComponent.EnergyToMove = (short)((movementComponent.EnergyToMove + existingComponent.EnergyToMove) / 2);
+                    movementComponent.FramesToWait = (short)((movementComponent.FramesToWait + existingComponent.FramesToWait) / 2);
+                    movementComponent.NextMapPosition = existingComponent.NextMapPosition;
+                    movementComponent.TargetMapPosition = existingComponent.TargetMapPosition;
+                }
+            }
+            _movementComponents[entityId] = movementComponent;
+        }
+        public static void RemoveMovementComponent(int entityId)
+        {
+            _movementComponents.Remove(entityId);
+        }
 
         /// <summary>
         /// Specifies the starting size of Dense component arrays.
@@ -97,11 +302,11 @@ namespace DungeonCrawlerWorld.Components
             _transformComponents = new TransformComponent?[defaultDenseArraySize];
 
             /* Sparse Components */
-            ClassComponents = new Dictionary<int, List<ClassComponent>>();
-            RaceComponents = new Dictionary<int, List<RaceComponent>>();
-            EnergyComponents = new ConcurrentDictionary<int, EnergyComponent>();
-            HealthComponents = new ConcurrentDictionary<int, HealthComponent>();
-            MovementComponents = new Dictionary<int, MovementComponent>();
+            _classComponents = [];
+            _raceComponents = [];
+            _energyComponents = [];
+            _healthComponents = [];
+            _movementComponents = [];
         }
 
         /// <summary>
@@ -132,88 +337,6 @@ namespace DungeonCrawlerWorld.Components
             Array.Resize(ref _transformComponents, currentDenseArraySize);
         }
 
-        /// <summary>
-        /// Add a class component to an entity
-        /// An entity can contain multiple classes.
-        /// </summary>
-        public static void AddClass(int entityId, ClassComponent newClass)
-        {
-            if (!ClassComponents.TryGetValue(entityId, out var classComponents))
-            {
-                classComponents = [];
-                ClassComponents[entityId] = classComponents;
-            }
-
-            if (!classComponents.Any(classComponent => classComponent.Id == newClass.Id))
-            {
-                classComponents.Add(newClass);
-            }
-        }
-
-        /// <summary>
-        /// Remove a class component from an entity.
-        /// </summary>
-        public static void RemoveClass(int entityId, Guid classId)
-        {
-            if (ClassComponents.TryGetValue(entityId, out var classComponents))
-            {
-                for (int i = 0; i < classComponents.Count; i++)
-                {
-                    if (classComponents[i].Id == classId)
-                    {
-                        classComponents.RemoveAt(i);
-                        break;
-                    }
-                }
-
-                if (classComponents.Count == 0)
-                {
-                    ClassComponents.Remove(entityId);
-                }
-            }
-        }
-
-        /// <summary>
-        /// Add a race component to an entity
-        /// An entity can contain multiple races.
-        /// </summary>
-        public static void AddRace(int entityId, RaceComponent newRace)
-        {
-            if (!RaceComponents.TryGetValue(entityId, out var raceComponents))
-            {
-                raceComponents = [];
-                RaceComponents[entityId] = raceComponents;
-            }
-
-            if (!raceComponents.Any(raceComponent => raceComponent.Id == newRace.Id))
-            {
-                raceComponents.Add(newRace);
-            }
-        }
-
-        /// <summary>
-        /// Remove a race component from an entity
-        /// </summary>
-        public static void RemoveRace(int entityId, Guid raceId)
-        {
-            if (RaceComponents.TryGetValue(entityId, out var raceComponets))
-            {
-                for (int i = 0; i < raceComponets.Count; i++)
-                {
-                    if (raceComponets[i].Id == raceId)
-                    {
-                        raceComponets.RemoveAt(i);
-                        break;
-                    }
-                }
-
-                if (raceComponets.Count == 0)
-                {
-                    RaceComponents.Remove(entityId);
-                }
-            }
-        }
-
         //Return a list of all components attached to an entity. This is primarily used in debugging mode.
         public static List<IEntityComponent> GetAllComponents(int entityId)
         {
@@ -237,7 +360,7 @@ namespace DungeonCrawlerWorld.Components
             {
                 for (var i = 0; i < raceComponentList.Count; i++)
                 {
-                    components.Add( raceComponentList[i] );
+                    components.Add(raceComponentList[i]);
                 }
             }
 
@@ -273,16 +396,16 @@ namespace DungeonCrawlerWorld.Components
         /// </summary>
         public static void RemoveAllComponents(int entityId)
         {
-            BackgroundComponents[entityId] = null;
-            DisplayTextComponents[entityId] = null;
-            GlyphComponents[entityId] = null;
-            TransformComponents[entityId] = null;
+            _backgroundComponents[entityId] = null;
+            _displayTextComponents[entityId] = null;
+            _glyphComponents[entityId] = null;
+            _transformComponents[entityId] = null;
 
-            RaceComponents.Remove(entityId);
-            ClassComponents.Remove(entityId);
-            EnergyComponents.TryRemove(entityId, out _);
-            HealthComponents.TryRemove(entityId, out _);
-            MovementComponents.Remove(entityId);
+            _raceComponents.Remove(entityId);
+            _classComponents.Remove(entityId);
+            _energyComponents.Remove(entityId);
+            _healthComponents.Remove(entityId);
+            _movementComponents.Remove(entityId);
         }
     }
 }

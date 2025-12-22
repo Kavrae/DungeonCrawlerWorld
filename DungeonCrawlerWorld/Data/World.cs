@@ -1,7 +1,6 @@
-﻿using Microsoft.Xna.Framework;
-
-using DungeonCrawlerWorld.Components;
+﻿using DungeonCrawlerWorld.Components;
 using DungeonCrawlerWorld.Utilities;
+using Microsoft.Xna.Framework;
 
 namespace DungeonCrawlerWorld.Data
 {
@@ -71,7 +70,7 @@ namespace DungeonCrawlerWorld.Data
                     }
 
                     transformComponent.Position = newPosition;
-                    ComponentRepo.TransformComponents[entityId] = transformComponent;
+                    ComponentRepo.SaveTransformComponent(entityId, transformComponent, ComponentSaveMode.Overwrite);
                 }
             }
         }

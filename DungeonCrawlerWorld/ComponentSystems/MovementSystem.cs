@@ -1,11 +1,9 @@
-﻿using System;
-
-using Microsoft.Xna.Framework;
-
-using DungeonCrawlerWorld.Components;
+﻿using DungeonCrawlerWorld.Components;
 using DungeonCrawlerWorld.Data;
 using DungeonCrawlerWorld.Services;
 using DungeonCrawlerWorld.Utilities;
+using Microsoft.Xna.Framework;
+using System;
 
 namespace DungeonCrawlerWorld.ComponentSystems
 {
@@ -39,7 +37,7 @@ namespace DungeonCrawlerWorld.ComponentSystems
                 if (movementComponent.FramesToWait > 0)
                 {
                     movementComponent.FramesToWait -= 1;
-                    ComponentRepo.MovementComponents[entityId] = movementComponent;
+                    ComponentRepo.SaveMovementComponent(entityId, movementComponent, ComponentSaveMode.Overwrite);
                     continue;
                 }
 
@@ -61,7 +59,7 @@ namespace DungeonCrawlerWorld.ComponentSystems
                 var transformComponent = transformComponentNullable.Value;
 
                 SetNextMapPosition(entityId, movementComponent, transformComponent);
-                TryMoveToNextMapPosition(entityId, movementComponent, actionEnergyComponent);
+                TryMoveToNextMapPosition(entityId, movementComponent, actionEnergyComponent); //TODO fix this so that we're not pulling transformComponent multiple times.
             }
         }
 
@@ -86,13 +84,13 @@ namespace DungeonCrawlerWorld.ComponentSystems
         /// MoveEntity checks for collision in case other entities have already moved into the selected space.
         /// Energy from the EnergyComponent is consumed during movement, not during path selection.
         /// </summary>
-        public void TryMoveToNextMapPosition(int entityId, MovementComponent movementComponent, EnergyComponent actionEnergyComponent)
+        public void TryMoveToNextMapPosition(int entityId, MovementComponent movementComponent, EnergyComponent energyComponent)
         {
             if (movementComponent.NextMapPosition != null)
             {
                 world.MoveEntity(entityId, movementComponent.NextMapPosition.Value);
-                actionEnergyComponent.CurrentEnergy -= movementComponent.EnergyToMove;
-                ComponentRepo.EnergyComponents[entityId] = actionEnergyComponent;
+                energyComponent.CurrentEnergy -= movementComponent.EnergyToMove;
+                ComponentRepo.SaveEnergyComponent(entityId, energyComponent, ComponentSaveMode.Overwrite);
             }
         }
 
@@ -140,7 +138,7 @@ namespace DungeonCrawlerWorld.ComponentSystems
 
                 var movementCandidates = new Vector3Int[4];
                 var movementCandidateCount = 0;
-                
+
                 if (mapNode.NeighborNorth != null)
                 {
                     var newPositionCube = new CubeInt(mapNode.NeighborNorth.Value, transformComponent.Size);
@@ -174,10 +172,10 @@ namespace DungeonCrawlerWorld.ComponentSystems
                     }
                 }
 
-                if (movementCandidateCount> 0)
+                if (movementCandidateCount > 0)
                 {
                     movementComponent.NextMapPosition = movementCandidates[randomizer.Next(movementCandidateCount)];
-                    ComponentRepo.MovementComponents[entityId] = movementComponent;
+                    ComponentRepo.SaveMovementComponent(entityId, movementComponent, ComponentSaveMode.Overwrite);
                 }
                 else
                 {

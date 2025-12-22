@@ -1,20 +1,20 @@
 {
   "format": 1,
   "restore": {
-    "C:\\Users\\doork\\Documents\\Code\\DungeonCrawlerWorld\\DungeonCrawlerWorld\\DungeonCrawlerWorld.csproj": {}
+    "C:\\Code\\DungeonCrawlerWorld\\DungeonCrawlerWorld\\DungeonCrawlerWorld.csproj": {}
   },
   "projects": {
-    "C:\\Users\\doork\\Documents\\Code\\DungeonCrawlerWorld\\DungeonCrawlerWorld\\DungeonCrawlerWorld.csproj": {
+    "C:\\Code\\DungeonCrawlerWorld\\DungeonCrawlerWorld\\DungeonCrawlerWorld.csproj": {
       "version": "1.0.0",
       "restore": {
-        "projectUniqueName": "C:\\Users\\doork\\Documents\\Code\\DungeonCrawlerWorld\\DungeonCrawlerWorld\\DungeonCrawlerWorld.csproj",
+        "projectUniqueName": "C:\\Code\\DungeonCrawlerWorld\\DungeonCrawlerWorld\\DungeonCrawlerWorld.csproj",
         "projectName": "DungeonCrawlerWorld",
-        "projectPath": "C:\\Users\\doork\\Documents\\Code\\DungeonCrawlerWorld\\DungeonCrawlerWorld\\DungeonCrawlerWorld.csproj",
-        "packagesPath": "C:\\Users\\doork\\.nuget\\packages\\",
-        "outputPath": "C:\\Users\\doork\\Documents\\Code\\DungeonCrawlerWorld\\DungeonCrawlerWorld\\obj\\",
+        "projectPath": "C:\\Code\\DungeonCrawlerWorld\\DungeonCrawlerWorld\\DungeonCrawlerWorld.csproj",
+        "packagesPath": "C:\\Users\\crobe\\.nuget\\packages\\",
+        "outputPath": "C:\\Code\\DungeonCrawlerWorld\\DungeonCrawlerWorld\\obj\\",
         "projectStyle": "PackageReference",
         "configFilePaths": [
-          "C:\\Users\\doork\\AppData\\Roaming\\NuGet\\NuGet.Config",
+          "C:\\Users\\crobe\\AppData\\Roaming\\NuGet\\NuGet.Config",
           "C:\\Program Files (x86)\\NuGet\\Config\\Microsoft.VisualStudio.Offline.config"
         ],
         "originalTargetFrameworks": [

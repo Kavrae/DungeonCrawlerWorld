@@ -1,9 +1,7 @@
-﻿using System.Threading.Tasks;
-
-using Microsoft.Xna.Framework;
-
-using DungeonCrawlerWorld.Components;
+﻿using DungeonCrawlerWorld.Components;
 using DungeonCrawlerWorld.Utilities;
+using Microsoft.Xna.Framework;
+using System.Threading.Tasks;
 
 
 namespace DungeonCrawlerWorld.ComponentSystems
@@ -26,9 +24,9 @@ namespace DungeonCrawlerWorld.ComponentSystems
                 if (healthComponent.HealthRegen != 0)
                 {
                     healthComponent.CurrentHealth += healthComponent.HealthRegen;
-                    healthComponent.CurrentHealth = MathUtility.ClampShort( healthComponent.CurrentHealth, 0, healthComponent.MaximumHealth );
-                    
-                    ComponentRepo.HealthComponents[keyValuePair.Key] = healthComponent;
+                    healthComponent.CurrentHealth = MathUtility.ClampShort(healthComponent.CurrentHealth, 0, healthComponent.MaximumHealth);
+
+                    ComponentRepo.SaveHealthComponent(keyValuePair.Key, healthComponent, ComponentSaveMode.Overwrite);
                 }
             });
         }

@@ -1,15 +1,12 @@
-﻿using System;
-using System.Collections.Generic;
-
-using FontStashSharp;
-
-using Microsoft.Xna.Framework;
-using Microsoft.Xna.Framework.Graphics;
-
+﻿using DungeonCrawlerWorld.Components;
 using DungeonCrawlerWorld.Data;
 using DungeonCrawlerWorld.Services;
-using DungeonCrawlerWorld.Components;
 using DungeonCrawlerWorld.Utilities;
+using FontStashSharp;
+using Microsoft.Xna.Framework;
+using Microsoft.Xna.Framework.Graphics;
+using System;
+using System.Collections.Generic;
 
 namespace DungeonCrawlerWorld.GameManagers.UserInterfaceManager
 {
@@ -60,8 +57,8 @@ namespace DungeonCrawlerWorld.GameManagers.UserInterfaceManager
             fonts = new Dictionary<FontType, SpriteFontBase>
             {
                 { FontType.DefaultMedium, FontService.GetFont(8) },
-                { FontType.DefaultLarge, FontService.GetFont(16) },
-                { FontType.DefaultHuge, FontService.GetFont(14) }
+                { FontType.DefaultLarge, FontService.GetFont(24) },
+                { FontType.DefaultHuge, FontService.GetFont(36) }
             };
 
             UpdateMaxScrollPosition();
@@ -161,7 +158,7 @@ namespace DungeonCrawlerWorld.GameManagers.UserInterfaceManager
 
                             //Multi-tile glyph fix. Only draw the top left tile to avoid duplication.
                             if (transformComponent.Position.X != mapNodeX) break;
-                            if( transformComponent.Position.Y != mapNodeY) break;
+                            if (transformComponent.Position.Y != mapNodeY) break;
 
                             SpriteFontBase glyphFont = null;
                             if (transformComponent.Size.X == 1)

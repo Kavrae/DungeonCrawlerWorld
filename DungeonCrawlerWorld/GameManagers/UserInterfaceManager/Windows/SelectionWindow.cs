@@ -1,13 +1,11 @@
-﻿using System;
+﻿using DungeonCrawlerWorld.Components;
+using DungeonCrawlerWorld.Data;
+using Microsoft.Xna.Framework;
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Reflection;
 using System.Text;
-
-using Microsoft.Xna.Framework;
-
-using DungeonCrawlerWorld.Components;
-using DungeonCrawlerWorld.Data;
 
 namespace DungeonCrawlerWorld.GameManagers.UserInterfaceManager
 {
@@ -74,6 +72,18 @@ namespace DungeonCrawlerWorld.GameManagers.UserInterfaceManager
 
         public void CreateComponentDebugInfoWindows(int entityId)
         {
+            var displayTextComponent = ComponentRepo.DisplayTextComponents[entityId];
+            if (displayTextComponent != null)
+            {
+                AddChildWindow(new TextWindow(this, new TextWindowOptions
+                {
+                    ShowTitle = false,
+                    Text = displayTextComponent.Value.Name,
+                    ShowBorder = false,
+                    MaximumSize = _contentSize,
+                    DisplayMode = WindowDisplayMode.Grow
+                }));
+            }
             foreach (var component in ComponentRepo.GetAllComponents(entityId))
             {
                 var text = new StringBuilder();

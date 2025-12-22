@@ -23,18 +23,10 @@ namespace DungeonCrawlerWorld.Components
     /// <summary>
     /// A core component that specifies the Position and Size of an entity.
     /// </summary>
-    public struct TransformComponent : IEntityComponent
+    public struct TransformComponent(Vector3Int position, Vector3Int size) : IEntityComponent
     {
-        public Vector3Int Position { get; set; }
-        public Vector3Int Size { get; set; } //TODO the z component is assumed to always be 1 for now.
-
-        public TransformComponent(int entityId, Vector3Int position, Vector3Int size)
-        {
-            Position = position;
-            Size = size;
-
-            ComponentRepo.TransformComponents[entityId] = this;
-        }
+        public Vector3Int Position { get; set; } = position;
+        public Vector3Int Size { get; set; } = size;
 
         public override string ToString()
         {

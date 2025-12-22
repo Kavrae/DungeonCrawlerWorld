@@ -1,8 +1,5 @@
-﻿using System;
-
+﻿using DungeonCrawlerWorld.Components;
 using Microsoft.Xna.Framework;
-
-using DungeonCrawlerWorld.Components;
 
 namespace DungeonCrawlerWorld.Data.Blueprints.Terrain
 {
@@ -17,12 +14,29 @@ namespace DungeonCrawlerWorld.Data.Blueprints.Terrain
     /// </components>
     public class Grass : IBlueprint
     {
-       public static void Build( int entityId )
+        public static void Build(int entityId)
         {
-            _ = new GlyphComponent(entityId, ",", Color.LawnGreen, new Point(5, -2));
-            _ = new BackgroundComponent(entityId, Color.ForestGreen);
-            _ = new DisplayTextComponent(entityId, "Grass", "Ordinary grass. Nothing special.");
-            _ = new TransformComponent(entityId, new Utilities.Vector3Int(0, 0, (int)MapHeight.Ground), new Utilities.Vector3Int(1, 1, 1));
+            ComponentRepo.SaveBackgroundComponent(
+                entityId,
+                new BackgroundComponent(Color.ForestGreen),
+                ComponentSaveMode.Overwrite);
+
+            ComponentRepo.SaveDisplayTextComponent(
+                entityId,
+                new DisplayTextComponent("Grass", "Ordinary grass. Nothing special."),
+                ComponentSaveMode.Overwrite);
+
+            ComponentRepo.SaveGlyphComponent(
+                entityId,
+                new GlyphComponent(",", Color.LawnGreen, new Point(5, -2)),
+                ComponentSaveMode.Overwrite);
+
+            ComponentRepo.SaveTransformComponent(
+                entityId,
+                 new TransformComponent(
+                     new Utilities.Vector3Int(0, 0, (int)MapHeight.Ground),
+                     new Utilities.Vector3Int(1, 1, 1)),
+                 ComponentSaveMode.Overwrite);
         }
     }
 }

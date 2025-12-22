@@ -8,21 +8,11 @@ namespace DungeonCrawlerWorld.Components
     /// Energy is utilized by other systems as a method of restricting an entity's speed and action count.
     /// Ex : an entity that attempts to run by moving twice as much is unlikely to have enough energy to also attack.
     /// </summary>
-    public struct EnergyComponent : IEntityComponent
+    public struct EnergyComponent(short currentEnergy, short energyRecharge, short maximumEnergy) : IEntityComponent
     {
-        public short CurrentEnergy { get; set; }
-        public short EnergyRecharge { get; set; }
-        public short MaximumEnergy { get; set; }
-
-        public EnergyComponent(int entityId) : this(entityId, 0, 0, 0) { }
-        public EnergyComponent(int entityId, short currentEnergy, short energyRecharge, short maximumEnergy)
-        {
-            CurrentEnergy = currentEnergy;
-            EnergyRecharge = energyRecharge;
-            MaximumEnergy = maximumEnergy;
-
-            ComponentRepo.EnergyComponents[entityId] = this;
-        }
+        public short CurrentEnergy { get; set; } = currentEnergy;
+        public short EnergyRecharge { get; set; } = energyRecharge;
+        public short MaximumEnergy { get; set; } = maximumEnergy;
 
         public override string ToString()
         {

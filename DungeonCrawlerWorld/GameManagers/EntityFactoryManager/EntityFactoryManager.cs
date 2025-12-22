@@ -54,7 +54,7 @@ namespace DungeonCrawlerWorld.GameManagers.EntityFactoryManager
         public static int BuildFromBlueprint<T>() where T : IBlueprint, new()
         {
             var entityId = ComponentRepo.GetNextEntityId();
-            T.Build( entityId );
+            T.Build(entityId);
             return entityId;
         }
 
@@ -63,7 +63,7 @@ namespace DungeonCrawlerWorld.GameManagers.EntityFactoryManager
         /// The Z axis will default to the blueprint's default map height transform value.
         /// This is primarily used to immediately spawn new entities onto the map.
         /// </summary>
-        public static int BuildFromBlueprint<T>( Point position ) where T : IBlueprint, new()
+        public static int BuildFromBlueprint<T>(Point position) where T : IBlueprint, new()
         {
             var entityId = BuildFromBlueprint<T>();
 

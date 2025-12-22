@@ -1,9 +1,7 @@
-﻿using System.Threading.Tasks;
-
-using Microsoft.Xna.Framework;
-
-using DungeonCrawlerWorld.Components;
+﻿using DungeonCrawlerWorld.Components;
 using DungeonCrawlerWorld.Utilities;
+using Microsoft.Xna.Framework;
+using System.Threading.Tasks;
 
 namespace DungeonCrawlerWorld.ComponentSystems
 {
@@ -27,7 +25,7 @@ namespace DungeonCrawlerWorld.ComponentSystems
                     actionEnergyComponent.CurrentEnergy += actionEnergyComponent.EnergyRecharge;
                     actionEnergyComponent.CurrentEnergy = MathUtility.ClampShort(actionEnergyComponent.CurrentEnergy, 0, actionEnergyComponent.MaximumEnergy);
 
-                    ComponentRepo.EnergyComponents[keyValuePair.Key] = actionEnergyComponent;
+                    ComponentRepo.SaveEnergyComponent(keyValuePair.Key, actionEnergyComponent, ComponentSaveMode.Overwrite);
                 }
             });
         }
