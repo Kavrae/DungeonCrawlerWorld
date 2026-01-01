@@ -197,7 +197,7 @@ namespace DungeonCrawlerWorld.GameManagers.UserInterfaceManager
             _showTitle = windowOptions.ShowTitle ?? false;
             _showTitleWhenMinimized = windowOptions.ShowTitleWhenMinimized ?? false;
             _titleText = windowOptions.TitleText ?? string.Empty;
-            _originalTitleSize = new Vector2(_windowOriginalSize.X, TitleFont.MeasureString(" ").Y + TitlePadding.Y * 2);
+            _originalTitleSize = new Vector2(_windowOriginalSize.X, TitleFont.MeasureString(" ").Y + TitlePadding.Y * 3);
             _titleSize = _originalTitleSize;
             _titleBackgroundColor = windowOptions.TitleColor ?? Color.LightBlue;
             TitleButtons = [];

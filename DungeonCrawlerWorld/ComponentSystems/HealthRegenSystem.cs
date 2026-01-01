@@ -1,7 +1,6 @@
 ﻿using DungeonCrawlerWorld.Components;
 using DungeonCrawlerWorld.Utilities;
 using Microsoft.Xna.Framework;
-using System.Threading.Tasks;
 
 
 namespace DungeonCrawlerWorld.ComponentSystems
@@ -18,9 +17,14 @@ namespace DungeonCrawlerWorld.ComponentSystems
 
         public void Update(GameTime gameTime)
         {
-            Parallel.ForEach(ComponentRepo.HealthComponents, keyValuePair =>
+            int entityId;
+            HealthComponent healthComponent;
+
+            foreach (var keyValuePair in ComponentRepo.HealthComponents)
             {
-                var healthComponent = keyValuePair.Value;
+                entityId = keyValuePair.Key;
+                healthComponent = keyValuePair.Value;
+
                 if (healthComponent.HealthRegen != 0)
                 {
                     healthComponent.CurrentHealth += healthComponent.HealthRegen;
@@ -28,7 +32,7 @@ namespace DungeonCrawlerWorld.ComponentSystems
 
                     ComponentRepo.SaveHealthComponent(keyValuePair.Key, healthComponent, ComponentSaveMode.Overwrite);
                 }
-            });
+            }
         }
     }
 }

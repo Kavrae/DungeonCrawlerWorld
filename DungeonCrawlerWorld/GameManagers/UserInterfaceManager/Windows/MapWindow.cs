@@ -86,23 +86,22 @@ namespace DungeonCrawlerWorld.GameManagers.UserInterfaceManager
         public void DrawBackgrounds(GameTime gameTime, SpriteBatch spriteBatch, Texture2D unitRectangle)
         {
             var selectedTileDrawn = false;
+            Color? backgroundColor;
 
             for (var column = 0; column < tileColumns; column++)
             {
                 for (var row = 0; row < tileRows; row++)
                 {
-                    var backgroundColor = backgroundColorCache[column + row * tileColumns];
+                    backgroundColor = backgroundColorCache[column + row * tileColumns];
 
                     if (backgroundColor != null)
                     {
                         drawRectangle.X = column * currentTileSize.X;
                         drawRectangle.Y = row * currentTileSize.Y;
 
-                        var isSelected = !selectedTileDrawn && world.SelectedMapNodePosition != null
+                        if (!selectedTileDrawn && world.SelectedMapNodePosition != null
                             && world.SelectedMapNodePosition.Value.X == column + currentScrollPosition.X
-                            && world.SelectedMapNodePosition.Value.Y == row + currentScrollPosition.Y;
-
-                        if (isSelected)
+                            && world.SelectedMapNodePosition.Value.Y == row + currentScrollPosition.Y)
                         {
                             spriteBatch.Draw(
                                 unitRectangle,
@@ -133,34 +132,48 @@ namespace DungeonCrawlerWorld.GameManagers.UserInterfaceManager
 
         public void DrawGlyphs(GameTime gameTime, SpriteBatch spriteBatch)
         {
+            int mapNodeX;
+            int mapNodeY;
+            MapNode mapNode;
+
+            int entityId;
+
+            GlyphComponent? nullableGlyphComponent;
+            GlyphComponent glyphComponent;
+            TransformComponent? nullableTransformComponent;
+            TransformComponent transformComponent;
+
+            Vector2 drawPosition;
+            SpriteFontBase glyphFont;
+
             for (var column = 0; column < tileColumns; column++)
             {
                 for (var row = 0; row < tileRows; row++)
                 {
-                    var mapNodeX = column + currentScrollPosition.X;
-                    var mapNodeY = row + currentScrollPosition.Y;
+                    mapNodeX = column + currentScrollPosition.X;
+                    mapNodeY = row + currentScrollPosition.Y;
 
                     for (var z = tileDepth - 1; z >= 0; z--)
                     {
-                        var mapNode = world.Map.MapNodes[mapNodeX, mapNodeY, z];
+                        mapNode = world.Map.MapNodes[mapNodeX, mapNodeY, z];
 
                         if (mapNode.EntityId != null)
                         {
-                            var entityId = mapNode.EntityId.Value;
-                            var nullableGlyphComponent = ComponentRepo.GlyphComponents[entityId];
+                            entityId = mapNode.EntityId.Value;
+                            nullableGlyphComponent = ComponentRepo.GlyphComponents[entityId];
                             if (nullableGlyphComponent == null) break;
 
-                            var nullableTransformComponent = ComponentRepo.TransformComponents[entityId];
+                            nullableTransformComponent = ComponentRepo.TransformComponents[entityId];
                             if (nullableTransformComponent == null) break;
 
-                            var glyphComponent = nullableGlyphComponent.Value;
-                            var transformComponent = nullableTransformComponent.Value;
+                            glyphComponent = nullableGlyphComponent.Value;
+                            transformComponent = nullableTransformComponent.Value;
 
                             //Multi-tile glyph fix. Only draw the top left tile to avoid duplication.
                             if (transformComponent.Position.X != mapNodeX) break;
                             if (transformComponent.Position.Y != mapNodeY) break;
 
-                            SpriteFontBase glyphFont = null;
+                            glyphFont = null;
                             if (transformComponent.Size.X == 1)
                             {
                                 glyphFont = fonts[FontType.DefaultMedium];
@@ -174,12 +187,14 @@ namespace DungeonCrawlerWorld.GameManagers.UserInterfaceManager
                                 glyphFont = fonts[FontType.DefaultHuge];
                             }
 
+                            drawPosition = new Vector2(
+                                (column * currentTileSize.X) + glyphComponent.GlyphOffset.X,
+                                (row * currentTileSize.Y) + glyphComponent.GlyphOffset.Y);
+
                             spriteBatch.DrawString(
                                 glyphFont,
                                 glyphComponent.Glyph,
-                                new Vector2(
-                                    (column * currentTileSize.X) + glyphComponent.GlyphOffset.X,
-                                    (row * currentTileSize.Y) + glyphComponent.GlyphOffset.Y),
+                                drawPosition,
                                 glyphComponent.GlyphColor);
 
                             break;
@@ -235,19 +250,24 @@ namespace DungeonCrawlerWorld.GameManagers.UserInterfaceManager
 
         public void UpdateBackgroundColorCache()
         {
+            int mapNodeX;
+            int mapNodeY;
+            MapNode mapNode;
+            BackgroundComponent? nullableBackgroundComponent;
+
             for (var column = 0; column < tileColumns; column++)
             {
                 for (var row = 0; row < tileRows; row++)
                 {
-                    var mapNodeX = column + currentScrollPosition.X;
-                    var mapNodeY = row + currentScrollPosition.Y;
+                    mapNodeX = column + currentScrollPosition.X;
+                    mapNodeY = row + currentScrollPosition.Y;
 
                     for (var z = tileDepth - 1; z >= 0; z--)
                     {
-                        var mapNode = world.Map.MapNodes[mapNodeX, mapNodeY, z];
+                        mapNode = world.Map.MapNodes[mapNodeX, mapNodeY, z];
                         if (mapNode.EntityId != null)
                         {
-                            var nullableBackgroundComponent = ComponentRepo.BackgroundComponents[mapNode.EntityId.Value];
+                            nullableBackgroundComponent = ComponentRepo.BackgroundComponents[mapNode.EntityId.Value];
                             if (nullableBackgroundComponent != null)
                             {
                                 backgroundColorCache[column + row * tileColumns] = nullableBackgroundComponent.Value.BackgroundColor;

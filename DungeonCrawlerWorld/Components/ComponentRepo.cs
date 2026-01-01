@@ -280,7 +280,7 @@ namespace DungeonCrawlerWorld.Components
         /// This allows them to be set to a specified size once and then fill in that memory instead of re-allocating the array with each new component added.
         /// This value should be adjusted as more components are added to the game and the array sizes are tested.
         /// </summary>
-        private static readonly int defaultDenseArraySize = 1000000;
+        private static readonly int defaultDenseArraySize = 2000000;
 
         /// <summary>
         /// Specifies the amount to increase the dense array sizes by whenever they have been filled.

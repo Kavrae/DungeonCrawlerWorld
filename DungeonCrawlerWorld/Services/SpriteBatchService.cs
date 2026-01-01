@@ -20,12 +20,12 @@ namespace DungeonCrawlerWorld.Services
         public SpriteBatchService(GraphicsDevice graphicsDevice)
         {
             _graphicsDevice = graphicsDevice;
+            spriteBatch = new SpriteBatch(_graphicsDevice);
         }
 
         public SpriteBatch StartSpriteBatch()
         {
-            spriteBatch = new SpriteBatch(_graphicsDevice);
-            spriteBatch.Begin();
+            spriteBatch.Begin(SpriteSortMode.Deferred, BlendState.AlphaBlend);
             return spriteBatch;
         }
 
@@ -37,7 +37,6 @@ namespace DungeonCrawlerWorld.Services
         public void EndSpriteBatch()
         {
             spriteBatch.End();
-            spriteBatch.Dispose();
         }
     }
 }

@@ -1,17 +1,15 @@
+using DungeonCrawlerWorld.Services;
+using DungeonCrawlerWorld.Utilities;
 using FontStashSharp;
-
 using Microsoft.Xna.Framework;
 using Microsoft.Xna.Framework.Graphics;
-
-using DungeonCrawlerWorld.Utilities;
-using DungeonCrawlerWorld.Services;
 
 namespace DungeonCrawlerWorld.GameManagers.UserInterfaceManager
 {
     public class TextWindow : Window
     {
         public string OriginalText { get; set; }
-        public DisplayText FormattedText { get; set; }
+        public DisplayText DisplayText { get; set; }
         public SpriteFontBase ContentFont { get; set; }
         public Color TextColor { get; set; }
         private readonly int LinePadding = 3;
@@ -37,22 +35,15 @@ namespace DungeonCrawlerWorld.GameManagers.UserInterfaceManager
 
         public override void DrawContent(GameTime gameTime, SpriteBatch spriteBatch, Texture2D unitRectangle)
         {
-            if (FormattedText != null && FormattedText.FormattedTextLines != null && FormattedText.FormattedTextLines.Count > 0)
+            if (!string.IsNullOrWhiteSpace(DisplayText.FormattedText))
             {
-                for (int lineNumber = 0; lineNumber < FormattedText.FormattedTextLines.Count; lineNumber++)
-                {
-                    var line = FormattedText.FormattedTextLines[lineNumber];
-                    if (!string.IsNullOrWhiteSpace(line))
-                    {
-                        spriteBatch.DrawString(
-                            ContentFont,
-                            line,
-                            new Vector2(
-                                LinePadding,
-                                (ContentFont.LineHeight * lineNumber) + (LinePadding * (lineNumber + 1))),
-                            TextColor);
-                    }
-                }
+                spriteBatch.DrawString(
+                    ContentFont,
+                    DisplayText.FormattedText,
+                    new Vector2(
+                        LinePadding,
+                        LinePadding),
+                    TextColor);
             }
         }
 
@@ -60,24 +51,14 @@ namespace DungeonCrawlerWorld.GameManagers.UserInterfaceManager
         {
             base.RecalculateStaticWindowSize();
 
-            FormattedText = StringUtility.FormatText(new FormatTextCriteria (OriginalText)
-            {
-                Font = ContentFont,
-                MaximumPixelWidth = _contentSize.X - (ContentPadding.X * 2),
-                WordWrap = true
-            });
+            ReformatDisplayText();
         }
 
         public override void RecalculateFillWindowSize()
         {
             base.RecalculateFillWindowSize();
 
-            FormattedText = StringUtility.FormatText(new FormatTextCriteria (OriginalText)
-            {
-                Font = ContentFont,
-                MaximumPixelWidth = _contentSize.X - (ContentPadding.X * 2),
-                WordWrap = true
-            });
+            ReformatDisplayText();
         }
 
         public override void RecalculateGrowWindowSize()
@@ -89,14 +70,9 @@ namespace DungeonCrawlerWorld.GameManagers.UserInterfaceManager
                 _contentSize.X -= _borderSize.X * 2;
             }
 
-            FormattedText = StringUtility.FormatText(new FormatTextCriteria(OriginalText)
-            {
-                Font = ContentFont,
-                MaximumPixelWidth = _contentSize.X - (ContentPadding.X * 2),
-                WordWrap = true
-            });
+            ReformatDisplayText();
 
-            _contentSize.Y = ContentFont.LineHeight * FormattedText.FormattedTextLines.Count + (LinePadding * (FormattedText.FormattedTextLines.Count + 1));
+            _contentSize.Y = ContentFont.LineHeight * DisplayText.LineCount + (LinePadding * (DisplayText.LineCount + 1));
 
             _windowCurrentSize = _contentSize;
             if (_showTitle)
@@ -111,6 +87,11 @@ namespace DungeonCrawlerWorld.GameManagers.UserInterfaceManager
             {
                 _windowCurrentSize += Vector2.Multiply(_borderSize, 2);
             }
+        }
+
+        public void ReformatDisplayText()
+        {
+            DisplayText = StringUtility.FormatText(new FormatTextCriteria(ContentFont, _contentSize.X - (ContentPadding.X * 2), OriginalText, FormatTextMode.Wordwrap));
         }
 
         public void UpdateText(string newText)

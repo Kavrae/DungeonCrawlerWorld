@@ -1,16 +1,14 @@
-﻿using System.Collections.Generic;
-
-using Microsoft.Xna.Framework;
-using Microsoft.Xna.Framework.Graphics;
-
-using DungeonCrawlerWorld.Services;
-using DungeonCrawlerWorld.GameManagers;
+﻿using DungeonCrawlerWorld.GameManagers;
 using DungeonCrawlerWorld.GameManagers.ComponentSystemManager;
-using DungeonCrawlerWorld.GameManagers.MapBuilderManager;
 using DungeonCrawlerWorld.GameManagers.EntityEventManager;
 using DungeonCrawlerWorld.GameManagers.EntityFactoryManager;
-using DungeonCrawlerWorld.GameManagers.UserInterfaceManager;
+using DungeonCrawlerWorld.GameManagers.MapBuilderManager;
 using DungeonCrawlerWorld.GameManagers.NotificationManager;
+using DungeonCrawlerWorld.GameManagers.UserInterfaceManager;
+using DungeonCrawlerWorld.Services;
+using Microsoft.Xna.Framework;
+using Microsoft.Xna.Framework.Graphics;
+using System.Collections.Generic;
 
 namespace DungeonCrawlerWorld
 {
@@ -29,8 +27,6 @@ namespace DungeonCrawlerWorld
     //Note6 : tutorial guild after first fight, which unlocks full game for the crawler
     public class GameLoop : Game
     {
-        public readonly Game Game;
-
         private GraphicsDeviceManager graphics;
         private DataAccessService dataAccessService;
 
@@ -39,8 +35,6 @@ namespace DungeonCrawlerWorld
 
         public GameLoop()
         {
-            Game = this;
-
             graphics = new GraphicsDeviceManager(this)
             {
                 PreferredBackBufferHeight = 1050,

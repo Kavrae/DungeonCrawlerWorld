@@ -79,7 +79,7 @@ namespace DungeonCrawlerWorld.GameManagers.MapBuilderManager
                         {
                             EntityFactoryManager.EntityFactoryManager.BuildFromBlueprint<GoblinEngineerBlueprint>(new Vector3Int(column, row, (int)MapHeight.Standing));
                         }
-                        if ((row - 5) % 5 == 0 && (column - 1) % 5 == 0) //80,000 Goblins
+                        if ((row - 5) % 5 == 0 && (column - 1) % 2 == 0) //200,000 Goblins
                         {
                             EntityFactoryManager.EntityFactoryManager.BuildFromBlueprint<Goblin>(new Vector3Int(column, row, (int)MapHeight.Standing));
                         }

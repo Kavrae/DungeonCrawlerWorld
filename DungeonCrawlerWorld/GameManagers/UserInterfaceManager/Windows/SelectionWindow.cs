@@ -4,7 +4,6 @@ using Microsoft.Xna.Framework;
 using System;
 using System.Collections.Generic;
 using System.Linq;
-using System.Reflection;
 using System.Text;
 
 namespace DungeonCrawlerWorld.GameManagers.UserInterfaceManager
@@ -18,7 +17,7 @@ namespace DungeonCrawlerWorld.GameManagers.UserInterfaceManager
         public SelectionWindow(World world, WindowOptions windowOptions) : base(null, windowOptions)
         {
             this.world = world;
-            selectedMapNodes = new List<MapNode>();
+            selectedMapNodes = [];
         }
 
         public override void Initialize()
@@ -49,10 +48,9 @@ namespace DungeonCrawlerWorld.GameManagers.UserInterfaceManager
                 {
                     foreach (var selectedMapNode in selectedMapNodes)
                     {
-                        var entityId = selectedMapNode.EntityId;
-                        if (entityId != null)
+                        if (selectedMapNode.EntityId != null)
                         {
-                            CreateComponentDebugInfoWindows(entityId.Value);
+                            CreateComponentDebugInfoWindows(selectedMapNode.EntityId.Value);
                         }
                     }
                 }
@@ -64,7 +62,6 @@ namespace DungeonCrawlerWorld.GameManagers.UserInterfaceManager
             else
             {
                 TitleText = "No map nodes selected";
-                selectedMapNodes = new List<MapNode>();
             }
 
             base.Update(gameTime);
@@ -84,13 +81,26 @@ namespace DungeonCrawlerWorld.GameManagers.UserInterfaceManager
                     DisplayMode = WindowDisplayMode.Grow
                 }));
             }
-            foreach (var component in ComponentRepo.GetAllComponents(entityId))
+            var components = ComponentRepo.GetAllComponents(entityId);
+            for (var componentIndex = 0; componentIndex < components.Count; componentIndex++)
             {
+                var component = components[componentIndex];
+                var properties = component.GetType().GetProperties()
+                    .Where(property => property.GetGetMethod().GetParameters().Length == 0);
+
                 var text = new StringBuilder();
-                foreach (PropertyInfo propertyInfo in component.GetType().GetProperties()
-                    .Where(property => !property.GetGetMethod().GetParameters().Any()))
+                for (var propertyIndex = 0; propertyIndex < properties.Count(); propertyIndex++)
                 {
-                    text.Append($"    {propertyInfo.Name} : {propertyInfo.GetValue(component, null)}{Environment.NewLine}");
+                    var propertyInfo = properties.ElementAt(propertyIndex);
+                    text.Append("    ");
+                    text.Append(propertyInfo.Name);
+                    text.Append(" : ");
+                    text.Append(propertyInfo.GetValue(component, null));
+
+                    if (propertyIndex < properties.Count() - 1)
+                    {
+                        text.Append(Environment.NewLine);
+                    }
                 }
 
                 AddChildWindow(new TextWindow(this, new TextWindowOptions
