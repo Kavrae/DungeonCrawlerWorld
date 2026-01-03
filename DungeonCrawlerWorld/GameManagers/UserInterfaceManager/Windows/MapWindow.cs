@@ -32,7 +32,7 @@ namespace DungeonCrawlerWorld.GameManagers.UserInterfaceManager
         Rectangle drawRectangle;
         Rectangle innerDrawRectangle;
 
-        private Color?[] backgroundColorCache;
+        private Color[] backgroundColorCache;
 
         public MapWindow()
         {
@@ -50,6 +50,8 @@ namespace DungeonCrawlerWorld.GameManagers.UserInterfaceManager
             };
 
             tileDepth = this.world.Map.Size.Z;
+
+            backgroundColorCache = [];
         }
 
         public void BuildWindow(Window parentWindow, TextWindowOptions windowOptions)
@@ -168,9 +170,9 @@ namespace DungeonCrawlerWorld.GameManagers.UserInterfaceManager
                     {
                         mapNode = world.Map.MapNodes[mapNodeX, mapNodeY, heightIndex];
 
-                        if (mapNode.EntityId != null)
+                        if (mapNode.EntityId != -1)
                         {
-                            entityId = mapNode.EntityId.Value;
+                            entityId = mapNode.EntityId;
 
                             //Entity does not contain a drawable glyph or something went wrong and does not have a transform.
                             //Skip to the next entity in the list.
@@ -262,7 +264,7 @@ namespace DungeonCrawlerWorld.GameManagers.UserInterfaceManager
             tileColumns = (int)Math.Floor(ContentSize.X / currentTileSize.X) + 1;
             tileRows = (int)Math.Floor(ContentSize.Y / currentTileSize.Y) + 1;
 
-            backgroundColorCache = new Color?[tileColumns * tileRows];
+            backgroundColorCache = new Color[tileColumns * tileRows];
         }
 
         public void UpdateDrawRectangles()
@@ -295,12 +297,12 @@ namespace DungeonCrawlerWorld.GameManagers.UserInterfaceManager
             int scrollColumn;
             int scrollRow;
 
-            if ((scrollDeltaX == 0 && scrollDeltaY == 0) || backgroundColorCache == null)
+            if (scrollDeltaX == 0 && scrollDeltaY == 0)
             {
                 return;
             }
 
-            var temporaryColorCache = new Color?[tileColumns * tileRows];
+            var temporaryColorCache = new Color[tileColumns * tileRows];
 
             // shift existing cells into new positions
             for (columnIndex = 0; columnIndex < tileColumns; columnIndex++)
@@ -313,10 +315,6 @@ namespace DungeonCrawlerWorld.GameManagers.UserInterfaceManager
                     if (scrollColumn >= 0 && scrollColumn < tileColumns && scrollRow >= 0 && scrollRow < tileRows)
                     {
                         temporaryColorCache[columnIndex + rowIndex * tileColumns] = backgroundColorCache[scrollColumn + scrollRow * tileColumns];
-                    }
-                    else
-                    {
-                        temporaryColorCache[columnIndex + rowIndex * tileColumns] = null; // will be filled below
                     }
                 }
             }
@@ -377,15 +375,15 @@ namespace DungeonCrawlerWorld.GameManagers.UserInterfaceManager
             }
         }
 
-        private Color? ResolveTopBackgroundColor(int mapNodeX, int mapNodeY)
+        private Color ResolveTopBackgroundColor(int mapNodeX, int mapNodeY)
         {
             int entityId;
             for (int z = tileDepth - 1; z >= 0; z--)
             {
                 var mapNode = world.Map.MapNodes[mapNodeX, mapNodeY, z];
-                if (mapNode.EntityId != null)
+                if (mapNode.EntityId != -1)
                 {
-                    entityId = mapNode.EntityId.Value;
+                    entityId = mapNode.EntityId;
                     if (ComponentRepo.BackgroundComponentPresent[entityId] != 0)
                     {
                         var backgroundComponent = ComponentRepo.BackgroundComponents[entityId];
@@ -393,7 +391,7 @@ namespace DungeonCrawlerWorld.GameManagers.UserInterfaceManager
                     }
                 }
             }
-            return null;
+            return Color.White;
         }
 
         public void SelectMapNodes(Point mousePosition)

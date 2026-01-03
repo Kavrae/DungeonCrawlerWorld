@@ -31,14 +31,17 @@ namespace DungeonCrawlerWorld.Data
             Size = mapSize;
             MapNodes = new MapNode[mapSize.X, mapSize.Y, mapSize.Z];
 
-            //Direct array indexing is found to be more performant over other iterators for larger maps.
-            for (int x = 0; x < Size.X; x++)
+            int xCoordinate;
+            int yCoordinate;
+            int zCoordinate;
+
+            for (xCoordinate = 0; xCoordinate < Size.X; xCoordinate++)
             {
-                for (int y = 0; y < Size.Y; y++)
+                for (yCoordinate = 0; yCoordinate < Size.Y; yCoordinate++)
                 {
-                    for (int z = 0; z < Size.Z; z++)
+                    for (zCoordinate = 0; zCoordinate < Size.Z; zCoordinate++)
                     {
-                        MapNodes[x, y, z] = new MapNode(x, y, z, mapSize);
+                        MapNodes[xCoordinate, yCoordinate, zCoordinate] = new MapNode(xCoordinate, yCoordinate, zCoordinate);
                     }
                 }
             }

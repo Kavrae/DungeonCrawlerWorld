@@ -76,9 +76,9 @@ namespace DungeonCrawlerWorld.GameManagers.UserInterfaceManager
             _selectedEntityIds.Clear();
             foreach (var selectedMapNode in selectedMapNodes)
             {
-                if (selectedMapNode.EntityId != null)
+                if (selectedMapNode.EntityId != -1)
                 {
-                    _selectedEntityIds.Add(selectedMapNode.EntityId.Value);
+                    _selectedEntityIds.Add(selectedMapNode.EntityId);
                 }
             }
 

@@ -39,7 +39,7 @@ namespace DungeonCrawlerWorld.Data
         {
             if (transformComponent.Size == TransformSize1)
             {
-                Map.MapNodes[transformComponent.Position.X, transformComponent.Position.Y, transformComponent.Position.Z].EntityId = null;
+                Map.MapNodes[transformComponent.Position.X, transformComponent.Position.Y, transformComponent.Position.Z].EntityId = -1;
                 Map.MapNodes[newPosition.X, newPosition.Y, newPosition.Z].EntityId = entityId;
             }
             else
@@ -50,7 +50,7 @@ namespace DungeonCrawlerWorld.Data
                 {
                     for (yCoordinate = transformComponent.Position.Y; yCoordinate < transformComponent.Position.Y + transformComponent.Size.Y; yCoordinate++)
                     {
-                        Map.MapNodes[xCoordinate, yCoordinate, zCoordinate].EntityId = null;
+                        Map.MapNodes[xCoordinate, yCoordinate, zCoordinate].EntityId = -1;
                     }
                 }
 
@@ -74,7 +74,7 @@ namespace DungeonCrawlerWorld.Data
             {
                 if (transformComponent.Size == TransformSize1)
                 {
-                    Map.MapNodes[transformComponent.Position.X, transformComponent.Position.Y, transformComponent.Position.Z].EntityId = null;
+                    Map.MapNodes[transformComponent.Position.X, transformComponent.Position.Y, transformComponent.Position.Z].EntityId = -1;
                 }
                 else
                 {
@@ -84,7 +84,7 @@ namespace DungeonCrawlerWorld.Data
                     {
                         for (yCoordinate = transformComponent.Position.Y; yCoordinate < transformComponent.Position.Y + transformComponent.Size.Y; yCoordinate++)
                         {
-                            Map.MapNodes[xCoordinate, yCoordinate, zCoordinate].EntityId = null;
+                            Map.MapNodes[xCoordinate, yCoordinate, zCoordinate].EntityId = -1;
                         }
                     }
                 }

@@ -128,7 +128,7 @@ namespace DungeonCrawlerWorld.ComponentSystems
                     for (zCoordinate = newTransform.Position.Z; zCoordinate < newTransform.Position.Z + newTransform.Size.Z; zCoordinate++)
                     {
                         candidateMapNode = world.Map.MapNodes[xCoordinate, yCoordinate, zCoordinate];
-                        if (candidateMapNode.EntityId != null && candidateMapNode.EntityId != entityId)
+                        if (candidateMapNode.EntityId != -1 && candidateMapNode.EntityId != entityId)
                         {
                             return false;
                         }
@@ -157,33 +157,40 @@ namespace DungeonCrawlerWorld.ComponentSystems
 
                 currentMapNode = world.Map.MapNodes[transformComponent.Position.X, transformComponent.Position.Y, transformComponent.Position.Z];
 
-                if (currentMapNode.NeighborNorth != null)
+                //North
+                if (currentMapNode.Position.Y > 0)
                 {
-                    movementCandidate.Position = currentMapNode.NeighborNorth.Value;
+                    movementCandidate.Position = new Vector3Int(transformComponent.Position.X, transformComponent.Position.Y - 1, transformComponent.Position.Z);
                     if (CanMove(movementCandidate, entityId))
                     {
                         _movementCandidates[movementCandidateCount++] = movementCandidate.Position;
                     }
                 }
-                if (currentMapNode.NeighborEast != null)
+
+                //East
+                if (currentMapNode.Position.X < world.Map.Size.X - 1)
                 {
-                    movementCandidate.Position = currentMapNode.NeighborEast.Value;
+                    movementCandidate.Position = new Vector3Int(transformComponent.Position.X + 1, transformComponent.Position.Y, transformComponent.Position.Z);
                     if (CanMove(movementCandidate, entityId))
                     {
                         _movementCandidates[movementCandidateCount++] = movementCandidate.Position;
                     }
                 }
-                if (currentMapNode.NeighborSouth != null)
+
+                //South
+                if (currentMapNode.Position.Y < world.Map.Size.Y - 1)
                 {
-                    movementCandidate.Position = currentMapNode.NeighborSouth.Value;
+                    movementCandidate.Position = new Vector3Int(transformComponent.Position.X, transformComponent.Position.Y + 1, transformComponent.Position.Z);
                     if (CanMove(movementCandidate, entityId))
                     {
                         _movementCandidates[movementCandidateCount++] = movementCandidate.Position;
                     }
                 }
-                if (currentMapNode.NeighborWest != null)
+
+                //West
+                if (currentMapNode.Position.X > 0)
                 {
-                    movementCandidate.Position = currentMapNode.NeighborWest.Value;
+                    movementCandidate.Position = new Vector3Int(transformComponent.Position.X - 1, transformComponent.Position.Y, transformComponent.Position.Z);
                     if (CanMove(movementCandidate, entityId))
                     {
                         _movementCandidates[movementCandidateCount++] = movementCandidate.Position;
