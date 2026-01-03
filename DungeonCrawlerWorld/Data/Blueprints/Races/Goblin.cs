@@ -7,40 +7,49 @@ namespace DungeonCrawlerWorld.Data.Blueprints.Races
 {
     public class Goblin : IBlueprint
     {
+        private static readonly Guid raceId = new("1aa7b1c2-0b54-4745-b616-8aaff734a7d6");
+        private static readonly string raceName = "Goblin";
+
+        private static readonly string[] personalNameOptions =
+        [
+            "TestName1",
+            "TestName2"
+        ];
+
+        private static readonly string description = "Small, green and smart. What Goblins lack in physical strength they make up in pure spunk.";
+
+        private static readonly short maximumEnergy = 100;
+        private static readonly short minimumEnergyRecharge = 10;
+        private static readonly short maximumEnergyRecharge = 100;
+
+        //TODO randomizer service
+        private static Random randomizer;
+
         public static void Build(int entityId)
         {
-            var randomizer = new Random();
-            var maxEnergy = 100;
-            var currentEnergy = randomizer.Next(0, maxEnergy);
-            var energyRecharge = randomizer.Next(10, 12);
-            var personalNameOptions = new string[]
-            {
-                "TestName1",
-                "TestName2"
-            };
-            var description = "Small, green and smart. What Goblins lack in physical strength they make up in pure spunk.";
+            randomizer = new Random();
 
             ComponentRepo.AddRaceComponent(
                 entityId,
                 new RaceComponent
                 (
-                    new("1aa7b1c2-0b54-4745-b616-8aaff734a7d6"),
-                    "Goblin",
+                    raceId,
+                    raceName,
                     description));
 
             ComponentRepo.SaveDisplayTextComponent(
                 entityId,
                 new DisplayTextComponent(
-                    $"{personalNameOptions[randomizer.Next(personalNameOptions.Length)]} : Goblin",
+                    $"{personalNameOptions[randomizer.Next(personalNameOptions.Length)]} : {raceName}",
                     description),
                 ComponentSaveMode.Merge);
 
             ComponentRepo.SaveEnergyComponent(
                 entityId,
                 new EnergyComponent(
-                    (short)currentEnergy,
-                    (short)energyRecharge,
-                    (short)maxEnergy),
+                    (short)randomizer.Next(0, maximumEnergy),
+                    (short)randomizer.Next(minimumEnergyRecharge, maximumEnergyRecharge),
+                    maximumEnergy),
                 ComponentSaveMode.Merge);
 
             ComponentRepo.SaveGlyphComponent(
@@ -62,7 +71,7 @@ namespace DungeonCrawlerWorld.Data.Blueprints.Races
                 entityId,
                 new TransformComponent(
                     new Vector3Int(-1, -1, (int)MapHeight.Standing),
-                    new Vector3Int(1, 1, 1)),
+                    new Vector3Byte(1, 1, 1)),
                 ComponentSaveMode.Merge);
         }
     }

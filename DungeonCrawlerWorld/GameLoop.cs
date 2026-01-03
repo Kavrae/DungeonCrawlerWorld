@@ -104,6 +104,7 @@ namespace DungeonCrawlerWorld
             GameServices.AddService(new DataAccessService());
             GameServices.AddService(new SpriteBatchService(graphics.GraphicsDevice));
             GameServices.AddService(new FontService());
+            GameServices.AddService(new WindowService());
         }
 
         public void InitializeGameManagers()

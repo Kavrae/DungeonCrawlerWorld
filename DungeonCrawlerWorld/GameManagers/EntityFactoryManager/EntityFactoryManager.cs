@@ -70,7 +70,7 @@ namespace DungeonCrawlerWorld.GameManagers.EntityFactoryManager
             var transformComponent = ComponentRepo.TransformComponents[entityId];
             if (transformComponent != null)
             {
-                world.MoveEntity(entityId, new Vector3Int(position.X, position.Y, transformComponent.Value.Position.Z));
+                world.PlaceEntityOnMap(entityId, new Vector3Int(position.X, position.Y, transformComponent.Value.Position.Z), transformComponent.Value);
             }
 
             return entityId;
@@ -88,7 +88,7 @@ namespace DungeonCrawlerWorld.GameManagers.EntityFactoryManager
             var transformComponent = ComponentRepo.TransformComponents[entityId];
             if (transformComponent != null)
             {
-                world.MoveEntity(entityId, position);
+                world.PlaceEntityOnMap(entityId, position, transformComponent.Value);
             }
 
             return entityId;

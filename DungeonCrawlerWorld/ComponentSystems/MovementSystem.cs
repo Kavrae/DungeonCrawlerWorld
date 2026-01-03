@@ -19,9 +19,19 @@ namespace DungeonCrawlerWorld.ComponentSystems
 
         private Random randomizer;
 
-        private Vector3Int[] _movementCandidates;
 
         short framesToWaitIfNoOptions = 10;
+
+        //Working Variables
+        MapNode currentMapNode;
+        MapNode candidateMapNode;
+        int xCoordinate;
+        int yCoordinate;
+        int zCoordinate;
+
+        TransformComponent movementCandidate;
+        byte movementCandidateCount;
+        private Vector3Int[] _movementCandidates;
 
         public MovementSystem()
         {
@@ -29,6 +39,7 @@ namespace DungeonCrawlerWorld.ComponentSystems
             world = dataAccessService.RetrieveWorld();
 
             randomizer = new Random();
+            movementCandidate = new TransformComponent();
             _movementCandidates = new Vector3Int[4];
         }
 
@@ -36,6 +47,8 @@ namespace DungeonCrawlerWorld.ComponentSystems
         {
             int entityId;
             MovementComponent movementComponent;
+            EnergyComponent energyComponent;
+            TransformComponent transformComponent;
 
             foreach (var keyValuePair in ComponentRepo.MovementComponents)
             {
@@ -49,12 +62,12 @@ namespace DungeonCrawlerWorld.ComponentSystems
                     continue;
                 }
 
-                if (!ComponentRepo.EnergyComponents.TryGetValue(entityId, out var actionEnergyComponent))
+                if (!ComponentRepo.EnergyComponents.TryGetValue(entityId, out energyComponent))
                 {
                     continue;
                 }
 
-                if (actionEnergyComponent.CurrentEnergy < movementComponent.EnergyToMove)
+                if (energyComponent.CurrentEnergy < movementComponent.EnergyToMove)
                 {
                     continue;
                 }
@@ -64,10 +77,10 @@ namespace DungeonCrawlerWorld.ComponentSystems
                 {
                     continue;
                 }
-                var transformComponent = transformComponentNullable.Value;
+                transformComponent = transformComponentNullable.Value;
 
                 SetNextMapPosition(entityId, movementComponent, transformComponent);
-                TryMoveToNextMapPosition(entityId, movementComponent, actionEnergyComponent); //TODO fix this so that we're not pulling transformComponent multiple times.
+                TryMoveToNextMapPosition(entityId, movementComponent, energyComponent, transformComponent);
             }
         }
 
@@ -79,7 +92,6 @@ namespace DungeonCrawlerWorld.ComponentSystems
             if (movementComponent.MovementMode == MovementMode.Random)
             {
                 SetRandomMapPosition(entityId, movementComponent, transformComponent);
-
             }
             else if (movementComponent.MovementMode == MovementMode.SeekTarget)
             {
@@ -92,11 +104,12 @@ namespace DungeonCrawlerWorld.ComponentSystems
         /// MoveEntity checks for collision in case other entities have already moved into the selected space.
         /// Energy from the EnergyComponent is consumed during movement, not during path selection.
         /// </summary>
-        public void TryMoveToNextMapPosition(int entityId, MovementComponent movementComponent, EnergyComponent energyComponent)
+        public void TryMoveToNextMapPosition(int entityId, MovementComponent movementComponent, EnergyComponent energyComponent, TransformComponent transformComponent)
         {
             if (movementComponent.NextMapPosition != null)
             {
-                world.MoveEntity(entityId, movementComponent.NextMapPosition.Value);
+                world.MoveEntity(entityId, movementComponent.NextMapPosition.Value, transformComponent);
+
                 energyComponent.CurrentEnergy -= movementComponent.EnergyToMove;
                 ComponentRepo.SaveEnergyComponent(entityId, energyComponent, ComponentSaveMode.Overwrite);
             }
@@ -107,18 +120,16 @@ namespace DungeonCrawlerWorld.ComponentSystems
         /// Basic collision detection is run to determine if any of the mapNodes are already occupied.
         /// Each map node can contain a single entity.
         /// </summary>
-        public bool CanMove(CubeInt newPosition, int entityId)
+        public bool CanMove(TransformComponent newTransform, int entityId)
         {
-            MapNode mapNode;
-
-            for (var x = newPosition.Position.X; x < newPosition.Position.X + newPosition.Size.X; x++)
+            for (xCoordinate = newTransform.Position.X; xCoordinate < newTransform.Position.X + newTransform.Size.X; xCoordinate++)
             {
-                for (var y = newPosition.Position.Y; y < newPosition.Position.Y + newPosition.Size.Y; y++)
+                for (yCoordinate = newTransform.Position.Y; yCoordinate < newTransform.Position.Y + newTransform.Size.Y; yCoordinate++)
                 {
-                    for (var z = newPosition.Position.Z; z < newPosition.Position.Z + newPosition.Size.Z; z++)
+                    for (zCoordinate = newTransform.Position.Z; zCoordinate < newTransform.Position.Z + newTransform.Size.Z; zCoordinate++)
                     {
-                        mapNode = world.Map.MapNodes[x, y, z];
-                        if (mapNode.EntityId != null && mapNode.EntityId != entityId)
+                        candidateMapNode = world.Map.MapNodes[xCoordinate, yCoordinate, zCoordinate];
+                        if (candidateMapNode.EntityId != null && candidateMapNode.EntityId != entityId)
                         {
                             return false;
                         }
@@ -142,40 +153,41 @@ namespace DungeonCrawlerWorld.ComponentSystems
         {
             if (movementComponent.NextMapPosition == null || transformComponent.Position == movementComponent.NextMapPosition.Value)
             {
-                var movementCandidateCount = 0;
+                movementCandidateCount = 0;
+                movementCandidate.Size = transformComponent.Size;
 
-                var mapNode = world.Map.MapNodes[transformComponent.Position.X, transformComponent.Position.Y, transformComponent.Position.Z];
+                currentMapNode = world.Map.MapNodes[transformComponent.Position.X, transformComponent.Position.Y, transformComponent.Position.Z];
 
-                if (mapNode.NeighborNorth != null)
+                if (currentMapNode.NeighborNorth != null)
                 {
-                    var newPositionCube = new CubeInt(mapNode.NeighborNorth.Value, transformComponent.Size);
-                    if (CanMove(newPositionCube, entityId))
+                    movementCandidate.Position = currentMapNode.NeighborNorth.Value;
+                    if (CanMove(movementCandidate, entityId))
                     {
-                        _movementCandidates[movementCandidateCount++] = newPositionCube.Position;
+                        _movementCandidates[movementCandidateCount++] = movementCandidate.Position;
                     }
                 }
-                if (mapNode.NeighborEast != null)
+                if (currentMapNode.NeighborEast != null)
                 {
-                    var newPositionCube = new CubeInt(mapNode.NeighborEast.Value, transformComponent.Size);
-                    if (CanMove(newPositionCube, entityId))
+                    movementCandidate.Position = currentMapNode.NeighborEast.Value;
+                    if (CanMove(movementCandidate, entityId))
                     {
-                        _movementCandidates[movementCandidateCount++] = newPositionCube.Position;
+                        _movementCandidates[movementCandidateCount++] = movementCandidate.Position;
                     }
                 }
-                if (mapNode.NeighborSouth != null)
+                if (currentMapNode.NeighborSouth != null)
                 {
-                    var newPositionCube = new CubeInt(mapNode.NeighborSouth.Value, transformComponent.Size);
-                    if (CanMove(newPositionCube, entityId))
+                    movementCandidate.Position = currentMapNode.NeighborSouth.Value;
+                    if (CanMove(movementCandidate, entityId))
                     {
-                        _movementCandidates[movementCandidateCount++] = newPositionCube.Position;
+                        _movementCandidates[movementCandidateCount++] = movementCandidate.Position;
                     }
                 }
-                if (mapNode.NeighborWest != null)
+                if (currentMapNode.NeighborWest != null)
                 {
-                    var newPositionCube = new CubeInt(mapNode.NeighborWest.Value, transformComponent.Size);
-                    if (CanMove(newPositionCube, entityId))
+                    movementCandidate.Position = currentMapNode.NeighborWest.Value;
+                    if (CanMove(movementCandidate, entityId))
                     {
-                        _movementCandidates[movementCandidateCount++] = newPositionCube.Position;
+                        _movementCandidates[movementCandidateCount++] = movementCandidate.Position;
                     }
                 }
 

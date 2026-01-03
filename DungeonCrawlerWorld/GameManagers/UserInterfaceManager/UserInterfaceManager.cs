@@ -1,15 +1,13 @@
-﻿using System.Collections.Generic;
-
+﻿using DungeonCrawlerWorld.Data;
+using DungeonCrawlerWorld.Services;
 using Microsoft.Xna.Framework;
 using Microsoft.Xna.Framework.Graphics;
 using Microsoft.Xna.Framework.Input;
-
-using DungeonCrawlerWorld.Data;
-using DungeonCrawlerWorld.Services;
+using System.Collections.Generic;
 
 namespace DungeonCrawlerWorld.GameManagers.UserInterfaceManager
 {
-    
+
     /// <summary>
     /// Manages the user interface components of the game.
     /// </summary>
@@ -21,17 +19,10 @@ namespace DungeonCrawlerWorld.GameManagers.UserInterfaceManager
         /// </summary>
         public bool CanUpdateWhilePaused => true;
 
-        /// <summary>
-        /// An in-memory reference to the game world retrieved from the Data Access Service.
-        /// </summary>
-        /// <todo>
-        /// Only reference the portion of the world relevant to UI updates within a certain radius.
-        /// </todo>
-        private World world;
-
         private GraphicsDevice graphicsDevice;
         private SpriteBatchService spriteBatchService;
         private DataAccessService dataAccessService;
+        private WindowService windowService;
 
         private DebugWindow debugWindow;
         private MapWindow mapWindow;
@@ -57,11 +48,12 @@ namespace DungeonCrawlerWorld.GameManagers.UserInterfaceManager
         public void Initialize()
         {
             dataAccessService = GameServices.GetService<DataAccessService>();
-            world = dataAccessService.RetrieveWorld();
 
             graphicsDevice = GameServices.GetService<GraphicsDevice>();
 
             spriteBatchService = GameServices.GetService<SpriteBatchService>();
+
+            windowService = GameServices.GetService<WindowService>();
 
             previousKeyboardState = Keyboard.GetState();
 
@@ -117,47 +109,47 @@ namespace DungeonCrawlerWorld.GameManagers.UserInterfaceManager
         /// </todo>
         public void CreateUserInterfaceWindows()
         {
-            debugWindow = new DebugWindow(
-                    world,
-                    new WindowOptions
-                    {
-                        RelativePosition = new Vector2(10, 0),
-                        Size = new Vector2(1536, 20),
-                        TitleText = "Debug Window",
-                        DisplayMode = WindowDisplayMode.Static,
-                    });
+            debugWindow = windowService.CreateWindow<DebugWindow, WindowOptions>(
+                null,
+                new WindowOptions
+                {
+                    RelativePosition = new Vector2(10, 0),
+                    Size = new Vector2(1536, 20),
+                    TitleText = "Debug Window",
+                    DisplayMode = WindowDisplayMode.Static,
+                });
 
-            mapWindow = new MapWindow(
-                    world,
-                    new WindowOptions
-                    {
-                        RelativePosition = new Vector2(12, 12),
-                        Size = new Vector2(1536, 930),
-                        ShowBorder = false,
-                        ShowTitle = true,
-                        TitleText = "Dungeon Crawler World : Test Floor",
-                        DisplayMode = WindowDisplayMode.Static
-                    });
+            mapWindow = windowService.CreateWindow<MapWindow, WindowOptions>(
+                null,
+                new WindowOptions
+                {
+                    RelativePosition = new Vector2(12, 12),
+                    Size = new Vector2(1536, 930),
+                    ShowBorder = false,
+                    ShowTitle = true,
+                    TitleText = "Dungeon Crawler World : Test Floor",
+                    DisplayMode = WindowDisplayMode.Static
+                });
 
-            selectionWindow = new SelectionWindow(
-                    world,
-                    new WindowOptions
-                    {
-                        RelativePosition = new Vector2(1565, 15),
-                        Size = new Vector2(270, 1440),
-                        ShowTitle = true,
-                        TitleText = "No map nodes selected",
-                        CanContainChildWindows = true,
-                        ChildWindowTileMode = WindowTileMode.Vertical,
-                        DisplayMode = WindowDisplayMode.Static
-                    });
+            selectionWindow = windowService.CreateWindow<SelectionWindow, WindowOptions>(
+                null,
+                new WindowOptions
+                {
+                    RelativePosition = new Vector2(1565, 15),
+                    Size = new Vector2(270, 1440),
+                    ShowTitle = true,
+                    TitleText = "No map nodes selected",
+                    CanContainChildWindows = true,
+                    ChildWindowTileMode = WindowTileMode.Vertical,
+                    DisplayMode = WindowDisplayMode.Static
+                });
 
-            userInterfaceWindows = new List<Window>
-            {
+            userInterfaceWindows =
+            [
                 debugWindow,
                 mapWindow,
                 selectionWindow
-            };
+            ];
         }
 
         /// <summary>

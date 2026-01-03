@@ -1,7 +1,6 @@
-﻿using Microsoft.Xna.Framework;
-
-using DungeonCrawlerWorld.ComponentSystems;
+﻿using DungeonCrawlerWorld.ComponentSystems;
 using DungeonCrawlerWorld.Data;
+using Microsoft.Xna.Framework;
 
 namespace DungeonCrawlerWorld.GameManagers.ComponentSystemManager
 {
@@ -72,13 +71,13 @@ namespace DungeonCrawlerWorld.GameManagers.ComponentSystemManager
             {
                 energyRechargeSystem.Update(gameTime);
             }
-            if ((currentFrame + 1) % energyRechargeSystem.FramesPerUpdate == 0)
-            {
-                movementSystem.Update(gameTime);
-            }
-            if ((currentFrame + 2) % healthRegenSystem.FramesPerUpdate == 0)
+            if ((currentFrame - 1) % healthRegenSystem.FramesPerUpdate == 0)
             {
                 healthRegenSystem.Update(gameTime);
+            }
+            if ((currentFrame - 5) % movementSystem.FramesPerUpdate == 0)
+            {
+                movementSystem.Update(gameTime);
             }
 
             currentFrame++;

@@ -1,5 +1,4 @@
-﻿using System;
-using DungeonCrawlerWorld.Utilities;
+﻿using DungeonCrawlerWorld.Utilities;
 
 namespace DungeonCrawlerWorld.Data
 {
@@ -31,9 +30,9 @@ namespace DungeonCrawlerWorld.Data
 
             Position = new Vector3Int(x, y, z);
             NeighborNorth = y > 0 ? new Vector3Int(x, y - 1, z) : null;
-            NeighborSouth = y < mapSize.X - 1 ? new Vector3Int(x, y + 1, z) : null;
+            NeighborSouth = y < mapSize.Y - 1 ? new Vector3Int(x, y + 1, z) : null;
             NeighborWest = x > 0 ? new Vector3Int(x - 1, y, z) : null;
-            NeighborEast = x < mapSize.Y - 1 ? new Vector3Int(x + 1, y, z) : null;
+            NeighborEast = x < mapSize.X - 1 ? new Vector3Int(x + 1, y, z) : null;
             NeighborDown = z > 0 ? new Vector3Int(x, y, z + 1) : null;
             NeighborUp = z < mapSize.Z - 1 ? new Vector3Int(x, y, z - 1) : null;
         }

@@ -7,34 +7,47 @@ namespace DungeonCrawlerWorld.Data.Blueprints.Races
 {
     public class Fairy : IBlueprint
     {
+        private static readonly Guid raceId = new("c22f6339-0a56-4528-b818-10052a831dc5");
+        private static readonly string raceName = "Fairy";
+
+        private static readonly string[] personalNameOptions =
+        [
+            "Fairy1",
+            "Fairy2"
+        ];
+
+        private static readonly string description = "TODO fairy description. Their magic is stored in their wings.";
+
+        private static readonly short maximumEnergy = 100;
+        private static readonly short minimumEnergyRecharge = 10;
+        private static readonly short maximumEnergyRecharge = 100;
+
+        //TODO randomizer service
+        private static Random randomizer;
         public static void Build(int entityId)
         {
-            var randomizer = new Random();
-            var personalNameOptions = new string[]
-            {
-                "TestName1",
-                "TestName2"
-            };
-            var name = "Fairy";
-            var description = "TODO fairy description. Their magic is stored in their wings.";
+            randomizer = new Random();
 
             ComponentRepo.AddRaceComponent(
                 entityId,
                 new RaceComponent(
-                    new("c22f6339-0a56-4528-b818-10052a831dc5"),
-                    name,
+                    raceId,
+                    raceName,
                     description));
 
             ComponentRepo.SaveDisplayTextComponent(
                 entityId,
                 new DisplayTextComponent(
-                    $"{personalNameOptions[randomizer.Next(personalNameOptions.Length)]} : {name}",
+                    $"{personalNameOptions[randomizer.Next(personalNameOptions.Length)]} : {raceName}",
                     description),
                 ComponentSaveMode.Merge);
 
             ComponentRepo.SaveEnergyComponent(
                 entityId,
-                new EnergyComponent(0, 10, 100),
+                new EnergyComponent(
+                    (short)randomizer.Next(0, maximumEnergy),
+                    (short)randomizer.Next(minimumEnergyRecharge, maximumEnergyRecharge),
+                    maximumEnergy),
                 ComponentSaveMode.Merge);
 
             ComponentRepo.SaveGlyphComponent(
@@ -56,7 +69,7 @@ namespace DungeonCrawlerWorld.Data.Blueprints.Races
                 entityId,
                 new TransformComponent(
                     new Vector3Int(0, 0, (int)MapHeight.Flying),
-                    new Vector3Int(1, 1, 1)),
+                    new Vector3Byte(1, 1, 1)),
                 ComponentSaveMode.Merge);
         }
     }

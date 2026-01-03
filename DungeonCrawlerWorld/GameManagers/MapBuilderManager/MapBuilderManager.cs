@@ -87,21 +87,22 @@ namespace DungeonCrawlerWorld.GameManagers.MapBuilderManager
                 }
             }
 
-            //TODO why do these have broken background colors?
             //Large goblin test
             var largeGoblinEntityId = EntityFactoryManager.EntityFactoryManager.BuildFromBlueprint<Goblin>();
             var largeGoblinPosition = new Vector3Int(2, 2, (int)MapHeight.Standing);
-            ComponentRepo.SaveTransformComponent(largeGoblinEntityId, new TransformComponent(largeGoblinPosition, new Vector3Int(2, 2, 1)), ComponentSaveMode.Overwrite);
+            var largeGoblinTransformComponent = new TransformComponent(largeGoblinPosition, new Vector3Byte(2, 2, 1));
+            ComponentRepo.SaveTransformComponent(largeGoblinEntityId, largeGoblinTransformComponent, ComponentSaveMode.Overwrite);
             var largeGoblinDisplayText = ComponentRepo.DisplayTextComponents[largeGoblinEntityId].Value;
             largeGoblinDisplayText.Description = "ThisIsAReallyLongDescriptionToTestTheWordWrapCapabilitiesAroundHyphenatingLongWordsMultipleTimes";
             ComponentRepo.SaveDisplayTextComponent(largeGoblinEntityId, largeGoblinDisplayText, ComponentSaveMode.Overwrite);
-            world.MoveEntity(largeGoblinEntityId, largeGoblinPosition);
+            world.PlaceEntityOnMap(largeGoblinEntityId, largeGoblinPosition, largeGoblinTransformComponent);
 
             //Huge goblin test
             var hugeGoblinEntityId = EntityFactoryManager.EntityFactoryManager.BuildFromBlueprint<GoblinEngineerBlueprint>();
             var hugeGoblinPosition = new Vector3Int(5, 5, (int)MapHeight.Standing);
-            ComponentRepo.SaveTransformComponent(hugeGoblinEntityId, new TransformComponent(hugeGoblinPosition, new Vector3Int(3, 3, 1)), ComponentSaveMode.Overwrite);
-            world.MoveEntity(hugeGoblinEntityId, hugeGoblinPosition);
+            var hugeGoblinTransformComponent = new TransformComponent(hugeGoblinPosition, new Vector3Byte(3, 3, 1));
+            ComponentRepo.SaveTransformComponent(hugeGoblinEntityId, hugeGoblinTransformComponent, ComponentSaveMode.Overwrite);
+            world.PlaceEntityOnMap(hugeGoblinEntityId, hugeGoblinPosition, hugeGoblinTransformComponent);
 
             //Stationary Fairy engineer test
             var fairyEngineerId = EntityFactoryManager.EntityFactoryManager.BuildFromBlueprint<Fairy>(new Vector3Int(1, 1, (int)MapHeight.Floating));

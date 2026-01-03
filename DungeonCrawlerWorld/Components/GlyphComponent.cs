@@ -8,12 +8,12 @@ namespace DungeonCrawlerWorld.Components
     public struct GlyphComponent(string glyph, Color glyphColor, Point glyphOffset) : IEntityComponent
     {
         /// <summary>
-        /// The ASCII symbol drawn to the screen
+        /// The ASCII symbols drawn to the screen for this entity
         /// </summary>
         public string Glyph { get; set; } = glyph;
 
         /// <summary>
-        /// The color of the symbol to be drawn. This can be modified by the race, class, status effect, or any other systems.
+        /// The color of the symbols to be drawn. This can be modified by the race, class, status effect, or any other systems.
         /// </summary>
         public Color GlyphColor { get; set; } = glyphColor;
 
@@ -21,6 +21,7 @@ namespace DungeonCrawlerWorld.Components
         /// The 2d pixel value determining how much the glyph is draw away from the center of a mapNode tile.
         /// This is used to correct unusually positioned glyphs, position multi-node entities, and draw effects that make a glyph move within a mapNode
         /// </summary>
+        //TODO offset per size.
         public Point GlyphOffset { get; set; } = glyphOffset;
 
         public override string ToString()

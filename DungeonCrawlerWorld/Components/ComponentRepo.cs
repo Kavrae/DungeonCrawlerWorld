@@ -17,6 +17,17 @@ namespace DungeonCrawlerWorld.Components
     /// Recycle entityIds and deal with maxInt limit.
     /// Retrieve from data storage.
     /// </todo>
+
+    //TODO when implementing the BitSet, for elements that can have shared values (glyph, background, race) have the bitset point to the same value.
+    ///     This will save memory and speed up comparisons at the cost of creates/deletes taking longer, which are rare anyway.
+    ///     Do this on a case-by-case basis.
+    ///     Then evaluate if there can be a common structure to share.
+    ///     BENCHMARK BEFORE CHANGES - fps and heap
+    ///         Before
+    ///             Live Objects : 632
+    ///             Private Bytes : 2.6 GB
+    ///             FPS : 34-39
+
     public static class ComponentRepo
     {
         /// <summary>
@@ -113,10 +124,10 @@ namespace DungeonCrawlerWorld.Components
                     //Do not change the position.
                     transformComponent.Position = existingComponent.Value.Position;
                     //Use the average size, rounding down. This will avoid collision issues that growing would cause.
-                    transformComponent.Size = new Vector3Int(
-                        (transformComponent.Size.X + existingComponent.Value.Size.X) / 2,
-                        (transformComponent.Size.Y + existingComponent.Value.Size.Y) / 2,
-                        (transformComponent.Size.Z + existingComponent.Value.Size.Z) / 2);
+                    transformComponent.Size = new Vector3Byte(
+                        (byte)((transformComponent.Size.X + existingComponent.Value.Size.X) / 2),
+                        (byte)((transformComponent.Size.Y + existingComponent.Value.Size.Y) / 2),
+                        (byte)((transformComponent.Size.Z + existingComponent.Value.Size.Z) / 2));
                 }
             }
             _transformComponents[entityId] = transformComponent;
@@ -205,8 +216,6 @@ namespace DungeonCrawlerWorld.Components
             }
         }
 
-        //TODO add SparseComponent SaveXyzComponent methods for merge logic.
-        //Probably need backing fields to prevent direct save access.
         private static Dictionary<int, EnergyComponent> _energyComponents { get; set; }
         public static IReadOnlyDictionary<int, EnergyComponent> EnergyComponents { get => _energyComponents; }
         public static void SaveEnergyComponent(int entityId, EnergyComponent energyComponent, ComponentSaveMode componentSaveMode)

@@ -1,13 +1,11 @@
-using System;
-using System.Collections.Generic;
-using System.Linq;
-
-using Microsoft.Xna.Framework;
-using Microsoft.Xna.Framework.Graphics;
-
 using DungeonCrawlerWorld.Data;
 using DungeonCrawlerWorld.GameManagers.UserInterfaceManager;
 using DungeonCrawlerWorld.Services;
+using Microsoft.Xna.Framework;
+using Microsoft.Xna.Framework.Graphics;
+using System;
+using System.Collections.Generic;
+using System.Linq;
 
 namespace DungeonCrawlerWorld.GameManagers.NotificationManager
 {
@@ -26,11 +24,13 @@ namespace DungeonCrawlerWorld.GameManagers.NotificationManager
         private List<(NotificationType notificationType, TextWindow summaryWindow, List<Notification> notifications)> _unreadNotifications;
 
         //TODO once this all works, make a _notificationActiveContainer
-        private List<(TextWindow activeWindow, Notification notification)> _activeNotifications; 
+        private List<(TextWindow activeWindow, Notification notification)> _activeNotifications;
 
         private GraphicsDevice graphicsDevice;
         private SpriteBatchService spriteBatchService;
         private Texture2D unitRectangle;
+
+        private WindowService windowService;
 
         public NotificationManager()
         {
@@ -39,6 +39,7 @@ namespace DungeonCrawlerWorld.GameManagers.NotificationManager
 
             graphicsDevice = GameServices.GetService<GraphicsDevice>();
             spriteBatchService = GameServices.GetService<SpriteBatchService>();
+            windowService = GameServices.GetService<WindowService>();
 
             unitRectangle = new Texture2D(graphicsDevice, 1, 1);
             unitRectangle.SetData(new[] { Color.White });
@@ -46,7 +47,7 @@ namespace DungeonCrawlerWorld.GameManagers.NotificationManager
 
         public void Initialize()
         {
-            _notificationSummaryContainer = new Window(null, new WindowOptions
+            _notificationSummaryContainer = windowService.CreateWindow<Window, WindowOptions>(null, new WindowOptions
             {
                 CanContainChildWindows = true,
                 ChildWindowTileMode = WindowTileMode.Horizontal,
@@ -58,9 +59,9 @@ namespace DungeonCrawlerWorld.GameManagers.NotificationManager
             });
             _notificationSummaryContainer.Initialize();
 
-            foreach (var notificationType in Enum.GetValues(typeof(NotificationType)).Cast<NotificationType>())
+            foreach (var notificationType in Enum.GetValues<NotificationType>().Cast<NotificationType>())
             {
-                var notificationCountWindow = new TextWindow(
+                var notificationCountWindow = windowService.CreateWindow<TextWindow, TextWindowOptions>(
                     _notificationSummaryContainer,
                     new TextWindowOptions
                     {
@@ -73,7 +74,7 @@ namespace DungeonCrawlerWorld.GameManagers.NotificationManager
                         Text = $"{notificationType}: 0",
                         ContentColor = Color.LightGray
                     });
-                _unreadNotifications.Add( new (notificationType, notificationCountWindow, new List<Notification>()));
+                _unreadNotifications.Add(new(notificationType, notificationCountWindow, new List<Notification>()));
                 _notificationSummaryContainer.AddChildWindow(notificationCountWindow);
             }
 
@@ -116,7 +117,7 @@ namespace DungeonCrawlerWorld.GameManagers.NotificationManager
 
             if (isActive)
             {
-                var notificationWindow = new TextWindow(
+                var notificationWindow = windowService.CreateWindow<TextWindow, TextWindowOptions>(
                         null,
                         new TextWindowOptions
                         {
@@ -132,7 +133,7 @@ namespace DungeonCrawlerWorld.GameManagers.NotificationManager
                             TitleText = notificationType.ToString(),
                             Text = message
                         });
-                _activeNotifications.Add( new(notificationWindow, notification) );
+                _activeNotifications.Add(new(notificationWindow, notification));
                 notificationWindow.Initialize();
             }
             else
@@ -143,7 +144,7 @@ namespace DungeonCrawlerWorld.GameManagers.NotificationManager
                 UpdateUnreadNotificationSummary(notificationType);
             }
         }
-        
+
         public void UpdateUnreadNotificationSummary(NotificationType notificationType)
         {
             var notificationTuple = _unreadNotifications
@@ -154,7 +155,7 @@ namespace DungeonCrawlerWorld.GameManagers.NotificationManager
 
         public void CloseNotification(Guid notificationId)
         {
-            if( _activeNotifications.Any(tuple => tuple.notification.Id == notificationId) )
+            if (_activeNotifications.Any(tuple => tuple.notification.Id == notificationId))
             {
                 var notificationTuple = _activeNotifications.First(tuple => tuple.notification.Id == notificationId);
                 _activeNotifications.Remove(notificationTuple);
@@ -191,7 +192,7 @@ namespace DungeonCrawlerWorld.GameManagers.NotificationManager
 
         public void MinimizeAllNotifications()
         {
-            foreach( var (_, notification) in _activeNotifications.ToList() )
+            foreach (var (_, notification) in _activeNotifications.ToList())
             {
                 MinimizeNotification(notification.Id);
             }

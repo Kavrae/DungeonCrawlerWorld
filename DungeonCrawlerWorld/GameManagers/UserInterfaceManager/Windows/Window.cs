@@ -40,6 +40,7 @@ namespace DungeonCrawlerWorld.GameManagers.UserInterfaceManager
 
         protected FontService FontService;
         protected DataAccessService DataAccessService;
+        protected WindowService WindowService;
 
         protected GameVariables _gameVariables;
 
@@ -85,7 +86,7 @@ namespace DungeonCrawlerWorld.GameManagers.UserInterfaceManager
         public Rectangle WindowRectangle { get { return _windowRectangle; } }
 
         protected bool _isVisible;
-        public bool IsVisible { get { return _isVisible; } }
+        public bool IsVisible { get { return _isVisible; } set { _isVisible = value; } }
 
         protected bool _isTransparent;
         public bool IsTransparent { get { return _isTransparent; } }
@@ -160,7 +161,7 @@ namespace DungeonCrawlerWorld.GameManagers.UserInterfaceManager
         public bool CanUserScrollHorizontal { get; set; }
         public bool CanUserScrollVertical { get; set; }
 
-        public Window(Window parentWindow, WindowOptions windowOptions)
+        public Window()
         {
             _windowId = Guid.NewGuid();
 
@@ -172,11 +173,16 @@ namespace DungeonCrawlerWorld.GameManagers.UserInterfaceManager
             DataAccessService = GameServices.GetService<DataAccessService>();
             _gameVariables = DataAccessService.RetrieveGameVariables();
 
+            WindowService = GameServices.GetService<WindowService>();
+        }
+
+        public virtual void BuildWindow(Window parentWindow, WindowOptions windowOptions)
+        {
             /*========Window hierarchy========*/
             _parentWindow = parentWindow;
             _canContainChildWindows = windowOptions.CanContainChildWindows ?? false;
             _childWindowTileMode = windowOptions.ChildWindowTileMode ?? WindowTileMode.Floating;
-            _childWindows = new List<Window>();
+            _childWindows = [];
 
             /*========Window========*/
             _windowDisplayMode = windowOptions.DisplayMode ?? WindowDisplayMode.Static;
@@ -206,7 +212,6 @@ namespace DungeonCrawlerWorld.GameManagers.UserInterfaceManager
             _showBorder = windowOptions.ShowBorder ?? false;
             _borderSize = windowOptions.BorderSize ?? new Vector2(1, 1);
 
-
             /*========Content========*/
             _contentBackgroundColor = windowOptions.ContentColor ?? Color.White;
 
@@ -217,8 +222,6 @@ namespace DungeonCrawlerWorld.GameManagers.UserInterfaceManager
             CanUserResize = windowOptions.CanUserResize ?? false;
             CanUserScrollHorizontal = windowOptions.CanUserScrollHorizontal ?? false;
             CanUserScrollVertical = windowOptions.CanUserScrollVertical ?? false;
-
-
         }
 
         public virtual void Initialize()
@@ -700,7 +703,7 @@ namespace DungeonCrawlerWorld.GameManagers.UserInterfaceManager
 
         public void Close()
         {
-            _parentWindow?.RemoveChildWindow(_windowId);
+            WindowService.CloseWindow(this);
         }
     }
 }

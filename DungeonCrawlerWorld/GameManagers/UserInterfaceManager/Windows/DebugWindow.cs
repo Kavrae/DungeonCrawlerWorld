@@ -1,33 +1,41 @@
-﻿using System;
-
+﻿using DungeonCrawlerWorld.Components;
+using DungeonCrawlerWorld.Services;
 using FontStashSharp;
-
 using Microsoft.Xna.Framework;
 using Microsoft.Xna.Framework.Graphics;
-
-using DungeonCrawlerWorld.Components;
-using DungeonCrawlerWorld.Data;
-using DungeonCrawlerWorld.Services;
+using System;
 
 namespace DungeonCrawlerWorld.GameManagers.UserInterfaceManager
 {
     public class DebugWindow : Window
     {
-        private World world;
-
         private readonly long ticksBetweenUpdates = 10000000; //1 seconds
         private long lastDrawTicks;
         private long lastUpdateTicks;
         private long drawsSinceLastDisplayUpdate;
         private long updatesSinceLastDisplayUpdate;
+
         private double drawsPerSecond;
+        private string drawsPerSecondString = string.Empty;
+
         private double updatesPerSecond;
+        private string updatesPerSecondString = string.Empty;
+
+        private double entityCount;
+        private string entityCountString = string.Empty;
+
+        private double movingEntityCount;
+        private string movingEntityCountString = string.Empty;
 
         private SpriteFontBase font;
 
-        public DebugWindow(World dataAccess, WindowOptions windowOptions) : base(null, windowOptions)
+        public DebugWindow() : base()
         {
-            world = dataAccess;
+        }
+
+        public void BuildWindow(Window parentWindow, TextWindowOptions windowOptions)
+        {
+            base.BuildWindow(parentWindow, windowOptions);
         }
 
         public override void Initialize()
@@ -53,10 +61,29 @@ namespace DungeonCrawlerWorld.GameManagers.UserInterfaceManager
             var ticksSinceLastUpdate = currentTicks - lastUpdateTicks;
             if (ticksSinceLastUpdate >= ticksBetweenUpdates)
             {
-                updatesPerSecond = updatesSinceLastDisplayUpdate;
+                var newUpdatesPerSecond = updatesSinceLastDisplayUpdate;
                 lastUpdateTicks = currentTicks;
-
                 updatesSinceLastDisplayUpdate = 0;
+
+                if (newUpdatesPerSecond != updatesPerSecond)
+                {
+                    updatesPerSecond = newUpdatesPerSecond;
+                    updatesPerSecondString = $"{string.Format("{0:N1}", updatesPerSecond)} ups";
+                }
+            }
+
+            var newEntityCount = ComponentRepo.CurrentMaxEntityId;
+            if (newEntityCount != entityCount)
+            {
+                entityCount = newEntityCount;
+                entityCountString = $"Entities : {string.Format("{0:N0}", entityCount)}";
+            }
+
+            var newMovingEntityCount = ComponentRepo.MovementComponents.Count;
+            if (newMovingEntityCount != movingEntityCount)
+            {
+                movingEntityCount = newMovingEntityCount;
+                movingEntityCountString = $"Moving Entities : {string.Format("{0:N0}", movingEntityCount)}";
             }
 
             base.Update(gameTime);
@@ -70,23 +97,28 @@ namespace DungeonCrawlerWorld.GameManagers.UserInterfaceManager
             var ticksSinceLastDraw = currentTicks - lastDrawTicks;
             if (ticksSinceLastDraw >= ticksBetweenUpdates)
             {
-                drawsPerSecond = drawsSinceLastDisplayUpdate;
+                var newDrawsPerSecond = drawsSinceLastDisplayUpdate;
                 lastDrawTicks = currentTicks;
-
                 drawsSinceLastDisplayUpdate = 0;
+
+                if (newDrawsPerSecond != drawsPerSecond)
+                {
+                    drawsPerSecond = newDrawsPerSecond;
+                    drawsPerSecondString = $"{string.Format("{0:N1}", drawsPerSecond)} fps";
+                }
             }
 
-            spriteBatch.DrawString(font, $"{string.Format("{0:N1}", updatesPerSecond)} ups", _contentAbsolutePosition, gameTime.IsRunningSlowly ? Color.Red : Color.Black);
+            spriteBatch.DrawString(font, updatesPerSecondString, _contentAbsolutePosition, gameTime.IsRunningSlowly ? Color.Red : Color.Black);
 
-            spriteBatch.DrawString(font, $"{string.Format("{0:N1}", drawsPerSecond)} fps", new Vector2(_contentAbsolutePosition.X + 60, _contentAbsolutePosition.Y), gameTime.IsRunningSlowly ? Color.Red : Color.Black);
+            spriteBatch.DrawString(font, drawsPerSecondString, new Vector2(_contentAbsolutePosition.X + 60, _contentAbsolutePosition.Y), gameTime.IsRunningSlowly ? Color.Red : Color.Black);
 
             if (_gameVariables.IsPaused)
             {
                 spriteBatch.DrawString(font, "Paused", new Vector2(_contentAbsolutePosition.X + 120, _contentAbsolutePosition.Y), Color.Red);
             }
 
-            spriteBatch.DrawString(font, $"Entities : {string.Format("{0:N0}", ComponentRepo.CurrentMaxEntityId)}", new Vector2(_contentAbsolutePosition.X + 180, _contentAbsolutePosition.Y), Color.Black);
-            spriteBatch.DrawString(font, $"Moving Entities : {string.Format("{0:N0}", ComponentRepo.MovementComponents.Count)}", new Vector2(_contentAbsolutePosition.X + 300, _contentAbsolutePosition.Y), Color.Black);
+            spriteBatch.DrawString(font, entityCountString, new Vector2(_contentAbsolutePosition.X + 180, _contentAbsolutePosition.Y), Color.Black);
+            spriteBatch.DrawString(font, movingEntityCountString, new Vector2(_contentAbsolutePosition.X + 300, _contentAbsolutePosition.Y), Color.Black);
         }
     }
 }

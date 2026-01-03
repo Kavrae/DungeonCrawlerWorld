@@ -14,13 +14,21 @@ namespace DungeonCrawlerWorld.GameManagers.UserInterfaceManager
         public Color TextColor { get; set; }
         private readonly int LinePadding = 3;
 
-        public TextWindow(Window parentWindow, TextWindowOptions windowOptions) : base(parentWindow, windowOptions)
+        public TextWindow() : base()
         {
             ContentFont = FontService.GetFont(8);
-            OriginalText = windowOptions.Text;
-            TextColor = windowOptions.TextColor ?? Color.Black;
+        }
 
-            _canContainChildWindows = false;
+        public override void BuildWindow(Window parentWindow, WindowOptions windowOptions)
+        {
+            base.BuildWindow(parentWindow, windowOptions);
+
+            if (windowOptions is TextWindowOptions textWindowOptions)
+            {
+                OriginalText = textWindowOptions.Text;
+                TextColor = textWindowOptions.TextColor ?? Color.Black;
+                _canContainChildWindows = false;
+            }
         }
 
         public override void Initialize()

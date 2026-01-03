@@ -35,7 +35,7 @@ namespace DungeonCrawlerWorld.Data.Blueprints.Terrain
                 entityId,
                  new TransformComponent(
                      new Utilities.Vector3Int(0, 0, (int)MapHeight.Ground),
-                     new Utilities.Vector3Int(1, 1, 1)),
+                     new Utilities.Vector3Byte(1, 1, 1)),
                  ComponentSaveMode.Overwrite);
         }
     }

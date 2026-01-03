@@ -13,6 +13,7 @@ namespace DungeonCrawlerWorld.Data
         /// The current map locations and data loaded into memory
         /// </summary>
         public Map Map { get; set; }
+        private Vector3Byte TransformSize1 = new(1, 1, 1);
 
         /// <summary>
         /// The position of the currently selected map node, if any, using the 2d Map coordinates.
@@ -21,57 +22,99 @@ namespace DungeonCrawlerWorld.Data
         /// </summary>
         public Point? SelectedMapNodePosition { get; set; }
 
+        //Working variables
+        int xCoordinate;
+        int yCoordinate;
+        int zCoordinate;
+
         public World()
         {
             Map = new Map(new Vector3Int(0, 0, 0));
         }
 
         /// <summary>
-        /// Moves an entity to a new position within the world, updating the old and new map node entity references accordingly.
-        /// Entities are effectively "teleported" to the destination mapNodes without moving through the intermediate nodes.
-        /// Only entities with a transform component can be moved.
-        /// Entities that occupy multiple mapModes must collision check each one before moving.
+        /// MoveEntity is assumed to always have valid starting and ending positions, unlike Place and Remove.
         /// </summary>
-        public void MoveEntity(int entityId, Vector3Int newPosition)
+        public void MoveEntity(int entityId, Vector3Int newPosition, TransformComponent transformComponent)
+        {
+            if (transformComponent.Size == TransformSize1)
+            {
+                Map.MapNodes[transformComponent.Position.X, transformComponent.Position.Y, transformComponent.Position.Z].EntityId = null;
+                Map.MapNodes[newPosition.X, newPosition.Y, newPosition.Z].EntityId = entityId;
+            }
+            else
+            {
+                zCoordinate = transformComponent.Position.Z;
+
+                for (xCoordinate = transformComponent.Position.X; xCoordinate < transformComponent.Position.X + transformComponent.Size.X; xCoordinate++)
+                {
+                    for (yCoordinate = transformComponent.Position.Y; yCoordinate < transformComponent.Position.Y + transformComponent.Size.Y; yCoordinate++)
+                    {
+                        Map.MapNodes[xCoordinate, yCoordinate, zCoordinate].EntityId = null;
+                    }
+                }
+
+                zCoordinate = newPosition.Z;
+                for (xCoordinate = newPosition.X; xCoordinate < newPosition.X + transformComponent.Size.X; xCoordinate++)
+                {
+                    for (yCoordinate = newPosition.Y; yCoordinate < newPosition.Y + transformComponent.Size.Y; yCoordinate++)
+                    {
+                        Map.MapNodes[xCoordinate, yCoordinate, zCoordinate].EntityId = entityId;
+                    }
+                }
+            }
+
+            transformComponent.Position = newPosition;
+            ComponentRepo.SaveTransformComponent(entityId, transformComponent, ComponentSaveMode.Overwrite);
+        }
+
+        public void RemoveEntityFromMap(int entityId, TransformComponent transformComponent)
+        {
+            if (IsOnMap(transformComponent.Position))
+            {
+                if (transformComponent.Size == TransformSize1)
+                {
+                    Map.MapNodes[transformComponent.Position.X, transformComponent.Position.Y, transformComponent.Position.Z].EntityId = null;
+                }
+                else
+                {
+                    zCoordinate = transformComponent.Position.Z;
+
+                    for (xCoordinate = transformComponent.Position.X; xCoordinate < transformComponent.Position.X + transformComponent.Size.X; xCoordinate++)
+                    {
+                        for (yCoordinate = transformComponent.Position.Y; yCoordinate < transformComponent.Position.Y + transformComponent.Size.Y; yCoordinate++)
+                        {
+                            Map.MapNodes[xCoordinate, yCoordinate, zCoordinate].EntityId = null;
+                        }
+                    }
+                }
+            }
+            transformComponent.Position = new Vector3Int();
+            ComponentRepo.SaveTransformComponent(entityId, transformComponent, ComponentSaveMode.Overwrite);
+        }
+
+        public void PlaceEntityOnMap(int entityId, Vector3Int newPosition, TransformComponent transformComponent)
         {
             if (IsOnMap(newPosition))
             {
-                var nullableTransformComponent = ComponentRepo.TransformComponents[entityId];
-                if (nullableTransformComponent != null)
+                if (transformComponent.Size == TransformSize1)
                 {
-                    var transformComponent = nullableTransformComponent.Value;
-
-                    //If the entity is already on the map, empty its map nodes.
-                    if (IsOnMap(nullableTransformComponent.Value.Position))
-                    {
-                        for (var x = transformComponent.Position.X; x < transformComponent.Position.X + transformComponent.Size.X; x++)
-                        {
-                            for (var y = transformComponent.Position.Y; y < transformComponent.Position.Y + transformComponent.Size.Y; y++)
-                            {
-                                var mapNode = Map.MapNodes[x, y, transformComponent.Position.Z];
-                                mapNode.EntityId = null;
-                                Map.MapNodes[x, y, transformComponent.Position.Z] = mapNode;
-                            }
-                        }
-                    }
-
-                    //Place the entity on the new map nodes.
-                    for (var x = newPosition.X; x < newPosition.X + transformComponent.Size.X; x++)
-                    {
-                        for (var y = newPosition.Y; y < newPosition.Y + transformComponent.Size.Y; y++)
-                        {
-                            var mapNode = Map.MapNodes[x, y, newPosition.Z];
-                            if (mapNode.EntityId != entityId)
-                            {
-                                mapNode.EntityId = entityId;
-                                Map.MapNodes[x, y, newPosition.Z] = mapNode;
-                            }
-                        }
-                    }
-
-                    transformComponent.Position = newPosition;
-                    ComponentRepo.SaveTransformComponent(entityId, transformComponent, ComponentSaveMode.Overwrite);
+                    Map.MapNodes[newPosition.X, newPosition.Y, newPosition.Z].EntityId = entityId;
                 }
+                else
+                {
+                    zCoordinate = newPosition.Z;
+
+                    for (xCoordinate = newPosition.X; xCoordinate < newPosition.X + transformComponent.Size.X; xCoordinate++)
+                    {
+                        for (yCoordinate = newPosition.Y; yCoordinate < newPosition.Y + transformComponent.Size.Y; yCoordinate++)
+                        {
+                            Map.MapNodes[xCoordinate, yCoordinate, zCoordinate].EntityId = entityId;
+                        }
+                    }
+                }
+                transformComponent.Position = newPosition;
+                ComponentRepo.SaveTransformComponent(entityId, transformComponent, ComponentSaveMode.Overwrite);
             }
         }
 

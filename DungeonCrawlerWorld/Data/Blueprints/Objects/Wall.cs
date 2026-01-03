@@ -29,7 +29,7 @@ namespace DungeonCrawlerWorld.Data.Blueprints.Objects
                 entityId,
                 new TransformComponent(
                     new Utilities.Vector3Int(0, 0, (int)MapHeight.Standing),
-                    new Utilities.Vector3Int(1, 1, 1)),
+                    new Utilities.Vector3Byte(1, 1, 1)),
                 ComponentSaveMode.Overwrite);
         }
     }
