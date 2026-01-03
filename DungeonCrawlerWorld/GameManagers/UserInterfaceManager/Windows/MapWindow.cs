@@ -147,9 +147,7 @@ namespace DungeonCrawlerWorld.GameManagers.UserInterfaceManager
 
             int entityId;
 
-            GlyphComponent? nullableGlyphComponent;
             GlyphComponent glyphComponent;
-            TransformComponent? nullableTransformComponent;
             TransformComponent transformComponent;
 
             Vector2 drawPosition;
@@ -173,18 +171,25 @@ namespace DungeonCrawlerWorld.GameManagers.UserInterfaceManager
                         if (mapNode.EntityId != null)
                         {
                             entityId = mapNode.EntityId.Value;
-                            nullableGlyphComponent = ComponentRepo.GlyphComponents[entityId];
-                            if (nullableGlyphComponent == null) break;
 
-                            nullableTransformComponent = ComponentRepo.TransformComponents[entityId];
-                            if (nullableTransformComponent == null) break;
+                            //Entity does not contain a drawable glyph or something went wrong and does not have a transform.
+                            //Skip to the next entity in the list.
+                            if (ComponentRepo.GlyphComponentPresent[entityId] == 0 ||
+                               ComponentRepo.TransformComponentPresent[entityId] == 0)
+                            {
+                                continue;
+                            }
 
-                            glyphComponent = nullableGlyphComponent.Value;
-                            transformComponent = nullableTransformComponent.Value;
+                            glyphComponent = ComponentRepo.GlyphComponents[entityId];
+                            transformComponent = ComponentRepo.TransformComponents[entityId];
 
                             //Multi-tile glyph fix. Only draw the top left tile to avoid duplication.
-                            if (transformComponent.Position.X != mapNodeX) break;
-                            if (transformComponent.Position.Y != mapNodeY) break;
+                            //Do not draw lower glyphs as the multi-tile entity is still covering it up.
+                            if (transformComponent.Position.X != mapNodeX ||
+                                transformComponent.Position.Y != mapNodeY)
+                            {
+                                break;
+                            }
 
                             glyphFont = null;
                             if (transformComponent.Size.X == 1)
@@ -374,15 +379,17 @@ namespace DungeonCrawlerWorld.GameManagers.UserInterfaceManager
 
         private Color? ResolveTopBackgroundColor(int mapNodeX, int mapNodeY)
         {
+            int entityId;
             for (int z = tileDepth - 1; z >= 0; z--)
             {
                 var mapNode = world.Map.MapNodes[mapNodeX, mapNodeY, z];
                 if (mapNode.EntityId != null)
                 {
-                    var backgroundComponents = ComponentRepo.BackgroundComponents[mapNode.EntityId.Value];
-                    if (backgroundComponents != null)
+                    entityId = mapNode.EntityId.Value;
+                    if (ComponentRepo.BackgroundComponentPresent[entityId] != 0)
                     {
-                        return backgroundComponents.Value.BackgroundColor;
+                        var backgroundComponent = ComponentRepo.BackgroundComponents[entityId];
+                        return backgroundComponent.BackgroundColor;
                     }
                 }
             }

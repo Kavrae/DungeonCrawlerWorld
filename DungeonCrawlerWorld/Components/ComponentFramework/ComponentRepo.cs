@@ -9,24 +9,14 @@ namespace DungeonCrawlerWorld.Components
     /// <summary>
     /// The in-memory storage of all components.
     /// Dense components are those that appear on the majority of entities.
-    /// Dense components are stored as arrays, indexed by the Integer entityId, to take advantage of array efficiency.
+    /// Dense components are stored as arrays, indexed by the Integer entityId, and checked before usage via presence arrays.
     /// Sparse components are those that appear infrequently on entities. 
-    /// They are stored as dictionaries, keyed by the Integer entityId, to avoid allocating unused memory on entities without those components.
+    /// Sparse components are stored as arrays and mapped to a separate dense array via entityId to avoid allocating unused memory on entities without those components.
     /// </summary>
     /// <todo> 
     /// Recycle entityIds and deal with maxInt limit.
     /// Retrieve from data storage.
     /// </todo>
-
-    //TODO when implementing the BitSet, for elements that can have shared values (glyph, background, race) have the bitset point to the same value.
-    ///     This will save memory and speed up comparisons at the cost of creates/deletes taking longer, which are rare anyway.
-    ///     Do this on a case-by-case basis.
-    ///     Then evaluate if there can be a common structure to share.
-    ///     BENCHMARK BEFORE CHANGES - fps and heap
-    ///         Before
-    ///             Live Objects : 632
-    ///             Private Bytes : 2.6 GB
-    ///             FPS : 34-39
 
     public static class ComponentRepo
     {
@@ -42,99 +32,99 @@ namespace DungeonCrawlerWorld.Components
         /// They are stored in arrays for increased efficiency when used by Systems at the cost of wasted storage space for entities without those components.
         /// A save method is created for each component to define Merges, which will handle permanent changes to an entity's components.
         /// </summary>
-        private static BackgroundComponent?[] _backgroundComponents;
-        public static IReadOnlyList<BackgroundComponent?> BackgroundComponents { get => _backgroundComponents; }
+
+        //TODO "XComponentPresent" method for each sparse component as well to keep to a common interface.
+        //TODO XComponent[entityId] methods for each sparse component to keep to a common interface.
+        private static BackgroundComponent[] _backgroundComponents;
+        public static BackgroundComponent[] BackgroundComponents => _backgroundComponents;
+
+        private static byte[] _backgroundComponentPresent;
+        public static byte[] BackgroundComponentPresent => _backgroundComponentPresent;
+
         public static void SaveBackgroundComponent(int entityId, BackgroundComponent backgroundComponent, ComponentSaveMode componentSaveMode)
         {
-            if (componentSaveMode == ComponentSaveMode.Merge)
+            if (componentSaveMode == ComponentSaveMode.Merge && _backgroundComponentPresent[entityId] != 0)
             {
                 var existingComponent = _backgroundComponents[entityId];
-                if (existingComponent != null)
-                {
-                    backgroundComponent.BackgroundColor = Color.Lerp(backgroundComponent.BackgroundColor, existingComponent.Value.BackgroundColor, 0.5f);
-                }
+                backgroundComponent.BackgroundColor = Color.Lerp(backgroundComponent.BackgroundColor, existingComponent.BackgroundColor, 0.5f);
             }
             _backgroundComponents[entityId] = backgroundComponent;
+            _backgroundComponentPresent[entityId] = 1;
         }
         public static void RemoveBackgroundComponent(int entityId)
         {
-            _backgroundComponents[entityId] = null;
+            _backgroundComponentPresent[entityId] = 0;
         }
 
-        private static DisplayTextComponent?[] _displayTextComponents;
-        public static IReadOnlyList<DisplayTextComponent?> DisplayTextComponents
-        {
-            get => _displayTextComponents;
-        }
+        private static DisplayTextComponent[] _displayTextComponents;
+        public static DisplayTextComponent[] DisplayTextComponents => _displayTextComponents;
+
+        private static byte[] _displayTextComponentPresent;
+        public static byte[] DisplayTextComponentPresent => _displayTextComponentPresent;
+
         public static void SaveDisplayTextComponent(int entityId, DisplayTextComponent displayTextComponent, ComponentSaveMode componentSaveMode)
         {
-            if (componentSaveMode == ComponentSaveMode.Merge)
+            if (componentSaveMode == ComponentSaveMode.Merge && _displayTextComponentPresent[entityId] != 0)
             {
                 var existingComponent = _displayTextComponents[entityId];
-                if (existingComponent != null)
-                {
-                    displayTextComponent.Name = existingComponent.Value.Name + " " + displayTextComponent.Name;
-                    displayTextComponent.Description = existingComponent.Value.Description + Environment.NewLine + displayTextComponent.Description;
-                }
+                displayTextComponent.Name = existingComponent.Name + " " + displayTextComponent.Name;
+                displayTextComponent.Description = existingComponent.Description + Environment.NewLine + displayTextComponent.Description;
             }
             _displayTextComponents[entityId] = displayTextComponent;
+            _displayTextComponentPresent[entityId] = 1;
         }
         public static void RemoveDisplayTextComponent(int entityId)
         {
-            _displayTextComponents[entityId] = null;
+            _displayTextComponentPresent[entityId] = 0;
         }
 
-        private static GlyphComponent?[] _glyphComponents;
-        public static IReadOnlyList<GlyphComponent?> GlyphComponents
-        {
-            get => _glyphComponents;
-        }
+        private static GlyphComponent[] _glyphComponents;
+        public static GlyphComponent[] GlyphComponents => _glyphComponents;
+
+        private static byte[] _glyphComponentPresent;
+        public static byte[] GlyphComponentPresent => _glyphComponentPresent;
         public static void SaveGlyphComponent(int entityId, GlyphComponent glyphComponent, ComponentSaveMode componentSaveMode)
         {
-            if (componentSaveMode == ComponentSaveMode.Merge)
+            if (componentSaveMode == ComponentSaveMode.Merge && _glyphComponentPresent[entityId] != 0)
             {
                 var existingComponent = _glyphComponents[entityId];
-                if (existingComponent != null)
-                {
-                    //Keep the glyph and offset the same as this will be hard to calculate currently.
-                    glyphComponent.GlyphColor = Color.Lerp(glyphComponent.GlyphColor, existingComponent.Value.GlyphColor, 0.5f);
-                    glyphComponent.Glyph = existingComponent.Value.Glyph;
-                    glyphComponent.GlyphOffset = existingComponent.Value.GlyphOffset;
-                }
+                //Keep the glyph and offset the same as this will be hard to calculate currently.
+                glyphComponent.GlyphColor = Color.Lerp(glyphComponent.GlyphColor, existingComponent.GlyphColor, 0.5f);
+                glyphComponent.Glyph = existingComponent.Glyph;
+                glyphComponent.GlyphOffset = existingComponent.GlyphOffset;
             }
             _glyphComponents[entityId] = glyphComponent;
+            _glyphComponentPresent[entityId] = 1;
         }
         public static void RemoveGlyphComponent(int entityId)
         {
-            _glyphComponents[entityId] = null;
+            _glyphComponentPresent[entityId] = 0;
         }
 
-        private static TransformComponent?[] _transformComponents;
-        public static IReadOnlyList<TransformComponent?> TransformComponents
-        {
-            get => _transformComponents;
-        }
+        private static TransformComponent[] _transformComponents;
+        public static TransformComponent[] TransformComponents => _transformComponents;
+
+        private static byte[] _transformComponentPresent;
+        public static byte[] TransformComponentPresent => _transformComponentPresent;
         public static void SaveTransformComponent(int entityId, TransformComponent transformComponent, ComponentSaveMode componentSaveMode)
         {
-            if (componentSaveMode == ComponentSaveMode.Merge)
+            if (componentSaveMode == ComponentSaveMode.Merge && _transformComponentPresent[entityId] != 0)
             {
                 var existingComponent = _transformComponents[entityId];
-                if (existingComponent != null)
-                {
-                    //Do not change the position.
-                    transformComponent.Position = existingComponent.Value.Position;
-                    //Use the average size, rounding down. This will avoid collision issues that growing would cause.
-                    transformComponent.Size = new Vector3Byte(
-                        (byte)((transformComponent.Size.X + existingComponent.Value.Size.X) / 2),
-                        (byte)((transformComponent.Size.Y + existingComponent.Value.Size.Y) / 2),
-                        (byte)((transformComponent.Size.Z + existingComponent.Value.Size.Z) / 2));
-                }
+                //Do not change the position.
+                transformComponent.Position = existingComponent.Position;
+                //Use the average size, rounding down. This will avoid collision issues that growing would cause.
+                transformComponent.Size = new Vector3Byte(
+                    (byte)((transformComponent.Size.X + existingComponent.Size.X) / 2),
+                    (byte)((transformComponent.Size.Y + existingComponent.Size.Y) / 2),
+                    (byte)((transformComponent.Size.Z + existingComponent.Size.Z) / 2));
             }
             _transformComponents[entityId] = transformComponent;
+            _transformComponentPresent[entityId] = 1;
         }
         public static void RemoveTransformComponent(int entityId)
         {
-            _transformComponents[entityId] = null;
+            _transformComponentPresent[entityId] = 0;
         }
 
         /// <summary>
@@ -216,8 +206,8 @@ namespace DungeonCrawlerWorld.Components
             }
         }
 
-        private static Dictionary<int, EnergyComponent> _energyComponents { get; set; }
-        public static IReadOnlyDictionary<int, EnergyComponent> EnergyComponents { get => _energyComponents; }
+        private static SparseSet<EnergyComponent> _energyComponents { get; set; }
+        public static SparseSet<EnergyComponent> EnergyComponents { get => _energyComponents; }
         public static void SaveEnergyComponent(int entityId, EnergyComponent energyComponent, ComponentSaveMode componentSaveMode)
         {
             if (componentSaveMode == ComponentSaveMode.Merge)
@@ -232,15 +222,15 @@ namespace DungeonCrawlerWorld.Components
                         energyComponent.MaximumEnergy);
                 }
             }
-            _energyComponents[entityId] = energyComponent;
+            _energyComponents.Save(entityId, energyComponent);
         }
         public static void RemoveEnergyComponent(int entityId)
         {
             _energyComponents.Remove(entityId);
         }
 
-        private static Dictionary<int, HealthComponent> _healthComponents { get; set; }
-        public static IReadOnlyDictionary<int, HealthComponent> HealthComponents { get => _healthComponents; }
+        private static SparseSet<HealthComponent> _healthComponents { get; set; }
+        public static SparseSet<HealthComponent> HealthComponents { get => _healthComponents; }
         public static void SaveHealthComponent(int entityId, HealthComponent healthComponent, ComponentSaveMode componentSaveMode)
         {
             if (componentSaveMode == ComponentSaveMode.Merge)
@@ -255,15 +245,15 @@ namespace DungeonCrawlerWorld.Components
                         healthComponent.MaximumHealth);
                 }
             }
-            _healthComponents[entityId] = healthComponent;
+            _healthComponents.Save(entityId, healthComponent);
         }
         public static void RemoveHealthComponent(int entityId)
         {
             _healthComponents.Remove(entityId);
         }
 
-        private static Dictionary<int, MovementComponent> _movementComponents { get; set; }
-        public static IReadOnlyDictionary<int, MovementComponent> MovementComponents { get => _movementComponents; }
+        private static SparseSet<MovementComponent> _movementComponents { get; set; }
+        public static SparseSet<MovementComponent> MovementComponents { get => _movementComponents; }
         public static void SaveMovementComponent(int entityId, MovementComponent movementComponent, ComponentSaveMode componentSaveMode)
         {
             if (componentSaveMode == ComponentSaveMode.Merge)
@@ -277,7 +267,7 @@ namespace DungeonCrawlerWorld.Components
                     movementComponent.TargetMapPosition = existingComponent.TargetMapPosition;
                 }
             }
-            _movementComponents[entityId] = movementComponent;
+            _movementComponents.Save(entityId, movementComponent);
         }
         public static void RemoveMovementComponent(int entityId)
         {
@@ -290,6 +280,8 @@ namespace DungeonCrawlerWorld.Components
         /// This value should be adjusted as more components are added to the game and the array sizes are tested.
         /// </summary>
         private static readonly int defaultDenseArraySize = 2000000;
+
+        private static readonly int defaultSparseArraySize = 200000;
 
         /// <summary>
         /// Specifies the amount to increase the dense array sizes by whenever they have been filled.
@@ -305,17 +297,26 @@ namespace DungeonCrawlerWorld.Components
         static ComponentRepo()
         {
             /* Dense Components */
-            _backgroundComponents = new BackgroundComponent?[defaultDenseArraySize];
-            _displayTextComponents = new DisplayTextComponent?[defaultDenseArraySize];
-            _glyphComponents = new GlyphComponent?[defaultDenseArraySize];
-            _transformComponents = new TransformComponent?[defaultDenseArraySize];
+            _backgroundComponents = new BackgroundComponent[defaultDenseArraySize];
+            _backgroundComponentPresent = new byte[defaultDenseArraySize];
+
+            _displayTextComponents = new DisplayTextComponent[defaultDenseArraySize];
+            _displayTextComponentPresent = new byte[defaultDenseArraySize];
+
+            _glyphComponents = new GlyphComponent[defaultDenseArraySize];
+            _glyphComponentPresent = new byte[defaultDenseArraySize];
+
+            _transformComponents = new TransformComponent[defaultDenseArraySize];
+            _transformComponentPresent = new byte[defaultDenseArraySize];
 
             /* Sparse Components */
+            _energyComponents = new SparseSet<EnergyComponent>(defaultDenseArraySize, defaultSparseArraySize);
+            _healthComponents = new SparseSet<HealthComponent>(defaultDenseArraySize, defaultSparseArraySize);
+            _movementComponents = new SparseSet<MovementComponent>(defaultDenseArraySize, defaultSparseArraySize);
+
+            /* Multi-assignment sparse components */
             _classComponents = [];
             _raceComponents = [];
-            _energyComponents = [];
-            _healthComponents = [];
-            _movementComponents = [];
         }
 
         /// <summary>
@@ -329,7 +330,7 @@ namespace DungeonCrawlerWorld.Components
 
             if (currentMaxEntityId >= currentDenseArraySize)
             {
-                IncrementAllDenseComponentArrays();
+                ResizeComponentArrays();
             }
             return currentMaxEntityId;
         }
@@ -337,13 +338,27 @@ namespace DungeonCrawlerWorld.Components
         /// <summary>
         /// Increase the size of all dense component arrays to account for new entityIds.
         /// </summary>
-        private static void IncrementAllDenseComponentArrays()
+        private static void ResizeComponentArrays()
         {
             currentDenseArraySize += denseArrayIncrementAmount;
+
+            //Dense Arrays
             Array.Resize(ref _backgroundComponents, currentDenseArraySize);
+            Array.Resize(ref _backgroundComponentPresent, currentDenseArraySize);
+
             Array.Resize(ref _displayTextComponents, currentDenseArraySize);
+            Array.Resize(ref _displayTextComponentPresent, currentDenseArraySize);
+
             Array.Resize(ref _glyphComponents, currentDenseArraySize);
+            Array.Resize(ref _glyphComponentPresent, currentDenseArraySize);
+
             Array.Resize(ref _transformComponents, currentDenseArraySize);
+            Array.Resize(ref _transformComponentPresent, currentDenseArraySize);
+
+            //Sparse Arrays
+            _healthComponents.Resize(currentDenseArraySize);
+            _energyComponents.Resize(currentDenseArraySize);
+            _movementComponents.Resize(currentDenseArraySize);
         }
 
         //Return a list of all components attached to an entity. This is primarily used in debugging mode.
@@ -352,17 +367,25 @@ namespace DungeonCrawlerWorld.Components
             var components = new List<IEntityComponent>(9);
 
             // Dense components
-            var backgroundComponent = BackgroundComponents[entityId];
-            if (backgroundComponent != null) components.Add(backgroundComponent);
+            if (_backgroundComponentPresent[entityId] != 0)
+            {
+                components.Add(BackgroundComponents[entityId]);
+            }
 
-            var displayTextComponent = DisplayTextComponents[entityId];
-            if (displayTextComponent != null) components.Add(displayTextComponent);
+            if (_displayTextComponentPresent[entityId] != 0)
+            {
+                components.Add(DisplayTextComponents[entityId]);
+            }
 
-            var glyphComponent = GlyphComponents[entityId];
-            if (glyphComponent != null) components.Add(glyphComponent);
+            if (_glyphComponentPresent[entityId] != 0)
+            {
+                components.Add(GlyphComponents[entityId]);
+            }
 
-            var transformComponent = TransformComponents[entityId];
-            if (transformComponent != null) components.Add(transformComponent);
+            if (_transformComponentPresent[entityId] != 0)
+            {
+                components.Add(TransformComponents[entityId]);
+            }
 
             // Sparse components
             if (RaceComponents.TryGetValue(entityId, out var raceComponentList))
@@ -405,13 +428,15 @@ namespace DungeonCrawlerWorld.Components
         /// </summary>
         public static void RemoveAllComponents(int entityId)
         {
-            _backgroundComponents[entityId] = null;
-            _displayTextComponents[entityId] = null;
-            _glyphComponents[entityId] = null;
-            _transformComponents[entityId] = null;
+            //Dense
+            _backgroundComponentPresent[entityId] = 0;
+            _displayTextComponentPresent[entityId] = 0;
+            _glyphComponentPresent[entityId] = 0;
+            _transformComponentPresent[entityId] = 0;
 
-            _raceComponents.Remove(entityId);
+            //Sparse
             _classComponents.Remove(entityId);
+            _raceComponents.Remove(entityId);
             _energyComponents.Remove(entityId);
             _healthComponents.Remove(entityId);
             _movementComponents.Remove(entityId);

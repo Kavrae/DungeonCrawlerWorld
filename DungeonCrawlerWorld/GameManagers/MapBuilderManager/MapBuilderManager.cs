@@ -92,7 +92,7 @@ namespace DungeonCrawlerWorld.GameManagers.MapBuilderManager
             var largeGoblinPosition = new Vector3Int(2, 2, (int)MapHeight.Standing);
             var largeGoblinTransformComponent = new TransformComponent(largeGoblinPosition, new Vector3Byte(2, 2, 1));
             ComponentRepo.SaveTransformComponent(largeGoblinEntityId, largeGoblinTransformComponent, ComponentSaveMode.Overwrite);
-            var largeGoblinDisplayText = ComponentRepo.DisplayTextComponents[largeGoblinEntityId].Value;
+            var largeGoblinDisplayText = ComponentRepo.DisplayTextComponents[largeGoblinEntityId];
             largeGoblinDisplayText.Description = "ThisIsAReallyLongDescriptionToTestTheWordWrapCapabilitiesAroundHyphenatingLongWordsMultipleTimes";
             ComponentRepo.SaveDisplayTextComponent(largeGoblinEntityId, largeGoblinDisplayText, ComponentSaveMode.Overwrite);
             world.PlaceEntityOnMap(largeGoblinEntityId, largeGoblinPosition, largeGoblinTransformComponent);

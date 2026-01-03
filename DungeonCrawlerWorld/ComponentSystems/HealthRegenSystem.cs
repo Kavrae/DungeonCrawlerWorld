@@ -17,20 +17,22 @@ namespace DungeonCrawlerWorld.ComponentSystems
 
         public void Update(GameTime gameTime)
         {
-            int entityId;
-            HealthComponent healthComponent;
+            var healthComponentSet = ComponentRepo.HealthComponents;
+            var entityIds = healthComponentSet.EntityIds;
+            var components = healthComponentSet.Components;
+            var count = healthComponentSet.Count;
 
-            foreach (var keyValuePair in ComponentRepo.HealthComponents)
+            for (var healthIndex = 0; healthIndex < count; healthIndex++)
             {
-                entityId = keyValuePair.Key;
-                healthComponent = keyValuePair.Value;
+                var entityId = entityIds[healthIndex];
+                var healthComponent = components[healthIndex];
 
                 if (healthComponent.HealthRegen != 0)
                 {
                     healthComponent.CurrentHealth += healthComponent.HealthRegen;
                     healthComponent.CurrentHealth = MathUtility.ClampShort(healthComponent.CurrentHealth, 0, healthComponent.MaximumHealth);
 
-                    ComponentRepo.SaveHealthComponent(keyValuePair.Key, healthComponent, ComponentSaveMode.Overwrite);
+                    healthComponentSet.Save(entityId, healthComponent);
                 }
             }
         }

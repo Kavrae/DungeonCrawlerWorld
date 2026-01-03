@@ -67,10 +67,10 @@ namespace DungeonCrawlerWorld.GameManagers.EntityFactoryManager
         {
             var entityId = BuildFromBlueprint<T>();
 
-            var transformComponent = ComponentRepo.TransformComponents[entityId];
-            if (transformComponent != null)
+            if (ComponentRepo.TransformComponentPresent[entityId] != 0)
             {
-                world.PlaceEntityOnMap(entityId, new Vector3Int(position.X, position.Y, transformComponent.Value.Position.Z), transformComponent.Value);
+                var transformComponent = ComponentRepo.TransformComponents[entityId];
+                world.PlaceEntityOnMap(entityId, new Vector3Int(position.X, position.Y, transformComponent.Position.Z), transformComponent);
             }
 
             return entityId;
@@ -85,10 +85,10 @@ namespace DungeonCrawlerWorld.GameManagers.EntityFactoryManager
         {
             var entityId = BuildFromBlueprint<T>();
 
-            var transformComponent = ComponentRepo.TransformComponents[entityId];
-            if (transformComponent != null)
+            if (ComponentRepo.TransformComponentPresent[entityId] != 0)
             {
-                world.PlaceEntityOnMap(entityId, position, transformComponent.Value);
+                var transformComponent = ComponentRepo.TransformComponents[entityId];
+                world.PlaceEntityOnMap(entityId, position, transformComponent);
             }
 
             return entityId;

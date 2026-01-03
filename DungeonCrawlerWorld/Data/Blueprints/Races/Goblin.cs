@@ -20,7 +20,7 @@ namespace DungeonCrawlerWorld.Data.Blueprints.Races
 
         private static readonly short maximumEnergy = 100;
         private static readonly short minimumEnergyRecharge = 10;
-        private static readonly short maximumEnergyRecharge = 100;
+        private static readonly short maximumEnergyRecharge = 20;
 
         //TODO randomizer service
         private static Random randomizer;
@@ -64,7 +64,7 @@ namespace DungeonCrawlerWorld.Data.Blueprints.Races
 
             ComponentRepo.SaveMovementComponent(
                 entityId,
-                new MovementComponent(MovementMode.Random, 20, null, null),
+                new MovementComponent(MovementMode.Random, 40, null, null),
                 ComponentSaveMode.Merge);
 
             ComponentRepo.SaveTransformComponent(

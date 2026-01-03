@@ -45,24 +45,24 @@ namespace DungeonCrawlerWorld.ComponentSystems
 
         public void Update(GameTime gameTime)
         {
-            int entityId;
-            MovementComponent movementComponent;
-            EnergyComponent energyComponent;
-            TransformComponent transformComponent;
+            var movementComponentSet = ComponentRepo.MovementComponents;
+            var entityIds = movementComponentSet.EntityIds;
+            var components = movementComponentSet.Components;
+            var count = movementComponentSet.Count;
 
-            foreach (var keyValuePair in ComponentRepo.MovementComponents)
+            for (var movementIndex = 0; movementIndex < count; movementIndex++)
             {
-                entityId = keyValuePair.Key;
-                movementComponent = keyValuePair.Value;
+                var entityId = entityIds[movementIndex];
+                var movementComponent = components[movementIndex];
 
                 if (movementComponent.FramesToWait > 0)
                 {
                     movementComponent.FramesToWait -= 1;
-                    ComponentRepo.SaveMovementComponent(entityId, movementComponent, ComponentSaveMode.Overwrite);
+                    movementComponentSet.Save(entityId, movementComponent);
                     continue;
                 }
 
-                if (!ComponentRepo.EnergyComponents.TryGetValue(entityId, out energyComponent))
+                if (!ComponentRepo.EnergyComponents.TryGetValue(entityId, out var energyComponent))
                 {
                     continue;
                 }
@@ -72,12 +72,11 @@ namespace DungeonCrawlerWorld.ComponentSystems
                     continue;
                 }
 
-                var transformComponentNullable = ComponentRepo.TransformComponents[entityId];
-                if (transformComponentNullable == null)
+                if (ComponentRepo.TransformComponentPresent[entityId] == 0)
                 {
                     continue;
                 }
-                transformComponent = transformComponentNullable.Value;
+                var transformComponent = ComponentRepo.TransformComponents[entityId];
 
                 SetNextMapPosition(entityId, movementComponent, transformComponent);
                 TryMoveToNextMapPosition(entityId, movementComponent, energyComponent, transformComponent);
