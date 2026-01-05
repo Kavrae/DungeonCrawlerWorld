@@ -16,27 +16,23 @@ namespace DungeonCrawlerWorld.Data.Blueprints.Terrain
     {
         public static void Build(int entityId)
         {
-            ComponentRepo.SaveBackgroundComponent(
+            ComponentRepo.BackgroundComponents.Add(
                 entityId,
-                new BackgroundComponent(Color.ForestGreen),
-                ComponentSaveMode.Overwrite);
+                new BackgroundComponent(Color.ForestGreen));
 
-            ComponentRepo.SaveDisplayTextComponent(
+            ComponentRepo.DisplayTextComponents.Add(
                 entityId,
-                new DisplayTextComponent("Grass", "Ordinary grass. Nothing special."),
-                ComponentSaveMode.Overwrite);
+                new DisplayTextComponent("Grass", "Ordinary grass. Nothing special."));
 
-            ComponentRepo.SaveGlyphComponent(
+            ComponentRepo.GlyphComponents.Add(
                 entityId,
-                new GlyphComponent(",", Color.LawnGreen, new Point(5, -2)),
-                ComponentSaveMode.Overwrite);
+                new GlyphComponent(",", Color.LawnGreen, new Point(5, -2)));
 
-            ComponentRepo.SaveTransformComponent(
+            ComponentRepo.TransformComponents.Add(
                 entityId,
                  new TransformComponent(
                      new Utilities.Vector3Int(0, 0, (int)MapHeight.Ground),
-                     new Utilities.Vector3Byte(1, 1, 1)),
-                 ComponentSaveMode.Overwrite);
+                     new Utilities.Vector3Byte(1, 1, 1)));
         }
     }
 }

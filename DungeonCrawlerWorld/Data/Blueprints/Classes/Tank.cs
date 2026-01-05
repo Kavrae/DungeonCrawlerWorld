@@ -14,19 +14,18 @@ namespace DungeonCrawlerWorld.Data.Blueprints.Classes
                     "Extra hit points"));
 
             //TODO temporary : tanks have 10% more health and health regen
-            if (ComponentRepo.HealthComponents.TryGetValue(entityId, out var healthComponent))
+            if (ComponentRepo.HealthComponents.HasComponent(entityId))
             {
-                //TODO need to track additive and multiplicative bonuses, not just multiply them here. Otherwise order matters and introduces many bugs.
+                ref var healthComponent = ref ComponentRepo.HealthComponents.Get(entityId);
                 healthComponent.MaximumHealth = (short)(healthComponent.MaximumHealth * 1.10m);
                 healthComponent.HealthRegen = (short)(healthComponent.HealthRegen * 1.10m);
-                ComponentRepo.SaveHealthComponent(entityId, healthComponent, ComponentSaveMode.Overwrite);
             }
 
-            ComponentRepo.SaveDisplayTextComponent(entityId, new DisplayTextComponent
+            ComponentRepo.DisplayTextComponents.Add(entityId, new DisplayTextComponent
             {
                 Name = "Tank",
                 Description = "Tank class"
-            }, ComponentSaveMode.Merge);
+            });
         }
     }
 }

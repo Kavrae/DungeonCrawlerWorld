@@ -8,15 +8,16 @@ namespace DungeonCrawlerWorld.Components
         private int[] _entityIdToDenseIndexMap;
         private int[] _denseIndexToEntityIdMap;
         private T[] _denseComponents;
-        private int _count;
+        private readonly MergeAction<T> _mergeImplementation;
 
+        private int _count;
         public int Count => _count;
 
 
-        public SparseSet(int maximumEntityCount, int initialDenseCapacity = 256)
+        public SparseSet(int maximumEntityCount, int initialCapacity, MergeAction<T> mergeImplementation)
         {
             ArgumentOutOfRangeException.ThrowIfNegativeOrZero(maximumEntityCount);
-            ArgumentOutOfRangeException.ThrowIfNegativeOrZero(initialDenseCapacity);
+            ArgumentOutOfRangeException.ThrowIfNegativeOrZero(initialCapacity);
 
             _maxEntities = maximumEntityCount;
             _entityIdToDenseIndexMap = new int[_maxEntities];
@@ -25,9 +26,11 @@ namespace DungeonCrawlerWorld.Components
                 _entityIdToDenseIndexMap[i] = -1;
             }
 
-            _denseComponents = new T[initialDenseCapacity];
+            _denseComponents = new T[initialCapacity];
             _denseIndexToEntityIdMap = new int[_denseComponents.Length];
             _count = 0;
+
+            _mergeImplementation = mergeImplementation;
         }
 
         public void Resize(int newMaximumEntityCount)
@@ -40,26 +43,13 @@ namespace DungeonCrawlerWorld.Components
             _maxEntities = newMaximumEntityCount;
         }
 
-        public bool TryGetValue(int entityId, out T component)
-        {
-            var denseIndex = _entityIdToDenseIndexMap[entityId];
-            if ((uint)denseIndex < (uint)_count)
-            {
-                component = _denseComponents[denseIndex];
-                return true;
-            }
-            component = default;
-            return false;
-        }
-
-        public bool Contains(int entityId) => _entityIdToDenseIndexMap[entityId] >= 0;
-
-        public void Save(int entityId, T newComponent)
+        public void Add(int entityId, T newComponent)
         {
             var denseIndex = _entityIdToDenseIndexMap[entityId];
             if (denseIndex >= 0)
             {
-                _denseComponents[denseIndex] = newComponent;
+                ref var existingComponent = ref _denseComponents[denseIndex];
+                _mergeImplementation(ref existingComponent, newComponent);
                 return;
             }
 
@@ -74,6 +64,18 @@ namespace DungeonCrawlerWorld.Components
             _entityIdToDenseIndexMap[entityId] = _count;
             _count++;
         }
+
+        public bool HasComponent(int entityId) => _entityIdToDenseIndexMap[entityId] >= 0;
+
+        public ref T Get(int entityId)
+        {
+            var denseIndex = _entityIdToDenseIndexMap[entityId];
+            return ref _denseComponents[denseIndex];
+        }
+
+        public ref T[] AllComponents => ref _denseComponents;
+
+        public int[] AllEntityIds => _denseIndexToEntityIdMap;
 
         public bool Remove(int entityId)
         {
@@ -95,8 +97,5 @@ namespace DungeonCrawlerWorld.Components
             _count--;
             return true;
         }
-
-        public T[] Components => _denseComponents;
-        public int[] EntityIds => _denseIndexToEntityIdMap;
     }
 }

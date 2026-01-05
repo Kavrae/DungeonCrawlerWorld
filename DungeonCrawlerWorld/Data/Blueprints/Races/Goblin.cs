@@ -19,8 +19,8 @@ namespace DungeonCrawlerWorld.Data.Blueprints.Races
         private static readonly string description = "Small, green and smart. What Goblins lack in physical strength they make up in pure spunk.";
 
         private static readonly short maximumEnergy = 100;
-        private static readonly short minimumEnergyRecharge = 10;
-        private static readonly short maximumEnergyRecharge = 20;
+        private static readonly short minimumEnergyRecharge = 5;
+        private static readonly short maximumEnergyRecharge = 10;
 
         //TODO randomizer service
         private static Random randomizer;
@@ -37,42 +37,36 @@ namespace DungeonCrawlerWorld.Data.Blueprints.Races
                     raceName,
                     description));
 
-            ComponentRepo.SaveDisplayTextComponent(
+            ComponentRepo.DisplayTextComponents.Add(
                 entityId,
                 new DisplayTextComponent(
                     $"{personalNameOptions[randomizer.Next(personalNameOptions.Length)]} : {raceName}",
-                    description),
-                ComponentSaveMode.Merge);
+                    description));
 
-            ComponentRepo.SaveEnergyComponent(
+            ComponentRepo.EnergyComponents.Add(
                 entityId,
                 new EnergyComponent(
                     (short)randomizer.Next(0, maximumEnergy),
                     (short)randomizer.Next(minimumEnergyRecharge, maximumEnergyRecharge),
-                    maximumEnergy),
-                ComponentSaveMode.Merge);
+                    maximumEnergy));
 
-            ComponentRepo.SaveGlyphComponent(
+            ComponentRepo.GlyphComponents.Add(
                 entityId,
-                new GlyphComponent("g", Color.DarkGreen, new Point(3, -2)),
-                ComponentSaveMode.Merge);
+                new GlyphComponent("g", Color.DarkGreen, new Point(3, -2)));
 
-            ComponentRepo.SaveHealthComponent(
+            ComponentRepo.HealthComponents.Add(
                 entityId,
-                new HealthComponent(100, 10, 200),
-                ComponentSaveMode.Merge);
+                new HealthComponent(100, 10, 200));
 
-            ComponentRepo.SaveMovementComponent(
+            ComponentRepo.MovementComponents.Add(
                 entityId,
-                new MovementComponent(MovementMode.Random, 40, null, null),
-                ComponentSaveMode.Merge);
+                new MovementComponent(MovementMode.Random, 40, null, null));
 
-            ComponentRepo.SaveTransformComponent(
+            ComponentRepo.TransformComponents.Add(
                 entityId,
                 new TransformComponent(
                     new Vector3Int(-1, -1, (int)MapHeight.Standing),
-                    new Vector3Byte(1, 1, 1)),
-                ComponentSaveMode.Merge);
+                    new Vector3Byte(1, 1, 1)));
         }
     }
 }

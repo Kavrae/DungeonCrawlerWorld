@@ -12,8 +12,8 @@ namespace DungeonCrawlerWorld.Data
     /// </remarks>
     public struct MapNode(int x, int y, int z)
     {
-        public Vector3Int Position { get; set; } = new Vector3Int(x, y, z);
-
         public int EntityId { get; set; } = -1;
+
+        public Vector3Int Position { get; set; } = new Vector3Int(x, y, z);
     }
 }

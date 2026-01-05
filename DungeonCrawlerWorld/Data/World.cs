@@ -35,7 +35,7 @@ namespace DungeonCrawlerWorld.Data
         /// <summary>
         /// MoveEntity is assumed to always have valid starting and ending positions, unlike Place and Remove.
         /// </summary>
-        public void MoveEntity(int entityId, Vector3Int newPosition, TransformComponent transformComponent)
+        public void MoveEntity(int entityId, Vector3Int newPosition, ref TransformComponent transformComponent)
         {
             if (transformComponent.Size == TransformSize1)
             {
@@ -65,10 +65,9 @@ namespace DungeonCrawlerWorld.Data
             }
 
             transformComponent.Position = newPosition;
-            ComponentRepo.SaveTransformComponent(entityId, transformComponent, ComponentSaveMode.Overwrite);
         }
 
-        public void RemoveEntityFromMap(int entityId, TransformComponent transformComponent)
+        public void RemoveEntityFromMap(int entityId, ref TransformComponent transformComponent)
         {
             if (IsOnMap(transformComponent.Position))
             {
@@ -90,10 +89,9 @@ namespace DungeonCrawlerWorld.Data
                 }
             }
             transformComponent.Position = new Vector3Int();
-            ComponentRepo.SaveTransformComponent(entityId, transformComponent, ComponentSaveMode.Overwrite);
         }
 
-        public void PlaceEntityOnMap(int entityId, Vector3Int newPosition, TransformComponent transformComponent)
+        public void PlaceEntityOnMap(int entityId, Vector3Int newPosition, ref TransformComponent transformComponent)
         {
             if (IsOnMap(newPosition))
             {
@@ -114,7 +112,6 @@ namespace DungeonCrawlerWorld.Data
                     }
                 }
                 transformComponent.Position = newPosition;
-                ComponentRepo.SaveTransformComponent(entityId, transformComponent, ComponentSaveMode.Overwrite);
             }
         }
 

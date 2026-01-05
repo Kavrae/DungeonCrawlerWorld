@@ -35,42 +35,36 @@ namespace DungeonCrawlerWorld.Data.Blueprints.Races
                     raceName,
                     description));
 
-            ComponentRepo.SaveDisplayTextComponent(
+            ComponentRepo.DisplayTextComponents.Add(
                 entityId,
                 new DisplayTextComponent(
                     $"{personalNameOptions[randomizer.Next(personalNameOptions.Length)]} : {raceName}",
-                    description),
-                ComponentSaveMode.Merge);
+                    description));
 
-            ComponentRepo.SaveEnergyComponent(
+            ComponentRepo.EnergyComponents.Add(
                 entityId,
                 new EnergyComponent(
                     (short)randomizer.Next(0, maximumEnergy),
                     (short)randomizer.Next(minimumEnergyRecharge, maximumEnergyRecharge),
-                    maximumEnergy),
-                ComponentSaveMode.Merge);
+                    maximumEnergy));
 
-            ComponentRepo.SaveGlyphComponent(
+            ComponentRepo.GlyphComponents.Add(
                 entityId,
-                new GlyphComponent("f", Color.DeepPink, new Point(4, 0)),
-                ComponentSaveMode.Merge);
+                new GlyphComponent("f", Color.DeepPink, new Point(4, 0)));
 
-            ComponentRepo.SaveHealthComponent(
+            ComponentRepo.HealthComponents.Add(
                 entityId,
-                new HealthComponent(100, 5, 100),
-                ComponentSaveMode.Merge);
+                new HealthComponent(100, 5, 100));
 
-            ComponentRepo.SaveMovementComponent(
+            ComponentRepo.MovementComponents.Add(
                 entityId,
-                new MovementComponent(MovementMode.Random, 15, null, null),
-                ComponentSaveMode.Merge);
+                new MovementComponent(MovementMode.Random, 15, null, null));
 
-            ComponentRepo.SaveTransformComponent(
+            ComponentRepo.TransformComponents.Add(
                 entityId,
                 new TransformComponent(
                     new Vector3Int(0, 0, (int)MapHeight.Flying),
-                    new Vector3Byte(1, 1, 1)),
-                ComponentSaveMode.Merge);
+                    new Vector3Byte(1, 1, 1)));
         }
     }
 }

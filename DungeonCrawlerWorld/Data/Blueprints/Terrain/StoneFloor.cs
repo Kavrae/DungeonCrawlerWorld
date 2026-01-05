@@ -15,22 +15,19 @@ namespace DungeonCrawlerWorld.Data.Blueprints.Terrain
     {
         public static void Build(int entityId)
         {
-            ComponentRepo.SaveBackgroundComponent(
+            ComponentRepo.BackgroundComponents.Add(
                 entityId,
-                new BackgroundComponent(Color.LightGray),
-                ComponentSaveMode.Overwrite);
+                new BackgroundComponent(Color.LightGray));
 
-            ComponentRepo.SaveDisplayTextComponent(
+            ComponentRepo.DisplayTextComponents.Add(
                 entityId,
-                new DisplayTextComponent("Stone floor", "Roughly shaped stone floor."),
-                ComponentSaveMode.Overwrite);
+                new DisplayTextComponent("Stone floor", "Roughly shaped stone floor."));
 
-            ComponentRepo.SaveTransformComponent(
+            ComponentRepo.TransformComponents.Add(
                 entityId,
                 new TransformComponent(
                     new Utilities.Vector3Int(0, 0, (int)MapHeight.Ground),
-                    new Utilities.Vector3Byte(1, 1, 1)),
-                ComponentSaveMode.Overwrite);
+                    new Utilities.Vector3Byte(1, 1, 1)));
         }
     }
 }

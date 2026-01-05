@@ -30,7 +30,7 @@ namespace DungeonCrawlerWorld.Components
 
         public override readonly string ToString()
         {
-            return $"Transform : {Size} {Position}";
+            return $"Transform : {Position} {Size}";
         }
     }
 }

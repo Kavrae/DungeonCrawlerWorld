@@ -149,9 +149,6 @@ namespace DungeonCrawlerWorld.GameManagers.UserInterfaceManager
 
             int entityId;
 
-            GlyphComponent glyphComponent;
-            TransformComponent transformComponent;
-
             Vector2 drawPosition;
             SpriteFontBase glyphFont;
 
@@ -176,14 +173,14 @@ namespace DungeonCrawlerWorld.GameManagers.UserInterfaceManager
 
                             //Entity does not contain a drawable glyph or something went wrong and does not have a transform.
                             //Skip to the next entity in the list.
-                            if (ComponentRepo.GlyphComponentPresent[entityId] == 0 ||
-                               ComponentRepo.TransformComponentPresent[entityId] == 0)
+                            if (!ComponentRepo.GlyphComponents.HasComponent(entityId) ||
+                               !ComponentRepo.TransformComponents.HasComponent(entityId))
                             {
                                 continue;
                             }
 
-                            glyphComponent = ComponentRepo.GlyphComponents[entityId];
-                            transformComponent = ComponentRepo.TransformComponents[entityId];
+                            var glyphComponent = ComponentRepo.GlyphComponents.Get(entityId);
+                            var transformComponent = ComponentRepo.TransformComponents.Get(entityId);
 
                             //Multi-tile glyph fix. Only draw the top left tile to avoid duplication.
                             //Do not draw lower glyphs as the multi-tile entity is still covering it up.
@@ -384,9 +381,9 @@ namespace DungeonCrawlerWorld.GameManagers.UserInterfaceManager
                 if (mapNode.EntityId != -1)
                 {
                     entityId = mapNode.EntityId;
-                    if (ComponentRepo.BackgroundComponentPresent[entityId] != 0)
+                    if (ComponentRepo.BackgroundComponents.HasComponent(entityId))
                     {
-                        var backgroundComponent = ComponentRepo.BackgroundComponents[entityId];
+                        var backgroundComponent = ComponentRepo.BackgroundComponents.Get(entityId);
                         return backgroundComponent.BackgroundColor;
                     }
                 }

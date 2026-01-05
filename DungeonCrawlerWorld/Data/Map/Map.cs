@@ -46,5 +46,10 @@ namespace DungeonCrawlerWorld.Data
                 }
             }
         }
+
+        public MapNode GetMapNode(Vector3Int coordinates)
+        {
+            return MapNodes[coordinates.X, coordinates.Y, coordinates.Z];
+        }
     }
 }

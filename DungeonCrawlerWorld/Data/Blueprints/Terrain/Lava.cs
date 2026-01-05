@@ -19,27 +19,23 @@ namespace DungeonCrawlerWorld.Data.Blueprints.Terrain
         //TODO burn icon on selection
         public static void Build(int entityId)
         {
-            ComponentRepo.SaveBackgroundComponent(
+            ComponentRepo.BackgroundComponents.Add(
                 entityId,
-                new BackgroundComponent(Color.OrangeRed),
-                ComponentSaveMode.Overwrite);
+                new BackgroundComponent(Color.OrangeRed));
 
-            ComponentRepo.SaveDisplayTextComponent(
+            ComponentRepo.DisplayTextComponents.Add(
                 entityId,
-                new DisplayTextComponent("Lava", "Hot lava. I do not recommend stepping on it."),
-                ComponentSaveMode.Overwrite);
+                new DisplayTextComponent("Lava", "Hot lava. I do not recommend stepping on it."));
 
-            ComponentRepo.SaveGlyphComponent(
+            ComponentRepo.GlyphComponents.Add(
                 entityId,
-                new GlyphComponent("~", Color.Yellow, new Point(3, 0)),
-                ComponentSaveMode.Overwrite);
+                new GlyphComponent("~", Color.Yellow, new Point(3, 0)));
 
-            ComponentRepo.SaveTransformComponent(
+            ComponentRepo.TransformComponents.Add(
                 entityId,
                 new TransformComponent(
                     new Utilities.Vector3Int(0, 0, (int)MapHeight.Ground),
-                    new Utilities.Vector3Byte(1, 1, 1)),
-                ComponentSaveMode.Overwrite);
+                    new Utilities.Vector3Byte(1, 1, 1)));
         }
     }
 }

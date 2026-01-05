@@ -15,18 +15,17 @@ namespace DungeonCrawlerWorld.Data.Blueprints.Npcs
             Goblin.Build(entityId);
             Engineer.Build(entityId);
 
-            ComponentRepo.SaveDisplayTextComponent(entityId, new DisplayTextComponent
+            ComponentRepo.DisplayTextComponents.Add(entityId, new DisplayTextComponent
             {
                 Name = "Goblin Engineer",
                 Description = "Engineers. The incels of the goblin world. They have a hard time finding a date, which makes them extra angry. If there are any females in you party, they will attack them first."
-            }, ComponentSaveMode.Overwrite);
+            });
 
-            //TODO temporary : goblin engineers have 10% more energy and energy recharge on top of the engineering bonus
-            if (ComponentRepo.EnergyComponents.TryGetValue(entityId, out var energyComponent))
+            if (ComponentRepo.EnergyComponents.HasComponent(entityId))
             {
+                ref var energyComponent = ref ComponentRepo.EnergyComponents.Get(entityId);
                 energyComponent.MaximumEnergy = (short)(energyComponent.MaximumEnergy * 1.1m);
                 energyComponent.EnergyRecharge = (short)(energyComponent.EnergyRecharge * 1.1m);
-                ComponentRepo.SaveEnergyComponent(entityId, energyComponent, ComponentSaveMode.Overwrite);
             }
         }
     }

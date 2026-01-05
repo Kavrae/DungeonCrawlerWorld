@@ -133,9 +133,9 @@ namespace DungeonCrawlerWorld.GameManagers.UserInterfaceManager
         {
             var createdWindows = new List<TextWindow>();
 
-            if (ComponentRepo.DisplayTextComponentPresent[entityId] != 0)
+            if (ComponentRepo.DisplayTextComponents.HasComponent(entityId))
             {
-                var displayTextComponent = ComponentRepo.DisplayTextComponents[entityId];
+                var displayTextComponent = ComponentRepo.DisplayTextComponents.Get(entityId);
                 _reusableTextOptions.ShowTitle = false;
                 _reusableTextOptions.Text = displayTextComponent.Name;
                 _reusableTextOptions.ShowBorder = false;
@@ -180,9 +180,9 @@ namespace DungeonCrawlerWorld.GameManagers.UserInterfaceManager
             var components = ComponentRepo.GetAllComponents(entityId);
 
             int windowIndex = 0;
-            if (ComponentRepo.DisplayTextComponentPresent[entityId] != 0)
+            if (ComponentRepo.DisplayTextComponents.HasComponent(entityId))
             {
-                var displayTextComponent = ComponentRepo.DisplayTextComponents[entityId];
+                var displayTextComponent = ComponentRepo.DisplayTextComponents.Get(entityId);
                 windows[0].UpdateText(displayTextComponent.Name);
                 windowIndex++;
             }

@@ -17,21 +17,19 @@ namespace DungeonCrawlerWorld.ComponentSystems
         public void Update(GameTime gameTime)
         {
             var energyComponentSet = ComponentRepo.EnergyComponents;
-            var entityIds = energyComponentSet.EntityIds;
-            var components = energyComponentSet.Components;
+            var entityIds = energyComponentSet.AllEntityIds;
+            ref var components = ref energyComponentSet.AllComponents;
             var count = energyComponentSet.Count;
 
             for (var energyIndex = 0; energyIndex < count; energyIndex++)
             {
                 var entityId = entityIds[energyIndex];
-                var energyComponent = components[energyIndex];
+                ref var energyComponent = ref components[energyIndex];
 
                 if (energyComponent.EnergyRecharge != 0)
                 {
                     energyComponent.CurrentEnergy += energyComponent.EnergyRecharge;
                     energyComponent.CurrentEnergy = MathUtility.ClampShort(energyComponent.CurrentEnergy, 0, energyComponent.MaximumEnergy);
-
-                    energyComponentSet.Save(entityId, energyComponent);
                 }
             }
         }

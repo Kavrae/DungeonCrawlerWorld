@@ -14,19 +14,18 @@ namespace DungeonCrawlerWorld.Data.Blueprints.Classes
                     "TODO default engineer description"));
 
             //TODO temporary : engineers have 5% more energy and energy recharge
-            if (ComponentRepo.EnergyComponents.TryGetValue(entityId, out var energyComponent))
+            if (ComponentRepo.EnergyComponents.HasComponent(entityId))
             {
-                //TODO need to track additive and multiplicative bonuses, not just multiple them here. Otherwise order matters.
+                ref var energyComponent = ref ComponentRepo.EnergyComponents.Get(entityId);
                 energyComponent.MaximumEnergy = (short)(energyComponent.MaximumEnergy * 1.05m);
                 energyComponent.EnergyRecharge = (short)(energyComponent.EnergyRecharge * 1.05m);
-                ComponentRepo.SaveEnergyComponent(entityId, energyComponent, ComponentSaveMode.Overwrite);
             }
 
-            ComponentRepo.SaveDisplayTextComponent(entityId, new DisplayTextComponent
+            ComponentRepo.DisplayTextComponents.Add(entityId, new DisplayTextComponent
             {
                 Name = "Engineer",
                 Description = "TODO default engineer description"
-            }, ComponentSaveMode.Merge);
+            });
         }
     }
 }

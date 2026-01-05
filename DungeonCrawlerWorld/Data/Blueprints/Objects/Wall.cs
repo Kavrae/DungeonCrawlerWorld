@@ -15,22 +15,19 @@ namespace DungeonCrawlerWorld.Data.Blueprints.Objects
     {
         public static void Build(int entityId)
         {
-            ComponentRepo.SaveDisplayTextComponent(
+            ComponentRepo.DisplayTextComponents.Add(
                 entityId,
-                new DisplayTextComponent("Wall", "Basic wall. Default implementation."),
-                ComponentSaveMode.Overwrite);
+                new DisplayTextComponent("Wall", "Basic wall. Default implementation."));
 
-            ComponentRepo.SaveGlyphComponent(
+            ComponentRepo.GlyphComponents.Add(
                 entityId,
-                new GlyphComponent("[][]", Color.DarkGray, new Point(0, -1)),
-                ComponentSaveMode.Overwrite);
+                new GlyphComponent("[][]", Color.DarkGray, new Point(0, -1)));
 
-            ComponentRepo.SaveTransformComponent(
+            ComponentRepo.TransformComponents.Add(
                 entityId,
                 new TransformComponent(
                     new Utilities.Vector3Int(0, 0, (int)MapHeight.Standing),
-                    new Utilities.Vector3Byte(1, 1, 1)),
-                ComponentSaveMode.Overwrite);
+                    new Utilities.Vector3Byte(1, 1, 1)));
         }
     }
 }
