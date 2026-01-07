@@ -27,7 +27,7 @@ namespace DungeonCrawlerWorld.Components
             }
 
             _denseComponents = new T[initialCapacity];
-            _denseIndexToEntityIdMap = new int[_denseComponents.Length];
+            _denseIndexToEntityIdMap = new int[initialCapacity];
             _count = 0;
 
             _mergeImplementation = mergeImplementation;
@@ -55,8 +55,9 @@ namespace DungeonCrawlerWorld.Components
 
             if (_count == _denseComponents.Length)
             {
-                Array.Resize(ref _denseComponents, _denseComponents.Length * 2);
-                Array.Resize(ref _denseIndexToEntityIdMap, _denseIndexToEntityIdMap.Length * 2);
+                var newSize = _denseComponents.Length * 2;
+                Array.Resize(ref _denseComponents, newSize);
+                Array.Resize(ref _denseIndexToEntityIdMap, newSize);
             }
 
             _denseComponents[_count] = newComponent;

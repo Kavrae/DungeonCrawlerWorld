@@ -3,7 +3,6 @@ using DungeonCrawlerWorld.Data;
 using DungeonCrawlerWorld.Services;
 using DungeonCrawlerWorld.Utilities;
 using Microsoft.Xna.Framework;
-using System;
 
 namespace DungeonCrawlerWorld.ComponentSystems
 {
@@ -17,22 +16,13 @@ namespace DungeonCrawlerWorld.ComponentSystems
 
         private readonly World world;
 
-        private readonly Random randomizer;
-
-
         short framesToWaitIfNoOptions = 10;
         private Vector3Byte TransformSize1 = new(1, 1, 1);
-
-        byte movementCandidateCount;
-        private Vector3Int[] _movementCandidates;
 
         public MovementSystem()
         {
             var dataAccessService = GameServices.GetService<DataAccessService>();
             world = dataAccessService.RetrieveWorld();
-
-            randomizer = new Random();
-            _movementCandidates = new Vector3Int[4];
         }
 
         public void Update(GameTime gameTime)
@@ -155,54 +145,75 @@ namespace DungeonCrawlerWorld.ComponentSystems
         /// <summary>
         /// Select a random neighboring map node to move to.
         /// The map node must be on the map and not currently occupied.
-        /// All valid options are equally likely to be chosen.
+        /// Options immediately after the first failed attempt are more likely to be selected.
         /// </summary>
         public void SetRandomMapPosition(int entityId, ref MovementComponent movementComponent, TransformComponent transformComponent)
         {
             var size = transformComponent.Size;
-            movementCandidateCount = 0;
+            Direction randomDirection;
+            var positionToTest = new Vector3Int();
+            var failedIndexes = new int[4];
+            int failedIndexCount = 0;
 
-            if (transformComponent.Position.Y > 0)
+            if (transformComponent.Position.Y == 0)
             {
-                var northPosition = new Vector3Int(transformComponent.Position.X, transformComponent.Position.Y - 1, transformComponent.Position.Z);
-                if (CanMove(northPosition, size, entityId))
-                {
-                    _movementCandidates[movementCandidateCount++] = northPosition;
-                }
+                failedIndexes[failedIndexCount++] = (int)Direction.North;
             }
-            if (transformComponent.Position.Y < world.Map.Size.Y - 1)
+            else if (transformComponent.Position.Y == world.Map.Size.Y - size.Y)
             {
-                var southPosition = new Vector3Int(transformComponent.Position.X, transformComponent.Position.Y + 1, transformComponent.Position.Z);
-                if (CanMove(southPosition, size, entityId))
-                {
-                    _movementCandidates[movementCandidateCount++] = southPosition;
-                }
+                failedIndexes[failedIndexCount++] = (int)Direction.South;
             }
-            if (transformComponent.Position.X > 0)
+            if (transformComponent.Position.X == 0)
             {
-                var westPosition = new Vector3Int(transformComponent.Position.X - 1, transformComponent.Position.Y, transformComponent.Position.Z);
-                if (CanMove(westPosition, size, entityId))
-                {
-                    _movementCandidates[movementCandidateCount++] = westPosition;
-                }
+                failedIndexes[failedIndexCount++] = (int)Direction.East;
             }
-            if (transformComponent.Position.X < world.Map.Size.X - 1)
+            else if (transformComponent.Position.X == world.Map.Size.X - size.X)
             {
-                var eastPosition = new Vector3Int(transformComponent.Position.X + 1, transformComponent.Position.Y, transformComponent.Position.Z);
-                if (CanMove(eastPosition, size, entityId))
-                {
-                    _movementCandidates[movementCandidateCount++] = eastPosition;
-                }
+                failedIndexes[failedIndexCount++] = (int)Direction.West;
             }
 
-            if (movementCandidateCount > 0)
+            do
             {
-                movementComponent.NextMapPosition = _movementCandidates[randomizer.Next(movementCandidateCount)];
-            }
-            else
-            {
-                movementComponent.FramesToWait = framesToWaitIfNoOptions;
-            }
+                randomDirection = (Direction)MathUtility.RandomExceptFor(4, failedIndexes, failedIndexCount);
+                switch (randomDirection)
+                {
+                    case Direction.North:
+                        positionToTest = new Vector3Int(transformComponent.Position.X, transformComponent.Position.Y - 1, transformComponent.Position.Z);
+                        break;
+                    case Direction.South:
+                        positionToTest = new Vector3Int(transformComponent.Position.X, transformComponent.Position.Y + 1, transformComponent.Position.Z);
+                        break;
+                    case Direction.East:
+                        positionToTest = new Vector3Int(transformComponent.Position.X - 1, transformComponent.Position.Y, transformComponent.Position.Z);
+                        break;
+                    case Direction.West:
+                        positionToTest = new Vector3Int(transformComponent.Position.X + 1, transformComponent.Position.Y, transformComponent.Position.Z);
+                        break;
+                    default:
+                        break;
+                }
+                if (CanMove(positionToTest, size, entityId))
+                {
+                    movementComponent.NextMapPosition = positionToTest;
+                    return;
+                }
+                else
+                {
+                    failedIndexes[failedIndexCount++] = (int)randomDirection;
+                }
+            } while (failedIndexCount < 4);
+
+            movementComponent.FramesToWait = framesToWaitIfNoOptions;
         }
+    }
+
+    public enum Direction
+    {
+        North,
+        South,
+        East,
+        West,
+        Up,
+        Down
     }
 }
