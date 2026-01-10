@@ -17,8 +17,8 @@ namespace DungeonCrawlerWorld.ComponentSystems
         public void Update(GameTime gameTime)
         {
             var energyComponentSet = ComponentRepo.EnergyComponents;
-            var entityIds = energyComponentSet.AllEntityIds;
-            ref var components = ref energyComponentSet.AllComponents;
+            var entityIds = energyComponentSet.GetAllEntityIds();
+            ref var components = ref energyComponentSet.GetAll();
             var count = energyComponentSet.Count;
 
             for (var energyIndex = 0; energyIndex < count; energyIndex++)

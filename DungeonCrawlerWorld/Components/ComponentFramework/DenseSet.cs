@@ -14,6 +14,7 @@ namespace DungeonCrawlerWorld.Components
         public DenseSet(int initialCapacity, MergeAction<T> mergeImplementation)
         {
             ArgumentOutOfRangeException.ThrowIfNegativeOrZero(initialCapacity);
+            ArgumentNullException.ThrowIfNull(mergeImplementation);
 
             _components = new T[initialCapacity];
             _componentPresent = new byte[initialCapacity];

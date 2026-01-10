@@ -2,7 +2,6 @@
 using Microsoft.Xna.Framework;
 using System;
 using System.Collections.Generic;
-using System.Linq;
 
 namespace DungeonCrawlerWorld.Components
 {
@@ -60,6 +59,7 @@ namespace DungeonCrawlerWorld.Components
         private static readonly DenseSet<TransformComponent> _transformComponents;
         public static DenseSet<TransformComponent> TransformComponents => _transformComponents;
 
+
         private static SparseSet<EnergyComponent> _energyComponents { get; set; }
         public static SparseSet<EnergyComponent> EnergyComponents { get => _energyComponents; }
 
@@ -69,77 +69,12 @@ namespace DungeonCrawlerWorld.Components
         private static SparseSet<MovementComponent> _movementComponents { get; set; }
         public static SparseSet<MovementComponent> MovementComponents { get => _movementComponents; }
 
-        private static Dictionary<int, List<ClassComponent>> _classComponents { get; }
-        public static IReadOnlyDictionary<int, List<ClassComponent>> ClassComponents { get => _classComponents; }
-        public static void AddClassComponent(int entityId, ClassComponent newClass)
-        {
-            if (!ClassComponents.TryGetValue(entityId, out var classComponents))
-            {
-                classComponents = [];
-            }
 
-            if (!classComponents.Any(classComponent => classComponent.Id == newClass.Id))
-            {
-                classComponents.Add(newClass);
-                _classComponents[entityId] = classComponents;
-            }
-        }
-        public static void RemoveClassComponent(int entityId, Guid classId)
-        {
-            if (ClassComponents.TryGetValue(entityId, out var classComponents))
-            {
-                for (int i = 0; i < classComponents.Count; i++)
-                {
-                    if (classComponents[i].Id == classId)
-                    {
-                        classComponents.RemoveAt(i);
-                        _classComponents[entityId] = classComponents;
-                        break;
-                    }
-                }
+        private static SparseMultiSet<ClassComponent> _classComponents { get; set; }
+        public static SparseMultiSet<ClassComponent> ClassComponents { get => _classComponents; }
 
-                if (classComponents.Count == 0)
-                {
-                    _classComponents.Remove(entityId);
-                }
-            }
-        }
-
-        private static Dictionary<int, List<RaceComponent>> _raceComponents { get; }
-        public static IReadOnlyDictionary<int, List<RaceComponent>> RaceComponents { get => _raceComponents; }
-        public static void AddRaceComponent(int entityId, RaceComponent newRace)
-        {
-            if (!RaceComponents.TryGetValue(entityId, out var raceComponents))
-            {
-                raceComponents = [];
-            }
-
-            if (!raceComponents.Any(raceComponent => raceComponent.Id == newRace.Id))
-            {
-                raceComponents.Add(newRace);
-                _raceComponents[entityId] = raceComponents;
-            }
-        }
-        public static void RemoveRaceComponent(int entityId, Guid raceId)
-        {
-            if (RaceComponents.TryGetValue(entityId, out var raceComponets))
-            {
-                for (int i = 0; i < raceComponets.Count; i++)
-                {
-                    if (raceComponets[i].Id == raceId)
-                    {
-                        raceComponets.RemoveAt(i);
-                        _raceComponents[entityId] = raceComponets;
-                        break;
-                    }
-                }
-
-                if (raceComponets.Count == 0)
-                {
-                    _raceComponents.Remove(entityId);
-                }
-            }
-        }
+        private static SparseMultiSet<RaceComponent> _raceComponents { get; set; }
+        public static SparseMultiSet<RaceComponent> RaceComponents { get => _raceComponents; }
 
         /// <summary>
         /// Initialize the DenseSets and SparseSets with their default sizes and merge methods.
@@ -206,10 +141,8 @@ namespace DungeonCrawlerWorld.Components
                     existingComponent.TargetMapPosition = newComponent.TargetMapPosition;
                 });
 
-            /* Multi-assignment sparse components */
-            //TODO
-            _classComponents = [];
-            _raceComponents = [];
+            _classComponents = new SparseMultiSet<ClassComponent>(defaultDenseArraySize, defaultSparseArraySize);
+            _raceComponents = new SparseMultiSet<RaceComponent>(defaultDenseArraySize, defaultSparseArraySize);
         }
 
         /// <summary>
@@ -243,6 +176,9 @@ namespace DungeonCrawlerWorld.Components
             _healthComponents.Resize(currentDenseArraySize);
             _energyComponents.Resize(currentDenseArraySize);
             _movementComponents.Resize(currentDenseArraySize);
+
+            _classComponents.Resize(currentDenseArraySize);
+            _raceComponents.Resize(currentDenseArraySize);
         }
 
         //Return a list of all components attached to an entity. This is primarily used in debugging mode.
@@ -272,19 +208,21 @@ namespace DungeonCrawlerWorld.Components
             }
 
             // Sparse components
-            if (RaceComponents.TryGetValue(entityId, out var raceComponentList))
+            if (_raceComponents.HasComponent(entityId))
             {
-                for (var i = 0; i < raceComponentList.Count; i++)
+                var raceComponents = RaceComponents.Get(entityId);
+                for (var i = 0; i < raceComponents.Length; i++)
                 {
-                    components.Add(raceComponentList[i]);
+                    components.Add(raceComponents[i]);
                 }
             }
 
-            if (ClassComponents.TryGetValue(entityId, out var classComponentList))
+            if (_classComponents.HasComponent(entityId))
             {
-                for (var i = 0; i < classComponentList.Count; i++)
+                var classComponents = ClassComponents.Get(entityId);
+                for (var i = 0; i < classComponents.Length; i++)
                 {
-                    components.Add(classComponentList[i]);
+                    components.Add(classComponents[i]);
                 }
             }
 
@@ -317,11 +255,12 @@ namespace DungeonCrawlerWorld.Components
             _glyphComponents.Remove(entityId);
             _transformComponents.Remove(entityId);
 
-            _classComponents.Remove(entityId);
-            _raceComponents.Remove(entityId);
             _energyComponents.Remove(entityId);
             _healthComponents.Remove(entityId);
             _movementComponents.Remove(entityId);
+
+            _classComponents.RemoveAll(entityId);
+            _raceComponents.RemoveAll(entityId);
         }
     }
 }

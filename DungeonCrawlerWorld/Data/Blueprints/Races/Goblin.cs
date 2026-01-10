@@ -29,7 +29,7 @@ namespace DungeonCrawlerWorld.Data.Blueprints.Races
         {
             randomizer = new Random();
 
-            ComponentRepo.AddRaceComponent(
+            ComponentRepo.RaceComponents.Add(
                 entityId,
                 new RaceComponent
                 (

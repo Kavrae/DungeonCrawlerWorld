@@ -51,7 +51,7 @@ namespace DungeonCrawlerWorld.Utilities
                 span[0] = 'H'; span[1] = 'P'; span[2] = ' '; span[3] = ':'; span[4] = ' '; span[5] = '[';
 
                 // bars
-                for (int i = 0; i < maximumValue; i++)
+                for (int i = 0; i < barSize; i++)
                 {
                     span[6 + i] = i < fillCount ? '=' : '_';
                 }

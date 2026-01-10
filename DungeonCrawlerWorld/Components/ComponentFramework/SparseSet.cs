@@ -8,6 +8,7 @@ namespace DungeonCrawlerWorld.Components
         private int[] _entityIdToDenseIndexMap;
         private int[] _denseIndexToEntityIdMap;
         private T[] _denseComponents;
+        private int _denseGrowthAmount;
         private readonly MergeAction<T> _mergeImplementation;
 
         private int _count;
@@ -18,6 +19,7 @@ namespace DungeonCrawlerWorld.Components
         {
             ArgumentOutOfRangeException.ThrowIfNegativeOrZero(maximumEntityCount);
             ArgumentOutOfRangeException.ThrowIfNegativeOrZero(initialCapacity);
+            ArgumentNullException.ThrowIfNull(mergeImplementation);
 
             _maxEntities = maximumEntityCount;
             _entityIdToDenseIndexMap = new int[_maxEntities];
@@ -31,6 +33,7 @@ namespace DungeonCrawlerWorld.Components
             _count = 0;
 
             _mergeImplementation = mergeImplementation;
+            _denseGrowthAmount = initialCapacity;
         }
 
         public void Resize(int newMaximumEntityCount)
@@ -45,6 +48,8 @@ namespace DungeonCrawlerWorld.Components
 
         public void Add(int entityId, T newComponent)
         {
+            ArgumentOutOfRangeException.ThrowIfGreaterThan(entityId, _maxEntities);
+
             var denseIndex = _entityIdToDenseIndexMap[entityId];
             if (denseIndex >= 0)
             {
@@ -55,7 +60,7 @@ namespace DungeonCrawlerWorld.Components
 
             if (_count == _denseComponents.Length)
             {
-                var newSize = _denseComponents.Length * 2;
+                var newSize = _denseComponents.Length + _denseGrowthAmount;
                 Array.Resize(ref _denseComponents, newSize);
                 Array.Resize(ref _denseIndexToEntityIdMap, newSize);
             }
@@ -74,10 +79,17 @@ namespace DungeonCrawlerWorld.Components
             return ref _denseComponents[denseIndex];
         }
 
-        public ref T[] AllComponents => ref _denseComponents;
+        public ref T[] GetAll() => ref _denseComponents;
 
-        public int[] AllEntityIds => _denseIndexToEntityIdMap;
+        public int[] GetAllEntityIds() => _denseIndexToEntityIdMap;
 
+        /// <summary>
+        /// Remove an entity's component by setting its entityId to DenseIndex map to -1.
+        /// If it's not the last component in the list, swap the last component into its place to keep the dense array compact. 
+        /// Then remap the entityId of the moved component to its new dense index.
+        /// </summary>
+        /// <param name="entityId"></param>
+        /// <returns></returns>
         public bool Remove(int entityId)
         {
             var denseIndex = _entityIdToDenseIndexMap[entityId];

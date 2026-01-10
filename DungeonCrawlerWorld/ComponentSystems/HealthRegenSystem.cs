@@ -44,8 +44,8 @@ namespace DungeonCrawlerWorld.ComponentSystems
         public void Update(GameTime gameTime)
         {
             var healthComponentSet = ComponentRepo.HealthComponents;
-            var entityIds = healthComponentSet.AllEntityIds;
-            ref var components = ref healthComponentSet.AllComponents;
+            var entityIds = healthComponentSet.GetAllEntityIds();
+            ref var components = ref healthComponentSet.GetAll();
             var count = healthComponentSet.Count;
 
             for (var healthIndex = 0; healthIndex < count; healthIndex++)

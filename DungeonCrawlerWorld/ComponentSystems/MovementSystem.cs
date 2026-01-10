@@ -31,10 +31,10 @@ namespace DungeonCrawlerWorld.ComponentSystems
             var movementComponentSet = ComponentRepo.MovementComponents;
             var transformComponentSet = ComponentRepo.TransformComponents;
 
-            var entityIds = movementComponentSet.AllEntityIds;
+            var entityIds = movementComponentSet.GetAllEntityIds();
             var count = entityIds.Length;
 
-            ref var movementComponents = ref movementComponentSet.AllComponents;
+            ref var movementComponents = ref movementComponentSet.GetAll();
 
             for (var movementIndex = 0; movementIndex < count; movementIndex++)
             {

@@ -17,3 +17,5 @@ DungeonCrawlerWorld/obj/Debug/net6.0/refint/DungeonCrawlerWorld.dll
 /DungeonCrawlerWorld/obj/Debug/net9.0/DungeonCrawlerWorld.sourcelink.json
 /DungeonCrawlerWorld/obj/Debug/net9.0/DungeonCrawlerWorld.csproj.CoreCompileInputs.cache
 /DungeonCrawlerWorld/obj/Release/net9.0
+/UnitTests/bin/Debug/net10.0
+/UnitTests/obj

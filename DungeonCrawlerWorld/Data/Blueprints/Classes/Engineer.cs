@@ -6,7 +6,7 @@ namespace DungeonCrawlerWorld.Data.Blueprints.Classes
     {
         public static void Build(int entityId)
         {
-            ComponentRepo.AddClassComponent(
+            ComponentRepo.ClassComponents.Add(
                 entityId,
                 new ClassComponent(
                     new("7b97d17d-5e77-42a1-8b4a-ed0bb97c730d"),

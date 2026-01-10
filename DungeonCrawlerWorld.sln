@@ -1,9 +1,11 @@
 ﻿
 Microsoft Visual Studio Solution File, Format Version 12.00
-# Visual Studio Version 17
-VisualStudioVersion = 17.11.35125.118
+# Visual Studio Version 18
+VisualStudioVersion = 18.3.11222.16 d18.3
 MinimumVisualStudioVersion = 10.0.40219.1
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "DungeonCrawlerWorld", "DungeonCrawlerWorld\DungeonCrawlerWorld.csproj", "{69C0D33C-52BD-4CC3-AE28-917C39A2D336}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "UnitTests", "UnitTests\UnitTests.csproj", "{710D5CBB-B002-4ABD-9D86-8A3573D2FF4B}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
@@ -15,6 +17,10 @@ Global
 		{69C0D33C-52BD-4CC3-AE28-917C39A2D336}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{69C0D33C-52BD-4CC3-AE28-917C39A2D336}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{69C0D33C-52BD-4CC3-AE28-917C39A2D336}.Release|Any CPU.Build.0 = Release|Any CPU
+		{710D5CBB-B002-4ABD-9D86-8A3573D2FF4B}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{710D5CBB-B002-4ABD-9D86-8A3573D2FF4B}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{710D5CBB-B002-4ABD-9D86-8A3573D2FF4B}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{710D5CBB-B002-4ABD-9D86-8A3573D2FF4B}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
