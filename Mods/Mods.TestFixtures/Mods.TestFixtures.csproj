@@ -1,0 +1,17 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <LangVersion>latest</LangVersion>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!-- Same reasoning as Mods.ExampleMod.csproj: a mod resolves Engine/Game against the
+         host process's already-loaded copies rather than shipping its own. -->
+    <ProjectReference Include="..\..\Engine\Engine.csproj" Private="false" />
+    <ProjectReference Include="..\..\Game\Game.csproj" Private="false" />
+  </ItemGroup>
+
+</Project>

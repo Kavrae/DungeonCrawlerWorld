@@ -1,0 +1,33 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <LangVersion>latest</LangVersion>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="MSTest" Version="4.0.1" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Engine\Engine.csproj" />
+    <ProjectReference Include="..\Game\Game.csproj" />
+    <ProjectReference Include="..\Presentation\Presentation.csproj" />
+    <!--
+      Build-order only: GameBootstrapperTests/ModuleLoaderTests load Mods.ExampleMod.dll at
+      runtime via reflection (the real modding pipeline), not by compile-time reference.
+      ReferenceOutputAssembly=false keeps its types out of Tests' own compilation so that
+      pipeline is what's actually being exercised, while still guaranteeing it's built
+      before Tests runs.
+    -->
+    <ProjectReference Include="..\Mods\Mods.ExampleMod\Mods.ExampleMod.csproj" ReferenceOutputAssembly="false" />
+    <ProjectReference Include="..\Mods\Mods.TestFixtures\Mods.TestFixtures.csproj" ReferenceOutputAssembly="false" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Using Include="Microsoft.VisualStudio.TestTools.UnitTesting" />
+  </ItemGroup>
+
+</Project>

@@ -1,0 +1,24 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <LangVersion>latest</LangVersion>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!--
+      Private=false: a real mod must not ship its own copy of Engine.dll/Game.dll next to
+      itself in Mods/, or ModuleLoader would try to load those copies too (Game.dll alone
+      defines every built-in module), and a duplicate IModule type loaded into its own
+      AssemblyLoadContext is a distinct Type from the host process's, breaking the
+      typeof(IModule).IsAssignableFrom check entirely. A mod resolves these against the
+      copies the host process already has loaded, exactly like a Minecraft mod resolves
+      against the game's own classes instead of shipping its own.
+    -->
+    <ProjectReference Include="..\..\Engine\Engine.csproj" Private="false" />
+    <ProjectReference Include="..\..\Game\Game.csproj" Private="false" />
+  </ItemGroup>
+
+</Project>
