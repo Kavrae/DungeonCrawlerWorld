@@ -151,15 +151,57 @@ public sealed class BlueprintTests
     }
 
     [TestMethod]
-    public void Engineer_Build_DoesNotThrowWhenEnergyComponentAbsent()
+    public void Engineer_Build_AddsBaselineEnergyWhenEnergyComponentAbsent()
     {
         var ecsContext = BuildEcsContext();
         var entityId = ecsContext.EntityManager.CreateEntity();
 
         new Engineer().Build(ecsContext.ComponentManager, entityId);
 
-        Assert.IsFalse(ecsContext.ComponentManager.GetPackedPool<EnergyComponent>().Has(entityId));
+        // No race ran first, so Engineer merges its own baseline instead of silently doing
+        // nothing -- the class still functions when composed (or used) without a race.
+        var energy = ecsContext.ComponentManager.GetPackedPool<EnergyComponent>().GetReadonly(entityId);
+        Assert.AreEqual((short)100, energy.MaximumEnergy);
+        Assert.AreEqual((short)5, energy.EnergyRecharge);
         Assert.IsTrue(ecsContext.ComponentManager.GetMultiPool<ClassComponent>().Has(entityId));
+    }
+
+    [TestMethod]
+    public void Tank_Build_AddsBaselineHealthWhenHealthComponentAbsent()
+    {
+        var ecsContext = BuildEcsContext();
+        var entityId = ecsContext.EntityManager.CreateEntity();
+
+        new Tank().Build(ecsContext.ComponentManager, entityId);
+
+        // No race ran first, so Tank merges its own baseline instead of silently doing
+        // nothing -- the class still functions when composed (or used) without a race.
+        var health = ecsContext.ComponentManager.GetPackedPool<HealthComponent>().GetReadonly(entityId);
+        Assert.AreEqual((short)100, health.MaximumHealth);
+        Assert.AreEqual((short)10, health.HealthRegen);
+        Assert.IsTrue(ecsContext.ComponentManager.GetMultiPool<ClassComponent>().Has(entityId));
+    }
+
+    /// <summary>
+    /// Engineer and Goblin are each independently order-independent: composing them in
+    /// reverse (class before race) never throws or drops the class's mechanic -- Engineer
+    /// merges its own baseline energy since none exists yet, then Goblin's own energy merges
+    /// on top via EnergyModule's registered merge action. The exact resulting numbers depend
+    /// on order, but the entity always ends up with a working EnergyComponent either way.
+    /// </summary>
+    [TestMethod]
+    public void EngineerThenGoblin_ComposedInReverseOrder_StillProducesAWorkingEntity()
+    {
+        var ecsContext = BuildEcsContext();
+        var entityId = ecsContext.EntityManager.CreateEntity();
+        var mathUtility = new MathUtility(new Random(1));
+
+        new Engineer().Build(ecsContext.ComponentManager, entityId);
+        new Goblin(mathUtility).Build(ecsContext.ComponentManager, entityId);
+
+        Assert.IsTrue(ecsContext.ComponentManager.GetPackedPool<EnergyComponent>().Has(entityId));
+        Assert.IsTrue(ecsContext.ComponentManager.GetMultiPool<ClassComponent>().Has(entityId));
+        Assert.IsTrue(ecsContext.ComponentManager.GetMultiPool<RaceComponent>().Has(entityId));
     }
 
     [TestMethod]
