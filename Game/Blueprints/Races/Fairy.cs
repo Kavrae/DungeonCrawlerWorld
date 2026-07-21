@@ -35,11 +35,11 @@ public sealed class Fairy(MathUtility mathUtility) : IBlueprint
             (short)mathUtility.Next(MinimumEnergyRecharge, MaximumEnergyRecharge),
             MaximumEnergy));
 
-        componentManager.Merge(entityId, new GlyphComponent("f", Color.DeepPink, new Point(4, 0)));
+        componentManager.Merge(entityId, new GlyphComponent("f", Color.DeepPink));
         componentManager.Merge(entityId, new HealthComponent(100, 5, 100));
         componentManager.Merge(entityId, new MovementComponent(MovementMode.Random, 15, null, null));
 
         componentManager.Merge(entityId, new TransformComponent(
-            new Vector3Int(0, 0, (int)MapHeight.Flying), new Vector3Byte(1, 1, 1)));
+            new Vector3Int(0, 0, (int)MapLayer.Flying), new Vector2Byte(1, 1)));
     }
 }

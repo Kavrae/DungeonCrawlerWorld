@@ -22,13 +22,13 @@ public sealed class WorldEventSyncTests
 
         var oldPosition = new Vector3Int(1, 1, 0);
         var newPosition = new Vector3Int(2, 1, 0);
-        var transform = new TransformComponent(oldPosition, new Vector3Byte(1, 1, 1));
+        var transform = new TransformComponent(oldPosition, new Vector2Byte(1, 1));
         world.PlaceEntityOnMap(entityId: 7, oldPosition, ref transform);
 
-        eventBus.Publish(new EntityMoved(7, oldPosition, newPosition, new Vector3Byte(1, 1, 1)));
+        eventBus.Publish(new EntityMoved(7, oldPosition, newPosition, new Vector2Byte(1, 1)));
 
-        Assert.AreEqual(-1, world.Map.GetMapNode(oldPosition).EntityId);
-        Assert.AreEqual(7, world.Map.GetMapNode(newPosition).EntityId);
+        Assert.AreEqual(-1, world.Map.GetEntityId(oldPosition));
+        Assert.AreEqual(7, world.Map.GetEntityId(newPosition));
     }
 
     [TestMethod]
@@ -40,14 +40,14 @@ public sealed class WorldEventSyncTests
 
         var oldPosition = new Vector3Int(0, 0, 0);
         var newPosition = new Vector3Int(1, 0, 0);
-        var size = new Vector3Byte(2, 1, 1);
+        var size = new Vector2Byte(2, 1);
         var transform = new TransformComponent(oldPosition, size);
         world.PlaceEntityOnMap(entityId: 3, oldPosition, ref transform);
 
         eventBus.Publish(new EntityMoved(3, oldPosition, newPosition, size));
 
-        Assert.AreEqual(-1, world.Map.GetMapNode(new Vector3Int(0, 0, 0)).EntityId);
-        Assert.AreEqual(3, world.Map.GetMapNode(new Vector3Int(1, 0, 0)).EntityId);
-        Assert.AreEqual(3, world.Map.GetMapNode(new Vector3Int(2, 0, 0)).EntityId);
+        Assert.AreEqual(-1, world.Map.GetEntityId(new Vector3Int(0, 0, 0)));
+        Assert.AreEqual(3, world.Map.GetEntityId(new Vector3Int(1, 0, 0)));
+        Assert.AreEqual(3, world.Map.GetEntityId(new Vector3Int(2, 0, 0)));
     }
 }

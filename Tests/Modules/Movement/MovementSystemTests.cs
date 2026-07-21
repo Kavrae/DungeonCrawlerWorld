@@ -24,6 +24,7 @@ public sealed class MovementSystemTests
             position.X >= 0 && position.Y >= 0 && position.Z >= 0
             && position.X < MapSize.X && position.Y < MapSize.Y && position.Z < MapSize.Z;
         public int GetEntityIdAt(Vector3Int position) => -1;
+        public bool IsBlocking(int entityId) => true;
     }
 
     private static DirectComponentPool<TransformComponent> CreateTransformPool(int capacity = 10) =>
@@ -34,6 +35,9 @@ public sealed class MovementSystemTests
 
     private static PackedComponentPool<MovementComponent> CreateMovementPool(int capacity = 10) =>
         new(capacity, capacity, static (ref MovementComponent existing, MovementComponent incoming) => existing = incoming);
+
+    private static MultiComponentPool<NonBlockingComponent> CreateNonBlockingPool(int capacity = 10) =>
+        new(capacity, capacity);
 
     [TestMethod]
     public void Update_MissingEnergyOrTransformComponent_IsSkippedWithoutThrowing()
@@ -58,7 +62,7 @@ public sealed class MovementSystemTests
         var movementPool = CreateMovementPool();
         var world = new Game.World.World(new Map(new Vector3Int(5, 5, 1)));
 
-        var transform = new TransformComponent(new Vector3Int(2, 2, 0), new Vector3Byte(1, 1, 1));
+        var transform = new TransformComponent(new Vector3Int(2, 2, 0), new Vector2Byte(1, 1));
         transformPool.Add(0, transform);
         world.PlaceEntityOnMap(0, transform.Position, ref transform);
         energyPool.Add(0, new EnergyComponent(100, 0, 100));
@@ -80,7 +84,7 @@ public sealed class MovementSystemTests
         var movementPool = CreateMovementPool();
         var world = new Game.World.World(new Map(new Vector3Int(5, 5, 1)));
 
-        var transform = new TransformComponent(new Vector3Int(2, 2, 0), new Vector3Byte(1, 1, 1));
+        var transform = new TransformComponent(new Vector3Int(2, 2, 0), new Vector2Byte(1, 1));
         transformPool.Add(0, transform);
         world.PlaceEntityOnMap(0, transform.Position, ref transform);
         energyPool.Add(0, new EnergyComponent(5, 0, 100)); // Less than EnergyToMove.
@@ -113,17 +117,17 @@ public sealed class MovementSystemTests
         // (Position.X==0, Position.Y==0). South (target footprint (0,1,0)+(1,1,0)) and
         // West (target footprint (1,0,0)+(2,0,0)) are blocked by other entities occupying
         // one cell of each target footprint -- both clearly on-map.
-        var moverTransform = new TransformComponent(new Vector3Int(0, 0, 0), new Vector3Byte(2, 1, 1));
+        var moverTransform = new TransformComponent(new Vector3Int(0, 0, 0), new Vector2Byte(2, 1));
         transformPool.Add(0, moverTransform);
         world.PlaceEntityOnMap(0, moverTransform.Position, ref moverTransform);
         energyPool.Add(0, new EnergyComponent(100, 0, 100));
         movementPool.Add(0, new MovementComponent(MovementMode.Random, 10, null, null));
 
-        var southBlockerTransform = new TransformComponent(new Vector3Int(), new Vector3Byte(1, 1, 1));
+        var southBlockerTransform = new TransformComponent(new Vector3Int(), new Vector2Byte(1, 1));
         transformPool.Add(1, southBlockerTransform);
         world.PlaceEntityOnMap(1, new Vector3Int(1, 1, 0), ref southBlockerTransform);
 
-        var westBlockerTransform = new TransformComponent(new Vector3Int(), new Vector3Byte(1, 1, 1));
+        var westBlockerTransform = new TransformComponent(new Vector3Int(), new Vector2Byte(1, 1));
         transformPool.Add(2, westBlockerTransform);
         world.PlaceEntityOnMap(2, new Vector3Int(2, 0, 0), ref westBlockerTransform);
 
@@ -152,7 +156,7 @@ public sealed class MovementSystemTests
         var eventBus = new EventBus();
 
         var startPosition = new Vector3Int(2, 2, 0);
-        transformPool.Add(0, new TransformComponent(startPosition, new Vector3Byte(1, 1, 1)));
+        transformPool.Add(0, new TransformComponent(startPosition, new Vector2Byte(1, 1)));
         energyPool.Add(0, new EnergyComponent(100, 0, 100));
         movementPool.Add(0, new MovementComponent(MovementMode.Random, 10, null, null));
 
@@ -167,5 +171,46 @@ public sealed class MovementSystemTests
         Assert.AreEqual(startPosition, received.Value.OldPosition);
         Assert.AreEqual(transformPool.GetReadonly(0).Position, received.Value.NewPosition);
         Assert.AreNotEqual(startPosition, received.Value.NewPosition);
+    }
+
+    /// <summary>
+    /// Mirrors Update_MultiTileEntitySurroundedByOnMapObstacles_DoesNotMoveIntoOccupiedCell's
+    /// setup (corner position, two directions excluded by the map edge, the remaining two
+    /// occupied by other Blocking entities) but for a non-Blocking mover -- where that test
+    /// asserts the entity gets stuck (FramesToWait set, all four directions exhausted), a
+    /// non-Blocking mover must bypass the occupancy comparison entirely (see CanMove, which
+    /// only ever asks IMapQuery.IsBlocking -- it doesn't know or care whether that's backed by
+    /// NonBlockingComponent, ForceBlockingComponent, or anything else) and move regardless of
+    /// the two blockers.
+    /// </summary>
+    [TestMethod]
+    public void Update_NonBlockingMover_BypassesEntitiesBlockingEveryOtherDirection()
+    {
+        var transformPool = CreateTransformPool();
+        var energyPool = CreateEnergyPool();
+        var movementPool = CreateMovementPool();
+        var nonBlockingPool = CreateNonBlockingPool();
+        var world = new Game.World.World(new Map(new Vector3Int(5, 5, 1))) { NonBlockingComponents = nonBlockingPool };
+
+        var moverTransform = new TransformComponent(new Vector3Int(0, 0, 0), new Vector2Byte(1, 1));
+        transformPool.Add(0, moverTransform);
+        world.PlaceEntityOnMap(0, moverTransform.Position, ref moverTransform);
+        energyPool.Add(0, new EnergyComponent(100, 0, 100));
+        movementPool.Add(0, new MovementComponent(MovementMode.Random, 10, null, null));
+        nonBlockingPool.Add(0, new NonBlockingComponent());
+
+        var southBlockerTransform = new TransformComponent(new Vector3Int(), new Vector2Byte(1, 1));
+        transformPool.Add(1, southBlockerTransform);
+        world.PlaceEntityOnMap(1, new Vector3Int(0, 1, 0), ref southBlockerTransform);
+
+        var westBlockerTransform = new TransformComponent(new Vector3Int(), new Vector2Byte(1, 1));
+        transformPool.Add(2, westBlockerTransform);
+        world.PlaceEntityOnMap(2, new Vector3Int(1, 0, 0), ref westBlockerTransform);
+
+        var system = new MovementSystem(transformPool, energyPool, movementPool, world, new MathUtility(new Random(1)), new EventBus());
+        system.Update(default, 0);
+
+        Assert.AreNotEqual(10, movementPool.GetReadonly(0).FramesToWait);
+        Assert.AreNotEqual(new Vector3Int(0, 0, 0), transformPool.GetReadonly(0).Position);
     }
 }

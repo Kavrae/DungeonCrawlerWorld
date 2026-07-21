@@ -29,6 +29,7 @@ public sealed class MapWindowTests
         componentManager.RegisterDirectPool<TransformComponent>(static (ref TransformComponent existing, TransformComponent incoming) => existing = incoming);
         componentManager.RegisterDirectPool<GlyphComponent>(static (ref GlyphComponent existing, GlyphComponent incoming) => existing = incoming);
         componentManager.RegisterDirectPool<BackgroundComponent>(static (ref BackgroundComponent existing, BackgroundComponent incoming) => existing = incoming);
+        componentManager.RegisterPackedPool<OccupancyComponent>(static (ref OccupancyComponent existing, OccupancyComponent incoming) => existing = incoming);
 
         windowService.RegisterFactory<MapWindow>((_, _) => new MapWindow(
             fontService, windowService, world, componentManager, new TileRenderer(), new GlyphRenderer()));
@@ -101,5 +102,27 @@ public sealed class MapWindowTests
         mapWindow.SelectMapNodes(new Point(1, 1));
 
         Assert.AreEqual(new Point(0, 0), world.SelectedMapNodePosition);
+    }
+
+    [TestMethod]
+    public void ChangeLayer_ClampsToValidRange()
+    {
+        // 3-deep map (UnderGround/Ground/Flying) -- MapWindow starts on Ground (index 1).
+        // CurrentMapLayer lives on World (shared with SelectionWindowContent), not MapWindow.
+        var (world, mapWindow) = BuildMapWindow(5, 5, 3);
+        Assert.AreEqual(1, world.CurrentMapLayer);
+
+        mapWindow.ChangeLayer(1);
+        Assert.AreEqual(2, world.CurrentMapLayer);
+
+        mapWindow.ChangeLayer(1);
+        Assert.AreEqual(2, world.CurrentMapLayer, "Already at the topmost layer -- must not go past it.");
+
+        mapWindow.ChangeLayer(-1);
+        mapWindow.ChangeLayer(-1);
+        Assert.AreEqual(0, world.CurrentMapLayer);
+
+        mapWindow.ChangeLayer(-1);
+        Assert.AreEqual(0, world.CurrentMapLayer, "Already at the bottommost layer -- must not go below it.");
     }
 }

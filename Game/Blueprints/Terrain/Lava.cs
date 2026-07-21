@@ -15,8 +15,8 @@ public sealed class Lava : IBlueprint
     {
         componentManager.Merge(entityId, new BackgroundComponent(Color.OrangeRed));
         componentManager.Merge(entityId, new DisplayTextComponent("Lava", "Hot lava. I do not recommend stepping on it."));
-        componentManager.Merge(entityId, new GlyphComponent("~", Color.Yellow, new Point(3, 0)));
+        componentManager.Merge(entityId, new GlyphComponent("~", Color.Yellow));
         componentManager.Merge(entityId, new TransformComponent(
-            new Vector3Int(0, 0, (int)MapHeight.Ground), new Vector3Byte(1, 1, 1)));
+            new Vector3Int(0, 0, (int)MapLayer.Ground), new Vector2Byte(1, 1)));
     }
 }

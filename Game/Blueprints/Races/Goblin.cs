@@ -38,11 +38,11 @@ public sealed class Goblin(MathUtility mathUtility) : IBlueprint
             (short)mathUtility.Next(MinimumEnergyRecharge, MaximumEnergyRecharge),
             MaximumEnergy));
 
-        componentManager.Merge(entityId, new GlyphComponent("g", Color.DarkGreen, new Point(3, -2)));
+        componentManager.Merge(entityId, new GlyphComponent("g", Color.DarkGreen));
         componentManager.Merge(entityId, new HealthComponent(100, 10, 200));
         componentManager.Merge(entityId, new MovementComponent(MovementMode.Random, 40, null, null));
 
         componentManager.Merge(entityId, new TransformComponent(
-            new Vector3Int(-1, -1, (int)MapHeight.Standing), new Vector3Byte(1, 1, 1)));
+            new Vector3Int(-1, -1, (int)MapLayer.Ground), new Vector2Byte(1, 1)));
     }
 }

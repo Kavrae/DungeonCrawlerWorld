@@ -30,12 +30,20 @@ public sealed class CoreModule : IModule
             existing.GlyphColor = Color.Lerp(existing.GlyphColor, incoming.GlyphColor, 0.5f);
         });
 
+        componentManager.RegisterPackedPool<OccupancyComponent>(static (ref OccupancyComponent existing, OccupancyComponent incoming) =>
+        {
+            existing.IsTiny |= incoming.IsTiny;
+            existing.IsPhasing |= incoming.IsPhasing;
+        });
+
+        componentManager.RegisterMultiPool<NonBlockingComponent>();
+        componentManager.RegisterMultiPool<ForceBlockingComponent>();
+
         componentManager.RegisterDirectPool<TransformComponent>(static (ref TransformComponent existing, TransformComponent incoming) =>
         {
-            existing.Size = new Vector3Byte(
+            existing.Size = new Vector2Byte(
                 (byte)((existing.Size.X + incoming.Size.X) / 2),
-                (byte)((existing.Size.Y + incoming.Size.Y) / 2),
-                (byte)((existing.Size.Z + incoming.Size.Z) / 2));
+                (byte)((existing.Size.Y + incoming.Size.Y) / 2));
         });
     }
 

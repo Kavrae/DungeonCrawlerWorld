@@ -19,14 +19,15 @@ namespace DungeonCrawlerWorld;
 /// </summary>
 public sealed class GameLoop : Microsoft.Xna.Framework.Game
 {
-    // Sized for the 1000x1000 test map (~1.06M terrain/wall entities, ~49k GoblinEngineers
-    // plus a denser ~108k-entity secondary plain-Goblin population from TestMapBuilder)
-    // rather than left at a small default and grown via doubling --
-    // EntityManager/ComponentManager both grow automatically on demand, but at this scale
-    // that's dozens of full-array reallocate-and-copy passes during Populate instead of
-    // (close to) none.
-    private const int InitialEntityCapacity = 1_300_000;
-    private const int InitialComponentCapacity = 180_000;
+    // Sized for the 1000x1000 test map across all three MapLayers: Ground (~1.06M terrain/
+    // wall entities, ~49k GoblinEngineers plus a denser ~108k-entity secondary plain-Goblin
+    // population), UnderGround (~1M terrain entities plus ~4k border walls), and Flying
+    // (~21k scattered Fairies) from TestMapBuilder -- rather than left at a small default and
+    // grown via doubling. EntityManager/ComponentManager both grow automatically on demand,
+    // but at this scale that's dozens of full-array reallocate-and-copy passes during
+    // Populate instead of (close to) none.
+    private const int InitialEntityCapacity = 2_600_000;
+    private const int InitialComponentCapacity = 220_000;
 
     private readonly GraphicsDeviceManager _graphics;
 

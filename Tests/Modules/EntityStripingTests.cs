@@ -174,7 +174,7 @@ public sealed class EntityStripingTests
         for (var x = 0; x < entityCount; x++)
         {
             var entityId = ecsContext.EntityManager.CreateEntity();
-            var transform = new TransformComponent(new Vector3Int(x % 20, x / 20, 0), new Vector3Byte(1, 1, 1));
+            var transform = new TransformComponent(new Vector3Int(x % 20, x / 20, 0), new Vector2Byte(1, 1));
             ecsContext.ComponentManager.GetDirectPool<TransformComponent>().Add(entityId, transform);
             world.PlaceEntityOnMap(entityId, transform.Position, ref transform);
 

@@ -1,3 +1,4 @@
+using Engine.ECS.Components.Stores;
 using Engine.Math;
 using Game.Modules.Core.Components;
 using Microsoft.Xna.Framework;
@@ -7,12 +8,31 @@ namespace Game.World;
 /// <summary>The in-memory game world: the map and bookkeeping for entities placed on it.</summary>
 public sealed class World : IMapQuery
 {
-    private static readonly Vector3Byte TransformSize1 = new(1, 1, 1);
+    private static readonly Vector2Byte TransformSize1 = new(1, 1);
 
     public Map Map { get; set; }
 
-    /// <summary>2D coordinates of the currently selected map node, if any -- includes all Z layers at that XY.</summary>
+    /// <summary>
+    /// Set once ComponentManager exists (World itself is constructed before it, so these can't
+    /// be constructor dependencies -- see GameLoop.cs). Null means "nobody has occupancy data
+    /// yet," which IsBlocking treats as "everyone is Blocking," matching every pre-Occupancy
+    /// test and blueprint unchanged.
+    /// </summary>
+    public MultiComponentPool<NonBlockingComponent>? NonBlockingComponents { get; set; }
+
+    /// <inheritdoc cref="NonBlockingComponents"/>
+    public MultiComponentPool<ForceBlockingComponent>? ForceBlockingComponents { get; set; }
+
+    /// <summary>2D coordinates of the currently selected map node, if any -- paired with CurrentMapLayer for the Z.</summary>
     public Point? SelectedMapNodePosition { get; set; }
+
+    /// <summary>
+    /// The single MapLayer currently displayed/inspected -- shared state between MapWindow
+    /// (the only writer, via Page Up/Down) and SelectionWindowContent (which scopes the
+    /// inspector to this layer, matching what's actually visible on screen), the same way
+    /// SelectedMapNodePosition already coordinates those two windows.
+    /// </summary>
+    public int CurrentMapLayer { get; set; } = (int)MapLayer.Ground;
 
     public World(Map map)
     {
@@ -22,23 +42,33 @@ public sealed class World : IMapQuery
     /// <summary>
     /// Moves entityId's map-index presence from transformComponent.Position to newPosition.
     /// No-ops (leaves the map's index untouched) if either footprint is off the map, or if
-    /// the destination footprint is already occupied by a different entity -- both should be
-    /// impossible given MovementSystem's own CanMove gate re-checking immediately before
-    /// this is reached, but MoveEntity is a public method any future caller (including a
-    /// mod's own Game-layer code, which can call it directly) can reach without going through
-    /// that gate, so it defends itself rather than trusting the caller blindly. Clearing the
-    /// origin footprint only clears cells that still record entityId, so a caller passing a
-    /// stale or wrong old position can't corrupt a different entity's occupancy record.
+    /// the destination footprint is already occupied by a different Blocking entity -- both
+    /// should be impossible given MovementSystem's own CanMove gate re-checking immediately
+    /// before this is reached, but MoveEntity is a public method any future caller (including
+    /// a mod's own Game-layer code, which can call it directly) can reach without going
+    /// through that gate, so it defends itself rather than trusting the caller blindly. The
+    /// free-space defense only applies to Blocking entities -- a Tiny/Phasing entity is exempt
+    /// from map occupancy entirely and must never be refused here just because some other
+    /// Blocking entity already occupies the destination. Map writes are skipped altogether for
+    /// non-Blocking entities (see IsBlocking); transformComponent.Position still updates for
+    /// everyone via the caller (WorldEventSync), since map-index presence and transform
+    /// position are tracked independently.
     /// </summary>
     public void MoveEntity(int entityId, Vector3Int newPosition, TransformComponent transformComponent)
     {
         var size = transformComponent.Size;
-        var extent = new Vector3Int(size.X, size.Y, size.Z);
+        var extent = new Vector3Int(size.X, size.Y, 1); // A footprint never spans more than one MapLayer.
         var oldPosition = transformComponent.Position;
-        var oldCube = new CubeInt(oldPosition, extent);
         var newCube = new CubeInt(newPosition, extent);
 
-        if (!IsOnMap(oldCube) || !IsOnMap(newCube) || !IsFootprintFreeFor(entityId, newCube))
+        var isBlocking = IsBlocking(entityId);
+
+        if (!IsOnMap(newCube) || (isBlocking && !IsFootprintFreeFor(entityId, newCube)))
+        {
+            return;
+        }
+
+        if (!isBlocking)
         {
             return;
         }
@@ -50,11 +80,7 @@ public sealed class World : IMapQuery
         {
             for (var y = oldPosition.Y; y < oldMaxY; y++)
             {
-                ref var node = ref Map.MapNodes[x, y, oldZ];
-                if (node.EntityId == entityId)
-                {
-                    node.EntityId = -1;
-                }
+                Map.ClearIfOccupiedBy(new Vector3Int(x, y, oldZ), entityId);
             }
         }
 
@@ -65,7 +91,7 @@ public sealed class World : IMapQuery
         {
             for (var y = newPosition.Y; y < newMaxY; y++)
             {
-                Map.MapNodes[x, y, newZ].EntityId = entityId;
+                Map.SetEntityId(new Vector3Int(x, y, newZ), entityId);
             }
         }
     }
@@ -80,7 +106,7 @@ public sealed class World : IMapQuery
         {
             for (var y = cube.Position.Y; y < maxY; y++)
             {
-                var occupyingEntityId = Map.MapNodes[x, y, z].EntityId;
+                var occupyingEntityId = Map.GetEntityId(new Vector3Int(x, y, z));
                 if (occupyingEntityId != -1 && occupyingEntityId != entityId)
                 {
                     return false;
@@ -91,15 +117,39 @@ public sealed class World : IMapQuery
         return true;
     }
 
-    // Note: Position resets to (0,0,0) rather than a sentinel like MapNode's EntityId=-1 --
+    /// <summary>
+    /// Fulfills IMapQuery.IsBlocking. ForceBlockingComponent wins if present (an effect
+    /// forcing an otherwise-exempt entity solid); otherwise NonBlockingComponent exempts it;
+    /// otherwise the default is Blocking. Both are Multi pools -- Has() means "at least one
+    /// source is still active" -- so overlapping sources (two independent effects granting
+    /// the same exemption) are handled correctly: one expiring doesn't affect the other.
+    /// Absence of a pool (not wired up yet) is treated as "no sources," i.e. Blocking,
+    /// matching every pre-Occupancy test and blueprint unchanged.
+    /// </summary>
+    public bool IsBlocking(int entityId)
+    {
+        if (ForceBlockingComponents is { } forceBlocking && forceBlocking.Has(entityId))
+        {
+            return true;
+        }
+
+        if (NonBlockingComponents is { } nonBlocking && nonBlocking.Has(entityId))
+        {
+            return false;
+        }
+
+        return true;
+    }
+
+    // Note: Position resets to (0,0,0) rather than a sentinel like Map's own -1 EntityId --
     // an inconsistency worth fixing once real despawn logic exercises this.
     public void RemoveEntityFromMap(int entityId, ref TransformComponent transformComponent)
     {
-        if (IsOnMap(transformComponent.Position))
+        if (IsOnMap(transformComponent.Position) && IsBlocking(entityId))
         {
             if (transformComponent.Size == TransformSize1)
             {
-                Map.MapNodes[transformComponent.Position.X, transformComponent.Position.Y, transformComponent.Position.Z].EntityId = -1;
+                Map.SetEntityId(transformComponent.Position, -1);
             }
             else
             {
@@ -108,7 +158,7 @@ public sealed class World : IMapQuery
                 {
                     for (var y = transformComponent.Position.Y; y < transformComponent.Position.Y + transformComponent.Size.Y; y++)
                     {
-                        Map.MapNodes[x, y, z].EntityId = -1;
+                        Map.SetEntityId(new Vector3Int(x, y, z), -1);
                     }
                 }
             }
@@ -120,28 +170,47 @@ public sealed class World : IMapQuery
     public void PlaceEntityOnMap(int entityId, Vector3Int newPosition, ref TransformComponent transformComponent)
     {
         var size = transformComponent.Size;
-        if (!IsOnMap(new CubeInt(newPosition, new Vector3Int(size.X, size.Y, size.Z))))
+        if (!IsOnMap(new CubeInt(newPosition, new Vector3Int(size.X, size.Y, 1)))) // A footprint never spans more than one MapLayer.
         {
             return;
         }
 
-        if (transformComponent.Size == TransformSize1)
+        if (IsBlocking(entityId))
         {
-            Map.MapNodes[newPosition.X, newPosition.Y, newPosition.Z].EntityId = entityId;
-        }
-        else
-        {
-            var z = newPosition.Z;
-            for (var x = newPosition.X; x < newPosition.X + transformComponent.Size.X; x++)
+            if (transformComponent.Size == TransformSize1)
             {
-                for (var y = newPosition.Y; y < newPosition.Y + transformComponent.Size.Y; y++)
+                Map.SetEntityId(newPosition, entityId);
+            }
+            else
+            {
+                var z = newPosition.Z;
+                for (var x = newPosition.X; x < newPosition.X + transformComponent.Size.X; x++)
                 {
-                    Map.MapNodes[x, y, z].EntityId = entityId;
+                    for (var y = newPosition.Y; y < newPosition.Y + transformComponent.Size.Y; y++)
+                    {
+                        Map.SetEntityId(new Vector3Int(x, y, z), entityId);
+                    }
                 }
             }
         }
 
         transformComponent.Position = newPosition;
+    }
+
+    /// <summary>
+    /// Places a terrain entity (the floor beneath UnderGround/Ground -- never Flying, which
+    /// has no floor). Terrain is always 1x1, never moves, and never blocks, so none of the
+    /// footprint/occupancy logic above applies -- it writes directly to Map's separate terrain
+    /// store instead of the creature-occupancy one.
+    /// </summary>
+    public void PlaceTerrainOnMap(int entityId, int x, int y, TerrainLayer terrainLayer)
+    {
+        if (!IsOnMap(new Vector3Int(x, y, 0)))
+        {
+            return;
+        }
+
+        Map.SetTerrainEntityId(x, y, terrainLayer, entityId);
     }
 
     public bool IsOnMap(Vector3Int coordinates) =>
@@ -162,5 +231,5 @@ public sealed class World : IMapQuery
     public Vector3Int MapSize => Map.Size;
 
     /// <inheritdoc cref="IMapQuery"/>
-    public int GetEntityIdAt(Vector3Int position) => Map.GetMapNode(position).EntityId;
+    public int GetEntityIdAt(Vector3Int position) => Map.GetEntityId(position);
 }

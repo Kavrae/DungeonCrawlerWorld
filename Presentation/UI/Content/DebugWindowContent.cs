@@ -21,7 +21,7 @@ public sealed class DebugWindowContent(
 {
     private static readonly Vector2 DrawsPerSecondOffset = new(60, 0);
     private static readonly Vector2 EntityCountOffset = new(120, 0);
-    private static readonly Vector2 MovingEntityCountOffset = new(240, 0);
+    private static readonly Vector2 MovingEntityCountOffset = new(200, 0);
 
     private readonly PerformanceCounter _updateCounter = new();
     private readonly PerformanceCounter _drawCounter = new();

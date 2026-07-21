@@ -17,7 +17,7 @@ namespace Game.Floors;
 /// </summary>
 public static class FloorBuilder
 {
-    private static readonly Vector3Int TestMapSize = new(1000, 1000, 6);
+    private static readonly Vector3Int TestMapSize = new(1000, 1000, 3);
 
     public static Game.World.Map CreateMap(int floorNumber) => new(TestMapSize);
 

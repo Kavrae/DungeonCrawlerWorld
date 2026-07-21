@@ -13,6 +13,6 @@ public sealed class StoneFloor : IBlueprint
         componentManager.Merge(entityId, new BackgroundComponent(Color.LightGray));
         componentManager.Merge(entityId, new DisplayTextComponent("Stone floor", "Roughly shaped stone floor."));
         componentManager.Merge(entityId, new TransformComponent(
-            new Vector3Int(0, 0, (int)MapHeight.Ground), new Vector3Byte(1, 1, 1)));
+            new Vector3Int(0, 0, (int)MapLayer.Ground), new Vector2Byte(1, 1)));
     }
 }

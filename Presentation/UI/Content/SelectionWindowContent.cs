@@ -8,12 +8,13 @@ using Microsoft.Xna.Framework.Graphics;
 namespace Presentation.UI.Content;
 
 /// <summary>
-/// Shows every component on the entities at the currently selected map node, one child
-/// TextWindow per component -- a diff-and-refresh design that only recreates child windows
-/// when the selected entity set changes, and refreshes existing windows' text on an interval
-/// rather than every frame. Component text comes from Engine/Diagnostics's
-/// ComponentInspector, not a live reflection walk: every component already carries a
-/// purpose-built ToString(), so no reflection is needed at all.
+/// Shows every component on the Blocking/Tiny/Phasing entities and the terrain at the
+/// currently selected map node's World.CurrentMapLayer -- the same single layer MapWindow is
+/// rendering, not every layer -- one child TextWindow per component. A diff-and-refresh
+/// design that only recreates child windows when the selected entity set changes, and
+/// refreshes existing windows' text on an interval rather than every frame. Component text
+/// comes from Engine/Diagnostics's ComponentInspector, not a live reflection walk: every
+/// component already carries a purpose-built ToString(), so no reflection is needed at all.
 /// </summary>
 public sealed class SelectionWindowContent(
     World world,
@@ -91,16 +92,51 @@ public sealed class SelectionWindowContent(
 
         // SelectedMapNodePosition is a plain settable property; MapWindow is the only
         // current writer and already validates on-map before setting it, but nothing
-        // enforces that here, so guard directly against indexing MapNodes out of bounds.
+        // enforces that here, so guard directly against indexing out of bounds.
         if (!world.IsOnMap(new Engine.Math.Vector3Int(selected.X, selected.Y, 0)))
         {
             return;
         }
 
-        for (var z = world.Map.Size.Z - 1; z >= 0; z--)
+        // Scoped to World.CurrentMapLayer only -- the same layer MapWindow is actually
+        // rendering -- rather than every layer, so the inspector shows what's on screen
+        // instead of entities on layers currently hidden from view.
+        var currentMapLayer = world.CurrentMapLayer;
+
+        var blockingEntityId = world.Map.GetEntityId(new Engine.Math.Vector3Int(selected.X, selected.Y, currentMapLayer));
+        if (blockingEntityId != -1)
         {
-            var entityId = world.Map.MapNodes[selected.X, selected.Y, z].EntityId;
-            if (entityId != -1)
+            _selectedEntityIds.Add(blockingEntityId);
+        }
+
+        // The terrain beneath the current layer (Flying has none) -- terrain is never a
+        // Blocking creature-occupancy entity (see World.PlaceTerrainOnMap), so it lives in
+        // Map's separate terrain store and has to be looked up independently of the Map slot
+        // above.
+        if (Map.TerrainLayerFor(currentMapLayer) is { } terrainLayer)
+        {
+            var terrainEntityId = world.Map.GetTerrainEntityId(selected.X, selected.Y, terrainLayer);
+            if (terrainEntityId != -1)
+            {
+                _selectedEntityIds.Add(terrainEntityId);
+            }
+        }
+
+        // Tiny/Phasing entities never occupy Map's Blocking slot (see World.IsBlocking), so
+        // the checks above alone would silently drop them from the debug panel -- cross-check
+        // the (small, sparse) Occupancy pool directly against the selected XY, filtered to
+        // the current layer the same way the Blocking check above is.
+        var occupancyPool = componentManager.GetPackedPool<OccupancyComponent>();
+        var transformPool = componentManager.GetDirectPool<TransformComponent>();
+        foreach (var entityId in occupancyPool.EntityIds)
+        {
+            if (!transformPool.Has(entityId))
+            {
+                continue;
+            }
+
+            var position = transformPool.GetReadonly(entityId).Position;
+            if (position.X == selected.X && position.Y == selected.Y && position.Z == currentMapLayer)
             {
                 _selectedEntityIds.Add(entityId);
             }
@@ -114,11 +150,16 @@ public sealed class SelectionWindowContent(
 
         if (displayTextPool.Has(entityId))
         {
+            // Bordered, and thicker than a component window's border (BorderSize 2 vs 1) --
+            // this is the only visual break between one entity's block of component windows
+            // and the next entity's, since child windows otherwise tile with nothing between
+            // them. Without it, two adjacent entities' component lists read as one continuous
+            // list with no indication where one entity ends and the next begins.
             var nameWindow = windowService.CreateWindow<TextWindow>(_hostWindow, new WindowOptions
             {
                 Hierarchy = new WindowHierarchyOptions { CanContainChildWindows = false },
                 Layout = new WindowLayoutOptions { MaximumSize = _hostWindow.ContentSize, DisplayMode = WindowDisplayMode.Grow },
-                Chrome = new WindowChromeOptions { ShowTitle = false, ShowBorder = false },
+                Chrome = new WindowChromeOptions { ShowTitle = false, ShowBorder = true, BorderSize = new Vector2(2, 2) },
                 Text = new TextOptions { Text = displayTextPool.GetReadonly(entityId).Name },
             });
             _hostWindow.AddChildWindow(nameWindow);

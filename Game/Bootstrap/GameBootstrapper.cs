@@ -5,6 +5,7 @@ using Engine.Modules;
 using Game.Modules;
 using Game.Modules.Class;
 using Game.Modules.Core;
+using Game.Modules.Core.Components;
 using Game.Modules.Energy;
 using Game.Modules.Health;
 using Game.Modules.Movement;
@@ -53,6 +54,15 @@ public static class GameBootstrapper
         ConfigureGameModules(modules, mapQuery, mathUtility, eventBus);
 
         var ecsContext = Bootstrapper.Build(modules, initialEntityCapacity, initialComponentCapacity, eventBus);
+
+        // World is constructed before this method runs (its own doc comment on the World
+        // parameter explains why -- MovementModule.Configure needs an IMapQuery before
+        // Bootstrapper.Build can produce the ComponentManager these pools come from), so they
+        // can't be World constructor dependencies. Wired up here, not left to GameLoop, so
+        // every real caller of this method gets them -- absence would silently default every
+        // entity to Blocking (see World.IsBlocking).
+        world.NonBlockingComponents = ecsContext.ComponentManager.GetMultiPool<NonBlockingComponent>();
+        world.ForceBlockingComponents = ecsContext.ComponentManager.GetMultiPool<ForceBlockingComponent>();
 
         // Not held onto -- its EntityMoved subscription (a bound instance-method delegate)
         // keeps it alive for as long as ecsContext.EventBus is.

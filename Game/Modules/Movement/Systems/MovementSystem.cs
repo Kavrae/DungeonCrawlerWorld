@@ -20,7 +20,7 @@ public sealed class MovementSystem : ISystem
     public byte StripeCount => 15;
 
     private const short FramesToWaitIfNoOptions = 10;
-    private static readonly Vector3Byte TransformSize1 = new(1, 1, 1);
+    private static readonly Vector2Byte TransformSize1 = new(1, 1);
 
     private readonly DirectComponentPool<TransformComponent> _transformComponents;
     private readonly PackedComponentPool<EnergyComponent> _energyComponents;
@@ -126,11 +126,28 @@ public sealed class MovementSystem : ISystem
     }
 
     /// <summary>
-    /// Whether an entity of the given size could occupy the given position: every cell in
-    /// its footprint must be on the map and either unoccupied or already occupied by itself.
+    /// Whether an entity of the given X/Y size could occupy the given position: every cell in
+    /// its footprint must be on the map (see IMapQuery.IsOnMap(Vector3Int, Vector2Byte)) and
+    /// either unoccupied or already occupied by itself. Bounds are checked first, since they
+    /// have to be checked regardless and an out-of-bounds position never needs the occupancy
+    /// work at all. Occupancy itself still has to be checked per cell (unlike bounds, a
+    /// cell's occupancy can't be inferred from its neighbors' occupancy). A non-Blocking
+    /// mover (IMapQuery.IsBlocking) skips the occupancy comparison entirely -- it's exempt
+    /// from map collision, the same reason it never occupies the map's occupancy index in the
+    /// first place (see World.IsBlocking) -- but still can't move off the map.
     /// </summary>
-    private bool CanMove(Vector3Int position, Vector3Byte size, int entityId)
+    private bool CanMove(Vector3Int position, Vector2Byte size, int entityId)
     {
+        if (!_mapQuery.IsOnMap(position, size))
+        {
+            return false;
+        }
+
+        if (!_mapQuery.IsBlocking(entityId))
+        {
+            return true;
+        }
+
         if (size == TransformSize1)
         {
             var occupyingEntityId = _mapQuery.GetEntityIdAt(position);
@@ -141,19 +158,10 @@ public sealed class MovementSystem : ISystem
         {
             for (var y = position.Y; y < position.Y + size.Y; y++)
             {
-                for (var z = position.Z; z < position.Z + size.Z; z++)
+                var occupyingEntityId = _mapQuery.GetEntityIdAt(new Vector3Int(x, y, position.Z));
+                if (occupyingEntityId != -1 && occupyingEntityId != entityId)
                 {
-                    var checkPosition = new Vector3Int(x, y, z);
-                    if (!_mapQuery.IsOnMap(checkPosition))
-                    {
-                        return false;
-                    }
-
-                    var occupyingEntityId = _mapQuery.GetEntityIdAt(checkPosition);
-                    if (occupyingEntityId != -1 && occupyingEntityId != entityId)
-                    {
-                        return false;
-                    }
+                    return false;
                 }
             }
         }

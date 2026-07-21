@@ -61,6 +61,15 @@ public sealed class GameInputController(MapWindow mapWindow, NotificationCenter 
             CycleZoom(1);
         }
 
+        if (IsKeyPressed(keyboardState, Keys.PageUp))
+        {
+            mapWindow.ChangeLayer(1);
+        }
+        if (IsKeyPressed(keyboardState, Keys.PageDown))
+        {
+            mapWindow.ChangeLayer(-1);
+        }
+
         var mouseState = Mouse.GetState();
         if (mouseState.LeftButton == ButtonState.Pressed && _previousMouseState.LeftButton == ButtonState.Released)
         {

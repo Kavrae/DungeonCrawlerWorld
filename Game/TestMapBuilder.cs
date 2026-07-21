@@ -13,9 +13,11 @@ using Game.Modules.Movement.Components;
 namespace Game;
 
 /// <summary>
-/// Builds a test map (border walls, a cross hallway, dirt/lava terrain, a large wandering
-/// goblin population at two densities, and a handful of standalone multi-trait fixtures) via
-/// the Blueprint composition system.
+/// Builds a test map across all three MapLayers: Ground (border walls, a cross hallway,
+/// dirt/lava terrain, a large wandering goblin population at two densities), UnderGround
+/// (border walls and a randomized dirt/lava mixture), and Flying (scattered wandering
+/// Fairies) -- plus a handful of standalone multi-trait fixtures, via the Blueprint
+/// composition system.
 /// </summary>
 public sealed class TestMapBuilder(EntityManager entityManager, ComponentManager componentManager, MathUtility mathUtility)
 {
@@ -23,7 +25,7 @@ public sealed class TestMapBuilder(EntityManager entityManager, ComponentManager
     // (TransformComponent.Size.X: 1 => medium, 2 => large, _ => huge) -- rotating through
     // them one-for-one keeps the three groups as even as possible regardless of how many
     // goblins the map ends up with.
-    private static readonly Vector3Byte[] GoblinSizes = [new(1, 1, 1), new(2, 2, 1), new(3, 3, 1)];
+    private static readonly Vector2Byte[] GoblinSizes = [new(1, 1), new(2, 2), new(3, 3)];
 
     private const string LongWordWrapDescription =
         "ThisIsAReallyLongDescriptionToTestTheWordWrapCapabilitiesAroundHyphenatingLongWordsMultipleTimes";
@@ -55,21 +57,22 @@ public sealed class TestMapBuilder(EntityManager entityManager, ComponentManager
         {
             for (var row = 0; row < mapRows; row++)
             {
+                var isBorder = column == 0 || column == mapColumns - 1 || row == 0 || row == mapRows - 1;
                 var isWallOrHallway =
-                    column == 0 || column == mapColumns - 1 || row == 0 || row == mapRows - 1 ||
+                    isBorder ||
                     (column is 10 or 16 && (row < 10 || row > 16)) ||
                     (row is 10 or 16 && (column < 10 || column > 16));
 
                 if (isWallOrHallway)
                 {
-                    BuildFromBlueprint(world, _stoneFloor, column, row);
+                    BuildTerrainFromBlueprint(world, _stoneFloor, column, row, TerrainLayer.Ground);
                     BuildFromBlueprint(world, _wall, column, row);
                 }
                 else
                 {
                     // Occasional lava patches instead of dirt -- uncommon by design.
                     var isLava = row % 33 == 17 && column % 47 == 23;
-                    BuildFromBlueprint(world, isLava ? _lava : _dirt, column, row);
+                    BuildTerrainFromBlueprint(world, isLava ? _lava : _dirt, column, row, TerrainLayer.Ground);
 
                     if (row % 5 == 0 && column % 4 == 0)
                     {
@@ -81,6 +84,34 @@ public sealed class TestMapBuilder(EntityManager entityManager, ComponentManager
                         // separate from and denser than the GoblinEngineer spawn above.
                         BuildFromBlueprint(world, _goblin, column, row);
                     }
+                }
+
+                // UnderGround layer: border walls (its own MapLayer, so distinct from the
+                // Ground-layer walls above -- entities on different layers never collide).
+                // Mirrors Ground's own split: StoneFloor under the border (so the wall's
+                // background reads as a consistent wall floor, not the interior's speckled
+                // terrain -- MapWindow's background resolution only ever shows terrain color,
+                // never the creature standing on it, so the border cells need dedicated
+                // terrain of their own the same way Ground's isWallOrHallway branch already
+                // does) and a genuinely randomized dirt/lava mixture everywhere else, unlike
+                // Ground's sparse, deterministic lava patches (a fixed pattern one layer down
+                // would just look identical, not "random").
+                if (isBorder)
+                {
+                    BuildTerrainFromBlueprint(world, _stoneFloor, column, row, TerrainLayer.UnderGround);
+                    BuildFromBlueprintAtLayer(world, _wall, column, row, MapLayer.UnderGround);
+                }
+                else
+                {
+                    BuildTerrainFromBlueprint(world, mathUtility.Next(0, 5) == 0 ? _lava : _dirt, column, row, TerrainLayer.UnderGround);
+                }
+
+                // Flying layer: scattered ordinary Fairies. Independent of whatever's on
+                // Ground/UnderGround at the same (column,row) -- a different MapLayer, so no
+                // collision between them.
+                if (row % 8 == 0 && column % 6 == 0)
+                {
+                    BuildFromBlueprintAtLayer(world, _fairy, column, row, MapLayer.Flying);
                 }
             }
         }
@@ -94,6 +125,29 @@ public sealed class TestMapBuilder(EntityManager entityManager, ComponentManager
         blueprint.Build(componentManager, entityId);
 
         PlaceAt(world, entityId, column, row);
+    }
+
+    /// <summary>Same as BuildFromBlueprint, but places at mapLayer instead of preserving whatever Z the blueprint itself set.</summary>
+    private void BuildFromBlueprintAtLayer(World.World world, IBlueprint blueprint, int column, int row, MapLayer mapLayer)
+    {
+        var entityId = entityManager.CreateEntity();
+        blueprint.Build(componentManager, entityId);
+
+        ref var transform = ref componentManager.GetDirectPool<TransformComponent>().Get(entityId);
+        world.PlaceEntityOnMap(entityId, new Vector3Int(column, row, (int)mapLayer), ref transform);
+    }
+
+    /// <summary>
+    /// Terrain (the floor an entity stands on) is never a Blocking creature-occupancy entity
+    /// -- it goes through Map's separate terrain store instead of PlaceEntityOnMap, so it
+    /// can't clobber (or be clobbered by) whatever creature/wall is standing on it.
+    /// </summary>
+    private void BuildTerrainFromBlueprint(World.World world, IBlueprint blueprint, int column, int row, TerrainLayer terrainLayer)
+    {
+        var entityId = entityManager.CreateEntity();
+        blueprint.Build(componentManager, entityId);
+
+        world.PlaceTerrainOnMap(entityId, column, row, terrainLayer);
     }
 
     /// <summary>Same placement as BuildFromBlueprint, plus assigning one of the three even-rotation sizes.</summary>
@@ -129,7 +183,7 @@ public sealed class TestMapBuilder(EntityManager entityManager, ComponentManager
         longDescriptionText.Description = LongWordWrapDescription;
 
         ref var longDescriptionTransform = ref componentManager.GetDirectPool<TransformComponent>().Get(longDescriptionId);
-        longDescriptionTransform.Size = new Vector3Byte(2, 2, 1);
+        longDescriptionTransform.Size = new Vector2Byte(2, 2);
 
         PlaceAt(world, longDescriptionId, 2, 2);
 
@@ -138,7 +192,7 @@ public sealed class TestMapBuilder(EntityManager entityManager, ComponentManager
         _goblinEngineer.Build(componentManager, hugeId);
 
         ref var hugeTransform = ref componentManager.GetDirectPool<TransformComponent>().Get(hugeId);
-        hugeTransform.Size = new Vector3Byte(3, 3, 1);
+        hugeTransform.Size = new Vector2Byte(3, 3);
 
         PlaceAt(world, hugeId, 5, 5);
 
@@ -171,6 +225,36 @@ public sealed class TestMapBuilder(EntityManager entityManager, ComponentManager
         _tank.Build(componentManager, multiClassId);
 
         PlaceAt(world, multiClassId, 11, 2);
+
+        // Tiny-entity occupancy fixtures: 4 partially fill MapWindow's 3x3 tiny grid, 11
+        // exercise its 9-entity cap (the extra 2 are built but never drawn).
+        BuildTinyGoblins(world, count: 4, column: 3, row: 5);
+        BuildTinyGoblins(world, count: 11, column: 7, row: 5);
+
+        // Phasing fairy, deliberately co-located with the ordinary moving Fairy above (17,16)
+        // -- both are Flying layer, so the Phasing entity overlaps a Blocking one at the same
+        // layer, the scenario Occupancy exists to support, rather than relying on a
+        // coincidental overlap elsewhere.
+        var phasingFairyId = entityManager.CreateEntity();
+        _fairy.Build(componentManager, phasingFairyId); // Fairy's own blueprint already includes MovementComponent.
+        componentManager.GetPackedPool<OccupancyComponent>().Add(phasingFairyId, new OccupancyComponent(isTiny: false, isPhasing: true));
+        componentManager.GetMultiPool<NonBlockingComponent>().Add(phasingFairyId, new NonBlockingComponent());
+
+        PlaceAt(world, phasingFairyId, 17, 16);
+    }
+
+    /// <summary>Builds count plain-Goblin-glyph entities, all Tiny, all at the same cell -- for exercising MapWindow's tiny-entity grid/cap.</summary>
+    private void BuildTinyGoblins(World.World world, int count, int column, int row)
+    {
+        for (var i = 0; i < count; i++)
+        {
+            var entityId = entityManager.CreateEntity();
+            _goblin.Build(componentManager, entityId);
+            componentManager.GetPackedPool<OccupancyComponent>().Add(entityId, new OccupancyComponent(isTiny: true, isPhasing: false));
+            componentManager.GetMultiPool<NonBlockingComponent>().Add(entityId, new NonBlockingComponent());
+
+            PlaceAt(world, entityId, column, row);
+        }
     }
 
     /// <summary>

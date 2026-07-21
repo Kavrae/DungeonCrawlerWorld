@@ -93,7 +93,7 @@ public sealed class GameModuleIntegrationTests
         var ecsContext = Bootstrapper.Build(modules, initialEntityCapacity: 100, initialComponentCapacity: 50);
 
         var entityId = ecsContext.EntityManager.CreateEntity();
-        var transform = new TransformComponent(new Vector3Int(2, 2, 0), new Vector3Byte(1, 1, 1));
+        var transform = new TransformComponent(new Vector3Int(2, 2, 0), new Vector2Byte(1, 1));
         ecsContext.ComponentManager.GetDirectPool<TransformComponent>().Add(entityId, transform);
         world.PlaceEntityOnMap(entityId, transform.Position, ref transform);
         ecsContext.ComponentManager.GetPackedPool<EnergyComponent>().Add(entityId, new EnergyComponent(100, 5, 100));
