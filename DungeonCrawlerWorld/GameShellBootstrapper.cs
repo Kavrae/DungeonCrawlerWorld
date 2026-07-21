@@ -1,6 +1,5 @@
 using Engine.Diagnostics;
 using Engine.ECS.World;
-using Game.Notifications;
 using Game.World;
 using Microsoft.Xna.Framework;
 using Microsoft.Xna.Framework.Graphics;
@@ -96,32 +95,30 @@ public static class GameShellBootstrapper
         selectionWindow.Initialize();
         rootWindows.Add(selectionWindow);
 
-        var notificationCenter = new NotificationCenter(presentation.WindowService, ecsContext.EventBus);
+        var alwaysOnTopWindows = new List<Window>();
+        var notificationCenter = new NotificationCenter(presentation.WindowService, ecsContext.EventBus, alwaysOnTopWindows);
         notificationCenter.Initialize();
 
-        // Published through the buffered NotificationRequested event rather than calling
-        // notificationCenter.AddNotification directly -- the shell could call it directly (it's
-        // still part of the composition root), but publishing is what actually proves the
-        // buffered pipeline works end to end, the same path a Game-layer system (which can't
-        // reference Presentation.NotificationCenter at all) would have to use. Both
-        // ShowImmediately: true so both categories are visibly on screen at once: System pauses
-        // the game and can't be minimized, Quest does neither.
-        ecsContext.EventBus.Publish(new NotificationRequested(NotificationCategory.System, "You have entered the dungeon", ShowImmediately: true));
-        ecsContext.EventBus.Publish(new NotificationRequested(NotificationCategory.Quest, "Take your first steps!", ShowImmediately: true));
-
-        return new GameShellContext(mapWindow, notificationCenter, rootWindows);
+        return new GameShellContext(mapWindow, notificationCenter, rootWindows, alwaysOnTopWindows);
     }
 }
 
 /// <summary>
-/// Bundles the app's constructed root windows and notification center, produced by
-/// GameShellBootstrapper. Owns LoadContent/Draw itself -- both are self-contained fan-outs
-/// over RootWindows/NotificationCenter with no dependency on anything outside the shell.
-/// Update is deliberately not here: GameLoop needs to run EcsContext.Update and check the
-/// pause state in between updating NotificationCenter and updating the windows, an ordering
-/// constraint that belongs to the composition root, not the shell.
+/// Bundles the app's constructed root windows, always-on-top windows (notifications), and
+/// notification center, produced by GameShellBootstrapper. RootWindows/AlwaysOnTopWindows are
+/// two tiers of the same window-list machinery (see Window.TryHitTestInteraction/RaiseToFront
+/// and GameInputController) -- always-on-top windows are drawn/hit-tested after (on top of)
+/// root windows, and raise-to-front only ever reorders a window within its own tier, so a
+/// root window being raised can never end up in front of a notification. Both are mutable
+/// List&lt;Window&gt;, not IReadOnlyList -- GameInputController reorders them on raise-to-front,
+/// and NotificationCenter adds/removes its own windows from AlwaysOnTopWindows as they
+/// show/close. Owns LoadContent/Draw itself -- both are self-contained fan-outs over the two
+/// tiers with no dependency on anything outside the shell. Update is deliberately not here:
+/// GameLoop needs to run EcsContext.Update and check the pause state in between updating
+/// NotificationCenter and updating the windows, an ordering constraint that belongs to the
+/// composition root, not the shell.
 /// </summary>
-public sealed record GameShellContext(MapWindow MapWindow, NotificationCenter NotificationCenter, IReadOnlyList<Window> RootWindows)
+public sealed record GameShellContext(MapWindow MapWindow, NotificationCenter NotificationCenter, List<Window> RootWindows, List<Window> AlwaysOnTopWindows)
 {
     public void LoadContent()
     {
@@ -130,7 +127,10 @@ public sealed record GameShellContext(MapWindow MapWindow, NotificationCenter No
             window.LoadContent();
         }
 
-        NotificationCenter.LoadContent();
+        foreach (var window in AlwaysOnTopWindows)
+        {
+            window.LoadContent();
+        }
     }
 
     public void Draw(GameTime gameTime, GraphicsDevice graphicsDevice, SpriteBatch spriteBatch, Texture2D unitRectangle)
@@ -140,6 +140,9 @@ public sealed record GameShellContext(MapWindow MapWindow, NotificationCenter No
             window.Draw(gameTime, graphicsDevice, spriteBatch, unitRectangle);
         }
 
-        NotificationCenter.Draw(gameTime, graphicsDevice, spriteBatch, unitRectangle);
+        foreach (var window in AlwaysOnTopWindows)
+        {
+            window.Draw(gameTime, graphicsDevice, spriteBatch, unitRectangle);
+        }
     }
 }

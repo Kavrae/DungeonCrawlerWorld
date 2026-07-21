@@ -19,15 +19,27 @@ public class Button
     public Rectangle ButtonRectangle { get; private set; }
     public Rectangle ContentRectangle { get; private set; }
 
+    public Rectangle BorderTopRectangle { get; private set; }
+    public Rectangle BorderBottomRectangle { get; private set; }
+    public Rectangle BorderLeftRectangle { get; private set; }
+    public Rectangle BorderRightRectangle { get; private set; }
+
     public Color ButtonColor { get; }
 
     public bool ShowBorder { get; }
 
+    /// <summary>Defaults to Outset -- unlike Window (which defaults to Flat), every title button gets the raised bevel look unless a caller opts out.</summary>
+    public BorderStyle BorderStyle { get; }
+
     public string Text { get; private set; }
+
+    /// <summary>True while the mouse is held down over this button -- Draw() swaps Outset/Inset while true, giving the pressed-in look. See GameInputController, which calls SetPressed on press/release.</summary>
+    public bool IsPressed { get; private set; }
 
     protected SpriteFontBase? Font { get; }
 
     private readonly GlyphRenderer _glyphRenderer;
+    private static readonly BorderThickness DefaultBorderThickness = BorderThickness.Uniform(Vector2.One);
 
     /// <summary>Raised when the button is clicked.</summary>
     public event Action? Clicked;
@@ -44,16 +56,13 @@ public class Button
 
         Text = buttonOptions.Text ?? string.Empty;
 
-        // Button is only ever used for title-bar chrome (close/minimize/dismiss) today, so
-        // Font/Size/Color/ShowBorder all default to what every one of those needs -- callers
-        // only specify what actually differs (Text, and whichever override a future non-title
-        // button turns out to need).
         Font = buttonOptions.Font ?? parentWindow.TitleFont;
         _glyphRenderer = parentWindow.GlyphRenderer;
 
         RelativePosition = buttonOptions.RelativePosition ?? Vector2.Zero;
         Size = buttonOptions.Size ?? DefaultTitleButtonSize(parentWindow);
         ShowBorder = buttonOptions.ShowBorder ?? true;
+        BorderStyle = buttonOptions.BorderStyle ?? BorderStyle.Outset;
         ButtonColor = buttonOptions.Color ?? Color.LightGray;
     }
 
@@ -72,15 +81,11 @@ public class Button
     {
     }
 
-    // TODO slightly darker color for a hover effect.
-    // TODO mouse down should switch this to an inset look, mouse up back to outset (Window
-    // Chrome) -- needs GameInputController to expose a held-down state, which it doesn't have
-    // yet (see the TODO on its mouse handling in Update).
     public void Draw(GameTime gameTime, SpriteBatch spriteBatch, Texture2D unitRectangle)
     {
         if (ShowBorder)
         {
-            spriteBatch.Draw(unitRectangle, ButtonRectangle, Color.Black);
+            BorderRenderer.Draw(spriteBatch, unitRectangle, EffectiveBorderStyle, BorderTopRectangle, BorderBottomRectangle, BorderLeftRectangle, BorderRightRectangle);
         }
 
         spriteBatch.Draw(unitRectangle, ContentRectangle, ButtonColor);
@@ -100,6 +105,21 @@ public class Button
         }
     }
 
+    /// <summary>Outset<->Inset while IsPressed (the raised bevel briefly reads as pushed in); Flat is unaffected, since it has no bevel direction to swap.</summary>
+    private BorderStyle EffectiveBorderStyle => IsPressed
+        ? BorderStyle switch
+        {
+            BorderStyle.Outset => BorderStyle.Inset,
+            BorderStyle.Inset => BorderStyle.Outset,
+            _ => BorderStyle,
+        }
+        : BorderStyle;
+
+    public void SetPressed(bool isPressed)
+    {
+        IsPressed = isPressed;
+    }
+
     public void ChangeRelativePosition(Vector2 newPosition)
     {
         RelativePosition = newPosition;
@@ -116,11 +136,20 @@ public class Button
     {
         AbsolutePosition = RelativePosition + ParentWindow.WindowAbsolutePosition;
         ButtonRectangle = new Rectangle((int)AbsolutePosition.X, (int)AbsolutePosition.Y, (int)Size.X, (int)Size.Y);
-        ContentRectangle = ShowBorder
-            // Inset by 1px on every side so a full border shows all the way around, not just
-            // the bottom/right (which used to read as a shadow/bevel rather than a border).
-            ? new Rectangle(ButtonRectangle.X + 1, ButtonRectangle.Y + 1, ButtonRectangle.Width - 2, ButtonRectangle.Height - 2)
-            : ButtonRectangle;
+
+        if (ShowBorder)
+        {
+            ContentRectangle = BorderThickness.Inset(ButtonRectangle, DefaultBorderThickness);
+            var edges = BorderThickness.GetEdgeRectangles(ButtonRectangle, DefaultBorderThickness);
+            BorderTopRectangle = edges.Top;
+            BorderBottomRectangle = edges.Bottom;
+            BorderLeftRectangle = edges.Left;
+            BorderRightRectangle = edges.Right;
+        }
+        else
+        {
+            ContentRectangle = ButtonRectangle;
+        }
     }
 
     public void HandleClick(Point mousePosition)

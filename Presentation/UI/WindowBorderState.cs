@@ -7,6 +7,7 @@ internal sealed class WindowBorderState
 {
     public bool Show;
     public BorderThickness Thickness;
+    public BorderStyle Style;
 
     /// <summary>
     /// The four edge strips a border draws as (see Window.RecalculateBorderRectangles) --

@@ -13,6 +13,13 @@ namespace Tests.Presentation;
 /// destroy-and-requeue "minimize" hack: closing now goes through Window's real Closed
 /// event, verified here by confirming a closed notification's screen position stops being
 /// clickable (its Window has actually been detached from the active list, not just hidden).
+///
+/// Click routing/hit-testing is no longer NotificationCenter's job (Window Chrome Phase A1)
+/// -- production code (GameInputController) hit-tests the shared alwaysOnTopWindows list
+/// directly. ClickAlwaysOnTop below mirrors that exact topmost-first
+/// TryHitTestInteraction-then-HandleClick sequence, against the same list this
+/// NotificationCenter was constructed with, so these tests still exercise real click-to-
+/// window routing rather than only NotificationCenter's own bookkeeping.
 /// </summary>
 [TestClass]
 public sealed class NotificationCenterTests
@@ -21,46 +28,67 @@ public sealed class NotificationCenterTests
 
     private static WindowService CreateWindowService() => new(new FontService("Fonts"), new GlyphRenderer());
 
+    private static NotificationCenter CreateNotificationCenter(WindowService windowService, List<Window> alwaysOnTopWindows)
+    {
+        var notificationCenter = new NotificationCenter(windowService, new EventBus(), alwaysOnTopWindows);
+        notificationCenter.Initialize();
+        return notificationCenter;
+    }
+
+    private static bool ClickAlwaysOnTop(List<Window> alwaysOnTopWindows, Point position)
+    {
+        for (var index = alwaysOnTopWindows.Count - 1; index >= 0; index--)
+        {
+            var interaction = alwaysOnTopWindows[index].TryHitTestInteraction(position);
+            if (interaction.Window is not null)
+            {
+                interaction.Window.HandleClick(position);
+                return true;
+            }
+        }
+
+        return false;
+    }
+
     [TestMethod]
     public void AddNotification_ShowImmediately_CreatesAClickableActiveWindow()
     {
-        var notificationCenter = new NotificationCenter(CreateWindowService(), new EventBus());
-        notificationCenter.Initialize();
+        var alwaysOnTopWindows = new List<Window>();
+        var notificationCenter = CreateNotificationCenter(CreateWindowService(), alwaysOnTopWindows);
 
         notificationCenter.AddNotification(NotificationCategory.Quest, "Hello", showImmediately: true);
 
-        Assert.IsTrue(notificationCenter.HandleClick(FirstActiveNotificationTopLeft));
+        Assert.IsTrue(ClickAlwaysOnTop(alwaysOnTopWindows, FirstActiveNotificationTopLeft));
     }
 
     [TestMethod]
     public void AddNotification_NotShownImmediately_CreatesNoActiveWindow()
     {
-        var notificationCenter = new NotificationCenter(CreateWindowService(), new EventBus());
-        notificationCenter.Initialize();
+        var alwaysOnTopWindows = new List<Window>();
+        var notificationCenter = CreateNotificationCenter(CreateWindowService(), alwaysOnTopWindows);
 
         notificationCenter.AddNotification(NotificationCategory.Quest, "Hello", showImmediately: false);
 
-        Assert.IsFalse(notificationCenter.HandleClick(FirstActiveNotificationTopLeft));
+        Assert.IsFalse(ClickAlwaysOnTop(alwaysOnTopWindows, FirstActiveNotificationTopLeft));
     }
 
     [TestMethod]
     public void CloseNotification_ActiveNotification_RemovesItFromActiveList()
     {
-        var notificationCenter = new NotificationCenter(CreateWindowService(), new EventBus());
-        notificationCenter.Initialize();
+        var alwaysOnTopWindows = new List<Window>();
+        var notificationCenter = CreateNotificationCenter(CreateWindowService(), alwaysOnTopWindows);
         var notificationId = notificationCenter.AddNotification(NotificationCategory.Quest, "Hello", showImmediately: true);
 
         var closed = notificationCenter.CloseNotification(notificationId);
 
         Assert.IsTrue(closed);
-        Assert.IsFalse(notificationCenter.HandleClick(FirstActiveNotificationTopLeft));
+        Assert.IsFalse(ClickAlwaysOnTop(alwaysOnTopWindows, FirstActiveNotificationTopLeft));
     }
 
     [TestMethod]
     public void CloseNotification_UnknownId_ReturnsFalse()
     {
-        var notificationCenter = new NotificationCenter(CreateWindowService(), new EventBus());
-        notificationCenter.Initialize();
+        var notificationCenter = CreateNotificationCenter(CreateWindowService(), []);
 
         Assert.IsFalse(notificationCenter.CloseNotification(Guid.NewGuid()));
     }
@@ -68,24 +96,24 @@ public sealed class NotificationCenterTests
     [TestMethod]
     public void OpenNextNotification_WithUnreadNotification_PromotesItToActive()
     {
-        var notificationCenter = new NotificationCenter(CreateWindowService(), new EventBus());
-        notificationCenter.Initialize();
+        var alwaysOnTopWindows = new List<Window>();
+        var notificationCenter = CreateNotificationCenter(CreateWindowService(), alwaysOnTopWindows);
         notificationCenter.AddNotification(NotificationCategory.Quest, "Hello", showImmediately: false);
 
         notificationCenter.OpenNextNotification(NotificationCategory.Quest);
 
-        Assert.IsTrue(notificationCenter.HandleClick(FirstActiveNotificationTopLeft));
+        Assert.IsTrue(ClickAlwaysOnTop(alwaysOnTopWindows, FirstActiveNotificationTopLeft));
     }
 
     [TestMethod]
     public void OpenNextNotification_WithNoUnreadNotifications_DoesNothing()
     {
-        var notificationCenter = new NotificationCenter(CreateWindowService(), new EventBus());
-        notificationCenter.Initialize();
+        var alwaysOnTopWindows = new List<Window>();
+        var notificationCenter = CreateNotificationCenter(CreateWindowService(), alwaysOnTopWindows);
 
         notificationCenter.OpenNextNotification(NotificationCategory.Quest);
 
-        Assert.IsFalse(notificationCenter.HandleClick(FirstActiveNotificationTopLeft));
+        Assert.IsFalse(ClickAlwaysOnTop(alwaysOnTopWindows, FirstActiveNotificationTopLeft));
     }
 
     /// <summary>
@@ -97,8 +125,7 @@ public sealed class NotificationCenterTests
     [TestMethod]
     public void CloseNotification_TwiceAcrossPooledWindowReuse_DoesNotThrow()
     {
-        var notificationCenter = new NotificationCenter(CreateWindowService(), new EventBus());
-        notificationCenter.Initialize();
+        var notificationCenter = CreateNotificationCenter(CreateWindowService(), []);
 
         var firstId = notificationCenter.AddNotification(NotificationCategory.Quest, "First", showImmediately: true);
         notificationCenter.CloseNotification(firstId);
@@ -117,42 +144,41 @@ public sealed class NotificationCenterTests
     /// TextWindow, but nothing called OpenNextNotification from there. Unlike
     /// OpenNextNotification_WithUnreadNotification_PromotesItToActive above (which calls
     /// OpenNextNotification directly and would have passed even with the bug present), this
-    /// drives it through NotificationCenter.HandleClick at the summary badge's actual screen
-    /// position, exercising the click-to-callback wiring itself.
+    /// drives it through the summary badge's actual screen position, exercising the
+    /// click-to-callback wiring itself.
     /// </summary>
     [TestMethod]
     public void ClickingSummaryBadge_WithUnreadNotification_OpensItAsActive()
     {
-        var notificationCenter = new NotificationCenter(CreateWindowService(), new EventBus());
-        notificationCenter.Initialize();
+        var alwaysOnTopWindows = new List<Window>();
+        var notificationCenter = CreateNotificationCenter(CreateWindowService(), alwaysOnTopWindows);
         notificationCenter.AddNotification(NotificationCategory.Quest, "Explore the dungeon.", showImmediately: false);
 
         // Quest is the second declared NotificationCategory, tiled horizontally after System's
         // summary badge (65px wide) starting at the summary bar's position (12, 30).
         var questSummaryBadge = new Point(12 + 65 + 5, 30 + 5);
-        var handled = notificationCenter.HandleClick(questSummaryBadge);
+        var handled = ClickAlwaysOnTop(alwaysOnTopWindows, questSummaryBadge);
 
         Assert.IsTrue(handled);
-        Assert.IsTrue(notificationCenter.HandleClick(FirstActiveNotificationTopLeft));
+        Assert.IsTrue(ClickAlwaysOnTop(alwaysOnTopWindows, FirstActiveNotificationTopLeft));
     }
 
     [TestMethod]
     public void ClickingSummaryBadge_WithNoUnreadNotifications_DoesNotOpenAnything()
     {
-        var notificationCenter = new NotificationCenter(CreateWindowService(), new EventBus());
-        notificationCenter.Initialize();
+        var alwaysOnTopWindows = new List<Window>();
+        var notificationCenter = CreateNotificationCenter(CreateWindowService(), alwaysOnTopWindows);
 
         var questSummaryBadge = new Point(12 + 65 + 5, 30 + 5);
-        notificationCenter.HandleClick(questSummaryBadge);
+        ClickAlwaysOnTop(alwaysOnTopWindows, questSummaryBadge);
 
-        Assert.IsFalse(notificationCenter.HandleClick(FirstActiveNotificationTopLeft));
+        Assert.IsFalse(ClickAlwaysOnTop(alwaysOnTopWindows, FirstActiveNotificationTopLeft));
     }
 
     [TestMethod]
     public void HasBlockingNotification_SystemNotificationActive_IsTrue()
     {
-        var notificationCenter = new NotificationCenter(CreateWindowService(), new EventBus());
-        notificationCenter.Initialize();
+        var notificationCenter = CreateNotificationCenter(CreateWindowService(), []);
 
         notificationCenter.AddNotification(NotificationCategory.System, "You have entered the dungeon", showImmediately: true);
 
@@ -162,8 +188,7 @@ public sealed class NotificationCenterTests
     [TestMethod]
     public void HasBlockingNotification_OnlyQuestNotificationActive_IsFalse()
     {
-        var notificationCenter = new NotificationCenter(CreateWindowService(), new EventBus());
-        notificationCenter.Initialize();
+        var notificationCenter = CreateNotificationCenter(CreateWindowService(), []);
 
         notificationCenter.AddNotification(NotificationCategory.Quest, "Take your first steps!", showImmediately: true);
 
@@ -173,8 +198,7 @@ public sealed class NotificationCenterTests
     [TestMethod]
     public void HasBlockingNotification_AfterClosingTheSystemNotification_IsFalseAgain()
     {
-        var notificationCenter = new NotificationCenter(CreateWindowService(), new EventBus());
-        notificationCenter.Initialize();
+        var notificationCenter = CreateNotificationCenter(CreateWindowService(), []);
         var notificationId = notificationCenter.AddNotification(NotificationCategory.System, "You have entered the dungeon", showImmediately: true);
 
         notificationCenter.CloseNotification(notificationId);
@@ -183,14 +207,15 @@ public sealed class NotificationCenterTests
     }
 
     /// <summary>
-    /// Regression test: HandleClick used to check _activeNotifications oldest-first, but
+    /// Regression test: click routing used to check _activeNotifications oldest-first, but
     /// ShowActive stacks each new popup ActiveNotificationStackOffset (10px) further
     /// down-right and Draw renders them in the same order -- so a newer popup is both on top
     /// on screen and last in the list, while an older popup's much larger bounding rectangle
     /// (the diagonal offset is tiny next to a real popup's size) still covers the newer
     /// popup's own buttons. Checking oldest-first meant the older popup claimed clicks meant
     /// for the newer one's close button, making it effectively unclickable whenever an older
-    /// popup was still open behind it.
+    /// popup was still open behind it. ClickAlwaysOnTop (topmost-first, matching production)
+    /// is what proves this stays fixed now that NotificationCenter itself doesn't route clicks.
     /// </summary>
     [TestMethod]
     public void ClickingCloseButton_OnNewerOverlappingNotification_ClosesOnlyThatOne()
@@ -211,8 +236,8 @@ public sealed class NotificationCenterTests
             return window;
         });
 
-        var notificationCenter = new NotificationCenter(windowService, new EventBus());
-        notificationCenter.Initialize();
+        var alwaysOnTopWindows = new List<Window>();
+        var notificationCenter = CreateNotificationCenter(windowService, alwaysOnTopWindows);
 
         var firstId = notificationCenter.AddNotification(NotificationCategory.Quest, "First", showImmediately: true);
         var secondId = notificationCenter.AddNotification(NotificationCategory.Quest, "Second", showImmediately: true);
@@ -226,7 +251,7 @@ public sealed class NotificationCenterTests
         var secondPopup = activePopups[1]; // second AddNotification call -- stacked on top, see ActiveNotificationStackOffset
         var closeButton = secondPopup.TitleButtons[0]; // Close attaches first, see Window.Initialize
 
-        var handled = notificationCenter.HandleClick(closeButton.ButtonRectangle.Center);
+        var handled = ClickAlwaysOnTop(alwaysOnTopWindows, closeButton.ButtonRectangle.Center);
 
         Assert.IsTrue(handled);
         // Already closed by the click above -- CloseNotification returns false for an id no
@@ -240,18 +265,19 @@ public sealed class NotificationCenterTests
     public void PublishingNotificationRequested_ThenUpdate_ProducesSameResultAsDirectAddNotification()
     {
         var eventBus = new EventBus();
-        var notificationCenter = new NotificationCenter(CreateWindowService(), eventBus);
+        var alwaysOnTopWindows = new List<Window>();
+        var notificationCenter = new NotificationCenter(CreateWindowService(), eventBus, alwaysOnTopWindows);
         notificationCenter.Initialize();
 
         eventBus.Publish(new NotificationRequested(NotificationCategory.System, "You have entered the dungeon", ShowImmediately: true));
 
         // Not dispatched yet -- Publish on a buffered event only enqueues.
         Assert.IsFalse(notificationCenter.HasBlockingNotification);
-        Assert.IsFalse(notificationCenter.HandleClick(FirstActiveNotificationTopLeft));
+        Assert.IsFalse(ClickAlwaysOnTop(alwaysOnTopWindows, FirstActiveNotificationTopLeft));
 
         notificationCenter.Update(new GameTime());
 
         Assert.IsTrue(notificationCenter.HasBlockingNotification);
-        Assert.IsTrue(notificationCenter.HandleClick(FirstActiveNotificationTopLeft));
+        Assert.IsTrue(ClickAlwaysOnTop(alwaysOnTopWindows, FirstActiveNotificationTopLeft));
     }
 }

@@ -1,7 +1,6 @@
 using Engine.Events;
 using Game.Notifications;
 using Microsoft.Xna.Framework;
-using Microsoft.Xna.Framework.Graphics;
 
 namespace Presentation.UI.Notifications;
 
@@ -17,7 +16,7 @@ namespace Presentation.UI.Notifications;
 /// (which can't reference this Presentation-layer type at all) can request a notification
 /// without a direct reference.
 /// </summary>
-public sealed class NotificationCenter(WindowService windowService, EventBus eventBus)
+public sealed class NotificationCenter(WindowService windowService, EventBus eventBus, List<Window> alwaysOnTopWindows)
 {
     private static readonly Vector2 SummaryPosition = new(12, 30);
     private static readonly Vector2 SummarySize = new(300, 25);
@@ -44,6 +43,7 @@ public sealed class NotificationCenter(WindowService windowService, EventBus eve
             Chrome = new WindowChromeOptions { ShowTitle = false },
         });
         _summaryWindow.Initialize();
+        alwaysOnTopWindows.Add(_summaryWindow);
 
         foreach (var category in Enum.GetValues<NotificationCategory>())
         {
@@ -68,68 +68,15 @@ public sealed class NotificationCenter(WindowService windowService, EventBus eve
         eventBus.Subscribe<NotificationRequested>(OnNotificationRequested);
     }
 
-    public void LoadContent()
-    {
-        _summaryWindow.LoadContent();
-
-        foreach (var (activeWindow, _) in _activeNotifications)
-        {
-            activeWindow.LoadContent();
-        }
-    }
-
-    /// <summary>Notifications update even while the game is paused -- deliberately not gated by GameLoop's pause state.</summary>
-    public void Update(GameTime gameTime)
-    {
-        eventBus.DispatchBuffered<NotificationRequested>();
-
-        _summaryWindow.Update(gameTime);
-
-        foreach (var (activeWindow, _) in _activeNotifications)
-        {
-            activeWindow.Update(gameTime);
-        }
-    }
-
-    public void Draw(GameTime gameTime, GraphicsDevice graphicsDevice, SpriteBatch spriteBatch, Texture2D unitRectangle)
-    {
-        _summaryWindow.Draw(gameTime, graphicsDevice, spriteBatch, unitRectangle);
-
-        foreach (var (activeWindow, _) in _activeNotifications)
-        {
-            activeWindow.Draw(gameTime, graphicsDevice, spriteBatch, unitRectangle);
-        }
-    }
-
-    /// <summary>Returns true if the click landed on a notification window and was handled.</summary>
-    public bool HandleClick(Point mousePosition)
-    {
-        // Newest (last in the list) first, not oldest first: ShowActive stacks each new
-        // popup ActiveNotificationStackOffset further down-right and Draw (above) renders
-        // them in list order, so a later popup is both on top on screen and last in the
-        // list. Overlapping bounding rectangles are the common case here (the offset is only
-        // 10px against popups often 100+px wide), so checking oldest-first let an older
-        // popup's much larger rectangle claim clicks meant for a newer popup's own buttons --
-        // the newer popup's buttons were effectively unclickable whenever an older popup was
-        // still open behind it.
-        for (var index = _activeNotifications.Count - 1; index >= 0; index--)
-        {
-            var activeWindow = _activeNotifications[index].ActiveWindow;
-            if (activeWindow.WindowRectangle.Contains(mousePosition))
-            {
-                activeWindow.HandleClick(mousePosition);
-                return true;
-            }
-        }
-
-        if (_summaryWindow.WindowRectangle.Contains(mousePosition))
-        {
-            _summaryWindow.HandleClick(mousePosition);
-            return true;
-        }
-
-        return false;
-    }
+    /// <summary>
+    /// Notifications update even while the game is paused (see GameLoop) -- true today because
+    /// GameShellContext's own per-tier Update loop over AlwaysOnTopWindows is unconditional,
+    /// the same way it already is for RootWindows, not because of anything here. This method
+    /// only does the notification-domain part: dispatching buffered NotificationRequested
+    /// events, which must run before GameLoop's pause check reads HasBlockingNotification (a
+    /// notification published this same frame needs to be reflected before that check).
+    /// </summary>
+    public void Update(GameTime gameTime) => eventBus.DispatchBuffered<NotificationRequested>();
 
     public Guid AddNotification(NotificationCategory category, string text, bool showImmediately = true)
     {
@@ -210,6 +157,7 @@ public sealed class NotificationCenter(WindowService windowService, EventBus eve
                 // Never the built-in minimize/restore chrome -- see NotificationMinimizeBehavior,
                 // attached below instead of via Window.Initialize()'s CanUserMinimize path.
                 CanUserMinimize = false,
+                CanUserMove = true,
             },
             Text = new TextOptions { Text = notification.Text },
         });
@@ -217,6 +165,7 @@ public sealed class NotificationCenter(WindowService windowService, EventBus eve
         notificationWindow.Closed += OnActiveNotificationClosed;
         _activeNotifications.Add((notificationWindow, notification));
         notificationWindow.Initialize();
+        alwaysOnTopWindows.Add(notificationWindow);
 
         // Attached after Initialize() (which already attached WindowCloseBehavior, since
         // CanUserClose is true) so the dismiss button lands to the close button's left, the
@@ -255,6 +204,8 @@ public sealed class NotificationCenter(WindowService windowService, EventBus eve
         {
             _activeNotifications.RemoveAt(index);
         }
+
+        alwaysOnTopWindows.Remove(closedWindow);
     }
 
     private List<Notification> UnreadListFor(NotificationCategory category) =>

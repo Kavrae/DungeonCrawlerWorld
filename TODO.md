@@ -22,11 +22,12 @@ Affected: `Presentation/UI/MapWindow.cs` (`BuildOccupantsByPosition`), `Presenta
 
 ## Window Chrome
 
-- Drag header to move
-- Drag borders to resize
-- Fix header button order
-- 3D borders with inset and outset modes
-- Mouse down changes a button to inset, mouse up changes it back to outset
+All phases (E/A0/B/A1/C/D) are done: 3D inset/outset borders, unified hit-test/raise-to-
+front/two-tier windows, mouse down/up pressed visual (firing on release), drag header to move
+(notification popups only -- map/debug/selection windows deliberately stay fixed), and drag
+borders to resize (10px grab zone on every edge/corner, directional OS cursor, clamped to stay
+on-screen/within the parent's content rect). See the implementation plan for the phase
+breakdown if any of this needs revisiting.
 
 ## Body parts
 
@@ -42,12 +43,6 @@ Affected: `Presentation/UI/MapWindow.cs` (`BuildOccupantsByPosition`), `Presenta
 ## TextWindow
 
 - Way to copy text to clipboard
-
-## Window
-
-- Clean up resize/move/etc. calculations
-- Clean up properties via better composition
-- Border overhaul
 
 ## Generic status-effect system needed once buff/debuff variety grows
 

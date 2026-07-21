@@ -54,9 +54,27 @@ public class TextWindow : Window
 
     protected override void RecalculateWrapContentWindowSize()
     {
-        _contentState.Size.X = _geometry.MaximumSize.X - _geometry.RelativePosition.X - BorderInsetDoubled.X;
+        // Only a child window's MaximumSize is actually a parent-relative boundary (inherited
+        // as _parentWindow.ContentSize, see BuildWindow) -- subtracting RelativePosition.X
+        // there gives the width still available after this child's own offset within the
+        // parent. A root window's MaximumSize (like a notification popup's explicit 400x300
+        // cap) is just a literal width bound with no parent edge to offset against; subtracting
+        // RelativePosition.X from it pinned the window's right edge to a fixed screen x
+        // (MaximumSize.X) regardless of position -- invisible while notifications were
+        // stationary, but visible as "only the right edge doesn't follow the drag" once Window
+        // Chrome Phase C made them draggable.
+        var maximumContentWidth = ParentWindow is not null
+            ? _geometry.MaximumSize.X - _geometry.RelativePosition.X - BorderInsetDoubled.X
+            : _geometry.MaximumSize.X - BorderInsetDoubled.X;
 
+        // Wrap against the maximum first (this is the width word-wrap decisions need), then
+        // shrink the window itself to the widest line that wrapping actually produced --
+        // StringUtility.FormatText already returns text unwrapped (i.e. at its own natural
+        // width) whenever it fits within maximumContentWidth, so most short notifications
+        // need far less than the full maximum and shouldn't claim it.
+        _contentState.Size.X = maximumContentWidth;
         ReformatDisplayText();
+        _contentState.Size.X = System.Math.Min(WidestLineWidth() + ContentPadding.X * 2, maximumContentWidth);
 
         _contentState.Size.Y = ContentFont.LineHeight * DisplayText.LineCount + LinePadding * (DisplayText.LineCount + 1);
 
@@ -68,6 +86,22 @@ public class TextWindow : Window
             _geometry.CurrentSize.Y += _title.Size.Y;
         }
         _geometry.CurrentSize += BorderInsetDoubled;
+    }
+
+    private float WidestLineWidth()
+    {
+        if (string.IsNullOrEmpty(DisplayText.FormattedText))
+        {
+            return 0f;
+        }
+
+        var widest = 0f;
+        foreach (var line in DisplayText.FormattedText.Split('\n'))
+        {
+            widest = Math.Max(widest, ContentFont.MeasureString(line.TrimEnd('\r')).X);
+        }
+
+        return widest;
     }
 
     public void ReformatDisplayText()

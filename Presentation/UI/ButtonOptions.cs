@@ -13,6 +13,9 @@ public class ButtonOptions
 
     public bool? ShowBorder { get; set; }
 
+    /// <summary>Defaults to Outset -- see Button's own doc comment on its BorderStyle property.</summary>
+    public BorderStyle? BorderStyle { get; set; }
+
     public Vector2? Size { get; set; }
 
     public string? Text { get; set; }

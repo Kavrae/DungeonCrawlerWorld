@@ -80,7 +80,8 @@ public sealed class GameLoop : Microsoft.Xna.Framework.Game
 
         _presentation = PresentationBootstrapper.Build(GraphicsDevice, "Fonts");
         _shell = GameShellBootstrapper.Build(_presentation, world, _ecsContext);
-        _inputController = new GameInputController(_shell.MapWindow, _shell.NotificationCenter, _shell.RootWindows);
+        var screenSize = new Vector2(_graphics.PreferredBackBufferWidth, _graphics.PreferredBackBufferHeight);
+        _inputController = new GameInputController(_shell.MapWindow, _shell.RootWindows, _shell.AlwaysOnTopWindows, screenSize);
 
         base.Initialize();
     }
@@ -111,6 +112,11 @@ public sealed class GameLoop : Microsoft.Xna.Framework.Game
         }
 
         foreach (var window in _shell.RootWindows)
+        {
+            window.Update(gameTime);
+        }
+
+        foreach (var window in _shell.AlwaysOnTopWindows)
         {
             window.Update(gameTime);
         }

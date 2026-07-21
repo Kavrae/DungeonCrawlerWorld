@@ -25,6 +25,9 @@ public sealed class WindowChromeOptions
 
     public Vector2? BorderSize { get; set; }
 
+    /// <summary>Defaults to Flat (today's solid-color look) -- Outset/Inset are opt-in for windows.</summary>
+    public BorderStyle? BorderStyle { get; set; }
+
     /*========User Controls========*/
     public bool? CanUserClose { get; set; }
 

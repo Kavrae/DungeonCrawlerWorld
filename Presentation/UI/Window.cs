@@ -2,6 +2,7 @@ using FontStashSharp;
 using Microsoft.Xna.Framework;
 using Microsoft.Xna.Framework.Graphics;
 using Presentation.Fonts;
+using Presentation.Input;
 using Presentation.Rendering;
 using Presentation.UI.ChromeBehaviors;
 
@@ -146,6 +147,7 @@ public class Window
     public Rectangle BorderBottomRectangle => _border.BottomRectangle;
     public Rectangle BorderLeftRectangle => _border.LeftRectangle;
     public Rectangle BorderRightRectangle => _border.RightRectangle;
+    public BorderStyle BorderStyle => _border.Style;
 
     /*========Content========*/
     /// <summary>Content-area bookkeeping -- see WindowGeometryState's doc comment for the same "grouped, plain fields" rationale. Named _contentState, not _content, to avoid colliding with the pluggable IWindowContent field below.</summary>
@@ -226,6 +228,7 @@ public class Window
         /*========Border========*/
         _border.Show = chrome?.ShowBorder ?? false;
         _border.Thickness = BorderThickness.Uniform(chrome?.BorderSize ?? new Vector2(1, 1));
+        _border.Style = chrome?.BorderStyle ?? BorderStyle.Flat;
 
         /*========Content========*/
         _contentState.BackgroundColor = content?.ContentColor ?? Color.White;
@@ -243,7 +246,6 @@ public class Window
     {
         MeasureAndArrange();
 
-        _windowViewport = new Viewport(_contentState.Rectangle);
         _cameraTransform = Matrix.CreateRotationZ(0) * // camera rotation, default 0
                            Matrix.CreateScale(new Vector3(1, 1, 1)); // TODO zoom
 
@@ -318,10 +320,7 @@ public class Window
 
         if (_border.Show)
         {
-            spriteBatch.Draw(unitRectangle, _border.TopRectangle, Color.Black);
-            spriteBatch.Draw(unitRectangle, _border.BottomRectangle, Color.Black);
-            spriteBatch.Draw(unitRectangle, _border.LeftRectangle, Color.Black);
-            spriteBatch.Draw(unitRectangle, _border.RightRectangle, Color.Black);
+            BorderRenderer.Draw(spriteBatch, unitRectangle, _border.Style, _border.TopRectangle, _border.BottomRectangle, _border.LeftRectangle, _border.RightRectangle);
         }
 
         if ((_geometry.DisplayMode != WindowDisplayMode.Minimized && _title.ShowTitle) || (_geometry.DisplayMode == WindowDisplayMode.Minimized && _title.ShowWhenMinimized))
@@ -398,6 +397,165 @@ public class Window
                 button.HandleClick(mousePosition);
             }
         }
+    }
+
+    /// <summary>
+    /// Hit-test only -- returns the title button at this point without invoking its click
+    /// action, unlike OnTitleClickAction. Used by GameInputController to track which button
+    /// is currently held down (see Window Chrome Phase A0/B) independently of when the
+    /// button's own Clicked action actually fires.
+    /// </summary>
+    public Button? FindTitleButtonAt(Point position)
+    {
+        if (!_title.ShowTitle)
+        {
+            return null;
+        }
+
+        foreach (var button in _title.Buttons)
+        {
+            if (button.ButtonRectangle.Contains(position))
+            {
+                return button;
+            }
+        }
+
+        return null;
+    }
+
+    /// <summary>How close (in pixels) to a corner of WindowRectangle counts as grabbing that corner for a two-axis resize, rather than just one edge.</summary>
+    /// <summary>
+    /// How close (in pixels) to WindowRectangle's edge counts as grabbing it for resize --
+    /// deliberately independent of the visual border thickness (BorderThickness.Uniform
+    /// defaults to just 1px), which would make single-edge grabbing nearly impossible to hit
+    /// precisely with a mouse. Matches roughly what desktop OSes use for their own resize
+    /// border (e.g. Windows' classic ~8px non-DPI-scaled resize frame), bumped slightly for
+    /// comfortable grabbing.
+    /// </summary>
+    private const int ResizeGrabSize = 10;
+
+    /// <summary>
+    /// Which border edge(s) this point is a resize-grab for, if any -- an input-only zone
+    /// ResizeGrabSize wide along each edge of WindowRectangle (corners, where two edges
+    /// overlap, checked first), entirely independent of the border's own visual rectangles/
+    /// thickness. Pure geometry -- the caller (TryHitTestInteraction) decides whether
+    /// CanUserResize even allows starting one.
+    /// </summary>
+    internal ResizeEdges GetResizeEdgesAt(Point position)
+    {
+        if (!_border.Show)
+        {
+            return ResizeEdges.None;
+        }
+
+        // ResizeEdges is [Flags] -- a corner is just its two edges OR'd together, so there's
+        // no need to enumerate the four corner-then-edge cases by hand; whichever edges the
+        // position is close to combine on their own.
+        var rect = _geometry.Rectangle;
+        var edges = ResizeEdges.None;
+
+        if (position.Y - rect.Y < ResizeGrabSize)
+        {
+            edges |= ResizeEdges.Top;
+        }
+        if (rect.Bottom - position.Y < ResizeGrabSize)
+        {
+            edges |= ResizeEdges.Bottom;
+        }
+        if (position.X - rect.X < ResizeGrabSize)
+        {
+            edges |= ResizeEdges.Left;
+        }
+        if (rect.Right - position.X < ResizeGrabSize)
+        {
+            edges |= ResizeEdges.Right;
+        }
+
+        return edges;
+    }
+
+    /// <summary>
+    /// Picks exactly one interaction target, topmost-first -- unlike OnContentClickAction
+    /// (which loops every overlapping child with no break, fine for plain clicks but wrong
+    /// for picking a single drag target). Checks, in priority order: title buttons (a button
+    /// always wins over starting a move, even if CanUserMove) -> title bar minus buttons
+    /// (move, if CanUserMove) -> border edges/corners (resize, if CanUserResize) -> children,
+    /// topmost (last-added, see AddChildWindow) first -> this window's own content as the
+    /// fallback. Returns WindowInteraction.NotHit if this point isn't even within
+    /// WindowRectangle, so callers can walk sibling root windows/tiers.
+    /// </summary>
+    /// <summary>
+    /// True unless a tiling parent (Horizontal/Vertical) owns this window's relative position --
+    /// dragging it would just be overwritten by the parent's next AddChildWindow/
+    /// RemoveChildWindow re-tile. Root windows (no parent) and Floating children (whose own doc
+    /// comment already says "the creator sets relative position", i.e. free positioning is the
+    /// point) are unaffected. Gates drag-to-move (Window Chrome Phase C) and will gate
+    /// drag-to-resize (Phase D) the same way.
+    /// </summary>
+    private bool HasFreePosition => _parentWindow is null || _parentWindow.ChildWindowTileMode == WindowTileMode.Floating;
+
+    internal WindowInteraction TryHitTestInteraction(Point position)
+    {
+        if (!_geometry.Rectangle.Contains(position))
+        {
+            return WindowInteraction.NotHit;
+        }
+
+        var button = FindTitleButtonAt(position);
+        if (button is not null)
+        {
+            return WindowInteraction.ButtonClick(this, button);
+        }
+
+        if (CanUserMove && HasFreePosition && _title.ShowTitle && _title.Rectangle.Contains(position))
+        {
+            return WindowInteraction.Move(this);
+        }
+
+        // Fixed-only: SetSize/SetBounds's own resize math is documented as only affecting
+        // Fixed windows (Fill/WrapContent compute their size from the parent/content instead),
+        // so a Fill/WrapContent window offering a Resize interaction here would let the user
+        // start a drag that never visibly does anything. Same no-tiling-parent restriction as
+        // Move (HasFreePosition) -- a tiled child's size is also just recomputed on the next
+        // AddChildWindow/RemoveChildWindow, so manual resize would just be fought the same way.
+        if (CanUserResize && HasFreePosition && _geometry.DisplayMode == WindowDisplayMode.Fixed)
+        {
+            var edges = GetResizeEdgesAt(position);
+            if (edges != ResizeEdges.None)
+            {
+                return WindowInteraction.Resize(this, edges);
+            }
+        }
+
+        for (var index = _childWindows.Count - 1; index >= 0; index--)
+        {
+            var childInteraction = _childWindows[index].TryHitTestInteraction(position);
+            if (childInteraction.Window is not null)
+            {
+                return childInteraction;
+            }
+        }
+
+        return WindowInteraction.Click(this);
+    }
+
+    /// <summary>
+    /// Moves this window to the end of its parent's child list, so it draws last (on top) and
+    /// wins future overlapping hit-tests against its siblings. No-op for a root window (no
+    /// parent) -- GameInputController is responsible for raising a root window to the front of
+    /// whichever shared tier list (RootWindows/AlwaysOnTopWindows) it belongs to, since Window
+    /// itself has no knowledge of those.
+    /// </summary>
+    internal void RaiseToFront()
+    {
+        if (_parentWindow is null)
+        {
+            return;
+        }
+
+        var siblings = _parentWindow._childWindows;
+        siblings.Remove(this);
+        siblings.Add(this);
     }
 
     private void HandleContentClick(Point mousePosition)
@@ -782,26 +940,18 @@ public class Window
         _geometry.Rectangle = new Rectangle((int)_geometry.AbsolutePosition.X, (int)_geometry.AbsolutePosition.Y, (int)_geometry.CurrentSize.X, (int)_geometry.CurrentSize.Y);
         _title.Rectangle = new Rectangle((int)_title.AbsolutePosition.X, (int)_title.AbsolutePosition.Y, (int)_title.Size.X, (int)_title.Size.Y);
         _contentState.Rectangle = new Rectangle((int)_contentState.AbsolutePosition.X, (int)_contentState.AbsolutePosition.Y, (int)_contentState.Size.X, (int)_contentState.Size.Y);
+        _windowViewport = new Viewport(_contentState.Rectangle);
 
         RecalculateBorderRectangles();
     }
 
-    /// <summary>
-    /// Four edge strips, not one solid rectangle -- top/bottom span the window's full width
-    /// (covering the corners) while left/right are inset by that thickness so all four tile
-    /// the window's outline without overlapping.
-    /// </summary>
     private void RecalculateBorderRectangles()
     {
-        var topThickness = (int)_border.Thickness.Top;
-        var bottomThickness = (int)_border.Thickness.Bottom;
-        var leftThickness = (int)_border.Thickness.Left;
-        var rightThickness = (int)_border.Thickness.Right;
-
-        _border.TopRectangle = new Rectangle(_geometry.Rectangle.X, _geometry.Rectangle.Y, _geometry.Rectangle.Width, topThickness);
-        _border.BottomRectangle = new Rectangle(_geometry.Rectangle.X, _geometry.Rectangle.Bottom - bottomThickness, _geometry.Rectangle.Width, bottomThickness);
-        _border.LeftRectangle = new Rectangle(_geometry.Rectangle.X, _geometry.Rectangle.Y + topThickness, leftThickness, _geometry.Rectangle.Height - topThickness - bottomThickness);
-        _border.RightRectangle = new Rectangle(_geometry.Rectangle.Right - rightThickness, _geometry.Rectangle.Y + topThickness, rightThickness, _geometry.Rectangle.Height - topThickness - bottomThickness);
+        var edges = BorderThickness.GetEdgeRectangles(_geometry.Rectangle, _border.Thickness);
+        _border.TopRectangle = edges.Top;
+        _border.BottomRectangle = edges.Bottom;
+        _border.LeftRectangle = edges.Left;
+        _border.RightRectangle = edges.Right;
     }
 
     /// <summary>
@@ -856,6 +1006,20 @@ public class Window
     /// </summary>
     public void SetSize(Vector2 size)
     {
+        _geometry.OriginalSize = size;
+        MeasureAndArrange();
+    }
+
+    /// <summary>
+    /// Sets relative position and Fixed-mode size together in one MeasureAndArrange pass --
+    /// needed for left/top-edge resize (Window Chrome Phase D), which must move position and
+    /// size together to keep the opposite edge visually fixed. A separate SetSize then
+    /// SetRelativePosition would relayout twice and fire Resized then Moved from two calls
+    /// instead of one.
+    /// </summary>
+    internal void SetBounds(Vector2 relativePosition, Vector2 size)
+    {
+        _geometry.RelativePosition = relativePosition;
         _geometry.OriginalSize = size;
         MeasureAndArrange();
     }

@@ -18,4 +18,10 @@
     <ProjectReference Include="..\Content\Content.csproj" />
   </ItemGroup>
 
+  <ItemGroup>
+    <!-- Lets Tests exercise internal-scoped seams (e.g. GameInputController's testable
+         state-driven Update overload) without widening them to full public API. -->
+    <InternalsVisibleTo Include="Tests" />
+  </ItemGroup>
+
 </Project>
