@@ -49,10 +49,6 @@ Affected: `Presentation/UI/MapWindow.cs` (`BuildOccupantsByPosition`), `Presenta
 - Clean up properties via better composition
 - Border overhaul
 
-## Rethink `SelectedMapNodePosition`'s ownership
-
-Does selection belong on `World`/`Map`, or is it more of a UI-layer concern that should just query the map instead of living as shared state on `World`?
-
 ## Generic status-effect system needed once buff/debuff variety grows
 
 The occupancy markers (`NonBlockingComponent`/`ForceBlockingComponent`) are `MultiComponentPool`-backed "many independent sources, count-based" components -- a reasonable, low-risk special case for exactly two boolean occupancy questions. Do **not** copy that pattern (a bespoke marker-component type plus a hand-written precedence function) for every future buff/debuff once real effect variety shows up (dozens of effects on the player character, overlapping sources assumed throughout) -- it doesn't scale:

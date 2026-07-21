@@ -15,7 +15,7 @@ namespace Presentation.UI;
 /// Displays a scrollable/zoomable viewport onto a single MapLayer of the game map at a time
 /// (Page Up/Down switches layers -- see GameInputController.ChangeLayer). Cannot be moved,
 /// docked, or resized -- no chrome behaviors are attached to it. Holds direct
-/// constructor-injected references to World/ComponentManager rather than a pluggable content
+/// constructor-injected references to World/MapViewState/ComponentManager rather than a pluggable content
 /// abstraction (unlike DebugWindowContent/SelectionWindowContent/NotificationCenter, which
 /// implement IWindowContent), since the map's rendering is tightly coupled to
 /// World/ComponentManager and gains nothing from the extra indirection.
@@ -28,6 +28,7 @@ public sealed class MapWindow : Window
     private static readonly Color DownLayerBadgeColor = new(101, 67, 33);
 
     private readonly World _world;
+    private readonly MapViewState _mapViewState;
     private readonly DirectComponentPool<TransformComponent> _transformPool;
     private readonly DirectComponentPool<GlyphComponent> _glyphPool;
     private readonly DirectComponentPool<BackgroundComponent> _backgroundPool;
@@ -64,16 +65,19 @@ public sealed class MapWindow : Window
         FontService fontService,
         WindowService windowService,
         World world,
+        MapViewState mapViewState,
         ComponentManager componentManager,
         TileRenderer tileRenderer,
         GlyphRenderer glyphRenderer) : base(fontService, windowService)
     {
         ArgumentNullException.ThrowIfNull(world);
+        ArgumentNullException.ThrowIfNull(mapViewState);
         ArgumentNullException.ThrowIfNull(componentManager);
         ArgumentNullException.ThrowIfNull(tileRenderer);
         ArgumentNullException.ThrowIfNull(glyphRenderer);
 
         _world = world;
+        _mapViewState = mapViewState;
         _transformPool = componentManager.GetDirectPool<TransformComponent>();
         _glyphPool = componentManager.GetDirectPool<GlyphComponent>();
         _backgroundPool = componentManager.GetDirectPool<BackgroundComponent>();
@@ -101,12 +105,12 @@ public sealed class MapWindow : Window
         UpdateTileSizes();
         UpdateMaxScrollPosition();
 
-        // World.CurrentMapLayer defaults to MapLayer.Ground (index 1) regardless of how deep
+        // MapViewState.CurrentMapLayer defaults to MapLayer.Ground (index 1) regardless of how deep
         // this particular Map actually is -- fine for the real 3-layer game map, but a
         // shallower Map (e.g. a 1-deep test map) would leave it out of bounds for
         // Map.GetEntityId/GetTerrainEntityId below. Clamp the same way ChangeLayer does before
         // anything reads it.
-        _world.CurrentMapLayer = MathUtility.ClampInt(_world.CurrentMapLayer, 0, _tileDepth - 1);
+        _mapViewState.CurrentMapLayer = MathUtility.ClampInt(_mapViewState.CurrentMapLayer, 0, _tileDepth - 1);
 
         ResetBackgroundColorCache();
     }
@@ -120,7 +124,7 @@ public sealed class MapWindow : Window
 
     private void DrawSelectedTileHighlight(SpriteBatch spriteBatch, Texture2D unitRectangle)
     {
-        if (_world.SelectedMapNodePosition is not { } selectedPosition)
+        if (_mapViewState.SelectedMapNodePosition is not { } selectedPosition)
         {
             return;
         }
@@ -142,20 +146,20 @@ public sealed class MapWindow : Window
 
     /// <summary>
     /// Switches the single MapLayer this window renders (Page Up/Down -- see
-    /// GameInputController), stored on World rather than locally so SelectionWindowContent can
-    /// scope the inspector to the same layer this window is actually showing. Background
+    /// GameInputController), stored on MapViewState rather than locally so SelectionWindowContent
+    /// can scope the inspector to the same layer this window is actually showing. Background
     /// depends on the current layer's terrain (see ResolveBackgroundColor), so the cache must
     /// be rebuilt on every change, the same as a zoom-level change.
     /// </summary>
     public void ChangeLayer(int delta)
     {
-        _world.CurrentMapLayer = MathUtility.ClampInt(_world.CurrentMapLayer + delta, 0, _tileDepth - 1);
+        _mapViewState.CurrentMapLayer = MathUtility.ClampInt(_mapViewState.CurrentMapLayer + delta, 0, _tileDepth - 1);
         ResetBackgroundColorCache();
     }
 
     private void DrawGlyphs(SpriteBatch spriteBatch)
     {
-        var currentMapLayer = _world.CurrentMapLayer;
+        var currentMapLayer = _mapViewState.CurrentMapLayer;
         var occupantsByPosition = BuildOccupantsByPosition();
         var terrainLayer = Map.TerrainLayerFor(currentMapLayer);
 
@@ -536,7 +540,7 @@ public sealed class MapWindow : Window
             return Color.Black;
         }
 
-        var currentMapLayer = _world.CurrentMapLayer;
+        var currentMapLayer = _mapViewState.CurrentMapLayer;
 
         var occupantEntityId = _world.Map.GetEntityId(new Vector3Int(mapNodeX, mapNodeY, currentMapLayer));
         if (occupantEntityId != -1 && _backgroundPool.Has(occupantEntityId))
@@ -581,7 +585,7 @@ public sealed class MapWindow : Window
             return;
         }
 
-        _world.SelectedMapNodePosition = mapPosition;
+        _mapViewState.SelectedMapNodePosition = mapPosition;
     }
 
     protected override void OnContentClickAction(Point mousePosition) => SelectMapNodes(mousePosition);

@@ -28,6 +28,11 @@ public static class GameShellBootstrapper
 
         var rootWindows = new List<Window>();
 
+        // Single MapViewState instance for the session shared between
+        // MapWindow (the only writer, via click-to-select and Page Up/Down) and
+        // SelectionWindowContent (which reads it to scope the inspector to what's on screen).
+        var mapViewState = new MapViewState();
+
         // MapWindow's dependencies (World/ComponentManager/renderers) come from Engine/Game
         // and Presentation both, so it can't be registered inside WindowService's own
         // constructor the way Window/TextWindow are -- this is exactly what
@@ -36,6 +41,7 @@ public static class GameShellBootstrapper
             presentation.FontService,
             presentation.WindowService,
             world,
+            mapViewState,
             ecsContext.ComponentManager,
             presentation.TileRenderer,
             presentation.GlyphRenderer));
@@ -86,7 +92,7 @@ public static class GameShellBootstrapper
             },
             Chrome = new WindowChromeOptions { ShowBorder = true, ShowTitle = true, TitleText = "No map nodes selected" },
         });
-        selectionWindow.SetContent(new SelectionWindowContent(world, ecsContext.ComponentManager, componentInspector, presentation.WindowService));
+        selectionWindow.SetContent(new SelectionWindowContent(world, mapViewState, ecsContext.ComponentManager, componentInspector, presentation.WindowService));
         selectionWindow.Initialize();
         rootWindows.Add(selectionWindow);
 

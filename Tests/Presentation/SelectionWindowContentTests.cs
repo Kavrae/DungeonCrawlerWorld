@@ -23,11 +23,12 @@ namespace Tests.Presentation;
 [TestClass]
 public sealed class SelectionWindowContentTests
 {
-    private static (EcsContext EcsContext, Game.World.World World) BuildEcsContextAndWorld()
+    private static (EcsContext EcsContext, Game.World.World World, MapViewState MapViewState) BuildEcsContextAndWorld()
     {
         // Z=3 so Wall's blueprint (which places at MapLayer.Ground = 1) actually lands
         // on the map -- PlaceEntityOnMap silently no-ops for off-map positions.
         var world = new Game.World.World(new Map(new Vector3Int(5, 5, 3)));
+        var mapViewState = new MapViewState();
         var mathUtility = new MathUtility();
 
         var movementModule = new MovementModule();
@@ -45,7 +46,7 @@ public sealed class SelectionWindowContentTests
         world.NonBlockingComponents = ecsContext.ComponentManager.GetMultiPool<NonBlockingComponent>();
         world.ForceBlockingComponents = ecsContext.ComponentManager.GetMultiPool<ForceBlockingComponent>();
 
-        return (ecsContext, world);
+        return (ecsContext, world, mapViewState);
     }
 
     private static int CreateWallEntityAt(EcsContext ecsContext, Game.World.World world, int x, int y)
@@ -106,11 +107,11 @@ public sealed class SelectionWindowContentTests
     [TestMethod]
     public void Update_NoSelection_CreatesNoChildWindowsAndSetsDefaultTitle()
     {
-        var (ecsContext, world) = BuildEcsContextAndWorld();
+        var (ecsContext, world, mapViewState) = BuildEcsContextAndWorld();
         var fontService = new FontService("Fonts");
         var windowService = new WindowService(fontService);
         var componentInspector = new ComponentInspector(ecsContext.ComponentManager);
-        var hostWindow = CreateHostWindow(windowService, new SelectionWindowContent(world, ecsContext.ComponentManager, componentInspector, windowService));
+        var hostWindow = CreateHostWindow(windowService, new SelectionWindowContent(world, mapViewState, ecsContext.ComponentManager, componentInspector, windowService));
 
         hostWindow.Update(new GameTime());
 
@@ -121,15 +122,15 @@ public sealed class SelectionWindowContentTests
     [TestMethod]
     public void Update_SelectingEntity_CreatesOneChildWindowPerNameAndComponent()
     {
-        var (ecsContext, world) = BuildEcsContextAndWorld();
+        var (ecsContext, world, mapViewState) = BuildEcsContextAndWorld();
         CreateWallEntityAt(ecsContext, world, 2, 2);
 
         var fontService = new FontService("Fonts");
         var windowService = new WindowService(fontService);
         var componentInspector = new ComponentInspector(ecsContext.ComponentManager);
-        var hostWindow = CreateHostWindow(windowService, new SelectionWindowContent(world, ecsContext.ComponentManager, componentInspector, windowService));
+        var hostWindow = CreateHostWindow(windowService, new SelectionWindowContent(world, mapViewState, ecsContext.ComponentManager, componentInspector, windowService));
 
-        world.SelectedMapNodePosition = new Point(2, 2);
+        mapViewState.SelectedMapNodePosition = new Point(2, 2);
         hostWindow.Update(new GameTime());
 
         // One name window (Wall has a DisplayTextComponent) plus one window per inspected
@@ -141,19 +142,19 @@ public sealed class SelectionWindowContentTests
     [TestMethod]
     public void Update_DeselectingEntity_RemovesItsChildWindows()
     {
-        var (ecsContext, world) = BuildEcsContextAndWorld();
+        var (ecsContext, world, mapViewState) = BuildEcsContextAndWorld();
         CreateWallEntityAt(ecsContext, world, 2, 2);
 
         var fontService = new FontService("Fonts");
         var windowService = new WindowService(fontService);
         var componentInspector = new ComponentInspector(ecsContext.ComponentManager);
-        var hostWindow = CreateHostWindow(windowService, new SelectionWindowContent(world, ecsContext.ComponentManager, componentInspector, windowService));
+        var hostWindow = CreateHostWindow(windowService, new SelectionWindowContent(world, mapViewState, ecsContext.ComponentManager, componentInspector, windowService));
 
-        world.SelectedMapNodePosition = new Point(2, 2);
+        mapViewState.SelectedMapNodePosition = new Point(2, 2);
         hostWindow.Update(new GameTime());
         Assert.AreNotEqual(0, hostWindow.ChildWindows.Count);
 
-        world.SelectedMapNodePosition = null;
+        mapViewState.SelectedMapNodePosition = null;
         hostWindow.Update(new GameTime());
 
         Assert.IsEmpty(hostWindow.ChildWindows);
@@ -170,13 +171,13 @@ public sealed class SelectionWindowContentTests
     [TestMethod]
     public void Update_SelectedMapNodePositionOffMap_DoesNotThrow()
     {
-        var (ecsContext, world) = BuildEcsContextAndWorld();
+        var (ecsContext, world, mapViewState) = BuildEcsContextAndWorld();
         var fontService = new FontService("Fonts");
         var windowService = new WindowService(fontService);
         var componentInspector = new ComponentInspector(ecsContext.ComponentManager);
-        var hostWindow = CreateHostWindow(windowService, new SelectionWindowContent(world, ecsContext.ComponentManager, componentInspector, windowService));
+        var hostWindow = CreateHostWindow(windowService, new SelectionWindowContent(world, mapViewState, ecsContext.ComponentManager, componentInspector, windowService));
 
-        world.SelectedMapNodePosition = new Point(999, 999);
+        mapViewState.SelectedMapNodePosition = new Point(999, 999);
 
         hostWindow.Update(new GameTime());
 
@@ -192,7 +193,7 @@ public sealed class SelectionWindowContentTests
     [TestMethod]
     public void Update_SelectingTinyEntity_StillCreatesItsChildWindows()
     {
-        var (ecsContext, world) = BuildEcsContextAndWorld();
+        var (ecsContext, world, mapViewState) = BuildEcsContextAndWorld();
         CreateTinyEntityAt(ecsContext, world, 2, 2);
 
         // Confirms the Tiny entity really isn't in Map's slot -- if this ever fails, the
@@ -202,9 +203,9 @@ public sealed class SelectionWindowContentTests
         var fontService = new FontService("Fonts");
         var windowService = new WindowService(fontService);
         var componentInspector = new ComponentInspector(ecsContext.ComponentManager);
-        var hostWindow = CreateHostWindow(windowService, new SelectionWindowContent(world, ecsContext.ComponentManager, componentInspector, windowService));
+        var hostWindow = CreateHostWindow(windowService, new SelectionWindowContent(world, mapViewState, ecsContext.ComponentManager, componentInspector, windowService));
 
-        world.SelectedMapNodePosition = new Point(2, 2);
+        mapViewState.SelectedMapNodePosition = new Point(2, 2);
         hostWindow.Update(new GameTime());
 
         // Same shape as Update_SelectingEntity_CreatesOneChildWindowPerNameAndComponent:
@@ -222,7 +223,7 @@ public sealed class SelectionWindowContentTests
     [TestMethod]
     public void Update_SelectingMapNode_ShowsTerrainAtCurrentLayer()
     {
-        var (ecsContext, world) = BuildEcsContextAndWorld();
+        var (ecsContext, world, mapViewState) = BuildEcsContextAndWorld();
         var terrainId = ecsContext.EntityManager.CreateEntity();
         new StoneFloor().Build(ecsContext.ComponentManager, terrainId);
         world.PlaceTerrainOnMap(terrainId, 2, 2, TerrainLayer.Ground);
@@ -230,9 +231,9 @@ public sealed class SelectionWindowContentTests
         var fontService = new FontService("Fonts");
         var windowService = new WindowService(fontService);
         var componentInspector = new ComponentInspector(ecsContext.ComponentManager);
-        var hostWindow = CreateHostWindow(windowService, new SelectionWindowContent(world, ecsContext.ComponentManager, componentInspector, windowService));
+        var hostWindow = CreateHostWindow(windowService, new SelectionWindowContent(world, mapViewState, ecsContext.ComponentManager, componentInspector, windowService));
 
-        world.SelectedMapNodePosition = new Point(2, 2);
+        mapViewState.SelectedMapNodePosition = new Point(2, 2);
         hostWindow.Update(new GameTime());
 
         // One name window plus one per inspected component (DisplayText, Background,
@@ -243,22 +244,22 @@ public sealed class SelectionWindowContentTests
     /// <summary>
     /// Two Walls at the same XY but different MapLayers (which never collide -- each layer
     /// has its own independent Map slot) must not both show up at once: the inspector is
-    /// scoped to World.CurrentMapLayer, the same single layer MapWindow is rendering, and
+    /// scoped to MapViewState.CurrentMapLayer, the same single layer MapWindow is rendering, and
     /// switching layers swaps which one is shown.
     /// </summary>
     [TestMethod]
     public void Update_SelectingMapNode_OnlyShowsEntitiesOnCurrentLayer()
     {
-        var (ecsContext, world) = BuildEcsContextAndWorld();
-        CreateWallEntityAt(ecsContext, world, 2, 2); // Ground -- matches World.CurrentMapLayer's default.
+        var (ecsContext, world, mapViewState) = BuildEcsContextAndWorld();
+        CreateWallEntityAt(ecsContext, world, 2, 2); // Ground -- matches MapViewState.CurrentMapLayer's default.
         CreateWallEntityAtLayer(ecsContext, world, 2, 2, MapLayer.Flying);
 
         var fontService = new FontService("Fonts");
         var windowService = new WindowService(fontService);
         var componentInspector = new ComponentInspector(ecsContext.ComponentManager);
-        var hostWindow = CreateHostWindow(windowService, new SelectionWindowContent(world, ecsContext.ComponentManager, componentInspector, windowService));
+        var hostWindow = CreateHostWindow(windowService, new SelectionWindowContent(world, mapViewState, ecsContext.ComponentManager, componentInspector, windowService));
 
-        world.SelectedMapNodePosition = new Point(2, 2);
+        mapViewState.SelectedMapNodePosition = new Point(2, 2);
         hostWindow.Update(new GameTime());
 
         // Only the Ground-layer Wall's windows, same count as
@@ -266,7 +267,7 @@ public sealed class SelectionWindowContentTests
         // second Wall exists at the same XY on the Flying layer.
         Assert.HasCount(4, hostWindow.ChildWindows);
 
-        world.CurrentMapLayer = (int)MapLayer.Flying;
+        mapViewState.CurrentMapLayer = (int)MapLayer.Flying;
         hostWindow.Update(new GameTime());
 
         // Switching layers swaps which Wall is inspected -- still 4 windows, now the Flying one's.

@@ -19,9 +19,10 @@ namespace Tests.Presentation;
 [TestClass]
 public sealed class MapWindowTests
 {
-    private static (Game.World.World World, MapWindow MapWindow) BuildMapWindow(int mapSizeX, int mapSizeY, int mapSizeZ)
+    private static (Game.World.World World, MapViewState MapViewState, MapWindow MapWindow) BuildMapWindow(int mapSizeX, int mapSizeY, int mapSizeZ)
     {
         var world = new Game.World.World(new Game.World.Map(new Vector3Int(mapSizeX, mapSizeY, mapSizeZ)));
+        var mapViewState = new MapViewState();
         var fontService = new FontService("Fonts");
         var windowService = new WindowService(fontService);
 
@@ -32,7 +33,7 @@ public sealed class MapWindowTests
         componentManager.RegisterPackedPool<OccupancyComponent>(static (ref OccupancyComponent existing, OccupancyComponent incoming) => existing = incoming);
 
         windowService.RegisterFactory<MapWindow>((_, _) => new MapWindow(
-            fontService, windowService, world, componentManager, new TileRenderer(), new GlyphRenderer()));
+            fontService, windowService, world, mapViewState, componentManager, new TileRenderer(), new GlyphRenderer()));
 
         var mapWindow = windowService.CreateWindow<MapWindow>(null, new WindowOptions
         {
@@ -40,29 +41,29 @@ public sealed class MapWindowTests
         });
         mapWindow.Initialize();
 
-        return (world, mapWindow);
+        return (world, mapViewState, mapWindow);
     }
 
     [TestMethod]
     public void SelectMapNodes_ClickWithinViewportButPastMapEdge_DoesNotThrowAndLeavesSelectionUnset()
     {
-        var (world, mapWindow) = BuildMapWindow(5, 5, 1);
+        var (_, mapViewState, mapWindow) = BuildMapWindow(5, 5, 1);
 
         // Team zoom = 12px tiles; the viewport (1256px content / 12 + 1 = 105 columns) is
         // far larger than this 5-wide map, so tile column 10 is visible but off the map.
         mapWindow.SelectMapNodes(new Point(10 * 12 + 1, 1));
 
-        Assert.IsNull(world.SelectedMapNodePosition);
+        Assert.IsNull(mapViewState.SelectedMapNodePosition);
     }
 
     [TestMethod]
     public void SelectMapNodes_ClickOnMap_SetsSelection()
     {
-        var (world, mapWindow) = BuildMapWindow(5, 5, 1);
+        var (_, mapViewState, mapWindow) = BuildMapWindow(5, 5, 1);
 
         mapWindow.SelectMapNodes(new Point(1 * 12 + 1, 1 * 12 + 1));
 
-        Assert.AreEqual(new Point(1, 1), world.SelectedMapNodePosition);
+        Assert.AreEqual(new Point(1, 1), mapViewState.SelectedMapNodePosition);
     }
 
     /// <summary>
@@ -77,12 +78,12 @@ public sealed class MapWindowTests
     [TestMethod]
     public void UpdateScrollPosition_ScrollingPastMax_StopsWithMapsLastColumnAtWindowsRightEdge()
     {
-        var (world, mapWindow) = BuildMapWindow(200, 5, 1);
+        var (_, mapViewState, mapWindow) = BuildMapWindow(200, 5, 1);
 
         mapWindow.UpdateScrollPosition(new Point(100_000, 0));
         mapWindow.SelectMapNodes(new Point(104 * 12 + 1, 1));
 
-        Assert.AreEqual(new Point(199, 0), world.SelectedMapNodePosition);
+        Assert.AreEqual(new Point(199, 0), mapViewState.SelectedMapNodePosition);
     }
 
     /// <summary>
@@ -95,34 +96,34 @@ public sealed class MapWindowTests
     [TestMethod]
     public void UpdateZoomLevel_RecalculatesMaxScrollAndReclampsCurrentPosition()
     {
-        var (world, mapWindow) = BuildMapWindow(200, 5, 1);
+        var (_, mapViewState, mapWindow) = BuildMapWindow(200, 5, 1);
         mapWindow.UpdateScrollPosition(new Point(100_000, 0));
 
         mapWindow.UpdateZoomLevel(ZoomLevel.Borough);
         mapWindow.SelectMapNodes(new Point(1, 1));
 
-        Assert.AreEqual(new Point(0, 0), world.SelectedMapNodePosition);
+        Assert.AreEqual(new Point(0, 0), mapViewState.SelectedMapNodePosition);
     }
 
     [TestMethod]
     public void ChangeLayer_ClampsToValidRange()
     {
         // 3-deep map (UnderGround/Ground/Flying) -- MapWindow starts on Ground (index 1).
-        // CurrentMapLayer lives on World (shared with SelectionWindowContent), not MapWindow.
-        var (world, mapWindow) = BuildMapWindow(5, 5, 3);
-        Assert.AreEqual(1, world.CurrentMapLayer);
+        // CurrentMapLayer lives on MapViewState (shared with SelectionWindowContent), not MapWindow.
+        var (_, mapViewState, mapWindow) = BuildMapWindow(5, 5, 3);
+        Assert.AreEqual(1, mapViewState.CurrentMapLayer);
 
         mapWindow.ChangeLayer(1);
-        Assert.AreEqual(2, world.CurrentMapLayer);
+        Assert.AreEqual(2, mapViewState.CurrentMapLayer);
 
         mapWindow.ChangeLayer(1);
-        Assert.AreEqual(2, world.CurrentMapLayer, "Already at the topmost layer -- must not go past it.");
+        Assert.AreEqual(2, mapViewState.CurrentMapLayer, "Already at the topmost layer -- must not go past it.");
 
         mapWindow.ChangeLayer(-1);
         mapWindow.ChangeLayer(-1);
-        Assert.AreEqual(0, world.CurrentMapLayer);
+        Assert.AreEqual(0, mapViewState.CurrentMapLayer);
 
         mapWindow.ChangeLayer(-1);
-        Assert.AreEqual(0, world.CurrentMapLayer, "Already at the bottommost layer -- must not go below it.");
+        Assert.AreEqual(0, mapViewState.CurrentMapLayer, "Already at the bottommost layer -- must not go below it.");
     }
 }

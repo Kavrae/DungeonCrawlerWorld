@@ -9,7 +9,7 @@ namespace Presentation.UI.Content;
 
 /// <summary>
 /// Shows every component on the Blocking/Tiny/Phasing entities and the terrain at the
-/// currently selected map node's World.CurrentMapLayer -- the same single layer MapWindow is
+/// currently selected map node's MapViewState.CurrentMapLayer -- the same single layer MapWindow is
 /// rendering, not every layer -- one child TextWindow per component. A diff-and-refresh
 /// design that only recreates child windows when the selected entity set changes, and
 /// refreshes existing windows' text on an interval rather than every frame. Component text
@@ -18,6 +18,7 @@ namespace Presentation.UI.Content;
 /// </summary>
 public sealed class SelectionWindowContent(
     World world,
+    MapViewState mapViewState,
     ComponentManager componentManager,
     ComponentInspector componentInspector,
     WindowService windowService) : IWindowContent
@@ -70,7 +71,7 @@ public sealed class SelectionWindowContent(
             }
         }
 
-        _hostWindow.TitleText = world.SelectedMapNodePosition is { } selected
+        _hostWindow.TitleText = mapViewState.SelectedMapNodePosition is { } selected
             ? $"Selected Map Node : {selected.X},{selected.Y}"
             : "No map nodes selected";
     }
@@ -85,7 +86,7 @@ public sealed class SelectionWindowContent(
     {
         _selectedEntityIds.Clear();
 
-        if (world.SelectedMapNodePosition is not { } selected)
+        if (mapViewState.SelectedMapNodePosition is not { } selected)
         {
             return;
         }
@@ -98,10 +99,10 @@ public sealed class SelectionWindowContent(
             return;
         }
 
-        // Scoped to World.CurrentMapLayer only -- the same layer MapWindow is actually
+        // Scoped to MapViewState.CurrentMapLayer only -- the same layer MapWindow is actually
         // rendering -- rather than every layer, so the inspector shows what's on screen
         // instead of entities on layers currently hidden from view.
-        var currentMapLayer = world.CurrentMapLayer;
+        var currentMapLayer = mapViewState.CurrentMapLayer;
 
         var blockingEntityId = world.Map.GetEntityId(new Engine.Math.Vector3Int(selected.X, selected.Y, currentMapLayer));
         if (blockingEntityId != -1)
