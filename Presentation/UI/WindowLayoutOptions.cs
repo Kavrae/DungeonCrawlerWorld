@@ -14,7 +14,7 @@ public sealed class WindowLayoutOptions
 
     public Vector2? MaximumSize { get; set; }
 
-    /// <summary>Size used when DisplayMode is Static. Defaults to the maximum size if unspecified.</summary>
+    /// <summary>Size used when DisplayMode is Fixed. Defaults to the maximum size if unspecified.</summary>
     public Vector2? Size { get; set; }
 
     public bool? IsVisible { get; set; }

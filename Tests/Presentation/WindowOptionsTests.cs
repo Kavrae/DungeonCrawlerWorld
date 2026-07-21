@@ -1,5 +1,6 @@
 using Microsoft.Xna.Framework;
 using Presentation.Fonts;
+using Presentation.Rendering;
 using Presentation.UI;
 
 namespace Tests.Presentation;
@@ -15,7 +16,7 @@ namespace Tests.Presentation;
 [TestClass]
 public sealed class WindowOptionsTests
 {
-    private static WindowService CreateWindowService() => new(new FontService("Fonts"));
+    private static WindowService CreateWindowService() => new(new FontService("Fonts"), new GlyphRenderer());
 
     [TestMethod]
     public void CreateWindow_AllGroupsUnset_FallsBackToDefaults()
@@ -24,7 +25,7 @@ public sealed class WindowOptionsTests
 
         var window = windowService.CreateWindow<Window>(null, new WindowOptions());
 
-        Assert.AreEqual(WindowDisplayMode.Static, window.WindowDisplay);
+        Assert.AreEqual(WindowDisplayMode.Fixed, window.WindowDisplay);
         Assert.IsFalse(window.ShowTitle);
         Assert.IsFalse(window.ShowBorder);
         Assert.IsFalse(window.CanContainChildWindows);
@@ -43,7 +44,7 @@ public sealed class WindowOptionsTests
             {
                 RelativePosition = new Vector2(10, 20),
                 Size = new Vector2(100, 50),
-                DisplayMode = WindowDisplayMode.Static,
+                DisplayMode = WindowDisplayMode.Fixed,
             },
         });
 
@@ -77,7 +78,7 @@ public sealed class WindowOptionsTests
         Assert.IsTrue(window.CanUserClose);
         Assert.IsTrue(window.CanUserMinimize);
         // Layout was never set -- chrome applying correctly shouldn't depend on it.
-        Assert.AreEqual(WindowDisplayMode.Static, window.WindowDisplay);
+        Assert.AreEqual(WindowDisplayMode.Fixed, window.WindowDisplay);
     }
 
     [TestMethod]

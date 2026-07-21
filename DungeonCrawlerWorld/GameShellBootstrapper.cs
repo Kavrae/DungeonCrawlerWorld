@@ -52,7 +52,7 @@ public static class GameShellBootstrapper
             {
                 RelativePosition = new Vector2(12, 12),
                 Size = new Vector2(1256, 776),
-                DisplayMode = WindowDisplayMode.Static,
+                DisplayMode = WindowDisplayMode.Fixed,
             },
             Chrome = new WindowChromeOptions
             {
@@ -70,7 +70,7 @@ public static class GameShellBootstrapper
             {
                 RelativePosition = new Vector2(1280, 12),
                 Size = new Vector2(300, 24),
-                DisplayMode = WindowDisplayMode.Static,
+                DisplayMode = WindowDisplayMode.Fixed,
             },
             Chrome = new WindowChromeOptions { ShowBorder = true },
         });
@@ -88,7 +88,7 @@ public static class GameShellBootstrapper
             {
                 RelativePosition = new Vector2(1280, 44),
                 Size = new Vector2(300, 744),
-                DisplayMode = WindowDisplayMode.Static,
+                DisplayMode = WindowDisplayMode.Fixed,
             },
             Chrome = new WindowChromeOptions { ShowBorder = true, ShowTitle = true, TitleText = "No map nodes selected" },
         });

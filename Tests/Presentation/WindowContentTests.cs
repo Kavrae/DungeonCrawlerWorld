@@ -1,6 +1,7 @@
 using Microsoft.Xna.Framework;
 using Microsoft.Xna.Framework.Graphics;
 using Presentation.Fonts;
+using Presentation.Rendering;
 using Presentation.UI;
 
 namespace Tests.Presentation;
@@ -25,7 +26,7 @@ public sealed class WindowContentTests
         public void DrawContent(GameTime gameTime, SpriteBatch spriteBatch, Texture2D unitRectangle) => DrawContentCount++;
     }
 
-    private static WindowService CreateWindowService() => new(new FontService("Fonts"));
+    private static WindowService CreateWindowService() => new(new FontService("Fonts"), new GlyphRenderer());
 
     [TestMethod]
     public void Initialize_ContentAttached_ReceivesHostWindow()

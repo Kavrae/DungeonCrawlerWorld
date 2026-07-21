@@ -159,7 +159,7 @@ public sealed class SelectionWindowContent(
             var nameWindow = windowService.CreateWindow<TextWindow>(_hostWindow, new WindowOptions
             {
                 Hierarchy = new WindowHierarchyOptions { CanContainChildWindows = false },
-                Layout = new WindowLayoutOptions { MaximumSize = _hostWindow.ContentSize, DisplayMode = WindowDisplayMode.Grow },
+                Layout = new WindowLayoutOptions { MaximumSize = _hostWindow.ContentSize, DisplayMode = WindowDisplayMode.WrapContent },
                 Chrome = new WindowChromeOptions { ShowTitle = false, ShowBorder = true, BorderSize = new Vector2(2, 2) },
                 Text = new TextOptions { Text = displayTextPool.GetReadonly(entityId).Name },
             });
@@ -175,7 +175,7 @@ public sealed class SelectionWindowContent(
             var componentWindow = windowService.CreateWindow<TextWindow>(_hostWindow, new WindowOptions
             {
                 Hierarchy = new WindowHierarchyOptions { CanContainChildWindows = false },
-                Layout = new WindowLayoutOptions { MaximumSize = _hostWindow.ContentSize, DisplayMode = WindowDisplayMode.Grow },
+                Layout = new WindowLayoutOptions { MaximumSize = _hostWindow.ContentSize, DisplayMode = WindowDisplayMode.WrapContent },
                 Chrome = new WindowChromeOptions { ShowTitle = true, TitleText = entry.ComponentType.Name, ShowBorder = true, BorderSize = new Vector2(1, 1) },
                 Text = new TextOptions { Text = entry.Value.ToString() ?? string.Empty },
             });

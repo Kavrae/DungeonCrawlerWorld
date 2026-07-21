@@ -24,7 +24,7 @@ public sealed class MapWindowTests
         var world = new Game.World.World(new Game.World.Map(new Vector3Int(mapSizeX, mapSizeY, mapSizeZ)));
         var mapViewState = new MapViewState();
         var fontService = new FontService("Fonts");
-        var windowService = new WindowService(fontService);
+        var windowService = new WindowService(fontService, new GlyphRenderer());
 
         var componentManager = new ComponentManager(100, 50);
         componentManager.RegisterDirectPool<TransformComponent>(static (ref TransformComponent existing, TransformComponent incoming) => existing = incoming);
@@ -37,7 +37,7 @@ public sealed class MapWindowTests
 
         var mapWindow = windowService.CreateWindow<MapWindow>(null, new WindowOptions
         {
-            Layout = new WindowLayoutOptions { Size = new Vector2(1256, 776), DisplayMode = WindowDisplayMode.Static },
+            Layout = new WindowLayoutOptions { Size = new Vector2(1256, 776), DisplayMode = WindowDisplayMode.Fixed },
         });
         mapWindow.Initialize();
 

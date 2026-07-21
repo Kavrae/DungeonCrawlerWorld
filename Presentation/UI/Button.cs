@@ -1,6 +1,7 @@
 using FontStashSharp;
 using Microsoft.Xna.Framework;
 using Microsoft.Xna.Framework.Graphics;
+using Presentation.Rendering;
 
 namespace Presentation.UI;
 
@@ -14,7 +15,6 @@ public class Button
     public Vector2 AbsolutePosition { get; private set; }
 
     public Vector2 Size { get; }
-    public static readonly Vector2 DefaultSize = new(50, 50);
 
     public Rectangle ButtonRectangle { get; private set; }
     public Rectangle ContentRectangle { get; private set; }
@@ -24,12 +24,16 @@ public class Button
     public bool ShowBorder { get; }
 
     public string Text { get; private set; }
-    public Vector2 TextOffset { get; private set; }
 
     protected SpriteFontBase? Font { get; }
 
+    private readonly GlyphRenderer _glyphRenderer;
+
     /// <summary>Raised when the button is clicked.</summary>
     public event Action? Clicked;
+
+    /// <summary>Inset from the title bar's own height each title button's default square size shrinks by, leaving a small margin above/below it.</summary>
+    private const float DefaultSizeTitleInset = 4;
 
     public Button(Window parentWindow, ButtonOptions buttonOptions)
     {
@@ -39,13 +43,24 @@ public class Button
         ParentWindow = parentWindow;
 
         Text = buttonOptions.Text ?? string.Empty;
-        TextOffset = buttonOptions.TextOffset ?? new Vector2(2, -4);
-        Font = buttonOptions.Font;
+
+        // Button is only ever used for title-bar chrome (close/minimize/dismiss) today, so
+        // Font/Size/Color/ShowBorder all default to what every one of those needs -- callers
+        // only specify what actually differs (Text, and whichever override a future non-title
+        // button turns out to need).
+        Font = buttonOptions.Font ?? parentWindow.TitleFont;
+        _glyphRenderer = parentWindow.GlyphRenderer;
 
         RelativePosition = buttonOptions.RelativePosition ?? Vector2.Zero;
-        Size = buttonOptions.Size ?? DefaultSize;
-        ShowBorder = buttonOptions.ShowBorder ?? false;
-        ButtonColor = buttonOptions.Color ?? Color.White;
+        Size = buttonOptions.Size ?? DefaultTitleButtonSize(parentWindow);
+        ShowBorder = buttonOptions.ShowBorder ?? true;
+        ButtonColor = buttonOptions.Color ?? Color.LightGray;
+    }
+
+    private static Vector2 DefaultTitleButtonSize(Window window)
+    {
+        var side = window.OriginalTitleSize.Y - DefaultSizeTitleInset;
+        return new Vector2(side, side);
     }
 
     public virtual void Initialize()
@@ -57,7 +72,10 @@ public class Button
     {
     }
 
-    // TODO extra border to make 3d + slightly darker color for hover effect
+    // TODO slightly darker color for a hover effect.
+    // TODO mouse down should switch this to an inset look, mouse up back to outset (Window
+    // Chrome) -- needs GameInputController to expose a held-down state, which it doesn't have
+    // yet (see the TODO on its mouse handling in Update).
     public void Draw(GameTime gameTime, SpriteBatch spriteBatch, Texture2D unitRectangle)
     {
         if (ShowBorder)
@@ -69,7 +87,16 @@ public class Button
 
         if (!string.IsNullOrWhiteSpace(Text) && Font is not null)
         {
-            spriteBatch.DrawString(Font, Text, AbsolutePosition + TextOffset, Color.Black);
+            // Same ink-centering GlyphRenderer uses for map tile glyphs -- centers on the
+            // string's actual rendered ink within ContentRectangle, rather than a manually
+            // tuned per-glyph pixel offset that has to be re-eyeballed for every new label.
+            _glyphRenderer.DrawCentered(
+                spriteBatch,
+                Font,
+                Text,
+                new Vector2(ContentRectangle.X, ContentRectangle.Y),
+                new Vector2(ContentRectangle.Width, ContentRectangle.Height),
+                Color.Black);
         }
     }
 
@@ -80,10 +107,9 @@ public class Button
     }
 
     /// <summary>Changes the button's label in place, e.g. a minimize/restore toggle button swapping its glyph to match the window's current state.</summary>
-    public void SetText(string text, Vector2 textOffset)
+    public void SetText(string text)
     {
         Text = text ?? string.Empty;
-        TextOffset = textOffset;
     }
 
     public void CalculateButtonPositionAndRectangle()
@@ -91,8 +117,9 @@ public class Button
         AbsolutePosition = RelativePosition + ParentWindow.WindowAbsolutePosition;
         ButtonRectangle = new Rectangle((int)AbsolutePosition.X, (int)AbsolutePosition.Y, (int)Size.X, (int)Size.Y);
         ContentRectangle = ShowBorder
-            // Decrease bottom and right by 1 to show those borders.
-            ? new Rectangle(ButtonRectangle.X, ButtonRectangle.Y, ButtonRectangle.Width - 1, ButtonRectangle.Height - 1)
+            // Inset by 1px on every side so a full border shows all the way around, not just
+            // the bottom/right (which used to read as a shadow/bevel rather than a border).
+            ? new Rectangle(ButtonRectangle.X + 1, ButtonRectangle.Y + 1, ButtonRectangle.Width - 2, ButtonRectangle.Height - 2)
             : ButtonRectangle;
     }
 

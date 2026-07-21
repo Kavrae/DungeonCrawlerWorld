@@ -2,6 +2,7 @@ using FontStashSharp;
 using Microsoft.Xna.Framework;
 using Microsoft.Xna.Framework.Graphics;
 using Presentation.Fonts;
+using Presentation.Rendering;
 using Presentation.UI.ChromeBehaviors;
 
 namespace Presentation.UI;
@@ -26,7 +27,12 @@ public class Window
     /// <summary>Raised when the window is closed (before it's returned to WindowService's pool).</summary>
     public event Action<Window>? Closed;
 
-    /// <summary>Raised when the window's current size actually changes.</summary>
+    /// <summary>
+    /// Raised when the window's current size actually changes. Fires during the Measure
+    /// pass, which runs across the whole subtree before Arrange (see Measure/Arrange) --
+    /// so every node's Resized fires before any node's Moved, not interleaved node-by-node
+    /// the way they were before the two-pass split.
+    /// </summary>
     public event Action<Window>? Resized;
 
     /// <summary>Raised when the window's absolute screen position actually changes.</summary>
@@ -66,33 +72,23 @@ public class Window
     private IWindowContent? _content;
 
     /*========Window========*/
-    protected WindowDisplayMode _windowDisplayMode;
-    public WindowDisplayMode WindowDisplay => _windowDisplayMode;
+    /// <summary>
+    /// Position/size/display-mode bookkeeping grouped into one object -- see
+    /// WindowGeometryState -- rather than several independent fields, so a future
+    /// WindowMoveBehavior/WindowResizeBehavior (attached the same way WindowCloseBehavior is)
+    /// has a single cohesive surface to read/mutate instead of reaching into many.
+    /// </summary>
+    private protected readonly WindowGeometryState _geometry = new();
 
-    protected WindowDisplayMode _previousWindowDisplayMode;
-    public WindowDisplayMode PreviousWindowDisplay => _previousWindowDisplayMode;
-
-    protected Vector2 _windowAbsolutePosition;
-    public Vector2 WindowAbsolutePosition => _windowAbsolutePosition;
-
-    /// <summary>Position relative to the parent window.</summary>
-    protected Vector2 _windowRelativePosition;
-    public Vector2 WindowRelativePosition => _windowRelativePosition;
-
-    protected Vector2 _windowOriginalSize;
-    public Vector2 WindowOriginalSize => _windowOriginalSize;
-
-    protected Vector2 _windowCurrentSize;
-    public Vector2 WindowCurrentSize => _windowCurrentSize;
-
-    protected Vector2 _windowMinimumSize;
-    public Vector2 WindowMinimumSize => _windowMinimumSize;
-
-    protected Vector2 _windowMaximumSize;
-    public Vector2 WindowMaximumSize => _windowMaximumSize;
-
-    protected Rectangle _windowRectangle;
-    public Rectangle WindowRectangle => _windowRectangle;
+    public WindowDisplayMode WindowDisplay => _geometry.DisplayMode;
+    public WindowDisplayMode PreviousWindowDisplay => _geometry.PreviousDisplayMode;
+    public Vector2 WindowAbsolutePosition => _geometry.AbsolutePosition;
+    public Vector2 WindowRelativePosition => _geometry.RelativePosition;
+    public Vector2 WindowOriginalSize => _geometry.OriginalSize;
+    public Vector2 WindowCurrentSize => _geometry.CurrentSize;
+    public Vector2 WindowMinimumSize => _geometry.MinimumSize;
+    public Vector2 WindowMaximumSize => _geometry.MaximumSize;
+    public Rectangle WindowRectangle => _geometry.Rectangle;
 
     protected bool _isVisible = true;
     public bool IsVisible { get => _isVisible; set => _isVisible = value; }
@@ -108,55 +104,58 @@ public class Window
     /// </summary>
     internal SpriteFontBase TitleFont { get; }
 
-    protected bool _showTitle;
-    public bool ShowTitle => _showTitle;
+    /// <summary>Internal, not protected, for the same reason as TitleFont -- Button uses this to center its label the same way GlyphRenderer centers map tile glyphs.</summary>
+    internal GlyphRenderer GlyphRenderer { get; }
 
-    protected bool _showTitleWhenMinimized;
-    public bool ShowTitleWhenMinimized => _showTitleWhenMinimized;
+    /// <summary>Title bar bookkeeping -- see WindowGeometryState's doc comment for the same "grouped, plain fields" rationale.</summary>
+    private protected readonly WindowTitleState _title = new();
 
-    protected string _titleText = string.Empty;
-    public string TitleText { get => _titleText; set => _titleText = value; }
-    public Vector2 TitlePadding = new(5, 2);
+    public bool ShowTitle => _title.ShowTitle;
+    public bool ShowTitleWhenMinimized => _title.ShowWhenMinimized;
+    public string TitleText { get => _title.Text; set => _title.Text = value; }
+    public Vector2 TitlePadding { get; set; } = new(5, 2);
+    public Vector2 OriginalTitleSize => _title.OriginalSize;
+    public Vector2 TitleSize => _title.Size;
+    public Vector2 TitleAbsolutePosition => _title.AbsolutePosition;
+    public Rectangle TitleRectangle => _title.Rectangle;
 
-    protected Vector2 _originalTitleSize;
-    public Vector2 OriginalTitleSize => _originalTitleSize;
+    /// <summary>Title bar height if shown, else zero -- see BorderInset for the analogous border helper.</summary>
+    protected float TitleInsetHeight => _title.ShowTitle ? _title.Size.Y : 0;
 
-    protected Vector2 _titleSize;
-    public Vector2 TitleSize => _titleSize;
-
-    protected Vector2 _titleAbsolutePosition;
-    public Vector2 TitleAbsolutePosition => _titleAbsolutePosition;
-
-    protected Rectangle _titleRectangle;
-    public Rectangle TitleRectangle => _titleRectangle;
-
-    protected Color _titleBackgroundColor;
-    public Color TitleColor => _titleBackgroundColor;
-
-    protected List<Button> _titleButtons = [];
-    public List<Button> TitleButtons { get => _titleButtons; set => _titleButtons = value; }
+    public Color TitleColor => _title.BackgroundColor;
+    public List<Button> TitleButtons { get => _title.Buttons; set => _title.Buttons = value; }
 
     /*========Border========*/
-    protected bool _showBorder;
-    public bool ShowBorder => _showBorder;
+    /// <summary>Border bookkeeping -- see WindowGeometryState's doc comment for the same "grouped, plain fields" rationale.</summary>
+    private protected readonly WindowBorderState _border = new();
 
-    protected Vector2 _borderSize;
-    public Vector2 BorderSize => _borderSize;
+    public bool ShowBorder => _border.Show;
+
+    /// <summary>
+    /// Border thickness on one edge if the border is shown, else zero -- single source of
+    /// truth for how much border eats into title/content space, replacing what used to be an
+    /// independently-repeated `_showBorder ? _borderSize.X : 0`-style ternary in every
+    /// RecalculateXxxWindowSize method and RecalculateAbsolutePositions.
+    /// </summary>
+    protected Vector2 BorderInset => _border.Show ? new Vector2(_border.Thickness.Left, _border.Thickness.Top) : Vector2.Zero;
+
+    /// <summary>Border thickness on both edges of an axis (e.g. left+right) if shown, else zero.</summary>
+    protected Vector2 BorderInsetDoubled => _border.Show ? new Vector2(_border.Thickness.Horizontal, _border.Thickness.Vertical) : Vector2.Zero;
+
+    public Rectangle BorderTopRectangle => _border.TopRectangle;
+    public Rectangle BorderBottomRectangle => _border.BottomRectangle;
+    public Rectangle BorderLeftRectangle => _border.LeftRectangle;
+    public Rectangle BorderRightRectangle => _border.RightRectangle;
 
     /*========Content========*/
-    protected Vector2 _contentAbsolutePosition;
-    public Vector2 ContentAbsolutePosition => _contentAbsolutePosition;
+    /// <summary>Content-area bookkeeping -- see WindowGeometryState's doc comment for the same "grouped, plain fields" rationale. Named _contentState, not _content, to avoid colliding with the pluggable IWindowContent field below.</summary>
+    private protected readonly WindowContentState _contentState = new();
 
-    protected Vector2 _contentSize;
-    public Vector2 ContentSize => _contentSize;
-
-    protected Rectangle _contentRectangle;
-    public Rectangle ContentRectangle => _contentRectangle;
-
-    public Vector2 ContentPadding = new(5, 5);
-
-    protected Color _contentBackgroundColor;
-    public Color ContentColor => _contentBackgroundColor;
+    public Vector2 ContentAbsolutePosition => _contentState.AbsolutePosition;
+    public Vector2 ContentSize => _contentState.Size;
+    public Rectangle ContentRectangle => _contentState.Rectangle;
+    public Vector2 ContentPadding { get; set; } = new(5, 5);
+    public Color ContentColor => _contentState.BackgroundColor;
 
     /*========Viewport========*/
     private Viewport _windowViewport;
@@ -173,13 +172,15 @@ public class Window
     public bool CanUserScrollHorizontal { get; set; }
     public bool CanUserScrollVertical { get; set; }
 
-    public Window(FontService fontService, WindowService windowService)
+    public Window(FontService fontService, WindowService windowService, GlyphRenderer glyphRenderer)
     {
         ArgumentNullException.ThrowIfNull(fontService);
         ArgumentNullException.ThrowIfNull(windowService);
+        ArgumentNullException.ThrowIfNull(glyphRenderer);
 
         FontService = fontService;
         TitleFont = fontService.GetFont(8);
+        GlyphRenderer = glyphRenderer;
         _windowService = windowService;
     }
 
@@ -199,35 +200,35 @@ public class Window
         _childWindows = [];
 
         /*========Window========*/
-        _windowDisplayMode = layout?.DisplayMode ?? WindowDisplayMode.Static;
-        _windowRelativePosition = layout?.RelativePosition ?? new Vector2();
-        _windowAbsolutePosition = _parentWindow != null
-            ? _parentWindow.ContentAbsolutePosition + _windowRelativePosition
-            : _windowRelativePosition;
+        _geometry.DisplayMode = layout?.DisplayMode ?? WindowDisplayMode.Fixed;
+        _geometry.RelativePosition = layout?.RelativePosition ?? new Vector2();
+        _geometry.AbsolutePosition = _parentWindow != null
+            ? _parentWindow.ContentAbsolutePosition + _geometry.RelativePosition
+            : _geometry.RelativePosition;
 
-        _windowMinimumSize = layout?.MinimumSize ?? new Vector2(0, 0);
-        _windowMaximumSize = layout?.MaximumSize ?? _parentWindow?.ContentSize ?? layout?.Size ?? new Vector2(0, 0);
-        _windowOriginalSize = layout?.Size ?? new Vector2(0, 0);
-        _windowCurrentSize = _windowOriginalSize;
+        _geometry.MinimumSize = layout?.MinimumSize ?? new Vector2(0, 0);
+        _geometry.MaximumSize = layout?.MaximumSize ?? _parentWindow?.ContentSize ?? layout?.Size ?? new Vector2(0, 0);
+        _geometry.OriginalSize = layout?.Size ?? new Vector2(0, 0);
+        _geometry.CurrentSize = _geometry.OriginalSize;
 
         _isVisible = layout?.IsVisible ?? true;
         _isTransparent = layout?.IsTransparent ?? false;
 
         /*========Title========*/
-        _showTitle = chrome?.ShowTitle ?? false;
-        _showTitleWhenMinimized = chrome?.ShowTitleWhenMinimized ?? false;
-        _titleText = chrome?.TitleText ?? string.Empty;
-        _originalTitleSize = new Vector2(_windowOriginalSize.X, TitleFont.MeasureString(" ").Y + TitlePadding.Y * 3);
-        _titleSize = _originalTitleSize;
-        _titleBackgroundColor = chrome?.TitleColor ?? Color.LightBlue;
-        _titleButtons = [];
+        _title.ShowTitle = chrome?.ShowTitle ?? false;
+        _title.ShowWhenMinimized = chrome?.ShowTitleWhenMinimized ?? false;
+        _title.Text = chrome?.TitleText ?? string.Empty;
+        _title.OriginalSize = new Vector2(_geometry.OriginalSize.X, TitleFont.MeasureString(" ").Y + TitlePadding.Y * 3);
+        _title.Size = _title.OriginalSize;
+        _title.BackgroundColor = chrome?.TitleColor ?? Color.LightBlue;
+        _title.Buttons = [];
 
         /*========Border========*/
-        _showBorder = chrome?.ShowBorder ?? false;
-        _borderSize = chrome?.BorderSize ?? new Vector2(1, 1);
+        _border.Show = chrome?.ShowBorder ?? false;
+        _border.Thickness = BorderThickness.Uniform(chrome?.BorderSize ?? new Vector2(1, 1));
 
         /*========Content========*/
-        _contentBackgroundColor = content?.ContentColor ?? Color.White;
+        _contentState.BackgroundColor = content?.ContentColor ?? Color.White;
 
         /*========User Controls========*/
         CanUserClose = chrome?.CanUserClose ?? false;
@@ -240,13 +241,13 @@ public class Window
 
     public virtual void Initialize()
     {
-        RecalculateSizeAndAbsolutePosition();
+        MeasureAndArrange();
 
-        _windowViewport = new Viewport(_contentRectangle);
+        _windowViewport = new Viewport(_contentState.Rectangle);
         _cameraTransform = Matrix.CreateRotationZ(0) * // camera rotation, default 0
                            Matrix.CreateScale(new Vector3(1, 1, 1)); // TODO zoom
 
-        if (_showTitle)
+        if (_title.ShowTitle)
         {
             // Close/minimize/restore are the standard, near-universal chrome capabilities,
             // so Window still decides whether to attach them from the existing options
@@ -266,7 +267,7 @@ public class Window
             }
         }
 
-        foreach (var button in _titleButtons)
+        foreach (var button in _title.Buttons)
         {
             button.Initialize();
         }
@@ -295,7 +296,7 @@ public class Window
 
     public virtual void Update(GameTime gameTime)
     {
-        foreach (var button in _titleButtons)
+        foreach (var button in _title.Buttons)
         {
             button.Update(gameTime);
         }
@@ -315,31 +316,33 @@ public class Window
             return;
         }
 
-        // TODO redo to put border around title and content separately in all display modes
-        if (_showBorder)
+        if (_border.Show)
         {
-            spriteBatch.Draw(unitRectangle, _windowRectangle, Color.Black);
+            spriteBatch.Draw(unitRectangle, _border.TopRectangle, Color.Black);
+            spriteBatch.Draw(unitRectangle, _border.BottomRectangle, Color.Black);
+            spriteBatch.Draw(unitRectangle, _border.LeftRectangle, Color.Black);
+            spriteBatch.Draw(unitRectangle, _border.RightRectangle, Color.Black);
         }
 
-        if ((_windowDisplayMode != WindowDisplayMode.Minimized && _showTitle) || (_windowDisplayMode == WindowDisplayMode.Minimized && _showTitleWhenMinimized))
+        if ((_geometry.DisplayMode != WindowDisplayMode.Minimized && _title.ShowTitle) || (_geometry.DisplayMode == WindowDisplayMode.Minimized && _title.ShowWhenMinimized))
         {
             if (!_isTransparent)
             {
-                spriteBatch.Draw(unitRectangle, _titleRectangle, _titleBackgroundColor);
+                spriteBatch.Draw(unitRectangle, _title.Rectangle, _title.BackgroundColor);
             }
-            spriteBatch.DrawString(TitleFont, TitleText, _titleAbsolutePosition + TitlePadding, Color.Black);
+            spriteBatch.DrawString(TitleFont, TitleText, _title.AbsolutePosition + TitlePadding, Color.Black);
 
-            foreach (var button in _titleButtons)
+            foreach (var button in _title.Buttons)
             {
                 button.Draw(gameTime, spriteBatch, unitRectangle);
             }
         }
 
-        if (_windowDisplayMode != WindowDisplayMode.Minimized)
+        if (_geometry.DisplayMode != WindowDisplayMode.Minimized)
         {
             if (!_isTransparent)
             {
-                spriteBatch.Draw(unitRectangle, _contentRectangle, _contentBackgroundColor);
+                spriteBatch.Draw(unitRectangle, _contentState.Rectangle, _contentState.BackgroundColor);
             }
 
             spriteBatch.End();
@@ -367,20 +370,18 @@ public class Window
         _content?.DrawContent(gameTime, spriteBatch, unitRectangle);
     }
 
-    public bool IsInDisplayRectangle(int x, int y) => _contentRectangle.Contains(x, y);
-
     public void HandleClick(Point mousePosition)
     {
-        // _titleRectangle is sized/positioned from _titleSize/_titleAbsolutePosition
-        // unconditionally (RecalculateRectangles doesn't know about _showTitle), so without
-        // this guard a titleless window's upper region is a dead zone: clicks there land in
-        // an invisible title rect and route to HandleTitleClick (which only checks title
-        // buttons, of which there are none) instead of falling through to content.
-        if (_showTitle && _titleRectangle.Contains(mousePosition))
+        // _title.Rectangle is sized/positioned from _title.Size/_title.AbsolutePosition
+        // unconditionally (RecalculateRectangles doesn't know about _title.ShowTitle), so
+        // without this guard a titleless window's upper region is a dead zone: clicks there
+        // land in an invisible title rect and route to HandleTitleClick (which only checks
+        // title buttons, of which there are none) instead of falling through to content.
+        if (_title.ShowTitle && _title.Rectangle.Contains(mousePosition))
         {
             HandleTitleClick(mousePosition);
         }
-        else if (_contentRectangle.Contains(mousePosition))
+        else if (_contentState.Rectangle.Contains(mousePosition))
         {
             HandleContentClick(mousePosition);
         }
@@ -390,7 +391,7 @@ public class Window
 
     protected virtual void OnTitleClickAction(Point mousePosition)
     {
-        foreach (var button in _titleButtons)
+        foreach (var button in _title.Buttons)
         {
             if (button.ButtonRectangle.Contains(mousePosition))
             {
@@ -420,15 +421,15 @@ public class Window
     {
         ArgumentNullException.ThrowIfNull(newButton);
 
-        if (!_showTitle)
+        if (!_title.ShowTitle)
         {
             return;
         }
 
-        var maximumIndex = _titleButtons.Count;
+        var maximumIndex = _title.Buttons.Count;
         var clampedInsertIndex = System.Math.Clamp(insertIndex ?? maximumIndex, 0, maximumIndex);
 
-        _titleButtons.Insert(clampedInsertIndex, newButton);
+        _title.Buttons.Insert(clampedInsertIndex, newButton);
 
         RepositionTitleButtons();
     }
@@ -443,16 +444,16 @@ public class Window
     /// </summary>
     private void RepositionTitleButtons()
     {
-        for (var index = 0; index < _titleButtons.Count; index++)
+        for (var index = 0; index < _title.Buttons.Count; index++)
         {
-            var button = _titleButtons[index];
+            var button = _title.Buttons[index];
             if (index == 0)
             {
-                button.ChangeRelativePosition(new Vector2(_titleSize.X - button.Size.X - 3, 3));
+                button.ChangeRelativePosition(new Vector2(_title.Size.X - button.Size.X - 3, 3));
             }
             else
             {
-                var previousButton = _titleButtons[index - 1];
+                var previousButton = _title.Buttons[index - 1];
                 button.ChangeRelativePosition(new Vector2(
                     previousButton.RelativePosition.X - previousButton.Size.X - 3,
                     previousButton.RelativePosition.Y));
@@ -502,26 +503,36 @@ public class Window
             }
             else if (updateIndex == 0)
             {
-                newChildWindow._windowRelativePosition = new Vector2(0, 0);
+                newChildWindow._geometry.RelativePosition = new Vector2(0, 0);
             }
             else
             {
                 var previousChildWindow = _childWindows[updateIndex - 1];
                 if (_childWindowTileMode == WindowTileMode.Horizontal)
                 {
-                    newChildWindow._windowRelativePosition = new Vector2(
-                        previousChildWindow._windowRelativePosition.X + previousChildWindow._windowCurrentSize.X,
-                        previousChildWindow._windowRelativePosition.Y);
+                    newChildWindow._geometry.RelativePosition = new Vector2(
+                        previousChildWindow._geometry.RelativePosition.X + previousChildWindow._geometry.CurrentSize.X,
+                        previousChildWindow._geometry.RelativePosition.Y);
                 }
                 else if (_childWindowTileMode == WindowTileMode.Vertical)
                 {
-                    newChildWindow._windowRelativePosition = new Vector2(
-                        previousChildWindow._windowRelativePosition.X,
-                        previousChildWindow._windowRelativePosition.Y + previousChildWindow._windowCurrentSize.Y);
+                    newChildWindow._geometry.RelativePosition = new Vector2(
+                        previousChildWindow._geometry.RelativePosition.X,
+                        previousChildWindow._geometry.RelativePosition.Y + previousChildWindow._geometry.CurrentSize.Y);
                 }
             }
 
             newChildWindow.Initialize();
+        }
+
+        // A WrapContent parent's own size depends on its children's -- re-fit around the
+        // newly added child. Gated to WrapContent only: for Fixed/Fill/Minimized parents the
+        // loop above already fully re-measures+re-arranges every affected child, and the
+        // parent's own size never depends on children in those modes, so an unconditional
+        // call here would just re-walk the entire existing sibling list for no effect.
+        if (_geometry.DisplayMode == WindowDisplayMode.WrapContent)
+        {
+            MeasureAndArrange();
         }
     }
 
@@ -539,177 +550,275 @@ public class Window
         {
             _childWindows[index].Initialize();
         }
+
+        // See the matching comment in AddChildWindow -- a WrapContent parent needs to shrink
+        // to fit around the removed child; other modes don't depend on children for sizing.
+        if (_geometry.DisplayMode == WindowDisplayMode.WrapContent)
+        {
+            MeasureAndArrange();
+        }
     }
 
-    public void RecalculateSizeAndAbsolutePosition()
+    /// <summary>
+    /// Entry point for a full re-layout: measures this window's (and its subtree's) sizes
+    /// bottom-up where needed, then arranges absolute positions/rectangles top-down. See
+    /// Measure/Arrange below for why this is split into two passes rather than one.
+    /// </summary>
+    private void MeasureAndArrange()
     {
-        // If there is no parent, this is a root window guaranteed to have a maximum set.
-        if (_parentWindow != null)
+        // If there is no parent, this is a root window guaranteed to have a maximum set
+        // (from BuildWindow) already sitting in _geometry.MaximumSize.
+        var availableSize = _parentWindow != null
+            ? _parentWindow.ContentSize - _geometry.RelativePosition
+            : _geometry.MaximumSize;
+
+        Measure(availableSize);
+        Arrange();
+    }
+
+    /// <summary>
+    /// Bottom-up size computation. WrapContent needs its children's sizes to compute its
+    /// own, so it measures children first, threading its OWN available space through to them
+    /// unchanged (the same resolution Android's View.measure() uses for WRAP_CONTENT: a
+    /// wrap-content node's own final size isn't known yet, so it can't offer children a real
+    /// constraint of its own -- it passes through what it was given). Fixed/Fill/Minimized's
+    /// own size never depends on children, so they compute themselves first and hand children
+    /// their own now-final content size as the real constraint.
+    /// </summary>
+    private void Measure(Vector2 availableSize)
+    {
+        var previousSize = _geometry.CurrentSize;
+        _geometry.MaximumSize = availableSize;
+
+        if (_geometry.DisplayMode == WindowDisplayMode.WrapContent)
         {
-            _windowMaximumSize = _parentWindow.ContentSize - _windowRelativePosition;
+            MeasureChildren(availableSize);
+            RecalculateWrapContentWindowSize();
+        }
+        else
+        {
+            switch (_geometry.DisplayMode)
+            {
+                case WindowDisplayMode.Minimized:
+                    RecalculateMinimizedWindowSize();
+                    break;
+                case WindowDisplayMode.Fixed:
+                    RecalculateFixedWindowSize();
+                    break;
+                case WindowDisplayMode.Fill:
+                    RecalculateFillWindowSize();
+                    break;
+                default:
+                    throw new NotImplementedException("No default window display mode.");
+            }
+
+            MeasureChildren(_contentState.Size);
         }
 
-        var previousSize = _windowCurrentSize;
-
-        switch (_windowDisplayMode)
-        {
-            case WindowDisplayMode.Minimized:
-                RecalculateMinimizedWindowSize();
-                break;
-            case WindowDisplayMode.Static:
-                RecalculateStaticWindowSize();
-                break;
-            case WindowDisplayMode.Fill:
-                RecalculateFillWindowSize();
-                break;
-            case WindowDisplayMode.Grow:
-                RecalculateGrowWindowSize();
-                break;
-            default:
-                throw new NotImplementedException("No default window display mode.");
-        }
-
-        RecalculateAbsolutePositions();
-        RecalculateRectangles();
-        RecalculateButtonsSizeAndPosition();
-        RecalculateChildrenSizeAndPosition();
-
-        if (_windowCurrentSize != previousSize)
+        if (_geometry.CurrentSize != previousSize)
         {
             Resized?.Invoke(this);
         }
     }
 
-    public void RecalculateAbsolutePositions()
+    private void MeasureChildren(Vector2 availableContentSize)
     {
-        var previousAbsolutePosition = _windowAbsolutePosition;
+        foreach (var childWindow in _childWindows)
+        {
+            childWindow.Measure(availableContentSize - childWindow.WindowRelativePosition);
+        }
+    }
 
-        _windowAbsolutePosition = _parentWindow != null
-            ? _parentWindow.WindowAbsolutePosition + _windowRelativePosition
-            : _windowRelativePosition;
+    /// <summary>
+    /// Top-down absolute-position/rectangle assignment, run only after every node in this
+    /// subtree has already been measured (see Measure) -- RecalculateRectangles and
+    /// RecalculateButtonsSizeAndPosition both read sizes that must already be final.
+    /// </summary>
+    protected void Arrange()
+    {
+        RecalculateAbsolutePositions();
+        RecalculateRectangles();
+        RecalculateButtonsSizeAndPosition();
 
-        _titleAbsolutePosition = new Vector2(
-            _windowAbsolutePosition.X + (_showBorder ? _borderSize.X : 0),
-            _windowAbsolutePosition.Y + (_showBorder ? _borderSize.Y : 0));
+        foreach (var childWindow in _childWindows)
+        {
+            childWindow.Arrange();
+        }
+    }
 
-        _contentAbsolutePosition = new Vector2(
-            _windowAbsolutePosition.X + (_showBorder ? _borderSize.X : 0),
-            _windowAbsolutePosition.Y + (_showBorder ? _borderSize.Y : 0) + (_showTitle ? _titleSize.Y : 0));
+    private void RecalculateAbsolutePositions()
+    {
+        var previousAbsolutePosition = _geometry.AbsolutePosition;
 
-        if (_windowAbsolutePosition != previousAbsolutePosition)
+        // A child's relative position is relative to the parent's content area, not the
+        // parent's outer window bounds -- matching BuildWindow's own initial computation
+        // below. Using WindowAbsolutePosition here instead used to shift every child by
+        // exactly the parent's own border+title thickness, leaving e.g. a 1px gap between a
+        // child's right border and the parent content's right edge whenever the parent had a
+        // border.
+        _geometry.AbsolutePosition = _parentWindow != null
+            ? _parentWindow.ContentAbsolutePosition + _geometry.RelativePosition
+            : _geometry.RelativePosition;
+
+        _title.AbsolutePosition = _geometry.AbsolutePosition + BorderInset;
+
+        _contentState.AbsolutePosition = new Vector2(
+            _geometry.AbsolutePosition.X + BorderInset.X,
+            _geometry.AbsolutePosition.Y + BorderInset.Y + TitleInsetHeight);
+
+        if (_geometry.AbsolutePosition != previousAbsolutePosition)
         {
             Moved?.Invoke(this);
         }
     }
 
-    public virtual void RecalculateMinimizedWindowSize()
+    protected virtual void RecalculateMinimizedWindowSize()
     {
-        var textSize = TitleFont.MeasureString(_titleText);
-        _titleSize = new Vector2(textSize.X + TitlePadding.X * 2, textSize.Y + TitlePadding.Y * 2);
+        var textSize = TitleFont.MeasureString(_title.Text);
 
-        _contentSize = new Vector2(0, 0);
+        // Widened to also fit the title buttons (close/minimize-restore), not just the text --
+        // a short/empty title would otherwise shrink the title bar narrower than the buttons
+        // it still has to hold, and RepositionTitleButtons (which doesn't know about text
+        // width, only _title.Size.X) would tile them overlapping each other or the text.
+        var titleWidth = System.Math.Max(textSize.X + TitlePadding.X * 2, TotalTitleButtonsWidth());
+        _title.Size = new Vector2(titleWidth, textSize.Y + TitlePadding.Y * 2);
 
-        var windowSize = new Vector2(
-            _titleSize.X + (_showBorder ? _borderSize.X * 2 : 0),
-            _titleSize.Y + (_showBorder ? _borderSize.Y * 2 : 0));
+        _contentState.Size = new Vector2(0, 0);
 
-        _windowCurrentSize = new Vector2(
-            MathHelper.Clamp(windowSize.X, _windowMinimumSize.X, _windowMaximumSize.X),
+        var windowSize = _title.Size + BorderInsetDoubled;
+
+        _geometry.CurrentSize = new Vector2(
+            MathHelper.Clamp(windowSize.X, _geometry.MinimumSize.X, _geometry.MaximumSize.X),
             windowSize.Y);
     }
 
-    public virtual void RecalculateStaticWindowSize()
+    /// <summary>Minimum title width that fits every title button without overlap -- see RepositionTitleButtons for the matching 3px-gap tiling this mirrors.</summary>
+    private float TotalTitleButtonsWidth()
     {
-        _windowCurrentSize = new Vector2(
-            MathHelper.Clamp(_windowOriginalSize.X, _windowMinimumSize.X, _windowMaximumSize.X),
-            MathHelper.Clamp(_windowOriginalSize.Y, _windowMinimumSize.Y, _windowMaximumSize.Y));
+        if (_title.Buttons.Count == 0)
+        {
+            return 0f;
+        }
+
+        var width = 3f; // gap between the rightmost button and the title's right edge.
+        foreach (var button in _title.Buttons)
+        {
+            width += button.Size.X + 3f; // each button plus the gap to its left.
+        }
+
+        return width;
+    }
+
+    protected virtual void RecalculateFixedWindowSize()
+    {
+        _geometry.CurrentSize = new Vector2(
+            MathHelper.Clamp(_geometry.OriginalSize.X, _geometry.MinimumSize.X, _geometry.MaximumSize.X),
+            MathHelper.Clamp(_geometry.OriginalSize.Y, _geometry.MinimumSize.Y, _geometry.MaximumSize.Y));
 
         // Resize horizontally to fit the new window size, but keep the vertical size.
-        _titleSize = new Vector2(
-            _windowCurrentSize.X - (_showBorder ? _borderSize.X * 2 : 0),
-            _originalTitleSize.Y - (_showBorder ? _borderSize.Y : 0));
+        _title.Size = new Vector2(
+            _geometry.CurrentSize.X - BorderInsetDoubled.X,
+            _title.OriginalSize.Y - BorderInset.Y);
 
-        _contentSize = new Vector2(
-            _windowCurrentSize.X - (_showBorder ? _borderSize.X * 2 : 0),
-            _windowCurrentSize.Y - (_showBorder ? _borderSize.Y : 0) - (_showTitle ? _titleSize.Y : 0));
+        // Content sits below the title (which itself already accounts for just the top
+        // border) and above the bottom border, so its own height must clear both the top and
+        // bottom border -- BorderInsetDoubled.Y, not BorderInset.Y. Getting this wrong left no
+        // room for a bottom border strip, so content's own background fill (drawn after the
+        // border in Draw()) painted directly over it.
+        _contentState.Size = new Vector2(
+            _geometry.CurrentSize.X - BorderInsetDoubled.X,
+            _geometry.CurrentSize.Y - BorderInsetDoubled.Y - TitleInsetHeight);
     }
 
-    public virtual void RecalculateFillWindowSize()
+    protected virtual void RecalculateFillWindowSize()
     {
-        _windowCurrentSize = _windowMaximumSize;
+        _geometry.CurrentSize = _geometry.MaximumSize;
 
-        _titleSize = new Vector2(
-            _windowCurrentSize.X - (_showBorder ? _borderSize.X * 2 : 0),
-            _originalTitleSize.Y - (_showBorder ? _borderSize.Y : 0));
+        _title.Size = new Vector2(
+            _geometry.CurrentSize.X - BorderInsetDoubled.X,
+            _title.OriginalSize.Y - BorderInset.Y);
 
-        _contentSize = _windowCurrentSize
-            - (_showTitle ? _titleSize : new Vector2(0, 0))
-            - (_showBorder ? Vector2.Multiply(_borderSize, 2) : new Vector2(0, 0));
+        _contentState.Size = _geometry.CurrentSize
+            - (_title.ShowTitle ? _title.Size : Vector2.Zero)
+            - BorderInsetDoubled;
     }
 
-    public virtual void RecalculateGrowWindowSize()
+    protected virtual void RecalculateWrapContentWindowSize()
     {
         if (_canContainChildWindows && _childWindows.Count > 0)
         {
-            var maxRight = 0;
-            var maxBottom = 0;
+            // Relative position + measured size, not the absolute WindowRectangle -- this
+            // runs during Measure, before children have been Arranged, so their absolute
+            // position isn't valid yet. Also more correct in general: fitting to children
+            // shouldn't need absolute screen coordinates at all.
+            var maxRight = 0f;
+            var maxBottom = 0f;
             foreach (var childWindow in _childWindows)
             {
-                maxRight = System.Math.Max(maxRight, childWindow.WindowRectangle.Right);
-                maxBottom = System.Math.Max(maxBottom, childWindow.WindowRectangle.Bottom);
+                maxRight = System.Math.Max(maxRight, childWindow.WindowRelativePosition.X + childWindow.WindowCurrentSize.X);
+                maxBottom = System.Math.Max(maxBottom, childWindow.WindowRelativePosition.Y + childWindow.WindowCurrentSize.Y);
             }
-            _contentSize = new Vector2(maxRight, maxBottom);
+            _contentState.Size = new Vector2(maxRight, maxBottom);
         }
         else
         {
-            _contentSize = new Vector2(0, 0);
+            _contentState.Size = new Vector2(0, 0);
         }
 
-        _contentSize += ContentPadding;
+        _contentState.Size += ContentPadding;
 
-        _windowCurrentSize = _contentSize;
-        if (_showTitle)
+        _geometry.CurrentSize = _contentState.Size;
+        if (_title.ShowTitle)
         {
-            _titleSize = new Vector2(_contentSize.X, _originalTitleSize.Y - (_showBorder ? _borderSize.Y : 0));
-            _windowCurrentSize += _titleSize;
+            _title.Size = new Vector2(_contentState.Size.X, _title.OriginalSize.Y - BorderInset.Y);
+            _geometry.CurrentSize += _title.Size;
         }
-        if (_showBorder)
-        {
-            _windowCurrentSize += Vector2.Multiply(_borderSize, 2);
-        }
+        _geometry.CurrentSize += BorderInsetDoubled;
     }
 
     /// <summary>Recalculates draw rectangles from the current absolute positions/sizes.</summary>
-    public void RecalculateRectangles()
+    private void RecalculateRectangles()
     {
-        _windowRectangle = new Rectangle((int)_windowAbsolutePosition.X, (int)_windowAbsolutePosition.Y, (int)_windowCurrentSize.X, (int)_windowCurrentSize.Y);
-        _titleRectangle = new Rectangle((int)_titleAbsolutePosition.X, (int)_titleAbsolutePosition.Y, (int)_titleSize.X, (int)_titleSize.Y);
-        _contentRectangle = new Rectangle((int)_contentAbsolutePosition.X, (int)_contentAbsolutePosition.Y, (int)_contentSize.X, (int)_contentSize.Y);
+        _geometry.Rectangle = new Rectangle((int)_geometry.AbsolutePosition.X, (int)_geometry.AbsolutePosition.Y, (int)_geometry.CurrentSize.X, (int)_geometry.CurrentSize.Y);
+        _title.Rectangle = new Rectangle((int)_title.AbsolutePosition.X, (int)_title.AbsolutePosition.Y, (int)_title.Size.X, (int)_title.Size.Y);
+        _contentState.Rectangle = new Rectangle((int)_contentState.AbsolutePosition.X, (int)_contentState.AbsolutePosition.Y, (int)_contentState.Size.X, (int)_contentState.Size.Y);
+
+        RecalculateBorderRectangles();
+    }
+
+    /// <summary>
+    /// Four edge strips, not one solid rectangle -- top/bottom span the window's full width
+    /// (covering the corners) while left/right are inset by that thickness so all four tile
+    /// the window's outline without overlapping.
+    /// </summary>
+    private void RecalculateBorderRectangles()
+    {
+        var topThickness = (int)_border.Thickness.Top;
+        var bottomThickness = (int)_border.Thickness.Bottom;
+        var leftThickness = (int)_border.Thickness.Left;
+        var rightThickness = (int)_border.Thickness.Right;
+
+        _border.TopRectangle = new Rectangle(_geometry.Rectangle.X, _geometry.Rectangle.Y, _geometry.Rectangle.Width, topThickness);
+        _border.BottomRectangle = new Rectangle(_geometry.Rectangle.X, _geometry.Rectangle.Bottom - bottomThickness, _geometry.Rectangle.Width, bottomThickness);
+        _border.LeftRectangle = new Rectangle(_geometry.Rectangle.X, _geometry.Rectangle.Y + topThickness, leftThickness, _geometry.Rectangle.Height - topThickness - bottomThickness);
+        _border.RightRectangle = new Rectangle(_geometry.Rectangle.Right - rightThickness, _geometry.Rectangle.Y + topThickness, rightThickness, _geometry.Rectangle.Height - topThickness - bottomThickness);
     }
 
     /// <summary>
     /// Re-tiles every title button against the current title width (see
     /// RepositionTitleButtons) rather than just refreshing each button's absolute position
     /// from its previously-computed relative one, since the title width itself can change
-    /// (e.g. minimizing shrinks it to fit just the title text).
+    /// (e.g. minimizing shrinks it to fit just its text).
     /// </summary>
-    public void RecalculateButtonsSizeAndPosition()
+    private void RecalculateButtonsSizeAndPosition()
     {
         RepositionTitleButtons();
-    }
-
-    public void RecalculateChildrenSizeAndPosition()
-    {
-        foreach (var childWindow in _childWindows)
-        {
-            childWindow.RecalculateSizeAndAbsolutePosition();
-        }
     }
 
     public void SetIsVisible(bool isVisible)
     {
         _isVisible = isVisible;
-        _parentWindow?.RecalculateChildrenSizeAndPosition();
+        _parentWindow?.MeasureAndArrange();
     }
 
     public void SetWindowDisplayMode(WindowDisplayMode newWindowDisplayMode)
@@ -717,38 +826,38 @@ public class Window
         // No-op guard matters beyond just skipping redundant work: without it, a call with
         // the mode the window is already in would still overwrite PreviousWindowDisplay with
         // that same current mode, corrupting what a later restore should return to.
-        if (newWindowDisplayMode == _windowDisplayMode)
+        if (newWindowDisplayMode == _geometry.DisplayMode)
         {
             return;
         }
 
-        _previousWindowDisplayMode = _windowDisplayMode;
-        _windowDisplayMode = newWindowDisplayMode;
-        RecalculateSizeAndAbsolutePosition();
+        _geometry.PreviousDisplayMode = _geometry.DisplayMode;
+        _geometry.DisplayMode = newWindowDisplayMode;
+        MeasureAndArrange();
         DisplayModeChanged?.Invoke(this);
     }
 
     /// <summary>
     /// Repositions the window relative to its parent (or the screen, for a root window).
     /// For chrome behaviors that need to move a window (e.g. a future drag-to-move) --
-    /// Resized/Moved fire automatically through RecalculateSizeAndAbsolutePosition.
+    /// Resized/Moved fire automatically through MeasureAndArrange.
     /// </summary>
     public void SetRelativePosition(Vector2 relativePosition)
     {
-        _windowRelativePosition = relativePosition;
-        RecalculateSizeAndAbsolutePosition();
+        _geometry.RelativePosition = relativePosition;
+        MeasureAndArrange();
     }
 
     /// <summary>
-    /// Sets the window's Static-mode size. Only display mode Static reads this size --
-    /// Fill/Grow compute size from the parent/content instead, so this method has no
-    /// visible effect on a Fill or Grow window, matching that a window can't be manually
-    /// resized while it's set to auto-size.
+    /// Sets the window's Fixed-mode size. Only display mode Fixed reads this size --
+    /// Fill/WrapContent compute size from the parent/content instead, so this method has no
+    /// visible effect on a Fill or WrapContent window, matching that a window can't be
+    /// manually resized while it's set to auto-size.
     /// </summary>
     public void SetSize(Vector2 size)
     {
-        _windowOriginalSize = size;
-        RecalculateSizeAndAbsolutePosition();
+        _geometry.OriginalSize = size;
+        MeasureAndArrange();
     }
 
     public void Close()

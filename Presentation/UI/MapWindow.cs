@@ -68,7 +68,7 @@ public sealed class MapWindow : Window
         MapViewState mapViewState,
         ComponentManager componentManager,
         TileRenderer tileRenderer,
-        GlyphRenderer glyphRenderer) : base(fontService, windowService)
+        GlyphRenderer glyphRenderer) : base(fontService, windowService, glyphRenderer)
     {
         ArgumentNullException.ThrowIfNull(world);
         ArgumentNullException.ThrowIfNull(mapViewState);
@@ -562,7 +562,7 @@ public sealed class MapWindow : Window
 
     public void SelectMapNodes(Point mousePosition)
     {
-        var relativeMapDisplayMousePosition = new Vector2(mousePosition.X - _contentAbsolutePosition.X, mousePosition.Y - _contentAbsolutePosition.Y);
+        var relativeMapDisplayMousePosition = new Vector2(mousePosition.X - _contentState.AbsolutePosition.X, mousePosition.Y - _contentState.AbsolutePosition.Y);
         var x = (int)(relativeMapDisplayMousePosition.X / _currentTileSize.X);
 
         if (x < 0 || x >= _tileColumns)

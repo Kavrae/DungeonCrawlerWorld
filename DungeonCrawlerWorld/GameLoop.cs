@@ -120,7 +120,7 @@ public sealed class GameLoop : Microsoft.Xna.Framework.Game
 
     protected override void Draw(GameTime gameTime)
     {
-        GraphicsDevice.Clear(Color.Black);
+        GraphicsDevice.Clear(Color.LightGray);
 
         var spriteBatch = _presentation.SpriteBatchRenderer.StartSpriteBatch();
 

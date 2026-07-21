@@ -1,5 +1,3 @@
-using Microsoft.Xna.Framework;
-
 namespace Presentation.UI.ChromeBehaviors;
 
 /// <summary>
@@ -14,20 +12,11 @@ namespace Presentation.UI.ChromeBehaviors;
 /// </summary>
 public sealed class WindowMinimizeRestoreBehavior : IWindowChromeBehavior
 {
-    private static readonly Vector2 MinimizeTextOffset = new(2, -4);
-    private static readonly Vector2 RestoreTextOffset = new(1, -1);
-
     public void Attach(Window window)
     {
         ArgumentNullException.ThrowIfNull(window);
 
-        var buttonSize = new Vector2(window.OriginalTitleSize.Y - 4, window.OriginalTitleSize.Y - 4);
-        var button = new Button(window, new ButtonOptions
-        {
-            Color = Color.LightGray,
-            Font = window.TitleFont,
-            Size = buttonSize,
-        });
+        var button = new Button(window, new ButtonOptions());
         UpdateButtonLabel(window, button);
 
         button.Clicked += () => window.SetWindowDisplayMode(
@@ -55,6 +44,6 @@ public sealed class WindowMinimizeRestoreBehavior : IWindowChromeBehavior
     private static void UpdateButtonLabel(Window window, Button button)
     {
         var isMinimized = window.WindowDisplay == WindowDisplayMode.Minimized;
-        button.SetText(isMinimized ? "O" : "_", isMinimized ? RestoreTextOffset : MinimizeTextOffset);
+        button.SetText(isMinimized ? "O" : "_");
     }
 }

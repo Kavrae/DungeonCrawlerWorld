@@ -1,4 +1,5 @@
 using Presentation.Fonts;
+using Presentation.Rendering;
 
 namespace Presentation.UI;
 
@@ -16,12 +17,13 @@ public sealed class WindowService
     private const int DefaultPoolGrowthSize = 8;
     private const int WindowPoolMaximumSize = byte.MaxValue;
 
-    public WindowService(FontService fontService)
+    public WindowService(FontService fontService, GlyphRenderer glyphRenderer)
     {
         ArgumentNullException.ThrowIfNull(fontService);
+        ArgumentNullException.ThrowIfNull(glyphRenderer);
 
-        RegisterFactory<Window>((_, _) => new Window(fontService, this));
-        RegisterFactory<TextWindow>((_, _) => new TextWindow(fontService, this));
+        RegisterFactory<Window>((_, _) => new Window(fontService, this, glyphRenderer));
+        RegisterFactory<TextWindow>((_, _) => new TextWindow(fontService, this, glyphRenderer));
     }
 
     /// <summary>

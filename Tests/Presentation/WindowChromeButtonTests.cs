@@ -1,5 +1,6 @@
 using Microsoft.Xna.Framework;
 using Presentation.Fonts;
+using Presentation.Rendering;
 using Presentation.UI;
 
 namespace Tests.Presentation;
@@ -12,13 +13,13 @@ namespace Tests.Presentation;
 [TestClass]
 public sealed class WindowChromeButtonTests
 {
-    private static WindowService CreateWindowService() => new(new FontService("Fonts"));
+    private static WindowService CreateWindowService() => new(new FontService("Fonts"), new GlyphRenderer());
 
     private static Window CreateWindowWithCloseAndMinimize(WindowService windowService)
     {
         var window = windowService.CreateWindow<Window>(null, new WindowOptions
         {
-            Layout = new WindowLayoutOptions { Size = new Vector2(200, 100), DisplayMode = WindowDisplayMode.Static },
+            Layout = new WindowLayoutOptions { Size = new Vector2(200, 100), DisplayMode = WindowDisplayMode.Fixed },
             // A non-trivial TitleText matters here: minimizing shrinks the title bar to fit
             // just its text, and an empty title would shrink it down to less than a single
             // button's own width -- a separate edge case this test isn't about.
@@ -56,7 +57,7 @@ public sealed class WindowChromeButtonTests
         var windowService = CreateWindowService();
         var window = windowService.CreateWindow<Window>(null, new WindowOptions
         {
-            Layout = new WindowLayoutOptions { Size = new Vector2(200, 100), DisplayMode = WindowDisplayMode.Static },
+            Layout = new WindowLayoutOptions { Size = new Vector2(200, 100), DisplayMode = WindowDisplayMode.Fixed },
             Chrome = new WindowChromeOptions { ShowTitle = true, CanUserMinimize = true },
         });
         window.Initialize();
@@ -98,7 +99,7 @@ public sealed class WindowChromeButtonTests
 
         window.HandleClick(minimizeRestoreButton.ButtonRectangle.Center);
 
-        Assert.AreEqual(WindowDisplayMode.Static, window.WindowDisplay);
+        Assert.AreEqual(WindowDisplayMode.Fixed, window.WindowDisplay);
         Assert.AreEqual("_", minimizeRestoreButton.Text);
     }
 
@@ -119,6 +120,34 @@ public sealed class WindowChromeButtonTests
         window.SetWindowDisplayMode(WindowDisplayMode.Minimized);
 
         Assert.IsTrue(window.TitleRectangle.Contains(minimizeRestoreButton.ButtonRectangle.Center));
+    }
+
+    /// <summary>
+    /// Regression test: RecalculateMinimizedWindowSize used to size the minimized title bar
+    /// to fit only the title text, with no allowance for the title buttons sitting on top of
+    /// it. A short title could shrink the title bar narrower than the close + minimize/
+    /// restore buttons' combined width, and RepositionTitleButtons (which only knows about
+    /// _title.Size.X, not text width) would then tile them overlapping each other -- visually
+    /// reading as a stray artifact between the two buttons.
+    /// </summary>
+    [TestMethod]
+    public void MinimizedWindow_ShortTitle_ButtonsDoNotOverlap()
+    {
+        var windowService = CreateWindowService();
+        var window = windowService.CreateWindow<Window>(null, new WindowOptions
+        {
+            Layout = new WindowLayoutOptions { Size = new Vector2(200, 100), DisplayMode = WindowDisplayMode.Fixed },
+            // A single-character title is short enough that, pre-fix, the minimized title bar
+            // would be narrower than the two buttons combined.
+            Chrome = new WindowChromeOptions { ShowTitle = true, TitleText = "X", CanUserClose = true, CanUserMinimize = true },
+        });
+        window.Initialize();
+
+        window.SetWindowDisplayMode(WindowDisplayMode.Minimized);
+
+        var closeButton = window.TitleButtons[0];
+        var minimizeRestoreButton = window.TitleButtons[1];
+        Assert.IsFalse(closeButton.ButtonRectangle.Intersects(minimizeRestoreButton.ButtonRectangle));
     }
 
     /// <summary>

@@ -12,6 +12,7 @@ using Game.Modules.Movement.Components;
 using Game.World;
 using Microsoft.Xna.Framework;
 using Presentation.Fonts;
+using Presentation.Rendering;
 using Presentation.UI;
 using Presentation.UI.Content;
 
@@ -47,7 +48,7 @@ public sealed class DebugWindowContentTests
         ecsContext.ComponentManager.GetPackedPool<MovementComponent>().Add(entityId, new MovementComponent(MovementMode.Random, 10, null, null));
 
         var fontService = new FontService("Fonts");
-        var windowService = new WindowService(fontService);
+        var windowService = new WindowService(fontService, new GlyphRenderer());
         var hostWindow = windowService.CreateWindow<Window>(null, new WindowOptions());
         hostWindow.SetContent(new DebugWindowContent(fontService, ecsContext.EntityManager, ecsContext.ComponentManager));
 
@@ -62,7 +63,7 @@ public sealed class DebugWindowContentTests
         var ecsContext = BuildEcsContext();
 
         var fontService = new FontService("Fonts");
-        var windowService = new WindowService(fontService);
+        var windowService = new WindowService(fontService, new GlyphRenderer());
         var hostWindow = windowService.CreateWindow<Window>(null, new WindowOptions());
         hostWindow.SetContent(new DebugWindowContent(fontService, ecsContext.EntityManager, ecsContext.ComponentManager));
 

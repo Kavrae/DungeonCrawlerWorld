@@ -23,7 +23,7 @@ public static class PresentationBootstrapper
         var spriteBatchRenderer = new SpriteBatchRenderer(graphicsDevice);
         var glyphRenderer = new GlyphRenderer();
         var tileRenderer = new TileRenderer();
-        var windowService = new WindowService(fontService);
+        var windowService = new WindowService(fontService, glyphRenderer);
 
         return new PresentationContext(fontService, spriteBatchRenderer, glyphRenderer, tileRenderer, windowService);
     }

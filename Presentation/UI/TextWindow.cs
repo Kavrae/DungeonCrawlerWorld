@@ -3,6 +3,7 @@ using FontStashSharp;
 using Microsoft.Xna.Framework;
 using Microsoft.Xna.Framework.Graphics;
 using Presentation.Fonts;
+using Presentation.Rendering;
 
 namespace Presentation.UI;
 
@@ -14,7 +15,8 @@ public class TextWindow : Window
     public Color TextColor { get; set; }
     private const int LinePadding = 3;
 
-    public TextWindow(FontService fontService, WindowService windowService) : base(fontService, windowService)
+    public TextWindow(FontService fontService, WindowService windowService, GlyphRenderer glyphRenderer)
+        : base(fontService, windowService, glyphRenderer)
     {
         ContentFont = fontService.GetFont(8);
     }
@@ -36,51 +38,43 @@ public class TextWindow : Window
         }
     }
 
-    public override void RecalculateStaticWindowSize()
+    protected override void RecalculateFixedWindowSize()
     {
-        base.RecalculateStaticWindowSize();
+        base.RecalculateFixedWindowSize();
 
         ReformatDisplayText();
     }
 
-    public override void RecalculateFillWindowSize()
+    protected override void RecalculateFillWindowSize()
     {
         base.RecalculateFillWindowSize();
 
         ReformatDisplayText();
     }
 
-    public override void RecalculateGrowWindowSize()
+    protected override void RecalculateWrapContentWindowSize()
     {
-        _contentSize.X = _windowMaximumSize.X - _windowRelativePosition.X;
-
-        if (_showBorder)
-        {
-            _contentSize.X -= _borderSize.X * 2;
-        }
+        _contentState.Size.X = _geometry.MaximumSize.X - _geometry.RelativePosition.X - BorderInsetDoubled.X;
 
         ReformatDisplayText();
 
-        _contentSize.Y = ContentFont.LineHeight * DisplayText.LineCount + LinePadding * (DisplayText.LineCount + 1);
+        _contentState.Size.Y = ContentFont.LineHeight * DisplayText.LineCount + LinePadding * (DisplayText.LineCount + 1);
 
-        _windowCurrentSize = _contentSize;
-        if (_showTitle)
+        _geometry.CurrentSize = _contentState.Size;
+        if (_title.ShowTitle)
         {
             // Resize horizontally to fit the new content size, but keep the vertical size.
-            _titleSize = new Vector2(_contentSize.X, _originalTitleSize.Y - (_showBorder ? _borderSize.Y : 0));
-            _windowCurrentSize.Y += _titleSize.Y;
+            _title.Size = new Vector2(_contentState.Size.X, _title.OriginalSize.Y - BorderInset.Y);
+            _geometry.CurrentSize.Y += _title.Size.Y;
         }
-        if (_showBorder)
-        {
-            _windowCurrentSize += Vector2.Multiply(_borderSize, 2);
-        }
+        _geometry.CurrentSize += BorderInsetDoubled;
     }
 
     public void ReformatDisplayText()
     {
         DisplayText = StringUtility.FormatText(new FormatTextCriteria(
             new FontStashTextMeasurer(ContentFont),
-            _contentSize.X - ContentPadding.X * 2,
+            _contentState.Size.X - ContentPadding.X * 2,
             OriginalText,
             FormatTextMode.Wordwrap));
     }
@@ -89,18 +83,23 @@ public class TextWindow : Window
     {
         OriginalText = newText;
 
-        switch (_windowDisplayMode)
+        switch (_geometry.DisplayMode)
         {
-            case WindowDisplayMode.Static:
-                RecalculateStaticWindowSize();
+            case WindowDisplayMode.Fixed:
+                RecalculateFixedWindowSize();
                 break;
             case WindowDisplayMode.Fill:
                 RecalculateFillWindowSize();
                 break;
-            case WindowDisplayMode.Grow:
-                RecalculateGrowWindowSize();
+            case WindowDisplayMode.WrapContent:
+                RecalculateWrapContentWindowSize();
                 break;
         }
+
+        // Without this, a text-driven resize left the window's rectangles/absolute
+        // positions/title button positions stale (still reflecting the size before the
+        // text change) even though CurrentSize/ContentSize above were already correct.
+        Arrange();
     }
 
     protected override void OnContentClickAction(Point mousePosition)

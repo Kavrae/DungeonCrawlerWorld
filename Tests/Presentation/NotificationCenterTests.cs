@@ -2,6 +2,7 @@ using Engine.Events;
 using Game.Notifications;
 using Microsoft.Xna.Framework;
 using Presentation.Fonts;
+using Presentation.Rendering;
 using Presentation.UI;
 using Presentation.UI.Notifications;
 
@@ -18,7 +19,7 @@ public sealed class NotificationCenterTests
 {
     private static readonly Point FirstActiveNotificationTopLeft = new(200, 200);
 
-    private static WindowService CreateWindowService() => new(new FontService("Fonts"));
+    private static WindowService CreateWindowService() => new(new FontService("Fonts"), new GlyphRenderer());
 
     [TestMethod]
     public void AddNotification_ShowImmediately_CreatesAClickableActiveWindow()
@@ -179,6 +180,60 @@ public sealed class NotificationCenterTests
         notificationCenter.CloseNotification(notificationId);
 
         Assert.IsFalse(notificationCenter.HasBlockingNotification);
+    }
+
+    /// <summary>
+    /// Regression test: HandleClick used to check _activeNotifications oldest-first, but
+    /// ShowActive stacks each new popup ActiveNotificationStackOffset (10px) further
+    /// down-right and Draw renders them in the same order -- so a newer popup is both on top
+    /// on screen and last in the list, while an older popup's much larger bounding rectangle
+    /// (the diagonal offset is tiny next to a real popup's size) still covers the newer
+    /// popup's own buttons. Checking oldest-first meant the older popup claimed clicks meant
+    /// for the newer one's close button, making it effectively unclickable whenever an older
+    /// popup was still open behind it.
+    /// </summary>
+    [TestMethod]
+    public void ClickingCloseButton_OnNewerOverlappingNotification_ClosesOnlyThatOne()
+    {
+        var fontService = new FontService("Fonts");
+        var windowService = new WindowService(fontService, new GlyphRenderer());
+        var capturedPopups = new List<TextWindow>();
+
+        // Overrides WindowService's default TextWindow factory just to capture each created
+        // instance -- NotificationCenter doesn't expose its windows, and this is the only
+        // way to get real Button/ButtonRectangle references (needed to click precisely,
+        // since a WrapContent popup's exact size depends on font metrics) without duplicating
+        // Window's internal layout math in the test.
+        windowService.RegisterFactory<TextWindow>((_, _) =>
+        {
+            var window = new TextWindow(fontService, windowService, new GlyphRenderer());
+            capturedPopups.Add(window);
+            return window;
+        });
+
+        var notificationCenter = new NotificationCenter(windowService, new EventBus());
+        notificationCenter.Initialize();
+
+        var firstId = notificationCenter.AddNotification(NotificationCategory.Quest, "First", showImmediately: true);
+        var secondId = notificationCenter.AddNotification(NotificationCategory.Quest, "Second", showImmediately: true);
+
+        // Summary count badges (created during Initialize, above) have ShowTitle=false and so
+        // never get title buttons -- only the two active popups just created do, letting us
+        // pick them out regardless of how many summary badges preceded them in the capture list.
+        var activePopups = capturedPopups.Where(popup => popup.TitleButtons.Count > 0).ToList();
+        Assert.HasCount(2, activePopups);
+
+        var secondPopup = activePopups[1]; // second AddNotification call -- stacked on top, see ActiveNotificationStackOffset
+        var closeButton = secondPopup.TitleButtons[0]; // Close attaches first, see Window.Initialize
+
+        var handled = notificationCenter.HandleClick(closeButton.ButtonRectangle.Center);
+
+        Assert.IsTrue(handled);
+        // Already closed by the click above -- CloseNotification returns false for an id no
+        // longer in the active list.
+        Assert.IsFalse(notificationCenter.CloseNotification(secondId));
+        // Untouched -- proves the click reached the newer (topmost) popup, not the one behind it.
+        Assert.IsTrue(notificationCenter.CloseNotification(firstId));
     }
 
     [TestMethod]
