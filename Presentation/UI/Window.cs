@@ -867,6 +867,16 @@ public class Window
         return width;
     }
 
+    /// <summary>
+    /// Natural width the title bar needs for its own text plus buttons, independent of
+    /// content
+    /// </summary>
+    protected float MinimumTitleWidth()
+    {
+        var textSize = TitleFont.MeasureString(_title.Text);
+        return System.Math.Max(textSize.X + TitlePadding.X * 2, TotalTitleButtonsWidth());
+    }
+
     protected virtual void RecalculateFixedWindowSize()
     {
         _geometry.CurrentSize = new Vector2(
@@ -925,11 +935,20 @@ public class Window
 
         _contentState.Size += ContentPadding;
 
+        // A WrapContent window must be at least as wide as its title needs (text + buttons),
+        // not just its content -- see MinimumTitleWidth. Without this, a title longer than the
+        // content it labels (the common case for the selection window's per-component child
+        // windows) rendered clipped/overlapping instead of widening the window to fit.
+        if (_title.ShowTitle)
+        {
+            _contentState.Size.X = System.Math.Max(_contentState.Size.X, MinimumTitleWidth());
+        }
+
         _geometry.CurrentSize = _contentState.Size;
         if (_title.ShowTitle)
         {
             _title.Size = new Vector2(_contentState.Size.X, _title.OriginalSize.Y - BorderInset.Y);
-            _geometry.CurrentSize += _title.Size;
+            _geometry.CurrentSize.Y += _title.Size.Y;
         }
         _geometry.CurrentSize += BorderInsetDoubled;
     }

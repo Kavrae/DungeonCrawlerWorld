@@ -76,6 +76,11 @@ public class TextWindow : Window
         ReformatDisplayText();
         _contentState.Size.X = System.Math.Min(WidestLineWidth() + ContentPadding.X * 2, maximumContentWidth);
 
+        if (_title.ShowTitle)
+        {
+            _contentState.Size.X = System.Math.Min(System.Math.Max(_contentState.Size.X, MinimumTitleWidth()), maximumContentWidth);
+        }
+
         _contentState.Size.Y = ContentFont.LineHeight * DisplayText.LineCount + LinePadding * (DisplayText.LineCount + 1);
 
         _geometry.CurrentSize = _contentState.Size;
