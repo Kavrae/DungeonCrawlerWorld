@@ -10,6 +10,12 @@ namespace Presentation.Input;
 /// </summary>
 public sealed class GameInputController(MapWindow mapWindow, List<Window> rootWindows, List<Window> alwaysOnTopWindows, Vector2 screenSize)
 {
+    /// <summary>MouseState.ScrollWheelValue's units per standard wheel detent -- the FNA/XNA convention, not configurable per-device.</summary>
+    private const float WheelNotchValue = 120f;
+
+    /// <summary>Content pixels scrolled per wheel detent -- roughly three lines of the 8pt font most window content uses, matching typical OS scroll-speed defaults.</summary>
+    private const float ScrollPixelsPerNotch = 24f;
+
     private KeyboardState _previousKeyboardState;
     private MouseState _previousMouseState;
     private ZoomLevel _currentZoomLevel = ZoomLevel.Team;
@@ -154,10 +160,41 @@ public sealed class GameInputController(MapWindow mapWindow, List<Window> rootWi
             }
         }
 
+        UpdateMouseWheelScroll(mouseState);
         UpdateCursor(mouseState);
 
         _previousKeyboardState = keyboardState;
         _previousMouseState = mouseState;
+    }
+
+    /// <summary>
+    /// Scrolls whichever window is directly under the cursor, if it opts into
+    /// CanUserScrollVertical/Horizontal (see Window.ScrollBy) -- independent of
+    /// ActiveInteraction, so scrolling one window mid-drag of another is harmless rather than
+    /// something that needs guarding against. ScrollWheelValue is cumulative, not per-frame, so
+    /// this reads like every other per-frame delta here (see the mouse-button handling above):
+    /// diffed against last frame's value.
+    /// </summary>
+    private void UpdateMouseWheelScroll(MouseState mouseState)
+    {
+        var wheelDelta = mouseState.ScrollWheelValue - _previousMouseState.ScrollWheelValue;
+        if (wheelDelta == 0)
+        {
+            return;
+        }
+
+        var position = new Point(mouseState.X, mouseState.Y);
+        var hoveredInteraction = TryHitTestInteraction(position);
+        if (hoveredInteraction.Window is not { } window || !(window.CanUserScrollVertical || window.CanUserScrollHorizontal))
+        {
+            return;
+        }
+
+        // Scrolling forward (wheelDelta > 0) moves content up (offset decreases) -- the
+        // universal convention -- hence the negation. Vertical only: shift+wheel-for-horizontal
+        // is a reasonable future addition, but nothing today needs it (see TextWindow, whose
+        // wrapped text can only ever overflow horizontally by a single unbreakable word).
+        window.ScrollBy(new Vector2(0, -wheelDelta / WheelNotchValue * ScrollPixelsPerNotch));
     }
 
     /// <summary>Always-on-top tier first (so it can never lose to a root window), each tier topmost (last-raised) first.</summary>
@@ -303,17 +340,28 @@ public sealed class GameInputController(MapWindow mapWindow, List<Window> rootWi
     /// Sets the OS cursor for whatever's under the mouse right now: the active drag's own
     /// cursor while one is in progress (regardless of where the mouse has since wandered --
     /// e.g. a resize drag dragged inward past the border still shows the resize cursor, not
-    /// whatever the mouse happens to be over), otherwise a fresh hover hit-test each frame.
-    /// Only calls MouseCursorEXT.SetCursor when the cursor actually changes, to avoid a native
-    /// call every single frame regardless of whether anything changed.
+    /// whatever the mouse happens to be over), otherwise a hover hit-test. The hover hit-test
+    /// is skipped when the mouse hasn't moved since last frame -- it's a full recursive
+    /// Rectangle.Contains walk over every root/always-on-top window and their descendants
+    /// (title buttons, tiled/floating children), which otherwise ran unconditionally every
+    /// single frame regardless of whether the mouse was even moving. A window appearing/
+    /// resizing/closing directly under a stationary mouse can leave the cursor stale for a
+    /// frame until the mouse next moves -- an acceptable, self-correcting tradeoff for not
+    /// re-walking the whole tree 60 times a second. Only calls MouseCursorEXT.SetCursor when
+    /// the cursor actually changes, to avoid a native call every single frame regardless of
+    /// whether anything changed.
     /// </summary>
     private void UpdateCursor(MouseState mouseState)
     {
+        var position = new Point(mouseState.X, mouseState.Y);
+        var previousPosition = new Point(_previousMouseState.X, _previousMouseState.Y);
+
         var cursor = _activeInteraction.Kind switch
         {
             WindowInteractionKind.Resize => GetResizeCursor(_activeInteraction.Edges),
             WindowInteractionKind.Move => MouseCursor.SizeAll,
-            _ => GetHoverCursor(new Point(mouseState.X, mouseState.Y)),
+            _ when position == previousPosition => CurrentCursor,
+            _ => GetHoverCursor(position),
         };
 
         if (cursor != CurrentCursor)

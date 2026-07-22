@@ -23,7 +23,7 @@ public sealed class NotificationCenter(WindowService windowService, EventBus eve
     private static readonly Vector2 SummaryEntrySize = new(65, 21);
 
     private static readonly Vector2 ActiveNotificationBasePosition = new(200, 200);
-    private static readonly Vector2 ActiveNotificationMaximumSize = new(400, 300);
+    private static readonly Vector2 ActiveNotificationMaximumSize = new(640, 176);
     private const int ActiveNotificationStackOffset = 10;
 
     private readonly List<(NotificationCategory Category, TextWindow SummaryWindow, List<Notification> Notifications)> _unreadByCategory = [];
@@ -154,10 +154,9 @@ public sealed class NotificationCenter(WindowService windowService, EventBus eve
                 TitleText = notification.Category.ToString(),
                 ShowBorder = true,
                 CanUserClose = true,
-                // Never the built-in minimize/restore chrome -- see NotificationMinimizeBehavior,
-                // attached below instead of via Window.Initialize()'s CanUserMinimize path.
                 CanUserMinimize = false,
                 CanUserMove = true,
+                CanUserScrollVertical = true
             },
             Text = new TextOptions { Text = notification.Text },
         });

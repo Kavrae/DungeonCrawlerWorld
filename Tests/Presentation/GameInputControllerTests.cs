@@ -28,6 +28,9 @@ public sealed class GameInputControllerTests
     private static MouseState MouseAt(int x, int y, ButtonState leftButton) =>
         new(x, y, 0, leftButton, ButtonState.Released, ButtonState.Released, ButtonState.Released, ButtonState.Released);
 
+    private static MouseState MouseAtWithScroll(int x, int y, int scrollWheelValue) =>
+        new(x, y, scrollWheelValue, ButtonState.Released, ButtonState.Released, ButtonState.Released, ButtonState.Released, ButtonState.Released);
+
     private static WindowService CreateWindowService() => new(new FontService("Fonts"), new GlyphRenderer());
 
     private static Window CreateRootWindowWithCloseButton(WindowService windowService, Vector2 relativePosition)
@@ -67,6 +70,20 @@ public sealed class GameInputControllerTests
                 DisplayMode = WindowDisplayMode.Fixed,
             },
             Chrome = new WindowChromeOptions { ShowBorder = true, CanUserResize = true },
+        });
+        window.Initialize();
+        return window;
+    }
+
+    /// <summary>Fixed-size with a much taller content than the window (see TextWindowScrollingTests for the underlying scroll-bounds math) -- just enough overflow for mouse-wheel dispatch tests to have something to scroll.</summary>
+    private static TextWindow CreateScrollableTextWindow(WindowService windowService, Vector2 relativePosition)
+    {
+        var longText = string.Join(' ', Enumerable.Repeat("word", 200));
+        var window = windowService.CreateWindow<TextWindow>(null, new WindowOptions
+        {
+            Layout = new WindowLayoutOptions { RelativePosition = relativePosition, Size = new Vector2(150, 30), DisplayMode = WindowDisplayMode.Fixed },
+            Chrome = new WindowChromeOptions { CanUserScrollVertical = true },
+            Text = new TextOptions { Text = longText },
         });
         window.Initialize();
         return window;
@@ -788,5 +805,33 @@ public sealed class GameInputControllerTests
         controller.Update(NoKeys, MouseAt(pressPoint.X + 500, pressPoint.Y, ButtonState.Pressed));
 
         Assert.AreEqual(MouseCursor.SizeWE, controller.CurrentCursor);
+    }
+
+    [TestMethod]
+    public void MouseWheel_OverAScrollableWindow_ScrollsItsContent()
+    {
+        var windowService = CreateWindowService();
+        var window = CreateScrollableTextWindow(windowService, new Vector2(50, 60));
+        var controller = new GameInputController(CreateMapWindow(windowService), [window], [], LargeScreenSize);
+
+        var hoverPoint = window.ContentRectangle.Center;
+        // -120 = one notch "down" (the FNA/XNA convention -- see GameInputController.UpdateMouseWheelScroll), which should scroll forward into the content (ScrollOffset increases), matching every other app's convention.
+        controller.Update(NoKeys, MouseAtWithScroll(hoverPoint.X, hoverPoint.Y, -120));
+
+        Assert.IsGreaterThan(0, window.ScrollOffset.Y);
+    }
+
+    /// <summary>Regression guard: hovering a window that never opted into scrolling (CanUserScrollVertical/Horizontal both false) must not scroll it, even with an active wheel delta.</summary>
+    [TestMethod]
+    public void MouseWheel_OverANonScrollableWindow_DoesNothing()
+    {
+        var windowService = CreateWindowService();
+        var window = CreateMovableWindow(windowService, new Vector2(50, 60));
+        var controller = new GameInputController(CreateMapWindow(windowService), [window], [], LargeScreenSize);
+
+        var hoverPoint = window.ContentRectangle.Center;
+        controller.Update(NoKeys, MouseAtWithScroll(hoverPoint.X, hoverPoint.Y, -120));
+
+        Assert.AreEqual(Vector2.Zero, window.ScrollOffset);
     }
 }

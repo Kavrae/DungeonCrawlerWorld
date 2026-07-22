@@ -1,5 +1,6 @@
 using Engine.Diagnostics;
 using Engine.ECS.Components;
+using Engine.ECS.Components.Stores;
 using Engine.ECS.Entities;
 using FontStashSharp;
 using Game.Modules.Movement.Components;
@@ -26,7 +27,11 @@ public sealed class DebugWindowContent(
     private readonly PerformanceCounter _updateCounter = new();
     private readonly PerformanceCounter _drawCounter = new();
 
+    // Resolved once instead of via ComponentManager's dictionary lookup on every Update call.
+    private readonly PackedComponentPool<MovementComponent> _movementPool = componentManager.GetPackedPool<MovementComponent>();
+
     private SpriteFontBase _font = null!;
+    private Window _hostWindow = null!;
 
     private string _updatesPerSecondText = string.Empty;
     private string _drawsPerSecondText = string.Empty;
@@ -35,6 +40,7 @@ public sealed class DebugWindowContent(
 
     public void Initialize(Window hostWindow)
     {
+        _hostWindow = hostWindow;
         _font = fontService.GetFont(8);
     }
 
@@ -44,7 +50,7 @@ public sealed class DebugWindowContent(
         _updatesPerSecondText = $"{_updateCounter.RatePerSecond:N1} ups";
 
         _entityCountText = $"Entities : {entityManager.LivingEntityCount:N0}";
-        _movingEntityCountText = $"Moving Entities : {componentManager.GetPackedPool<MovementComponent>().Count:N0}";
+        _movingEntityCountText = $"Moving Entities : {_movementPool.Count:N0}";
     }
 
     public void DrawContent(GameTime gameTime, SpriteBatch spriteBatch, Texture2D unitRectangle)
@@ -52,10 +58,11 @@ public sealed class DebugWindowContent(
         _drawCounter.Tick();
         _drawsPerSecondText = $"{_drawCounter.RatePerSecond:N1} fps";
 
+        var origin = _hostWindow.ContentAbsolutePosition;
         var rateColor = gameTime.IsRunningSlowly ? Color.Red : Color.Black;
-        spriteBatch.DrawString(_font, _updatesPerSecondText, Vector2.Zero, rateColor);
-        spriteBatch.DrawString(_font, _drawsPerSecondText, DrawsPerSecondOffset, rateColor);
-        spriteBatch.DrawString(_font, _entityCountText, EntityCountOffset, Color.Black);
-        spriteBatch.DrawString(_font, _movingEntityCountText, MovingEntityCountOffset, Color.Black);
+        spriteBatch.DrawString(_font, _updatesPerSecondText, origin, rateColor);
+        spriteBatch.DrawString(_font, _drawsPerSecondText, origin + DrawsPerSecondOffset, rateColor);
+        spriteBatch.DrawString(_font, _entityCountText, origin + EntityCountOffset, Color.Black);
+        spriteBatch.DrawString(_font, _movingEntityCountText, origin + MovingEntityCountOffset, Color.Black);
     }
 }

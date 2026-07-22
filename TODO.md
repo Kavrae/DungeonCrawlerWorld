@@ -20,15 +20,6 @@ Affected: `Presentation/UI/MapWindow.cs` (`BuildOccupantsByPosition`), `Presenta
 - Can stack to increase damage and duration (so multiplicatively worse)
 - Gets worse for each movement the entity ends in lava
 
-## Window Chrome
-
-All phases (E/A0/B/A1/C/D) are done: 3D inset/outset borders, unified hit-test/raise-to-
-front/two-tier windows, mouse down/up pressed visual (firing on release), drag header to move
-(notification popups only -- map/debug/selection windows deliberately stay fixed), and drag
-borders to resize (10px grab zone on every edge/corner, directional OS cursor, clamped to stay
-on-screen/within the parent's content rect). See the implementation plan for the phase
-breakdown if any of this needs revisiting.
-
 ## Body parts
 
 - Plan first

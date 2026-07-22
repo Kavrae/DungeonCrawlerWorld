@@ -174,6 +174,14 @@ public class Window
     public bool CanUserScrollHorizontal { get; set; }
     public bool CanUserScrollVertical { get; set; }
 
+    protected virtual bool RequiresContentViewport => CanUserScrollHorizontal || CanUserScrollVertical;
+
+    /*========Scroll========*/
+    private Vector2 _scrollOffset;
+    public Vector2 ScrollOffset => _scrollOffset;
+    protected Vector2 _maxScrollOffset;
+    public Vector2 MaxScrollOffset => _maxScrollOffset;
+
     public Window(FontService fontService, WindowService windowService, GlyphRenderer glyphRenderer)
     {
         ArgumentNullException.ThrowIfNull(fontService);
@@ -240,14 +248,17 @@ public class Window
         CanUserResize = chrome?.CanUserResize ?? false;
         CanUserScrollHorizontal = chrome?.CanUserScrollHorizontal ?? false;
         CanUserScrollVertical = chrome?.CanUserScrollVertical ?? false;
+
+        /*========Scroll========*/
+        _scrollOffset = Vector2.Zero;
+        _maxScrollOffset = Vector2.Zero;
     }
 
     public virtual void Initialize()
     {
         MeasureAndArrange();
 
-        _cameraTransform = Matrix.CreateRotationZ(0) * // camera rotation, default 0
-                           Matrix.CreateScale(new Vector3(1, 1, 1)); // TODO zoom
+        RecalculateCameraTransform(); // TODO zoom/rotation, if ever needed -- see RecalculateCameraTransform.
 
         if (_title.ShowTitle)
         {
@@ -286,6 +297,52 @@ public class Window
         _content?.Initialize(this);
 
         Opened?.Invoke(this);
+    }
+
+    /// <summary>
+    /// Scrolls this window's content by delta, clamped to [0, MaxScrollOffset] -- an axis
+    /// CanUserScrollHorizontal/Vertical doesn't allow is held at zero regardless of delta, so
+    /// a window that only opts into vertical scrolling (the common case -- see TextWindow,
+    /// where word-wrap already keeps lines within the content width) simply ignores any
+    /// horizontal delta a caller passes. Folded into CameraTransform (see
+    /// RecalculateCameraTransform) rather than requiring every DrawContent implementation to
+    /// manually offset its own draw calls -- content keeps drawing in the same local
+    /// coordinates it always has; RequiresContentViewport's per-window viewport (see Draw)
+    /// picks the offset up automatically.
+    /// </summary>
+    public void ScrollBy(Vector2 delta)
+    {
+        var desiredOffset = _scrollOffset + delta;
+        _scrollOffset = new Vector2(
+            CanUserScrollHorizontal ? MathHelper.Clamp(desiredOffset.X, 0, _maxScrollOffset.X) : 0,
+            CanUserScrollVertical ? MathHelper.Clamp(desiredOffset.Y, 0, _maxScrollOffset.Y) : 0);
+
+        RecalculateCameraTransform();
+    }
+
+    /// <summary>
+    /// Sets how far this window's content can scroll (see ScrollBy) and re-clamps the current
+    /// ScrollOffset into the new bounds -- e.g. TextWindow calls this whenever its wrapped text
+    /// or content size changes, since a resize or text update can shrink MaxScrollOffset below
+    /// wherever the window was previously scrolled to.
+    /// </summary>
+    protected void SetMaxScrollOffset(Vector2 maxScrollOffset)
+    {
+        _maxScrollOffset = Vector2.Max(Vector2.Zero, maxScrollOffset);
+        ScrollBy(Vector2.Zero);
+    }
+
+    /// <summary>
+    /// -ScrollOffset as a translation: content drawn in local coordinates (i.e. under
+    /// RequiresContentViewport's own Begin(..., CameraTransform) pass, see Draw) shifts by
+    /// this before the per-window viewport maps it onto screen, which is what makes scrolling
+    /// work without any DrawContent implementation needing to know about ScrollOffset itself.
+    /// No rotation/zoom yet -- CameraTransform predates ScrollOffset and was already a
+    /// placeholder for both; scrolling is the first thing to actually need it.
+    /// </summary>
+    private void RecalculateCameraTransform()
+    {
+        _cameraTransform = Matrix.CreateTranslation(-_scrollOffset.X, -_scrollOffset.Y, 0);
     }
 
     public virtual void LoadContent()
@@ -344,18 +401,26 @@ public class Window
                 spriteBatch.Draw(unitRectangle, _contentState.Rectangle, _contentState.BackgroundColor);
             }
 
-            spriteBatch.End();
+            if (RequiresContentViewport)
+            {
+                // A dedicated viewport translates this window's local-coordinate content onto
+                // screen and hard-clips whatever overflows it
+                spriteBatch.End();
 
-            // Creating a separate viewport for the content allows windows to be individually scrolled and clipped.
-            var previousViewport = graphicsDevice.Viewport;
-            graphicsDevice.Viewport = WindowViewport;
-            spriteBatch.Begin(SpriteSortMode.Deferred, BlendState.AlphaBlend, null, null, null, null, CameraTransform);
+                var previousViewport = graphicsDevice.Viewport;
+                graphicsDevice.Viewport = WindowViewport;
+                spriteBatch.Begin(SpriteSortMode.Deferred, BlendState.AlphaBlend, null, null, null, null, CameraTransform);
 
-            DrawContent(gameTime, spriteBatch, unitRectangle);
+                DrawContent(gameTime, spriteBatch, unitRectangle);
 
-            spriteBatch.End();
-            graphicsDevice.Viewport = previousViewport;
-            spriteBatch.Begin(SpriteSortMode.Deferred, BlendState.AlphaBlend);
+                spriteBatch.End();
+                graphicsDevice.Viewport = previousViewport;
+                spriteBatch.Begin(SpriteSortMode.Deferred, BlendState.AlphaBlend);
+            }
+            else
+            {
+                DrawContent(gameTime, spriteBatch, unitRectangle);
+            }
 
             foreach (var childWindow in _childWindows)
             {
@@ -653,35 +718,9 @@ public class Window
 
         _childWindows.Insert(clampedInsertIndex, newChildWindow);
 
-        for (var updateIndex = clampedInsertIndex; updateIndex < _childWindows.Count; updateIndex++)
-        {
-            if (_childWindowTileMode == WindowTileMode.Floating)
-            {
-                // Let the window's creator determine its relative position and draw order.
-            }
-            else if (updateIndex == 0)
-            {
-                newChildWindow._geometry.RelativePosition = new Vector2(0, 0);
-            }
-            else
-            {
-                var previousChildWindow = _childWindows[updateIndex - 1];
-                if (_childWindowTileMode == WindowTileMode.Horizontal)
-                {
-                    newChildWindow._geometry.RelativePosition = new Vector2(
-                        previousChildWindow._geometry.RelativePosition.X + previousChildWindow._geometry.CurrentSize.X,
-                        previousChildWindow._geometry.RelativePosition.Y);
-                }
-                else if (_childWindowTileMode == WindowTileMode.Vertical)
-                {
-                    newChildWindow._geometry.RelativePosition = new Vector2(
-                        previousChildWindow._geometry.RelativePosition.X,
-                        previousChildWindow._geometry.RelativePosition.Y + previousChildWindow._geometry.CurrentSize.Y);
-                }
-            }
-
-            newChildWindow.Initialize();
-        }
+        // Retiles from the insertion point onward, not just newChildWindow itself -- inserting
+        // anywhere but the end shifts every sibling after it one slot down the tiling axis too.
+        RetileChildrenFrom(clampedInsertIndex);
 
         // A WrapContent parent's own size depends on its children's -- re-fit around the
         // newly added child. Gated to WrapContent only: for Fixed/Fill/Minimized parents the
@@ -694,7 +733,7 @@ public class Window
         }
     }
 
-    /// <summary>Empty and re-add so sibling positions recalculate around the removed window.</summary>
+    /// <summary>Removes the child, then retiles everything after it so later siblings close the gap instead of keeping the removed window's slot as dead space.</summary>
     public void RemoveChildWindow(Guid windowId)
     {
         var childWindowIndex = _childWindows.FindIndex(childWindow => childWindow.WindowId == windowId);
@@ -704,16 +743,57 @@ public class Window
         }
 
         _childWindows.RemoveAt(childWindowIndex);
-        for (var index = childWindowIndex; index < _childWindows.Count; index++)
-        {
-            _childWindows[index].Initialize();
-        }
+        RetileChildrenFrom(childWindowIndex);
 
         // See the matching comment in AddChildWindow -- a WrapContent parent needs to shrink
         // to fit around the removed child; other modes don't depend on children for sizing.
         if (_geometry.DisplayMode == WindowDisplayMode.WrapContent)
         {
             MeasureAndArrange();
+        }
+    }
+
+    /// <summary>
+    /// Recomputes RelativePosition for every child from startIndex onward against
+    /// _childWindowTileMode -- Horizontal/Vertical chain each child off the previous sibling's
+    /// now-current position+size (in that order: Initialize below re-measures a child's
+    /// CurrentSize, which the *next* iteration's chaining depends on), Floating leaves position
+    /// alone entirely (the creator owns it). Shared by AddChildWindow (inserting anywhere but
+    /// the end shifts every later sibling down the tiling axis) and RemoveChildWindow (closing
+    /// the gap the removed window leaves behind) rather than each hand-rolling the same chain.
+    /// </summary>
+    private void RetileChildrenFrom(int startIndex)
+    {
+        for (var index = startIndex; index < _childWindows.Count; index++)
+        {
+            var childWindow = _childWindows[index];
+
+            if (_childWindowTileMode == WindowTileMode.Floating)
+            {
+                // Let the window's creator determine its relative position and draw order.
+            }
+            else if (index == 0)
+            {
+                childWindow._geometry.RelativePosition = new Vector2(0, 0);
+            }
+            else
+            {
+                var previousChildWindow = _childWindows[index - 1];
+                if (_childWindowTileMode == WindowTileMode.Horizontal)
+                {
+                    childWindow._geometry.RelativePosition = new Vector2(
+                        previousChildWindow._geometry.RelativePosition.X + previousChildWindow._geometry.CurrentSize.X,
+                        previousChildWindow._geometry.RelativePosition.Y);
+                }
+                else if (_childWindowTileMode == WindowTileMode.Vertical)
+                {
+                    childWindow._geometry.RelativePosition = new Vector2(
+                        previousChildWindow._geometry.RelativePosition.X,
+                        previousChildWindow._geometry.RelativePosition.Y + previousChildWindow._geometry.CurrentSize.Y);
+                }
+            }
+
+            childWindow.Initialize();
         }
     }
 

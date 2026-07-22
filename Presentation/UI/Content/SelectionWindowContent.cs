@@ -1,5 +1,6 @@
 using Engine.Diagnostics;
 using Engine.ECS.Components;
+using Engine.ECS.Components.Stores;
 using Game.Modules.Core.Components;
 using Game.World;
 using Microsoft.Xna.Framework;
@@ -24,6 +25,14 @@ public sealed class SelectionWindowContent(
     WindowService windowService) : IWindowContent
 {
     private const int ComponentRefreshInterval = 10; // Most components update every 10 frames, so more frequent refreshes are wasted work.
+
+    // Resolved once and reused rather than re-resolved via ComponentManager's dictionary
+    // lookup on every call -- RecomputeSelectedEntityIds runs every frame (see Update), so
+    // occupancyPool/transformPool were otherwise being looked up 60 times a second for no
+    // reason. Matches the pattern MapWindow already uses for its own pool references.
+    private readonly PackedComponentPool<OccupancyComponent> _occupancyPool = componentManager.GetPackedPool<OccupancyComponent>();
+    private readonly DirectComponentPool<TransformComponent> _transformPool = componentManager.GetDirectPool<TransformComponent>();
+    private readonly DirectComponentPool<DisplayTextComponent> _displayTextPool = componentManager.GetDirectPool<DisplayTextComponent>();
 
     private readonly Dictionary<int, List<TextWindow>> _entityDebugWindows = [];
     private readonly HashSet<int> _visibleDebugEntityIds = [];
@@ -127,16 +136,14 @@ public sealed class SelectionWindowContent(
         // the checks above alone would silently drop them from the debug panel -- cross-check
         // the (small, sparse) Occupancy pool directly against the selected XY, filtered to
         // the current layer the same way the Blocking check above is.
-        var occupancyPool = componentManager.GetPackedPool<OccupancyComponent>();
-        var transformPool = componentManager.GetDirectPool<TransformComponent>();
-        foreach (var entityId in occupancyPool.EntityIds)
+        foreach (var entityId in _occupancyPool.EntityIds)
         {
-            if (!transformPool.Has(entityId))
+            if (!_transformPool.Has(entityId))
             {
                 continue;
             }
 
-            var position = transformPool.GetReadonly(entityId).Position;
+            var position = _transformPool.GetReadonly(entityId).Position;
             if (position.X == selected.X && position.Y == selected.Y && position.Z == currentMapLayer)
             {
                 _selectedEntityIds.Add(entityId);
@@ -147,9 +154,8 @@ public sealed class SelectionWindowContent(
     private List<TextWindow> CreateDebugWindowsForEntity(int entityId)
     {
         var createdWindows = new List<TextWindow>();
-        var displayTextPool = componentManager.GetDirectPool<DisplayTextComponent>();
 
-        if (displayTextPool.Has(entityId))
+        if (_displayTextPool.Has(entityId))
         {
             // Bordered, and thicker than a component window's border (BorderSize 2 vs 1) --
             // this is the only visual break between one entity's block of component windows
@@ -161,7 +167,7 @@ public sealed class SelectionWindowContent(
                 Hierarchy = new WindowHierarchyOptions { CanContainChildWindows = false },
                 Layout = new WindowLayoutOptions { MaximumSize = _hostWindow.ContentSize, DisplayMode = WindowDisplayMode.WrapContent },
                 Chrome = new WindowChromeOptions { ShowTitle = false, ShowBorder = true, BorderSize = new Vector2(2, 2) },
-                Text = new TextOptions { Text = displayTextPool.GetReadonly(entityId).Name },
+                Text = new TextOptions { Text = _displayTextPool.GetReadonly(entityId).Name },
             });
             _hostWindow.AddChildWindow(nameWindow);
             createdWindows.Add(nameWindow);
@@ -194,11 +200,10 @@ public sealed class SelectionWindowContent(
         }
 
         var windowIndex = 0;
-        var displayTextPool = componentManager.GetDirectPool<DisplayTextComponent>();
 
-        if (displayTextPool.Has(entityId) && windowIndex < windows.Count)
+        if (_displayTextPool.Has(entityId) && windowIndex < windows.Count)
         {
-            windows[windowIndex].UpdateText(displayTextPool.GetReadonly(entityId).Name);
+            windows[windowIndex].UpdateText(_displayTextPool.GetReadonly(entityId).Name);
             windowIndex++;
         }
 

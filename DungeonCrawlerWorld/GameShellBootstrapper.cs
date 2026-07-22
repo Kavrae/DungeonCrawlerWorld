@@ -58,6 +58,8 @@ public static class GameShellBootstrapper
                 ShowBorder = true,
                 ShowTitle = true,
                 TitleText = "Dungeon Crawler World",
+                CanUserScrollHorizontal = true,
+                CanUserScrollVertical = true,
             },
         });
         mapWindow.Initialize();

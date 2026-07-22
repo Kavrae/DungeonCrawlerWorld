@@ -34,7 +34,8 @@ public class TextWindow : Window
     {
         if (!string.IsNullOrWhiteSpace(DisplayText.FormattedText))
         {
-            spriteBatch.DrawString(ContentFont, DisplayText.FormattedText, new Vector2(LinePadding, LinePadding), TextColor);
+            var origin = RequiresContentViewport ? Vector2.Zero : ContentAbsolutePosition;
+            spriteBatch.DrawString(ContentFont, DisplayText.FormattedText, origin + new Vector2(LinePadding, LinePadding), TextColor);
         }
     }
 
@@ -43,6 +44,7 @@ public class TextWindow : Window
         base.RecalculateFixedWindowSize();
 
         ReformatDisplayText();
+        UpdateScrollBounds();
     }
 
     protected override void RecalculateFillWindowSize()
@@ -50,22 +52,26 @@ public class TextWindow : Window
         base.RecalculateFillWindowSize();
 
         ReformatDisplayText();
+        UpdateScrollBounds();
     }
 
     protected override void RecalculateWrapContentWindowSize()
     {
         // Only a child window's MaximumSize is actually a parent-relative boundary (inherited
-        // as _parentWindow.ContentSize, see BuildWindow) -- subtracting RelativePosition.X
-        // there gives the width still available after this child's own offset within the
-        // parent. A root window's MaximumSize (like a notification popup's explicit 400x300
-        // cap) is just a literal width bound with no parent edge to offset against; subtracting
-        // RelativePosition.X from it pinned the window's right edge to a fixed screen x
-        // (MaximumSize.X) regardless of position -- invisible while notifications were
-        // stationary, but visible as "only the right edge doesn't follow the drag" once Window
-        // Chrome Phase C made them draggable.
+        // as _parentWindow.ContentSize, see BuildWindow) -- subtracting RelativePosition there
+        // gives the space still available after this child's own offset within the parent. A
+        // root window's MaximumSize (like a notification popup's explicit cap) is just a
+        // literal bound with no parent edge to offset against; subtracting RelativePosition.X
+        // from it used to pin the window's right edge to a fixed screen x regardless of
+        // position -- invisible while notifications were stationary, but visible as "only the
+        // right edge doesn't follow the drag" once Window Chrome Phase C made them draggable.
+        // Y has the same shape as X here, so it gets the same ParentWindow-is-null check.
         var maximumContentWidth = ParentWindow is not null
             ? _geometry.MaximumSize.X - _geometry.RelativePosition.X - BorderInsetDoubled.X
             : _geometry.MaximumSize.X - BorderInsetDoubled.X;
+        var maximumContentHeight = (ParentWindow is not null
+            ? _geometry.MaximumSize.Y - _geometry.RelativePosition.Y
+            : _geometry.MaximumSize.Y) - BorderInsetDoubled.Y - TitleInsetHeight;
 
         // Wrap against the maximum first (this is the width word-wrap decisions need), then
         // shrink the window itself to the widest line that wrapping actually produced --
@@ -81,7 +87,15 @@ public class TextWindow : Window
             _contentState.Size.X = System.Math.Min(System.Math.Max(_contentState.Size.X, MinimumTitleWidth()), maximumContentWidth);
         }
 
-        _contentState.Size.Y = ContentFont.LineHeight * DisplayText.LineCount + LinePadding * (DisplayText.LineCount + 1);
+        var wrappedTextHeight = TextContentHeight();
+
+        // Clamped to maximumContentHeight, unlike width, which always has room to shrink into
+        // (the window just gets narrower). Text with more lines than fit has no analogous
+        // shrink-to-fit fallback, so without this clamp the window would grow past its own
+        // MaximumSize instead of respecting it -- CanUserScrollVertical (see
+        // NotificationCenter) is what makes the clamped-off remainder still reachable, via
+        // UpdateScrollBounds below.
+        _contentState.Size.Y = System.Math.Min(wrappedTextHeight, maximumContentHeight);
 
         _geometry.CurrentSize = _contentState.Size;
         if (_title.ShowTitle)
@@ -91,6 +105,8 @@ public class TextWindow : Window
             _geometry.CurrentSize.Y += _title.Size.Y;
         }
         _geometry.CurrentSize += BorderInsetDoubled;
+
+        UpdateScrollBounds();
     }
 
     private float WidestLineWidth()
@@ -108,6 +124,19 @@ public class TextWindow : Window
 
         return widest;
     }
+
+    private void UpdateScrollBounds()
+    {
+        var maxScrollY = System.Math.Max(0, TextContentHeight() - _contentState.Size.Y);
+
+        // Word-wrap already keeps lines within the content width, but a single word too long
+        // to break still overflows one line horizontally -- so this isn't always zero.
+        var maxScrollX = System.Math.Max(0, WidestLineWidth() + ContentPadding.X * 2 - _contentState.Size.X);
+
+        SetMaxScrollOffset(new Vector2(maxScrollX, maxScrollY));
+    }
+
+    private float TextContentHeight() => ContentFont.LineHeight * DisplayText.LineCount + LinePadding * 2;
 
     public void ReformatDisplayText()
     {
