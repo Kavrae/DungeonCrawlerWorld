@@ -73,7 +73,7 @@ public static class GameShellBootstrapper
                 Size = new Vector2(300, 24),
                 DisplayMode = WindowDisplayMode.Fixed,
             },
-            Chrome = new WindowChromeOptions { ShowBorder = true },
+            Chrome = new WindowChromeOptions { ShowBorder = true, CanUserFocus = false },
         });
         debugWindow.SetContent(new DebugWindowContent(presentation.FontService, ecsContext.EntityManager, ecsContext.ComponentManager));
         debugWindow.Initialize();

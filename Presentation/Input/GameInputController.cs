@@ -1,4 +1,3 @@
-using Engine.Math;
 using Microsoft.Xna.Framework;
 using Microsoft.Xna.Framework.Input;
 using Presentation.UI;
@@ -8,7 +7,7 @@ namespace Presentation.Input;
 /// <summary>
 /// Translates raw keyboard/mouse state into the app's UI-level interactions
 /// </summary>
-public sealed class GameInputController(MapWindow mapWindow, List<Window> rootWindows, List<Window> alwaysOnTopWindows, Vector2 screenSize)
+public sealed class GameInputController(List<Window> rootWindows, List<Window> alwaysOnTopWindows, Vector2 screenSize)
 {
     /// <summary>MouseState.ScrollWheelValue's units per standard wheel detent -- the FNA/XNA convention, not configurable per-device.</summary>
     private const float WheelNotchValue = 120f;
@@ -18,14 +17,13 @@ public sealed class GameInputController(MapWindow mapWindow, List<Window> rootWi
 
     private KeyboardState _previousKeyboardState;
     private MouseState _previousMouseState;
-    private ZoomLevel _currentZoomLevel = ZoomLevel.Team;
 
     private WindowInteraction _activeInteraction = WindowInteraction.NotHit;
     private Vector2 _dragStartMousePosition;
     private Vector2 _dragStartRelativePosition;
     private Vector2 _dragStartSize;
 
-    public bool IsPaused { get; private set; }
+    private Window? _focusedWindow;
 
     /// <summary>
     /// The title button currently held down by the mouse, if any -- null the rest of the
@@ -36,6 +34,12 @@ public sealed class GameInputController(MapWindow mapWindow, List<Window> rootWi
 
     /// <summary>The drag/resize interaction currently in progress (or WindowInteraction.NotHit if none). Move is wired to SetRelativePosition and Resize to SetBounds, both each held frame -- see ComputeResize for the resize math.</summary>
     internal WindowInteraction ActiveInteraction => _activeInteraction;
+
+    /// <summary>The window currently holding keyboard focus, if any -- see SetFocus/RouteKeyPressesToFocusedWindow/CycleFocus.</summary>
+    internal Window? FocusedWindow => _focusedWindow;
+
+    /// <summary>Focuses a window from outside -- GameLoop calls this once at startup to default-focus the map window, since a window's own hotkeys (see RouteHotkeysToFocusedWindow) only fire while it holds focus.</summary>
+    public void FocusWindow(Window window) => SetFocus(window);
 
     /// <summary>Window.WindowRelativePosition captured at the start of the current drag -- meaningless when ActiveInteraction.Kind is None. Move's per-frame SetRelativePosition is this plus DragDelta; ComputeResize uses it as the Left/Top-edge resize baseline.</summary>
     internal Vector2 DragStartRelativePosition => _dragStartRelativePosition;
@@ -58,106 +62,21 @@ public sealed class GameInputController(MapWindow mapWindow, List<Window> rootWi
     /// </summary>
     internal void Update(KeyboardState keyboardState, MouseState mouseState)
     {
-        if (IsKeyPressed(keyboardState, Keys.Space))
-        {
-            IsPaused = !IsPaused;
-        }
-
-        var scrollChange = Point.Zero;
-        if (keyboardState.IsKeyDown(Keys.W))
-        {
-            scrollChange.Y -= 1;
-        }
-        if (keyboardState.IsKeyDown(Keys.S))
-        {
-            scrollChange.Y += 1;
-        }
-        if (keyboardState.IsKeyDown(Keys.A))
-        {
-            scrollChange.X -= 1;
-        }
-        if (keyboardState.IsKeyDown(Keys.D))
-        {
-            scrollChange.X += 1;
-        }
-        if (scrollChange != Point.Zero)
-        {
-            mapWindow.UpdateScrollPosition(scrollChange);
-        }
-
-        if (IsKeyPressed(keyboardState, Keys.OemPlus) || IsKeyPressed(keyboardState, Keys.Add))
-        {
-            CycleZoom(-1);
-        }
-        if (IsKeyPressed(keyboardState, Keys.OemMinus) || IsKeyPressed(keyboardState, Keys.Subtract))
-        {
-            CycleZoom(1);
-        }
-
-        if (IsKeyPressed(keyboardState, Keys.PageUp))
-        {
-            mapWindow.ChangeLayer(1);
-        }
-        if (IsKeyPressed(keyboardState, Keys.PageDown))
-        {
-            mapWindow.ChangeLayer(-1);
-        }
+        RouteHotkeysToFocusedWindow(keyboardState);
+        HandleFocusCycling(keyboardState);
+        RouteKeyPressesToFocusedWindow(keyboardState);
 
         if (mouseState.LeftButton == ButtonState.Pressed && _previousMouseState.LeftButton == ButtonState.Released)
         {
-            var clickPosition = new Point(mouseState.X, mouseState.Y);
-
-            _activeInteraction = TryHitTestInteraction(clickPosition);
-            PressedButton = _activeInteraction.Button;
-            PressedButton?.SetPressed(true);
-            DragDelta = Vector2.Zero;
-
-            if (_activeInteraction.Window is not null)
-            {
-                RaiseToFront(_activeInteraction.Window);
-
-                if (_activeInteraction.Kind != WindowInteractionKind.None)
-                {
-                    _dragStartMousePosition = new Vector2(mouseState.X, mouseState.Y);
-                    _dragStartRelativePosition = _activeInteraction.Window.WindowRelativePosition;
-                    _dragStartSize = _activeInteraction.Window.WindowCurrentSize;
-                }
-            }
+            HandleMousePress(mouseState);
         }
         else if (mouseState.LeftButton == ButtonState.Released && _previousMouseState.LeftButton == ButtonState.Pressed)
         {
-            // Fires on release, not press -- standard button convention (press only starts
-            // the pressed visual above; release commits, re-hit-testing the same window at
-            // the release position so a button/title/content click that's been dragged off
-            // its target quietly does nothing rather than firing against whatever else the
-            // mouse happens to be over). This is also the only way the pressed visual is ever
-            // actually observable: firing on press meant a destructive action (Close) usually
-            // destroyed the button before a held frame could even render.
-            _activeInteraction.Window?.HandleClick(new Point(mouseState.X, mouseState.Y));
-
-            PressedButton?.SetPressed(false);
-            PressedButton = null;
-            _activeInteraction = WindowInteraction.NotHit;
-            DragDelta = Vector2.Zero;
+            HandleMouseRelease(mouseState);
         }
         else if (mouseState.LeftButton == ButtonState.Pressed && _activeInteraction.Kind != WindowInteractionKind.None)
         {
-            // Held, mid-drag.
-            DragDelta = new Vector2(mouseState.X, mouseState.Y) - _dragStartMousePosition;
-
-            if (_activeInteraction.Kind == WindowInteractionKind.Move && _activeInteraction.Window is not null)
-            {
-                var window = _activeInteraction.Window;
-                var desiredPosition = _dragStartRelativePosition + DragDelta;
-                window.SetRelativePosition(ClampMoveToBounds(desiredPosition, window.WindowCurrentSize, GetPositionBounds(window)));
-            }
-            else if (_activeInteraction.Kind == WindowInteractionKind.Resize && _activeInteraction.Window is not null)
-            {
-                var window = _activeInteraction.Window;
-                var (relativePosition, size) = ComputeResize(window, _activeInteraction.Edges, _dragStartRelativePosition, _dragStartSize, DragDelta);
-                (relativePosition, size) = ClampResizeToBounds(relativePosition, size, GetPositionBounds(window));
-                window.SetBounds(relativePosition, size);
-            }
+            HandleMouseDrag(mouseState);
         }
 
         UpdateMouseWheelScroll(mouseState);
@@ -165,6 +84,92 @@ public sealed class GameInputController(MapWindow mapWindow, List<Window> rootWi
 
         _previousKeyboardState = keyboardState;
         _previousMouseState = mouseState;
+    }
+
+    /// <summary>
+    /// Routes the whole keyboard state to whichever window is focused, once per frame (see
+    /// Window.HandleHotkeys) -- e.g. MapWindow's WASD/zoom/PageUp/PageDown/Space, or a future
+    /// inventory window's own navigation keys. GameInputController itself knows nothing about
+    /// what any window's hotkeys are; it only knows which window is focused.
+    /// </summary>
+    private void RouteHotkeysToFocusedWindow(KeyboardState keyboardState) => _focusedWindow?.HandleHotkeys(keyboardState, _previousKeyboardState);
+
+    /// <summary>Tab itself must stay unconditional -- it's how focus moves in the first place, so it can never be gated behind already holding focus.</summary>
+    private void HandleFocusCycling(KeyboardState keyboardState)
+    {
+        if (!IsKeyPressed(keyboardState, Keys.Tab))
+        {
+            return;
+        }
+
+        var direction = keyboardState.IsKeyDown(Keys.LeftShift) || keyboardState.IsKeyDown(Keys.RightShift)
+            ? -1
+            : 1;
+        CycleFocus(direction);
+    }
+
+    private void HandleMousePress(MouseState mouseState)
+    {
+        var clickPosition = new Point(mouseState.X, mouseState.Y);
+
+        _activeInteraction = TryHitTestInteraction(clickPosition);
+        PressedButton = _activeInteraction.Button;
+        PressedButton?.SetPressed(true);
+        DragDelta = Vector2.Zero;
+
+        if (_activeInteraction.Window is not null)
+        {
+            RaiseToFront(_activeInteraction.Window);
+
+            if (_activeInteraction.Window.CanUserFocus)
+            {
+                SetFocus(_activeInteraction.Window);
+            }
+
+            if (_activeInteraction.Kind != WindowInteractionKind.None)
+            {
+                _dragStartMousePosition = new Vector2(mouseState.X, mouseState.Y);
+                _dragStartRelativePosition = _activeInteraction.Window.WindowRelativePosition;
+                _dragStartSize = _activeInteraction.Window.WindowCurrentSize;
+            }
+        }
+    }
+
+    /// <summary>
+    /// Fires on release, not press -- standard button convention (press only starts the pressed
+    /// visual; release commits, re-hit-testing the same window at the release position so a
+    /// button/title/content click that's been dragged off its target quietly does nothing rather
+    /// than firing against whatever else the mouse happens to be over). This is also the only way
+    /// the pressed visual is ever actually observable: firing on press meant a destructive action
+    /// (Close) usually destroyed the button before a held frame could even render.
+    /// </summary>
+    private void HandleMouseRelease(MouseState mouseState)
+    {
+        _activeInteraction.Window?.HandleClick(new Point(mouseState.X, mouseState.Y));
+
+        PressedButton?.SetPressed(false);
+        PressedButton = null;
+        _activeInteraction = WindowInteraction.NotHit;
+        DragDelta = Vector2.Zero;
+    }
+
+    private void HandleMouseDrag(MouseState mouseState)
+    {
+        DragDelta = new Vector2(mouseState.X, mouseState.Y) - _dragStartMousePosition;
+
+        if (_activeInteraction.Kind == WindowInteractionKind.Move && _activeInteraction.Window is not null)
+        {
+            var window = _activeInteraction.Window;
+            var desiredPosition = _dragStartRelativePosition + DragDelta;
+            window.SetRelativePosition(ClampMoveToBounds(desiredPosition, window.WindowCurrentSize, GetPositionBounds(window)));
+        }
+        else if (_activeInteraction.Kind == WindowInteractionKind.Resize && _activeInteraction.Window is not null)
+        {
+            var window = _activeInteraction.Window;
+            var (relativePosition, size) = ComputeResize(window, _activeInteraction.Edges, _dragStartRelativePosition, _dragStartSize, DragDelta);
+            (relativePosition, size) = ClampResizeToBounds(relativePosition, size, GetPositionBounds(window));
+            window.SetBounds(relativePosition, size);
+        }
     }
 
     /// <summary>
@@ -228,11 +233,7 @@ public sealed class GameInputController(MapWindow mapWindow, List<Window> rootWi
     {
         window.RaiseToFront();
 
-        var rootAncestor = window;
-        while (rootAncestor.ParentWindow is not null)
-        {
-            rootAncestor = rootAncestor.ParentWindow;
-        }
+        var rootAncestor = GetRootAncestor(window);
 
         if (rootWindows.Remove(rootAncestor))
         {
@@ -241,6 +242,115 @@ public sealed class GameInputController(MapWindow mapWindow, List<Window> rootWi
         else if (alwaysOnTopWindows.Remove(rootAncestor))
         {
             alwaysOnTopWindows.Add(rootAncestor);
+        }
+    }
+
+    /// <summary>Walks up ParentWindow to the top-level ancestor -- shared by RaiseToFront and CycleFocus, both of which operate on whichever root/always-on-top window a given window belongs to, not the window itself.</summary>
+    private static Window GetRootAncestor(Window window)
+    {
+        var rootAncestor = window;
+        while (rootAncestor.ParentWindow is not null)
+        {
+            rootAncestor = rootAncestor.ParentWindow;
+        }
+
+        return rootAncestor;
+    }
+
+    /// <summary>
+    /// Subscribes to the new window's Closed event so a focused window closing -- and
+    /// potentially being pooled and reused for something else entirely (see WindowService) --
+    /// can't leave this holding a stale reference that treats the reused instance as focused.
+    /// </summary>
+    private void SetFocus(Window? newWindow)
+    {
+        if (_focusedWindow == newWindow)
+        {
+            return;
+        }
+
+        if (_focusedWindow is not null)
+        {
+            _focusedWindow.Closed -= OnFocusedWindowClosed;
+            _focusedWindow.SetFocused(false);
+        }
+
+        _focusedWindow = newWindow;
+
+        if (_focusedWindow is not null)
+        {
+            _focusedWindow.SetFocused(true);
+            _focusedWindow.Closed += OnFocusedWindowClosed;
+        }
+    }
+
+    private void OnFocusedWindowClosed(Window closedWindow)
+    {
+        closedWindow.Closed -= OnFocusedWindowClosed;
+
+        if (_focusedWindow == closedWindow)
+        {
+            _focusedWindow = null;
+        }
+    }
+
+    /// <summary>
+    /// Advances focus to the next (direction 1) or previous (direction -1) focusable root
+    /// window (Window.CanUserFocus -- e.g. the debug stats window opts out, see
+    /// GameShellBootstrapper), wrapping past either end. rootWindows only (map/debug/
+    /// selection), not alwaysOnTopWindows: notifications are a separate tier dismissed via
+    /// their own close/minimize button, not something a user tabs to.
+    /// </summary>
+    private void CycleFocus(int direction)
+    {
+        var focusableRootWindows = new List<Window>();
+        foreach (var window in rootWindows)
+        {
+            if (window.CanUserFocus)
+            {
+                focusableRootWindows.Add(window);
+            }
+        }
+
+        if (focusableRootWindows.Count == 0)
+        {
+            return;
+        }
+
+        var currentRoot = _focusedWindow is not null
+            ? GetRootAncestor(_focusedWindow)
+            : null;
+        var currentIndex = currentRoot is not null
+            ? focusableRootWindows.IndexOf(currentRoot)
+            : -1;
+
+        // Nothing focused yet: forward starts at the first window, backward at the last --
+        // matching standard Tab/Shift+Tab behavior from "nothing focused" -- rather than both
+        // directions landing on the same window, which naive modulo wrapping from -1 would do.
+        var unfocusedStartIndex = direction > 0
+            ? 0
+            : focusableRootWindows.Count - 1;
+        var nextIndex = currentIndex < 0
+            ? unfocusedStartIndex
+            : ((currentIndex + direction) % focusableRootWindows.Count + focusableRootWindows.Count) % focusableRootWindows.Count;
+
+        SetFocus(focusableRootWindows[nextIndex]);
+    }
+
+    /// <summary>Forwards every key newly pressed this frame to whichever window holds focus. Tab is excluded since it's already claimed above for focus-cycling.</summary>
+    private void RouteKeyPressesToFocusedWindow(KeyboardState keyboardState)
+    {
+        if (_focusedWindow is null)
+        {
+            return;
+        }
+
+        foreach (var key in keyboardState.GetPressedKeys())
+        {
+            if (key != Keys.Tab && _previousKeyboardState.IsKeyUp(key))
+            {
+                _focusedWindow.HandleKeyPress(key);
+            }
         }
     }
 
@@ -405,14 +515,5 @@ public sealed class GameInputController(MapWindow mapWindow, List<Window> rootWi
         return MouseCursor.Arrow;
     }
 
-    private bool IsKeyPressed(KeyboardState current, Keys key) => current.IsKeyDown(key) && _previousKeyboardState.IsKeyUp(key);
-
-    private void CycleZoom(int direction)
-    {
-        var zoomLevels = Enum.GetValues<ZoomLevel>();
-        var currentIndex = Array.IndexOf(zoomLevels, _currentZoomLevel);
-        var newIndex = MathUtility.ClampInt(currentIndex + direction, 0, zoomLevels.Length - 1);
-        _currentZoomLevel = zoomLevels[newIndex];
-        mapWindow.UpdateZoomLevel(_currentZoomLevel);
-    }
+    private bool IsKeyPressed(KeyboardState current, Keys key) => Window.WasKeyPressed(current, _previousKeyboardState, key);
 }

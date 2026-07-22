@@ -16,5 +16,6 @@ internal sealed class WindowTitleState
     public Vector2 AbsolutePosition;
     public Rectangle Rectangle;
     public Color BackgroundColor;
+    public Color FocusedBackgroundColor;
     public List<Button> Buttons = [];
 }

@@ -1,5 +1,6 @@
 using Microsoft.Xna.Framework;
 using Microsoft.Xna.Framework.Graphics;
+using Microsoft.Xna.Framework.Input;
 using Presentation.Fonts;
 using Presentation.Rendering;
 using Presentation.UI;
@@ -20,10 +21,14 @@ public sealed class WindowContentTests
         public Window? InitializedWith { get; private set; }
         public int UpdateCount { get; private set; }
         public int DrawContentCount { get; private set; }
+        public List<Keys> PressedKeys { get; } = [];
+        public int HandleHotkeysCount { get; private set; }
 
         public void Initialize(Window hostWindow) => InitializedWith = hostWindow;
         public void Update(GameTime gameTime) => UpdateCount++;
         public void DrawContent(GameTime gameTime, SpriteBatch spriteBatch, Texture2D unitRectangle) => DrawContentCount++;
+        public void HandleKeyPress(Keys key) => PressedKeys.Add(key);
+        public void HandleHotkeys(KeyboardState keyboardState, KeyboardState previousKeyboardState) => HandleHotkeysCount++;
     }
 
     private static WindowService CreateWindowService() => new(new FontService("Fonts"), new GlyphRenderer());
@@ -68,6 +73,54 @@ public sealed class WindowContentTests
         window.DrawContent(new GameTime(), null!, null!);
 
         Assert.AreEqual(1, content.DrawContentCount);
+    }
+
+    [TestMethod]
+    public void HandleKeyPress_ContentAttached_IsForwardedByDefaultVirtualMethod()
+    {
+        var windowService = CreateWindowService();
+        var window = windowService.CreateWindow<Window>(null, new WindowOptions());
+        var content = new RecordingContent();
+        window.SetContent(content);
+        window.Initialize();
+
+        window.HandleKeyPress(Keys.A);
+
+        CollectionAssert.AreEqual(new[] { Keys.A }, content.PressedKeys);
+    }
+
+    [TestMethod]
+    public void Window_WithNoContentAttached_HandleKeyPressDoesNotThrow()
+    {
+        var windowService = CreateWindowService();
+        var window = windowService.CreateWindow<Window>(null, new WindowOptions());
+        window.Initialize();
+
+        window.HandleKeyPress(Keys.A);
+    }
+
+    [TestMethod]
+    public void HandleHotkeys_ContentAttached_IsForwardedByDefaultVirtualMethod()
+    {
+        var windowService = CreateWindowService();
+        var window = windowService.CreateWindow<Window>(null, new WindowOptions());
+        var content = new RecordingContent();
+        window.SetContent(content);
+        window.Initialize();
+
+        window.HandleHotkeys(new KeyboardState(), new KeyboardState());
+
+        Assert.AreEqual(1, content.HandleHotkeysCount);
+    }
+
+    [TestMethod]
+    public void Window_WithNoContentAttached_HandleHotkeysDoesNotThrow()
+    {
+        var windowService = CreateWindowService();
+        var window = windowService.CreateWindow<Window>(null, new WindowOptions());
+        window.Initialize();
+
+        window.HandleHotkeys(new KeyboardState(), new KeyboardState());
     }
 
     [TestMethod]

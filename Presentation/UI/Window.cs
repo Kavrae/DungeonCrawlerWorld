@@ -1,6 +1,7 @@
 using FontStashSharp;
 using Microsoft.Xna.Framework;
 using Microsoft.Xna.Framework.Graphics;
+using Microsoft.Xna.Framework.Input;
 using Presentation.Fonts;
 using Presentation.Input;
 using Presentation.Rendering;
@@ -97,6 +98,14 @@ public class Window
     protected bool _isTransparent;
     public bool IsTransparent => _isTransparent;
 
+    /*========Focus========*/
+    public event Action<Window>? FocusChanged;
+
+    protected bool _isFocused;
+
+    /// <summary>True while this window holds input focus -- set by GameInputController, not this window itself.</summary>
+    public bool IsFocused => _isFocused;
+
     /*========Title========*/
     /// <summary>
     /// Internal, not protected: chrome behaviors (see IWindowChromeBehavior) live outside
@@ -124,6 +133,7 @@ public class Window
     protected float TitleInsetHeight => _title.ShowTitle ? _title.Size.Y : 0;
 
     public Color TitleColor => _title.BackgroundColor;
+    public Color FocusedTitleColor => _title.FocusedBackgroundColor;
     public List<Button> TitleButtons { get => _title.Buttons; set => _title.Buttons = value; }
 
     /*========Border========*/
@@ -173,6 +183,9 @@ public class Window
     public bool CanUserResize { get; set; }
     public bool CanUserScrollHorizontal { get; set; }
     public bool CanUserScrollVertical { get; set; }
+
+    /// <summary>Unlike the other CanUserXxx flags (opt-in, default false), this defaults to true -- every window participates in focus unless explicitly opted out.</summary>
+    public bool CanUserFocus { get; set; }
 
     protected virtual bool RequiresContentViewport => CanUserScrollHorizontal || CanUserScrollVertical;
 
@@ -224,6 +237,11 @@ public class Window
         _isVisible = layout?.IsVisible ?? true;
         _isTransparent = layout?.IsTransparent ?? false;
 
+        /*========Focus========*/
+        // Pooled windows (see WindowService) must not inherit a stale focused look from
+        // whatever they were last used for.
+        _isFocused = false;
+
         /*========Title========*/
         _title.ShowTitle = chrome?.ShowTitle ?? false;
         _title.ShowWhenMinimized = chrome?.ShowTitleWhenMinimized ?? false;
@@ -231,6 +249,7 @@ public class Window
         _title.OriginalSize = new Vector2(_geometry.OriginalSize.X, TitleFont.MeasureString(" ").Y + TitlePadding.Y * 3);
         _title.Size = _title.OriginalSize;
         _title.BackgroundColor = chrome?.TitleColor ?? Color.LightBlue;
+        _title.FocusedBackgroundColor = chrome?.FocusedTitleColor ?? Color.Gold;
         _title.Buttons = [];
 
         /*========Border========*/
@@ -248,6 +267,7 @@ public class Window
         CanUserResize = chrome?.CanUserResize ?? false;
         CanUserScrollHorizontal = chrome?.CanUserScrollHorizontal ?? false;
         CanUserScrollVertical = chrome?.CanUserScrollVertical ?? false;
+        CanUserFocus = chrome?.CanUserFocus ?? true;
 
         /*========Scroll========*/
         _scrollOffset = Vector2.Zero;
@@ -384,7 +404,10 @@ public class Window
         {
             if (!_isTransparent)
             {
-                spriteBatch.Draw(unitRectangle, _title.Rectangle, _title.BackgroundColor);
+                var titleBackgroundColor = _isFocused
+                    ? _title.FocusedBackgroundColor
+                    : _title.BackgroundColor;
+                spriteBatch.Draw(unitRectangle, _title.Rectangle, titleBackgroundColor);
             }
             spriteBatch.DrawString(TitleFont, TitleText, _title.AbsolutePosition + TitlePadding, Color.Black);
 
@@ -433,6 +456,25 @@ public class Window
     {
         _content?.DrawContent(gameTime, spriteBatch, unitRectangle);
     }
+
+    /// <summary>Routes a key newly pressed this frame to this window while it holds focus -- see GameInputController.RouteKeyPressesToFocusedWindow.</summary>
+    internal void HandleKeyPress(Keys key) => OnKeyPressAction(key);
+
+    protected virtual void OnKeyPressAction(Keys key) => _content?.HandleKeyPress(key);
+
+    /// <summary>
+    /// Routes the whole keyboard state to this window once per frame while it holds focus --
+    /// see GameInputController.RouteHotkeysToFocusedWindow. Unlike HandleKeyPress (one discrete
+    /// key-press event at a time), this is for windows whose own hotkeys need continuous or
+    /// combined multi-key state (e.g. MapWindow's WASD scroll, which reads all four keys'
+    /// current down-state together rather than reacting to one press event).
+    /// </summary>
+    internal void HandleHotkeys(KeyboardState keyboardState, KeyboardState previousKeyboardState) => OnHotkeysAction(keyboardState, previousKeyboardState);
+
+    protected virtual void OnHotkeysAction(KeyboardState keyboardState, KeyboardState previousKeyboardState) => _content?.HandleHotkeys(keyboardState, previousKeyboardState);
+
+    /// <summary>Shared "newly pressed this frame" edge-detection for OnHotkeysAction overrides and GameInputController's own Tab handling.</summary>
+    internal static bool WasKeyPressed(KeyboardState current, KeyboardState previous, Keys key) => current.IsKeyDown(key) && previous.IsKeyUp(key);
 
     public void HandleClick(Point mousePosition)
     {
@@ -1068,6 +1110,17 @@ public class Window
     {
         _isVisible = isVisible;
         _parentWindow?.MeasureAndArrange();
+    }
+
+    internal void SetFocused(bool isFocused)
+    {
+        if (_isFocused == isFocused)
+        {
+            return;
+        }
+
+        _isFocused = isFocused;
+        FocusChanged?.Invoke(this);
     }
 
     public void SetWindowDisplayMode(WindowDisplayMode newWindowDisplayMode)

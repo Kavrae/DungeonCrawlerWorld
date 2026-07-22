@@ -1,5 +1,6 @@
 using Microsoft.Xna.Framework;
 using Microsoft.Xna.Framework.Graphics;
+using Microsoft.Xna.Framework.Input;
 
 namespace Presentation.UI;
 
@@ -21,4 +22,10 @@ public interface IWindowContent
     void Update(GameTime gameTime);
 
     void DrawContent(GameTime gameTime, SpriteBatch spriteBatch, Texture2D unitRectangle);
+
+    /// <summary>Default-implemented as a no-op so existing content types don't need to change.</summary>
+    void HandleKeyPress(Keys key) { }
+
+    /// <summary>Default-implemented as a no-op so existing content types don't need to change.</summary>
+    void HandleHotkeys(KeyboardState keyboardState, KeyboardState previousKeyboardState) { }
 }

@@ -6,6 +6,7 @@ using Game.Modules.Core.Components;
 using Game.World;
 using Microsoft.Xna.Framework;
 using Microsoft.Xna.Framework.Graphics;
+using Microsoft.Xna.Framework.Input;
 using Presentation.Fonts;
 using Presentation.Rendering;
 
@@ -13,7 +14,8 @@ namespace Presentation.UI;
 
 /// <summary>
 /// Displays a scrollable/zoomable viewport onto a single MapLayer of the game map at a time
-/// (Page Up/Down switches layers -- see GameInputController.ChangeLayer). Cannot be moved,
+/// (WASD/zoom/Page Up/Down/Space are this window's own hotkeys -- see OnHotkeysAction; only
+/// live while it holds focus, see GameInputController.RouteHotkeysToFocusedWindow). Cannot be moved,
 /// docked, or resized -- no chrome behaviors are attached to it. Holds direct
 /// constructor-injected references to World/MapViewState/ComponentManager rather than a pluggable content
 /// abstraction (unlike DebugWindowContent/SelectionWindowContent/NotificationCenter, which
@@ -60,6 +62,9 @@ public sealed class MapWindow : Window
     };
 
     private Color[] _backgroundColorCache = [];
+
+    /// <summary>True while the simulation is paused (Space, while this window holds focus -- see OnHotkeysAction). GameLoop.Update gates EcsContext.Update on this.</summary>
+    public bool IsPaused { get; private set; }
 
     public MapWindow(
         FontService fontService,
@@ -145,8 +150,8 @@ public sealed class MapWindow : Window
     }
 
     /// <summary>
-    /// Switches the single MapLayer this window renders (Page Up/Down -- see
-    /// GameInputController), stored on MapViewState rather than locally so SelectionWindowContent
+    /// Switches the single MapLayer this window renders (Page Up/Down -- see OnHotkeysAction),
+    /// stored on MapViewState rather than locally so SelectionWindowContent
     /// can scope the inspector to the same layer this window is actually showing. Background
     /// depends on the current layer's terrain (see ResolveBackgroundColor), so the cache must
     /// be rebuilt on every change, the same as a zoom-level change.
@@ -589,4 +594,61 @@ public sealed class MapWindow : Window
     }
 
     protected override void OnContentClickAction(Point mousePosition) => SelectMapNodes(mousePosition);
+
+    /// <summary>The map's own hotkeys -- only invoked while this window holds focus (see GameInputController.RouteHotkeysToFocusedWindow).</summary>
+    protected override void OnHotkeysAction(KeyboardState keyboardState, KeyboardState previousKeyboardState)
+    {
+        if (WasKeyPressed(keyboardState, previousKeyboardState, Keys.Space))
+        {
+            IsPaused = !IsPaused;
+        }
+
+        var scrollChange = Point.Zero;
+        if (keyboardState.IsKeyDown(Keys.W))
+        {
+            scrollChange.Y -= 1;
+        }
+        if (keyboardState.IsKeyDown(Keys.S))
+        {
+            scrollChange.Y += 1;
+        }
+        if (keyboardState.IsKeyDown(Keys.A))
+        {
+            scrollChange.X -= 1;
+        }
+        if (keyboardState.IsKeyDown(Keys.D))
+        {
+            scrollChange.X += 1;
+        }
+        if (scrollChange != Point.Zero)
+        {
+            UpdateScrollPosition(scrollChange);
+        }
+
+        if (WasKeyPressed(keyboardState, previousKeyboardState, Keys.OemPlus) || WasKeyPressed(keyboardState, previousKeyboardState, Keys.Add))
+        {
+            CycleZoom(-1);
+        }
+        if (WasKeyPressed(keyboardState, previousKeyboardState, Keys.OemMinus) || WasKeyPressed(keyboardState, previousKeyboardState, Keys.Subtract))
+        {
+            CycleZoom(1);
+        }
+
+        if (WasKeyPressed(keyboardState, previousKeyboardState, Keys.PageUp))
+        {
+            ChangeLayer(1);
+        }
+        if (WasKeyPressed(keyboardState, previousKeyboardState, Keys.PageDown))
+        {
+            ChangeLayer(-1);
+        }
+    }
+
+    private void CycleZoom(int direction)
+    {
+        var zoomLevels = Enum.GetValues<ZoomLevel>();
+        var currentIndex = Array.IndexOf(zoomLevels, _currentZoomLevel);
+        var newIndex = MathUtility.ClampInt(currentIndex + direction, 0, zoomLevels.Length - 1);
+        UpdateZoomLevel(zoomLevels[newIndex]);
+    }
 }

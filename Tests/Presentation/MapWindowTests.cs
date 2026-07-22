@@ -2,6 +2,7 @@ using Engine.ECS.Components;
 using Engine.Math;
 using Game.Modules.Core.Components;
 using Microsoft.Xna.Framework;
+using Microsoft.Xna.Framework.Input;
 using Presentation.Fonts;
 using Presentation.Rendering;
 using Presentation.UI;
@@ -125,5 +126,67 @@ public sealed class MapWindowTests
 
         mapWindow.ChangeLayer(-1);
         Assert.AreEqual(0, mapViewState.CurrentMapLayer, "Already at the bottommost layer -- must not go below it.");
+    }
+
+    /// <summary>
+    /// MapWindow's own hotkeys (see OnHotkeysAction) -- GameInputController only ever routes
+    /// the whole keyboard state to whichever window is focused (see
+    /// GameInputControllerTests.HotkeysAreRoutedToTheFocusedWindow), so these are tested
+    /// directly against HandleHotkeys rather than through a real GameInputController.
+    /// </summary>
+    [TestMethod]
+    public void HandleHotkeys_PressingSpace_TogglesIsPaused()
+    {
+        var (_, _, mapWindow) = BuildMapWindow(5, 5, 1);
+        Assert.IsFalse(mapWindow.IsPaused);
+
+        mapWindow.HandleHotkeys(new KeyboardState(Keys.Space), new KeyboardState());
+        Assert.IsTrue(mapWindow.IsPaused);
+
+        mapWindow.HandleHotkeys(new KeyboardState(), new KeyboardState(Keys.Space));
+        Assert.IsTrue(mapWindow.IsPaused, "Releasing Space must not toggle pause again.");
+
+        mapWindow.HandleHotkeys(new KeyboardState(Keys.Space), new KeyboardState());
+        Assert.IsFalse(mapWindow.IsPaused);
+    }
+
+    [TestMethod]
+    public void HandleHotkeys_HoldingD_ScrollsRight()
+    {
+        var (_, mapViewState, mapWindow) = BuildMapWindow(200, 5, 1);
+
+        mapWindow.HandleHotkeys(new KeyboardState(Keys.D), new KeyboardState());
+
+        // Team zoom = 12px tiles; a single frame's scroll change is +1 tile, so clicking at
+        // tile-column 0 now resolves to map column 1 instead of 0.
+        mapWindow.SelectMapNodes(new Point(1, 1));
+        Assert.AreEqual(new Point(1, 0), mapViewState.SelectedMapNodePosition);
+    }
+
+    [TestMethod]
+    public void HandleHotkeys_PressingPageUp_ChangesLayer()
+    {
+        var (_, mapViewState, mapWindow) = BuildMapWindow(5, 5, 3);
+        Assert.AreEqual(1, mapViewState.CurrentMapLayer);
+
+        mapWindow.HandleHotkeys(new KeyboardState(Keys.PageUp), new KeyboardState());
+
+        Assert.AreEqual(2, mapViewState.CurrentMapLayer);
+    }
+
+    /// <summary>Mirrors UpdateZoomLevel_RecalculatesMaxScrollAndReclampsCurrentPosition above, but via the OemMinus hotkey instead of a direct UpdateZoomLevel call.</summary>
+    [TestMethod]
+    public void HandleHotkeys_PressingOemMinus_ZoomsOutOneLevelAndRecalculatesMaxScroll()
+    {
+        var (_, mapViewState, mapWindow) = BuildMapWindow(200, 5, 1);
+        mapWindow.UpdateScrollPosition(new Point(100_000, 0));
+
+        // OemMinus cycles zoom out one level (Team, 12px tiles -> Neighborhood, 6px tiles);
+        // 210 columns are now visible against the 200-wide map, so the previously-valid
+        // Team-zoom max scroll (95) must be re-clamped down to 0.
+        mapWindow.HandleHotkeys(new KeyboardState(Keys.OemMinus), new KeyboardState());
+        mapWindow.SelectMapNodes(new Point(1, 1));
+
+        Assert.AreEqual(new Point(0, 0), mapViewState.SelectedMapNodePosition);
     }
 }

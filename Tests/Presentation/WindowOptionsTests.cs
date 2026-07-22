@@ -31,6 +31,22 @@ public sealed class WindowOptionsTests
         Assert.IsFalse(window.CanContainChildWindows);
         Assert.IsTrue(window.IsVisible);
         Assert.AreEqual(string.Empty, window.TitleText);
+        // Opt-out, not opt-in, unlike every other CanUserXxx flag above -- see Window.CanUserFocus.
+        Assert.IsTrue(window.CanUserFocus);
+    }
+
+    /// <summary>The one concrete opt-out case today: the debug stats window (see GameShellBootstrapper) has nothing that needs keyboard input and shouldn't be a stop in the Tab sequence.</summary>
+    [TestMethod]
+    public void CreateWindow_ChromeGroup_CanUserFocusFalse_OptsOutOfFocus()
+    {
+        var windowService = CreateWindowService();
+
+        var window = windowService.CreateWindow<Window>(null, new WindowOptions
+        {
+            Chrome = new WindowChromeOptions { CanUserFocus = false },
+        });
+
+        Assert.IsFalse(window.CanUserFocus);
     }
 
     [TestMethod]

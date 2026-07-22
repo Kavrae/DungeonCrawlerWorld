@@ -19,6 +19,7 @@ public sealed class WindowChromeOptions
     public string? TitleText { get; set; }
 
     public Color? TitleColor { get; set; }
+    public Color? FocusedTitleColor { get; set; }
 
     /*========Border========*/
     public bool? ShowBorder { get; set; }
@@ -44,4 +45,7 @@ public sealed class WindowChromeOptions
 
     /// <summary>Not yet implemented.</summary>
     public bool? CanUserScrollVertical { get; set; }
+
+    /// <summary>Defaults to true (opt-out, unlike every other CanUserXxx flag here) -- see Window.CanUserFocus.</summary>
+    public bool? CanUserFocus { get; set; }
 }

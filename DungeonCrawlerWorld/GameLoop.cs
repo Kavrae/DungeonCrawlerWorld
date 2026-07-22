@@ -81,7 +81,8 @@ public sealed class GameLoop : Microsoft.Xna.Framework.Game
         _presentation = PresentationBootstrapper.Build(GraphicsDevice, "Fonts");
         _shell = GameShellBootstrapper.Build(_presentation, world, _ecsContext);
         var screenSize = new Vector2(_graphics.PreferredBackBufferWidth, _graphics.PreferredBackBufferHeight);
-        _inputController = new GameInputController(_shell.MapWindow, _shell.RootWindows, _shell.AlwaysOnTopWindows, screenSize);
+        _inputController = new GameInputController(_shell.RootWindows, _shell.AlwaysOnTopWindows, screenSize);
+        _inputController.FocusWindow(_shell.MapWindow);
 
         base.Initialize();
     }
@@ -100,13 +101,9 @@ public sealed class GameLoop : Microsoft.Xna.Framework.Game
     {
         _inputController.Update(gameTime);
 
-        // Runs before the pause check (and before _ecsContext.Update) so a notification
-        // published this same frame -- e.g. via NotificationRequested -- is reflected in
-        // HasBlockingNotification before deciding whether to advance gameplay this frame.
-        // Notifications update even while paused, deliberately.
         _shell.NotificationCenter.Update(gameTime);
 
-        if (!(_inputController.IsPaused || _shell.NotificationCenter.HasBlockingNotification))
+        if (!(_shell.MapWindow.IsPaused || _shell.NotificationCenter.HasBlockingNotification))
         {
             _ecsContext.Update(new EngineTime(gameTime.TotalGameTime, gameTime.ElapsedGameTime, gameTime.IsRunningSlowly));
         }
