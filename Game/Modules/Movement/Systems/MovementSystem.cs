@@ -54,7 +54,8 @@ public sealed class MovementSystem : ISystem
     {
         foreach (var entityId in _stripeSet.GetBucket(stripeIndex))
         {
-            if (!_energyComponents.Has(entityId) || !_transformComponents.Has(entityId))
+            if (!_energyComponents.TryGetReadonly(entityId, out var energyComponent) ||
+                !_transformComponents.TryGetReadonly(entityId, out var transformComponent))
             {
                 continue;
             }
@@ -69,13 +70,11 @@ public sealed class MovementSystem : ISystem
                 continue;
             }
 
-            ref readonly var transformComponent = ref _transformComponents.GetReadonly(entityId);
             if (!_mapQuery.IsOnMap(transformComponent.Position))
             {
                 continue;
             }
 
-            ref readonly var energyComponent = ref _energyComponents.GetReadonly(entityId);
             if (energyComponent.CurrentEnergy < movementComponent.EnergyToMove)
             {
                 continue;
@@ -131,19 +130,23 @@ public sealed class MovementSystem : ISystem
     /// either unoccupied or already occupied by itself. Bounds are checked first, since they
     /// have to be checked regardless and an out-of-bounds position never needs the occupancy
     /// work at all. Occupancy itself still has to be checked per cell (unlike bounds, a
-    /// cell's occupancy can't be inferred from its neighbors' occupancy). A non-Blocking
-    /// mover (IMapQuery.IsBlocking) skips the occupancy comparison entirely -- it's exempt
-    /// from map collision, the same reason it never occupies the map's occupancy index in the
-    /// first place (see World.IsBlocking) -- but still can't move off the map.
+    /// cell's occupancy can't be inferred from its neighbors' occupancy). isBlocking (see
+    /// IMapQuery.IsBlocking) is the caller's to compute once and pass in, not this method's --
+    /// it depends only on entityId, not on the candidate position being tested, so
+    /// SetRandomMapPosition's retry loop would otherwise recompute the identical answer on
+    /// every candidate direction it tries for the same entity. A non-Blocking mover skips the
+    /// occupancy comparison entirely -- it's exempt from map collision, the same reason it
+    /// never occupies the map's occupancy index in the first place (see World.IsBlocking) --
+    /// but still can't move off the map.
     /// </summary>
-    private bool CanMove(Vector3Int position, Vector2Byte size, int entityId)
+    private bool CanMove(Vector3Int position, Vector2Byte size, int entityId, bool isBlocking)
     {
         if (!_mapQuery.IsOnMap(position, size))
         {
             return false;
         }
 
-        if (!_mapQuery.IsBlocking(entityId))
+        if (!isBlocking)
         {
             return true;
         }
@@ -177,6 +180,7 @@ public sealed class MovementSystem : ISystem
     private void SetRandomMapPosition(int entityId, MovementComponent movementComponent, TransformComponent transformComponent)
     {
         var size = transformComponent.Size;
+        var isBlocking = _mapQuery.IsBlocking(entityId);
         var positionToTest = new Vector3Int();
         Span<int> failedIndexes = stackalloc int[4];
         var failedIndexCount = 0;
@@ -210,7 +214,7 @@ public sealed class MovementSystem : ISystem
                 _ => positionToTest,
             };
 
-            if (CanMove(positionToTest, size, entityId))
+            if (CanMove(positionToTest, size, entityId, isBlocking))
             {
                 _movementComponents.TryUpdate(entityId, positionToTest, static (ref movementComponent, newPosition) =>
                 {
