@@ -5,16 +5,11 @@ namespace Engine.Collections;
 /// one, so ids stay bounded to the high-water mark of concurrently live ids rather than
 /// growing forever across churn.
 /// </summary>
-public sealed class FreeIdPool
+public sealed class FreeIdPool(int initialCapacity = 0)
 {
     private readonly Stack<int> _freeIds = new();
-    private byte[] _issued;
+    private byte[] _issued = new byte[System.Math.Max(initialCapacity, 1)];
     private int _nextId;
-
-    public FreeIdPool(int initialCapacity = 0)
-    {
-        _issued = new byte[System.Math.Max(initialCapacity, 1)];
-    }
 
     /// <summary>Number of ids currently rented (not released).</summary>
     public int Count => _nextId - _freeIds.Count;

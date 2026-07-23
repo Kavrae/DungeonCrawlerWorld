@@ -59,7 +59,9 @@ public sealed class DebugWindowContent(
         _drawsPerSecondText = $"{_drawCounter.RatePerSecond:N1} fps";
 
         var origin = _hostWindow.ContentAbsolutePosition;
-        var rateColor = gameTime.IsRunningSlowly ? Color.Red : Color.Black;
+        var rateColor = gameTime.IsRunningSlowly
+            ? Color.Red
+            : Color.Black;
         spriteBatch.DrawString(_font, _updatesPerSecondText, origin, rateColor);
         spriteBatch.DrawString(_font, _drawsPerSecondText, origin + DrawsPerSecondOffset, rateColor);
         spriteBatch.DrawString(_font, _entityCountText, origin + EntityCountOffset, Color.Black);

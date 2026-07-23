@@ -34,7 +34,7 @@ public struct Vector3Int : IEquatable<Vector3Int>
 
     public override bool Equals(object? obj) => obj is Vector3Int other && Equals(other);
 
-    public bool Equals(Vector3Int other) => X == other.X && Y == other.Y && Z == other.Z;
+    public readonly bool Equals(Vector3Int other) => X == other.X && Y == other.Y && Z == other.Z;
 
     public static bool operator ==(Vector3Int value1, Vector3Int value2) => value1.Equals(value2);
 
@@ -46,7 +46,7 @@ public struct Vector3Int : IEquatable<Vector3Int>
     public static Vector3Int operator -(Vector3Int value1, Vector3Int value2) =>
         new(value1.X - value2.X, value1.Y - value2.Y, value1.Z - value2.Z);
 
-    public override int GetHashCode() => HashCode.Combine(X, Y, Z);
+    public override readonly int GetHashCode() => HashCode.Combine(X, Y, Z);
 
-    public override string ToString() => $"{{X:{X} Y:{Y} Z:{Z}}}";
+    public override readonly string ToString() => $"{{X:{X} Y:{Y} Z:{Z}}}";
 }

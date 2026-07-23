@@ -3,7 +3,7 @@ using Engine.ECS.Entities;
 using Engine.ECS.Systems;
 using Engine.Events;
 
-namespace Engine.ECS.World;
+namespace Engine.ECS.Context;
 
 /// <summary>
 /// Mechanical assembly of an <see cref="EcsContext"/>. Deciding the correct module

@@ -9,7 +9,7 @@ public sealed class EnergyRechargeSystemTests
 {
     private static PackedComponentPool<EnergyComponent> CreatePool() =>
         new(maximumEntityCount: 10, initialCapacity: 4,
-            static (ref EnergyComponent existing, EnergyComponent incoming) => existing = incoming);
+            static (ref existing, incoming) => existing = incoming);
 
     [TestMethod]
     public void Update_RechargesEnergyByEnergyRechargeAmount()

@@ -65,7 +65,7 @@ public sealed class MultiComponentPoolTests
         pool.Add(0, new TestComponent { Value = 1 });
         pool.Add(0, new TestComponent { Value = 2 });
 
-        var removed = pool.RemoveFirst(0, (ref readonly TestComponent c) => c.Value == 1);
+        var removed = pool.RemoveFirst(0, (ref readonly c) => c.Value == 1);
 
         Assert.IsTrue(removed);
         Assert.AreEqual(1, pool.CountForEntity(0));
@@ -82,7 +82,7 @@ public sealed class MultiComponentPoolTests
         pool.Add(0, new TestComponent { Value = 2 });
         pool.Add(0, new TestComponent { Value = 3 });
 
-        pool.RemoveFirst(0, (ref readonly TestComponent c) => c.Value == 1);
+        pool.RemoveFirst(0, (ref readonly c) => c.Value == 1);
 
         Assert.AreEqual(2, pool.CountForEntity(0));
         Assert.AreEqual(1, pool.CountForEntity(1));

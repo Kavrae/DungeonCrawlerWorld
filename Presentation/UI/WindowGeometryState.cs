@@ -9,6 +9,13 @@ namespace Presentation.UI;
 /// reaching into several independent fields on Window itself. Plain mutable fields, not
 /// properties -- Window and TextWindow do in-place mutation like `_geometry.CurrentSize.Y +=
 /// ...`, which only compiles against a directly-addressable struct field.
+///
+/// This is the model for the wider *State naming convention (see also WindowTitleState,
+/// WindowBorderState, WindowContentState, MapViewState): a type that exists purely as a
+/// shared mutable bag of state for one or two designated writer/reader collaborators gets
+/// plain fields, not properties, even where a given field isn't compound-mutated today --
+/// it signals "mutable bag, not an encapsulated object with invariants" and keeps the
+/// option open for compound mutation later without a later conversion.
 /// </summary>
 internal sealed class WindowGeometryState
 {

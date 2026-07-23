@@ -140,11 +140,11 @@ public class Button
         if (ShowBorder)
         {
             ContentRectangle = BorderThickness.Inset(ButtonRectangle, DefaultBorderThickness);
-            var edges = BorderThickness.GetEdgeRectangles(ButtonRectangle, DefaultBorderThickness);
-            BorderTopRectangle = edges.Top;
-            BorderBottomRectangle = edges.Bottom;
-            BorderLeftRectangle = edges.Left;
-            BorderRightRectangle = edges.Right;
+            var (top, bottom, left, right) = BorderThickness.GetEdgeRectangles(ButtonRectangle, DefaultBorderThickness);
+            BorderTopRectangle = top;
+            BorderBottomRectangle = bottom;
+            BorderLeftRectangle = left;
+            BorderRightRectangle = right;
         }
         else
         {

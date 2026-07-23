@@ -5,11 +5,11 @@ using Game.Modules.Core.Components;
 namespace Game.World;
 
 /// <summary>The in-memory game world: the map and bookkeeping for entities placed on it.</summary>
-public sealed class World : IMapQuery
+public sealed class World(Map map) : IMapQuery
 {
-    private static readonly Vector2Byte TransformSize1 = new(1, 1);
+    public Map Map { get; set; } = map ?? throw new ArgumentNullException(nameof(map));
 
-    public Map Map { get; set; }
+    private static readonly Vector2Byte TransformSize1 = new(1, 1);
 
     /// <summary>
     /// Set once ComponentManager exists (World itself is constructed before it, so these can't
@@ -21,11 +21,6 @@ public sealed class World : IMapQuery
 
     /// <inheritdoc cref="NonBlockingComponents"/>
     public MultiComponentPool<ForceBlockingComponent>? ForceBlockingComponents { get; set; }
-
-    public World(Map map)
-    {
-        Map = map ?? throw new ArgumentNullException(nameof(map));
-    }
 
     /// <summary>
     /// Moves entityId's map-index presence from transformComponent.Position to newPosition.

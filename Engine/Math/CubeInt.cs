@@ -6,8 +6,8 @@ namespace Engine.Math;
 /// </summary>
 public struct CubeInt : IEquatable<CubeInt>
 {
-    public Vector3Int Position { get; set; }
-    public Vector3Int Size { get; set; }
+    public Vector3Int Position;
+    public Vector3Int Size;
 
     public CubeInt(Vector3Int position)
     {
@@ -23,13 +23,13 @@ public struct CubeInt : IEquatable<CubeInt>
 
     public override bool Equals(object? obj) => obj is CubeInt other && Equals(other);
 
-    public bool Equals(CubeInt other) => Position == other.Position && Size == other.Size;
+    public readonly bool Equals(CubeInt other) => Position == other.Position && Size == other.Size;
 
     public static bool operator ==(CubeInt value1, CubeInt value2) => value1.Equals(value2);
 
     public static bool operator !=(CubeInt value1, CubeInt value2) => !value1.Equals(value2);
 
-    public override int GetHashCode() => HashCode.Combine(Position, Size);
+    public override readonly int GetHashCode() => HashCode.Combine(Position, Size);
 
-    public override string ToString() => $"{{Position:{Position} Size:{Size}}}";
+    public override readonly string ToString() => $"{{Position:{Position} Size:{Size}}}";
 }

@@ -274,7 +274,9 @@ public sealed class GameInputController
     private WindowInteraction TryHitTestInteraction(Point position)
     {
         var interaction = TryHitTestInList(_alwaysOnTopWindows, position);
-        return interaction.Window is not null ? interaction : TryHitTestInList(_rootWindows, position);
+        return interaction.Window is not null
+            ? interaction
+            : TryHitTestInList(_rootWindows, position);
     }
 
     private static WindowInteraction TryHitTestInList(List<Window> windows, Point position)
@@ -371,7 +373,9 @@ public sealed class GameInputController
         _focusedWindow?.SetFocused(false);
 
         _focusedWindow = target;
-        _focusedWindowSiblings = target is not null ? GetSiblingContainer(target) : null;
+        _focusedWindowSiblings = target is not null
+            ? GetSiblingContainer(target)
+            : null;
 
         if (_focusedWindow is not null)
         {

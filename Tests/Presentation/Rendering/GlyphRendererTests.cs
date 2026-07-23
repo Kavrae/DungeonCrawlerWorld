@@ -51,8 +51,8 @@ public sealed class GlyphRendererTests
         var oneTilePosition = renderer.GetCenteredPosition(font, glyph, origin, new Vector2(12, 12));
         var threeTilePosition = renderer.GetCenteredPosition(font, glyph, origin, new Vector2(36, 36));
 
-        Assert.IsTrue(threeTilePosition.X > oneTilePosition.X);
-        Assert.IsTrue(threeTilePosition.Y > oneTilePosition.Y);
+        Assert.IsGreaterThan(oneTilePosition.X, threeTilePosition.X);
+        Assert.IsGreaterThan(oneTilePosition.Y, threeTilePosition.Y);
     }
 
     [TestMethod]

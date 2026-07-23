@@ -7,19 +7,13 @@ using Presentation.Rendering;
 
 namespace Presentation.UI;
 
-public class TextWindow : Window
+public class TextWindow(FontService fontService, WindowService windowService, GlyphRenderer glyphRenderer) : Window(fontService, windowService, glyphRenderer)
 {
     public string OriginalText { get; set; } = string.Empty;
     public DisplayText DisplayText { get; set; }
-    public SpriteFontBase ContentFont { get; set; }
+    public SpriteFontBase ContentFont { get; set; } = fontService.GetFont(8);
     public Color TextColor { get; set; }
     protected const int LinePadding = 3;
-
-    public TextWindow(FontService fontService, WindowService windowService, GlyphRenderer glyphRenderer)
-        : base(fontService, windowService, glyphRenderer)
-    {
-        ContentFont = fontService.GetFont(8);
-    }
 
     public override void BuildWindow(Window? parentWindow, WindowOptions windowOptions)
     {
@@ -34,7 +28,9 @@ public class TextWindow : Window
     {
         if (!string.IsNullOrWhiteSpace(DisplayText.FormattedText))
         {
-            var origin = RequiresContentViewport ? Vector2.Zero : ContentAbsolutePosition;
+            var origin = RequiresContentViewport
+                ? Vector2.Zero
+                : ContentAbsolutePosition;
             spriteBatch.DrawString(ContentFont, DisplayText.FormattedText, origin + new Vector2(LinePadding, LinePadding), TextColor);
         }
     }

@@ -1,5 +1,5 @@
 using Engine.Diagnostics;
-using Engine.ECS.World;
+using Engine.ECS.Context;
 using Game.Notifications;
 using Game.World;
 using Microsoft.Xna.Framework;
@@ -172,12 +172,12 @@ public static class GameShellBootstrapper
         // NotificationCenter.OnActiveNotificationClosed already does for its own popups, or a
         // reopened composer would eventually add the same recycled instance to rootWindows
         // twice.
-        Action<Window>? onClosed = null;
-        onClosed = closedWindow =>
+        void onClosed(Window closedWindow)
         {
             closedWindow.Closed -= onClosed;
             rootWindows.Remove(closedWindow);
-        };
+        }
+
         popup.Closed += onClosed;
 
         // Size.Y is only a starting point -- TextBox.AutoSizeToContent immediately shrinks it

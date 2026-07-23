@@ -72,7 +72,14 @@ public sealed class TestMapBuilder(EntityManager entityManager, ComponentManager
                 {
                     // Occasional lava patches instead of dirt -- uncommon by design.
                     var isLava = row % 33 == 17 && column % 47 == 23;
-                    BuildTerrainFromBlueprint(world, isLava ? _lava : _dirt, column, row, TerrainLayer.Ground);
+                    BuildTerrainFromBlueprint(
+                        world,
+                        isLava
+                            ? _lava
+                            : _dirt,
+                        column,
+                        row,
+                        TerrainLayer.Ground);
 
                     if (row % 5 == 0 && column % 4 == 0)
                     {
@@ -103,7 +110,14 @@ public sealed class TestMapBuilder(EntityManager entityManager, ComponentManager
                 }
                 else
                 {
-                    BuildTerrainFromBlueprint(world, mathUtility.Next(0, 5) == 0 ? _lava : _dirt, column, row, TerrainLayer.UnderGround);
+                    BuildTerrainFromBlueprint(
+                        world,
+                        mathUtility.Next(0, 5) == 0
+                            ? _lava
+                            : _dirt,
+                        column,
+                        row,
+                        TerrainLayer.UnderGround);
                 }
 
                 // Flying layer: scattered ordinary Fairies. Independent of whatever's on

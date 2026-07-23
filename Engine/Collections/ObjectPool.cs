@@ -5,21 +5,17 @@ namespace Engine.Collections;
 /// create and discard the same shape of object (e.g. per-frame view buffers, pooled UI
 /// windows).
 /// </summary>
-public sealed class ObjectPool<T> where T : class
+public sealed class ObjectPool<T>(Func<T> factory, Action<T>? reset = null) where T : class
 {
+    private readonly Func<T> _factory = factory ?? throw new ArgumentNullException(nameof(factory));
+    private readonly Action<T>? _reset = reset;
     private readonly Stack<T> _items = new();
-    private readonly Func<T> _factory;
-    private readonly Action<T>? _reset;
-
-    public ObjectPool(Func<T> factory, Action<T>? reset = null)
-    {
-        _factory = factory ?? throw new ArgumentNullException(nameof(factory));
-        _reset = reset;
-    }
 
     public int Count => _items.Count;
 
-    public T Rent() => _items.Count > 0 ? _items.Pop() : _factory();
+    public T Rent() => _items.Count > 0
+        ? _items.Pop()
+        : _factory();
 
     public void Return(T item)
     {

@@ -13,7 +13,7 @@ public sealed class HealthModule : IModule
 
     public void RegisterComponents(ComponentManager componentManager)
     {
-        componentManager.RegisterPackedPool<HealthComponent>(static (ref HealthComponent existing, HealthComponent incoming) =>
+        componentManager.RegisterPackedPool<HealthComponent>(static (ref existing, incoming) =>
         {
             existing.HealthRegen = (short)((existing.HealthRegen + incoming.HealthRegen) / 2);
             // Floored at 0: a negative MaximumHealth here would make the ClampShort below

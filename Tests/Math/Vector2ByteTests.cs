@@ -90,7 +90,7 @@ public sealed class Vector2ByteTests
 
         var text = value.ToString();
 
-        StringAssert.Contains(text, "1");
-        StringAssert.Contains(text, "2");
+        Assert.Contains("1", text);
+        Assert.Contains("2", text);
     }
 }

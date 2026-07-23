@@ -20,7 +20,9 @@ public sealed class WindowMinimizeRestoreBehavior : IWindowChromeBehavior
         UpdateButtonLabel(window, button);
 
         button.Clicked += () => window.SetWindowDisplayMode(
-            window.WindowDisplay == WindowDisplayMode.Minimized ? window.PreviousWindowDisplay : WindowDisplayMode.Minimized);
+            window.WindowDisplay == WindowDisplayMode.Minimized
+                ? window.PreviousWindowDisplay
+                : WindowDisplayMode.Minimized);
 
         void OnDisplayModeChanged(Window _) => UpdateButtonLabel(window, button);
 
@@ -44,6 +46,9 @@ public sealed class WindowMinimizeRestoreBehavior : IWindowChromeBehavior
     private static void UpdateButtonLabel(Window window, Button button)
     {
         var isMinimized = window.WindowDisplay == WindowDisplayMode.Minimized;
-        button.SetText(isMinimized ? "O" : "_");
+        button.SetText(
+            isMinimized
+                ? "O"
+                : "_");
     }
 }

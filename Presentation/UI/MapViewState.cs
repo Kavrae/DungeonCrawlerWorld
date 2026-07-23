@@ -8,12 +8,14 @@ namespace Presentation.UI;
 /// no simulation meaning, shared between MapWindow (the sole writer, via click-to-select and
 /// Page Up/Down) and SelectionWindowContent (which reads both to scope the inspector to
 /// what's actually on screen). Previously lived on World; moved here because nothing in
-/// Engine or Game ever read or wrote it.
+/// Engine or Game ever read or wrote it. Follows the same *State plain-field convention as
+/// WindowGeometryState/WindowTitleState/WindowBorderState/WindowContentState -- see
+/// WindowGeometryState for why.
 /// </summary>
 public sealed class MapViewState
 {
     /// <summary>2D coordinates of the currently selected map node, if any -- paired with CurrentMapLayer for the Z.</summary>
-    public Point? SelectedMapNodePosition { get; set; }
+    public Point? SelectedMapNodePosition;
 
     /// <summary>
     /// The single MapLayer currently displayed/inspected -- shared state between MapWindow
@@ -21,5 +23,5 @@ public sealed class MapViewState
     /// inspector to this layer, matching what's actually visible on screen), the same way
     /// SelectedMapNodePosition already coordinates those two windows.
     /// </summary>
-    public int CurrentMapLayer { get; set; } = (int)MapLayer.Ground;
+    public int CurrentMapLayer = (int)MapLayer.Ground;
 }

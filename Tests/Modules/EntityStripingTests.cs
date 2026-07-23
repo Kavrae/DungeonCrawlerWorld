@@ -38,7 +38,7 @@ public sealed class EntityStripingTests
     {
         const int entityCount = 23;
         var pool = new PackedComponentPool<EnergyComponent>(entityCount, entityCount,
-            static (ref EnergyComponent existing, EnergyComponent incoming) => existing = incoming);
+            static (ref existing, incoming) => existing = incoming);
 
         for (var entityId = 0; entityId < entityCount; entityId++)
         {
@@ -89,7 +89,7 @@ public sealed class EntityStripingTests
     public void EnergyRechargeSystem_EntityRemovedMidCycle_DoesNotCorruptOtherStripes()
     {
         var pool = new PackedComponentPool<EnergyComponent>(30, 30,
-            static (ref EnergyComponent existing, EnergyComponent incoming) => existing = incoming);
+            static (ref existing, incoming) => existing = incoming);
 
         for (var entityId = 0; entityId < 10; entityId++)
         {

@@ -39,7 +39,7 @@ public sealed class HealthRegenSystem : ISystem
                 continue;
             }
 
-            _healthComponents.TryUpdate(entityId, static (ref HealthComponent healthComponent) =>
+            _healthComponents.TryUpdate(entityId, static (ref healthComponent) =>
             {
                 // Widened to int before adding: CurrentHealth/HealthRegen are both short, and
                 // a raw short += can silently overflow/underflow before ClampShort ever runs.

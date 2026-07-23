@@ -34,7 +34,7 @@ public sealed class EnergyRechargeSystem : ISystem
                 continue;
             }
 
-            _energyComponents.TryUpdate(entityId, static (ref EnergyComponent energyComponent) =>
+            _energyComponents.TryUpdate(entityId, static (ref energyComponent) =>
             {
                 // Widened to int before adding: CurrentEnergy/EnergyRecharge are both short,
                 // and a raw short += can silently overflow/underflow before ClampShort ever

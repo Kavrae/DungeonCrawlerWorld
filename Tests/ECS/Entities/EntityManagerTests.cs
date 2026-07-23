@@ -28,7 +28,7 @@ public sealed class EntityManagerTests
     public void DestroyEntity_RemovesAllComponentsAndMarksNotAlive()
     {
         var componentManager = new ComponentManager(4, 4);
-        componentManager.RegisterDirectPool<TestComponent>((ref TestComponent existing, TestComponent incoming) => existing = incoming);
+        componentManager.RegisterDirectPool<TestComponent>((ref existing, incoming) => existing = incoming);
         var entityManager = new EntityManager(componentManager, 4);
         var entityId = entityManager.CreateEntity();
         componentManager.GetDirectPool<TestComponent>().Add(entityId, new TestComponent { Value = 1 });
@@ -59,7 +59,7 @@ public sealed class EntityManagerTests
     public void CreateEntity_BeyondInitialCapacity_GrowsComponentPools()
     {
         var componentManager = new ComponentManager(2, 4);
-        componentManager.RegisterDirectPool<TestComponent>((ref TestComponent existing, TestComponent incoming) => existing = incoming);
+        componentManager.RegisterDirectPool<TestComponent>((ref existing, incoming) => existing = incoming);
         var entityManager = new EntityManager(componentManager, 2);
 
         entityManager.CreateEntity();

@@ -28,13 +28,13 @@ public sealed class MovementSystemTests
     }
 
     private static DirectComponentPool<TransformComponent> CreateTransformPool(int capacity = 10) =>
-        new(capacity, static (ref TransformComponent existing, TransformComponent incoming) => existing = incoming);
+        new(capacity, static (ref existing, incoming) => existing = incoming);
 
     private static PackedComponentPool<EnergyComponent> CreateEnergyPool(int capacity = 10) =>
-        new(capacity, capacity, static (ref EnergyComponent existing, EnergyComponent incoming) => existing = incoming);
+        new(capacity, capacity, static (ref existing, incoming) => existing = incoming);
 
     private static PackedComponentPool<MovementComponent> CreateMovementPool(int capacity = 10) =>
-        new(capacity, capacity, static (ref MovementComponent existing, MovementComponent incoming) => existing = incoming);
+        new(capacity, capacity, static (ref existing, incoming) => existing = incoming);
 
     private static MultiComponentPool<NonBlockingComponent> CreateNonBlockingPool(int capacity = 10) =>
         new(capacity, capacity);

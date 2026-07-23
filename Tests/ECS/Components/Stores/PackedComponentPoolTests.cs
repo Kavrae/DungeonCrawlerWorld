@@ -11,7 +11,7 @@ public sealed class PackedComponentPoolTests
     }
 
     private static Engine.ECS.Components.MergeAction<TestComponent> AverageMerge =>
-        (ref TestComponent existing, TestComponent incoming) => existing.Value = (existing.Value + incoming.Value) / 2;
+        (ref existing, incoming) => existing.Value = (existing.Value + incoming.Value) / 2;
 
     [TestMethod]
     public void Add_PacksIntoDenseStorageStartingAtZero()
@@ -64,7 +64,7 @@ public sealed class PackedComponentPoolTests
         var pool = new PackedComponentPool<TestComponent>(maximumEntityCount: 10, initialCapacity: 4, AverageMerge);
         pool.Add(5, new TestComponent { Value = 1 });
 
-        pool.UpdateByDenseIndex(0, static (ref TestComponent c) => c.Value += 100);
+        pool.UpdateByDenseIndex(0, static (ref c) => c.Value += 100);
 
         Assert.AreEqual(101, pool.GetByDenseIndex(0).Value);
         Assert.AreEqual(2u, pool.GetVersionByDenseIndex(0));

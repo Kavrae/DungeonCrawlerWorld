@@ -15,7 +15,7 @@ namespace Presentation.UI;
 /// GameInputController to hand focus to it. Shift+Enter inserts a newline instead, but only
 /// when Multiline -- a single-line box treats Shift+Enter the same as a plain Enter.
 /// </summary>
-public sealed class TextBox : TextWindow
+public sealed class TextBox(FontService fontService, WindowService windowService, GlyphRenderer glyphRenderer) : TextWindow(fontService, windowService, glyphRenderer)
 {
     private static readonly Color FocusIndicatorColor = Color.Gold;
     private static readonly BorderThickness FocusIndicatorThickness = BorderThickness.Uniform(new Vector2(2, 2));
@@ -27,11 +27,6 @@ public sealed class TextBox : TextWindow
 
     /// <summary>Raised when Enter (or Shift+Enter on a non-multiline box) submits the current text.</summary>
     public event Action<string>? TextSubmitted;
-
-    public TextBox(FontService fontService, WindowService windowService, GlyphRenderer glyphRenderer)
-        : base(fontService, windowService, glyphRenderer)
-    {
-    }
 
     public override void BuildWindow(Window? parentWindow, WindowOptions windowOptions)
     {
@@ -170,10 +165,10 @@ public sealed class TextBox : TextWindow
             return;
         }
 
-        var edges = BorderThickness.GetEdgeRectangles(WindowRectangle, FocusIndicatorThickness);
-        spriteBatch.Draw(unitRectangle, edges.Top, FocusIndicatorColor);
-        spriteBatch.Draw(unitRectangle, edges.Bottom, FocusIndicatorColor);
-        spriteBatch.Draw(unitRectangle, edges.Left, FocusIndicatorColor);
-        spriteBatch.Draw(unitRectangle, edges.Right, FocusIndicatorColor);
+        var (top, bottom, left, right) = BorderThickness.GetEdgeRectangles(WindowRectangle, FocusIndicatorThickness);
+        spriteBatch.Draw(unitRectangle, top, FocusIndicatorColor);
+        spriteBatch.Draw(unitRectangle, bottom, FocusIndicatorColor);
+        spriteBatch.Draw(unitRectangle, left, FocusIndicatorColor);
+        spriteBatch.Draw(unitRectangle, right, FocusIndicatorColor);
     }
 }

@@ -1,6 +1,6 @@
 using Engine.Bootstrap;
 using Engine.ECS.Components;
-using Engine.ECS.World;
+using Engine.ECS.Context;
 using Engine.Events;
 using Engine.Math;
 using Engine.Modules;
@@ -9,6 +9,7 @@ using Game.Blueprints.NPCs.Generic;
 using Game.Blueprints.Objects;
 using Game.Blueprints.Races;
 using Game.Blueprints.Terrain;
+using Game.Modules;
 using Game.Modules.Class;
 using Game.Modules.Class.Components;
 using Game.Modules.Core;
@@ -19,7 +20,6 @@ using Game.Modules.Health;
 using Game.Modules.Health.Components;
 using Game.Modules.Movement;
 using Game.Modules.Movement.Components;
-using Game.Modules;
 using Game.Modules.Race;
 using Game.Modules.Race.Components;
 using Game.World;
@@ -249,9 +249,9 @@ public sealed class BlueprintTests
         // CoreModule's DisplayTextComponent merge lambda concatenates Name with a space and
         // Description with a newline for each stage of the chain (Goblin, then Engineer,
         // then the blueprint's own final merge) -- so all three names/descriptions survive.
-        StringAssert.Contains(displayText.Name, "Goblin");
-        StringAssert.Contains(displayText.Name, "Engineer");
-        StringAssert.Contains(displayText.Name, "Goblin Engineer");
+        Assert.Contains("Goblin", displayText.Name);
+        Assert.Contains("Engineer", displayText.Name);
+        Assert.Contains("Goblin Engineer", displayText.Name);
     }
 
     [TestMethod]

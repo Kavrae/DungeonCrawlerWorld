@@ -1,5 +1,5 @@
-using System.Text;
 using Engine.Math;
+using System.Text;
 
 namespace Engine.Utilities;
 
@@ -54,7 +54,9 @@ public static class StringUtility
 
             for (var i = 0; i < size; i++)
             {
-                span[start + i] = i < fill ? '=' : '_';
+                span[start + i] = i < fill
+                    ? '='
+                    : '_';
             }
 
             span[totalSize - 1] = ']';
@@ -180,7 +182,9 @@ public static class StringUtility
         while (true)
         {
             var nextSpaceIndex = originalText.IndexOf(' ', wordStartIndex);
-            var word = nextSpaceIndex < 0 ? originalText[wordStartIndex..] : originalText[wordStartIndex..nextSpaceIndex];
+            var word = nextSpaceIndex < 0
+                ? originalText[wordStartIndex..]
+                : originalText[wordStartIndex..nextSpaceIndex];
 
             if (remainingLineWidth != criteria.MaximumPixelWidth)
             {
@@ -202,7 +206,6 @@ public static class StringUtility
 
                 if (remainingLineWidth > wordSize)
                 {
-                    // Word fits on the current line -- add it and move to the next word.
                     stringBuilder.Append(remainingWord);
                     remainingLineWidth -= wordSize;
                     break;
@@ -213,7 +216,6 @@ public static class StringUtility
 
                 if (canHyphenate)
                 {
-                    // Enough space to hyphenate and the word is long enough to break.
                     var percentageOfWordThatFits = remainingHyphenatedLineWidth / wordSize;
                     var substringLength = MathUtility.ClampInt(
                         (int)System.Math.Round(percentageOfWordThatFits * remainingWord.Length, MidpointRounding.ToZero),

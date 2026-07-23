@@ -73,7 +73,7 @@ public sealed class NotificationCenterTests
         notificationCenter.AddNotification(NotificationCategory.Quest, "Hello", showImmediately: true);
 
         Assert.IsNotNull(openedWindow);
-        Assert.IsTrue(alwaysOnTopWindows.Contains(openedWindow));
+        Assert.Contains(openedWindow, alwaysOnTopWindows);
     }
 
     /// <summary>Same event, via the other path a popup can appear through -- promoting a queued/unread notification back to active.</summary>
@@ -89,7 +89,7 @@ public sealed class NotificationCenterTests
         notificationCenter.OpenNextNotification(NotificationCategory.Quest);
 
         Assert.IsNotNull(openedWindow);
-        Assert.IsTrue(alwaysOnTopWindows.Contains(openedWindow));
+        Assert.Contains(openedWindow, alwaysOnTopWindows);
     }
 
     [TestMethod]
@@ -198,7 +198,7 @@ public sealed class NotificationCenterTests
     public void ClickingSummaryBadge_WithNoUnreadNotifications_DoesNotOpenAnything()
     {
         var alwaysOnTopWindows = new List<Window>();
-        var notificationCenter = CreateNotificationCenter(CreateWindowService(), alwaysOnTopWindows);
+        _ = CreateNotificationCenter(CreateWindowService(), alwaysOnTopWindows);
 
         var questSummaryBadge = new Point(12 + 65 + 5, 30 + 5);
         ClickAlwaysOnTop(alwaysOnTopWindows, questSummaryBadge);

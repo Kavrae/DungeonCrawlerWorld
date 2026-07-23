@@ -36,7 +36,7 @@ public sealed class MovementModule : IGameModule
 
     public void RegisterComponents(ComponentManager componentManager)
     {
-        componentManager.RegisterPackedPool<MovementComponent>(static (ref MovementComponent existing, MovementComponent incoming) =>
+        componentManager.RegisterPackedPool<MovementComponent>(static (ref existing, incoming) =>
         {
             existing.MovementMode = (MovementMode)System.Math.Max((byte)existing.MovementMode, (byte)incoming.MovementMode);
             existing.EnergyToMove = (short)((existing.EnergyToMove + incoming.EnergyToMove) / 2);

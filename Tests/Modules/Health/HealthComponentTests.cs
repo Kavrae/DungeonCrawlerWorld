@@ -10,7 +10,7 @@ public sealed class HealthComponentTests
     {
         var component = new HealthComponent(currentHealth: 50, healthRegen: 5, maximumHealth: 100);
 
-        StringAssert.Contains(component.ToString(), "HP");
+        Assert.Contains("HP", component.ToString());
     }
 
     /// <summary>
@@ -26,7 +26,7 @@ public sealed class HealthComponentTests
 
         var text = component.ToString();
 
-        StringAssert.Contains(text, "invalid");
+        Assert.Contains("invalid", text);
     }
 
     [TestMethod]
@@ -36,6 +36,6 @@ public sealed class HealthComponentTests
 
         var text = component.ToString();
 
-        StringAssert.Contains(text, "invalid");
+        Assert.Contains("invalid", text);
     }
 }

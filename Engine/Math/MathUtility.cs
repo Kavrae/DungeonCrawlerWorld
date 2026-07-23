@@ -4,14 +4,9 @@ namespace Engine.Math;
 /// Integer/short clamping (FNA's MathHelper.Clamp is float-only) plus a random-selection
 /// helper used on hot paths like movement direction selection.
 /// </summary>
-public sealed class MathUtility
+public sealed class MathUtility(Random? randomizer = null)
 {
-    private readonly Random _randomizer;
-
-    public MathUtility(Random? randomizer = null)
-    {
-        _randomizer = randomizer ?? new Random();
-    }
+    private readonly Random _randomizer = randomizer ?? new Random();
 
     public static int ClampInt(int value, int min, int max)
     {
@@ -20,8 +15,12 @@ public sealed class MathUtility
             throw new ArgumentException($"min ({min}) is greater than max ({max}).");
         }
 
-        value = value > max ? max : value;
-        value = value < min ? min : value;
+        value = value > max
+            ? max
+            : value;
+        value = value < min
+            ? min
+            : value;
         return value;
     }
 
@@ -32,8 +31,12 @@ public sealed class MathUtility
             throw new ArgumentException($"min ({min}) is greater than max ({max}).");
         }
 
-        value = value > max ? max : value;
-        value = value < min ? min : value;
+        value = value > max
+            ? max
+            : value;
+        value = value < min
+            ? min
+            : value;
         return value;
     }
 

@@ -136,7 +136,10 @@ public class Window
     public Rectangle TitleRectangle => _title.Rectangle;
 
     /// <summary>Title bar height if shown, else zero -- see BorderInset for the analogous border helper.</summary>
-    protected float TitleInsetHeight => _title.ShowTitle ? _title.Size.Y : 0;
+    protected float TitleInsetHeight =>
+        _title.ShowTitle
+            ? _title.Size.Y
+            : 0;
 
     public Color TitleColor => _title.BackgroundColor;
     public Color FocusedTitleColor => _title.FocusedBackgroundColor;
@@ -154,10 +157,16 @@ public class Window
     /// independently-repeated `_showBorder ? _borderSize.X : 0`-style ternary in every
     /// RecalculateXxxWindowSize method and RecalculateAbsolutePositions.
     /// </summary>
-    protected Vector2 BorderInset => _border.Show ? new Vector2(_border.Thickness.Left, _border.Thickness.Top) : Vector2.Zero;
+    protected Vector2 BorderInset =>
+        _border.Show
+            ? new Vector2(_border.Thickness.Left, _border.Thickness.Top)
+            : Vector2.Zero;
 
     /// <summary>Border thickness on both edges of an axis (e.g. left+right) if shown, else zero.</summary>
-    protected Vector2 BorderInsetDoubled => _border.Show ? new Vector2(_border.Thickness.Horizontal, _border.Thickness.Vertical) : Vector2.Zero;
+    protected Vector2 BorderInsetDoubled =>
+        _border.Show
+            ? new Vector2(_border.Thickness.Horizontal, _border.Thickness.Vertical)
+            : Vector2.Zero;
 
     public Rectangle BorderTopRectangle => _border.TopRectangle;
     public Rectangle BorderBottomRectangle => _border.BottomRectangle;
@@ -340,8 +349,12 @@ public class Window
     {
         var desiredOffset = _scrollOffset + delta;
         _scrollOffset = new Vector2(
-            CanUserScrollHorizontal ? MathHelper.Clamp(desiredOffset.X, 0, _maxScrollOffset.X) : 0,
-            CanUserScrollVertical ? MathHelper.Clamp(desiredOffset.Y, 0, _maxScrollOffset.Y) : 0);
+            CanUserScrollHorizontal
+                ? MathHelper.Clamp(desiredOffset.X, 0, _maxScrollOffset.X)
+                : 0,
+            CanUserScrollVertical
+                ? MathHelper.Clamp(desiredOffset.Y, 0, _maxScrollOffset.Y)
+                : 0);
 
         RecalculateCameraTransform();
 
@@ -514,7 +527,9 @@ public class Window
         // one." after: some child starts right after it and wraps around, stopping once the
         // scan loops all the way back to after itself (a lone TextBox must not "advance" to
         // itself) rather than re-checking it as index Count.
-        var startOffset = after is null ? 0 : _childWindows.IndexOf(after) + 1;
+        var startOffset = after is null
+            ? 0
+            : _childWindows.IndexOf(after) + 1;
 
         for (var offset = 0; offset < _childWindows.Count; offset++)
         {
@@ -977,8 +992,12 @@ public class Window
             // constructor-time value gets unconditionally overwritten below.
             var parentAvailableSize = _parentWindow.ContentSize - _geometry.RelativePosition;
             availableSize = new Vector2(
-                _parentWindow.CanUserScrollHorizontal ? _geometry.MaximumSize.X : parentAvailableSize.X,
-                _parentWindow.CanUserScrollVertical ? _geometry.MaximumSize.Y : parentAvailableSize.Y);
+                _parentWindow.CanUserScrollHorizontal
+                    ? _geometry.MaximumSize.X
+                    : parentAvailableSize.X,
+                _parentWindow.CanUserScrollVertical
+                    ? _geometry.MaximumSize.Y
+                    : parentAvailableSize.Y);
         }
 
         Measure(availableSize);
@@ -1166,7 +1185,9 @@ public class Window
             _title.OriginalSize.Y - BorderInset.Y);
 
         _contentState.Size = _geometry.CurrentSize
-            - (_title.ShowTitle ? _title.Size : Vector2.Zero)
+            - (_title.ShowTitle
+                ? _title.Size
+                : Vector2.Zero)
             - BorderInsetDoubled;
     }
 
@@ -1225,11 +1246,11 @@ public class Window
 
     private void RecalculateBorderRectangles()
     {
-        var edges = BorderThickness.GetEdgeRectangles(_geometry.Rectangle, _border.Thickness);
-        _border.TopRectangle = edges.Top;
-        _border.BottomRectangle = edges.Bottom;
-        _border.LeftRectangle = edges.Left;
-        _border.RightRectangle = edges.Right;
+        var (top, bottom, left, right) = BorderThickness.GetEdgeRectangles(_geometry.Rectangle, _border.Thickness);
+        _border.TopRectangle = top;
+        _border.BottomRectangle = bottom;
+        _border.LeftRectangle = left;
+        _border.RightRectangle = right;
     }
 
     /// <summary>

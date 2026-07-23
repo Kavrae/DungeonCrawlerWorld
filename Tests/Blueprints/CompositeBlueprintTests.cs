@@ -1,6 +1,6 @@
 using Engine.Bootstrap;
 using Engine.ECS.Components;
-using Engine.ECS.World;
+using Engine.ECS.Context;
 using Engine.Events;
 using Engine.Math;
 using Engine.Modules;
@@ -87,9 +87,9 @@ public sealed class CompositeBlueprintTests
         composite.Build(ecsContext.ComponentManager, entityId);
 
         var displayText = ecsContext.ComponentManager.GetDirectPool<DisplayTextComponent>().GetReadonly(entityId);
-        StringAssert.Contains(displayText.Name, "PartA");
-        StringAssert.Contains(displayText.Name, "PartB");
-        StringAssert.Contains(displayText.Name, "Override");
+        Assert.Contains("PartA", displayText.Name);
+        Assert.Contains("PartB", displayText.Name);
+        Assert.Contains("Override", displayText.Name);
 
         // DisplayTextComponent's merge action appends -- Override coming last in the string
         // confirms the overrides delegate really ran after both parts, not interleaved.
@@ -126,7 +126,7 @@ public sealed class CompositeBlueprintTests
         variantSet.Build(ecsContext.ComponentManager, entityId);
 
         var displayText = ecsContext.ComponentManager.GetDirectPool<DisplayTextComponent>().GetReadonly(entityId);
-        StringAssert.Contains(displayText.Name, "Base");
+        Assert.Contains("Base", displayText.Name);
 
         var containsA = displayText.Name.Contains("VariantA", StringComparison.Ordinal);
         var containsB = displayText.Name.Contains("VariantB", StringComparison.Ordinal);
@@ -159,8 +159,8 @@ public sealed class CompositeBlueprintTests
         composite.Build(ecsContext.ComponentManager, entityId);
 
         var displayText = ecsContext.ComponentManager.GetDirectPool<DisplayTextComponent>().GetReadonly(entityId);
-        StringAssert.Contains(displayText.Name, "Outer");
-        StringAssert.Contains(displayText.Name, "NestedBase");
-        StringAssert.Contains(displayText.Name, "NestedVariant");
+        Assert.Contains("Outer", displayText.Name);
+        Assert.Contains("NestedBase", displayText.Name);
+        Assert.Contains("NestedVariant", displayText.Name);
     }
 }

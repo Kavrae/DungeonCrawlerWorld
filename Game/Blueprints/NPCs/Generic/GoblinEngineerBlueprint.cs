@@ -19,28 +19,23 @@ namespace Game.Blueprints.NPCs.Generic;
 /// choice, not a correctness requirement -- this hand-authored, tested composite is exactly
 /// the place to pin that choice down, even though the parts themselves don't demand it.
 /// </summary>
-public sealed class GoblinEngineerBlueprint : IBlueprint
+public sealed class GoblinEngineerBlueprint(Goblin goblin, Engineer engineer) : IBlueprint
 {
     private const string DisplayName = "Goblin Engineer";
     private const string Description = "Engineers. The incels of the goblin world. They have a hard time finding a date, which makes them extra angry. If there are any females in you party, they will attack them first.";
 
-    private readonly CompositeBlueprint _composite;
+    private readonly CompositeBlueprint _composite = new CompositeBlueprint(
+        [goblin, engineer],
+        static (componentManager, entityId) =>
+        {
+            componentManager.Merge(entityId, new DisplayTextComponent(DisplayName, Description));
 
-    public GoblinEngineerBlueprint(Goblin goblin, Engineer engineer)
-    {
-        _composite = new CompositeBlueprint(
-            [goblin, engineer],
-            static (componentManager, entityId) =>
+            componentManager.TryUpdate(entityId, static (ref EnergyComponent energyComponent) =>
             {
-                componentManager.Merge(entityId, new DisplayTextComponent(DisplayName, Description));
-
-                componentManager.TryUpdate(entityId, static (ref EnergyComponent energyComponent) =>
-                {
-                    energyComponent.MaximumEnergy = (short)(energyComponent.MaximumEnergy * 1.1m);
-                    energyComponent.EnergyRecharge = (short)(energyComponent.EnergyRecharge * 1.1m);
-                });
+                energyComponent.MaximumEnergy = (short)(energyComponent.MaximumEnergy * 1.1m);
+                energyComponent.EnergyRecharge = (short)(energyComponent.EnergyRecharge * 1.1m);
             });
-    }
+        });
 
     public void Build(ComponentManager componentManager, int entityId) => _composite.Build(componentManager, entityId);
 }

@@ -62,7 +62,7 @@ public sealed class MovementSystem : ISystem
             ref readonly var movementComponent = ref _movementComponents.GetReadonly(entityId);
             if (movementComponent.FramesToWait > 0)
             {
-                _movementComponents.TryUpdate(entityId, static (ref MovementComponent movementComponent) =>
+                _movementComponents.TryUpdate(entityId, static (ref movementComponent) =>
                 {
                     movementComponent.FramesToWait -= 1;
                 });
@@ -112,12 +112,12 @@ public sealed class MovementSystem : ISystem
         var oldPosition = transformComponent.Position;
         var newPosition = movementComponent.NextMapPosition!.Value;
 
-        _transformComponents.TryUpdate(entityId, newPosition, static (ref TransformComponent transformComponent, Vector3Int newPosition) =>
+        _transformComponents.TryUpdate(entityId, newPosition, static (ref transformComponent, newPosition) =>
         {
             transformComponent.Position = newPosition;
         });
 
-        _energyComponents.TryUpdate(entityId, movementComponent.EnergyToMove, static (ref EnergyComponent energyComponent, short energyToMove) =>
+        _energyComponents.TryUpdate(entityId, movementComponent.EnergyToMove, static (ref energyComponent, energyToMove) =>
         {
             energyComponent.CurrentEnergy -= energyToMove;
         });
@@ -212,7 +212,7 @@ public sealed class MovementSystem : ISystem
 
             if (CanMove(positionToTest, size, entityId))
             {
-                _movementComponents.TryUpdate(entityId, positionToTest, static (ref MovementComponent movementComponent, Vector3Int newPosition) =>
+                _movementComponents.TryUpdate(entityId, positionToTest, static (ref movementComponent, newPosition) =>
                 {
                     movementComponent.NextMapPosition = newPosition;
                 });
@@ -223,7 +223,7 @@ public sealed class MovementSystem : ISystem
         }
         while (failedIndexCount < 4);
 
-        _movementComponents.TryUpdate(entityId, FramesToWaitIfNoOptions, static (ref MovementComponent movementComponent, short framesToWait) =>
+        _movementComponents.TryUpdate(entityId, FramesToWaitIfNoOptions, static (ref movementComponent, framesToWait) =>
         {
             movementComponent.FramesToWait = framesToWait;
         });

@@ -29,7 +29,7 @@ public struct Vector2Byte : IEquatable<Vector2Byte>
 
     public override bool Equals(object? obj) => obj is Vector2Byte other && Equals(other);
 
-    public bool Equals(Vector2Byte other) => X == other.X && Y == other.Y;
+    public readonly bool Equals(Vector2Byte other) => X == other.X && Y == other.Y;
 
     public static bool operator ==(Vector2Byte value1, Vector2Byte value2) => value1.Equals(value2);
 
@@ -43,7 +43,7 @@ public struct Vector2Byte : IEquatable<Vector2Byte>
     public static Vector2Byte operator -(Vector2Byte value1, Vector2Byte value2) =>
         new(MathUtility.ClampByte(value1.X - value2.X), MathUtility.ClampByte(value1.Y - value2.Y));
 
-    public override int GetHashCode() => HashCode.Combine(X, Y);
+    public override readonly int GetHashCode() => HashCode.Combine(X, Y);
 
-    public override string ToString() => $"{{X:{X} Y:{Y}}}";
+    public override readonly string ToString() => $"{{X:{X} Y:{Y}}}";
 }

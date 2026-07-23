@@ -25,7 +25,7 @@ public sealed class ComponentManagerTests
     {
         var manager = new ComponentManager(initialEntityCapacity: 10, initialComponentCapacity: 4);
 
-        manager.RegisterDirectPool<DirectTestComponent>((ref DirectTestComponent existing, DirectTestComponent incoming) => existing = incoming);
+        manager.RegisterDirectPool<DirectTestComponent>((ref existing, incoming) => existing = incoming);
 
         Assert.IsTrue(manager.IsRegistered<DirectTestComponent>());
         Assert.AreEqual(ComponentPoolType.Direct, manager.GetPoolType<DirectTestComponent>());
@@ -39,17 +39,17 @@ public sealed class ComponentManagerTests
     public void RegisterSameTypeTwice_Throws()
     {
         var manager = new ComponentManager(initialEntityCapacity: 10, initialComponentCapacity: 4);
-        manager.RegisterDirectPool<DirectTestComponent>((ref DirectTestComponent existing, DirectTestComponent incoming) => existing = incoming);
+        manager.RegisterDirectPool<DirectTestComponent>((ref existing, incoming) => existing = incoming);
 
         Assert.ThrowsExactly<InvalidOperationException>(() =>
-            manager.RegisterDirectPool<DirectTestComponent>((ref DirectTestComponent existing, DirectTestComponent incoming) => existing = incoming));
+            manager.RegisterDirectPool<DirectTestComponent>((ref existing, incoming) => existing = incoming));
     }
 
     [TestMethod]
     public void GetPackedPool_WrongPoolKind_Throws()
     {
         var manager = new ComponentManager(initialEntityCapacity: 10, initialComponentCapacity: 4);
-        manager.RegisterDirectPool<DirectTestComponent>((ref DirectTestComponent existing, DirectTestComponent incoming) => existing = incoming);
+        manager.RegisterDirectPool<DirectTestComponent>((ref existing, incoming) => existing = incoming);
 
         Assert.ThrowsExactly<InvalidOperationException>(() => manager.GetPackedPool<DirectTestComponent>());
     }
@@ -66,8 +66,8 @@ public sealed class ComponentManagerTests
     public void ResizeEntityCapacity_ResizesEveryRegisteredPool()
     {
         var manager = new ComponentManager(initialEntityCapacity: 4, initialComponentCapacity: 4);
-        manager.RegisterDirectPool<DirectTestComponent>((ref DirectTestComponent existing, DirectTestComponent incoming) => existing = incoming);
-        manager.RegisterPackedPool<PackedTestComponent>((ref PackedTestComponent existing, PackedTestComponent incoming) => existing = incoming);
+        manager.RegisterDirectPool<DirectTestComponent>((ref existing, incoming) => existing = incoming);
+        manager.RegisterPackedPool<PackedTestComponent>((ref existing, incoming) => existing = incoming);
         manager.RegisterMultiPool<MultiTestComponent>();
 
         manager.ResizeEntityCapacity(50);
@@ -82,8 +82,8 @@ public sealed class ComponentManagerTests
     public void RemoveAllComponents_RemovesAcrossAllPoolKinds()
     {
         var manager = new ComponentManager(initialEntityCapacity: 10, initialComponentCapacity: 4);
-        manager.RegisterDirectPool<DirectTestComponent>((ref DirectTestComponent existing, DirectTestComponent incoming) => existing = incoming);
-        manager.RegisterPackedPool<PackedTestComponent>((ref PackedTestComponent existing, PackedTestComponent incoming) => existing = incoming);
+        manager.RegisterDirectPool<DirectTestComponent>((ref existing, incoming) => existing = incoming);
+        manager.RegisterPackedPool<PackedTestComponent>((ref existing, incoming) => existing = incoming);
         manager.RegisterMultiPool<MultiTestComponent>();
 
         manager.GetDirectPool<DirectTestComponent>().Add(0, new DirectTestComponent());
@@ -108,7 +108,7 @@ public sealed class ComponentManagerTests
     public void Merge_DirectPool_AbsentComponent_AddsIt()
     {
         var manager = new ComponentManager(initialEntityCapacity: 10, initialComponentCapacity: 4);
-        manager.RegisterDirectPool<DirectTestComponent>((ref DirectTestComponent existing, DirectTestComponent incoming) => existing.Value += incoming.Value);
+        manager.RegisterDirectPool<DirectTestComponent>((ref existing, incoming) => existing.Value += incoming.Value);
 
         manager.Merge(0, new DirectTestComponent { Value = 5 });
 
@@ -119,7 +119,7 @@ public sealed class ComponentManagerTests
     public void Merge_DirectPool_ExistingComponent_CombinesViaMergeAction()
     {
         var manager = new ComponentManager(initialEntityCapacity: 10, initialComponentCapacity: 4);
-        manager.RegisterDirectPool<DirectTestComponent>((ref DirectTestComponent existing, DirectTestComponent incoming) => existing.Value += incoming.Value);
+        manager.RegisterDirectPool<DirectTestComponent>((ref existing, incoming) => existing.Value += incoming.Value);
         manager.Merge(0, new DirectTestComponent { Value = 5 });
 
         manager.Merge(0, new DirectTestComponent { Value = 3 });
@@ -131,7 +131,7 @@ public sealed class ComponentManagerTests
     public void Merge_PackedPool_ExistingComponent_CombinesViaMergeAction()
     {
         var manager = new ComponentManager(initialEntityCapacity: 10, initialComponentCapacity: 4);
-        manager.RegisterPackedPool<PackedTestComponent>((ref PackedTestComponent existing, PackedTestComponent incoming) => existing.Value += incoming.Value);
+        manager.RegisterPackedPool<PackedTestComponent>((ref existing, incoming) => existing.Value += incoming.Value);
         manager.Merge(0, new PackedTestComponent { Value = 5 });
 
         manager.Merge(0, new PackedTestComponent { Value = 3 });
@@ -170,7 +170,7 @@ public sealed class ComponentManagerTests
     public void TryUpdate_DirectPool_ExistingComponent_MutatesInPlaceAndReturnsTrue()
     {
         var manager = new ComponentManager(initialEntityCapacity: 10, initialComponentCapacity: 4);
-        manager.RegisterDirectPool<DirectTestComponent>((ref DirectTestComponent existing, DirectTestComponent incoming) => existing = incoming);
+        manager.RegisterDirectPool<DirectTestComponent>((ref existing, incoming) => existing = incoming);
         manager.Merge(0, new DirectTestComponent { Value = 5 });
 
         var updated = manager.TryUpdate(0, (ref DirectTestComponent c) => c.Value += 10);
@@ -183,7 +183,7 @@ public sealed class ComponentManagerTests
     public void TryUpdate_DirectPool_AbsentComponent_ReturnsFalse()
     {
         var manager = new ComponentManager(initialEntityCapacity: 10, initialComponentCapacity: 4);
-        manager.RegisterDirectPool<DirectTestComponent>((ref DirectTestComponent existing, DirectTestComponent incoming) => existing = incoming);
+        manager.RegisterDirectPool<DirectTestComponent>((ref existing, incoming) => existing = incoming);
 
         var updated = manager.TryUpdate(0, (ref DirectTestComponent c) => c.Value += 10);
 
@@ -194,7 +194,7 @@ public sealed class ComponentManagerTests
     public void TryUpdate_PackedPool_ExistingComponent_MutatesInPlaceAndReturnsTrue()
     {
         var manager = new ComponentManager(initialEntityCapacity: 10, initialComponentCapacity: 4);
-        manager.RegisterPackedPool<PackedTestComponent>((ref PackedTestComponent existing, PackedTestComponent incoming) => existing = incoming);
+        manager.RegisterPackedPool<PackedTestComponent>((ref existing, incoming) => existing = incoming);
         manager.Merge(0, new PackedTestComponent { Value = 5 });
 
         var updated = manager.TryUpdate(0, (ref PackedTestComponent c) => c.Value += 10);

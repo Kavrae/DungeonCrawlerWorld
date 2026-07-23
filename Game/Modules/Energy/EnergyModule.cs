@@ -13,7 +13,7 @@ public sealed class EnergyModule : IModule
 
     public void RegisterComponents(ComponentManager componentManager)
     {
-        componentManager.RegisterPackedPool<EnergyComponent>(static (ref EnergyComponent existing, EnergyComponent incoming) =>
+        componentManager.RegisterPackedPool<EnergyComponent>(static (ref existing, incoming) =>
         {
             existing.EnergyRecharge = (short)((existing.EnergyRecharge + incoming.EnergyRecharge) / 2);
             // Floored at 0: a negative MaximumEnergy here would make the ClampShort below

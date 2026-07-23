@@ -1,6 +1,6 @@
 using Engine.Bootstrap;
 using Engine.Diagnostics;
-using Engine.ECS.World;
+using Engine.ECS.Context;
 using Engine.Events;
 using Engine.Math;
 using Engine.Modules;

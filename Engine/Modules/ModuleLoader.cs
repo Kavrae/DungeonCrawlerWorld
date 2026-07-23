@@ -56,7 +56,7 @@ public static class ModuleLoader
         {
             // Some types in the assembly failed to load (e.g. a missing dependency) -- still
             // process whichever types did load rather than discarding the whole assembly.
-            types = exception.Types.Where(type => type is not null).Cast<Type>().ToArray();
+            types = [.. exception.Types.Where(type => type is not null).Cast<Type>()];
             failures.Add(new ModuleFailure(dllPath, exception));
         }
 

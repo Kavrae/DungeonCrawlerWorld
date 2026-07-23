@@ -9,14 +9,9 @@ namespace Engine.Diagnostics;
 /// an entity's components (e.g. for a debug/selection UI) costs no reflection and no boxing
 /// beyond the pools' own inspection entries.
 /// </summary>
-public sealed class ComponentInspector
+public sealed class ComponentInspector(ComponentManager componentManager)
 {
-    private readonly ComponentManager _componentManager;
-
-    public ComponentInspector(ComponentManager componentManager)
-    {
-        _componentManager = componentManager ?? throw new ArgumentNullException(nameof(componentManager));
-    }
+    private readonly ComponentManager _componentManager = componentManager ?? throw new ArgumentNullException(nameof(componentManager));
 
     public void CopyInspectionDataForEntity(int entityId, List<InspectedComponentEntry> destination)
     {

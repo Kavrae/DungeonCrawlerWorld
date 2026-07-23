@@ -14,23 +14,23 @@ public sealed class CoreModule : IModule
 
     public void RegisterComponents(ComponentManager componentManager)
     {
-        componentManager.RegisterDirectPool<BackgroundComponent>(static (ref BackgroundComponent existing, BackgroundComponent incoming) =>
+        componentManager.RegisterDirectPool<BackgroundComponent>(static (ref existing, incoming) =>
         {
             existing.BackgroundColor = Color.Lerp(existing.BackgroundColor, incoming.BackgroundColor, 0.5f);
         });
 
-        componentManager.RegisterDirectPool<DisplayTextComponent>(static (ref DisplayTextComponent existing, DisplayTextComponent incoming) =>
+        componentManager.RegisterDirectPool<DisplayTextComponent>(static (ref existing, incoming) =>
         {
             existing.Name = existing.Name + " " + incoming.Name;
             existing.Description = existing.Description + Environment.NewLine + incoming.Description;
         });
 
-        componentManager.RegisterDirectPool<GlyphComponent>(static (ref GlyphComponent existing, GlyphComponent incoming) =>
+        componentManager.RegisterDirectPool<GlyphComponent>(static (ref existing, incoming) =>
         {
             existing.GlyphColor = Color.Lerp(existing.GlyphColor, incoming.GlyphColor, 0.5f);
         });
 
-        componentManager.RegisterPackedPool<OccupancyComponent>(static (ref OccupancyComponent existing, OccupancyComponent incoming) =>
+        componentManager.RegisterPackedPool<OccupancyComponent>(static (ref existing, incoming) =>
         {
             existing.IsTiny |= incoming.IsTiny;
             existing.IsPhasing |= incoming.IsPhasing;
@@ -39,7 +39,7 @@ public sealed class CoreModule : IModule
         componentManager.RegisterMultiPool<NonBlockingComponent>();
         componentManager.RegisterMultiPool<ForceBlockingComponent>();
 
-        componentManager.RegisterDirectPool<TransformComponent>(static (ref TransformComponent existing, TransformComponent incoming) =>
+        componentManager.RegisterDirectPool<TransformComponent>(static (ref existing, incoming) =>
         {
             existing.Size = new Vector2Byte(
                 (byte)((existing.Size.X + incoming.Size.X) / 2),

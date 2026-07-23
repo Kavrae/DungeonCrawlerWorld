@@ -10,7 +10,7 @@ public sealed class EnergyComponentTests
     {
         var component = new EnergyComponent(currentEnergy: 50, energyRecharge: 5, maximumEnergy: 100);
 
-        StringAssert.Contains(component.ToString(), "E");
+        Assert.Contains("E", component.ToString());
     }
 
     /// <summary>
@@ -26,7 +26,7 @@ public sealed class EnergyComponentTests
 
         var text = component.ToString();
 
-        StringAssert.Contains(text, "invalid");
+        Assert.Contains("invalid", text);
     }
 
     [TestMethod]
@@ -36,6 +36,6 @@ public sealed class EnergyComponentTests
 
         var text = component.ToString();
 
-        StringAssert.Contains(text, "invalid");
+        Assert.Contains("invalid", text);
     }
 }

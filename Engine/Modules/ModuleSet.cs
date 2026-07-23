@@ -16,7 +16,9 @@ public static class ModuleSet
 
         foreach (var mod in mods)
         {
-            var replaceIndex = mod.Id != Guid.Empty ? combined.FindIndex(m => m.Id == mod.Id) : -1;
+            var replaceIndex = mod.Id != Guid.Empty
+                ? combined.FindIndex(m => m.Id == mod.Id)
+                : -1;
 
             if (replaceIndex >= 0)
             {

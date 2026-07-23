@@ -198,7 +198,7 @@ public sealed class StringUtilityTests
     }
 
     [TestMethod]
-    [Timeout(5000)]
+    [Timeout(5000, CooperativeCancellation = true)]
     public void FormatText_WordMuchWiderThanCharacterWidthEstimate_TerminatesInsteadOfHanging()
     {
         // Regression test for a real infinite-loop risk: a word made of characters far

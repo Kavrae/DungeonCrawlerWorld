@@ -28,10 +28,10 @@ public sealed class MapWindowTests
         var windowService = new WindowService(fontService, new GlyphRenderer());
 
         var componentManager = new ComponentManager(100, 50);
-        componentManager.RegisterDirectPool<TransformComponent>(static (ref TransformComponent existing, TransformComponent incoming) => existing = incoming);
-        componentManager.RegisterDirectPool<GlyphComponent>(static (ref GlyphComponent existing, GlyphComponent incoming) => existing = incoming);
-        componentManager.RegisterDirectPool<BackgroundComponent>(static (ref BackgroundComponent existing, BackgroundComponent incoming) => existing = incoming);
-        componentManager.RegisterPackedPool<OccupancyComponent>(static (ref OccupancyComponent existing, OccupancyComponent incoming) => existing = incoming);
+        componentManager.RegisterDirectPool<TransformComponent>(static (ref existing, incoming) => existing = incoming);
+        componentManager.RegisterDirectPool<GlyphComponent>(static (ref existing, incoming) => existing = incoming);
+        componentManager.RegisterDirectPool<BackgroundComponent>(static (ref existing, incoming) => existing = incoming);
+        componentManager.RegisterPackedPool<OccupancyComponent>(static (ref existing, incoming) => existing = incoming);
 
         windowService.RegisterFactory<MapWindow>((_, _) => new MapWindow(
             fontService, windowService, world, mapViewState, componentManager, new TileRenderer(), new GlyphRenderer()));
