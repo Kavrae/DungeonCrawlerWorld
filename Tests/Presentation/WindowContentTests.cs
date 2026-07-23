@@ -23,12 +23,14 @@ public sealed class WindowContentTests
         public int DrawContentCount { get; private set; }
         public List<Keys> PressedKeys { get; } = [];
         public int HandleHotkeysCount { get; private set; }
+        public List<char> TypedCharacters { get; } = [];
 
         public void Initialize(Window hostWindow) => InitializedWith = hostWindow;
         public void Update(GameTime gameTime) => UpdateCount++;
         public void DrawContent(GameTime gameTime, SpriteBatch spriteBatch, Texture2D unitRectangle) => DrawContentCount++;
         public void HandleKeyPress(Keys key) => PressedKeys.Add(key);
         public void HandleHotkeys(KeyboardState keyboardState, KeyboardState previousKeyboardState) => HandleHotkeysCount++;
+        public void HandleTextInput(char character) => TypedCharacters.Add(character);
     }
 
     private static WindowService CreateWindowService() => new(new FontService("Fonts"), new GlyphRenderer());
@@ -121,6 +123,30 @@ public sealed class WindowContentTests
         window.Initialize();
 
         window.HandleHotkeys(new KeyboardState(), new KeyboardState());
+    }
+
+    [TestMethod]
+    public void HandleTextInput_ContentAttached_IsForwardedByDefaultVirtualMethod()
+    {
+        var windowService = CreateWindowService();
+        var window = windowService.CreateWindow<Window>(null, new WindowOptions());
+        var content = new RecordingContent();
+        window.SetContent(content);
+        window.Initialize();
+
+        window.HandleTextInput('a');
+
+        CollectionAssert.AreEqual(new[] { 'a' }, content.TypedCharacters);
+    }
+
+    [TestMethod]
+    public void Window_WithNoContentAttached_HandleTextInputDoesNotThrow()
+    {
+        var windowService = CreateWindowService();
+        var window = windowService.CreateWindow<Window>(null, new WindowOptions());
+        window.Initialize();
+
+        window.HandleTextInput('a');
     }
 
     [TestMethod]

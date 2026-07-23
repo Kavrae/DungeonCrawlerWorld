@@ -131,4 +131,75 @@ public sealed class TextWindowScrollingTests
 
         Assert.AreEqual(expectedMaxScrollY, window.MaxScrollOffset.Y, 0.01f);
     }
+
+    /// <summary>
+    /// Regression test for the selection-window overlap fix: a plain (non-TextWindow) parent
+    /// with CanUserScrollVertical set must get a positive MaxScrollOffset once its
+    /// WrapContent-height children's combined extent exceeds its own fixed content size --
+    /// AddChildWindow's RecalculateScrollBoundsFromChildren is what wires this up, mirroring
+    /// how a WrapContent parent already sizes itself around its children.
+    /// </summary>
+    [TestMethod]
+    public void ParentWindow_ChildrenExceedContentSize_GetsPositiveMaxScrollOffset()
+    {
+        var windowService = CreateWindowService();
+        var parent = windowService.CreateWindow<Window>(null, new WindowOptions
+        {
+            Hierarchy = new WindowHierarchyOptions { CanContainChildWindows = true, ChildWindowTileMode = WindowTileMode.Vertical },
+            Layout = new WindowLayoutOptions { Size = new Vector2(300, 10), DisplayMode = WindowDisplayMode.Fixed },
+            Chrome = new WindowChromeOptions { CanUserScrollVertical = true },
+        });
+        parent.Initialize();
+
+        for (var index = 0; index < 3; index++)
+        {
+            var child = windowService.CreateWindow<TextWindow>(parent, new WindowOptions
+            {
+                Layout = new WindowLayoutOptions { MaximumSize = new Vector2(parent.ContentSize.X, 1000), DisplayMode = WindowDisplayMode.WrapContent },
+                Text = new TextOptions { Text = $"Child {index}" },
+            });
+            parent.AddChildWindow(child);
+        }
+
+        Assert.IsGreaterThan(0, parent.MaxScrollOffset.Y);
+    }
+
+    /// <summary>
+    /// Regression test: scrolling a parent must actually move its children's absolute screen
+    /// position (RecalculateAbsolutePositions subtracts the parent's ScrollOffset), not just
+    /// update ScrollOffset/MaxScrollOffset bookkeeping with no visible effect -- Window.Draw's
+    /// child-window loop positions children by WindowAbsolutePosition, not through the
+    /// CameraTransform viewport pass DrawContent uses, so this is the only mechanism that
+    /// actually scrolls child windows at all (see ScrollBy's call to Arrange()).
+    /// </summary>
+    [TestMethod]
+    public void ScrollBy_OnParentWindow_ShiftsChildAbsolutePosition()
+    {
+        var windowService = CreateWindowService();
+        var parent = windowService.CreateWindow<Window>(null, new WindowOptions
+        {
+            Hierarchy = new WindowHierarchyOptions { CanContainChildWindows = true, ChildWindowTileMode = WindowTileMode.Vertical },
+            Layout = new WindowLayoutOptions { Size = new Vector2(300, 10), DisplayMode = WindowDisplayMode.Fixed },
+            Chrome = new WindowChromeOptions { CanUserScrollVertical = true },
+        });
+        parent.Initialize();
+
+        Window? firstChild = null;
+        for (var index = 0; index < 3; index++)
+        {
+            var child = windowService.CreateWindow<TextWindow>(parent, new WindowOptions
+            {
+                Layout = new WindowLayoutOptions { MaximumSize = new Vector2(parent.ContentSize.X, 1000), DisplayMode = WindowDisplayMode.WrapContent },
+                Text = new TextOptions { Text = $"Child {index}" },
+            });
+            parent.AddChildWindow(child);
+            firstChild ??= child;
+        }
+
+        var positionBeforeScroll = firstChild!.WindowAbsolutePosition;
+
+        parent.ScrollBy(new Vector2(0, parent.MaxScrollOffset.Y));
+
+        Assert.AreEqual(positionBeforeScroll.Y - parent.MaxScrollOffset.Y, firstChild.WindowAbsolutePosition.Y, 0.01f);
+    }
 }

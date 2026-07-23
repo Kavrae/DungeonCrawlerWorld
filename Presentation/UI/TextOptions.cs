@@ -14,4 +14,7 @@ public sealed class TextOptions
     public string? Text { get; set; }
 
     public Color? TextColor { get; set; }
+
+    /// <summary>TextBox only -- whether Shift+Enter inserts a newline (true) or is treated the same as a plain Enter (false, the default). See TextBox.OnHotkeysAction.</summary>
+    public bool? Multiline { get; set; }
 }

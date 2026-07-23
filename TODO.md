@@ -4,7 +4,53 @@ Non-urgent architectural items worth revisiting later -- things noticed in passi
 
 ## Text input
 
-No editable text control exists -- `TextWindow` only ever displays text, never accepts it. Needed for anything resembling a settings screen, chat/console input, search/filter boxes, etc. Focus (`Window.IsFocused`/`GameInputController`) now exists and routes both discrete key presses (`Window.HandleKeyPress`) and whole-keyboard-state hotkeys (`Window.HandleHotkeys`) to whichever window is focused, so this is unblocked -- a text-input control just needs to override one of those two hooks.
+No editable text control exists -- `TextWindow` only ever displays text, never accepts it. Needed for anything resembling a settings screen, chat/console input, search/filter boxes, etc.
+
+Focus (`Window.IsFocused`, `GameInputController`) and two keyboard-routing hooks already exist for a focused window to consume input: `Window.HandleKeyPress`/`OnKeyPressAction` (one discrete key-press event at a time) and `Window.HandleHotkeys`/`OnHotkeysAction` (the whole `KeyboardState`, for modifier-aware combos -- see `MapWindow.OnHotkeysAction`). Neither delivers actual typed *characters* (shifted case, punctuation, OS keyboard layout) though -- that needs a third hook fed from FNA's `TextInputEXT.TextInput` static event (the same "*EXT" extension-class pattern `GameInputController.UpdateCursor` already uses for `MouseCursorEXT`), mirrored the same way as the other two: `Window.HandleTextInput(char)`/`OnTextInputAction`/`IWindowContent.HandleTextInput`, fed by a new `GameInputController.RouteTextInputToFocusedWindow` subscribed to that event once.
+
+A new `TextBox : TextWindow` control (reusing `TextWindow`'s existing wrap/scroll/draw machinery rather than rebuilding it, single-line just being a fixed-height case of the same class) would be the first thing to actually need all three hooks together:
+
+- `OnTextInputAction` appends the typed character.
+- `OnKeyPressAction` handles Backspace (removes the last character).
+- `OnHotkeysAction` watches for Enter -- needs Shift-state, hence the whole-state hook rather than `HandleKeyPress`: plain Enter submits; Shift+Enter inserts a newline, multiline boxes only (a `Multiline` option, e.g. on a new `TextBoxOptions`/extended `TextOptions`, gates whether Shift+Enter does anything).
+
+Behavior once submitted:
+
+- Submitting (plain Enter) raises a `TextSubmitted` event (mirrors `Button.Clicked`) carrying the current text -- the TextBox itself stays generic; whatever hosts it decides what "submit" means.
+- If the TextBox's parent window has another TextBox child, submitting moves focus to it rather than leaving focus on a dead end. Needs a new `Window.NextTextBoxAfter(Window? after)` helper (walks `ChildWindows` in order) plus a way for the TextBox to ask `GameInputController` to actually move focus, since `Window` has no reference to it -- a new `Window.FocusRequested` event, subscribed/unsubscribed by `GameInputController.SetFocus` exactly the way it already subscribes to `Closed`.
+- Whenever a window with TextBox children becomes the focused window (click, Tab-cycle, or `FocusWindow`), redirect into its first TextBox automatically rather than leaving the container itself as the dead-end focus target. Natural place: `GameInputController.SetFocus` itself -- after focusing `newWindow`, check `newWindow.NextTextBoxAfter(null)` and redirect if found. This and the Enter-driven case above are the same underlying primitive (find the next TextBox sibling); `NextTextBoxAfter(null)` doubles as "find the first one."
+
+A visual focus indicator is also needed specifically for this control -- not optional, since without one there's no way to tell a TextBox is focused at all: the existing indicator (`Window.FocusedTitleColor`) only paints a title bar, but a TextBox is expected to be titleless, so it needs its own border/highlight-based indicator instead.
+
+First concrete implementation, landed: a popup window (`GameShellBootstrapper.OpenQuestComposer`, `WindowDisplayMode.Fixed`, closeable, explicitly resized to track its TextBox -- see the WrapContent-circularity TODO below for why not `WrapContent`) containing one multiline TextBox. Submitting sends the text to `NotificationCenter.AddNotification(NotificationCategory.Quest, ...)` and closes the popup.
+
+Deliberately out of scope for this first pass -- start narrow; see Text Input Enhanced Features below for what's deferred and why.
+
+Affected: `Presentation/UI/Window.cs` (new `HandleTextInput` hook, `NextTextBoxAfter`, `FocusRequested`), `Presentation/UI/IWindowContent.cs` (new hook), `Presentation/Input/GameInputController.cs` (new routing method, `SetFocus` auto-redirect), `Presentation/UI/TextBox.cs` (new), `Presentation/UI/Notifications/NotificationCenter.cs` (consumer for the demo).
+
+## Text Input Enhanced Features
+
+Follow-on to Text input above, once a TextBox actually needs more than "type to append, Backspace to remove from the end" -- deliberately deferred out of that item's first pass rather than gold-plating a control before anything exercises the basics:
+
+- Cursor-addressable editing: insert/delete at an arbitrary position within the string, not just the end.
+- Arrow-key navigation (Left/Right, and Up/Down for multiline) to move the cursor without the mouse.
+- Click-to-position-cursor: clicking within a TextBox's text sets the cursor to that character position.
+- Selection (Shift+arrow or click-drag) and copy/paste, building on the clipboard mechanism from the Text copy to clipboard TODO below.
+- Key-repeat on a held Backspace/Delete -- `Window.HandleKeyPress` is edge-triggered (fires once per press, not while held), so this needs either a per-window repeat timer or a second, repeat-aware routing path. Typed characters don't have this gap: OS-level `TextInputEXT` text input already auto-repeats while a printable key is held.
+
+Affected: `Presentation/UI/TextBox.cs` (once it exists, see Text input above).
+
+## WrapContent parent sizing collapses when a child resizes itself after being attached
+
+Discovered building the quest-composer popup (see Text input above): a `WindowDisplayMode.WrapContent` window whose size depends on a child, paired with a child that later resizes *itself* (not at attach time -- `AddChildWindow`/`RemoveChildWindow` already re-fit a WrapContent parent correctly on attach/detach), collapses both windows toward `(0,0)` instead of settling on a real size. Confirmed with a failing test (a `WrapContent` parent + a multiline `TextBox` child, `TextBox.AutoSizeToContent` calling the parent's own `MeasureAndArrange` after each resize) before backing out of that design.
+
+Root cause: `Window.Measure` unconditionally overwrites a child's own `_geometry.MaximumSize` with `_parentWindow.ContentSize - RelativePosition` on every pass (see the top of `Measure`), regardless of whatever `MaximumSize` the child was actually built with. For a `Fixed`-size parent this is harmless (`ContentSize` is already stable, independent of children). For a `WrapContent` parent it's circular: the parent's own `ContentSize` is *derived from* its children's current sizes, but a child that resizes itself gets its own cap silently rewritten to that same not-yet-correct parent `ContentSize` -- which starts at `(0,0)` before the parent has ever measured a child, so the loop starts degenerate and never escapes it (each side keeps "confirming" the other's near-zero size instead of converging on the child's actual intended size).
+
+The quest-composer popup works around this today by staying `Fixed` and having `GameShellBootstrapper.OpenQuestComposer` explicitly resize the popup off the TextBox's own `Resized` event, with a chrome-overhead constant computed once up front -- see that method's own comments. That's a fine one-off answer but doesn't generalize: the *next* thing that wants "container shrinks to fit a child, then grows as that child grows" will hit the exact same wall.
+
+A real fix likely means `Measure` shouldn't blindly overwrite a child's `MaximumSize` from `_parentWindow.ContentSize` when the parent is itself `WrapContent` mid-resolution -- e.g. a child's own explicitly-authored `MaximumSize` (captured once at `BuildWindow`, the way `TextBox` was almost given its own independent cap field before this got scoped down to the `Fixed`-parent workaround) should take precedence over whatever the parent's not-yet-settled `ContentSize` currently is. Worth a real design pass rather than a quick patch, since it touches the shared Measure/Arrange pipeline every window goes through.
+
+Affected: `Presentation/UI/Window.cs` (`Measure`, `MeasureAndArrange`, `RecalculateWrapContentWindowSize`).
 
 ## Text copy to clipboard
 
@@ -128,6 +174,24 @@ The map/debug/selection windows are independently positioned/sized rectangles to
 ## Window open/close/minimize animation
 
 Everything -- opening, closing, minimizing, restoring, a notification appearing -- snaps instantly with no transition. Pure polish; lowest priority of the UI items here.
+
+## Options menu
+
+Low priority. No settings/options screen exists -- pressing Escape currently does nothing. Wanted: Escape (global and unconditional, the same way Tab is -- see `GameInputController.HandleFocusCycling`'s "must stay unconditional" note -- not gated to whichever window holds focus) opens an options menu, and the game pauses while it's open.
+
+`MapWindow.IsPaused` (see `OnHotkeysAction`) is today the only pause trigger, and was flagged when it moved there as a seam to revisit once a second trigger showed up -- this is that second trigger. Worth generalizing pause into something both the options menu and MapWindow's own Space hotkey set, rather than the options menu reaching into MapWindow to flip its flag directly.
+
+Directly related to Pause modality above: an open options menu is itself the kind of modal window that TODO wants -- solving "block/dim input to other windows while a modal is up" there would cover the options menu for free, not just System notifications.
+
+Affected: `Presentation/Input/GameInputController.cs` (Escape handling), `Presentation/UI/` (a new options-menu window), `DungeonCrawlerWorld/GameShellBootstrapper.cs`/`GameLoop.cs` (wiring it in and gating the simulation update on it, alongside `MapWindow.IsPaused`/`NotificationCenter.HasBlockingNotification`).
+
+## Keybindings page on the options menu
+
+Low priority, and after Options menu above -- needs somewhere to live. A page/tab within the options menu listing the game's hotkeys (today hardcoded in `MapWindow.OnHotkeysAction`, plus `GameInputController`'s own Tab/Escape handling) and letting the player remap them.
+
+Depends on Options menu above and Standard widget set above -- listing/remapping actions needs more than `Window`/`TextWindow`/`Button`, at minimum something list-like. Would also eventually want persisted storage for the rebound keys -- see Data storage above, though today that item only covers window geometry.
+
+Affected: the new options-menu content (see Options menu above), `Presentation/Input/GameInputController.cs` and `Presentation/UI/MapWindow.cs` (the hotkeys being made rebindable).
 
 ## Possible future UI gaps, likely out of scope for this project
 

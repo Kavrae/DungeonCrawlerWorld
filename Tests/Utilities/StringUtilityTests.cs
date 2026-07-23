@@ -265,4 +265,22 @@ public sealed class StringUtilityTests
     {
         Assert.ThrowsExactly<ArgumentNullException>(() => new FormatTextCriteria(null!, 100, "text", FormatTextMode.Wordwrap));
     }
+
+    [TestMethod]
+    public void SimpleWordWrap_EmbeddedNewlineNotAtChunkBoundary_GetsSplitMidChunkInsteadOfRespected()
+    {
+        // Regression-documenting test, not a fix: SimpleWordWrap chunks by a fixed character
+        // count with no awareness of an embedded '\n' -- a pre-existing newline (e.g. from a
+        // future multiline text box's Shift+Enter) can land in the middle of a chunk instead
+        // of starting its own line. Anything built on top of this that needs embedded
+        // newlines respected has to route around it (e.g. wrap each '\n'-delimited segment
+        // independently) rather than assume this handles them.
+        var criteria = new FormatTextCriteria(new FixedWidthTextMeasurer(10), 50, "AB\nCDEFGHIJ", FormatTextMode.Wordwrap);
+
+        var result = StringUtility.SimpleWordWrap(criteria);
+
+        // If the newline were respected as a forced break, "AB" would be its own line.
+        // Instead 5-character chunking swallows it into the middle of the first chunk.
+        Assert.AreEqual($"AB\nCD{Environment.NewLine}EFGHI{Environment.NewLine}J", result.FormattedText);
+    }
 }

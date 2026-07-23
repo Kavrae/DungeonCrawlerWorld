@@ -10,13 +10,6 @@ using Presentation.Input;
 
 namespace DungeonCrawlerWorld;
 
-/// <summary>
-/// Composition root: wires Engine's module Bootstrapper, Presentation's window service,
-/// and a minimal test map into a running game. Window/layout construction lives in
-/// GameShellBootstrapper and input handling in GameInputController -- both are pulled out
-/// because they're substantial, self-contained pieces of logic; what's left here is the
-/// composition itself plus the thin per-frame orchestration XNA requires of a Game subclass.
-/// </summary>
 public sealed class GameLoop : Microsoft.Xna.Framework.Game
 {
     // Sized for the 1000x1000 test map across all three MapLayers: Ground (~1.06M terrain/
@@ -79,10 +72,9 @@ public sealed class GameLoop : Microsoft.Xna.Framework.Game
         FloorBuilder.PopulateFloor(world, _ecsContext, mathUtility);
 
         _presentation = PresentationBootstrapper.Build(GraphicsDevice, "Fonts");
-        _shell = GameShellBootstrapper.Build(_presentation, world, _ecsContext);
         var screenSize = new Vector2(_graphics.PreferredBackBufferWidth, _graphics.PreferredBackBufferHeight);
-        _inputController = new GameInputController(_shell.RootWindows, _shell.AlwaysOnTopWindows, screenSize);
-        _inputController.FocusWindow(_shell.MapWindow);
+        _shell = GameShellBootstrapper.Build(_presentation, world, _ecsContext, screenSize);
+        _inputController = _shell.InputController;
 
         base.Initialize();
     }

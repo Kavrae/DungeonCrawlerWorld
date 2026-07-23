@@ -58,6 +58,12 @@ public class Window
     /// </summary>
     public event Action<Window>? DisplayModeChanged;
 
+    /// <summary>Raised by a window that can't move focus itself (e.g. a TextBox submitting via Enter) to ask GameInputController to move it elsewhere -- see GameInputController.SetFocus, which subscribes/unsubscribes this the same way it does Closed.</summary>
+    public event Action<Window>? FocusRequested;
+
+    /// <summary>Events can only be raised from their declaring class, so subclasses (e.g. TextBox) go through this instead of invoking FocusRequested directly.</summary>
+    protected void RequestFocus(Window targetWindow) => FocusRequested?.Invoke(targetWindow);
+
     /*========Window hierarchy========*/
     protected Window? _parentWindow;
     public Window? ParentWindow => _parentWindow;
@@ -338,6 +344,13 @@ public class Window
             CanUserScrollVertical ? MathHelper.Clamp(desiredOffset.Y, 0, _maxScrollOffset.Y) : 0);
 
         RecalculateCameraTransform();
+
+        // Child windows (as opposed to DrawContent, e.g. TextWindow's own wrapped text) aren't
+        // drawn through the CameraTransform pass at all -- see Draw's child-window loop, which
+        // runs outside RequiresContentViewport's transformed/clipped Begin/End pair -- so
+        // ScrollOffset only moves them at all because RecalculateAbsolutePositions folds it in
+        // directly. Re-arranging here is what actually pushes a scroll into their positions.
+        Arrange();
     }
 
     /// <summary>
@@ -388,7 +401,7 @@ public class Window
         }
     }
 
-    public void Draw(GameTime gameTime, GraphicsDevice graphicsDevice, SpriteBatch spriteBatch, Texture2D unitRectangle)
+    public virtual void Draw(GameTime gameTime, GraphicsDevice graphicsDevice, SpriteBatch spriteBatch, Texture2D unitRectangle)
     {
         if (!_isVisible)
         {
@@ -475,6 +488,49 @@ public class Window
 
     /// <summary>Shared "newly pressed this frame" edge-detection for OnHotkeysAction overrides and GameInputController's own Tab handling.</summary>
     internal static bool WasKeyPressed(KeyboardState current, KeyboardState previous, Keys key) => current.IsKeyDown(key) && previous.IsKeyUp(key);
+
+    /// <summary>
+    /// Routes an actual typed character (shifted case, punctuation, OS keyboard layout) to
+    /// this window while it holds focus -- see GameInputController.RouteTextInputToFocusedWindow.
+    /// Neither HandleKeyPress (raw Keys values) nor HandleHotkeys (modifier-aware combos) can
+    /// deliver real characters; this is fed from FNA's TextInputEXT.
+    /// </summary>
+    internal void HandleTextInput(char character) => OnTextInputAction(character);
+
+    protected virtual void OnTextInputAction(char character) => _content?.HandleTextInput(character);
+
+    /// <summary>
+    /// Finds the next focusable TextBox among this window's direct children, starting right
+    /// after `after` and wrapping around (after: null means "the first one"). Shared by
+    /// TextBox's own Enter-to-advance and GameInputController.SetFocus's auto-redirect into a
+    /// container's first TextBox -- both are "find the next TextBox sibling," the second just
+    /// with after: null.
+    /// </summary>
+    internal Window? NextTextBoxAfter(Window? after)
+    {
+        // after: null starts the scan at index 0 (IndexOf(null) is -1, so +1 lands on 0) and
+        // never matches the candidate == after break check below, since _childWindows never
+        // contains a null entry -- the scan just runs to completion in order, i.e. "the first
+        // one." after: some child starts right after it and wraps around, stopping once the
+        // scan loops all the way back to after itself (a lone TextBox must not "advance" to
+        // itself) rather than re-checking it as index Count.
+        var startOffset = after is null ? 0 : _childWindows.IndexOf(after) + 1;
+
+        for (var offset = 0; offset < _childWindows.Count; offset++)
+        {
+            var candidate = _childWindows[(startOffset + offset) % _childWindows.Count];
+            if (candidate == after)
+            {
+                break;
+            }
+            if (candidate is TextBox { CanUserFocus: true })
+            {
+                return candidate;
+            }
+        }
+
+        return null;
+    }
 
     public void HandleClick(Point mousePosition)
     {
@@ -697,6 +753,11 @@ public class Window
         _title.Buttons.Insert(clampedInsertIndex, newButton);
 
         RepositionTitleButtons();
+
+        if (_geometry.DisplayMode == WindowDisplayMode.WrapContent)
+        {
+            MeasureAndArrange();
+        }
     }
 
     /// <summary>
@@ -773,6 +834,17 @@ public class Window
         {
             MeasureAndArrange();
         }
+
+        // A scrollable parent's own MaxScrollOffset depends on its children's total extent the
+        // same way a WrapContent parent's own size does above -- re-fit it here, and keep it
+        // in sync with newChildWindow's own future resizes (e.g. SelectionWindowContent
+        // refreshing a component TextWindow's text) via Resized, the same way TextBox tells a
+        // WrapContent parent to re-fit after resizing itself (see TextBox.AutoSizeToContent).
+        if (CanUserScrollVertical || CanUserScrollHorizontal)
+        {
+            newChildWindow.Resized += OnChildWindowResizedForScrollBounds;
+            RecalculateScrollBoundsFromChildren();
+        }
     }
 
     /// <summary>Removes the child, then retiles everything after it so later siblings close the gap instead of keeping the removed window's slot as dead space.</summary>
@@ -784,6 +856,7 @@ public class Window
             return;
         }
 
+        var removedChild = _childWindows[childWindowIndex];
         _childWindows.RemoveAt(childWindowIndex);
         RetileChildrenFrom(childWindowIndex);
 
@@ -793,6 +866,34 @@ public class Window
         {
             MeasureAndArrange();
         }
+
+        if (CanUserScrollVertical || CanUserScrollHorizontal)
+        {
+            removedChild.Resized -= OnChildWindowResizedForScrollBounds;
+            RecalculateScrollBoundsFromChildren();
+        }
+    }
+
+    private void OnChildWindowResizedForScrollBounds(Window _) => RecalculateScrollBoundsFromChildren();
+
+    /// <summary>
+    /// A scrollable parent's MaxScrollOffset is how far its children's total extent exceeds
+    /// its own (fixed) content size -- the same maxRight/maxBottom-from-children computation
+    /// RecalculateWrapContentWindowSize uses to size a WrapContent parent around its children,
+    /// applied here to bound scrolling instead of sizing.
+    /// </summary>
+    private void RecalculateScrollBoundsFromChildren()
+    {
+        var maxRight = 0f;
+        var maxBottom = 0f;
+
+        foreach (var childWindow in _childWindows)
+        {
+            maxRight = System.Math.Max(maxRight, childWindow.WindowRelativePosition.X + childWindow.WindowCurrentSize.X);
+            maxBottom = System.Math.Max(maxBottom, childWindow.WindowRelativePosition.Y + childWindow.WindowCurrentSize.Y);
+        }
+
+        SetMaxScrollOffset(new Vector2(maxRight - _contentState.Size.X, maxBottom - _contentState.Size.Y));
     }
 
     /// <summary>
@@ -844,13 +945,41 @@ public class Window
     /// bottom-up where needed, then arranges absolute positions/rectangles top-down. See
     /// Measure/Arrange below for why this is split into two passes rather than one.
     /// </summary>
-    private void MeasureAndArrange()
+    /// <remarks>
+    /// Internal, not private: a WrapContent parent's own size depends on its children's (see
+    /// RecalculateWrapContentWindowSize), but nothing propagates that automatically when a
+    /// child resizes *itself* after already being attached -- AddChildWindow/RemoveChildWindow
+    /// re-fit the parent on attach/detach, but a child calling its own SetSize/SetBounds later
+    /// (e.g. TextBox.AutoSizeToContent, growing as the user types) has no such hook. Exposing
+    /// this lets a child ask ParentWindow to re-measure itself directly rather than needing a
+    /// whole new "child resized" event/subscription mechanism for what's currently a single
+    /// caller.
+    /// </remarks>
+    internal void MeasureAndArrange()
     {
-        // If there is no parent, this is a root window guaranteed to have a maximum set
-        // (from BuildWindow) already sitting in _geometry.MaximumSize.
-        var availableSize = _parentWindow != null
-            ? _parentWindow.ContentSize - _geometry.RelativePosition
-            : _geometry.MaximumSize;
+        Vector2 availableSize;
+        if (_parentWindow == null)
+        {
+            // Root window: guaranteed to have a maximum set (from BuildWindow) already sitting
+            // in _geometry.MaximumSize.
+            availableSize = _geometry.MaximumSize;
+        }
+        else
+        {
+            // Per axis: a scrollable parent (see AddChildWindow/RecalculateScrollBoundsFromChildren)
+            // deliberately lets its children exceed its own content size on that axis -- overflow
+            // is meant to be revealed by scrolling, not clamped away -- so on that axis the child's
+            // own already-configured _geometry.MaximumSize (its Layout.MaximumSize option, e.g. a
+            // generous sentinel like SelectionWindowContent's UnboundedChildHeight) is the real
+            // constraint instead of the parent's visible content size. Without this, a scrollable
+            // parent's children were silently reclamped to the parent's actual (small) content
+            // size on every Measure regardless of what Layout.MaximumSize asked for, since this
+            // constructor-time value gets unconditionally overwritten below.
+            var parentAvailableSize = _parentWindow.ContentSize - _geometry.RelativePosition;
+            availableSize = new Vector2(
+                _parentWindow.CanUserScrollHorizontal ? _geometry.MaximumSize.X : parentAvailableSize.X,
+                _parentWindow.CanUserScrollVertical ? _geometry.MaximumSize.Y : parentAvailableSize.Y);
+        }
 
         Measure(availableSize);
         Arrange();
@@ -935,9 +1064,12 @@ public class Window
         // below. Using WindowAbsolutePosition here instead used to shift every child by
         // exactly the parent's own border+title thickness, leaving e.g. a 1px gap between a
         // child's right border and the parent content's right edge whenever the parent had a
-        // border.
+        // border. Also shifted by -ParentWindow.ScrollOffset (zero, so a no-op, for any parent
+        // that isn't scrollable) -- child windows are drawn outside the CameraTransform pass
+        // (see ScrollBy's own comment), so this is what actually makes a scrollable parent's
+        // children move at all as it scrolls.
         _geometry.AbsolutePosition = _parentWindow != null
-            ? _parentWindow.ContentAbsolutePosition + _geometry.RelativePosition
+            ? _parentWindow.ContentAbsolutePosition + _geometry.RelativePosition - _parentWindow.ScrollOffset
             : _geometry.RelativePosition;
 
         _title.AbsolutePosition = _geometry.AbsolutePosition + BorderInset;
@@ -956,12 +1088,12 @@ public class Window
     {
         var textSize = TitleFont.MeasureString(_title.Text);
 
-        // Widened to also fit the title buttons (close/minimize-restore), not just the text --
-        // a short/empty title would otherwise shrink the title bar narrower than the buttons
-        // it still has to hold, and RepositionTitleButtons (which doesn't know about text
-        // width, only _title.Size.X) would tile them overlapping each other or the text.
-        var titleWidth = System.Math.Max(textSize.X + TitlePadding.X * 2, TotalTitleButtonsWidth());
-        _title.Size = new Vector2(titleWidth, textSize.Y + TitlePadding.Y * 2);
+        // MinimumTitleWidth already accounts for the title buttons (close/minimize-restore)
+        // alongside the text -- a short/empty title would otherwise shrink the title bar
+        // narrower than the buttons it still has to hold, and RepositionTitleButtons (which
+        // doesn't know about text width, only _title.Size.X) would tile them overlapping each
+        // other or the text.
+        _title.Size = new Vector2(MinimumTitleWidth(), textSize.Y + TitlePadding.Y * 2);
 
         _contentState.Size = new Vector2(0, 0);
 
@@ -972,7 +1104,7 @@ public class Window
             windowSize.Y);
     }
 
-    /// <summary>Minimum title width that fits every title button without overlap -- see RepositionTitleButtons for the matching 3px-gap tiling this mirrors.</summary>
+    /// <summary>Total width every title button needs, tiled with the same 3px gaps RepositionTitleButtons itself uses -- see MinimumTitleWidth, which combines this with the title text's own width.</summary>
     private float TotalTitleButtonsWidth()
     {
         if (_title.Buttons.Count == 0)
@@ -991,12 +1123,17 @@ public class Window
 
     /// <summary>
     /// Natural width the title bar needs for its own text plus buttons, independent of
-    /// content
+    /// content. Summed, not maxed: the text (left-aligned) and buttons (right-aligned,
+    /// RepositionTitleButtons) both draw within the same title bar simultaneously, so a title
+    /// bar sized to fit only whichever is bigger doesn't actually have room for both --
+    /// confirmed by reproduction (a two-word notification title, "New Quest", with close/
+    /// minimize buttons: the buttons, drawn on top per Window.Draw's ordering, covered the
+    /// tail of the text instead of sitting past it).
     /// </summary>
     protected float MinimumTitleWidth()
     {
         var textSize = TitleFont.MeasureString(_title.Text);
-        return System.Math.Max(textSize.X + TitlePadding.X * 2, TotalTitleButtonsWidth());
+        return textSize.X + TitlePadding.X * 2 + TotalTitleButtonsWidth();
     }
 
     protected virtual void RecalculateFixedWindowSize()

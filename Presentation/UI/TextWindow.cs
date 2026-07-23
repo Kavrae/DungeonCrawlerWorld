@@ -13,7 +13,7 @@ public class TextWindow : Window
     public DisplayText DisplayText { get; set; }
     public SpriteFontBase ContentFont { get; set; }
     public Color TextColor { get; set; }
-    private const int LinePadding = 3;
+    protected const int LinePadding = 3;
 
     public TextWindow(FontService fontService, WindowService windowService, GlyphRenderer glyphRenderer)
         : base(fontService, windowService, glyphRenderer)
@@ -66,12 +66,21 @@ public class TextWindow : Window
         // position -- invisible while notifications were stationary, but visible as "only the
         // right edge doesn't follow the drag" once Window Chrome Phase C made them draggable.
         // Y has the same shape as X here, so it gets the same ParentWindow-is-null check.
-        var maximumContentWidth = ParentWindow is not null
+        // Clamped to 0, not left possibly negative: a tiled sibling positioned far enough down
+        // a tall column (e.g. by earlier siblings' own long text) can have RelativePosition.Y
+        // exceed MaximumSize.Y outright. An unclamped negative maximumContentHeight fed into
+        // the Math.Min below would make this window's own Size.Y negative -- which then makes
+        // RetileChildrenFrom's next-sibling chain (previousChildWindow.RelativePosition.Y +
+        // previousChildWindow.CurrentSize.Y) step backward instead of forward, landing the next
+        // sibling on top of this one instead of below it. Confirmed by reproduction: a
+        // goblin-engineer-plus-dirt tile's dirt component windows overlapping each other, but
+        // only once the goblin engineer's own (longer) text pushed dirt's block far enough down.
+        var maximumContentWidth = System.Math.Max(0, ParentWindow is not null
             ? _geometry.MaximumSize.X - _geometry.RelativePosition.X - BorderInsetDoubled.X
-            : _geometry.MaximumSize.X - BorderInsetDoubled.X;
-        var maximumContentHeight = (ParentWindow is not null
+            : _geometry.MaximumSize.X - BorderInsetDoubled.X);
+        var maximumContentHeight = System.Math.Max(0, (ParentWindow is not null
             ? _geometry.MaximumSize.Y - _geometry.RelativePosition.Y
-            : _geometry.MaximumSize.Y) - BorderInsetDoubled.Y - TitleInsetHeight;
+            : _geometry.MaximumSize.Y) - BorderInsetDoubled.Y - TitleInsetHeight);
 
         // Wrap against the maximum first (this is the width word-wrap decisions need), then
         // shrink the window itself to the widest line that wrapping actually produced --
@@ -136,9 +145,17 @@ public class TextWindow : Window
         SetMaxScrollOffset(new Vector2(maxScrollX, maxScrollY));
     }
 
-    private float TextContentHeight() => ContentFont.LineHeight * DisplayText.LineCount + LinePadding * 2;
+    /// <summary>Protected, not private -- TextBox uses this same formula (with an enforced minimum line count) to auto-size its own height to content. See TextBox.AutoSizeToContent.</summary>
+    protected float TextContentHeight() => ContentFont.LineHeight * DisplayText.LineCount + LinePadding * 2;
 
-    public void ReformatDisplayText()
+    /// <summary>
+    /// Virtual so TextBox can override it: StringUtility's word-wrap chunks/splits on spaces
+    /// only and doesn't treat an embedded '\n' as a forced line break (confirmed by
+    /// StringUtilityTests.SimpleWordWrap_EmbeddedNewlineNotAtChunkBoundary...) -- fine for
+    /// this base class (nothing here ever produces embedded newlines), but a TextBox's own
+    /// Shift+Enter does, so it needs to wrap around that gap instead of assuming it away.
+    /// </summary>
+    public virtual void ReformatDisplayText()
     {
         DisplayText = StringUtility.FormatText(new FormatTextCriteria(
             new FontStashTextMeasurer(ContentFont),

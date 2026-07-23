@@ -28,4 +28,7 @@ public interface IWindowContent
 
     /// <summary>Default-implemented as a no-op so existing content types don't need to change.</summary>
     void HandleHotkeys(KeyboardState keyboardState, KeyboardState previousKeyboardState) { }
+
+    /// <summary>Default-implemented as a no-op so existing content types don't need to change.</summary>
+    void HandleTextInput(char character) { }
 }

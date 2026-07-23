@@ -274,4 +274,53 @@ public sealed class SelectionWindowContentTests
         // Switching layers swaps which Wall is inspected -- still 4 windows, now the Flying one's.
         Assert.HasCount(4, hostWindow.ChildWindows);
     }
+
+    /// <summary>
+    /// Regression test for the reported bug: when an entity's total component text exceeds
+    /// hostWindow's own (Fixed, non-growing) height, each child window used to clamp its own
+    /// content size down (see TextWindowSizingTests for the negative-height clamp that used to
+    /// make this go further and overlap the *next* child too). The fix is at the parent level,
+    /// not per-child: children now render their full, unclamped natural height (see
+    /// SelectionWindowContent's UnboundedChildHeight), and hostWindow itself becomes the
+    /// scrollable one -- CanUserScrollVertical on hostWindow (see GameShellBootstrapper's
+    /// selectionWindow) turns the overflow into a real, positive MaxScrollOffset on hostWindow
+    /// instead of clipping/overlapping individual children.
+    /// </summary>
+    [TestMethod]
+    public void Update_EntityComponentsExceedHostWindowHeight_HostWindowBecomesScrollableAndChildrenStayFullHeight()
+    {
+        var (ecsContext, world, mapViewState) = BuildEcsContextAndWorld();
+        CreateWallEntityAt(ecsContext, world, 2, 2);
+
+        var fontService = new FontService("Fonts");
+        var windowService = new WindowService(fontService, new GlyphRenderer());
+        var componentInspector = new ComponentInspector(ecsContext.ComponentManager);
+        // Deliberately much shorter than CreateHostWindow's usual 700px -- forces the 4
+        // component windows to exceed the host's own height, the same way a goblin engineer's
+        // longer component text did in the original report.
+        var hostWindow = windowService.CreateWindow<Window>(null, new WindowOptions
+        {
+            Hierarchy = new WindowHierarchyOptions { CanContainChildWindows = true, ChildWindowTileMode = WindowTileMode.Vertical },
+            Layout = new WindowLayoutOptions { Size = new Vector2(300, 40), DisplayMode = WindowDisplayMode.Fixed },
+            Chrome = new WindowChromeOptions { ShowTitle = true, CanUserScrollVertical = true },
+        });
+        hostWindow.SetContent(new SelectionWindowContent(world, mapViewState, ecsContext.ComponentManager, componentInspector, windowService));
+        hostWindow.Initialize();
+
+        mapViewState.SelectedMapNodePosition = new Point(2, 2);
+        hostWindow.Update(new GameTime());
+
+        Assert.HasCount(4, hostWindow.ChildWindows);
+
+        // hostWindow, not any individual child, is the one that ends up scrollable.
+        Assert.IsTrue(hostWindow.CanUserScrollVertical);
+        Assert.IsGreaterThan(0, hostWindow.MaxScrollOffset.Y);
+
+        // No child should have been clamped down to fit hostWindow's tiny 40px content height --
+        // every child keeps its own full, positive natural height instead of getting collapsed.
+        foreach (var child in hostWindow.ChildWindows)
+        {
+            Assert.IsGreaterThan(0, child.WindowCurrentSize.Y);
+        }
+    }
 }

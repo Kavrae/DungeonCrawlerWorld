@@ -26,6 +26,9 @@ public sealed class SelectionWindowContent(
 {
     private const int ComponentRefreshInterval = 10; // Most components update every 10 frames, so more frequent refreshes are wasted work.
 
+    /// <summary>A generous, effectively-unlimited per-component-window height cap -- see CreateDebugWindowsForEntity.</summary>
+    private const float UnboundedChildHeight = 10000f;
+
     // Resolved once and reused rather than re-resolved via ComponentManager's dictionary
     // lookup on every call -- RecomputeSelectedEntityIds runs every frame (see Update), so
     // occupancyPool/transformPool were otherwise being looked up 60 times a second for no
@@ -165,7 +168,15 @@ public sealed class SelectionWindowContent(
             var nameWindow = windowService.CreateWindow<TextWindow>(_hostWindow, new WindowOptions
             {
                 Hierarchy = new WindowHierarchyOptions { CanContainChildWindows = false },
-                Layout = new WindowLayoutOptions { MaximumSize = _hostWindow.ContentSize, DisplayMode = WindowDisplayMode.WrapContent },
+                // Height uncapped (a generous, effectively-unlimited sentinel, not
+                // _hostWindow.ContentSize.Y) -- selectionWindow itself is the thing that
+                // scrolls now (CanUserScrollVertical, see GameShellBootstrapper), so each
+                // component window should always render its full natural height rather than
+                // getting clamped for "running out of room" the moment it's tiled past
+                // selectionWindow's own fixed, one-screen-tall content size. Width still capped
+                // to the host's content width -- that's the word-wrap boundary, unrelated to
+                // the vertical scrolling concern.
+                Layout = new WindowLayoutOptions { MaximumSize = new Vector2(_hostWindow.ContentSize.X, UnboundedChildHeight), DisplayMode = WindowDisplayMode.WrapContent },
                 Chrome = new WindowChromeOptions { ShowTitle = false, ShowBorder = true, BorderSize = new Vector2(2, 2) },
                 Text = new TextOptions { Text = _displayTextPool.GetReadonly(entityId).Name },
             });
@@ -178,10 +189,11 @@ public sealed class SelectionWindowContent(
 
         foreach (var entry in _reusableInspectionList)
         {
+            // MaximumSize.Y uncapped -- see the matching comment on nameWindow above.
             var componentWindow = windowService.CreateWindow<TextWindow>(_hostWindow, new WindowOptions
             {
                 Hierarchy = new WindowHierarchyOptions { CanContainChildWindows = false },
-                Layout = new WindowLayoutOptions { MaximumSize = _hostWindow.ContentSize, DisplayMode = WindowDisplayMode.WrapContent },
+                Layout = new WindowLayoutOptions { MaximumSize = new Vector2(_hostWindow.ContentSize.X, UnboundedChildHeight), DisplayMode = WindowDisplayMode.WrapContent },
                 Chrome = new WindowChromeOptions { ShowTitle = true, TitleText = entry.ComponentType.Name, ShowBorder = true, BorderSize = new Vector2(1, 1) },
                 Text = new TextOptions { Text = entry.Value.ToString() ?? string.Empty },
             });

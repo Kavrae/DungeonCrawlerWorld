@@ -24,6 +24,7 @@ public sealed class WindowService
 
         RegisterFactory<Window>((_, _) => new Window(fontService, this, glyphRenderer));
         RegisterFactory<TextWindow>((_, _) => new TextWindow(fontService, this, glyphRenderer));
+        RegisterFactory<TextBox>((_, _) => new TextBox(fontService, this, glyphRenderer));
     }
 
     /// <summary>

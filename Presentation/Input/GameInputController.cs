@@ -7,13 +7,17 @@ namespace Presentation.Input;
 /// <summary>
 /// Translates raw keyboard/mouse state into the app's UI-level interactions
 /// </summary>
-public sealed class GameInputController(List<Window> rootWindows, List<Window> alwaysOnTopWindows, Vector2 screenSize)
+public sealed class GameInputController
 {
     /// <summary>MouseState.ScrollWheelValue's units per standard wheel detent -- the FNA/XNA convention, not configurable per-device.</summary>
     private const float WheelNotchValue = 120f;
 
     /// <summary>Content pixels scrolled per wheel detent -- roughly three lines of the 8pt font most window content uses, matching typical OS scroll-speed defaults.</summary>
     private const float ScrollPixelsPerNotch = 24f;
+
+    private readonly List<Window> _rootWindows;
+    private readonly List<Window> _alwaysOnTopWindows;
+    private readonly Vector2 _screenSize;
 
     private KeyboardState _previousKeyboardState;
     private MouseState _previousMouseState;
@@ -24,6 +28,66 @@ public sealed class GameInputController(List<Window> rootWindows, List<Window> a
     private Vector2 _dragStartSize;
 
     private Window? _focusedWindow;
+
+    /// <summary>
+    /// The container (a parent's ChildWindows, or the always-on-top tier) the currently
+    /// focused window belonged to at the moment it gained focus -- see GetSiblingContainer and
+    /// RedirectFocusAwayFrom. Snapshotted in SetFocus rather than recomputed at close/minimize
+    /// time because a closing window may already have removed itself from that same list by
+    /// then (e.g. NotificationCenter.OnActiveNotificationClosed), depending on event
+    /// subscription order.
+    /// </summary>
+    private List<Window>? _focusedWindowSiblings;
+
+    /// <summary>The fallback focus target whenever a close/minimize redirect (see RedirectFocusAwayFrom) finds no sibling to move to -- e.g. dismissing the last active notification, or closing the quest composer popup. Set once via SetDefaultFocusWindow, the same composition-root role FocusWindow already plays for initial focus.</summary>
+    private Window? _defaultFocusWindow;
+
+    /// <summary>
+    /// The focused window itself plus every ParentWindow above it, up to its root -- e.g. a
+    /// focused TextBox's chain is [textBox, popup]. Closing a window only ever fires Closed on
+    /// that exact window, never on its still-open descendants (RemoveChildWindow doesn't raise
+    /// anything on the child being removed) -- so closing the quest-composer popup while its
+    /// TextBox holds focus would otherwise never reach OnFocusedWindowClosed at all, since
+    /// _focusedWindow (the TextBox) never itself closes. Subscribing Closed across the whole
+    /// chain, not just the focused window, is what makes an ancestor closing still redirect
+    /// focus away from whatever descendant currently holds it.
+    /// </summary>
+    private readonly List<Window> _focusedWindowAncestorChain = [];
+
+    /// <summary>
+    /// Characters typed this frame, buffered from FNA's static TextInputEXT.TextInput event
+    /// (subscribed once, in the constructor) and drained by RouteTextInputToFocusedWindow.
+    /// Per-instance, not static, so each GameInputController -- including the many short-lived
+    /// ones tests construct -- only ever sees characters typed while it itself is subscribed.
+    /// </summary>
+    private readonly List<char> _pendingTextInput = [];
+
+    /// <summary>
+    /// Wraps TextInputEXT.StartTextInput/StopTextInput (see SetFocus) -- swappable in tests,
+    /// since SDL_IsTextInputActive's real state isn't reliably observable in a headless test
+    /// environment with no actual SDL window backing it (confirmed: asserting on it directly
+    /// still reads false immediately after a real StartTextInput() call). Tests substitute a
+    /// call-recording fake and assert on that instead.
+    /// </summary>
+    internal Action StartTextInput = TextInputEXT.StartTextInput;
+
+    /// <summary>See StartTextInput.</summary>
+    internal Action StopTextInput = TextInputEXT.StopTextInput;
+
+    public GameInputController(List<Window> rootWindows, List<Window> alwaysOnTopWindows, Vector2 screenSize)
+    {
+        _rootWindows = rootWindows;
+        _alwaysOnTopWindows = alwaysOnTopWindows;
+        _screenSize = screenSize;
+
+        // Subscribing is safe to do unconditionally and permanently -- SDL simply never raises
+        // SDL_TEXTINPUT while text input is stopped (see SetFocus's Start/StopTextInput calls
+        // below), so this just never fires until a TextBox is actually focused.
+        TextInputEXT.TextInput += OnTextInput;
+    }
+
+    /// <summary>Internal, not private, so tests can simulate a typed character without a real OS text-input event -- the subscribed TextInputEXT.TextInput handler in real use otherwise.</summary>
+    internal void OnTextInput(char character) => _pendingTextInput.Add(character);
 
     /// <summary>
     /// The title button currently held down by the mouse, if any -- null the rest of the
@@ -40,6 +104,9 @@ public sealed class GameInputController(List<Window> rootWindows, List<Window> a
 
     /// <summary>Focuses a window from outside -- GameLoop calls this once at startup to default-focus the map window, since a window's own hotkeys (see RouteHotkeysToFocusedWindow) only fire while it holds focus.</summary>
     public void FocusWindow(Window window) => SetFocus(window);
+
+    /// <summary>See _defaultFocusWindow.</summary>
+    public void SetDefaultFocusWindow(Window window) => _defaultFocusWindow = window;
 
     /// <summary>Window.WindowRelativePosition captured at the start of the current drag -- meaningless when ActiveInteraction.Kind is None. Move's per-frame SetRelativePosition is this plus DragDelta; ComputeResize uses it as the Left/Top-edge resize baseline.</summary>
     internal Vector2 DragStartRelativePosition => _dragStartRelativePosition;
@@ -65,6 +132,7 @@ public sealed class GameInputController(List<Window> rootWindows, List<Window> a
         RouteHotkeysToFocusedWindow(keyboardState);
         HandleFocusCycling(keyboardState);
         RouteKeyPressesToFocusedWindow(keyboardState);
+        RouteTextInputToFocusedWindow();
 
         if (mouseState.LeftButton == ButtonState.Pressed && _previousMouseState.LeftButton == ButtonState.Released)
         {
@@ -205,8 +273,8 @@ public sealed class GameInputController(List<Window> rootWindows, List<Window> a
     /// <summary>Always-on-top tier first (so it can never lose to a root window), each tier topmost (last-raised) first.</summary>
     private WindowInteraction TryHitTestInteraction(Point position)
     {
-        var interaction = TryHitTestInList(alwaysOnTopWindows, position);
-        return interaction.Window is not null ? interaction : TryHitTestInList(rootWindows, position);
+        var interaction = TryHitTestInList(_alwaysOnTopWindows, position);
+        return interaction.Window is not null ? interaction : TryHitTestInList(_rootWindows, position);
     }
 
     private static WindowInteraction TryHitTestInList(List<Window> windows, Point position)
@@ -235,13 +303,13 @@ public sealed class GameInputController(List<Window> rootWindows, List<Window> a
 
         var rootAncestor = GetRootAncestor(window);
 
-        if (rootWindows.Remove(rootAncestor))
+        if (_rootWindows.Remove(rootAncestor))
         {
-            rootWindows.Add(rootAncestor);
+            _rootWindows.Add(rootAncestor);
         }
-        else if (alwaysOnTopWindows.Remove(rootAncestor))
+        else if (_alwaysOnTopWindows.Remove(rootAncestor))
         {
-            alwaysOnTopWindows.Add(rootAncestor);
+            _alwaysOnTopWindows.Add(rootAncestor);
         }
     }
 
@@ -258,41 +326,155 @@ public sealed class GameInputController(List<Window> rootWindows, List<Window> a
     }
 
     /// <summary>
-    /// Subscribes to the new window's Closed event so a focused window closing -- and
-    /// potentially being pooled and reused for something else entirely (see WindowService) --
-    /// can't leave this holding a stale reference that treats the reused instance as focused.
+    /// Subscribes to the new window's FocusRequested/DisplayModeChanged and its whole
+    /// ancestor chain's Closed events (see _focusedWindowAncestorChain) so a focused window (or
+    /// an ancestor of it) closing or minimizing -- and potentially being pooled and reused for
+    /// something else entirely (see WindowService) -- can't leave this holding a stale
+    /// reference that treats the reused instance as focused, and so a window that can't move
+    /// focus itself (e.g. a TextBox submitting via Enter) can ask to be defocused in favor of
+    /// another window.
     /// </summary>
+    /// <remarks>
+    /// Redirects into newWindow.NextTextBoxAfter(null) first, if it has any focusable TextBox
+    /// children -- a window with TextBox children is never itself the terminal focus target,
+    /// its first TextBox is. For every window without TextBox children (everything that
+    /// existed before TextBox did) this resolves to newWindow itself, unchanged. Falls back to
+    /// _defaultFocusWindow when that still leaves no target at all (newWindow itself null, e.g.
+    /// RedirectFocusAwayFrom finding no sibling to move to).
+    /// </remarks>
     private void SetFocus(Window? newWindow)
     {
-        if (_focusedWindow == newWindow)
+        var target = newWindow?.NextTextBoxAfter(null) ?? newWindow ?? _defaultFocusWindow;
+
+        if (_focusedWindow == target)
         {
             return;
         }
 
-        if (_focusedWindow is not null)
+        // SDL's text-input mode is meant to bracket the lifetime of whatever widget is actually
+        // receiving typed characters, not run for the whole app session -- left on permanently,
+        // every keystroke (including e.g. MapWindow's WASD movement hotkeys) gets fed through
+        // any active OS IME, popping up composition/candidate UI during ordinary gameplay, and
+        // on touch/mobile SDL backends StartTextInput is also what raises the on-screen
+        // keyboard. Only toggled on an actual TextBox <-> non-TextBox edge, not every focus
+        // change, so tabbing between two ordinary windows doesn't touch it at all.
+        if (target is TextBox && _focusedWindow is not TextBox)
         {
-            _focusedWindow.Closed -= OnFocusedWindowClosed;
-            _focusedWindow.SetFocused(false);
+            StartTextInput();
+        }
+        else if (_focusedWindow is TextBox && target is not TextBox)
+        {
+            StopTextInput();
         }
 
-        _focusedWindow = newWindow;
+        UnsubscribeFocusTracking();
+        _focusedWindow?.SetFocused(false);
+
+        _focusedWindow = target;
+        _focusedWindowSiblings = target is not null ? GetSiblingContainer(target) : null;
 
         if (_focusedWindow is not null)
         {
             _focusedWindow.SetFocused(true);
-            _focusedWindow.Closed += OnFocusedWindowClosed;
+            _focusedWindow.FocusRequested += OnFocusedWindowRequestedFocus;
+            _focusedWindow.DisplayModeChanged += OnFocusedWindowDisplayModeChanged;
+
+            for (var ancestor = _focusedWindow; ancestor is not null; ancestor = ancestor.ParentWindow)
+            {
+                _focusedWindowAncestorChain.Add(ancestor);
+                ancestor.Closed += OnFocusedWindowClosed;
+            }
         }
     }
 
-    private void OnFocusedWindowClosed(Window closedWindow)
+    private void UnsubscribeFocusTracking()
     {
-        closedWindow.Closed -= OnFocusedWindowClosed;
-
-        if (_focusedWindow == closedWindow)
+        if (_focusedWindow is not null)
         {
-            _focusedWindow = null;
+            _focusedWindow.FocusRequested -= OnFocusedWindowRequestedFocus;
+            _focusedWindow.DisplayModeChanged -= OnFocusedWindowDisplayModeChanged;
+        }
+
+        foreach (var ancestor in _focusedWindowAncestorChain)
+        {
+            ancestor.Closed -= OnFocusedWindowClosed;
+        }
+        _focusedWindowAncestorChain.Clear();
+    }
+
+    private void OnFocusedWindowRequestedFocus(Window requestedWindow) => SetFocus(requestedWindow);
+
+    /// <summary>
+    /// Fires for the focused window itself closing, or any of its ancestors (see
+    /// _focusedWindowAncestorChain) -- e.g. closing the quest-composer popup while its TextBox
+    /// child holds focus: the popup is what actually calls Close(), the TextBox never does, so
+    /// without the whole-chain subscription this would never fire at all and focus would be
+    /// left dangling on a TextBox whose window is now hidden/pooled.
+    /// </summary>
+    private void OnFocusedWindowClosed(Window closedWindow) => RedirectFocusAwayFrom();
+
+    /// <summary>
+    /// A minimized window reads as "no longer the active thing", the same as a closed one --
+    /// redirect focus the same way. Fires on every DisplayModeChanged, not just transitions
+    /// into Minimized (restoring back out of it, or an unrelated Fixed/Fill change, also raise
+    /// this event), so only the Minimized case is treated as a redirect trigger here. Active
+    /// notification popups never hit this path -- NotificationMinimizeBehavior's "minimize"
+    /// dismisses via a real Close() (see NotificationCenter.MinimizeNotification), not
+    /// WindowDisplayMode.Minimized -- so OnFocusedWindowClosed above is what actually covers
+    /// the notification case task 1 asked for.
+    /// </summary>
+    private void OnFocusedWindowDisplayModeChanged(Window window)
+    {
+        if (window.WindowDisplay == WindowDisplayMode.Minimized)
+        {
+            RedirectFocusAwayFrom();
         }
     }
+
+    /// <summary>
+    /// Moves focus to a sibling of the currently focused window, rather than leaving focus on
+    /// nothing, once it (or an ancestor of it) has closed or minimized. "Sibling" is scoped to
+    /// groups of genuinely interchangeable windows -- other children under the same parent
+    /// (e.g. a future multi-TextBox form), or other always-on-top popups (e.g. the next active
+    /// notification once the topmost one is dismissed) -- not the root tier, whose windows
+    /// (map/debug/selection) are fixed, distinct panels rather than a stack of equivalent ones;
+    /// closing the quest-composer popup (the only root window that can ever close) is meant to
+    /// fall all the way through to _defaultFocusWindow instead of grabbing some unrelated root
+    /// panel. Uses _focusedWindowSiblings (snapshotted when this window gained focus, see
+    /// SetFocus) rather than re-deriving its sibling group now, since a closing window may
+    /// already have removed itself from that same list by the time this runs.
+    /// </summary>
+    private void RedirectFocusAwayFrom()
+    {
+        var closingWindow = _focusedWindow;
+        if (closingWindow is null)
+        {
+            return;
+        }
+
+        UnsubscribeFocusTracking();
+
+        Window? nextSibling = null;
+        if (_focusedWindowSiblings is not null)
+        {
+            foreach (var candidate in _focusedWindowSiblings)
+            {
+                if (candidate != closingWindow && candidate.CanUserFocus)
+                {
+                    nextSibling = candidate;
+                }
+            }
+        }
+
+        _focusedWindow = null;
+        _focusedWindowSiblings = null;
+        SetFocus(nextSibling);
+    }
+
+    /// <summary>See RedirectFocusAwayFrom for why this deliberately excludes the root tier.</summary>
+    private List<Window>? GetSiblingContainer(Window window) =>
+        window.ParentWindow?.ChildWindows
+        ?? (_alwaysOnTopWindows.Contains(window) ? _alwaysOnTopWindows : null);
 
     /// <summary>
     /// Advances focus to the next (direction 1) or previous (direction -1) focusable root
@@ -304,7 +486,7 @@ public sealed class GameInputController(List<Window> rootWindows, List<Window> a
     private void CycleFocus(int direction)
     {
         var focusableRootWindows = new List<Window>();
-        foreach (var window in rootWindows)
+        foreach (var window in _rootWindows)
         {
             if (window.CanUserFocus)
             {
@@ -355,6 +537,23 @@ public sealed class GameInputController(List<Window> rootWindows, List<Window> a
     }
 
     /// <summary>
+    /// Drains characters buffered by OnTextInput (see the constructor's TextInputEXT
+    /// subscription) to whichever window holds focus. A separate buffer-then-drain step,
+    /// unlike RouteKeyPressesToFocusedWindow's direct poll of KeyboardState, because
+    /// TextInputEXT.TextInput is an event, not a per-frame state snapshot -- characters can
+    /// arrive between Update calls and need to be collected rather than read live.
+    /// </summary>
+    private void RouteTextInputToFocusedWindow()
+    {
+        foreach (var character in _pendingTextInput)
+        {
+            _focusedWindow?.HandleTextInput(character);
+        }
+
+        _pendingTextInput.Clear();
+    }
+
+    /// <summary>
     /// Computes the relative position and size a resize drag should produce this frame. Right/
     /// Bottom grow the size directly (dragStartSize plus delta) with no position change.
     /// Left/Top must derive the position shift from the *actual clamped* size, not the raw
@@ -398,7 +597,7 @@ public sealed class GameInputController(List<Window> rootWindows, List<Window> a
     /// Window.BuildWindow), a child window's is its parent's own content area (RelativePosition
     /// is relative to ContentAbsolutePosition).
     /// </summary>
-    private Vector2 GetPositionBounds(Window window) => window.ParentWindow?.ContentSize ?? screenSize;
+    private Vector2 GetPositionBounds(Window window) => window.ParentWindow?.ContentSize ?? _screenSize;
 
     /// <summary>
     /// Pulls a drag-to-move's destination position back inside GetPositionBounds -- called with

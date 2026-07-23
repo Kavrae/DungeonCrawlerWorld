@@ -99,6 +99,7 @@ public sealed class GameInputControllerTests
     {
         public List<Keys> PressedKeys { get; } = [];
         public int HotkeyCallCount { get; private set; }
+        public List<char> TypedCharacters { get; } = [];
 
         public void Initialize(Window hostWindow)
         {
@@ -114,6 +115,7 @@ public sealed class GameInputControllerTests
 
         public void HandleKeyPress(Keys key) => PressedKeys.Add(key);
         public void HandleHotkeys(KeyboardState keyboardState, KeyboardState previousKeyboardState) => HotkeyCallCount++;
+        public void HandleTextInput(char character) => TypedCharacters.Add(character);
     }
 
     /// <summary>A plain titled window with a RecordingKeyContent attached, for focus/key-routing tests.</summary>
@@ -1005,6 +1007,111 @@ public sealed class GameInputControllerTests
         Assert.AreEqual(0, content.HotkeyCallCount);
     }
 
+    /// <summary>
+    /// A typed character (simulated via OnTextInput -- the internal seam a real
+    /// TextInputEXT.TextInput subscription feeds in production, see the GameInputController
+    /// constructor) reaches only the focused window's content, mirroring HandleKeyPress/
+    /// HandleHotkeys routing.
+    /// </summary>
+    [TestMethod]
+    public void TypedCharacters_RouteOnlyToTheFocusedWindowsContent()
+    {
+        var windowService = CreateWindowService();
+        var (focused, focusedContent) = CreateFocusableWindowWithContent(windowService, new Vector2(0, 0));
+        var (other, otherContent) = CreateFocusableWindowWithContent(windowService, new Vector2(400, 400));
+        var controller = new GameInputController([focused, other], [], LargeScreenSize);
+
+        var pressPoint = focused.ContentRectangle.Center;
+        controller.Update(NoKeys, MouseAt(pressPoint.X, pressPoint.Y, ButtonState.Released));
+        controller.Update(NoKeys, MouseAt(pressPoint.X, pressPoint.Y, ButtonState.Pressed));
+        controller.Update(NoKeys, MouseAt(pressPoint.X, pressPoint.Y, ButtonState.Released));
+
+        controller.OnTextInput('a');
+        controller.Update(NoKeys, MouseAt(pressPoint.X, pressPoint.Y, ButtonState.Released));
+
+        CollectionAssert.AreEqual(new[] { 'a' }, focusedContent.TypedCharacters);
+        Assert.HasCount(0, otherContent.TypedCharacters);
+    }
+
+    /// <summary>Characters typed before anything is focused are buffered, not lost or misrouted -- once a window is focused, the next Update drains whatever had accumulated.</summary>
+    [TestMethod]
+    public void TypedCharacters_BufferedBeforeAnyUpdate_AreNotLostOnceFocused()
+    {
+        var windowService = CreateWindowService();
+        var (focused, focusedContent) = CreateFocusableWindowWithContent(windowService, new Vector2(0, 0));
+        var controller = new GameInputController([focused], [], LargeScreenSize);
+        controller.FocusWindow(focused);
+
+        controller.OnTextInput('h');
+        controller.OnTextInput('i');
+        controller.Update(NoKeys, MouseAt(0, 0, ButtonState.Released));
+
+        CollectionAssert.AreEqual(new[] { 'h', 'i' }, focusedContent.TypedCharacters);
+    }
+
+    /// <summary>
+    /// A window with a focusable TextBox child is never itself the terminal focus target --
+    /// focusing it (a click, here) redirects into its first TextBox instead, per
+    /// GameInputController.SetFocus's NextTextBoxAfter redirect.
+    /// </summary>
+    [TestMethod]
+    public void ClickingAWindowWithATextBoxChild_FocusesTheTextBoxInstead()
+    {
+        var windowService = CreateWindowService();
+        var container = windowService.CreateWindow<Window>(null, new WindowOptions
+        {
+            Hierarchy = new WindowHierarchyOptions { CanContainChildWindows = true },
+            Layout = new WindowLayoutOptions { RelativePosition = new Vector2(0, 0), Size = new Vector2(200, 100), DisplayMode = WindowDisplayMode.Fixed },
+            Chrome = new WindowChromeOptions { ShowTitle = true, TitleText = "Form", CanUserMove = true },
+        });
+        container.Initialize();
+        var textBox = windowService.CreateWindow<TextBox>(container, new WindowOptions
+        {
+            Layout = new WindowLayoutOptions { RelativePosition = new Vector2(0, 0), Size = new Vector2(180, 50), DisplayMode = WindowDisplayMode.Fixed },
+        });
+        container.AddChildWindow(textBox);
+        var controller = new GameInputController([container], [], LargeScreenSize);
+
+        // Click the container's title bar -- content-agnostic, so it can't be mistaken for
+        // directly clicking the TextBox child itself.
+        var titlePoint = container.TitleRectangle.Center;
+        controller.Update(NoKeys, MouseAt(titlePoint.X, titlePoint.Y, ButtonState.Released));
+        controller.Update(NoKeys, MouseAt(titlePoint.X, titlePoint.Y, ButtonState.Pressed));
+
+        Assert.AreSame(textBox, controller.FocusedWindow);
+        Assert.IsTrue(textBox.IsFocused);
+        Assert.IsFalse(container.IsFocused);
+    }
+
+    /// <summary>Enter on a TextBox with a sibling TextBox asks GameInputController (via FocusRequested) to move focus to it -- the same mechanism a click or Tab would use.</summary>
+    [TestMethod]
+    public void SubmittingATextBox_MovesFocusToTheNextTextBoxSibling()
+    {
+        var windowService = CreateWindowService();
+        var container = windowService.CreateWindow<Window>(null, new WindowOptions
+        {
+            Hierarchy = new WindowHierarchyOptions { CanContainChildWindows = true },
+            Layout = new WindowLayoutOptions { RelativePosition = new Vector2(0, 0), Size = new Vector2(200, 200), DisplayMode = WindowDisplayMode.Fixed },
+        });
+        container.Initialize();
+        var firstTextBox = windowService.CreateWindow<TextBox>(container, new WindowOptions
+        {
+            Layout = new WindowLayoutOptions { RelativePosition = new Vector2(0, 0), Size = new Vector2(180, 50), DisplayMode = WindowDisplayMode.Fixed },
+        });
+        container.AddChildWindow(firstTextBox);
+        var secondTextBox = windowService.CreateWindow<TextBox>(container, new WindowOptions
+        {
+            Layout = new WindowLayoutOptions { RelativePosition = new Vector2(0, 60), Size = new Vector2(180, 50), DisplayMode = WindowDisplayMode.Fixed },
+        });
+        container.AddChildWindow(secondTextBox);
+        var controller = new GameInputController([container], [], LargeScreenSize);
+        controller.FocusWindow(firstTextBox);
+
+        controller.Update(new KeyboardState(Keys.Enter), MouseAt(0, 0, ButtonState.Released));
+
+        Assert.AreSame(secondTextBox, controller.FocusedWindow);
+    }
+
     /// <summary>Tab advances focus to the next root window, wrapping past the last one back to the first -- rootWindows only, in list order.</summary>
     [TestMethod]
     public void PressingTab_CyclesFocusThroughRootWindows_Wrapping()
@@ -1148,5 +1255,304 @@ public sealed class GameInputControllerTests
 
         Assert.AreSame(windowB, controller.FocusedWindow);
         Assert.IsFalse(nonFocusable.IsFocused);
+    }
+
+    private static (Window Parent, Window ChildA, Window ChildB) CreateParentWithTwoCloseableChildren(WindowService windowService)
+    {
+        var parent = windowService.CreateWindow<Window>(null, new WindowOptions
+        {
+            Hierarchy = new WindowHierarchyOptions { CanContainChildWindows = true, ChildWindowTileMode = WindowTileMode.Vertical },
+            Layout = new WindowLayoutOptions { RelativePosition = Vector2.Zero, Size = new Vector2(300, 200), DisplayMode = WindowDisplayMode.Fixed },
+        });
+        parent.Initialize();
+
+        var childA = windowService.CreateWindow<Window>(parent, new WindowOptions
+        {
+            Layout = new WindowLayoutOptions { Size = new Vector2(300, 50), DisplayMode = WindowDisplayMode.Fixed },
+            Chrome = new WindowChromeOptions { ShowTitle = true, TitleText = "A", CanUserClose = true },
+        });
+        parent.AddChildWindow(childA);
+
+        var childB = windowService.CreateWindow<Window>(parent, new WindowOptions
+        {
+            Layout = new WindowLayoutOptions { Size = new Vector2(300, 50), DisplayMode = WindowDisplayMode.Fixed },
+            Chrome = new WindowChromeOptions { ShowTitle = true, TitleText = "B", CanUserClose = true },
+        });
+        parent.AddChildWindow(childB);
+
+        return (parent, childA, childB);
+    }
+
+    /// <summary>
+    /// Regression test for the reported behavior: closing the focused window must not just
+    /// leave focus on nothing when a genuine sibling exists -- e.g. closing the topmost active
+    /// notification popup should hand focus to the next one, not clear it. Always-on-top tier
+    /// siblings specifically, mirroring NotificationCenter's stack of popups.
+    /// </summary>
+    [TestMethod]
+    public void ClosingTheFocusedAlwaysOnTopWindow_RedirectsFocusToTheRemainingSibling()
+    {
+        var windowService = CreateWindowService();
+        var notificationA = CreateRootWindowWithCloseButton(windowService, new Vector2(0, 0));
+        var notificationB = CreateRootWindowWithCloseButton(windowService, new Vector2(300, 0));
+        var controller = new GameInputController([], [notificationA, notificationB], LargeScreenSize);
+
+        var pressPoint = notificationA.ContentRectangle.Center;
+        controller.Update(NoKeys, MouseAt(pressPoint.X, pressPoint.Y, ButtonState.Released));
+        controller.Update(NoKeys, MouseAt(pressPoint.X, pressPoint.Y, ButtonState.Pressed));
+        Assert.AreSame(notificationA, controller.FocusedWindow);
+
+        notificationA.Close();
+
+        Assert.AreSame(notificationB, controller.FocusedWindow);
+    }
+
+    private static (Window Popup, Window Child) CreatePopupWithFocusableChild(WindowService windowService, Vector2 relativePosition)
+    {
+        var popup = windowService.CreateWindow<Window>(null, new WindowOptions
+        {
+            Hierarchy = new WindowHierarchyOptions { CanContainChildWindows = true },
+            Layout = new WindowLayoutOptions { RelativePosition = relativePosition, Size = new Vector2(300, 200), DisplayMode = WindowDisplayMode.Fixed },
+            Chrome = new WindowChromeOptions { ShowTitle = true, TitleText = "Popup", CanUserClose = true },
+        });
+        popup.Initialize();
+
+        var child = windowService.CreateWindow<Window>(popup, new WindowOptions
+        {
+            Layout = new WindowLayoutOptions { Size = new Vector2(280, 150), DisplayMode = WindowDisplayMode.Fixed },
+        });
+        popup.AddChildWindow(child);
+
+        return (popup, child);
+    }
+
+    /// <summary>
+    /// Regression test for the reported bug: closing the quest-composer popup while its
+    /// TextBox child holds focus left focus stranded on the (now closed/hidden) TextBox
+    /// instead of falling back to the map window -- popup.Close() only ever fires Closed on
+    /// popup itself, never on the still-focused child, so a redirect wired to just the exact
+    /// focused window's own Closed event never saw it happen at all. GameInputController now
+    /// subscribes Closed across the focused window's whole ancestor chain (see
+    /// _focusedWindowAncestorChain), not just the focused window itself.
+    /// </summary>
+    [TestMethod]
+    public void ClosingAWindowWhoseFocusedChildIsNotItself_StillRedirectsFocusAwayFromTheChild()
+    {
+        var windowService = CreateWindowService();
+        var (popup, child) = CreatePopupWithFocusableChild(windowService, new Vector2(0, 0));
+        var mapWindowStandIn = CreateRootWindowWithCloseButton(windowService, new Vector2(400, 0));
+        var controller = new GameInputController([popup, mapWindowStandIn], [], LargeScreenSize);
+        controller.SetDefaultFocusWindow(mapWindowStandIn);
+
+        var pressPoint = child.ContentRectangle.Center;
+        controller.Update(NoKeys, MouseAt(pressPoint.X, pressPoint.Y, ButtonState.Released));
+        controller.Update(NoKeys, MouseAt(pressPoint.X, pressPoint.Y, ButtonState.Pressed));
+        Assert.AreSame(child, controller.FocusedWindow);
+
+        popup.Close();
+
+        Assert.AreSame(mapWindowStandIn, controller.FocusedWindow);
+    }
+
+    /// <summary>Same redirect, generalized to sibling child windows under a shared parent (e.g. a future multi-pane form), not just the always-on-top notification stack.</summary>
+    [TestMethod]
+    public void ClosingTheFocusedChildWindow_RedirectsFocusToItsSiblingChild()
+    {
+        var windowService = CreateWindowService();
+        var (parent, childA, childB) = CreateParentWithTwoCloseableChildren(windowService);
+        var controller = new GameInputController([parent], [], LargeScreenSize);
+
+        var pressPoint = childA.ContentRectangle.Center;
+        controller.Update(NoKeys, MouseAt(pressPoint.X, pressPoint.Y, ButtonState.Released));
+        controller.Update(NoKeys, MouseAt(pressPoint.X, pressPoint.Y, ButtonState.Pressed));
+        Assert.AreSame(childA, controller.FocusedWindow);
+
+        childA.Close();
+
+        Assert.AreSame(childB, controller.FocusedWindow);
+    }
+
+    /// <summary>Same trigger, but via minimizing (WindowMinimizeRestoreBehavior's real WindowDisplayMode.Minimized toggle) instead of closing -- a minimized window reads as "no longer active" the same way a closed one does.</summary>
+    [TestMethod]
+    public void MinimizingTheFocusedWindow_RedirectsFocusToTheRemainingSibling()
+    {
+        var windowService = CreateWindowService();
+        var notificationA = CreateRootWindowWithCloseButton(windowService, new Vector2(0, 0));
+        var notificationB = CreateRootWindowWithCloseButton(windowService, new Vector2(300, 0));
+        var controller = new GameInputController([], [notificationA, notificationB], LargeScreenSize);
+
+        var pressPoint = notificationA.ContentRectangle.Center;
+        controller.Update(NoKeys, MouseAt(pressPoint.X, pressPoint.Y, ButtonState.Released));
+        controller.Update(NoKeys, MouseAt(pressPoint.X, pressPoint.Y, ButtonState.Pressed));
+        Assert.AreSame(notificationA, controller.FocusedWindow);
+
+        notificationA.SetWindowDisplayMode(WindowDisplayMode.Minimized);
+
+        Assert.AreSame(notificationB, controller.FocusedWindow);
+    }
+
+    /// <summary>Regression guard: DisplayModeChanged fires on every mode change, not just transitions into Minimized -- an unrelated mode change (e.g. Fixed to Fill) must not spuriously redirect focus away.</summary>
+    [TestMethod]
+    public void ChangingTheFocusedWindowsDisplayModeToSomethingOtherThanMinimized_DoesNotRedirectFocus()
+    {
+        var windowService = CreateWindowService();
+        var window = CreateRootWindowWithCloseButton(windowService, new Vector2(0, 0));
+        var controller = new GameInputController([window], [], LargeScreenSize);
+
+        var pressPoint = window.ContentRectangle.Center;
+        controller.Update(NoKeys, MouseAt(pressPoint.X, pressPoint.Y, ButtonState.Released));
+        controller.Update(NoKeys, MouseAt(pressPoint.X, pressPoint.Y, ButtonState.Pressed));
+        Assert.AreSame(window, controller.FocusedWindow);
+
+        window.SetWindowDisplayMode(WindowDisplayMode.Fill);
+
+        Assert.AreSame(window, controller.FocusedWindow);
+    }
+
+    /// <summary>
+    /// Regression test for task 2: closing the quest-composer popup (a root window) must not
+    /// grab some unrelated root panel (e.g. the selection window) as a substitute -- root-tier
+    /// windows are fixed, distinct panels, not an interchangeable stack -- it must fall all the
+    /// way through to the configured default focus window (the map window in production), same
+    /// as if nothing else were open at all.
+    /// </summary>
+    [TestMethod]
+    public void ClosingAFocusedRootWindow_FallsBackToTheDefaultFocusWindow_NotAnUnrelatedRootSibling()
+    {
+        var windowService = CreateWindowService();
+        var popup = CreateRootWindowWithCloseButton(windowService, new Vector2(0, 0));
+        var unrelatedRootWindow = CreateRootWindowWithCloseButton(windowService, new Vector2(300, 0));
+        var mapWindowStandIn = CreateRootWindowWithCloseButton(windowService, new Vector2(0, 300));
+        var controller = new GameInputController([popup, unrelatedRootWindow, mapWindowStandIn], [], LargeScreenSize);
+        controller.SetDefaultFocusWindow(mapWindowStandIn);
+
+        var pressPoint = popup.ContentRectangle.Center;
+        controller.Update(NoKeys, MouseAt(pressPoint.X, pressPoint.Y, ButtonState.Released));
+        controller.Update(NoKeys, MouseAt(pressPoint.X, pressPoint.Y, ButtonState.Pressed));
+        Assert.AreSame(popup, controller.FocusedWindow);
+
+        popup.Close();
+
+        Assert.AreSame(mapWindowStandIn, controller.FocusedWindow);
+    }
+
+    /// <summary>Regression test for task 2's other half: with no default focus window configured (e.g. a test that never calls SetDefaultFocusWindow) and no eligible sibling, closing the focused window still just clears focus rather than throwing.</summary>
+    [TestMethod]
+    public void ClosingTheOnlyFocusedWindow_WithNoDefaultFocusWindowConfigured_LeavesFocusNull()
+    {
+        var windowService = CreateWindowService();
+        var window = CreateRootWindowWithCloseButton(windowService, new Vector2(0, 0));
+        var controller = new GameInputController([window], [], LargeScreenSize);
+
+        var pressPoint = window.ContentRectangle.Center;
+        controller.Update(NoKeys, MouseAt(pressPoint.X, pressPoint.Y, ButtonState.Released));
+        controller.Update(NoKeys, MouseAt(pressPoint.X, pressPoint.Y, ButtonState.Pressed));
+        Assert.AreSame(window, controller.FocusedWindow);
+
+        window.Close();
+
+        Assert.IsNull(controller.FocusedWindow);
+    }
+
+    /// <summary>
+    /// Regression test mirroring NotificationCenter's summary bar: a CanUserFocus = false
+    /// sibling (e.g. a click-only HUD element sharing the always-on-top tier with real
+    /// notification popups) must never be picked as the "next" window on redirect -- it should
+    /// be skipped just like Tab cycling already skips it, falling through to the default focus
+    /// window instead.
+    /// </summary>
+    [TestMethod]
+    public void ClosingTheFocusedWindow_SkipsANonFocusableSiblingAndFallsBackToDefault()
+    {
+        var windowService = CreateWindowService();
+        var summaryBarStandIn = windowService.CreateWindow<Window>(null, new WindowOptions
+        {
+            Layout = new WindowLayoutOptions { RelativePosition = new Vector2(0, 300), Size = new Vector2(200, 30), DisplayMode = WindowDisplayMode.Fixed },
+            Chrome = new WindowChromeOptions { CanUserFocus = false },
+        });
+        summaryBarStandIn.Initialize();
+        var notification = CreateRootWindowWithCloseButton(windowService, new Vector2(0, 0));
+        var mapWindowStandIn = CreateRootWindowWithCloseButton(windowService, new Vector2(0, 400));
+        var controller = new GameInputController([], [summaryBarStandIn, notification], LargeScreenSize);
+        controller.SetDefaultFocusWindow(mapWindowStandIn);
+
+        var pressPoint = notification.ContentRectangle.Center;
+        controller.Update(NoKeys, MouseAt(pressPoint.X, pressPoint.Y, ButtonState.Released));
+        controller.Update(NoKeys, MouseAt(pressPoint.X, pressPoint.Y, ButtonState.Pressed));
+        Assert.AreSame(notification, controller.FocusedWindow);
+
+        notification.Close();
+
+        Assert.AreSame(mapWindowStandIn, controller.FocusedWindow);
+    }
+
+    private static TextBox CreateFocusableTextBox(WindowService windowService, Vector2 relativePosition)
+    {
+        var textBox = windowService.CreateWindow<TextBox>(null, new WindowOptions
+        {
+            Layout = new WindowLayoutOptions { RelativePosition = relativePosition, Size = new Vector2(200, 60), DisplayMode = WindowDisplayMode.Fixed },
+        });
+        textBox.Initialize();
+        return textBox;
+    }
+
+    /// <summary>
+    /// Regression test: SDL text-input mode (which gates OS IME composition popups, and on
+    /// touch/mobile SDL backends the on-screen keyboard) must track TextBox focus rather than
+    /// run for the whole app session -- started only once an actual TextBox gains focus, and
+    /// stopped again once focus moves to anything that isn't one. Substitutes call-recording
+    /// fakes for StartTextInput/StopTextInput (see GameInputController) rather than asserting
+    /// on TextInputEXT.IsTextInputActive() directly -- that reads real SDL state, which isn't
+    /// reliably observable with no actual SDL window backing this headless test environment.
+    /// </summary>
+    [TestMethod]
+    public void FocusMovingToAndAwayFromATextBox_TogglesSdlTextInputMode()
+    {
+        var windowService = CreateWindowService();
+        var textBox = CreateFocusableTextBox(windowService, new Vector2(0, 0));
+        var plainWindow = CreateRootWindowWithCloseButton(windowService, new Vector2(400, 0));
+        var controller = new GameInputController([textBox, plainWindow], [], LargeScreenSize);
+        var startCount = 0;
+        var stopCount = 0;
+        controller.StartTextInput = () => startCount++;
+        controller.StopTextInput = () => stopCount++;
+
+        var textBoxPressPoint = textBox.ContentRectangle.Center;
+        controller.Update(NoKeys, MouseAt(textBoxPressPoint.X, textBoxPressPoint.Y, ButtonState.Released));
+        controller.Update(NoKeys, MouseAt(textBoxPressPoint.X, textBoxPressPoint.Y, ButtonState.Pressed));
+        Assert.AreSame(textBox, controller.FocusedWindow);
+        Assert.AreEqual(1, startCount);
+        Assert.AreEqual(0, stopCount);
+
+        var plainWindowPressPoint = plainWindow.ContentRectangle.Center;
+        controller.Update(NoKeys, MouseAt(plainWindowPressPoint.X, plainWindowPressPoint.Y, ButtonState.Released));
+        controller.Update(NoKeys, MouseAt(plainWindowPressPoint.X, plainWindowPressPoint.Y, ButtonState.Pressed));
+        Assert.AreSame(plainWindow, controller.FocusedWindow);
+        Assert.AreEqual(1, startCount);
+        Assert.AreEqual(1, stopCount);
+    }
+
+    /// <summary>Regression guard: tabbing/clicking between two ordinary (non-TextBox) windows must not toggle text-input mode at all -- only an actual TextBox &lt;-&gt; non-TextBox edge should.</summary>
+    [TestMethod]
+    public void FocusMovingBetweenTwoNonTextBoxWindows_NeverTogglesSdlTextInputMode()
+    {
+        var windowService = CreateWindowService();
+        var windowA = CreateRootWindowWithCloseButton(windowService, new Vector2(0, 0));
+        var windowB = CreateRootWindowWithCloseButton(windowService, new Vector2(400, 0));
+        var controller = new GameInputController([windowA, windowB], [], LargeScreenSize);
+        var startCount = 0;
+        var stopCount = 0;
+        controller.StartTextInput = () => startCount++;
+        controller.StopTextInput = () => stopCount++;
+
+        var pressPointA = windowA.ContentRectangle.Center;
+        controller.Update(NoKeys, MouseAt(pressPointA.X, pressPointA.Y, ButtonState.Released));
+        controller.Update(NoKeys, MouseAt(pressPointA.X, pressPointA.Y, ButtonState.Pressed));
+        var pressPointB = windowB.ContentRectangle.Center;
+        controller.Update(NoKeys, MouseAt(pressPointB.X, pressPointB.Y, ButtonState.Released));
+        controller.Update(NoKeys, MouseAt(pressPointB.X, pressPointB.Y, ButtonState.Pressed));
+
+        Assert.AreEqual(0, startCount);
+        Assert.AreEqual(0, stopCount);
     }
 }

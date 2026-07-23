@@ -61,6 +61,37 @@ public sealed class NotificationCenterTests
         Assert.IsTrue(ClickAlwaysOnTop(alwaysOnTopWindows, FirstActiveNotificationTopLeft));
     }
 
+    /// <summary>Feature: opening a notification (fresh, via showImmediately: true) should let a caller (GameInputController, in production) focus the new popup -- see ActiveNotificationOpened.</summary>
+    [TestMethod]
+    public void AddNotification_ShowImmediately_RaisesActiveNotificationOpenedWithTheNewWindow()
+    {
+        var alwaysOnTopWindows = new List<Window>();
+        var notificationCenter = CreateNotificationCenter(CreateWindowService(), alwaysOnTopWindows);
+        Window? openedWindow = null;
+        notificationCenter.ActiveNotificationOpened += window => openedWindow = window;
+
+        notificationCenter.AddNotification(NotificationCategory.Quest, "Hello", showImmediately: true);
+
+        Assert.IsNotNull(openedWindow);
+        Assert.IsTrue(alwaysOnTopWindows.Contains(openedWindow));
+    }
+
+    /// <summary>Same event, via the other path a popup can appear through -- promoting a queued/unread notification back to active.</summary>
+    [TestMethod]
+    public void OpenNextNotification_RaisesActiveNotificationOpenedWithThePromotedWindow()
+    {
+        var alwaysOnTopWindows = new List<Window>();
+        var notificationCenter = CreateNotificationCenter(CreateWindowService(), alwaysOnTopWindows);
+        notificationCenter.AddNotification(NotificationCategory.Quest, "Hello", showImmediately: false);
+        Window? openedWindow = null;
+        notificationCenter.ActiveNotificationOpened += window => openedWindow = window;
+
+        notificationCenter.OpenNextNotification(NotificationCategory.Quest);
+
+        Assert.IsNotNull(openedWindow);
+        Assert.IsTrue(alwaysOnTopWindows.Contains(openedWindow));
+    }
+
     [TestMethod]
     public void AddNotification_NotShownImmediately_CreatesNoActiveWindow()
     {
@@ -259,6 +290,59 @@ public sealed class NotificationCenterTests
         Assert.IsFalse(notificationCenter.CloseNotification(secondId));
         // Untouched -- proves the click reached the newer (topmost) popup, not the one behind it.
         Assert.IsTrue(notificationCenter.CloseNotification(firstId));
+    }
+
+    /// <summary>Captures every TextWindow WindowService creates -- the only way to inspect an active popup's own TitleText, since NotificationCenter doesn't expose its windows. Mirrors ClickingCloseButton_OnNewerOverlappingNotification_ClosesOnlyThatOne's technique.</summary>
+    private static (WindowService WindowService, List<TextWindow> CapturedPopups) CreateWindowServiceCapturingTextWindows()
+    {
+        var fontService = new FontService("Fonts");
+        var windowService = new WindowService(fontService, new GlyphRenderer());
+        var capturedPopups = new List<TextWindow>();
+        windowService.RegisterFactory<TextWindow>((_, _) =>
+        {
+            var window = new TextWindow(fontService, windowService, new GlyphRenderer());
+            capturedPopups.Add(window);
+            return window;
+        });
+        return (windowService, capturedPopups);
+    }
+
+    [TestMethod]
+    public void AddNotification_WithCustomTitle_UsesItInsteadOfTheCategoryName()
+    {
+        var (windowService, capturedPopups) = CreateWindowServiceCapturingTextWindows();
+        var notificationCenter = CreateNotificationCenter(windowService, []);
+
+        notificationCenter.AddNotification(NotificationCategory.Quest, "Explore the dungeon.", showImmediately: true, title: "New Quest");
+
+        var activePopup = capturedPopups.Single(popup => popup.TitleButtons.Count > 0);
+        Assert.AreEqual("New Quest", activePopup.TitleText);
+    }
+
+    [TestMethod]
+    public void AddNotification_WithoutCustomTitle_FallsBackToTheCategoryName()
+    {
+        var (windowService, capturedPopups) = CreateWindowServiceCapturingTextWindows();
+        var notificationCenter = CreateNotificationCenter(windowService, []);
+
+        notificationCenter.AddNotification(NotificationCategory.Quest, "Explore the dungeon.", showImmediately: true);
+
+        var activePopup = capturedPopups.Single(popup => popup.TitleButtons.Count > 0);
+        Assert.AreEqual("Quest", activePopup.TitleText);
+    }
+
+    /// <summary>The quest composer's exact call shape: created minimized (showImmediately: false) with a custom title -- the title must survive being queued and only later shown via OpenNextNotification.</summary>
+    [TestMethod]
+    public void AddNotification_MinimizedWithCustomTitle_ShowsTheTitleWhenLaterOpened()
+    {
+        var (windowService, capturedPopups) = CreateWindowServiceCapturingTextWindows();
+        var notificationCenter = CreateNotificationCenter(windowService, []);
+        notificationCenter.AddNotification(NotificationCategory.Quest, "Explore the dungeon.", showImmediately: false, title: "New Quest");
+
+        notificationCenter.OpenNextNotification(NotificationCategory.Quest);
+
+        var activePopup = capturedPopups.Single(popup => popup.TitleButtons.Count > 0);
+        Assert.AreEqual("New Quest", activePopup.TitleText);
     }
 
     [TestMethod]

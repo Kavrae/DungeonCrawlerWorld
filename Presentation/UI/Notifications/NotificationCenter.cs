@@ -34,13 +34,28 @@ public sealed class NotificationCenter(WindowService windowService, EventBus eve
     /// <summary>True while a System-category notification is active -- GameLoop gates the game's own Update on this.</summary>
     public bool HasBlockingNotification => _activeNotifications.Any(entry => entry.Notification.Category == NotificationCategory.System);
 
+    /// <summary>
+    /// Raised whenever a notification popup actually shows on screen (a fresh one via
+    /// AddNotification(showImmediately: true), or a queued one via OpenNextNotification) -- see
+    /// ShowActive. GameLoop subscribes once it has a GameInputController (which doesn't exist
+    /// yet while GameShellBootstrapper.Build, and so NotificationCenter.Initialize, are still
+    /// running) and focuses the new popup, the same composition-root role its existing
+    /// QuestComposerOpened subscription plays for the quest-composer popup.
+    /// </summary>
+    public event Action<Window>? ActiveNotificationOpened;
+
     public void Initialize()
     {
         _summaryWindow = windowService.CreateWindow<Window>(null, new WindowOptions
         {
             Hierarchy = new WindowHierarchyOptions { CanContainChildWindows = true, ChildWindowTileMode = WindowTileMode.Horizontal },
             Layout = new WindowLayoutOptions { DisplayMode = WindowDisplayMode.Fixed, IsTransparent = true, RelativePosition = SummaryPosition, Size = SummarySize },
-            Chrome = new WindowChromeOptions { ShowTitle = false },
+            // CanUserFocus false -- a click-only HUD counter bar (see countWindow.Clicked below),
+            // not something a user tabs to or types into. Also keeps it out of
+            // GameInputController.RedirectFocusAwayFrom's always-on-top sibling search: without
+            // this, dismissing the last active notification would hand focus to the summary bar
+            // instead of falling through to GameInputController's default focus window.
+            Chrome = new WindowChromeOptions { ShowTitle = false, CanUserFocus = false },
         });
         _summaryWindow.Initialize();
         alwaysOnTopWindows.Add(_summaryWindow);
@@ -78,9 +93,9 @@ public sealed class NotificationCenter(WindowService windowService, EventBus eve
     /// </summary>
     public void Update(GameTime gameTime) => eventBus.DispatchBuffered<NotificationRequested>();
 
-    public Guid AddNotification(NotificationCategory category, string text, bool showImmediately = true)
+    public Guid AddNotification(NotificationCategory category, string text, bool showImmediately = true, string? title = null)
     {
-        var notification = new Notification(text, category);
+        var notification = new Notification(text, category, title);
 
         if (showImmediately)
         {
@@ -151,7 +166,7 @@ public sealed class NotificationCenter(WindowService windowService, EventBus eve
             {
                 ShowTitle = true,
                 ShowTitleWhenMinimized = true,
-                TitleText = notification.Category.ToString(),
+                TitleText = notification.Title ?? notification.Category.ToString(),
                 ShowBorder = true,
                 CanUserClose = true,
                 CanUserMinimize = false,
@@ -165,6 +180,7 @@ public sealed class NotificationCenter(WindowService windowService, EventBus eve
         _activeNotifications.Add((notificationWindow, notification));
         notificationWindow.Initialize();
         alwaysOnTopWindows.Add(notificationWindow);
+        ActiveNotificationOpened?.Invoke(notificationWindow);
 
         // Attached after Initialize() (which already attached WindowCloseBehavior, since
         // CanUserClose is true) so the dismiss button lands to the close button's left, the
