@@ -1,3 +1,5 @@
+using System.Runtime.InteropServices;
+
 namespace Engine.ECS.Systems;
 
 /// <summary>
@@ -42,8 +44,14 @@ public sealed class EntityStripeSet
         }
     }
 
-    /// <summary>The entities assigned to the given stripe as of right now. Do not mutate the source pool while enumerating this.</summary>
-    public IReadOnlyList<int> GetBucket(byte stripeIndex) => _buckets[stripeIndex];
+    /// <summary>
+    /// The entities assigned to the given stripe as of right now. Do not mutate the source
+    /// pool while enumerating this. ReadOnlySpan rather than IReadOnlyList/IEnumerable so
+    /// every call site's foreach binds to Span's own non-allocating enumerator instead of
+    /// boxing List&lt;T&gt;'s struct enumerator through an interface -- this runs every frame,
+    /// per striped system, so the boxing would otherwise be a permanent per-frame GC cost.
+    /// </summary>
+    public ReadOnlySpan<int> GetBucket(byte stripeIndex) => CollectionsMarshal.AsSpan(_buckets[stripeIndex]);
 
     public void OnEntityAdded(int entityId)
     {

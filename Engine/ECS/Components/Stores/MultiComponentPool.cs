@@ -78,34 +78,19 @@ public sealed class MultiComponentPool<T> : IReadOnlyMultiComponentPool<T>, IIns
         for (var i = _maximumEntityCount; i < newMaximumEntityCount; i++)
         {
             _entityIdToFirstDenseIndexMap[i] = -1;
-            _entityCounts[i] = 0;
-            _entityVersions[i] = 0;
         }
 
         _maximumEntityCount = newMaximumEntityCount;
     }
 
-    public bool Has(int entityId)
-    {
-        ValidateEntityId(entityId);
-        return _entityCounts[entityId] > 0;
-    }
+    public bool Has(int entityId) => _entityCounts[entityId] > 0;
 
-    public int CountForEntity(int entityId)
-    {
-        ValidateEntityId(entityId);
-        return _entityCounts[entityId];
-    }
+    public int CountForEntity(int entityId) => _entityCounts[entityId];
 
-    public uint GetEntityVersion(int entityId)
-    {
-        ValidateEntityId(entityId);
-        return _entityVersions[entityId];
-    }
+    public uint GetEntityVersion(int entityId) => _entityVersions[entityId];
 
     public void Add(int entityId, T component)
     {
-        ValidateEntityId(entityId);
         EnsureDenseCapacityForOneMore();
 
         var newDenseIndex = _count++;
@@ -130,8 +115,6 @@ public sealed class MultiComponentPool<T> : IReadOnlyMultiComponentPool<T>, IIns
 
     public bool Remove(int entityId)
     {
-        ValidateEntityId(entityId);
-
         var denseIndex = _entityIdToFirstDenseIndexMap[entityId];
         if (denseIndex == -1)
         {
@@ -148,7 +131,6 @@ public sealed class MultiComponentPool<T> : IReadOnlyMultiComponentPool<T>, IIns
 
     public bool RemoveFirst(int entityId, ComponentPredicate predicate)
     {
-        ValidateEntityId(entityId);
         ArgumentNullException.ThrowIfNull(predicate);
 
         for (var denseIndex = _entityIdToFirstDenseIndexMap[entityId]; denseIndex != -1;)
@@ -169,7 +151,6 @@ public sealed class MultiComponentPool<T> : IReadOnlyMultiComponentPool<T>, IIns
 
     public bool RemoveFirst<TState>(int entityId, TState state, ComponentPredicate<TState> predicate)
     {
-        ValidateEntityId(entityId);
         ArgumentNullException.ThrowIfNull(predicate);
 
         for (var denseIndex = _entityIdToFirstDenseIndexMap[entityId]; denseIndex != -1;)
@@ -190,51 +171,25 @@ public sealed class MultiComponentPool<T> : IReadOnlyMultiComponentPool<T>, IIns
 
     public bool RemoveByDenseIndex(int denseIndex)
     {
-        ValidateDenseIndex(denseIndex);
         RemoveDenseIndexInternal(denseIndex);
         return true;
     }
 
-    public int GetFirstDenseIndex(int entityId)
-    {
-        ValidateEntityId(entityId);
-        return _entityIdToFirstDenseIndexMap[entityId];
-    }
+    public int GetFirstDenseIndex(int entityId) => _entityIdToFirstDenseIndexMap[entityId];
 
-    public int GetNextDenseIndex(int denseIndex)
-    {
-        ValidateDenseIndex(denseIndex);
-        return _denseNext[denseIndex];
-    }
+    public int GetNextDenseIndex(int denseIndex) => _denseNext[denseIndex];
 
-    public ref T GetByDenseIndex(int denseIndex)
-    {
-        ValidateDenseIndex(denseIndex);
-        return ref _denseComponents[denseIndex];
-    }
+    public ref T GetByDenseIndex(int denseIndex) => ref _denseComponents[denseIndex];
 
-    public ref readonly T GetReadonlyByDenseIndex(int denseIndex)
-    {
-        ValidateDenseIndex(denseIndex);
-        return ref _denseComponents[denseIndex];
-    }
+    public ref readonly T GetReadonlyByDenseIndex(int denseIndex) => ref _denseComponents[denseIndex];
 
-    public int GetEntityIdByDenseIndex(int denseIndex)
-    {
-        ValidateDenseIndex(denseIndex);
-        return _denseIndexToEntityIdMap[denseIndex];
-    }
+    public int GetEntityIdByDenseIndex(int denseIndex) => _denseIndexToEntityIdMap[denseIndex];
 
-    public uint GetVersionByDenseIndex(int denseIndex)
-    {
-        ValidateDenseIndex(denseIndex);
-        return _denseVersions[denseIndex];
-    }
+    public uint GetVersionByDenseIndex(int denseIndex) => _denseVersions[denseIndex];
 
     public int CopyInspectionDataForEntity(int entityId, List<InspectedComponentEntry> destination)
     {
         ArgumentNullException.ThrowIfNull(destination);
-        ValidateEntityId(entityId);
 
         var componentCount = 0;
 
@@ -243,7 +198,7 @@ public sealed class MultiComponentPool<T> : IReadOnlyMultiComponentPool<T>, IIns
             destination.Add(new InspectedComponentEntry(
                 ComponentType,
                 ComponentPoolType,
-                GetReadonlyByDenseIndex(denseIndex),
+                GetReadonlyByDenseIndex(denseIndex).ToString() ?? string.Empty,
                 GetVersionByDenseIndex(denseIndex)));
 
             componentCount++;
@@ -254,7 +209,6 @@ public sealed class MultiComponentPool<T> : IReadOnlyMultiComponentPool<T>, IIns
 
     public void IncrementVersionByDenseIndex(int denseIndex)
     {
-        ValidateDenseIndex(denseIndex);
         _denseVersions[denseIndex]++;
 
         var entityId = _denseIndexToEntityIdMap[denseIndex];
@@ -263,7 +217,6 @@ public sealed class MultiComponentPool<T> : IReadOnlyMultiComponentPool<T>, IIns
 
     public void UpdateByDenseIndex(int denseIndex, ComponentUpdater updater)
     {
-        ValidateDenseIndex(denseIndex);
         ArgumentNullException.ThrowIfNull(updater);
 
         updater(ref _denseComponents[denseIndex]);
@@ -275,7 +228,6 @@ public sealed class MultiComponentPool<T> : IReadOnlyMultiComponentPool<T>, IIns
 
     public void UpdateByDenseIndex<TState>(int denseIndex, TState state, ComponentUpdater<TState> updater)
     {
-        ValidateDenseIndex(denseIndex);
         ArgumentNullException.ThrowIfNull(updater);
 
         updater(ref _denseComponents[denseIndex], state);
@@ -287,15 +239,15 @@ public sealed class MultiComponentPool<T> : IReadOnlyMultiComponentPool<T>, IIns
 
     public bool TryUpdateFirst(int entityId, ComponentPredicate predicate, ComponentUpdater updater)
     {
-        ValidateEntityId(entityId);
         ArgumentNullException.ThrowIfNull(predicate);
         ArgumentNullException.ThrowIfNull(updater);
 
         for (var denseIndex = _entityIdToFirstDenseIndexMap[entityId]; denseIndex != -1; denseIndex = _denseNext[denseIndex])
         {
-            if (predicate(ref _denseComponents[denseIndex]))
+            ref var component = ref _denseComponents[denseIndex];
+            if (predicate(ref component))
             {
-                updater(ref _denseComponents[denseIndex]);
+                updater(ref component);
                 _denseVersions[denseIndex]++;
                 _entityVersions[entityId]++;
                 return true;
@@ -311,15 +263,15 @@ public sealed class MultiComponentPool<T> : IReadOnlyMultiComponentPool<T>, IIns
         ComponentPredicate<TState> predicate,
         ComponentUpdater<TState> updater)
     {
-        ValidateEntityId(entityId);
         ArgumentNullException.ThrowIfNull(predicate);
         ArgumentNullException.ThrowIfNull(updater);
 
         for (var denseIndex = _entityIdToFirstDenseIndexMap[entityId]; denseIndex != -1; denseIndex = _denseNext[denseIndex])
         {
-            if (predicate(ref _denseComponents[denseIndex], state))
+            ref var component = ref _denseComponents[denseIndex];
+            if (predicate(ref component, state))
             {
-                updater(ref _denseComponents[denseIndex], state);
+                updater(ref component, state);
                 _denseVersions[denseIndex]++;
                 _entityVersions[entityId]++;
                 return true;
@@ -428,21 +380,8 @@ public sealed class MultiComponentPool<T> : IReadOnlyMultiComponentPool<T>, IIns
         for (var i = _count; i < newSize; i++)
         {
             _denseIndexToEntityIdMap[i] = -1;
-            _denseVersions[i] = 0;
             _denseNext[i] = -1;
             _densePrevious[i] = -1;
         }
-    }
-
-    private void ValidateEntityId(int entityId)
-    {
-        ArgumentOutOfRangeException.ThrowIfNegative(entityId);
-        ArgumentOutOfRangeException.ThrowIfGreaterThanOrEqual(entityId, _maximumEntityCount);
-    }
-
-    private void ValidateDenseIndex(int denseIndex)
-    {
-        ArgumentOutOfRangeException.ThrowIfNegative(denseIndex);
-        ArgumentOutOfRangeException.ThrowIfGreaterThanOrEqual(denseIndex, _count);
     }
 }

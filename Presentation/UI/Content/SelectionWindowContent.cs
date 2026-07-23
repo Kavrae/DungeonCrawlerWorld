@@ -195,7 +195,7 @@ public sealed class SelectionWindowContent(
                 Hierarchy = new WindowHierarchyOptions { CanContainChildWindows = false },
                 Layout = new WindowLayoutOptions { MaximumSize = new Vector2(_hostWindow.ContentSize.X, UnboundedChildHeight), DisplayMode = WindowDisplayMode.WrapContent },
                 Chrome = new WindowChromeOptions { ShowTitle = true, TitleText = entry.ComponentType.Name, ShowBorder = true, BorderSize = new Vector2(1, 1) },
-                Text = new TextOptions { Text = entry.Value.ToString() ?? string.Empty },
+                Text = new TextOptions { Text = entry.Value },
             });
             _hostWindow.AddChildWindow(componentWindow);
             createdWindows.Add(componentWindow);
@@ -229,7 +229,7 @@ public sealed class SelectionWindowContent(
                 break;
             }
 
-            windows[windowIndex].UpdateText(entry.Value.ToString() ?? string.Empty);
+            windows[windowIndex].UpdateText(entry.Value);
             windowIndex++;
         }
     }

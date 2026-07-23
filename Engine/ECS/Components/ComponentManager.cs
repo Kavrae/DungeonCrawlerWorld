@@ -168,8 +168,14 @@ public sealed class ComponentManager
         };
     }
 
-    /// <summary>All registered pools, for inspection tooling (e.g. Diagnostics/ComponentInspector).</summary>
-    public IEnumerable<IComponentPool> AllPools => _componentPools.Values;
+    /// <summary>
+    /// All registered pools, for inspection tooling (e.g. Diagnostics/ComponentInspector).
+    /// Concrete ValueCollection return type rather than IEnumerable/ICollection -- same reason
+    /// as EntityStripeSet.GetBucket: foreach over an interface-typed reference boxes
+    /// Dictionary&lt;,&gt;.ValueCollection's own struct enumerator to satisfy the interface
+    /// method, foreach over the concrete type does not.
+    /// </summary>
+    public Dictionary<Type, IComponentPool>.ValueCollection AllPools => _componentPools.Values;
 
     public void ResizeEntityCapacity(int newMaximumEntityCount)
     {

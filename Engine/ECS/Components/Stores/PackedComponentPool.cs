@@ -72,8 +72,6 @@ public sealed class PackedComponentPool<T> : IReadOnlyComponentPool<T>, IInspect
 
     public void Add(int entityId, T newComponent)
     {
-        ValidateEntityId(entityId);
-
         var denseIndex = _entityIdToDenseIndexMap[entityId];
         if (denseIndex >= 0)
         {
@@ -93,8 +91,6 @@ public sealed class PackedComponentPool<T> : IReadOnlyComponentPool<T>, IInspect
 
     public void Merge(int entityId, T newComponent)
     {
-        ValidateEntityId(entityId);
-
         var denseIndex = _entityIdToDenseIndexMap[entityId];
         if (denseIndex >= 0)
         {
@@ -106,16 +102,10 @@ public sealed class PackedComponentPool<T> : IReadOnlyComponentPool<T>, IInspect
         Add(entityId, newComponent);
     }
 
-    public bool Has(int entityId)
-    {
-        ValidateEntityId(entityId);
-        return _entityIdToDenseIndexMap[entityId] >= 0;
-    }
+    public bool Has(int entityId) => _entityIdToDenseIndexMap[entityId] >= 0;
 
     public bool TryGetReadonly(int entityId, out T component)
     {
-        ValidateEntityId(entityId);
-
         var denseIndex = _entityIdToDenseIndexMap[entityId];
         if (denseIndex < 0)
         {
@@ -129,8 +119,6 @@ public sealed class PackedComponentPool<T> : IReadOnlyComponentPool<T>, IInspect
 
     public ref readonly T GetReadonly(int entityId)
     {
-        ValidateEntityId(entityId);
-
         var denseIndex = _entityIdToDenseIndexMap[entityId];
         if (denseIndex < 0)
         {
@@ -142,9 +130,8 @@ public sealed class PackedComponentPool<T> : IReadOnlyComponentPool<T>, IInspect
 
     public int CopyInspectionDataForEntity(int entityId, List<InspectedComponentEntry> destination)
     {
-        ValidateEntityId(entityId);
-
-        if (!Has(entityId))
+        var denseIndex = _entityIdToDenseIndexMap[entityId];
+        if (denseIndex < 0)
         {
             return 0;
         }
@@ -152,16 +139,14 @@ public sealed class PackedComponentPool<T> : IReadOnlyComponentPool<T>, IInspect
         destination.Add(new InspectedComponentEntry(
             ComponentType,
             ComponentPoolType,
-            GetReadonly(entityId),
-            GetVersion(entityId)));
+            _denseComponents[denseIndex].ToString() ?? string.Empty,
+            _denseVersions[denseIndex]));
 
         return 1;
     }
 
     public uint GetVersion(int entityId)
     {
-        ValidateEntityId(entityId);
-
         var denseIndex = _entityIdToDenseIndexMap[entityId];
         if (denseIndex < 0)
         {
@@ -173,8 +158,6 @@ public sealed class PackedComponentPool<T> : IReadOnlyComponentPool<T>, IInspect
 
     public bool TrySet(int entityId, T value)
     {
-        ValidateEntityId(entityId);
-
         var denseIndex = _entityIdToDenseIndexMap[entityId];
         if (denseIndex < 0)
         {
@@ -188,7 +171,6 @@ public sealed class PackedComponentPool<T> : IReadOnlyComponentPool<T>, IInspect
 
     public bool TryUpdate(int entityId, Engine.ECS.Components.ComponentUpdater<T> updater)
     {
-        ValidateEntityId(entityId);
         ArgumentNullException.ThrowIfNull(updater);
 
         var denseIndex = _entityIdToDenseIndexMap[entityId];
@@ -204,7 +186,6 @@ public sealed class PackedComponentPool<T> : IReadOnlyComponentPool<T>, IInspect
 
     public bool TryUpdate<TState>(int entityId, TState state, ComponentUpdater<TState> updater)
     {
-        ValidateEntityId(entityId);
         ArgumentNullException.ThrowIfNull(updater);
 
         var denseIndex = _entityIdToDenseIndexMap[entityId];
@@ -218,40 +199,22 @@ public sealed class PackedComponentPool<T> : IReadOnlyComponentPool<T>, IInspect
         return true;
     }
 
-    public ref T GetByDenseIndex(int denseIndex)
-    {
-        ValidateDenseIndex(denseIndex);
-        return ref _denseComponents[denseIndex];
-    }
+    public ref T GetByDenseIndex(int denseIndex) => ref _denseComponents[denseIndex];
 
-    public ref readonly T GetReadonlyByDenseIndex(int denseIndex)
-    {
-        ValidateDenseIndex(denseIndex);
-        return ref _denseComponents[denseIndex];
-    }
+    public ref readonly T GetReadonlyByDenseIndex(int denseIndex) => ref _denseComponents[denseIndex];
 
-    public int GetEntityIdByDenseIndex(int denseIndex)
-    {
-        ValidateDenseIndex(denseIndex);
-        return _denseIndexToEntityIdMap[denseIndex];
-    }
+    public int GetEntityIdByDenseIndex(int denseIndex) => _denseIndexToEntityIdMap[denseIndex];
 
-    public uint GetVersionByDenseIndex(int denseIndex)
-    {
-        ValidateDenseIndex(denseIndex);
-        return _denseVersions[denseIndex];
-    }
+    public uint GetVersionByDenseIndex(int denseIndex) => _denseVersions[denseIndex];
 
     public void SetByDenseIndex(int denseIndex, T value)
     {
-        ValidateDenseIndex(denseIndex);
         _denseComponents[denseIndex] = value;
         _denseVersions[denseIndex]++;
     }
 
     public void UpdateByDenseIndex(int denseIndex, Engine.ECS.Components.ComponentUpdater<T> updater)
     {
-        ValidateDenseIndex(denseIndex);
         ArgumentNullException.ThrowIfNull(updater);
 
         updater(ref _denseComponents[denseIndex]);
@@ -260,23 +223,16 @@ public sealed class PackedComponentPool<T> : IReadOnlyComponentPool<T>, IInspect
 
     public void UpdateByDenseIndex<TState>(int denseIndex, TState state, ComponentUpdater<TState> updater)
     {
-        ValidateDenseIndex(denseIndex);
         ArgumentNullException.ThrowIfNull(updater);
 
         updater(ref _denseComponents[denseIndex], state);
         _denseVersions[denseIndex]++;
     }
 
-    public void IncrementVersionByDenseIndex(int denseIndex)
-    {
-        ValidateDenseIndex(denseIndex);
-        _denseVersions[denseIndex]++;
-    }
+    public void IncrementVersionByDenseIndex(int denseIndex) => _denseVersions[denseIndex]++;
 
     public bool Remove(int entityId)
     {
-        ValidateEntityId(entityId);
-
         var denseIndex = _entityIdToDenseIndexMap[entityId];
         if (denseIndex < 0)
         {
@@ -287,11 +243,12 @@ public sealed class PackedComponentPool<T> : IReadOnlyComponentPool<T>, IInspect
 
         if (denseIndex != lastDenseIndex)
         {
+            var movedEntityId = _denseIndexToEntityIdMap[lastDenseIndex];
+
             _denseComponents[denseIndex] = _denseComponents[lastDenseIndex];
-            _denseIndexToEntityIdMap[denseIndex] = _denseIndexToEntityIdMap[lastDenseIndex];
+            _denseIndexToEntityIdMap[denseIndex] = movedEntityId;
             _denseVersions[denseIndex] = _denseVersions[lastDenseIndex];
 
-            var movedEntityId = _denseIndexToEntityIdMap[denseIndex];
             _entityIdToDenseIndexMap[movedEntityId] = denseIndex;
         }
 
@@ -322,17 +279,5 @@ public sealed class PackedComponentPool<T> : IReadOnlyComponentPool<T>, IInspect
         {
             _denseIndexToEntityIdMap[i] = -1;
         }
-    }
-
-    private void ValidateEntityId(int entityId)
-    {
-        ArgumentOutOfRangeException.ThrowIfNegative(entityId);
-        ArgumentOutOfRangeException.ThrowIfGreaterThanOrEqual(entityId, _maxEntities);
-    }
-
-    private void ValidateDenseIndex(int denseIndex)
-    {
-        ArgumentOutOfRangeException.ThrowIfNegative(denseIndex);
-        ArgumentOutOfRangeException.ThrowIfGreaterThanOrEqual(denseIndex, _count);
     }
 }

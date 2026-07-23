@@ -6,8 +6,9 @@ namespace Engine.Diagnostics;
 /// Structured entity inspection, wrapping every registered pool's
 /// <see cref="IInspectableComponentPool"/>. Reads data the pools already track for their own
 /// bookkeeping rather than reflecting over component fields at inspection time, so dumping
-/// an entity's components (e.g. for a debug/selection UI) costs no reflection and no boxing
-/// beyond the pools' own inspection entries.
+/// an entity's components (e.g. for a debug/selection UI) costs no reflection and no boxing --
+/// <see cref="InspectedComponentEntry.Value"/> is captured via a constrained ToString() call
+/// on the component itself, not by boxing it into an object.
 /// </summary>
 public sealed class ComponentInspector(ComponentManager componentManager)
 {

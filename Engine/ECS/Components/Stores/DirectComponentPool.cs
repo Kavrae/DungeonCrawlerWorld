@@ -41,23 +41,13 @@ public sealed class DirectComponentPool<T> : IReadOnlyComponentPool<T>, IInspect
     {
         ArgumentOutOfRangeException.ThrowIfLessThan(newMaximumEntityCount, _components.Length);
 
-        var oldLength = _components.Length;
-
         Array.Resize(ref _components, newMaximumEntityCount);
         Array.Resize(ref _present, newMaximumEntityCount);
         Array.Resize(ref _versions, newMaximumEntityCount);
-
-        for (var i = oldLength; i < newMaximumEntityCount; i++)
-        {
-            _present[i] = 0;
-            _versions[i] = 0;
-        }
     }
 
     public void Add(int entityId, T newComponent)
     {
-        ValidateEntityId(entityId);
-
         if (_present[entityId] != 0)
         {
             throw new InvalidOperationException($"Entity {entityId} already has a component of type {typeof(T).Name}.");
@@ -71,8 +61,6 @@ public sealed class DirectComponentPool<T> : IReadOnlyComponentPool<T>, IInspect
 
     public void Merge(int entityId, T newComponent)
     {
-        ValidateEntityId(entityId);
-
         if (_present[entityId] != 0)
         {
             _mergeImplementation(ref _components[entityId], newComponent);
@@ -83,17 +71,10 @@ public sealed class DirectComponentPool<T> : IReadOnlyComponentPool<T>, IInspect
         Add(entityId, newComponent);
     }
 
-    public bool Has(int entityId)
-    {
-        ValidateEntityId(entityId);
-
-        return _present[entityId] != 0;
-    }
+    public bool Has(int entityId) => _present[entityId] != 0;
 
     public bool TryGetReadonly(int entityId, out T component)
     {
-        ValidateEntityId(entityId);
-
         if (_present[entityId] == 0)
         {
             component = default;
@@ -106,8 +87,6 @@ public sealed class DirectComponentPool<T> : IReadOnlyComponentPool<T>, IInspect
 
     public ref readonly T GetReadonly(int entityId)
     {
-        ValidateEntityId(entityId);
-
         if (_present[entityId] == 0)
         {
             throw new InvalidOperationException($"Entity {entityId} does not have component {typeof(T).Name}.");
@@ -122,8 +101,6 @@ public sealed class DirectComponentPool<T> : IReadOnlyComponentPool<T>, IInspect
     /// </summary>
     public ref T Get(int entityId)
     {
-        ValidateEntityId(entityId);
-
         if (_present[entityId] == 0)
         {
             throw new InvalidOperationException($"Entity {entityId} does not have component {typeof(T).Name}.");
@@ -134,9 +111,7 @@ public sealed class DirectComponentPool<T> : IReadOnlyComponentPool<T>, IInspect
 
     public int CopyInspectionDataForEntity(int entityId, List<InspectedComponentEntry> destination)
     {
-        ValidateEntityId(entityId);
-
-        if (!Has(entityId))
+        if (_present[entityId] == 0)
         {
             return 0;
         }
@@ -144,16 +119,14 @@ public sealed class DirectComponentPool<T> : IReadOnlyComponentPool<T>, IInspect
         destination.Add(new InspectedComponentEntry(
             ComponentType,
             ComponentPoolType,
-            GetReadonly(entityId),
-            GetVersion(entityId)));
+            _components[entityId].ToString() ?? string.Empty,
+            _versions[entityId]));
 
         return 1;
     }
 
     public uint GetVersion(int entityId)
     {
-        ValidateEntityId(entityId);
-
         if (_present[entityId] == 0)
         {
             throw new InvalidOperationException($"Entity {entityId} does not have component {typeof(T).Name}.");
@@ -164,8 +137,6 @@ public sealed class DirectComponentPool<T> : IReadOnlyComponentPool<T>, IInspect
 
     public bool TrySet(int entityId, T value)
     {
-        ValidateEntityId(entityId);
-
         if (_present[entityId] == 0)
         {
             return false;
@@ -178,7 +149,6 @@ public sealed class DirectComponentPool<T> : IReadOnlyComponentPool<T>, IInspect
 
     public bool TryUpdate(int entityId, Engine.ECS.Components.ComponentUpdater<T> updater)
     {
-        ValidateEntityId(entityId);
         ArgumentNullException.ThrowIfNull(updater);
 
         if (_present[entityId] == 0)
@@ -193,7 +163,6 @@ public sealed class DirectComponentPool<T> : IReadOnlyComponentPool<T>, IInspect
 
     public bool TryUpdate<TState>(int entityId, TState state, ComponentUpdater<TState> updater)
     {
-        ValidateEntityId(entityId);
         ArgumentNullException.ThrowIfNull(updater);
 
         if (_present[entityId] == 0)
@@ -208,8 +177,6 @@ public sealed class DirectComponentPool<T> : IReadOnlyComponentPool<T>, IInspect
 
     public void IncrementVersion(int entityId)
     {
-        ValidateEntityId(entityId);
-
         if (_present[entityId] == 0)
         {
             throw new InvalidOperationException($"Entity {entityId} does not have component {typeof(T).Name}.");
@@ -220,8 +187,6 @@ public sealed class DirectComponentPool<T> : IReadOnlyComponentPool<T>, IInspect
 
     public bool Remove(int entityId)
     {
-        ValidateEntityId(entityId);
-
         if (_present[entityId] == 0)
         {
             return false;
@@ -240,11 +205,5 @@ public sealed class DirectComponentPool<T> : IReadOnlyComponentPool<T>, IInspect
         Array.Clear(_present);
         Array.Clear(_versions);
         _count = 0;
-    }
-
-    private void ValidateEntityId(int entityId)
-    {
-        ArgumentOutOfRangeException.ThrowIfNegative(entityId);
-        ArgumentOutOfRangeException.ThrowIfGreaterThanOrEqual(entityId, _components.Length);
     }
 }

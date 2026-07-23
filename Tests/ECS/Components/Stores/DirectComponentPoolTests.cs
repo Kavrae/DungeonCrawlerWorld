@@ -27,14 +27,6 @@ public sealed class DirectComponentPoolTests
     }
 
     [TestMethod]
-    public void Has_OutOfRangeEntityId_Throws()
-    {
-        var pool = new DirectComponentPool<TestComponent>(5, AverageMerge);
-
-        Assert.ThrowsExactly<ArgumentOutOfRangeException>(() => pool.Has(5));
-    }
-
-    [TestMethod]
     public void Add_ThenGet_ReturnsStoredValue()
     {
         var pool = new DirectComponentPool<TestComponent>(5, AverageMerge);
