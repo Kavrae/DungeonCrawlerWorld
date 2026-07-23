@@ -207,12 +207,12 @@ public sealed class MapWindow : Window
 
         foreach (var entityId in _occupancyPool.EntityIds)
         {
-            if (!_transformPool.Has(entityId))
+            if (!_transformPool.TryGetReadonly(entityId, out var transformComponent))
             {
                 continue;
             }
 
-            var position = _transformPool.GetReadonly(entityId).Position;
+            var position = transformComponent.Position;
             if (!occupantsByPosition.TryGetValue(position, out var occupants))
             {
                 occupants = [];
@@ -233,12 +233,11 @@ public sealed class MapWindow : Window
         }
 
         var terrainEntityId = _world.Map.GetTerrainEntityId(mapNodeX, mapNodeY, layer);
-        if (terrainEntityId == -1 || !_glyphPool.Has(terrainEntityId))
+        if (terrainEntityId == -1 || !_glyphPool.TryGetReadonly(terrainEntityId, out var glyphComponent))
         {
             return;
         }
 
-        ref readonly var glyphComponent = ref _glyphPool.GetReadonly(terrainEntityId);
         var footprintSize = new Vector2(_currentTileSize.X, _currentTileSize.Y); // Terrain is always 1x1.
         _glyphRenderer.DrawCentered(spriteBatch, _mediumFont, glyphComponent.Glyph, tileOrigin, footprintSize, glyphComponent.GlyphColor);
     }
@@ -261,14 +260,13 @@ public sealed class MapWindow : Window
                 break;
             }
 
-            if (!_occupancyPool.GetReadonly(entityId).IsTiny || !_glyphPool.Has(entityId))
+            if (!_occupancyPool.GetReadonly(entityId).IsTiny || !_glyphPool.TryGetReadonly(entityId, out var glyphComponent))
             {
                 continue;
             }
 
             var subColumn = drawnCount % TinyGridDimension;
             var subRow = drawnCount / TinyGridDimension;
-            ref readonly var glyphComponent = ref _glyphPool.GetReadonly(entityId);
             var subCellTopLeft = new Vector2(tileOrigin.X + subColumn * subCellSize.X, tileOrigin.Y + subRow * subCellSize.Y);
 
             _glyphRenderer.DrawCentered(spriteBatch, _tinyFont, glyphComponent.Glyph, subCellTopLeft, new Vector2(subCellSize.X, subCellSize.Y), glyphComponent.GlyphColor);
@@ -285,13 +283,10 @@ public sealed class MapWindow : Window
             return;
         }
 
-        if (!_glyphPool.Has(entityId) || !_transformPool.Has(entityId))
+        if (!_glyphPool.TryGetReadonly(entityId, out var glyphComponent) || !_transformPool.TryGetReadonly(entityId, out var transformComponent))
         {
             return;
         }
-
-        ref readonly var glyphComponent = ref _glyphPool.GetReadonly(entityId);
-        ref readonly var transformComponent = ref _transformPool.GetReadonly(entityId);
 
         // Multi-tile glyph fix: only draw from the entity's top-left origin tile
         // to avoid drawing it once per occupied tile.
@@ -326,13 +321,13 @@ public sealed class MapWindow : Window
 
         foreach (var entityId in occupants)
         {
-            if (!_occupancyPool.GetReadonly(entityId).IsPhasing || !_glyphPool.Has(entityId) || !_transformPool.Has(entityId))
+            if (!_occupancyPool.GetReadonly(entityId).IsPhasing ||
+                !_glyphPool.TryGetReadonly(entityId, out var glyphComponent) ||
+                !_transformPool.TryGetReadonly(entityId, out var transformComponent))
             {
                 continue;
             }
 
-            ref readonly var glyphComponent = ref _glyphPool.GetReadonly(entityId);
-            ref readonly var transformComponent = ref _transformPool.GetReadonly(entityId);
             var footprintSize = new Vector2(transformComponent.Size.X * _currentTileSize.X, transformComponent.Size.Y * _currentTileSize.Y);
 
             _glyphRenderer.DrawCentered(spriteBatch, FontForSize(transformComponent.Size.X), glyphComponent.Glyph, tileOrigin, footprintSize, glyphComponent.GlyphColor * 0.5f);
@@ -548,17 +543,17 @@ public sealed class MapWindow : Window
         var currentMapLayer = _mapViewState.CurrentMapLayer;
 
         var occupantEntityId = _world.Map.GetEntityId(new Vector3Int(mapNodeX, mapNodeY, currentMapLayer));
-        if (occupantEntityId != -1 && _backgroundPool.Has(occupantEntityId))
+        if (occupantEntityId != -1 && _backgroundPool.TryGetReadonly(occupantEntityId, out var occupantBackground))
         {
-            return _backgroundPool.GetReadonly(occupantEntityId).BackgroundColor;
+            return occupantBackground.BackgroundColor;
         }
 
         if (Map.TerrainLayerFor(currentMapLayer) is { } terrainLayer)
         {
             var terrainEntityId = _world.Map.GetTerrainEntityId(mapNodeX, mapNodeY, terrainLayer);
-            if (terrainEntityId != -1 && _backgroundPool.Has(terrainEntityId))
+            if (terrainEntityId != -1 && _backgroundPool.TryGetReadonly(terrainEntityId, out var terrainBackground))
             {
-                return _backgroundPool.GetReadonly(terrainEntityId).BackgroundColor;
+                return terrainBackground.BackgroundColor;
             }
         }
 

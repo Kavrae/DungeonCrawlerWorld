@@ -31,8 +31,27 @@ public sealed class NotificationCenter(WindowService windowService, EventBus eve
 
     private Window _summaryWindow = null!;
 
-    /// <summary>True while a System-category notification is active -- GameLoop gates the game's own Update on this.</summary>
-    public bool HasBlockingNotification => _activeNotifications.Any(entry => entry.Notification.Category == NotificationCategory.System);
+    /// <summary>
+    /// True while a System-category notification is active -- GameLoop gates the game's own
+    /// Update on this, so it's evaluated every frame; a plain loop over the concrete List&lt;&gt;
+    /// avoids both the per-frame closure and the boxed enumerator Enumerable.Any() would
+    /// otherwise cost through IEnumerable&lt;&gt; dispatch.
+    /// </summary>
+    public bool HasBlockingNotification
+    {
+        get
+        {
+            foreach (var entry in _activeNotifications)
+            {
+                if (entry.Notification.Category == NotificationCategory.System)
+                {
+                    return true;
+                }
+            }
+
+            return false;
+        }
+    }
 
     /// <summary>
     /// Raised whenever a notification popup actually shows on screen (a fresh one via

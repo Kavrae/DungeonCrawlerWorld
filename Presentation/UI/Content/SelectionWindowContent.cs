@@ -41,9 +41,12 @@ public sealed class SelectionWindowContent(
     private readonly HashSet<int> _visibleDebugEntityIds = [];
     private readonly HashSet<int> _selectedEntityIds = [];
     private readonly List<InspectedComponentEntry> _reusableInspectionList = [];
+    private readonly List<int> _reusableDiffBuffer = [];
 
     private Window _hostWindow = null!;
     private int _updatesSinceLastComponentRefresh;
+    private Point? _titleTextSourcePosition;
+    private bool _hasSetTitleText;
 
     public void Initialize(Window hostWindow)
     {
@@ -54,7 +57,22 @@ public sealed class SelectionWindowContent(
     {
         RecomputeSelectedEntityIds();
 
-        foreach (var entityId in _visibleDebugEntityIds.Except(_selectedEntityIds).ToArray())
+        // Manual diff into a reused buffer rather than HashSet.Except().ToArray() -- this runs
+        // every frame regardless of whether the selection changed, so the two LINQ allocations
+        // (Except's internal set plus ToArray's array) would otherwise be permanent per-frame
+        // garbage even on the common "nothing selected" frame. ToArray-equivalent snapshotting
+        // is still needed since the loop bodies mutate _visibleDebugEntityIds/_selectedEntityIds
+        // while iterating.
+        _reusableDiffBuffer.Clear();
+        foreach (var entityId in _visibleDebugEntityIds)
+        {
+            if (!_selectedEntityIds.Contains(entityId))
+            {
+                _reusableDiffBuffer.Add(entityId);
+            }
+        }
+
+        foreach (var entityId in _reusableDiffBuffer)
         {
             if (_entityDebugWindows.Remove(entityId, out var windows))
             {
@@ -67,7 +85,16 @@ public sealed class SelectionWindowContent(
             _visibleDebugEntityIds.Remove(entityId);
         }
 
-        foreach (var entityId in _selectedEntityIds.Except(_visibleDebugEntityIds).ToArray())
+        _reusableDiffBuffer.Clear();
+        foreach (var entityId in _selectedEntityIds)
+        {
+            if (!_visibleDebugEntityIds.Contains(entityId))
+            {
+                _reusableDiffBuffer.Add(entityId);
+            }
+        }
+
+        foreach (var entityId in _reusableDiffBuffer)
         {
             _entityDebugWindows[entityId] = CreateDebugWindowsForEntity(entityId);
             _visibleDebugEntityIds.Add(entityId);
@@ -83,9 +110,19 @@ public sealed class SelectionWindowContent(
             }
         }
 
-        _hostWindow.TitleText = mapViewState.SelectedMapNodePosition is { } selected
-            ? $"Selected Map Node : {selected.X},{selected.Y}"
-            : "No map nodes selected";
+        // TitleText only actually needs rebuilding when the selection changes -- most frames
+        // it's identical to last frame's value, so this guard avoids a steady-state per-frame
+        // string allocation (unlike DebugWindowContent's rate counters, this isn't a live
+        // display that needs to change every frame regardless).
+        var currentSelection = mapViewState.SelectedMapNodePosition;
+        if (!_hasSetTitleText || currentSelection != _titleTextSourcePosition)
+        {
+            _hasSetTitleText = true;
+            _titleTextSourcePosition = currentSelection;
+            _hostWindow.TitleText = currentSelection is { } selected
+                ? $"Selected Map Node : {selected.X},{selected.Y}"
+                : "No map nodes selected";
+        }
     }
 
     public void DrawContent(GameTime gameTime, SpriteBatch spriteBatch, Texture2D unitRectangle)
@@ -141,12 +178,12 @@ public sealed class SelectionWindowContent(
         // the current layer the same way the Blocking check above is.
         foreach (var entityId in _occupancyPool.EntityIds)
         {
-            if (!_transformPool.Has(entityId))
+            if (!_transformPool.TryGetReadonly(entityId, out var transformComponent))
             {
                 continue;
             }
 
-            var position = _transformPool.GetReadonly(entityId).Position;
+            var position = transformComponent.Position;
             if (position.X == selected.X && position.Y == selected.Y && position.Z == currentMapLayer)
             {
                 _selectedEntityIds.Add(entityId);
