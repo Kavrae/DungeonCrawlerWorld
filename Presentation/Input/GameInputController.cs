@@ -27,6 +27,12 @@ public sealed class GameInputController
     private Vector2 _dragStartRelativePosition;
     private Vector2 _dragStartSize;
 
+    /// <summary>The window a right-mouse-button drag started over (hit-tested on press), or null while no right-drag is in progress -- see HandleRightDragStart/HandleRightDrag.</summary>
+    private Window? _rightDragWindow;
+
+    /// <summary>Mouse position at the moment the current right-drag started -- HandleRightDrag reports the total delta from this anchor every frame, not a per-frame increment, so the receiving window never has to worry about drift from accumulating many small deltas.</summary>
+    private Vector2 _rightDragStartMousePosition;
+
     private Window? _focusedWindow;
 
     /// <summary>
@@ -147,6 +153,19 @@ public sealed class GameInputController
             HandleMouseDrag(mouseState);
         }
 
+        if (mouseState.RightButton == ButtonState.Pressed && _previousMouseState.RightButton == ButtonState.Released)
+        {
+            HandleRightDragStart(mouseState);
+        }
+        else if (mouseState.RightButton == ButtonState.Released && _previousMouseState.RightButton == ButtonState.Pressed)
+        {
+            _rightDragWindow = null;
+        }
+        else if (mouseState.RightButton == ButtonState.Pressed && _rightDragWindow is not null)
+        {
+            HandleRightDrag(mouseState);
+        }
+
         UpdateMouseWheelScroll(mouseState);
         UpdateCursor(mouseState);
 
@@ -238,6 +257,29 @@ public sealed class GameInputController
             (relativePosition, size) = ClampResizeToBounds(relativePosition, size, GetPositionBounds(window));
             window.SetBounds(relativePosition, size);
         }
+    }
+
+    /// <summary>
+    /// Captures which window a right-mouse-button drag started over, hit-testing the same way
+    /// a left-click does (TryHitTestInteraction) -- but with no raise-to-front/focus side
+    /// effects, since a drag-to-pan gesture shouldn't steal focus or reorder windows the way
+    /// clicking one does. Null (nothing hit, e.g. empty space between windows) means the drag
+    /// simply forwards to nothing until released. Also snapshots the press position as the
+    /// anchor HandleRightDrag measures every subsequent frame's total delta from.
+    /// </summary>
+    private void HandleRightDragStart(MouseState mouseState)
+    {
+        var position = new Point(mouseState.X, mouseState.Y);
+        _rightDragWindow = TryHitTestInteraction(position).Window;
+        _rightDragStartMousePosition = new Vector2(mouseState.X, mouseState.Y);
+        _rightDragWindow?.HandleRightDragStart();
+    }
+
+    /// <summary>Forwards the total mouse-pixel delta since the drag started (not this frame's increment) to whichever window the drag started over -- see Window.HandleRightDrag.</summary>
+    private void HandleRightDrag(MouseState mouseState)
+    {
+        var totalDelta = new Vector2(mouseState.X, mouseState.Y) - _rightDragStartMousePosition;
+        _rightDragWindow?.HandleRightDrag(totalDelta);
     }
 
     /// <summary>

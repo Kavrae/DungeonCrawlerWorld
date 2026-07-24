@@ -1,5 +1,7 @@
 using Engine.ECS.Context;
 using Engine.Math;
+using Game.Blueprints;
+using Game.Modules.Core.Components;
 
 namespace Game.Floors;
 
@@ -21,6 +23,67 @@ public static class FloorBuilder
 
     public static Game.World.Map CreateMap(int floorNumber) => new(TestMapSize);
 
-    public static void PopulateFloor(Game.World.World world, EcsContext ecsContext, MathUtility mathUtility) =>
+    public static void PopulateFloor(Game.World.World world, EcsContext ecsContext, MathUtility mathUtility)
+    {
         new TestMapBuilder(ecsContext.EntityManager, ecsContext.ComponentManager, mathUtility).Populate(world);
+
+        world.PlayerEntityId = CreatePlayer(world, ecsContext);
+    }
+
+    private static int CreatePlayer(Game.World.World world, EcsContext ecsContext)
+    {
+        var entityId = ecsContext.EntityManager.CreateEntity();
+        new PlayerBlueprint().Build(ecsContext.ComponentManager, entityId);
+
+        var spawnPosition = FindFreeGroundCellNearCenter(world);
+        ref var transform = ref ecsContext.ComponentManager.GetDirectPool<TransformComponent>().Get(entityId);
+        world.PlaceEntityOnMap(entityId, spawnPosition, ref transform);
+
+        return entityId;
+    }
+
+    /// <summary>
+    /// Scans outward in expanding square rings from the map's Ground-layer center for the
+    /// first on-map, unoccupied cell -- deliberately not a hardcoded coordinate, since that
+    /// would couple player spawning to TestMapBuilder's own deterministic (and, per its doc
+    /// comment, placeholder) wall/population pattern. Falls back to the exact center if
+    /// somehow nothing else is found within the map's bounds.
+    /// </summary>
+    private static Vector3Int FindFreeGroundCellNearCenter(Game.World.World world)
+    {
+        var mapSize = world.Map.Size;
+        var center = new Vector3Int(mapSize.X / 2, mapSize.Y / 2, (int)MapLayer.Ground);
+
+        if (IsFreeGroundCell(world, center))
+        {
+            return center;
+        }
+
+        var maxRadius = Math.Max(mapSize.X, mapSize.Y);
+        for (var radius = 1; radius <= maxRadius; radius++)
+        {
+            for (var deltaX = -radius; deltaX <= radius; deltaX++)
+            {
+                for (var deltaY = -radius; deltaY <= radius; deltaY++)
+                {
+                    // Ring only -- interior offsets were already checked at a smaller radius.
+                    if (Math.Max(Math.Abs(deltaX), Math.Abs(deltaY)) != radius)
+                    {
+                        continue;
+                    }
+
+                    var candidate = new Vector3Int(center.X + deltaX, center.Y + deltaY, center.Z);
+                    if (IsFreeGroundCell(world, candidate))
+                    {
+                        return candidate;
+                    }
+                }
+            }
+        }
+
+        return center;
+    }
+
+    private static bool IsFreeGroundCell(Game.World.World world, Vector3Int position) =>
+        world.IsOnMap(position) && world.GetEntityIdAt(position) == -1;
 }

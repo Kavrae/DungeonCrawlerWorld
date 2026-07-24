@@ -213,4 +213,82 @@ public sealed class MovementSystemTests
         Assert.AreNotEqual(10, movementPool.GetReadonly(0).FramesToWait);
         Assert.AreNotEqual(new Vector3Int(0, 0, 0), transformPool.GetReadonly(0).Position);
     }
+
+    /// <summary>
+    /// Mirrors MapWindow.TryQueuePlayerMove's validate-then-queue pattern (on-map + free-space
+    /// check before ever setting NextMapPosition -- SetNextMapPosition has no case for
+    /// PlayerControlled, so MovementSystem itself never re-validates a queued target) applied
+    /// to two independent entities, proving MovementMode.PlayerControlled isn't tied to any
+    /// single global "the player": World.PlayerEntityId is just which PlayerControlled entity
+    /// MapWindow's input happens to drive today, not a constraint MovementSystem enforces.
+    /// Entity ids 0 and 15 share stripe bucket 0 (StripeCount = 15), so a single
+    /// Update(_, 0) call processes both in the same tick.
+    /// </summary>
+    [TestMethod]
+    public void Update_TwoPlayerControlledEntities_EachMoveIndependentlyWithOwnValidation()
+    {
+        var transformPool = CreateTransformPool(20);
+        var energyPool = CreateEnergyPool(20);
+        var movementPool = CreateMovementPool(20);
+        var world = new Game.World.World(new Map(new Vector3Int(10, 10, 1)));
+
+        const int firstEntityId = 0;
+        const int secondEntityId = 15;
+        const int wallEntityId = 3;
+
+        var firstTransform = new TransformComponent(new Vector3Int(2, 2, 0), new Vector2Byte(1, 1));
+        transformPool.Add(firstEntityId, firstTransform);
+        world.PlaceEntityOnMap(firstEntityId, firstTransform.Position, ref firstTransform);
+        energyPool.Add(firstEntityId, new EnergyComponent(100, 0, 100));
+        movementPool.Add(firstEntityId, new MovementComponent(MovementMode.PlayerControlled, 10, null, null));
+
+        var secondTransform = new TransformComponent(new Vector3Int(7, 7, 0), new Vector2Byte(1, 1));
+        transformPool.Add(secondEntityId, secondTransform);
+        world.PlaceEntityOnMap(secondEntityId, secondTransform.Position, ref secondTransform);
+        energyPool.Add(secondEntityId, new EnergyComponent(100, 0, 100));
+        movementPool.Add(secondEntityId, new MovementComponent(MovementMode.PlayerControlled, 10, null, null));
+
+        // A wall directly east of the second entity -- its own move attempt there must be
+        // rejected by its own validation, independent of the first entity's unrelated move.
+        var wallTransform = new TransformComponent(new Vector3Int(), new Vector2Byte(1, 1));
+        transformPool.Add(wallEntityId, wallTransform);
+        world.PlaceEntityOnMap(wallEntityId, new Vector3Int(8, 7, 0), ref wallTransform);
+
+        QueuePlayerControlledMove(world, transformPool, movementPool, firstEntityId, new Vector3Int(1, 0, 0));
+        QueuePlayerControlledMove(world, transformPool, movementPool, secondEntityId, new Vector3Int(1, 0, 0)); // Into the wall.
+
+        Assert.AreEqual(new Vector3Int(3, 2, 0), movementPool.GetReadonly(firstEntityId).NextMapPosition);
+        Assert.IsNull(movementPool.GetReadonly(secondEntityId).NextMapPosition,
+            "The second entity's own validation must reject a move into the wall, independent of the first entity's move.");
+
+        var system = new MovementSystem(transformPool, energyPool, movementPool, world, new MathUtility(), new EventBus());
+        system.Update(default, 0);
+
+        Assert.AreEqual(new Vector3Int(3, 2, 0), transformPool.GetReadonly(firstEntityId).Position, "First entity moves to its own valid target.");
+        Assert.AreEqual(new Vector3Int(7, 7, 0), transformPool.GetReadonly(secondEntityId).Position, "Second entity stays put -- it never had a valid queued move.");
+    }
+
+    /// <summary>Standalone stand-in for MapWindow.TryQueuePlayerMove's validate-then-queue logic, so this test can drive independent PlayerControlled entities without any MapWindow/input machinery.</summary>
+    private static void QueuePlayerControlledMove(IMapQuery mapQuery, DirectComponentPool<TransformComponent> transformPool, PackedComponentPool<MovementComponent> movementPool, int entityId, Vector3Int delta)
+    {
+        if (!transformPool.TryGetReadonly(entityId, out var transformComponent) || !movementPool.TryGetReadonly(entityId, out var movementComponent))
+        {
+            return;
+        }
+
+        var isAtRest = movementComponent.NextMapPosition is null || movementComponent.NextMapPosition.Value == transformComponent.Position;
+        if (!isAtRest)
+        {
+            return;
+        }
+
+        var candidate = transformComponent.Position + delta;
+        var occupyingEntityId = mapQuery.GetEntityIdAt(candidate);
+        if (!mapQuery.IsOnMap(candidate) || (occupyingEntityId != -1 && occupyingEntityId != entityId))
+        {
+            return;
+        }
+
+        movementPool.TryUpdate(entityId, candidate, static (ref MovementComponent movement, Vector3Int target) => movement.NextMapPosition = target);
+    }
 }

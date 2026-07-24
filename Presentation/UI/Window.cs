@@ -503,6 +503,30 @@ public class Window
     internal static bool WasKeyPressed(KeyboardState current, KeyboardState previous, Keys key) => current.IsKeyDown(key) && previous.IsKeyUp(key);
 
     /// <summary>
+    /// Fires once when a right-mouse-button drag starts over this window -- see
+    /// GameInputController's right-button state machine. No-op by default; MapWindow uses
+    /// this to snapshot its own scroll position as the drag's anchor, so every subsequent
+    /// HandleRightDrag call (which reports the *total* delta since the drag started, not a
+    /// per-frame increment) can recompute the desired scroll from a fixed reference point
+    /// rather than accumulating potentially-lossy per-frame deltas.
+    /// </summary>
+    internal void HandleRightDragStart() => OnRightDragStartAction();
+
+    protected virtual void OnRightDragStartAction() { }
+
+    /// <summary>
+    /// Routes the total mouse-pixel delta of an in-progress right-mouse-button drag (measured
+    /// from where the drag started, not since the last frame) to whichever window the drag
+    /// started over -- see GameInputController's right-button state machine and
+    /// HandleRightDragStart. No-op by default (only MapWindow overrides this today, to pan its
+    /// camera); unlike HandleHotkeys this doesn't depend on focus, since a drag-to-pan gesture
+    /// shouldn't require clicking to focus a window first.
+    /// </summary>
+    internal void HandleRightDrag(Vector2 totalPixelDeltaSinceStart) => OnRightDragAction(totalPixelDeltaSinceStart);
+
+    protected virtual void OnRightDragAction(Vector2 totalPixelDeltaSinceStart) { }
+
+    /// <summary>
     /// Routes an actual typed character (shifted case, punctuation, OS keyboard layout) to
     /// this window while it holds focus -- see GameInputController.RouteTextInputToFocusedWindow.
     /// Neither HandleKeyPress (raw Keys values) nor HandleHotkeys (modifier-aware combos) can

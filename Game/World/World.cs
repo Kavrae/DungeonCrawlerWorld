@@ -9,6 +9,8 @@ public sealed class World(Map map) : IMapQuery
 {
     public Map Map { get; set; } = map ?? throw new ArgumentNullException(nameof(map));
 
+    public int PlayerEntityId { get; set; }
+
     private static readonly Vector2Byte TransformSize1 = new(1, 1);
 
     /// <summary>

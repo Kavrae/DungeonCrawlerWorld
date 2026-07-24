@@ -5,4 +5,5 @@ public enum MovementMode : byte
 {
     Random,
     SeekTarget,
+    PlayerControlled
 }

@@ -3,6 +3,7 @@ using Engine.ECS.Components.Stores;
 using Engine.Math;
 using FontStashSharp;
 using Game.Modules.Core.Components;
+using Game.Modules.Movement.Components;
 using Game.World;
 using Microsoft.Xna.Framework;
 using Microsoft.Xna.Framework.Graphics;
@@ -13,14 +14,7 @@ using Presentation.Rendering;
 namespace Presentation.UI;
 
 /// <summary>
-/// Displays a scrollable/zoomable viewport onto a single MapLayer of the game map at a time
-/// (WASD/zoom/Page Up/Down/Space are this window's own hotkeys -- see OnHotkeysAction; only
-/// live while it holds focus, see GameInputController.RouteHotkeysToFocusedWindow). Cannot be moved,
-/// docked, or resized -- no chrome behaviors are attached to it. Holds direct
-/// constructor-injected references to World/MapViewState/ComponentManager rather than a pluggable content
-/// abstraction (unlike DebugWindowContent/SelectionWindowContent/NotificationCenter, which
-/// implement IWindowContent), since the map's rendering is tightly coupled to
-/// World/ComponentManager and gains nothing from the extra indirection.
+/// Displays a scrollable/zoomable viewport onto a single MapLayer of the game map at a time.
 /// </summary>
 public sealed class MapWindow : Window
 {
@@ -29,14 +23,23 @@ public sealed class MapWindow : Window
     private static readonly Color UpLayerBadgeColor = Color.Blue;
     private static readonly Color DownLayerBadgeColor = new(101, 67, 33);
 
+    private const int FramesPerPlayerMove = 15;
+
     private readonly World _world;
     private readonly MapViewState _mapViewState;
     private readonly DirectComponentPool<TransformComponent> _transformPool;
     private readonly DirectComponentPool<GlyphComponent> _glyphPool;
     private readonly DirectComponentPool<BackgroundComponent> _backgroundPool;
     private readonly PackedComponentPool<OccupancyComponent> _occupancyPool;
+    private readonly PackedComponentPool<MovementComponent> _movementPool;
     private readonly TileRenderer _tileRenderer;
     private readonly GlyphRenderer _glyphRenderer;
+
+    private int _playerMoveCooldownFrames;
+
+    private bool _cameraFollowsPlayer = true;
+
+    private Point _rightDragStartScrollPosition;
 
     private SpriteFontBase _mediumFont = null!;
     private SpriteFontBase _largeFont = null!;
@@ -53,12 +56,14 @@ public sealed class MapWindow : Window
     private int _tileRows;
     private readonly int _tileDepth;
 
+    private const int BaseTileSizePixels = 18;
+
     private ZoomLevel _currentZoomLevel = ZoomLevel.Team;
     private static readonly Dictionary<ZoomLevel, Point> TileSizesByZoomLevel = new()
     {
-        [ZoomLevel.Team] = new Point(12, 12),
-        [ZoomLevel.Neighborhood] = new Point(6, 6),
-        [ZoomLevel.Borough] = new Point(3, 3),
+        [ZoomLevel.Team] = new Point(BaseTileSizePixels, BaseTileSizePixels),
+        [ZoomLevel.Neighborhood] = new Point(BaseTileSizePixels / 2, BaseTileSizePixels / 2),
+        [ZoomLevel.Borough] = new Point(BaseTileSizePixels / 4, BaseTileSizePixels / 4),
     };
 
     private Color[] _backgroundColorCache = [];
@@ -87,6 +92,7 @@ public sealed class MapWindow : Window
         _glyphPool = componentManager.GetDirectPool<GlyphComponent>();
         _backgroundPool = componentManager.GetDirectPool<BackgroundComponent>();
         _occupancyPool = componentManager.GetPackedPool<OccupancyComponent>();
+        _movementPool = componentManager.GetPackedPool<MovementComponent>();
         _tileRenderer = tileRenderer;
         _glyphRenderer = glyphRenderer;
 
@@ -103,21 +109,19 @@ public sealed class MapWindow : Window
         _tinyFont = FontService.GetFont(3); // ~1/3 of _mediumFont, for the tiny-entity grid.
         _badgeFont = FontService.GetFont(6); // Double _tinyFont, for the up/down layer-occupancy badges -- legible at a glance without competing with the main glyph.
 
-        // UpdateMaxScrollPosition reads _tileColumns/_tileRows, which UpdateTileSizes is what
-        // actually computes -- must run second, not first, or max scroll is calculated
-        // against a still-zero visible tile count (letting the map scroll a full extra
-        // viewport past its real edge).
         UpdateTileSizes();
         UpdateMaxScrollPosition();
 
-        // MapViewState.CurrentMapLayer defaults to MapLayer.Ground (index 1) regardless of how deep
-        // this particular Map actually is -- fine for the real 3-layer game map, but a
-        // shallower Map (e.g. a 1-deep test map) would leave it out of bounds for
-        // Map.GetEntityId/GetTerrainEntityId below. Clamp the same way ChangeLayer does before
-        // anything reads it.
         _mapViewState.CurrentMapLayer = MathUtility.ClampInt(_mapViewState.CurrentMapLayer, 0, _tileDepth - 1);
 
-        ResetBackgroundColorCache();
+        if (_transformPool.TryGetReadonly(_world.PlayerEntityId, out var playerTransform))
+        {
+            CenterCameraOn(playerTransform.Position);
+        }
+        else
+        {
+            ResetBackgroundColorCache();
+        }
     }
 
     public override void DrawContent(GameTime gameTime, SpriteBatch spriteBatch, Texture2D unitRectangle)
@@ -457,6 +461,18 @@ public sealed class MapWindow : Window
             return;
         }
 
+        // A delta at least as large as the viewport leaves nothing to shift -- every cell is
+        // newly exposed, so a full rebuild is both correct and cheaper than shifting nothing
+        // and then filling everything. The fill loops below also assume the delta is smaller
+        // than the viewport in the axis they fill (e.g. "fill the last scrollDeltaX columns"),
+        // so without this guard a big-enough jump (a large map with a small enough viewport
+        // that a single scroll/drag can exceed it) indexes the cache array out of bounds.
+        if (System.Math.Abs(scrollDeltaX) >= _tileColumns || System.Math.Abs(scrollDeltaY) >= _tileRows)
+        {
+            ResetBackgroundColorCache();
+            return;
+        }
+
         var shiftedColorCache = new Color[_tileColumns * _tileRows];
 
         for (var columnIndex = 0; columnIndex < _tileColumns; columnIndex++)
@@ -598,26 +614,15 @@ public sealed class MapWindow : Window
             IsPaused = !IsPaused;
         }
 
-        var scrollChange = Point.Zero;
-        if (keyboardState.IsKeyDown(Keys.W))
+        HandlePlayerMovementInput(keyboardState);
+
+        if (WasKeyPressed(keyboardState, previousKeyboardState, Keys.Home))
         {
-            scrollChange.Y -= 1;
-        }
-        if (keyboardState.IsKeyDown(Keys.S))
-        {
-            scrollChange.Y += 1;
-        }
-        if (keyboardState.IsKeyDown(Keys.A))
-        {
-            scrollChange.X -= 1;
-        }
-        if (keyboardState.IsKeyDown(Keys.D))
-        {
-            scrollChange.X += 1;
-        }
-        if (scrollChange != Point.Zero)
-        {
-            UpdateScrollPosition(scrollChange);
+            _cameraFollowsPlayer = true;
+            if (_transformPool.TryGetReadonly(_world.PlayerEntityId, out var playerTransform))
+            {
+                CenterCameraOn(playerTransform.Position);
+            }
         }
 
         if (WasKeyPressed(keyboardState, previousKeyboardState, Keys.OemPlus) || WasKeyPressed(keyboardState, previousKeyboardState, Keys.Add))
@@ -645,5 +650,109 @@ public sealed class MapWindow : Window
         var currentIndex = Array.IndexOf(zoomLevels, _currentZoomLevel);
         var newIndex = MathUtility.ClampInt(currentIndex + direction, 0, zoomLevels.Length - 1);
         UpdateZoomLevel(zoomLevels[newIndex]);
+    }
+
+    private void HandlePlayerMovementInput(KeyboardState keyboardState)
+    {
+        if (_playerMoveCooldownFrames > 0)
+        {
+            _playerMoveCooldownFrames--;
+        }
+
+        var delta = new Vector3Int();
+        if (keyboardState.IsKeyDown(Keys.W))
+        {
+            delta.Y -= 1;
+        }
+        if (keyboardState.IsKeyDown(Keys.S))
+        {
+            delta.Y += 1;
+        }
+        if (keyboardState.IsKeyDown(Keys.A))
+        {
+            delta.X -= 1;
+        }
+        if (keyboardState.IsKeyDown(Keys.D))
+        {
+            delta.X += 1;
+        }
+
+        if (delta == new Vector3Int() || _playerMoveCooldownFrames > 0)
+        {
+            return;
+        }
+
+        _playerMoveCooldownFrames = FramesPerPlayerMove;
+        TryQueuePlayerMove(delta);
+    }
+
+    private void TryQueuePlayerMove(Vector3Int delta)
+    {
+        var playerEntityId = _world.PlayerEntityId;
+        if (!_transformPool.TryGetReadonly(playerEntityId, out var transformComponent) ||
+            !_movementPool.TryGetReadonly(playerEntityId, out var movementComponent))
+        {
+            return;
+        }
+
+        // Only queue a new move while at rest -- avoids redirecting a move that's already
+        // pending (e.g. still waiting on MovementSystem's energy gate).
+        var isAtRest = movementComponent.NextMapPosition is null || movementComponent.NextMapPosition.Value == transformComponent.Position;
+        if (!isAtRest)
+        {
+            return;
+        }
+
+        var candidate = transformComponent.Position + delta;
+        var occupyingEntityId = _world.GetEntityIdAt(candidate);
+        if (!_world.IsOnMap(candidate) || (occupyingEntityId != -1 && occupyingEntityId != playerEntityId))
+        {
+            return;
+        }
+
+        _movementPool.TryUpdate(playerEntityId, candidate, static (ref MovementComponent movement, Vector3Int target) =>
+        {
+            movement.NextMapPosition = target;
+        });
+
+        if (_cameraFollowsPlayer)
+        {
+            CenterCameraOn(candidate);
+        }
+    }
+
+    private void CenterCameraOn(Vector3Int position)
+    {
+        var desiredScroll = new Point(position.X - _tileColumns / 2, position.Y - _tileRows / 2);
+        _currentScrollPosition = new Point(
+            MathUtility.ClampInt(desiredScroll.X, 0, _maxScrollPosition.X),
+            MathUtility.ClampInt(desiredScroll.Y, 0, _maxScrollPosition.Y));
+        ResetBackgroundColorCache();
+    }
+
+    /// <summary>Snapshots the scroll position the moment a right-mouse-drag starts, so OnRightDragAction always has a fixed anchor to measure the drag against.</summary>
+    protected override void OnRightDragStartAction()
+    {
+        _rightDragStartScrollPosition = _currentScrollPosition;
+    }
+
+    protected override void OnRightDragAction(Vector2 totalPixelDeltaSinceStart)
+    {
+        if (totalPixelDeltaSinceStart == Vector2.Zero)
+        {
+            return;
+        }
+
+        _cameraFollowsPlayer = false;
+
+        var desiredScroll = new Point(
+            _rightDragStartScrollPosition.X - (int)System.MathF.Round(totalPixelDeltaSinceStart.X / _currentTileSize.X, MidpointRounding.AwayFromZero),
+            _rightDragStartScrollPosition.Y - (int)System.MathF.Round(totalPixelDeltaSinceStart.Y / _currentTileSize.Y, MidpointRounding.AwayFromZero));
+
+        var scrollChange = new Point(desiredScroll.X - _currentScrollPosition.X, desiredScroll.Y - _currentScrollPosition.Y);
+        if (scrollChange != Point.Zero)
+        {
+            UpdateScrollPosition(scrollChange);
+        }
     }
 }

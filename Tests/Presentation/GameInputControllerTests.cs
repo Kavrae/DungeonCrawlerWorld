@@ -32,7 +32,31 @@ public sealed class GameInputControllerTests
     private static MouseState MouseAtWithScroll(int x, int y, int scrollWheelValue) =>
         new(x, y, scrollWheelValue, ButtonState.Released, ButtonState.Released, ButtonState.Released, ButtonState.Released, ButtonState.Released);
 
+    private static MouseState MouseAtWithRightButton(int x, int y, ButtonState rightButton) =>
+        new(x, y, 0, ButtonState.Released, ButtonState.Released, rightButton, ButtonState.Released, ButtonState.Released);
+
     private static WindowService CreateWindowService() => new(new FontService("Fonts"), new GlyphRenderer());
+
+    /// <summary>Records HandleRightDragStart/HandleRightDrag calls, so GameInputController's right-button wiring (hit-test on press, total-delta-since-start on every held frame) can be verified end-to-end without a real MapWindow.</summary>
+    private sealed class RightDragSpyWindow(FontService fontService, WindowService windowService, GlyphRenderer glyphRenderer) : Window(fontService, windowService, glyphRenderer)
+    {
+        public int DragStartCallCount { get; private set; }
+        public List<Vector2> DragDeltas { get; } = [];
+
+        protected override void OnRightDragStartAction() => DragStartCallCount++;
+        protected override void OnRightDragAction(Vector2 totalPixelDeltaSinceStart) => DragDeltas.Add(totalPixelDeltaSinceStart);
+    }
+
+    private static RightDragSpyWindow CreateRightDragSpyWindow(WindowService windowService, FontService fontService, Vector2 relativePosition)
+    {
+        windowService.RegisterFactory<RightDragSpyWindow>((_, _) => new RightDragSpyWindow(fontService, windowService, new GlyphRenderer()));
+        var window = windowService.CreateWindow<RightDragSpyWindow>(null, new WindowOptions
+        {
+            Layout = new WindowLayoutOptions { RelativePosition = relativePosition, Size = new Vector2(200, 100), DisplayMode = WindowDisplayMode.Fixed },
+        });
+        window.Initialize();
+        return window;
+    }
 
     private static Window CreateRootWindowWithCloseButton(WindowService windowService, Vector2 relativePosition)
     {
@@ -854,6 +878,72 @@ public sealed class GameInputControllerTests
         controller.Update(NoKeys, MouseAtWithScroll(hoverPoint.X, hoverPoint.Y, -120));
 
         Assert.AreEqual(Vector2.Zero, window.ScrollOffset);
+    }
+
+    /// <summary>
+    /// Right-press hit-tests (like a left-click) to find the drag's target and fires
+    /// HandleRightDragStart on it exactly once; every held frame afterward reports the total
+    /// pixel delta since the drag started (not a per-frame increment) via HandleRightDrag.
+    /// This is the actual GameInputController-to-Window wiring a real MapWindow depends on for
+    /// camera panning -- MapWindowTests only covers OnRightDragAction's own math in isolation.
+    /// </summary>
+    [TestMethod]
+    public void RightMouseDrag_ReportsTotalDeltaSinceStart_ToTheWindowUnderTheCursor()
+    {
+        var fontService = new FontService("Fonts");
+        var windowService = new WindowService(fontService, new GlyphRenderer());
+        var window = CreateRightDragSpyWindow(windowService, fontService, new Vector2(0, 0));
+        var controller = new GameInputController([window], [], LargeScreenSize);
+
+        var pressPoint = window.ContentRectangle.Center;
+        controller.Update(NoKeys, MouseAtWithRightButton(pressPoint.X, pressPoint.Y, ButtonState.Released));
+        controller.Update(NoKeys, MouseAtWithRightButton(pressPoint.X, pressPoint.Y, ButtonState.Pressed));
+
+        Assert.AreEqual(1, window.DragStartCallCount);
+        Assert.HasCount(0, window.DragDeltas, "HandleRightDragStart carries no delta -- only fires once the mouse actually moves.");
+
+        controller.Update(NoKeys, MouseAtWithRightButton(pressPoint.X - 10, pressPoint.Y, ButtonState.Pressed));
+        controller.Update(NoKeys, MouseAtWithRightButton(pressPoint.X - 25, pressPoint.Y, ButtonState.Pressed));
+
+        CollectionAssert.AreEqual(new[] { new Vector2(-10, 0), new Vector2(-25, 0) }, window.DragDeltas,
+            "Each call reports the total delta since the drag started, not this frame's increment.");
+    }
+
+    /// <summary>Releasing must end the drag -- a fresh press afterward starts a new one, anchored at wherever it begins, not the previous drag's start position.</summary>
+    [TestMethod]
+    public void RightMouseDrag_ReleasingThenPressingAgain_StartsAFreshDrag()
+    {
+        var fontService = new FontService("Fonts");
+        var windowService = new WindowService(fontService, new GlyphRenderer());
+        var window = CreateRightDragSpyWindow(windowService, fontService, new Vector2(0, 0));
+        var controller = new GameInputController([window], [], LargeScreenSize);
+
+        var pressPoint = window.ContentRectangle.Center;
+        controller.Update(NoKeys, MouseAtWithRightButton(pressPoint.X, pressPoint.Y, ButtonState.Released));
+        controller.Update(NoKeys, MouseAtWithRightButton(pressPoint.X, pressPoint.Y, ButtonState.Pressed));
+        controller.Update(NoKeys, MouseAtWithRightButton(pressPoint.X - 40, pressPoint.Y, ButtonState.Pressed));
+        controller.Update(NoKeys, MouseAtWithRightButton(pressPoint.X - 40, pressPoint.Y, ButtonState.Released));
+
+        // The press transition itself only fires HandleRightDragStart (mirroring the
+        // left-button pattern) -- a held frame afterward is what reports a delta.
+        controller.Update(NoKeys, MouseAtWithRightButton(pressPoint.X + 5, pressPoint.Y, ButtonState.Pressed));
+        controller.Update(NoKeys, MouseAtWithRightButton(pressPoint.X + 15, pressPoint.Y, ButtonState.Pressed));
+
+        Assert.AreEqual(2, window.DragStartCallCount);
+        Assert.AreEqual(new Vector2(10, 0), window.DragDeltas[^1], "The new drag's delta must be measured from its own start position (pressPoint.X + 5), not the previous drag's.");
+    }
+
+    /// <summary>Right-dragging over empty space (nothing hit) must not throw -- it simply has nowhere to forward to until released.</summary>
+    [TestMethod]
+    public void RightMouseDrag_OverEmptySpace_DoesNotThrow()
+    {
+        var windowService = CreateWindowService();
+        var window = CreateRootWindowWithCloseButton(windowService, new Vector2(0, 0));
+        var controller = new GameInputController([window], [], LargeScreenSize);
+
+        controller.Update(NoKeys, MouseAtWithRightButton(1900, 1900, ButtonState.Released));
+        controller.Update(NoKeys, MouseAtWithRightButton(1900, 1900, ButtonState.Pressed));
+        controller.Update(NoKeys, MouseAtWithRightButton(1850, 1900, ButtonState.Pressed));
     }
 
     /// <summary>Focus + keyboard navigation: clicking a window focuses it (anchored to the same raise-to-front gesture) and unfocuses whatever held focus before.</summary>

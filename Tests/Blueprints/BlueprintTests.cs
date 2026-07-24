@@ -4,6 +4,7 @@ using Engine.ECS.Context;
 using Engine.Events;
 using Engine.Math;
 using Engine.Modules;
+using Game.Blueprints;
 using Game.Blueprints.Classes;
 using Game.Blueprints.NPCs.Generic;
 using Game.Blueprints.Objects;
@@ -118,6 +119,31 @@ public sealed class BlueprintTests
         Assert.IsTrue(ecsContext.ComponentManager.GetPackedPool<HealthComponent>().Has(entityId));
         Assert.IsTrue(ecsContext.ComponentManager.GetPackedPool<MovementComponent>().Has(entityId));
         Assert.IsTrue(ecsContext.ComponentManager.GetDirectPool<TransformComponent>().Has(entityId));
+    }
+
+    [TestMethod]
+    public void PlayerBlueprint_Build_SetsGlyphEnergyHealthPlayerControlledMovementAndTransform()
+    {
+        var ecsContext = BuildEcsContext();
+        var entityId = ecsContext.EntityManager.CreateEntity();
+
+        new PlayerBlueprint().Build(ecsContext.ComponentManager, entityId);
+
+        var glyph = ecsContext.ComponentManager.GetDirectPool<GlyphComponent>().GetReadonly(entityId);
+        Assert.AreEqual("@", glyph.Glyph);
+
+        Assert.IsTrue(ecsContext.ComponentManager.GetPackedPool<EnergyComponent>().Has(entityId));
+        Assert.IsTrue(ecsContext.ComponentManager.GetPackedPool<HealthComponent>().Has(entityId));
+
+        var movement = ecsContext.ComponentManager.GetPackedPool<MovementComponent>().GetReadonly(entityId);
+        Assert.AreEqual(MovementMode.PlayerControlled, movement.MovementMode);
+        Assert.IsNull(movement.NextMapPosition);
+
+        Assert.IsTrue(ecsContext.ComponentManager.GetDirectPool<TransformComponent>().Has(entityId));
+
+        // No RaceComponent/ClassComponent -- nothing needs the player to have either.
+        Assert.IsFalse(ecsContext.ComponentManager.GetMultiPool<RaceComponent>().Has(entityId));
+        Assert.IsFalse(ecsContext.ComponentManager.GetMultiPool<ClassComponent>().Has(entityId));
     }
 
     [TestMethod]

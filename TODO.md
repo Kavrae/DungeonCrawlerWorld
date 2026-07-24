@@ -261,6 +261,16 @@ Depends on Options menu above and Standard widget set above -- listing/remapping
 
 Affected: the new options-menu content (see Options menu above), `Presentation/Input/GameInputController.cs` and `Presentation/UI/MapWindow.cs` (the hotkeys being made rebindable).
 
+#### Targeted key-press routing instead of a full-keyboard scan
+
+`GameInputController.RouteKeyPressesToFocusedWindow` calls `KeyboardState.GetPressedKeys()` every frame a window is focused (effectively always) -- confirmed via reflection against the actual FNA assembly that this is the only overload (no non-allocating variant like MonoGame added), so it allocates a new array every frame for the life of the session.
+
+`HandleKeyPress`/`OnKeyPressAction` (what this routes into) has exactly one real consumer today -- `TextBox.OnKeyPressAction`, which only cares about `Keys.Back`; `IWindowContent.HandleKeyPress` defaults to a no-op for everything else. Rather than scanning the whole keyboard (or, worse, manually diffing all ~130 `Keys` values via `IsKeyDown` every frame as a naive fix), let the currently-focused window's content declare the small set of keys it actually wants checked, and only call `IsKeyDown` for that declared set.
+
+Not actually dependent on the Keybindings page item above -- `HandleKeyPress` (discrete edit-type keypresses, e.g. Backspace) and `HandleHotkeys` (continuous/combo game commands, what Keybindings remaps) are deliberately separate hooks. Sequenced here as a followup for proximity to the other keyboard-routing work, not a real ordering requirement.
+
+Affected: `Presentation/Input/GameInputController.cs` (`RouteKeyPressesToFocusedWindow`), `Presentation/UI/IWindowContent.cs`/`Window.cs` (a new way for content to declare its interested keys), `Presentation/UI/TextBox.cs` (the one current consumer, declaring interest in `Keys.Back`).
+
 ## Global
 
 ### High Priority
