@@ -112,16 +112,28 @@ public sealed class MapWindow : Window
         UpdateTileSizes();
         UpdateMaxScrollPosition();
 
-        _mapViewState.CurrentMapLayer = MathUtility.ClampInt(_mapViewState.CurrentMapLayer, 0, _tileDepth - 1);
+        SetCameraMapLayer(_mapViewState.CurrentMapLayer);
 
         if (_transformPool.TryGetReadonly(_world.PlayerEntityId, out var playerTransform))
         {
-            CenterCameraOn(playerTransform.Position);
+            SnapCameraToPlayer(playerTransform.Position);
         }
         else
         {
             ResetBackgroundColorCache();
         }
+    }
+
+    private void SnapCameraToPlayer(Vector3Int position)
+    {
+        SetCameraMapLayer(position.Z);
+        CenterCameraOn(position);
+    }
+
+    /// <summary>The single place [0, _tileDepth - 1] clamping happens for MapViewState.CurrentMapLayer -- shared by ChangeLayer, SnapToPlayer, and Initialize's own re-clamp against whatever depth this particular Map turns out to have.</summary>
+    private void SetCameraMapLayer(int layer)
+    {
+        _mapViewState.CurrentMapLayer = MathUtility.ClampInt(layer, 0, _tileDepth - 1);
     }
 
     public override void DrawContent(GameTime gameTime, SpriteBatch spriteBatch, Texture2D unitRectangle)
@@ -162,7 +174,7 @@ public sealed class MapWindow : Window
     /// </summary>
     public void ChangeLayer(int delta)
     {
-        _mapViewState.CurrentMapLayer = MathUtility.ClampInt(_mapViewState.CurrentMapLayer + delta, 0, _tileDepth - 1);
+        SetCameraMapLayer(_mapViewState.CurrentMapLayer + delta);
         ResetBackgroundColorCache();
     }
 
@@ -621,7 +633,7 @@ public sealed class MapWindow : Window
             _cameraFollowsPlayer = true;
             if (_transformPool.TryGetReadonly(_world.PlayerEntityId, out var playerTransform))
             {
-                CenterCameraOn(playerTransform.Position);
+                SnapCameraToPlayer(playerTransform.Position);
             }
         }
 

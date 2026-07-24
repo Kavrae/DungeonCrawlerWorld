@@ -47,7 +47,7 @@ Explore before committing -- this is a profiling question (does indexed access a
 
 Complementary idea to the existing entity-striping scheme (`SystemManager` processes `Count`/`StripeCount` of a system's population per frame, round-robin regardless of position). Instead of, or in addition to, pure round-robin striping, bucket entities into concentric distance-from-player rings ("onions") and process outer rings less frequently or at reduced fidelity compared to the innermost ring.
 
-Depends on a real player-character position existing to measure distance from (see Player character item under Game) -- doesn't make much sense against the camera-is-the-viewpoint model there is today, since the camera can scroll anywhere independent of any single reference point. Related to the Movement System efficiency-update item under Game -- likely the same investigation; whichever gets tackled first should consider the other.
+A real player-character position now exists to measure distance from (`World.PlayerEntityId`), independent of wherever the camera happens to be scrolled to. Related to the Movement System efficiency-update item under Game -- likely the same investigation; whichever gets tackled first should consider the other.
 
 ## Game
 
@@ -59,20 +59,7 @@ Item interactions, storage rules, restricted items, etc. Governs how the Engine-
 
 #### Melee attack implementation
 
-For NPCs and the player. Attacking uses energy, creating a tactical decision between moving more vs. attacking more. Can target any entity one tile away that has physical collision -- even entities without hit points, since this allows status effects to be applied to otherwise-immortal entities. Depends on the Engine-layer generic status-effect system above for the "immortal but affectable" case, and on the player-character item below for the player's side of it.
-
-#### Player character with movement replacing map scrolling
-
-Today `MapWindow.OnHotkeysAction` (invoked by `GameInputController.RouteHotkeysToFocusedWindow` while the map window holds focus) wires `W`/`A`/`S`/`D` directly to `UpdateScrollPosition` (pans the camera) and `PageUp`/`PageDown` to `ChangeLayer` (changes which layer is viewed) -- there is no player-controlled entity anywhere; every entity's position only ever changes via the Movement module/system, never directly from input.
-
-Wanted: a real player character entity that `W`/`A`/`S`/`D` actually moves -- through the same Movement system every other entity uses (see the `SeekTarget` item below, which may share machinery), not a special-cased direct position write, so it interacts with blocking/collision/etc. the same as anything else. The camera should then follow the character's position/layer automatically instead of being the thing `W`/`A`/`S`/`D` directly controls.
-
-- Shift + move keeps today's behavior (independent camera scroll, decoupled from the character) for free-look.
-- Space snaps the camera back to the character's current position and layer -- needed because Shift-scrolling or `PageUp`/`PageDown` (viewing a different layer than the character occupies) can leave the camera arbitrarily far from the character, with no way back except manually scrolling/paging back.
-
-Promoted to High: the melee attack item above ("attack any entity 1 tile away") and the player attack button/key item under Presentation both assume a real player-controlled entity with a map position already exists.
-
-Affected: `Presentation/UI/MapWindow.cs` (current `W`/`A`/`S`/`D`/`PageUp`/`PageDown` wiring in `OnHotkeysAction`; `UpdateScrollPosition`/`ChangeLayer` are camera-only today and would need a "center on position" method), `Game/Modules/Movement` (the actual movement system a player-controlled entity should route through).
+For NPCs and the player. Attacking uses energy, creating a tactical decision between moving more vs. attacking more. Can target any entity one tile away that has physical collision -- even entities without hit points, since this allows status effects to be applied to otherwise-immortal entities. Depends on the Engine-layer generic status-effect system above for the "immortal but affectable" case.
 
 ### Low Priority
 
@@ -137,7 +124,7 @@ Persisted view of the player's active stats. Always shows the same fixed set of 
 
 #### Player attack button or key
 
-A button or key for attacking, distinct from the hotbar -- needs to be available outside the hotbar but usable more quickly than going through the context menu. Determine the best UI treatment for this class of "common interaction that should always be quickly accessible." Depends on the player-character item under Game.
+A button or key for attacking, distinct from the hotbar -- needs to be available outside the hotbar but usable more quickly than going through the context menu. Determine the best UI treatment for this class of "common interaction that should always be quickly accessible."
 
 #### Standard widget set
 

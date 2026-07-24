@@ -336,6 +336,26 @@ public sealed class MapWindowTests
         Assert.AreEqual(new Point(0, 0), mapViewState.SelectedMapNodePosition, "Centering on (2,2) would want a negative scroll -- must clamp to 0, not go out of bounds.");
     }
 
+    /// <summary>
+    /// Page Up/Down can leave the viewed layer arbitrarily far from whatever layer the player
+    /// actually occupies, with no way back except manually paging back -- HOME (and initial
+    /// startup) must switch the viewed layer back to the player's own, not just recenter X/Y.
+    /// </summary>
+    [TestMethod]
+    public void Initialize_AndHandleHotkeys_PressingHome_SyncViewedLayerToThePlayers()
+    {
+        var (_, mapViewState, mapWindow, _) = BuildMapWindowWithPlayer(300, 300, 3, new Vector3Int(100, 100, 0));
+
+        Assert.AreEqual(0, mapViewState.CurrentMapLayer, "Should start viewing the player's own layer (UnderGround), not the default Ground.");
+
+        mapWindow.ChangeLayer(2);
+        Assert.AreEqual(2, mapViewState.CurrentMapLayer, "Sanity check -- now viewing Flying, away from the player.");
+
+        mapWindow.HandleHotkeys(new KeyboardState(Keys.Home), new KeyboardState());
+
+        Assert.AreEqual(0, mapViewState.CurrentMapLayer, "HOME must switch back to the layer the player actually occupies.");
+    }
+
     [TestMethod]
     public void HandleHotkeys_PressingPageUp_ChangesLayer()
     {
