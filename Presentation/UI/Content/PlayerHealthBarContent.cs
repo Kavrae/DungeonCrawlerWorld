@@ -10,11 +10,11 @@ namespace Presentation.UI.Content;
 /// <summary>
 /// Permanent top-right HUD readout for the player's health -- unlike MapWindow's per-entity
 /// tile bars (which hide at full health), this always renders since it's a persistent HUD
-/// element, not a transient overlay. Hosted by a plain transparent/borderless Window (see
-/// GameShellBootstrapper) the same way DebugWindowContent is, rather than living inside
-/// MapWindow -- it belongs to the always-on-top HUD layer (screen-absolute coordinates), not
-/// the map's own local content-viewport space. Light grey full-width fill when the player has
-/// no HealthComponent at all -- reserved for a future temporarily/permanently-immortal player
+/// element, not a transient overlay. Hosted via IWindowContent/SetContent (see
+/// GameShellBootstrapper), the same pattern DebugWindowContent uses, rather than living inside
+/// MapWindow -- it belongs to the HUD tier (screen-absolute coordinates), not the map's own
+/// local content-viewport space. Light grey full-width fill when the player has no
+/// HealthComponent at all -- reserved for a future temporarily/permanently-immortal player
 /// state, rather than hiding the bar outright.
 /// </summary>
 public sealed class PlayerHealthBarContent(World world, ComponentManager componentManager) : IWindowContent

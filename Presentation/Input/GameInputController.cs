@@ -330,9 +330,12 @@ public sealed class GameInputController
         }
 
         interaction = TryHitTestInList(_hudWindows, position);
-        return interaction.Window is not null
-            ? interaction
-            : TryHitTestInList(_rootWindows, position);
+        if (interaction.Window is not null)
+        {
+            return interaction;
+        }
+
+        return TryHitTestInList(_rootWindows, position);
     }
 
     private static WindowInteraction TryHitTestInList(List<Window> windows, Point position)
@@ -558,6 +561,7 @@ public sealed class GameInputController
                 focusableWindows.Add(window);
             }
         }
+
         foreach (var window in _hudWindows)
         {
             if (window.CanUserFocus)
