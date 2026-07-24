@@ -26,7 +26,6 @@ public sealed class MapWindow : Window
 
     private const float HealthBarWidthFraction = 0.9f;
     private const int HealthBarHeightPixels = 4;
-    private static readonly Color HealthBarOutlineColor = Color.Black;
 
     private const int FramesPerPlayerMove = 15;
 
@@ -336,8 +335,14 @@ public sealed class MapWindow : Window
         DrawEntityIcons(spriteBatch, unitRectangle, entityId, footprintTopLeft, footprintSize);
     }
 
+    /// <summary>Skips the player entirely -- the top-right HUD health bar (see DrawPlayerHealthBar) covers the player, so no per-tile icon here, now or for anything added to this method later, should duplicate it.</summary>
     private void DrawEntityIcons(SpriteBatch spriteBatch, Texture2D unitRectangle, int entityId, Vector2 footprintTopLeft, Vector2 footprintSize)
     {
+        if (entityId == _world.PlayerEntityId)
+        {
+            return;
+        }
+
         DrawHealthBar(spriteBatch, unitRectangle, entityId, footprintTopLeft, footprintSize);
     }
 
@@ -354,21 +359,15 @@ public sealed class MapWindow : Window
         var barY = footprintTopLeft.Y;
 
         var outerRectangle = new Rectangle((int)barX, (int)barY, (int)barWidth, HealthBarHeightPixels);
-        spriteBatch.Draw(unitRectangle, outerRectangle, HealthBarOutlineColor);
+        spriteBatch.Draw(unitRectangle, outerRectangle, HealthBarPalette.OutlineColor);
 
         var healthFraction = (float)health.CurrentHealth / health.MaximumHealth;
         var innerWidth = (int)((outerRectangle.Width - 2) * healthFraction);
         if (innerWidth > 0)
         {
-            spriteBatch.Draw(unitRectangle, new Rectangle(outerRectangle.X + 1, outerRectangle.Y + 1, innerWidth, HealthBarHeightPixels - 2), HealthBarFillColor(healthFraction));
+            spriteBatch.Draw(unitRectangle, new Rectangle(outerRectangle.X + 1, outerRectangle.Y + 1, innerWidth, HealthBarHeightPixels - 2), HealthBarPalette.FractionColor(healthFraction));
         }
     }
-
-    /// <summary>Green at full health, yellow at half, red at empty -- two linear segments (100%-50% and 50%-0%) rather than one 100%-0% lerp, so the midpoint lands exactly on yellow instead of a muddy green-red blend.</summary>
-    private static Color HealthBarFillColor(float healthFraction) =>
-        healthFraction >= 0.5f
-            ? Color.Lerp(Color.Yellow, Color.Green, (healthFraction - 0.5f) / 0.5f)
-            : Color.Lerp(Color.Red, Color.Yellow, healthFraction / 0.5f);
 
     /// <summary>Medium/large/huge glyph font by an entity's TransformComponent.Size.X -- shared by DrawMainGlyph and DrawPhasingGlyphs.</summary>
     private SpriteFontBase FontForSize(int sizeX) => sizeX switch

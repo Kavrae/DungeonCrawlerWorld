@@ -100,15 +100,7 @@ public sealed class GameLoop : Microsoft.Xna.Framework.Game
             _ecsContext.Update(new EngineTime(gameTime.TotalGameTime, gameTime.ElapsedGameTime, gameTime.IsRunningSlowly));
         }
 
-        foreach (var window in _shell.RootWindows)
-        {
-            window.Update(gameTime);
-        }
-
-        foreach (var window in _shell.AlwaysOnTopWindows)
-        {
-            window.Update(gameTime);
-        }
+        _shell.Update(gameTime);
 
         base.Update(gameTime);
     }

@@ -24,6 +24,9 @@ public sealed class DebugWindowContent(
     private static readonly Vector2 EntityCountOffset = new(120, 0);
     private static readonly Vector2 MovingEntityCountOffset = new(200, 0);
 
+    /// <summary>Mirrors TextWindow.LinePadding -- the same small left inset every other text-bearing window in this codebase already uses.</summary>
+    private const float LeftPadding = 3f;
+
     private readonly PerformanceCounter _updateCounter = new();
     private readonly PerformanceCounter _drawCounter = new();
 
@@ -58,7 +61,8 @@ public sealed class DebugWindowContent(
         _drawCounter.Tick();
         _drawsPerSecondText = $"{_drawCounter.RatePerSecond:N1} fps";
 
-        var origin = _hostWindow.ContentAbsolutePosition;
+        var verticalOffset = (_hostWindow.ContentSize.Y - _font.LineHeight) / 2f;
+        var origin = _hostWindow.ContentAbsolutePosition + new Vector2(LeftPadding, verticalOffset);
         var rateColor = gameTime.IsRunningSlowly
             ? Color.Red
             : Color.Black;

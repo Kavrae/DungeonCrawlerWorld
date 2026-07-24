@@ -18,9 +18,9 @@ namespace Presentation.UI.Notifications;
 /// </summary>
 public sealed class NotificationCenter(WindowService windowService, EventBus eventBus, List<Window> alwaysOnTopWindows)
 {
-    private static readonly Vector2 SummaryPosition = new(12, 30);
+    private static readonly Vector2 SummaryPosition = HudMetrics.Margin;
     private static readonly Vector2 SummarySize = new(300, 25);
-    private static readonly Vector2 SummaryEntrySize = new(65, 21);
+    private static readonly Vector2 SummaryEntrySize = HudMetrics.EntrySize;
 
     private static readonly Vector2 ActiveNotificationBasePosition = new(200, 200);
     private static readonly Vector2 ActiveNotificationMaximumSize = new(640, 176);

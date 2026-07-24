@@ -16,6 +16,7 @@ public sealed class GameInputController
     private const float ScrollPixelsPerNotch = 24f;
 
     private readonly List<Window> _rootWindows;
+    private readonly List<Window> _hudWindows;
     private readonly List<Window> _alwaysOnTopWindows;
     private readonly Vector2 _screenSize;
 
@@ -80,9 +81,10 @@ public sealed class GameInputController
     /// <summary>See StartTextInput.</summary>
     internal Action StopTextInput = TextInputEXT.StopTextInput;
 
-    public GameInputController(List<Window> rootWindows, List<Window> alwaysOnTopWindows, Vector2 screenSize)
+    public GameInputController(List<Window> rootWindows, List<Window> hudWindows, List<Window> alwaysOnTopWindows, Vector2 screenSize)
     {
         _rootWindows = rootWindows;
+        _hudWindows = hudWindows;
         _alwaysOnTopWindows = alwaysOnTopWindows;
         _screenSize = screenSize;
 
@@ -318,10 +320,16 @@ public sealed class GameInputController
         window.ScrollBy(new Vector2(0, -wheelDelta / WheelNotchValue * ScrollPixelsPerNotch));
     }
 
-    /// <summary>Always-on-top tier first (so it can never lose to a root window), each tier topmost (last-raised) first.</summary>
+    /// <summary>Always-on-top tier first, then HUD, then base (root) -- a higher tier can never lose to a lower one. Each tier topmost (last-raised) first.</summary>
     private WindowInteraction TryHitTestInteraction(Point position)
     {
         var interaction = TryHitTestInList(_alwaysOnTopWindows, position);
+        if (interaction.Window is not null)
+        {
+            return interaction;
+        }
+
+        interaction = TryHitTestInList(_hudWindows, position);
         return interaction.Window is not null
             ? interaction
             : TryHitTestInList(_rootWindows, position);
@@ -344,8 +352,8 @@ public sealed class GameInputController
     /// <summary>
     /// Raises window within its own parent's children (no-op if it has no parent -- see
     /// Window.RaiseToFront), then raises whichever top-level ancestor contains it within its
-    /// own tier (rootWindows/alwaysOnTopWindows), so the whole subtree ends up drawn/hit-tested
-    /// on top of its siblings at every level.
+    /// own tier (rootWindows/hudWindows/alwaysOnTopWindows), so the whole subtree ends up
+    /// drawn/hit-tested on top of its siblings at every level.
     /// </summary>
     private void RaiseToFront(Window window)
     {
@@ -356,6 +364,10 @@ public sealed class GameInputController
         if (_rootWindows.Remove(rootAncestor))
         {
             _rootWindows.Add(rootAncestor);
+        }
+        else if (_hudWindows.Remove(rootAncestor))
+        {
+            _hudWindows.Add(rootAncestor);
         }
         else if (_alwaysOnTopWindows.Remove(rootAncestor))
         {
@@ -529,24 +541,32 @@ public sealed class GameInputController
         ?? (_alwaysOnTopWindows.Contains(window) ? _alwaysOnTopWindows : null);
 
     /// <summary>
-    /// Advances focus to the next (direction 1) or previous (direction -1) focusable root
+    /// Advances focus to the next (direction 1) or previous (direction -1) focusable Base/HUD
     /// window (Window.CanUserFocus -- e.g. the debug stats window opts out, see
-    /// GameShellBootstrapper), wrapping past either end. rootWindows only (map/debug/
-    /// selection), not alwaysOnTopWindows: notifications are a separate tier dismissed via
-    /// their own close/minimize button, not something a user tabs to.
+    /// GameShellBootstrapper), wrapping past either end. rootWindows+hudWindows only (map/
+    /// debug/selection/health bar/quest trigger -- "fixed, distinct panels"), not
+    /// alwaysOnTopWindows: notifications are a separate tier dismissed via their own close/
+    /// minimize button, not something a user tabs to.
     /// </summary>
     private void CycleFocus(int direction)
     {
-        var focusableRootWindows = new List<Window>();
+        var focusableWindows = new List<Window>();
         foreach (var window in _rootWindows)
         {
             if (window.CanUserFocus)
             {
-                focusableRootWindows.Add(window);
+                focusableWindows.Add(window);
+            }
+        }
+        foreach (var window in _hudWindows)
+        {
+            if (window.CanUserFocus)
+            {
+                focusableWindows.Add(window);
             }
         }
 
-        if (focusableRootWindows.Count == 0)
+        if (focusableWindows.Count == 0)
         {
             return;
         }
@@ -555,7 +575,7 @@ public sealed class GameInputController
             ? GetRootAncestor(_focusedWindow)
             : null;
         var currentIndex = currentRoot is not null
-            ? focusableRootWindows.IndexOf(currentRoot)
+            ? focusableWindows.IndexOf(currentRoot)
             : -1;
 
         // Nothing focused yet: forward starts at the first window, backward at the last --
@@ -563,12 +583,12 @@ public sealed class GameInputController
         // directions landing on the same window, which naive modulo wrapping from -1 would do.
         var unfocusedStartIndex = direction > 0
             ? 0
-            : focusableRootWindows.Count - 1;
+            : focusableWindows.Count - 1;
         var nextIndex = currentIndex < 0
             ? unfocusedStartIndex
-            : ((currentIndex + direction) % focusableRootWindows.Count + focusableRootWindows.Count) % focusableRootWindows.Count;
+            : ((currentIndex + direction) % focusableWindows.Count + focusableWindows.Count) % focusableWindows.Count;
 
-        SetFocus(focusableRootWindows[nextIndex]);
+        SetFocus(focusableWindows[nextIndex]);
     }
 
     /// <summary>Forwards every key newly pressed this frame to whichever window holds focus. Tab is excluded since it's already claimed above for focus-cycling.</summary>

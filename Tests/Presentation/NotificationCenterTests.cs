@@ -186,8 +186,8 @@ public sealed class NotificationCenterTests
         notificationCenter.AddNotification(NotificationCategory.Quest, "Explore the dungeon.", showImmediately: false);
 
         // Quest is the second declared NotificationCategory, tiled horizontally after System's
-        // summary badge (65px wide) starting at the summary bar's position (12, 30).
-        var questSummaryBadge = new Point(12 + 65 + 5, 30 + 5);
+        // summary badge (65px wide) starting at the summary bar's position, HudMetrics.Margin (30, 30).
+        var questSummaryBadge = new Point(30 + 65 + 5, 30 + 5);
         var handled = ClickAlwaysOnTop(alwaysOnTopWindows, questSummaryBadge);
 
         Assert.IsTrue(handled);
@@ -200,7 +200,7 @@ public sealed class NotificationCenterTests
         var alwaysOnTopWindows = new List<Window>();
         _ = CreateNotificationCenter(CreateWindowService(), alwaysOnTopWindows);
 
-        var questSummaryBadge = new Point(12 + 65 + 5, 30 + 5);
+        var questSummaryBadge = new Point(30 + 65 + 5, 30 + 5);
         ClickAlwaysOnTop(alwaysOnTopWindows, questSummaryBadge);
 
         Assert.IsFalse(ClickAlwaysOnTop(alwaysOnTopWindows, FirstActiveNotificationTopLeft));
