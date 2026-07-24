@@ -1,4 +1,5 @@
 using Engine.ECS.Components;
+using Engine.Math;
 using Game.Modules.Class.Components;
 using Game.Modules.Core.Components;
 using Game.Modules.Health.Components;
@@ -12,13 +13,12 @@ namespace Game.Blueprints.Classes;
 /// the class's mechanic still functions rather than silently doing nothing because of
 /// composition order.
 /// </summary>
-public sealed class Tank : IBlueprint
+public sealed class Tank(MathUtility mathUtility) : IBlueprint
 {
     private static readonly Guid ClassId = new("45ddf671-3f76-4e23-9ac3-7a588282ec35");
     private const string ClassName = "Tank";
     private const string Description = "Extra hit points";
 
-    private const short BaselineCurrentHealth = 100;
     private const short BaselineHealthRegen = 10;
     private const short BaselineMaximumHealth = 100;
 
@@ -36,7 +36,7 @@ public sealed class Tank : IBlueprint
         }
         else
         {
-            componentManager.Merge(entityId, new HealthComponent(BaselineCurrentHealth, BaselineHealthRegen, BaselineMaximumHealth));
+            componentManager.Merge(entityId, new HealthComponent((short)mathUtility.Next(1, BaselineMaximumHealth + 1), BaselineHealthRegen, BaselineMaximumHealth));
         }
 
         componentManager.Merge(entityId, new DisplayTextComponent(ClassName, "Tank class"));

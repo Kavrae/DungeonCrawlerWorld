@@ -37,7 +37,7 @@ public sealed class TestMapBuilder(EntityManager entityManager, ComponentManager
     private readonly Goblin _goblin = new(mathUtility);
     private readonly Fairy _fairy = new(mathUtility);
     private readonly Engineer _engineer = new();
-    private readonly Tank _tank = new();
+    private readonly Tank _tank = new(mathUtility);
     private readonly GoblinEngineerBlueprint _goblinEngineer = new(new Goblin(mathUtility), new Engineer());
     private int _goblinsBuilt;
 

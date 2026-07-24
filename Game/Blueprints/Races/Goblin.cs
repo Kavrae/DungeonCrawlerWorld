@@ -26,6 +26,9 @@ public sealed class Goblin(MathUtility mathUtility) : IBlueprint
     private const short MinimumEnergyRecharge = 5;
     private const short MaximumEnergyRecharge = 10;
 
+    private const short MaximumHealth = 200;
+    private const short HealthRegen = 2;
+
     public void Build(ComponentManager componentManager, int entityId)
     {
         componentManager.Merge(entityId, new RaceComponent(RaceId, RaceName, Description));
@@ -39,7 +42,7 @@ public sealed class Goblin(MathUtility mathUtility) : IBlueprint
             MaximumEnergy));
 
         componentManager.Merge(entityId, new GlyphComponent("g", Color.DarkGreen));
-        componentManager.Merge(entityId, new HealthComponent(100, 10, 200));
+        componentManager.Merge(entityId, new HealthComponent((short)mathUtility.Next(1, MaximumHealth + 1), HealthRegen, MaximumHealth));
         componentManager.Merge(entityId, new MovementComponent(MovementMode.Random, 40, null, null));
 
         componentManager.Merge(entityId, new TransformComponent(

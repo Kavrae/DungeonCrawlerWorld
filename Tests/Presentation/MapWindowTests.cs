@@ -1,6 +1,7 @@
 using Engine.ECS.Components;
 using Engine.Math;
 using Game.Modules.Core.Components;
+using Game.Modules.Health.Components;
 using Game.Modules.Movement.Components;
 using Microsoft.Xna.Framework;
 using Microsoft.Xna.Framework.Input;
@@ -46,6 +47,7 @@ public sealed class MapWindowTests
         componentManager.RegisterDirectPool<BackgroundComponent>(static (ref existing, incoming) => existing = incoming);
         componentManager.RegisterPackedPool<OccupancyComponent>(static (ref existing, incoming) => existing = incoming);
         componentManager.RegisterPackedPool<MovementComponent>(static (ref existing, incoming) => existing = incoming);
+        componentManager.RegisterPackedPool<HealthComponent>(static (ref existing, incoming) => existing = incoming);
 
         if (playerPosition is { } position)
         {

@@ -3,6 +3,7 @@ using Engine.ECS.Components.Stores;
 using Engine.Math;
 using FontStashSharp;
 using Game.Modules.Core.Components;
+using Game.Modules.Health.Components;
 using Game.Modules.Movement.Components;
 using Game.World;
 using Microsoft.Xna.Framework;
@@ -23,6 +24,10 @@ public sealed class MapWindow : Window
     private static readonly Color UpLayerBadgeColor = Color.Blue;
     private static readonly Color DownLayerBadgeColor = new(101, 67, 33);
 
+    private const float HealthBarWidthFraction = 0.9f;
+    private const int HealthBarHeightPixels = 4;
+    private static readonly Color HealthBarOutlineColor = Color.Black;
+
     private const int FramesPerPlayerMove = 15;
 
     private readonly World _world;
@@ -32,6 +37,7 @@ public sealed class MapWindow : Window
     private readonly DirectComponentPool<BackgroundComponent> _backgroundPool;
     private readonly PackedComponentPool<OccupancyComponent> _occupancyPool;
     private readonly PackedComponentPool<MovementComponent> _movementPool;
+    private readonly PackedComponentPool<HealthComponent> _healthPool;
     private readonly TileRenderer _tileRenderer;
     private readonly GlyphRenderer _glyphRenderer;
 
@@ -95,6 +101,7 @@ public sealed class MapWindow : Window
         _backgroundPool = componentManager.GetDirectPool<BackgroundComponent>();
         _occupancyPool = componentManager.GetPackedPool<OccupancyComponent>();
         _movementPool = componentManager.GetPackedPool<MovementComponent>();
+        _healthPool = componentManager.GetPackedPool<HealthComponent>();
         _tileRenderer = tileRenderer;
         _glyphRenderer = glyphRenderer;
 
@@ -144,7 +151,7 @@ public sealed class MapWindow : Window
 
         _tileRenderer.DrawBackgrounds(spriteBatch, unitRectangle, _backgroundColorCache, _tileColumns, _tileRows, _currentTileSize, _renderPixelOffset);
         DrawSelectedTileHighlight(spriteBatch, unitRectangle);
-        DrawGlyphs(spriteBatch);
+        DrawGlyphs(spriteBatch, unitRectangle);
     }
 
     /// <summary>
@@ -191,7 +198,7 @@ public sealed class MapWindow : Window
         ResetBackgroundColorCache();
     }
 
-    private void DrawGlyphs(SpriteBatch spriteBatch)
+    private void DrawGlyphs(SpriteBatch spriteBatch, Texture2D unitRectangle)
     {
         var currentMapLayer = _mapViewState.CurrentMapLayer;
         var occupantsByPosition = BuildOccupantsByPosition();
@@ -212,12 +219,9 @@ public sealed class MapWindow : Window
                 var tileOrigin = TileOrigin(columnIndex, rowIndex);
                 occupantsByPosition.TryGetValue(new Vector3Int(mapNodeX, mapNodeY, currentMapLayer), out var occupantsHere);
 
-                // Draw order (bottom to top): terrain floor glyph, tiny entities in their 3x3
-                // sub-grid, the main Blocking occupant on top of them, Phasing entities
-                // translucent over everything, then the small layer-occupancy badges.
                 DrawTerrainGlyph(spriteBatch, terrainLayer, mapNodeX, mapNodeY, tileOrigin);
                 DrawTinyGrid(spriteBatch, occupantsHere, tileOrigin);
-                DrawMainGlyph(spriteBatch, currentMapLayer, mapNodeX, mapNodeY, columnIndex, rowIndex);
+                DrawPrimaryOccupant(spriteBatch, unitRectangle, currentMapLayer, mapNodeX, mapNodeY, columnIndex, rowIndex);
                 DrawPhasingGlyphs(spriteBatch, occupantsHere, tileOrigin);
                 DrawLayerBadges(spriteBatch, occupantsByPosition, currentMapLayer, mapNodeX, mapNodeY, tileOrigin);
             }
@@ -303,8 +307,7 @@ public sealed class MapWindow : Window
         }
     }
 
-    /// <summary>The Blocking occupant of the current layer's Map slot -- only ever one, and only ever Blocking (see World.IsBlocking).</summary>
-    private void DrawMainGlyph(SpriteBatch spriteBatch, int currentMapLayer, int mapNodeX, int mapNodeY, int columnIndex, int rowIndex)
+    private void DrawPrimaryOccupant(SpriteBatch spriteBatch, Texture2D unitRectangle, int currentMapLayer, int mapNodeX, int mapNodeY, int columnIndex, int rowIndex)
     {
         var entityId = _world.Map.GetEntityId(new Vector3Int(mapNodeX, mapNodeY, currentMapLayer));
         if (entityId == -1)
@@ -330,7 +333,42 @@ public sealed class MapWindow : Window
         var footprintSize = new Vector2(transformComponent.Size.X * _currentTileSize.X, transformComponent.Size.Y * _currentTileSize.Y);
 
         _glyphRenderer.DrawCentered(spriteBatch, FontForSize(transformComponent.Size.X), glyphComponent.Glyph, footprintTopLeft, footprintSize, glyphComponent.GlyphColor);
+        DrawEntityIcons(spriteBatch, unitRectangle, entityId, footprintTopLeft, footprintSize);
     }
+
+    private void DrawEntityIcons(SpriteBatch spriteBatch, Texture2D unitRectangle, int entityId, Vector2 footprintTopLeft, Vector2 footprintSize)
+    {
+        DrawHealthBar(spriteBatch, unitRectangle, entityId, footprintTopLeft, footprintSize);
+    }
+
+    /// <summary>Thin bar at the top of the entity's own footprint, above its glyph, hidden at full health. Black backdrop doubles as the outline and the "missing health" portion; the fill rect insets 1px and its width (not the outline's) scales with the health fraction.</summary>
+    private void DrawHealthBar(SpriteBatch spriteBatch, Texture2D unitRectangle, int entityId, Vector2 footprintTopLeft, Vector2 footprintSize)
+    {
+        if (!_healthPool.TryGetReadonly(entityId, out var health) || health.MaximumHealth <= 0 || health.CurrentHealth >= health.MaximumHealth)
+        {
+            return;
+        }
+
+        var barWidth = footprintSize.X * HealthBarWidthFraction;
+        var barX = footprintTopLeft.X + (footprintSize.X - barWidth) / 2f;
+        var barY = footprintTopLeft.Y;
+
+        var outerRectangle = new Rectangle((int)barX, (int)barY, (int)barWidth, HealthBarHeightPixels);
+        spriteBatch.Draw(unitRectangle, outerRectangle, HealthBarOutlineColor);
+
+        var healthFraction = (float)health.CurrentHealth / health.MaximumHealth;
+        var innerWidth = (int)((outerRectangle.Width - 2) * healthFraction);
+        if (innerWidth > 0)
+        {
+            spriteBatch.Draw(unitRectangle, new Rectangle(outerRectangle.X + 1, outerRectangle.Y + 1, innerWidth, HealthBarHeightPixels - 2), HealthBarFillColor(healthFraction));
+        }
+    }
+
+    /// <summary>Green at full health, yellow at half, red at empty -- two linear segments (100%-50% and 50%-0%) rather than one 100%-0% lerp, so the midpoint lands exactly on yellow instead of a muddy green-red blend.</summary>
+    private static Color HealthBarFillColor(float healthFraction) =>
+        healthFraction >= 0.5f
+            ? Color.Lerp(Color.Yellow, Color.Green, (healthFraction - 0.5f) / 0.5f)
+            : Color.Lerp(Color.Red, Color.Yellow, healthFraction / 0.5f);
 
     /// <summary>Medium/large/huge glyph font by an entity's TransformComponent.Size.X -- shared by DrawMainGlyph and DrawPhasingGlyphs.</summary>
     private SpriteFontBase FontForSize(int sizeX) => sizeX switch
@@ -363,7 +401,12 @@ public sealed class MapWindow : Window
         }
     }
 
-    /// <summary>Blue up-arrow (top-right) if any layer above the current one is occupied; brown down-arrow (bottom-right) if any layer below is.</summary>
+    /// <summary>
+    /// Blue up-arrow (top-right) if any layer above the current one is occupied; brown
+    /// down-arrow (bottom-right) if any layer below is. A tile-level badge -- unlike
+    /// DrawEntityIcons, this describes the tile's other layers, not the Blocking occupant
+    /// drawn on it.
+    /// </summary>
     private void DrawLayerBadges(SpriteBatch spriteBatch, Dictionary<Vector3Int, List<int>> occupantsByPosition, int currentMapLayer, int mapNodeX, int mapNodeY, Vector2 tileOrigin)
     {
         var hasHigherLayer = false;

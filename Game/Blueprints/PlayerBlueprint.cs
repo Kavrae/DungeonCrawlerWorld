@@ -16,7 +16,7 @@ namespace Game.Blueprints;
 /// Blocking, not Tiny/Phasing" (see OccupancyComponent's own doc comment), exactly right for
 /// the player.
 /// </summary>
-public sealed class PlayerBlueprint : IBlueprint
+public sealed class PlayerBlueprint(MathUtility mathUtility) : IBlueprint
 {
     private const short MaximumEnergy = 100;
     private const short EnergyRecharge = 10;
@@ -29,7 +29,7 @@ public sealed class PlayerBlueprint : IBlueprint
     {
         componentManager.Merge(entityId, new GlyphComponent("@", Color.White));
         componentManager.Merge(entityId, new EnergyComponent(MaximumEnergy, EnergyRecharge, MaximumEnergy));
-        componentManager.Merge(entityId, new HealthComponent(MaximumHealth, HealthRegen, MaximumHealth));
+        componentManager.Merge(entityId, new HealthComponent((short)mathUtility.Next(1, MaximumHealth + 1), HealthRegen, MaximumHealth));
         componentManager.Merge(entityId, new MovementComponent(MovementMode.PlayerControlled, EnergyToMove, null, null));
         componentManager.Merge(entityId, new TransformComponent(new Vector3Int(-1, -1, (int)MapLayer.Ground), new Vector2Byte(1, 1)));
     }

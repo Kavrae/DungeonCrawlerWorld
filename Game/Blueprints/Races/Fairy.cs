@@ -23,6 +23,9 @@ public sealed class Fairy(MathUtility mathUtility) : IBlueprint
     private const short MinimumEnergyRecharge = 10;
     private const short MaximumEnergyRecharge = 100;
 
+    private const short MaximumHealth = 100;
+    private const short HealthRegen = 1;
+
     public void Build(ComponentManager componentManager, int entityId)
     {
         componentManager.Merge(entityId, new RaceComponent(RaceId, RaceName, Description));
@@ -36,7 +39,7 @@ public sealed class Fairy(MathUtility mathUtility) : IBlueprint
             MaximumEnergy));
 
         componentManager.Merge(entityId, new GlyphComponent("f", Color.DeepPink));
-        componentManager.Merge(entityId, new HealthComponent(100, 5, 100));
+        componentManager.Merge(entityId, new HealthComponent((short)mathUtility.Next(1, MaximumHealth + 1), HealthRegen, MaximumHealth));
         componentManager.Merge(entityId, new MovementComponent(MovementMode.Random, 15, null, null));
 
         componentManager.Merge(entityId, new TransformComponent(

@@ -27,13 +27,13 @@ public static class FloorBuilder
     {
         new TestMapBuilder(ecsContext.EntityManager, ecsContext.ComponentManager, mathUtility).Populate(world);
 
-        world.PlayerEntityId = CreatePlayer(world, ecsContext);
+        world.PlayerEntityId = CreatePlayer(world, ecsContext, mathUtility);
     }
 
-    private static int CreatePlayer(Game.World.World world, EcsContext ecsContext)
+    private static int CreatePlayer(Game.World.World world, EcsContext ecsContext, MathUtility mathUtility)
     {
         var entityId = ecsContext.EntityManager.CreateEntity();
-        new PlayerBlueprint().Build(ecsContext.ComponentManager, entityId);
+        new PlayerBlueprint(mathUtility).Build(ecsContext.ComponentManager, entityId);
 
         var spawnPosition = FindFreeGroundCellNearCenter(world);
         ref var transform = ref ecsContext.ComponentManager.GetDirectPool<TransformComponent>().Get(entityId);

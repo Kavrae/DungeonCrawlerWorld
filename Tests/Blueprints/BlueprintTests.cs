@@ -116,7 +116,8 @@ public sealed class BlueprintTests
         Assert.IsTrue(racePool.Has(entityId));
         Assert.AreEqual("Goblin", racePool.GetReadonlyByDenseIndex(racePool.GetFirstDenseIndex(entityId)).Name);
         Assert.IsTrue(ecsContext.ComponentManager.GetPackedPool<EnergyComponent>().Has(entityId));
-        Assert.IsTrue(ecsContext.ComponentManager.GetPackedPool<HealthComponent>().Has(entityId));
+        var health = ecsContext.ComponentManager.GetPackedPool<HealthComponent>().GetReadonly(entityId);
+        Assert.IsTrue(health.CurrentHealth >= 1 && health.CurrentHealth <= health.MaximumHealth);
         Assert.IsTrue(ecsContext.ComponentManager.GetPackedPool<MovementComponent>().Has(entityId));
         Assert.IsTrue(ecsContext.ComponentManager.GetDirectPool<TransformComponent>().Has(entityId));
     }
@@ -127,13 +128,14 @@ public sealed class BlueprintTests
         var ecsContext = BuildEcsContext();
         var entityId = ecsContext.EntityManager.CreateEntity();
 
-        new PlayerBlueprint().Build(ecsContext.ComponentManager, entityId);
+        new PlayerBlueprint(new MathUtility(new Random(1))).Build(ecsContext.ComponentManager, entityId);
 
         var glyph = ecsContext.ComponentManager.GetDirectPool<GlyphComponent>().GetReadonly(entityId);
         Assert.AreEqual("@", glyph.Glyph);
 
         Assert.IsTrue(ecsContext.ComponentManager.GetPackedPool<EnergyComponent>().Has(entityId));
-        Assert.IsTrue(ecsContext.ComponentManager.GetPackedPool<HealthComponent>().Has(entityId));
+        var health = ecsContext.ComponentManager.GetPackedPool<HealthComponent>().GetReadonly(entityId);
+        Assert.IsTrue(health.CurrentHealth >= 1 && health.CurrentHealth <= health.MaximumHealth);
 
         var movement = ecsContext.ComponentManager.GetPackedPool<MovementComponent>().GetReadonly(entityId);
         Assert.AreEqual(MovementMode.PlayerControlled, movement.MovementMode);
@@ -156,7 +158,8 @@ public sealed class BlueprintTests
 
         Assert.IsTrue(ecsContext.ComponentManager.GetMultiPool<RaceComponent>().Has(entityId));
         Assert.IsTrue(ecsContext.ComponentManager.GetPackedPool<EnergyComponent>().Has(entityId));
-        Assert.IsTrue(ecsContext.ComponentManager.GetPackedPool<HealthComponent>().Has(entityId));
+        var health = ecsContext.ComponentManager.GetPackedPool<HealthComponent>().GetReadonly(entityId);
+        Assert.IsTrue(health.CurrentHealth >= 1 && health.CurrentHealth <= health.MaximumHealth);
         Assert.IsTrue(ecsContext.ComponentManager.GetPackedPool<MovementComponent>().Has(entityId));
         Assert.IsTrue(ecsContext.ComponentManager.GetDirectPool<TransformComponent>().Has(entityId));
     }
@@ -198,13 +201,14 @@ public sealed class BlueprintTests
         var ecsContext = BuildEcsContext();
         var entityId = ecsContext.EntityManager.CreateEntity();
 
-        new Tank().Build(ecsContext.ComponentManager, entityId);
+        new Tank(new MathUtility(new Random(1))).Build(ecsContext.ComponentManager, entityId);
 
         // No race ran first, so Tank merges its own baseline instead of silently doing
         // nothing -- the class still functions when composed (or used) without a race.
         var health = ecsContext.ComponentManager.GetPackedPool<HealthComponent>().GetReadonly(entityId);
         Assert.AreEqual((short)100, health.MaximumHealth);
         Assert.AreEqual((short)10, health.HealthRegen);
+        Assert.IsTrue(health.CurrentHealth >= 1 && health.CurrentHealth <= health.MaximumHealth);
         Assert.IsTrue(ecsContext.ComponentManager.GetMultiPool<ClassComponent>().Has(entityId));
     }
 
@@ -237,7 +241,7 @@ public sealed class BlueprintTests
         var entityId = ecsContext.EntityManager.CreateEntity();
         ecsContext.ComponentManager.GetPackedPool<HealthComponent>().Add(entityId, new HealthComponent(50, 10, 100));
 
-        new Tank().Build(ecsContext.ComponentManager, entityId);
+        new Tank(new MathUtility(new Random(1))).Build(ecsContext.ComponentManager, entityId);
 
         var health = ecsContext.ComponentManager.GetPackedPool<HealthComponent>().GetReadonly(entityId);
         Assert.AreEqual((short)110, health.MaximumHealth);
