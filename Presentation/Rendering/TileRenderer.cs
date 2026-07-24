@@ -12,19 +12,26 @@ namespace Presentation.Rendering;
 /// </summary>
 public sealed class TileRenderer
 {
+    private const int GridLineThickness = 1;
+
     public void DrawBackgrounds(
         SpriteBatch spriteBatch,
         Texture2D unitRectangle,
         ReadOnlySpan<Color> backgroundColors,
         int columns,
         int rows,
-        Point tileSize)
+        Point tileSize,
+        Vector2 pixelOffset = default)
     {
         for (var column = 0; column < columns; column++)
         {
             for (var row = 0; row < rows; row++)
             {
-                var destination = new Rectangle(column * tileSize.X, row * tileSize.Y, tileSize.X, tileSize.Y);
+                var destination = new Rectangle(
+                    (int)(column * tileSize.X - pixelOffset.X),
+                    (int)(row * tileSize.Y - pixelOffset.Y),
+                    tileSize.X - GridLineThickness,
+                    tileSize.Y - GridLineThickness);
                 spriteBatch.Draw(unitRectangle, destination, backgroundColors[column + row * columns]);
             }
         }

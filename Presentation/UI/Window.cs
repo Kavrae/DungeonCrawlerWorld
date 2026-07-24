@@ -527,6 +527,16 @@ public class Window
     protected virtual void OnRightDragAction(Vector2 totalPixelDeltaSinceStart) { }
 
     /// <summary>
+    /// Fires once when an in-progress right-mouse-button drag ends (button released) -- see
+    /// GameInputController's right-button state machine. No-op by default; MapWindow uses this
+    /// to settle its smooth sub-tile scroll offset onto the tile grid once the gesture is over,
+    /// rather than mid-drag on every frame.
+    /// </summary>
+    internal void HandleRightDragEnd() => OnRightDragEndAction();
+
+    protected virtual void OnRightDragEndAction() { }
+
+    /// <summary>
     /// Routes an actual typed character (shifted case, punctuation, OS keyboard layout) to
     /// this window while it holds focus -- see GameInputController.RouteTextInputToFocusedWindow.
     /// Neither HandleKeyPress (raw Keys values) nor HandleHotkeys (modifier-aware combos) can

@@ -93,9 +93,10 @@ public sealed class MapWindowTests
     /// max scroll was computed against a still-zero visible tile count -- the bound ended up
     /// as the full map width/height instead of (map size - visible tiles), letting the map
     /// scroll a whole extra viewport past its real edge (reported as "scrolls too far").
-    /// With a 200-wide map and 70 visible columns at Team zoom (1256px content / 18px
-    /// tiles + 1), the correct max scroll is 130, which puts the map's last column (199) at
-    /// the window's rightmost visible column (index 69).
+    /// With a 200-wide map and 71 visible columns at Team zoom (1256px content / 18px
+    /// tiles + 2 -- see UpdateTileSizes' own margin comment), the correct max scroll is 129,
+    /// which puts the map's last column (199) at the window's rightmost visible column
+    /// (index 70).
     /// </summary>
     [TestMethod]
     public void UpdateScrollPosition_ScrollingPastMax_StopsWithMapsLastColumnAtWindowsRightEdge()
@@ -103,7 +104,7 @@ public sealed class MapWindowTests
         var (_, mapViewState, mapWindow) = BuildMapWindow(200, 5, 1);
 
         mapWindow.UpdateScrollPosition(new Point(100_000, 0));
-        mapWindow.SelectMapNodes(new Point(69 * 18 + 1, 1));
+        mapWindow.SelectMapNodes(new Point(70 * 18 + 1, 1));
 
         Assert.AreEqual(new Point(199, 0), mapViewState.SelectedMapNodePosition);
     }
@@ -111,9 +112,9 @@ public sealed class MapWindowTests
     /// <summary>
     /// Regression test: UpdateZoomLevel changed the visible tile count via UpdateTileSizes
     /// but never recalculated max scroll, so it went stale after any zoom change. Scrolling
-    /// to Team zoom's max (130, see above), then zooming out to Borough (4px tiles -- the
+    /// to Team zoom's max (129, see above), then zooming out to Borough (4px tiles -- the
     /// whole 200-wide map fits in the 1256px content area, so the correct max scroll is 0)
-    /// must re-clamp the stale scroll position down to 0, not leave it at 130.
+    /// must re-clamp the stale scroll position down to 0, not leave it at 129.
     /// </summary>
     [TestMethod]
     public void UpdateZoomLevel_RecalculatesMaxScrollAndReclampsCurrentPosition()
@@ -291,12 +292,83 @@ public sealed class MapWindowTests
     }
 
     /// <summary>
-    /// The drag is measured from a fixed start anchor, not accumulated per frame (see
-    /// OnRightDragAction), and rounds to the nearest tile -- so a drag just past half a tile
-    /// already registers, rather than requiring a nearly-full tile of movement first.
+    /// The whole point of the smooth-scroll rework: the drag is measured from a fixed start
+    /// anchor (not accumulated per frame), and every pixel of movement immediately shifts
+    /// rendering (see OnRightDragAction's _renderPixelOffset) -- not just once a whole tile has
+    /// accumulated, which is what made panning feel jittery before. A mere 1px drag already
+    /// moves the boundary between which screen pixel resolves to which map column.
     /// </summary>
     [TestMethod]
-    public void OnRightDragAction_PastHalfATile_RoundsUpToOneTileOfScroll()
+    public void OnRightDragAction_SubTileOffset_ShiftsWhichColumnAClickResolvesTo()
+    {
+        var (_, mapViewState, mapWindow, _) = BuildMapWindowWithPlayer(300, 300, 1, new Vector3Int(100, 100, 0));
+
+        // Without any drag, a click 1px before column 35's left edge resolves to column 34.
+        mapWindow.SelectMapNodes(new Point(35 * 18 - 1, 22 * 18 + 1));
+        Assert.AreEqual(new Point(99, 100), mapViewState.SelectedMapNodePosition);
+
+        mapWindow.HandleRightDragStart();
+
+        // Team zoom = 18px tiles; 1px is nowhere near a whole tile, but must already shift
+        // rendering by exactly that much.
+        mapWindow.HandleRightDrag(new Vector2(-1, 0));
+
+        mapWindow.SelectMapNodes(new Point(35 * 18 - 1, 22 * 18 + 1));
+        Assert.AreEqual(new Point(100, 100), mapViewState.SelectedMapNodePosition, "A 1px drag must already shift rendering by 1px, not wait for a whole tile to accumulate.");
+    }
+
+    /// <summary>
+    /// The underlying tile grid (_currentScrollPosition/the background cache) only ever
+    /// commits whole-tile steps -- a drag under a full tile leaves it untouched; only the
+    /// render-time offset moves. The grid isn't "snapped to" (settled with zero offset) until
+    /// the drag ends -- see OnRightDragEndAction's own tests below.
+    /// </summary>
+    [TestMethod]
+    public void OnRightDragAction_MidDrag_DoesNotCommitUntilAFullTileIsCrossed()
+    {
+        var (_, mapViewState, mapWindow, _) = BuildMapWindowWithPlayer(300, 300, 1, new Vector3Int(100, 100, 0));
+
+        mapWindow.HandleRightDragStart();
+
+        // Team zoom = 18px tiles; 10px is comfortably short of a whole tile (unlike a value
+        // near 18, this can't also tip the click's own resolved column over a boundary).
+        mapWindow.HandleRightDrag(new Vector2(-10, 0));
+
+        mapWindow.SelectMapNodes(new Point(35 * 18 + 1, 22 * 18 + 1));
+        Assert.AreEqual(new Point(100, 100), mapViewState.SelectedMapNodePosition, "A drag under a full tile must not commit a grid scroll while still in progress.");
+    }
+
+    /// <summary>
+    /// Regression test: _tileColumns/_tileRows originally had only a single extra tile of
+    /// margin beyond the minimum needed to cover the content area (enough for a partial tile
+    /// sitting at the edge when _renderPixelOffset is always 0). Once dragging could shift
+    /// rendering by up to a whole tile, that single tile of margin ran out partway through a
+    /// drag, leaving the right/bottom edge with no tile rendered there at all until the next
+    /// whole-tile commit -- visible as that edge's tiles flickering in and out (see
+    /// UpdateTileSizes' own margin comment for why a second extra tile fixes this). A click
+    /// right at the window's actual content edge, during a near-full-tile drag, is exactly
+    /// the scenario that starves without that second tile of margin.
+    /// </summary>
+    [TestMethod]
+    public void OnRightDragAction_NearFullTileDrag_StillResolvesAClickAtTheContentsFarEdge()
+    {
+        var (_, mapViewState, mapWindow, _) = BuildMapWindowWithPlayer(300, 300, 1, new Vector3Int(100, 100, 0));
+
+        mapWindow.HandleRightDragStart();
+
+        // Team zoom = 18px tiles; 17px is as close to a full tile as possible without
+        // crossing it -- the worst case for how far the render offset can eat into the margin.
+        mapWindow.HandleRightDrag(new Vector2(-17, 0));
+
+        // 2px inside the window's actual content edge (1256px) -- must still resolve to a
+        // real, on-map position, not be silently rejected for landing past _tileColumns.
+        mapWindow.SelectMapNodes(new Point(1254, 22 * 18 + 1));
+        Assert.IsNotNull(mapViewState.SelectedMapNodePosition, "The window's far edge must still resolve correctly during a near-full-tile drag.");
+    }
+
+    /// <summary>Ending the drag settles whatever sub-tile remainder is left onto the nearest whole tile -- past the halfway point rounds up to the next one.</summary>
+    [TestMethod]
+    public void OnRightDragEndAction_SnapsRemainderPastHalfATile_ToTheNextTile()
     {
         var (_, mapViewState, mapWindow, _) = BuildMapWindowWithPlayer(300, 300, 1, new Vector3Int(100, 100, 0));
 
@@ -304,14 +376,15 @@ public sealed class MapWindowTests
 
         // Team zoom = 18px tiles; 10px is just past half a tile (9px).
         mapWindow.HandleRightDrag(new Vector2(-10, 0));
+        mapWindow.HandleRightDragEnd();
 
         mapWindow.SelectMapNodes(new Point(35 * 18 + 1, 22 * 18 + 1));
-        Assert.AreEqual(new Point(101, 100), mapViewState.SelectedMapNodePosition);
+        Assert.AreEqual(new Point(101, 100), mapViewState.SelectedMapNodePosition, "Ending the drag must snap a past-half-tile remainder up to the next tile.");
     }
 
-    /// <summary>The other side of the rounding threshold -- under half a tile of drag must not scroll at all yet.</summary>
+    /// <summary>The other side of the rounding threshold -- an under-half-tile remainder settles back onto the current tile, not the next one.</summary>
     [TestMethod]
-    public void OnRightDragAction_LessThanHalfATile_DoesNotScrollYet()
+    public void OnRightDragEndAction_SnapsRemainderUnderHalfATile_BackToTheCurrentTile()
     {
         var (_, mapViewState, mapWindow, _) = BuildMapWindowWithPlayer(300, 300, 1, new Vector3Int(100, 100, 0));
 
@@ -319,9 +392,10 @@ public sealed class MapWindowTests
 
         // Team zoom = 18px tiles; 8px is just under half a tile (9px).
         mapWindow.HandleRightDrag(new Vector2(-8, 0));
+        mapWindow.HandleRightDragEnd();
 
         mapWindow.SelectMapNodes(new Point(35 * 18 + 1, 22 * 18 + 1));
-        Assert.AreEqual(new Point(100, 100), mapViewState.SelectedMapNodePosition, "A drag under half a tile must not yet produce any scroll.");
+        Assert.AreEqual(new Point(100, 100), mapViewState.SelectedMapNodePosition, "Ending the drag must settle an under-half-tile remainder back onto the current tile, not advance it.");
     }
 
     /// <summary>HOME must center on the player, but never scroll past the map's borders even when that means the player isn't exactly centered.</summary>
@@ -371,15 +445,15 @@ public sealed class MapWindowTests
     [TestMethod]
     public void HandleHotkeys_PressingOemMinus_ZoomsOutOneLevelAndRecalculatesMaxScroll()
     {
-        // 100 wide: bigger than Team's 70-column viewport (so there's a real max scroll to
-        // start from) but small enough to fully fit Neighborhood's 140-column viewport (so
+        // 100 wide: bigger than Team's 71-column viewport (so there's a real max scroll to
+        // start from) but small enough to fully fit Neighborhood's 141-column viewport (so
         // the re-clamp actually lands on 0, not some other nonzero bound).
         var (_, mapViewState, mapWindow) = BuildMapWindow(100, 5, 1);
         mapWindow.UpdateScrollPosition(new Point(100_000, 0));
 
         // OemMinus cycles zoom out one level (Team, 18px tiles -> Neighborhood, 9px tiles);
-        // 140 columns are now visible against the 100-wide map, so the previously-valid
-        // Team-zoom max scroll (30) must be re-clamped down to 0.
+        // 141 columns are now visible against the 100-wide map, so the previously-valid
+        // Team-zoom max scroll (29) must be re-clamped down to 0.
         mapWindow.HandleHotkeys(new KeyboardState(Keys.OemMinus), new KeyboardState());
         mapWindow.SelectMapNodes(new Point(1, 1));
 

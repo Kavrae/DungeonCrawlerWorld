@@ -41,10 +41,12 @@ public sealed class GameInputControllerTests
     private sealed class RightDragSpyWindow(FontService fontService, WindowService windowService, GlyphRenderer glyphRenderer) : Window(fontService, windowService, glyphRenderer)
     {
         public int DragStartCallCount { get; private set; }
+        public int DragEndCallCount { get; private set; }
         public List<Vector2> DragDeltas { get; } = [];
 
         protected override void OnRightDragStartAction() => DragStartCallCount++;
         protected override void OnRightDragAction(Vector2 totalPixelDeltaSinceStart) => DragDeltas.Add(totalPixelDeltaSinceStart);
+        protected override void OnRightDragEndAction() => DragEndCallCount++;
     }
 
     private static RightDragSpyWindow CreateRightDragSpyWindow(WindowService windowService, FontService fontService, Vector2 relativePosition)
@@ -931,6 +933,26 @@ public sealed class GameInputControllerTests
 
         Assert.AreEqual(2, window.DragStartCallCount);
         Assert.AreEqual(new Vector2(10, 0), window.DragDeltas[^1], "The new drag's delta must be measured from its own start position (pressPoint.X + 5), not the previous drag's.");
+    }
+
+    /// <summary>Releasing must fire HandleRightDragEnd exactly once on the window the drag started over -- MapWindow uses this to settle its smooth-scroll offset onto the tile grid.</summary>
+    [TestMethod]
+    public void RightMouseDrag_Releasing_FiresDragEndOnce()
+    {
+        var fontService = new FontService("Fonts");
+        var windowService = new WindowService(fontService, new GlyphRenderer());
+        var window = CreateRightDragSpyWindow(windowService, fontService, new Vector2(0, 0));
+        var controller = new GameInputController([window], [], LargeScreenSize);
+
+        var pressPoint = window.ContentRectangle.Center;
+        controller.Update(NoKeys, MouseAtWithRightButton(pressPoint.X, pressPoint.Y, ButtonState.Released));
+        controller.Update(NoKeys, MouseAtWithRightButton(pressPoint.X, pressPoint.Y, ButtonState.Pressed));
+        controller.Update(NoKeys, MouseAtWithRightButton(pressPoint.X - 10, pressPoint.Y, ButtonState.Pressed));
+        Assert.AreEqual(0, window.DragEndCallCount, "Must not fire while the drag is still held.");
+
+        controller.Update(NoKeys, MouseAtWithRightButton(pressPoint.X - 10, pressPoint.Y, ButtonState.Released));
+
+        Assert.AreEqual(1, window.DragEndCallCount);
     }
 
     /// <summary>Right-dragging over empty space (nothing hit) must not throw -- it simply has nowhere to forward to until released.</summary>

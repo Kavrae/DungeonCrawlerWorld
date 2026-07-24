@@ -159,7 +159,7 @@ public sealed class GameInputController
         }
         else if (mouseState.RightButton == ButtonState.Released && _previousMouseState.RightButton == ButtonState.Pressed)
         {
-            _rightDragWindow = null;
+            HandleRightDragEnd();
         }
         else if (mouseState.RightButton == ButtonState.Pressed && _rightDragWindow is not null)
         {
@@ -280,6 +280,12 @@ public sealed class GameInputController
     {
         var totalDelta = new Vector2(mouseState.X, mouseState.Y) - _rightDragStartMousePosition;
         _rightDragWindow?.HandleRightDrag(totalDelta);
+    }
+
+    private void HandleRightDragEnd()
+    {
+        _rightDragWindow?.HandleRightDragEnd();
+        _rightDragWindow = null;
     }
 
     /// <summary>

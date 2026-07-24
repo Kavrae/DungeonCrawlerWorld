@@ -41,6 +41,8 @@ public sealed class MapWindow : Window
 
     private Point _rightDragStartScrollPosition;
 
+    private Vector2 _renderPixelOffset;
+
     private SpriteFontBase _mediumFont = null!;
     private SpriteFontBase _largeFont = null!;
     private SpriteFontBase _hugeFont = null!;
@@ -138,10 +140,20 @@ public sealed class MapWindow : Window
 
     public override void DrawContent(GameTime gameTime, SpriteBatch spriteBatch, Texture2D unitRectangle)
     {
-        _tileRenderer.DrawBackgrounds(spriteBatch, unitRectangle, _backgroundColorCache, _tileColumns, _tileRows, _currentTileSize);
+        spriteBatch.Draw(unitRectangle, new Rectangle(0, 0, _tileColumns * _currentTileSize.X, _tileRows * _currentTileSize.Y), Color.DarkGray);
+
+        _tileRenderer.DrawBackgrounds(spriteBatch, unitRectangle, _backgroundColorCache, _tileColumns, _tileRows, _currentTileSize, _renderPixelOffset);
         DrawSelectedTileHighlight(spriteBatch, unitRectangle);
         DrawGlyphs(spriteBatch);
     }
+
+    /// <summary>
+    /// The screen position of a tile's top-left corner, given its column/row within the
+    /// visible viewport -- shared by every draw method below so _renderPixelOffset's smooth
+    /// drag shift (see OnRightDragAction) only ever needs applying in one place.
+    /// </summary>
+    private Vector2 TileOrigin(int columnIndex, int rowIndex) =>
+        new Vector2(columnIndex * _currentTileSize.X, rowIndex * _currentTileSize.Y) - _renderPixelOffset;
 
     private void DrawSelectedTileHighlight(SpriteBatch spriteBatch, Texture2D unitRectangle)
     {
@@ -158,7 +170,8 @@ public sealed class MapWindow : Window
             return;
         }
 
-        var outerRectangle = new Rectangle(column * _currentTileSize.X, row * _currentTileSize.Y, _currentTileSize.X, _currentTileSize.Y);
+        var origin = TileOrigin(column, row);
+        var outerRectangle = new Rectangle((int)origin.X, (int)origin.Y, _currentTileSize.X, _currentTileSize.Y);
         spriteBatch.Draw(unitRectangle, outerRectangle, Color.Gold);
 
         var innerRectangle = new Rectangle(outerRectangle.X + 1, outerRectangle.Y + 1, _innerTileSize.X, _innerTileSize.Y);
@@ -196,7 +209,7 @@ public sealed class MapWindow : Window
                     continue;
                 }
 
-                var tileOrigin = new Vector2(columnIndex * _currentTileSize.X, rowIndex * _currentTileSize.Y);
+                var tileOrigin = TileOrigin(columnIndex, rowIndex);
                 occupantsByPosition.TryGetValue(new Vector3Int(mapNodeX, mapNodeY, currentMapLayer), out var occupantsHere);
 
                 // Draw order (bottom to top): terrain floor glyph, tiny entities in their 3x3
@@ -313,7 +326,7 @@ public sealed class MapWindow : Window
 
         // The footprint is Size tiles wide/tall, not 1 -- a 3x3 Huge entity's glyph must
         // center across all three tiles it actually occupies, not just the origin tile.
-        var footprintTopLeft = new Vector2(columnIndex * _currentTileSize.X, rowIndex * _currentTileSize.Y);
+        var footprintTopLeft = TileOrigin(columnIndex, rowIndex);
         var footprintSize = new Vector2(transformComponent.Size.X * _currentTileSize.X, transformComponent.Size.Y * _currentTileSize.Y);
 
         _glyphRenderer.DrawCentered(spriteBatch, FontForSize(transformComponent.Size.X), glyphComponent.Glyph, footprintTopLeft, footprintSize, glyphComponent.GlyphColor);
@@ -420,6 +433,10 @@ public sealed class MapWindow : Window
             MathUtility.ClampInt(_currentScrollPosition.X, 0, _maxScrollPosition.X),
             MathUtility.ClampInt(_currentScrollPosition.Y, 0, _maxScrollPosition.Y));
 
+        // A zoom mid-drag would otherwise leave a stale smooth-scroll offset sized for the old
+        // tile size shifting the newly-resized grid.
+        _renderPixelOffset = Vector2.Zero;
+
         ResetBackgroundColorCache();
     }
 
@@ -441,9 +458,9 @@ public sealed class MapWindow : Window
         _currentTileSize = TileSizesByZoomLevel[_currentZoomLevel];
         _innerTileSize = new Point(_currentTileSize.X - 2, _currentTileSize.Y - 2);
 
-        // +1 to account for partial tiles when scrolling.
-        _tileColumns = (int)System.Math.Floor(ContentSize.X / _currentTileSize.X) + 1;
-        _tileRows = (int)System.Math.Floor(ContentSize.Y / _currentTileSize.Y) + 1;
+        // +2 to account for partial tile rendering and scrolling jitter
+        _tileColumns = (int)System.Math.Floor(ContentSize.X / _currentTileSize.X) + 2;
+        _tileRows = (int)System.Math.Floor(ContentSize.Y / _currentTileSize.Y) + 2;
 
         _backgroundColorCache = new Color[_tileColumns * _tileRows];
     }
@@ -590,7 +607,7 @@ public sealed class MapWindow : Window
 
     public void SelectMapNodes(Point mousePosition)
     {
-        var relativeMapDisplayMousePosition = new Vector2(mousePosition.X - _contentState.AbsolutePosition.X, mousePosition.Y - _contentState.AbsolutePosition.Y);
+        var relativeMapDisplayMousePosition = new Vector2(mousePosition.X - _contentState.AbsolutePosition.X, mousePosition.Y - _contentState.AbsolutePosition.Y) + _renderPixelOffset;
         var x = (int)(relativeMapDisplayMousePosition.X / _currentTileSize.X);
 
         if (x < 0 || x >= _tileColumns)
@@ -739,6 +756,9 @@ public sealed class MapWindow : Window
         _currentScrollPosition = new Point(
             MathUtility.ClampInt(desiredScroll.X, 0, _maxScrollPosition.X),
             MathUtility.ClampInt(desiredScroll.Y, 0, _maxScrollPosition.Y));
+
+        _renderPixelOffset = Vector2.Zero;
+
         ResetBackgroundColorCache();
     }
 
@@ -757,14 +777,41 @@ public sealed class MapWindow : Window
 
         _cameraFollowsPlayer = false;
 
-        var desiredScroll = new Point(
-            _rightDragStartScrollPosition.X - (int)System.MathF.Round(totalPixelDeltaSinceStart.X / _currentTileSize.X, MidpointRounding.AwayFromZero),
-            _rightDragStartScrollPosition.Y - (int)System.MathF.Round(totalPixelDeltaSinceStart.Y / _currentTileSize.Y, MidpointRounding.AwayFromZero));
+        var continuousPixelPosition = new Vector2(
+             MathHelper.Clamp(_rightDragStartScrollPosition.X * _currentTileSize.X - totalPixelDeltaSinceStart.X, 0, _maxScrollPosition.X * _currentTileSize.X),
+             MathHelper.Clamp(_rightDragStartScrollPosition.Y * _currentTileSize.Y - totalPixelDeltaSinceStart.Y, 0, _maxScrollPosition.Y * _currentTileSize.Y));
 
-        var scrollChange = new Point(desiredScroll.X - _currentScrollPosition.X, desiredScroll.Y - _currentScrollPosition.Y);
+        var wholeTileScroll = new Point(
+            (int)(continuousPixelPosition.X / _currentTileSize.X),
+            (int)(continuousPixelPosition.Y / _currentTileSize.Y));
+
+        _renderPixelOffset = new Vector2(
+            continuousPixelPosition.X - wholeTileScroll.X * _currentTileSize.X,
+            continuousPixelPosition.Y - wholeTileScroll.Y * _currentTileSize.Y);
+
+        var scrollChange = new Point(wholeTileScroll.X - _currentScrollPosition.X, wholeTileScroll.Y - _currentScrollPosition.Y);
         if (scrollChange != Point.Zero)
         {
             UpdateScrollPosition(scrollChange);
+        }
+    }
+
+    protected override void OnRightDragEndAction()
+    {
+        if (_renderPixelOffset == Vector2.Zero)
+        {
+            return;
+        }
+
+        var snap = new Point(
+            _renderPixelOffset.X >= _currentTileSize.X / 2f ? 1 : 0,
+            _renderPixelOffset.Y >= _currentTileSize.Y / 2f ? 1 : 0);
+
+        _renderPixelOffset = Vector2.Zero;
+
+        if (snap != Point.Zero)
+        {
+            UpdateScrollPosition(snap);
         }
     }
 }
