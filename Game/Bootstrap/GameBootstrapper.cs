@@ -3,6 +3,7 @@ using Engine.Events;
 using Engine.Math;
 using Engine.Modules;
 using Game.Modules;
+using Game.Modules.Burning;
 using Game.Modules.Class;
 using Game.Modules.Core;
 using Game.Modules.Core.Components;
@@ -10,6 +11,7 @@ using Game.Modules.Energy;
 using Game.Modules.Health;
 using Game.Modules.Movement;
 using Game.Modules.Race;
+using Game.Modules.StatusEffects;
 using Game.World;
 
 namespace Game.Bootstrap;
@@ -38,6 +40,8 @@ public static class GameBootstrapper
             new MovementModule(),
             new RaceModule(),
             new ClassModule(),
+            new StatusEffectsModule(),
+            new BurningModule(),
         ];
 
         var mapQuery = (IMapQuery)world;
@@ -47,11 +51,11 @@ public static class GameBootstrapper
         var loadResult = ModuleLoader.LoadFromDirectory(modsDirectory);
         failures.AddRange(loadResult.Failures);
 
-        var survivingMods = DryRunValidateMods(builtInModules, loadResult.Modules, mapQuery, mathUtility, failures);
+        var survivingMods = DryRunValidateMods(builtInModules, loadResult.Modules, mapQuery, world, mathUtility, failures);
 
         var modules = ModuleSet.Combine(builtInModules, survivingMods);
 
-        ConfigureGameModules(modules, mapQuery, mathUtility, eventBus);
+        ConfigureGameModules(modules, mapQuery, world, mathUtility, eventBus);
 
         var ecsContext = Bootstrapper.Build(modules, initialEntityCapacity, initialComponentCapacity, eventBus);
 
@@ -84,6 +88,7 @@ public static class GameBootstrapper
         IReadOnlyList<IModule> builtInModules,
         IReadOnlyList<IModule> mods,
         IMapQuery mapQuery,
+        IPlayerQuery playerQuery,
         MathUtility mathUtility,
         List<ModuleFailure> failures)
     {
@@ -96,7 +101,7 @@ public static class GameBootstrapper
                 var trialModules = new List<IModule>(builtInModules) { mod };
                 var throwawayEventBus = new EventBus();
 
-                ConfigureGameModules(trialModules, mapQuery, mathUtility, throwawayEventBus);
+                ConfigureGameModules(trialModules, mapQuery, playerQuery, mathUtility, throwawayEventBus);
 
                 Bootstrapper.Build(trialModules, initialEntityCapacity: 10, initialComponentCapacity: 10, throwawayEventBus);
 
@@ -111,9 +116,9 @@ public static class GameBootstrapper
         return survivors;
     }
 
-    private static void ConfigureGameModules(IReadOnlyList<IModule> modules, IMapQuery mapQuery, MathUtility mathUtility, EventBus eventBus)
+    private static void ConfigureGameModules(IReadOnlyList<IModule> modules, IMapQuery mapQuery, IPlayerQuery playerQuery, MathUtility mathUtility, EventBus eventBus)
     {
-        var context = new GameModuleContext(mapQuery, mathUtility, eventBus);
+        var context = new GameModuleContext(mapQuery, mathUtility, eventBus) { PlayerQuery = playerQuery };
 
         foreach (var module in modules)
         {

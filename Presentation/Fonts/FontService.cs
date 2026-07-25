@@ -13,6 +13,7 @@ public sealed class FontService
     /// <see cref="AppContext.BaseDirectory"/> rather than the process's current working
     /// directory, since "dotnet run" sets the working directory to the project's source
     /// folder, not its build output.
+    /// Fonts should be adding in fallback order.
     /// </param>
     public FontService(string fontsDirectory)
     {
@@ -21,6 +22,7 @@ public sealed class FontService
         _fontSystem = new FontSystem();
         var resolvedFontsDirectory = Path.Combine(AppContext.BaseDirectory, fontsDirectory);
         _fontSystem.AddFont(File.ReadAllBytes(Path.Combine(resolvedFontsDirectory, "DroidSans.ttf")));
+        _fontSystem.AddFont(File.ReadAllBytes(Path.Combine(resolvedFontsDirectory, "DroidSansJapanese.ttf")));
     }
 
     public SpriteFontBase GetFont(int fontSize) => _fontSystem.GetFont(fontSize);

@@ -1,6 +1,7 @@
 .vs/
 **/bin/
 **/obj/
+/Log/*
 /DungeonCrawlerWorld/obj/Debug/net9.0/DungeonCrawlerWorld.assets.cache
 /DungeonCrawlerWorld/obj/Debug/net9.0/DungeonCrawlerWorld.GeneratedMSBuildEditorConfig.editorconfig
 /DungeonCrawlerWorld/obj/DungeonCrawlerWorld.csproj.nuget.dgspec.json

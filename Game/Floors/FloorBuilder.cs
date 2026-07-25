@@ -1,7 +1,9 @@
 using Engine.ECS.Context;
 using Engine.Math;
 using Game.Blueprints;
+using Game.Modules.Burning;
 using Game.Modules.Core.Components;
+using Game.World;
 
 namespace Game.Floors;
 
@@ -30,10 +32,19 @@ public static class FloorBuilder
         world.PlayerEntityId = CreatePlayer(world, ecsContext, mathUtility);
     }
 
+    // TEMPORARY test seeding -- exercises Burning until a real in-game source (lava, per
+    // TODO.md) exists. Remove once one does.
+    private const int TestBurningStackCount = 10;
+
     private static int CreatePlayer(Game.World.World world, EcsContext ecsContext, MathUtility mathUtility)
     {
         var entityId = ecsContext.EntityManager.CreateEntity();
         new PlayerBlueprint(mathUtility).Build(ecsContext.ComponentManager, entityId);
+
+        for (var i = 0; i < TestBurningStackCount; i++)
+        {
+            BurningEffects.ApplyStack(ecsContext.ComponentManager, entityId, StatusEffectSource.Admin);
+        }
 
         var spawnPosition = FindFreeGroundCellNearCenter(world);
         ref var transform = ref ecsContext.ComponentManager.GetDirectPool<TransformComponent>().Get(entityId);

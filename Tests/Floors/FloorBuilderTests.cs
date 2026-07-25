@@ -5,6 +5,7 @@ using Engine.Math;
 using Engine.Modules;
 using Game.Floors;
 using Game.Modules;
+using Game.Modules.Burning;
 using Game.Modules.Class;
 using Game.Modules.Core;
 using Game.Modules.Core.Components;
@@ -13,6 +14,7 @@ using Game.Modules.Health;
 using Game.Modules.Movement;
 using Game.Modules.Movement.Components;
 using Game.Modules.Race;
+using Game.Modules.StatusEffects;
 using Game.World;
 
 namespace Tests.Floors;
@@ -22,8 +24,14 @@ public sealed class FloorBuilderTests
 {
     private static EcsContext BuildEcsContext(Game.World.World world, MathUtility mathUtility)
     {
+        var eventBus = new EventBus();
+        var context = new GameModuleContext(world, mathUtility, eventBus) { PlayerQuery = world };
+
         var movementModule = new MovementModule();
-        movementModule.Configure(new GameModuleContext(world, mathUtility, new EventBus()));
+        movementModule.Configure(context);
+
+        var burningModule = new BurningModule();
+        burningModule.Configure(context);
 
         IReadOnlyList<IModule> modules =
         [
@@ -33,6 +41,8 @@ public sealed class FloorBuilderTests
             movementModule,
             new RaceModule(),
             new ClassModule(),
+            new StatusEffectsModule(),
+            burningModule,
         ];
 
         return Bootstrapper.Build(modules, initialEntityCapacity: 5000, initialComponentCapacity: 5000);

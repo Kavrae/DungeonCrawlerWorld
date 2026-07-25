@@ -5,7 +5,7 @@ using Game.Modules.Core.Components;
 namespace Game.World;
 
 /// <summary>The in-memory game world: the map and bookkeeping for entities placed on it.</summary>
-public sealed class World(Map map) : IMapQuery
+public sealed class World(Map map) : IMapQuery, IPlayerQuery
 {
     public Map Map { get; set; } = map ?? throw new ArgumentNullException(nameof(map));
 

@@ -1,7 +1,8 @@
-using Engine.ECS.Systems;
 using Engine.ECS.Context;
+using Engine.ECS.Systems;
 using Engine.Math;
 using Game.Bootstrap;
+using Game.Diagnostics;
 using Game.Floors;
 using Microsoft.Xna.Framework;
 using Microsoft.Xna.Framework.Graphics;
@@ -28,6 +29,8 @@ public sealed class GameLoop : Microsoft.Xna.Framework.Game
     private PresentationContext _presentation = null!;
     private GameShellContext _shell = null!;
     private GameInputController _inputController = null!;
+    private PlayerActivityLog _playerActivityLog = null!;
+    private int _frameCount;
 
     private Texture2D _unitRectangle = null!;
 
@@ -71,6 +74,10 @@ public sealed class GameLoop : Microsoft.Xna.Framework.Game
 
         FloorBuilder.PopulateFloor(world, _ecsContext, mathUtility);
 
+        var logFilePath = Path.Combine(FindProjectRoot(), "Log", "player-activity.log");
+        _playerActivityLog = new PlayerActivityLog(world, _ecsContext.EventBus, logFilePath);
+        Console.WriteLine($"[PlayerActivityLog] Writing to {logFilePath}");
+
         _presentation = PresentationBootstrapper.Build(GraphicsDevice, "Fonts");
         var screenSize = new Vector2(_graphics.PreferredBackBufferWidth, _graphics.PreferredBackBufferHeight);
         _shell = GameShellBootstrapper.Build(_presentation, world, _ecsContext, screenSize);
@@ -97,6 +104,8 @@ public sealed class GameLoop : Microsoft.Xna.Framework.Game
 
         if (!(_shell.MapWindow.IsPaused || _shell.NotificationCenter.HasBlockingNotification))
         {
+            _frameCount++;
+            _playerActivityLog.BeginFrame(_frameCount, DateTime.Now);
             _ecsContext.Update(new EngineTime(gameTime.TotalGameTime, gameTime.ElapsedGameTime, gameTime.IsRunningSlowly));
         }
 
@@ -116,5 +125,16 @@ public sealed class GameLoop : Microsoft.Xna.Framework.Game
         _presentation.SpriteBatchRenderer.EndSpriteBatch();
 
         base.Draw(gameTime);
+    }
+
+    private static string FindProjectRoot()
+    {
+        var directory = new DirectoryInfo(AppContext.BaseDirectory);
+        while (directory is not null && !File.Exists(Path.Combine(directory.FullName, "DungeonCrawlerWorld.sln")))
+        {
+            directory = directory.Parent;
+        }
+
+        return directory?.FullName ?? AppContext.BaseDirectory;
     }
 }

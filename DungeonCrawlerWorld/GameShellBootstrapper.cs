@@ -165,6 +165,21 @@ public static class GameShellBootstrapper
         playerHealthBarWindow.Initialize();
         hudWindows.Add(playerHealthBarWindow);
 
+        var playerStatusEffectsWindow = presentation.WindowService.CreateWindow<Window>(null, new WindowOptions
+        {
+            Layout = new WindowLayoutOptions
+            {
+                RelativePosition = new Vector2(screenSize.X - PlayerHealthBarContent.Size.X - HudMetrics.Margin.X, HudMetrics.Margin.Y + PlayerHealthBarContent.Size.Y),
+                Size = PlayerStatusEffectsContent.Size,
+                DisplayMode = WindowDisplayMode.Fixed,
+                IsTransparent = true,
+            },
+            Chrome = new WindowChromeOptions { ShowTitle = false, ShowBorder = false, CanUserFocus = false },
+        });
+        playerStatusEffectsWindow.SetContent(new PlayerStatusEffectsContent(world, ecsContext.ComponentManager, presentation.FontService));
+        playerStatusEffectsWindow.Initialize();
+        hudWindows.Add(playerStatusEffectsWindow);
+
         // TEMPORARY First concrete TextBox consumer (see the Text input TODO) -- a multiline TextBox in
         // a closeable popup that submits into a new Quest notification. "New Quest" is a
         // clickable TextWindow the same way NotificationCenter's own summary-bar entries are

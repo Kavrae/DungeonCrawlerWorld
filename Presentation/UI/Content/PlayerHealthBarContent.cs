@@ -19,7 +19,7 @@ namespace Presentation.UI.Content;
 /// </summary>
 public sealed class PlayerHealthBarContent(World world, ComponentManager componentManager) : IWindowContent
 {
-    public static readonly Vector2 Size = new(HudMetrics.EntrySize.X * 3, HudMetrics.EntrySize.Y / 2f);
+    public static readonly Vector2 Size = new(HudMetrics.EntrySize.X * 4.5f, HudMetrics.EntrySize.Y * 0.75f);
 
     private static readonly Color NoHealthColor = Color.LightGray;
     private static readonly float[] MajorTickFractions = [0.25f, 0.5f, 0.75f];

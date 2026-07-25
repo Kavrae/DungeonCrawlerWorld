@@ -270,6 +270,16 @@ Promoted to High: both the new equipment menu and the Options menu (see Presenta
 
 ### Low Priority
 
+#### Debug/event logging with levels
+
+`Game/Diagnostics/PlayerActivityLog.cs` (added alongside the Burning status effect) is a
+narrow, single-purpose EventBus subscriber that writes the player's Burning damage and moves
+straight to a file -- deliberately minimal, not a general logging facility. Worth a real
+design pass once more than one thing wants to log: an actual log-level concept (e.g.
+Debug/Info/Warn/Error, or a verbosity toggle), a general "subscribe any event type to a log
+line" mechanism instead of one hardcoded handler per event, configurable sinks (file/console),
+and eventually other entities/event types, not just the player's moves and damage.
+
 #### Data storage, starting with window locations and sizes
 
 No serialization/save-and-load system exists anywhere yet. Window layout (`WindowRelativePosition`/`WindowCurrentSize`/`WindowDisplay` -- see `Window.cs`) is the first concrete use case: every launch starts from whatever `GameShellBootstrapper` hardcodes, with no way to remember where the player last left the map/debug/selection windows or which were minimized.
