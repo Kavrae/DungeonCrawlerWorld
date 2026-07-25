@@ -47,7 +47,7 @@ namespace Game.Modules.StatusEffectAura.Systems;
 ///   walks away from (removal only -- newly gaining exposure purely because a source
 ///   approached a stationary entity is an accepted gap: that entity picks up the aura the
 ///   next time it moves itself). This path is rare (no moving source exists in the game
-///   today) so the box query it still uses (MaxScanRadius, to find candidate nearby
+///   today) so the box query it still uses (see _maxScanRadius, to find candidate nearby
 ///   occupants) is not on the hot path.
 /// </summary>
 public sealed class StatusEffectAuraSystem : ISystem
@@ -65,6 +65,8 @@ public sealed class StatusEffectAuraSystem : ISystem
 
     private readonly Dictionary<StatusEffectType, AuraGrid> _gridsByEffectType = [];
     private bool _gridsBuilt;
+
+    private int _maxScanRadius;
 
     public StatusEffectAuraSystem(
         ComponentManager componentManager,
@@ -117,6 +119,7 @@ public sealed class StatusEffectAuraSystem : ISystem
             }
 
             grid.AddSource(transform.Position, source.AuraAndGlowStrength);
+            _maxScanRadius = Math.Max(_maxScanRadius, DistanceFalloff.MaxRadius(source.AuraAndGlowStrength));
         }
 
         _gridsBuilt = true;
@@ -269,9 +272,9 @@ public sealed class StatusEffectAuraSystem : ISystem
     /// <summary>Removal-only re-check for occupants near a moving aura source -- see this class's own doc comment for why granting is not handled here. Each candidate's own check is now O(1) per effect type via the grids, not a nested box scan -- only the "who might be nearby" part still uses a box query, and only on this rare (no moving source exists today) path.</summary>
     private void ReEvaluateExposuresNear(Vector3Int center)
     {
-        const int boxWidth = AuraEffects.MaxScanRadius * 2 + 1;
+        var boxWidth = _maxScanRadius * 2 + 1;
         var box = new CubeInt(
-            new Vector3Int(center.X - AuraEffects.MaxScanRadius, center.Y - AuraEffects.MaxScanRadius, center.Z),
+            new Vector3Int(center.X - _maxScanRadius, center.Y - _maxScanRadius, center.Z),
             new Vector3Int(boxWidth, boxWidth, 1));
 
         Span<int> occupantIds = stackalloc int[boxWidth * boxWidth];
