@@ -3,6 +3,7 @@ using Engine.Math;
 using Game.Blueprints;
 using Game.Modules.Burning;
 using Game.Modules.Core.Components;
+using Game.Modules.Poison;
 using Game.World;
 
 namespace Game.Floors;
@@ -36,6 +37,13 @@ public static class FloorBuilder
     // TODO.md) exists. Remove once one does.
     private const int TestBurningStackCount = 10;
 
+    // TEMPORARY test seeding -- exercises Poison until a real in-game source exists. Remove
+    // once one does. 10 applications of a 5-tick duration each: since ApplyStack takes the
+    // *greater* of the remaining and new duration (not additive), the end result is 10 stacks
+    // with a duration of exactly 5 ticks, not 50.
+    private const int TestPoisonStackCount = 10;
+    private const int TestPoisonDurationTicks = 5;
+
     private static int CreatePlayer(Game.World.World world, EcsContext ecsContext, MathUtility mathUtility)
     {
         var entityId = ecsContext.EntityManager.CreateEntity();
@@ -44,6 +52,11 @@ public static class FloorBuilder
         for (var i = 0; i < TestBurningStackCount; i++)
         {
             BurningEffects.ApplyStack(ecsContext.ComponentManager, entityId, StatusEffectSource.Admin);
+        }
+
+        for (var i = 0; i < TestPoisonStackCount; i++)
+        {
+            PoisonEffects.ApplyStack(ecsContext.ComponentManager, entityId, StatusEffectSource.Admin, TestPoisonDurationTicks);
         }
 
         var spawnPosition = FindFreeGroundCellNearCenter(world);

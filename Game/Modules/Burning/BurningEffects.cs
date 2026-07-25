@@ -11,10 +11,8 @@ public static class BurningEffects
     public const int MaxStacks = 20;
     public const int TickIntervalFrames = 60;
 
-    /// <summary>
-    /// Requires DroidSansJapanese.ttf loaded as a fallback font (see FontService).
-    /// </summary>
-    public const string Glyph = "火";
+    /// <summary>🔥 (U+1F525, "fire"). Requires Symbola-Emoji.ttf loaded as a fallback font (see FontService).</summary>
+    public const string Glyph = "🔥";
 
     public static void ApplyStack(ComponentManager componentManager, int entityId, StatusEffectSource source)
     {

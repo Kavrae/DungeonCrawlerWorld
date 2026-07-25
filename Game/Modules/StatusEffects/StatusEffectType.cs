@@ -4,4 +4,5 @@ namespace Game.Modules.StatusEffects;
 public enum StatusEffectType : byte
 {
     Burning,
+    Poison,
 }

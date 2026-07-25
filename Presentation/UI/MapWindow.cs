@@ -111,9 +111,9 @@ public sealed class MapWindow : Window
     {
         base.Initialize();
 
-        _mediumFont = FontService.GetFont(8);
-        _largeFont = FontService.GetFont(24);
-        _hugeFont = FontService.GetFont(36);
+        _mediumFont = FontService.GetFont(12);
+        _largeFont = FontService.GetFont(36);
+        _hugeFont = FontService.GetFont(54);
         _tinyFont = FontService.GetFont(3); // ~1/3 of _mediumFont, for the tiny-entity grid.
         _badgeFont = FontService.GetFont(6); // Double _tinyFont, for the up/down layer-occupancy badges -- legible at a glance without competing with the main glyph.
 

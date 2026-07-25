@@ -23,6 +23,7 @@ public sealed class FontService
         var resolvedFontsDirectory = Path.Combine(AppContext.BaseDirectory, fontsDirectory);
         _fontSystem.AddFont(File.ReadAllBytes(Path.Combine(resolvedFontsDirectory, "DroidSans.ttf")));
         _fontSystem.AddFont(File.ReadAllBytes(Path.Combine(resolvedFontsDirectory, "DroidSansJapanese.ttf")));
+        _fontSystem.AddFont(File.ReadAllBytes(Path.Combine(resolvedFontsDirectory, "Symbola-Emoji.ttf")));
     }
 
     public SpriteFontBase GetFont(int fontSize) => _fontSystem.GetFont(fontSize);

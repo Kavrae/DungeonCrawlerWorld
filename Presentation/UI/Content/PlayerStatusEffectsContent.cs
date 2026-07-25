@@ -2,6 +2,7 @@ using Engine.ECS.Components;
 using Engine.ECS.Components.Stores;
 using FontStashSharp;
 using Game.Modules.Burning;
+using Game.Modules.Poison;
 using Game.Modules.StatusEffects;
 using Game.Modules.StatusEffects.Components;
 using Game.World;
@@ -66,13 +67,22 @@ public sealed class PlayerStatusEffectsContent(World world, ComponentManager com
         spriteBatch.Draw(unitRectangle, outerRectangle, Color.Black);
         spriteBatch.Draw(unitRectangle, new Rectangle(outerRectangle.X + 1, outerRectangle.Y + 1, outerRectangle.Width - 2, outerRectangle.Height - 2), Color.White);
 
-        _glyphRenderer.DrawCentered(spriteBatch, _font, GetGlyph(effectType), origin, size, Color.Red);
+        _glyphRenderer.DrawCentered(spriteBatch, _font, GetGlyph(effectType), origin, size, GetColor(effectType));
     }
 
     /// <summary>Presentation's own type -> glyph mapping (rendering knowledge belongs here, not in the shared StatusEffects core module, which stays ignorant of individual effects -- see StatusEffectsModule's own doc comment). "?" is an intentionally-visible fallback for any future effect type added here without a mapping yet, rather than throwing mid-draw.</summary>
     private static string GetGlyph(StatusEffectType effectType) => effectType switch
     {
         StatusEffectType.Burning => BurningEffects.Glyph,
+        StatusEffectType.Poison => PoisonEffects.Glyph,
         _ => "?",
+    };
+
+    /// <summary>Same reasoning/fallback as GetGlyph above -- kept as its own switch rather than folded into GetGlyph so each is a single, simple type -> value mapping.</summary>
+    private static Color GetColor(StatusEffectType effectType) => effectType switch
+    {
+        StatusEffectType.Burning => Color.Red,
+        StatusEffectType.Poison => Color.DarkGreen,
+        _ => Color.Black,
     };
 }
