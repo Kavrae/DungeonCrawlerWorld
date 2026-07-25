@@ -111,4 +111,68 @@ public sealed class MultiComponentPoolTests
 
         Assert.IsGreaterThan(versionAfterAdd, versionAfterRemove);
     }
+
+    [TestMethod]
+    public void CopyInspectionDataForEntity_SingleInstance_OneRowWithNoCountSuffix()
+    {
+        var pool = new MultiComponentPool<TestComponent>(maximumEntityCount: 10, initialCapacity: 4);
+        pool.Add(0, new TestComponent { Value = 1 });
+        var destination = new List<Engine.ECS.Components.InspectedComponentEntry>();
+
+        var rowsAdded = pool.CopyInspectionDataForEntity(0, destination);
+
+        Assert.AreEqual(1, rowsAdded);
+        Assert.HasCount(1, destination);
+        Assert.DoesNotContain("x1)", destination[0].Value);
+    }
+
+    /// <summary>Regression test for the Selection window grouping feature: several value-equal instances (e.g. several StatusEffectStack entries with the same EffectType/Source) collapse into one row with a count, instead of one near-duplicate row per instance.</summary>
+    [TestMethod]
+    public void CopyInspectionDataForEntity_MultipleIdenticalInstances_GroupsIntoOneRowWithCount()
+    {
+        var pool = new MultiComponentPool<TestComponent>(maximumEntityCount: 10, initialCapacity: 4);
+        pool.Add(0, new TestComponent { Value = 7 });
+        pool.Add(0, new TestComponent { Value = 7 });
+        pool.Add(0, new TestComponent { Value = 7 });
+        var destination = new List<Engine.ECS.Components.InspectedComponentEntry>();
+
+        var rowsAdded = pool.CopyInspectionDataForEntity(0, destination);
+
+        Assert.AreEqual(1, rowsAdded);
+        Assert.HasCount(1, destination);
+        StringAssert.Contains(destination[0].Value, "(x3)");
+    }
+
+    [TestMethod]
+    public void CopyInspectionDataForEntity_MixOfDistinctAndDuplicateInstances_EachDistinctValueGetsItsOwnRow()
+    {
+        var pool = new MultiComponentPool<TestComponent>(maximumEntityCount: 10, initialCapacity: 8);
+        pool.Add(0, new TestComponent { Value = 1 });
+        pool.Add(0, new TestComponent { Value = 2 });
+        pool.Add(0, new TestComponent { Value = 1 });
+        pool.Add(0, new TestComponent { Value = 2 });
+        pool.Add(0, new TestComponent { Value = 2 });
+        var destination = new List<Engine.ECS.Components.InspectedComponentEntry>();
+
+        var rowsAdded = pool.CopyInspectionDataForEntity(0, destination);
+
+        Assert.AreEqual(2, rowsAdded);
+        Assert.HasCount(2, destination);
+        Assert.IsTrue(destination.Exists(entry => entry.Value.Contains("(x2)")), "The two Value=1 instances should collapse into one row counted x2.");
+        Assert.IsTrue(destination.Exists(entry => entry.Value.Contains("(x3)")), "The three Value=2 instances should collapse into one row counted x3.");
+    }
+
+    [TestMethod]
+    public void CopyInspectionDataForEntity_GroupedRow_UsesTheHighestVersionInTheGroup()
+    {
+        var pool = new MultiComponentPool<TestComponent>(maximumEntityCount: 10, initialCapacity: 4);
+        pool.Add(0, new TestComponent { Value = 5 }); // dense index 0, version 1
+        pool.Add(0, new TestComponent { Value = 5 }); // dense index 1, version 1
+        pool.UpdateByDenseIndex(pool.GetFirstDenseIndex(0), static (ref TestComponent c) => { }); // bumps whichever instance is first in the chain to version 2
+        var destination = new List<Engine.ECS.Components.InspectedComponentEntry>();
+
+        pool.CopyInspectionDataForEntity(0, destination);
+
+        Assert.AreEqual(2u, destination[0].Version);
+    }
 }

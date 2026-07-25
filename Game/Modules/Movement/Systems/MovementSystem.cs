@@ -97,8 +97,25 @@ public sealed class MovementSystem : ISystem
         if (movementComponent.MovementMode == MovementMode.Random)
         {
             SetRandomMapPosition(entityId, movementComponent, transformComponent);
+            return;
         }
+
         // TODO MovementMode.SeekTarget: path toward TargetMapPosition once pathfinding exists.
+
+        // PlayerControlled (and SeekTarget until pathfinding exists) never auto-picks a next
+        // destination -- that's an external caller's job (MapWindow.TryQueuePlayerMove).
+        // Reaching this method at all means the entity just arrived at NextMapPosition (see
+        // this method's only caller) with nothing new queued, so NextMapPosition must be
+        // cleared here -- otherwise it stays set to the position the entity is already
+        // standing on, and the very next Update call where energy/FramesToWait allow it would
+        // re-run TryMoveToNextMapPosition against that same value: a same-position "move" that
+        // deducts energy and publishes a spurious EntityMoved(old == new) every cycle,
+        // repeating forever instead of the entity going idle until a real move is queued. This
+        // was previously harmless (only WorldEventSync/PlayerActivityLog consumed EntityMoved,
+        // both tolerant of Old == New) but became consequential once EntityMoved-driven
+        // systems (ContactDamageSystem, StatusEffectAuraSystem) started treating every such
+        // event as a fresh step onto whatever tile the entity is on.
+        _movementComponents.TryUpdate(entityId, static (ref MovementComponent m) => m.NextMapPosition = null);
     }
 
     /// <summary>

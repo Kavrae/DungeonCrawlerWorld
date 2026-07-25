@@ -48,5 +48,15 @@ public struct Vector3Int : IEquatable<Vector3Int>
 
     public override readonly int GetHashCode() => HashCode.Combine(X, Y, Z);
 
+    /// <summary>
+    /// This position's index into a flat row-major array shaped like a size.X x size.Y x size.Z
+    /// grid (X fastest-varying, then Y, then Z). The single formula behind indexing any
+    /// flat array backing a 3D-grid-shaped store -- call this instead of re-deriving it.
+    /// </summary>
+    public readonly int FlatIndex(Vector3Int size) => X + Y * size.X + Z * size.X * size.Y;
+
+    /// <summary>Treating this instance as a size (X x Y x Z), the total number of cells -- the length a flat array backed by FlatIndex needs.</summary>
+    public readonly int Volume => X * Y * Z;
+
     public override readonly string ToString() => $"{{X:{X} Y:{Y} Z:{Z}}}";
 }

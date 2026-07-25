@@ -13,7 +13,10 @@ namespace Game.Modules.Burning;
 /// <summary>
 /// Burning-specific: its own timer component and system, depending on StatusEffectsModule
 /// (shared stack storage) and HealthModule (what it damages). Parameterless, with runtime
-/// dependencies (EventBus, IPlayerQuery) supplied via IGameModule.Configure
+/// dependencies (EventBus, IPlayerQuery) supplied via IGameModule.Configure. Also registers a
+/// TimerBasedAuraApplier&lt;BurningTimerComponent&gt; into the shared
+/// StatusEffectAuraApplierRegistry during Configure, so StatusEffectAuraSystem can grant
+/// Burning stacks without depending on this module directly.
 /// </summary>
 public sealed class BurningModule : IGameModule
 {
@@ -28,6 +31,7 @@ public sealed class BurningModule : IGameModule
     {
         _eventBus = context.EventBus;
         _playerQuery = context.PlayerQuery;
+        context.StatusEffectAuraAppliers.Register(new TimerBasedAuraApplier<BurningTimerComponent>(StatusEffectType.Burning, BurningEffects.ApplyStack));
     }
 
     public void RegisterComponents(ComponentManager componentManager) =>

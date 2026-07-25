@@ -13,7 +13,10 @@ namespace Game.Modules.Burning.Systems;
 /// <summary>
 /// Ticks down each burning entity's countdown and, once it reaches 0, deals damage equal to
 /// the current stack count and removes exactly one stack (not per-stack damage -- 7 stacks
-/// deals 7 damage total, not 49).
+/// deals 7 damage total, not 49). The decrement-or-fire loop itself is
+/// Engine.ECS.Systems.CountdownTicker.Tick, shared with PoisonSystem/ContactDamageSystem/
+/// StatusEffectAuraSystem -- this class only supplies the entity-id source and what "ticking"
+/// actually does.
 ///
 /// StripeCount is deliberately 1, not the 10 EnergyRechargeSystem/HealthRegenSystem use:
 /// SystemManager.Update calls this system's Update once per real frame regardless, but a
@@ -42,13 +45,6 @@ public sealed class BurningSystem : ISystem
     private readonly EventBus _eventBus;
     private readonly IPlayerQuery? _playerQuery;
     private readonly EntityStripeSet _stripeSet;
-
-    // Reused across Update calls rather than allocated fresh each frame. Entries whose timer
-    // should be removed are collected here during the foreach below and removed only after it
-    // completes -- EntityStripeSet.GetBucket returns a Span over the live backing list, and
-    // removing an entity mid-foreach fires EntityRemoved -> EntityStripeSet.OnEntityRemoved,
-    // which swap-removes within the very bucket currently being enumerated (silent skip/reread
-    // risk otherwise).
     private readonly List<int> _pendingTimerRemovals = [];
 
     public BurningSystem(
@@ -68,38 +64,16 @@ public sealed class BurningSystem : ISystem
         timers.EntityRemoved += _stripeSet.OnEntityRemoved;
     }
 
-    public void Update(EngineTime time, byte stripeIndex)
+    public void Update(EngineTime time, byte stripeIndex) =>
+        CountdownTicker.Tick(_timers, _stripeSet.GetBucket(stripeIndex), _pendingTimerRemovals, Tick);
+
+    /// <summary>Returns whether the timer should be removed entirely (stacks fully decayed) -- see CountdownTicker.Tick's own doc comment for the contract.</summary>
+    private bool Tick(int entityId, BurningTimerComponent timer)
     {
-        _pendingTimerRemovals.Clear();
-
-        foreach (var entityId in _stripeSet.GetBucket(stripeIndex))
-        {
-            if (!_timers.TryGetReadonly(entityId, out var timer))
-            {
-                continue;
-            }
-
-            if (timer.FramesUntilNextTick > 1)
-            {
-                _timers.TryUpdate(entityId, static (ref BurningTimerComponent t) => t.FramesUntilNextTick--);
-                continue;
-            }
-
-            Tick(entityId, timer.StackCount);
-        }
-
-        foreach (var entityId in _pendingTimerRemovals)
-        {
-            _timers.Remove(entityId);
-        }
-    }
-
-    private void Tick(int entityId, int stackCount)
-    {
+        var stackCount = timer.StackCount;
         if (stackCount == 0)
         {
-            _pendingTimerRemovals.Add(entityId);
-            return;
+            return true;
         }
 
         var source = default(StatusEffectSource);
@@ -122,15 +96,15 @@ public sealed class BurningSystem : ISystem
         var remainingStacks = stackCount - 1;
         if (remainingStacks == 0)
         {
-            _pendingTimerRemovals.Add(entityId);
+            return true;
         }
-        else
+
+        _timers.TryUpdate(entityId, remainingStacks, static (ref BurningTimerComponent t, int remaining) =>
         {
-            _timers.TryUpdate(entityId, remainingStacks, static (ref BurningTimerComponent t, int remaining) =>
-            {
-                t.StackCount = remaining;
-                t.FramesUntilNextTick = BurningEffects.TickIntervalFrames;
-            });
-        }
+            t.StackCount = remaining;
+            t.FramesUntilNextTick = BurningEffects.TickIntervalFrames;
+        });
+
+        return false;
     }
 }

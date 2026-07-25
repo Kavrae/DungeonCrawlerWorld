@@ -7,6 +7,7 @@ using Game.Floors;
 using Game.Modules;
 using Game.Modules.Burning;
 using Game.Modules.Class;
+using Game.Modules.ContactDamage;
 using Game.Modules.Core;
 using Game.Modules.Core.Components;
 using Game.Modules.Energy;
@@ -15,6 +16,7 @@ using Game.Modules.Movement;
 using Game.Modules.Movement.Components;
 using Game.Modules.Poison;
 using Game.Modules.Race;
+using Game.Modules.StatusEffectAura;
 using Game.Modules.StatusEffects;
 using Game.World;
 
@@ -37,6 +39,12 @@ public sealed class FloorBuilderTests
         var poisonModule = new PoisonModule();
         poisonModule.Configure(context);
 
+        var contactDamageModule = new ContactDamageModule();
+        contactDamageModule.Configure(context);
+
+        var statusEffectAuraModule = new StatusEffectAuraModule();
+        statusEffectAuraModule.Configure(context);
+
         IReadOnlyList<IModule> modules =
         [
             new CoreModule(),
@@ -48,6 +56,8 @@ public sealed class FloorBuilderTests
             new StatusEffectsModule(),
             burningModule,
             poisonModule,
+            contactDamageModule,
+            statusEffectAuraModule,
         ];
 
         return Bootstrapper.Build(modules, initialEntityCapacity: 5000, initialComponentCapacity: 5000);

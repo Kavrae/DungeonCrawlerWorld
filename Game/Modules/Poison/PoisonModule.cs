@@ -13,13 +13,27 @@ namespace Game.Modules.Poison;
 /// <summary>
 /// Poison-specific: its own timer component and system, depending on StatusEffectsModule
 /// (shared stack storage). Parameterless, with runtime dependencies (EventBus, IPlayerQuery)
-/// supplied via IGameModule.Configure.
+/// supplied via IGameModule.Configure. Also registers a
+/// TimerBasedAuraApplier&lt;PoisonTimerComponent&gt; into the shared
+/// StatusEffectAuraApplierRegistry during Configure, so StatusEffectAuraSystem can grant
+/// Poison stacks without depending on this module directly.
 /// </summary>
 public sealed class PoisonModule : IGameModule
 {
     public Guid Id { get; } = new("d9f6a1c4-8b2e-4f3a-9c1d-000000000009");
 
     public IReadOnlyList<Type> Dependencies { get; } = [typeof(StatusEffectsModule)];
+
+    // How long each aura-granted stack refreshes Poison's duration to, in the same "ticks"
+    // unit PoisonSystem itself counts down (once per its own PoisonEffects.TickIntervalFrames
+    // cycle, not per frame). Deliberately tiny (1), not some longer fixed window: ApplyStack
+    // refreshes RemainingDurationTicks to Max(existing, durationInTicks) rather than adding,
+    // so as long as the entity stays exposed, the aura's own re-grant cadence
+    // (AuraEffects.TickIntervalFrames, the same 60 frames) keeps refreshing the duration back
+    // up to at least 1 before it would otherwise hit 0 -- and once out of range, the duration
+    // simply counts down and expires normally. A longer fixed duration here would let poison
+    // outlive having left the aura by that many extra ticks for no reason.
+    private const int AuraDurationTicks = 1;
 
     private EventBus _eventBus = null!;
     private IPlayerQuery? _playerQuery;
@@ -28,6 +42,9 @@ public sealed class PoisonModule : IGameModule
     {
         _eventBus = context.EventBus;
         _playerQuery = context.PlayerQuery;
+        context.StatusEffectAuraAppliers.Register(new TimerBasedAuraApplier<PoisonTimerComponent>(
+            StatusEffectType.Poison,
+            (componentManager, entityId, source) => PoisonEffects.ApplyStack(componentManager, entityId, source, AuraDurationTicks)));
     }
 
     public void RegisterComponents(ComponentManager componentManager) =>

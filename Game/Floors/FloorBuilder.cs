@@ -1,7 +1,6 @@
 using Engine.ECS.Context;
 using Engine.Math;
 using Game.Blueprints;
-using Game.Modules.Burning;
 using Game.Modules.Core.Components;
 using Game.Modules.Poison;
 using Game.World;
@@ -33,10 +32,6 @@ public static class FloorBuilder
         world.PlayerEntityId = CreatePlayer(world, ecsContext, mathUtility);
     }
 
-    // TEMPORARY test seeding -- exercises Burning until a real in-game source (lava, per
-    // TODO.md) exists. Remove once one does.
-    private const int TestBurningStackCount = 10;
-
     // TEMPORARY test seeding -- exercises Poison until a real in-game source exists. Remove
     // once one does. 10 applications of a 5-tick duration each: since ApplyStack takes the
     // *greater* of the remaining and new duration (not additive), the end result is 10 stacks
@@ -49,11 +44,6 @@ public static class FloorBuilder
         var entityId = ecsContext.EntityManager.CreateEntity();
         new PlayerBlueprint(mathUtility).Build(ecsContext.ComponentManager, entityId);
 
-        for (var i = 0; i < TestBurningStackCount; i++)
-        {
-            BurningEffects.ApplyStack(ecsContext.ComponentManager, entityId, StatusEffectSource.Admin);
-        }
-
         for (var i = 0; i < TestPoisonStackCount; i++)
         {
             PoisonEffects.ApplyStack(ecsContext.ComponentManager, entityId, StatusEffectSource.Admin, TestPoisonDurationTicks);
@@ -62,6 +52,11 @@ public static class FloorBuilder
         var spawnPosition = FindFreeGroundCellNearCenter(world);
         ref var transform = ref ecsContext.ComponentManager.GetDirectPool<TransformComponent>().Get(entityId);
         world.PlaceEntityOnMap(entityId, spawnPosition, ref transform);
+
+        // Spawning counts as a move (see EntityMoved's own doc comment) so hazard/aura
+        // detection (ContactDamageSystem, StatusEffectAuraSystem) sees the player immediately
+        // if spawned onto/next to one, rather than only on their first real move.
+        ecsContext.EventBus.Publish(new EntityMoved(entityId, spawnPosition, spawnPosition, transform.Size));
 
         return entityId;
     }
@@ -90,13 +85,14 @@ public static class FloorBuilder
             {
                 for (var deltaY = -radius; deltaY <= radius; deltaY++)
                 {
+                    var candidate = new Vector3Int(center.X + deltaX, center.Y + deltaY, center.Z);
+
                     // Ring only -- interior offsets were already checked at a smaller radius.
-                    if (Math.Max(Math.Abs(deltaX), Math.Abs(deltaY)) != radius)
+                    if (DistanceFalloff.ChebyshevDistance(center, candidate) != radius)
                     {
                         continue;
                     }
 
-                    var candidate = new Vector3Int(center.X + deltaX, center.Y + deltaY, center.Z);
                     if (IsFreeGroundCell(world, candidate))
                     {
                         return candidate;

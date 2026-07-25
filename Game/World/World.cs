@@ -186,9 +186,22 @@ public sealed class World(Map map) : IMapQuery, IPlayerQuery
     /// Places a terrain entity (the floor beneath UnderGround/Ground -- never Flying, which
     /// has no floor). Terrain is always 1x1, never moves, and never blocks, so none of the
     /// footprint/occupancy logic above applies -- it writes directly to Map's separate terrain
-    /// store instead of the creature-occupancy one.
+    /// store instead of the creature-occupancy one. Also sets transformComponent.Position,
+    /// mirroring PlaceEntityOnMap -- without this, a terrain entity's own Transform stays
+    /// whatever placeholder its blueprint hardcoded, and nothing can answer "given this
+    /// terrain entity, where is it" (only the reverse, via Map.GetTerrainEntityId). A
+    /// source-driven effect (an aura or tint source that happens to be terrain) needs exactly
+    /// that entity-to-position direction to find itself.
+    ///
+    /// Z is (int)terrainLayer, NOT always 0 -- TerrainLayer's values are defined to line up
+    /// with MapLayer's (UnderGround=0, Ground=1), so a Ground-layer terrain entity must report
+    /// Z=1 to land on the same plane as the Ground-layer (Z=1) creatures standing on it. An
+    /// earlier version of this hardcoded Z=0, which silently broke every terrain-anchored
+    /// aura/tint source placed via TerrainLayer.Ground (the common case -- Ground is what
+    /// players/creatures actually walk on): the source's contribution was baked into the
+    /// wrong Z-plane (UnderGround) and so was invisible to anything querying at Z=1.
     /// </summary>
-    public void PlaceTerrainOnMap(int entityId, int x, int y, TerrainLayer terrainLayer)
+    public void PlaceTerrainOnMap(int entityId, int x, int y, TerrainLayer terrainLayer, ref TransformComponent transformComponent)
     {
         if (!IsOnMap(new Vector3Int(x, y, 0)))
         {
@@ -196,6 +209,7 @@ public sealed class World(Map map) : IMapQuery, IPlayerQuery
         }
 
         Map.SetTerrainEntityId(x, y, terrainLayer, entityId);
+        transformComponent.Position = new Vector3Int(x, y, (int)terrainLayer);
     }
 
     public bool IsOnMap(Vector3Int coordinates) =>
@@ -217,4 +231,30 @@ public sealed class World(Map map) : IMapQuery, IPlayerQuery
 
     /// <inheritdoc cref="IMapQuery"/>
     public int GetEntityIdAt(Vector3Int position) => Map.GetEntityId(position);
+
+    /// <inheritdoc cref="IMapQuery"/>
+    public int GetTerrainEntityIdAt(Vector3Int position) =>
+        Map.TerrainLayerFor(position.Z) is { } terrainLayer ? Map.GetTerrainEntityId(position.X, position.Y, terrainLayer) : -1;
+
+    /// <summary>
+    /// Row-major (X fastest-varying) batched occupant scan -- box.Size.Z is ignored, every
+    /// cell is read at box.Position.Z. One batched call instead of one interface call per
+    /// cell, for anything scanning a falloff radius (aura range) instead of a fixed 3x3
+    /// neighborhood.
+    /// </summary>
+    /// <inheritdoc cref="IMapQuery"/>
+    public void GetEntityIdsInBox(CubeInt box, Span<int> entityIds)
+    {
+        var z = box.Position.Z;
+        var index = 0;
+        for (var y = box.Position.Y; y < box.Position.Y + box.Size.Y; y++)
+        {
+            for (var x = box.Position.X; x < box.Position.X + box.Size.X; x++)
+            {
+                var position = new Vector3Int(x, y, z);
+                entityIds[index] = IsOnMap(position) ? Map.GetEntityId(position) : -1;
+                index++;
+            }
+        }
+    }
 }

@@ -25,6 +25,8 @@ public sealed class MovementSystemTests
             && position.X < MapSize.X && position.Y < MapSize.Y && position.Z < MapSize.Z;
         public int GetEntityIdAt(Vector3Int position) => -1;
         public bool IsBlocking(int entityId) => true;
+        public int GetTerrainEntityIdAt(Vector3Int position) => -1;
+        public void GetEntityIdsInBox(CubeInt box, Span<int> entityIds) => entityIds.Fill(-1);
     }
 
     private static DirectComponentPool<TransformComponent> CreateTransformPool(int capacity = 10) =>

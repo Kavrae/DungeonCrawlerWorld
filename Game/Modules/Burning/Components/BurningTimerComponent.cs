@@ -1,3 +1,6 @@
+using Engine.ECS.Components;
+using Game.Modules.StatusEffects;
+
 namespace Game.Modules.Burning.Components;
 
 /// <summary>
@@ -5,7 +8,7 @@ namespace Game.Modules.Burning.Components;
 /// 0-to-1 stack transition, removed once stacks reach 0 (see BurningSystem). Countdown to the
 /// next damage tick; gaining an additional stack while already burning must not reset it.
 /// </summary>
-public struct BurningTimerComponent(int framesUntilNextTick, int stackCount)
+public struct BurningTimerComponent(int framesUntilNextTick, int stackCount) : ITickCountdown, IStatusEffectStackCount
 {
     public int FramesUntilNextTick { get; set; } = framesUntilNextTick;
 

@@ -5,6 +5,7 @@ using Engine.Modules;
 using Game.Modules;
 using Game.Modules.Burning;
 using Game.Modules.Class;
+using Game.Modules.ContactDamage;
 using Game.Modules.Core;
 using Game.Modules.Core.Components;
 using Game.Modules.Energy;
@@ -12,6 +13,7 @@ using Game.Modules.Health;
 using Game.Modules.Movement;
 using Game.Modules.Poison;
 using Game.Modules.Race;
+using Game.Modules.StatusEffectAura;
 using Game.Modules.StatusEffects;
 using Game.World;
 
@@ -44,6 +46,8 @@ public static class GameBootstrapper
             new StatusEffectsModule(),
             new BurningModule(),
             new PoisonModule(),
+            new ContactDamageModule(),
+            new StatusEffectAuraModule(),
         ];
 
         var mapQuery = (IMapQuery)world;

@@ -1,5 +1,6 @@
 using Engine.Events;
 using Engine.Math;
+using Game.Modules.StatusEffects;
 using Game.World;
 
 namespace Game.Modules;
@@ -13,4 +14,13 @@ namespace Game.Modules;
 public sealed record GameModuleContext(IMapQuery MapQuery, MathUtility MathUtility, EventBus EventBus)
 {
     public IPlayerQuery? PlayerQuery { get; init; }
+
+    /// <summary>
+    /// Shared across every module's Configure call within one GameBootstrapper.Build (or one
+    /// DryRunValidateMods trial) -- a fresh registry per GameModuleContext instance, so the
+    /// dry-run trial's registrations never leak into the real build's. See
+    /// StatusEffectAuraApplierRegistry's own doc comment for why registering here (during
+    /// Configure) rather than in RegisterComponents/RegisterSystems is what makes ordering safe.
+    /// </summary>
+    public StatusEffectAuraApplierRegistry StatusEffectAuraAppliers { get; init; } = new();
 }

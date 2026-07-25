@@ -191,20 +191,37 @@ public sealed class MultiComponentPool<T> : IReadOnlyMultiComponentPool<T>, IIns
     {
         ArgumentNullException.ThrowIfNull(destination);
 
-        var componentCount = 0;
+        var groups = new List<(T Value, int Count, uint MaxVersion)>();
 
         for (var denseIndex = GetFirstDenseIndex(entityId); denseIndex != -1; denseIndex = GetNextDenseIndex(denseIndex))
         {
-            destination.Add(new InspectedComponentEntry(
-                ComponentType,
-                ComponentPoolType,
-                GetReadonlyByDenseIndex(denseIndex).ToString() ?? string.Empty,
-                GetVersionByDenseIndex(denseIndex)));
+            var value = GetReadonlyByDenseIndex(denseIndex);
+            var version = GetVersionByDenseIndex(denseIndex);
 
-            componentCount++;
+            var groupIndex = groups.FindIndex(group => EqualityComparer<T>.Default.Equals(group.Value, value));
+            if (groupIndex == -1)
+            {
+                groups.Add((value, 1, version));
+            }
+            else
+            {
+                var existing = groups[groupIndex];
+                groups[groupIndex] = (existing.Value, existing.Count + 1, System.Math.Max(existing.MaxVersion, version));
+            }
         }
 
-        return componentCount;
+        foreach (var group in groups)
+        {
+            var text = group.Value.ToString() ?? string.Empty;
+            if (group.Count > 1)
+            {
+                text = $"{text} (x{group.Count})";
+            }
+
+            destination.Add(new InspectedComponentEntry(ComponentType, ComponentPoolType, text, group.MaxVersion));
+        }
+
+        return groups.Count;
     }
 
     public void IncrementVersionByDenseIndex(int denseIndex)

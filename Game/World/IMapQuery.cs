@@ -49,4 +49,19 @@ public interface IMapQuery
     /// differently (World derives it from NonBlockingComponent/ForceBlockingComponent).
     /// </summary>
     bool IsBlocking(int entityId);
+
+    /// <summary>
+    /// The terrain entity at position's (x,y), for whichever TerrainLayer corresponds to
+    /// position.Z, or -1 if that layer has no terrain floor (Flying) or nothing is set there.
+    /// </summary>
+    int GetTerrainEntityIdAt(Vector3Int position);
+
+    /// <summary>
+    /// Fills entityIds (row-major, X fastest-varying, single Z plane -- box.Size.Z is ignored)
+    /// with the occupant entity id at each cell of box, -1 for empty or off-map cells.
+    /// entityIds.Length must equal box.Size.X * box.Size.Y. One batched scan instead of one
+    /// interface call per cell -- for anything scanning a falloff radius (aura range, tint
+    /// range) instead of a fixed 3x3 neighborhood.
+    /// </summary>
+    void GetEntityIdsInBox(CubeInt box, Span<int> entityIds);
 }

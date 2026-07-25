@@ -227,7 +227,8 @@ public sealed class SelectionWindowContentTests
         var (ecsContext, world, mapViewState) = BuildEcsContextAndWorld();
         var terrainId = ecsContext.EntityManager.CreateEntity();
         new StoneFloor().Build(ecsContext.ComponentManager, terrainId);
-        world.PlaceTerrainOnMap(terrainId, 2, 2, TerrainLayer.Ground);
+        ref var terrainTransform = ref ecsContext.ComponentManager.GetDirectPool<TransformComponent>().Get(terrainId);
+        world.PlaceTerrainOnMap(terrainId, 2, 2, TerrainLayer.Ground, ref terrainTransform);
 
         var fontService = new FontService("Fonts");
         var windowService = new WindowService(fontService, new GlyphRenderer());

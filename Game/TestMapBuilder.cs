@@ -161,7 +161,8 @@ public sealed class TestMapBuilder(EntityManager entityManager, ComponentManager
         var entityId = entityManager.CreateEntity();
         blueprint.Build(componentManager, entityId);
 
-        world.PlaceTerrainOnMap(entityId, column, row, terrainLayer);
+        ref var transform = ref componentManager.GetDirectPool<TransformComponent>().Get(entityId);
+        world.PlaceTerrainOnMap(entityId, column, row, terrainLayer, ref transform);
     }
 
     /// <summary>Same placement as BuildFromBlueprint, plus assigning one of the three even-rotation sizes.</summary>

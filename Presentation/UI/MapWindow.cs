@@ -5,6 +5,7 @@ using FontStashSharp;
 using Game.Modules.Core.Components;
 using Game.Modules.Health.Components;
 using Game.Modules.Movement.Components;
+using Game.Modules.StatusEffectAura.Components;
 using Game.World;
 using Microsoft.Xna.Framework;
 using Microsoft.Xna.Framework.Graphics;
@@ -39,6 +40,23 @@ public sealed class MapWindow : Window
     private readonly PackedComponentPool<HealthComponent> _healthPool;
     private readonly TileRenderer _tileRenderer;
     private readonly GlyphRenderer _glyphRenderer;
+
+    // Normalizes DistanceFalloff.ValueAtDistance(source.Strength, distance) into a 0-1 Color.Lerp
+    // factor -- a source at distance 0 with Strength >= this shows its TintColor at full strength.
+    private const int MaxTintStrength = 8;
+
+    /// <summary>
+    /// Precomputed once (constructor), not scanned live per cache rebuild: every visible-tile
+    /// cache rebuild used to iterate every StatusEffectAuraSourceComponent in the whole game
+    /// (fine for a handful of sources, catastrophic with TestMapBuilder's real lava density --
+    /// tens of thousands of sources scanned on every player move tanked FPS to ~1). Sparse
+    /// (only cells actually within some source's radius have an entry) since
+    /// StatusEffectAuraSourceComponent is terrain-anchored and static once placed -- see
+    /// BuildTintGrid. Where multiple sources overlap a cell, their colors are blended by a
+    /// falloff-weighted average rather than the sequential per-source Color.Lerp chain an
+    /// earlier, unscalable version of this used.
+    /// </summary>
+    private readonly Dictionary<int, (Color Color, float Factor)> _tintGrid;
 
     private int _playerMoveCooldownFrames;
 
@@ -105,7 +123,69 @@ public sealed class MapWindow : Window
         _glyphRenderer = glyphRenderer;
 
         _tileDepth = _world.Map.Size.Z;
+
+        _tintGrid = BuildTintGrid(componentManager, _world.Map.Size);
     }
+
+    /// <summary>
+    /// One-time scatter over every StatusEffectAuraSourceComponent (see this class's own doc
+    /// comment on _tintGrid for why this must be precomputed, not scanned per rebuild).
+    /// Accumulates a falloff-weighted RGB sum plus total weight per affected cell, then
+    /// finalizes each into a single (blended Color, 0-1 factor) pair -- multiple overlapping
+    /// sources of different colors blend proportionally to how strongly each reaches that
+    /// cell, rather than requiring a specific application order. Scatters through
+    /// DistanceFalloff.ScatterManhattan -- the same falloff shape StatusEffectAuraSystem/
+    /// AuraGrid use on the gameplay side, defined in exactly one place, so glow always
+    /// visually matches actual aura reach (both read the same AuraAndGlowStrength).
+    /// </summary>
+    private static Dictionary<int, (Color Color, float Factor)> BuildTintGrid(ComponentManager componentManager, Vector3Int mapSize)
+    {
+        var auraSourcePool = componentManager.GetPackedPool<StatusEffectAuraSourceComponent>();
+        var transformPool = componentManager.GetDirectPool<TransformComponent>();
+
+        var weightedSums = new Dictionary<int, (float R, float G, float B, float Weight)>();
+
+        var entityIds = auraSourcePool.EntityIds;
+        var auraSources = auraSourcePool.Components;
+        for (var i = 0; i < entityIds.Length; i++)
+        {
+            if (!transformPool.TryGetReadonly(entityIds[i], out var transform))
+            {
+                continue;
+            }
+
+            var auraSource = auraSources[i];
+            var sourcePosition = transform.Position;
+
+            DistanceFalloff.ScatterManhattan(sourcePosition, auraSource.AuraAndGlowStrength, mapSize, (cellPosition, weight) =>
+            {
+                var index = cellPosition.FlatIndex(mapSize);
+                weightedSums.TryGetValue(index, out var accumulated);
+                weightedSums[index] = (
+                    accumulated.R + auraSource.GlowColor.R * weight,
+                    accumulated.G + auraSource.GlowColor.G * weight,
+                    accumulated.B + auraSource.GlowColor.B * weight,
+                    accumulated.Weight + weight);
+            });
+        }
+
+        var tintGrid = new Dictionary<int, (Color Color, float Factor)>(weightedSums.Count);
+        foreach (var (index, accumulated) in weightedSums)
+        {
+            var blendedColor = new Color(
+                (byte)(accumulated.R / accumulated.Weight),
+                (byte)(accumulated.G / accumulated.Weight),
+                (byte)(accumulated.B / accumulated.Weight));
+            var factor = MathUtility.ClampInt((int)accumulated.Weight, 0, MaxTintStrength) / (float)MaxTintStrength;
+
+            tintGrid[index] = (blendedColor, factor);
+        }
+
+        return tintGrid;
+    }
+
+    private int TintGridIndex(int mapNodeX, int mapNodeY, int mapLayer) =>
+        new Vector3Int(mapNodeX, mapNodeY, mapLayer).FlatIndex(_world.Map.Size);
 
     public override void Initialize()
     {
@@ -635,16 +715,23 @@ public sealed class MapWindow : Window
             return occupantBackground.BackgroundColor;
         }
 
+        Color baseColor;
         if (Map.TerrainLayerFor(currentMapLayer) is { } terrainLayer)
         {
             var terrainEntityId = _world.Map.GetTerrainEntityId(mapNodeX, mapNodeY, terrainLayer);
-            if (terrainEntityId != -1 && _backgroundPool.TryGetReadonly(terrainEntityId, out var terrainBackground))
-            {
-                return terrainBackground.BackgroundColor;
-            }
+            baseColor = terrainEntityId != -1 && _backgroundPool.TryGetReadonly(terrainEntityId, out var terrainBackground)
+                ? terrainBackground.BackgroundColor
+                : Color.White;
+        }
+        else
+        {
+            baseColor = Color.White;
         }
 
-        return Color.White;
+        // O(1) precomputed-grid lookup (see _tintGrid's own doc comment) -- not a live scan.
+        return _tintGrid.TryGetValue(TintGridIndex(mapNodeX, mapNodeY, currentMapLayer), out var tint)
+            ? Color.Lerp(baseColor, tint.Color, tint.Factor)
+            : baseColor;
     }
 
     public void SelectMapNodes(Point mousePosition)

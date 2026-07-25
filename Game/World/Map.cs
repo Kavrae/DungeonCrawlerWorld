@@ -22,7 +22,7 @@ public sealed class Map
     {
         Size = size;
 
-        _occupantEntityIds = new int[size.X * size.Y * size.Z];
+        _occupantEntityIds = new int[size.Volume];
         Array.Fill(_occupantEntityIds, -1);
 
         _terrainEntityIds = new int[size.X * size.Y * TerrainLayerCount];
@@ -30,14 +30,14 @@ public sealed class Map
     }
 
     /// <summary>(0,0,0) is drawn to the top-left of the map window.</summary>
-    public int GetEntityId(Vector3Int coordinates) => _occupantEntityIds[Index(coordinates.X, coordinates.Y, coordinates.Z)];
+    public int GetEntityId(Vector3Int coordinates) => _occupantEntityIds[coordinates.FlatIndex(Size)];
 
-    public void SetEntityId(Vector3Int position, int entityId) => _occupantEntityIds[Index(position.X, position.Y, position.Z)] = entityId;
+    public void SetEntityId(Vector3Int position, int entityId) => _occupantEntityIds[position.FlatIndex(Size)] = entityId;
 
     /// <summary>Clears the cell only if it still records entityId. Returns whether it cleared anything.</summary>
     public bool ClearIfOccupiedBy(Vector3Int position, int entityId)
     {
-        ref var occupantEntityId = ref _occupantEntityIds[Index(position.X, position.Y, position.Z)];
+        ref var occupantEntityId = ref _occupantEntityIds[position.FlatIndex(Size)];
         if (occupantEntityId != entityId)
         {
             return false;
@@ -64,7 +64,5 @@ public sealed class Map
         _ => null,
     };
 
-    private int Index(int x, int y, int z) => x + y * Size.X + z * Size.X * Size.Y;
-
-    private int TerrainIndex(int x, int y, TerrainLayer terrainLayer) => x + y * Size.X + (int)terrainLayer * Size.X * Size.Y;
+    private int TerrainIndex(int x, int y, TerrainLayer terrainLayer) => new Vector3Int(x, y, (int)terrainLayer).FlatIndex(Size);
 }
