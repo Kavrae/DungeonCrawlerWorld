@@ -1,4 +1,5 @@
 using Engine.ECS.Components;
+using Game.Modules.Burning.Components;
 using Game.Modules.StatusEffects;
 using Game.Modules.StatusEffects.Components;
 using Game.World;
@@ -16,7 +17,7 @@ public static class BurningEffects
 
     public static void ApplyStack(ComponentManager componentManager, int entityId, StatusEffectSource source)
     {
-        var timers = componentManager.GetPackedPool<Components.BurningTimerComponent>();
+        var timers = componentManager.GetPackedPool<BurningTimerComponent>();
 
         if (timers.TryGetReadonly(entityId, out var existingTimer) && existingTimer.StackCount >= MaxStacks)
         {
@@ -27,11 +28,11 @@ public static class BurningEffects
 
         if (timers.Has(entityId))
         {
-            timers.TryUpdate(entityId, static (ref Components.BurningTimerComponent t) => t.StackCount++);
+            timers.TryUpdate(entityId, static (ref BurningTimerComponent t) => t.StackCount++);
         }
         else
         {
-            timers.Add(entityId, new Components.BurningTimerComponent(TickIntervalFrames, stackCount: 1));
+            timers.Add(entityId, new BurningTimerComponent(TickIntervalFrames, stackCount: 1));
         }
     }
 }

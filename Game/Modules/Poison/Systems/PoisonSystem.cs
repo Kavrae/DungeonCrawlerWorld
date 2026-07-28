@@ -27,7 +27,6 @@ public sealed class PoisonSystem : ISystem
     private readonly PackedComponentPool<HealthComponent> _health;
     private readonly EventBus _eventBus;
     private readonly IPlayerQuery? _playerQuery;
-    private readonly EntityStripeSet _stripeSet;
     private readonly List<int> _pendingTimerRemovals = [];
 
     public PoisonSystem(
@@ -42,13 +41,10 @@ public sealed class PoisonSystem : ISystem
         _health = health;
         _eventBus = eventBus;
         _playerQuery = playerQuery;
-        _stripeSet = new EntityStripeSet(StripeCount, timers.EntityIds);
-        timers.EntityAdded += _stripeSet.OnEntityAdded;
-        timers.EntityRemoved += _stripeSet.OnEntityRemoved;
     }
 
     public void Update(EngineTime time, byte stripeIndex) =>
-        CountdownTicker.Tick(_timers, _stripeSet.GetBucket(stripeIndex), _pendingTimerRemovals, Tick);
+        CountdownTicker.Tick(_timers, _timers.EntityIds, _pendingTimerRemovals, Tick);
 
     /// <summary>Returns whether the timer should be removed entirely (duration expired) -- see CountdownTicker.Tick's own doc comment for the contract. Drains every Poison stack itself before reporting removal, since that's a separate pool CountdownTicker knows nothing about (contrast BurningSystem, which only ever removes a single stack per tick, so it doesn't need this).</summary>
     private bool Tick(int entityId, PoisonTimerComponent timer)
