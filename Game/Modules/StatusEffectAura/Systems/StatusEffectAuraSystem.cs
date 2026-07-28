@@ -20,15 +20,18 @@ namespace Game.Modules.StatusEffectAura.Systems;
 /// frames." The decrement-or-fire loop itself is Engine.ECS.Systems.CountdownTicker.Tick,
 /// shared with BurningSystem/PoisonSystem/ContactDamageSystem.
 ///
-/// All range checks go through a lazily-built AuraGrid per distinct StatusEffectType (O(1)
-/// per lookup), not a live per-mover box scan -- an earlier version of this class scanned a
-/// fixed radius around every single EntityMoved in the game, which is correct but was a
-/// measured production performance bug once real lava density and TestMapBuilder's real
-/// wandering-population scale were involved. See AuraGrid's own doc comment.
+/// All range checks go through a single lazily-built AuraGrid (O(1) per lookup, keyed by both
+/// cell and StatusEffectType internally -- see its own doc comment for why one shared sparse
+/// grid replaced an earlier one-dense-array-per-effect-type version), not a live per-mover box
+/// scan -- an earlier version of this class scanned a fixed radius around every single
+/// EntityMoved in the game, which is correct but was a measured production performance bug
+/// once real lava density and TestMapBuilder's real wandering-population scale were involved.
 ///
-/// A separate grid per StatusEffectType is required, not one shared grid: two sources
-/// granting *different* effects (e.g. a future Burning lava tile next to a Poison bog) must
-/// never have their Strengths summed together into one meaningless total.
+/// _effectTypesInUse tracks which StatusEffectTypes actually have a registered source, so
+/// TryGrantApplicableStacks/IsExposedToAny only ever query effect types that could possibly
+/// have a nonzero total -- two sources granting *different* effects (e.g. a future Burning
+/// lava tile next to a Poison bog) still never have their Strengths summed together into one
+/// meaningless total, since AuraGrid keys every total by (cell, effectType) together.
 ///
 /// EntityMoved is still handled two ways, since an aura source can in principle be a moving
 /// entity (e.g. a future lava golem), not just static terrain:
@@ -63,8 +66,9 @@ public sealed class StatusEffectAuraSystem : ISystem
 
     private readonly List<int> _pendingExposureRemovals = [];
 
-    private readonly Dictionary<StatusEffectType, AuraGrid> _gridsByEffectType = [];
-    private bool _gridsBuilt;
+    private readonly AuraGrid _auraGrid;
+    private readonly HashSet<StatusEffectType> _effectTypesInUse = [];
+    private bool _gridBuilt;
 
     private int _maxScanRadius;
 
@@ -84,20 +88,21 @@ public sealed class StatusEffectAuraSystem : ISystem
         _mapQuery = mapQuery;
         _applierRegistry = applierRegistry;
 
+        _auraGrid = new AuraGrid(mapQuery.MapSize);
+
         eventBus.Subscribe<EntityMoved>(OnEntityMoved);
     }
 
     /// <summary>
-    /// Built on first real use (not the constructor): StatusEffectAuraModule.RegisterSystems
-    /// runs during GameBootstrapper.Build, which is before FloorBuilder.PopulateFloor places
-    /// any terrain (e.g. Lava) -- so no StatusEffectAuraSourceComponent exists yet at
-    /// construction time. By the time the first EntityMoved/Update fires, population has
-    /// finished. Populates _gridsByEffectType directly rather than returning it -- every
-    /// caller already has that field in scope.
+    /// Scatters every currently-registered source on first real use (not the constructor):
+    /// StatusEffectAuraModule.RegisterSystems runs during GameBootstrapper.Build, which is
+    /// before FloorBuilder.PopulateFloor places any terrain (e.g. Lava) -- so no
+    /// StatusEffectAuraSourceComponent exists yet at construction time. By the time the first
+    /// EntityMoved/Update fires, population has finished.
     /// </summary>
-    private void EnsureGrids()
+    private void EnsureGrid()
     {
-        if (_gridsBuilt)
+        if (_gridBuilt)
         {
             return;
         }
@@ -112,33 +117,23 @@ public sealed class StatusEffectAuraSystem : ISystem
             }
 
             var source = sourceComponents[i];
-            if (!_gridsByEffectType.TryGetValue(source.EffectType, out var grid))
-            {
-                grid = new AuraGrid(_mapQuery.MapSize);
-                _gridsByEffectType[source.EffectType] = grid;
-            }
-
-            grid.AddSource(transform.Position, source.AuraAndGlowStrength);
+            _effectTypesInUse.Add(source.EffectType);
+            _auraGrid.AddSource(transform.Position, source.AuraAndGlowStrength, source.EffectType);
             _maxScanRadius = Math.Max(_maxScanRadius, DistanceFalloff.MaxRadius(source.AuraAndGlowStrength));
         }
 
-        _gridsBuilt = true;
+        _gridBuilt = true;
     }
 
     private void OnEntityMoved(EntityMoved moved)
     {
-        var gridsAlreadyBuilt = _gridsBuilt;
-        EnsureGrids();
+        var gridAlreadyBuilt = _gridBuilt;
+        EnsureGrid();
 
-        // If the grids were just built by this very call, they already reflect
-        // moved.EntityId's current (== new, per EntityMoved's own contract) position --
-        // applying the remove-old/add-new adjustment on top would double-count it.
-        if (gridsAlreadyBuilt
-            && _sources.TryGetReadonly(moved.EntityId, out var movedSource)
-            && _gridsByEffectType.TryGetValue(movedSource.EffectType, out var movedGrid))
+        if (gridAlreadyBuilt && _sources.TryGetReadonly(moved.EntityId, out var movedSource))
         {
-            movedGrid.RemoveSource(moved.OldPosition, movedSource.AuraAndGlowStrength);
-            movedGrid.AddSource(moved.NewPosition, movedSource.AuraAndGlowStrength);
+            _auraGrid.RemoveSource(moved.OldPosition, movedSource.AuraAndGlowStrength, movedSource.EffectType);
+            _auraGrid.AddSource(moved.NewPosition, movedSource.AuraAndGlowStrength, movedSource.EffectType);
         }
 
         // Only a genuinely fresh entry (no exposure already running) grants anything here --
@@ -158,7 +153,7 @@ public sealed class StatusEffectAuraSystem : ISystem
 
     public void Update(EngineTime time, byte stripeIndex)
     {
-        EnsureGrids();
+        EnsureGrid();
         CountdownTicker.Tick(_exposures, _exposures.EntityIds, _pendingExposureRemovals, Tick);
     }
 
@@ -180,13 +175,13 @@ public sealed class StatusEffectAuraSystem : ISystem
         return false;
     }
 
-    /// <summary>Grants stacks from every effect-type grid applicable at position (each topped off via GrantStacks -- see its own doc comment), returning whether any effect type actually granted something (not just whether some grid's total was positive -- an unsupported effect type, see GrantStacks, contributes nothing here even if its grid says otherwise). Shared by OnEntityMoved's fresh-entry path and Update's periodic re-grant, which otherwise duplicated this exact loop.</summary>
+    /// <summary>Grants stacks from every effect type actually in use that's applicable at position (each topped off via GrantStacks -- see its own doc comment), returning whether any effect type actually granted something (not just whether some total was positive -- an unsupported effect type, see GrantStacks, contributes nothing here even if the grid says otherwise). Shared by OnEntityMoved's fresh-entry path and Update's periodic re-grant, which otherwise duplicated this exact loop.</summary>
     private bool TryGrantApplicableStacks(int entityId, Vector3Int position)
     {
         var anyGranted = false;
-        foreach (var (effectType, grid) in _gridsByEffectType)
+        foreach (var effectType in _effectTypesInUse)
         {
-            if (TotalStacksExcludingSelf(grid, entityId, position, effectType) is var totalStacks and > 0)
+            if (TotalStacksExcludingSelf(entityId, position, effectType) is var totalStacks and > 0)
             {
                 anyGranted |= GrantStacks(entityId, effectType, totalStacks);
             }
@@ -195,12 +190,12 @@ public sealed class StatusEffectAuraSystem : ISystem
         return anyGranted;
     }
 
-    /// <summary>The read-only half of TryGrantApplicableStacks -- whether any effect-type grid still has a positive contribution at position, without granting anything. Used where only "is this still in range of something" matters (ReEvaluateExposuresNear's removal check).</summary>
+    /// <summary>The read-only half of TryGrantApplicableStacks -- whether any effect type still has a positive contribution at position, without granting anything. Used where only "is this still in range of something" matters (ReEvaluateExposuresNear's removal check).</summary>
     private bool IsExposedToAny(int entityId, Vector3Int position)
     {
-        foreach (var (effectType, grid) in _gridsByEffectType)
+        foreach (var effectType in _effectTypesInUse)
         {
-            if (TotalStacksExcludingSelf(grid, entityId, position, effectType) > 0)
+            if (TotalStacksExcludingSelf(entityId, position, effectType) > 0)
             {
                 return true;
             }
@@ -209,9 +204,9 @@ public sealed class StatusEffectAuraSystem : ISystem
         return false;
     }
 
-    private int TotalStacksExcludingSelf(AuraGrid grid, int entityId, Vector3Int position, StatusEffectType effectType)
+    private int TotalStacksExcludingSelf(int entityId, Vector3Int position, StatusEffectType effectType)
     {
-        var totalStacks = grid.GetTotalStacksAt(position);
+        var totalStacks = _auraGrid.GetTotalStacksAt(position, effectType);
         if (_sources.TryGetReadonly(entityId, out var selfSource) && selfSource.EffectType == effectType)
         {
             totalStacks = Math.Max(0, totalStacks - selfSource.AuraAndGlowStrength);
@@ -269,7 +264,7 @@ public sealed class StatusEffectAuraSystem : ISystem
         return true;
     }
 
-    /// <summary>Removal-only re-check for occupants near a moving aura source -- see this class's own doc comment for why granting is not handled here. Each candidate's own check is now O(1) per effect type via the grids, not a nested box scan -- only the "who might be nearby" part still uses a box query, and only on this rare (no moving source exists today) path.</summary>
+    /// <summary>Removal-only re-check for occupants near a moving aura source -- see this class's own doc comment for why granting is not handled here. Each candidate's own check is now O(1) per effect type via the grid, not a nested box scan -- only the "who might be nearby" part still uses a box query, and only on this rare (no moving source exists today) path.</summary>
     private void ReEvaluateExposuresNear(Vector3Int center)
     {
         var boxWidth = _maxScanRadius * 2 + 1;

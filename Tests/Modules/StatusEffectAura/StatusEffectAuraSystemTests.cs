@@ -90,7 +90,7 @@ public sealed class StatusEffectAuraSystemTests
         return registry;
     }
 
-    /// <summary>AuraGrid only finds a source by scanning its TransformComponent (see StatusEffectAuraSystem.EnsureGrids) -- a source needs one set at its real position for any of these tests to see it, exactly as PlaceTerrainOnMap/PlaceEntityOnMap would set it for real in-game.</summary>
+    /// <summary>AuraGrid only finds a source by scanning its TransformComponent (see StatusEffectAuraSystem.EnsureGrid) -- a source needs one set at its real position for any of these tests to see it, exactly as PlaceTerrainOnMap/PlaceEntityOnMap would set it for real in-game.</summary>
     private static void AddSource(ComponentManager componentManager, int entityId, Vector3Int position, StatusEffectType effectType, int strength)
     {
         componentManager.GetPackedPool<StatusEffectAuraSourceComponent>().Add(entityId, new StatusEffectAuraSourceComponent(effectType, strength, Color.Orange));
