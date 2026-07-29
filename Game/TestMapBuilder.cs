@@ -15,7 +15,7 @@ namespace Game;
 
 /// <summary>
 /// Builds a test map across all three MapLayers: Ground (border walls, a cross hallway,
-/// dirt/lava terrain, a large wandering goblin population at two densities), UnderGround
+/// randomized lava/dirt/grass terrain, a large wandering goblin population at two densities), UnderGround
 /// (border walls and a randomized dirt/lava mixture), and Flying (scattered wandering
 /// Fairies) -- plus a handful of standalone multi-trait fixtures, via the Blueprint
 /// composition system.
@@ -35,6 +35,7 @@ public sealed class TestMapBuilder(EntityManager entityManager, ComponentManager
     private readonly Wall _wall = new();
     private readonly Dirt _dirt = new();
     private readonly Lava _lava = new();
+    private readonly Grass _grass = new();
     private readonly Goblin _goblin = new(mathUtility);
     private readonly Fairy _fairy = new(mathUtility);
     private readonly Engineer _engineer = new();
@@ -73,13 +74,10 @@ public sealed class TestMapBuilder(EntityManager entityManager, ComponentManager
                 }
                 else
                 {
-                    // Occasional lava patches instead of dirt -- uncommon by design.
-                    var isLava = row % 33 == 17 && column % 47 == 23;
+                    // Randomized ground terrain: lava 10%, dirt 45%, grass 45%.
                     BuildTerrainFromBlueprint(
                         world,
-                        isLava
-                            ? _lava
-                            : _dirt,
+                        PickGroundTerrain(),
                         column,
                         row,
                         TerrainLayer.Ground);
@@ -103,9 +101,9 @@ public sealed class TestMapBuilder(EntityManager entityManager, ComponentManager
                 // terrain -- MapWindow's background resolution only ever shows terrain color,
                 // never the creature standing on it, so the border cells need dedicated
                 // terrain of their own the same way Ground's isWallOrHallway branch already
-                // does) and a genuinely randomized dirt/lava mixture everywhere else, unlike
-                // Ground's sparse, deterministic lava patches (a fixed pattern one layer down
-                // would just look identical, not "random").
+                // does) and a genuinely randomized dirt/lava mixture everywhere else -- its own
+                // independent roll from Ground's lava/dirt/grass mix one layer up, so the two
+                // layers don't mirror each other.
                 if (isBorder)
                 {
                     BuildTerrainFromBlueprint(world, _stoneFloor, column, row, TerrainLayer.UnderGround);
@@ -170,6 +168,18 @@ public sealed class TestMapBuilder(EntityManager entityManager, ComponentManager
 
         ref var transform = ref componentManager.GetDirectPool<TransformComponent>().Get(entityId);
         world.PlaceTerrainOnMap(entityId, column, row, terrainLayer, ref transform);
+    }
+
+    /// <summary>Lava 10%, dirt 45%, grass 45% -- via a 0-19 roll (2/9/9 slices) so the 10% share lands exactly.</summary>
+    private IBlueprint PickGroundTerrain()
+    {
+        var roll = mathUtility.Next(0, 100);
+        return roll switch
+        {
+            < 1 => _lava,
+            < 40 => _dirt,
+            _ => _grass,
+        };
     }
 
     /// <summary>Same placement as BuildFromBlueprint, plus assigning one of the three even-rotation sizes.</summary>

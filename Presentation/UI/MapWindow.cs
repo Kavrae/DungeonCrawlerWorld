@@ -83,7 +83,7 @@ public sealed class MapWindow : Window
     private int _tileRows;
     private readonly int _tileDepth;
 
-    private const int BaseTileSizePixels = 18;
+    private const int BaseTileSizePixels = 36;
 
     private ZoomLevel _currentZoomLevel = ZoomLevel.Team;
     private static readonly Dictionary<ZoomLevel, Point> TileSizesByZoomLevel = new()
@@ -193,11 +193,11 @@ public sealed class MapWindow : Window
     {
         base.Initialize();
 
-        _mediumFont = FontService.GetFont(12);
-        _largeFont = FontService.GetFont(36);
-        _hugeFont = FontService.GetFont(54);
-        _tinyFont = FontService.GetFont(3); // ~1/3 of _mediumFont, for the tiny-entity grid.
-        _badgeFont = FontService.GetFont(6); // Double _tinyFont, for the up/down layer-occupancy badges -- legible at a glance without competing with the main glyph.
+        _mediumFont = FontService.GetFont(24);
+        _largeFont = FontService.GetFont(72);
+        _hugeFont = FontService.GetFont(108);
+        _tinyFont = FontService.GetFont(6); // ~1/3 of _mediumFont, for the tiny-entity grid.
+        _badgeFont = FontService.GetFont(12); // Double _tinyFont, for the up/down layer-occupancy badges -- legible at a glance without competing with the main glyph.
 
         UpdateTileSizes();
         UpdateMaxScrollPosition();
