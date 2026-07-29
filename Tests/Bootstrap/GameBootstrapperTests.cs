@@ -1,6 +1,6 @@
 using Engine.Math;
 using Game.Bootstrap;
-using Game.Modules.Energy.Components;
+using Game.Modules.Core.Components;
 using Game.Modules.Health.Components;
 using Game.World;
 using GameWorldModel = Game.World.World;
@@ -136,10 +136,10 @@ public sealed class GameBootstrapperTests
             // Mods.TestFixtures.dll also defines ReplacementHealthModule, which survives
             // dry-run and legitimately replaces HealthModule -- so HealthComponent itself
             // isn't a valid "rest of world still builds" signal here (see that module's doc
-            // comment). EnergyComponent is untouched by either fixture module.
+            // comment). ActionLockComponent is untouched by either fixture module.
             Assert.HasCount(1, result.Failures);
             Assert.Contains("ThrowingModule", result.Failures[0].Source);
-            Assert.IsTrue(result.EcsContext.ComponentManager.IsRegistered<EnergyComponent>());
+            Assert.IsTrue(result.EcsContext.ComponentManager.IsRegistered<ActionLockComponent>());
             var entityId = result.EcsContext.EntityManager.CreateEntity();
             Assert.AreEqual(0, entityId);
         }
@@ -163,10 +163,10 @@ public sealed class GameBootstrapperTests
             // ReplacementHealthModule shares the real HealthModule's Id and registers
             // nothing -- HealthComponent ending up unregistered is only possible if the mod
             // actually replaced the built-in HealthModule rather than coexisting with it.
-            // EnergyComponent registering normally confirms this replacement is selective,
-            // not a side effect of the whole world failing to build.
+            // ActionLockComponent registering normally confirms this replacement is
+            // selective, not a side effect of the whole world failing to build.
             Assert.IsFalse(result.EcsContext.ComponentManager.IsRegistered<HealthComponent>());
-            Assert.IsTrue(result.EcsContext.ComponentManager.IsRegistered<EnergyComponent>());
+            Assert.IsTrue(result.EcsContext.ComponentManager.IsRegistered<ActionLockComponent>());
         }
         finally
         {

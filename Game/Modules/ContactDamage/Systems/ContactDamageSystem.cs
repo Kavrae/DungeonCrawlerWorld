@@ -12,7 +12,7 @@ namespace Game.Modules.ContactDamage.Systems;
 /// Detects contact via EntityMoved (constructor subscription, same pattern WorldEventSync
 /// uses) and ticks ongoing exposure via Update, combined in one class since both operate on
 /// the same ContactDamageExposureComponent pool. StripeCount is deliberately 1, not the 10
-/// EnergyRechargeSystem/HealthRegenSystem use -- see BurningSystem's own doc comment for why:
+/// HealthRegenSystem/ActionLockSystem use -- see BurningSystem's own doc comment for why:
 /// the population (entities currently standing on a hazard tile) is expected to stay small,
 /// and striping would stretch "every N frames" into "every N * StripeCount real frames." At
 /// StripeCount 1 there's only ever one stripe anyway, so Update iterates _exposures.EntityIds

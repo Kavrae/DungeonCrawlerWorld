@@ -1,7 +1,6 @@
 using Engine.ECS.Components;
 using Engine.Math;
 using Game.Modules.Core.Components;
-using Game.Modules.Energy.Components;
 using Game.Modules.Health.Components;
 using Game.Modules.Movement.Components;
 using Game.Modules.Race.Components;
@@ -22,10 +21,6 @@ public sealed class Goblin(MathUtility mathUtility) : IBlueprint
 
     private const string Description = "Small, green and smart. What Goblins lack in physical strength they make up in pure spunk.";
 
-    private const short MaximumEnergy = 100;
-    private const short MinimumEnergyRecharge = 5;
-    private const short MaximumEnergyRecharge = 10;
-
     private const short MaximumHealth = 200;
     private const short HealthRegen = 2;
 
@@ -36,14 +31,10 @@ public sealed class Goblin(MathUtility mathUtility) : IBlueprint
         var personalName = PersonalNameOptions[mathUtility.Next(0, PersonalNameOptions.Length)];
         componentManager.Merge(entityId, new DisplayTextComponent($"{personalName} : {RaceName}", Description));
 
-        componentManager.Merge(entityId, new EnergyComponent(
-            (short)mathUtility.Next(0, MaximumEnergy),
-            (short)mathUtility.Next(MinimumEnergyRecharge, MaximumEnergyRecharge),
-            MaximumEnergy));
-
         componentManager.Merge(entityId, new GlyphComponent("g", Color.DarkGreen));
         componentManager.Merge(entityId, new HealthComponent((short)mathUtility.Next(1, MaximumHealth + 1), HealthRegen, MaximumHealth));
-        componentManager.Merge(entityId, new MovementComponent(MovementMode.Random, 40, null, null));
+        componentManager.Merge(entityId, new MovementComponent(MovementMode.Random, 54, null, null));
+        componentManager.Merge(entityId, new ActionLockComponent(totalLockFrames: 0, lockFramesRemaining: 0));
 
         componentManager.Merge(entityId, new TransformComponent(
             new Vector3Int(-1, -1, (int)MapLayer.Ground), new Vector2Byte(1, 1)));

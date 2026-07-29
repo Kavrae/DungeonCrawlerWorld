@@ -179,15 +179,17 @@ public sealed class MapWindowTests
     /// <summary>
     /// WASD moves the player character (through MovementComponent.NextMapPosition, like any
     /// other entity -- see MapWindow.TryQueuePlayerMove), not the camera. A fresh press moves
-    /// immediately (no initial delay), and the camera automatically recenters on the queued
-    /// move's target (not a stale re-read of TransformComponent, since MovementSystem hasn't
-    /// actually applied the move yet at input time).
+    /// immediately (no initial delay), but the camera must not recenter until the queued move
+    /// actually lands -- MovementSystem applies it later (possibly much later, if the player's
+    /// action lock is still counting down from a previous move), and snapping the camera ahead
+    /// of the entity used to make the camera visibly jump before the glyph caught up to it.
     /// </summary>
     [TestMethod]
-    public void HandleHotkeys_PressingD_MovesPlayerImmediatelyAndCameraFollows()
+    public void HandleHotkeys_PressingD_MovesPlayerImmediatelyButCameraWaitsForTheActualMove()
     {
         var (_, mapViewState, mapWindow, componentManager) = BuildMapWindowWithPlayer(300, 300, 1, new Vector3Int(100, 100, 0));
         var movementPool = componentManager.GetPackedPool<MovementComponent>();
+        var transformPool = componentManager.GetDirectPool<TransformComponent>();
 
         // Team zoom = 18px tiles, viewport is 70 columns x 44 rows; column/row 35/22 is
         // screen-center, so clicking there resolves to the player's own position once the
@@ -199,7 +201,14 @@ public sealed class MapWindowTests
         Assert.AreEqual(new Vector3Int(101, 100, 0), movementPool.GetReadonly(PlayerEntityId).NextMapPosition, "A fresh press must move immediately, not wait out an initial cooldown.");
 
         mapWindow.SelectMapNodes(new Point(35 * 18 + 1, 22 * 18 + 1));
-        Assert.AreEqual(new Point(101, 100), mapViewState.SelectedMapNodePosition, "Camera should follow the queued move's target position.");
+        Assert.AreEqual(new Point(100, 100), mapViewState.SelectedMapNodePosition, "Camera must not follow a merely-queued target -- MovementSystem hasn't moved the entity yet.");
+
+        // Simulate MovementSystem actually applying the move (e.g. once the action lock clears).
+        transformPool.TryUpdate(PlayerEntityId, static (ref TransformComponent transform) => transform.Position = new Vector3Int(101, 100, 0));
+        mapWindow.Update(new GameTime());
+
+        mapWindow.SelectMapNodes(new Point(35 * 18 + 1, 22 * 18 + 1));
+        Assert.AreEqual(new Point(101, 100), mapViewState.SelectedMapNodePosition, "Camera should follow once the entity's own position actually changes.");
     }
 
     /// <summary>

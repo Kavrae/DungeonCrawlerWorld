@@ -9,7 +9,6 @@ using Game.Blueprints.Terrain;
 using Game.Modules;
 using Game.Modules.Core;
 using Game.Modules.Core.Components;
-using Game.Modules.Energy;
 using Game.Modules.Health;
 using Game.Modules.Movement;
 using Game.World;
@@ -38,7 +37,6 @@ public sealed class SelectionWindowContentTests
         IReadOnlyList<IModule> modules =
         [
             new CoreModule(),
-            new EnergyModule(),
             new HealthModule(),
             movementModule,
         ];

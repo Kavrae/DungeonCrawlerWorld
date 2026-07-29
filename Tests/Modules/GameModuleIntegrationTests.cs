@@ -5,8 +5,6 @@ using Engine.Modules;
 using Game.Modules;
 using Game.Modules.Core;
 using Game.Modules.Core.Components;
-using Game.Modules.Energy;
-using Game.Modules.Energy.Components;
 using Game.Modules.Health;
 using Game.Modules.Health.Components;
 using Game.Modules.Movement;
@@ -18,7 +16,7 @@ namespace Tests.Modules;
 /// <summary>
 /// Validates the four real Phase 3 modules (not the toy modules in
 /// Tests.Bootstrap.BootstrapperTests) register and schedule together correctly through the
-/// real Bootstrapper, including MovementModule's declared dependency on Core and Energy.
+/// real Bootstrapper, including MovementModule's declared dependency on Core.
 /// </summary>
 [TestClass]
 public sealed class GameModuleIntegrationTests
@@ -39,7 +37,6 @@ public sealed class GameModuleIntegrationTests
         IReadOnlyList<IModule> modules =
         [
             new CoreModule(),
-            new EnergyModule(),
             new HealthModule(),
             CreateConfiguredMovementModule(world, mathUtility),
         ];
@@ -50,7 +47,7 @@ public sealed class GameModuleIntegrationTests
         Assert.IsTrue(ecsContext.ComponentManager.IsRegistered<DisplayTextComponent>());
         Assert.IsTrue(ecsContext.ComponentManager.IsRegistered<GlyphComponent>());
         Assert.IsTrue(ecsContext.ComponentManager.IsRegistered<BackgroundComponent>());
-        Assert.IsTrue(ecsContext.ComponentManager.IsRegistered<EnergyComponent>());
+        Assert.IsTrue(ecsContext.ComponentManager.IsRegistered<ActionLockComponent>());
         Assert.IsTrue(ecsContext.ComponentManager.IsRegistered<HealthComponent>());
         Assert.IsTrue(ecsContext.ComponentManager.IsRegistered<MovementComponent>());
     }
@@ -59,7 +56,7 @@ public sealed class GameModuleIntegrationTests
     public void Build_ModulesInReverseDependencyOrder_StillSucceeds()
     {
         // Bootstrapper must topologically sort by declared Dependencies, not trust
-        // caller-supplied order -- pass Movement (which depends on Core and Energy) first.
+        // caller-supplied order -- pass Movement (which depends on Core) first.
         var world = new Game.World.World(new Map(new Vector3Int(5, 5, 1)));
         var mathUtility = new MathUtility();
 
@@ -67,7 +64,6 @@ public sealed class GameModuleIntegrationTests
         [
             CreateConfiguredMovementModule(world, mathUtility),
             new HealthModule(),
-            new EnergyModule(),
             new CoreModule(),
         ];
 
@@ -85,7 +81,6 @@ public sealed class GameModuleIntegrationTests
         IReadOnlyList<IModule> modules =
         [
             new CoreModule(),
-            new EnergyModule(),
             new HealthModule(),
             CreateConfiguredMovementModule(world, mathUtility),
         ];
@@ -96,7 +91,7 @@ public sealed class GameModuleIntegrationTests
         var transform = new TransformComponent(new Vector3Int(2, 2, 0), new Vector2Byte(1, 1));
         ecsContext.ComponentManager.GetDirectPool<TransformComponent>().Add(entityId, transform);
         world.PlaceEntityOnMap(entityId, transform.Position, ref transform);
-        ecsContext.ComponentManager.GetPackedPool<EnergyComponent>().Add(entityId, new EnergyComponent(100, 5, 100));
+        ecsContext.ComponentManager.GetPackedPool<ActionLockComponent>().Add(entityId, new ActionLockComponent(totalLockFrames: 0, lockFramesRemaining: 0));
         ecsContext.ComponentManager.GetPackedPool<HealthComponent>().Add(entityId, new HealthComponent(100, 10, 100));
         ecsContext.ComponentManager.GetPackedPool<MovementComponent>().Add(entityId, new MovementComponent(MovementMode.Random, 10, null, null));
 

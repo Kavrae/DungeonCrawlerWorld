@@ -1,16 +1,13 @@
 using Engine.ECS.Components;
+using Engine.Math;
 using Game.Modules.Class.Components;
 using Game.Modules.Core.Components;
-using Game.Modules.Energy.Components;
+using Game.Modules.Movement.Components;
 
 namespace Game.Blueprints.Classes;
 
 /// <summary>
-/// Engineers have 5% more energy and energy recharge than their race baseline. Order-
-/// independent: if a race blueprint already set EnergyComponent, Engineer boosts it in
-/// place; if not (Engineer built standalone, or composed before a race), Engineer merges in
-/// its own baseline instead, so the class's mechanic still functions rather than silently
-/// doing nothing because of composition order.
+/// Engineers act 10% more often than their race baseline
 /// </summary>
 public sealed class Engineer : IBlueprint
 {
@@ -18,25 +15,23 @@ public sealed class Engineer : IBlueprint
     private const string ClassName = "Engineer";
     private const string Description = "TODO default engineer description";
 
-    private const short BaselineCurrentEnergy = 50;
-    private const short BaselineEnergyRecharge = 5;
-    private const short BaselineMaximumEnergy = 100;
+    private const short BaselineActionCooldownFrames = 60;
 
     public void Build(ComponentManager componentManager, int entityId)
     {
         componentManager.Merge(entityId, new ClassComponent(ClassId, ClassName, Description));
 
-        if (componentManager.GetPackedPool<EnergyComponent>().Has(entityId))
+        if (componentManager.GetPackedPool<MovementComponent>().Has(entityId))
         {
-            componentManager.TryUpdate(entityId, static (ref EnergyComponent energyComponent) =>
+            componentManager.TryUpdate(entityId, static (ref MovementComponent movementComponent) =>
             {
-                energyComponent.MaximumEnergy = (short)(energyComponent.MaximumEnergy * 1.05m);
-                energyComponent.EnergyRecharge = (short)(energyComponent.EnergyRecharge * 1.05m);
+                movementComponent.ActionCooldownFrames = MathUtility.ClampShort((short)(movementComponent.ActionCooldownFrames * 0.9m), 1, short.MaxValue);
             });
         }
         else
         {
-            componentManager.Merge(entityId, new EnergyComponent(BaselineCurrentEnergy, BaselineEnergyRecharge, BaselineMaximumEnergy));
+            componentManager.Merge(entityId, new MovementComponent(MovementMode.Random, BaselineActionCooldownFrames, null, null));
+            componentManager.Merge(entityId, new ActionLockComponent(totalLockFrames: 0, lockFramesRemaining: 0));
         }
 
         componentManager.Merge(entityId, new DisplayTextComponent(ClassName, Description));

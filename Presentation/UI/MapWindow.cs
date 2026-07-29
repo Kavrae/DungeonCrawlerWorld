@@ -62,6 +62,8 @@ public sealed class MapWindow : Window
 
     private bool _cameraFollowsPlayer = true;
 
+    private Vector3Int _lastKnownPlayerPosition;
+
     private Point _rightDragStartScrollPosition;
 
     private Vector2 _renderPixelOffset;
@@ -205,10 +207,26 @@ public sealed class MapWindow : Window
         if (_transformPool.TryGetReadonly(_world.PlayerEntityId, out var playerTransform))
         {
             SnapCameraToPlayer(playerTransform.Position);
+            _lastKnownPlayerPosition = playerTransform.Position;
         }
         else
         {
             ResetBackgroundColorCache();
+        }
+    }
+
+    public override void Update(GameTime gameTime)
+    {
+        base.Update(gameTime);
+
+        if (_transformPool.TryGetReadonly(_world.PlayerEntityId, out var playerTransform) && playerTransform.Position != _lastKnownPlayerPosition)
+        {
+            _lastKnownPlayerPosition = playerTransform.Position;
+
+            if (_cameraFollowsPlayer)
+            {
+                CenterCameraOn(playerTransform.Position);
+            }
         }
     }
 
@@ -854,7 +872,7 @@ public sealed class MapWindow : Window
         }
 
         // Only queue a new move while at rest -- avoids redirecting a move that's already
-        // pending (e.g. still waiting on MovementSystem's energy gate).
+        // pending (e.g. still waiting on MovementSystem's action lock).
         var isAtRest = movementComponent.NextMapPosition is null || movementComponent.NextMapPosition.Value == transformComponent.Position;
         if (!isAtRest)
         {
@@ -872,11 +890,6 @@ public sealed class MapWindow : Window
         {
             movement.NextMapPosition = target;
         });
-
-        if (_cameraFollowsPlayer)
-        {
-            CenterCameraOn(candidate);
-        }
     }
 
     private void CenterCameraOn(Vector3Int position)

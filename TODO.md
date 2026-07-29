@@ -59,7 +59,7 @@ Item interactions, storage rules, restricted items, etc. Governs how the Engine-
 
 #### Melee attack implementation
 
-For NPCs and the player. Attacking uses energy, creating a tactical decision between moving more vs. attacking more. Can target any entity one tile away that has physical collision -- even entities without hit points, since this allows status effects to be applied to otherwise-immortal entities. Depends on the Engine-layer generic status-effect system above for the "immortal but affectable" case.
+For NPCs and the player. Attacking sets the same shared ActionLockComponent that movement sets on a successful move, creating a tactical decision between moving more vs. attacking more -- choosing to attack this window means not moving this window, and vice versa. Can target any entity one tile away that has physical collision -- even entities without hit points, since this allows status effects to be applied to otherwise-immortal entities. Depends on the Engine-layer generic status-effect system above for the "immortal but affectable" case.
 
 ### Low Priority
 

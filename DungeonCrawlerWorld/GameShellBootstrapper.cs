@@ -30,6 +30,7 @@ public static class GameShellBootstrapper
 
     private const float DebugWindowHeight = 24f;
     private const float SelectionWindowWidth = 300f;
+    private const float ActionLockGap = 8f;
 
     public static GameShellContext Build(PresentationContext presentation, World world, EcsContext ecsContext, Vector2 screenSize)
     {
@@ -164,6 +165,21 @@ public static class GameShellBootstrapper
         playerHealthBarWindow.SetContent(new PlayerHealthBarContent(world, ecsContext.ComponentManager));
         playerHealthBarWindow.Initialize();
         hudWindows.Add(playerHealthBarWindow);
+
+        var actionLockWindow = presentation.WindowService.CreateWindow<Window>(null, new WindowOptions
+        {
+            Layout = new WindowLayoutOptions
+            {
+                RelativePosition = new Vector2(screenSize.X - PlayerHealthBarContent.Size.X - HudMetrics.Margin.X - ActionLockContent.Size.X - ActionLockGap, HudMetrics.Margin.Y),
+                Size = ActionLockContent.Size,
+                DisplayMode = WindowDisplayMode.Fixed,
+                IsTransparent = true,
+            },
+            Chrome = new WindowChromeOptions { ShowTitle = false, ShowBorder = true, BorderStyle = BorderStyle.Outset, CanUserFocus = false },
+        });
+        actionLockWindow.SetContent(new ActionLockContent(world, ecsContext.ComponentManager, presentation.FontService));
+        actionLockWindow.Initialize();
+        hudWindows.Add(actionLockWindow);
 
         var playerStatusEffectsWindow = presentation.WindowService.CreateWindow<Window>(null, new WindowOptions
         {

@@ -13,10 +13,9 @@ using Game.Modules.Class;
 using Game.Modules.Class.Components;
 using Game.Modules.Core;
 using Game.Modules.Core.Components;
-using Game.Modules.Energy;
-using Game.Modules.Energy.Components;
 using Game.Modules.Health;
 using Game.Modules.Movement;
+using Game.Modules.Movement.Components;
 using Game.Modules.Race;
 using Game.Modules.Race.Components;
 using Game.World;
@@ -37,7 +36,6 @@ public sealed class CompositeBlueprintTests
         IReadOnlyList<IModule> modules =
         [
             new CoreModule(),
-            new EnergyModule(),
             new HealthModule(),
             movementModule,
             new RaceModule(),
@@ -67,11 +65,11 @@ public sealed class CompositeBlueprintTests
         Assert.IsTrue(ecsContext.ComponentManager.GetMultiPool<RaceComponent>().Has(entityId));
         Assert.IsTrue(ecsContext.ComponentManager.GetMultiPool<ClassComponent>().Has(entityId));
 
-        // Goblin's fixed MaximumEnergy ceiling (100) with Engineer's own 5% bonus on top --
-        // same composition CompositeBlueprint is meant to replace GoblinEngineerBlueprint's
-        // hand-written "goblin.Build then engineer.Build" with.
-        var energy = ecsContext.ComponentManager.GetPackedPool<EnergyComponent>().GetReadonly(entityId);
-        Assert.AreEqual((short)105, energy.MaximumEnergy);
+        // Goblin's fixed ActionCooldownFrames (54) with Engineer's own 10% cooldown reduction
+        // on top -- same composition CompositeBlueprint is meant to replace
+        // GoblinEngineerBlueprint's hand-written "goblin.Build then engineer.Build" with.
+        var movement = ecsContext.ComponentManager.GetPackedPool<MovementComponent>().GetReadonly(entityId);
+        Assert.AreEqual((short)(54 * 0.9m), movement.ActionCooldownFrames);
     }
 
     [TestMethod]

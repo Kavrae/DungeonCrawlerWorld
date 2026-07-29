@@ -4,8 +4,6 @@ using Engine.Events;
 using Engine.Math;
 using Game.Modules.Core;
 using Game.Modules.Core.Components;
-using Game.Modules.Energy;
-using Game.Modules.Energy.Components;
 using Game.Modules.Movement.Components;
 using Game.Modules.Movement.Systems;
 using Game.World;
@@ -21,7 +19,7 @@ public sealed class MovementModule : IGameModule
 {
     public Guid Id { get; } = new("d9f6a1c4-8b2e-4f3a-9c1d-000000000004");
 
-    public IReadOnlyList<Type> Dependencies { get; } = [typeof(CoreModule), typeof(EnergyModule)];
+    public IReadOnlyList<Type> Dependencies { get; } = [typeof(CoreModule)];
 
     private IMapQuery _mapQuery = null!;
     private MathUtility _mathUtility = null!;
@@ -39,7 +37,7 @@ public sealed class MovementModule : IGameModule
         componentManager.RegisterPackedPool<MovementComponent>(static (ref existing, incoming) =>
         {
             existing.MovementMode = (MovementMode)System.Math.Max((byte)existing.MovementMode, (byte)incoming.MovementMode);
-            existing.EnergyToMove = (short)((existing.EnergyToMove + incoming.EnergyToMove) / 2);
+            existing.ActionCooldownFrames = (short)((existing.ActionCooldownFrames + incoming.ActionCooldownFrames) / 2);
             existing.FramesToWait = (short)((existing.FramesToWait + incoming.FramesToWait) / 2);
             existing.NextMapPosition = incoming.NextMapPosition;
             existing.TargetMapPosition = incoming.TargetMapPosition;
@@ -50,7 +48,7 @@ public sealed class MovementModule : IGameModule
     {
         systemManager.Register(new MovementSystem(
             componentManager.GetDirectPool<TransformComponent>(),
-            componentManager.GetPackedPool<EnergyComponent>(),
+            componentManager.GetPackedPool<ActionLockComponent>(),
             componentManager.GetPackedPool<MovementComponent>(),
             _mapQuery,
             _mathUtility,

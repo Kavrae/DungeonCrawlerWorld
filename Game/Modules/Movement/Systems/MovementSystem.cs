@@ -3,7 +3,6 @@ using Engine.ECS.Systems;
 using Engine.Events;
 using Engine.Math;
 using Game.Modules.Core.Components;
-using Game.Modules.Energy.Components;
 using Game.Modules.Movement.Components;
 using Game.World;
 
@@ -17,13 +16,15 @@ namespace Game.Modules.Movement.Systems;
 /// </summary>
 public sealed class MovementSystem : ISystem
 {
-    public byte StripeCount => 15;
+    private const byte StripeCountValue = 15;
 
-    private const short FramesToWaitIfNoOptions = 10;
+    public byte StripeCount => StripeCountValue;
+
+    private const short FramesToWaitIfNoOptions = 120;
     private static readonly Vector2Byte TransformSize1 = new(1, 1);
 
     private readonly DirectComponentPool<TransformComponent> _transformComponents;
-    private readonly PackedComponentPool<EnergyComponent> _energyComponents;
+    private readonly PackedComponentPool<ActionLockComponent> _actionLocks;
     private readonly PackedComponentPool<MovementComponent> _movementComponents;
     private readonly IMapQuery _mapQuery;
     private readonly MathUtility _mathUtility;
@@ -32,14 +33,14 @@ public sealed class MovementSystem : ISystem
 
     public MovementSystem(
         DirectComponentPool<TransformComponent> transformComponents,
-        PackedComponentPool<EnergyComponent> energyComponents,
+        PackedComponentPool<ActionLockComponent> actionLocks,
         PackedComponentPool<MovementComponent> movementComponents,
         IMapQuery mapQuery,
         MathUtility mathUtility,
         EventBus eventBus)
     {
         _transformComponents = transformComponents;
-        _energyComponents = energyComponents;
+        _actionLocks = actionLocks;
         _movementComponents = movementComponents;
         _mapQuery = mapQuery;
         _mathUtility = mathUtility;
@@ -54,28 +55,24 @@ public sealed class MovementSystem : ISystem
     {
         foreach (var entityId in _stripeSet.GetBucket(stripeIndex))
         {
-            if (!_energyComponents.TryGetReadonly(entityId, out var energyComponent) ||
+            ref readonly var movementComponent = ref _movementComponents.GetReadonly(entityId);
+
+            if (movementComponent.FramesToWait > 0)
+            {
+                _movementComponents.TryUpdate(entityId, static (ref MovementComponent movementComponent) =>
+                {
+                    movementComponent.FramesToWait = (short)Math.Max(0, movementComponent.FramesToWait - StripeCountValue);
+                });
+                continue;
+            }
+
+            if (ActionLockGate.IsBlocked(_actionLocks, entityId) ||
                 !_transformComponents.TryGetReadonly(entityId, out var transformComponent))
             {
                 continue;
             }
 
-            ref readonly var movementComponent = ref _movementComponents.GetReadonly(entityId);
-            if (movementComponent.FramesToWait > 0)
-            {
-                _movementComponents.TryUpdate(entityId, static (ref movementComponent) =>
-                {
-                    movementComponent.FramesToWait -= 1;
-                });
-                continue;
-            }
-
             if (!_mapQuery.IsOnMap(transformComponent.Position))
-            {
-                continue;
-            }
-
-            if (energyComponent.CurrentEnergy < movementComponent.EnergyToMove)
             {
                 continue;
             }
@@ -107,9 +104,9 @@ public sealed class MovementSystem : ISystem
         // Reaching this method at all means the entity just arrived at NextMapPosition (see
         // this method's only caller) with nothing new queued, so NextMapPosition must be
         // cleared here -- otherwise it stays set to the position the entity is already
-        // standing on, and the very next Update call where energy/FramesToWait allow it would
+        // standing on, and the very next Update call where the action lock allows it would
         // re-run TryMoveToNextMapPosition against that same value: a same-position "move" that
-        // deducts energy and publishes a spurious EntityMoved(old == new) every cycle,
+        // sets the action lock and publishes a spurious EntityMoved(old == new) every cycle,
         // repeating forever instead of the entity going idle until a real move is queued. This
         // was previously harmless (only WorldEventSync/PlayerActivityLog consumed EntityMoved,
         // both tolerant of Old == New) but became consequential once EntityMoved-driven
@@ -120,25 +117,29 @@ public sealed class MovementSystem : ISystem
 
     /// <summary>
     /// Attempts to move toward the selected node. CanMove is re-checked here in case
-    /// another entity has already moved into the space since it was selected. Energy is
-    /// consumed on the move itself, not during path selection.
+    /// another entity has already moved into the space since it was selected. The action
+    /// lock is set on the move itself, not during path selection.
     /// </summary>
     private void TryMoveToNextMapPosition(int entityId, MovementComponent movementComponent, TransformComponent transformComponent)
     {
-        var oldPosition = transformComponent.Position;
         var newPosition = movementComponent.NextMapPosition!.Value;
 
-        _transformComponents.TryUpdate(entityId, newPosition, static (ref transformComponent, newPosition) =>
+        if (!CanMove(newPosition, transformComponent.Size, entityId, _mapQuery.IsBlocking(entityId)))
+        {
+            _movementComponents.TryUpdate(entityId, static (ref MovementComponent m) => m.NextMapPosition = null);
+            return;
+        }
+
+        var oldPosition = transformComponent.Position;
+
+        if (_transformComponents.TryUpdate(entityId, newPosition, static (ref transformComponent, newPosition) =>
         {
             transformComponent.Position = newPosition;
-        });
-
-        _energyComponents.TryUpdate(entityId, movementComponent.EnergyToMove, static (ref energyComponent, energyToMove) =>
+        }))
         {
-            energyComponent.CurrentEnergy -= energyToMove;
-        });
-
-        _eventBus.Publish(new EntityMoved(entityId, oldPosition, newPosition, transformComponent.Size));
+            ActionLockGate.Lock(_actionLocks, entityId, movementComponent.ActionCooldownFrames);
+            _eventBus.Publish(new EntityMoved(entityId, oldPosition, newPosition, transformComponent.Size));
+        }
     }
 
     /// <summary>
@@ -193,6 +194,9 @@ public sealed class MovementSystem : ISystem
     /// Picks a random neighboring node to move to. The node must be on the map and
     /// unoccupied. Directions immediately after the first failed attempt are slightly more
     /// likely to be selected than a uniform choice would give (see MathUtility.RandomExceptFor).
+    /// A search that exhausts all four directions sets the entity's own FramesToWait, not the
+    /// shared action lock -- failing to find a spot isn't an action, so it shouldn't consume
+    /// the same budget a real move or a future melee attack would.
     /// </summary>
     private void SetRandomMapPosition(int entityId, MovementComponent movementComponent, TransformComponent transformComponent)
     {
@@ -244,7 +248,7 @@ public sealed class MovementSystem : ISystem
         }
         while (failedIndexCount < 4);
 
-        _movementComponents.TryUpdate(entityId, FramesToWaitIfNoOptions, static (ref movementComponent, framesToWait) =>
+        _movementComponents.TryUpdate(entityId, FramesToWaitIfNoOptions, static (ref MovementComponent movementComponent, short framesToWait) =>
         {
             movementComponent.FramesToWait = framesToWait;
         });

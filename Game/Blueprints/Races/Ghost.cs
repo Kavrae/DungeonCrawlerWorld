@@ -1,7 +1,6 @@
 using Engine.ECS.Components;
 using Engine.Math;
 using Game.Modules.Core.Components;
-using Game.Modules.Energy.Components;
 using Game.Modules.Movement.Components;
 using Game.Modules.Race.Components;
 using Microsoft.Xna.Framework;
@@ -21,10 +20,6 @@ public sealed class Ghost(MathUtility mathUtility) : IBlueprint
 
     private const string Description = "A wandering spirit with no physical form. Used to test melee status effects against a target with no Health to damage.";
 
-    private const short MaximumEnergy = 100;
-    private const short MinimumEnergyRecharge = 10;
-    private const short MaximumEnergyRecharge = 100;
-
     /// <summary>ᗣ (U+15A3, Canadian Aboriginal Syllabics). Requires Symbola-Emoji.ttf loaded as a fallback font (see FontService)</summary>
     private const string Glyph = "ᗣ";
 
@@ -35,20 +30,11 @@ public sealed class Ghost(MathUtility mathUtility) : IBlueprint
         var personalName = PersonalNameOptions[mathUtility.Next(0, PersonalNameOptions.Length)];
         componentManager.Merge(entityId, new DisplayTextComponent($"{personalName} : {RaceName}", Description));
 
-        componentManager.Merge(entityId, new EnergyComponent(
-            (short)mathUtility.Next(0, MaximumEnergy),
-            (short)mathUtility.Next(MinimumEnergyRecharge, MaximumEnergyRecharge),
-            MaximumEnergy));
-
         componentManager.Merge(entityId, new GlyphComponent(Glyph, Color.Blue));
-        componentManager.Merge(entityId, new MovementComponent(MovementMode.Random, 15, null, null));
-
-        // Z defaults to Ground, like Goblin's own placeholder -- TestMapBuilder.PlaceAt
-        // preserves whatever Z a blueprint sets (only X/Y are placeholders), so a caller
-        // wanting Ghosts on UnderGround/Flying instead should place via
-        // BuildFromBlueprintAtLayer, the same way Fairy is placed Flying-only today.
+        componentManager.Merge(entityId, new MovementComponent(MovementMode.Random, 48, null, null));
+        componentManager.Merge(entityId, new ActionLockComponent(totalLockFrames: 0, lockFramesRemaining: 0));
         componentManager.Merge(entityId, new TransformComponent(
-            new Vector3Int(0, 0, (int)MapLayer.Ground), new Vector2Byte(1, 1)));
+    new Vector3Int(0, 0, (int)MapLayer.Ground), new Vector2Byte(1, 1)));
 
         componentManager.Merge(entityId, new OccupancyComponent(isTiny: false, isPhasing: true));
     }

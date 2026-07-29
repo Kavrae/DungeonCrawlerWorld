@@ -7,10 +7,9 @@ using Engine.Modules;
 using Game.Modules;
 using Game.Modules.Core;
 using Game.Modules.Core.Components;
-using Game.Modules.Energy;
-using Game.Modules.Energy.Components;
-using Game.Modules.Energy.Systems;
 using Game.Modules.Health;
+using Game.Modules.Health.Components;
+using Game.Modules.Health.Systems;
 using Game.Modules.Movement;
 using Game.World;
 
@@ -28,26 +27,26 @@ namespace Tests.Modules;
 public sealed class EntityStripingTests
 {
     /// <summary>
-    /// Deep correctness check against the real EnergyRechargeSystem: a population that
+    /// Deep correctness check against the real HealthRegenSystem: a population that
     /// doesn't divide evenly by StripeCount (23 entities, 10 stripes) must still have every
     /// entity touched exactly once per full cycle, with each individual frame touching only
     /// ceil(23/10)=3 or floor(23/10)=2 entities -- never the whole population at once.
     /// </summary>
     [TestMethod]
-    public void EnergyRechargeSystem_OverOneFullCycle_TouchesEveryEntityExactlyOnceWithBoundedPerFrameWork()
+    public void HealthRegenSystem_OverOneFullCycle_TouchesEveryEntityExactlyOnceWithBoundedPerFrameWork()
     {
         const int entityCount = 23;
-        var pool = new PackedComponentPool<EnergyComponent>(entityCount, entityCount,
+        var pool = new PackedComponentPool<HealthComponent>(entityCount, entityCount,
             static (ref existing, incoming) => existing = incoming);
 
         for (var entityId = 0; entityId < entityCount; entityId++)
         {
-            pool.Add(entityId, new EnergyComponent(currentEnergy: 0, energyRecharge: 1, maximumEnergy: 1000));
+            pool.Add(entityId, new HealthComponent(currentHealth: 0, healthRegen: 1, maximumHealth: 1000));
         }
 
-        var system = new EnergyRechargeSystem(pool);
+        var system = new HealthRegenSystem(pool);
         var touchCountByEntityId = new int[entityCount];
-        var previousEnergy = new short[entityCount];
+        var previousHealth = new short[entityCount];
 
         for (var frame = 0; frame < system.StripeCount; frame++)
         {
@@ -56,12 +55,12 @@ public sealed class EntityStripingTests
             var touchedThisFrame = 0;
             for (var entityId = 0; entityId < entityCount; entityId++)
             {
-                var currentEnergy = pool.GetReadonly(entityId).CurrentEnergy;
-                if (currentEnergy != previousEnergy[entityId])
+                var currentHealth = pool.GetReadonly(entityId).CurrentHealth;
+                if (currentHealth != previousHealth[entityId])
                 {
                     touchCountByEntityId[entityId]++;
                     touchedThisFrame++;
-                    previousEnergy[entityId] = currentEnergy;
+                    previousHealth[entityId] = currentHealth;
                 }
             }
 
@@ -86,39 +85,39 @@ public sealed class EntityStripingTests
     /// and not twice, and entities 0-8 (in unrelated stripes) must be completely unaffected.
     /// </summary>
     [TestMethod]
-    public void EnergyRechargeSystem_EntityRemovedMidCycle_DoesNotCorruptOtherStripes()
+    public void HealthRegenSystem_EntityRemovedMidCycle_DoesNotCorruptOtherStripes()
     {
-        var pool = new PackedComponentPool<EnergyComponent>(30, 30,
+        var pool = new PackedComponentPool<HealthComponent>(30, 30,
             static (ref existing, incoming) => existing = incoming);
 
         for (var entityId = 0; entityId < 10; entityId++)
         {
-            pool.Add(entityId, new EnergyComponent(currentEnergy: 0, energyRecharge: 1, maximumEnergy: 1000));
+            pool.Add(entityId, new HealthComponent(currentHealth: 0, healthRegen: 1, maximumHealth: 1000));
         }
-        pool.Add(19, new EnergyComponent(currentEnergy: 0, energyRecharge: 1, maximumEnergy: 1000)); // Stripe 9, alongside entity 9.
+        pool.Add(19, new HealthComponent(currentHealth: 0, healthRegen: 1, maximumHealth: 1000)); // Stripe 9, alongside entity 9.
 
-        var system = new EnergyRechargeSystem(pool);
+        var system = new HealthRegenSystem(pool);
         var touchCountByEntityId = new Dictionary<int, int>();
-        var previousEnergy = new Dictionary<int, short> { [19] = 0 };
+        var previousHealth = new Dictionary<int, short> { [19] = 0 };
         for (var entityId = 0; entityId < 10; entityId++)
         {
-            previousEnergy[entityId] = 0;
+            previousHealth[entityId] = 0;
         }
 
         void RecordTouches()
         {
-            foreach (var entityId in previousEnergy.Keys.ToArray())
+            foreach (var entityId in previousHealth.Keys.ToArray())
             {
                 if (!pool.Has(entityId))
                 {
                     continue;
                 }
 
-                var currentEnergy = pool.GetReadonly(entityId).CurrentEnergy;
-                if (currentEnergy != previousEnergy[entityId])
+                var currentHealth = pool.GetReadonly(entityId).CurrentHealth;
+                if (currentHealth != previousHealth[entityId])
                 {
                     touchCountByEntityId[entityId] = touchCountByEntityId.GetValueOrDefault(entityId) + 1;
-                    previousEnergy[entityId] = currentEnergy;
+                    previousHealth[entityId] = currentHealth;
                 }
             }
         }
@@ -162,13 +161,12 @@ public sealed class EntityStripingTests
         IReadOnlyList<IModule> modules =
         [
             new CoreModule(),
-            new EnergyModule(),
             new HealthModule(),
             movementModule,
         ];
 
         var ecsContext = Bootstrapper.Build(modules, initialEntityCapacity: 500, initialComponentCapacity: 500);
-        var energyPool = ecsContext.ComponentManager.GetPackedPool<EnergyComponent>();
+        var healthPool = ecsContext.ComponentManager.GetPackedPool<HealthComponent>();
 
         const int entityCount = 200;
         for (var x = 0; x < entityCount; x++)
@@ -178,13 +176,13 @@ public sealed class EntityStripingTests
             ecsContext.ComponentManager.GetDirectPool<TransformComponent>().Add(entityId, transform);
             world.PlaceEntityOnMap(entityId, transform.Position, ref transform);
 
-            energyPool.Add(entityId, new EnergyComponent(currentEnergy: 0, energyRecharge: 5, maximumEnergy: 1000));
-            ecsContext.ComponentManager.GetPackedPool<Game.Modules.Health.Components.HealthComponent>().Add(entityId, new Game.Modules.Health.Components.HealthComponent(100, 10, 100));
-
-            // Deliberately no MovementComponent: MovementSystem consumes energy on a
-            // successful move, which would make "was this entity recharged" a noisy signal
-            // to assert on below. MovementModule stays registered (realism, and to prove the
-            // three real systems still coexist without throwing) but with an empty population.
+            // Starts at 0, not MaximumHealth, so "CurrentHealth > 0" below actually proves
+            // HealthRegenSystem touched this entity rather than being vacuously true from
+            // the start. No MovementComponent: keeps this test minimal (MovementSystem
+            // doesn't touch HealthComponent, so there's no cross-contamination to avoid --
+            // MovementModule stays registered purely to prove the two real systems still
+            // coexist without throwing, with an empty movement population).
+            healthPool.Add(entityId, new HealthComponent(currentHealth: 0, healthRegen: 5, maximumHealth: 1000));
         }
 
         for (var frame = 0; frame < 60; frame++)
@@ -195,13 +193,13 @@ public sealed class EntityStripingTests
         var rechargedCount = 0;
         for (var entityId = 0; entityId < entityCount; entityId++)
         {
-            if (energyPool.GetReadonly(entityId).CurrentEnergy > 0)
+            if (healthPool.GetReadonly(entityId).CurrentHealth > 0)
             {
                 rechargedCount++;
             }
         }
 
-        // 60 frames is 6 full EnergyRechargeSystem cycles (StripeCount 10) -- every entity
+        // 60 frames is 6 full HealthRegenSystem cycles (StripeCount 10) -- every entity
         // should have been touched at least once by now.
         Assert.AreEqual(entityCount, rechargedCount);
     }

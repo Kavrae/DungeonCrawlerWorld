@@ -10,7 +10,6 @@ using Game.Modules.Class;
 using Game.Modules.ContactDamage;
 using Game.Modules.Core;
 using Game.Modules.Core.Components;
-using Game.Modules.Energy;
 using Game.Modules.Health;
 using Game.Modules.Movement;
 using Game.Modules.Movement.Components;
@@ -48,7 +47,6 @@ public sealed class FloorBuilderTests
         IReadOnlyList<IModule> modules =
         [
             new CoreModule(),
-            new EnergyModule(),
             new HealthModule(),
             movementModule,
             new RaceModule(),

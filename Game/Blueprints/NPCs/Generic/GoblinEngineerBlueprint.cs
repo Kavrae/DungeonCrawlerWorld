@@ -1,16 +1,17 @@
 using Engine.ECS.Components;
+using Engine.Math;
 using Game.Blueprints;
 using Game.Blueprints.Classes;
 using Game.Blueprints.Races;
 using Game.Modules.Core.Components;
-using Game.Modules.Energy.Components;
+using Game.Modules.Movement.Components;
 
 namespace Game.Blueprints.NPCs.Generic;
 
 /// <summary>
 /// A goblin engineer NPC: the Goblin race composed with the Engineer class via
-/// CompositeBlueprint, plus an additional energy bonus on top of Engineer's own, applied as
-/// the composite's overrides step. Goblin.Build and Engineer.Build both set
+/// CompositeBlueprint, plus an additional action-cooldown reduction on top of Engineer's own,
+/// applied as the composite's overrides step. Goblin.Build and Engineer.Build both set
 /// DisplayTextComponent for this entity; since every blueprint uses <c>Merge</c> rather than
 /// <c>Add</c>, the chain composes cleanly instead of throwing on the second write --
 /// CoreModule's DisplayTextComponent merge lambda concatenates each stage's Name/Description
@@ -30,10 +31,9 @@ public sealed class GoblinEngineerBlueprint(Goblin goblin, Engineer engineer) : 
         {
             componentManager.Merge(entityId, new DisplayTextComponent(DisplayName, Description));
 
-            componentManager.TryUpdate(entityId, static (ref EnergyComponent energyComponent) =>
+            componentManager.TryUpdate(entityId, static (ref MovementComponent movementComponent) =>
             {
-                energyComponent.MaximumEnergy = (short)(energyComponent.MaximumEnergy * 1.1m);
-                energyComponent.EnergyRecharge = (short)(energyComponent.EnergyRecharge * 1.1m);
+                movementComponent.ActionCooldownFrames = MathUtility.ClampShort((short)(movementComponent.ActionCooldownFrames * 0.9m), 1, short.MaxValue);
             });
         });
 

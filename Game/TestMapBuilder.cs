@@ -1,4 +1,5 @@
 using Engine.ECS.Components;
+using Engine.ECS.Components.Stores;
 using Engine.ECS.Entities;
 using Engine.Math;
 using Game.Blueprints;
@@ -39,6 +40,8 @@ public sealed class TestMapBuilder(EntityManager entityManager, ComponentManager
     private readonly Engineer _engineer = new();
     private readonly Tank _tank = new(mathUtility);
     private readonly GoblinEngineerBlueprint _goblinEngineer = new(new Goblin(mathUtility), new Engineer());
+    private readonly PackedComponentPool<MovementComponent> _movementComponents = componentManager.GetPackedPool<MovementComponent>();
+    private readonly PackedComponentPool<ActionLockComponent> _actionLocks = componentManager.GetPackedPool<ActionLockComponent>();
     private int _goblinsBuilt;
 
     /// <summary>
@@ -89,7 +92,7 @@ public sealed class TestMapBuilder(EntityManager entityManager, ComponentManager
                     {
                         // Denser secondary population: plain Goblins (no Engineer class),
                         // separate from and denser than the GoblinEngineer spawn above.
-                        BuildFromBlueprint(world, _goblin, column, row);
+                        StaggerActionLock(BuildFromBlueprint(world, _goblin, column, row));
                     }
                 }
 
@@ -125,7 +128,7 @@ public sealed class TestMapBuilder(EntityManager entityManager, ComponentManager
                 // collision between them.
                 if (row % 8 == 0 && column % 6 == 0)
                 {
-                    BuildFromBlueprintAtLayer(world, _fairy, column, row, MapLayer.Flying);
+                    StaggerActionLock(BuildFromBlueprintAtLayer(world, _fairy, column, row, MapLayer.Flying));
                 }
             }
         }
@@ -133,22 +136,26 @@ public sealed class TestMapBuilder(EntityManager entityManager, ComponentManager
         BuildFixtureEntities(world);
     }
 
-    private void BuildFromBlueprint(World.World world, IBlueprint blueprint, int column, int row)
+    private int BuildFromBlueprint(World.World world, IBlueprint blueprint, int column, int row)
     {
         var entityId = entityManager.CreateEntity();
         blueprint.Build(componentManager, entityId);
 
         PlaceAt(world, entityId, column, row);
+
+        return entityId;
     }
 
     /// <summary>Same as BuildFromBlueprint, but places at mapLayer instead of preserving whatever Z the blueprint itself set.</summary>
-    private void BuildFromBlueprintAtLayer(World.World world, IBlueprint blueprint, int column, int row, MapLayer mapLayer)
+    private int BuildFromBlueprintAtLayer(World.World world, IBlueprint blueprint, int column, int row, MapLayer mapLayer)
     {
         var entityId = entityManager.CreateEntity();
         blueprint.Build(componentManager, entityId);
 
         ref var transform = ref componentManager.GetDirectPool<TransformComponent>().Get(entityId);
         world.PlaceEntityOnMap(entityId, new Vector3Int(column, row, (int)mapLayer), ref transform);
+
+        return entityId;
     }
 
     /// <summary>
@@ -175,6 +182,7 @@ public sealed class TestMapBuilder(EntityManager entityManager, ComponentManager
         transform.Size = GoblinSizes[_goblinsBuilt % GoblinSizes.Length];
         _goblinsBuilt++;
 
+        StaggerActionLock(entityId);
         PlaceAt(world, entityId, column, row);
     }
 
@@ -200,6 +208,7 @@ public sealed class TestMapBuilder(EntityManager entityManager, ComponentManager
         ref var longDescriptionTransform = ref componentManager.GetDirectPool<TransformComponent>().Get(longDescriptionId);
         longDescriptionTransform.Size = new Vector2Byte(2, 2);
 
+        StaggerActionLock(longDescriptionId);
         PlaceAt(world, longDescriptionId, 2, 2);
 
         // Huge (3x3) goblin engineer, placed standalone rather than through BuildGoblin's rotation.
@@ -209,6 +218,7 @@ public sealed class TestMapBuilder(EntityManager entityManager, ComponentManager
         ref var hugeTransform = ref componentManager.GetDirectPool<TransformComponent>().Get(hugeId);
         hugeTransform.Size = new Vector2Byte(3, 3);
 
+        StaggerActionLock(hugeId);
         PlaceAt(world, hugeId, 5, 5);
 
         // Stationary Fairy engineer: race+class composed, then MovementComponent removed so
@@ -216,12 +226,12 @@ public sealed class TestMapBuilder(EntityManager entityManager, ComponentManager
         var stationaryFairyId = entityManager.CreateEntity();
         _fairy.Build(componentManager, stationaryFairyId);
         _engineer.Build(componentManager, stationaryFairyId);
-        componentManager.GetPackedPool<MovementComponent>().Remove(stationaryFairyId);
+        _movementComponents.Remove(stationaryFairyId);
 
         PlaceAt(world, stationaryFairyId, 1, 1);
 
         // Ordinary moving Fairy, for contrast against the stationary one above.
-        BuildFromBlueprint(world, _fairy, 17, 16);
+        StaggerActionLock(BuildFromBlueprint(world, _fairy, 17, 16));
 
         // Two RaceComponents on one entity (Goblin base with Fairy layered on top). Movement
         // removed since a grounded-goblin/flying-fairy hybrid has no single coherent
@@ -229,7 +239,7 @@ public sealed class TestMapBuilder(EntityManager entityManager, ComponentManager
         var multiRaceId = entityManager.CreateEntity();
         _goblin.Build(componentManager, multiRaceId);
         _fairy.Build(componentManager, multiRaceId);
-        componentManager.GetPackedPool<MovementComponent>().Remove(multiRaceId);
+        _movementComponents.Remove(multiRaceId);
 
         PlaceAt(world, multiRaceId, 17, 9);
 
@@ -239,6 +249,7 @@ public sealed class TestMapBuilder(EntityManager entityManager, ComponentManager
         _engineer.Build(componentManager, multiClassId);
         _tank.Build(componentManager, multiClassId);
 
+        StaggerActionLock(multiClassId);
         PlaceAt(world, multiClassId, 11, 2);
 
         // Tiny-entity occupancy fixtures: 4 partially fill MapWindow's 3x3 tiny grid, 11
@@ -255,6 +266,7 @@ public sealed class TestMapBuilder(EntityManager entityManager, ComponentManager
         componentManager.GetPackedPool<OccupancyComponent>().Add(phasingFairyId, new OccupancyComponent(isTiny: false, isPhasing: true));
         componentManager.GetMultiPool<NonBlockingComponent>().Add(phasingFairyId, new NonBlockingComponent());
 
+        StaggerActionLock(phasingFairyId);
         PlaceAt(world, phasingFairyId, 17, 16);
     }
 
@@ -268,8 +280,27 @@ public sealed class TestMapBuilder(EntityManager entityManager, ComponentManager
             componentManager.GetPackedPool<OccupancyComponent>().Add(entityId, new OccupancyComponent(isTiny: true, isPhasing: false));
             componentManager.GetMultiPool<NonBlockingComponent>().Add(entityId, new NonBlockingComponent());
 
+            StaggerActionLock(entityId);
             PlaceAt(world, entityId, column, row);
         }
+    }
+
+    private const short MaximumStaggerFrames = 60;
+
+    /// <summary>
+    /// Randomizes a freshly-built goblin/fairy's starting action lock to a value between 0 and
+    /// MaximumStaggerFrames, instead of the 0 every race blueprint merges by default -- without
+    /// this, an entire periodic population spawns ready to act on the same handful of frames
+    /// and visibly moves in lockstep bursts rather than spreading out over time. The exact
+    /// upper bound doesn't need to track any entity's real ActionCooldownFrames -- this only
+    /// matters for the initial stagger, and gets fully overwritten the first time the entity
+    /// actually moves (ActionLockGate.Lock sets both fields together at that point).
+    /// </summary>
+    private void StaggerActionLock(int entityId)
+    {
+        var framesToWait = (short)mathUtility.Next(0, MaximumStaggerFrames + 1);
+
+        ActionLockGate.Lock(_actionLocks, entityId, framesToWait);
     }
 
     /// <summary>

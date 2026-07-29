@@ -29,24 +29,14 @@ public sealed class HealthRegenSystem : ISystem
     {
         foreach (var entityId in _stripeSet.GetBucket(stripeIndex))
         {
-            // Skipping the whole TryUpdate call (not just the math inside it) when there's
-            // nothing to regenerate also avoids bumping the component's version for no reason
-            // -- TryUpdate bumps it unconditionally once the delegate runs, which would
-            // otherwise make a never-changing component look like it's being mutated every
-            // stripe cycle.
-            if (!_healthComponents.TryGetReadonly(entityId, out var currentHealthComponent) || currentHealthComponent.HealthRegen == 0)
+            if (_healthComponents.TryGetReadonly(entityId, out var currentHealthComponent) && currentHealthComponent.HealthRegen != 0)
             {
-                continue;
+                _healthComponents.TryUpdate(entityId, static (ref healthComponent) =>
+                {
+                    var regeneratedHealth = (int)healthComponent.CurrentHealth + healthComponent.HealthRegen;
+                    healthComponent.CurrentHealth = (short)MathUtility.ClampInt(regeneratedHealth, 0, healthComponent.MaximumHealth);
+                });
             }
-
-            _healthComponents.TryUpdate(entityId, static (ref healthComponent) =>
-            {
-                // Widened to int before adding: CurrentHealth/HealthRegen are both short, and
-                // a raw short += can silently overflow/underflow before ClampShort ever runs.
-                // int can't overflow for any short + short, so it's safe to clamp after.
-                var regeneratedHealth = (int)healthComponent.CurrentHealth + healthComponent.HealthRegen;
-                healthComponent.CurrentHealth = (short)MathUtility.ClampInt(regeneratedHealth, 0, healthComponent.MaximumHealth);
-            });
         }
     }
 }
