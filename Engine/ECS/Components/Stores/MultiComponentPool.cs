@@ -41,6 +41,18 @@ public sealed class MultiComponentPool<T> : IReadOnlyMultiComponentPool<T>, IIns
     public delegate bool ComponentPredicate(ref readonly T component);
     public delegate bool ComponentPredicate<TState>(ref readonly T component, TState state);
 
+    /// <summary>
+    /// Fired on an entity's 0-to-1 (EntityAdded) or 1-to-0 (EntityRemoved) membership
+    /// transition -- not on every individual Add/Remove call, since an entity can hold several
+    /// instances at once here. Mirrors PackedComponentPool's own EntityAdded/EntityRemoved (same
+    /// purpose: letting an EntityStripeSet maintain incremental bucket membership), scoped to
+    /// "does this entity have any instance at all" rather than "an instance changed," so a
+    /// system striping over this pool (e.g. AbilityCooldownSystem) still gets exactly one bucket
+    /// entry per entity regardless of how many instances that entity carries.
+    /// </summary>
+    public event Action<int>? EntityAdded;
+    public event Action<int>? EntityRemoved;
+
     public MultiComponentPool(int maximumEntityCount, int initialCapacity)
     {
         ArgumentOutOfRangeException.ThrowIfNegativeOrZero(maximumEntityCount);
@@ -111,6 +123,11 @@ public sealed class MultiComponentPool<T> : IReadOnlyMultiComponentPool<T>, IIns
         _entityIdToFirstDenseIndexMap[entityId] = newDenseIndex;
         _entityCounts[entityId]++;
         _entityVersions[entityId]++;
+
+        if (previousFirst == -1)
+        {
+            EntityAdded?.Invoke(entityId);
+        }
     }
 
     public bool Remove(int entityId)
@@ -335,6 +352,11 @@ public sealed class MultiComponentPool<T> : IReadOnlyMultiComponentPool<T>, IIns
 
         _entityCounts[ownerEntityId]--;
         _entityVersions[ownerEntityId]++;
+
+        if (_entityCounts[ownerEntityId] == 0)
+        {
+            EntityRemoved?.Invoke(ownerEntityId);
+        }
 
         var lastDenseIndex = _count - 1;
 

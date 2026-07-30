@@ -11,12 +11,15 @@ using Game.Blueprints.Objects;
 using Game.Blueprints.Races;
 using Game.Blueprints.Terrain;
 using Game.Modules;
+using Game.Modules.Abilities;
+using Game.Modules.Abilities.Components;
 using Game.Modules.Class;
 using Game.Modules.Class.Components;
 using Game.Modules.Core;
 using Game.Modules.Core.Components;
 using Game.Modules.Health;
 using Game.Modules.Health.Components;
+using Game.Modules.Melee;
 using Game.Modules.Movement;
 using Game.Modules.Movement.Components;
 using Game.Modules.Race;
@@ -32,9 +35,13 @@ public sealed class BlueprintTests
     {
         var world = new Game.World.World(new Map(new Vector3Int(5, 5, 1)));
         var mathUtility = new MathUtility();
+        var context = new GameModuleContext(world, mathUtility, new EventBus());
 
         var movementModule = new MovementModule();
-        movementModule.Configure(new GameModuleContext(world, mathUtility, new EventBus()));
+        movementModule.Configure(context);
+
+        var abilitiesModule = new AbilitiesModule();
+        abilitiesModule.Configure(context);
 
         IReadOnlyList<IModule> modules =
         [
@@ -43,6 +50,7 @@ public sealed class BlueprintTests
             movementModule,
             new RaceModule(),
             new ClassModule(),
+            abilitiesModule,
         ];
 
         return Bootstrapper.Build(modules, initialEntityCapacity: 100, initialComponentCapacity: 50);
@@ -117,6 +125,9 @@ public sealed class BlueprintTests
         Assert.IsTrue(ecsContext.ComponentManager.GetPackedPool<MovementComponent>().Has(entityId));
         Assert.IsTrue(ecsContext.ComponentManager.GetPackedPool<ActionLockComponent>().Has(entityId));
         Assert.IsTrue(ecsContext.ComponentManager.GetDirectPool<TransformComponent>().Has(entityId));
+
+        Assert.IsTrue(AbilityInstanceQueries.TryGet(ecsContext.ComponentManager.GetMultiPool<AbilityInstanceComponent>(), entityId, MeleeModule.DefaultAttackId, out var defaultAttack));
+        Assert.AreEqual((short)10, defaultAttack.DamageAmount);
     }
 
     [TestMethod]
@@ -143,6 +154,12 @@ public sealed class BlueprintTests
         // No RaceComponent/ClassComponent -- nothing needs the player to have either.
         Assert.IsFalse(ecsContext.ComponentManager.GetMultiPool<RaceComponent>().Has(entityId));
         Assert.IsFalse(ecsContext.ComponentManager.GetMultiPool<ClassComponent>().Has(entityId));
+
+        var abilityInstances = ecsContext.ComponentManager.GetMultiPool<AbilityInstanceComponent>();
+        Assert.IsTrue(AbilityInstanceQueries.TryGet(abilityInstances, entityId, MeleeModule.DefaultAttackId, out var defaultAttack));
+        Assert.AreEqual((short)20, defaultAttack.DamageAmount);
+        Assert.IsTrue(AbilityInstanceQueries.TryGet(abilityInstances, entityId, PlayerTestAbilitiesModule.RangedTestAbilityId, out var rangedTest));
+        Assert.AreEqual((short)10, rangedTest.DamageAmount);
     }
 
     [TestMethod]
@@ -159,6 +176,9 @@ public sealed class BlueprintTests
         Assert.IsTrue(ecsContext.ComponentManager.GetPackedPool<MovementComponent>().Has(entityId));
         Assert.IsTrue(ecsContext.ComponentManager.GetPackedPool<ActionLockComponent>().Has(entityId));
         Assert.IsTrue(ecsContext.ComponentManager.GetDirectPool<TransformComponent>().Has(entityId));
+
+        Assert.IsTrue(AbilityInstanceQueries.TryGet(ecsContext.ComponentManager.GetMultiPool<AbilityInstanceComponent>(), entityId, MeleeModule.DefaultAttackId, out var defaultAttack));
+        Assert.AreEqual((short)5, defaultAttack.DamageAmount);
     }
 
     [TestMethod]

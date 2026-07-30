@@ -1,5 +1,6 @@
 using Engine.Diagnostics;
 using Engine.ECS.Context;
+using Game.Modules.Abilities;
 using Game.Notifications;
 using Game.World;
 using Microsoft.Xna.Framework;
@@ -32,14 +33,15 @@ public static class GameShellBootstrapper
     private const float SelectionWindowWidth = 300f;
     private const float ActionLockGap = 8f;
 
-    public static GameShellContext Build(PresentationContext presentation, World world, EcsContext ecsContext, Vector2 screenSize)
+    public static GameShellContext Build(PresentationContext presentation, World world, EcsContext ecsContext, AbilityCatalog abilityCatalog, Vector2 screenSize)
     {
         ArgumentNullException.ThrowIfNull(presentation);
         ArgumentNullException.ThrowIfNull(world);
         ArgumentNullException.ThrowIfNull(ecsContext);
+        ArgumentNullException.ThrowIfNull(abilityCatalog);
 
-        var (rootWindows, mapWindow, mapViewState, mapSize) = BuildRootWindows(presentation, world, ecsContext, screenSize);
-        var (hudWindows, questTriggerWindow) = BuildHudWindows(presentation, world, ecsContext, screenSize, mapViewState, mapSize);
+        var (rootWindows, mapWindow, mapViewState, mapSize) = BuildRootWindows(presentation, world, ecsContext, abilityCatalog, screenSize);
+        var (hudWindows, questTriggerWindow) = BuildHudWindows(presentation, world, ecsContext, abilityCatalog, screenSize, mapViewState, mapSize);
         var (alwaysOnTopWindows, notificationCenter) = BuildAlwaysOnTopWindows(presentation, ecsContext);
 
         // Constructed last, once every window/list it needs to wire already exists
@@ -65,7 +67,7 @@ public static class GameShellBootstrapper
 
     /// <summary>Base tier: the map itself plus the debug stats footer directly beneath it -- see GameShellContext's doc comment for what "Base" means. mapViewState/mapSize are returned for BuildHudWindows, whose selection window needs both (mapViewState to scope the inspector, mapSize to dock against the map's actual bottom edge).</summary>
     private static (List<Window> RootWindows, MapWindow MapWindow, MapViewState MapViewState, Vector2 MapSize) BuildRootWindows(
-        PresentationContext presentation, World world, EcsContext ecsContext, Vector2 screenSize)
+        PresentationContext presentation, World world, EcsContext ecsContext, AbilityCatalog abilityCatalog, Vector2 screenSize)
     {
         var rootWindows = new List<Window>();
 
@@ -86,6 +88,7 @@ public static class GameShellBootstrapper
             world,
             mapViewState,
             ecsContext.ComponentManager,
+            abilityCatalog,
             presentation.TileRenderer,
             presentation.GlyphRenderer));
 
@@ -128,7 +131,7 @@ public static class GameShellBootstrapper
 
     /// <summary>HUD tier: the selection/inspector panel, the player health bar, and the quest trigger -- see GameShellContext's doc comment for what "HUD" means. questTriggerWindow is returned for Build, which wires its Clicked event once the always-on-top tier (needed by OpenQuestComposer) also exists.</summary>
     private static (List<Window> HudWindows, TextWindow QuestTriggerWindow) BuildHudWindows(
-        PresentationContext presentation, World world, EcsContext ecsContext, Vector2 screenSize, MapViewState mapViewState, Vector2 mapSize)
+        PresentationContext presentation, World world, EcsContext ecsContext, AbilityCatalog abilityCatalog, Vector2 screenSize, MapViewState mapViewState, Vector2 mapSize)
     {
         var hudWindows = new List<Window>();
 
@@ -195,6 +198,23 @@ public static class GameShellBootstrapper
         playerStatusEffectsWindow.SetContent(new PlayerStatusEffectsContent(world, ecsContext.ComponentManager, presentation.FontService));
         playerStatusEffectsWindow.Initialize();
         hudWindows.Add(playerStatusEffectsWindow);
+
+        // Bottom-center, overlaying the map -- HUD tier draws over Base, the same way
+        // selectionWindow/playerHealthBarWindow already do.
+        var hotbarWindow = presentation.WindowService.CreateWindow<Window>(null, new WindowOptions
+        {
+            Layout = new WindowLayoutOptions
+            {
+                RelativePosition = new Vector2((screenSize.X - HotbarContent.Size.X) / 2f, screenSize.Y - HotbarContent.Size.Y - HudMetrics.Margin.Y),
+                Size = HotbarContent.Size,
+                DisplayMode = WindowDisplayMode.Fixed,
+                IsTransparent = true,
+            },
+            Chrome = new WindowChromeOptions { ShowTitle = false, ShowBorder = false, CanUserFocus = false },
+        });
+        hotbarWindow.SetContent(new HotbarContent(world, mapViewState, ecsContext.ComponentManager, abilityCatalog, presentation.FontService));
+        hotbarWindow.Initialize();
+        hudWindows.Add(hotbarWindow);
 
         // TEMPORARY First concrete TextBox consumer (see the Text input TODO) -- a multiline TextBox in
         // a closeable popup that submits into a new Quest notification. "New Quest" is a

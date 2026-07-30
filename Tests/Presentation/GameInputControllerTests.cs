@@ -42,11 +42,13 @@ public sealed class GameInputControllerTests
     {
         public int DragStartCallCount { get; private set; }
         public int DragEndCallCount { get; private set; }
+        public int RightClickTapCallCount { get; private set; }
         public List<Vector2> DragDeltas { get; } = [];
 
         protected override void OnRightDragStartAction() => DragStartCallCount++;
         protected override void OnRightDragAction(Vector2 totalPixelDeltaSinceStart) => DragDeltas.Add(totalPixelDeltaSinceStart);
         protected override void OnRightDragEndAction() => DragEndCallCount++;
+        protected override void OnRightClickTapAction() => RightClickTapCallCount++;
     }
 
     private static RightDragSpyWindow CreateRightDragSpyWindow(WindowService windowService, FontService fontService, Vector2 relativePosition)
@@ -953,6 +955,82 @@ public sealed class GameInputControllerTests
         controller.Update(NoKeys, MouseAtWithRightButton(pressPoint.X - 10, pressPoint.Y, ButtonState.Released));
 
         Assert.AreEqual(1, window.DragEndCallCount);
+    }
+
+    /// <summary>A release with no movement at all (press and release at the same point, no held frame in between) is a tap -- HandleRightClickTap fires instead of HandleRightDragEnd, since this gesture never panned anything.</summary>
+    [TestMethod]
+    public void RightMouseClick_NoMovement_FiresRightClickTapInsteadOfDragEnd()
+    {
+        var fontService = new FontService("Fonts");
+        var windowService = new WindowService(fontService, new GlyphRenderer());
+        var window = CreateRightDragSpyWindow(windowService, fontService, new Vector2(0, 0));
+        var controller = new GameInputController([window], [], [], LargeScreenSize);
+
+        var pressPoint = window.ContentRectangle.Center;
+        controller.Update(NoKeys, MouseAtWithRightButton(pressPoint.X, pressPoint.Y, ButtonState.Released));
+        controller.Update(NoKeys, MouseAtWithRightButton(pressPoint.X, pressPoint.Y, ButtonState.Pressed));
+        controller.Update(NoKeys, MouseAtWithRightButton(pressPoint.X, pressPoint.Y, ButtonState.Released));
+
+        Assert.AreEqual(1, window.RightClickTapCallCount);
+        Assert.AreEqual(0, window.DragEndCallCount, "A tap must not also fire the drag-end hook.");
+    }
+
+    /// <summary>A release after only jitter-sized movement (below the tap-vs-drag pixel threshold) still reads as a tap, not a drag -- ordinary click imprecision shouldn't cancel an armed ability's own drag-pan behavior, nor should it be mistaken for an intentional pan.</summary>
+    [TestMethod]
+    public void RightMouseClick_MovementBelowTapThreshold_StillFiresRightClickTap()
+    {
+        var fontService = new FontService("Fonts");
+        var windowService = new WindowService(fontService, new GlyphRenderer());
+        var window = CreateRightDragSpyWindow(windowService, fontService, new Vector2(0, 0));
+        var controller = new GameInputController([window], [], [], LargeScreenSize);
+
+        var pressPoint = window.ContentRectangle.Center;
+        controller.Update(NoKeys, MouseAtWithRightButton(pressPoint.X, pressPoint.Y, ButtonState.Released));
+        controller.Update(NoKeys, MouseAtWithRightButton(pressPoint.X, pressPoint.Y, ButtonState.Pressed));
+        controller.Update(NoKeys, MouseAtWithRightButton(pressPoint.X + 2, pressPoint.Y, ButtonState.Pressed));
+        controller.Update(NoKeys, MouseAtWithRightButton(pressPoint.X + 2, pressPoint.Y, ButtonState.Released));
+
+        Assert.AreEqual(1, window.RightClickTapCallCount);
+        Assert.AreEqual(0, window.DragEndCallCount);
+    }
+
+    /// <summary>A release after movement past the tap threshold is a real drag -- HandleRightDragEnd fires, not HandleRightClickTap, so an intentional camera pan keeps behaving exactly as before this distinction existed.</summary>
+    [TestMethod]
+    public void RightMouseDrag_MovementPastTapThreshold_FiresDragEndNotRightClickTap()
+    {
+        var fontService = new FontService("Fonts");
+        var windowService = new WindowService(fontService, new GlyphRenderer());
+        var window = CreateRightDragSpyWindow(windowService, fontService, new Vector2(0, 0));
+        var controller = new GameInputController([window], [], [], LargeScreenSize);
+
+        var pressPoint = window.ContentRectangle.Center;
+        controller.Update(NoKeys, MouseAtWithRightButton(pressPoint.X, pressPoint.Y, ButtonState.Released));
+        controller.Update(NoKeys, MouseAtWithRightButton(pressPoint.X, pressPoint.Y, ButtonState.Pressed));
+        controller.Update(NoKeys, MouseAtWithRightButton(pressPoint.X - 40, pressPoint.Y, ButtonState.Pressed));
+        controller.Update(NoKeys, MouseAtWithRightButton(pressPoint.X - 40, pressPoint.Y, ButtonState.Released));
+
+        Assert.AreEqual(1, window.DragEndCallCount);
+        Assert.AreEqual(0, window.RightClickTapCallCount);
+    }
+
+    /// <summary>A drag that wanders back near its start before releasing still counts as a drag, not a tap -- the threshold check latches once exceeded rather than re-measuring only the final displacement.</summary>
+    [TestMethod]
+    public void RightMouseDrag_WandersPastThresholdThenBackToStart_StillFiresDragEndNotRightClickTap()
+    {
+        var fontService = new FontService("Fonts");
+        var windowService = new WindowService(fontService, new GlyphRenderer());
+        var window = CreateRightDragSpyWindow(windowService, fontService, new Vector2(0, 0));
+        var controller = new GameInputController([window], [], [], LargeScreenSize);
+
+        var pressPoint = window.ContentRectangle.Center;
+        controller.Update(NoKeys, MouseAtWithRightButton(pressPoint.X, pressPoint.Y, ButtonState.Released));
+        controller.Update(NoKeys, MouseAtWithRightButton(pressPoint.X, pressPoint.Y, ButtonState.Pressed));
+        controller.Update(NoKeys, MouseAtWithRightButton(pressPoint.X - 40, pressPoint.Y, ButtonState.Pressed));
+        controller.Update(NoKeys, MouseAtWithRightButton(pressPoint.X, pressPoint.Y, ButtonState.Pressed));
+        controller.Update(NoKeys, MouseAtWithRightButton(pressPoint.X, pressPoint.Y, ButtonState.Released));
+
+        Assert.AreEqual(1, window.DragEndCallCount);
+        Assert.AreEqual(0, window.RightClickTapCallCount);
     }
 
     /// <summary>Right-dragging over empty space (nothing hit) must not throw -- it simply has nowhere to forward to until released.</summary>

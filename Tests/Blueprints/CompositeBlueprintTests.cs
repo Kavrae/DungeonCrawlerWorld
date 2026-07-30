@@ -9,6 +9,7 @@ using Game.Blueprints.Classes;
 using Game.Blueprints.Objects;
 using Game.Blueprints.Races;
 using Game.Modules;
+using Game.Modules.Abilities;
 using Game.Modules.Class;
 using Game.Modules.Class.Components;
 using Game.Modules.Core;
@@ -29,9 +30,13 @@ public sealed class CompositeBlueprintTests
     {
         var world = new Game.World.World(new Map(new Vector3Int(5, 5, 1)));
         var mathUtility = new MathUtility();
+        var context = new GameModuleContext(world, mathUtility, new EventBus());
 
         var movementModule = new MovementModule();
-        movementModule.Configure(new GameModuleContext(world, mathUtility, new EventBus()));
+        movementModule.Configure(context);
+
+        var abilitiesModule = new AbilitiesModule();
+        abilitiesModule.Configure(context);
 
         IReadOnlyList<IModule> modules =
         [
@@ -40,6 +45,7 @@ public sealed class CompositeBlueprintTests
             movementModule,
             new RaceModule(),
             new ClassModule(),
+            abilitiesModule,
         ];
 
         return Bootstrapper.Build(modules, initialEntityCapacity: 100, initialComponentCapacity: 50);

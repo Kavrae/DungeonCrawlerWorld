@@ -1,6 +1,8 @@
 using Engine.ECS.Components;
 using Engine.Math;
+using Game.Modules.Abilities.Components;
 using Game.Modules.Core.Components;
+using Game.Modules.Melee;
 using Game.Modules.Movement.Components;
 using Game.Modules.Race.Components;
 using Microsoft.Xna.Framework;
@@ -20,6 +22,9 @@ public sealed class Ghost(MathUtility mathUtility) : IBlueprint
 
     private const string Description = "A wandering spirit with no physical form. Used to test melee status effects against a target with no Health to damage.";
 
+    /// <summary>Hardcoded stopgap until the Additive/Multiplicative bonuses system exists -- see TODO.md.</summary>
+    private const short DefaultAttackDamage = 5;
+
     /// <summary>ᗣ (U+15A3, Canadian Aboriginal Syllabics). Requires Symbola-Emoji.ttf loaded as a fallback font (see FontService)</summary>
     private const string Glyph = "ᗣ";
 
@@ -37,5 +42,6 @@ public sealed class Ghost(MathUtility mathUtility) : IBlueprint
     new Vector3Int(0, 0, (int)MapLayer.Ground), new Vector2Byte(1, 1)));
 
         componentManager.Merge(entityId, new OccupancyComponent(isTiny: false, isPhasing: true));
+        componentManager.Merge(entityId, new AbilityInstanceComponent(MeleeModule.DefaultAttackId, damageAmount: DefaultAttackDamage, cooldownFramesRemaining: 0));
     }
 }

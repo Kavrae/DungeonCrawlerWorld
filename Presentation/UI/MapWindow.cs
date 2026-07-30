@@ -2,6 +2,8 @@ using Engine.ECS.Components;
 using Engine.ECS.Components.Stores;
 using Engine.Math;
 using FontStashSharp;
+using Game.Modules.Abilities;
+using Game.Modules.Abilities.Components;
 using Game.Modules.Core.Components;
 using Game.Modules.Health.Components;
 using Game.Modules.Movement.Components;
@@ -11,6 +13,7 @@ using Microsoft.Xna.Framework;
 using Microsoft.Xna.Framework.Graphics;
 using Microsoft.Xna.Framework.Input;
 using Presentation.Fonts;
+using Presentation.Input;
 using Presentation.Rendering;
 
 namespace Presentation.UI;
@@ -38,8 +41,36 @@ public sealed class MapWindow : Window
     private readonly PackedComponentPool<OccupancyComponent> _occupancyPool;
     private readonly PackedComponentPool<MovementComponent> _movementPool;
     private readonly PackedComponentPool<HealthComponent> _healthPool;
+    private readonly AbilityCatalog _abilityCatalog;
+    private readonly MultiComponentPool<HotkeyBindingComponent> _hotkeyBindings;
+    private readonly PackedComponentPool<PendingAbilityActivationComponent> _pendingActivations;
+    private readonly PackedComponentPool<PendingDelayedActionComponent> _pendingDelayedActions;
+    private readonly PackedComponentPool<ActionLockComponent> _actionLocks;
     private readonly TileRenderer _tileRenderer;
     private readonly GlyphRenderer _glyphRenderer;
+
+    /// <summary>~300ms at 60fps -- a second press of the same slot within this many frames of the first is a double-tap (see HandleHotkeySlotPress), not two independent arm/disarm presses.</summary>
+    private const int DoubleTapWindowFrames = 18;
+
+    /// <summary>Frame-counted (see ActionLockComponent's own doc comment for why this codebase denominates timers in frames, not wall-clock time), incremented once per Update call -- OnHotkeysAction has no GameTime of its own to measure elapsed time against.</summary>
+    private int _frameCounter;
+
+    private readonly Dictionary<HotkeySlot, int> _lastHotkeyPressFrameBySlot = [];
+
+    // Reused across calls (see TargetShapeResolver's own doc comment on why Resolve writes into
+    // a caller-owned buffer instead of allocating).
+    private readonly List<Vector3Int> _candidateTilesBuffer = [];
+    private readonly List<Vector3Int> _occupiedCandidateTilesBuffer = [];
+    private readonly List<Vector3Int> _finalTargetTilesBuffer = [];
+
+    /// <summary>The armed ability's actual hit-footprint at the current hover position, recomputed every Update (see UpdateHoveredTile) -- MapWindow-local rendering state, not shared via MapViewState since nothing else consumes it.</summary>
+    private readonly List<Vector3Int> _hoveredFootprintBuffer = [];
+
+    /// <summary>Read-only view of _hoveredFootprintBuffer for tests -- same internal-for-test-visibility pattern as GameInputController.CurrentCursor/DragDelta.</summary>
+    internal IReadOnlyList<Vector3Int> HoveredFootprint => _hoveredFootprintBuffer;
+
+    private static readonly Color TargetableTileColor = Color.CornflowerBlue * 0.6f;
+    private static readonly Color HoveredTargetTileColor = Color.OrangeRed * 0.75f;
 
     // Normalizes DistanceFalloff.ValueAtDistance(source.Strength, distance) into a 0-1 Color.Lerp
     // factor -- a source at distance 0 with Strength >= this shows its TintColor at full strength.
@@ -104,12 +135,14 @@ public sealed class MapWindow : Window
         World world,
         MapViewState mapViewState,
         ComponentManager componentManager,
+        AbilityCatalog abilityCatalog,
         TileRenderer tileRenderer,
         GlyphRenderer glyphRenderer) : base(fontService, windowService, glyphRenderer)
     {
         ArgumentNullException.ThrowIfNull(world);
         ArgumentNullException.ThrowIfNull(mapViewState);
         ArgumentNullException.ThrowIfNull(componentManager);
+        ArgumentNullException.ThrowIfNull(abilityCatalog);
         ArgumentNullException.ThrowIfNull(tileRenderer);
         ArgumentNullException.ThrowIfNull(glyphRenderer);
 
@@ -121,6 +154,11 @@ public sealed class MapWindow : Window
         _occupancyPool = componentManager.GetPackedPool<OccupancyComponent>();
         _movementPool = componentManager.GetPackedPool<MovementComponent>();
         _healthPool = componentManager.GetPackedPool<HealthComponent>();
+        _abilityCatalog = abilityCatalog;
+        _hotkeyBindings = componentManager.GetMultiPool<HotkeyBindingComponent>();
+        _pendingActivations = componentManager.GetPackedPool<PendingAbilityActivationComponent>();
+        _pendingDelayedActions = componentManager.GetPackedPool<PendingDelayedActionComponent>();
+        _actionLocks = componentManager.GetPackedPool<ActionLockComponent>();
         _tileRenderer = tileRenderer;
         _glyphRenderer = glyphRenderer;
 
@@ -219,6 +257,8 @@ public sealed class MapWindow : Window
     {
         base.Update(gameTime);
 
+        _frameCounter++;
+
         if (_transformPool.TryGetReadonly(_world.PlayerEntityId, out var playerTransform) && playerTransform.Position != _lastKnownPlayerPosition)
         {
             _lastKnownPlayerPosition = playerTransform.Position;
@@ -227,6 +267,47 @@ public sealed class MapWindow : Window
             {
                 CenterCameraOn(playerTransform.Position);
             }
+        }
+
+        var mouseState = Mouse.GetState();
+        UpdateHoveredTile(new Point(mouseState.X, mouseState.Y));
+    }
+
+    /// <summary>
+    /// While an ability is armed, tracks which map tile the mouse is currently over (on the
+    /// player's own Z layer, not necessarily whatever layer the camera happens to be showing)
+    /// and, if so, recomputes the armed ability's actual hit-footprint from that hover position
+    /// via TargetShapeResolver -- this is what lets Burst/Cone/Line's highlighted tiles move
+    /// with the cursor instead of staying fixed at arm time. Takes the mouse position explicitly
+    /// (Update reads Mouse.GetState() -- the same static FNA API GameInputController.Update
+    /// itself reads -- and passes it in) rather than reading it here directly, so tests can
+    /// simulate a mouse position without a real OS cursor, the same way HandleHotkeys takes an
+    /// explicit KeyboardState instead of reading Keyboard.GetState() itself. internal, not
+    /// private, for that same test-visibility reason (see Window.HandleHotkeys).
+    /// </summary>
+    internal void UpdateHoveredTile(Point mousePosition)
+    {
+        _hoveredFootprintBuffer.Clear();
+
+        if (_mapViewState.ArmedAbilityId is not { } abilityId)
+        {
+            _mapViewState.HoveredTile = null;
+            return;
+        }
+
+        if (!TryGetHoveredMapPosition(mousePosition, out var hoveredColumnRow) ||
+            !_transformPool.TryGetReadonly(_world.PlayerEntityId, out var playerTransform))
+        {
+            _mapViewState.HoveredTile = null;
+            return;
+        }
+
+        var hoveredTile = new Vector3Int(hoveredColumnRow.X, hoveredColumnRow.Y, playerTransform.Position.Z);
+        _mapViewState.HoveredTile = hoveredTile;
+
+        if (_abilityCatalog.TryGet(abilityId, out var ability))
+        {
+            TargetShapeResolver.Resolve(ability.Targeting.Shape, playerTransform.Position, hoveredTile, ability.Targeting.Range, ability.Targeting.AreaSize, _world.Map.Size, _hoveredFootprintBuffer);
         }
     }
 
@@ -247,6 +328,7 @@ public sealed class MapWindow : Window
         spriteBatch.Draw(unitRectangle, new Rectangle(0, 0, _tileColumns * _currentTileSize.X, _tileRows * _currentTileSize.Y), Color.DarkGray);
 
         _tileRenderer.DrawBackgrounds(spriteBatch, unitRectangle, _backgroundColorCache, _tileColumns, _tileRows, _currentTileSize, _renderPixelOffset);
+        DrawTargetingHighlights(spriteBatch, unitRectangle);
         DrawSelectedTileHighlight(spriteBatch, unitRectangle);
         DrawGlyphs(spriteBatch, unitRectangle);
     }
@@ -259,6 +341,29 @@ public sealed class MapWindow : Window
     private Vector2 TileOrigin(int columnIndex, int rowIndex) =>
         new Vector2(columnIndex * _currentTileSize.X, rowIndex * _currentTileSize.Y) - _renderPixelOffset;
 
+    /// <summary>
+    /// Every tile the currently-armed ability could be aimed at (see MapViewState.TargetableTiles,
+    /// computed once at arm time) -- one color for "targetable, not currently hovered," a second,
+    /// distinct color for whichever of those tiles the armed shape's hover-resolved footprint
+    /// (_hoveredFootprintBuffer, recomputed every Update -- see UpdateHoveredTile) actually covers
+    /// right now. A separate, independent draw call from DrawSelectedTileHighlight below -- the
+    /// two are conceptually distinct (ability targeting vs. the inspector's click-to-select) even
+    /// though they share the same low-level tile-rectangle technique (see DrawTileHighlight).
+    /// </summary>
+    private void DrawTargetingHighlights(SpriteBatch spriteBatch, Texture2D unitRectangle)
+    {
+        if (_mapViewState.TargetableTiles is not { Count: > 0 } targetableTiles)
+        {
+            return;
+        }
+
+        foreach (var tile in targetableTiles)
+        {
+            var color = _hoveredFootprintBuffer.Contains(tile) ? HoveredTargetTileColor : TargetableTileColor;
+            DrawTileHighlight(spriteBatch, unitRectangle, tile.X, tile.Y, color);
+        }
+    }
+
     private void DrawSelectedTileHighlight(SpriteBatch spriteBatch, Texture2D unitRectangle)
     {
         if (_mapViewState.SelectedMapNodePosition is not { } selectedPosition)
@@ -266,8 +371,14 @@ public sealed class MapWindow : Window
             return;
         }
 
-        var column = selectedPosition.X - _currentScrollPosition.X;
-        var row = selectedPosition.Y - _currentScrollPosition.Y;
+        DrawTileHighlight(spriteBatch, unitRectangle, selectedPosition.X, selectedPosition.Y, Color.Gold);
+    }
+
+    /// <summary>Outer-border-then-refill-inner technique shared by every tile highlight -- DrawSelectedTileHighlight's single-tile Gold inspector highlight, and DrawTargetingHighlights' per-tile ability-targeting colors.</summary>
+    private void DrawTileHighlight(SpriteBatch spriteBatch, Texture2D unitRectangle, int mapNodeX, int mapNodeY, Color color)
+    {
+        var column = mapNodeX - _currentScrollPosition.X;
+        var row = mapNodeY - _currentScrollPosition.Y;
 
         if (column < 0 || column >= _tileColumns || row < 0 || row >= _tileRows)
         {
@@ -276,7 +387,7 @@ public sealed class MapWindow : Window
 
         var origin = TileOrigin(column, row);
         var outerRectangle = new Rectangle((int)origin.X, (int)origin.Y, _currentTileSize.X, _currentTileSize.Y);
-        spriteBatch.Draw(unitRectangle, outerRectangle, Color.Gold);
+        spriteBatch.Draw(unitRectangle, outerRectangle, color);
 
         var innerRectangle = new Rectangle(outerRectangle.X + 1, outerRectangle.Y + 1, _innerTileSize.X, _innerTileSize.Y);
         spriteBatch.Draw(unitRectangle, innerRectangle, _backgroundColorCache[column + row * _tileColumns]);
@@ -754,33 +865,123 @@ public sealed class MapWindow : Window
 
     public void SelectMapNodes(Point mousePosition)
     {
+        if (TryGetHoveredMapPosition(mousePosition, out var mapPosition))
+        {
+            _mapViewState.SelectedMapNodePosition = mapPosition;
+        }
+    }
+
+    /// <summary>
+    /// Shared mouse-to-map-tile math -- SelectMapNodes' original click-only body, extracted so
+    /// UpdateHoveredTile (every-frame, not just on click) can reuse the exact same translation
+    /// instead of a second, potentially-drifting copy of it.
+    /// </summary>
+    private bool TryGetHoveredMapPosition(Point mousePosition, out Point mapPosition)
+    {
         var relativeMapDisplayMousePosition = new Vector2(mousePosition.X - _contentState.AbsolutePosition.X, mousePosition.Y - _contentState.AbsolutePosition.Y) + _renderPixelOffset;
         var x = (int)(relativeMapDisplayMousePosition.X / _currentTileSize.X);
 
         if (x < 0 || x >= _tileColumns)
         {
-            return;
+            mapPosition = default;
+            return false;
         }
 
         var y = (int)(relativeMapDisplayMousePosition.Y / _currentTileSize.Y);
         if (y < 0 || y >= _tileRows)
         {
+            mapPosition = default;
+            return false;
+        }
+
+        mapPosition = new Point(x + _currentScrollPosition.X, y + _currentScrollPosition.Y);
+
+        // _tileColumns/_tileRows are the visible viewport grid, which can be larger than
+        // the actual map -- a click (or hover) can land within the viewport but past the map's
+        // real edge.
+        if (!_world.IsOnMap(new Vector3Int(mapPosition.X, mapPosition.Y, 0)))
+        {
+            mapPosition = default;
+            return false;
+        }
+
+        return true;
+    }
+
+    /// <summary>
+    /// A left-click confirms the armed ability's activation if an ability is armed, falling
+    /// back to the ordinary inspector click-select otherwise -- an armed ability's target
+    /// selection takes over the click entirely while it's active, matching how the outline
+    /// describes left-click as the universal "activate" gesture once something is armed.
+    /// </summary>
+    protected override void OnContentClickAction(Point mousePosition)
+    {
+        if (_mapViewState.ArmedAbilityId is { } abilityId)
+        {
+            TryConfirmActivation(mousePosition, abilityId);
             return;
         }
 
-        var mapPosition = new Point(x + _currentScrollPosition.X, y + _currentScrollPosition.Y);
+        SelectMapNodes(mousePosition);
+    }
 
-        // _tileColumns/_tileRows are the visible viewport grid, which can be larger than
-        // the actual map -- a click can land within the viewport but past the map's real edge.
-        if (!_world.IsOnMap(new Vector3Int(mapPosition.X, mapPosition.Y, 0)))
+    /// <summary>
+    /// Confirms the armed ability against whichever tile was clicked, provided that tile is
+    /// actually within TargetableTiles (clicking outside the highlighted area is a no-op --
+    /// the ability stays armed, exactly like clicking empty space doesn't clear an inspector
+    /// selection either). Resolves the ability's real Shape anchored on the clicked tile (not
+    /// the fixed candidate-enumeration shape ComputeTargetableTiles uses) -- for Adjacent this
+    /// produces the same fixed footprint regardless of which of its tiles was clicked, since
+    /// Adjacent ignores the cursor entirely.
+    /// </summary>
+    private void TryConfirmActivation(Point mousePosition, Guid abilityId)
+    {
+        if (!TryGetHoveredMapPosition(mousePosition, out var clickedColumnRow) ||
+            !_abilityCatalog.TryGet(abilityId, out var ability) ||
+            !_transformPool.TryGetReadonly(_world.PlayerEntityId, out var transform))
         {
             return;
         }
 
-        _mapViewState.SelectedMapNodePosition = mapPosition;
+        var attackerPosition = transform.Position;
+        var clickedTile = new Vector3Int(clickedColumnRow.X, clickedColumnRow.Y, attackerPosition.Z);
+
+        if (_mapViewState.TargetableTiles is not { } targetableTiles || !targetableTiles.Contains(clickedTile))
+        {
+            return;
+        }
+
+        TargetShapeResolver.Resolve(ability.Targeting.Shape, attackerPosition, clickedTile, ability.Targeting.Range, ability.Targeting.AreaSize, _world.Map.Size, _finalTargetTilesBuffer);
+        QueueActivation(_world.PlayerEntityId, abilityId, _finalTargetTilesBuffer);
+        Disarm();
     }
 
-    protected override void OnContentClickAction(Point mousePosition) => SelectMapNodes(mousePosition);
+    /// <summary>
+    /// Cancels an armed ability (right-click tap or Escape -- see OnRightClickTapAction/
+    /// OnEscapeAction), or, if nothing is armed, cancels a Delayed ability's in-progress windup
+    /// instead: clears PendingDelayedActionComponent and zeroes the shared ActionLock directly
+    /// (via ActionLockGate.Lock(..., 0)) so cancelling frees the entity immediately rather than
+    /// still waiting out the full wind-up with no effect at the end -- see PendingDelayedActionComponent's
+    /// own doc comment.
+    /// </summary>
+    private void CancelArmedOrPendingAction()
+    {
+        if (_mapViewState.ArmedAbilityId is not null)
+        {
+            Disarm();
+            return;
+        }
+
+        var playerEntityId = _world.PlayerEntityId;
+        if (_pendingDelayedActions.Remove(playerEntityId))
+        {
+            ActionLockGate.Lock(_actionLocks, playerEntityId, framesToWait: 0);
+        }
+    }
+
+    protected override void OnRightClickTapAction() => CancelArmedOrPendingAction();
+
+    protected override void OnEscapeAction() => CancelArmedOrPendingAction();
 
     /// <summary>The map's own hotkeys -- only invoked while this window holds focus (see GameInputController.RouteHotkeysToFocusedWindow).</summary>
     protected override void OnHotkeysAction(KeyboardState keyboardState, KeyboardState previousKeyboardState)
@@ -818,6 +1019,172 @@ public sealed class MapWindow : Window
         {
             ChangeLayer(-1);
         }
+
+        HandleAbilityHotkeys(keyboardState, previousKeyboardState);
+    }
+
+    /// <summary>
+    /// One hotkey slot per HotkeySlotLayout.PhysicalKeyBySlot entry -- an unbound slot's press
+    /// is silently a no-op (see HandleHotkeySlotPress), which is exactly what a slot with no
+    /// HotkeyBindingComponent instance already produces, so no separate "is this slot enabled"
+    /// check is needed here.
+    /// </summary>
+    private void HandleAbilityHotkeys(KeyboardState keyboardState, KeyboardState previousKeyboardState)
+    {
+        foreach (var (slot, physicalKey) in HotkeySlotLayout.PhysicalKeyBySlot)
+        {
+            if (WasKeyPressed(keyboardState, previousKeyboardState, physicalKey))
+            {
+                HandleHotkeySlotPress(slot);
+            }
+        }
+    }
+
+    /// <summary>
+    /// Arms/disarms the pressed slot's ability, or -- on a double-tap within
+    /// DoubleTapWindowFrames -- skips arming entirely and immediately activates against an
+    /// auto-picked target (see TryActivateWithAutoTarget). An unbound slot does nothing either
+    /// way, per the outline's requirement that unused hotkeys be inert.
+    /// </summary>
+    private void HandleHotkeySlotPress(HotkeySlot slot)
+    {
+        var isDoubleTap = _lastHotkeyPressFrameBySlot.TryGetValue(slot, out var lastPressFrame) &&
+            _frameCounter - lastPressFrame <= DoubleTapWindowFrames;
+        _lastHotkeyPressFrameBySlot[slot] = _frameCounter;
+
+        if (!HotkeyBindingQueries.TryGet(_hotkeyBindings, _world.PlayerEntityId, slot, out var abilityId))
+        {
+            return;
+        }
+
+        if (isDoubleTap)
+        {
+            TryActivateWithAutoTarget(_world.PlayerEntityId, abilityId);
+
+            // The pair's first press (a moment ago, within the double-tap window) armed this
+            // same slot -- now that it's fired, leaving it visually armed would be stale/
+            // misleading, so clear it rather than requiring a third press to tidy up.
+            if (_mapViewState.ArmedSlot == slot)
+            {
+                Disarm();
+            }
+
+            return;
+        }
+
+        if (_mapViewState.ArmedSlot == slot)
+        {
+            // Pressing the already-armed slot again disarms it. A no-target ability activating
+            // on this same press is a later Presentation phase's concern (it needs to know the
+            // ability's Shape doesn't require a target tile at all, not just that its slot was
+            // pressed again) -- every ability granted so far requires a target, so disarm-only
+            // is the complete, correct behavior today.
+            Disarm();
+            return;
+        }
+
+        Arm(slot, abilityId);
+    }
+
+    private void Arm(HotkeySlot slot, Guid abilityId)
+    {
+        _mapViewState.ArmedAbilityId = abilityId;
+        _mapViewState.ArmedSlot = slot;
+
+        if (_abilityCatalog.TryGet(abilityId, out var ability) && _transformPool.TryGetReadonly(_world.PlayerEntityId, out var transform))
+        {
+            ComputeTargetableTiles(transform.Position, ability, _candidateTilesBuffer);
+            _mapViewState.TargetableTiles = _candidateTilesBuffer.ToHashSet();
+        }
+    }
+
+    private void Disarm()
+    {
+        _mapViewState.ArmedAbilityId = null;
+        _mapViewState.ArmedSlot = null;
+        _mapViewState.TargetableTiles = null;
+    }
+
+    /// <summary>
+    /// The full universe of tiles the given ability could possibly be aimed at from
+    /// attackerPosition -- Adjacent's fixed self-plus-4-neighbors footprint, or every tile
+    /// within the ability's own Range for every cursor-directed shape (SingleTarget/Burst/Line/
+    /// Cone) via a Burst-shaped scatter, not the ability's real Shape -- there's no single
+    /// "aim direction" yet at arm time, only a reachable area. Shared by Arm (for highlighting)
+    /// and TryActivateWithAutoTarget (for double-tap's candidate pool), so the two never drift
+    /// out of sync with each other.
+    /// </summary>
+    private void ComputeTargetableTiles(Vector3Int attackerPosition, AbilityDefinition ability, List<Vector3Int> buffer)
+    {
+        if (ability.Targeting.Shape == TargetShape.Adjacent)
+        {
+            TargetShapeResolver.Resolve(TargetShape.Adjacent, attackerPosition, attackerPosition, range: 0, areaSize: 0, _world.Map.Size, buffer);
+            return;
+        }
+
+        TargetShapeResolver.Resolve(TargetShape.Burst, attackerPosition, attackerPosition, range: 0, ability.Targeting.Range, _world.Map.Size, buffer);
+    }
+
+    /// <summary>
+    /// Resolves and queues a full activation with no manual click-confirm at all -- the
+    /// double-tap path. Adjacent's footprint never depends on a target choice (it's always the
+    /// caster's own tile plus its 4 cardinal neighbors), so it's queued immediately. Every other
+    /// shape needs a target tile chosen first: ComputeTargetableTiles' reachable-area candidates
+    /// are filtered down to occupied tiles and handed to TargetPriority.SelectAutoTarget, using
+    /// MapViewState.HoveredTile as the cursor bias when one is already tracked (armed-and-then-
+    /// double-tapped in one motion means Update hasn't run with the arm in effect yet, so
+    /// HoveredTile can still be stale/null on the very first pair -- attackerPosition is the
+    /// fallback for exactly that case, which is also what makes "closest to cursor" degenerate
+    /// harmlessly into "closest to the caster" rather than picking an arbitrary target).
+    /// </summary>
+    private void TryActivateWithAutoTarget(int entityId, Guid abilityId)
+    {
+        if (!_abilityCatalog.TryGet(abilityId, out var ability) || !_transformPool.TryGetReadonly(entityId, out var transform))
+        {
+            return;
+        }
+
+        var attackerPosition = transform.Position;
+        var mapSize = _world.Map.Size;
+
+        if (ability.Targeting.Shape == TargetShape.Adjacent)
+        {
+            ComputeTargetableTiles(attackerPosition, ability, _candidateTilesBuffer);
+            QueueActivation(entityId, abilityId, _candidateTilesBuffer);
+            return;
+        }
+
+        ComputeTargetableTiles(attackerPosition, ability, _candidateTilesBuffer);
+
+        _occupiedCandidateTilesBuffer.Clear();
+        foreach (var tile in _candidateTilesBuffer)
+        {
+            var occupantEntityId = _world.GetEntityIdAt(tile);
+            if (occupantEntityId != -1 && occupantEntityId != entityId)
+            {
+                _occupiedCandidateTilesBuffer.Add(tile);
+            }
+        }
+
+        var cursorTile = _mapViewState.HoveredTile ?? attackerPosition;
+        if (TargetPriority.SelectAutoTarget(attackerPosition, cursorTile, _occupiedCandidateTilesBuffer) is not { } chosenTile)
+        {
+            return;
+        }
+
+        TargetShapeResolver.Resolve(ability.Targeting.Shape, attackerPosition, chosenTile, ability.Targeting.Range, ability.Targeting.AreaSize, mapSize, _finalTargetTilesBuffer);
+        QueueActivation(entityId, abilityId, _finalTargetTilesBuffer);
+    }
+
+    /// <summary>Presentation only ever queues an activation request -- AbilityActivationSystem is the only thing that applies gameplay effects. Mirrors TryQueuePlayerMove's existing queue-and-let-a-system-consume pattern for movement.</summary>
+    private void QueueActivation(int entityId, Guid abilityId, List<Vector3Int> targetTiles)
+    {
+        if (targetTiles.Count == 0)
+        {
+            return;
+        }
+
+        _pendingActivations.Merge(entityId, new PendingAbilityActivationComponent(abilityId, targetTiles.ToArray()));
     }
 
     private void CycleZoom(int direction)

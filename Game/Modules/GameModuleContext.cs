@@ -1,5 +1,6 @@
 using Engine.Events;
 using Engine.Math;
+using Game.Modules.Abilities;
 using Game.Modules.StatusEffects;
 using Game.World;
 
@@ -23,4 +24,7 @@ public sealed record GameModuleContext(IMapQuery MapQuery, MathUtility MathUtili
     /// Configure) rather than in RegisterComponents/RegisterSystems is what makes ordering safe.
     /// </summary>
     public StatusEffectAuraApplierRegistry StatusEffectAuraAppliers { get; init; } = new();
+
+    /// <summary>Shared across every module's Configure call within one build -- same reasoning as StatusEffectAuraAppliers above.</summary>
+    public AbilityCatalog Abilities { get; init; } = new();
 }

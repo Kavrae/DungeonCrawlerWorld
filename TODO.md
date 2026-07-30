@@ -37,6 +37,8 @@ A general way to combine multiple simultaneous stat modifiers -- from equipment,
 
 Directly related to the generic status-effect system above -- `Magnitude` there is exactly this kind of value, and the derived-question functions it proposes (`GetSpeedMultiplier`, etc.) are where additive/multiplicative combination would actually get applied. Also directly relevant to the new stats items under Game/Presentation (stat points, buffs/debuffs) and equipment above.
 
+Concretely blocked on this now: Engineer's class-level +1 melee damage bonus (deferred rather than special-cased into the ability system -- see the Melee attack implementation item), and more generally, any ability's damage/cooldown/Action Lock frames/status effects needing modification both persistently (race/class/equipment) and temporarily (a cast-time buff spell), not just flat stat bonuses. Fold into this same design pass rather than a separate one; it's the same underlying requirement (sum additive modifiers, then apply multiplicative ones, fixed order) applied to ability data instead of raw stats.
+
 #### Explore the C# `Span<T>` structure for component storage
 
 Component pools (`DirectComponentPool<T>`/`PackedComponentPool<T>`/`MultiComponentPool<T>`, `Engine/ECS/Components/Stores`) are hot-path -- called every frame, per striped system (see `SystemManager`/`EntityStripeSet` in CLAUDE.md's ECS notes). Worth spiking whether exposing pool data as `Span<T>`/`ReadOnlySpan<T>` (bulk contiguous access, no per-element bounds-check/indirection, no allocation) is a meaningful win over the current per-entity-id indexed access pattern, particularly for systems that process most or all of a pool's population rather than a scattered subset.
@@ -61,7 +63,15 @@ Item interactions, storage rules, restricted items, etc. Governs how the Engine-
 
 For NPCs and the player. Attacking sets the same shared ActionLockComponent that movement sets on a successful move, creating a tactical decision between moving more vs. attacking more -- choosing to attack this window means not moving this window, and vice versa. Can target any entity one tile away that has physical collision -- even entities without hit points, since this allows status effects to be applied to otherwise-immortal entities. Depends on the Engine-layer generic status-effect system above for the "immortal but affectable" case.
 
+#### Death at 0 HP
+
+`HealthComponent.CurrentHealth` can reach 0 today with no consequence -- nothing removes the entity, stops its systems from processing it, or notifies anything. Now that melee/abilities can reliably deal lethal damage (the ability/hotkey system above), an entity actually reaching 0 HP needs a real transition (map/occupancy removal at minimum). See the matching Presentation item below for the player-specific end state.
+
 ### Low Priority
+
+#### Replace MeleeModule with a general ability library
+
+`Game/Modules/Melee/MeleeModule.cs` registers exactly one ability definition ("Default Attack") directly in its own `Configure` -- a reasonable first step (see the Melee attack implementation item above), but it hard-codes "melee module = one fallback attack" rather than being a real content library. Once more than one race/class-agnostic ability exists (e.g. the self-buff/poison-toggle/self-heal examples below), replace it with a proper catalog of premade, off-the-shelf `AbilityDefinition`s that aren't tied to any specific race or class -- race/class blueprints then pick whichever ones they want to grant (Default Attack among them), rather than every generic ability living inside a module named after one specific attack.
 
 #### Show runner race
 
@@ -93,6 +103,22 @@ Defeat enemies to get experience points. Each class gets different stats, abilit
 - Can stack to increase damage and duration (so multiplicatively worse)
 - Gets worse for each movement the entity ends in lava
 
+#### Goblins attack adjacent targets with default melee instead of moving
+
+Today's `MovementMode.Random` walks a goblin into an occupied tile as if it were empty (blocked by `CanMove`, so it just doesn't move) rather than attacking. Now that melee is a real action any entity can trigger, goblin AI should prefer activating its Default Attack against an adjacent blocking entity over its normal random-wander check.
+
+#### Self damage buff ability
+
+An example FreeCast or Immediate ability that raises the caster's own outgoing damage for a duration -- exercises the ability system on a non-damage-dealing, self-targeted effect.
+
+#### Toggle poison aura ability
+
+A FreeCast-style ability that turns an existing Poison/StatusEffectAura source on/off around the caster -- exercises FreeCast's "usable during an Action Lock" behavior against the existing aura machinery.
+
+#### Self heal ability
+
+Companion example to the self-buff/poison-toggle items above -- a positive, self-targeted effect using the same plumbing.
+
 #### Body parts
 
 - Plan first
@@ -112,7 +138,9 @@ Defeat enemies to get experience points. Each class gets different stats, abilit
 
 Tabs, sorting, click-and-drag organization, icons, click-to-inspect. Depends on the Standard widget set item below for list/tab-style controls, and on the Engine inventory system and Game inventory rules above for the data it's displaying.
 
-#### Inventory and spell hotbar
+#### Game over screen on player 0 HP
+
+Companion to the Game-layer Death at 0 HP item above, specifically for the player entity -- the player dying today has no distinct end state or UI at all.
 
 #### Context menu / mouse button coverage
 
@@ -125,6 +153,8 @@ Persisted view of the player's active stats. Always shows the same fixed set of 
 #### Player attack button or key
 
 A button or key for attacking, distinct from the hotbar -- needs to be available outside the hotbar but usable more quickly than going through the context menu. Determine the best UI treatment for this class of "common interaction that should always be quickly accessible."
+
+Partially addressed by the hotkey/ability system: Default Attack is bound to F by default and fires with a single press (or double-tap for auto-target), which covers the "quickly accessible" requirement functionally. What's still unaddressed is "distinct from the hotbar" specifically -- today it's just one more `HotbarContent` slot (`Presentation/UI/Content/HotbarContent.cs`) like any other, not a separate always-visible control outside it. Revisit whether that distinction is still wanted now that the hotbar itself is fast to use.
 
 #### Standard widget set
 
@@ -157,6 +187,10 @@ Deliberately out of scope for this first pass -- start narrow; see Text Input En
 Affected: `Presentation/UI/Window.cs` (new `HandleTextInput` hook, `NextTextBoxAfter`, `FocusRequested`), `Presentation/UI/IWindowContent.cs` (new hook), `Presentation/Input/GameInputController.cs` (new routing method, `SetFocus` auto-redirect), `Presentation/UI/TextBox.cs` (new), `Presentation/UI/Notifications/NotificationCenter.cs` (consumer for the demo).
 
 ### Low Priority
+
+#### Ability summary on hotkey hover
+
+A tooltip-style panel showing an ability's name/effect/cooldown when hovering its hotbar slot (`Presentation/UI/Content/HotbarContent.cs`) -- depends on the Hotbar UI existing first, which it now does.
 
 #### Player stats v2
 
@@ -217,6 +251,12 @@ That design assumed ghosts/insects are always a small population relative to the
 When this becomes a real bottleneck: replace the per-frame full-pool rescan with an actual position-keyed index for non-Blocking entities, kept incrementally in sync with placement/movement/removal the same way `Map`'s own creature-occupancy array is -- or at minimum, only rebuild `MapWindow`'s dictionary when the Occupancy pool or relevant transforms have actually changed since the last frame, rather than unconditionally every frame.
 
 Affected: `Presentation/UI/MapWindow.cs` (`BuildOccupantsByPosition`), `Presentation/UI/Content/SelectionWindowContent.cs` (`RecomputeSelectedEntityIds`).
+
+#### Review MapWindow for properties that belong on MapViewState instead
+
+MapWindow has accumulated a growing set of its own instance fields (camera/zoom state, hotkey-arming bookkeeping, hover-tracking buffers) alongside `MapViewState`, which already holds the shared state other windows/content need to read (`SelectedMapNodePosition`/`CurrentMapLayer`/`ArmedAbilityId`/`ArmedSlot`/`TargetableTiles`/`HoveredTile`). Worth a pass to check whether any of MapWindow's own private fields are actually shared/inspectable state that belongs on `MapViewState` -- the established convention for state another window/content might need to read -- rather than staying private to MapWindow, particularly as more Presentation work (Hotbar UI, activation flow) lands on top and may need some of that same state.
+
+Affected: `Presentation/UI/MapWindow.cs`, `Presentation/UI/MapViewState.cs`.
 
 #### Window minimize completeness
 

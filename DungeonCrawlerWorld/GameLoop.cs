@@ -80,7 +80,7 @@ public sealed class GameLoop : Microsoft.Xna.Framework.Game
 
         _presentation = PresentationBootstrapper.Build(GraphicsDevice, "Fonts");
         var screenSize = new Vector2(_graphics.PreferredBackBufferWidth, _graphics.PreferredBackBufferHeight);
-        _shell = GameShellBootstrapper.Build(_presentation, world, _ecsContext, screenSize);
+        _shell = GameShellBootstrapper.Build(_presentation, world, _ecsContext, bootstrapResult.AbilityCatalog, screenSize);
         _inputController = _shell.InputController;
 
         base.Initialize();

@@ -99,6 +99,36 @@ public sealed class MultiComponentPoolTests
     }
 
     [TestMethod]
+    public void EntityAdded_FiresOnlyOnZeroToOneTransition_NotOnEverySubsequentAdd()
+    {
+        var pool = new MultiComponentPool<TestComponent>(maximumEntityCount: 10, initialCapacity: 4);
+        var addedFiredCount = 0;
+        pool.EntityAdded += _ => addedFiredCount++;
+
+        pool.Add(0, new TestComponent { Value = 1 });
+        pool.Add(0, new TestComponent { Value = 2 });
+        pool.Add(0, new TestComponent { Value = 3 });
+
+        Assert.AreEqual(1, addedFiredCount);
+    }
+
+    [TestMethod]
+    public void EntityRemoved_FiresOnlyOnOneToZeroTransition_NotOnEveryIntermediateRemove()
+    {
+        var pool = new MultiComponentPool<TestComponent>(maximumEntityCount: 10, initialCapacity: 4);
+        pool.Add(0, new TestComponent { Value = 1 });
+        pool.Add(0, new TestComponent { Value = 2 });
+        var removedFiredCount = 0;
+        pool.EntityRemoved += _ => removedFiredCount++;
+
+        pool.RemoveFirst(0, (ref readonly c) => c.Value == 1);
+        Assert.AreEqual(0, removedFiredCount);
+
+        pool.RemoveFirst(0, (ref readonly c) => c.Value == 2);
+        Assert.AreEqual(1, removedFiredCount);
+    }
+
+    [TestMethod]
     public void EntityVersion_IncrementsOnAddAndRemove()
     {
         var pool = new MultiComponentPool<TestComponent>(maximumEntityCount: 10, initialCapacity: 4);

@@ -1,7 +1,9 @@
 using Engine.ECS.Components;
 using Engine.Math;
+using Game.Modules.Abilities.Components;
 using Game.Modules.Core.Components;
 using Game.Modules.Health.Components;
+using Game.Modules.Melee;
 using Game.Modules.Movement.Components;
 using Game.Modules.Race.Components;
 using Microsoft.Xna.Framework;
@@ -21,6 +23,9 @@ public sealed class Fairy(MathUtility mathUtility) : IBlueprint
     private const short MaximumHealth = 100;
     private const short HealthRegen = 1;
 
+    /// <summary>Hardcoded stopgap until the Additive/Multiplicative bonuses system exists -- see TODO.md.</summary>
+    private const short DefaultAttackDamage = 5;
+
     public void Build(ComponentManager componentManager, int entityId)
     {
         componentManager.Merge(entityId, new RaceComponent(RaceId, RaceName, Description));
@@ -35,5 +40,7 @@ public sealed class Fairy(MathUtility mathUtility) : IBlueprint
 
         componentManager.Merge(entityId, new TransformComponent(
             new Vector3Int(0, 0, (int)MapLayer.Flying), new Vector2Byte(1, 1)));
+
+        componentManager.Merge(entityId, new AbilityInstanceComponent(MeleeModule.DefaultAttackId, damageAmount: DefaultAttackDamage, cooldownFramesRemaining: 0));
     }
 }

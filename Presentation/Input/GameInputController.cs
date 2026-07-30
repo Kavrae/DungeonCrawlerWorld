@@ -34,6 +34,12 @@ public sealed class GameInputController
     /// <summary>Mouse position at the moment the current right-drag started -- HandleRightDrag reports the total delta from this anchor every frame, not a per-frame increment, so the receiving window never has to worry about drift from accumulating many small deltas.</summary>
     private Vector2 _rightDragStartMousePosition;
 
+    /// <summary>Pixel distance past which a right-button press/release reads as a drag rather than a tap -- see HandleRightDrag/HandleRightDragEnd. Small enough to absorb ordinary click jitter, comfortably smaller than an intentional pan.</summary>
+    private const float RightClickTapThresholdPixels = 4f;
+
+    /// <summary>Set once the current right-drag's total delta has ever exceeded RightClickTapThresholdPixels -- checked (not recomputed) at release, so a drag that wandered out past the threshold and back before releasing still counts as a drag, not a tap.</summary>
+    private bool _rightDragExceededTapThreshold;
+
     private Window? _focusedWindow;
 
     /// <summary>
@@ -139,6 +145,7 @@ public sealed class GameInputController
     {
         RouteHotkeysToFocusedWindow(keyboardState);
         HandleFocusCycling(keyboardState);
+        HandleEscape(keyboardState);
         RouteKeyPressesToFocusedWindow(keyboardState);
         RouteTextInputToFocusedWindow();
 
@@ -195,6 +202,34 @@ public sealed class GameInputController
             ? -1
             : 1;
         CycleFocus(direction);
+    }
+
+    /// <summary>
+    /// Escape must stay unconditional too, the same reasoning as Tab above: broadcast to every
+    /// root/HUD window (not just whichever holds focus) rather than routed only to the focused
+    /// one, since an armed ability's own window (MapWindow) shouldn't have to hold keyboard
+    /// focus for Escape to cancel it -- e.g. a HUD panel could be focused while the map still
+    /// has an ability armed. AlwaysOnTop (notification popups) is deliberately excluded, the
+    /// same tier scope CycleFocus already uses. No-op by default (Window.OnEscapeAction);
+    /// MapWindow is the only override today. This is scoped to ability-cancel only -- the
+    /// separate "Escape opens the options menu" TODO.md item isn't implemented here.
+    /// </summary>
+    private void HandleEscape(KeyboardState keyboardState)
+    {
+        if (!IsKeyPressed(keyboardState, Keys.Escape))
+        {
+            return;
+        }
+
+        foreach (var window in _rootWindows)
+        {
+            window.HandleEscape();
+        }
+
+        foreach (var window in _hudWindows)
+        {
+            window.HandleEscape();
+        }
     }
 
     private void HandleMousePress(MouseState mouseState)
@@ -274,19 +309,35 @@ public sealed class GameInputController
         var position = new Point(mouseState.X, mouseState.Y);
         _rightDragWindow = TryHitTestInteraction(position).Window;
         _rightDragStartMousePosition = new Vector2(mouseState.X, mouseState.Y);
+        _rightDragExceededTapThreshold = false;
         _rightDragWindow?.HandleRightDragStart();
     }
 
-    /// <summary>Forwards the total mouse-pixel delta since the drag started (not this frame's increment) to whichever window the drag started over -- see Window.HandleRightDrag.</summary>
+    /// <summary>Forwards the total mouse-pixel delta since the drag started (not this frame's increment) to whichever window the drag started over -- see Window.HandleRightDrag. Also latches _rightDragExceededTapThreshold once this gesture has moved enough to count as a real drag, not a tap -- see HandleRightDragEnd.</summary>
     private void HandleRightDrag(MouseState mouseState)
     {
         var totalDelta = new Vector2(mouseState.X, mouseState.Y) - _rightDragStartMousePosition;
+
+        if (totalDelta.Length() > RightClickTapThresholdPixels)
+        {
+            _rightDragExceededTapThreshold = true;
+        }
+
         _rightDragWindow?.HandleRightDrag(totalDelta);
     }
 
+    /// <summary>A gesture that never exceeded the tap threshold reads as a right-click tap (e.g. ability-cancel) instead of a drag-end -- a real drag's own end-of-gesture handling (e.g. MapWindow settling its smooth scroll onto the tile grid) has nothing to do for a tap anyway, since it never moved.</summary>
     private void HandleRightDragEnd()
     {
-        _rightDragWindow?.HandleRightDragEnd();
+        if (_rightDragExceededTapThreshold)
+        {
+            _rightDragWindow?.HandleRightDragEnd();
+        }
+        else
+        {
+            _rightDragWindow?.HandleRightClickTap();
+        }
+
         _rightDragWindow = null;
     }
 

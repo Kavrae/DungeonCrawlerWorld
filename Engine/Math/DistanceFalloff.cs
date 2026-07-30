@@ -33,6 +33,7 @@ public static class DistanceFalloff
     public static int MaxRadius(int strength) => strength <= 0 ? -1 : (int)System.Math.Log2(strength);
 
     public delegate void ManhattanCellVisitor(Vector3Int cellPosition, int contribution);
+    public delegate void ManhattanCellVisitor<in TState>(Vector3Int cellPosition, int contribution, TState state);
 
     /// <summary>
     /// Visits every cell within a Manhattan-distance falloff radius of sourcePosition (same Z
@@ -43,8 +44,19 @@ public static class DistanceFalloff
     /// weighted-color sum). The diamond loop bounds (deltaX limited to
     /// maxRadius - |deltaY| per row) visit only cells actually within range, rather than a
     /// full square scan that then discards out-of-range corners.
+    ///
+    /// Thin wrapper over the TState overload below -- existing callers here already pass a
+    /// capturing lambda (both current ones run once at construction time, not per-frame, so the
+    /// closure allocation was never a real cost for them), so this keeps their call sites
+    /// unchanged rather than forcing every caller to adopt the state-passing shape. Callers that
+    /// run every frame (e.g. TargetShapeResolver, for live hover tracking) should use the TState
+    /// overload with a static lambda instead, to avoid allocating a new closure on every call.
     /// </summary>
-    public static void ScatterManhattan(Vector3Int sourcePosition, int strength, Vector3Int mapSize, ManhattanCellVisitor visit)
+    public static void ScatterManhattan(Vector3Int sourcePosition, int strength, Vector3Int mapSize, ManhattanCellVisitor visit) =>
+        ScatterManhattan(sourcePosition, strength, mapSize, visit, static (cellPosition, contribution, state) => state(cellPosition, contribution));
+
+    /// <summary>See the non-generic overload above for the shared shape/bounds rationale. state is threaded through to visit unchanged, so a caller can pass a static lambda plus whatever state it needs (e.g. a results buffer) without allocating a closure per call.</summary>
+    public static void ScatterManhattan<TState>(Vector3Int sourcePosition, int strength, Vector3Int mapSize, TState state, ManhattanCellVisitor<TState> visit)
     {
         var maxRadius = MaxRadius(strength);
         if (maxRadius < 0)
@@ -76,7 +88,7 @@ public static class DistanceFalloff
                     continue;
                 }
 
-                visit(cellPosition, contribution);
+                visit(cellPosition, contribution, state);
             }
         }
     }

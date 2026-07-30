@@ -1,5 +1,7 @@
 using Engine.ECS.Components;
 using Engine.Math;
+using Game.Modules.Abilities;
+using Game.Modules.Abilities.Components;
 using Game.Modules.Core.Components;
 using Game.Modules.Health.Components;
 using Game.Modules.Movement.Components;
@@ -35,7 +37,15 @@ public sealed class MapWindowTests
     private static (Game.World.World World, MapViewState MapViewState, MapWindow MapWindow, ComponentManager ComponentManager) BuildMapWindowWithPlayer(int mapSizeX, int mapSizeY, int mapSizeZ, Vector3Int playerPosition) =>
         BuildMapWindowCore(mapSizeX, mapSizeY, mapSizeZ, playerPosition);
 
-    private static (Game.World.World World, MapViewState MapViewState, MapWindow MapWindow, ComponentManager ComponentManager) BuildMapWindowCore(int mapSizeX, int mapSizeY, int mapSizeZ, Vector3Int? playerPosition)
+    /// <summary>Same as BuildMapWindowWithPlayer, but also hands back the AbilityCatalog MapWindow was built with -- for hotkey/ability tests that need to register a test AbilityDefinition before pressing anything.</summary>
+    private static (Game.World.World World, MapViewState MapViewState, MapWindow MapWindow, ComponentManager ComponentManager, AbilityCatalog AbilityCatalog) BuildMapWindowWithPlayerAndAbilities(int mapSizeX, int mapSizeY, int mapSizeZ, Vector3Int playerPosition)
+    {
+        var abilityCatalog = new AbilityCatalog();
+        var (world, mapViewState, mapWindow, componentManager) = BuildMapWindowCore(mapSizeX, mapSizeY, mapSizeZ, playerPosition, abilityCatalog);
+        return (world, mapViewState, mapWindow, componentManager, abilityCatalog);
+    }
+
+    private static (Game.World.World World, MapViewState MapViewState, MapWindow MapWindow, ComponentManager ComponentManager) BuildMapWindowCore(int mapSizeX, int mapSizeY, int mapSizeZ, Vector3Int? playerPosition, AbilityCatalog? abilityCatalog = null)
     {
         var world = new Game.World.World(new Game.World.Map(new Vector3Int(mapSizeX, mapSizeY, mapSizeZ)));
         var mapViewState = new MapViewState();
@@ -50,6 +60,11 @@ public sealed class MapWindowTests
         componentManager.RegisterPackedPool<MovementComponent>(static (ref existing, incoming) => existing = incoming);
         componentManager.RegisterPackedPool<HealthComponent>(static (ref existing, incoming) => existing = incoming);
         componentManager.RegisterPackedPool<StatusEffectAuraSourceComponent>(static (ref existing, incoming) => existing = incoming);
+        componentManager.RegisterMultiPool<AbilityInstanceComponent>();
+        componentManager.RegisterMultiPool<HotkeyBindingComponent>();
+        componentManager.RegisterPackedPool<PendingAbilityActivationComponent>(static (ref existing, incoming) => existing = incoming);
+        componentManager.RegisterPackedPool<PendingDelayedActionComponent>(static (ref existing, incoming) => existing = incoming);
+        componentManager.RegisterPackedPool<ActionLockComponent>(static (ref existing, incoming) => existing = incoming);
 
         if (playerPosition is { } position)
         {
@@ -59,7 +74,7 @@ public sealed class MapWindowTests
         }
 
         windowService.RegisterFactory<MapWindow>((_, _) => new MapWindow(
-            fontService, windowService, world, mapViewState, componentManager, new TileRenderer(), new GlyphRenderer()));
+            fontService, windowService, world, mapViewState, componentManager, abilityCatalog ?? new AbilityCatalog(), new TileRenderer(), new GlyphRenderer()));
 
         var mapWindow = windowService.CreateWindow<MapWindow>(null, new WindowOptions
         {
@@ -471,5 +486,464 @@ public sealed class MapWindowTests
         mapWindow.SelectMapNodes(new Point(1, 1));
 
         Assert.AreEqual(new Point(0, 0), mapViewState.SelectedMapNodePosition);
+    }
+
+    private static readonly Guid TestAbilityId = new("99999999-9999-9999-9999-999999999999");
+
+    private static void RegisterTestAdjacentAbility(AbilityCatalog abilityCatalog) =>
+        abilityCatalog.Register(new AbilityDefinition(
+            TestAbilityId,
+            "Test Adjacent",
+            "#",
+            new AbilityTargeting(TargetShape.Adjacent, Range: 0),
+            new AbilityTiming(ActionTimingCategory.Immediate, ActionLockFrames: 30, CooldownFrames: null),
+            new AbilityEffect(DamageAmount: 0, StatusEffects: [])));
+
+    [TestMethod]
+    public void HandleHotkeys_PressingBoundSlot_ArmsIt()
+    {
+        var (_, mapViewState, mapWindow, componentManager, abilityCatalog) = BuildMapWindowWithPlayerAndAbilities(300, 300, 1, new Vector3Int(100, 100, 0));
+        RegisterTestAdjacentAbility(abilityCatalog);
+        componentManager.Merge(PlayerEntityId, new AbilityInstanceComponent(TestAbilityId, damageAmount: 10, cooldownFramesRemaining: 0));
+        componentManager.Merge(PlayerEntityId, new HotkeyBindingComponent(HotkeySlot.Slot4, TestAbilityId));
+
+        mapWindow.HandleHotkeys(new KeyboardState(Keys.F), new KeyboardState());
+
+        Assert.AreEqual(TestAbilityId, mapViewState.ArmedAbilityId);
+        Assert.AreEqual(HotkeySlot.Slot4, mapViewState.ArmedSlot);
+    }
+
+    [TestMethod]
+    public void HandleHotkeys_PressingArmedSlotAgainAfterDoubleTapWindowElapses_Disarms()
+    {
+        var (_, mapViewState, mapWindow, componentManager, abilityCatalog) = BuildMapWindowWithPlayerAndAbilities(300, 300, 1, new Vector3Int(100, 100, 0));
+        RegisterTestAdjacentAbility(abilityCatalog);
+        componentManager.Merge(PlayerEntityId, new AbilityInstanceComponent(TestAbilityId, damageAmount: 10, cooldownFramesRemaining: 0));
+        componentManager.Merge(PlayerEntityId, new HotkeyBindingComponent(HotkeySlot.Slot4, TestAbilityId));
+
+        mapWindow.HandleHotkeys(new KeyboardState(Keys.F), new KeyboardState());
+        Assert.IsNotNull(mapViewState.ArmedAbilityId);
+
+        // Advance well past the ~18-frame double-tap window so the next press reads as an
+        // independent press, not a double-tap.
+        for (var i = 0; i < 20; i++)
+        {
+            mapWindow.Update(new GameTime());
+        }
+
+        mapWindow.HandleHotkeys(new KeyboardState(Keys.F), new KeyboardState());
+
+        Assert.IsNull(mapViewState.ArmedAbilityId);
+        Assert.IsNull(mapViewState.ArmedSlot);
+    }
+
+    [TestMethod]
+    public void HandleHotkeys_PressingUnboundSlot_DoesNothing()
+    {
+        var (_, mapViewState, mapWindow, _, _) = BuildMapWindowWithPlayerAndAbilities(300, 300, 1, new Vector3Int(100, 100, 0));
+
+        mapWindow.HandleHotkeys(new KeyboardState(Keys.Q), new KeyboardState());
+
+        Assert.IsNull(mapViewState.ArmedAbilityId);
+        Assert.IsNull(mapViewState.ArmedSlot);
+    }
+
+    /// <summary>
+    /// Two presses with no Update call in between leave the frame counter unchanged, so the
+    /// second press reads as a double-tap (see HandleHotkeySlotPress) -- this activates
+    /// immediately against Adjacent's fixed footprint (the caster's own tile plus its 4
+    /// cardinal neighbors) rather than merely arming, and the queued PendingAbilityActivationComponent
+    /// is the observable proof (actual damage application is AbilityActivationSystem's own
+    /// responsibility, covered by AbilityActivationSystemTests, not exercised by this
+    /// ComponentManager-only test harness).
+    /// </summary>
+    [TestMethod]
+    public void HandleHotkeys_DoubleTapAdjacentAbility_QueuesActivationAgainstTheFixedFootprint_AndClearsAnyArming()
+    {
+        var (_, mapViewState, mapWindow, componentManager, abilityCatalog) = BuildMapWindowWithPlayerAndAbilities(300, 300, 1, new Vector3Int(100, 100, 0));
+        RegisterTestAdjacentAbility(abilityCatalog);
+        componentManager.Merge(PlayerEntityId, new AbilityInstanceComponent(TestAbilityId, damageAmount: 10, cooldownFramesRemaining: 0));
+        componentManager.Merge(PlayerEntityId, new HotkeyBindingComponent(HotkeySlot.Slot4, TestAbilityId));
+
+        mapWindow.HandleHotkeys(new KeyboardState(Keys.F), new KeyboardState());
+        mapWindow.HandleHotkeys(new KeyboardState(Keys.F), new KeyboardState());
+
+        var pendingActivations = componentManager.GetPackedPool<PendingAbilityActivationComponent>();
+        Assert.IsTrue(pendingActivations.Has(PlayerEntityId));
+        var pending = pendingActivations.GetReadonly(PlayerEntityId);
+        Assert.AreEqual(TestAbilityId, pending.AbilityId);
+        Assert.HasCount(5, pending.TargetTiles);
+        CollectionAssert.Contains(pending.TargetTiles, new Vector3Int(100, 100, 0));
+        CollectionAssert.Contains(pending.TargetTiles, new Vector3Int(101, 100, 0));
+
+        Assert.IsNull(mapViewState.ArmedAbilityId, "The first press of the pair armed this slot -- once the double-tap fires, it shouldn't be left stale-armed.");
+    }
+
+    /// <summary>SingleTarget abilities have no fixed footprint -- double-tap must pick an actual occupied tile within range via TargetPriority, not just fire at the caster's own position.</summary>
+    [TestMethod]
+    public void HandleHotkeys_DoubleTapSingleTargetAbility_AutoTargetsTheOccupiedTileInRange()
+    {
+        const int TargetEntityId = 2;
+        var (world, _, mapWindow, componentManager, abilityCatalog) = BuildMapWindowWithPlayerAndAbilities(300, 300, 1, new Vector3Int(100, 100, 0));
+        var rangedAbilityId = Guid.NewGuid();
+        abilityCatalog.Register(new AbilityDefinition(
+            rangedAbilityId,
+            "Test Ranged",
+            "*",
+            new AbilityTargeting(TargetShape.SingleTarget, Range: 10),
+            new AbilityTiming(ActionTimingCategory.Immediate, ActionLockFrames: 30, CooldownFrames: null),
+            new AbilityEffect(DamageAmount: 0, StatusEffects: [])));
+        componentManager.Merge(PlayerEntityId, new AbilityInstanceComponent(rangedAbilityId, damageAmount: 10, cooldownFramesRemaining: 0));
+        componentManager.Merge(PlayerEntityId, new HotkeyBindingComponent(HotkeySlot.Slot5, rangedAbilityId));
+
+        var targetPosition = new Vector3Int(105, 100, 0);
+        var targetTransform = new TransformComponent(targetPosition, new Vector2Byte(1, 1));
+        componentManager.Merge(TargetEntityId, targetTransform);
+        world.PlaceEntityOnMap(TargetEntityId, targetPosition, ref targetTransform);
+        componentManager.Merge(TargetEntityId, new HealthComponent(100, 0, 100));
+
+        mapWindow.HandleHotkeys(new KeyboardState(Keys.V), new KeyboardState());
+        mapWindow.HandleHotkeys(new KeyboardState(Keys.V), new KeyboardState());
+
+        var pendingActivations = componentManager.GetPackedPool<PendingAbilityActivationComponent>();
+        Assert.IsTrue(pendingActivations.Has(PlayerEntityId));
+        var pending = pendingActivations.GetReadonly(PlayerEntityId);
+        Assert.AreEqual(rangedAbilityId, pending.AbilityId);
+        Assert.HasCount(1, pending.TargetTiles);
+        Assert.AreEqual(targetPosition, pending.TargetTiles[0]);
+    }
+
+    [TestMethod]
+    public void HandleHotkeys_DoubleTapWithNoOccupiedTileInRange_QueuesNoActivation()
+    {
+        var (_, _, mapWindow, componentManager, abilityCatalog) = BuildMapWindowWithPlayerAndAbilities(300, 300, 1, new Vector3Int(100, 100, 0));
+        var rangedAbilityId = Guid.NewGuid();
+        abilityCatalog.Register(new AbilityDefinition(
+            rangedAbilityId,
+            "Test Ranged",
+            "*",
+            new AbilityTargeting(TargetShape.SingleTarget, Range: 10),
+            new AbilityTiming(ActionTimingCategory.Immediate, ActionLockFrames: 30, CooldownFrames: null),
+            new AbilityEffect(DamageAmount: 0, StatusEffects: [])));
+        componentManager.Merge(PlayerEntityId, new AbilityInstanceComponent(rangedAbilityId, damageAmount: 10, cooldownFramesRemaining: 0));
+        componentManager.Merge(PlayerEntityId, new HotkeyBindingComponent(HotkeySlot.Slot5, rangedAbilityId));
+
+        mapWindow.HandleHotkeys(new KeyboardState(Keys.V), new KeyboardState());
+        mapWindow.HandleHotkeys(new KeyboardState(Keys.V), new KeyboardState());
+
+        Assert.IsFalse(componentManager.GetPackedPool<PendingAbilityActivationComponent>().Has(PlayerEntityId));
+    }
+
+    /// <summary>
+    /// Screen position that resolves to targetMapPosition's X/Y. Walks outward from an anchor
+    /// pixel one screen pixel at a time per axis, using SelectMapNodes/SelectedMapNodePosition
+    /// (the exact same mouse-to-tile math UpdateHoveredTile itself uses) to check when the
+    /// resolved tile matches -- deliberately not a pixels-per-tile ratio computed from a single
+    /// probe pair, since a probe delta that isn't an exact multiple of the (unknown, not part of
+    /// this class's public surface) tile size silently rounds to the wrong ratio. A pixel-walk
+    /// has no such rounding error, at the cost of needing several SelectMapNodes calls instead
+    /// of one. Mutates mapViewState.SelectedMapNodePosition as a side effect; harmless for hover
+    /// tests, which don't assert on it.
+    /// </summary>
+    private static Point ComputeScreenPositionForMapPosition(MapWindow mapWindow, MapViewState mapViewState, Vector3Int targetMapPosition)
+    {
+        // Bounds the walk to comfortably more pixels than any window under test is wide/tall --
+        // a target tile outside the visible viewport can never be reached this way (SelectMapNodes
+        // silently leaves SelectedMapNodePosition stale once the walk exits the viewport, which
+        // would otherwise spin the loop below forever instead of failing loudly).
+        const int maxSteps = 4000;
+
+        var screenX = 500;
+        var screenY = 500;
+
+        mapWindow.SelectMapNodes(new Point(screenX, screenY));
+        var current = mapViewState.SelectedMapNodePosition!.Value;
+
+        var steps = 0;
+        while (current.X != targetMapPosition.X)
+        {
+            Assert.IsLessThan(maxSteps, ++steps, "targetMapPosition is likely outside the visible viewport -- pick a tile the map window can actually resolve a click against.");
+            screenX += current.X < targetMapPosition.X ? 1 : -1;
+            mapWindow.SelectMapNodes(new Point(screenX, screenY));
+            current = mapViewState.SelectedMapNodePosition!.Value;
+        }
+
+        steps = 0;
+        while (current.Y != targetMapPosition.Y)
+        {
+            Assert.IsLessThan(maxSteps, ++steps, "targetMapPosition is likely outside the visible viewport -- pick a tile the map window can actually resolve a click against.");
+            screenY += current.Y < targetMapPosition.Y ? 1 : -1;
+            mapWindow.SelectMapNodes(new Point(screenX, screenY));
+            current = mapViewState.SelectedMapNodePosition!.Value;
+        }
+
+        return new Point(screenX, screenY);
+    }
+
+    [TestMethod]
+    public void HandleHotkeys_ArmingAdjacentAbility_SetsTargetableTilesToTheFixedFootprint()
+    {
+        var (_, mapViewState, mapWindow, componentManager, abilityCatalog) = BuildMapWindowWithPlayerAndAbilities(300, 300, 1, new Vector3Int(100, 100, 0));
+        RegisterTestAdjacentAbility(abilityCatalog);
+        componentManager.Merge(PlayerEntityId, new AbilityInstanceComponent(TestAbilityId, damageAmount: 10, cooldownFramesRemaining: 0));
+        componentManager.Merge(PlayerEntityId, new HotkeyBindingComponent(HotkeySlot.Slot4, TestAbilityId));
+
+        mapWindow.HandleHotkeys(new KeyboardState(Keys.F), new KeyboardState());
+
+        Assert.IsNotNull(mapViewState.TargetableTiles);
+        Assert.HasCount(5, mapViewState.TargetableTiles);
+        Assert.IsTrue(mapViewState.TargetableTiles.Contains(new Vector3Int(100, 100, 0)));
+        Assert.IsTrue(mapViewState.TargetableTiles.Contains(new Vector3Int(101, 100, 0)));
+        Assert.IsFalse(mapViewState.TargetableTiles.Contains(new Vector3Int(102, 100, 0)));
+    }
+
+    [TestMethod]
+    public void HandleHotkeys_ArmingRangedAbility_SetsTargetableTilesToTheFullDiamondWithinRange()
+    {
+        var (_, mapViewState, mapWindow, componentManager, abilityCatalog) = BuildMapWindowWithPlayerAndAbilities(300, 300, 1, new Vector3Int(100, 100, 0));
+        var rangedAbilityId = Guid.NewGuid();
+        abilityCatalog.Register(new AbilityDefinition(rangedAbilityId, "Test Ranged", "*", new AbilityTargeting(TargetShape.SingleTarget, Range: 10), new AbilityTiming(ActionTimingCategory.Immediate, ActionLockFrames: 30, CooldownFrames: null), new AbilityEffect(DamageAmount: 0, StatusEffects: [])));
+        componentManager.Merge(PlayerEntityId, new AbilityInstanceComponent(rangedAbilityId, damageAmount: 10, cooldownFramesRemaining: 0));
+        componentManager.Merge(PlayerEntityId, new HotkeyBindingComponent(HotkeySlot.Slot5, rangedAbilityId));
+
+        mapWindow.HandleHotkeys(new KeyboardState(Keys.V), new KeyboardState());
+
+        // Diamond of radius 10: 2*10^2 + 2*10 + 1 = 221 (same worked formula as DistanceFalloffTests).
+        Assert.IsNotNull(mapViewState.TargetableTiles);
+        Assert.HasCount(221, mapViewState.TargetableTiles);
+        Assert.IsTrue(mapViewState.TargetableTiles.Contains(new Vector3Int(110, 100, 0)), "Exactly at range 10 must be included.");
+        Assert.IsFalse(mapViewState.TargetableTiles.Contains(new Vector3Int(111, 100, 0)), "Beyond range 10 must be excluded.");
+    }
+
+    [TestMethod]
+    public void HandleHotkeys_Disarming_ClearsTargetableTiles()
+    {
+        var (_, mapViewState, mapWindow, componentManager, abilityCatalog) = BuildMapWindowWithPlayerAndAbilities(300, 300, 1, new Vector3Int(100, 100, 0));
+        RegisterTestAdjacentAbility(abilityCatalog);
+        componentManager.Merge(PlayerEntityId, new AbilityInstanceComponent(TestAbilityId, damageAmount: 10, cooldownFramesRemaining: 0));
+        componentManager.Merge(PlayerEntityId, new HotkeyBindingComponent(HotkeySlot.Slot4, TestAbilityId));
+
+        mapWindow.HandleHotkeys(new KeyboardState(Keys.F), new KeyboardState());
+        Assert.IsNotNull(mapViewState.TargetableTiles);
+
+        for (var i = 0; i < 20; i++)
+        {
+            mapWindow.Update(new GameTime());
+        }
+        mapWindow.HandleHotkeys(new KeyboardState(Keys.F), new KeyboardState());
+
+        Assert.IsNull(mapViewState.TargetableTiles);
+    }
+
+    [TestMethod]
+    public void UpdateHoveredTile_NothingArmed_HoveredTileAndFootprintStayEmpty()
+    {
+        var (_, mapViewState, mapWindow, _, _) = BuildMapWindowWithPlayerAndAbilities(300, 300, 1, new Vector3Int(100, 100, 0));
+
+        mapWindow.UpdateHoveredTile(ComputeScreenPositionForMapPosition(mapWindow, mapViewState, new Vector3Int(101, 100, 0)));
+        mapViewState.SelectedMapNodePosition = null; // Undo the calibration probes' side effect -- this test doesn't concern SelectedMapNodePosition.
+
+        Assert.IsNull(mapViewState.HoveredTile);
+        Assert.IsEmpty(mapWindow.HoveredFootprint.ToList());
+    }
+
+    [TestMethod]
+    public void UpdateHoveredTile_ArmedSingleTargetAbility_HoveringWithinRange_SetsHoveredTileAndFootprint()
+    {
+        var (_, mapViewState, mapWindow, componentManager, abilityCatalog) = BuildMapWindowWithPlayerAndAbilities(300, 300, 1, new Vector3Int(100, 100, 0));
+        var rangedAbilityId = Guid.NewGuid();
+        abilityCatalog.Register(new AbilityDefinition(rangedAbilityId, "Test Ranged", "*", new AbilityTargeting(TargetShape.SingleTarget, Range: 10), new AbilityTiming(ActionTimingCategory.Immediate, ActionLockFrames: 30, CooldownFrames: null), new AbilityEffect(DamageAmount: 0, StatusEffects: [])));
+        componentManager.Merge(PlayerEntityId, new AbilityInstanceComponent(rangedAbilityId, damageAmount: 10, cooldownFramesRemaining: 0));
+        componentManager.Merge(PlayerEntityId, new HotkeyBindingComponent(HotkeySlot.Slot5, rangedAbilityId));
+
+        mapWindow.HandleHotkeys(new KeyboardState(Keys.V), new KeyboardState());
+        mapWindow.UpdateHoveredTile(ComputeScreenPositionForMapPosition(mapWindow, mapViewState, new Vector3Int(101, 100, 0)));
+
+        Assert.AreEqual(new Vector3Int(101, 100, 0), mapViewState.HoveredTile);
+        Assert.HasCount(1, mapWindow.HoveredFootprint);
+        Assert.AreEqual(new Vector3Int(101, 100, 0), mapWindow.HoveredFootprint[0]);
+    }
+
+    [TestMethod]
+    public void UpdateHoveredTile_ArmedSingleTargetAbility_HoveringBeyondRange_SetsHoveredTile_ButFootprintStaysEmpty()
+    {
+        var (_, mapViewState, mapWindow, componentManager, abilityCatalog) = BuildMapWindowWithPlayerAndAbilities(300, 300, 1, new Vector3Int(100, 100, 0));
+        var rangedAbilityId = Guid.NewGuid();
+        abilityCatalog.Register(new AbilityDefinition(rangedAbilityId, "Test Ranged", "*", new AbilityTargeting(TargetShape.SingleTarget, Range: 10), new AbilityTiming(ActionTimingCategory.Immediate, ActionLockFrames: 30, CooldownFrames: null), new AbilityEffect(DamageAmount: 0, StatusEffects: [])));
+        componentManager.Merge(PlayerEntityId, new AbilityInstanceComponent(rangedAbilityId, damageAmount: 10, cooldownFramesRemaining: 0));
+        componentManager.Merge(PlayerEntityId, new HotkeyBindingComponent(HotkeySlot.Slot5, rangedAbilityId));
+
+        mapWindow.HandleHotkeys(new KeyboardState(Keys.V), new KeyboardState());
+        mapWindow.UpdateHoveredTile(ComputeScreenPositionForMapPosition(mapWindow, mapViewState, new Vector3Int(115, 100, 0)));
+
+        Assert.AreEqual(new Vector3Int(115, 100, 0), mapViewState.HoveredTile);
+        Assert.IsEmpty(mapWindow.HoveredFootprint.ToList());
+    }
+
+    [TestMethod]
+    public void UpdateHoveredTile_MouseOffMap_SetsHoveredTileNullEvenWhileArmed()
+    {
+        var (_, mapViewState, mapWindow, componentManager, abilityCatalog) = BuildMapWindowWithPlayerAndAbilities(300, 300, 1, new Vector3Int(100, 100, 0));
+        RegisterTestAdjacentAbility(abilityCatalog);
+        componentManager.Merge(PlayerEntityId, new AbilityInstanceComponent(TestAbilityId, damageAmount: 10, cooldownFramesRemaining: 0));
+        componentManager.Merge(PlayerEntityId, new HotkeyBindingComponent(HotkeySlot.Slot4, TestAbilityId));
+
+        mapWindow.HandleHotkeys(new KeyboardState(Keys.F), new KeyboardState());
+        mapWindow.UpdateHoveredTile(new Point(-100, -100));
+
+        Assert.IsNull(mapViewState.HoveredTile);
+        Assert.IsEmpty(mapWindow.HoveredFootprint.ToList());
+    }
+
+    [TestMethod]
+    public void HandleClick_ArmedAdjacentAbility_ClickWithinFootprint_QueuesActivationAndDisarms()
+    {
+        var (_, mapViewState, mapWindow, componentManager, abilityCatalog) = BuildMapWindowWithPlayerAndAbilities(300, 300, 1, new Vector3Int(100, 100, 0));
+        RegisterTestAdjacentAbility(abilityCatalog);
+        componentManager.Merge(PlayerEntityId, new AbilityInstanceComponent(TestAbilityId, damageAmount: 10, cooldownFramesRemaining: 0));
+        componentManager.Merge(PlayerEntityId, new HotkeyBindingComponent(HotkeySlot.Slot4, TestAbilityId));
+        mapWindow.HandleHotkeys(new KeyboardState(Keys.F), new KeyboardState());
+
+        // The caster's own tile -- part of Adjacent's fixed footprint.
+        var clickPosition = ComputeScreenPositionForMapPosition(mapWindow, mapViewState, new Vector3Int(100, 100, 0));
+        mapWindow.HandleClick(clickPosition);
+
+        var pendingActivations = componentManager.GetPackedPool<PendingAbilityActivationComponent>();
+        Assert.IsTrue(pendingActivations.Has(PlayerEntityId));
+        var pending = pendingActivations.GetReadonly(PlayerEntityId);
+        Assert.AreEqual(TestAbilityId, pending.AbilityId);
+        Assert.HasCount(5, pending.TargetTiles);
+        Assert.IsNull(mapViewState.ArmedAbilityId, "Confirming a target must disarm.");
+        Assert.IsNull(mapViewState.TargetableTiles);
+    }
+
+    [TestMethod]
+    public void HandleClick_ArmedAbility_ClickOutsideTargetableTiles_DoesNothingAndStaysArmed()
+    {
+        var (_, mapViewState, mapWindow, componentManager, abilityCatalog) = BuildMapWindowWithPlayerAndAbilities(300, 300, 1, new Vector3Int(100, 100, 0));
+        RegisterTestAdjacentAbility(abilityCatalog);
+        componentManager.Merge(PlayerEntityId, new AbilityInstanceComponent(TestAbilityId, damageAmount: 10, cooldownFramesRemaining: 0));
+        componentManager.Merge(PlayerEntityId, new HotkeyBindingComponent(HotkeySlot.Slot4, TestAbilityId));
+        mapWindow.HandleHotkeys(new KeyboardState(Keys.F), new KeyboardState());
+
+        // Outside Adjacent's 5-tile footprint around (100,100), but still comfortably within the visible viewport.
+        var farClickPosition = ComputeScreenPositionForMapPosition(mapWindow, mapViewState, new Vector3Int(105, 100, 0));
+        mapWindow.HandleClick(farClickPosition);
+
+        Assert.IsFalse(componentManager.GetPackedPool<PendingAbilityActivationComponent>().Has(PlayerEntityId));
+        Assert.IsNotNull(mapViewState.ArmedAbilityId, "A miss shouldn't disarm -- the player can just try again.");
+    }
+
+    [TestMethod]
+    public void HandleClick_ArmedLineAbility_ClickInDirection_QueuesActivationAlongThatLine()
+    {
+        var (_, mapViewState, mapWindow, componentManager, abilityCatalog) = BuildMapWindowWithPlayerAndAbilities(300, 300, 1, new Vector3Int(100, 100, 0));
+        var lineAbilityId = Guid.NewGuid();
+        abilityCatalog.Register(new AbilityDefinition(lineAbilityId, "Test Line", "#", new AbilityTargeting(TargetShape.Line, Range: 2), new AbilityTiming(ActionTimingCategory.Immediate, ActionLockFrames: 30, CooldownFrames: null), new AbilityEffect(DamageAmount: 0, StatusEffects: [])));
+        componentManager.Merge(PlayerEntityId, new AbilityInstanceComponent(lineAbilityId, damageAmount: 10, cooldownFramesRemaining: 0));
+        componentManager.Merge(PlayerEntityId, new HotkeyBindingComponent(HotkeySlot.Slot4, lineAbilityId));
+        mapWindow.HandleHotkeys(new KeyboardState(Keys.F), new KeyboardState());
+
+        // Two tiles east -- within the range-2 candidate diamond ComputeTargetableTiles builds around the caster.
+        var clickPosition = ComputeScreenPositionForMapPosition(mapWindow, mapViewState, new Vector3Int(102, 100, 0));
+        mapWindow.HandleClick(clickPosition);
+
+        var pendingActivations = componentManager.GetPackedPool<PendingAbilityActivationComponent>();
+        Assert.IsTrue(pendingActivations.Has(PlayerEntityId));
+        var pending = pendingActivations.GetReadonly(PlayerEntityId);
+        Assert.AreEqual(lineAbilityId, pending.AbilityId);
+        CollectionAssert.AreEqual(new[] { new Vector3Int(101, 100, 0), new Vector3Int(102, 100, 0) }, pending.TargetTiles);
+    }
+
+    [TestMethod]
+    public void HandleClick_ArmedBurstAbility_ClickAwayFromCaster_QueuesFootprintCenteredOnClickedTile()
+    {
+        var (_, mapViewState, mapWindow, componentManager, abilityCatalog) = BuildMapWindowWithPlayerAndAbilities(300, 300, 1, new Vector3Int(100, 100, 0));
+        var burstAbilityId = Guid.NewGuid();
+        abilityCatalog.Register(new AbilityDefinition(burstAbilityId, "Test Burst", "*", new AbilityTargeting(TargetShape.Burst, Range: 10, AreaSize: 1), new AbilityTiming(ActionTimingCategory.Immediate, ActionLockFrames: 30, CooldownFrames: null), new AbilityEffect(DamageAmount: 0, StatusEffects: [])));
+        componentManager.Merge(PlayerEntityId, new AbilityInstanceComponent(burstAbilityId, damageAmount: 10, cooldownFramesRemaining: 0));
+        componentManager.Merge(PlayerEntityId, new HotkeyBindingComponent(HotkeySlot.Slot5, burstAbilityId));
+        mapWindow.HandleHotkeys(new KeyboardState(Keys.V), new KeyboardState());
+
+        var clickedTile = new Vector3Int(105, 100, 0);
+        var clickPosition = ComputeScreenPositionForMapPosition(mapWindow, mapViewState, clickedTile);
+        mapWindow.HandleClick(clickPosition);
+
+        var pendingActivations = componentManager.GetPackedPool<PendingAbilityActivationComponent>();
+        Assert.IsTrue(pendingActivations.Has(PlayerEntityId));
+        var pending = pendingActivations.GetReadonly(PlayerEntityId);
+        Assert.AreEqual(burstAbilityId, pending.AbilityId);
+        Assert.HasCount(5, pending.TargetTiles, "areaSize 1 -> radius-1 diamond centered on the clicked tile, not the caster.");
+        CollectionAssert.Contains(pending.TargetTiles, clickedTile);
+        CollectionAssert.DoesNotContain(pending.TargetTiles, new Vector3Int(100, 100, 0));
+    }
+
+    [TestMethod]
+    public void HandleRightClickTap_ArmedAbility_CancelsIt()
+    {
+        var (_, mapViewState, mapWindow, componentManager, abilityCatalog) = BuildMapWindowWithPlayerAndAbilities(300, 300, 1, new Vector3Int(100, 100, 0));
+        RegisterTestAdjacentAbility(abilityCatalog);
+        componentManager.Merge(PlayerEntityId, new AbilityInstanceComponent(TestAbilityId, damageAmount: 10, cooldownFramesRemaining: 0));
+        componentManager.Merge(PlayerEntityId, new HotkeyBindingComponent(HotkeySlot.Slot4, TestAbilityId));
+        mapWindow.HandleHotkeys(new KeyboardState(Keys.F), new KeyboardState());
+
+        mapWindow.HandleRightClickTap();
+
+        Assert.IsNull(mapViewState.ArmedAbilityId);
+        Assert.IsNull(mapViewState.ArmedSlot);
+        Assert.IsNull(mapViewState.TargetableTiles);
+    }
+
+    [TestMethod]
+    public void HandleEscape_ArmedAbility_CancelsIt()
+    {
+        var (_, mapViewState, mapWindow, componentManager, abilityCatalog) = BuildMapWindowWithPlayerAndAbilities(300, 300, 1, new Vector3Int(100, 100, 0));
+        RegisterTestAdjacentAbility(abilityCatalog);
+        componentManager.Merge(PlayerEntityId, new AbilityInstanceComponent(TestAbilityId, damageAmount: 10, cooldownFramesRemaining: 0));
+        componentManager.Merge(PlayerEntityId, new HotkeyBindingComponent(HotkeySlot.Slot4, TestAbilityId));
+        mapWindow.HandleHotkeys(new KeyboardState(Keys.F), new KeyboardState());
+
+        mapWindow.HandleEscape();
+
+        Assert.IsNull(mapViewState.ArmedAbilityId);
+        Assert.IsNull(mapViewState.ArmedSlot);
+        Assert.IsNull(mapViewState.TargetableTiles);
+    }
+
+    [TestMethod]
+    public void HandleRightClickTap_NothingArmed_PendingDelayedAction_CancelsItAndZeroesTheActionLock()
+    {
+        var (_, _, mapWindow, componentManager, _) = BuildMapWindowWithPlayerAndAbilities(300, 300, 1, new Vector3Int(100, 100, 0));
+        componentManager.Merge(PlayerEntityId, new PendingDelayedActionComponent(Guid.NewGuid(), [new Vector3Int(101, 100, 0)]));
+        componentManager.Merge(PlayerEntityId, new ActionLockComponent(totalLockFrames: 60, lockFramesRemaining: 45));
+
+        mapWindow.HandleRightClickTap();
+
+        Assert.IsFalse(componentManager.GetPackedPool<PendingDelayedActionComponent>().Has(PlayerEntityId));
+        Assert.AreEqual((short)0, componentManager.GetPackedPool<ActionLockComponent>().GetReadonly(PlayerEntityId).LockFramesRemaining);
+    }
+
+    [TestMethod]
+    public void HandleEscape_NothingArmed_PendingDelayedAction_CancelsItAndZeroesTheActionLock()
+    {
+        var (_, _, mapWindow, componentManager, _) = BuildMapWindowWithPlayerAndAbilities(300, 300, 1, new Vector3Int(100, 100, 0));
+        componentManager.Merge(PlayerEntityId, new PendingDelayedActionComponent(Guid.NewGuid(), [new Vector3Int(101, 100, 0)]));
+        componentManager.Merge(PlayerEntityId, new ActionLockComponent(totalLockFrames: 60, lockFramesRemaining: 45));
+
+        mapWindow.HandleEscape();
+
+        Assert.IsFalse(componentManager.GetPackedPool<PendingDelayedActionComponent>().Has(PlayerEntityId));
+        Assert.AreEqual((short)0, componentManager.GetPackedPool<ActionLockComponent>().GetReadonly(PlayerEntityId).LockFramesRemaining);
+    }
+
+    [TestMethod]
+    public void HandleRightClickTapAndEscape_NothingArmedOrPending_DoNothing()
+    {
+        var (_, mapViewState, mapWindow, _, _) = BuildMapWindowWithPlayerAndAbilities(300, 300, 1, new Vector3Int(100, 100, 0));
+
+        mapWindow.HandleRightClickTap();
+        mapWindow.HandleEscape();
+
+        Assert.IsNull(mapViewState.ArmedAbilityId);
     }
 }

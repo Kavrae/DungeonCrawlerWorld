@@ -3,12 +3,14 @@ using Engine.Events;
 using Engine.Math;
 using Engine.Modules;
 using Game.Modules;
+using Game.Modules.Abilities;
 using Game.Modules.Burning;
 using Game.Modules.Class;
 using Game.Modules.ContactDamage;
 using Game.Modules.Core;
 using Game.Modules.Core.Components;
 using Game.Modules.Health;
+using Game.Modules.Melee;
 using Game.Modules.Movement;
 using Game.Modules.Poison;
 using Game.Modules.Race;
@@ -41,6 +43,9 @@ public static class GameBootstrapper
             new MovementModule(),
             new RaceModule(),
             new ClassModule(),
+            new AbilitiesModule(),
+            new MeleeModule(),
+            new PlayerTestAbilitiesModule(),
             new StatusEffectsModule(),
             new BurningModule(),
             new PoisonModule(),
@@ -59,7 +64,7 @@ public static class GameBootstrapper
 
         var modules = ModuleSet.Combine(builtInModules, survivingMods);
 
-        ConfigureGameModules(modules, mapQuery, world, mathUtility, eventBus);
+        var context = ConfigureGameModules(modules, mapQuery, world, mathUtility, eventBus);
 
         var ecsContext = Bootstrapper.Build(modules, initialEntityCapacity, initialComponentCapacity, eventBus);
 
@@ -76,7 +81,7 @@ public static class GameBootstrapper
         // keeps it alive for as long as ecsContext.EventBus is.
         _ = new WorldEventSync(world, ecsContext.EventBus);
 
-        return new GameBootstrapResult(ecsContext, failures);
+        return new GameBootstrapResult(ecsContext, failures, context.Abilities);
     }
 
     /// <summary>
@@ -120,7 +125,7 @@ public static class GameBootstrapper
         return survivors;
     }
 
-    private static void ConfigureGameModules(IReadOnlyList<IModule> modules, IMapQuery mapQuery, IPlayerQuery playerQuery, MathUtility mathUtility, EventBus eventBus)
+    private static GameModuleContext ConfigureGameModules(IReadOnlyList<IModule> modules, IMapQuery mapQuery, IPlayerQuery playerQuery, MathUtility mathUtility, EventBus eventBus)
     {
         var context = new GameModuleContext(mapQuery, mathUtility, eventBus) { PlayerQuery = playerQuery };
 
@@ -131,5 +136,7 @@ public static class GameBootstrapper
                 gameModule.Configure(context);
             }
         }
+
+        return context;
     }
 }

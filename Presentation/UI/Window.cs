@@ -537,6 +537,28 @@ public class Window
     protected virtual void OnRightDragEndAction() { }
 
     /// <summary>
+    /// Fires instead of HandleRightDragEnd when a right-button press/release never moved the
+    /// mouse past GameInputController's small tap-vs-drag pixel threshold -- a right-click
+    /// "tap," distinct from the drag-to-pan gesture the same button also drives. No-op by
+    /// default; MapWindow uses this to cancel an armed ability, since a genuine right-drag
+    /// (panning the camera) must keep behaving exactly as it already does.
+    /// </summary>
+    internal void HandleRightClickTap() => OnRightClickTapAction();
+
+    protected virtual void OnRightClickTapAction() { }
+
+    /// <summary>
+    /// Fires on every root/HUD window when Escape is pressed -- see
+    /// GameInputController.HandleEscape for why this is broadcast unconditionally rather than
+    /// routed only to whichever window holds focus. No-op by default; MapWindow uses this to
+    /// cancel an armed ability or an in-progress Delayed action windup, the same cancellation
+    /// OnRightClickTapAction triggers.
+    /// </summary>
+    internal void HandleEscape() => OnEscapeAction();
+
+    protected virtual void OnEscapeAction() { }
+
+    /// <summary>
     /// Routes an actual typed character (shifted case, punctuation, OS keyboard layout) to
     /// this window while it holds focus -- see GameInputController.RouteTextInputToFocusedWindow.
     /// Neither HandleKeyPress (raw Keys values) nor HandleHotkeys (modifier-aware combos) can
