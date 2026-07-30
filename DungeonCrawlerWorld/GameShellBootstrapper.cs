@@ -205,7 +205,7 @@ public static class GameShellBootstrapper
         {
             Layout = new WindowLayoutOptions
             {
-                RelativePosition = new Vector2((screenSize.X - HotbarContent.Size.X) / 2f, screenSize.Y - HotbarContent.Size.Y - HudMetrics.Margin.Y),
+                RelativePosition = new Vector2((screenSize.X - HotbarContent.Size.X) / 2f, screenSize.Y - HotbarContent.Size.Y - HudMetrics.Margin.Y * 1.5f),
                 Size = HotbarContent.Size,
                 DisplayMode = WindowDisplayMode.Fixed,
                 IsTransparent = true,

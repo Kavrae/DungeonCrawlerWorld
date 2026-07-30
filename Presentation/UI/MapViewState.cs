@@ -33,7 +33,7 @@ public sealed class MapViewState
     /// <summary>See ArmedAbilityId.</summary>
     public HotkeySlot? ArmedSlot;
 
-    /// <summary>Every tile the currently-armed ability could possibly be aimed at, computed once when it arms (see MapWindow.Arm) -- Adjacent's fixed footprint, or every tile within the ability's Range for cursor-directed shapes. Null when nothing is armed.</summary>
+    /// <summary>Every tile the currently-armed ability could possibly be aimed at from the caster's current position -- Adjacent's fixed footprint, or every tile within the ability's Range for cursor-directed shapes. Computed at arm time and recomputed if the caster moves while still armed (see AbilityTargetingController.RefreshTargetableTiles). Null when nothing is armed.</summary>
     public IReadOnlySet<Vector3Int>? TargetableTiles;
 
     /// <summary>The map tile the mouse is currently over, on the player's own Z layer -- null when nothing is armed or the mouse isn't over the map. Updated every frame while an ability is armed (see MapWindow.UpdateHoveredTile).</summary>

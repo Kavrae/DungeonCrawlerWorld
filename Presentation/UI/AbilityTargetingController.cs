@@ -44,6 +44,18 @@ public sealed class AbilityTargetingController(
     private readonly List<Vector3Int> _occupiedCandidateTilesBuffer = [];
     private readonly List<Vector3Int> _finalTargetTilesBuffer = [];
 
+    /// <summary>
+    /// Backs MapViewState.TargetableTiles -- populated by RefreshTargetableTiles (Clear +
+    /// repopulate) rather than replaced with a fresh HashSet every arm/move, since a HashSet
+    /// allocation here runs against a heap already holding this world's ~2.6M-entity component
+    /// arrays (see CLAUDE.md's Scale note); a GC pass triggered at just the wrong moment against
+    /// that heap is exactly the kind of one-time stutter a per-call allocation risks causing.
+    /// </summary>
+    private readonly HashSet<Vector3Int> _targetableTilesSet = [];
+
+    /// <summary>The caster position TargetableTiles was last computed from -- lets RefreshTargetableTiles (called every frame an ability is armed) cheaply skip recomputation on frames where the caster hasn't moved.</summary>
+    private Vector3Int? _targetableTilesOrigin;
+
     /// <summary>The armed ability's actual hit-footprint at the current hover position, recomputed every Update (see UpdateHoveredTile).</summary>
     private readonly List<Vector3Int> _hoveredFootprintBuffer = [];
 
@@ -61,10 +73,13 @@ public sealed class AbilityTargetingController(
     /// player's own Z layer, not necessarily whatever layer the camera happens to be showing)
     /// and, if so, recomputes the armed ability's actual hit-footprint from that hover position
     /// via TargetShapeResolver -- this is what lets Burst/Cone/Line's highlighted tiles move
-    /// with the cursor instead of staying fixed at arm time. Takes the mouse position and the
-    /// host window's content-area origin explicitly rather than reading either itself, the same
-    /// way MapWindow.Update reads Mouse.GetState() once and passes it in, so tests can simulate
-    /// a mouse position without a real OS cursor or a real Window subclass.
+    /// with the cursor instead of staying fixed at arm time. Also refreshes TargetableTiles (see
+    /// RefreshTargetableTiles) every call, independent of whether the mouse currently resolves
+    /// to a map tile at all, so the reachable-area highlight keeps following the caster if it
+    /// moves while armed even with the cursor off the map. Takes the mouse position and the host
+    /// window's content-area origin explicitly rather than reading either itself, the same way
+    /// MapWindow.Update reads Mouse.GetState() once and passes it in, so tests can simulate a
+    /// mouse position without a real OS cursor or a real Window subclass.
     /// </summary>
     public void UpdateHoveredTile(Point mousePosition, Vector2 contentAbsolutePosition)
     {
@@ -76,8 +91,15 @@ public sealed class AbilityTargetingController(
             return;
         }
 
-        if (!camera.TryGetHoveredMapPosition(mousePosition, contentAbsolutePosition, out var hoveredColumnRow) ||
-            !transformPool.TryGetReadonly(world.PlayerEntityId, out var playerTransform))
+        if (!transformPool.TryGetReadonly(world.PlayerEntityId, out var playerTransform))
+        {
+            mapViewState.HoveredTile = null;
+            return;
+        }
+
+        RefreshTargetableTiles(abilityId, playerTransform.Position);
+
+        if (!camera.TryGetHoveredMapPosition(mousePosition, contentAbsolutePosition, out var hoveredColumnRow))
         {
             mapViewState.HoveredTile = null;
             return;
@@ -219,11 +241,11 @@ public sealed class AbilityTargetingController(
     {
         mapViewState.ArmedAbilityId = abilityId;
         mapViewState.ArmedSlot = slot;
+        _targetableTilesOrigin = null; // Forces RefreshTargetableTiles below to (re)compute regardless of any stale origin left over from a previous arm.
 
-        if (abilityCatalog.TryGet(abilityId, out var ability) && transformPool.TryGetReadonly(world.PlayerEntityId, out var transform))
+        if (transformPool.TryGetReadonly(world.PlayerEntityId, out var transform))
         {
-            ComputeTargetableTiles(transform.Position, ability, _candidateTilesBuffer);
-            mapViewState.TargetableTiles = _candidateTilesBuffer.ToHashSet();
+            RefreshTargetableTiles(abilityId, transform.Position);
         }
     }
 
@@ -232,6 +254,41 @@ public sealed class AbilityTargetingController(
         mapViewState.ArmedAbilityId = null;
         mapViewState.ArmedSlot = null;
         mapViewState.TargetableTiles = null;
+        _targetableTilesOrigin = null;
+    }
+
+    /// <summary>
+    /// (Re)computes TargetableTiles from currentPosition -- but only if it hasn't already been
+    /// computed from that exact position, so an armed-and-stationary caster doesn't redo this
+    /// work every single frame. Called both by Arm (first computation) and every UpdateHoveredTile
+    /// call thereafter, so the highlighted reachable area re-centers on the caster's new position
+    /// if it moves while still armed, instead of staying fixed at wherever it was standing at arm
+    /// time. Repopulates the shared _targetableTilesSet in place (Clear + re-add) rather than
+    /// assigning a fresh HashSet -- see that field's own doc comment for why.
+    /// </summary>
+    private void RefreshTargetableTiles(Guid abilityId, Vector3Int currentPosition)
+    {
+        if (_targetableTilesOrigin == currentPosition)
+        {
+            return;
+        }
+
+        _targetableTilesOrigin = currentPosition;
+
+        if (!abilityCatalog.TryGet(abilityId, out var ability))
+        {
+            return;
+        }
+
+        ComputeTargetableTiles(currentPosition, ability, _candidateTilesBuffer);
+
+        _targetableTilesSet.Clear();
+        foreach (var tile in _candidateTilesBuffer)
+        {
+            _targetableTilesSet.Add(tile);
+        }
+
+        mapViewState.TargetableTiles = _targetableTilesSet;
     }
 
     /// <summary>
@@ -257,7 +314,7 @@ public sealed class AbilityTargetingController(
     /// <summary>
     /// Resolves and queues a full activation with no manual click-confirm at all -- the
     /// double-tap path. Adjacent's footprint never depends on a target choice (it's always the
-    /// caster's own tile plus its 4 cardinal neighbors), so it's queued immediately. Every other
+    /// caster's own tile plus its 8 surrounding neighbors), so it's queued immediately. Every other
     /// shape needs a target tile chosen first: ComputeTargetableTiles' reachable-area candidates
     /// are filtered down to occupied tiles and handed to TargetPriority.SelectAutoTarget, using
     /// MapViewState.HoveredTile as the cursor bias when one is already tracked (armed-and-then-

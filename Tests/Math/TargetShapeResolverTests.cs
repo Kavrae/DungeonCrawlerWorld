@@ -8,20 +8,23 @@ public sealed class TargetShapeResolverTests
     private static readonly Vector3Int MapSize = new(1000, 1000, 1);
 
     [TestMethod]
-    public void Adjacent_IncludesOriginTileAndFourCardinalNeighbors_ExcludingDiagonals()
+    public void Adjacent_IncludesOriginTileAndAllEightSurroundingNeighbors()
     {
         var origin = new Vector3Int(10, 10, 0);
         var tiles = new List<Vector3Int>();
 
         TargetShapeResolver.Resolve(TargetShape.Adjacent, origin, cursorTile: origin, range: 0, areaSize: 0, MapSize, tiles);
 
-        Assert.HasCount(5, tiles);
+        Assert.HasCount(9, tiles);
         CollectionAssert.Contains(tiles, origin);
         CollectionAssert.Contains(tiles, new Vector3Int(9, 10, 0));
         CollectionAssert.Contains(tiles, new Vector3Int(11, 10, 0));
         CollectionAssert.Contains(tiles, new Vector3Int(10, 9, 0));
         CollectionAssert.Contains(tiles, new Vector3Int(10, 11, 0));
-        CollectionAssert.DoesNotContain(tiles, new Vector3Int(9, 9, 0));
+        CollectionAssert.Contains(tiles, new Vector3Int(9, 9, 0));
+        CollectionAssert.Contains(tiles, new Vector3Int(11, 9, 0));
+        CollectionAssert.Contains(tiles, new Vector3Int(9, 11, 0));
+        CollectionAssert.Contains(tiles, new Vector3Int(11, 11, 0));
     }
 
     [TestMethod]
@@ -32,7 +35,7 @@ public sealed class TargetShapeResolverTests
 
         TargetShapeResolver.Resolve(TargetShape.Adjacent, origin, cursorTile: origin, range: 99, areaSize: 99, MapSize, tiles);
 
-        Assert.HasCount(5, tiles);
+        Assert.HasCount(9, tiles);
     }
 
     [TestMethod]
@@ -115,7 +118,7 @@ public sealed class TargetShapeResolverTests
     public void Line_StepsTowardCursor_AlongDominantCardinalAxis()
     {
         var origin = new Vector3Int(5, 5, 0);
-        var cursorTile = new Vector3Int(9, 6, 0); // dominant axis is X (delta 4 vs delta 1)
+        var cursorTile = new Vector3Int(9, 6, 0); // mostly horizontal (delta 4 vs delta 1) -- well outside the diagonal wedge
         var tiles = new List<Vector3Int>();
 
         TargetShapeResolver.Resolve(TargetShape.Line, origin, cursorTile, range: 3, areaSize: 0, MapSize, tiles);
@@ -125,6 +128,23 @@ public sealed class TargetShapeResolverTests
             new Vector3Int(6, 5, 0),
             new Vector3Int(7, 5, 0),
             new Vector3Int(8, 5, 0),
+        }, tiles);
+    }
+
+    [TestMethod]
+    public void Line_CursorAtFortyFiveDegrees_StepsDiagonally()
+    {
+        var origin = new Vector3Int(5, 5, 0);
+        var cursorTile = new Vector3Int(8, 8, 0); // exactly 45 degrees
+        var tiles = new List<Vector3Int>();
+
+        TargetShapeResolver.Resolve(TargetShape.Line, origin, cursorTile, range: 3, areaSize: 0, MapSize, tiles);
+
+        CollectionAssert.AreEqual(new[]
+        {
+            new Vector3Int(6, 6, 0),
+            new Vector3Int(7, 7, 0),
+            new Vector3Int(8, 8, 0),
         }, tiles);
     }
 

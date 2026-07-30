@@ -41,8 +41,10 @@ public sealed class MapWindow : Window
     private readonly TileRenderer _tileRenderer;
     private readonly GlyphRenderer _glyphRenderer;
 
-    private static readonly Color TargetableTileColor = Color.CornflowerBlue * 0.6f;
-    private static readonly Color HoveredTargetTileColor = Color.OrangeRed * 0.75f;
+    private static readonly Color TargetableTileBorderColor = Color.White;
+    private static readonly Color HoveredTargetTileBorderColor = Color.Red;
+    private const float TargetSelectionMaskAlpha = 0.5f;
+    private static readonly Color MapBackgroundColor = new(40, 40, 40);
 
     private SpriteFontBase _mediumFont = null!;
     private SpriteFontBase _largeFont = null!;
@@ -173,7 +175,7 @@ public sealed class MapWindow : Window
 
     public override void DrawContent(GameTime gameTime, SpriteBatch spriteBatch, Texture2D unitRectangle)
     {
-        spriteBatch.Draw(unitRectangle, new Rectangle(0, 0, _camera.TileColumns * _camera.CurrentTileSize.X, _camera.TileRows * _camera.CurrentTileSize.Y), Color.DarkGray);
+        spriteBatch.Draw(unitRectangle, new Rectangle(0, 0, _camera.TileColumns * _camera.CurrentTileSize.X, _camera.TileRows * _camera.CurrentTileSize.Y), MapBackgroundColor);
 
         _tileRenderer.DrawBackgrounds(spriteBatch, unitRectangle, _backgroundCache.Colors, _camera.TileColumns, _camera.TileRows, _camera.CurrentTileSize, _camera.RenderPixelOffset);
         DrawTargetingHighlights(spriteBatch, unitRectangle);
@@ -186,12 +188,13 @@ public sealed class MapWindow : Window
 
     /// <summary>
     /// Every tile the currently-armed ability could be aimed at (see MapViewState.TargetableTiles,
-    /// computed once at arm time) -- one color for "targetable, not currently hovered," a second,
-    /// distinct color for whichever of those tiles the armed shape's hover-resolved footprint
-    /// (see AbilityTargetingController.HoveredFootprint, recomputed every Update) actually covers
-    /// right now. A separate, independent draw call from DrawSelectedTileHighlight below -- the
-    /// two are conceptually distinct (ability targeting vs. the inspector's click-to-select) even
-    /// though they share the same low-level tile-rectangle technique (see DrawTileHighlight).
+    /// computed once at arm time) -- a white border + 50% white mask for "targetable, not
+    /// currently hovered," a red border + 50% red mask for whichever of those tiles the armed
+    /// shape's hover-resolved footprint (see AbilityTargetingController.HoveredFootprint,
+    /// recomputed every Update) actually covers right now. A separate, independent draw call
+    /// from DrawSelectedTileHighlight below -- the two are conceptually distinct (ability
+    /// targeting vs. the inspector's click-to-select), even though both now share the same
+    /// border-plus-mask technique (see DrawMaskedTileHighlight).
     /// </summary>
     private void DrawTargetingHighlights(SpriteBatch spriteBatch, Texture2D unitRectangle)
     {
@@ -202,8 +205,8 @@ public sealed class MapWindow : Window
 
         foreach (var tile in targetableTiles)
         {
-            var color = _abilityTargeting.HoveredFootprintContains(tile) ? HoveredTargetTileColor : TargetableTileColor;
-            DrawTileHighlight(spriteBatch, unitRectangle, tile.X, tile.Y, color);
+            var borderColor = _abilityTargeting.HoveredFootprintContains(tile) ? HoveredTargetTileBorderColor : TargetableTileBorderColor;
+            DrawMaskedTileHighlight(spriteBatch, unitRectangle, tile.X, tile.Y, borderColor);
         }
     }
 
@@ -214,11 +217,17 @@ public sealed class MapWindow : Window
             return;
         }
 
-        DrawTileHighlight(spriteBatch, unitRectangle, selectedPosition.X, selectedPosition.Y, Color.Gold);
+        DrawMaskedTileHighlight(spriteBatch, unitRectangle, selectedPosition.X, selectedPosition.Y, Color.Gold);
     }
 
-    /// <summary>Outer-border-then-refill-inner technique shared by every tile highlight -- DrawSelectedTileHighlight's single-tile Gold inspector highlight, and DrawTargetingHighlights' per-tile ability-targeting colors.</summary>
-    private void DrawTileHighlight(SpriteBatch spriteBatch, Texture2D unitRectangle, int mapNodeX, int mapNodeY, Color color)
+    /// <summary>
+    /// Outer-border-then-refill-inner technique shared by every tile highlight -- the inspector's
+    /// single-tile Gold selection and DrawTargetingHighlights' per-tile ability-targeting colors.
+    /// The interior is refilled with the tile's actual background blended
+    /// TargetSelectionMaskAlpha of the way toward borderColor (a "mask"), so the ring reads as a
+    /// solid border while the tile's own contents still show through, just tinted.
+    /// </summary>
+    private void DrawMaskedTileHighlight(SpriteBatch spriteBatch, Texture2D unitRectangle, int mapNodeX, int mapNodeY, Color borderColor)
     {
         var column = mapNodeX - _camera.CurrentScrollPosition.X;
         var row = mapNodeY - _camera.CurrentScrollPosition.Y;
@@ -230,10 +239,11 @@ public sealed class MapWindow : Window
 
         var origin = TileOrigin(column, row);
         var outerRectangle = new Rectangle((int)origin.X, (int)origin.Y, _camera.CurrentTileSize.X, _camera.CurrentTileSize.Y);
-        spriteBatch.Draw(unitRectangle, outerRectangle, color);
+        spriteBatch.Draw(unitRectangle, outerRectangle, borderColor);
 
         var innerRectangle = new Rectangle(outerRectangle.X + 1, outerRectangle.Y + 1, _camera.InnerTileSize.X, _camera.InnerTileSize.Y);
-        spriteBatch.Draw(unitRectangle, innerRectangle, _backgroundCache[column, row]);
+        var maskedColor = Color.Lerp(_backgroundCache[column, row], borderColor, TargetSelectionMaskAlpha);
+        spriteBatch.Draw(unitRectangle, innerRectangle, maskedColor);
     }
 
     /// <summary>

@@ -9,13 +9,13 @@ namespace Engine.Math;
 /// </summary>
 public enum TargetShape
 {
-    /// <summary>The caster's own tile plus its 4 cardinal neighbors (Manhattan distance &lt;= 1) -- melee default. Includes the caster's own tile so a Phasing/Tiny entity sharing it is still a valid target.</summary>
+    /// <summary>The caster's own tile plus its 8 surrounding neighbors (Chebyshev distance &lt;= 1) -- melee default. Includes the caster's own tile so a Phasing/Tiny entity sharing it is still a valid target.</summary>
     Adjacent,
 
     /// <summary>A single tile at the cursor, valid only within Range of the caster -- e.g. a ranged single-target attack.</summary>
     SingleTarget,
 
-    /// <summary>A straight line of Range tiles from the caster toward the cursor, along whichever cardinal axis dominates the direction.</summary>
+    /// <summary>A straight line of Range tiles from the caster toward the cursor, along whichever of the 8 cardinal/diagonal directions is nearest the cursor direction.</summary>
     Line,
 
     /// <summary>Tiles within Range whose angle from the caster-to-cursor direction falls within a fixed threshold.</summary>

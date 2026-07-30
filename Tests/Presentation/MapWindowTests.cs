@@ -551,8 +551,8 @@ public sealed class MapWindowTests
     /// <summary>
     /// Two presses with no Update call in between leave the frame counter unchanged, so the
     /// second press reads as a double-tap (see HandleHotkeySlotPress) -- this activates
-    /// immediately against Adjacent's fixed footprint (the caster's own tile plus its 4
-    /// cardinal neighbors) rather than merely arming, and the queued PendingAbilityActivationComponent
+    /// immediately against Adjacent's fixed footprint (the caster's own tile plus its 8
+    /// surrounding neighbors) rather than merely arming, and the queued PendingAbilityActivationComponent
     /// is the observable proof (actual damage application is AbilityActivationSystem's own
     /// responsibility, covered by AbilityActivationSystemTests, not exercised by this
     /// ComponentManager-only test harness).
@@ -572,7 +572,7 @@ public sealed class MapWindowTests
         Assert.IsTrue(pendingActivations.Has(PlayerEntityId));
         var pending = pendingActivations.GetReadonly(PlayerEntityId);
         Assert.AreEqual(TestAbilityId, pending.AbilityId);
-        Assert.HasCount(5, pending.TargetTiles);
+        Assert.HasCount(9, pending.TargetTiles);
         CollectionAssert.Contains(pending.TargetTiles, new Vector3Int(100, 100, 0));
         CollectionAssert.Contains(pending.TargetTiles, new Vector3Int(101, 100, 0));
 
@@ -691,7 +691,7 @@ public sealed class MapWindowTests
         mapWindow.HandleHotkeys(new KeyboardState(Keys.F), new KeyboardState());
 
         Assert.IsNotNull(mapViewState.TargetableTiles);
-        Assert.HasCount(5, mapViewState.TargetableTiles);
+        Assert.HasCount(9, mapViewState.TargetableTiles);
         Assert.IsTrue(mapViewState.TargetableTiles.Contains(new Vector3Int(100, 100, 0)));
         Assert.IsTrue(mapViewState.TargetableTiles.Contains(new Vector3Int(101, 100, 0)));
         Assert.IsFalse(mapViewState.TargetableTiles.Contains(new Vector3Int(102, 100, 0)));
@@ -713,6 +713,35 @@ public sealed class MapWindowTests
         Assert.HasCount(221, mapViewState.TargetableTiles);
         Assert.IsTrue(mapViewState.TargetableTiles.Contains(new Vector3Int(110, 100, 0)), "Exactly at range 10 must be included.");
         Assert.IsFalse(mapViewState.TargetableTiles.Contains(new Vector3Int(111, 100, 0)), "Beyond range 10 must be excluded.");
+    }
+
+    /// <summary>
+    /// TargetableTiles must follow the caster, not stay anchored to wherever it was standing at
+    /// arm time -- Update (via AbilityTargetingController.RefreshTargetableTiles) recomputes it
+    /// from the caster's current TransformComponent every frame an ability stays armed.
+    /// </summary>
+    [TestMethod]
+    public void HandleHotkeys_CasterMovesWhileArmed_RecomputesTargetableTilesFromTheNewPosition()
+    {
+        var (_, mapViewState, mapWindow, componentManager, abilityCatalog) = BuildMapWindowWithPlayerAndAbilities(300, 300, 1, new Vector3Int(100, 100, 0));
+        RegisterTestAdjacentAbility(abilityCatalog);
+        componentManager.Merge(PlayerEntityId, new AbilityInstanceComponent(TestAbilityId, damageAmount: 10, cooldownFramesRemaining: 0));
+        componentManager.Merge(PlayerEntityId, new HotkeyBindingComponent(HotkeySlot.Slot4, TestAbilityId));
+        var transformPool = componentManager.GetDirectPool<TransformComponent>();
+
+        mapWindow.HandleHotkeys(new KeyboardState(Keys.F), new KeyboardState());
+        Assert.IsNotNull(mapViewState.TargetableTiles);
+        Assert.IsTrue(mapViewState.TargetableTiles.Contains(new Vector3Int(100, 100, 0)));
+        Assert.IsFalse(mapViewState.TargetableTiles.Contains(new Vector3Int(105, 100, 0)));
+
+        // Simulate MovementSystem actually applying a move while the ability stays armed.
+        transformPool.TryUpdate(PlayerEntityId, static (ref TransformComponent transform) => transform.Position = new Vector3Int(105, 100, 0));
+        mapWindow.Update(new GameTime());
+
+        Assert.IsNotNull(mapViewState.TargetableTiles);
+        Assert.HasCount(9, mapViewState.TargetableTiles);
+        Assert.IsFalse(mapViewState.TargetableTiles.Contains(new Vector3Int(100, 100, 0)), "The footprint must move with the caster, not stay anchored to the position it was armed at.");
+        Assert.IsTrue(mapViewState.TargetableTiles.Contains(new Vector3Int(105, 100, 0)));
     }
 
     [TestMethod]
@@ -812,7 +841,7 @@ public sealed class MapWindowTests
         Assert.IsTrue(pendingActivations.Has(PlayerEntityId));
         var pending = pendingActivations.GetReadonly(PlayerEntityId);
         Assert.AreEqual(TestAbilityId, pending.AbilityId);
-        Assert.HasCount(5, pending.TargetTiles);
+        Assert.HasCount(9, pending.TargetTiles);
         Assert.IsNull(mapViewState.ArmedAbilityId, "Confirming a target must disarm.");
         Assert.IsNull(mapViewState.TargetableTiles);
     }
@@ -826,7 +855,7 @@ public sealed class MapWindowTests
         componentManager.Merge(PlayerEntityId, new HotkeyBindingComponent(HotkeySlot.Slot4, TestAbilityId));
         mapWindow.HandleHotkeys(new KeyboardState(Keys.F), new KeyboardState());
 
-        // Outside Adjacent's 5-tile footprint around (100,100), but still comfortably within the visible viewport.
+        // Outside Adjacent's 9-tile footprint around (100,100), but still comfortably within the visible viewport.
         var farClickPosition = ComputeScreenPositionForMapPosition(mapWindow, mapViewState, new Vector3Int(105, 100, 0));
         mapWindow.HandleClick(farClickPosition);
 

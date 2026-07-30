@@ -17,8 +17,6 @@ namespace Game.Blueprints;
 /// </summary>
 public sealed class PlayerBlueprint(MathUtility mathUtility) : IBlueprint
 {
-    private const short ActionCooldownFrames = 60;
-
     private const short MaximumHealth = 100;
     private const short HealthRegen = 10;
 
@@ -32,7 +30,7 @@ public sealed class PlayerBlueprint(MathUtility mathUtility) : IBlueprint
     {
         componentManager.Merge(entityId, new GlyphComponent("@", Color.White));
         componentManager.Merge(entityId, new HealthComponent((short)mathUtility.Next(1, MaximumHealth + 1), HealthRegen, MaximumHealth));
-        componentManager.Merge(entityId, new MovementComponent(MovementMode.PlayerControlled, ActionCooldownFrames, null, null));
+        componentManager.Merge(entityId, new MovementComponent(MovementMode.PlayerControlled, 20, null, null));
         componentManager.Merge(entityId, new ActionLockComponent(totalLockFrames: 0, lockFramesRemaining: 0));
         componentManager.Merge(entityId, new TransformComponent(new Vector3Int(-1, -1, (int)MapLayer.Ground), new Vector2Byte(1, 1)));
 

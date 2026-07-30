@@ -28,18 +28,19 @@ namespace Presentation.UI.Content;
 /// </summary>
 public sealed class HotbarContent(World world, MapViewState mapViewState, ComponentManager componentManager, AbilityCatalog abilityCatalog, FontService fontService) : IWindowContent
 {
-    public static readonly Vector2 SlotSize = new(HudMetrics.EntrySize.Y * 1.5f, HudMetrics.EntrySize.Y * 1.5f);
+    public static readonly Vector2 SlotSize = new(HudMetrics.EntrySize.Y * 2.25f, HudMetrics.EntrySize.Y * 2.25f);
 
     private const float GlyphSizeFraction = 0.75f;
     private const int ContentInset = 2;
     private const int ArmedOutlineThickness = 3;
-    private const float SlotGap = 4f;
-    private const float GroupGap = 16f;
+    private const float SlotGap = 1f;
+    private const float GroupGap = 10f;
 
     private static readonly Color UnboundSlotColor = new(48, 48, 48);
     private static readonly Color BoundSlotBackgroundColor = Color.WhiteSmoke;
     private static readonly Color BoundSlotGlyphColor = Color.Black;
-    private static readonly Color ArmedSlotOutlineColor = Color.Gold;
+    private static readonly Color ArmedSlotOutlineColor = Color.White;
+    private static readonly Color ArmedSlotMaskColor = Color.White * 0.5f;
 
     public static readonly Vector2 Size = ComputeTotalSize();
 
@@ -109,6 +110,10 @@ public sealed class HotbarContent(World world, MapViewState mapViewState, Compon
             !abilityCatalog.TryGet(abilityId, out var ability))
         {
             spriteBatch.Draw(unitRectangle, contentBounds, UnboundSlotColor);
+            if (isArmed)
+            {
+                spriteBatch.Draw(unitRectangle, contentBounds, ArmedSlotMaskColor);
+            }
             return;
         }
 
@@ -117,6 +122,11 @@ public sealed class HotbarContent(World world, MapViewState mapViewState, Compon
         _radialFill.BackgroundColor = BoundSlotBackgroundColor;
         _radialFill.FillPercentage = ComputeFillPercentage(playerEntityId, ability);
         _radialFill.Draw(spriteBatch, unitRectangle, _font, contentBounds);
+
+        if (isArmed)
+        {
+            spriteBatch.Draw(unitRectangle, contentBounds, ArmedSlotMaskColor);
+        }
     }
 
     /// <summary>The greater of the shared ActionLock's fraction (Immediate/Delayed only) and the granted instance's own cooldown fraction (any category, if it has one) -- see this class's own doc comment.</summary>

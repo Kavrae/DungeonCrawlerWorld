@@ -25,7 +25,7 @@ public static class TargetShapeResolver
     /// <summary>
     /// Range and areaSize are read differently per shape -- see AbilityTargeting's own doc
     /// comment for the general split. Adjacent ignores both entirely: its footprint is always
-    /// exactly the caster's own tile plus its 4 cardinal neighbors, not a per-ability tunable.
+    /// exactly the caster's own tile plus its 8 surrounding neighbors, not a per-ability tunable.
     /// </summary>
     public static void Resolve(TargetShape shape, Vector3Int origin, Vector3Int cursorTile, int range, int areaSize, Vector3Int mapSize, List<Vector3Int> results)
     {
@@ -34,7 +34,7 @@ public static class TargetShapeResolver
         switch (shape)
         {
             case TargetShape.Adjacent:
-                ResolveManhattanBurst(origin, radius: 1, mapSize, results);
+                ResolveAdjacent(origin, mapSize, results);
                 break;
             case TargetShape.SingleTarget:
                 ResolveSingleTarget(origin, cursorTile, range, results);
@@ -52,16 +52,12 @@ public static class TargetShapeResolver
     }
 
     /// <summary>
-    /// Shared by Adjacent (self-anchored, fixed radius 1) and Burst (cursor-anchored, per-ability
-    /// radius) -- both are the same diamond-shaped scatter, just centered on a different point.
-    /// ScatterManhattan always visits its anchor cell (distance 0) before any neighbor, which is
-    /// what makes Adjacent include the caster's own tile (so a Phasing/Tiny entity sharing it is
-    /// still a valid melee target) without a hand-rolled "plus the origin tile" special case.
-    /// radius converts to the strength ScatterManhattan expects via strength = 1 &lt;&lt; radius,
-    /// since MaxRadius(strength) == floor(log2(strength)); the visited-cell falloff magnitude is
-    /// ignored here -- nothing in this plan needs distance-based damage falloff yet. Uses the
-    /// TState overload with a static lambda (results passed as state) so no closure is
-    /// allocated per call.
+    /// Burst's cursor-anchored, per-ability-radius diamond scatter. ScatterManhattan always
+    /// visits its anchor cell (distance 0) before any neighbor. radius converts to the strength
+    /// ScatterManhattan expects via strength = 1 &lt;&lt; radius, since MaxRadius(strength) ==
+    /// floor(log2(strength)); the visited-cell falloff magnitude is ignored here -- nothing in
+    /// this plan needs distance-based damage falloff yet. Uses the TState overload with a static
+    /// lambda (results passed as state) so no closure is allocated per call.
     /// </summary>
     private static void ResolveManhattanBurst(Vector3Int anchor, int radius, Vector3Int mapSize, List<Vector3Int> results)
     {
@@ -71,6 +67,35 @@ public static class TargetShapeResolver
         }
 
         DistanceFalloff.ScatterManhattan(anchor, 1 << radius, mapSize, results, static (cellPosition, _, resultsList) => resultsList.Add(cellPosition));
+    }
+
+    /// <summary>
+    /// The caster's own tile plus its 8 surrounding neighbors (Chebyshev distance &lt;= 1) --
+    /// melee default. Includes the caster's own tile so a Phasing/Tiny entity sharing it is
+    /// still a valid target. A fixed 3x3 block, not the diamond-shaped scatter Burst uses, since
+    /// Adjacent's radius is always exactly 1 and diagonals must be included.
+    /// </summary>
+    private static void ResolveAdjacent(Vector3Int origin, Vector3Int mapSize, List<Vector3Int> results)
+    {
+        for (var offsetY = -1; offsetY <= 1; offsetY++)
+        {
+            var cellY = origin.Y + offsetY;
+            if (cellY < 0 || cellY >= mapSize.Y)
+            {
+                continue;
+            }
+
+            for (var offsetX = -1; offsetX <= 1; offsetX++)
+            {
+                var cellX = origin.X + offsetX;
+                if (cellX < 0 || cellX >= mapSize.X)
+                {
+                    continue;
+                }
+
+                results.Add(new Vector3Int(cellX, cellY, origin.Z));
+            }
+        }
     }
 
     /// <summary>Exactly cursorTile, valid only when it's within range of the caster -- otherwise no valid target exists at all.</summary>
@@ -93,10 +118,10 @@ public static class TargetShapeResolver
         ResolveManhattanBurst(cursorTile, areaSize, mapSize, results);
     }
 
-    /// <summary>Steps from origin toward cursorTile along whichever cardinal axis dominates the direction, for up to range tiles, stopping early at the map edge.</summary>
+    /// <summary>Steps from origin toward cursorTile along whichever of the 8 cardinal/diagonal directions is nearest the cursor direction, for up to range tiles, stopping early at the map edge.</summary>
     private static void ResolveLine(Vector3Int origin, Vector3Int cursorTile, int range, Vector3Int mapSize, List<Vector3Int> results)
     {
-        var direction = DominantCardinalDirection(origin, cursorTile);
+        var direction = NearestEightDirection(origin, cursorTile);
         if (direction.X == 0 && direction.Y == 0)
         {
             return;
@@ -115,7 +140,17 @@ public static class TargetShapeResolver
         }
     }
 
-    private static Vector3Int DominantCardinalDirection(Vector3Int origin, Vector3Int cursorTile)
+    /// <summary>tan(22.5 degrees) and tan(67.5 degrees) -- the octant boundaries a direction's |deltaY|/|deltaX| ratio is compared against below.</summary>
+    private const double OctantLowRatio = 0.41421356237; // tan(22.5deg)
+    private const double OctantHighRatio = 2.41421356237; // tan(67.5deg)
+
+    /// <summary>
+    /// Snaps the origin-to-cursorTile direction to the nearest of the 8 cardinal/diagonal unit
+    /// vectors (N/S/E/W/NE/NW/SE/SW), each covering a 45-degree wedge centered on its own axis.
+    /// Purely a ratio-of-magnitudes comparison (no trig call needed per resolve, unlike Cone,
+    /// since there are only 3 buckets: mostly-horizontal, mostly-vertical, or roughly diagonal).
+    /// </summary>
+    private static Vector3Int NearestEightDirection(Vector3Int origin, Vector3Int cursorTile)
     {
         var deltaX = cursorTile.X - origin.X;
         var deltaY = cursorTile.Y - origin.Y;
@@ -125,9 +160,31 @@ public static class TargetShapeResolver
             return new Vector3Int(0, 0, 0);
         }
 
-        return System.Math.Abs(deltaX) >= System.Math.Abs(deltaY)
-            ? new Vector3Int(System.Math.Sign(deltaX), 0, 0)
-            : new Vector3Int(0, System.Math.Sign(deltaY), 0);
+        var signX = System.Math.Sign(deltaX);
+        var signY = System.Math.Sign(deltaY);
+
+        if (deltaX == 0)
+        {
+            return new Vector3Int(0, signY, 0);
+        }
+
+        if (deltaY == 0)
+        {
+            return new Vector3Int(signX, 0, 0);
+        }
+
+        var ratio = (double)System.Math.Abs(deltaY) / System.Math.Abs(deltaX);
+        if (ratio < OctantLowRatio)
+        {
+            return new Vector3Int(signX, 0, 0);
+        }
+
+        if (ratio > OctantHighRatio)
+        {
+            return new Vector3Int(0, signY, 0);
+        }
+
+        return new Vector3Int(signX, signY, 0);
     }
 
     /// <summary>
