@@ -186,8 +186,9 @@ public sealed class NotificationCenterTests
         notificationCenter.AddNotification(NotificationCategory.Quest, "Explore the dungeon.", showImmediately: false);
 
         // Quest is the second declared NotificationCategory, tiled horizontally after System's
-        // summary badge (65px wide) starting at the summary bar's position, HudMetrics.Margin (30, 30).
-        var questSummaryBadge = new Point(30 + 65 + 5, 30 + 5);
+        // summary badge (NotificationCenter.SummaryEntrySize.X = 130px wide) starting at the
+        // summary bar's position, HudMetrics.Margin (30, 30).
+        var questSummaryBadge = new Point(30 + 130 + 5, 30 + 5);
         var handled = ClickAlwaysOnTop(alwaysOnTopWindows, questSummaryBadge);
 
         Assert.IsTrue(handled);
@@ -200,7 +201,7 @@ public sealed class NotificationCenterTests
         var alwaysOnTopWindows = new List<Window>();
         _ = CreateNotificationCenter(CreateWindowService(), alwaysOnTopWindows);
 
-        var questSummaryBadge = new Point(30 + 65 + 5, 30 + 5);
+        var questSummaryBadge = new Point(30 + 130 + 5, 30 + 5);
         ClickAlwaysOnTop(alwaysOnTopWindows, questSummaryBadge);
 
         Assert.IsFalse(ClickAlwaysOnTop(alwaysOnTopWindows, FirstActiveNotificationTopLeft));
@@ -363,5 +364,57 @@ public sealed class NotificationCenterTests
 
         Assert.IsTrue(notificationCenter.HasBlockingNotification);
         Assert.IsTrue(ClickAlwaysOnTop(alwaysOnTopWindows, FirstActiveNotificationTopLeft));
+    }
+
+    /// <summary>
+    /// Achievement notifications carry structured fields (AchievementNotificationDetails)
+    /// beyond the base Text/Title -- TextWindow only renders one flat string, so
+    /// NotificationCenter.ShowActive flattens them into the popup's displayed text. This
+    /// confirms every field actually shows up, not just Text/Title.
+    /// </summary>
+    [TestMethod]
+    public void AddNotification_WithAchievementDetails_IncludesEveryFieldInTheDisplayedText()
+    {
+        var (windowService, capturedPopups) = CreateWindowServiceCapturingTextWindows();
+        var notificationCenter = CreateNotificationCenter(windowService, []);
+        var achievement = new AchievementNotificationDetails(
+            RequirementText: "Entered the dungeon without a human companion.",
+            LootboxLabel: "Bronze Adventurer Box",
+            RewardText: "A shiny bronze box.");
+
+        notificationCenter.AddNotification(
+            NotificationCategory.Achievement,
+            "Didn't anyone teach you there is safety in numbers?",
+            showImmediately: true,
+            title: "Loner",
+            achievement: achievement);
+
+        var activePopup = capturedPopups.Single(popup => popup.TitleButtons.Count > 0);
+        Assert.AreEqual("Loner", activePopup.TitleText);
+        StringAssert.Contains(activePopup.OriginalText, "Didn't anyone teach you there is safety in numbers?");
+        StringAssert.Contains(activePopup.OriginalText, achievement.RequirementText);
+        StringAssert.Contains(activePopup.OriginalText, achievement.LootboxLabel);
+        StringAssert.Contains(activePopup.OriginalText, achievement.RewardText);
+    }
+
+    [TestMethod]
+    public void AddNotification_WithAchievementDetailsButNoLootbox_ShowsNoneForLootbox()
+    {
+        var (windowService, capturedPopups) = CreateWindowServiceCapturingTextWindows();
+        var notificationCenter = CreateNotificationCenter(windowService, []);
+        var achievement = new AchievementNotificationDetails(
+            RequirementText: "Entered the dungeon without a human companion.",
+            LootboxLabel: null,
+            RewardText: "None! Haha. You are so dead.");
+
+        notificationCenter.AddNotification(
+            NotificationCategory.Achievement,
+            "Didn't anyone teach you there is safety in numbers?",
+            showImmediately: true,
+            title: "Loner",
+            achievement: achievement);
+
+        var activePopup = capturedPopups.Single(popup => popup.TitleButtons.Count > 0);
+        StringAssert.Contains(activePopup.OriginalText, "Lootbox: None.");
     }
 }

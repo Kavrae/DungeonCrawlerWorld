@@ -16,10 +16,6 @@ Infinite storage per entity. The player character will carry a large amount (hun
 
 Engine-side equipment support (slots, equip/unequip mechanics). Companion to the Game-layer equipment rules and the Presentation-layer equipment menu below.
 
-#### Achievement center
-
-Tracks achievement progress and fires the notification system when one completes. Needs its own `AchievementNotification` type.
-
 #### Generic status-effect system
 
 The occupancy markers (`NonBlockingComponent`/`ForceBlockingComponent`) are `MultiComponentPool`-backed "many independent sources, count-based" components -- a reasonable, low-risk special case for exactly two boolean occupancy questions. Do **not** copy that pattern (a bespoke marker-component type plus a hand-written precedence function) for every future buff/debuff once real effect variety shows up (dozens of effects on the player character, overlapping sources assumed throughout) -- it doesn't scale:
@@ -129,6 +125,30 @@ Companion example to the self-buff/poison-toggle items above -- a positive, self
 
 - `SeekTarget` movement mode
 - Efficiency update
+
+#### Achievement lootbox delivery
+
+Achievements can name a `LootboxReward` (rarity + box type, see `Game/Modules/Achievements/LootboxReward.cs`), but nothing delivers it yet -- the Inventory system above doesn't exist. Once it does, `AchievementModule`'s unlock path needs to actually add the lootbox's contents to the player's inventory instead of only describing it in the notification. Lootboxes themselves can only be *opened* in Safe Rooms once opening exists as a mechanic -- this is not a purchased gambling item, it's a pre-set reward tied to how it was earned.
+
+#### Achievement content backlog
+
+The Achievement system (`Game/Modules/Achievements/`) currently ships one achievement ("Loner") to prove the pipeline; the rest is a deliberate, incremental backlog -- a few added alongside each future feature rather than all at once. Volume/pacing target: many low-value achievements early (deliberately "drowning the player in low-level loot boxes" at the start), tapering to fewer, higher-value ones by the midgame.
+
+Design-target examples, not yet implemented:
+- Enter the dungeon with a cat (random starting-item selection)
+- Find a Borough Boss
+- Attempt to punch a slime
+- Kill an armed enemy bare-handed
+- Kill more than 20 non-combatant NPCs in one attack
+- Reach level 2
+- Wear magical gear for the first time
+- Increase the Magic Missile spell to level 3
+- Loot a corpse for the first time
+- Store 10 tons of weight in inventory
+
+Several depend on systems that don't exist yet (Inventory, a real companion/party concept + Human race, levels/experience, magic/spell gear, corpse looting) -- implement each achievement once its underlying system actually lands, not before.
+
+`LonerAchievement` (`Game/Modules/Achievements/Definitions/LonerAchievement.cs`) unlocks on any spawn-sentinel `EntityMoved` (`OldPosition == NewPosition`) unconditionally, relying on `FloorBuilder.CreatePlayer` being the only thing that publishes one today. Once a monster spawner also uses that same sentinel, this needs a real player-vs-NPC discriminator that doesn't depend on `IPlayerQuery.PlayerEntityId`'s assignment timing (`GameLoop` sets it *after* `CreatePlayer` returns, but `CreatePlayer` publishes the sentinel *before* returning -- comparing against `PlayerEntityId` here silently never matches, confirmed the hard way). A `MovementComponent.Mode == MovementMode.PlayerControlled` check on the moved entity is the likely fix.
 
 ## Presentation
 

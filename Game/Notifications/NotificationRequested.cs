@@ -9,4 +9,9 @@ namespace Game.Notifications;
 /// per-frame drain point (the top of its own Update). Mirrors NotificationCenter.AddNotification's
 /// existing parameters exactly, so it's a drop-in alternate entry point, not a new concept.
 /// </summary>
-public sealed record NotificationRequested(NotificationCategory Category, string Text, bool ShowImmediately) : IBufferedEvent;
+public sealed record NotificationRequested(
+    NotificationCategory Category,
+    string Text,
+    bool ShowImmediately,
+    string? Title = null,
+    AchievementNotificationDetails? Achievement = null) : IBufferedEvent;

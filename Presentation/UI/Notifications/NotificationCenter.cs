@@ -19,8 +19,16 @@ namespace Presentation.UI.Notifications;
 public sealed class NotificationCenter(WindowService windowService, EventBus eventBus, List<Window> alwaysOnTopWindows)
 {
     private static readonly Vector2 SummaryPosition = HudMetrics.Margin;
-    private static readonly Vector2 SummarySize = new(300, 25);
-    private static readonly Vector2 SummaryEntrySize = HudMetrics.EntrySize;
+    private static readonly Vector2 SummarySize = new(400, 25);
+
+    /// <summary>
+    /// Deliberately its own constant, not HudMetrics.EntrySize (65px wide -- sized for short
+    /// hotbar/health-bar-style content elsewhere): a summary badge's text is "{category}: {count}",
+    /// and "Achievement: 0" doesn't fit in 65px at this font size -- confirmed the hard way, it
+    /// wrapped/hyphenated inside the fixed-size box and rendered a stray glyph. Wide enough for
+    /// the longest category name plus a 2-digit count without wrapping.
+    /// </summary>
+    private static readonly Vector2 SummaryEntrySize = new(130, HudMetrics.EntrySize.Y);
 
     private static readonly Vector2 ActiveNotificationBasePosition = new(200, 200);
     private static readonly Vector2 ActiveNotificationMaximumSize = new(640, 176);
@@ -112,9 +120,9 @@ public sealed class NotificationCenter(WindowService windowService, EventBus eve
     /// </summary>
     public void Update(GameTime gameTime) => eventBus.DispatchBuffered<NotificationRequested>();
 
-    public Guid AddNotification(NotificationCategory category, string text, bool showImmediately = true, string? title = null)
+    public Guid AddNotification(NotificationCategory category, string text, bool showImmediately = true, string? title = null, AchievementNotificationDetails? achievement = null)
     {
-        var notification = new Notification(text, category, title);
+        var notification = new Notification(text, category, title, achievement);
 
         if (showImmediately)
         {
@@ -162,7 +170,7 @@ public sealed class NotificationCenter(WindowService windowService, EventBus eve
     }
 
     private void OnNotificationRequested(NotificationRequested requested) =>
-        AddNotification(requested.Category, requested.Text, requested.ShowImmediately);
+        AddNotification(requested.Category, requested.Text, requested.ShowImmediately, requested.Title, requested.Achievement);
 
     private void ShowActive(Notification notification)
     {
@@ -192,7 +200,7 @@ public sealed class NotificationCenter(WindowService windowService, EventBus eve
                 CanUserMove = true,
                 CanUserScrollVertical = true
             },
-            Text = new TextOptions { Text = notification.Text },
+            Text = new TextOptions { Text = BuildDisplayText(notification) },
         });
 
         notificationWindow.Closed += OnActiveNotificationClosed;
@@ -240,6 +248,29 @@ public sealed class NotificationCenter(WindowService windowService, EventBus eve
         }
 
         alwaysOnTopWindows.Remove(closedWindow);
+    }
+
+    /// <summary>
+    /// TextWindow renders one flat string with one font -- no per-section styling exists yet
+    /// -- so an achievement's structured fields (kept separate on Notification/AchievementNotificationDetails
+    /// for future consumers, e.g. an achievement log) get flattened into one displayed block
+    /// here. Sections are joined with " \n\n " (space-padded) rather than bare "\n\n": TextWindow's
+    /// word-wrap only splits on spaces (see StringUtility.WordWrapWithHyphenation), so an
+    /// un-padded "\n\n" would get glued onto the end of the previous word as one unbroken chunk
+    /// instead of standing alone as its own forced-break token.
+    /// </summary>
+    private static string BuildDisplayText(Notification notification)
+    {
+        if (notification.Achievement is not { } achievement)
+        {
+            return notification.Text;
+        }
+
+        var lootboxLine = achievement.LootboxLabel is { } lootboxLabel
+            ? $"Lootbox: {lootboxLabel}."
+            : "Lootbox: None.";
+
+        return $"{notification.Text} \n\n Requirement fulfilled: {achievement.RequirementText} \n\n {lootboxLine} \n\n Reward: {achievement.RewardText}";
     }
 
     private List<Notification> UnreadListFor(NotificationCategory category) =>

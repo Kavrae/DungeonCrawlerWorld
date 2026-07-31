@@ -4,6 +4,7 @@ using Engine.Math;
 using Engine.Modules;
 using Game.Modules;
 using Game.Modules.Abilities;
+using Game.Modules.Achievements;
 using Game.Modules.Burning;
 using Game.Modules.Class;
 using Game.Modules.ContactDamage;
@@ -51,6 +52,7 @@ public static class GameBootstrapper
             new PoisonModule(),
             new ContactDamageModule(),
             new StatusEffectAuraModule(),
+            new AchievementModule(),
         ];
 
         var mapQuery = (IMapQuery)world;

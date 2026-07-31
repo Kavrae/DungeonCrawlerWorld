@@ -14,4 +14,7 @@ public enum NotificationCategory
 
     /// <summary>A quest or objective. Can be minimized and does not pause the game.</summary>
     Quest,
+
+    /// <summary>An achievement earned by the player. Can be minimized and does not pause the game; starts minimized (see AchievementModule) rather than popping up immediately.</summary>
+    Achievement,
 }
