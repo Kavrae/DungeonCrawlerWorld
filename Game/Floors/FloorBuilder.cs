@@ -46,7 +46,14 @@ public static class FloorBuilder
             PoisonEffects.ApplyStack(ecsContext.ComponentManager, entityId, StatusEffectSource.Admin, TestPoisonDurationTicks);
         }
 
-        var spawnPosition = FindFreeGroundCellNearCenter(world);
+        // TEMPORARY: spawn beside TestMapBuilder's column-16 wall corridor (a fixed column
+        // regardless of map size, unlike the map-size-relative exact center below) instead of
+        // FindFreeGroundCellNearCenter's usual target, so the sprite migration's Wall sprite
+        // (SpriteManifest.Wall) is immediately visible on spawn without scrolling ~480 tiles
+        // to the nearest wall. Revert to FindFreeGroundCellNearCenter(world) once that's been
+        // visually confirmed in-game.
+        var wallAdjacentOrigin = new Vector3Int(17, world.Map.Size.Y / 2, (int)MapLayer.Ground);
+        var spawnPosition = FindFreeGroundCellNear(world, wallAdjacentOrigin);
         ref var transform = ref ecsContext.ComponentManager.GetDirectPool<TransformComponent>().Get(entityId);
         world.PlaceEntityOnMap(entityId, spawnPosition, ref transform);
 
@@ -72,13 +79,18 @@ public static class FloorBuilder
     private static Vector3Int FindFreeGroundCellNearCenter(Game.World.World world)
     {
         var mapSize = world.Map.Size;
-        var center = new Vector3Int(mapSize.X / 2, mapSize.Y / 2, (int)MapLayer.Ground);
+        return FindFreeGroundCellNear(world, new Vector3Int(mapSize.X / 2, mapSize.Y / 2, (int)MapLayer.Ground));
+    }
 
-        if (IsFreeGroundCell(world, center))
+    /// <summary>Same ring-expanding search as FindFreeGroundCellNearCenter, but from an arbitrary origin -- extracted so CreatePlayer's TEMPORARY wall-adjacent override above can reuse the same free-cell-finding robustness without duplicating it.</summary>
+    private static Vector3Int FindFreeGroundCellNear(Game.World.World world, Vector3Int origin)
+    {
+        if (IsFreeGroundCell(world, origin))
         {
-            return center;
+            return origin;
         }
 
+        var mapSize = world.Map.Size;
         var maxRadius = Math.Max(mapSize.X, mapSize.Y);
         for (var radius = 1; radius <= maxRadius; radius++)
         {
@@ -86,10 +98,10 @@ public static class FloorBuilder
             {
                 for (var deltaY = -radius; deltaY <= radius; deltaY++)
                 {
-                    var candidate = new Vector3Int(center.X + deltaX, center.Y + deltaY, center.Z);
+                    var candidate = new Vector3Int(origin.X + deltaX, origin.Y + deltaY, origin.Z);
 
                     // Ring only -- interior offsets were already checked at a smaller radius.
-                    if (DistanceFalloff.ChebyshevDistance(center, candidate) != radius)
+                    if (DistanceFalloff.ChebyshevDistance(origin, candidate) != radius)
                     {
                         continue;
                     }
@@ -102,7 +114,7 @@ public static class FloorBuilder
             }
         }
 
-        return center;
+        return origin;
     }
 
     private static bool IsFreeGroundCell(Game.World.World world, Vector3Int position) =>

@@ -8,7 +8,7 @@ using Microsoft.Xna.Framework;
 
 namespace Game.Modules.Core;
 
-/// <summary>Shared components reused across other modules: Transform, DisplayText, Glyph, Background, ActionLock.</summary>
+/// <summary>Shared components reused across other modules: Transform, DisplayText, Glyph, Sprite, Background, ActionLock.</summary>
 public sealed class CoreModule : IModule
 {
     public Guid Id { get; } = new("d9f6a1c4-8b2e-4f3a-9c1d-000000000001");
@@ -30,6 +30,8 @@ public sealed class CoreModule : IModule
         {
             existing.GlyphColor = Color.Lerp(existing.GlyphColor, incoming.GlyphColor, 0.5f);
         });
+
+        componentManager.RegisterDirectPool<SpriteComponent>(static (ref existing, incoming) => { });
 
         componentManager.RegisterMultiPool<NonBlockingComponent>();
         componentManager.RegisterMultiPool<ForceBlockingComponent>();

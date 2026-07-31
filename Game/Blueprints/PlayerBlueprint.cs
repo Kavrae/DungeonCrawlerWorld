@@ -29,6 +29,10 @@ public sealed class PlayerBlueprint(MathUtility mathUtility) : IBlueprint
     public void Build(ComponentManager componentManager, int entityId)
     {
         componentManager.Merge(entityId, new GlyphComponent("@", Color.White));
+        if (SpriteManifest.TryGet("Player", out var sprite))
+        {
+            componentManager.Merge(entityId, sprite);
+        }
         componentManager.Merge(entityId, new HealthComponent((short)mathUtility.Next(1, MaximumHealth + 1), HealthRegen, MaximumHealth));
         componentManager.Merge(entityId, new MovementComponent(MovementMode.PlayerControlled, 20, null, null));
         componentManager.Merge(entityId, new ActionLockComponent(totalLockFrames: 0, lockFramesRemaining: 0));

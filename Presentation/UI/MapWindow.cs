@@ -35,12 +35,16 @@ public sealed class MapWindow : Window
     private readonly MapCamera _camera;
     private readonly AbilityTargetingController _abilityTargeting;
     private readonly MapBackgroundCache _backgroundCache;
+    private readonly MapTintGrid _tintGrid;
     private readonly DirectComponentPool<TransformComponent> _transformPool;
     private readonly DirectComponentPool<GlyphComponent> _glyphPool;
+    private readonly DirectComponentPool<SpriteComponent> _spritePool;
     private readonly MultiComponentPool<NonBlockingComponent> _nonBlockingPool;
     private readonly PackedComponentPool<HealthComponent> _healthPool;
     private readonly TileRenderer _tileRenderer;
     private readonly GlyphRenderer _glyphRenderer;
+    private readonly SpriteSheetService _spriteSheetService;
+    private readonly SpriteRenderer _spriteRenderer;
 
     private static readonly Color TargetableTileBorderColor = Color.White;
     private static readonly Color HoveredTargetTileBorderColor = Color.Red;
@@ -66,7 +70,9 @@ public sealed class MapWindow : Window
         ComponentManager componentManager,
         AbilityCatalog abilityCatalog,
         TileRenderer tileRenderer,
-        GlyphRenderer glyphRenderer) : base(fontService, windowService, glyphRenderer)
+        GlyphRenderer glyphRenderer,
+        SpriteSheetService spriteSheetService,
+        SpriteRenderer spriteRenderer) : base(fontService, windowService, glyphRenderer)
     {
         ArgumentNullException.ThrowIfNull(world);
         ArgumentNullException.ThrowIfNull(mapViewState);
@@ -74,15 +80,20 @@ public sealed class MapWindow : Window
         ArgumentNullException.ThrowIfNull(abilityCatalog);
         ArgumentNullException.ThrowIfNull(tileRenderer);
         ArgumentNullException.ThrowIfNull(glyphRenderer);
+        ArgumentNullException.ThrowIfNull(spriteSheetService);
+        ArgumentNullException.ThrowIfNull(spriteRenderer);
 
         _world = world;
         _mapViewState = mapViewState;
         _transformPool = componentManager.GetDirectPool<TransformComponent>();
         _glyphPool = componentManager.GetDirectPool<GlyphComponent>();
+        _spritePool = componentManager.GetDirectPool<SpriteComponent>();
         _nonBlockingPool = componentManager.GetMultiPool<NonBlockingComponent>();
         _healthPool = componentManager.GetPackedPool<HealthComponent>();
         _tileRenderer = tileRenderer;
         _glyphRenderer = glyphRenderer;
+        _spriteSheetService = spriteSheetService;
+        _spriteRenderer = spriteRenderer;
 
         _camera = new MapCamera(world);
         _abilityTargeting = new AbilityTargetingController(
@@ -96,11 +107,11 @@ public sealed class MapWindow : Window
             componentManager.GetPackedPool<PendingAbilityActivationComponent>(),
             componentManager.GetPackedPool<PendingDelayedActionComponent>(),
             componentManager.GetPackedPool<ActionLockComponent>());
+        _tintGrid = new MapTintGrid(componentManager, world.Map.Size);
         _backgroundCache = new MapBackgroundCache(
             world,
             mapViewState,
             componentManager.GetDirectPool<BackgroundComponent>(),
-            new MapTintGrid(componentManager, world.Map.Size),
             _camera);
 
         _tileDepth = _world.Map.Size.Z;
@@ -179,9 +190,43 @@ public sealed class MapWindow : Window
         spriteBatch.Draw(unitRectangle, new Rectangle(0, 0, _camera.TileColumns * _camera.CurrentTileSize.X, _camera.TileRows * _camera.CurrentTileSize.Y), MapBackgroundColor);
 
         _tileRenderer.DrawBackgrounds(spriteBatch, unitRectangle, _backgroundCache.Colors, _camera.TileColumns, _camera.TileRows, _camera.CurrentTileSize, _camera.RenderPixelOffset);
+        DrawGlyphs(spriteBatch, unitRectangle);
+        DrawGlowOverlay(spriteBatch, unitRectangle);
         DrawTargetingHighlights(spriteBatch, unitRectangle);
         DrawSelectedTileHighlight(spriteBatch, unitRectangle);
-        DrawGlyphs(spriteBatch, unitRectangle);
+    }
+
+    /// <summary>
+    /// StatusEffectAuraSourceComponent's glow (see MapTintGrid), drawn as a translucent overlay
+    /// on top of terrain/occupant sprites rather than blended into the background color
+    /// underneath them. Blending it into the background (the old approach) only ever showed
+    /// through a small, mostly-transparent glyph -- a full-tile opaque sprite hides an
+    /// underlying background color completely, which silently broke the glow the moment
+    /// terrain/entities started rendering as sprites. Drawing the same tint as its own
+    /// translucent rect on top means it shows over a sprite exactly the way it used to show
+    /// over a flat background color.
+    /// </summary>
+    private void DrawGlowOverlay(SpriteBatch spriteBatch, Texture2D unitRectangle)
+    {
+        var currentMapLayer = _mapViewState.CurrentMapLayer;
+
+        for (var columnIndex = 0; columnIndex < _camera.TileColumns; columnIndex++)
+        {
+            for (var rowIndex = 0; rowIndex < _camera.TileRows; rowIndex++)
+            {
+                var mapNodeX = columnIndex + _camera.CurrentScrollPosition.X;
+                var mapNodeY = rowIndex + _camera.CurrentScrollPosition.Y;
+
+                if (!_world.IsOnMap(new Vector3Int(mapNodeX, mapNodeY, 0)) || !_tintGrid.TryGetTint(mapNodeX, mapNodeY, currentMapLayer, out var tint))
+                {
+                    continue;
+                }
+
+                var tileOrigin = TileOrigin(columnIndex, rowIndex);
+                var destination = new Rectangle((int)tileOrigin.X, (int)tileOrigin.Y, _camera.CurrentTileSize.X, _camera.CurrentTileSize.Y);
+                spriteBatch.Draw(unitRectangle, destination, tint.Color * tint.Factor);
+            }
+        }
     }
 
     /// <summary>Delegates to MapCamera.TileOrigin -- kept as a same-signature method here rather than inlined at every call site below.</summary>
@@ -222,11 +267,14 @@ public sealed class MapWindow : Window
     }
 
     /// <summary>
-    /// Outer-border-then-refill-inner technique shared by every tile highlight -- the inspector's
-    /// single-tile Gold selection and DrawTargetingHighlights' per-tile ability-targeting colors.
-    /// The interior is refilled with the tile's actual background blended
-    /// TargetSelectionMaskAlpha of the way toward borderColor (a "mask"), so the ring reads as a
-    /// solid border while the tile's own contents still show through, just tinted.
+    /// A uniform translucent borderColor wash (TargetSelectionMaskAlpha alpha) over the whole
+    /// tile -- shared by the inspector's single-tile Gold selection and DrawTargetingHighlights'
+    /// per-tile ability-targeting colors. Drawn after DrawGlyphs/DrawGlowOverlay (not before,
+    /// like the tile backgrounds) so it lands on top of whatever's actually on the tile --
+    /// terrain/occupant sprite, glyph, or glow -- rather than getting hidden underneath an opaque
+    /// sprite the way this used to. The whole tile is translucent (not just an inset "mask" with
+    /// a solid opaque border ring, the earlier technique) specifically so the sprite stays
+    /// visible through the border too, not just the interior.
     /// </summary>
     private void DrawMaskedTileHighlight(SpriteBatch spriteBatch, Texture2D unitRectangle, int mapNodeX, int mapNodeY, Color borderColor)
     {
@@ -239,12 +287,8 @@ public sealed class MapWindow : Window
         }
 
         var origin = TileOrigin(column, row);
-        var outerRectangle = new Rectangle((int)origin.X, (int)origin.Y, _camera.CurrentTileSize.X, _camera.CurrentTileSize.Y);
-        spriteBatch.Draw(unitRectangle, outerRectangle, borderColor);
-
-        var innerRectangle = new Rectangle(outerRectangle.X + 1, outerRectangle.Y + 1, _camera.InnerTileSize.X, _camera.InnerTileSize.Y);
-        var maskedColor = Color.Lerp(_backgroundCache[column, row], borderColor, TargetSelectionMaskAlpha);
-        spriteBatch.Draw(unitRectangle, innerRectangle, maskedColor);
+        var tileRectangle = new Rectangle((int)origin.X, (int)origin.Y, _camera.CurrentTileSize.X, _camera.CurrentTileSize.Y);
+        spriteBatch.Draw(unitRectangle, tileRectangle, borderColor * TargetSelectionMaskAlpha);
     }
 
     /// <summary>
@@ -260,6 +304,17 @@ public sealed class MapWindow : Window
         _backgroundCache.Reset();
     }
 
+    /// <summary>
+    /// Two full passes over the visible grid, not one interleaved pass -- a multi-tile
+    /// entity's sprite/glyph is drawn once, from its origin tile (see DrawPrimaryOccupant),
+    /// covering every tile in its footprint. With a single per-tile pass, a neighboring
+    /// column/row's terrain draw (a later loop iteration, since SpriteSortMode.Deferred
+    /// submits in call order with no depth buffer) would land on top of that already-drawn
+    /// footprint, covering part of it -- visible now that terrain renders as an opaque
+    /// full-tile sprite rather than a small, mostly-transparent glyph. Drawing all terrain
+    /// first, then all occupants, guarantees occupants are always on top regardless of
+    /// footprint size or the entity's position within it.
+    /// </summary>
     private void DrawGlyphs(SpriteBatch spriteBatch, Texture2D unitRectangle)
     {
         var currentMapLayer = _mapViewState.CurrentMapLayer;
@@ -277,16 +332,50 @@ public sealed class MapWindow : Window
                     continue;
                 }
 
+                DrawTerrainGlyph(spriteBatch, terrainLayer, mapNodeX, mapNodeY, TileOrigin(columnIndex, rowIndex));
+            }
+        }
+
+        for (var columnIndex = 0; columnIndex < _camera.TileColumns; columnIndex++)
+        {
+            for (var rowIndex = 0; rowIndex < _camera.TileRows; rowIndex++)
+            {
+                var mapNodeX = columnIndex + _camera.CurrentScrollPosition.X;
+                var mapNodeY = rowIndex + _camera.CurrentScrollPosition.Y;
+
+                if (!_world.IsOnMap(new Vector3Int(mapNodeX, mapNodeY, 0)))
+                {
+                    continue;
+                }
+
                 var tileOrigin = TileOrigin(columnIndex, rowIndex);
                 var occupantsHere = _world.GetNonBlockingEntityIdsAt(new Vector3Int(mapNodeX, mapNodeY, currentMapLayer));
 
-                DrawTerrainGlyph(spriteBatch, terrainLayer, mapNodeX, mapNodeY, tileOrigin);
                 DrawTinyGrid(spriteBatch, occupantsHere, tileOrigin);
                 DrawPrimaryOccupant(spriteBatch, unitRectangle, currentMapLayer, mapNodeX, mapNodeY, columnIndex, rowIndex);
                 DrawPhasingGlyphs(spriteBatch, occupantsHere, tileOrigin);
                 DrawLayerBadges(spriteBatch, currentMapLayer, mapNodeX, mapNodeY, tileOrigin);
             }
         }
+    }
+
+    /// <summary>Draws entityId's sprite if it has one, else falls back to its glyph -- the one place that decides sprite-vs-glyph, shared by every per-tile visual draw below. Returns whether anything was actually drawn.</summary>
+    private bool TryDrawEntityVisual(SpriteBatch spriteBatch, int entityId, SpriteFontBase font, Vector2 footprintTopLeft, Vector2 footprintSize, float alphaMultiplier = 1f)
+    {
+        if (_spritePool.TryGetReadonly(entityId, out var spriteComponent))
+        {
+            var texture = _spriteSheetService.GetTexture(spriteComponent.SheetPath);
+            _spriteRenderer.Draw(spriteBatch, texture, spriteComponent.SourceRectangle, footprintTopLeft, footprintSize, Color.White * alphaMultiplier);
+            return true;
+        }
+
+        if (_glyphPool.TryGetReadonly(entityId, out var glyphComponent))
+        {
+            _glyphRenderer.DrawCentered(spriteBatch, font, glyphComponent.Glyph, footprintTopLeft, footprintSize, glyphComponent.GlyphColor * alphaMultiplier);
+            return true;
+        }
+
+        return false;
     }
 
     private void DrawTerrainGlyph(SpriteBatch spriteBatch, TerrainLayer? terrainLayer, int mapNodeX, int mapNodeY, Vector2 tileOrigin)
@@ -297,13 +386,13 @@ public sealed class MapWindow : Window
         }
 
         var terrainEntityId = _world.Map.GetTerrainEntityId(mapNodeX, mapNodeY, layer);
-        if (terrainEntityId == -1 || !_glyphPool.TryGetReadonly(terrainEntityId, out var glyphComponent))
+        if (terrainEntityId == -1)
         {
             return;
         }
 
         var footprintSize = new Vector2(_camera.CurrentTileSize.X, _camera.CurrentTileSize.Y); // Terrain is always 1x1.
-        _glyphRenderer.DrawCentered(spriteBatch, _mediumFont, glyphComponent.Glyph, tileOrigin, footprintSize, glyphComponent.GlyphColor);
+        TryDrawEntityVisual(spriteBatch, terrainEntityId, _mediumFont, tileOrigin, footprintSize);
     }
 
     /// <summary>Up to 9 Tiny entities in a 3x3 sub-grid, each &lt;= 1/3 tile size; extras beyond 9 are simply not drawn.</summary>
@@ -319,7 +408,7 @@ public sealed class MapWindow : Window
                 break;
             }
 
-            if ((NonBlockingQueries.CombinedKind(_nonBlockingPool, entityId) & NonBlockingKind.Tiny) == 0 || !_glyphPool.TryGetReadonly(entityId, out var glyphComponent))
+            if ((NonBlockingQueries.CombinedKind(_nonBlockingPool, entityId) & NonBlockingKind.Tiny) == 0)
             {
                 continue;
             }
@@ -328,8 +417,10 @@ public sealed class MapWindow : Window
             var subRow = drawnCount / TinyGridDimension;
             var subCellTopLeft = new Vector2(tileOrigin.X + subColumn * subCellSize.X, tileOrigin.Y + subRow * subCellSize.Y);
 
-            _glyphRenderer.DrawCentered(spriteBatch, _tinyFont, glyphComponent.Glyph, subCellTopLeft, new Vector2(subCellSize.X, subCellSize.Y), glyphComponent.GlyphColor);
-            drawnCount++;
+            if (TryDrawEntityVisual(spriteBatch, entityId, _tinyFont, subCellTopLeft, new Vector2(subCellSize.X, subCellSize.Y)))
+            {
+                drawnCount++;
+            }
         }
     }
 
@@ -341,7 +432,7 @@ public sealed class MapWindow : Window
             return;
         }
 
-        if (!_glyphPool.TryGetReadonly(entityId, out var glyphComponent) || !_transformPool.TryGetReadonly(entityId, out var transformComponent))
+        if (!_transformPool.TryGetReadonly(entityId, out var transformComponent))
         {
             return;
         }
@@ -358,7 +449,7 @@ public sealed class MapWindow : Window
         var footprintTopLeft = TileOrigin(columnIndex, rowIndex);
         var footprintSize = new Vector2(transformComponent.Size.X * _camera.CurrentTileSize.X, transformComponent.Size.Y * _camera.CurrentTileSize.Y);
 
-        _glyphRenderer.DrawCentered(spriteBatch, FontForSize(transformComponent.Size.X), glyphComponent.Glyph, footprintTopLeft, footprintSize, glyphComponent.GlyphColor);
+        TryDrawEntityVisual(spriteBatch, entityId, FontForSize(transformComponent.Size.X), footprintTopLeft, footprintSize);
         DrawEntityIcons(spriteBatch, unitRectangle, entityId, footprintTopLeft, footprintSize);
     }
 
@@ -410,7 +501,6 @@ public sealed class MapWindow : Window
         foreach (var entityId in occupants)
         {
             if ((NonBlockingQueries.CombinedKind(_nonBlockingPool, entityId) & NonBlockingKind.Phasing) == 0 ||
-                !_glyphPool.TryGetReadonly(entityId, out var glyphComponent) ||
                 !_transformPool.TryGetReadonly(entityId, out var transformComponent))
             {
                 continue;
@@ -418,7 +508,7 @@ public sealed class MapWindow : Window
 
             var footprintSize = new Vector2(transformComponent.Size.X * _camera.CurrentTileSize.X, transformComponent.Size.Y * _camera.CurrentTileSize.Y);
 
-            _glyphRenderer.DrawCentered(spriteBatch, FontForSize(transformComponent.Size.X), glyphComponent.Glyph, tileOrigin, footprintSize, glyphComponent.GlyphColor * 0.5f);
+            TryDrawEntityVisual(spriteBatch, entityId, FontForSize(transformComponent.Size.X), tileOrigin, footprintSize, alphaMultiplier: 0.5f);
         }
     }
 

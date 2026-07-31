@@ -55,6 +55,7 @@ public sealed class MapWindowTests
         var componentManager = new ComponentManager(100, 50);
         componentManager.RegisterDirectPool<TransformComponent>(static (ref existing, incoming) => existing = incoming);
         componentManager.RegisterDirectPool<GlyphComponent>(static (ref existing, incoming) => existing = incoming);
+        componentManager.RegisterDirectPool<SpriteComponent>(static (ref existing, incoming) => existing = incoming);
         componentManager.RegisterDirectPool<BackgroundComponent>(static (ref existing, incoming) => existing = incoming);
         componentManager.RegisterMultiPool<NonBlockingComponent>();
         componentManager.RegisterPackedPool<MovementComponent>(static (ref existing, incoming) => existing = incoming);
@@ -74,7 +75,8 @@ public sealed class MapWindowTests
         }
 
         windowService.RegisterFactory<MapWindow>((_, _) => new MapWindow(
-            fontService, windowService, world, mapViewState, componentManager, abilityCatalog ?? new AbilityCatalog(), new TileRenderer(), new GlyphRenderer()));
+            fontService, windowService, world, mapViewState, componentManager, abilityCatalog ?? new AbilityCatalog(), new TileRenderer(), new GlyphRenderer(),
+            new SpriteSheetService(null, "Spritesheets"), new SpriteRenderer()));
 
         var mapWindow = windowService.CreateWindow<MapWindow>(null, new WindowOptions
         {

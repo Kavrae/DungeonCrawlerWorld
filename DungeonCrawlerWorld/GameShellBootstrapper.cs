@@ -90,7 +90,9 @@ public static class GameShellBootstrapper
             ecsContext.ComponentManager,
             abilityCatalog,
             presentation.TileRenderer,
-            presentation.GlyphRenderer));
+            presentation.GlyphRenderer,
+            presentation.SpriteSheetService,
+            presentation.SpriteRenderer));
 
         var mapWindow = presentation.WindowService.CreateWindow<MapWindow>(null, new WindowOptions
         {

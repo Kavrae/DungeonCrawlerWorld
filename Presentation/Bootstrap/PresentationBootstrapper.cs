@@ -14,17 +14,20 @@ namespace Presentation.Bootstrap;
 /// </summary>
 public static class PresentationBootstrapper
 {
-    public static PresentationContext Build(GraphicsDevice graphicsDevice, string fontsDirectory)
+    public static PresentationContext Build(GraphicsDevice graphicsDevice, string fontsDirectory, string spritesheetsDirectory)
     {
         ArgumentNullException.ThrowIfNull(graphicsDevice);
         ArgumentException.ThrowIfNullOrWhiteSpace(fontsDirectory);
+        ArgumentException.ThrowIfNullOrWhiteSpace(spritesheetsDirectory);
 
         var fontService = new FontService(fontsDirectory);
         var spriteBatchRenderer = new SpriteBatchRenderer(graphicsDevice);
         var glyphRenderer = new GlyphRenderer();
         var tileRenderer = new TileRenderer();
+        var spriteSheetService = new SpriteSheetService(graphicsDevice, spritesheetsDirectory);
+        var spriteRenderer = new SpriteRenderer();
         var windowService = new WindowService(fontService, glyphRenderer);
 
-        return new PresentationContext(fontService, spriteBatchRenderer, glyphRenderer, tileRenderer, windowService);
+        return new PresentationContext(fontService, spriteBatchRenderer, glyphRenderer, tileRenderer, spriteSheetService, spriteRenderer, windowService);
     }
 }

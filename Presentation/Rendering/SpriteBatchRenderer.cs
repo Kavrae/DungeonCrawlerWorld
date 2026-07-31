@@ -19,7 +19,7 @@ public sealed class SpriteBatchRenderer
 
     public SpriteBatch StartSpriteBatch()
     {
-        _spriteBatch.Begin(SpriteSortMode.Deferred, BlendState.AlphaBlend);
+        _spriteBatch.Begin(SpriteSortMode.Deferred, BlendState.AlphaBlend, SamplerState.PointClamp, null, null);
         return _spriteBatch;
     }
 

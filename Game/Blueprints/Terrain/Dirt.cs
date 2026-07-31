@@ -14,5 +14,9 @@ public sealed class Dirt : IBlueprint
         componentManager.Merge(entityId, new DisplayTextComponent("Dirt", "Ordinary dirt. Nothing special."));
         componentManager.Merge(entityId, new TransformComponent(
             new Vector3Int(0, 0, (int)MapLayer.Ground), new Vector2Byte(1, 1)));
+        if (SpriteManifest.TryGet("Dirt", out var sprite))
+        {
+            componentManager.Merge(entityId, sprite);
+        }
     }
 }

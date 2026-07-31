@@ -18,7 +18,9 @@ namespace Presentation.UI;
 /// the sequential per-source Color.Lerp chain an earlier, unscalable version of this used.
 /// Not to be confused with Game.Modules.StatusEffectAura.AuraGrid -- that's the gameplay-side,
 /// incrementally-updated per-effect-type stack index; this is a presentation-only, static-once
-/// blended-color lookup for MapBackgroundCache's rendering.
+/// blended-color lookup. Consumed directly by MapWindow.DrawGlowOverlay as a translucent rect
+/// drawn on top of terrain/occupant sprites, not blended into MapBackgroundCache's background
+/// color -- an opaque sprite drawn over that background would otherwise hide the tint entirely.
 /// </summary>
 public sealed class MapTintGrid
 {

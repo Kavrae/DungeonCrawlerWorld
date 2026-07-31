@@ -12,6 +12,10 @@ public sealed class Wall : IBlueprint
     {
         componentManager.Merge(entityId, new DisplayTextComponent("Wall", "Basic wall. Default implementation."));
         componentManager.Merge(entityId, new GlyphComponent("[][]", Color.DarkGray));
+        if (SpriteManifest.TryGet("Wall", out var sprite))
+        {
+            componentManager.Merge(entityId, sprite);
+        }
         componentManager.Merge(entityId, new TransformComponent(
             new Vector3Int(0, 0, (int)MapLayer.Ground), new Vector2Byte(1, 1)));
     }

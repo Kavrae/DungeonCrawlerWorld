@@ -13,6 +13,10 @@ public sealed class Grass : IBlueprint
         componentManager.Merge(entityId, new BackgroundComponent(Color.ForestGreen));
         componentManager.Merge(entityId, new DisplayTextComponent("Grass", "Ordinary grass. Nothing special."));
         componentManager.Merge(entityId, new GlyphComponent(",", Color.LawnGreen));
+        if (SpriteManifest.TryGet("Grass", out var sprite))
+        {
+            componentManager.Merge(entityId, sprite);
+        }
         componentManager.Merge(entityId, new TransformComponent(
             new Vector3Int(0, 0, (int)MapLayer.Ground), new Vector2Byte(1, 1)));
     }

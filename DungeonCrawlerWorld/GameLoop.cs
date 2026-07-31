@@ -97,7 +97,7 @@ public sealed class GameLoop : Microsoft.Xna.Framework.Game
         _playerActivityLog = new PlayerActivityLog(_world, _ecsContext.EventBus, logFilePath);
         Console.WriteLine($"[PlayerActivityLog] Writing to {logFilePath}");
 
-        _presentation = PresentationBootstrapper.Build(GraphicsDevice, "Fonts");
+        _presentation = PresentationBootstrapper.Build(GraphicsDevice, "Fonts", "Spritesheets");
         var screenSize = new Vector2(_graphics.PreferredBackBufferWidth, _graphics.PreferredBackBufferHeight);
         _shell = GameShellBootstrapper.Build(_presentation, _world, _ecsContext, bootstrapResult.AbilityCatalog, screenSize);
         _inputController = _shell.InputController;

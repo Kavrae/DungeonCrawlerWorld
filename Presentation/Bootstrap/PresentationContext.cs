@@ -10,11 +10,15 @@ public sealed class PresentationContext(
     SpriteBatchRenderer spriteBatchRenderer,
     GlyphRenderer glyphRenderer,
     TileRenderer tileRenderer,
+    SpriteSheetService spriteSheetService,
+    SpriteRenderer spriteRenderer,
     WindowService windowService)
 {
     public FontService FontService { get; } = fontService ?? throw new ArgumentNullException(nameof(fontService));
     public SpriteBatchRenderer SpriteBatchRenderer { get; } = spriteBatchRenderer ?? throw new ArgumentNullException(nameof(spriteBatchRenderer));
     public GlyphRenderer GlyphRenderer { get; } = glyphRenderer ?? throw new ArgumentNullException(nameof(glyphRenderer));
     public TileRenderer TileRenderer { get; } = tileRenderer ?? throw new ArgumentNullException(nameof(tileRenderer));
+    public SpriteSheetService SpriteSheetService { get; } = spriteSheetService ?? throw new ArgumentNullException(nameof(spriteSheetService));
+    public SpriteRenderer SpriteRenderer { get; } = spriteRenderer ?? throw new ArgumentNullException(nameof(spriteRenderer));
     public WindowService WindowService { get; } = windowService ?? throw new ArgumentNullException(nameof(windowService));
 }

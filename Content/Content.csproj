@@ -13,6 +13,24 @@
     <None Include="Fonts\license.txt">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </None>
+
+    <Content Include="SpriteManifest.json">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+
+    <!--
+      A single recursive wildcard rather than one entry per file: SpriteManifestBuilder (see
+      DevTools) can reference any PNG under this folder, from any vendored pack, at any time.
+      Enumerating files individually here meant every new manifest entry needed a matching
+      manual csproj edit too, and forgetting one is exactly what a missing-file exception at
+      runtime looks like (a real bug hit in practice, not hypothetical).
+    -->
+    <Content Include="Spritesheets\**\*.png">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+    <None Include="Spritesheets\Pixel Crawler - Free Pack\Terms.txt">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </None>
   </ItemGroup>
 
 </Project>

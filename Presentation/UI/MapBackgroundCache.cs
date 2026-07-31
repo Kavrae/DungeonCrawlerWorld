@@ -18,14 +18,11 @@ public sealed class MapBackgroundCache(
     World world,
     MapViewState mapViewState,
     DirectComponentPool<BackgroundComponent> backgroundPool,
-    MapTintGrid tintGrid,
     MapCamera camera)
 {
     private Color[] _colors = [];
 
     public Color[] Colors => _colors;
-
-    public Color this[int column, int row] => _colors[column + row * camera.TileColumns];
 
     /// <summary>Reallocates the cache to match MapCamera's current tile grid -- called whenever the camera's tile columns/rows change (Initialize, zoom). Leaves the new cells unresolved; callers follow up with Reset.</summary>
     public void Resize()
@@ -161,22 +158,14 @@ public sealed class MapBackgroundCache(
             return occupantBackground.BackgroundColor;
         }
 
-        Color baseColor;
         if (Map.TerrainLayerFor(currentMapLayer) is { } terrainLayer)
         {
             var terrainEntityId = world.Map.GetTerrainEntityId(mapNodeX, mapNodeY, terrainLayer);
-            baseColor = terrainEntityId != -1 && backgroundPool.TryGetReadonly(terrainEntityId, out var terrainBackground)
+            return terrainEntityId != -1 && backgroundPool.TryGetReadonly(terrainEntityId, out var terrainBackground)
                 ? terrainBackground.BackgroundColor
                 : Color.White;
         }
-        else
-        {
-            baseColor = Color.White;
-        }
 
-        // O(1) precomputed-grid lookup (see MapTintGrid) -- not a live scan.
-        return tintGrid.TryGetTint(mapNodeX, mapNodeY, currentMapLayer, out var tint)
-            ? Color.Lerp(baseColor, tint.Color, tint.Factor)
-            : baseColor;
+        return Color.White;
     }
 }

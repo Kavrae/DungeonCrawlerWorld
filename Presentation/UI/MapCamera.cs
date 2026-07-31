@@ -30,7 +30,6 @@ public sealed class MapCamera
 
     private ZoomLevel _currentZoomLevel = ZoomLevel.Team;
     private Point _currentTileSize;
-    private Point _innerTileSize;
     private int _tileColumns;
     private int _tileRows;
     private Point _currentScrollPosition;
@@ -45,7 +44,6 @@ public sealed class MapCamera
     }
 
     public Point CurrentTileSize => _currentTileSize;
-    public Point InnerTileSize => _innerTileSize;
     public int TileColumns => _tileColumns;
     public int TileRows => _tileRows;
     public Point CurrentScrollPosition => _currentScrollPosition;
@@ -198,7 +196,6 @@ public sealed class MapCamera
     private void UpdateTileSizes(Vector2 contentSize)
     {
         _currentTileSize = TileSizesByZoomLevel[_currentZoomLevel];
-        _innerTileSize = new Point(_currentTileSize.X - 2, _currentTileSize.Y - 2);
 
         // +2 to account for partial tile rendering and scrolling jitter
         _tileColumns = (int)System.Math.Floor(contentSize.X / _currentTileSize.X) + 2;

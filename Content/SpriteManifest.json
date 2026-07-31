@@ -1,0 +1,139 @@
+[
+  {
+    "Name": "Player",
+    "Cells": [
+      {
+        "SheetPath": "Pixel Crawler - Free Pack/Entities/Characters/Body_A/Animations/Idle_Base/Idle_Down-Sheet.png",
+        "Column": 0,
+        "Row": 0,
+        "CellWidth": 64,
+        "CellHeight": 64
+      }
+    ]
+  },
+  {
+    "Name": "Grass",
+    "Cells": [
+      {
+        "SheetPath": "Pixel Crawler - Free Pack/Environment/Tilesets/Dungeon_Tiles.png",
+        "Column": 11,
+        "Row": 2,
+        "CellWidth": 16,
+        "CellHeight": 16
+      },
+      {
+        "SheetPath": "Pixel Crawler - Free Pack/Environment/Tilesets/Dungeon_Tiles.png",
+        "Column": 11,
+        "Row": 1,
+        "CellWidth": 16,
+        "CellHeight": 16
+      },
+      {
+        "SheetPath": "Pixel Crawler - Free Pack/Environment/Tilesets/Dungeon_Tiles.png",
+        "Column": 12,
+        "Row": 1,
+        "CellWidth": 16,
+        "CellHeight": 16
+      },
+      {
+        "SheetPath": "Pixel Crawler - Free Pack/Environment/Tilesets/Dungeon_Tiles.png",
+        "Column": 12,
+        "Row": 2,
+        "CellWidth": 16,
+        "CellHeight": 16
+      },
+      {
+        "SheetPath": "Pixel Crawler - Free Pack/Environment/Tilesets/Dungeon_Tiles.png",
+        "Column": 13,
+        "Row": 5,
+        "CellWidth": 16,
+        "CellHeight": 16
+      },
+      {
+        "SheetPath": "Pixel Crawler - Free Pack/Environment/Tilesets/Dungeon_Tiles.png",
+        "Column": 13,
+        "Row": 6,
+        "CellWidth": 16,
+        "CellHeight": 16
+      }
+    ]
+  },
+  {
+    "Name": "Goblin",
+    "Cells": [
+      {
+        "SheetPath": "Pixel Crawler - Free Pack/Entities/Mobs/Orc Crew/Orc/Idle/Idle-Sheet.png",
+        "Column": 0,
+        "Row": 0,
+        "CellWidth": 32,
+        "CellHeight": 32
+      },
+      {
+        "SheetPath": "Pixel Crawler - Free Pack/Entities/Mobs/Orc Crew/Orc/Idle/Idle-Sheet.png",
+        "Column": 1,
+        "Row": 0,
+        "CellWidth": 32,
+        "CellHeight": 32
+      },
+      {
+        "SheetPath": "Pixel Crawler - Free Pack/Entities/Mobs/Orc Crew/Orc/Idle/Idle-Sheet.png",
+        "Column": 2,
+        "Row": 0,
+        "CellWidth": 32,
+        "CellHeight": 32
+      },
+      {
+        "SheetPath": "Pixel Crawler - Free Pack/Entities/Mobs/Orc Crew/Orc/Idle/Idle-Sheet.png",
+        "Column": 3,
+        "Row": 0,
+        "CellWidth": 32,
+        "CellHeight": 32
+      }
+    ]
+  },
+  {
+    "Name": "Wall",
+    "Cells": [
+      {
+        "SheetPath": "Pixel Crawler - Free Pack/Environment/Tilesets/Wall_Tiles.png",
+        "Column": 6,
+        "Row": 21,
+        "CellWidth": 16,
+        "CellHeight": 16
+      },
+      {
+        "SheetPath": "Pixel Crawler - Free Pack/Environment/Tilesets/Wall_Tiles.png",
+        "Column": 6,
+        "Row": 22,
+        "CellWidth": 16,
+        "CellHeight": 16
+      }
+    ]
+  },
+  {
+    "Name": "Dirt",
+    "Cells": [
+      {
+        "SheetPath": "Pixel Crawler - Free Pack/Environment/Tilesets/Floors_Tiles.png",
+        "Column": 6,
+        "Row": 10,
+        "CellWidth": 16,
+        "CellHeight": 16
+      },
+      {
+        "SheetPath": "Pixel Crawler - Free Pack/Environment/Tilesets/Floors_Tiles.png",
+        "Column": 7,
+        "Row": 10,
+        "CellWidth": 16,
+        "CellHeight": 16
+      },
+      {
+        "SheetPath": "Pixel Crawler - Free Pack/Environment/Tilesets/Floors_Tiles.png",
+        "Column": 8,
+        "Row": 10,
+        "CellWidth": 16,
+        "CellHeight": 16
+      }
+    ]
+  }
+]

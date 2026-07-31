@@ -132,8 +132,8 @@ public sealed class SelectionWindowContentTests
         hostWindow.Update(new GameTime());
 
         // One name window (Wall has a DisplayTextComponent) plus one window per inspected
-        // component (DisplayText, Glyph, Transform -- everything Wall.Build sets).
-        Assert.HasCount(4, hostWindow.ChildWindows);
+        // component (DisplayText, Glyph, Sprite, Transform -- everything Wall.Build sets).
+        Assert.HasCount(5, hostWindow.ChildWindows);
         Assert.AreEqual("Selected Map Node : 2,2", hostWindow.TitleText);
     }
 
@@ -208,8 +208,8 @@ public sealed class SelectionWindowContentTests
 
         // Same shape as Update_SelectingEntity_CreatesOneChildWindowPerNameAndComponent, plus
         // one more for NonBlocking: one name window plus one per inspected component
-        // (DisplayText, Glyph, Transform, NonBlocking).
-        Assert.HasCount(5, hostWindow.ChildWindows);
+        // (DisplayText, Glyph, Sprite, Transform, NonBlocking).
+        Assert.HasCount(6, hostWindow.ChildWindows);
     }
 
     /// <summary>
@@ -264,13 +264,13 @@ public sealed class SelectionWindowContentTests
         // Only the Ground-layer Wall's windows, same count as
         // Update_SelectingEntity_CreatesOneChildWindowPerNameAndComponent, even though a
         // second Wall exists at the same XY on the Flying layer.
-        Assert.HasCount(4, hostWindow.ChildWindows);
+        Assert.HasCount(5, hostWindow.ChildWindows);
 
         mapViewState.CurrentMapLayer = (int)MapLayer.Flying;
         hostWindow.Update(new GameTime());
 
-        // Switching layers swaps which Wall is inspected -- still 4 windows, now the Flying one's.
-        Assert.HasCount(4, hostWindow.ChildWindows);
+        // Switching layers swaps which Wall is inspected -- still 5 windows, now the Flying one's.
+        Assert.HasCount(5, hostWindow.ChildWindows);
     }
 
     /// <summary>
@@ -293,7 +293,7 @@ public sealed class SelectionWindowContentTests
         var fontService = new FontService("Fonts");
         var windowService = new WindowService(fontService, new GlyphRenderer());
         var componentInspector = new ComponentInspector(ecsContext.ComponentManager);
-        // Deliberately much shorter than CreateHostWindow's usual 700px -- forces the 4
+        // Deliberately much shorter than CreateHostWindow's usual 700px -- forces the 5
         // component windows to exceed the host's own height, the same way a goblin engineer's
         // longer component text did in the original report.
         var hostWindow = windowService.CreateWindow<Window>(null, new WindowOptions
@@ -308,7 +308,7 @@ public sealed class SelectionWindowContentTests
         mapViewState.SelectedMapNodePosition = new Point(2, 2);
         hostWindow.Update(new GameTime());
 
-        Assert.HasCount(4, hostWindow.ChildWindows);
+        Assert.HasCount(5, hostWindow.ChildWindows);
 
         // hostWindow, not any individual child, is the one that ends up scrollable.
         Assert.IsTrue(hostWindow.CanUserScrollVertical);

@@ -188,6 +188,12 @@ Affected: `Presentation/UI/Window.cs` (new `HandleTextInput` hook, `NextTextBoxA
 
 ### Low Priority
 
+#### Per-entity sprite scale
+
+`SpriteRenderer.Draw` (`Presentation/Rendering/SpriteRenderer.cs`) always stretches a sprite's source rectangle to fill its tile footprint exactly -- fine for tile-sized art (Wall, Grass) but wrong for character sprites, which don't all read at a consistent apparent size relative to their footprint: confirmed in-game, the player sprite needs to render larger and goblin sprites smaller. Needs a per-entity (or per-`SpriteComponent`) scale factor -- e.g. a `Scale` field on `SpriteComponent` (`Game/Modules/Core/Components/SpriteComponent.cs`) that `MapWindow.TryDrawEntityVisual` applies when computing the destination rectangle passed to `SpriteRenderer.Draw`, rather than always drawing at exactly the tile's own footprint size.
+
+Affected: `Game/Modules/Core/Components/SpriteComponent.cs`, `Presentation/Rendering/SpriteRenderer.cs`, `Presentation/UI/MapWindow.cs` (`TryDrawEntityVisual`), `Game/Blueprints/SpriteManifest.cs` (Player/Goblin entries would set their chosen scale here).
+
 #### Ability summary on hotkey hover
 
 A tooltip-style panel showing an ability's name/effect/cooldown when hovering its hotbar slot (`Presentation/UI/Content/HotbarContent.cs`) -- depends on the Hotbar UI existing first, which it now does.

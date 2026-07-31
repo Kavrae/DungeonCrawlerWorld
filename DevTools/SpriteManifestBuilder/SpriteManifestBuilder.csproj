@@ -1,0 +1,19 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    Standalone dev tool: deliberately zero ProjectReferences into the rest of the solution
+    (no Game/Engine/Presentation/FNA). It duplicates the small SpriteManifest entry shape and
+    JSON read/write logic independently rather than sharing code with the game; both sides
+    just agree on the same JSON property names by convention. Not referenced by
+    DungeonCrawlerWorld.csproj: this never ships with or runs as part of the game.
+  -->
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net10.0-windows</TargetFramework>
+    <UseWindowsForms>true</UseWindowsForms>
+    <LangVersion>latest</LangVersion>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+  </PropertyGroup>
+
+</Project>
