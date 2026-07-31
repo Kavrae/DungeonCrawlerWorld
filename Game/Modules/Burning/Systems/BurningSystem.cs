@@ -13,21 +13,29 @@ namespace Game.Modules.Burning.Systems;
 /// <summary>
 /// Ticks down each burning entity's countdown and, once it reaches 0, deals damage equal to
 /// the current stack count and removes exactly one stack (not per-stack damage -- 7 stacks
-/// deals 7 damage total, not 49). The decrement-or-fire loop itself is
-/// Engine.ECS.Systems.CountdownTicker.Tick, shared with PoisonSystem/ContactDamageSystem/
-/// StatusEffectAuraSystem -- this class only supplies the entity-id source and what "ticking"
-/// actually does.
+/// deals 7 damage total, not 49). The decrement-or-fire
+/// loop itself is Engine.ECS.Systems.CountdownTicker.Tick, shared with PoisonSystem/
+/// ContactDamageSystem/StatusEffectAuraSystem -- this class only supplies the entity-id source
+/// and what "ticking" actually does.
 /// </summary>
 public sealed class BurningSystem : ISystem
 {
-    public byte StripeCount => 1;
+    private const byte StripeCountValue = 15;
+
+    public byte StripeCount => StripeCountValue;
 
     private readonly PackedComponentPool<BurningTimerComponent> _timers;
     private readonly MultiComponentPool<StatusEffectStack> _stacks;
     private readonly PackedComponentPool<HealthComponent> _health;
     private readonly EventBus _eventBus;
     private readonly IPlayerQuery? _playerQuery;
+    private readonly EntityStripeSet _stripeSet;
     private readonly List<int> _pendingTimerRemovals = [];
+
+    // Cached once instead of passing the Tick method group at the CountdownTicker.Tick call
+    // site every Update -- see ContactDamageSystem's own field for why this matters (an
+    // instance method group conversion allocates a fresh delegate every evaluation).
+    private readonly Func<int, BurningTimerComponent, bool> _tick;
 
     public BurningSystem(
         PackedComponentPool<BurningTimerComponent> timers,
@@ -41,10 +49,15 @@ public sealed class BurningSystem : ISystem
         _health = health;
         _eventBus = eventBus;
         _playerQuery = playerQuery;
+        _tick = Tick;
+
+        _stripeSet = new EntityStripeSet(StripeCount, timers.EntityIds);
+        timers.EntityAdded += _stripeSet.OnEntityAdded;
+        timers.EntityRemoved += _stripeSet.OnEntityRemoved;
     }
 
     public void Update(EngineTime time, byte stripeIndex) =>
-        CountdownTicker.Tick(_timers, _timers.EntityIds, _pendingTimerRemovals, Tick);
+        CountdownTicker.Tick(_timers, _stripeSet.GetBucket(stripeIndex), _pendingTimerRemovals, _tick, StripeCountValue);
 
     /// <summary>Returns whether the timer should be removed entirely (stacks fully decayed) -- see CountdownTicker.Tick's own doc comment for the contract.</summary>
     private bool Tick(int entityId, BurningTimerComponent timer)

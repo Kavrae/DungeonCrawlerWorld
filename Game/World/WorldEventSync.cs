@@ -1,25 +1,19 @@
-using Engine.Events;
 using Game.Modules.Core.Components;
 
 namespace Game.World;
 
 /// <summary>
-/// Keeps World.Map's per-cell entity index in sync with MovementSystem's confirmed moves,
-/// via EntityMoved rather than a direct reference MovementSystem would otherwise need to
-/// hold. Subscribing in the constructor is enough to keep this instance alive for as long as
-/// the EventBus is -- a bound instance-method delegate rooted in the subscriber list keeps
-/// its target alive, so nothing needs to hold a reference to this afterward.
+/// Keeps World.Map's per-cell entity index in sync with MovementSystem's confirmed moves.
+/// Implements IEntityMoveSync so MovementSystem can call SyncMove directly (mandatory
+/// bookkeeping, not an optional module reaction) instead of going through EventBus -- see
+/// IEntityMoveSync's own doc comment. Calls World.MoveEntityUnchecked, not the public
+/// MoveEntity, since the caller (MovementSystem) has already validated the destination
+/// footprint via its own CanMove moments earlier in the same call.
 /// </summary>
-public sealed class WorldEventSync
+public sealed class WorldEventSync(World world) : IEntityMoveSync
 {
-    private readonly World _world;
+    private readonly World _world = world;
 
-    public WorldEventSync(World world, EventBus eventBus)
-    {
-        _world = world;
-        eventBus.Subscribe<EntityMoved>(OnEntityMoved);
-    }
-
-    private void OnEntityMoved(EntityMoved moved) =>
-        _world.MoveEntity(moved.EntityId, moved.NewPosition, new TransformComponent(moved.OldPosition, moved.Size));
+    public void SyncMove(EntityMoved moved) =>
+        _world.MoveEntityUnchecked(moved.EntityId, moved.NewPosition, new TransformComponent(moved.OldPosition, moved.Size));
 }

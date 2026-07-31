@@ -1,7 +1,7 @@
 using Engine.ECS.Components;
 using Engine.ECS.Systems;
-using Engine.Events;
 using Game.Modules.Core.Components;
+using Game.Modules.Movement;
 using Game.Modules.StatusEffectAura.Components;
 using Game.Modules.StatusEffectAura.Systems;
 using Game.Modules.StatusEffects;
@@ -16,27 +16,30 @@ namespace Game.Modules.StatusEffectAura;
 /// stack-granting -- StatusEffectAuraSystem.GrantStacks dispatches through the shared
 /// StatusEffectAuraApplierRegistry (see IStatusEffectAuraApplier), populated by each concrete
 /// effect module's own Configure call (BurningModule/PoisonModule each register a
-/// TimerBasedAuraApplier&lt;T&gt; for their own timer component). This module therefore only depends on
-/// StatusEffectsModule (shared stack storage) -- not on any one concrete effect module -- so a
-/// brand new effect type just needs its own IStatusEffectAuraApplier registered, nothing here
-/// changes. Parameterless, with runtime dependencies (EventBus, IMapQuery, the applier
-/// registry) supplied via IGameModule.Configure.
+/// TimerBasedAuraApplier&lt;T&gt; for their own timer component). This module's own Dependencies
+/// list StatusEffectsModule (shared stack storage) and, now, MovementModule -- the latter so
+/// StatusEffectAuraSystem's own Update always runs after MovementSystem's within the same
+/// SystemManager.Update() cycle, required for it to see this frame's moves via the shared
+/// FrameEventBuffer&lt;EntityMoved&gt; (see that class's own doc comment on why
+/// producer-before-consumer ordering matters). Parameterless, with runtime dependencies
+/// (IMapQuery, the applier registry, the moved-entities buffer) supplied via
+/// IGameModule.Configure.
 /// </summary>
 public sealed class StatusEffectAuraModule : IGameModule
 {
     public Guid Id { get; } = new("d9f6a1c4-8b2e-4f3a-9c1d-00000000000b");
 
-    public IReadOnlyList<Type> Dependencies { get; } = [typeof(StatusEffectsModule)];
+    public IReadOnlyList<Type> Dependencies { get; } = [typeof(StatusEffectsModule), typeof(MovementModule)];
 
-    private EventBus _eventBus = null!;
     private IMapQuery _mapQuery = null!;
     private StatusEffectAuraApplierRegistry _applierRegistry = null!;
+    private FrameEventBuffer<EntityMoved> _movedEntities = null!;
 
     public void Configure(GameModuleContext context)
     {
-        _eventBus = context.EventBus;
         _mapQuery = context.MapQuery;
         _applierRegistry = context.StatusEffectAuraAppliers;
+        _movedEntities = context.MovedEntities;
     }
 
     public void RegisterComponents(ComponentManager componentManager)
@@ -52,6 +55,6 @@ public sealed class StatusEffectAuraModule : IGameModule
             componentManager.GetPackedPool<StatusEffectAuraSourceComponent>(),
             componentManager.GetDirectPool<TransformComponent>(),
             _mapQuery,
-            _eventBus,
-            _applierRegistry));
+            _applierRegistry,
+            _movedEntities));
 }

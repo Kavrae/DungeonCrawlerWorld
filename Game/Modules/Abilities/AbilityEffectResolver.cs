@@ -28,13 +28,20 @@ public static class AbilityEffectResolver
     {
         foreach (var tile in targetTiles)
         {
-            var targetEntityId = mapQuery.GetEntityIdAt(tile);
-            if (targetEntityId == -1)
+            var blockingEntityId = mapQuery.GetEntityIdAt(tile);
+            if (blockingEntityId != -1)
             {
-                continue;
+                HealthDamage.Apply(health, eventBus, blockingEntityId, instance.DamageAmount, StatusEffectSource.FromEntity(sourceEntityId), playerQuery, ability.Name);
             }
 
-            HealthDamage.Apply(health, eventBus, targetEntityId, instance.DamageAmount, StatusEffectSource.FromEntity(sourceEntityId), playerQuery, ability.Name);
+            // Tiny/Phasing entities never occupy the Blocking slot GetEntityIdAt just checked
+            // (see World.IsBlocking), and any number of them can share a tile -- so hitting
+            // "everyone standing here" means also applying to every non-Blocking entity the
+            // position-keyed index reports, not just the one Blocking occupant.
+            foreach (var nonBlockingEntityId in mapQuery.GetNonBlockingEntityIdsAt(tile))
+            {
+                HealthDamage.Apply(health, eventBus, nonBlockingEntityId, instance.DamageAmount, StatusEffectSource.FromEntity(sourceEntityId), playerQuery, ability.Name);
+            }
         }
     }
 }

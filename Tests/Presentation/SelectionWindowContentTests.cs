@@ -32,7 +32,7 @@ public sealed class SelectionWindowContentTests
         var mathUtility = new MathUtility();
 
         var movementModule = new MovementModule();
-        movementModule.Configure(new GameModuleContext(world, mathUtility, new EventBus()));
+        movementModule.Configure(new GameModuleContext(world, mathUtility, new EventBus()) { EntityMoveSync = new WorldEventSync(world) });
 
         IReadOnlyList<IModule> modules =
         [
@@ -60,18 +60,17 @@ public sealed class SelectionWindowContentTests
     }
 
     /// <summary>
-    /// A Tiny entity, built like CreateWallEntityAt but with a Tiny OccupancyComponent (for
-    /// rendering) and a NonBlockingComponent (for collision) both added first -- since
-    /// World.NonBlockingComponents is wired up above (matching GameBootstrapper.cs),
-    /// PlaceEntityOnMap will skip writing it into Map's Blocking slot entirely (see
-    /// World.IsBlocking), so it's only findable by position, not by Map.GetEntityId.
+    /// A Tiny entity, built like CreateWallEntityAt but with a single Tiny-kinded
+    /// NonBlockingComponent added first -- since World.NonBlockingComponents is wired up above
+    /// (matching GameBootstrapper.cs), PlaceEntityOnMap will skip writing it into Map's
+    /// Blocking slot entirely (see World.IsBlocking), so it's only findable by position, not
+    /// by Map.GetEntityId.
     /// </summary>
     private static int CreateTinyEntityAt(EcsContext ecsContext, Game.World.World world, int x, int y)
     {
         var entityId = ecsContext.EntityManager.CreateEntity();
         new Wall().Build(ecsContext.ComponentManager, entityId);
-        ecsContext.ComponentManager.GetPackedPool<OccupancyComponent>().Add(entityId, new OccupancyComponent(isTiny: true, isPhasing: false));
-        ecsContext.ComponentManager.GetMultiPool<NonBlockingComponent>().Add(entityId, new NonBlockingComponent());
+        ecsContext.ComponentManager.GetMultiPool<NonBlockingComponent>().Add(entityId, new NonBlockingComponent(NonBlockingKind.Tiny));
 
         ref var transform = ref ecsContext.ComponentManager.GetDirectPool<Game.Modules.Core.Components.TransformComponent>().Get(entityId);
         world.PlaceEntityOnMap(entityId, new Vector3Int(x, y, transform.Position.Z), ref transform);
@@ -184,10 +183,10 @@ public sealed class SelectionWindowContentTests
     }
 
     /// <summary>
-    /// Regression coverage for the gap Occupancy introduced: a Tiny/Phasing entity never
-    /// occupies Map's Blocking slot (see World.IsBlocking), so RecomputeSelectedEntityIds'
+    /// Regression coverage for the gap non-Blocking entities introduce: a Tiny/Phasing entity
+    /// never occupies Map's Blocking slot (see World.IsBlocking), so RecomputeSelectedEntityIds'
     /// per-layer Map scan alone would silently drop it from the debug panel. It must still
-    /// show up via the separate Occupancy-pool cross-check.
+    /// show up via World's position-keyed non-Blocking index.
     /// </summary>
     [TestMethod]
     public void Update_SelectingTinyEntity_StillCreatesItsChildWindows()
@@ -207,10 +206,10 @@ public sealed class SelectionWindowContentTests
         mapViewState.SelectedMapNodePosition = new Point(2, 2);
         hostWindow.Update(new GameTime());
 
-        // Same shape as Update_SelectingEntity_CreatesOneChildWindowPerNameAndComponent:
-        // one name window plus one per inspected component (DisplayText, Glyph, Transform,
-        // Occupancy, NonBlocking).
-        Assert.HasCount(6, hostWindow.ChildWindows);
+        // Same shape as Update_SelectingEntity_CreatesOneChildWindowPerNameAndComponent, plus
+        // one more for NonBlocking: one name window plus one per inspected component
+        // (DisplayText, Glyph, Transform, NonBlocking).
+        Assert.HasCount(5, hostWindow.ChildWindows);
     }
 
     /// <summary>

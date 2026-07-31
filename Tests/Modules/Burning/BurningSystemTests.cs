@@ -26,8 +26,9 @@ public sealed class BurningSystemTests
     private static PackedComponentPool<HealthComponent> CreateHealthPool() =>
         new(maximumEntityCount: 10, initialCapacity: 4, static (ref existing, incoming) => existing = incoming);
 
+    /// <summary>BurningSystem is striped (see its own doc comment), so CountdownTicker.Tick decrements FramesUntilNextTick by StripeCount per visit, not by 1 -- otherwise a striped entity's timer would take TickIntervalFrames * StripeCount real frames to fire instead of TickIntervalFrames.</summary>
     [TestMethod]
-    public void Update_CountdownDecrementsByOnePerCall()
+    public void Update_CountdownDecrementsByStripeCountPerVisit()
     {
         var timers = CreateTimerPool();
         var stacks = CreateStackPool();
@@ -38,7 +39,7 @@ public sealed class BurningSystemTests
 
         system.Update(default, 0);
 
-        Assert.AreEqual(59, timers.GetReadonly(0).FramesUntilNextTick);
+        Assert.AreEqual(60 - system.StripeCount, timers.GetReadonly(0).FramesUntilNextTick);
     }
 
     [TestMethod]
@@ -62,9 +63,13 @@ public sealed class BurningSystemTests
     }
 
     /// <summary>
-    /// Regression test for the striping-cadence bug the plan called out: StripeCount must be 1
-    /// so a single burning entity ticks exactly once every TickIntervalFrames real Update
-    /// calls, not once every TickIntervalFrames * StripeCount.
+    /// Regression test for the striping-cadence bug: a striped entity (see BurningSystem's own
+    /// doc comment) must still tick exactly once every TickIntervalFrames real Update calls --
+    /// not once every TickIntervalFrames * StripeCount, which decrementing by 1 per visit
+    /// instead of by StripeCount would cause. Rotates stripeIndex across all of BurningSystem's
+    /// stripes the same way SystemManager does in real play, rather than calling Update with a
+    /// fixed stripeIndex every time (entity 0 always lands in stripe 0 regardless of
+    /// StripeCount, so a fixed-stripeIndex loop wouldn't actually exercise striping at all).
     /// </summary>
     [TestMethod]
     public void Update_SixtyCallsFromFreshTimer_TicksExactlyOnce()
@@ -79,7 +84,7 @@ public sealed class BurningSystemTests
 
         for (var frame = 0; frame < BurningEffects.TickIntervalFrames; frame++)
         {
-            system.Update(default, 0);
+            system.Update(default, (byte)(frame % system.StripeCount));
         }
 
         Assert.AreEqual(99, health.GetReadonly(0).CurrentHealth);
@@ -186,7 +191,8 @@ public sealed class BurningSystemTests
         eventBus.Subscribe<EntityDamaged>(_ => published = true);
         var system = new BurningSystem(timers, stacks, health, eventBus, new FakePlayerQuery(playerEntityId: 0));
 
-        system.Update(default, 0);
+        // Entity 1 lands in stripe 1 (entityId % StripeCount), not stripe 0.
+        system.Update(default, 1);
 
         Assert.IsFalse(published);
     }

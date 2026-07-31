@@ -350,4 +350,86 @@ public sealed class WorldTests
 
         Assert.IsTrue(world.IsBlocking(1));
     }
+
+    [TestMethod]
+    public void PlaceEntityOnMap_NonBlockingEntity_AddsToNonBlockingIndex()
+    {
+        var world = CreateWorld();
+        var nonBlockingPool = CreateNonBlockingPool();
+        nonBlockingPool.Add(1, new NonBlockingComponent());
+        world.NonBlockingComponents = nonBlockingPool;
+        var transform = new TransformComponent(new Vector3Int(), new Vector2Byte(1, 1));
+
+        world.PlaceEntityOnMap(1, new Vector3Int(3, 3, 1), ref transform);
+
+        Assert.IsTrue(world.Map.GetNonBlockingEntityIdsAt(new Vector3Int(3, 3, 1)).Contains(1));
+    }
+
+    [TestMethod]
+    public void PlaceEntityOnMap_MultiTileNonBlockingEntity_AddsToEveryOccupiedCell()
+    {
+        var world = CreateWorld();
+        var nonBlockingPool = CreateNonBlockingPool();
+        nonBlockingPool.Add(1, new NonBlockingComponent());
+        world.NonBlockingComponents = nonBlockingPool;
+        var transform = new TransformComponent(new Vector3Int(), new Vector2Byte(2, 2));
+
+        world.PlaceEntityOnMap(1, new Vector3Int(2, 2, 1), ref transform);
+
+        Assert.IsTrue(world.Map.GetNonBlockingEntityIdsAt(new Vector3Int(2, 2, 1)).Contains(1));
+        Assert.IsTrue(world.Map.GetNonBlockingEntityIdsAt(new Vector3Int(3, 2, 1)).Contains(1));
+        Assert.IsTrue(world.Map.GetNonBlockingEntityIdsAt(new Vector3Int(2, 3, 1)).Contains(1));
+        Assert.IsTrue(world.Map.GetNonBlockingEntityIdsAt(new Vector3Int(3, 3, 1)).Contains(1));
+    }
+
+    /// <summary>Any number of non-Blocking entities can share a cell -- unlike Map's single-occupant Blocking slot, the index must retain every one of them, not just the most recent.</summary>
+    [TestMethod]
+    public void PlaceEntityOnMap_MultipleNonBlockingEntities_AllStackAtTheSameCell()
+    {
+        var world = CreateWorld();
+        var nonBlockingPool = CreateNonBlockingPool();
+        nonBlockingPool.Add(1, new NonBlockingComponent());
+        nonBlockingPool.Add(2, new NonBlockingComponent());
+        world.NonBlockingComponents = nonBlockingPool;
+
+        var firstTransform = new TransformComponent(new Vector3Int(), new Vector2Byte(1, 1));
+        world.PlaceEntityOnMap(1, new Vector3Int(3, 3, 1), ref firstTransform);
+        var secondTransform = new TransformComponent(new Vector3Int(), new Vector2Byte(1, 1));
+        world.PlaceEntityOnMap(2, new Vector3Int(3, 3, 1), ref secondTransform);
+
+        var occupants = world.Map.GetNonBlockingEntityIdsAt(new Vector3Int(3, 3, 1));
+        Assert.IsTrue(occupants.Contains(1));
+        Assert.IsTrue(occupants.Contains(2));
+    }
+
+    [TestMethod]
+    public void MoveEntity_NonBlockingEntity_MovesIndexEntryFromOldToNewPosition()
+    {
+        var world = CreateWorld();
+        var nonBlockingPool = CreateNonBlockingPool();
+        nonBlockingPool.Add(1, new NonBlockingComponent());
+        world.NonBlockingComponents = nonBlockingPool;
+        var transform = new TransformComponent(new Vector3Int(3, 3, 1), new Vector2Byte(1, 1));
+        world.PlaceEntityOnMap(1, transform.Position, ref transform);
+
+        world.MoveEntity(1, new Vector3Int(4, 3, 1), transform);
+
+        Assert.IsFalse(world.Map.GetNonBlockingEntityIdsAt(new Vector3Int(3, 3, 1)).Contains(1));
+        Assert.IsTrue(world.Map.GetNonBlockingEntityIdsAt(new Vector3Int(4, 3, 1)).Contains(1));
+    }
+
+    [TestMethod]
+    public void RemoveEntityFromMap_NonBlockingEntity_RemovesFromNonBlockingIndex()
+    {
+        var world = CreateWorld();
+        var nonBlockingPool = CreateNonBlockingPool();
+        nonBlockingPool.Add(1, new NonBlockingComponent());
+        world.NonBlockingComponents = nonBlockingPool;
+        var transform = new TransformComponent(new Vector3Int(), new Vector2Byte(1, 1));
+        world.PlaceEntityOnMap(1, new Vector3Int(3, 3, 1), ref transform);
+
+        world.RemoveEntityFromMap(1, ref transform);
+
+        Assert.IsFalse(world.Map.GetNonBlockingEntityIdsAt(new Vector3Int(3, 3, 1)).Contains(1));
+    }
 }

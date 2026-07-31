@@ -9,7 +9,16 @@ public sealed class World(Map map) : IMapQuery, IPlayerQuery
 {
     public Map Map { get; set; } = map ?? throw new ArgumentNullException(nameof(map));
 
-    public int PlayerEntityId { get; set; }
+    /// <summary>
+    /// Defaults to -1 (the same "no entity" sentinel Map.GetEntityId/IMapQuery.GetEntityIdAt
+    /// already use), not the type's own default of 0 -- 0 is a real, valid entity id (likely
+    /// the very first entity TestMapBuilder creates), so leaving this at the bare default would
+    /// have every PlayerEntityId reader (MapWindow's camera-snap, the HUD content classes, etc.)
+    /// silently treat that unrelated entity as "the player" for however long elapses before
+    /// FloorBuilder.CreatePlayer actually runs and assigns the real value (see GameLoop, which
+    /// now spawns the player on its first live Update() tick rather than during Initialize()).
+    /// </summary>
+    public int PlayerEntityId { get; set; } = -1;
 
     private static readonly Vector2Byte TransformSize1 = new(1, 1);
 
@@ -55,6 +64,52 @@ public sealed class World(Map map) : IMapQuery, IPlayerQuery
 
         if (!isBlocking)
         {
+            RemoveNonBlockingFootprint(entityId, oldPosition, size);
+            AddNonBlockingFootprint(entityId, newPosition, size);
+            return;
+        }
+
+        var oldZ = oldPosition.Z;
+        var oldMaxX = oldPosition.X + size.X;
+        var oldMaxY = oldPosition.Y + size.Y;
+        for (var x = oldPosition.X; x < oldMaxX; x++)
+        {
+            for (var y = oldPosition.Y; y < oldMaxY; y++)
+            {
+                Map.ClearIfOccupiedBy(new Vector3Int(x, y, oldZ), entityId);
+            }
+        }
+
+        var newZ = newPosition.Z;
+        var newMaxX = newPosition.X + size.X;
+        var newMaxY = newPosition.Y + size.Y;
+        for (var x = newPosition.X; x < newMaxX; x++)
+        {
+            for (var y = newPosition.Y; y < newMaxY; y++)
+            {
+                Map.SetEntityId(new Vector3Int(x, y, newZ), entityId);
+            }
+        }
+    }
+
+    /// <summary>
+    /// Same map-index update as MoveEntity, minus the free-space/bounds re-validation --
+    /// internal, and safe ONLY when the caller has already validated the destination footprint
+    /// moments earlier in the same single-threaded call with nothing else able to mutate the
+    /// map in between (today: WorldEventSync.SyncMove, invoked directly by MovementSystem
+    /// immediately after MovementSystem.CanMove already checked this exact footprint). Any
+    /// other caller -- a mod, a future spawner -- should use the public, defensive MoveEntity
+    /// instead.
+    /// </summary>
+    internal void MoveEntityUnchecked(int entityId, Vector3Int newPosition, TransformComponent transformComponent)
+    {
+        var size = transformComponent.Size;
+        var oldPosition = transformComponent.Position;
+
+        if (!IsBlocking(entityId))
+        {
+            RemoveNonBlockingFootprint(entityId, oldPosition, size);
+            AddNonBlockingFootprint(entityId, newPosition, size);
             return;
         }
 
@@ -130,22 +185,29 @@ public sealed class World(Map map) : IMapQuery, IPlayerQuery
     // an inconsistency worth fixing once real despawn logic exercises this.
     public void RemoveEntityFromMap(int entityId, ref TransformComponent transformComponent)
     {
-        if (IsOnMap(transformComponent.Position) && IsBlocking(entityId))
+        if (IsOnMap(transformComponent.Position))
         {
-            if (transformComponent.Size == TransformSize1)
+            if (IsBlocking(entityId))
             {
-                Map.SetEntityId(transformComponent.Position, -1);
+                if (transformComponent.Size == TransformSize1)
+                {
+                    Map.SetEntityId(transformComponent.Position, -1);
+                }
+                else
+                {
+                    var z = transformComponent.Position.Z;
+                    for (var x = transformComponent.Position.X; x < transformComponent.Position.X + transformComponent.Size.X; x++)
+                    {
+                        for (var y = transformComponent.Position.Y; y < transformComponent.Position.Y + transformComponent.Size.Y; y++)
+                        {
+                            Map.SetEntityId(new Vector3Int(x, y, z), -1);
+                        }
+                    }
+                }
             }
             else
             {
-                var z = transformComponent.Position.Z;
-                for (var x = transformComponent.Position.X; x < transformComponent.Position.X + transformComponent.Size.X; x++)
-                {
-                    for (var y = transformComponent.Position.Y; y < transformComponent.Position.Y + transformComponent.Size.Y; y++)
-                    {
-                        Map.SetEntityId(new Vector3Int(x, y, z), -1);
-                    }
-                }
+                RemoveNonBlockingFootprint(entityId, transformComponent.Position, transformComponent.Size);
             }
         }
 
@@ -178,8 +240,38 @@ public sealed class World(Map map) : IMapQuery, IPlayerQuery
                 }
             }
         }
+        else
+        {
+            AddNonBlockingFootprint(entityId, newPosition, size);
+        }
 
         transformComponent.Position = newPosition;
+    }
+
+    /// <summary>Shared footprint iteration for a non-Blocking entity's placement/arrival -- every cell of its X/Y extent at the given Z, matching how the Blocking branches above loop over Size.X/Size.Y.</summary>
+    private void AddNonBlockingFootprint(int entityId, Vector3Int position, Vector2Byte size)
+    {
+        var z = position.Z;
+        for (var x = position.X; x < position.X + size.X; x++)
+        {
+            for (var y = position.Y; y < position.Y + size.Y; y++)
+            {
+                Map.AddNonBlockingEntityId(new Vector3Int(x, y, z), entityId);
+            }
+        }
+    }
+
+    /// <summary>Shared footprint iteration for a non-Blocking entity's departure -- see AddNonBlockingFootprint.</summary>
+    private void RemoveNonBlockingFootprint(int entityId, Vector3Int position, Vector2Byte size)
+    {
+        var z = position.Z;
+        for (var x = position.X; x < position.X + size.X; x++)
+        {
+            for (var y = position.Y; y < position.Y + size.Y; y++)
+            {
+                Map.RemoveNonBlockingEntityId(new Vector3Int(x, y, z), entityId);
+            }
+        }
     }
 
     /// <summary>
@@ -231,6 +323,9 @@ public sealed class World(Map map) : IMapQuery, IPlayerQuery
 
     /// <inheritdoc cref="IMapQuery"/>
     public int GetEntityIdAt(Vector3Int position) => Map.GetEntityId(position);
+
+    /// <inheritdoc cref="IMapQuery"/>
+    public IReadOnlyList<int> GetNonBlockingEntityIdsAt(Vector3Int position) => Map.GetNonBlockingEntityIdsAt(position);
 
     /// <inheritdoc cref="IMapQuery"/>
     public int GetTerrainEntityIdAt(Vector3Int position) =>

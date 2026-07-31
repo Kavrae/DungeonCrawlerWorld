@@ -1,5 +1,5 @@
 using Engine.ECS.Components;
-using Engine.Events;
+using Engine.ECS.Systems;
 using Engine.Math;
 using Game.Modules.Burning;
 using Game.Modules.Burning.Components;
@@ -56,8 +56,17 @@ public sealed class StatusEffectAuraSystemTests
         }
     }
 
+    /// <summary>
+    /// A stripe that never matches ObserverEntityId (0), SourceEntityId (100), or
+    /// secondSourceEntityId (101) under StripeCount 15 (0, 10, and 11 respectively) -- used to
+    /// drain a just-recorded move (grant/detect it) without also consuming one of the mover's
+    /// own real CountdownTicker.Tick opportunities that same call, so existing rotating-stripe
+    /// loops elsewhere in these tests keep landing on the same tick counts they always did.
+    /// </summary>
+    private const byte DrainOnlyStripeIndex = 1;
+
     /// <summary>Mirrors real game wiring (both BurningModule.Configure and PoisonModule.Configure registering their own applier into the same shared registry) -- the registry a caller can override via applierRegistry to exercise unsupported-effect-type behavior instead.</summary>
-    private static (StatusEffectAuraSystem System, ComponentManager ComponentManager, FakeMapQuery MapQuery, EventBus EventBus) Build(StatusEffectAuraApplierRegistry? applierRegistry = null)
+    private static (StatusEffectAuraSystem System, ComponentManager ComponentManager, FakeMapQuery MapQuery, FrameEventBuffer<EntityMoved> MovedEntities) Build(StatusEffectAuraApplierRegistry? applierRegistry = null)
     {
         var componentManager = new ComponentManager(initialEntityCapacity: 200, initialComponentCapacity: 50);
         componentManager.RegisterDirectPool<TransformComponent>(static (ref existing, incoming) => existing = incoming);
@@ -68,7 +77,7 @@ public sealed class StatusEffectAuraSystemTests
         componentManager.RegisterMultiPool<StatusEffectStack>();
 
         var mapQuery = new FakeMapQuery();
-        var eventBus = new EventBus();
+        var movedEntities = new FrameEventBuffer<EntityMoved>();
 
         var system = new StatusEffectAuraSystem(
             componentManager,
@@ -76,10 +85,10 @@ public sealed class StatusEffectAuraSystemTests
             componentManager.GetPackedPool<StatusEffectAuraSourceComponent>(),
             componentManager.GetDirectPool<TransformComponent>(),
             mapQuery,
-            eventBus,
-            applierRegistry ?? DefaultApplierRegistry());
+            applierRegistry ?? DefaultApplierRegistry(),
+            movedEntities);
 
-        return (system, componentManager, mapQuery, eventBus);
+        return (system, componentManager, mapQuery, movedEntities);
     }
 
     private static StatusEffectAuraApplierRegistry DefaultApplierRegistry()
@@ -97,8 +106,22 @@ public sealed class StatusEffectAuraSystemTests
         componentManager.Merge(entityId, new TransformComponent(position, UnitSize));
     }
 
-    private static void MoveObserverTo(EventBus eventBus, Vector3Int from, Vector3Int to, int entityId = ObserverEntityId) =>
-        eventBus.Publish(new EntityMoved(entityId, from, to, UnitSize));
+    /// <summary>
+    /// Records the move into the shared buffer and immediately drains it via a stripe that
+    /// can't touch the mover's own exposure timer -- see DrainOnlyStripeIndex's own doc comment
+    /// for why this doesn't consume a real tick opportunity. Also clears the buffer afterward,
+    /// the same way SystemManager would at the end of a real frame's cycle (see FrameEventBuffer's
+    /// own doc comment) -- these tests construct StatusEffectAuraSystem directly, bypassing
+    /// SystemManager entirely, so without this the recorded move would still be sitting in the
+    /// buffer on every later Update call in these tests' own tick loops, getting silently
+    /// reprocessed (re-detecting the same move, over and over) instead of just once.
+    /// </summary>
+    private static void MoveObserverTo(StatusEffectAuraSystem system, FrameEventBuffer<EntityMoved> movedEntities, Vector3Int from, Vector3Int to, int entityId = ObserverEntityId)
+    {
+        movedEntities.Record(new EntityMoved(entityId, from, to, UnitSize));
+        system.Update(default, DrainOnlyStripeIndex);
+        movedEntities.ClearFrame();
+    }
 
     private static int StackCountOf(ComponentManager componentManager, int entityId) =>
         componentManager.GetPackedPool<BurningTimerComponent>().TryGetReadonly(entityId, out var timer) ? timer.StackCount : 0;
@@ -118,11 +141,11 @@ public sealed class StatusEffectAuraSystemTests
     [DataRow(4, 0)]
     public void SteppingIntoRange_GrantsFalloffStacksForStrengthEightSource(int distance, int expectedStacks)
     {
-        var (_, componentManager, _, eventBus) = Build();
+        var (system, componentManager, _, movedEntities) = Build();
         AddSource(componentManager, SourceEntityId, SourcePosition, StatusEffectType.Burning, strength: 8);
 
         var observerPosition = new Vector3Int(SourcePosition.X + distance, SourcePosition.Y, SourcePosition.Z);
-        MoveObserverTo(eventBus, new Vector3Int(0, 0, 0), observerPosition);
+        MoveObserverTo(system, movedEntities, new Vector3Int(0, 0, 0), observerPosition);
 
         Assert.AreEqual(expectedStacks, StackCountOf(componentManager, ObserverEntityId));
         Assert.AreEqual(expectedStacks > 0, componentManager.GetPackedPool<StatusEffectAuraExposureComponent>().Has(ObserverEntityId));
@@ -131,7 +154,7 @@ public sealed class StatusEffectAuraSystemTests
     [TestMethod]
     public void TwoOverlappingSources_StacksAreAdditive()
     {
-        var (_, componentManager, _, eventBus) = Build();
+        var (system, componentManager, _, movedEntities) = Build();
         AddSource(componentManager, SourceEntityId, SourcePosition, StatusEffectType.Burning, strength: 8);
 
         const int secondSourceEntityId = 101;
@@ -139,7 +162,7 @@ public sealed class StatusEffectAuraSystemTests
         AddSource(componentManager, secondSourceEntityId, secondSourcePosition, StatusEffectType.Burning, strength: 4);
 
         // Standing directly on the first source: 8 (distance 0 from source 1) + 1 (distance 2 from source 2, 4 >> 2 == 1).
-        MoveObserverTo(eventBus, new Vector3Int(0, 0, 0), SourcePosition);
+        MoveObserverTo(system, movedEntities, new Vector3Int(0, 0, 0), SourcePosition);
 
         Assert.AreEqual(9, StackCountOf(componentManager, ObserverEntityId));
     }
@@ -155,16 +178,20 @@ public sealed class StatusEffectAuraSystemTests
     [TestMethod]
     public void RemainingInRange_AtTheSameDistance_DoesNotAddStacksBeyondTheTarget()
     {
-        var (system, componentManager, _, eventBus) = Build();
+        var (system, componentManager, _, movedEntities) = Build();
         AddSource(componentManager, SourceEntityId, SourcePosition, StatusEffectType.Burning, strength: 8);
         componentManager.Merge(ObserverEntityId, new TransformComponent(SourcePosition, UnitSize));
 
-        MoveObserverTo(eventBus, new Vector3Int(0, 0, 0), SourcePosition);
+        MoveObserverTo(system, movedEntities, new Vector3Int(0, 0, 0), SourcePosition);
         Assert.AreEqual(8, StackCountOf(componentManager, ObserverEntityId));
 
+        // Rotates stripeIndex across all of StatusEffectAuraSystem's stripes the same way
+        // SystemManager does in real play (see BurningSystemTests' equivalent regression test)
+        // -- ObserverEntityId (0) always lands in stripe 0 regardless of StripeCount, so a
+        // fixed-stripeIndex loop wouldn't actually exercise striping at all.
         for (var frame = 0; frame < AuraEffects.TickIntervalFrames; frame++)
         {
-            system.Update(default, 0);
+            system.Update(default, (byte)(frame % system.StripeCount));
         }
 
         Assert.AreEqual(8, StackCountOf(componentManager, ObserverEntityId));
@@ -174,11 +201,11 @@ public sealed class StatusEffectAuraSystemTests
     [TestMethod]
     public void RemainingInRange_ToppsBackUpToTargetAfterExternalDecay()
     {
-        var (system, componentManager, _, eventBus) = Build();
+        var (system, componentManager, _, movedEntities) = Build();
         AddSource(componentManager, SourceEntityId, SourcePosition, StatusEffectType.Burning, strength: 8);
         componentManager.Merge(ObserverEntityId, new TransformComponent(SourcePosition, UnitSize));
 
-        MoveObserverTo(eventBus, new Vector3Int(0, 0, 0), SourcePosition);
+        MoveObserverTo(system, movedEntities, new Vector3Int(0, 0, 0), SourcePosition);
         Assert.AreEqual(8, StackCountOf(componentManager, ObserverEntityId));
 
         // Simulate BurningSystem's own decay (not exercised by this system-level test) having
@@ -187,7 +214,7 @@ public sealed class StatusEffectAuraSystemTests
 
         for (var frame = 0; frame < AuraEffects.TickIntervalFrames; frame++)
         {
-            system.Update(default, 0);
+            system.Update(default, (byte)(frame % system.StripeCount));
         }
 
         Assert.AreEqual(8, StackCountOf(componentManager, ObserverEntityId), "Topped back up to the target (8), not added on top of the decayed value (5 + 8 = 13).");
@@ -202,14 +229,14 @@ public sealed class StatusEffectAuraSystemTests
     [TestMethod]
     public void ObserverWalksOutOfRange_ExposureIsNotRemovedImmediately()
     {
-        var (_, componentManager, _, eventBus) = Build();
+        var (system, componentManager, _, movedEntities) = Build();
         AddSource(componentManager, SourceEntityId, SourcePosition, StatusEffectType.Burning, strength: 8);
 
-        MoveObserverTo(eventBus, new Vector3Int(0, 0, 0), SourcePosition);
+        MoveObserverTo(system, movedEntities, new Vector3Int(0, 0, 0), SourcePosition);
         Assert.IsTrue(componentManager.GetPackedPool<StatusEffectAuraExposureComponent>().Has(ObserverEntityId));
 
         var farAwayPosition = new Vector3Int(SourcePosition.X + 50, SourcePosition.Y, SourcePosition.Z);
-        MoveObserverTo(eventBus, SourcePosition, farAwayPosition);
+        MoveObserverTo(system, movedEntities, SourcePosition, farAwayPosition);
 
         Assert.IsTrue(componentManager.GetPackedPool<StatusEffectAuraExposureComponent>().Has(ObserverEntityId));
     }
@@ -217,20 +244,20 @@ public sealed class StatusEffectAuraSystemTests
     [TestMethod]
     public void ObserverWalksOutOfRange_ExposureRemovedOnceTimerTicksWhileStillAway()
     {
-        var (system, componentManager, _, eventBus) = Build();
+        var (system, componentManager, _, movedEntities) = Build();
         AddSource(componentManager, SourceEntityId, SourcePosition, StatusEffectType.Burning, strength: 8);
 
-        MoveObserverTo(eventBus, new Vector3Int(0, 0, 0), SourcePosition);
+        MoveObserverTo(system, movedEntities, new Vector3Int(0, 0, 0), SourcePosition);
 
         var farAwayPosition = new Vector3Int(SourcePosition.X + 50, SourcePosition.Y, SourcePosition.Z);
-        MoveObserverTo(eventBus, SourcePosition, farAwayPosition);
+        MoveObserverTo(system, movedEntities, SourcePosition, farAwayPosition);
         // Update reads the observer's *current* Transform.Position, independent of the
         // EntityMoved event itself -- must reflect where it actually ended up.
         componentManager.Merge(ObserverEntityId, new TransformComponent(farAwayPosition, UnitSize));
 
         for (var frame = 0; frame < AuraEffects.TickIntervalFrames; frame++)
         {
-            system.Update(default, 0);
+            system.Update(default, (byte)(frame % system.StripeCount));
         }
 
         Assert.IsFalse(componentManager.GetPackedPool<StatusEffectAuraExposureComponent>().Has(ObserverEntityId));
@@ -244,15 +271,15 @@ public sealed class StatusEffectAuraSystemTests
     [TestMethod]
     public void MovingOutAndBackInBeforeNextTick_DoesNotRegrantOrResetTimer()
     {
-        var (system, componentManager, _, eventBus) = Build();
+        var (system, componentManager, _, movedEntities) = Build();
         AddSource(componentManager, SourceEntityId, SourcePosition, StatusEffectType.Burning, strength: 8);
 
-        MoveObserverTo(eventBus, new Vector3Int(0, 0, 0), SourcePosition);
+        MoveObserverTo(system, movedEntities, new Vector3Int(0, 0, 0), SourcePosition);
         Assert.AreEqual(8, StackCountOf(componentManager, ObserverEntityId));
 
         for (var frame = 0; frame < 30; frame++)
         {
-            system.Update(default, 0);
+            system.Update(default, (byte)(frame % system.StripeCount));
         }
 
         Assert.AreEqual(30, componentManager.GetPackedPool<StatusEffectAuraExposureComponent>().GetReadonly(ObserverEntityId).FramesUntilNextTick);
@@ -260,8 +287,8 @@ public sealed class StatusEffectAuraSystemTests
         // Step out (still in range at distance 1 -- but exposure already exists, so this
         // must not grant) and back in, all before the original timer would naturally tick.
         var oneTileAway = new Vector3Int(SourcePosition.X + 1, SourcePosition.Y, SourcePosition.Z);
-        MoveObserverTo(eventBus, SourcePosition, oneTileAway);
-        MoveObserverTo(eventBus, oneTileAway, SourcePosition);
+        MoveObserverTo(system, movedEntities, SourcePosition, oneTileAway);
+        MoveObserverTo(system, movedEntities, oneTileAway, SourcePosition);
         componentManager.Merge(ObserverEntityId, new TransformComponent(SourcePosition, UnitSize));
 
         Assert.AreEqual(8, StackCountOf(componentManager, ObserverEntityId), "Stepping out and back in before the timer ticks must not grant again.");
@@ -269,7 +296,7 @@ public sealed class StatusEffectAuraSystemTests
 
         for (var frame = 0; frame < 30; frame++)
         {
-            system.Update(default, 0);
+            system.Update(default, (byte)(frame % system.StripeCount));
         }
 
         Assert.AreEqual(8, StackCountOf(componentManager, ObserverEntityId), "The original timer reaching 0 re-evaluates based on the entity's current (in-range) position, topping off to the target rather than adding to it again.");
@@ -278,15 +305,15 @@ public sealed class StatusEffectAuraSystemTests
     [TestMethod]
     public void RepeatedEntryExitCycles_NeverThrowsAndNeverDuplicatesExposure()
     {
-        var (_, componentManager, _, eventBus) = Build();
+        var (system, componentManager, _, movedEntities) = Build();
         AddSource(componentManager, SourceEntityId, SourcePosition, StatusEffectType.Burning, strength: 8);
         var oneTileAway = new Vector3Int(SourcePosition.X + 1, SourcePosition.Y, SourcePosition.Z);
 
-        MoveObserverTo(eventBus, new Vector3Int(0, 0, 0), SourcePosition);
+        MoveObserverTo(system, movedEntities, new Vector3Int(0, 0, 0), SourcePosition);
         for (var i = 0; i < 10; i++)
         {
-            MoveObserverTo(eventBus, SourcePosition, oneTileAway);
-            MoveObserverTo(eventBus, oneTileAway, SourcePosition);
+            MoveObserverTo(system, movedEntities, SourcePosition, oneTileAway);
+            MoveObserverTo(system, movedEntities, oneTileAway, SourcePosition);
         }
 
         // PackedComponentPool.Add throws on a duplicate entity id, so simply not throwing
@@ -304,7 +331,7 @@ public sealed class StatusEffectAuraSystemTests
     [TestMethod]
     public void SourceMovesAwayFromStationaryObserver_ExposureRemoved()
     {
-        var (_, componentManager, mapQuery, eventBus) = Build();
+        var (system, componentManager, mapQuery, movedEntities) = Build();
         AddSource(componentManager, SourceEntityId, SourcePosition, StatusEffectType.Burning, strength: 8);
         mapQuery.SetOccupant(SourcePosition, SourceEntityId); // A moving source is an occupant, not terrain.
 
@@ -315,7 +342,7 @@ public sealed class StatusEffectAuraSystemTests
         // scan around the *source's* old/new position, not the observer's own movement.
         var observerPosition = new Vector3Int(SourcePosition.X + 1, SourcePosition.Y, SourcePosition.Z);
         mapQuery.SetOccupant(observerPosition, ObserverEntityId);
-        MoveObserverTo(eventBus, new Vector3Int(0, 0, 0), observerPosition);
+        MoveObserverTo(system, movedEntities, new Vector3Int(0, 0, 0), observerPosition);
         componentManager.Merge(ObserverEntityId, new TransformComponent(observerPosition, UnitSize));
         Assert.IsTrue(componentManager.GetPackedPool<StatusEffectAuraExposureComponent>().Has(ObserverEntityId));
 
@@ -326,7 +353,7 @@ public sealed class StatusEffectAuraSystemTests
         var farAwayPosition = new Vector3Int(SourcePosition.X + 50, SourcePosition.Y, SourcePosition.Z);
         mapQuery.SetOccupant(farAwayPosition, SourceEntityId);
         componentManager.Merge(SourceEntityId, new TransformComponent(farAwayPosition, UnitSize));
-        eventBus.Publish(new EntityMoved(SourceEntityId, SourcePosition, farAwayPosition, UnitSize));
+        MoveObserverTo(system, movedEntities, SourcePosition, farAwayPosition, SourceEntityId);
 
         Assert.IsFalse(componentManager.GetPackedPool<StatusEffectAuraExposureComponent>().Has(ObserverEntityId));
     }
@@ -334,11 +361,11 @@ public sealed class StatusEffectAuraSystemTests
     [TestMethod]
     public void SourceDoesNotIgniteItself()
     {
-        var (_, componentManager, mapQuery, eventBus) = Build();
+        var (system, componentManager, mapQuery, movedEntities) = Build();
         AddSource(componentManager, SourceEntityId, SourcePosition, StatusEffectType.Burning, strength: 8);
         mapQuery.SetOccupant(SourcePosition, SourceEntityId);
 
-        eventBus.Publish(new EntityMoved(SourceEntityId, new Vector3Int(0, 0, 0), SourcePosition, UnitSize));
+        MoveObserverTo(system, movedEntities, new Vector3Int(0, 0, 0), SourcePosition, SourceEntityId);
 
         Assert.AreEqual(0, StackCountOf(componentManager, SourceEntityId));
         Assert.IsFalse(componentManager.GetPackedPool<StatusEffectAuraExposureComponent>().Has(SourceEntityId));
@@ -359,11 +386,11 @@ public sealed class StatusEffectAuraSystemTests
     [DataRow(4, 0)]
     public void PoisonEffectType_GrantsFalloffStacksViaTheSameGenericDispatchAsBurning(int distance, int expectedStacks)
     {
-        var (_, componentManager, _, eventBus) = Build();
+        var (system, componentManager, _, movedEntities) = Build();
         AddSource(componentManager, SourceEntityId, SourcePosition, StatusEffectType.Poison, strength: 8);
 
         var observerPosition = new Vector3Int(SourcePosition.X + distance, SourcePosition.Y, SourcePosition.Z);
-        MoveObserverTo(eventBus, new Vector3Int(0, 0, 0), observerPosition);
+        MoveObserverTo(system, movedEntities, new Vector3Int(0, 0, 0), observerPosition);
 
         Assert.AreEqual(expectedStacks, PoisonStackCountOf(componentManager, ObserverEntityId));
         Assert.AreEqual(expectedStacks > 0, componentManager.GetPackedPool<StatusEffectAuraExposureComponent>().Has(ObserverEntityId));
@@ -373,10 +400,10 @@ public sealed class StatusEffectAuraSystemTests
     [TestMethod]
     public void EffectTypeWithNoRegisteredApplier_GrantsNothingAndTracksNoExposure()
     {
-        var (_, componentManager, _, eventBus) = Build(new StatusEffectAuraApplierRegistry());
+        var (system, componentManager, _, movedEntities) = Build(new StatusEffectAuraApplierRegistry());
         AddSource(componentManager, SourceEntityId, SourcePosition, StatusEffectType.Poison, strength: 8);
 
-        MoveObserverTo(eventBus, new Vector3Int(0, 0, 0), SourcePosition);
+        MoveObserverTo(system, movedEntities, new Vector3Int(0, 0, 0), SourcePosition);
 
         Assert.AreEqual(0, PoisonStackCountOf(componentManager, ObserverEntityId));
         Assert.IsFalse(componentManager.GetPackedPool<StatusEffectAuraExposureComponent>().Has(ObserverEntityId),

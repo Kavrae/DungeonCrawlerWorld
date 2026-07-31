@@ -14,19 +14,19 @@ using Game.Modules.Movement.Components;
 namespace Game;
 
 /// <summary>
-/// Builds a test map across all three MapLayers: Ground (border walls, a cross hallway,
-/// randomized lava/dirt/grass terrain, a large wandering goblin population at two densities), UnderGround
-/// (border walls and a randomized dirt/lava mixture), and Flying (scattered wandering
-/// Fairies) -- plus a handful of standalone multi-trait fixtures, via the Blueprint
-/// composition system.
+/// Builds a test map across all three MapLayers, each with its own independent, percentage-
+/// rolled population: Ground (border walls, a cross hallway, randomized lava/dirt/grass
+/// terrain, 10% of interior tiles get a Goblin/Fairy/Ghost per PopulateGroundEntity's
+/// breakdown), UnderGround (border walls, a randomized dirt/lava mixture, 5% of interior
+/// tiles get a Ghost per PopulateUnderGroundGhost), and Flying (5% of all tiles get a Fairy
+/// per PopulateFlyingFairy) -- plus a handful of standalone multi-trait fixtures, via the
+/// Blueprint composition system.
 /// </summary>
 public sealed class TestMapBuilder(EntityManager entityManager, ComponentManager componentManager, MathUtility mathUtility)
 {
-    // Matches MapWindow.DrawGlyphs's own medium/large/huge glyph-size selection
-    // (TransformComponent.Size.X: 1 => medium, 2 => large, _ => huge) -- rotating through
-    // them one-for-one keeps the three groups as even as possible regardless of how many
-    // goblins the map ends up with.
-    private static readonly Vector2Byte[] GoblinSizes = [new(1, 1), new(2, 2), new(3, 3)];
+    private const int GroundPopulationPercent = 10;
+    private const int UnderGroundGhostPercent = 5;
+    private const int FlyingFairyPercent = 5;
 
     private const string LongWordWrapDescription =
         "ThisIsAReallyLongDescriptionToTestTheWordWrapCapabilitiesAroundHyphenatingLongWordsMultipleTimes";
@@ -38,12 +38,12 @@ public sealed class TestMapBuilder(EntityManager entityManager, ComponentManager
     private readonly Grass _grass = new();
     private readonly Goblin _goblin = new(mathUtility);
     private readonly Fairy _fairy = new(mathUtility);
+    private readonly Ghost _ghost = new(mathUtility);
     private readonly Engineer _engineer = new();
     private readonly Tank _tank = new(mathUtility);
     private readonly GoblinEngineerBlueprint _goblinEngineer = new(new Goblin(mathUtility), new Engineer());
     private readonly PackedComponentPool<MovementComponent> _movementComponents = componentManager.GetPackedPool<MovementComponent>();
     private readonly PackedComponentPool<ActionLockComponent> _actionLocks = componentManager.GetPackedPool<ActionLockComponent>();
-    private int _goblinsBuilt;
 
     /// <summary>
     /// Populates an already-constructed World's map with terrain and entities. World is
@@ -82,15 +82,9 @@ public sealed class TestMapBuilder(EntityManager entityManager, ComponentManager
                         row,
                         TerrainLayer.Ground);
 
-                    if (row % 5 == 0 && column % 4 == 0)
+                    if (mathUtility.Next(0, 100) < GroundPopulationPercent)
                     {
-                        BuildGoblin(world, column, row);
-                    }
-                    else if (row % 3 == 0 && column % 3 == 0)
-                    {
-                        // Denser secondary population: plain Goblins (no Engineer class),
-                        // separate from and denser than the GoblinEngineer spawn above.
-                        StaggerActionLock(BuildFromBlueprint(world, _goblin, column, row));
+                        PopulateGroundEntity(world, column, row);
                     }
                 }
 
@@ -119,19 +113,98 @@ public sealed class TestMapBuilder(EntityManager entityManager, ComponentManager
                         column,
                         row,
                         TerrainLayer.UnderGround);
+
+                    if (mathUtility.Next(0, 100) < UnderGroundGhostPercent)
+                    {
+                        PopulateUnderGroundGhost(world, column, row);
+                    }
                 }
 
-                // Flying layer: scattered ordinary Fairies. Independent of whatever's on
-                // Ground/UnderGround at the same (column,row) -- a different MapLayer, so no
-                // collision between them.
-                if (row % 8 == 0 && column % 6 == 0)
+                // Flying layer: no walls/border of its own (unlike Ground/UnderGround), so this
+                // isn't scoped to isBorder/isWallOrHallway -- every cell is eligible.
+                if (mathUtility.Next(0, 100) < FlyingFairyPercent)
                 {
-                    StaggerActionLock(BuildFromBlueprintAtLayer(world, _fairy, column, row, MapLayer.Flying));
+                    PopulateFlyingFairy(world, column, row);
                 }
             }
         }
 
         BuildFixtureEntities(world);
+    }
+
+    /// <summary>
+    /// Ground layer's entity roll (see GroundPopulationPercent for the gate already applied
+    /// by the caller): 40% 1x1 Goblin, 8% 2x2 Goblin, 1% 3x3 Goblin, 40% 1x1 Fairy, 8% 2x2
+    /// Fairy, 1% 3x3 Fairy, 2% 1x2 Ghost -- a 0-99 roll so each share lands exactly. All three
+    /// races land on the Ground layer here, including Fairy/Ghost -- distinct from, and in
+    /// addition to, the dedicated Ghost-on-UnderGround and Fairy-on-Flying populations below.
+    /// </summary>
+    private void PopulateGroundEntity(World.World world, int column, int row)
+    {
+        var roll = mathUtility.Next(0, 100);
+        switch (roll)
+        {
+            case < 40:
+                BuildRaceEntity(world, _goblin, column, row, new Vector2Byte(1, 1), MapLayer.Ground);
+                break;
+            case < 48:
+                BuildRaceEntity(world, _goblin, column, row, new Vector2Byte(2, 2), MapLayer.Ground);
+                break;
+            case < 49:
+                BuildRaceEntity(world, _goblin, column, row, new Vector2Byte(3, 3), MapLayer.Ground);
+                break;
+            case < 89:
+                BuildRaceEntity(world, _fairy, column, row, new Vector2Byte(1, 1), MapLayer.Ground);
+                break;
+            case < 97:
+                BuildRaceEntity(world, _fairy, column, row, new Vector2Byte(2, 2), MapLayer.Ground);
+                break;
+            case < 98:
+                BuildRaceEntity(world, _fairy, column, row, new Vector2Byte(3, 3), MapLayer.Ground);
+                break;
+            default:
+                BuildRaceEntity(world, _ghost, column, row, new Vector2Byte(1, 2), MapLayer.Ground);
+                break;
+        }
+    }
+
+    /// <summary>UnderGround layer's dedicated Ghost population (see UnderGroundGhostPercent for the gate): 90% 1x1, 9% 2x2, 1% 3x3.</summary>
+    private void PopulateUnderGroundGhost(World.World world, int column, int row)
+    {
+        var size = mathUtility.Next(0, 100) switch
+        {
+            < 90 => new Vector2Byte(1, 1),
+            < 99 => new Vector2Byte(2, 2),
+            _ => new Vector2Byte(3, 3),
+        };
+
+        BuildRaceEntity(world, _ghost, column, row, size, MapLayer.UnderGround);
+    }
+
+    /// <summary>Flying layer's dedicated Fairy population (see FlyingFairyPercent for the gate): 90% 1x1, 9% 2x2, 1% 3x3.</summary>
+    private void PopulateFlyingFairy(World.World world, int column, int row)
+    {
+        var size = mathUtility.Next(0, 100) switch
+        {
+            < 90 => new Vector2Byte(1, 1),
+            < 99 => new Vector2Byte(2, 2),
+            _ => new Vector2Byte(3, 3),
+        };
+
+        BuildRaceEntity(world, _fairy, column, row, size, MapLayer.Flying);
+    }
+
+    /// <summary>Builds a race blueprint entity at the given size/layer with a staggered action lock -- the shared path for every PopulateEntity roll outcome.</summary>
+    private void BuildRaceEntity(World.World world, IBlueprint blueprint, int column, int row, Vector2Byte size, MapLayer mapLayer)
+    {
+        var entityId = entityManager.CreateEntity();
+        blueprint.Build(componentManager, entityId);
+
+        ref var transform = ref componentManager.GetDirectPool<TransformComponent>().Get(entityId);
+        transform.Size = size;
+
+        StaggerActionLock(entityId);
+        world.PlaceEntityOnMap(entityId, new Vector3Int(column, row, (int)mapLayer), ref transform);
     }
 
     private int BuildFromBlueprint(World.World world, IBlueprint blueprint, int column, int row)
@@ -182,27 +255,12 @@ public sealed class TestMapBuilder(EntityManager entityManager, ComponentManager
         };
     }
 
-    /// <summary>Same placement as BuildFromBlueprint, plus assigning one of the three even-rotation sizes.</summary>
-    private void BuildGoblin(World.World world, int column, int row)
-    {
-        var entityId = entityManager.CreateEntity();
-        _goblinEngineer.Build(componentManager, entityId);
-
-        ref var transform = ref componentManager.GetDirectPool<TransformComponent>().Get(entityId);
-        transform.Size = GoblinSizes[_goblinsBuilt % GoblinSizes.Length];
-        _goblinsBuilt++;
-
-        StaggerActionLock(entityId);
-        PlaceAt(world, entityId, column, row);
-    }
-
     /// <summary>
     /// Standalone demonstration entities, placed individually rather than through the main
-    /// population loop above. Where BuildGoblin's size rotation already covers "goblins of
-    /// every size" in general, these specifically exercise capabilities nothing in the main
-    /// loop touches: multiple components of the same type on one entity (MultiComponentPool's
-    /// whole reason for existing), removing a component after blueprint construction, and
-    /// text long enough to actually word-wrap/hyphenate when selected.
+    /// population loop above (PopulateEntity). These specifically exercise capabilities
+    /// nothing in the main loop touches: multiple components of the same type on one entity
+    /// (MultiComponentPool's whole reason for existing), removing a component after blueprint
+    /// construction, and text long enough to actually word-wrap/hyphenate when selected.
     /// </summary>
     private void BuildFixtureEntities(World.World world)
     {
@@ -273,8 +331,7 @@ public sealed class TestMapBuilder(EntityManager entityManager, ComponentManager
         // coincidental overlap elsewhere.
         var phasingFairyId = entityManager.CreateEntity();
         _fairy.Build(componentManager, phasingFairyId); // Fairy's own blueprint already includes MovementComponent.
-        componentManager.GetPackedPool<OccupancyComponent>().Add(phasingFairyId, new OccupancyComponent(isTiny: false, isPhasing: true));
-        componentManager.GetMultiPool<NonBlockingComponent>().Add(phasingFairyId, new NonBlockingComponent());
+        componentManager.GetMultiPool<NonBlockingComponent>().Add(phasingFairyId, new NonBlockingComponent(NonBlockingKind.Phasing));
 
         StaggerActionLock(phasingFairyId);
         PlaceAt(world, phasingFairyId, 17, 16);
@@ -287,8 +344,7 @@ public sealed class TestMapBuilder(EntityManager entityManager, ComponentManager
         {
             var entityId = entityManager.CreateEntity();
             _goblin.Build(componentManager, entityId);
-            componentManager.GetPackedPool<OccupancyComponent>().Add(entityId, new OccupancyComponent(isTiny: true, isPhasing: false));
-            componentManager.GetMultiPool<NonBlockingComponent>().Add(entityId, new NonBlockingComponent());
+            componentManager.GetMultiPool<NonBlockingComponent>().Add(entityId, new NonBlockingComponent(NonBlockingKind.Tiny));
 
             StaggerActionLock(entityId);
             PlaceAt(world, entityId, column, row);

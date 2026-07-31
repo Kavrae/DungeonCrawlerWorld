@@ -71,11 +71,14 @@ public sealed class DirectComponentPool<T> : IReadOnlyComponentPool<T>, IInspect
         Add(entityId, newComponent);
     }
 
-    public bool Has(int entityId) => _present[entityId] != 0;
+    /// <summary>True if entityId is both within bounds and actually present -- a plain array index throws IndexOutOfRangeException for a negative or too-large entityId, unlike PackedComponentPool/MultiComponentPool's dictionary-backed lookups, which already tolerate any int. Every "safe query" method below (Has, TryGetReadonly, TrySet, TryUpdate, Remove) needs this same guard so callers checking "does this entity have X" (a sentinel like World.PlayerEntityId's -1 "no player yet" included) get a tolerant false, not a crash.</summary>
+    private bool IsInBounds(int entityId) => (uint)entityId < (uint)_present.Length;
+
+    public bool Has(int entityId) => IsInBounds(entityId) && _present[entityId] != 0;
 
     public bool TryGetReadonly(int entityId, out T component)
     {
-        if (_present[entityId] == 0)
+        if (!IsInBounds(entityId) || _present[entityId] == 0)
         {
             component = default;
             return false;
@@ -137,7 +140,7 @@ public sealed class DirectComponentPool<T> : IReadOnlyComponentPool<T>, IInspect
 
     public bool TrySet(int entityId, T value)
     {
-        if (_present[entityId] == 0)
+        if (!IsInBounds(entityId) || _present[entityId] == 0)
         {
             return false;
         }
@@ -151,7 +154,7 @@ public sealed class DirectComponentPool<T> : IReadOnlyComponentPool<T>, IInspect
     {
         ArgumentNullException.ThrowIfNull(updater);
 
-        if (_present[entityId] == 0)
+        if (!IsInBounds(entityId) || _present[entityId] == 0)
         {
             return false;
         }
@@ -165,7 +168,7 @@ public sealed class DirectComponentPool<T> : IReadOnlyComponentPool<T>, IInspect
     {
         ArgumentNullException.ThrowIfNull(updater);
 
-        if (_present[entityId] == 0)
+        if (!IsInBounds(entityId) || _present[entityId] == 0)
         {
             return false;
         }
@@ -187,7 +190,7 @@ public sealed class DirectComponentPool<T> : IReadOnlyComponentPool<T>, IInspect
 
     public bool Remove(int entityId)
     {
-        if (_present[entityId] == 0)
+        if (!IsInBounds(entityId) || _present[entityId] == 0)
         {
             return false;
         }

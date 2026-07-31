@@ -1,5 +1,6 @@
 using Engine.Bootstrap;
 using Engine.ECS.Context;
+using Engine.ECS.Systems;
 using Engine.Events;
 using Engine.Math;
 using Engine.Modules;
@@ -28,7 +29,7 @@ public sealed class FloorBuilderTests
     private static EcsContext BuildEcsContext(Game.World.World world, MathUtility mathUtility)
     {
         var eventBus = new EventBus();
-        var context = new GameModuleContext(world, mathUtility, eventBus) { PlayerQuery = world };
+        var context = new GameModuleContext(world, mathUtility, eventBus) { PlayerQuery = world, EntityMoveSync = new WorldEventSync(world) };
 
         var movementModule = new MovementModule();
         movementModule.Configure(context);
@@ -70,8 +71,10 @@ public sealed class FloorBuilderTests
     /// The player must not be placed before/during TestMapBuilder.Populate (PlaceEntityOnMap
     /// has no free-space check, so an earlier player placement could be silently overwritten
     /// by a later wall/creature at the same cell) -- this confirms the player actually lands
-    /// on a real, unoccupied, on-map cell once PopulateFloor finishes, and that World.PlayerEntityId
-    /// is wired to whatever id the player actually got (not any particular hardcoded value).
+    /// on a real, unoccupied, on-map cell once CreatePlayer runs (called separately from
+    /// PopulateFloor now -- see FloorBuilder's own doc comment for why: GameLoop triggers it
+    /// once on its first live Update() tick instead), and that World.PlayerEntityId is wired
+    /// to whatever id the player actually got (not any particular hardcoded value).
     /// </summary>
     [TestMethod]
     public void PopulateFloor_PlacesPlayerOnAFreeOnMapCellAndWiresPlayerEntityId()
@@ -81,6 +84,7 @@ public sealed class FloorBuilderTests
         var ecsContext = BuildEcsContext(world, mathUtility);
 
         FloorBuilder.PopulateFloor(world, ecsContext, mathUtility);
+        world.PlayerEntityId = FloorBuilder.CreatePlayer(world, ecsContext, mathUtility, new FrameEventBuffer<EntityMoved>());
 
         Assert.IsTrue(ecsContext.EntityManager.IsAlive(world.PlayerEntityId));
 

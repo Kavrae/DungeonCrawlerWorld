@@ -31,12 +31,6 @@ public sealed class CoreModule : IModule
             existing.GlyphColor = Color.Lerp(existing.GlyphColor, incoming.GlyphColor, 0.5f);
         });
 
-        componentManager.RegisterPackedPool<OccupancyComponent>(static (ref existing, incoming) =>
-        {
-            existing.IsTiny |= incoming.IsTiny;
-            existing.IsPhasing |= incoming.IsPhasing;
-        });
-
         componentManager.RegisterMultiPool<NonBlockingComponent>();
         componentManager.RegisterMultiPool<ForceBlockingComponent>();
 

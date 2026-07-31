@@ -24,12 +24,18 @@ public sealed class MovementModule : IGameModule
     private IMapQuery _mapQuery = null!;
     private MathUtility _mathUtility = null!;
     private EventBus _eventBus = null!;
+    private IEntityMoveSync? _entityMoveSync;
+    private FrameEventBuffer<EntityMoved> _movedEntities = null!;
+    private IPlayerQuery? _playerQuery;
 
     public void Configure(GameModuleContext context)
     {
         _mapQuery = context.MapQuery;
         _mathUtility = context.MathUtility;
         _eventBus = context.EventBus;
+        _entityMoveSync = context.EntityMoveSync;
+        _movedEntities = context.MovedEntities;
+        _playerQuery = context.PlayerQuery;
     }
 
     public void RegisterComponents(ComponentManager componentManager)
@@ -46,12 +52,22 @@ public sealed class MovementModule : IGameModule
 
     public void RegisterSystems(SystemManager systemManager, ComponentManager componentManager)
     {
+        if (_entityMoveSync is null)
+        {
+            throw new InvalidOperationException($"{nameof(MovementModule)} requires {nameof(GameModuleContext)}.{nameof(GameModuleContext.EntityMoveSync)} to be set.");
+        }
+
         systemManager.Register(new MovementSystem(
             componentManager.GetDirectPool<TransformComponent>(),
             componentManager.GetPackedPool<ActionLockComponent>(),
             componentManager.GetPackedPool<MovementComponent>(),
             _mapQuery,
             _mathUtility,
-            _eventBus));
+            _eventBus,
+            _entityMoveSync,
+            _movedEntities,
+            _playerQuery));
+
+        systemManager.RegisterFrameScoped(_movedEntities);
     }
 }

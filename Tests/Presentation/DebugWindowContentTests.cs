@@ -26,7 +26,7 @@ public sealed class DebugWindowContentTests
         var mathUtility = new MathUtility();
 
         var movementModule = new MovementModule();
-        movementModule.Configure(new GameModuleContext(world, mathUtility, new EventBus()));
+        movementModule.Configure(new GameModuleContext(world, mathUtility, new EventBus()) { EntityMoveSync = new WorldEventSync(world) });
 
         IReadOnlyList<IModule> modules =
         [
@@ -48,7 +48,7 @@ public sealed class DebugWindowContentTests
         var fontService = new FontService("Fonts");
         var windowService = new WindowService(fontService, new GlyphRenderer());
         var hostWindow = windowService.CreateWindow<Window>(null, new WindowOptions());
-        hostWindow.SetContent(new DebugWindowContent(fontService, ecsContext.EntityManager, ecsContext.ComponentManager));
+        hostWindow.SetContent(new DebugWindowContent(fontService, ecsContext.EntityManager, ecsContext.ComponentManager, ecsContext.SystemManager));
 
         hostWindow.Initialize();
         hostWindow.Update(new GameTime());
@@ -63,7 +63,7 @@ public sealed class DebugWindowContentTests
         var fontService = new FontService("Fonts");
         var windowService = new WindowService(fontService, new GlyphRenderer());
         var hostWindow = windowService.CreateWindow<Window>(null, new WindowOptions());
-        hostWindow.SetContent(new DebugWindowContent(fontService, ecsContext.EntityManager, ecsContext.ComponentManager));
+        hostWindow.SetContent(new DebugWindowContent(fontService, ecsContext.EntityManager, ecsContext.ComponentManager, ecsContext.SystemManager));
 
         hostWindow.Initialize();
         hostWindow.Update(new GameTime());

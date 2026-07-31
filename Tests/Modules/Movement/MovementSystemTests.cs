@@ -1,4 +1,5 @@
 using Engine.ECS.Components.Stores;
+using Engine.ECS.Systems;
 using Engine.Events;
 using Engine.Math;
 using Game.Modules.Core.Components;
@@ -28,6 +29,18 @@ public sealed class MovementSystemTests
         public void GetEntityIdsInBox(CubeInt box, Span<int> entityIds) => entityIds.Fill(-1);
     }
 
+    /// <summary>Records the last SyncMove call instead of touching any real World -- pairs with FakeMapQuery so a test can run with no Game.World.World anywhere in the object graph while still verifying the mandatory map-sync path was invoked.</summary>
+    private sealed class RecordingEntityMoveSync : IEntityMoveSync
+    {
+        public EntityMoved? LastSynced { get; private set; }
+        public void SyncMove(EntityMoved moved) => LastSynced = moved;
+    }
+
+    private sealed class FakePlayerQuery(int playerEntityId) : IPlayerQuery
+    {
+        public int PlayerEntityId { get; } = playerEntityId;
+    }
+
     private static DirectComponentPool<TransformComponent> CreateTransformPool(int capacity = 10) =>
         new(capacity, static (ref existing, incoming) => existing = incoming);
 
@@ -50,7 +63,7 @@ public sealed class MovementSystemTests
         movementPool.Add(0, new MovementComponent(MovementMode.Random, 10, null, null));
         // Entity 0 has no TransformComponent or ActionLockComponent registered.
 
-        var system = new MovementSystem(transformPool, actionLockPool, movementPool, world, new MathUtility(), new EventBus());
+        var system = new MovementSystem(transformPool, actionLockPool, movementPool, world, new MathUtility(), new EventBus(), new WorldEventSync(world), new FrameEventBuffer<EntityMoved>(), null);
 
         system.Update(default, 0);
     }
@@ -74,7 +87,7 @@ public sealed class MovementSystemTests
         actionLockPool.Add(0, new ActionLockComponent(totalLockFrames: 3, lockFramesRemaining: 3));
         movementPool.Add(0, new MovementComponent(MovementMode.Random, 10, null, null));
 
-        var system = new MovementSystem(transformPool, actionLockPool, movementPool, world, new MathUtility(), new EventBus());
+        var system = new MovementSystem(transformPool, actionLockPool, movementPool, world, new MathUtility(), new EventBus(), new WorldEventSync(world), new FrameEventBuffer<EntityMoved>(), null);
         system.Update(default, 0);
 
         Assert.AreEqual(3, actionLockPool.GetReadonly(0).LockFramesRemaining);
@@ -116,7 +129,7 @@ public sealed class MovementSystemTests
         transformPool.Add(2, westBlockerTransform);
         world.PlaceEntityOnMap(2, new Vector3Int(2, 0, 0), ref westBlockerTransform);
 
-        var system = new MovementSystem(transformPool, actionLockPool, movementPool, world, new MathUtility(new Random(1)), new EventBus());
+        var system = new MovementSystem(transformPool, actionLockPool, movementPool, world, new MathUtility(new Random(1)), new EventBus(), new WorldEventSync(world), new FrameEventBuffer<EntityMoved>(), null);
         system.Update(default, 0);
 
         Assert.AreEqual(new Vector3Int(0, 0, 0), transformPool.GetReadonly(0).Position);
@@ -165,13 +178,15 @@ public sealed class MovementSystemTests
         EntityMoved? received = null;
         var eventBus = new EventBus();
         eventBus.Subscribe<EntityMoved>(e => received = e);
+        var movedEntities = new FrameEventBuffer<EntityMoved>();
 
-        var system = new MovementSystem(transformPool, actionLockPool, movementPool, world, new MathUtility(), eventBus);
+        var system = new MovementSystem(transformPool, actionLockPool, movementPool, world, new MathUtility(), eventBus, new WorldEventSync(world), movedEntities, new FakePlayerQuery(0));
         system.Update(default, 0);
 
         Assert.AreEqual(startPosition, transformPool.GetReadonly(0).Position, "Mover must stay put -- the target was already taken.");
         Assert.IsNull(movementPool.GetReadonly(0).NextMapPosition, "The stale target must be cleared so a fresh one can be queued.");
         Assert.IsNull(received, "No move actually happened, so no EntityMoved should publish.");
+        Assert.IsEmpty(movedEntities.Items, "No move actually happened, so nothing should be recorded either.");
         Assert.AreEqual(0, world.GetEntityIdAt(startPosition), "The mover's own cell must still correctly list the mover.");
         Assert.AreEqual(1, world.GetEntityIdAt(contestedPosition), "The contested cell must still correctly list only the blocker.");
     }
@@ -190,7 +205,7 @@ public sealed class MovementSystemTests
         actionLockPool.Add(0, new ActionLockComponent(totalLockFrames: 0, lockFramesRemaining: 0));
         movementPool.Add(0, new MovementComponent(MovementMode.Random, 10, null, null) { FramesToWait = 40 });
 
-        var system = new MovementSystem(transformPool, actionLockPool, movementPool, world, new MathUtility(), new EventBus());
+        var system = new MovementSystem(transformPool, actionLockPool, movementPool, world, new MathUtility(), new EventBus(), new WorldEventSync(world), new FrameEventBuffer<EntityMoved>(), null);
         system.Update(default, 0);
 
         Assert.AreEqual(25, movementPool.GetReadonly(0).FramesToWait);
@@ -212,7 +227,7 @@ public sealed class MovementSystemTests
         actionLockPool.Add(0, new ActionLockComponent(totalLockFrames: 0, lockFramesRemaining: 0));
         movementPool.Add(0, new MovementComponent(MovementMode.Random, 10, null, null) { FramesToWait = 6 });
 
-        var system = new MovementSystem(transformPool, actionLockPool, movementPool, world, new MathUtility(), new EventBus());
+        var system = new MovementSystem(transformPool, actionLockPool, movementPool, world, new MathUtility(), new EventBus(), new WorldEventSync(world), new FrameEventBuffer<EntityMoved>(), null);
         system.Update(default, 0);
 
         Assert.AreEqual(0, movementPool.GetReadonly(0).FramesToWait);
@@ -220,11 +235,43 @@ public sealed class MovementSystemTests
 
     /// <summary>
     /// Confirms MovementSystem runs against a bare IMapQuery fake with no World anywhere in
-    /// the object graph, and that a confirmed move publishes EntityMoved rather than calling
-    /// into World directly -- the two halves of decision #2's read/write split.
+    /// the object graph, and that a confirmed move reaches its consumers via IEntityMoveSync
+    /// (mandatory map sync) and the shared FrameEventBuffer (optional/bulk consumers) rather
+    /// than calling into World directly -- the two halves of decision #2's read/write split,
+    /// updated for the buffer-based redesign that replaced the old single EventBus.Publish
+    /// (see MovementSystem's own doc comment for why).
     /// </summary>
     [TestMethod]
-    public void Update_SuccessfulMove_PublishesEntityMovedWithOldAndNewPosition()
+    public void Update_SuccessfulMove_SyncsMoveAndRecordsItWithoutTouchingWorld()
+    {
+        var transformPool = CreateTransformPool();
+        var actionLockPool = CreateActionLockPool();
+        var movementPool = CreateMovementPool();
+        var mapQuery = new FakeMapQuery(new Vector3Int(5, 5, 1));
+        var entityMoveSync = new RecordingEntityMoveSync();
+        var movedEntities = new FrameEventBuffer<EntityMoved>();
+
+        var startPosition = new Vector3Int(2, 2, 0);
+        transformPool.Add(0, new TransformComponent(startPosition, new Vector2Byte(1, 1)));
+        actionLockPool.Add(0, new ActionLockComponent(totalLockFrames: 0, lockFramesRemaining: 0));
+        movementPool.Add(0, new MovementComponent(MovementMode.Random, 10, null, null));
+
+        var system = new MovementSystem(transformPool, actionLockPool, movementPool, mapQuery, new MathUtility(new Random(1)), new EventBus(), entityMoveSync, movedEntities, null);
+        system.Update(default, 0);
+
+        Assert.IsNotNull(entityMoveSync.LastSynced);
+        Assert.AreEqual(0, entityMoveSync.LastSynced!.Value.EntityId);
+        Assert.AreEqual(startPosition, entityMoveSync.LastSynced.Value.OldPosition);
+        Assert.AreEqual(transformPool.GetReadonly(0).Position, entityMoveSync.LastSynced.Value.NewPosition);
+        Assert.AreNotEqual(startPosition, entityMoveSync.LastSynced.Value.NewPosition);
+
+        Assert.HasCount(1, movedEntities.Items);
+        Assert.AreEqual(entityMoveSync.LastSynced.Value, movedEntities.Items[0]);
+    }
+
+    /// <summary>Regression test for the redesign's dual dispatch: EventBus.Publish&lt;EntityMoved&gt; is now reserved for the player's own move (a handful/sec) instead of firing for the whole population, since PlayerActivityLog subscribes to it directly and expects nothing else on the bus.</summary>
+    [TestMethod]
+    public void Update_PlayerControlledMoversMove_AlsoPublishesEntityMovedForThatEntityOnly()
     {
         var transformPool = CreateTransformPool();
         var actionLockPool = CreateActionLockPool();
@@ -240,14 +287,38 @@ public sealed class MovementSystemTests
         EntityMoved? received = null;
         eventBus.Subscribe<EntityMoved>(e => received = e);
 
-        var system = new MovementSystem(transformPool, actionLockPool, movementPool, mapQuery, new MathUtility(new Random(1)), eventBus);
+        var system = new MovementSystem(transformPool, actionLockPool, movementPool, mapQuery, new MathUtility(new Random(1)), eventBus, new RecordingEntityMoveSync(), new FrameEventBuffer<EntityMoved>(), new FakePlayerQuery(0));
         system.Update(default, 0);
 
-        Assert.IsNotNull(received);
-        Assert.AreEqual(0, received.Value.EntityId);
-        Assert.AreEqual(startPosition, received.Value.OldPosition);
-        Assert.AreEqual(transformPool.GetReadonly(0).Position, received.Value.NewPosition);
-        Assert.AreNotEqual(startPosition, received.Value.NewPosition);
+        Assert.IsNotNull(received, "The mover IS the configured player, so its move must still publish via EventBus.");
+        Assert.AreEqual(0, received!.Value.EntityId);
+    }
+
+    /// <summary>Complements the test above: a non-player mover's move must NOT publish via EventBus, even though it's still synced/recorded via the other two channels -- otherwise every wandering NPC would still pay EventBus dispatch cost, the exact hotspot this redesign removed.</summary>
+    [TestMethod]
+    public void Update_NonPlayerMoverMoves_DoesNotPublishEntityMovedViaEventBus()
+    {
+        var transformPool = CreateTransformPool();
+        var actionLockPool = CreateActionLockPool();
+        var movementPool = CreateMovementPool();
+        var mapQuery = new FakeMapQuery(new Vector3Int(5, 5, 1));
+        var eventBus = new EventBus();
+
+        var startPosition = new Vector3Int(2, 2, 0);
+        transformPool.Add(0, new TransformComponent(startPosition, new Vector2Byte(1, 1)));
+        actionLockPool.Add(0, new ActionLockComponent(totalLockFrames: 0, lockFramesRemaining: 0));
+        movementPool.Add(0, new MovementComponent(MovementMode.Random, 10, null, null));
+
+        var published = false;
+        eventBus.Subscribe<EntityMoved>(_ => published = true);
+        var movedEntities = new FrameEventBuffer<EntityMoved>();
+
+        // playerEntityId (99) never matches the mover (0) -- also covers a null IPlayerQuery, matching most tests above.
+        var system = new MovementSystem(transformPool, actionLockPool, movementPool, mapQuery, new MathUtility(new Random(1)), eventBus, new RecordingEntityMoveSync(), movedEntities, new FakePlayerQuery(99));
+        system.Update(default, 0);
+
+        Assert.IsFalse(published);
+        Assert.HasCount(1, movedEntities.Items, "The move must still reach the buffer-based consumers even though it's not the player's.");
     }
 
     /// <summary>
@@ -287,7 +358,7 @@ public sealed class MovementSystemTests
         transformPool.Add(2, westBlockerTransform);
         world.PlaceEntityOnMap(2, new Vector3Int(1, 0, 0), ref westBlockerTransform);
 
-        var system = new MovementSystem(transformPool, actionLockPool, movementPool, world, new MathUtility(new Random(1)), new EventBus());
+        var system = new MovementSystem(transformPool, actionLockPool, movementPool, world, new MathUtility(new Random(1)), new EventBus(), new WorldEventSync(world), new FrameEventBuffer<EntityMoved>(), null);
         system.Update(default, 0);
 
         Assert.AreEqual(5, actionLockPool.GetReadonly(0).LockFramesRemaining);
@@ -341,7 +412,7 @@ public sealed class MovementSystemTests
         Assert.IsNull(movementPool.GetReadonly(secondEntityId).NextMapPosition,
             "The second entity's own validation must reject a move into the wall, independent of the first entity's move.");
 
-        var system = new MovementSystem(transformPool, actionLockPool, movementPool, world, new MathUtility(), new EventBus());
+        var system = new MovementSystem(transformPool, actionLockPool, movementPool, world, new MathUtility(), new EventBus(), new WorldEventSync(world), new FrameEventBuffer<EntityMoved>(), null);
         system.Update(default, 0);
 
         Assert.AreEqual(new Vector3Int(3, 2, 0), transformPool.GetReadonly(firstEntityId).Position, "First entity moves to its own valid target.");

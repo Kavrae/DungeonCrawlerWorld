@@ -9,9 +9,12 @@ using Game.World;
 namespace Game.Modules.ContactDamage.Systems;
 
 /// <summary>
-/// Detects contact via EntityMoved (constructor subscription, same pattern WorldEventSync
-/// uses) and ticks ongoing exposure via Update, combined in one class since both operate on
-/// the same ContactDamageExposureComponent pool. StripeCount is deliberately 1, not the 10
+/// Detects contact by draining MovementSystem's shared FrameEventBuffer&lt;EntityMoved&gt; at
+/// the start of each Update (replacing an EntityMoved EventBus subscription -- a gameplay-demo
+/// profiling investigation found that pattern, multiplied across every subscriber and the full
+/// moving population, a measured hotspot; see FrameEventBuffer's own doc comment) and ticks
+/// ongoing exposure via the same Update, combined in one class since both operate on the same
+/// ContactDamageExposureComponent pool. StripeCount is deliberately 1, not the 10
 /// HealthRegenSystem/ActionLockSystem use -- see BurningSystem's own doc comment for why:
 /// the population (entities currently standing on a hazard tile) is expected to stay small,
 /// and striping would stretch "every N frames" into "every N * StripeCount real frames." At
@@ -21,9 +24,11 @@ namespace Game.Modules.ContactDamage.Systems;
 /// The decrement-or-fire loop itself is Engine.ECS.Systems.CountdownTicker.Tick, shared with
 /// BurningSystem/PoisonSystem/StatusEffectAuraSystem.
 ///
-/// Per the literal spec, every EntityMoved landing on a hazard tile deals the immediate hit
+/// Per the literal spec, every buffered move landing on a hazard tile deals the immediate hit
 /// and resets the countdown -- including hazard-tile-to-hazard-tile moves, not just a fresh
-/// entry after being off one.
+/// entry after being off one. EventBus is still a constructor dependency -- HealthDamage.Apply
+/// publishes EntityDamaged through it, an unrelated, low-frequency event this redesign doesn't
+/// touch.
 /// </summary>
 public sealed class ContactDamageSystem : ISystem
 {
@@ -35,11 +40,19 @@ public sealed class ContactDamageSystem : ISystem
     private readonly EventBus _eventBus;
     private readonly IMapQuery _mapQuery;
     private readonly IPlayerQuery? _playerQuery;
+    private readonly FrameEventBuffer<EntityMoved> _movedEntities;
 
     // CountdownTicker.Tick's contract needs a reused pendingRemovals list regardless -- this
     // system just never actually populates it, since Update here never removes exposure
     // (only OnEntityMoved does, on stepping off a hazard).
     private readonly List<int> _pendingRemovals = [];
+
+    // Cached once instead of passing the Tick method group at the CountdownTicker.Tick call
+    // site every Update -- unlike a static method group, an instance method group conversion
+    // allocates a fresh delegate on every evaluation (the compiler can't cache a delegate that
+    // captures `this`), so passing `Tick` directly there would allocate one every frame for no
+    // reason: `this` never actually changes between calls.
+    private readonly Func<int, ContactDamageExposureComponent, bool> _tick;
 
     public ContactDamageSystem(
         PackedComponentPool<DamageOnContactComponent> hazards,
@@ -47,7 +60,8 @@ public sealed class ContactDamageSystem : ISystem
         PackedComponentPool<HealthComponent> health,
         EventBus eventBus,
         IMapQuery mapQuery,
-        IPlayerQuery? playerQuery)
+        IPlayerQuery? playerQuery,
+        FrameEventBuffer<EntityMoved> movedEntities)
     {
         _hazards = hazards;
         _exposures = exposures;
@@ -55,8 +69,8 @@ public sealed class ContactDamageSystem : ISystem
         _eventBus = eventBus;
         _mapQuery = mapQuery;
         _playerQuery = playerQuery;
-
-        eventBus.Subscribe<EntityMoved>(OnEntityMoved);
+        _movedEntities = movedEntities;
+        _tick = Tick;
     }
 
     private void OnEntityMoved(EntityMoved moved)
@@ -85,8 +99,15 @@ public sealed class ContactDamageSystem : ISystem
         }
     }
 
-    public void Update(EngineTime time, byte stripeIndex) =>
-        CountdownTicker.Tick(_exposures, _exposures.EntityIds, _pendingRemovals, Tick);
+    public void Update(EngineTime time, byte stripeIndex)
+    {
+        foreach (var moved in _movedEntities.Items)
+        {
+            OnEntityMoved(moved);
+        }
+
+        CountdownTicker.Tick(_exposures, _exposures.EntityIds, _pendingRemovals, _tick);
+    }
 
     /// <summary>Always returns false (never removes here -- see this class's own doc comment for why); see CountdownTicker.Tick's own doc comment for the contract.</summary>
     private bool Tick(int entityId, ContactDamageExposureComponent exposure)

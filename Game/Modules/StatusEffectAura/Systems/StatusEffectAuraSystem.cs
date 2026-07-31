@@ -1,7 +1,6 @@
 using Engine.ECS.Components;
 using Engine.ECS.Components.Stores;
 using Engine.ECS.Systems;
-using Engine.Events;
 using Engine.Math;
 using Game.Modules.Core.Components;
 using Game.Modules.StatusEffectAura.Components;
@@ -11,14 +10,26 @@ using Game.World;
 namespace Game.Modules.StatusEffectAura.Systems;
 
 /// <summary>
-/// Detects aura range via EntityMoved (constructor subscription, same pattern
-/// WorldEventSync/ContactDamageSystem use) and ticks ongoing exposure via Update, combined in
-/// one class since both operate on the same StatusEffectAuraExposureComponent pool.
-/// StripeCount is deliberately 1 -- see ContactDamageSystem/BurningSystem's own doc comments
-/// for why: the population (entities currently in range of an aura) is expected to stay
-/// small, and striping would stretch "every N frames" into "every N * StripeCount real
-/// frames." The decrement-or-fire loop itself is Engine.ECS.Systems.CountdownTicker.Tick,
-/// shared with BurningSystem/PoisonSystem/ContactDamageSystem.
+/// Detects aura range by draining MovementSystem's shared FrameEventBuffer&lt;EntityMoved&gt;
+/// at the start of each Update (replacing an EntityMoved EventBus subscription -- a
+/// gameplay-demo profiling investigation found that pattern, multiplied across every
+/// subscriber and the full moving population, a measured hotspot; see FrameEventBuffer's own
+/// doc comment) and ticks ongoing exposure via the same Update, combined in one class since
+/// both operate on the same StatusEffectAuraExposureComponent pool. Striped like MovementSystem
+/// (see EntityStripeSet), not StripeCount 1 -- lava covers 10% of ground terrain (see the Lava
+/// blueprint) with an aura radius wide enough to blanket most of a wandering population, so the
+/// exposed population isn't the "stays small" case ContactDamageSystem's own doc comment
+/// describes; profiling a gameplay demo showed this system costing as much wall-clock time as
+/// BurningSystem, both un-striped, combined exceeding MovementSystem's own (already-striped)
+/// cost. CountdownTicker.Tick is passed StripeCount as framesPerVisit so each entity's exposure
+/// still decrements by the correct number of real frames between visits (see
+/// CountdownTicker.Tick's own doc comment for why this matters), keeping
+/// AuraEffects.TickIntervalFrames accurate in real time despite each entity only being visited
+/// once every StripeCount frames -- note the buffer drain itself is NOT stripe-gated (every
+/// buffered move is processed every Update call, regardless of stripeIndex); only the ongoing
+/// CountdownTicker.Tick pass over the existing exposure population is. The decrement-or-fire
+/// loop itself is Engine.ECS.Systems.CountdownTicker.Tick, shared with BurningSystem/
+/// PoisonSystem/ContactDamageSystem.
 ///
 /// All range checks go through a single lazily-built AuraGrid (O(1) per lookup, keyed by both
 /// cell and StatusEffectType internally -- see its own doc comment for why one shared sparse
@@ -55,7 +66,9 @@ namespace Game.Modules.StatusEffectAura.Systems;
 /// </summary>
 public sealed class StatusEffectAuraSystem : ISystem
 {
-    public byte StripeCount => 1;
+    private const byte StripeCountValue = 15;
+
+    public byte StripeCount => StripeCountValue;
 
     private readonly ComponentManager _componentManager;
     private readonly PackedComponentPool<StatusEffectAuraExposureComponent> _exposures;
@@ -63,6 +76,8 @@ public sealed class StatusEffectAuraSystem : ISystem
     private readonly DirectComponentPool<TransformComponent> _transforms;
     private readonly StatusEffectAuraApplierRegistry _applierRegistry;
     private readonly IMapQuery _mapQuery;
+    private readonly FrameEventBuffer<EntityMoved> _movedEntities;
+    private readonly EntityStripeSet _stripeSet;
 
     private readonly List<int> _pendingExposureRemovals = [];
 
@@ -72,14 +87,19 @@ public sealed class StatusEffectAuraSystem : ISystem
 
     private int _maxScanRadius;
 
+    // Cached once instead of passing the Tick method group at the CountdownTicker.Tick call
+    // site every Update -- see ContactDamageSystem's own field for why this matters (an
+    // instance method group conversion allocates a fresh delegate every evaluation).
+    private readonly Func<int, StatusEffectAuraExposureComponent, bool> _tick;
+
     public StatusEffectAuraSystem(
         ComponentManager componentManager,
         PackedComponentPool<StatusEffectAuraExposureComponent> exposures,
         PackedComponentPool<StatusEffectAuraSourceComponent> sources,
         DirectComponentPool<TransformComponent> transforms,
         IMapQuery mapQuery,
-        EventBus eventBus,
-        StatusEffectAuraApplierRegistry applierRegistry)
+        StatusEffectAuraApplierRegistry applierRegistry,
+        FrameEventBuffer<EntityMoved> movedEntities)
     {
         _componentManager = componentManager;
         _exposures = exposures;
@@ -87,10 +107,14 @@ public sealed class StatusEffectAuraSystem : ISystem
         _transforms = transforms;
         _mapQuery = mapQuery;
         _applierRegistry = applierRegistry;
+        _movedEntities = movedEntities;
 
         _auraGrid = new AuraGrid(mapQuery.MapSize);
+        _tick = Tick;
 
-        eventBus.Subscribe<EntityMoved>(OnEntityMoved);
+        _stripeSet = new EntityStripeSet(StripeCount, exposures.EntityIds);
+        exposures.EntityAdded += _stripeSet.OnEntityAdded;
+        exposures.EntityRemoved += _stripeSet.OnEntityRemoved;
     }
 
     /// <summary>
@@ -153,8 +177,24 @@ public sealed class StatusEffectAuraSystem : ISystem
 
     public void Update(EngineTime time, byte stripeIndex)
     {
+        // Deliberately NOT EnsureGrid() up front: OnEntityMoved's own internal EnsureGrid()
+        // call captures gridAlreadyBuilt BEFORE building the grid, to tell "the grid didn't
+        // exist yet, so building it just now already accounts for wherever this source
+        // currently stands" apart from "the grid already existed with a stale position, so
+        // this move needs an explicit remove-old/add-new". Calling EnsureGrid() here first
+        // would flip _gridBuilt to true before the loop below ever runs, making every
+        // buffered move -- even a source's very first one -- take the second, "already
+        // built" branch and double-count its own contribution (confirmed by a failing test).
+        foreach (var moved in _movedEntities.Items)
+        {
+            OnEntityMoved(moved);
+        }
+
+        // Still needed here, idempotently, in case this frame had zero buffered moves (e.g.
+        // before the very first move of the whole game) -- CountdownTicker.Tick below needs
+        // the grid to exist.
         EnsureGrid();
-        CountdownTicker.Tick(_exposures, _exposures.EntityIds, _pendingExposureRemovals, Tick);
+        CountdownTicker.Tick(_exposures, _stripeSet.GetBucket(stripeIndex), _pendingExposureRemovals, _tick, StripeCountValue);
     }
 
     /// <summary>Returns whether the exposure should be removed entirely (no longer in range of anything, or the entity's own position can't be found) -- see CountdownTicker.Tick's own doc comment for the contract.</summary>

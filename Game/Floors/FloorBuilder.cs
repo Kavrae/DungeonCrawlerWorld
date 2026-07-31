@@ -1,4 +1,5 @@
 using Engine.ECS.Context;
+using Engine.ECS.Systems;
 using Engine.Math;
 using Game.Blueprints;
 using Game.Modules.Core.Components;
@@ -25,12 +26,8 @@ public static class FloorBuilder
 
     public static Game.World.Map CreateMap(int floorNumber) => new(TestMapSize);
 
-    public static void PopulateFloor(Game.World.World world, EcsContext ecsContext, MathUtility mathUtility)
-    {
+    public static void PopulateFloor(Game.World.World world, EcsContext ecsContext, MathUtility mathUtility) =>
         new TestMapBuilder(ecsContext.EntityManager, ecsContext.ComponentManager, mathUtility).Populate(world);
-
-        world.PlayerEntityId = CreatePlayer(world, ecsContext, mathUtility);
-    }
 
     // TEMPORARY test seeding -- exercises Poison until a real in-game source exists. Remove
     // once one does. 10 applications of a 5-tick duration each: since ApplyStack takes the
@@ -39,7 +36,7 @@ public static class FloorBuilder
     private const int TestPoisonStackCount = 10;
     private const int TestPoisonDurationTicks = 5;
 
-    private static int CreatePlayer(Game.World.World world, EcsContext ecsContext, MathUtility mathUtility)
+    public static int CreatePlayer(Game.World.World world, EcsContext ecsContext, MathUtility mathUtility, FrameEventBuffer<EntityMoved> movedEntities)
     {
         var entityId = ecsContext.EntityManager.CreateEntity();
         new PlayerBlueprint(mathUtility).Build(ecsContext.ComponentManager, entityId);
@@ -55,7 +52,11 @@ public static class FloorBuilder
 
         // Spawning counts as a move (see EntityMoved's own doc comment) so hazard/aura
         // detection (ContactDamageSystem, StatusEffectAuraSystem) sees the player immediately
-        // if spawned onto/next to one, rather than only on their first real move.
+        // if spawned onto/next to one, rather than only on their first real move. Recorded into
+        // the shared buffer those systems actually drain now (see FrameEventBuffer's own doc
+        // comment), not published on the bus -- EventBus.Publish is kept alongside it purely so
+        // PlayerActivityLog's existing spawn-time log line is preserved unchanged.
+        movedEntities.Record(new EntityMoved(entityId, spawnPosition, spawnPosition, transform.Size));
         ecsContext.EventBus.Publish(new EntityMoved(entityId, spawnPosition, spawnPosition, transform.Size));
 
         return entityId;

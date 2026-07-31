@@ -4,6 +4,7 @@ using Engine.Math;
 using FontStashSharp;
 using Game.Modules.Abilities;
 using Game.Modules.Abilities.Components;
+using Game.Modules.Core;
 using Game.Modules.Core.Components;
 using Game.Modules.Health.Components;
 using Game.Modules.Movement.Components;
@@ -36,7 +37,7 @@ public sealed class MapWindow : Window
     private readonly MapBackgroundCache _backgroundCache;
     private readonly DirectComponentPool<TransformComponent> _transformPool;
     private readonly DirectComponentPool<GlyphComponent> _glyphPool;
-    private readonly PackedComponentPool<OccupancyComponent> _occupancyPool;
+    private readonly MultiComponentPool<NonBlockingComponent> _nonBlockingPool;
     private readonly PackedComponentPool<HealthComponent> _healthPool;
     private readonly TileRenderer _tileRenderer;
     private readonly GlyphRenderer _glyphRenderer;
@@ -78,7 +79,7 @@ public sealed class MapWindow : Window
         _mapViewState = mapViewState;
         _transformPool = componentManager.GetDirectPool<TransformComponent>();
         _glyphPool = componentManager.GetDirectPool<GlyphComponent>();
-        _occupancyPool = componentManager.GetPackedPool<OccupancyComponent>();
+        _nonBlockingPool = componentManager.GetMultiPool<NonBlockingComponent>();
         _healthPool = componentManager.GetPackedPool<HealthComponent>();
         _tileRenderer = tileRenderer;
         _glyphRenderer = glyphRenderer;
@@ -262,7 +263,6 @@ public sealed class MapWindow : Window
     private void DrawGlyphs(SpriteBatch spriteBatch, Texture2D unitRectangle)
     {
         var currentMapLayer = _mapViewState.CurrentMapLayer;
-        var occupantsByPosition = BuildOccupantsByPosition();
         var terrainLayer = Map.TerrainLayerFor(currentMapLayer);
 
         for (var columnIndex = 0; columnIndex < _camera.TileColumns; columnIndex++)
@@ -278,45 +278,15 @@ public sealed class MapWindow : Window
                 }
 
                 var tileOrigin = TileOrigin(columnIndex, rowIndex);
-                occupantsByPosition.TryGetValue(new Vector3Int(mapNodeX, mapNodeY, currentMapLayer), out var occupantsHere);
+                var occupantsHere = _world.GetNonBlockingEntityIdsAt(new Vector3Int(mapNodeX, mapNodeY, currentMapLayer));
 
                 DrawTerrainGlyph(spriteBatch, terrainLayer, mapNodeX, mapNodeY, tileOrigin);
                 DrawTinyGrid(spriteBatch, occupantsHere, tileOrigin);
                 DrawPrimaryOccupant(spriteBatch, unitRectangle, currentMapLayer, mapNodeX, mapNodeY, columnIndex, rowIndex);
                 DrawPhasingGlyphs(spriteBatch, occupantsHere, tileOrigin);
-                DrawLayerBadges(spriteBatch, occupantsByPosition, currentMapLayer, mapNodeX, mapNodeY, tileOrigin);
+                DrawLayerBadges(spriteBatch, currentMapLayer, mapNodeX, mapNodeY, tileOrigin);
             }
         }
-    }
-
-    /// <summary>
-    /// Buckets every Tiny/Phasing entity by position, once per frame rather than per tile --
-    /// deliberately a fresh scan every draw rather than an index kept in sync with movement,
-    /// since this population (ghosts/insects) is expected to be small and this view is
-    /// temporary pending a full UI rework.
-    /// </summary>
-    private Dictionary<Vector3Int, List<int>> BuildOccupantsByPosition()
-    {
-        var occupantsByPosition = new Dictionary<Vector3Int, List<int>>();
-
-        foreach (var entityId in _occupancyPool.EntityIds)
-        {
-            if (!_transformPool.TryGetReadonly(entityId, out var transformComponent))
-            {
-                continue;
-            }
-
-            var position = transformComponent.Position;
-            if (!occupantsByPosition.TryGetValue(position, out var occupants))
-            {
-                occupants = [];
-                occupantsByPosition[position] = occupants;
-            }
-
-            occupants.Add(entityId);
-        }
-
-        return occupantsByPosition;
     }
 
     private void DrawTerrainGlyph(SpriteBatch spriteBatch, TerrainLayer? terrainLayer, int mapNodeX, int mapNodeY, Vector2 tileOrigin)
@@ -337,13 +307,8 @@ public sealed class MapWindow : Window
     }
 
     /// <summary>Up to 9 Tiny entities in a 3x3 sub-grid, each &lt;= 1/3 tile size; extras beyond 9 are simply not drawn.</summary>
-    private void DrawTinyGrid(SpriteBatch spriteBatch, List<int>? occupants, Vector2 tileOrigin)
+    private void DrawTinyGrid(SpriteBatch spriteBatch, IReadOnlyList<int> occupants, Vector2 tileOrigin)
     {
-        if (occupants is null)
-        {
-            return;
-        }
-
         var subCellSize = new Point(_camera.CurrentTileSize.X / TinyGridDimension, _camera.CurrentTileSize.Y / TinyGridDimension);
         var drawnCount = 0;
 
@@ -354,7 +319,7 @@ public sealed class MapWindow : Window
                 break;
             }
 
-            if (!_occupancyPool.GetReadonly(entityId).IsTiny || !_glyphPool.TryGetReadonly(entityId, out var glyphComponent))
+            if ((NonBlockingQueries.CombinedKind(_nonBlockingPool, entityId) & NonBlockingKind.Tiny) == 0 || !_glyphPool.TryGetReadonly(entityId, out var glyphComponent))
             {
                 continue;
             }
@@ -440,16 +405,11 @@ public sealed class MapWindow : Window
     };
 
     /// <summary>Every Phasing entity here draws at 50% alpha, stacked -- SpriteBatchRenderer already begins with BlendState.AlphaBlend.</summary>
-    private void DrawPhasingGlyphs(SpriteBatch spriteBatch, List<int>? occupants, Vector2 tileOrigin)
+    private void DrawPhasingGlyphs(SpriteBatch spriteBatch, IReadOnlyList<int> occupants, Vector2 tileOrigin)
     {
-        if (occupants is null)
-        {
-            return;
-        }
-
         foreach (var entityId in occupants)
         {
-            if (!_occupancyPool.GetReadonly(entityId).IsPhasing ||
+            if ((NonBlockingQueries.CombinedKind(_nonBlockingPool, entityId) & NonBlockingKind.Phasing) == 0 ||
                 !_glyphPool.TryGetReadonly(entityId, out var glyphComponent) ||
                 !_transformPool.TryGetReadonly(entityId, out var transformComponent))
             {
@@ -468,12 +428,12 @@ public sealed class MapWindow : Window
     /// DrawEntityIcons, this describes the tile's other layers, not the Blocking occupant
     /// drawn on it.
     /// </summary>
-    private void DrawLayerBadges(SpriteBatch spriteBatch, Dictionary<Vector3Int, List<int>> occupantsByPosition, int currentMapLayer, int mapNodeX, int mapNodeY, Vector2 tileOrigin)
+    private void DrawLayerBadges(SpriteBatch spriteBatch, int currentMapLayer, int mapNodeX, int mapNodeY, Vector2 tileOrigin)
     {
         var hasHigherLayer = false;
         for (var layer = currentMapLayer + 1; layer < _tileDepth; layer++)
         {
-            if (IsLayerOccupied(occupantsByPosition, mapNodeX, mapNodeY, layer))
+            if (IsLayerOccupied(mapNodeX, mapNodeY, layer))
             {
                 hasHigherLayer = true;
                 break;
@@ -483,7 +443,7 @@ public sealed class MapWindow : Window
         var hasLowerLayer = false;
         for (var layer = currentMapLayer - 1; layer >= 0; layer--)
         {
-            if (IsLayerOccupied(occupantsByPosition, mapNodeX, mapNodeY, layer))
+            if (IsLayerOccupied(mapNodeX, mapNodeY, layer))
             {
                 hasLowerLayer = true;
                 break;
@@ -503,15 +463,11 @@ public sealed class MapWindow : Window
         }
     }
 
-    /// <summary>"Occupied" counts a Blocking entity in Map's slot exactly the same as a Tiny/Phasing entity tracked only in occupantsByPosition.</summary>
-    private bool IsLayerOccupied(Dictionary<Vector3Int, List<int>> occupantsByPosition, int mapNodeX, int mapNodeY, int layer)
+    /// <summary>"Occupied" counts a Blocking entity in Map's slot exactly the same as a non-Blocking entity found via the position-keyed index.</summary>
+    private bool IsLayerOccupied(int mapNodeX, int mapNodeY, int layer)
     {
-        if (_world.Map.GetEntityId(new Vector3Int(mapNodeX, mapNodeY, layer)) != -1)
-        {
-            return true;
-        }
-
-        return occupantsByPosition.ContainsKey(new Vector3Int(mapNodeX, mapNodeY, layer));
+        var position = new Vector3Int(mapNodeX, mapNodeY, layer);
+        return _world.Map.GetEntityId(position) != -1 || _world.GetNonBlockingEntityIdsAt(position).Count > 0;
     }
 
     public void UpdateZoomLevel(ZoomLevel newZoomLevel)

@@ -156,7 +156,7 @@ public sealed class EntityStripingTests
         var mathUtility = new MathUtility();
 
         var movementModule = new MovementModule();
-        movementModule.Configure(new GameModuleContext(world, mathUtility, new EventBus()));
+        movementModule.Configure(new GameModuleContext(world, mathUtility, new EventBus()) { EntityMoveSync = new WorldEventSync(world) });
 
         IReadOnlyList<IModule> modules =
         [

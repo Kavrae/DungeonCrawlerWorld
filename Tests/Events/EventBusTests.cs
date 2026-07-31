@@ -1,3 +1,4 @@
+using Engine.Diagnostics;
 using Engine.Events;
 
 namespace Tests.Events;
@@ -135,5 +136,39 @@ public sealed class EventBusTests
         bus.DispatchBuffered<BufferedTestEvent>();
 
         CollectionAssert.AreEqual(new[] { 1 }, received);
+    }
+
+    // Profiler-enabled dispatch is a separate code path from the default -- these cover its
+    // functional correctness (still dispatches to the right handlers) rather than its timing
+    // output, the same reason PerformanceCounter/PhaseProfiler themselves have no direct tests:
+    // TopPhases only populates once a real wall-clock second has elapsed, which isn't something
+    // to assert on in a fast unit test.
+
+    [TestMethod]
+    public void Publish_WithProfilerSet_StillInvokesSubscriber()
+    {
+        var bus = new EventBus { Profiler = new PhaseProfiler() };
+        var received = -1;
+        bus.Subscribe<TestEvent>(e => received = e.Value);
+
+        bus.Publish(new TestEvent(42));
+
+        Assert.AreEqual(42, received);
+    }
+
+    [TestMethod]
+    public void Publish_WithProfilerSet_InvokesEveryHandlerExactlyOnce()
+    {
+        var bus = new EventBus { Profiler = new PhaseProfiler() };
+        var firstCount = 0;
+        var secondCount = 0;
+        bus.Subscribe<TestEvent>(_ => firstCount++);
+        bus.Subscribe<TestEvent>(_ => secondCount++);
+
+        bus.Publish(new TestEvent(1));
+        bus.Publish(new TestEvent(1));
+
+        Assert.AreEqual(2, firstCount);
+        Assert.AreEqual(2, secondCount);
     }
 }

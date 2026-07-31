@@ -57,14 +57,16 @@ public static class GameBootstrapper
         var eventBus = new EventBus();
         var failures = new List<ModuleFailure>();
 
+        var entityMoveSync = new WorldEventSync(world);
+
         var loadResult = ModuleLoader.LoadFromDirectory(modsDirectory);
         failures.AddRange(loadResult.Failures);
 
-        var survivingMods = DryRunValidateMods(builtInModules, loadResult.Modules, mapQuery, world, mathUtility, failures);
+        var survivingMods = DryRunValidateMods(builtInModules, loadResult.Modules, mapQuery, world, mathUtility, entityMoveSync, failures);
 
         var modules = ModuleSet.Combine(builtInModules, survivingMods);
 
-        var context = ConfigureGameModules(modules, mapQuery, world, mathUtility, eventBus);
+        var context = ConfigureGameModules(modules, mapQuery, world, mathUtility, eventBus, entityMoveSync);
 
         var ecsContext = Bootstrapper.Build(modules, initialEntityCapacity, initialComponentCapacity, eventBus);
 
@@ -77,11 +79,7 @@ public static class GameBootstrapper
         world.NonBlockingComponents = ecsContext.ComponentManager.GetMultiPool<NonBlockingComponent>();
         world.ForceBlockingComponents = ecsContext.ComponentManager.GetMultiPool<ForceBlockingComponent>();
 
-        // Not held onto -- its EntityMoved subscription (a bound instance-method delegate)
-        // keeps it alive for as long as ecsContext.EventBus is.
-        _ = new WorldEventSync(world, ecsContext.EventBus);
-
-        return new GameBootstrapResult(ecsContext, failures, context.Abilities);
+        return new GameBootstrapResult(ecsContext, failures, context.Abilities, context.MovedEntities);
     }
 
     /// <summary>
@@ -99,6 +97,7 @@ public static class GameBootstrapper
         IMapQuery mapQuery,
         IPlayerQuery playerQuery,
         MathUtility mathUtility,
+        IEntityMoveSync entityMoveSync,
         List<ModuleFailure> failures)
     {
         var survivors = new List<IModule>();
@@ -110,7 +109,7 @@ public static class GameBootstrapper
                 var trialModules = new List<IModule>(builtInModules) { mod };
                 var throwawayEventBus = new EventBus();
 
-                ConfigureGameModules(trialModules, mapQuery, playerQuery, mathUtility, throwawayEventBus);
+                ConfigureGameModules(trialModules, mapQuery, playerQuery, mathUtility, throwawayEventBus, entityMoveSync);
 
                 Bootstrapper.Build(trialModules, initialEntityCapacity: 10, initialComponentCapacity: 10, throwawayEventBus);
 
@@ -125,9 +124,9 @@ public static class GameBootstrapper
         return survivors;
     }
 
-    private static GameModuleContext ConfigureGameModules(IReadOnlyList<IModule> modules, IMapQuery mapQuery, IPlayerQuery playerQuery, MathUtility mathUtility, EventBus eventBus)
+    private static GameModuleContext ConfigureGameModules(IReadOnlyList<IModule> modules, IMapQuery mapQuery, IPlayerQuery playerQuery, MathUtility mathUtility, EventBus eventBus, IEntityMoveSync entityMoveSync)
     {
-        var context = new GameModuleContext(mapQuery, mathUtility, eventBus) { PlayerQuery = playerQuery };
+        var context = new GameModuleContext(mapQuery, mathUtility, eventBus) { PlayerQuery = playerQuery, EntityMoveSync = entityMoveSync };
 
         foreach (var module in modules)
         {

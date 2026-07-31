@@ -41,7 +41,7 @@ public sealed class Ghost(MathUtility mathUtility) : IBlueprint
         componentManager.Merge(entityId, new TransformComponent(
     new Vector3Int(0, 0, (int)MapLayer.Ground), new Vector2Byte(1, 1)));
 
-        componentManager.Merge(entityId, new OccupancyComponent(isTiny: false, isPhasing: true));
+        componentManager.Merge(entityId, new NonBlockingComponent(NonBlockingKind.Phasing));
         componentManager.Merge(entityId, new AbilityInstanceComponent(MeleeModule.DefaultAttackId, damageAmount: DefaultAttackDamage, cooldownFramesRemaining: 0));
     }
 }

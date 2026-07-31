@@ -24,7 +24,7 @@ public sealed class GameModuleIntegrationTests
     private static MovementModule CreateConfiguredMovementModule(Game.World.World world, MathUtility mathUtility)
     {
         var movementModule = new MovementModule();
-        movementModule.Configure(new GameModuleContext(world, mathUtility, new EventBus()));
+        movementModule.Configure(new GameModuleContext(world, mathUtility, new EventBus()) { EntityMoveSync = new WorldEventSync(world) });
         return movementModule;
     }
 

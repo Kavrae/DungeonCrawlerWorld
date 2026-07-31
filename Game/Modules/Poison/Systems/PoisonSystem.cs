@@ -29,6 +29,11 @@ public sealed class PoisonSystem : ISystem
     private readonly IPlayerQuery? _playerQuery;
     private readonly List<int> _pendingTimerRemovals = [];
 
+    // Cached once instead of passing the Tick method group at the CountdownTicker.Tick call
+    // site every Update -- see ContactDamageSystem's own field for why this matters (an
+    // instance method group conversion allocates a fresh delegate every evaluation).
+    private readonly Func<int, PoisonTimerComponent, bool> _tick;
+
     public PoisonSystem(
         PackedComponentPool<PoisonTimerComponent> timers,
         MultiComponentPool<StatusEffectStack> stacks,
@@ -41,10 +46,11 @@ public sealed class PoisonSystem : ISystem
         _health = health;
         _eventBus = eventBus;
         _playerQuery = playerQuery;
+        _tick = Tick;
     }
 
     public void Update(EngineTime time, byte stripeIndex) =>
-        CountdownTicker.Tick(_timers, _timers.EntityIds, _pendingTimerRemovals, Tick);
+        CountdownTicker.Tick(_timers, _timers.EntityIds, _pendingTimerRemovals, _tick);
 
     /// <summary>Returns whether the timer should be removed entirely (duration expired) -- see CountdownTicker.Tick's own doc comment for the contract. Drains every Poison stack itself before reporting removal, since that's a separate pool CountdownTicker knows nothing about (contrast BurningSystem, which only ever removes a single stack per tick, so it doesn't need this).</summary>
     private bool Tick(int entityId, PoisonTimerComponent timer)

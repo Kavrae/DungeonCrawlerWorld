@@ -44,6 +44,15 @@ public interface IMapQuery
     int GetEntityIdAt(Vector3Int position);
 
     /// <summary>
+    /// Every non-Blocking entity occupying position -- does NOT include the (at most one)
+    /// Blocking entity GetEntityIdAt already answers for the same position; a caller that needs
+    /// everyone at a tile combines both (see AbilityEffectResolver.Apply). Default-implemented
+    /// as empty so a fake IMapQuery with no non-Blocking entities of its own doesn't need to
+    /// override this -- World overrides it to delegate to Map's own non-Blocking index.
+    /// </summary>
+    IReadOnlyList<int> GetNonBlockingEntityIdsAt(Vector3Int position) => [];
+
+    /// <summary>
     /// Whether entityId currently participates in exclusive map occupancy -- not a default
     /// method like the overload above, since it needs pool state each implementer holds
     /// differently (World derives it from NonBlockingComponent/ForceBlockingComponent).

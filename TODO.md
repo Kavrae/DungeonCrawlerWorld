@@ -242,16 +242,6 @@ Scrolling itself works (`Window.ScrollBy`/`MaxScrollOffset`, mouse-wheel-driven 
 
 Affected: `Presentation/UI/Window.cs`, `Presentation/UI/TextWindow.cs`.
 
-#### Occupancy rendering/selection scans assume a small Tiny/Phasing population
-
-`MapWindow.BuildOccupantsByPosition` (rebuilt fresh every single frame) and `SelectionWindowContent.RecomputeSelectedEntityIds` (also every frame, via `Update`) both find Tiny/Phasing entities by doing a full linear scan of the `OccupancyComponent` pool and reading each one's `TransformComponent.Position` -- there's no position-keyed index for them, because `Map`'s own occupancy array deliberately never records non-Blocking entities (see `World.IsBlocking`).
-
-That design assumed ghosts/insects are always a small population relative to the map, cheap enough to rescan wholesale every frame. A randomly generated level that happens to be populated primarily by Tiny/Phasing entity types breaks that assumption -- at that point these become O(total occupant count) *per frame* scans instead of the intended "small enough not to matter" cost, on both the render path and the (also per-frame) selection-inspector path.
-
-When this becomes a real bottleneck: replace the per-frame full-pool rescan with an actual position-keyed index for non-Blocking entities, kept incrementally in sync with placement/movement/removal the same way `Map`'s own creature-occupancy array is -- or at minimum, only rebuild `MapWindow`'s dictionary when the Occupancy pool or relevant transforms have actually changed since the last frame, rather than unconditionally every frame.
-
-Affected: `Presentation/UI/MapWindow.cs` (`BuildOccupantsByPosition`), `Presentation/UI/Content/SelectionWindowContent.cs` (`RecomputeSelectedEntityIds`).
-
 #### Review MapWindow for properties that belong on MapViewState instead
 
 MapWindow has accumulated a growing set of its own instance fields (camera/zoom state, hotkey-arming bookkeeping, hover-tracking buffers) alongside `MapViewState`, which already holds the shared state other windows/content need to read (`SelectedMapNodePosition`/`CurrentMapLayer`/`ArmedAbilityId`/`ArmedSlot`/`TargetableTiles`/`HoveredTile`). Worth a pass to check whether any of MapWindow's own private fields are actually shared/inspectable state that belongs on `MapViewState` -- the established convention for state another window/content might need to read -- rather than staying private to MapWindow, particularly as more Presentation work (Hotbar UI, activation flow) lands on top and may need some of that same state.

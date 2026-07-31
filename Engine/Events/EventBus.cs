@@ -1,3 +1,6 @@
+using System.Diagnostics;
+using Engine.Diagnostics;
+
 namespace Engine.Events;
 
 /// <summary>
@@ -12,6 +15,27 @@ public sealed class EventBus
 {
     private readonly Dictionary<Type, Delegate> _subscribers = [];
     private readonly Dictionary<Type, object> _bufferedQueues = [];
+
+    /// <summary>
+    /// Cached "EventBus.Publish&lt;TypeName&gt;" phase-name string per event type, built once on
+    /// first profiled Publish rather than re-interpolated every call -- unlike the per-handler
+    /// breakdown this once had (reverted: on a hyper-frequent event like EntityMoved, splitting
+    /// one timed region into several multiplied Stopwatch/PhaseProfiler.Record overhead enough
+    /// to become a measurable fraction of the reported cost itself), this cache only depends on
+    /// T, not on the current handler set, so Subscribe/Unsubscribe don't need to invalidate it.
+    /// </summary>
+    private readonly Dictionary<Type, string> _aggregatePhaseNames = [];
+
+    /// <summary>
+    /// Opt-in dispatch-cost tracking, keyed by "EventBus.Publish&lt;TypeName&gt;" -- see
+    /// PhaseProfiler's own doc comment. Immediate (non-buffered) dispatch runs subscribers
+    /// synchronously in-line with whatever called Publish, so a system that publishes mid-
+    /// Update (e.g. MovementSystem publishing EntityMoved) has every subscriber's cost nested
+    /// inside that system's own SystemManager.Profiler timing -- this records dispatch cost
+    /// separately, so the two can be told apart when tracking down a gameplay demo's actual
+    /// frame cost. Null (the default) skips the Stopwatch calls entirely.
+    /// </summary>
+    public PhaseProfiler? Profiler { get; set; }
 
     public void Subscribe<T>(Action<T> handler)
     {
@@ -55,7 +79,24 @@ public sealed class EventBus
             return;
         }
 
-        if (_subscribers.TryGetValue(typeof(T), out var existing))
+        if (!_subscribers.TryGetValue(typeof(T), out var existing))
+        {
+            return;
+        }
+
+        if (Profiler is { } profiler)
+        {
+            if (!_aggregatePhaseNames.TryGetValue(typeof(T), out var phaseName))
+            {
+                phaseName = $"EventBus.Publish<{typeof(T).Name}>";
+                _aggregatePhaseNames[typeof(T)] = phaseName;
+            }
+
+            var start = Stopwatch.GetTimestamp();
+            ((Action<T>)existing).Invoke(eventData);
+            profiler.Record(phaseName, Stopwatch.GetElapsedTime(start));
+        }
+        else
         {
             ((Action<T>)existing).Invoke(eventData);
         }

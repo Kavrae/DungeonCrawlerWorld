@@ -56,7 +56,7 @@ public sealed class MapWindowTests
         componentManager.RegisterDirectPool<TransformComponent>(static (ref existing, incoming) => existing = incoming);
         componentManager.RegisterDirectPool<GlyphComponent>(static (ref existing, incoming) => existing = incoming);
         componentManager.RegisterDirectPool<BackgroundComponent>(static (ref existing, incoming) => existing = incoming);
-        componentManager.RegisterPackedPool<OccupancyComponent>(static (ref existing, incoming) => existing = incoming);
+        componentManager.RegisterMultiPool<NonBlockingComponent>();
         componentManager.RegisterPackedPool<MovementComponent>(static (ref existing, incoming) => existing = incoming);
         componentManager.RegisterPackedPool<HealthComponent>(static (ref existing, incoming) => existing = incoming);
         componentManager.RegisterPackedPool<StatusEffectAuraSourceComponent>(static (ref existing, incoming) => existing = incoming);

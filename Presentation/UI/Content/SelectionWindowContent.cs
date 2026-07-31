@@ -30,11 +30,9 @@ public sealed class SelectionWindowContent(
     private const float UnboundedChildHeight = 10000f;
 
     // Resolved once and reused rather than re-resolved via ComponentManager's dictionary
-    // lookup on every call -- RecomputeSelectedEntityIds runs every frame (see Update), so
-    // occupancyPool/transformPool were otherwise being looked up 60 times a second for no
-    // reason. Matches the pattern MapWindow already uses for its own pool references.
-    private readonly PackedComponentPool<OccupancyComponent> _occupancyPool = componentManager.GetPackedPool<OccupancyComponent>();
-    private readonly DirectComponentPool<TransformComponent> _transformPool = componentManager.GetDirectPool<TransformComponent>();
+    // lookup on every call -- CreateDebugWindowsForEntity/RefreshDebugWindowsForEntity run
+    // every frame a selection is visible, so this was otherwise being looked up 60 times a
+    // second for no reason. Matches the pattern MapWindow already uses for its own pool references.
     private readonly DirectComponentPool<DisplayTextComponent> _displayTextPool = componentManager.GetDirectPool<DisplayTextComponent>();
 
     private readonly Dictionary<int, List<TextWindow>> _entityDebugWindows = [];
@@ -173,21 +171,12 @@ public sealed class SelectionWindowContent(
         }
 
         // Tiny/Phasing entities never occupy Map's Blocking slot (see World.IsBlocking), so
-        // the checks above alone would silently drop them from the debug panel -- cross-check
-        // the (small, sparse) Occupancy pool directly against the selected XY, filtered to
-        // the current layer the same way the Blocking check above is.
-        foreach (var entityId in _occupancyPool.EntityIds)
+        // the check above alone would silently drop them from the debug panel -- the
+        // position-keyed non-Blocking index (World.GetNonBlockingEntityIdsAt) answers exactly
+        // that in O(entities actually here) instead of a full-population scan.
+        foreach (var entityId in world.GetNonBlockingEntityIdsAt(new Engine.Math.Vector3Int(selected.X, selected.Y, currentMapLayer)))
         {
-            if (!_transformPool.TryGetReadonly(entityId, out var transformComponent))
-            {
-                continue;
-            }
-
-            var position = transformComponent.Position;
-            if (position.X == selected.X && position.Y == selected.Y && position.Z == currentMapLayer)
-            {
-                _selectedEntityIds.Add(entityId);
-            }
+            _selectedEntityIds.Add(entityId);
         }
     }
 

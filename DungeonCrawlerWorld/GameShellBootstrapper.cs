@@ -122,7 +122,7 @@ public static class GameShellBootstrapper
             },
             Chrome = new WindowChromeOptions { ShowBorder = true, CanUserFocus = false },
         });
-        debugWindow.SetContent(new DebugWindowContent(presentation.FontService, ecsContext.EntityManager, ecsContext.ComponentManager));
+        debugWindow.SetContent(new DebugWindowContent(presentation.FontService, ecsContext.EntityManager, ecsContext.ComponentManager, ecsContext.SystemManager));
         debugWindow.Initialize();
         rootWindows.Add(debugWindow);
 

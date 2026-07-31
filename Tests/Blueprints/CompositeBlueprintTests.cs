@@ -30,7 +30,7 @@ public sealed class CompositeBlueprintTests
     {
         var world = new Game.World.World(new Map(new Vector3Int(5, 5, 1)));
         var mathUtility = new MathUtility();
-        var context = new GameModuleContext(world, mathUtility, new EventBus());
+        var context = new GameModuleContext(world, mathUtility, new EventBus()) { EntityMoveSync = new WorldEventSync(world) };
 
         var movementModule = new MovementModule();
         movementModule.Configure(context);

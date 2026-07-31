@@ -10,9 +10,20 @@ namespace Game.Modules.Movement.Systems;
 
 /// <summary>
 /// Selects the next map node to path toward and moves the entity toward it based on its
-/// movement mode. Depends on IMapQuery, not the concrete World, for collision/bounds reads;
-/// a confirmed move publishes EntityMoved (immediate dispatch) rather than calling into
-/// World directly -- WorldEventSync is the only thing that still touches World.MoveEntity.
+/// movement mode. Depends on IMapQuery, not the concrete World, for collision/bounds reads. A
+/// confirmed move is delivered three ways, matched to each consumer's actual need (see a
+/// gameplay-demo profiling investigation that found the old single EventBus.Publish -- fanning
+/// out to every subscriber, synchronously, per move, across a striped ~150k-entity population
+/// -- was a measured hotspot):
+/// - entityMoveSync.SyncMove: direct call, not the bus. Map-occupancy bookkeeping is
+///   mandatory, not an optional module reaction, so it doesn't belong on EventBus at all (see
+///   IEntityMoveSync's own doc comment).
+/// - movedEntities.Record: a per-frame buffer ContactDamageSystem/StatusEffectAuraSystem drain
+///   during their own Update, instead of each subscribing to a per-move event (see
+///   FrameEventBuffer's own doc comment).
+/// - eventBus.Publish(EntityMoved), only for the player's own move: PlayerActivityLog still
+///   subscribes to this on the bus exactly as before, just now firing at player-move frequency
+///   (a handful/sec) instead of the full population's.
 /// </summary>
 public sealed class MovementSystem : ISystem
 {
@@ -29,6 +40,9 @@ public sealed class MovementSystem : ISystem
     private readonly IMapQuery _mapQuery;
     private readonly MathUtility _mathUtility;
     private readonly EventBus _eventBus;
+    private readonly IEntityMoveSync _entityMoveSync;
+    private readonly FrameEventBuffer<EntityMoved> _movedEntities;
+    private readonly IPlayerQuery? _playerQuery;
     private readonly EntityStripeSet _stripeSet;
 
     public MovementSystem(
@@ -37,7 +51,10 @@ public sealed class MovementSystem : ISystem
         PackedComponentPool<MovementComponent> movementComponents,
         IMapQuery mapQuery,
         MathUtility mathUtility,
-        EventBus eventBus)
+        EventBus eventBus,
+        IEntityMoveSync entityMoveSync,
+        FrameEventBuffer<EntityMoved> movedEntities,
+        IPlayerQuery? playerQuery)
     {
         _transformComponents = transformComponents;
         _actionLocks = actionLocks;
@@ -45,6 +62,9 @@ public sealed class MovementSystem : ISystem
         _mapQuery = mapQuery;
         _mathUtility = mathUtility;
         _eventBus = eventBus;
+        _entityMoveSync = entityMoveSync;
+        _movedEntities = movedEntities;
+        _playerQuery = playerQuery;
 
         _stripeSet = new EntityStripeSet(StripeCount, movementComponents.EntityIds);
         movementComponents.EntityAdded += _stripeSet.OnEntityAdded;
@@ -77,14 +97,15 @@ public sealed class MovementSystem : ISystem
                 continue;
             }
 
-            if (movementComponent.NextMapPosition == null || transformComponent.Position == movementComponent.NextMapPosition.Value)
+            var justSelected = movementComponent.NextMapPosition == null || transformComponent.Position == movementComponent.NextMapPosition.Value;
+            if (justSelected)
             {
                 SetNextMapPosition(entityId, movementComponent, transformComponent);
             }
 
             if (movementComponent.NextMapPosition != null)
             {
-                TryMoveToNextMapPosition(entityId, movementComponent, transformComponent);
+                TryMoveToNextMapPosition(entityId, movementComponent, transformComponent, skipValidation: justSelected);
             }
         }
     }
@@ -116,15 +137,22 @@ public sealed class MovementSystem : ISystem
     }
 
     /// <summary>
-    /// Attempts to move toward the selected node. CanMove is re-checked here in case
-    /// another entity has already moved into the space since it was selected. The action
-    /// lock is set on the move itself, not during path selection.
+    /// Attempts to move toward the selected node. CanMove is re-checked here in case another
+    /// entity has already moved into the space since it was selected -- except when
+    /// skipValidation is set, meaning SetNextMapPosition just picked this exact position in
+    /// this same synchronous call (the Random-mode path): nothing else can have touched the
+    /// map between that pick and this call, so re-running CanMove (a full footprint walk for
+    /// multi-tile entities) and IsBlocking would just recompute the identical answer. A
+    /// position carried over from a previous frame (PlayerControlled's externally-queued
+    /// moves) always gets the real re-check, since time -- and other entities' moves -- has
+    /// actually passed since it was chosen. The action lock is set on the move itself, not
+    /// during path selection.
     /// </summary>
-    private void TryMoveToNextMapPosition(int entityId, MovementComponent movementComponent, TransformComponent transformComponent)
+    private void TryMoveToNextMapPosition(int entityId, MovementComponent movementComponent, TransformComponent transformComponent, bool skipValidation)
     {
         var newPosition = movementComponent.NextMapPosition!.Value;
 
-        if (!CanMove(newPosition, transformComponent.Size, entityId, _mapQuery.IsBlocking(entityId)))
+        if (!skipValidation && !CanMove(newPosition, transformComponent.Size, entityId, _mapQuery.IsBlocking(entityId)))
         {
             _movementComponents.TryUpdate(entityId, static (ref MovementComponent m) => m.NextMapPosition = null);
             return;
@@ -138,7 +166,15 @@ public sealed class MovementSystem : ISystem
         }))
         {
             ActionLockGate.Lock(_actionLocks, entityId, movementComponent.ActionCooldownFrames);
-            _eventBus.Publish(new EntityMoved(entityId, oldPosition, newPosition, transformComponent.Size));
+
+            var moved = new EntityMoved(entityId, oldPosition, newPosition, transformComponent.Size);
+            _entityMoveSync.SyncMove(moved);
+            _movedEntities.Record(moved);
+
+            if (entityId == _playerQuery?.PlayerEntityId)
+            {
+                _eventBus.Publish(moved);
+            }
         }
     }
 
