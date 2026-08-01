@@ -1,0 +1,15 @@
+using Microsoft.Xna.Framework;
+
+namespace Presentation.UI;
+
+/// <summary>Folder-specific configuration -- same "independent option group" pattern as TextOptions for TextWindow (see WindowOptions).</summary>
+public sealed class FolderOptions
+{
+    /// <summary>Looked up via Game.Blueprints.SpriteManifest. Falls back to FallbackGlyph if the name isn't found there.</summary>
+    public string? SpriteName { get; set; }
+
+    public string? FallbackGlyph { get; set; }
+
+    /// <summary>Defaults to Folder.DefaultIconSize if unset.</summary>
+    public Vector2? IconSize { get; set; }
+}

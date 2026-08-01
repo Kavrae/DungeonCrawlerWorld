@@ -132,7 +132,7 @@ Achievements can name a `LootboxReward` (rarity + box type, see `Game/Modules/Ac
 
 #### Achievement content backlog
 
-The Achievement system (`Game/Modules/Achievements/`) currently ships one achievement ("Loner") to prove the pipeline; the rest is a deliberate, incremental backlog -- a few added alongside each future feature rather than all at once. Volume/pacing target: many low-value achievements early (deliberately "drowning the player in low-level loot boxes" at the start), tapering to fewer, higher-value ones by the midgame.
+The Achievement system (`Game/Modules/Achievements/`) currently ships two achievements ("Loner", "You've Inflicted Damage on a Mob") to prove the pipeline; the rest is a deliberate, incremental backlog -- a few added alongside each future feature rather than all at once. Volume/pacing target: many low-value achievements early (deliberately "drowning the player in low-level loot boxes" at the start), tapering to fewer, higher-value ones by the midgame.
 
 Design-target examples, not yet implemented:
 - Enter the dungeon with a cat (random starting-item selection)

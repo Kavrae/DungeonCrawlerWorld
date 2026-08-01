@@ -104,6 +104,19 @@ public class Window
     protected bool _isTransparent;
     public bool IsTransparent => _isTransparent;
 
+    protected bool _isGlowing;
+    public bool IsGlowing => _isGlowing;
+
+    protected Color _glowColor = Color.Gold;
+    public Color GlowColor => _glowColor;
+
+    /// <summary>Turns the outward glow (see GlowRenderer) on/off around this window's border -- e.g. NotificationCenter's Folder while any category has an unread notification.</summary>
+    public void SetGlow(bool isGlowing, Color? color = null)
+    {
+        _isGlowing = isGlowing;
+        _glowColor = color ?? Color.Gold;
+    }
+
     /*========Focus========*/
     public event Action<Window>? FocusChanged;
 
@@ -251,6 +264,11 @@ public class Window
 
         _isVisible = layout?.IsVisible ?? true;
         _isTransparent = layout?.IsTransparent ?? false;
+
+        // Pooled windows must not inherit a stale glow from whatever they were last used for --
+        // same rationale as _isFocused reset below.
+        _isGlowing = false;
+        _glowColor = Color.Gold;
 
         /*========Focus========*/
         // Pooled windows (see WindowService) must not inherit a stale focused look from
@@ -424,6 +442,11 @@ public class Window
         if (_border.Show)
         {
             BorderRenderer.Draw(spriteBatch, unitRectangle, _border.Style, _border.TopRectangle, _border.BottomRectangle, _border.LeftRectangle, _border.RightRectangle);
+        }
+
+        if (_isGlowing)
+        {
+            GlowRenderer.Draw(spriteBatch, unitRectangle, _geometry.Rectangle, _glowColor);
         }
 
         if ((_geometry.DisplayMode != WindowDisplayMode.Minimized && _title.ShowTitle) || (_geometry.DisplayMode == WindowDisplayMode.Minimized && _title.ShowWhenMinimized))

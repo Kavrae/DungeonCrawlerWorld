@@ -23,7 +23,14 @@ public static class HealthDamage
             return; // No HealthComponent -- fine, e.g. an "immortal" entity a status effect still applied to.
         }
 
-        if (playerQuery is null || entityId != playerQuery.PlayerEntityId)
+        if (playerQuery is null)
+        {
+            return;
+        }
+
+        var playerInvolved = entityId == playerQuery.PlayerEntityId
+            || (source.Kind == StatusEffectSourceKind.Entity && source.EntityId == playerQuery.PlayerEntityId);
+        if (!playerInvolved)
         {
             return;
         }

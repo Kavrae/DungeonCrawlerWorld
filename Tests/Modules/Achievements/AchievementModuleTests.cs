@@ -13,11 +13,11 @@ using Game.World;
 namespace Tests.Modules.Achievements;
 
 /// <summary>
-/// Exercises the Loner achievement end-to-end through the real AchievementModule (Configure
+/// Exercises the built-in achievements end-to-end through the real AchievementModule (Configure
 /// then RegisterSystems, mirroring GameBootstrapper.Build's own ordering -- see
 /// GameModuleIntegrationTests for the same pattern with other real modules) rather than
 /// against AchievementModule's internals directly. Deliberately publishes the spawn-sentinel
-/// EntityMoved *before* assigning World.PlayerEntityId in every test here, matching
+/// EntityMoved *before* assigning World.PlayerEntityId in the Loner tests below, matching
 /// GameLoop/FloorBuilder.CreatePlayer's real ordering -- assigning it first (as an earlier
 /// version of this file did) would have hidden the exact bug LonerAchievement's own doc
 /// comment describes: PlayerEntityId isn't set yet at the moment this event actually fires.
@@ -25,7 +25,7 @@ namespace Tests.Modules.Achievements;
 [TestClass]
 public sealed class AchievementModuleTests
 {
-    private static (EcsContext EcsContext, EventBus EventBus, Game.World.World World) BuildWithLoner()
+    private static (EcsContext EcsContext, EventBus EventBus, Game.World.World World) Build()
     {
         var world = new Game.World.World(new Map(new Vector3Int(5, 5, 1)));
         var eventBus = new EventBus();
@@ -44,10 +44,12 @@ public sealed class AchievementModuleTests
 
     private static readonly Guid LonerAchievementId = new LonerAchievement().Id;
 
+    private static readonly Guid InflictedDamageAchievementId = new InflictedDamageAchievement().Id;
+
     [TestMethod]
     public void PlayerSpawnSentinel_UnlocksLonerAndPublishesMinimizedNotification()
     {
-        var (ecsContext, eventBus, world) = BuildWithLoner();
+        var (ecsContext, eventBus, world) = Build();
         var playerEntityId = ecsContext.EntityManager.CreateEntity();
         NotificationRequested? published = null;
         eventBus.Subscribe<NotificationRequested>(requested => published = requested);
@@ -72,7 +74,7 @@ public sealed class AchievementModuleTests
     [TestMethod]
     public void PlayerSpawnSentinel_PublishedTwice_OnlyUnlocksAndNotifiesOnce()
     {
-        var (ecsContext, eventBus, world) = BuildWithLoner();
+        var (ecsContext, eventBus, world) = Build();
         var playerEntityId = ecsContext.EntityManager.CreateEntity();
         var notificationCount = 0;
         eventBus.Subscribe<NotificationRequested>(_ => notificationCount++);
@@ -97,7 +99,7 @@ public sealed class AchievementModuleTests
     [TestMethod]
     public void RealMove_OldPositionDiffersFromNew_DoesNotUnlockLoner()
     {
-        var (ecsContext, eventBus, world) = BuildWithLoner();
+        var (ecsContext, eventBus, world) = Build();
         var playerEntityId = ecsContext.EntityManager.CreateEntity();
         world.PlayerEntityId = playerEntityId;
 
@@ -107,5 +109,44 @@ public sealed class AchievementModuleTests
             ecsContext.ComponentManager.GetMultiPool<AchievementUnlockedComponent>(),
             playerEntityId,
             LonerAchievementId));
+    }
+
+    [TestMethod]
+    public void PlayerDamagesNpc_UnlocksInflictedDamageAndPublishesNotification()
+    {
+        var (ecsContext, eventBus, world) = Build();
+        var playerEntityId = ecsContext.EntityManager.CreateEntity();
+        var npcEntityId = ecsContext.EntityManager.CreateEntity();
+        world.PlayerEntityId = playerEntityId;
+        NotificationRequested? published = null;
+        eventBus.Subscribe<NotificationRequested>(requested => published = requested);
+
+        eventBus.Publish(new EntityDamaged(npcEntityId, 5, StatusEffectSource.FromEntity(playerEntityId), 15, 20, "Default Attack"));
+        eventBus.DispatchBuffered<NotificationRequested>();
+
+        Assert.IsTrue(AchievementQueries.HasEarned(
+            ecsContext.ComponentManager.GetMultiPool<AchievementUnlockedComponent>(),
+            playerEntityId,
+            InflictedDamageAchievementId));
+
+        Assert.IsNotNull(published);
+        Assert.AreEqual(NotificationCategory.Achievement, published!.Category);
+        Assert.AreEqual("You've Inflicted Damage on a Mob", published.Title);
+    }
+
+    [TestMethod]
+    public void NpcDamagesPlayer_DoesNotUnlockInflictedDamage()
+    {
+        var (ecsContext, eventBus, world) = Build();
+        var playerEntityId = ecsContext.EntityManager.CreateEntity();
+        var npcEntityId = ecsContext.EntityManager.CreateEntity();
+        world.PlayerEntityId = playerEntityId;
+
+        eventBus.Publish(new EntityDamaged(playerEntityId, 5, StatusEffectSource.FromEntity(npcEntityId), 15, 20, "Contact"));
+
+        Assert.IsFalse(AchievementQueries.HasEarned(
+            ecsContext.ComponentManager.GetMultiPool<AchievementUnlockedComponent>(),
+            playerEntityId,
+            InflictedDamageAchievementId));
     }
 }

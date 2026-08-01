@@ -19,4 +19,6 @@ public sealed class WindowOptions
     public WindowContentOptions? Content { get; set; }
 
     public TextOptions? Text { get; set; }
+
+    public FolderOptions? Folder { get; set; }
 }

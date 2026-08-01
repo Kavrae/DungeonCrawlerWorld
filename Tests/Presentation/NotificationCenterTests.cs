@@ -26,7 +26,15 @@ public sealed class NotificationCenterTests
 {
     private static readonly Point FirstActiveNotificationTopLeft = new(200, 200);
 
-    private static WindowService CreateWindowService() => new(new FontService("Fonts"), new GlyphRenderer());
+    private static WindowService CreateWindowService()
+    {
+        var fontService = new FontService("Fonts");
+        var glyphRenderer = new GlyphRenderer();
+        var windowService = new WindowService(fontService, glyphRenderer);
+        windowService.RegisterFactory<Folder>((_, _) => new Folder(
+            fontService, windowService, glyphRenderer, new SpriteSheetService(null, "Spritesheets"), new SpriteRenderer()));
+        return windowService;
+    }
 
     private static NotificationCenter CreateNotificationCenter(WindowService windowService, List<Window> alwaysOnTopWindows)
     {
@@ -116,6 +124,54 @@ public sealed class NotificationCenterTests
         Assert.IsFalse(ClickAlwaysOnTop(alwaysOnTopWindows, FirstActiveNotificationTopLeft));
     }
 
+    private static (WindowService WindowService, Func<Folder> GetFolder) CreateWindowServiceCapturingFolder()
+    {
+        var fontService = new FontService("Fonts");
+        var glyphRenderer = new GlyphRenderer();
+        var windowService = new WindowService(fontService, glyphRenderer);
+        Folder? capturedFolder = null;
+        windowService.RegisterFactory<Folder>((_, _) =>
+        {
+            capturedFolder = new Folder(fontService, windowService, glyphRenderer, new SpriteSheetService(null, "Spritesheets"), new SpriteRenderer());
+            return capturedFolder;
+        });
+        return (windowService, () => capturedFolder ?? throw new InvalidOperationException("Folder not created yet."));
+    }
+
+    /// <summary>Closing a notification auto-tidies the HUD back down once nothing is left unread anywhere -- see NotificationCenter.OnActiveNotificationClosed.</summary>
+    [TestMethod]
+    public void CloseNotification_WithNoUnreadNotificationsRemaining_MinimizesTheFolder()
+    {
+        var (windowService, getFolder) = CreateWindowServiceCapturingFolder();
+        var notificationCenter = CreateNotificationCenter(windowService, []);
+        var notificationId = notificationCenter.AddNotification(NotificationCategory.Quest, "Hello", showImmediately: true);
+        var folder = getFolder();
+
+        // Force-expand first -- proves the close itself re-collapses it, not that it just never opened.
+        folder.HandleClick(new Point(35, 35));
+        Assert.AreEqual(WindowDisplayMode.WrapContent, folder.WindowDisplay);
+
+        notificationCenter.CloseNotification(notificationId);
+
+        Assert.AreEqual(WindowDisplayMode.Minimized, folder.WindowDisplay);
+    }
+
+    /// <summary>The Folder stays open for the user to keep working through what's left -- auto-minimize only triggers once every category's unread queue is actually empty, not just because one popup closed.</summary>
+    [TestMethod]
+    public void CloseNotification_WithUnreadNotificationsStillQueued_DoesNotMinimizeTheFolder()
+    {
+        var (windowService, getFolder) = CreateWindowServiceCapturingFolder();
+        var notificationCenter = CreateNotificationCenter(windowService, []);
+        var activeId = notificationCenter.AddNotification(NotificationCategory.Quest, "Active", showImmediately: true);
+        notificationCenter.AddNotification(NotificationCategory.Achievement, "Queued", showImmediately: false);
+        var folder = getFolder();
+        folder.HandleClick(new Point(35, 35));
+
+        notificationCenter.CloseNotification(activeId);
+
+        Assert.AreEqual(WindowDisplayMode.WrapContent, folder.WindowDisplay);
+    }
+
     [TestMethod]
     public void CloseNotification_UnknownId_ReturnsFalse()
     {
@@ -181,15 +237,20 @@ public sealed class NotificationCenterTests
     [TestMethod]
     public void ClickingSummaryBadge_WithUnreadNotification_OpensItAsActive()
     {
+        var (windowService, capturedBadges) = CreateWindowServiceCapturingTextWindows();
         var alwaysOnTopWindows = new List<Window>();
-        var notificationCenter = CreateNotificationCenter(CreateWindowService(), alwaysOnTopWindows);
+        var notificationCenter = CreateNotificationCenter(windowService, alwaysOnTopWindows);
         notificationCenter.AddNotification(NotificationCategory.Quest, "Explore the dungeon.", showImmediately: false);
 
-        // Quest is the second declared NotificationCategory, tiled horizontally after System's
-        // summary badge (NotificationCenter.SummaryEntrySize.X = 130px wide) starting at the
-        // summary bar's position, HudMetrics.Margin (30, 30).
-        var questSummaryBadge = new Point(30 + 130 + 5, 30 + 5);
-        var handled = ClickAlwaysOnTop(alwaysOnTopWindows, questSummaryBadge);
+        // The Folder starts collapsed (see Folder.Initialize) -- clicking anywhere within its
+        // small icon-sized header at HudMetrics.Margin (30, 30) expands it, tiling the
+        // category badges vertically beneath. Only then does Quest's badge have a real,
+        // clickable on-screen position -- read via WindowRectangle (its exact layout depends
+        // on border/title-icon sizing) rather than hand-derived pixel math.
+        Assert.IsTrue(ClickAlwaysOnTop(alwaysOnTopWindows, new Point(30 + 5, 30 + 5)));
+
+        var questBadge = capturedBadges.Single(badge => badge.OriginalText == "Quest: 1");
+        var handled = ClickAlwaysOnTop(alwaysOnTopWindows, questBadge.WindowRectangle.Center);
 
         Assert.IsTrue(handled);
         Assert.IsTrue(ClickAlwaysOnTop(alwaysOnTopWindows, FirstActiveNotificationTopLeft));
@@ -198,11 +259,13 @@ public sealed class NotificationCenterTests
     [TestMethod]
     public void ClickingSummaryBadge_WithNoUnreadNotifications_DoesNotOpenAnything()
     {
+        var (windowService, capturedBadges) = CreateWindowServiceCapturingTextWindows();
         var alwaysOnTopWindows = new List<Window>();
-        _ = CreateNotificationCenter(CreateWindowService(), alwaysOnTopWindows);
+        _ = CreateNotificationCenter(windowService, alwaysOnTopWindows);
 
-        var questSummaryBadge = new Point(30 + 130 + 5, 30 + 5);
-        ClickAlwaysOnTop(alwaysOnTopWindows, questSummaryBadge);
+        Assert.IsTrue(ClickAlwaysOnTop(alwaysOnTopWindows, new Point(30 + 5, 30 + 5))); // expand the Folder
+        var questBadge = capturedBadges.Single(badge => badge.OriginalText == "Quest: 0");
+        ClickAlwaysOnTop(alwaysOnTopWindows, questBadge.WindowRectangle.Center);
 
         Assert.IsFalse(ClickAlwaysOnTop(alwaysOnTopWindows, FirstActiveNotificationTopLeft));
     }
@@ -253,7 +316,10 @@ public sealed class NotificationCenterTests
     public void ClickingCloseButton_OnNewerOverlappingNotification_ClosesOnlyThatOne()
     {
         var fontService = new FontService("Fonts");
-        var windowService = new WindowService(fontService, new GlyphRenderer());
+        var glyphRenderer = new GlyphRenderer();
+        var windowService = new WindowService(fontService, glyphRenderer);
+        windowService.RegisterFactory<Folder>((_, _) => new Folder(
+            fontService, windowService, glyphRenderer, new SpriteSheetService(null, "Spritesheets"), new SpriteRenderer()));
         var capturedPopups = new List<TextWindow>();
 
         // Overrides WindowService's default TextWindow factory just to capture each created
@@ -297,7 +363,10 @@ public sealed class NotificationCenterTests
     private static (WindowService WindowService, List<TextWindow> CapturedPopups) CreateWindowServiceCapturingTextWindows()
     {
         var fontService = new FontService("Fonts");
-        var windowService = new WindowService(fontService, new GlyphRenderer());
+        var glyphRenderer = new GlyphRenderer();
+        var windowService = new WindowService(fontService, glyphRenderer);
+        windowService.RegisterFactory<Folder>((_, _) => new Folder(
+            fontService, windowService, glyphRenderer, new SpriteSheetService(null, "Spritesheets"), new SpriteRenderer()));
         var capturedPopups = new List<TextWindow>();
         windowService.RegisterFactory<TextWindow>((_, _) =>
         {

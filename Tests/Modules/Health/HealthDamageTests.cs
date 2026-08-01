@@ -80,6 +80,37 @@ public sealed class HealthDamageTests
     }
 
     [TestMethod]
+    public void Apply_PlayerIsSource_NonPlayerTarget_PublishesEntityDamagedWithTargetHealth()
+    {
+        var pool = CreatePool();
+        pool.Add(1, new HealthComponent(currentHealth: 50, healthRegen: 0, maximumHealth: 100));
+        var eventBus = new EventBus();
+        EntityDamaged? published = null;
+        eventBus.Subscribe<EntityDamaged>(e => published = e);
+
+        HealthDamage.Apply(pool, eventBus, 1, 10, StatusEffectSource.FromEntity(0), new FakePlayerQuery(0), "Default Attack");
+
+        Assert.IsNotNull(published);
+        Assert.AreEqual(1, published!.Value.EntityId);
+        Assert.AreEqual(40, published.Value.CurrentHealth);
+        Assert.AreEqual(StatusEffectSource.FromEntity(0), published.Value.Source);
+    }
+
+    [TestMethod]
+    public void Apply_NeitherPlayerNorPlayerSourced_DoesNotPublish()
+    {
+        var pool = CreatePool();
+        pool.Add(1, new HealthComponent(currentHealth: 50, healthRegen: 0, maximumHealth: 100));
+        var eventBus = new EventBus();
+        var published = false;
+        eventBus.Subscribe<EntityDamaged>(_ => published = true);
+
+        HealthDamage.Apply(pool, eventBus, 1, 10, StatusEffectSource.FromEntity(2), new FakePlayerQuery(0), "Contact");
+
+        Assert.IsFalse(published);
+    }
+
+    [TestMethod]
     public void Apply_NullPlayerQuery_DoesNotPublish()
     {
         var pool = CreatePool();

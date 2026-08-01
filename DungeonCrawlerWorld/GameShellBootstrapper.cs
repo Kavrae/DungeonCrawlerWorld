@@ -241,6 +241,14 @@ public static class GameShellBootstrapper
     private static (List<Window> AlwaysOnTopWindows, NotificationCenter NotificationCenter) BuildAlwaysOnTopWindows(PresentationContext presentation, EcsContext ecsContext)
     {
         var alwaysOnTopWindows = new List<Window>();
+
+        // Folder's dependencies (SpriteSheetService/SpriteRenderer) come from Presentation the
+        // same way MapWindow's do (see BuildRootWindows) -- registered here, not inside
+        // WindowService's own constructor, so window types that don't render sprites
+        // (Window/TextWindow/TextBox) don't have to thread those dependencies through too.
+        presentation.WindowService.RegisterFactory<Folder>((_, _) => new Folder(
+            presentation.FontService, presentation.WindowService, presentation.GlyphRenderer, presentation.SpriteSheetService, presentation.SpriteRenderer));
+
         var notificationCenter = new NotificationCenter(presentation.WindowService, ecsContext.EventBus, alwaysOnTopWindows);
         notificationCenter.Initialize();
 

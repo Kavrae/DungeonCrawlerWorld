@@ -5,30 +5,39 @@ using Microsoft.Xna.Framework;
 namespace Presentation.UI.Notifications;
 
 /// <summary>
-/// Owns the notification summary bar (one count per NotificationCategory, tiled horizontally)
-/// and the currently-active notification popups. Minimizing an active notification
-/// deliberately does NOT use the generic WindowMinimizeRestoreBehavior (which just shrinks a
-/// window to its title bar in place) -- see NotificationMinimizeBehavior -- since a
-/// minimized notification should read as "dismissed for now, reopen it later from the
-/// summary bar", not "still on screen, just collapsed". Closing is driven by Window's real
-/// Closed event rather than a public CloseNotification(Guid) callers had to remember to
-/// call. Also subscribes to the buffered NotificationRequested event, so a Game-layer caller
-/// (which can't reference this Presentation-layer type at all) can request a notification
-/// without a direct reference.
+/// Owns the notification summary Folder (one count badge per NotificationCategory, tiled
+/// vertically beneath it once expanded) and the currently-active notification popups.
+/// Minimizing an active notification deliberately does NOT use the generic
+/// WindowMinimizeRestoreBehavior (which just shrinks a window to its title bar in place) --
+/// see NotificationMinimizeBehavior -- since a minimized notification should read as
+/// "dismissed for now, reopen it later from the summary Folder", not "still on screen, just
+/// collapsed". Closing is driven by Window's real Closed event rather than a public
+/// CloseNotification(Guid) callers had to remember to call. Also subscribes to the buffered
+/// NotificationRequested event, so a Game-layer caller (which can't reference this
+/// Presentation-layer type at all) can request a notification without a direct reference.
 /// </summary>
 public sealed class NotificationCenter(WindowService windowService, EventBus eventBus, List<Window> alwaysOnTopWindows)
 {
-    private static readonly Vector2 SummaryPosition = HudMetrics.Margin;
-    private static readonly Vector2 SummarySize = new(400, 25);
+    private static readonly Vector2 FolderPosition = HudMetrics.Margin;
+
+    /// <summary>
+    /// Generous ceiling for the Folder's WrapContent sizing -- a root WrapContent window's own
+    /// MaximumSize is otherwise left at Vector2.Zero (see Window.BuildWindow: it only falls
+    /// back to a parent's ContentSize or an explicit Layout.Size/MaximumSize, and a root Folder
+    /// has neither a parent nor a fixed Size), which would zero-cap every child's own Measure
+    /// pass forever, since a root window's MaximumSize is otherwise never recomputed after
+    /// BuildWindow. Comfortably larger than the widest/tallest the category stack can ever be.
+    /// </summary>
+    private static readonly Vector2 FolderMaximumSize = new(200, 400);
 
     /// <summary>
     /// Deliberately its own constant, not HudMetrics.EntrySize (65px wide -- sized for short
-    /// hotbar/health-bar-style content elsewhere): a summary badge's text is "{category}: {count}",
-    /// and "Achievement: 0" doesn't fit in 65px at this font size -- confirmed the hard way, it
-    /// wrapped/hyphenated inside the fixed-size box and rendered a stray glyph. Wide enough for
-    /// the longest category name plus a 2-digit count without wrapping.
+    /// hotbar/health-bar-style content elsewhere). Also drives the Folder's own width, both
+    /// expanded (RecalculateWrapContentWindowSize fits its title/content to the widest child)
+    /// and collapsed (Folder.RecalculateMinimizedWindowSize matches that same width instead of
+    /// shrinking to just its icon).
     /// </summary>
-    private static readonly Vector2 SummaryEntrySize = new(130, HudMetrics.EntrySize.Y);
+    private static readonly Vector2 SummaryEntrySize = new(78, HudMetrics.EntrySize.Y);
 
     private static readonly Vector2 ActiveNotificationBasePosition = new(200, 200);
     private static readonly Vector2 ActiveNotificationMaximumSize = new(640, 176);
@@ -37,7 +46,7 @@ public sealed class NotificationCenter(WindowService windowService, EventBus eve
     private readonly List<(NotificationCategory Category, TextWindow SummaryWindow, List<Notification> Notifications)> _unreadByCategory = [];
     private readonly List<(Window ActiveWindow, Notification Notification)> _activeNotifications = [];
 
-    private Window _summaryWindow = null!;
+    private Folder _folder = null!;
 
     /// <summary>
     /// True while a System-category notification is active -- GameLoop gates the game's own
@@ -73,23 +82,16 @@ public sealed class NotificationCenter(WindowService windowService, EventBus eve
 
     public void Initialize()
     {
-        _summaryWindow = windowService.CreateWindow<Window>(null, new WindowOptions
+        _folder = windowService.CreateWindow<Folder>(null, new WindowOptions
         {
-            Hierarchy = new WindowHierarchyOptions { CanContainChildWindows = true, ChildWindowTileMode = WindowTileMode.Horizontal },
-            Layout = new WindowLayoutOptions { DisplayMode = WindowDisplayMode.Fixed, IsTransparent = true, RelativePosition = SummaryPosition, Size = SummarySize },
-            // CanUserFocus false -- a click-only HUD counter bar (see countWindow.Clicked below),
-            // not something a user tabs to or types into. Also keeps it out of
-            // GameInputController.RedirectFocusAwayFrom's always-on-top sibling search: without
-            // this, dismissing the last active notification would hand focus to the summary bar
-            // instead of falling through to GameInputController's default focus window.
-            Chrome = new WindowChromeOptions { ShowTitle = false, CanUserFocus = false },
+            Layout = new WindowLayoutOptions { RelativePosition = FolderPosition, MaximumSize = FolderMaximumSize, DisplayMode = WindowDisplayMode.WrapContent },
+            Chrome = new WindowChromeOptions { ShowBorder = true, BorderStyle = BorderStyle.Outset, CanUserFocus = false },
+            Folder = new FolderOptions { SpriteName = "AchievementCenter", FallbackGlyph = "★" },
         });
-        _summaryWindow.Initialize();
-        alwaysOnTopWindows.Add(_summaryWindow);
 
         foreach (var category in Enum.GetValues<NotificationCategory>())
         {
-            var countWindow = windowService.CreateWindow<TextWindow>(_summaryWindow, new WindowOptions
+            var countWindow = windowService.CreateWindow<TextWindow>(_folder, new WindowOptions
             {
                 Hierarchy = new WindowHierarchyOptions { CanContainChildWindows = false },
                 Layout = new WindowLayoutOptions { DisplayMode = WindowDisplayMode.Fixed, Size = SummaryEntrySize, IsTransparent = false },
@@ -99,13 +101,18 @@ public sealed class NotificationCenter(WindowService windowService, EventBus eve
             });
 
             _unreadByCategory.Add((category, countWindow, []));
-            _summaryWindow.AddChildWindow(countWindow);
+            _folder.AddChildWindow(countWindow);
 
             // Summary count windows are created once here and never pooled/reused (unlike
             // active notification windows), so this subscription lives for the game's
             // lifetime -- no unsubscribe-on-fire needed, unlike OnActiveNotificationClosed.
             countWindow.Clicked += _ => OpenNextNotification(category);
         }
+
+        // Initialized last -- see the WrapContent comment above for why this must run only
+        // after every child is already correctly tiled.
+        _folder.Initialize();
+        alwaysOnTopWindows.Add(_folder);
 
         eventBus.Subscribe<NotificationRequested>(OnNotificationRequested);
     }
@@ -248,6 +255,13 @@ public sealed class NotificationCenter(WindowService windowService, EventBus eve
         }
 
         alwaysOnTopWindows.Remove(closedWindow);
+
+        // Closing the last unread notification auto-tidies the HUD back down -- SetWindowDisplayMode
+        // no-ops if the Folder is already Minimized, so this is safe to call unconditionally.
+        if (_unreadByCategory?.Sum(category => category.Notifications.Count) == 0)
+        {
+            _folder.SetWindowDisplayMode(WindowDisplayMode.Minimized);
+        }
     }
 
     /// <summary>
@@ -276,9 +290,17 @@ public sealed class NotificationCenter(WindowService windowService, EventBus eve
     private List<Notification> UnreadListFor(NotificationCategory category) =>
         _unreadByCategory.First(entry => entry.Category == category).Notifications;
 
+    /// <summary>
+    /// Refreshes a category badge's text alongside both glow conditions this same unread-count
+    /// change affects: the badge itself glows while its own category has a queued-unread
+    /// notification, and the Folder glows while *any* category does.
+    /// </summary>
     private void RefreshUnreadSummary(NotificationCategory category)
     {
         var entry = _unreadByCategory.First(e => e.Category == category);
         entry.SummaryWindow.UpdateText($"{category}: {entry.Notifications.Count}");
+        entry.SummaryWindow.SetGlow(entry.Notifications.Count > 0, Color.Gold);
+
+        _folder.SetGlow(_unreadByCategory.Any(e => e.Notifications.Count > 0), Color.Gold);
     }
 }

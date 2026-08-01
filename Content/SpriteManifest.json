@@ -135,5 +135,17 @@
         "CellHeight": 16
       }
     ]
+  },
+  {
+    "Name": "AchievementCenter",
+    "Cells": [
+      {
+        "SheetPath": "Pixel Crawler - Free Pack/Environment/Props/Static/Dungeon_Props.png",
+        "Column": 4,
+        "Row": 5,
+        "CellWidth": 16,
+        "CellHeight": 16
+      }
+    ]
   }
 ]

@@ -25,7 +25,10 @@ public sealed class AchievementModule : IGameModule
 
     public IReadOnlyList<Type> Dependencies { get; } = [];
 
-    private static readonly IReadOnlyList<IAchievementDefinition> Definitions = [new LonerAchievement()];
+    private static readonly IReadOnlyList<IAchievementDefinition> Definitions = [
+        new InflictedDamageAchievement(),
+        new LonerAchievement()
+        ];
 
     private EventBus? _eventBus;
     private IPlayerQuery? _playerQuery;
