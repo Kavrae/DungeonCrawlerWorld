@@ -17,7 +17,7 @@ namespace Presentation.UI.Content;
 /// HealthComponent at all -- reserved for a future temporarily/permanently-immortal player
 /// state, rather than hiding the bar outright.
 /// </summary>
-public sealed class PlayerHealthBarContent(World world, ComponentManager componentManager) : IWindowContent
+public sealed class PlayerHealthBarContent(World world, ComponentManager componentManager) : IElementContent
 {
     public static readonly Vector2 Size = new(HudMetrics.EntrySize.X * 4.5f, HudMetrics.EntrySize.Y * 0.75f);
 

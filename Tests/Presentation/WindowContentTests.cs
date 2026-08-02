@@ -16,7 +16,7 @@ namespace Tests.Presentation;
 [TestClass]
 public sealed class WindowContentTests
 {
-    private sealed class RecordingContent : IWindowContent
+    private sealed class RecordingContent : IElementContent
     {
         public Window? InitializedWith { get; private set; }
         public int UpdateCount { get; private set; }
@@ -33,13 +33,13 @@ public sealed class WindowContentTests
         public void HandleTextInput(char character) => TypedCharacters.Add(character);
     }
 
-    private static WindowService CreateWindowService() => new(new FontService("Fonts"), new GlyphRenderer());
+    private static ElementPoolService CreateWindowService() => new(new FontService("Fonts"), new GlyphRenderer());
 
     [TestMethod]
     public void Initialize_ContentAttached_ReceivesHostWindow()
     {
         var windowService = CreateWindowService();
-        var window = windowService.CreateWindow<Window>(null, new WindowOptions());
+        var window = windowService.CreateElement<Window>(null, new ElementOptions());
         var content = new RecordingContent();
         window.SetContent(content);
 
@@ -52,7 +52,7 @@ public sealed class WindowContentTests
     public void Update_ContentAttached_IsCalledEveryUpdate()
     {
         var windowService = CreateWindowService();
-        var window = windowService.CreateWindow<Window>(null, new WindowOptions());
+        var window = windowService.CreateElement<Window>(null, new ElementOptions());
         var content = new RecordingContent();
         window.SetContent(content);
         window.Initialize();
@@ -67,7 +67,7 @@ public sealed class WindowContentTests
     public void DrawContent_ContentAttached_IsForwardedByDefaultVirtualMethod()
     {
         var windowService = CreateWindowService();
-        var window = windowService.CreateWindow<Window>(null, new WindowOptions());
+        var window = windowService.CreateElement<Window>(null, new ElementOptions());
         var content = new RecordingContent();
         window.SetContent(content);
         window.Initialize();
@@ -81,7 +81,7 @@ public sealed class WindowContentTests
     public void HandleKeyPress_ContentAttached_IsForwardedByDefaultVirtualMethod()
     {
         var windowService = CreateWindowService();
-        var window = windowService.CreateWindow<Window>(null, new WindowOptions());
+        var window = windowService.CreateElement<Window>(null, new ElementOptions());
         var content = new RecordingContent();
         window.SetContent(content);
         window.Initialize();
@@ -95,7 +95,7 @@ public sealed class WindowContentTests
     public void Window_WithNoContentAttached_HandleKeyPressDoesNotThrow()
     {
         var windowService = CreateWindowService();
-        var window = windowService.CreateWindow<Window>(null, new WindowOptions());
+        var window = windowService.CreateElement<Window>(null, new ElementOptions());
         window.Initialize();
 
         window.HandleKeyPress(Keys.A);
@@ -105,7 +105,7 @@ public sealed class WindowContentTests
     public void HandleHotkeys_ContentAttached_IsForwardedByDefaultVirtualMethod()
     {
         var windowService = CreateWindowService();
-        var window = windowService.CreateWindow<Window>(null, new WindowOptions());
+        var window = windowService.CreateElement<Window>(null, new ElementOptions());
         var content = new RecordingContent();
         window.SetContent(content);
         window.Initialize();
@@ -119,7 +119,7 @@ public sealed class WindowContentTests
     public void Window_WithNoContentAttached_HandleHotkeysDoesNotThrow()
     {
         var windowService = CreateWindowService();
-        var window = windowService.CreateWindow<Window>(null, new WindowOptions());
+        var window = windowService.CreateElement<Window>(null, new ElementOptions());
         window.Initialize();
 
         window.HandleHotkeys(new KeyboardState(), new KeyboardState());
@@ -129,7 +129,7 @@ public sealed class WindowContentTests
     public void HandleTextInput_ContentAttached_IsForwardedByDefaultVirtualMethod()
     {
         var windowService = CreateWindowService();
-        var window = windowService.CreateWindow<Window>(null, new WindowOptions());
+        var window = windowService.CreateElement<Window>(null, new ElementOptions());
         var content = new RecordingContent();
         window.SetContent(content);
         window.Initialize();
@@ -143,7 +143,7 @@ public sealed class WindowContentTests
     public void Window_WithNoContentAttached_HandleTextInputDoesNotThrow()
     {
         var windowService = CreateWindowService();
-        var window = windowService.CreateWindow<Window>(null, new WindowOptions());
+        var window = windowService.CreateElement<Window>(null, new ElementOptions());
         window.Initialize();
 
         window.HandleTextInput('a');
@@ -153,7 +153,7 @@ public sealed class WindowContentTests
     public void Window_WithNoContentAttached_DrawContentDoesNotThrow()
     {
         var windowService = CreateWindowService();
-        var window = windowService.CreateWindow<Window>(null, new WindowOptions());
+        var window = windowService.CreateElement<Window>(null, new ElementOptions());
         window.Initialize();
 
         window.DrawContent(new GameTime(), null!, null!);

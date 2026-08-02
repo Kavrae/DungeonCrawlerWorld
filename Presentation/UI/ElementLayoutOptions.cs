@@ -3,9 +3,9 @@ using Microsoft.Xna.Framework;
 namespace Presentation.UI;
 
 /// <summary>A window's size/position/visibility, independent of its chrome or content.</summary>
-public sealed class WindowLayoutOptions
+public sealed class ElementLayoutOptions
 {
-    public WindowDisplayMode? DisplayMode { get; set; }
+    public ElementDisplayMode? DisplayMode { get; set; }
 
     /// <summary>Position relative to the parent's content area; relative to the screen if there is no parent.</summary>
     public Vector2? RelativePosition { get; set; }

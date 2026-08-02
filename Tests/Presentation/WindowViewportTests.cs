@@ -18,41 +18,41 @@ namespace Tests.Presentation;
 [TestClass]
 public sealed class WindowViewportTests
 {
-    private static WindowService CreateWindowService() => new(new FontService("Fonts"), new GlyphRenderer());
+    private static ElementPoolService CreateWindowService() => new(new FontService("Fonts"), new GlyphRenderer());
 
     [TestMethod]
     public void SetRelativePosition_UpdatesWindowViewportToMatchContentRectangle()
     {
         var windowService = CreateWindowService();
-        var window = windowService.CreateWindow<Window>(null, new WindowOptions
+        var window = windowService.CreateElement<Window>(null, new ElementOptions
         {
-            Layout = new WindowLayoutOptions { RelativePosition = new Vector2(10, 10), Size = new Vector2(200, 100), DisplayMode = WindowDisplayMode.Fixed },
-            Chrome = new WindowChromeOptions { ShowBorder = true, ShowTitle = true, TitleText = "Test" },
+            Layout = new ElementLayoutOptions { RelativePosition = new Vector2(10, 10), Size = new Vector2(200, 100), DisplayMode = ElementDisplayMode.Fixed },
+            Chrome = new ElementChromeOptions { ShowBorder = true, ShowTitle = true, TitleText = "Test" },
         });
         window.Initialize();
 
         window.SetRelativePosition(new Vector2(300, 250));
 
-        Assert.AreEqual(window.ContentRectangle, window.WindowViewport.Bounds);
+        Assert.AreEqual(window.ContentRectangle, window.Viewport.Bounds);
     }
 
     [TestMethod]
     public void SetSize_UpdatesWindowViewportToMatchContentRectangle()
     {
         var windowService = CreateWindowService();
-        var window = windowService.CreateWindow<Window>(null, new WindowOptions
+        var window = windowService.CreateElement<Window>(null, new ElementOptions
         {
             // Explicit MaximumSize larger than the resize target -- otherwise it defaults to
             // this same Size (see BuildWindow), silently clamping SetSize(400, 300) back down
             // to a no-op and making this test pass even without the fix it's guarding.
-            Layout = new WindowLayoutOptions { RelativePosition = new Vector2(10, 10), Size = new Vector2(200, 100), MaximumSize = new Vector2(500, 400), DisplayMode = WindowDisplayMode.Fixed },
-            Chrome = new WindowChromeOptions { ShowBorder = true, ShowTitle = true, TitleText = "Test" },
+            Layout = new ElementLayoutOptions { RelativePosition = new Vector2(10, 10), Size = new Vector2(200, 100), MaximumSize = new Vector2(500, 400), DisplayMode = ElementDisplayMode.Fixed },
+            Chrome = new ElementChromeOptions { ShowBorder = true, ShowTitle = true, TitleText = "Test" },
         });
         window.Initialize();
 
         window.SetSize(new Vector2(400, 300));
 
-        Assert.AreEqual(window.ContentRectangle, window.WindowViewport.Bounds);
+        Assert.AreEqual(window.ContentRectangle, window.Viewport.Bounds);
     }
 
     /// <summary>
@@ -70,17 +70,17 @@ public sealed class WindowViewportTests
     public void DraggingARootWrapContentTextWindow_KeepsItsWidthConstant()
     {
         var windowService = CreateWindowService();
-        var window = windowService.CreateWindow<TextWindow>(null, new WindowOptions
+        var window = windowService.CreateElement<TextWindow>(null, new ElementOptions
         {
-            Layout = new WindowLayoutOptions { RelativePosition = new Vector2(200, 200), MaximumSize = new Vector2(400, 300), DisplayMode = WindowDisplayMode.WrapContent },
-            Chrome = new WindowChromeOptions { ShowBorder = true, ShowTitle = true, TitleText = "Test" },
+            Layout = new ElementLayoutOptions { RelativePosition = new Vector2(200, 200), MaximumSize = new Vector2(400, 300), DisplayMode = ElementDisplayMode.WrapContent },
+            Chrome = new ElementChromeOptions { ShowBorder = true, ShowTitle = true, TitleText = "Test" },
             Text = new TextOptions { Text = "Hello world" },
         });
         window.Initialize();
-        var widthBeforeDrag = window.WindowCurrentSize.X;
+        var widthBeforeDrag = window.CurrentSize.X;
 
         window.SetRelativePosition(new Vector2(350, 200));
 
-        Assert.AreEqual(widthBeforeDrag, window.WindowCurrentSize.X);
+        Assert.AreEqual(widthBeforeDrag, window.CurrentSize.X);
     }
 }

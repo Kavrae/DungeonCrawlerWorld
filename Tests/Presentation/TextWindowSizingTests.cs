@@ -16,14 +16,14 @@ namespace Tests.Presentation;
 [TestClass]
 public sealed class TextWindowSizingTests
 {
-    private static WindowService CreateWindowService() => new(new FontService("Fonts"), new GlyphRenderer());
+    private static ElementPoolService CreateWindowService() => new(new FontService("Fonts"), new GlyphRenderer());
 
-    private static TextWindow CreateWrapContentTextWindow(WindowService windowService, string text, Vector2 maximumSize)
+    private static TextWindow CreateWrapContentTextWindow(ElementPoolService windowService, string text, Vector2 maximumSize)
     {
-        return windowService.CreateWindow<TextWindow>(null, new WindowOptions
+        return windowService.CreateElement<TextWindow>(null, new ElementOptions
         {
-            Layout = new WindowLayoutOptions { RelativePosition = new Vector2(200, 200), MaximumSize = maximumSize, DisplayMode = WindowDisplayMode.WrapContent },
-            Chrome = new WindowChromeOptions { ShowBorder = true, ShowTitle = true, TitleText = "Test" },
+            Layout = new ElementLayoutOptions { RelativePosition = new Vector2(200, 200), MaximumSize = maximumSize, DisplayMode = ElementDisplayMode.WrapContent },
+            Chrome = new ElementChromeOptions { ShowBorder = true, ShowTitle = true, TitleText = "Test" },
             Text = new TextOptions { Text = text },
         });
     }
@@ -36,7 +36,7 @@ public sealed class TextWindowSizingTests
 
         window.Initialize();
 
-        Assert.IsLessThan(400, window.WindowCurrentSize.X);
+        Assert.IsLessThan(400, window.CurrentSize.X);
     }
 
     [TestMethod]
@@ -52,8 +52,8 @@ public sealed class TextWindowSizingTests
         // the boundary), so the shrunk width lands close to but not exactly at 400 -- the
         // guarantee that matters is the clamp (never wider than the maximum) plus actually
         // using most of the available width (not collapsing back to the short-text case).
-        Assert.IsLessThanOrEqualTo(400, window.WindowCurrentSize.X);
-        Assert.IsGreaterThan(300, window.WindowCurrentSize.X);
+        Assert.IsLessThanOrEqualTo(400, window.CurrentSize.X);
+        Assert.IsGreaterThan(300, window.CurrentSize.X);
     }
 
     /// <summary>Regression guard for the drag bug: a root window's shrink-to-fit width must not depend on its screen position.</summary>
@@ -63,11 +63,11 @@ public sealed class TextWindowSizingTests
         var windowService = CreateWindowService();
         var window = CreateWrapContentTextWindow(windowService, "Hi", new Vector2(400, 300));
         window.Initialize();
-        var widthBeforeMove = window.WindowCurrentSize.X;
+        var widthBeforeMove = window.CurrentSize.X;
 
         window.SetRelativePosition(new Vector2(350, 200));
 
-        Assert.AreEqual(widthBeforeMove, window.WindowCurrentSize.X);
+        Assert.AreEqual(widthBeforeMove, window.CurrentSize.X);
     }
 
     /// <summary>
@@ -88,13 +88,13 @@ public sealed class TextWindowSizingTests
     public void SiblingsExceedingParentBudget_NeverJumpBackwardInsteadOfContinuingDownward()
     {
         var windowService = CreateWindowService();
-        var parent = windowService.CreateWindow<Window>(null, new WindowOptions
+        var parent = windowService.CreateElement<Window>(null, new ElementOptions
         {
-            Hierarchy = new WindowHierarchyOptions { CanContainChildWindows = true, ChildWindowTileMode = WindowTileMode.Vertical },
+            Hierarchy = new ElementHierarchyOptions { CanContainChildren = true, ChildrenTileMode = ChildElementTileMode.Vertical },
             // Deliberately short -- a handful of long-text children will together exceed this
             // easily, the same way several component windows can exceed selectionWindow's
             // real 744px budget.
-            Layout = new WindowLayoutOptions { Size = new Vector2(300, 100), DisplayMode = WindowDisplayMode.Fixed },
+            Layout = new ElementLayoutOptions { Size = new Vector2(300, 100), DisplayMode = ElementDisplayMode.Fixed },
         });
         parent.Initialize();
 
@@ -105,19 +105,19 @@ public sealed class TextWindowSizingTests
         // each predecessor) has already exceeded the parent's 100px MaximumSize.Y budget.
         for (var index = 0; index < 4; index++)
         {
-            var child = windowService.CreateWindow<TextWindow>(parent, new WindowOptions
+            var child = windowService.CreateElement<TextWindow>(parent, new ElementOptions
             {
-                Layout = new WindowLayoutOptions { MaximumSize = parent.ContentSize, DisplayMode = WindowDisplayMode.WrapContent },
+                Layout = new ElementLayoutOptions { MaximumSize = parent.ContentSize, DisplayMode = ElementDisplayMode.WrapContent },
                 Text = new TextOptions { Text = longText },
             });
-            parent.AddChildWindow(child);
+            parent.AddChild(child);
 
-            Assert.IsGreaterThanOrEqualTo(0, child.WindowCurrentSize.Y, $"Sibling {index}'s own height went negative.");
+            Assert.IsGreaterThanOrEqualTo(0, child.CurrentSize.Y, $"Sibling {index}'s own height went negative.");
             if (previousChild is not null)
             {
                 Assert.IsGreaterThanOrEqualTo(
-                    previousChild.WindowRelativePosition.Y,
-                    child.WindowRelativePosition.Y,
+                    previousChild.RelativePosition.Y,
+                    child.RelativePosition.Y,
                     $"Sibling {index} landed above sibling {index - 1} instead of at or below it.");
             }
 
@@ -137,12 +137,12 @@ public sealed class TextWindowSizingTests
     public void WrapContentWindow_TitleAndCloseButton_BothFitWithoutOverlapping()
     {
         var windowService = CreateWindowService();
-        var window = windowService.CreateWindow<TextWindow>(null, new WindowOptions
+        var window = windowService.CreateElement<TextWindow>(null, new ElementOptions
         {
             // Short body text -- the title bar (text + button), not the content, must be what
             // drives this window's width for the bug to actually get exercised.
-            Layout = new WindowLayoutOptions { MaximumSize = new Vector2(640, 300), DisplayMode = WindowDisplayMode.WrapContent },
-            Chrome = new WindowChromeOptions { ShowBorder = true, ShowTitle = true, TitleText = "New Quest (Enter to submit)", CanUserClose = true },
+            Layout = new ElementLayoutOptions { MaximumSize = new Vector2(640, 300), DisplayMode = ElementDisplayMode.WrapContent },
+            Chrome = new ElementChromeOptions { ShowBorder = true, ShowTitle = true, TitleText = "New Quest (Enter to submit)", CanUserClose = true },
             Text = new TextOptions { Text = "Hi" },
         });
 
@@ -167,10 +167,10 @@ public sealed class TextWindowSizingTests
     public void WrapContentWindow_ButtonAddedAfterInitialize_StillFitsWithoutOverlapping()
     {
         var windowService = CreateWindowService();
-        var window = windowService.CreateWindow<TextWindow>(null, new WindowOptions
+        var window = windowService.CreateElement<TextWindow>(null, new ElementOptions
         {
-            Layout = new WindowLayoutOptions { MaximumSize = new Vector2(640, 300), DisplayMode = WindowDisplayMode.WrapContent },
-            Chrome = new WindowChromeOptions { ShowBorder = true, ShowTitle = true, TitleText = "New Quest (Enter to submit)" },
+            Layout = new ElementLayoutOptions { MaximumSize = new Vector2(640, 300), DisplayMode = ElementDisplayMode.WrapContent },
+            Chrome = new ElementChromeOptions { ShowBorder = true, ShowTitle = true, TitleText = "New Quest (Enter to submit)" },
             Text = new TextOptions { Text = "Hi" },
         });
         window.Initialize();

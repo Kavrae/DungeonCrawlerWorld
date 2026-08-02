@@ -13,17 +13,17 @@ namespace Tests.Presentation;
 [TestClass]
 public sealed class WindowChromeButtonTests
 {
-    private static WindowService CreateWindowService() => new(new FontService("Fonts"), new GlyphRenderer());
+    private static ElementPoolService CreateWindowService() => new(new FontService("Fonts"), new GlyphRenderer());
 
-    private static Window CreateWindowWithCloseAndMinimize(WindowService windowService)
+    private static Window CreateWindowWithCloseAndMinimize(ElementPoolService windowService)
     {
-        var window = windowService.CreateWindow<Window>(null, new WindowOptions
+        var window = windowService.CreateElement<Window>(null, new ElementOptions
         {
-            Layout = new WindowLayoutOptions { Size = new Vector2(200, 100), DisplayMode = WindowDisplayMode.Fixed },
+            Layout = new ElementLayoutOptions { Size = new Vector2(200, 100), DisplayMode = ElementDisplayMode.Fixed },
             // A non-trivial TitleText matters here: minimizing shrinks the title bar to fit
             // just its text, and an empty title would shrink it down to less than a single
             // button's own width -- a separate edge case this test isn't about.
-            Chrome = new WindowChromeOptions { ShowTitle = true, TitleText = "Test Window", CanUserClose = true, CanUserMinimize = true },
+            Chrome = new ElementChromeOptions { ShowTitle = true, TitleText = "Test Window", CanUserClose = true, CanUserMinimize = true },
         });
         window.Initialize();
         return window;
@@ -55,16 +55,16 @@ public sealed class WindowChromeButtonTests
     public void Initialize_OnlyMinimize_NoCloseButton_MinimizeRestoreStillOnRightSide()
     {
         var windowService = CreateWindowService();
-        var window = windowService.CreateWindow<Window>(null, new WindowOptions
+        var window = windowService.CreateElement<Window>(null, new ElementOptions
         {
-            Layout = new WindowLayoutOptions { Size = new Vector2(200, 100), DisplayMode = WindowDisplayMode.Fixed },
-            Chrome = new WindowChromeOptions { ShowTitle = true, CanUserMinimize = true },
+            Layout = new ElementLayoutOptions { Size = new Vector2(200, 100), DisplayMode = ElementDisplayMode.Fixed },
+            Chrome = new ElementChromeOptions { ShowTitle = true, CanUserMinimize = true },
         });
         window.Initialize();
 
         Assert.HasCount(1, window.TitleButtons);
         // Right-aligned per AddTitleButton's "first item" branch.
-        Assert.AreEqual(window.TitleSize.X - window.TitleButtons[0].Size.X - 3, window.TitleButtons[0].RelativePosition.X);
+        Assert.AreEqual(window.TitleSize.X - window.TitleButtons[0].CurrentSize.X - 3, window.TitleButtons[0].RelativePosition.X);
     }
 
     [TestMethod]
@@ -91,15 +91,15 @@ public sealed class WindowChromeButtonTests
 
         // Re-queried before each click rather than captured once: minimizing shrinks the
         // title bar to fit just its text, which legitimately moves the button on screen.
-        window.HandleClick(minimizeRestoreButton.ButtonRectangle.Center);
+        window.HandleClick(minimizeRestoreButton.Rectangle.Center);
 
-        Assert.AreEqual(WindowDisplayMode.Minimized, window.WindowDisplay);
+        Assert.AreEqual(ElementDisplayMode.Minimized, window.DisplayMode);
         Assert.AreEqual("O", minimizeRestoreButton.Text);
         Assert.HasCount(2, window.TitleButtons);
 
-        window.HandleClick(minimizeRestoreButton.ButtonRectangle.Center);
+        window.HandleClick(minimizeRestoreButton.Rectangle.Center);
 
-        Assert.AreEqual(WindowDisplayMode.Fixed, window.WindowDisplay);
+        Assert.AreEqual(ElementDisplayMode.Fixed, window.DisplayMode);
         Assert.AreEqual("_", minimizeRestoreButton.Text);
     }
 
@@ -117,9 +117,9 @@ public sealed class WindowChromeButtonTests
         var window = CreateWindowWithCloseAndMinimize(CreateWindowService());
         var minimizeRestoreButton = window.TitleButtons[1];
 
-        window.SetWindowDisplayMode(WindowDisplayMode.Minimized);
+        window.SetDisplayMode(ElementDisplayMode.Minimized);
 
-        Assert.IsTrue(window.TitleRectangle.Contains(minimizeRestoreButton.ButtonRectangle.Center));
+        Assert.IsTrue(window.TitleRectangle.Contains(minimizeRestoreButton.Rectangle.Center));
     }
 
     /// <summary>
@@ -134,20 +134,20 @@ public sealed class WindowChromeButtonTests
     public void MinimizedWindow_ShortTitle_ButtonsDoNotOverlap()
     {
         var windowService = CreateWindowService();
-        var window = windowService.CreateWindow<Window>(null, new WindowOptions
+        var window = windowService.CreateElement<Window>(null, new ElementOptions
         {
-            Layout = new WindowLayoutOptions { Size = new Vector2(200, 100), DisplayMode = WindowDisplayMode.Fixed },
+            Layout = new ElementLayoutOptions { Size = new Vector2(200, 100), DisplayMode = ElementDisplayMode.Fixed },
             // A single-character title is short enough that, pre-fix, the minimized title bar
             // would be narrower than the two buttons combined.
-            Chrome = new WindowChromeOptions { ShowTitle = true, TitleText = "X", CanUserClose = true, CanUserMinimize = true },
+            Chrome = new ElementChromeOptions { ShowTitle = true, TitleText = "X", CanUserClose = true, CanUserMinimize = true },
         });
         window.Initialize();
 
-        window.SetWindowDisplayMode(WindowDisplayMode.Minimized);
+        window.SetDisplayMode(ElementDisplayMode.Minimized);
 
         var closeButton = window.TitleButtons[0];
         var minimizeRestoreButton = window.TitleButtons[1];
-        Assert.IsFalse(closeButton.ButtonRectangle.Intersects(minimizeRestoreButton.ButtonRectangle));
+        Assert.IsFalse(closeButton.Rectangle.Intersects(minimizeRestoreButton.Rectangle));
     }
 
     /// <summary>
@@ -171,7 +171,7 @@ public sealed class WindowChromeButtonTests
             var window = CreateWindowWithCloseAndMinimize(windowService);
             var minimizeRestoreButton = window.TitleButtons[1];
 
-            window.SetWindowDisplayMode(WindowDisplayMode.Minimized);
+            window.SetDisplayMode(ElementDisplayMode.Minimized);
             Assert.AreEqual("O", minimizeRestoreButton.Text);
 
             window.Close();
@@ -180,7 +180,7 @@ public sealed class WindowChromeButtonTests
         var finalWindow = CreateWindowWithCloseAndMinimize(windowService);
         var finalButton = finalWindow.TitleButtons[1];
 
-        finalWindow.SetWindowDisplayMode(WindowDisplayMode.Minimized);
+        finalWindow.SetDisplayMode(ElementDisplayMode.Minimized);
 
         Assert.AreEqual("O", finalButton.Text);
     }

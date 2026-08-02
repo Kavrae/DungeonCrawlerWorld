@@ -132,7 +132,7 @@ Achievements can name a `LootboxReward` (rarity + box type, see `Game/Modules/Ac
 
 #### Achievement content backlog
 
-The Achievement system (`Game/Modules/Achievements/`) currently ships two achievements ("Loner", "You've Inflicted Damage on a Mob") to prove the pipeline; the rest is a deliberate, incremental backlog -- a few added alongside each future feature rather than all at once. Volume/pacing target: many low-value achievements early (deliberately "drowning the player in low-level loot boxes" at the start), tapering to fewer, higher-value ones by the midgame.
+The Achievement system (`Game/Modules/Achievements/`) currently ships three achievements ("Loner", "You've Inflicted Damage on a Mob", "Unarmed Combat") to prove the pipeline; the rest is a deliberate, incremental backlog -- a few added alongside each future feature rather than all at once. Volume/pacing target: many low-value achievements early (deliberately "drowning the player in low-level loot boxes" at the start), tapering to fewer, higher-value ones by the midgame.
 
 Design-target examples, not yet implemented:
 - Enter the dungeon with a cat (random starting-item selection)
@@ -148,7 +148,9 @@ Design-target examples, not yet implemented:
 
 Several depend on systems that don't exist yet (Inventory, a real companion/party concept + Human race, levels/experience, magic/spell gear, corpse looting) -- implement each achievement once its underlying system actually lands, not before.
 
-`LonerAchievement` (`Game/Modules/Achievements/Definitions/LonerAchievement.cs`) unlocks on any spawn-sentinel `EntityMoved` (`OldPosition == NewPosition`) unconditionally, relying on `FloorBuilder.CreatePlayer` being the only thing that publishes one today. Once a monster spawner also uses that same sentinel, this needs a real player-vs-NPC discriminator that doesn't depend on `IPlayerQuery.PlayerEntityId`'s assignment timing (`GameLoop` sets it *after* `CreatePlayer` returns, but `CreatePlayer` publishes the sentinel *before* returning -- comparing against `PlayerEntityId` here silently never matches, confirmed the hard way). A `MovementComponent.Mode == MovementMode.PlayerControlled` check on the moved entity is the likely fix.
+`LonerAchievement` (`Game/Modules/Achievements/Definitions/LonerAchievement.cs`) unlocks unconditionally on `Game.World.EnteredDungeon`, published once by `GameLoop` right after `_playerSpawned` flips true (so `IPlayerQuery.PlayerEntityId` is already assigned by the time the handler reads it -- no timing hazard the way the old `EntityMoved` spawn-sentinel trigger had). Once a real companion/party concept exists, this needs to actually check for a Human-race companion near the player at spawn instead of always succeeding.
+
+`UnarmedCombatAchievement` (`Game/Modules/Achievements/Definitions/UnarmedCombatAchievement.cs`) unlocks on the same `EnteredDungeon` event, same unconditional reasoning as `LonerAchievement` above (no equipment or start-equipment-selection system exists yet, so every player is unarmed today). Revisit once equipment/start-equipment selection lands: it should then check whether the player actually chose to start without a weapon.
 
 ## Presentation
 

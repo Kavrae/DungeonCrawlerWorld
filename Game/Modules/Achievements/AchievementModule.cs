@@ -27,7 +27,8 @@ public sealed class AchievementModule : IGameModule
 
     private static readonly IReadOnlyList<IAchievementDefinition> Definitions = [
         new InflictedDamageAchievement(),
-        new LonerAchievement()
+        new LonerAchievement(),
+        new UnarmedCombatAchievement()
         ];
 
     private EventBus? _eventBus;

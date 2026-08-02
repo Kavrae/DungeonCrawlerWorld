@@ -10,7 +10,7 @@ namespace Presentation.UI.ChromeBehaviors;
 /// since other code (e.g. a future "minimize all" action) can also toggle a window's
 /// minimized state -- the button must reflect that too, not just clicks on itself.
 /// </summary>
-public sealed class WindowMinimizeRestoreBehavior : IWindowChromeBehavior
+public sealed class MinimizeRestoreBehavior : IChromeBehavior
 {
     public void Attach(Window window)
     {
@@ -19,19 +19,19 @@ public sealed class WindowMinimizeRestoreBehavior : IWindowChromeBehavior
         var button = new Button(window, new ButtonOptions());
         UpdateButtonLabel(window, button);
 
-        button.Clicked += () => window.SetWindowDisplayMode(
-            window.WindowDisplay == WindowDisplayMode.Minimized
-                ? window.PreviousWindowDisplay
-                : WindowDisplayMode.Minimized);
+        button.Clicked += () => window.SetDisplayMode(
+            window.DisplayMode == ElementDisplayMode.Minimized
+                ? window.PreviousDisplay
+                : ElementDisplayMode.Minimized);
 
-        void OnDisplayModeChanged(Window _) => UpdateButtonLabel(window, button);
+        void OnDisplayModeChanged(Element _) => UpdateButtonLabel(window, button);
 
         // WindowService pools and reuses Window instances across close/reopen cycles (see
         // NotificationCenter.OnActiveNotificationClosed for the same pattern), so this
         // subscription must detach itself on Closed -- otherwise it stays attached to the
         // pooled instance forever, accumulating one stale handler (pinning a discarded
         // button) per reuse cycle.
-        void OnClosed(Window closedWindow)
+        void OnClosed(Element closedWindow)
         {
             closedWindow.DisplayModeChanged -= OnDisplayModeChanged;
             closedWindow.Closed -= OnClosed;
@@ -45,7 +45,7 @@ public sealed class WindowMinimizeRestoreBehavior : IWindowChromeBehavior
 
     private static void UpdateButtonLabel(Window window, Button button)
     {
-        var isMinimized = window.WindowDisplay == WindowDisplayMode.Minimized;
+        var isMinimized = window.DisplayMode == ElementDisplayMode.Minimized;
         button.SetText(
             isMinimized
                 ? "O"

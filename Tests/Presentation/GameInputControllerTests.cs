@@ -35,10 +35,10 @@ public sealed class GameInputControllerTests
     private static MouseState MouseAtWithRightButton(int x, int y, ButtonState rightButton) =>
         new(x, y, 0, ButtonState.Released, ButtonState.Released, rightButton, ButtonState.Released, ButtonState.Released);
 
-    private static WindowService CreateWindowService() => new(new FontService("Fonts"), new GlyphRenderer());
+    private static ElementPoolService CreateWindowService() => new(new FontService("Fonts"), new GlyphRenderer());
 
     /// <summary>Records HandleRightDragStart/HandleRightDrag calls, so GameInputController's right-button wiring (hit-test on press, total-delta-since-start on every held frame) can be verified end-to-end without a real MapWindow.</summary>
-    private sealed class RightDragSpyWindow(FontService fontService, WindowService windowService, GlyphRenderer glyphRenderer) : Window(fontService, windowService, glyphRenderer)
+    private sealed class RightDragSpyWindow(FontService fontService, ElementPoolService windowService, GlyphRenderer glyphRenderer) : Window(fontService, windowService, glyphRenderer)
     {
         public int DragStartCallCount { get; private set; }
         public int DragEndCallCount { get; private set; }
@@ -51,67 +51,67 @@ public sealed class GameInputControllerTests
         protected override void OnRightClickTapAction() => RightClickTapCallCount++;
     }
 
-    private static RightDragSpyWindow CreateRightDragSpyWindow(WindowService windowService, FontService fontService, Vector2 relativePosition)
+    private static RightDragSpyWindow CreateRightDragSpyWindow(ElementPoolService windowService, FontService fontService, Vector2 relativePosition)
     {
         windowService.RegisterFactory<RightDragSpyWindow>((_, _) => new RightDragSpyWindow(fontService, windowService, new GlyphRenderer()));
-        var window = windowService.CreateWindow<RightDragSpyWindow>(null, new WindowOptions
+        var window = windowService.CreateElement<RightDragSpyWindow>(null, new ElementOptions
         {
-            Layout = new WindowLayoutOptions { RelativePosition = relativePosition, Size = new Vector2(200, 100), DisplayMode = WindowDisplayMode.Fixed },
+            Layout = new ElementLayoutOptions { RelativePosition = relativePosition, Size = new Vector2(200, 100), DisplayMode = ElementDisplayMode.Fixed },
         });
         window.Initialize();
         return window;
     }
 
-    private static Window CreateRootWindowWithCloseButton(WindowService windowService, Vector2 relativePosition)
+    private static Window CreateRootWindowWithCloseButton(ElementPoolService windowService, Vector2 relativePosition)
     {
-        var window = windowService.CreateWindow<Window>(null, new WindowOptions
+        var window = windowService.CreateElement<Window>(null, new ElementOptions
         {
-            Layout = new WindowLayoutOptions { RelativePosition = relativePosition, Size = new Vector2(200, 100), DisplayMode = WindowDisplayMode.Fixed },
-            Chrome = new WindowChromeOptions { ShowTitle = true, TitleText = "Test", CanUserClose = true },
+            Layout = new ElementLayoutOptions { RelativePosition = relativePosition, Size = new Vector2(200, 100), DisplayMode = ElementDisplayMode.Fixed },
+            Chrome = new ElementChromeOptions { ShowTitle = true, TitleText = "Test", CanUserClose = true },
         });
         window.Initialize();
         return window;
     }
 
     /// <summary>No CanUserClose (so no title buttons to intercept the click) -- lets a press over TitleRectangle resolve to a Move interaction instead.</summary>
-    private static Window CreateMovableWindow(WindowService windowService, Vector2 relativePosition)
+    private static Window CreateMovableWindow(ElementPoolService windowService, Vector2 relativePosition)
     {
-        var window = windowService.CreateWindow<Window>(null, new WindowOptions
+        var window = windowService.CreateElement<Window>(null, new ElementOptions
         {
-            Layout = new WindowLayoutOptions { RelativePosition = relativePosition, Size = new Vector2(200, 100), DisplayMode = WindowDisplayMode.Fixed },
-            Chrome = new WindowChromeOptions { ShowTitle = true, TitleText = "Movable", CanUserMove = true },
+            Layout = new ElementLayoutOptions { RelativePosition = relativePosition, Size = new Vector2(200, 100), DisplayMode = ElementDisplayMode.Fixed },
+            Chrome = new ElementChromeOptions { ShowTitle = true, TitleText = "Movable", CanUserMove = true },
         });
         window.Initialize();
         return window;
     }
 
     /// <summary>ShowBorder=true (GetResizeEdgesAt requires a border to grab) and an explicit MaximumSize well past the starting size, so growing it in a test isn't silently clamped back down (see BuildWindow's MaximumSize default).</summary>
-    private static Window CreateResizableWindow(WindowService windowService, Vector2 relativePosition, Vector2? maximumSize = null, Vector2? minimumSize = null)
+    private static Window CreateResizableWindow(ElementPoolService windowService, Vector2 relativePosition, Vector2? maximumSize = null, Vector2? minimumSize = null)
     {
-        var window = windowService.CreateWindow<Window>(null, new WindowOptions
+        var window = windowService.CreateElement<Window>(null, new ElementOptions
         {
-            Layout = new WindowLayoutOptions
+            Layout = new ElementLayoutOptions
             {
                 RelativePosition = relativePosition,
                 Size = new Vector2(200, 100),
                 MinimumSize = minimumSize ?? Vector2.Zero,
                 MaximumSize = maximumSize ?? new Vector2(600, 500),
-                DisplayMode = WindowDisplayMode.Fixed,
+                DisplayMode = ElementDisplayMode.Fixed,
             },
-            Chrome = new WindowChromeOptions { ShowBorder = true, CanUserResize = true },
+            Chrome = new ElementChromeOptions { ShowBorder = true, CanUserResize = true },
         });
         window.Initialize();
         return window;
     }
 
     /// <summary>Fixed-size with a much taller content than the window (see TextWindowScrollingTests for the underlying scroll-bounds math) -- just enough overflow for mouse-wheel dispatch tests to have something to scroll.</summary>
-    private static TextWindow CreateScrollableTextWindow(WindowService windowService, Vector2 relativePosition)
+    private static TextWindow CreateScrollableTextWindow(ElementPoolService windowService, Vector2 relativePosition)
     {
         var longText = string.Join(' ', Enumerable.Repeat("word", 200));
-        var window = windowService.CreateWindow<TextWindow>(null, new WindowOptions
+        var window = windowService.CreateElement<TextWindow>(null, new ElementOptions
         {
-            Layout = new WindowLayoutOptions { RelativePosition = relativePosition, Size = new Vector2(150, 30), DisplayMode = WindowDisplayMode.Fixed },
-            Chrome = new WindowChromeOptions { CanUserScrollVertical = true },
+            Layout = new ElementLayoutOptions { RelativePosition = relativePosition, Size = new Vector2(150, 30), DisplayMode = ElementDisplayMode.Fixed },
+            Chrome = new ElementChromeOptions { CanUserScrollVertical = true },
             Text = new TextOptions { Text = longText },
         });
         window.Initialize();
@@ -123,7 +123,7 @@ public sealed class GameInputControllerTests
     /// HandleHotkeys -- used to observe GameInputController's routing (RouteKeyPressesToFocusedWindow/
     /// RouteHotkeysToFocusedWindow) without needing a real MapWindow or text-input control.
     /// </summary>
-    private sealed class RecordingKeyContent : IWindowContent
+    private sealed class RecordingKeyContent : IElementContent
     {
         public List<Keys> PressedKeys { get; } = [];
         public int HotkeyCallCount { get; private set; }
@@ -147,12 +147,12 @@ public sealed class GameInputControllerTests
     }
 
     /// <summary>A plain titled window with a RecordingKeyContent attached, for focus/key-routing tests.</summary>
-    private static (Window Window, RecordingKeyContent Content) CreateFocusableWindowWithContent(WindowService windowService, Vector2 relativePosition)
+    private static (Window Window, RecordingKeyContent Content) CreateFocusableWindowWithContent(ElementPoolService windowService, Vector2 relativePosition)
     {
-        var window = windowService.CreateWindow<Window>(null, new WindowOptions
+        var window = windowService.CreateElement<Window>(null, new ElementOptions
         {
-            Layout = new WindowLayoutOptions { RelativePosition = relativePosition, Size = new Vector2(200, 100), DisplayMode = WindowDisplayMode.Fixed },
-            Chrome = new WindowChromeOptions { ShowTitle = true, TitleText = "Test" },
+            Layout = new ElementLayoutOptions { RelativePosition = relativePosition, Size = new Vector2(200, 100), DisplayMode = ElementDisplayMode.Fixed },
+            Chrome = new ElementChromeOptions { ShowTitle = true, TitleText = "Test" },
         });
         var content = new RecordingKeyContent();
         window.SetContent(content);
@@ -168,7 +168,7 @@ public sealed class GameInputControllerTests
         var closeButton = window.TitleButtons[0];
         var controller = new GameInputController([window], [], [], LargeScreenSize);
 
-        var pressPoint = closeButton.ButtonRectangle.Center;
+        var pressPoint = closeButton.Rectangle.Center;
         controller.Update(NoKeys, MouseAt(pressPoint.X, pressPoint.Y, ButtonState.Released));
         controller.Update(NoKeys, MouseAt(pressPoint.X, pressPoint.Y, ButtonState.Pressed));
 
@@ -183,7 +183,7 @@ public sealed class GameInputControllerTests
         var closeButton = window.TitleButtons[0];
         var controller = new GameInputController([window], [], [], LargeScreenSize);
 
-        var pressPoint = closeButton.ButtonRectangle.Center;
+        var pressPoint = closeButton.Rectangle.Center;
         controller.Update(NoKeys, MouseAt(pressPoint.X, pressPoint.Y, ButtonState.Released));
         controller.Update(NoKeys, MouseAt(pressPoint.X, pressPoint.Y, ButtonState.Pressed));
         Assert.AreSame(closeButton, controller.PressedButton);
@@ -202,7 +202,7 @@ public sealed class GameInputControllerTests
         var closeButton = window.TitleButtons[0];
         var controller = new GameInputController([window], [], [], LargeScreenSize);
 
-        var pressPoint = closeButton.ButtonRectangle.Center;
+        var pressPoint = closeButton.Rectangle.Center;
         controller.Update(NoKeys, MouseAt(pressPoint.X, pressPoint.Y, ButtonState.Released));
         controller.Update(NoKeys, MouseAt(pressPoint.X, pressPoint.Y, ButtonState.Pressed));
 
@@ -217,7 +217,7 @@ public sealed class GameInputControllerTests
         var closeButton = window.TitleButtons[0];
         var controller = new GameInputController([window], [], [], LargeScreenSize);
 
-        var pressPoint = closeButton.ButtonRectangle.Center;
+        var pressPoint = closeButton.Rectangle.Center;
         controller.Update(NoKeys, MouseAt(pressPoint.X, pressPoint.Y, ButtonState.Released));
         controller.Update(NoKeys, MouseAt(pressPoint.X, pressPoint.Y, ButtonState.Pressed));
         Assert.IsTrue(closeButton.IsPressed);
@@ -258,7 +258,7 @@ public sealed class GameInputControllerTests
         window.Closed += _ => closed = true;
         var controller = new GameInputController([window], [], [], LargeScreenSize);
 
-        var pressPoint = closeButton.ButtonRectangle.Center;
+        var pressPoint = closeButton.Rectangle.Center;
         controller.Update(NoKeys, MouseAt(pressPoint.X, pressPoint.Y, ButtonState.Released));
         controller.Update(NoKeys, MouseAt(pressPoint.X, pressPoint.Y, ButtonState.Pressed));
         Assert.IsFalse(closed);
@@ -283,7 +283,7 @@ public sealed class GameInputControllerTests
         window.Closed += _ => closed = true;
         var controller = new GameInputController([window], [], [], LargeScreenSize);
 
-        var pressPoint = closeButton.ButtonRectangle.Center;
+        var pressPoint = closeButton.Rectangle.Center;
         controller.Update(NoKeys, MouseAt(pressPoint.X, pressPoint.Y, ButtonState.Released));
         controller.Update(NoKeys, MouseAt(pressPoint.X, pressPoint.Y, ButtonState.Pressed));
 
@@ -303,7 +303,7 @@ public sealed class GameInputControllerTests
         var windowService = CreateWindowService();
         var windowA = CreateRootWindowWithCloseButton(windowService, new Vector2(0, 0));
         var windowB = CreateRootWindowWithCloseButton(windowService, new Vector2(400, 400));
-        var rootWindows = new List<Window> { windowA, windowB };
+        var rootWindows = new List<Element> { windowA, windowB };
         var controller = new GameInputController(rootWindows, [], [], LargeScreenSize);
 
         var pressPoint = windowA.ContentRectangle.Center;
@@ -330,7 +330,7 @@ public sealed class GameInputControllerTests
         front.Closed += _ => frontClosed = true;
         var controller = new GameInputController([back, front], [], [], LargeScreenSize);
 
-        var pressPoint = front.TitleButtons[0].ButtonRectangle.Center;
+        var pressPoint = front.TitleButtons[0].Rectangle.Center;
         controller.Update(NoKeys, MouseAt(pressPoint.X, pressPoint.Y, ButtonState.Released));
         controller.Update(NoKeys, MouseAt(pressPoint.X, pressPoint.Y, ButtonState.Pressed));
         controller.Update(NoKeys, MouseAt(pressPoint.X, pressPoint.Y, ButtonState.Released));
@@ -356,7 +356,7 @@ public sealed class GameInputControllerTests
         alwaysOnTopWindow.Closed += _ => alwaysOnTopClosed = true;
         var controller = new GameInputController([rootWindow], [], [alwaysOnTopWindow], LargeScreenSize);
 
-        var pressPoint = alwaysOnTopWindow.TitleButtons[0].ButtonRectangle.Center;
+        var pressPoint = alwaysOnTopWindow.TitleButtons[0].Rectangle.Center;
         controller.Update(NoKeys, MouseAt(pressPoint.X, pressPoint.Y, ButtonState.Released));
         controller.Update(NoKeys, MouseAt(pressPoint.X, pressPoint.Y, ButtonState.Pressed));
         controller.Update(NoKeys, MouseAt(pressPoint.X, pressPoint.Y, ButtonState.Released));
@@ -377,10 +377,10 @@ public sealed class GameInputControllerTests
         controller.Update(NoKeys, MouseAt(pressPoint.X, pressPoint.Y, ButtonState.Released));
         controller.Update(NoKeys, MouseAt(pressPoint.X, pressPoint.Y, ButtonState.Pressed));
 
-        Assert.AreEqual(WindowInteractionKind.Move, controller.ActiveInteraction.Kind);
-        Assert.AreSame(window, controller.ActiveInteraction.Window);
-        Assert.AreEqual(window.WindowRelativePosition, controller.DragStartRelativePosition);
-        Assert.AreEqual(window.WindowCurrentSize, controller.DragStartSize);
+        Assert.AreEqual(ElementDragInteractionKind.Move, controller.ActiveInteraction.Kind);
+        Assert.AreSame(window, controller.ActiveInteraction.Element);
+        Assert.AreEqual(window.RelativePosition, controller.DragStartRelativePosition);
+        Assert.AreEqual(window.CurrentSize, controller.DragStartSize);
     }
 
     /// <summary>Moving the mouse while a drag is held recomputes DragDelta -- Phase D wires Resize the same way, via SetBounds.</summary>
@@ -414,7 +414,7 @@ public sealed class GameInputControllerTests
 
         controller.Update(NoKeys, MouseAt(pressPoint.X + 15, pressPoint.Y + 5, ButtonState.Pressed));
 
-        Assert.AreEqual(new Vector2(65, 65), window.WindowRelativePosition);
+        Assert.AreEqual(new Vector2(65, 65), window.RelativePosition);
     }
 
     /// <summary>
@@ -427,26 +427,26 @@ public sealed class GameInputControllerTests
     public void PressingATitleBar_OnATiledChildWindow_DoesNotStartAMove()
     {
         var windowService = CreateWindowService();
-        var parent = windowService.CreateWindow<Window>(null, new WindowOptions
+        var parent = windowService.CreateElement<Window>(null, new ElementOptions
         {
-            Hierarchy = new WindowHierarchyOptions { CanContainChildWindows = true, ChildWindowTileMode = WindowTileMode.Horizontal },
-            Layout = new WindowLayoutOptions { Size = new Vector2(400, 100), DisplayMode = WindowDisplayMode.Fixed },
+            Hierarchy = new ElementHierarchyOptions { CanContainChildren = true, ChildrenTileMode = ChildElementTileMode.Horizontal },
+            Layout = new ElementLayoutOptions { Size = new Vector2(400, 100), DisplayMode = ElementDisplayMode.Fixed },
         });
         parent.Initialize();
 
-        var child = windowService.CreateWindow<Window>(parent, new WindowOptions
+        var child = windowService.CreateElement<Window>(parent, new ElementOptions
         {
-            Layout = new WindowLayoutOptions { Size = new Vector2(200, 100), DisplayMode = WindowDisplayMode.Fixed },
-            Chrome = new WindowChromeOptions { ShowTitle = true, TitleText = "Tiled", CanUserMove = true },
+            Layout = new ElementLayoutOptions { Size = new Vector2(200, 100), DisplayMode = ElementDisplayMode.Fixed },
+            Chrome = new ElementChromeOptions { ShowTitle = true, TitleText = "Tiled", CanUserMove = true },
         });
-        parent.AddChildWindow(child);
+        parent.AddChild(child);
         var controller = new GameInputController([parent], [], [], LargeScreenSize);
 
         var pressPoint = child.TitleRectangle.Center;
         controller.Update(NoKeys, MouseAt(pressPoint.X, pressPoint.Y, ButtonState.Released));
         controller.Update(NoKeys, MouseAt(pressPoint.X, pressPoint.Y, ButtonState.Pressed));
 
-        Assert.AreNotEqual(WindowInteractionKind.Move, controller.ActiveInteraction.Kind);
+        Assert.AreNotEqual(ElementDragInteractionKind.Move, controller.ActiveInteraction.Kind);
     }
 
     /// <summary>Releasing the mouse ends the interaction entirely, not just PressedButton -- ActiveInteraction must go back to NotHit for the next press to start clean.</summary>
@@ -460,11 +460,11 @@ public sealed class GameInputControllerTests
         var pressPoint = window.TitleRectangle.Center;
         controller.Update(NoKeys, MouseAt(pressPoint.X, pressPoint.Y, ButtonState.Released));
         controller.Update(NoKeys, MouseAt(pressPoint.X, pressPoint.Y, ButtonState.Pressed));
-        Assert.AreEqual(WindowInteractionKind.Move, controller.ActiveInteraction.Kind);
+        Assert.AreEqual(ElementDragInteractionKind.Move, controller.ActiveInteraction.Kind);
 
         controller.Update(NoKeys, MouseAt(pressPoint.X, pressPoint.Y, ButtonState.Released));
 
-        Assert.AreEqual(WindowInteraction.NotHit, controller.ActiveInteraction);
+        Assert.AreEqual(ElementInteraction.NotHit, controller.ActiveInteraction);
     }
 
     /// <summary>Window Chrome Phase D: pressing a resizable window's right border edge starts a Resize interaction flagged for that edge.</summary>
@@ -479,7 +479,7 @@ public sealed class GameInputControllerTests
         controller.Update(NoKeys, MouseAt(pressPoint.X, pressPoint.Y, ButtonState.Released));
         controller.Update(NoKeys, MouseAt(pressPoint.X, pressPoint.Y, ButtonState.Pressed));
 
-        Assert.AreEqual(WindowInteractionKind.Resize, controller.ActiveInteraction.Kind);
+        Assert.AreEqual(ElementDragInteractionKind.Resize, controller.ActiveInteraction.Kind);
         Assert.AreEqual(ResizeEdges.Right, controller.ActiveInteraction.Edges);
     }
 
@@ -497,8 +497,8 @@ public sealed class GameInputControllerTests
 
         controller.Update(NoKeys, MouseAt(pressPoint.X + 40, pressPoint.Y, ButtonState.Pressed));
 
-        Assert.AreEqual(new Vector2(240, 100), window.WindowCurrentSize);
-        Assert.AreEqual(new Vector2(50, 60), window.WindowRelativePosition);
+        Assert.AreEqual(new Vector2(240, 100), window.CurrentSize);
+        Assert.AreEqual(new Vector2(50, 60), window.RelativePosition);
     }
 
     /// <summary>
@@ -513,7 +513,7 @@ public sealed class GameInputControllerTests
         var windowService = CreateWindowService();
         var window = CreateResizableWindow(windowService, new Vector2(50, 60));
         var controller = new GameInputController([window], [], [], LargeScreenSize);
-        var rightEdgeBeforeDrag = window.WindowRelativePosition.X + window.WindowCurrentSize.X;
+        var rightEdgeBeforeDrag = window.RelativePosition.X + window.CurrentSize.X;
 
         var pressPoint = window.BorderLeftRectangle.Center;
         controller.Update(NoKeys, MouseAt(pressPoint.X, pressPoint.Y, ButtonState.Released));
@@ -521,9 +521,9 @@ public sealed class GameInputControllerTests
 
         controller.Update(NoKeys, MouseAt(pressPoint.X + 40, pressPoint.Y, ButtonState.Pressed));
 
-        Assert.AreEqual(new Vector2(160, 100), window.WindowCurrentSize);
-        Assert.AreEqual(new Vector2(90, 60), window.WindowRelativePosition);
-        Assert.AreEqual(rightEdgeBeforeDrag, window.WindowRelativePosition.X + window.WindowCurrentSize.X);
+        Assert.AreEqual(new Vector2(160, 100), window.CurrentSize);
+        Assert.AreEqual(new Vector2(90, 60), window.RelativePosition);
+        Assert.AreEqual(rightEdgeBeforeDrag, window.RelativePosition.X + window.CurrentSize.X);
     }
 
     /// <summary>
@@ -537,7 +537,7 @@ public sealed class GameInputControllerTests
         var windowService = CreateWindowService();
         var window = CreateResizableWindow(windowService, new Vector2(50, 60), maximumSize: new Vector2(250, 500));
         var controller = new GameInputController([window], [], [], LargeScreenSize);
-        var rightEdgeBeforeDrag = window.WindowRelativePosition.X + window.WindowCurrentSize.X;
+        var rightEdgeBeforeDrag = window.RelativePosition.X + window.CurrentSize.X;
 
         var pressPoint = window.BorderLeftRectangle.Center;
         controller.Update(NoKeys, MouseAt(pressPoint.X, pressPoint.Y, ButtonState.Released));
@@ -546,8 +546,8 @@ public sealed class GameInputControllerTests
         // Dragging left by 100 would grow the width to 300 (200 + 100), past the 250 maximum.
         controller.Update(NoKeys, MouseAt(pressPoint.X - 100, pressPoint.Y, ButtonState.Pressed));
 
-        Assert.AreEqual(250, window.WindowCurrentSize.X);
-        Assert.AreEqual(rightEdgeBeforeDrag, window.WindowRelativePosition.X + window.WindowCurrentSize.X);
+        Assert.AreEqual(250, window.CurrentSize.X);
+        Assert.AreEqual(rightEdgeBeforeDrag, window.RelativePosition.X + window.CurrentSize.X);
     }
 
     /// <summary>A corner combines two edges in one drag -- bottom-right grows both dimensions independently.</summary>
@@ -558,14 +558,14 @@ public sealed class GameInputControllerTests
         var window = CreateResizableWindow(windowService, new Vector2(50, 60));
         var controller = new GameInputController([window], [], [], LargeScreenSize);
 
-        var pressPoint = new Point(window.WindowRectangle.Right - 2, window.WindowRectangle.Bottom - 2);
+        var pressPoint = new Point(window.Rectangle.Right - 2, window.Rectangle.Bottom - 2);
         controller.Update(NoKeys, MouseAt(pressPoint.X, pressPoint.Y, ButtonState.Released));
         controller.Update(NoKeys, MouseAt(pressPoint.X, pressPoint.Y, ButtonState.Pressed));
         Assert.AreEqual(ResizeEdges.Bottom | ResizeEdges.Right, controller.ActiveInteraction.Edges);
 
         controller.Update(NoKeys, MouseAt(pressPoint.X + 30, pressPoint.Y + 20, ButtonState.Pressed));
 
-        Assert.AreEqual(new Vector2(230, 120), window.WindowCurrentSize);
+        Assert.AreEqual(new Vector2(230, 120), window.CurrentSize);
     }
 
     /// <summary>WrapContent/Fill windows compute size from content/parent, not SetSize/SetBounds -- offering a Resize interaction there would start a drag that visibly does nothing.</summary>
@@ -573,10 +573,10 @@ public sealed class GameInputControllerTests
     public void PressingABorderEdge_OnANonFixedResizableWindow_DoesNotStartResize()
     {
         var windowService = CreateWindowService();
-        var window = windowService.CreateWindow<TextWindow>(null, new WindowOptions
+        var window = windowService.CreateElement<TextWindow>(null, new ElementOptions
         {
-            Layout = new WindowLayoutOptions { RelativePosition = new Vector2(50, 60), MaximumSize = new Vector2(400, 300), DisplayMode = WindowDisplayMode.WrapContent },
-            Chrome = new WindowChromeOptions { ShowBorder = true, CanUserResize = true },
+            Layout = new ElementLayoutOptions { RelativePosition = new Vector2(50, 60), MaximumSize = new Vector2(400, 300), DisplayMode = ElementDisplayMode.WrapContent },
+            Chrome = new ElementChromeOptions { ShowBorder = true, CanUserResize = true },
             Text = new TextOptions { Text = "Hello" },
         });
         window.Initialize();
@@ -586,7 +586,7 @@ public sealed class GameInputControllerTests
         controller.Update(NoKeys, MouseAt(pressPoint.X, pressPoint.Y, ButtonState.Released));
         controller.Update(NoKeys, MouseAt(pressPoint.X, pressPoint.Y, ButtonState.Pressed));
 
-        Assert.AreNotEqual(WindowInteractionKind.Resize, controller.ActiveInteraction.Kind);
+        Assert.AreNotEqual(ElementDragInteractionKind.Resize, controller.ActiveInteraction.Kind);
     }
 
     /// <summary>A tiled child's size is recomputed on the next AddChildWindow/RemoveChildWindow -- same HasFreePosition gate as Move, applied to Resize too.</summary>
@@ -594,26 +594,26 @@ public sealed class GameInputControllerTests
     public void PressingABorderEdge_OnATiledChildWindow_DoesNotStartResize()
     {
         var windowService = CreateWindowService();
-        var parent = windowService.CreateWindow<Window>(null, new WindowOptions
+        var parent = windowService.CreateElement<Window>(null, new ElementOptions
         {
-            Hierarchy = new WindowHierarchyOptions { CanContainChildWindows = true, ChildWindowTileMode = WindowTileMode.Horizontal },
-            Layout = new WindowLayoutOptions { Size = new Vector2(400, 100), DisplayMode = WindowDisplayMode.Fixed },
+            Hierarchy = new ElementHierarchyOptions { CanContainChildren = true, ChildrenTileMode = ChildElementTileMode.Horizontal },
+            Layout = new ElementLayoutOptions { Size = new Vector2(400, 100), DisplayMode = ElementDisplayMode.Fixed },
         });
         parent.Initialize();
 
-        var child = windowService.CreateWindow<Window>(parent, new WindowOptions
+        var child = windowService.CreateElement<Window>(parent, new ElementOptions
         {
-            Layout = new WindowLayoutOptions { Size = new Vector2(200, 100), MaximumSize = new Vector2(600, 500), DisplayMode = WindowDisplayMode.Fixed },
-            Chrome = new WindowChromeOptions { ShowBorder = true, CanUserResize = true },
+            Layout = new ElementLayoutOptions { Size = new Vector2(200, 100), MaximumSize = new Vector2(600, 500), DisplayMode = ElementDisplayMode.Fixed },
+            Chrome = new ElementChromeOptions { ShowBorder = true, CanUserResize = true },
         });
-        parent.AddChildWindow(child);
+        parent.AddChild(child);
         var controller = new GameInputController([parent], [], [], LargeScreenSize);
 
         var pressPoint = child.BorderRightRectangle.Center;
         controller.Update(NoKeys, MouseAt(pressPoint.X, pressPoint.Y, ButtonState.Released));
         controller.Update(NoKeys, MouseAt(pressPoint.X, pressPoint.Y, ButtonState.Pressed));
 
-        Assert.AreNotEqual(WindowInteractionKind.Resize, controller.ActiveInteraction.Kind);
+        Assert.AreNotEqual(ElementDragInteractionKind.Resize, controller.ActiveInteraction.Kind);
     }
 
     /// <summary>New requirement: dragging must not move a root window off-screen -- it should stop at the screen's right/bottom edge instead of continuing to follow the mouse.</summary>
@@ -632,7 +632,7 @@ public sealed class GameInputControllerTests
         controller.Update(NoKeys, MouseAt(pressPoint.X + 1000, pressPoint.Y + 1000, ButtonState.Pressed));
 
         // 200x100 window on a 300x200 screen: furthest it can go is (100, 100).
-        Assert.AreEqual(new Vector2(100, 100), window.WindowRelativePosition);
+        Assert.AreEqual(new Vector2(100, 100), window.RelativePosition);
     }
 
     /// <summary>The other side of the same requirement -- dragging toward/past the top-left must stop at (0, 0), not go negative.</summary>
@@ -649,7 +649,7 @@ public sealed class GameInputControllerTests
 
         controller.Update(NoKeys, MouseAt(pressPoint.X - 1000, pressPoint.Y - 1000, ButtonState.Pressed));
 
-        Assert.AreEqual(Vector2.Zero, window.WindowRelativePosition);
+        Assert.AreEqual(Vector2.Zero, window.RelativePosition);
     }
 
     /// <summary>
@@ -660,18 +660,18 @@ public sealed class GameInputControllerTests
     public void HoldingAMoveDrag_OnAChildWindow_StopsAtTheParentsContentEdges()
     {
         var windowService = CreateWindowService();
-        var parent = windowService.CreateWindow<Window>(null, new WindowOptions
+        var parent = windowService.CreateElement<Window>(null, new ElementOptions
         {
-            Hierarchy = new WindowHierarchyOptions { CanContainChildWindows = true, ChildWindowTileMode = WindowTileMode.Floating },
-            Layout = new WindowLayoutOptions { Size = new Vector2(300, 200), DisplayMode = WindowDisplayMode.Fixed },
+            Hierarchy = new ElementHierarchyOptions { CanContainChildren = true, ChildrenTileMode = ChildElementTileMode.Floating },
+            Layout = new ElementLayoutOptions { Size = new Vector2(300, 200), DisplayMode = ElementDisplayMode.Fixed },
         });
         parent.Initialize();
-        var child = windowService.CreateWindow<Window>(parent, new WindowOptions
+        var child = windowService.CreateElement<Window>(parent, new ElementOptions
         {
-            Layout = new WindowLayoutOptions { RelativePosition = new Vector2(10, 10), Size = new Vector2(50, 50), DisplayMode = WindowDisplayMode.Fixed },
-            Chrome = new WindowChromeOptions { ShowTitle = true, TitleText = "Child", CanUserMove = true },
+            Layout = new ElementLayoutOptions { RelativePosition = new Vector2(10, 10), Size = new Vector2(50, 50), DisplayMode = ElementDisplayMode.Fixed },
+            Chrome = new ElementChromeOptions { ShowTitle = true, TitleText = "Child", CanUserMove = true },
         });
-        parent.AddChildWindow(child);
+        parent.AddChild(child);
         var controller = new GameInputController([parent], [], [], LargeScreenSize);
 
         var pressPoint = child.TitleRectangle.Center;
@@ -680,7 +680,7 @@ public sealed class GameInputControllerTests
 
         controller.Update(NoKeys, MouseAt(pressPoint.X + 1000, pressPoint.Y + 1000, ButtonState.Pressed));
 
-        Assert.AreEqual(parent.ContentSize - child.WindowCurrentSize, child.WindowRelativePosition);
+        Assert.AreEqual(parent.ContentSize - child.CurrentSize, child.RelativePosition);
     }
 
     /// <summary>
@@ -696,7 +696,7 @@ public sealed class GameInputControllerTests
         var window = CreateResizableWindow(windowService, new Vector2(50, 60), maximumSize: new Vector2(1000, 1000));
         var smallScreen = new Vector2(300, 200);
         var controller = new GameInputController([window], [], [], smallScreen);
-        var rightEdgeBeforeDrag = window.WindowRelativePosition.X + window.WindowCurrentSize.X;
+        var rightEdgeBeforeDrag = window.RelativePosition.X + window.CurrentSize.X;
 
         var pressPoint = window.BorderLeftRectangle.Center;
         controller.Update(NoKeys, MouseAt(pressPoint.X, pressPoint.Y, ButtonState.Released));
@@ -704,8 +704,8 @@ public sealed class GameInputControllerTests
 
         controller.Update(NoKeys, MouseAt(pressPoint.X - 1000, pressPoint.Y, ButtonState.Pressed));
 
-        Assert.AreEqual(0, window.WindowRelativePosition.X);
-        Assert.AreEqual(rightEdgeBeforeDrag, window.WindowRelativePosition.X + window.WindowCurrentSize.X);
+        Assert.AreEqual(0, window.RelativePosition.X);
+        Assert.AreEqual(rightEdgeBeforeDrag, window.RelativePosition.X + window.CurrentSize.X);
     }
 
     /// <summary>Growing the right edge past the screen's right boundary must shrink to fit rather than pushing the window (or its right edge) off-screen.</summary>
@@ -723,7 +723,7 @@ public sealed class GameInputControllerTests
 
         controller.Update(NoKeys, MouseAt(pressPoint.X + 1000, pressPoint.Y, ButtonState.Pressed));
 
-        Assert.AreEqual(300, window.WindowRelativePosition.X + window.WindowCurrentSize.X);
+        Assert.AreEqual(300, window.RelativePosition.X + window.CurrentSize.X);
     }
 
     /// <summary>
@@ -739,11 +739,11 @@ public sealed class GameInputControllerTests
         var controller = new GameInputController([window], [], [], LargeScreenSize);
 
         // 5px in from the right edge, vertically centered (well clear of the corner zones).
-        var pressPoint = new Point(window.WindowRectangle.Right - 5, window.WindowRectangle.Y + (int)(window.WindowCurrentSize.Y / 2));
+        var pressPoint = new Point(window.Rectangle.Right - 5, window.Rectangle.Y + (int)(window.CurrentSize.Y / 2));
         controller.Update(NoKeys, MouseAt(pressPoint.X, pressPoint.Y, ButtonState.Released));
         controller.Update(NoKeys, MouseAt(pressPoint.X, pressPoint.Y, ButtonState.Pressed));
 
-        Assert.AreEqual(WindowInteractionKind.Resize, controller.ActiveInteraction.Kind);
+        Assert.AreEqual(ElementDragInteractionKind.Resize, controller.ActiveInteraction.Kind);
         Assert.AreEqual(ResizeEdges.Right, controller.ActiveInteraction.Edges);
     }
 
@@ -781,7 +781,7 @@ public sealed class GameInputControllerTests
         var window = CreateResizableWindow(windowService, new Vector2(50, 60));
         var controller = new GameInputController([window], [], [], LargeScreenSize);
 
-        var hoverPoint = new Point(window.WindowRectangle.X + 2, window.WindowRectangle.Y + 2);
+        var hoverPoint = new Point(window.Rectangle.X + 2, window.Rectangle.Y + 2);
         controller.Update(NoKeys, MouseAt(hoverPoint.X, hoverPoint.Y, ButtonState.Released));
 
         Assert.AreEqual(MouseCursor.SizeNWSE, controller.CurrentCursor);
@@ -794,7 +794,7 @@ public sealed class GameInputControllerTests
         var window = CreateResizableWindow(windowService, new Vector2(50, 60));
         var controller = new GameInputController([window], [], [], LargeScreenSize);
 
-        var hoverPoint = new Point(window.WindowRectangle.Right - 2, window.WindowRectangle.Y + 2);
+        var hoverPoint = new Point(window.Rectangle.Right - 2, window.Rectangle.Y + 2);
         controller.Update(NoKeys, MouseAt(hoverPoint.X, hoverPoint.Y, ButtonState.Released));
 
         Assert.AreEqual(MouseCursor.SizeNESW, controller.CurrentCursor);
@@ -895,7 +895,7 @@ public sealed class GameInputControllerTests
     public void RightMouseDrag_ReportsTotalDeltaSinceStart_ToTheWindowUnderTheCursor()
     {
         var fontService = new FontService("Fonts");
-        var windowService = new WindowService(fontService, new GlyphRenderer());
+        var windowService = new ElementPoolService(fontService, new GlyphRenderer());
         var window = CreateRightDragSpyWindow(windowService, fontService, new Vector2(0, 0));
         var controller = new GameInputController([window], [], [], LargeScreenSize);
 
@@ -918,7 +918,7 @@ public sealed class GameInputControllerTests
     public void RightMouseDrag_ReleasingThenPressingAgain_StartsAFreshDrag()
     {
         var fontService = new FontService("Fonts");
-        var windowService = new WindowService(fontService, new GlyphRenderer());
+        var windowService = new ElementPoolService(fontService, new GlyphRenderer());
         var window = CreateRightDragSpyWindow(windowService, fontService, new Vector2(0, 0));
         var controller = new GameInputController([window], [], [], LargeScreenSize);
 
@@ -942,7 +942,7 @@ public sealed class GameInputControllerTests
     public void RightMouseDrag_Releasing_FiresDragEndOnce()
     {
         var fontService = new FontService("Fonts");
-        var windowService = new WindowService(fontService, new GlyphRenderer());
+        var windowService = new ElementPoolService(fontService, new GlyphRenderer());
         var window = CreateRightDragSpyWindow(windowService, fontService, new Vector2(0, 0));
         var controller = new GameInputController([window], [], [], LargeScreenSize);
 
@@ -962,7 +962,7 @@ public sealed class GameInputControllerTests
     public void RightMouseClick_NoMovement_FiresRightClickTapInsteadOfDragEnd()
     {
         var fontService = new FontService("Fonts");
-        var windowService = new WindowService(fontService, new GlyphRenderer());
+        var windowService = new ElementPoolService(fontService, new GlyphRenderer());
         var window = CreateRightDragSpyWindow(windowService, fontService, new Vector2(0, 0));
         var controller = new GameInputController([window], [], [], LargeScreenSize);
 
@@ -980,7 +980,7 @@ public sealed class GameInputControllerTests
     public void RightMouseClick_MovementBelowTapThreshold_StillFiresRightClickTap()
     {
         var fontService = new FontService("Fonts");
-        var windowService = new WindowService(fontService, new GlyphRenderer());
+        var windowService = new ElementPoolService(fontService, new GlyphRenderer());
         var window = CreateRightDragSpyWindow(windowService, fontService, new Vector2(0, 0));
         var controller = new GameInputController([window], [], [], LargeScreenSize);
 
@@ -999,7 +999,7 @@ public sealed class GameInputControllerTests
     public void RightMouseDrag_MovementPastTapThreshold_FiresDragEndNotRightClickTap()
     {
         var fontService = new FontService("Fonts");
-        var windowService = new WindowService(fontService, new GlyphRenderer());
+        var windowService = new ElementPoolService(fontService, new GlyphRenderer());
         var window = CreateRightDragSpyWindow(windowService, fontService, new Vector2(0, 0));
         var controller = new GameInputController([window], [], [], LargeScreenSize);
 
@@ -1018,7 +1018,7 @@ public sealed class GameInputControllerTests
     public void RightMouseDrag_WandersPastThresholdThenBackToStart_StillFiresDragEndNotRightClickTap()
     {
         var fontService = new FontService("Fonts");
-        var windowService = new WindowService(fontService, new GlyphRenderer());
+        var windowService = new ElementPoolService(fontService, new GlyphRenderer());
         var window = CreateRightDragSpyWindow(windowService, fontService, new Vector2(0, 0));
         var controller = new GameInputController([window], [], [], LargeScreenSize);
 
@@ -1059,7 +1059,7 @@ public sealed class GameInputControllerTests
         controller.Update(NoKeys, MouseAt(pressPointA.X, pressPointA.Y, ButtonState.Released));
         controller.Update(NoKeys, MouseAt(pressPointA.X, pressPointA.Y, ButtonState.Pressed));
 
-        Assert.AreSame(windowA, controller.FocusedWindow);
+        Assert.AreSame(windowA, controller.FocusedElement);
         Assert.IsTrue(windowA.IsFocused);
         Assert.IsFalse(windowB.IsFocused);
 
@@ -1067,7 +1067,7 @@ public sealed class GameInputControllerTests
         controller.Update(NoKeys, MouseAt(pressPointB.X, pressPointB.Y, ButtonState.Released));
         controller.Update(NoKeys, MouseAt(pressPointB.X, pressPointB.Y, ButtonState.Pressed));
 
-        Assert.AreSame(windowB, controller.FocusedWindow);
+        Assert.AreSame(windowB, controller.FocusedElement);
         Assert.IsTrue(windowB.IsFocused);
         Assert.IsFalse(windowA.IsFocused);
     }
@@ -1083,12 +1083,12 @@ public sealed class GameInputControllerTests
         var pressPoint = window.ContentRectangle.Center;
         controller.Update(NoKeys, MouseAt(pressPoint.X, pressPoint.Y, ButtonState.Released));
         controller.Update(NoKeys, MouseAt(pressPoint.X, pressPoint.Y, ButtonState.Pressed));
-        Assert.AreSame(window, controller.FocusedWindow);
+        Assert.AreSame(window, controller.FocusedElement);
 
         controller.Update(NoKeys, MouseAt(1900, 1900, ButtonState.Released));
         controller.Update(NoKeys, MouseAt(1900, 1900, ButtonState.Pressed));
 
-        Assert.AreSame(window, controller.FocusedWindow);
+        Assert.AreSame(window, controller.FocusedElement);
         Assert.IsTrue(window.IsFocused);
     }
 
@@ -1108,11 +1108,11 @@ public sealed class GameInputControllerTests
         var pressPoint = window.ContentRectangle.Center;
         controller.Update(NoKeys, MouseAt(pressPoint.X, pressPoint.Y, ButtonState.Released));
         controller.Update(NoKeys, MouseAt(pressPoint.X, pressPoint.Y, ButtonState.Pressed));
-        Assert.AreSame(window, controller.FocusedWindow);
+        Assert.AreSame(window, controller.FocusedElement);
 
         window.Close();
 
-        Assert.IsNull(controller.FocusedWindow);
+        Assert.IsNull(controller.FocusedElement);
     }
 
     /// <summary>A key newly pressed with a window focused reaches that window's content, not an unfocused sibling's -- the generic routing pipeline Text Input will eventually build on.</summary>
@@ -1152,7 +1152,7 @@ public sealed class GameInputControllerTests
         var pressPoint = focused.ContentRectangle.Center;
         controller.Update(NoKeys, MouseAt(pressPoint.X, pressPoint.Y, ButtonState.Released));
         controller.Update(NoKeys, MouseAt(pressPoint.X, pressPoint.Y, ButtonState.Pressed));
-        Assert.AreSame(focused, controller.FocusedWindow);
+        Assert.AreSame(focused, controller.FocusedElement);
 
         controller.Update(NoKeys, MouseAt(pressPoint.X, pressPoint.Y, ButtonState.Released));
 
@@ -1176,7 +1176,7 @@ public sealed class GameInputControllerTests
         var pressPoint = focused.ContentRectangle.Center;
         controller.Update(NoKeys, MouseAt(pressPoint.X, pressPoint.Y, ButtonState.Released));
         controller.Update(NoKeys, MouseAt(pressPoint.X, pressPoint.Y, ButtonState.Pressed));
-        Assert.AreSame(focused, controller.FocusedWindow);
+        Assert.AreSame(focused, controller.FocusedElement);
 
         controller.Update(NoKeys, MouseAt(pressPoint.X, pressPoint.Y, ButtonState.Released));
 
@@ -1230,7 +1230,7 @@ public sealed class GameInputControllerTests
         var windowService = CreateWindowService();
         var (focused, focusedContent) = CreateFocusableWindowWithContent(windowService, new Vector2(0, 0));
         var controller = new GameInputController([focused], [], [], LargeScreenSize);
-        controller.FocusWindow(focused);
+        controller.FocusElement(focused);
 
         controller.OnTextInput('h');
         controller.OnTextInput('i');
@@ -1248,18 +1248,18 @@ public sealed class GameInputControllerTests
     public void ClickingAWindowWithATextBoxChild_FocusesTheTextBoxInstead()
     {
         var windowService = CreateWindowService();
-        var container = windowService.CreateWindow<Window>(null, new WindowOptions
+        var container = windowService.CreateElement<Window>(null, new ElementOptions
         {
-            Hierarchy = new WindowHierarchyOptions { CanContainChildWindows = true },
-            Layout = new WindowLayoutOptions { RelativePosition = new Vector2(0, 0), Size = new Vector2(200, 100), DisplayMode = WindowDisplayMode.Fixed },
-            Chrome = new WindowChromeOptions { ShowTitle = true, TitleText = "Form", CanUserMove = true },
+            Hierarchy = new ElementHierarchyOptions { CanContainChildren = true },
+            Layout = new ElementLayoutOptions { RelativePosition = new Vector2(0, 0), Size = new Vector2(200, 100), DisplayMode = ElementDisplayMode.Fixed },
+            Chrome = new ElementChromeOptions { ShowTitle = true, TitleText = "Form", CanUserMove = true },
         });
         container.Initialize();
-        var textBox = windowService.CreateWindow<TextBox>(container, new WindowOptions
+        var textBox = windowService.CreateElement<TextBox>(container, new ElementOptions
         {
-            Layout = new WindowLayoutOptions { RelativePosition = new Vector2(0, 0), Size = new Vector2(180, 50), DisplayMode = WindowDisplayMode.Fixed },
+            Layout = new ElementLayoutOptions { RelativePosition = new Vector2(0, 0), Size = new Vector2(180, 50), DisplayMode = ElementDisplayMode.Fixed },
         });
-        container.AddChildWindow(textBox);
+        container.AddChild(textBox);
         var controller = new GameInputController([container], [], [], LargeScreenSize);
 
         // Click the container's title bar -- content-agnostic, so it can't be mistaken for
@@ -1268,7 +1268,7 @@ public sealed class GameInputControllerTests
         controller.Update(NoKeys, MouseAt(titlePoint.X, titlePoint.Y, ButtonState.Released));
         controller.Update(NoKeys, MouseAt(titlePoint.X, titlePoint.Y, ButtonState.Pressed));
 
-        Assert.AreSame(textBox, controller.FocusedWindow);
+        Assert.AreSame(textBox, controller.FocusedElement);
         Assert.IsTrue(textBox.IsFocused);
         Assert.IsFalse(container.IsFocused);
     }
@@ -1278,28 +1278,28 @@ public sealed class GameInputControllerTests
     public void SubmittingATextBox_MovesFocusToTheNextTextBoxSibling()
     {
         var windowService = CreateWindowService();
-        var container = windowService.CreateWindow<Window>(null, new WindowOptions
+        var container = windowService.CreateElement<Window>(null, new ElementOptions
         {
-            Hierarchy = new WindowHierarchyOptions { CanContainChildWindows = true },
-            Layout = new WindowLayoutOptions { RelativePosition = new Vector2(0, 0), Size = new Vector2(200, 200), DisplayMode = WindowDisplayMode.Fixed },
+            Hierarchy = new ElementHierarchyOptions { CanContainChildren = true },
+            Layout = new ElementLayoutOptions { RelativePosition = new Vector2(0, 0), Size = new Vector2(200, 200), DisplayMode = ElementDisplayMode.Fixed },
         });
         container.Initialize();
-        var firstTextBox = windowService.CreateWindow<TextBox>(container, new WindowOptions
+        var firstTextBox = windowService.CreateElement<TextBox>(container, new ElementOptions
         {
-            Layout = new WindowLayoutOptions { RelativePosition = new Vector2(0, 0), Size = new Vector2(180, 50), DisplayMode = WindowDisplayMode.Fixed },
+            Layout = new ElementLayoutOptions { RelativePosition = new Vector2(0, 0), Size = new Vector2(180, 50), DisplayMode = ElementDisplayMode.Fixed },
         });
-        container.AddChildWindow(firstTextBox);
-        var secondTextBox = windowService.CreateWindow<TextBox>(container, new WindowOptions
+        container.AddChild(firstTextBox);
+        var secondTextBox = windowService.CreateElement<TextBox>(container, new ElementOptions
         {
-            Layout = new WindowLayoutOptions { RelativePosition = new Vector2(0, 60), Size = new Vector2(180, 50), DisplayMode = WindowDisplayMode.Fixed },
+            Layout = new ElementLayoutOptions { RelativePosition = new Vector2(0, 60), Size = new Vector2(180, 50), DisplayMode = ElementDisplayMode.Fixed },
         });
-        container.AddChildWindow(secondTextBox);
+        container.AddChild(secondTextBox);
         var controller = new GameInputController([container], [], [], LargeScreenSize);
-        controller.FocusWindow(firstTextBox);
+        controller.FocusElement(firstTextBox);
 
         controller.Update(new KeyboardState(Keys.Enter), MouseAt(0, 0, ButtonState.Released));
 
-        Assert.AreSame(secondTextBox, controller.FocusedWindow);
+        Assert.AreSame(secondTextBox, controller.FocusedElement);
     }
 
     /// <summary>Tab advances focus to the next root window, wrapping past the last one back to the first -- rootWindows only, in list order.</summary>
@@ -1309,20 +1309,20 @@ public sealed class GameInputControllerTests
         var windowService = CreateWindowService();
         var windowA = CreateRootWindowWithCloseButton(windowService, new Vector2(0, 0));
         var windowB = CreateRootWindowWithCloseButton(windowService, new Vector2(400, 400));
-        var rootWindows = new List<Window> { windowA, windowB };
+        var rootWindows = new List<Element> { windowA, windowB };
         var controller = new GameInputController(rootWindows, [], [], LargeScreenSize);
 
         controller.Update(NoKeys, MouseAt(0, 0, ButtonState.Released));
         controller.Update(new KeyboardState(Keys.Tab), MouseAt(0, 0, ButtonState.Released));
-        Assert.AreSame(windowA, controller.FocusedWindow);
+        Assert.AreSame(windowA, controller.FocusedElement);
 
         controller.Update(NoKeys, MouseAt(0, 0, ButtonState.Released));
         controller.Update(new KeyboardState(Keys.Tab), MouseAt(0, 0, ButtonState.Released));
-        Assert.AreSame(windowB, controller.FocusedWindow);
+        Assert.AreSame(windowB, controller.FocusedElement);
 
         controller.Update(NoKeys, MouseAt(0, 0, ButtonState.Released));
         controller.Update(new KeyboardState(Keys.Tab), MouseAt(0, 0, ButtonState.Released));
-        Assert.AreSame(windowA, controller.FocusedWindow);
+        Assert.AreSame(windowA, controller.FocusedElement);
     }
 
     /// <summary>
@@ -1337,7 +1337,7 @@ public sealed class GameInputControllerTests
         var windowService = CreateWindowService();
         var windowA = CreateRootWindowWithCloseButton(windowService, new Vector2(0, 0));
         var windowB = CreateRootWindowWithCloseButton(windowService, new Vector2(400, 400));
-        var rootWindows = new List<Window> { windowA, windowB };
+        var rootWindows = new List<Element> { windowA, windowB };
         var controller = new GameInputController(rootWindows, [], [], LargeScreenSize);
 
         controller.Update(NoKeys, MouseAt(0, 0, ButtonState.Released));
@@ -1353,13 +1353,13 @@ public sealed class GameInputControllerTests
         var windowService = CreateWindowService();
         var windowA = CreateRootWindowWithCloseButton(windowService, new Vector2(0, 0));
         var windowB = CreateRootWindowWithCloseButton(windowService, new Vector2(400, 400));
-        var rootWindows = new List<Window> { windowA, windowB };
+        var rootWindows = new List<Element> { windowA, windowB };
         var controller = new GameInputController(rootWindows, [], [], LargeScreenSize);
 
         controller.Update(NoKeys, MouseAt(0, 0, ButtonState.Released));
         controller.Update(new KeyboardState(Keys.Tab, Keys.LeftShift), MouseAt(0, 0, ButtonState.Released));
 
-        Assert.AreSame(windowB, controller.FocusedWindow);
+        Assert.AreSame(windowB, controller.FocusedElement);
     }
 
     /// <summary>
@@ -1377,15 +1377,15 @@ public sealed class GameInputControllerTests
         var windowA = CreateRootWindowWithCloseButton(windowService, new Vector2(0, 0));
         var windowB = CreateRootWindowWithCloseButton(windowService, new Vector2(400, 0));
         var windowC = CreateRootWindowWithCloseButton(windowService, new Vector2(0, 400));
-        var rootWindows = new List<Window> { windowA, windowB, windowC };
+        var rootWindows = new List<Element> { windowA, windowB, windowC };
         var controller = new GameInputController(rootWindows, [], [], LargeScreenSize);
 
-        var visited = new List<Window>();
+        var visited = new List<Element>();
         for (var i = 0; i < 6; i++)
         {
             controller.Update(NoKeys, MouseAt(0, 0, ButtonState.Released));
             controller.Update(new KeyboardState(Keys.Tab, Keys.LeftShift), MouseAt(0, 0, ButtonState.Released));
-            visited.Add(controller.FocusedWindow!);
+            visited.Add(controller.FocusedElement!);
         }
 
         // Backward from unfocused starts at the last window (C), then keeps stepping backward,
@@ -1399,10 +1399,10 @@ public sealed class GameInputControllerTests
     {
         var windowService = CreateWindowService();
         var focusable = CreateRootWindowWithCloseButton(windowService, new Vector2(0, 0));
-        var nonFocusable = windowService.CreateWindow<Window>(null, new WindowOptions
+        var nonFocusable = windowService.CreateElement<Window>(null, new ElementOptions
         {
-            Layout = new WindowLayoutOptions { RelativePosition = new Vector2(400, 400), Size = new Vector2(200, 100), DisplayMode = WindowDisplayMode.Fixed },
-            Chrome = new WindowChromeOptions { CanUserFocus = false },
+            Layout = new ElementLayoutOptions { RelativePosition = new Vector2(400, 400), Size = new Vector2(200, 100), DisplayMode = ElementDisplayMode.Fixed },
+            Chrome = new ElementChromeOptions { CanUserFocus = false },
         });
         nonFocusable.Initialize();
         var controller = new GameInputController([focusable, nonFocusable], [], [], LargeScreenSize);
@@ -1410,13 +1410,13 @@ public sealed class GameInputControllerTests
         var pressPointFocusable = focusable.ContentRectangle.Center;
         controller.Update(NoKeys, MouseAt(pressPointFocusable.X, pressPointFocusable.Y, ButtonState.Released));
         controller.Update(NoKeys, MouseAt(pressPointFocusable.X, pressPointFocusable.Y, ButtonState.Pressed));
-        Assert.AreSame(focusable, controller.FocusedWindow);
+        Assert.AreSame(focusable, controller.FocusedElement);
 
         var pressPointNonFocusable = nonFocusable.ContentRectangle.Center;
         controller.Update(NoKeys, MouseAt(pressPointNonFocusable.X, pressPointNonFocusable.Y, ButtonState.Released));
         controller.Update(NoKeys, MouseAt(pressPointNonFocusable.X, pressPointNonFocusable.Y, ButtonState.Pressed));
 
-        Assert.AreSame(focusable, controller.FocusedWindow);
+        Assert.AreSame(focusable, controller.FocusedElement);
         Assert.IsFalse(nonFocusable.IsFocused);
     }
 
@@ -1426,49 +1426,49 @@ public sealed class GameInputControllerTests
     {
         var windowService = CreateWindowService();
         var windowA = CreateRootWindowWithCloseButton(windowService, new Vector2(0, 0));
-        var nonFocusable = windowService.CreateWindow<Window>(null, new WindowOptions
+        var nonFocusable = windowService.CreateElement<Window>(null, new ElementOptions
         {
-            Layout = new WindowLayoutOptions { RelativePosition = new Vector2(400, 0), Size = new Vector2(200, 100), DisplayMode = WindowDisplayMode.Fixed },
-            Chrome = new WindowChromeOptions { CanUserFocus = false },
+            Layout = new ElementLayoutOptions { RelativePosition = new Vector2(400, 0), Size = new Vector2(200, 100), DisplayMode = ElementDisplayMode.Fixed },
+            Chrome = new ElementChromeOptions { CanUserFocus = false },
         });
         nonFocusable.Initialize();
         var windowB = CreateRootWindowWithCloseButton(windowService, new Vector2(0, 400));
-        var rootWindows = new List<Window> { windowA, nonFocusable, windowB };
+        var rootWindows = new List<Element> { windowA, nonFocusable, windowB };
         var controller = new GameInputController(rootWindows, [], [], LargeScreenSize);
 
         controller.Update(NoKeys, MouseAt(0, 0, ButtonState.Released));
         controller.Update(new KeyboardState(Keys.Tab), MouseAt(0, 0, ButtonState.Released));
-        Assert.AreSame(windowA, controller.FocusedWindow);
+        Assert.AreSame(windowA, controller.FocusedElement);
 
         controller.Update(NoKeys, MouseAt(0, 0, ButtonState.Released));
         controller.Update(new KeyboardState(Keys.Tab), MouseAt(0, 0, ButtonState.Released));
 
-        Assert.AreSame(windowB, controller.FocusedWindow);
+        Assert.AreSame(windowB, controller.FocusedElement);
         Assert.IsFalse(nonFocusable.IsFocused);
     }
 
-    private static (Window Parent, Window ChildA, Window ChildB) CreateParentWithTwoCloseableChildren(WindowService windowService)
+    private static (Window Parent, Window ChildA, Window ChildB) CreateParentWithTwoCloseableChildren(ElementPoolService windowService)
     {
-        var parent = windowService.CreateWindow<Window>(null, new WindowOptions
+        var parent = windowService.CreateElement<Window>(null, new ElementOptions
         {
-            Hierarchy = new WindowHierarchyOptions { CanContainChildWindows = true, ChildWindowTileMode = WindowTileMode.Vertical },
-            Layout = new WindowLayoutOptions { RelativePosition = Vector2.Zero, Size = new Vector2(300, 200), DisplayMode = WindowDisplayMode.Fixed },
+            Hierarchy = new ElementHierarchyOptions { CanContainChildren = true, ChildrenTileMode = ChildElementTileMode.Vertical },
+            Layout = new ElementLayoutOptions { RelativePosition = Vector2.Zero, Size = new Vector2(300, 200), DisplayMode = ElementDisplayMode.Fixed },
         });
         parent.Initialize();
 
-        var childA = windowService.CreateWindow<Window>(parent, new WindowOptions
+        var childA = windowService.CreateElement<Window>(parent, new ElementOptions
         {
-            Layout = new WindowLayoutOptions { Size = new Vector2(300, 50), DisplayMode = WindowDisplayMode.Fixed },
-            Chrome = new WindowChromeOptions { ShowTitle = true, TitleText = "A", CanUserClose = true },
+            Layout = new ElementLayoutOptions { Size = new Vector2(300, 50), DisplayMode = ElementDisplayMode.Fixed },
+            Chrome = new ElementChromeOptions { ShowTitle = true, TitleText = "A", CanUserClose = true },
         });
-        parent.AddChildWindow(childA);
+        parent.AddChild(childA);
 
-        var childB = windowService.CreateWindow<Window>(parent, new WindowOptions
+        var childB = windowService.CreateElement<Window>(parent, new ElementOptions
         {
-            Layout = new WindowLayoutOptions { Size = new Vector2(300, 50), DisplayMode = WindowDisplayMode.Fixed },
-            Chrome = new WindowChromeOptions { ShowTitle = true, TitleText = "B", CanUserClose = true },
+            Layout = new ElementLayoutOptions { Size = new Vector2(300, 50), DisplayMode = ElementDisplayMode.Fixed },
+            Chrome = new ElementChromeOptions { ShowTitle = true, TitleText = "B", CanUserClose = true },
         });
-        parent.AddChildWindow(childB);
+        parent.AddChild(childB);
 
         return (parent, childA, childB);
     }
@@ -1490,28 +1490,28 @@ public sealed class GameInputControllerTests
         var pressPoint = notificationA.ContentRectangle.Center;
         controller.Update(NoKeys, MouseAt(pressPoint.X, pressPoint.Y, ButtonState.Released));
         controller.Update(NoKeys, MouseAt(pressPoint.X, pressPoint.Y, ButtonState.Pressed));
-        Assert.AreSame(notificationA, controller.FocusedWindow);
+        Assert.AreSame(notificationA, controller.FocusedElement);
 
         notificationA.Close();
 
-        Assert.AreSame(notificationB, controller.FocusedWindow);
+        Assert.AreSame(notificationB, controller.FocusedElement);
     }
 
-    private static (Window Popup, Window Child) CreatePopupWithFocusableChild(WindowService windowService, Vector2 relativePosition)
+    private static (Window Popup, Window Child) CreatePopupWithFocusableChild(ElementPoolService windowService, Vector2 relativePosition)
     {
-        var popup = windowService.CreateWindow<Window>(null, new WindowOptions
+        var popup = windowService.CreateElement<Window>(null, new ElementOptions
         {
-            Hierarchy = new WindowHierarchyOptions { CanContainChildWindows = true },
-            Layout = new WindowLayoutOptions { RelativePosition = relativePosition, Size = new Vector2(300, 200), DisplayMode = WindowDisplayMode.Fixed },
-            Chrome = new WindowChromeOptions { ShowTitle = true, TitleText = "Popup", CanUserClose = true },
+            Hierarchy = new ElementHierarchyOptions { CanContainChildren = true },
+            Layout = new ElementLayoutOptions { RelativePosition = relativePosition, Size = new Vector2(300, 200), DisplayMode = ElementDisplayMode.Fixed },
+            Chrome = new ElementChromeOptions { ShowTitle = true, TitleText = "Popup", CanUserClose = true },
         });
         popup.Initialize();
 
-        var child = windowService.CreateWindow<Window>(popup, new WindowOptions
+        var child = windowService.CreateElement<Window>(popup, new ElementOptions
         {
-            Layout = new WindowLayoutOptions { Size = new Vector2(280, 150), DisplayMode = WindowDisplayMode.Fixed },
+            Layout = new ElementLayoutOptions { Size = new Vector2(280, 150), DisplayMode = ElementDisplayMode.Fixed },
         });
-        popup.AddChildWindow(child);
+        popup.AddChild(child);
 
         return (popup, child);
     }
@@ -1532,16 +1532,16 @@ public sealed class GameInputControllerTests
         var (popup, child) = CreatePopupWithFocusableChild(windowService, new Vector2(0, 0));
         var mapWindowStandIn = CreateRootWindowWithCloseButton(windowService, new Vector2(400, 0));
         var controller = new GameInputController([popup, mapWindowStandIn], [], [], LargeScreenSize);
-        controller.SetDefaultFocusWindow(mapWindowStandIn);
+        controller.SetDefaultFocusElement(mapWindowStandIn);
 
         var pressPoint = child.ContentRectangle.Center;
         controller.Update(NoKeys, MouseAt(pressPoint.X, pressPoint.Y, ButtonState.Released));
         controller.Update(NoKeys, MouseAt(pressPoint.X, pressPoint.Y, ButtonState.Pressed));
-        Assert.AreSame(child, controller.FocusedWindow);
+        Assert.AreSame(child, controller.FocusedElement);
 
         popup.Close();
 
-        Assert.AreSame(mapWindowStandIn, controller.FocusedWindow);
+        Assert.AreSame(mapWindowStandIn, controller.FocusedElement);
     }
 
     /// <summary>Same redirect, generalized to sibling child windows under a shared parent (e.g. a future multi-pane form), not just the always-on-top notification stack.</summary>
@@ -1555,11 +1555,11 @@ public sealed class GameInputControllerTests
         var pressPoint = childA.ContentRectangle.Center;
         controller.Update(NoKeys, MouseAt(pressPoint.X, pressPoint.Y, ButtonState.Released));
         controller.Update(NoKeys, MouseAt(pressPoint.X, pressPoint.Y, ButtonState.Pressed));
-        Assert.AreSame(childA, controller.FocusedWindow);
+        Assert.AreSame(childA, controller.FocusedElement);
 
         childA.Close();
 
-        Assert.AreSame(childB, controller.FocusedWindow);
+        Assert.AreSame(childB, controller.FocusedElement);
     }
 
     /// <summary>Same trigger, but via minimizing (WindowMinimizeRestoreBehavior's real WindowDisplayMode.Minimized toggle) instead of closing -- a minimized window reads as "no longer active" the same way a closed one does.</summary>
@@ -1574,11 +1574,11 @@ public sealed class GameInputControllerTests
         var pressPoint = notificationA.ContentRectangle.Center;
         controller.Update(NoKeys, MouseAt(pressPoint.X, pressPoint.Y, ButtonState.Released));
         controller.Update(NoKeys, MouseAt(pressPoint.X, pressPoint.Y, ButtonState.Pressed));
-        Assert.AreSame(notificationA, controller.FocusedWindow);
+        Assert.AreSame(notificationA, controller.FocusedElement);
 
-        notificationA.SetWindowDisplayMode(WindowDisplayMode.Minimized);
+        notificationA.SetDisplayMode(ElementDisplayMode.Minimized);
 
-        Assert.AreSame(notificationB, controller.FocusedWindow);
+        Assert.AreSame(notificationB, controller.FocusedElement);
     }
 
     /// <summary>Regression guard: DisplayModeChanged fires on every mode change, not just transitions into Minimized -- an unrelated mode change (e.g. Fixed to Fill) must not spuriously redirect focus away.</summary>
@@ -1592,11 +1592,11 @@ public sealed class GameInputControllerTests
         var pressPoint = window.ContentRectangle.Center;
         controller.Update(NoKeys, MouseAt(pressPoint.X, pressPoint.Y, ButtonState.Released));
         controller.Update(NoKeys, MouseAt(pressPoint.X, pressPoint.Y, ButtonState.Pressed));
-        Assert.AreSame(window, controller.FocusedWindow);
+        Assert.AreSame(window, controller.FocusedElement);
 
-        window.SetWindowDisplayMode(WindowDisplayMode.Fill);
+        window.SetDisplayMode(ElementDisplayMode.Fill);
 
-        Assert.AreSame(window, controller.FocusedWindow);
+        Assert.AreSame(window, controller.FocusedElement);
     }
 
     /// <summary>
@@ -1614,16 +1614,16 @@ public sealed class GameInputControllerTests
         var unrelatedRootWindow = CreateRootWindowWithCloseButton(windowService, new Vector2(300, 0));
         var mapWindowStandIn = CreateRootWindowWithCloseButton(windowService, new Vector2(0, 300));
         var controller = new GameInputController([popup, unrelatedRootWindow, mapWindowStandIn], [], [], LargeScreenSize);
-        controller.SetDefaultFocusWindow(mapWindowStandIn);
+        controller.SetDefaultFocusElement(mapWindowStandIn);
 
         var pressPoint = popup.ContentRectangle.Center;
         controller.Update(NoKeys, MouseAt(pressPoint.X, pressPoint.Y, ButtonState.Released));
         controller.Update(NoKeys, MouseAt(pressPoint.X, pressPoint.Y, ButtonState.Pressed));
-        Assert.AreSame(popup, controller.FocusedWindow);
+        Assert.AreSame(popup, controller.FocusedElement);
 
         popup.Close();
 
-        Assert.AreSame(mapWindowStandIn, controller.FocusedWindow);
+        Assert.AreSame(mapWindowStandIn, controller.FocusedElement);
     }
 
     /// <summary>Regression test for task 2's other half: with no default focus window configured (e.g. a test that never calls SetDefaultFocusWindow) and no eligible sibling, closing the focused window still just clears focus rather than throwing.</summary>
@@ -1637,11 +1637,11 @@ public sealed class GameInputControllerTests
         var pressPoint = window.ContentRectangle.Center;
         controller.Update(NoKeys, MouseAt(pressPoint.X, pressPoint.Y, ButtonState.Released));
         controller.Update(NoKeys, MouseAt(pressPoint.X, pressPoint.Y, ButtonState.Pressed));
-        Assert.AreSame(window, controller.FocusedWindow);
+        Assert.AreSame(window, controller.FocusedElement);
 
         window.Close();
 
-        Assert.IsNull(controller.FocusedWindow);
+        Assert.IsNull(controller.FocusedElement);
     }
 
     /// <summary>
@@ -1655,32 +1655,32 @@ public sealed class GameInputControllerTests
     public void ClosingTheFocusedWindow_SkipsANonFocusableSiblingAndFallsBackToDefault()
     {
         var windowService = CreateWindowService();
-        var summaryBarStandIn = windowService.CreateWindow<Window>(null, new WindowOptions
+        var summaryBarStandIn = windowService.CreateElement<Window>(null, new ElementOptions
         {
-            Layout = new WindowLayoutOptions { RelativePosition = new Vector2(0, 300), Size = new Vector2(200, 30), DisplayMode = WindowDisplayMode.Fixed },
-            Chrome = new WindowChromeOptions { CanUserFocus = false },
+            Layout = new ElementLayoutOptions { RelativePosition = new Vector2(0, 300), Size = new Vector2(200, 30), DisplayMode = ElementDisplayMode.Fixed },
+            Chrome = new ElementChromeOptions { CanUserFocus = false },
         });
         summaryBarStandIn.Initialize();
         var notification = CreateRootWindowWithCloseButton(windowService, new Vector2(0, 0));
         var mapWindowStandIn = CreateRootWindowWithCloseButton(windowService, new Vector2(0, 400));
         var controller = new GameInputController([], [], [summaryBarStandIn, notification], LargeScreenSize);
-        controller.SetDefaultFocusWindow(mapWindowStandIn);
+        controller.SetDefaultFocusElement(mapWindowStandIn);
 
         var pressPoint = notification.ContentRectangle.Center;
         controller.Update(NoKeys, MouseAt(pressPoint.X, pressPoint.Y, ButtonState.Released));
         controller.Update(NoKeys, MouseAt(pressPoint.X, pressPoint.Y, ButtonState.Pressed));
-        Assert.AreSame(notification, controller.FocusedWindow);
+        Assert.AreSame(notification, controller.FocusedElement);
 
         notification.Close();
 
-        Assert.AreSame(mapWindowStandIn, controller.FocusedWindow);
+        Assert.AreSame(mapWindowStandIn, controller.FocusedElement);
     }
 
-    private static TextBox CreateFocusableTextBox(WindowService windowService, Vector2 relativePosition)
+    private static TextBox CreateFocusableTextBox(ElementPoolService windowService, Vector2 relativePosition)
     {
-        var textBox = windowService.CreateWindow<TextBox>(null, new WindowOptions
+        var textBox = windowService.CreateElement<TextBox>(null, new ElementOptions
         {
-            Layout = new WindowLayoutOptions { RelativePosition = relativePosition, Size = new Vector2(200, 60), DisplayMode = WindowDisplayMode.Fixed },
+            Layout = new ElementLayoutOptions { RelativePosition = relativePosition, Size = new Vector2(200, 60), DisplayMode = ElementDisplayMode.Fixed },
         });
         textBox.Initialize();
         return textBox;
@@ -1710,14 +1710,14 @@ public sealed class GameInputControllerTests
         var textBoxPressPoint = textBox.ContentRectangle.Center;
         controller.Update(NoKeys, MouseAt(textBoxPressPoint.X, textBoxPressPoint.Y, ButtonState.Released));
         controller.Update(NoKeys, MouseAt(textBoxPressPoint.X, textBoxPressPoint.Y, ButtonState.Pressed));
-        Assert.AreSame(textBox, controller.FocusedWindow);
+        Assert.AreSame(textBox, controller.FocusedElement);
         Assert.AreEqual(1, startCount);
         Assert.AreEqual(0, stopCount);
 
         var plainWindowPressPoint = plainWindow.ContentRectangle.Center;
         controller.Update(NoKeys, MouseAt(plainWindowPressPoint.X, plainWindowPressPoint.Y, ButtonState.Released));
         controller.Update(NoKeys, MouseAt(plainWindowPressPoint.X, plainWindowPressPoint.Y, ButtonState.Pressed));
-        Assert.AreSame(plainWindow, controller.FocusedWindow);
+        Assert.AreSame(plainWindow, controller.FocusedElement);
         Assert.AreEqual(1, startCount);
         Assert.AreEqual(1, stopCount);
     }

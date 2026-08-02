@@ -50,7 +50,7 @@ public sealed class MapWindowTests
         var world = new Game.World.World(new Game.World.Map(new Vector3Int(mapSizeX, mapSizeY, mapSizeZ)));
         var mapViewState = new MapViewState();
         var fontService = new FontService("Fonts");
-        var windowService = new WindowService(fontService, new GlyphRenderer());
+        var windowService = new ElementPoolService(fontService, new GlyphRenderer());
 
         var componentManager = new ComponentManager(100, 50);
         componentManager.RegisterDirectPool<TransformComponent>(static (ref existing, incoming) => existing = incoming);
@@ -78,9 +78,9 @@ public sealed class MapWindowTests
             fontService, windowService, world, mapViewState, componentManager, abilityCatalog ?? new AbilityCatalog(), new TileRenderer(), new GlyphRenderer(),
             new SpriteSheetService(null, "Spritesheets"), new SpriteRenderer()));
 
-        var mapWindow = windowService.CreateWindow<MapWindow>(null, new WindowOptions
+        var mapWindow = windowService.CreateElement<MapWindow>(null, new ElementOptions
         {
-            Layout = new WindowLayoutOptions { Size = new Vector2(1256, 776), DisplayMode = WindowDisplayMode.Fixed },
+            Layout = new ElementLayoutOptions { Size = new Vector2(1256, 776), DisplayMode = ElementDisplayMode.Fixed },
         });
         mapWindow.Initialize();
 

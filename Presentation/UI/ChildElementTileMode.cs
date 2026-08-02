@@ -1,7 +1,7 @@
 namespace Presentation.UI;
 
 /// <summary>How child windows are arranged within a parent window.</summary>
-public enum WindowTileMode
+public enum ChildElementTileMode
 {
     /// <summary>Freely positioned; the creator sets relative position and draw order.</summary>
     Floating,

@@ -12,33 +12,33 @@ public sealed class FolderTests
     private static readonly Vector2 FolderPosition = new(30, 30);
     private static readonly Vector2 BadgeSize = new(130, 21);
 
-    private static WindowService CreateWindowService()
+    private static ElementPoolService CreateWindowService()
     {
         var fontService = new FontService("Fonts");
         var glyphRenderer = new GlyphRenderer();
-        var windowService = new WindowService(fontService, glyphRenderer);
+        var windowService = new ElementPoolService(fontService, glyphRenderer);
         windowService.RegisterFactory<Folder>((_, _) => new Folder(
             fontService, windowService, glyphRenderer, new SpriteSheetService(null, "Spritesheets"), new SpriteRenderer()));
         return windowService;
     }
 
-    private static Folder CreateFolder(WindowService windowService) =>
-        windowService.CreateWindow<Folder>(null, new WindowOptions
+    private static Folder CreateFolder(ElementPoolService windowService) =>
+        windowService.CreateElement<Folder>(null, new ElementOptions
         {
-            Layout = new WindowLayoutOptions { RelativePosition = FolderPosition, MaximumSize = new Vector2(200, 400), DisplayMode = WindowDisplayMode.WrapContent },
-            Chrome = new WindowChromeOptions { ShowBorder = true, BorderStyle = BorderStyle.Outset },
+            Layout = new ElementLayoutOptions { RelativePosition = FolderPosition, MaximumSize = new Vector2(200, 400), DisplayMode = ElementDisplayMode.WrapContent },
+            Chrome = new ElementChromeOptions { ShowBorder = true, BorderStyle = BorderStyle.Outset },
             Folder = new FolderOptions { SpriteName = "NoSuchManifestEntry", FallbackGlyph = "★" },
         });
 
-    private static TextWindow AddBadge(WindowService windowService, Folder folder, string text)
+    private static TextWindow AddBadge(ElementPoolService windowService, Folder folder, string text)
     {
-        var badge = windowService.CreateWindow<TextWindow>(folder, new WindowOptions
+        var badge = windowService.CreateElement<TextWindow>(folder, new ElementOptions
         {
-            Layout = new WindowLayoutOptions { DisplayMode = WindowDisplayMode.Fixed, Size = BadgeSize },
-            Chrome = new WindowChromeOptions { ShowBorder = true, ShowTitle = false },
+            Layout = new ElementLayoutOptions { DisplayMode = ElementDisplayMode.Fixed, Size = BadgeSize },
+            Chrome = new ElementChromeOptions { ShowBorder = true, ShowTitle = false },
             Text = new TextOptions { Text = text },
         });
-        folder.AddChildWindow(badge);
+        folder.AddChild(badge);
         return badge;
     }
 
@@ -49,7 +49,7 @@ public sealed class FolderTests
 
         folder.Initialize();
 
-        Assert.AreEqual(WindowDisplayMode.Minimized, folder.WindowDisplay);
+        Assert.AreEqual(ElementDisplayMode.Minimized, folder.DisplayMode);
     }
 
     [TestMethod]
@@ -60,7 +60,7 @@ public sealed class FolderTests
 
         folder.HandleClick(new Point((int)FolderPosition.X + 5, (int)FolderPosition.Y + 5));
 
-        Assert.AreEqual(WindowDisplayMode.WrapContent, folder.WindowDisplay);
+        Assert.AreEqual(ElementDisplayMode.WrapContent, folder.DisplayMode);
     }
 
     [TestMethod]
@@ -73,7 +73,7 @@ public sealed class FolderTests
         folder.HandleClick(headerPoint);
         folder.HandleClick(headerPoint);
 
-        Assert.AreEqual(WindowDisplayMode.Minimized, folder.WindowDisplay);
+        Assert.AreEqual(ElementDisplayMode.Minimized, folder.DisplayMode);
     }
 
     [TestMethod]
@@ -87,9 +87,9 @@ public sealed class FolderTests
 
         folder.HandleClick(new Point((int)FolderPosition.X + 5, (int)FolderPosition.Y + 5));
 
-        Assert.AreEqual(first.WindowRelativePosition.X, second.WindowRelativePosition.X);
-        Assert.IsGreaterThan(first.WindowRelativePosition.Y, second.WindowRelativePosition.Y);
-        Assert.AreEqual(first.WindowRelativePosition.Y + first.WindowCurrentSize.Y, second.WindowRelativePosition.Y);
+        Assert.AreEqual(first.RelativePosition.X, second.RelativePosition.X);
+        Assert.IsGreaterThan(first.RelativePosition.Y, second.RelativePosition.Y);
+        Assert.AreEqual(first.RelativePosition.Y + first.CurrentSize.Y, second.RelativePosition.Y);
     }
 
     [TestMethod]
@@ -101,7 +101,7 @@ public sealed class FolderTests
         folder.Initialize();
 
         // Never expanded -- still Minimized, per Initialize_StartsCollapsed.
-        Assert.AreEqual(WindowDisplayMode.Minimized, folder.WindowDisplay);
+        Assert.AreEqual(ElementDisplayMode.Minimized, folder.DisplayMode);
     }
 
     /// <summary>Collapsed width must match the expanded content width -- only the height collapses.</summary>
@@ -112,11 +112,11 @@ public sealed class FolderTests
         var folder = CreateFolder(windowService);
         AddBadge(windowService, folder, "Quest: 0");
         folder.Initialize();
-        var collapsedWidth = folder.WindowCurrentSize.X;
+        var collapsedWidth = folder.CurrentSize.X;
 
         folder.HandleClick(new Point((int)FolderPosition.X + 5, (int)FolderPosition.Y + 5));
 
-        Assert.AreEqual(WindowDisplayMode.WrapContent, folder.WindowDisplay);
-        Assert.AreEqual(collapsedWidth, folder.WindowCurrentSize.X);
+        Assert.AreEqual(ElementDisplayMode.WrapContent, folder.DisplayMode);
+        Assert.AreEqual(collapsedWidth, folder.CurrentSize.X);
     }
 }

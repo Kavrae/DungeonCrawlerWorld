@@ -16,19 +16,19 @@ namespace Tests.Presentation;
 [TestClass]
 public sealed class WindowOptionsTests
 {
-    private static WindowService CreateWindowService() => new(new FontService("Fonts"), new GlyphRenderer());
+    private static ElementPoolService CreateWindowService() => new(new FontService("Fonts"), new GlyphRenderer());
 
     [TestMethod]
     public void CreateWindow_AllGroupsUnset_FallsBackToDefaults()
     {
         var windowService = CreateWindowService();
 
-        var window = windowService.CreateWindow<Window>(null, new WindowOptions());
+        var window = windowService.CreateElement<Window>(null, new ElementOptions());
 
-        Assert.AreEqual(WindowDisplayMode.Fixed, window.WindowDisplay);
+        Assert.AreEqual(ElementDisplayMode.Fixed, window.DisplayMode);
         Assert.IsFalse(window.ShowTitle);
         Assert.IsFalse(window.ShowBorder);
-        Assert.IsFalse(window.CanContainChildWindows);
+        Assert.IsFalse(window.CanContainChildren);
         Assert.IsTrue(window.IsVisible);
         Assert.AreEqual(string.Empty, window.TitleText);
         // Opt-out, not opt-in, unlike every other CanUserXxx flag above -- see Window.CanUserFocus.
@@ -41,9 +41,9 @@ public sealed class WindowOptionsTests
     {
         var windowService = CreateWindowService();
 
-        var window = windowService.CreateWindow<Window>(null, new WindowOptions
+        var window = windowService.CreateElement<Window>(null, new ElementOptions
         {
-            Chrome = new WindowChromeOptions { CanUserFocus = false },
+            Chrome = new ElementChromeOptions { CanUserFocus = false },
         });
 
         Assert.IsFalse(window.CanUserFocus);
@@ -54,18 +54,18 @@ public sealed class WindowOptionsTests
     {
         var windowService = CreateWindowService();
 
-        var window = windowService.CreateWindow<Window>(null, new WindowOptions
+        var window = windowService.CreateElement<Window>(null, new ElementOptions
         {
-            Layout = new WindowLayoutOptions
+            Layout = new ElementLayoutOptions
             {
                 RelativePosition = new Vector2(10, 20),
                 Size = new Vector2(100, 50),
-                DisplayMode = WindowDisplayMode.Fixed,
+                DisplayMode = ElementDisplayMode.Fixed,
             },
         });
 
-        Assert.AreEqual(new Vector2(10, 20), window.WindowRelativePosition);
-        Assert.AreEqual(new Vector2(100, 50), window.WindowOriginalSize);
+        Assert.AreEqual(new Vector2(10, 20), window.RelativePosition);
+        Assert.AreEqual(new Vector2(100, 50), window.OriginalSize);
         // Chrome was never set -- layout applying correctly shouldn't depend on it.
         Assert.IsFalse(window.ShowTitle);
         Assert.IsFalse(window.ShowBorder);
@@ -76,9 +76,9 @@ public sealed class WindowOptionsTests
     {
         var windowService = CreateWindowService();
 
-        var window = windowService.CreateWindow<Window>(null, new WindowOptions
+        var window = windowService.CreateElement<Window>(null, new ElementOptions
         {
-            Chrome = new WindowChromeOptions
+            Chrome = new ElementChromeOptions
             {
                 ShowTitle = true,
                 TitleText = "Hello",
@@ -94,7 +94,7 @@ public sealed class WindowOptionsTests
         Assert.IsTrue(window.CanUserClose);
         Assert.IsTrue(window.CanUserMinimize);
         // Layout was never set -- chrome applying correctly shouldn't depend on it.
-        Assert.AreEqual(WindowDisplayMode.Fixed, window.WindowDisplay);
+        Assert.AreEqual(ElementDisplayMode.Fixed, window.DisplayMode);
     }
 
     [TestMethod]
@@ -102,13 +102,13 @@ public sealed class WindowOptionsTests
     {
         var windowService = CreateWindowService();
 
-        var window = windowService.CreateWindow<Window>(null, new WindowOptions
+        var window = windowService.CreateElement<Window>(null, new ElementOptions
         {
-            Hierarchy = new WindowHierarchyOptions { CanContainChildWindows = true, ChildWindowTileMode = WindowTileMode.Vertical },
+            Hierarchy = new ElementHierarchyOptions { CanContainChildren = true, ChildrenTileMode = ChildElementTileMode.Vertical },
         });
 
-        Assert.IsTrue(window.CanContainChildWindows);
-        Assert.AreEqual(WindowTileMode.Vertical, window.ChildWindowTileMode);
+        Assert.IsTrue(window.CanContainChildren);
+        Assert.AreEqual(ChildElementTileMode.Vertical, window.ChildElementTileMode);
     }
 
     [TestMethod]
@@ -116,9 +116,9 @@ public sealed class WindowOptionsTests
     {
         var windowService = CreateWindowService();
 
-        var window = windowService.CreateWindow<Window>(null, new WindowOptions
+        var window = windowService.CreateElement<Window>(null, new ElementOptions
         {
-            Content = new WindowContentOptions { ContentColor = Color.Red },
+            Content = new ElementContentOptions { ContentColor = Color.Red },
         });
 
         Assert.AreEqual(Color.Red, window.ContentColor);
@@ -134,9 +134,9 @@ public sealed class WindowOptionsTests
     {
         var windowService = CreateWindowService();
 
-        var window = windowService.CreateWindow<TextWindow>(null, new WindowOptions
+        var window = windowService.CreateElement<TextWindow>(null, new ElementOptions
         {
-            Chrome = new WindowChromeOptions { ShowTitle = true, TitleText = "Notes" },
+            Chrome = new ElementChromeOptions { ShowTitle = true, TitleText = "Notes" },
             Text = new TextOptions { Text = "Hello world", TextColor = Color.Blue },
         });
 
@@ -151,7 +151,7 @@ public sealed class WindowOptionsTests
     {
         var windowService = CreateWindowService();
 
-        var window = windowService.CreateWindow<TextWindow>(null, new WindowOptions());
+        var window = windowService.CreateElement<TextWindow>(null, new ElementOptions());
 
         Assert.AreEqual(string.Empty, window.OriginalText);
     }

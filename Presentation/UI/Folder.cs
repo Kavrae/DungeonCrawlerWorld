@@ -10,13 +10,13 @@ namespace Presentation.UI;
 /// <summary>
 /// A clickable header button that shows/hides a stack of child windows tiled vertically
 /// beneath it -- e.g. NotificationCenter's single folder replacing its old always-visible
-/// category bar. Reuses Window's own title/content split and Minimized/WrapContent sizing
-/// instead of inventing new state: the icon lives in the title bar (drawn regardless of
-/// display mode -- see Draw), and the child stack lives in the content area, which Window's
-/// own Measure already zeroes out while Minimized -- collapsing already hides *and*
-/// zero-sizes the children with no extra bookkeeping.
+/// category bar. An Element in its own right (not a Window subclass) -- reuses Element's
+/// generic header/Minimized/WrapContent machinery directly: the icon lives in the header
+/// (drawn regardless of display mode -- see DrawHeader), and the child stack lives in the
+/// content area, which Element's own Measure already zeroes out while Minimized -- collapsing
+/// already hides *and* zero-sizes the children with no extra bookkeeping.
 /// </summary>
-public sealed class Folder : Window
+public sealed class Folder : Element
 {
     private static readonly Vector2 DefaultIconSize = new(32, 32);
 
@@ -27,9 +27,10 @@ public sealed class Folder : Window
     private string? _spriteName;
     private string _fallbackGlyph = string.Empty;
     private SpriteFontBase _fallbackGlyphFont = null!;
+    private Color _backgroundColor;
 
-    public Folder(FontService fontService, WindowService windowService, GlyphRenderer glyphRenderer, SpriteSheetService spriteSheetService, SpriteRenderer spriteRenderer)
-        : base(fontService, windowService, glyphRenderer)
+    public Folder(FontService fontService, ElementPoolService elementPoolService, GlyphRenderer glyphRenderer, SpriteSheetService spriteSheetService, SpriteRenderer spriteRenderer)
+        : base(fontService, elementPoolService, glyphRenderer)
     {
         ArgumentNullException.ThrowIfNull(spriteSheetService);
         ArgumentNullException.ThrowIfNull(spriteRenderer);
@@ -38,28 +39,28 @@ public sealed class Folder : Window
         _spriteRenderer = spriteRenderer;
     }
 
-    public override void BuildWindow(Window? parentWindow, WindowOptions windowOptions)
+    public override void Build(Element? parent, ElementOptions options)
     {
-        base.BuildWindow(parentWindow, windowOptions);
+        base.Build(parent, options);
 
-        var folderOptions = windowOptions.Folder;
+        var folderOptions = options.Folder;
         _iconSize = folderOptions?.IconSize ?? DefaultIconSize;
         _spriteName = folderOptions?.SpriteName;
         _fallbackGlyph = folderOptions?.FallbackGlyph ?? string.Empty;
         _fallbackGlyphFont = FontService.GetFont((int)(_iconSize.Y * 0.6f));
+        _backgroundColor = folderOptions?.BackgroundColor ?? Color.LightBlue;
 
-        _canContainChildWindows = true;
-        _childWindowTileMode = WindowTileMode.Vertical;
+        _canContainChildren = true;
+        _childrenTileMode = ChildElementTileMode.Vertical;
 
-        // The title bar is this control's icon-button header, never text -- always shown
-        // (including while Minimized) so the icon stays visible whether the folder is
-        // expanded or collapsed. BorderStyle.Outset (set via Chrome options by callers, same
-        // as Button's own default) gives it the "standard button border" look.
-        _title.ShowTitle = true;
-        _title.ShowWhenMinimized = true;
-        _title.Text = string.Empty;
-        _title.OriginalSize = _iconSize;
-        _title.Size = _iconSize;
+        // The header is this control's icon button, always shown (including while Minimized)
+        // so the icon stays visible whether the folder is expanded or collapsed.
+        // BorderStyle.Outset (set via Chrome options by callers, same as Button's own default)
+        // gives it the "standard button border" look.
+        _headerState.ShowHeader = true;
+        _headerState.ShowHeaderWhenMinimized = true;
+        _headerState.OriginalSize = _iconSize;
+        _headerState.Size = _iconSize;
     }
 
     public override void Initialize()
@@ -68,22 +69,21 @@ public sealed class Folder : Window
 
         // Starts collapsed -- a HUD-persistent control defaults to its smallest footprint,
         // expanding only once the user actually asks to see its contents.
-        SetWindowDisplayMode(WindowDisplayMode.Minimized);
+        SetDisplayMode(ElementDisplayMode.Minimized);
     }
 
     /// <summary>
-    /// Base's version measures _title.Text -- always empty here, since this title only ever
-    /// shows an icon, never text. Width matches the expanded (WrapContent) content width
-    /// rather than shrinking to just the icon -- only the height collapses. Computed from the
-    /// children's own already-measured CurrentSize, which is still valid here: Measure() calls
-    /// this before MeasureChildren, so children's sizes still reflect the last time they were
-    /// actually measured (the last WrapContent pass), not yet zeroed for this one.
+    /// Width matches the expanded (WrapContent) content width rather than shrinking to just
+    /// the icon -- only the height collapses. Computed from the children's own already-measured
+    /// CurrentSize, which is still valid here: Measure() calls this before MeasureChildren, so
+    /// children's sizes still reflect the last time they were actually measured (the last
+    /// WrapContent pass), not yet zeroed for this one.
     /// </summary>
-    protected override void RecalculateMinimizedWindowSize()
+    protected override void RecalculateMinimizedSize()
     {
-        var width = _childWindows.Count > 0 ? ContentWidthFromChildren() : _iconSize.X;
+        var width = _children.Count > 0 ? ContentWidthFromChildren() : _iconSize.X;
 
-        _title.Size = new Vector2(width, _iconSize.Y);
+        _headerState.Size = new Vector2(width, _iconSize.Y);
         _contentState.Size = Vector2.Zero;
         _geometry.CurrentSize = new Vector2(width, _iconSize.Y) + BorderInsetDoubled;
     }
@@ -92,43 +92,39 @@ public sealed class Folder : Window
     private float ContentWidthFromChildren()
     {
         var maxRight = 0f;
-        foreach (var child in _childWindows)
+        foreach (var child in _children)
         {
-            maxRight = System.Math.Max(maxRight, child.WindowRelativePosition.X + child.WindowCurrentSize.X);
+            maxRight = System.Math.Max(maxRight, child.RelativePosition.X + child.CurrentSize.X);
         }
 
         return maxRight + ContentPadding.X;
     }
 
     /// <summary>
-    /// The icon lives in the title rect, not the content rect, so toggling here (not
+    /// The icon lives in the header rect, not the content rect, so toggling here (not
     /// OnContentClickAction/Clicked, which only fire for content-rect clicks) is what makes
     /// clicking the folder itself -- in either display mode -- expand/collapse it.
     /// </summary>
-    protected override void OnTitleClickAction(Point mousePosition)
+    protected override void OnHeaderClickAction(Point mousePosition)
     {
-        base.OnTitleClickAction(mousePosition);
-
-        SetWindowDisplayMode(WindowDisplay == WindowDisplayMode.Minimized
-            ? WindowDisplayMode.WrapContent
-            : WindowDisplayMode.Minimized);
+        SetDisplayMode(DisplayMode == ElementDisplayMode.Minimized
+            ? ElementDisplayMode.WrapContent
+            : ElementDisplayMode.Minimized);
     }
 
-    public override void Draw(GameTime gameTime, GraphicsDevice graphicsDevice, SpriteBatch spriteBatch, Texture2D unitRectangle)
+    /// <summary>Background fill, then sprite-else-glyph icon, mirroring MapWindow.TryDrawEntityVisual's fallback for entities with no manifest entry.</summary>
+    protected override void DrawHeader(GameTime gameTime, SpriteBatch spriteBatch, Texture2D unitRectangle)
     {
-        base.Draw(gameTime, graphicsDevice, spriteBatch, unitRectangle);
+        if (!IsTransparent)
+        {
+            spriteBatch.Draw(unitRectangle, HeaderRectangle, _backgroundColor);
+        }
 
-        DrawIcon(spriteBatch);
-    }
-
-    /// <summary>Sprite-else-glyph, mirroring MapWindow.TryDrawEntityVisual's fallback for entities with no manifest entry.</summary>
-    private void DrawIcon(SpriteBatch spriteBatch)
-    {
-        // The title bar grows wider than the icon once expanded (see
-        // RecalculateWrapContentWindowSize, which widens _title.Size to match content) -- the
-        // icon itself stays fixed at _iconSize regardless, centered within that wider title
+        // The header grows wider than the icon once expanded (see
+        // RecalculateWrapContentWindowSize, which widens _header.Size to match content) -- the
+        // icon itself stays fixed at _iconSize regardless, centered within that wider header
         // rect rather than stretched to fill it.
-        var iconTopLeft = TitleAbsolutePosition + (TitleSize - _iconSize) / 2f;
+        var iconTopLeft = HeaderAbsolutePosition + (HeaderSize - _iconSize) / 2f;
 
         if (_spriteName is not null && SpriteManifest.TryGet(_spriteName, out var spriteComponent))
         {

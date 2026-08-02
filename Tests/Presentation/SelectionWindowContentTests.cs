@@ -89,13 +89,13 @@ public sealed class SelectionWindowContentTests
         return entityId;
     }
 
-    private static Window CreateHostWindow(WindowService windowService, IWindowContent content)
+    private static Window CreateHostWindow(ElementPoolService windowService, IElementContent content)
     {
-        var hostWindow = windowService.CreateWindow<Window>(null, new WindowOptions
+        var hostWindow = windowService.CreateElement<Window>(null, new ElementOptions
         {
-            Hierarchy = new WindowHierarchyOptions { CanContainChildWindows = true, ChildWindowTileMode = WindowTileMode.Vertical },
-            Layout = new WindowLayoutOptions { Size = new Vector2(300, 700), DisplayMode = WindowDisplayMode.Fixed },
-            Chrome = new WindowChromeOptions { ShowTitle = true },
+            Hierarchy = new ElementHierarchyOptions { CanContainChildren = true, ChildrenTileMode = ChildElementTileMode.Vertical },
+            Layout = new ElementLayoutOptions { Size = new Vector2(300, 700), DisplayMode = ElementDisplayMode.Fixed },
+            Chrome = new ElementChromeOptions { ShowTitle = true },
         });
         hostWindow.SetContent(content);
         hostWindow.Initialize();
@@ -107,13 +107,13 @@ public sealed class SelectionWindowContentTests
     {
         var (ecsContext, world, mapViewState) = BuildEcsContextAndWorld();
         var fontService = new FontService("Fonts");
-        var windowService = new WindowService(fontService, new GlyphRenderer());
+        var windowService = new ElementPoolService(fontService, new GlyphRenderer());
         var componentInspector = new ComponentInspector(ecsContext.ComponentManager);
         var hostWindow = CreateHostWindow(windowService, new SelectionWindowContent(world, mapViewState, ecsContext.ComponentManager, componentInspector, windowService));
 
         hostWindow.Update(new GameTime());
 
-        Assert.IsEmpty(hostWindow.ChildWindows);
+        Assert.IsEmpty(hostWindow.ChildElements);
         Assert.AreEqual("No map nodes selected", hostWindow.TitleText);
     }
 
@@ -124,7 +124,7 @@ public sealed class SelectionWindowContentTests
         CreateWallEntityAt(ecsContext, world, 2, 2);
 
         var fontService = new FontService("Fonts");
-        var windowService = new WindowService(fontService, new GlyphRenderer());
+        var windowService = new ElementPoolService(fontService, new GlyphRenderer());
         var componentInspector = new ComponentInspector(ecsContext.ComponentManager);
         var hostWindow = CreateHostWindow(windowService, new SelectionWindowContent(world, mapViewState, ecsContext.ComponentManager, componentInspector, windowService));
 
@@ -133,7 +133,7 @@ public sealed class SelectionWindowContentTests
 
         // One name window (Wall has a DisplayTextComponent) plus one window per inspected
         // component (DisplayText, Glyph, Sprite, Transform -- everything Wall.Build sets).
-        Assert.HasCount(5, hostWindow.ChildWindows);
+        Assert.HasCount(5, hostWindow.ChildElements);
         Assert.AreEqual("Selected Map Node : 2,2", hostWindow.TitleText);
     }
 
@@ -144,18 +144,18 @@ public sealed class SelectionWindowContentTests
         CreateWallEntityAt(ecsContext, world, 2, 2);
 
         var fontService = new FontService("Fonts");
-        var windowService = new WindowService(fontService, new GlyphRenderer());
+        var windowService = new ElementPoolService(fontService, new GlyphRenderer());
         var componentInspector = new ComponentInspector(ecsContext.ComponentManager);
         var hostWindow = CreateHostWindow(windowService, new SelectionWindowContent(world, mapViewState, ecsContext.ComponentManager, componentInspector, windowService));
 
         mapViewState.SelectedMapNodePosition = new Point(2, 2);
         hostWindow.Update(new GameTime());
-        Assert.AreNotEqual(0, hostWindow.ChildWindows.Count);
+        Assert.AreNotEqual(0, hostWindow.ChildElements.Count);
 
         mapViewState.SelectedMapNodePosition = null;
         hostWindow.Update(new GameTime());
 
-        Assert.IsEmpty(hostWindow.ChildWindows);
+        Assert.IsEmpty(hostWindow.ChildElements);
         Assert.AreEqual("No map nodes selected", hostWindow.TitleText);
     }
 
@@ -171,7 +171,7 @@ public sealed class SelectionWindowContentTests
     {
         var (ecsContext, world, mapViewState) = BuildEcsContextAndWorld();
         var fontService = new FontService("Fonts");
-        var windowService = new WindowService(fontService, new GlyphRenderer());
+        var windowService = new ElementPoolService(fontService, new GlyphRenderer());
         var componentInspector = new ComponentInspector(ecsContext.ComponentManager);
         var hostWindow = CreateHostWindow(windowService, new SelectionWindowContent(world, mapViewState, ecsContext.ComponentManager, componentInspector, windowService));
 
@@ -179,7 +179,7 @@ public sealed class SelectionWindowContentTests
 
         hostWindow.Update(new GameTime());
 
-        Assert.IsEmpty(hostWindow.ChildWindows);
+        Assert.IsEmpty(hostWindow.ChildElements);
     }
 
     /// <summary>
@@ -199,7 +199,7 @@ public sealed class SelectionWindowContentTests
         Assert.AreEqual(-1, world.Map.GetEntityId(new Vector3Int(2, 2, (int)MapLayer.Ground)));
 
         var fontService = new FontService("Fonts");
-        var windowService = new WindowService(fontService, new GlyphRenderer());
+        var windowService = new ElementPoolService(fontService, new GlyphRenderer());
         var componentInspector = new ComponentInspector(ecsContext.ComponentManager);
         var hostWindow = CreateHostWindow(windowService, new SelectionWindowContent(world, mapViewState, ecsContext.ComponentManager, componentInspector, windowService));
 
@@ -209,7 +209,7 @@ public sealed class SelectionWindowContentTests
         // Same shape as Update_SelectingEntity_CreatesOneChildWindowPerNameAndComponent, plus
         // one more for NonBlocking: one name window plus one per inspected component
         // (DisplayText, Glyph, Sprite, Transform, NonBlocking).
-        Assert.HasCount(6, hostWindow.ChildWindows);
+        Assert.HasCount(6, hostWindow.ChildElements);
     }
 
     /// <summary>
@@ -228,7 +228,7 @@ public sealed class SelectionWindowContentTests
         world.PlaceTerrainOnMap(terrainId, 2, 2, TerrainLayer.Ground, ref terrainTransform);
 
         var fontService = new FontService("Fonts");
-        var windowService = new WindowService(fontService, new GlyphRenderer());
+        var windowService = new ElementPoolService(fontService, new GlyphRenderer());
         var componentInspector = new ComponentInspector(ecsContext.ComponentManager);
         var hostWindow = CreateHostWindow(windowService, new SelectionWindowContent(world, mapViewState, ecsContext.ComponentManager, componentInspector, windowService));
 
@@ -237,7 +237,7 @@ public sealed class SelectionWindowContentTests
 
         // One name window plus one per inspected component (DisplayText, Background,
         // Transform -- everything StoneFloor.Build sets).
-        Assert.HasCount(4, hostWindow.ChildWindows);
+        Assert.HasCount(4, hostWindow.ChildElements);
     }
 
     /// <summary>
@@ -254,7 +254,7 @@ public sealed class SelectionWindowContentTests
         CreateWallEntityAtLayer(ecsContext, world, 2, 2, MapLayer.Flying);
 
         var fontService = new FontService("Fonts");
-        var windowService = new WindowService(fontService, new GlyphRenderer());
+        var windowService = new ElementPoolService(fontService, new GlyphRenderer());
         var componentInspector = new ComponentInspector(ecsContext.ComponentManager);
         var hostWindow = CreateHostWindow(windowService, new SelectionWindowContent(world, mapViewState, ecsContext.ComponentManager, componentInspector, windowService));
 
@@ -264,13 +264,13 @@ public sealed class SelectionWindowContentTests
         // Only the Ground-layer Wall's windows, same count as
         // Update_SelectingEntity_CreatesOneChildWindowPerNameAndComponent, even though a
         // second Wall exists at the same XY on the Flying layer.
-        Assert.HasCount(5, hostWindow.ChildWindows);
+        Assert.HasCount(5, hostWindow.ChildElements);
 
         mapViewState.CurrentMapLayer = (int)MapLayer.Flying;
         hostWindow.Update(new GameTime());
 
         // Switching layers swaps which Wall is inspected -- still 5 windows, now the Flying one's.
-        Assert.HasCount(5, hostWindow.ChildWindows);
+        Assert.HasCount(5, hostWindow.ChildElements);
     }
 
     /// <summary>
@@ -291,16 +291,16 @@ public sealed class SelectionWindowContentTests
         CreateWallEntityAt(ecsContext, world, 2, 2);
 
         var fontService = new FontService("Fonts");
-        var windowService = new WindowService(fontService, new GlyphRenderer());
+        var windowService = new ElementPoolService(fontService, new GlyphRenderer());
         var componentInspector = new ComponentInspector(ecsContext.ComponentManager);
         // Deliberately much shorter than CreateHostWindow's usual 700px -- forces the 5
         // component windows to exceed the host's own height, the same way a goblin engineer's
         // longer component text did in the original report.
-        var hostWindow = windowService.CreateWindow<Window>(null, new WindowOptions
+        var hostWindow = windowService.CreateElement<Window>(null, new ElementOptions
         {
-            Hierarchy = new WindowHierarchyOptions { CanContainChildWindows = true, ChildWindowTileMode = WindowTileMode.Vertical },
-            Layout = new WindowLayoutOptions { Size = new Vector2(300, 40), DisplayMode = WindowDisplayMode.Fixed },
-            Chrome = new WindowChromeOptions { ShowTitle = true, CanUserScrollVertical = true },
+            Hierarchy = new ElementHierarchyOptions { CanContainChildren = true, ChildrenTileMode = ChildElementTileMode.Vertical },
+            Layout = new ElementLayoutOptions { Size = new Vector2(300, 40), DisplayMode = ElementDisplayMode.Fixed },
+            Chrome = new ElementChromeOptions { ShowTitle = true, CanUserScrollVertical = true },
         });
         hostWindow.SetContent(new SelectionWindowContent(world, mapViewState, ecsContext.ComponentManager, componentInspector, windowService));
         hostWindow.Initialize();
@@ -308,7 +308,7 @@ public sealed class SelectionWindowContentTests
         mapViewState.SelectedMapNodePosition = new Point(2, 2);
         hostWindow.Update(new GameTime());
 
-        Assert.HasCount(5, hostWindow.ChildWindows);
+        Assert.HasCount(5, hostWindow.ChildElements);
 
         // hostWindow, not any individual child, is the one that ends up scrollable.
         Assert.IsTrue(hostWindow.CanUserScrollVertical);
@@ -316,9 +316,9 @@ public sealed class SelectionWindowContentTests
 
         // No child should have been clamped down to fit hostWindow's tiny 40px content height --
         // every child keeps its own full, positive natural height instead of getting collapsed.
-        foreach (var child in hostWindow.ChildWindows)
+        foreach (var child in hostWindow.ChildElements)
         {
-            Assert.IsGreaterThan(0, child.WindowCurrentSize.Y);
+            Assert.IsGreaterThan(0, child.CurrentSize.Y);
         }
     }
 }

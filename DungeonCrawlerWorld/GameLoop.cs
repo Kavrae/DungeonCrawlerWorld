@@ -32,6 +32,12 @@ public sealed class GameLoop : Microsoft.Xna.Framework.Game
     // with a duplicate ranking every single frame.
     private const int ProfileReportIntervalFrames = 300;
 
+    // Floor 1 of (eventually) 18 -- floors are strictly sequential, no skipping or
+    // backtracking. There's no advance trigger yet (that needs a win-condition system that
+    // doesn't exist), so this stays a constant rather than tracked state until something
+    // actually needs to change it.
+    private const int FloorNumber = 1;
+
     private readonly GraphicsDeviceManager _graphics;
 
     private Game.World.World _world = null!;
@@ -63,19 +69,13 @@ public sealed class GameLoop : Microsoft.Xna.Framework.Game
     {
         _mathUtility = new MathUtility();
 
-        // Floor 1 of (eventually) 18 -- floors are strictly sequential, no skipping or
-        // backtracking. There's no advance trigger yet (that needs a win-condition system
-        // that doesn't exist), so this stays a local constant rather than tracked state until
-        // something actually needs to change it.
-        const int floorNumber = 1;
-
         // World must exist before GameBootstrapper.Build: MovementModule's Configure step
         // needs an IMapQuery (World implements it), but GameBootstrapper.Build is what
         // produces the EntityManager/ComponentManager FloorBuilder.PopulateFloor needs to
         // populate that world. World itself is session-long-lived, not rebuilt per floor --
         // see FloorBuilder -- so the IMapQuery every module captures here stays valid across
         // future floor transitions, which will replace world.Map rather than World itself.
-        _world = new Game.World.World(FloorBuilder.CreateMap(floorNumber));
+        _world = new Game.World.World(FloorBuilder.CreateMap(FloorNumber));
 
         var modsDirectory = Path.Combine(AppContext.BaseDirectory, "Mods");
         var bootstrapResult = GameBootstrapper.Build(_world, _mathUtility, modsDirectory, InitialEntityCapacity, InitialComponentCapacity);
@@ -134,6 +134,9 @@ public sealed class GameLoop : Microsoft.Xna.Framework.Game
             {
                 _world.PlayerEntityId = FloorBuilder.CreatePlayer(_world, _ecsContext, _mathUtility, _movedEntities);
                 _playerSpawned = true;
+
+                _ecsContext.EventBus.Publish(new EnteredDungeon());
+                _ecsContext.EventBus.Publish(new FloorEntered(FloorNumber));
             }
 
             var ecsUpdateStart = Stopwatch.GetTimestamp();

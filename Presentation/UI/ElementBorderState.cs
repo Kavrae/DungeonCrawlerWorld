@@ -2,15 +2,15 @@ using Microsoft.Xna.Framework;
 
 namespace Presentation.UI;
 
-/// <summary>Border bookkeeping -- see WindowGeometryState for why this is a plain-field class rather than a properties one.</summary>
-internal sealed class WindowBorderState
+/// <summary>Border bookkeeping -- see ElementGeometryState's doc comment for the same "grouped, plain fields" rationale.</summary>
+internal sealed class ElementBorderState
 {
     public bool Show;
     public BorderThickness Thickness;
     public BorderStyle Style;
 
     /// <summary>
-    /// The four edge strips a border draws as (see Window.RecalculateBorderRectangles) --
+    /// The four edge strips a border draws as (see Element.RecalculateBorderRectangles) --
     /// four independently-addressable rectangles, not one solid rectangle, so a future 3D
     /// inset/outset treatment (see Window Chrome TODO) can shade each edge differently.
     /// </summary>

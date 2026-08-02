@@ -12,7 +12,7 @@ public sealed class PresentationContext(
     TileRenderer tileRenderer,
     SpriteSheetService spriteSheetService,
     SpriteRenderer spriteRenderer,
-    WindowService windowService)
+    ElementPoolService elementPoolService)
 {
     public FontService FontService { get; } = fontService ?? throw new ArgumentNullException(nameof(fontService));
     public SpriteBatchRenderer SpriteBatchRenderer { get; } = spriteBatchRenderer ?? throw new ArgumentNullException(nameof(spriteBatchRenderer));
@@ -20,5 +20,5 @@ public sealed class PresentationContext(
     public TileRenderer TileRenderer { get; } = tileRenderer ?? throw new ArgumentNullException(nameof(tileRenderer));
     public SpriteSheetService SpriteSheetService { get; } = spriteSheetService ?? throw new ArgumentNullException(nameof(spriteSheetService));
     public SpriteRenderer SpriteRenderer { get; } = spriteRenderer ?? throw new ArgumentNullException(nameof(spriteRenderer));
-    public WindowService WindowService { get; } = windowService ?? throw new ArgumentNullException(nameof(windowService));
+    public ElementPoolService ElementPoolService { get; } = elementPoolService ?? throw new ArgumentNullException(nameof(elementPoolService));
 }

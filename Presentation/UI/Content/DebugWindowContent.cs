@@ -24,7 +24,7 @@ public sealed class DebugWindowContent(
     FontService fontService,
     EntityManager entityManager,
     ComponentManager componentManager,
-    SystemManager systemManager) : IWindowContent
+    SystemManager systemManager) : IElementContent
 {
     private static readonly Vector2 DrawsPerSecondOffset = new(60, 0);
     private static readonly Vector2 EntityCountOffset = new(120, 0);

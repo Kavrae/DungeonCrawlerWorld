@@ -6,7 +6,7 @@ namespace Presentation.UI;
 /// virtual methods on Window itself. A window that doesn't attach a given behavior pays
 /// no cost for it -- no fields, no branches, no button.
 /// </summary>
-public interface IWindowChromeBehavior
+public interface IChromeBehavior
 {
     void Attach(Window window);
 }

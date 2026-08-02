@@ -64,7 +64,7 @@ public sealed class MapWindow : Window
 
     public MapWindow(
         FontService fontService,
-        WindowService windowService,
+        ElementPoolService elementPoolService,
         World world,
         MapViewState mapViewState,
         ComponentManager componentManager,
@@ -72,7 +72,7 @@ public sealed class MapWindow : Window
         TileRenderer tileRenderer,
         GlyphRenderer glyphRenderer,
         SpriteSheetService spriteSheetService,
-        SpriteRenderer spriteRenderer) : base(fontService, windowService, glyphRenderer)
+        SpriteRenderer spriteRenderer) : base(fontService, elementPoolService, glyphRenderer)
     {
         ArgumentNullException.ThrowIfNull(world);
         ArgumentNullException.ThrowIfNull(mapViewState);

@@ -14,14 +14,14 @@ namespace Tests.Presentation;
 [TestClass]
 public sealed class TextWindowScrollingTests
 {
-    private static WindowService CreateWindowService() => new(new FontService("Fonts"), new GlyphRenderer());
+    private static ElementPoolService CreateWindowService() => new(new FontService("Fonts"), new GlyphRenderer());
 
-    private static TextWindow CreateFixedTextWindow(WindowService windowService, string text, Vector2 size, bool canUserScrollVertical)
+    private static TextWindow CreateFixedTextWindow(ElementPoolService windowService, string text, Vector2 size, bool canUserScrollVertical)
     {
-        var window = windowService.CreateWindow<TextWindow>(null, new WindowOptions
+        var window = windowService.CreateElement<TextWindow>(null, new ElementOptions
         {
-            Layout = new WindowLayoutOptions { Size = size, MaximumSize = new Vector2(size.X, 1000), DisplayMode = WindowDisplayMode.Fixed },
-            Chrome = new WindowChromeOptions { CanUserScrollVertical = canUserScrollVertical },
+            Layout = new ElementLayoutOptions { Size = size, MaximumSize = new Vector2(size.X, 1000), DisplayMode = ElementDisplayMode.Fixed },
+            Chrome = new ElementChromeOptions { CanUserScrollVertical = canUserScrollVertical },
             Text = new TextOptions { Text = text },
         });
         window.Initialize();
@@ -115,10 +115,10 @@ public sealed class TextWindowScrollingTests
         var windowService = CreateWindowService();
         var lineCount = 100;
         var text = string.Join(Environment.NewLine, Enumerable.Range(1, lineCount).Select(n => $"Line {n}"));
-        var window = windowService.CreateWindow<TextWindow>(null, new WindowOptions
+        var window = windowService.CreateElement<TextWindow>(null, new ElementOptions
         {
-            Layout = new WindowLayoutOptions { MaximumSize = new Vector2(300, 100), DisplayMode = WindowDisplayMode.WrapContent },
-            Chrome = new WindowChromeOptions { CanUserScrollVertical = true },
+            Layout = new ElementLayoutOptions { MaximumSize = new Vector2(300, 100), DisplayMode = ElementDisplayMode.WrapContent },
+            Chrome = new ElementChromeOptions { CanUserScrollVertical = true },
             Text = new TextOptions { Text = text },
         });
         window.Initialize();
@@ -143,22 +143,22 @@ public sealed class TextWindowScrollingTests
     public void ParentWindow_ChildrenExceedContentSize_GetsPositiveMaxScrollOffset()
     {
         var windowService = CreateWindowService();
-        var parent = windowService.CreateWindow<Window>(null, new WindowOptions
+        var parent = windowService.CreateElement<Window>(null, new ElementOptions
         {
-            Hierarchy = new WindowHierarchyOptions { CanContainChildWindows = true, ChildWindowTileMode = WindowTileMode.Vertical },
-            Layout = new WindowLayoutOptions { Size = new Vector2(300, 10), DisplayMode = WindowDisplayMode.Fixed },
-            Chrome = new WindowChromeOptions { CanUserScrollVertical = true },
+            Hierarchy = new ElementHierarchyOptions { CanContainChildren = true, ChildrenTileMode = ChildElementTileMode.Vertical },
+            Layout = new ElementLayoutOptions { Size = new Vector2(300, 10), DisplayMode = ElementDisplayMode.Fixed },
+            Chrome = new ElementChromeOptions { CanUserScrollVertical = true },
         });
         parent.Initialize();
 
         for (var index = 0; index < 3; index++)
         {
-            var child = windowService.CreateWindow<TextWindow>(parent, new WindowOptions
+            var child = windowService.CreateElement<TextWindow>(parent, new ElementOptions
             {
-                Layout = new WindowLayoutOptions { MaximumSize = new Vector2(parent.ContentSize.X, 1000), DisplayMode = WindowDisplayMode.WrapContent },
+                Layout = new ElementLayoutOptions { MaximumSize = new Vector2(parent.ContentSize.X, 1000), DisplayMode = ElementDisplayMode.WrapContent },
                 Text = new TextOptions { Text = $"Child {index}" },
             });
-            parent.AddChildWindow(child);
+            parent.AddChild(child);
         }
 
         Assert.IsGreaterThan(0, parent.MaxScrollOffset.Y);
@@ -176,30 +176,30 @@ public sealed class TextWindowScrollingTests
     public void ScrollBy_OnParentWindow_ShiftsChildAbsolutePosition()
     {
         var windowService = CreateWindowService();
-        var parent = windowService.CreateWindow<Window>(null, new WindowOptions
+        var parent = windowService.CreateElement<Window>(null, new ElementOptions
         {
-            Hierarchy = new WindowHierarchyOptions { CanContainChildWindows = true, ChildWindowTileMode = WindowTileMode.Vertical },
-            Layout = new WindowLayoutOptions { Size = new Vector2(300, 10), DisplayMode = WindowDisplayMode.Fixed },
-            Chrome = new WindowChromeOptions { CanUserScrollVertical = true },
+            Hierarchy = new ElementHierarchyOptions { CanContainChildren = true, ChildrenTileMode = ChildElementTileMode.Vertical },
+            Layout = new ElementLayoutOptions { Size = new Vector2(300, 10), DisplayMode = ElementDisplayMode.Fixed },
+            Chrome = new ElementChromeOptions { CanUserScrollVertical = true },
         });
         parent.Initialize();
 
         Window? firstChild = null;
         for (var index = 0; index < 3; index++)
         {
-            var child = windowService.CreateWindow<TextWindow>(parent, new WindowOptions
+            var child = windowService.CreateElement<TextWindow>(parent, new ElementOptions
             {
-                Layout = new WindowLayoutOptions { MaximumSize = new Vector2(parent.ContentSize.X, 1000), DisplayMode = WindowDisplayMode.WrapContent },
+                Layout = new ElementLayoutOptions { MaximumSize = new Vector2(parent.ContentSize.X, 1000), DisplayMode = ElementDisplayMode.WrapContent },
                 Text = new TextOptions { Text = $"Child {index}" },
             });
-            parent.AddChildWindow(child);
+            parent.AddChild(child);
             firstChild ??= child;
         }
 
-        var positionBeforeScroll = firstChild!.WindowAbsolutePosition;
+        var positionBeforeScroll = firstChild!.AbsolutePosition;
 
         parent.ScrollBy(new Vector2(0, parent.MaxScrollOffset.Y));
 
-        Assert.AreEqual(positionBeforeScroll.Y - parent.MaxScrollOffset.Y, firstChild.WindowAbsolutePosition.Y, 0.01f);
+        Assert.AreEqual(positionBeforeScroll.Y - parent.MaxScrollOffset.Y, firstChild.AbsolutePosition.Y, 0.01f);
     }
 }

@@ -46,8 +46,8 @@ public sealed class DebugWindowContentTests
         ecsContext.ComponentManager.GetPackedPool<MovementComponent>().Add(entityId, new MovementComponent(MovementMode.Random, 10, null, null));
 
         var fontService = new FontService("Fonts");
-        var windowService = new WindowService(fontService, new GlyphRenderer());
-        var hostWindow = windowService.CreateWindow<Window>(null, new WindowOptions());
+        var windowService = new ElementPoolService(fontService, new GlyphRenderer());
+        var hostWindow = windowService.CreateElement<Window>(null, new ElementOptions());
         hostWindow.SetContent(new DebugWindowContent(fontService, ecsContext.EntityManager, ecsContext.ComponentManager, ecsContext.SystemManager));
 
         hostWindow.Initialize();
@@ -61,8 +61,8 @@ public sealed class DebugWindowContentTests
         var ecsContext = BuildEcsContext();
 
         var fontService = new FontService("Fonts");
-        var windowService = new WindowService(fontService, new GlyphRenderer());
-        var hostWindow = windowService.CreateWindow<Window>(null, new WindowOptions());
+        var windowService = new ElementPoolService(fontService, new GlyphRenderer());
+        var hostWindow = windowService.CreateElement<Window>(null, new ElementOptions());
         hostWindow.SetContent(new DebugWindowContent(fontService, ecsContext.EntityManager, ecsContext.ComponentManager, ecsContext.SystemManager));
 
         hostWindow.Initialize();

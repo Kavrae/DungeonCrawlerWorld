@@ -9,13 +9,13 @@ namespace Tests.Presentation;
 [TestClass]
 public sealed class WindowGlowTests
 {
-    private static WindowService CreateWindowService() => new(new FontService("Fonts"), new GlyphRenderer());
+    private static ElementPoolService CreateWindowService() => new(new FontService("Fonts"), new GlyphRenderer());
 
-    private static Window CreateWindow(WindowService windowService)
+    private static Window CreateWindow(ElementPoolService windowService)
     {
-        var window = windowService.CreateWindow<Window>(null, new WindowOptions
+        var window = windowService.CreateElement<Window>(null, new ElementOptions
         {
-            Layout = new WindowLayoutOptions { Size = new Vector2(100, 50), DisplayMode = WindowDisplayMode.Fixed },
+            Layout = new ElementLayoutOptions { Size = new Vector2(100, 50), DisplayMode = ElementDisplayMode.Fixed },
         });
         window.Initialize();
         return window;
@@ -70,9 +70,9 @@ public sealed class WindowGlowTests
         window.SetGlow(true);
         window.Close();
 
-        var reused = windowService.CreateWindow<Window>(null, new WindowOptions
+        var reused = windowService.CreateElement<Window>(null, new ElementOptions
         {
-            Layout = new WindowLayoutOptions { Size = new Vector2(100, 50), DisplayMode = WindowDisplayMode.Fixed },
+            Layout = new ElementLayoutOptions { Size = new Vector2(100, 50), DisplayMode = ElementDisplayMode.Fixed },
         });
 
         Assert.AreSame(window, reused);

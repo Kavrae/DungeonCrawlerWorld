@@ -22,7 +22,7 @@ public sealed class SelectionWindowContent(
     MapViewState mapViewState,
     ComponentManager componentManager,
     ComponentInspector componentInspector,
-    WindowService windowService) : IWindowContent
+    ElementPoolService elementPoolService) : IElementContent
 {
     private const int ComponentRefreshInterval = 10; // Most components update every 10 frames, so more frequent refreshes are wasted work.
 
@@ -191,9 +191,9 @@ public sealed class SelectionWindowContent(
             // and the next entity's, since child windows otherwise tile with nothing between
             // them. Without it, two adjacent entities' component lists read as one continuous
             // list with no indication where one entity ends and the next begins.
-            var nameWindow = windowService.CreateWindow<TextWindow>(_hostWindow, new WindowOptions
+            var nameWindow = elementPoolService.CreateElement<TextWindow>(_hostWindow, new ElementOptions
             {
-                Hierarchy = new WindowHierarchyOptions { CanContainChildWindows = false },
+                Hierarchy = new ElementHierarchyOptions { CanContainChildren = false },
                 // Height uncapped (a generous, effectively-unlimited sentinel, not
                 // _hostWindow.ContentSize.Y) -- selectionWindow itself is the thing that
                 // scrolls now (CanUserScrollVertical, see GameShellBootstrapper), so each
@@ -202,11 +202,11 @@ public sealed class SelectionWindowContent(
                 // selectionWindow's own fixed, one-screen-tall content size. Width still capped
                 // to the host's content width -- that's the word-wrap boundary, unrelated to
                 // the vertical scrolling concern.
-                Layout = new WindowLayoutOptions { MaximumSize = new Vector2(_hostWindow.ContentSize.X, UnboundedChildHeight), DisplayMode = WindowDisplayMode.WrapContent },
-                Chrome = new WindowChromeOptions { ShowTitle = false, ShowBorder = true, BorderSize = new Vector2(2, 2) },
+                Layout = new ElementLayoutOptions { MaximumSize = new Vector2(_hostWindow.ContentSize.X, UnboundedChildHeight), DisplayMode = ElementDisplayMode.WrapContent },
+                Chrome = new ElementChromeOptions { ShowTitle = false, ShowBorder = true, BorderSize = new Vector2(2, 2) },
                 Text = new TextOptions { Text = _displayTextPool.GetReadonly(entityId).Name },
             });
-            _hostWindow.AddChildWindow(nameWindow);
+            _hostWindow.AddChild(nameWindow);
             createdWindows.Add(nameWindow);
         }
 
@@ -216,14 +216,14 @@ public sealed class SelectionWindowContent(
         foreach (var entry in _reusableInspectionList)
         {
             // MaximumSize.Y uncapped -- see the matching comment on nameWindow above.
-            var componentWindow = windowService.CreateWindow<TextWindow>(_hostWindow, new WindowOptions
+            var componentWindow = elementPoolService.CreateElement<TextWindow>(_hostWindow, new ElementOptions
             {
-                Hierarchy = new WindowHierarchyOptions { CanContainChildWindows = false },
-                Layout = new WindowLayoutOptions { MaximumSize = new Vector2(_hostWindow.ContentSize.X, UnboundedChildHeight), DisplayMode = WindowDisplayMode.WrapContent },
-                Chrome = new WindowChromeOptions { ShowTitle = true, TitleText = entry.ComponentType.Name, ShowBorder = true, BorderSize = new Vector2(1, 1) },
+                Hierarchy = new ElementHierarchyOptions { CanContainChildren = false },
+                Layout = new ElementLayoutOptions { MaximumSize = new Vector2(_hostWindow.ContentSize.X, UnboundedChildHeight), DisplayMode = ElementDisplayMode.WrapContent },
+                Chrome = new ElementChromeOptions { ShowTitle = true, TitleText = entry.ComponentType.Name, ShowBorder = true, BorderSize = new Vector2(1, 1) },
                 Text = new TextOptions { Text = entry.Value },
             });
-            _hostWindow.AddChildWindow(componentWindow);
+            _hostWindow.AddChild(componentWindow);
             createdWindows.Add(componentWindow);
         }
 

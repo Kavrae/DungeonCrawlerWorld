@@ -24,7 +24,7 @@ public interface IAchievementDefinition
 
     /// <summary>
     /// Subscribes whatever EventBus handler(s) this achievement needs to detect its own
-    /// condition. Implementations should use AchievementTriggerContext.SubscribeUntilUnlocked
+    /// condition. Implementations should use AchievementTriggerContext.SubscribeUntilUnlockedForPlayer
     /// rather than subscribing directly, so the achievement stops listening the moment it's
     /// earned instead of staying subscribed for the rest of the session.
     /// </summary>

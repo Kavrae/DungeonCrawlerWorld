@@ -8,7 +8,7 @@ namespace Presentation.UI;
 /// of what's drawn in its content area (see WindowContentOptions/TextOptions) or how it sizes
 /// and positions itself (see WindowLayoutOptions).
 /// </summary>
-public sealed class WindowChromeOptions
+public sealed class ElementChromeOptions
 {
     /*========Title========*/
     public bool? ShowTitle { get; set; }

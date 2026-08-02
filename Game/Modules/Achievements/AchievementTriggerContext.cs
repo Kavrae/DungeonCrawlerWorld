@@ -17,27 +17,36 @@ public sealed class AchievementTriggerContext(EventBus eventBus, IPlayerQuery? p
     public IPlayerQuery? PlayerQuery { get; } = playerQuery;
 
     /// <summary>
-    /// Subscribes a handler for TEvent that calls tryMatch on every occurrence; once tryMatch
-    /// returns a non-null entity id (the achievement's condition is satisfied), this unlocks
-    /// that entity's achievement and unsubscribes itself -- the achievement is earned exactly
-    /// once and stops costing anything to evaluate afterward. A cumulative achievement (e.g. a
-    /// future kill counter) can still track state across calls inside its own tryMatch closure,
-    /// only returning non-null once its threshold is reached.
+    /// Subscribes a handler for TEvent that unlocks the achievement for the player -- the only
+    /// entity an achievement can ever be earned by -- the first time condition (if given)
+    /// returns true, then unsubscribes itself, so the achievement is earned exactly once and
+    /// stops costing anything to evaluate afterward. Omitting condition means "unlock
+    /// unconditionally the moment TEvent fires" (e.g. LonerAchievement, UnarmedCombatAchievement);
+    /// InflictedDamageAchievement is the one definition that needs it, to check the event's own
+    /// data (who dealt/received the damage) before unlocking. A cumulative achievement (e.g. a
+    /// future kill counter) can still track state across calls inside its own condition closure,
+    /// only returning true once its threshold is reached.
+    ///
+    /// Never subscribes at all when PlayerQuery is null -- there's no player to unlock this
+    /// for -- rather than subscribing a handler that would just no-op forever.
     /// </summary>
-    public void SubscribeUntilUnlocked<TEvent>(Func<TEvent, int?> tryMatch)
+    public void SubscribeUntilUnlocked<TEvent>(Func<TEvent, bool>? condition = null)
     {
-        ArgumentNullException.ThrowIfNull(tryMatch);
+        if (PlayerQuery is not { } playerQuery)
+        {
+            return;
+        }
 
         Action<TEvent>? handler = null;
         handler = eventData =>
         {
-            if (tryMatch(eventData) is not { } entityId)
+            if (condition is not null && !condition(eventData))
             {
                 return;
             }
 
             EventBus.Unsubscribe(handler!);
-            unlock(entityId);
+            unlock(playerQuery.PlayerEntityId);
         };
 
         EventBus.Subscribe(handler);

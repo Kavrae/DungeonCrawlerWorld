@@ -18,7 +18,7 @@ namespace Presentation.UI.Content;
 /// status effect type the player currently has any stacks of, drawn left to right -- each its
 /// own square white tile with a 1px black border.
 /// </summary>
-public sealed class PlayerStatusEffectsContent(World world, ComponentManager componentManager, FontService fontService) : IWindowContent
+public sealed class PlayerStatusEffectsContent(World world, ComponentManager componentManager, FontService fontService) : IElementContent
 {
     public static readonly Vector2 Size = new(PlayerHealthBarContent.Size.X, HudMetrics.EntrySize.Y / 2f * 1.5f);
 

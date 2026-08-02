@@ -26,31 +26,31 @@ public sealed class NotificationCenterTests
 {
     private static readonly Point FirstActiveNotificationTopLeft = new(200, 200);
 
-    private static WindowService CreateWindowService()
+    private static ElementPoolService CreateWindowService()
     {
         var fontService = new FontService("Fonts");
         var glyphRenderer = new GlyphRenderer();
-        var windowService = new WindowService(fontService, glyphRenderer);
+        var windowService = new ElementPoolService(fontService, glyphRenderer);
         windowService.RegisterFactory<Folder>((_, _) => new Folder(
             fontService, windowService, glyphRenderer, new SpriteSheetService(null, "Spritesheets"), new SpriteRenderer()));
         return windowService;
     }
 
-    private static NotificationCenter CreateNotificationCenter(WindowService windowService, List<Window> alwaysOnTopWindows)
+    private static NotificationCenter CreateNotificationCenter(ElementPoolService windowService, List<Element> alwaysOnTopWindows)
     {
         var notificationCenter = new NotificationCenter(windowService, new EventBus(), alwaysOnTopWindows);
         notificationCenter.Initialize();
         return notificationCenter;
     }
 
-    private static bool ClickAlwaysOnTop(List<Window> alwaysOnTopWindows, Point position)
+    private static bool ClickAlwaysOnTop(List<Element> alwaysOnTopWindows, Point position)
     {
         for (var index = alwaysOnTopWindows.Count - 1; index >= 0; index--)
         {
             var interaction = alwaysOnTopWindows[index].TryHitTestInteraction(position);
-            if (interaction.Window is not null)
+            if (interaction.Element is not null)
             {
-                interaction.Window.HandleClick(position);
+                interaction.Element.HandleClick(position);
                 return true;
             }
         }
@@ -61,7 +61,7 @@ public sealed class NotificationCenterTests
     [TestMethod]
     public void AddNotification_ShowImmediately_CreatesAClickableActiveWindow()
     {
-        var alwaysOnTopWindows = new List<Window>();
+        var alwaysOnTopWindows = new List<Element>();
         var notificationCenter = CreateNotificationCenter(CreateWindowService(), alwaysOnTopWindows);
 
         notificationCenter.AddNotification(NotificationCategory.Quest, "Hello", showImmediately: true);
@@ -73,7 +73,7 @@ public sealed class NotificationCenterTests
     [TestMethod]
     public void AddNotification_ShowImmediately_RaisesActiveNotificationOpenedWithTheNewWindow()
     {
-        var alwaysOnTopWindows = new List<Window>();
+        var alwaysOnTopWindows = new List<Element>();
         var notificationCenter = CreateNotificationCenter(CreateWindowService(), alwaysOnTopWindows);
         Window? openedWindow = null;
         notificationCenter.ActiveNotificationOpened += window => openedWindow = window;
@@ -88,7 +88,7 @@ public sealed class NotificationCenterTests
     [TestMethod]
     public void OpenNextNotification_RaisesActiveNotificationOpenedWithThePromotedWindow()
     {
-        var alwaysOnTopWindows = new List<Window>();
+        var alwaysOnTopWindows = new List<Element>();
         var notificationCenter = CreateNotificationCenter(CreateWindowService(), alwaysOnTopWindows);
         notificationCenter.AddNotification(NotificationCategory.Quest, "Hello", showImmediately: false);
         Window? openedWindow = null;
@@ -103,7 +103,7 @@ public sealed class NotificationCenterTests
     [TestMethod]
     public void AddNotification_NotShownImmediately_CreatesNoActiveWindow()
     {
-        var alwaysOnTopWindows = new List<Window>();
+        var alwaysOnTopWindows = new List<Element>();
         var notificationCenter = CreateNotificationCenter(CreateWindowService(), alwaysOnTopWindows);
 
         notificationCenter.AddNotification(NotificationCategory.Quest, "Hello", showImmediately: false);
@@ -114,7 +114,7 @@ public sealed class NotificationCenterTests
     [TestMethod]
     public void CloseNotification_ActiveNotification_RemovesItFromActiveList()
     {
-        var alwaysOnTopWindows = new List<Window>();
+        var alwaysOnTopWindows = new List<Element>();
         var notificationCenter = CreateNotificationCenter(CreateWindowService(), alwaysOnTopWindows);
         var notificationId = notificationCenter.AddNotification(NotificationCategory.Quest, "Hello", showImmediately: true);
 
@@ -124,11 +124,11 @@ public sealed class NotificationCenterTests
         Assert.IsFalse(ClickAlwaysOnTop(alwaysOnTopWindows, FirstActiveNotificationTopLeft));
     }
 
-    private static (WindowService WindowService, Func<Folder> GetFolder) CreateWindowServiceCapturingFolder()
+    private static (ElementPoolService WindowService, Func<Folder> GetFolder) CreateWindowServiceCapturingFolder()
     {
         var fontService = new FontService("Fonts");
         var glyphRenderer = new GlyphRenderer();
-        var windowService = new WindowService(fontService, glyphRenderer);
+        var windowService = new ElementPoolService(fontService, glyphRenderer);
         Folder? capturedFolder = null;
         windowService.RegisterFactory<Folder>((_, _) =>
         {
@@ -149,11 +149,11 @@ public sealed class NotificationCenterTests
 
         // Force-expand first -- proves the close itself re-collapses it, not that it just never opened.
         folder.HandleClick(new Point(35, 35));
-        Assert.AreEqual(WindowDisplayMode.WrapContent, folder.WindowDisplay);
+        Assert.AreEqual(ElementDisplayMode.WrapContent, folder.DisplayMode);
 
         notificationCenter.CloseNotification(notificationId);
 
-        Assert.AreEqual(WindowDisplayMode.Minimized, folder.WindowDisplay);
+        Assert.AreEqual(ElementDisplayMode.Minimized, folder.DisplayMode);
     }
 
     /// <summary>The Folder stays open for the user to keep working through what's left -- auto-minimize only triggers once every category's unread queue is actually empty, not just because one popup closed.</summary>
@@ -169,7 +169,7 @@ public sealed class NotificationCenterTests
 
         notificationCenter.CloseNotification(activeId);
 
-        Assert.AreEqual(WindowDisplayMode.WrapContent, folder.WindowDisplay);
+        Assert.AreEqual(ElementDisplayMode.WrapContent, folder.DisplayMode);
     }
 
     [TestMethod]
@@ -183,7 +183,7 @@ public sealed class NotificationCenterTests
     [TestMethod]
     public void OpenNextNotification_WithUnreadNotification_PromotesItToActive()
     {
-        var alwaysOnTopWindows = new List<Window>();
+        var alwaysOnTopWindows = new List<Element>();
         var notificationCenter = CreateNotificationCenter(CreateWindowService(), alwaysOnTopWindows);
         notificationCenter.AddNotification(NotificationCategory.Quest, "Hello", showImmediately: false);
 
@@ -195,7 +195,7 @@ public sealed class NotificationCenterTests
     [TestMethod]
     public void OpenNextNotification_WithNoUnreadNotifications_DoesNothing()
     {
-        var alwaysOnTopWindows = new List<Window>();
+        var alwaysOnTopWindows = new List<Element>();
         var notificationCenter = CreateNotificationCenter(CreateWindowService(), alwaysOnTopWindows);
 
         notificationCenter.OpenNextNotification(NotificationCategory.Quest);
@@ -238,7 +238,7 @@ public sealed class NotificationCenterTests
     public void ClickingSummaryBadge_WithUnreadNotification_OpensItAsActive()
     {
         var (windowService, capturedBadges) = CreateWindowServiceCapturingTextWindows();
-        var alwaysOnTopWindows = new List<Window>();
+        var alwaysOnTopWindows = new List<Element>();
         var notificationCenter = CreateNotificationCenter(windowService, alwaysOnTopWindows);
         notificationCenter.AddNotification(NotificationCategory.Quest, "Explore the dungeon.", showImmediately: false);
 
@@ -250,7 +250,7 @@ public sealed class NotificationCenterTests
         Assert.IsTrue(ClickAlwaysOnTop(alwaysOnTopWindows, new Point(30 + 5, 30 + 5)));
 
         var questBadge = capturedBadges.Single(badge => badge.OriginalText == "Quest: 1");
-        var handled = ClickAlwaysOnTop(alwaysOnTopWindows, questBadge.WindowRectangle.Center);
+        var handled = ClickAlwaysOnTop(alwaysOnTopWindows, questBadge.Rectangle.Center);
 
         Assert.IsTrue(handled);
         Assert.IsTrue(ClickAlwaysOnTop(alwaysOnTopWindows, FirstActiveNotificationTopLeft));
@@ -260,12 +260,12 @@ public sealed class NotificationCenterTests
     public void ClickingSummaryBadge_WithNoUnreadNotifications_DoesNotOpenAnything()
     {
         var (windowService, capturedBadges) = CreateWindowServiceCapturingTextWindows();
-        var alwaysOnTopWindows = new List<Window>();
+        var alwaysOnTopWindows = new List<Element>();
         _ = CreateNotificationCenter(windowService, alwaysOnTopWindows);
 
         Assert.IsTrue(ClickAlwaysOnTop(alwaysOnTopWindows, new Point(30 + 5, 30 + 5))); // expand the Folder
         var questBadge = capturedBadges.Single(badge => badge.OriginalText == "Quest: 0");
-        ClickAlwaysOnTop(alwaysOnTopWindows, questBadge.WindowRectangle.Center);
+        ClickAlwaysOnTop(alwaysOnTopWindows, questBadge.Rectangle.Center);
 
         Assert.IsFalse(ClickAlwaysOnTop(alwaysOnTopWindows, FirstActiveNotificationTopLeft));
     }
@@ -317,7 +317,7 @@ public sealed class NotificationCenterTests
     {
         var fontService = new FontService("Fonts");
         var glyphRenderer = new GlyphRenderer();
-        var windowService = new WindowService(fontService, glyphRenderer);
+        var windowService = new ElementPoolService(fontService, glyphRenderer);
         windowService.RegisterFactory<Folder>((_, _) => new Folder(
             fontService, windowService, glyphRenderer, new SpriteSheetService(null, "Spritesheets"), new SpriteRenderer()));
         var capturedPopups = new List<TextWindow>();
@@ -334,7 +334,7 @@ public sealed class NotificationCenterTests
             return window;
         });
 
-        var alwaysOnTopWindows = new List<Window>();
+        var alwaysOnTopWindows = new List<Element>();
         var notificationCenter = CreateNotificationCenter(windowService, alwaysOnTopWindows);
 
         var firstId = notificationCenter.AddNotification(NotificationCategory.Quest, "First", showImmediately: true);
@@ -349,7 +349,7 @@ public sealed class NotificationCenterTests
         var secondPopup = activePopups[1]; // second AddNotification call -- stacked on top, see ActiveNotificationStackOffset
         var closeButton = secondPopup.TitleButtons[0]; // Close attaches first, see Window.Initialize
 
-        var handled = ClickAlwaysOnTop(alwaysOnTopWindows, closeButton.ButtonRectangle.Center);
+        var handled = ClickAlwaysOnTop(alwaysOnTopWindows, closeButton.Rectangle.Center);
 
         Assert.IsTrue(handled);
         // Already closed by the click above -- CloseNotification returns false for an id no
@@ -360,11 +360,11 @@ public sealed class NotificationCenterTests
     }
 
     /// <summary>Captures every TextWindow WindowService creates -- the only way to inspect an active popup's own TitleText, since NotificationCenter doesn't expose its windows. Mirrors ClickingCloseButton_OnNewerOverlappingNotification_ClosesOnlyThatOne's technique.</summary>
-    private static (WindowService WindowService, List<TextWindow> CapturedPopups) CreateWindowServiceCapturingTextWindows()
+    private static (ElementPoolService WindowService, List<TextWindow> CapturedPopups) CreateWindowServiceCapturingTextWindows()
     {
         var fontService = new FontService("Fonts");
         var glyphRenderer = new GlyphRenderer();
-        var windowService = new WindowService(fontService, glyphRenderer);
+        var windowService = new ElementPoolService(fontService, glyphRenderer);
         windowService.RegisterFactory<Folder>((_, _) => new Folder(
             fontService, windowService, glyphRenderer, new SpriteSheetService(null, "Spritesheets"), new SpriteRenderer()));
         var capturedPopups = new List<TextWindow>();
@@ -419,7 +419,7 @@ public sealed class NotificationCenterTests
     public void PublishingNotificationRequested_ThenUpdate_ProducesSameResultAsDirectAddNotification()
     {
         var eventBus = new EventBus();
-        var alwaysOnTopWindows = new List<Window>();
+        var alwaysOnTopWindows = new List<Element>();
         var notificationCenter = new NotificationCenter(CreateWindowService(), eventBus, alwaysOnTopWindows);
         notificationCenter.Initialize();
 

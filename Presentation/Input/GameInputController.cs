@@ -15,23 +15,23 @@ public sealed class GameInputController
     /// <summary>Content pixels scrolled per wheel detent -- roughly three lines of the 8pt font most window content uses, matching typical OS scroll-speed defaults.</summary>
     private const float ScrollPixelsPerNotch = 24f;
 
-    private readonly List<Window> _rootWindows;
-    private readonly List<Window> _hudWindows;
-    private readonly List<Window> _alwaysOnTopWindows;
+    private readonly List<Element> _rootElements;
+    private readonly List<Element> _hudElements;
+    private readonly List<Element> _alwaysOnTopElements;
     private readonly Vector2 _screenSize;
 
     private KeyboardState _previousKeyboardState;
     private MouseState _previousMouseState;
 
-    private WindowInteraction _activeInteraction = WindowInteraction.NotHit;
+    private ElementInteraction _activeInteraction = ElementInteraction.NotHit;
     private Vector2 _dragStartMousePosition;
     private Vector2 _dragStartRelativePosition;
     private Vector2 _dragStartSize;
 
-    /// <summary>The window a right-mouse-button drag started over (hit-tested on press), or null while no right-drag is in progress -- see HandleRightDragStart/HandleRightDrag.</summary>
-    private Window? _rightDragWindow;
+    /// <summary>The element a right-mouse-button drag started over (hit-tested on press), or null while no right-drag is in progress -- see HandleRightDragStart/HandleRightDrag.</summary>
+    private Element? _rightDragElement;
 
-    /// <summary>Mouse position at the moment the current right-drag started -- HandleRightDrag reports the total delta from this anchor every frame, not a per-frame increment, so the receiving window never has to worry about drift from accumulating many small deltas.</summary>
+    /// <summary>Mouse position at the moment the current right-drag started -- HandleRightDrag reports the total delta from this anchor every frame, not a per-frame increment, so the receiving element never has to worry about drift from accumulating many small deltas.</summary>
     private Vector2 _rightDragStartMousePosition;
 
     /// <summary>Pixel distance past which a right-button press/release reads as a drag rather than a tap -- see HandleRightDrag/HandleRightDragEnd. Small enough to absorb ordinary click jitter, comfortably smaller than an intentional pan.</summary>
@@ -40,36 +40,36 @@ public sealed class GameInputController
     /// <summary>Set once the current right-drag's total delta has ever exceeded RightClickTapThresholdPixels -- checked (not recomputed) at release, so a drag that wandered out past the threshold and back before releasing still counts as a drag, not a tap.</summary>
     private bool _rightDragExceededTapThreshold;
 
-    private Window? _focusedWindow;
+    private Element? _focusedElement;
 
     /// <summary>
-    /// The container (a parent's ChildWindows, or the always-on-top tier) the currently
-    /// focused window belonged to at the moment it gained focus -- see GetSiblingContainer and
+    /// The container (a parent's ChildElements, or the always-on-top tier) the currently
+    /// focused element belonged to at the moment it gained focus -- see GetSiblingContainer and
     /// RedirectFocusAwayFrom. Snapshotted in SetFocus rather than recomputed at close/minimize
-    /// time because a closing window may already have removed itself from that same list by
+    /// time because a closing element may already have removed itself from that same list by
     /// then (e.g. NotificationCenter.OnActiveNotificationClosed), depending on event
     /// subscription order.
     /// </summary>
-    private List<Window>? _focusedWindowSiblings;
+    private List<Element>? _focusedElementSiblings;
 
-    /// <summary>The fallback focus target whenever a close/minimize redirect (see RedirectFocusAwayFrom) finds no sibling to move to -- e.g. dismissing the last active notification, or closing the quest composer popup. Set once via SetDefaultFocusWindow, the same composition-root role FocusWindow already plays for initial focus.</summary>
-    private Window? _defaultFocusWindow;
+    /// <summary>The fallback focus target whenever a close/minimize redirect (see RedirectFocusAwayFrom) finds no sibling to move to -- e.g. dismissing the last active notification, or closing the quest composer popup. Set once via SetDefaultFocusElement, the same composition-root role FocusElement already plays for initial focus.</summary>
+    private Element? _defaultFocusElement;
 
     /// <summary>
-    /// The focused window itself plus every ParentWindow above it, up to its root -- e.g. a
+    /// The focused element itself plus every ParentElement above it, up to its root -- e.g. a
     /// focused TextBox's chain is [textBox, popup]. Closing a window only ever fires Closed on
-    /// that exact window, never on its still-open descendants (RemoveChildWindow doesn't raise
+    /// that exact element, never on its still-open descendants (RemoveChildWindow doesn't raise
     /// anything on the child being removed) -- so closing the quest-composer popup while its
-    /// TextBox holds focus would otherwise never reach OnFocusedWindowClosed at all, since
-    /// _focusedWindow (the TextBox) never itself closes. Subscribing Closed across the whole
-    /// chain, not just the focused window, is what makes an ancestor closing still redirect
+    /// TextBox holds focus would otherwise never reach OnFocusedElementClosed at all, since
+    /// _focusedElement (the TextBox) never itself closes. Subscribing Closed across the whole
+    /// chain, not just the focused element, is what makes an ancestor closing still redirect
     /// focus away from whatever descendant currently holds it.
     /// </summary>
-    private readonly List<Window> _focusedWindowAncestorChain = [];
+    private readonly List<Element> _focusedElementAncestorChain = [];
 
     /// <summary>
     /// Characters typed this frame, buffered from FNA's static TextInputEXT.TextInput event
-    /// (subscribed once, in the constructor) and drained by RouteTextInputToFocusedWindow.
+    /// (subscribed once, in the constructor) and drained by RouteTextInputToFocusedElement.
     /// Per-instance, not static, so each GameInputController -- including the many short-lived
     /// ones tests construct -- only ever sees characters typed while it itself is subscribed.
     /// </summary>
@@ -87,11 +87,11 @@ public sealed class GameInputController
     /// <summary>See StartTextInput.</summary>
     internal Action StopTextInput = TextInputEXT.StopTextInput;
 
-    public GameInputController(List<Window> rootWindows, List<Window> hudWindows, List<Window> alwaysOnTopWindows, Vector2 screenSize)
+    public GameInputController(List<Element> rootElements, List<Element> hudElements, List<Element> alwaysOnTopElements, Vector2 screenSize)
     {
-        _rootWindows = rootWindows;
-        _hudWindows = hudWindows;
-        _alwaysOnTopWindows = alwaysOnTopWindows;
+        _rootElements = rootElements;
+        _hudElements = hudElements;
+        _alwaysOnTopElements = alwaysOnTopElements;
         _screenSize = screenSize;
 
         // Subscribing is safe to do unconditionally and permanently -- SDL simply never raises
@@ -110,22 +110,22 @@ public sealed class GameInputController
     /// </summary>
     internal Button? PressedButton { get; private set; }
 
-    /// <summary>The drag/resize interaction currently in progress (or WindowInteraction.NotHit if none). Move is wired to SetRelativePosition and Resize to SetBounds, both each held frame -- see ComputeResize for the resize math.</summary>
-    internal WindowInteraction ActiveInteraction => _activeInteraction;
+    /// <summary>The drag/resize interaction currently in progress (or ElementInteraction.NotHit if none). Move is wired to SetRelativePosition and Resize to SetBounds, both each held frame -- see ComputeResize for the resize math.</summary>
+    internal ElementInteraction ActiveInteraction => _activeInteraction;
 
-    /// <summary>The window currently holding keyboard focus, if any -- see SetFocus/RouteKeyPressesToFocusedWindow/CycleFocus.</summary>
-    internal Window? FocusedWindow => _focusedWindow;
+    /// <summary>The element currently holding keyboard focus, if any -- see SetFocus/RouteKeyPressesToFocusedElement/CycleFocus.</summary>
+    internal Element? FocusedElement => _focusedElement;
 
-    /// <summary>Focuses a window from outside -- GameLoop calls this once at startup to default-focus the map window, since a window's own hotkeys (see RouteHotkeysToFocusedWindow) only fire while it holds focus.</summary>
-    public void FocusWindow(Window window) => SetFocus(window);
+    /// <summary>Focuses an element from outside -- GameLoop calls this once at startup to default-focus the map window, since an element's own hotkeys (see RouteHotkeysToFocusedElement) only fire while it holds focus.</summary>
+    public void FocusElement(Element element) => SetFocus(element);
 
-    /// <summary>See _defaultFocusWindow.</summary>
-    public void SetDefaultFocusWindow(Window window) => _defaultFocusWindow = window;
+    /// <summary>See _defaultFocusElement.</summary>
+    public void SetDefaultFocusElement(Element element) => _defaultFocusElement = element;
 
-    /// <summary>Window.WindowRelativePosition captured at the start of the current drag -- meaningless when ActiveInteraction.Kind is None. Move's per-frame SetRelativePosition is this plus DragDelta; ComputeResize uses it as the Left/Top-edge resize baseline.</summary>
+    /// <summary>Element.RelativePosition captured at the start of the current drag -- meaningless when ActiveInteraction.Kind is None. Move's per-frame SetRelativePosition is this plus DragDelta; ComputeResize uses it as the Left/Top-edge resize baseline.</summary>
     internal Vector2 DragStartRelativePosition => _dragStartRelativePosition;
 
-    /// <summary>Window.WindowCurrentSize captured at the start of the current drag -- meaningless when ActiveInteraction.Kind is None. ComputeResize's resize baseline.</summary>
+    /// <summary>Element.CurrentSize captured at the start of the current drag -- meaningless when ActiveInteraction.Kind is None. ComputeResize's resize baseline.</summary>
     internal Vector2 DragStartSize => _dragStartSize;
 
     /// <summary>Mouse movement since the drag started, recomputed every held frame -- zero on the press frame itself and once released.</summary>
@@ -143,11 +143,11 @@ public sealed class GameInputController
     /// </summary>
     internal void Update(KeyboardState keyboardState, MouseState mouseState)
     {
-        RouteHotkeysToFocusedWindow(keyboardState);
+        RouteHotkeysToFocusedElement(keyboardState);
         HandleFocusCycling(keyboardState);
         HandleEscape(keyboardState);
-        RouteKeyPressesToFocusedWindow(keyboardState);
-        RouteTextInputToFocusedWindow();
+        RouteKeyPressesToFocusedElement(keyboardState);
+        RouteTextInputToFocusedElement();
 
         if (mouseState.LeftButton == ButtonState.Pressed && _previousMouseState.LeftButton == ButtonState.Released)
         {
@@ -157,7 +157,7 @@ public sealed class GameInputController
         {
             HandleMouseRelease(mouseState);
         }
-        else if (mouseState.LeftButton == ButtonState.Pressed && _activeInteraction.Kind != WindowInteractionKind.None)
+        else if (mouseState.LeftButton == ButtonState.Pressed && _activeInteraction.Kind != ElementDragInteractionKind.None)
         {
             HandleMouseDrag(mouseState);
         }
@@ -170,7 +170,7 @@ public sealed class GameInputController
         {
             HandleRightDragEnd();
         }
-        else if (mouseState.RightButton == ButtonState.Pressed && _rightDragWindow is not null)
+        else if (mouseState.RightButton == ButtonState.Pressed && _rightDragElement is not null)
         {
             HandleRightDrag(mouseState);
         }
@@ -183,12 +183,12 @@ public sealed class GameInputController
     }
 
     /// <summary>
-    /// Routes the whole keyboard state to whichever window is focused, once per frame (see
+    /// Routes the whole keyboard state to whichever element is focused, once per frame (see
     /// Window.HandleHotkeys) -- e.g. MapWindow's WASD/zoom/PageUp/PageDown/Space, or a future
     /// inventory window's own navigation keys. GameInputController itself knows nothing about
-    /// what any window's hotkeys are; it only knows which window is focused.
+    /// what any element's hotkeys are; it only knows which element is focused.
     /// </summary>
-    private void RouteHotkeysToFocusedWindow(KeyboardState keyboardState) => _focusedWindow?.HandleHotkeys(keyboardState, _previousKeyboardState);
+    private void RouteHotkeysToFocusedElement(KeyboardState keyboardState) => _focusedElement?.HandleHotkeys(keyboardState, _previousKeyboardState);
 
     /// <summary>Tab itself must stay unconditional -- it's how focus moves in the first place, so it can never be gated behind already holding focus.</summary>
     private void HandleFocusCycling(KeyboardState keyboardState)
@@ -206,7 +206,7 @@ public sealed class GameInputController
 
     /// <summary>
     /// Escape must stay unconditional too, the same reasoning as Tab above: broadcast to every
-    /// root/HUD window (not just whichever holds focus) rather than routed only to the focused
+    /// root/HUD element (not just whichever holds focus) rather than routed only to the focused
     /// one, since an armed ability's own window (MapWindow) shouldn't have to hold keyboard
     /// focus for Escape to cancel it -- e.g. a HUD panel could be focused while the map still
     /// has an ability armed. AlwaysOnTop (notification popups) is deliberately excluded, the
@@ -221,14 +221,14 @@ public sealed class GameInputController
             return;
         }
 
-        foreach (var window in _rootWindows)
+        foreach (var element in _rootElements)
         {
-            window.HandleEscape();
+            element.HandleEscape();
         }
 
-        foreach (var window in _hudWindows)
+        foreach (var element in _hudElements)
         {
-            window.HandleEscape();
+            element.HandleEscape();
         }
     }
 
@@ -241,27 +241,27 @@ public sealed class GameInputController
         PressedButton?.SetPressed(true);
         DragDelta = Vector2.Zero;
 
-        if (_activeInteraction.Window is not null)
+        if (_activeInteraction.Element is not null)
         {
-            RaiseToFront(_activeInteraction.Window);
+            RaiseToFront(_activeInteraction.Element);
 
-            if (_activeInteraction.Window.CanUserFocus)
+            if (_activeInteraction.Element.CanUserFocus)
             {
-                SetFocus(_activeInteraction.Window);
+                SetFocus(_activeInteraction.Element);
             }
 
-            if (_activeInteraction.Kind != WindowInteractionKind.None)
+            if (_activeInteraction.Kind != ElementDragInteractionKind.None)
             {
                 _dragStartMousePosition = new Vector2(mouseState.X, mouseState.Y);
-                _dragStartRelativePosition = _activeInteraction.Window.WindowRelativePosition;
-                _dragStartSize = _activeInteraction.Window.WindowCurrentSize;
+                _dragStartRelativePosition = _activeInteraction.Element.RelativePosition;
+                _dragStartSize = _activeInteraction.Element.CurrentSize;
             }
         }
     }
 
     /// <summary>
     /// Fires on release, not press -- standard button convention (press only starts the pressed
-    /// visual; release commits, re-hit-testing the same window at the release position so a
+    /// visual; release commits, re-hit-testing the same element at the release position so a
     /// button/title/content click that's been dragged off its target quietly does nothing rather
     /// than firing against whatever else the mouse happens to be over). This is also the only way
     /// the pressed visual is ever actually observable: firing on press meant a destructive action
@@ -269,11 +269,11 @@ public sealed class GameInputController
     /// </summary>
     private void HandleMouseRelease(MouseState mouseState)
     {
-        _activeInteraction.Window?.HandleClick(new Point(mouseState.X, mouseState.Y));
+        _activeInteraction.Element?.HandleClick(new Point(mouseState.X, mouseState.Y));
 
         PressedButton?.SetPressed(false);
         PressedButton = null;
-        _activeInteraction = WindowInteraction.NotHit;
+        _activeInteraction = ElementInteraction.NotHit;
         DragDelta = Vector2.Zero;
     }
 
@@ -281,25 +281,25 @@ public sealed class GameInputController
     {
         DragDelta = new Vector2(mouseState.X, mouseState.Y) - _dragStartMousePosition;
 
-        if (_activeInteraction.Kind == WindowInteractionKind.Move && _activeInteraction.Window is not null)
+        if (_activeInteraction.Kind == ElementDragInteractionKind.Move && _activeInteraction.Element is not null)
         {
-            var window = _activeInteraction.Window;
+            var element = _activeInteraction.Element;
             var desiredPosition = _dragStartRelativePosition + DragDelta;
-            window.SetRelativePosition(ClampMoveToBounds(desiredPosition, window.WindowCurrentSize, GetPositionBounds(window)));
+            element.SetRelativePosition(ClampMoveToBounds(desiredPosition, element.CurrentSize, GetPositionBounds(element)));
         }
-        else if (_activeInteraction.Kind == WindowInteractionKind.Resize && _activeInteraction.Window is not null)
+        else if (_activeInteraction.Kind == ElementDragInteractionKind.Resize && _activeInteraction.Element is not null)
         {
-            var window = _activeInteraction.Window;
-            var (relativePosition, size) = ComputeResize(window, _activeInteraction.Edges, _dragStartRelativePosition, _dragStartSize, DragDelta);
-            (relativePosition, size) = ClampResizeToBounds(relativePosition, size, GetPositionBounds(window));
-            window.SetBounds(relativePosition, size);
+            var element = _activeInteraction.Element;
+            var (relativePosition, size) = ComputeResize(element, _activeInteraction.Edges, _dragStartRelativePosition, _dragStartSize, DragDelta);
+            (relativePosition, size) = ClampResizeToBounds(relativePosition, size, GetPositionBounds(element));
+            element.SetBounds(relativePosition, size);
         }
     }
 
     /// <summary>
-    /// Captures which window a right-mouse-button drag started over, hit-testing the same way
+    /// Captures which element a right-mouse-button drag started over, hit-testing the same way
     /// a left-click does (TryHitTestInteraction) -- but with no raise-to-front/focus side
-    /// effects, since a drag-to-pan gesture shouldn't steal focus or reorder windows the way
+    /// effects, since a drag-to-pan gesture shouldn't steal focus or reorder elements the way
     /// clicking one does. Null (nothing hit, e.g. empty space between windows) means the drag
     /// simply forwards to nothing until released. Also snapshots the press position as the
     /// anchor HandleRightDrag measures every subsequent frame's total delta from.
@@ -307,13 +307,13 @@ public sealed class GameInputController
     private void HandleRightDragStart(MouseState mouseState)
     {
         var position = new Point(mouseState.X, mouseState.Y);
-        _rightDragWindow = TryHitTestInteraction(position).Window;
+        _rightDragElement = TryHitTestInteraction(position).Element;
         _rightDragStartMousePosition = new Vector2(mouseState.X, mouseState.Y);
         _rightDragExceededTapThreshold = false;
-        _rightDragWindow?.HandleRightDragStart();
+        _rightDragElement?.HandleRightDragStart();
     }
 
-    /// <summary>Forwards the total mouse-pixel delta since the drag started (not this frame's increment) to whichever window the drag started over -- see Window.HandleRightDrag. Also latches _rightDragExceededTapThreshold once this gesture has moved enough to count as a real drag, not a tap -- see HandleRightDragEnd.</summary>
+    /// <summary>Forwards the total mouse-pixel delta since the drag started (not this frame's increment) to whichever element the drag started over -- see Window.HandleRightDrag. Also latches _rightDragExceededTapThreshold once this gesture has moved enough to count as a real drag, not a tap -- see HandleRightDragEnd.</summary>
     private void HandleRightDrag(MouseState mouseState)
     {
         var totalDelta = new Vector2(mouseState.X, mouseState.Y) - _rightDragStartMousePosition;
@@ -323,7 +323,7 @@ public sealed class GameInputController
             _rightDragExceededTapThreshold = true;
         }
 
-        _rightDragWindow?.HandleRightDrag(totalDelta);
+        _rightDragElement?.HandleRightDrag(totalDelta);
     }
 
     /// <summary>A gesture that never exceeded the tap threshold reads as a right-click tap (e.g. ability-cancel) instead of a drag-end -- a real drag's own end-of-gesture handling (e.g. MapWindow settling its smooth scroll onto the tile grid) has nothing to do for a tap anyway, since it never moved.</summary>
@@ -331,20 +331,20 @@ public sealed class GameInputController
     {
         if (_rightDragExceededTapThreshold)
         {
-            _rightDragWindow?.HandleRightDragEnd();
+            _rightDragElement?.HandleRightDragEnd();
         }
         else
         {
-            _rightDragWindow?.HandleRightClickTap();
+            _rightDragElement?.HandleRightClickTap();
         }
 
-        _rightDragWindow = null;
+        _rightDragElement = null;
     }
 
     /// <summary>
-    /// Scrolls whichever window is directly under the cursor, if it opts into
+    /// Scrolls whichever element is directly under the cursor, if it opts into
     /// CanUserScrollVertical/Horizontal (see Window.ScrollBy) -- independent of
-    /// ActiveInteraction, so scrolling one window mid-drag of another is harmless rather than
+    /// ActiveInteraction, so scrolling one element mid-drag of another is harmless rather than
     /// something that needs guarding against. ScrollWheelValue is cumulative, not per-frame, so
     /// this reads like every other per-frame delta here (see the mouse-button handling above):
     /// diffed against last frame's value.
@@ -359,7 +359,7 @@ public sealed class GameInputController
 
         var position = new Point(mouseState.X, mouseState.Y);
         var hoveredInteraction = TryHitTestInteraction(position);
-        if (hoveredInteraction.Window is not { } window || !(window.CanUserScrollVertical || window.CanUserScrollHorizontal))
+        if (hoveredInteraction.Element is not { } element || !(element.CanUserScrollVertical || element.CanUserScrollHorizontal))
         {
             return;
         }
@@ -368,101 +368,101 @@ public sealed class GameInputController
         // universal convention -- hence the negation. Vertical only: shift+wheel-for-horizontal
         // is a reasonable future addition, but nothing today needs it (see TextWindow, whose
         // wrapped text can only ever overflow horizontally by a single unbreakable word).
-        window.ScrollBy(new Vector2(0, -wheelDelta / WheelNotchValue * ScrollPixelsPerNotch));
+        element.ScrollBy(new Vector2(0, -wheelDelta / WheelNotchValue * ScrollPixelsPerNotch));
     }
 
     /// <summary>Always-on-top tier first, then HUD, then base (root) -- a higher tier can never lose to a lower one. Each tier topmost (last-raised) first.</summary>
-    private WindowInteraction TryHitTestInteraction(Point position)
+    private ElementInteraction TryHitTestInteraction(Point position)
     {
-        var interaction = TryHitTestInList(_alwaysOnTopWindows, position);
-        if (interaction.Window is not null)
+        var interaction = TryHitTestInList(_alwaysOnTopElements, position);
+        if (interaction.Element is not null)
         {
             return interaction;
         }
 
-        interaction = TryHitTestInList(_hudWindows, position);
-        if (interaction.Window is not null)
+        interaction = TryHitTestInList(_hudElements, position);
+        if (interaction.Element is not null)
         {
             return interaction;
         }
 
-        return TryHitTestInList(_rootWindows, position);
+        return TryHitTestInList(_rootElements, position);
     }
 
-    private static WindowInteraction TryHitTestInList(List<Window> windows, Point position)
+    private static ElementInteraction TryHitTestInList(List<Element> elements, Point position)
     {
-        for (var index = windows.Count - 1; index >= 0; index--)
+        for (var index = elements.Count - 1; index >= 0; index--)
         {
-            var interaction = windows[index].TryHitTestInteraction(position);
-            if (interaction.Window is not null)
+            var interaction = elements[index].TryHitTestInteraction(position);
+            if (interaction.Element is not null)
             {
                 return interaction;
             }
         }
 
-        return WindowInteraction.NotHit;
+        return ElementInteraction.NotHit;
     }
 
     /// <summary>
-    /// Raises window within its own parent's children (no-op if it has no parent -- see
-    /// Window.RaiseToFront), then raises whichever top-level ancestor contains it within its
-    /// own tier (rootWindows/hudWindows/alwaysOnTopWindows), so the whole subtree ends up
+    /// Raises element within its own parent's children (no-op if it has no parent -- see
+    /// Element.RaiseToFront), then raises whichever top-level ancestor contains it within its
+    /// own tier (rootElements/hudElements/alwaysOnTopElements), so the whole subtree ends up
     /// drawn/hit-tested on top of its siblings at every level.
     /// </summary>
-    private void RaiseToFront(Window window)
+    private void RaiseToFront(Element element)
     {
-        window.RaiseToFront();
+        element.RaiseToFront();
 
-        var rootAncestor = GetRootAncestor(window);
+        var rootAncestor = GetRootAncestor(element);
 
-        if (_rootWindows.Remove(rootAncestor))
+        if (_rootElements.Remove(rootAncestor))
         {
-            _rootWindows.Add(rootAncestor);
+            _rootElements.Add(rootAncestor);
         }
-        else if (_hudWindows.Remove(rootAncestor))
+        else if (_hudElements.Remove(rootAncestor))
         {
-            _hudWindows.Add(rootAncestor);
+            _hudElements.Add(rootAncestor);
         }
-        else if (_alwaysOnTopWindows.Remove(rootAncestor))
+        else if (_alwaysOnTopElements.Remove(rootAncestor))
         {
-            _alwaysOnTopWindows.Add(rootAncestor);
+            _alwaysOnTopElements.Add(rootAncestor);
         }
     }
 
-    /// <summary>Walks up ParentWindow to the top-level ancestor -- shared by RaiseToFront and CycleFocus, both of which operate on whichever root/always-on-top window a given window belongs to, not the window itself.</summary>
-    private static Window GetRootAncestor(Window window)
+    /// <summary>Walks up ParentElement to the top-level ancestor -- shared by RaiseToFront and CycleFocus, both of which operate on whichever root/always-on-top element a given element belongs to, not the element itself.</summary>
+    private static Element GetRootAncestor(Element element)
     {
-        var rootAncestor = window;
-        while (rootAncestor.ParentWindow is not null)
+        var rootAncestor = element;
+        while (rootAncestor.ParentElement is not null)
         {
-            rootAncestor = rootAncestor.ParentWindow;
+            rootAncestor = rootAncestor.ParentElement;
         }
 
         return rootAncestor;
     }
 
     /// <summary>
-    /// Subscribes to the new window's FocusRequested/DisplayModeChanged and its whole
-    /// ancestor chain's Closed events (see _focusedWindowAncestorChain) so a focused window (or
+    /// Subscribes to the new element's FocusRequested/DisplayModeChanged and its whole
+    /// ancestor chain's Closed events (see _focusedElementAncestorChain) so a focused element (or
     /// an ancestor of it) closing or minimizing -- and potentially being pooled and reused for
     /// something else entirely (see WindowService) -- can't leave this holding a stale
-    /// reference that treats the reused instance as focused, and so a window that can't move
+    /// reference that treats the reused instance as focused, and so an element that can't move
     /// focus itself (e.g. a TextBox submitting via Enter) can ask to be defocused in favor of
-    /// another window.
+    /// another element.
     /// </summary>
     /// <remarks>
-    /// Redirects into newWindow.NextTextBoxAfter(null) first, if it has any focusable TextBox
-    /// children -- a window with TextBox children is never itself the terminal focus target,
-    /// its first TextBox is. For every window without TextBox children (everything that
-    /// existed before TextBox did) this resolves to newWindow itself, unchanged. Falls back to
-    /// _defaultFocusWindow when that still leaves no target at all (newWindow itself null, e.g.
+    /// Redirects into newElement.NextFocusableDescendant(null) first, if it has any focusable
+    /// TextBox children -- an element with TextBox children is never itself the terminal focus
+    /// target, its first TextBox is. For every element without TextBox children (everything that
+    /// existed before TextBox did) this resolves to newElement itself, unchanged. Falls back to
+    /// _defaultFocusElement when that still leaves no target at all (newElement itself null, e.g.
     /// RedirectFocusAwayFrom finding no sibling to move to).
     /// </remarks>
-    private void SetFocus(Window? newWindow)
+    private void SetFocus(Element? newElement)
     {
-        var target = newWindow?.NextTextBoxAfter(null) ?? newWindow ?? _defaultFocusWindow;
+        var target = newElement?.NextFocusableDescendant(null) ?? newElement ?? _defaultFocusElement;
 
-        if (_focusedWindow == target)
+        if (_focusedElement == target)
         {
             return;
         }
@@ -473,183 +473,183 @@ public sealed class GameInputController
         // any active OS IME, popping up composition/candidate UI during ordinary gameplay, and
         // on touch/mobile SDL backends StartTextInput is also what raises the on-screen
         // keyboard. Only toggled on an actual TextBox <-> non-TextBox edge, not every focus
-        // change, so tabbing between two ordinary windows doesn't touch it at all.
-        if (target is TextBox && _focusedWindow is not TextBox)
+        // change, so tabbing between two ordinary elements doesn't touch it at all.
+        if (target is TextBox && _focusedElement is not TextBox)
         {
             StartTextInput();
         }
-        else if (_focusedWindow is TextBox && target is not TextBox)
+        else if (_focusedElement is TextBox && target is not TextBox)
         {
             StopTextInput();
         }
 
         UnsubscribeFocusTracking();
-        _focusedWindow?.SetFocused(false);
+        _focusedElement?.SetFocused(false);
 
-        _focusedWindow = target;
-        _focusedWindowSiblings = target is not null
+        _focusedElement = target;
+        _focusedElementSiblings = target is not null
             ? GetSiblingContainer(target)
             : null;
 
-        if (_focusedWindow is not null)
+        if (_focusedElement is not null)
         {
-            _focusedWindow.SetFocused(true);
-            _focusedWindow.FocusRequested += OnFocusedWindowRequestedFocus;
-            _focusedWindow.DisplayModeChanged += OnFocusedWindowDisplayModeChanged;
+            _focusedElement.SetFocused(true);
+            _focusedElement.FocusRequested += OnFocusedElementRequestedFocus;
+            _focusedElement.DisplayModeChanged += OnFocusedElementDisplayModeChanged;
 
-            for (var ancestor = _focusedWindow; ancestor is not null; ancestor = ancestor.ParentWindow)
+            for (var ancestor = _focusedElement; ancestor is not null; ancestor = ancestor.ParentElement)
             {
-                _focusedWindowAncestorChain.Add(ancestor);
-                ancestor.Closed += OnFocusedWindowClosed;
+                _focusedElementAncestorChain.Add(ancestor);
+                ancestor.Closed += OnFocusedElementClosed;
             }
         }
     }
 
     private void UnsubscribeFocusTracking()
     {
-        if (_focusedWindow is not null)
+        if (_focusedElement is not null)
         {
-            _focusedWindow.FocusRequested -= OnFocusedWindowRequestedFocus;
-            _focusedWindow.DisplayModeChanged -= OnFocusedWindowDisplayModeChanged;
+            _focusedElement.FocusRequested -= OnFocusedElementRequestedFocus;
+            _focusedElement.DisplayModeChanged -= OnFocusedElementDisplayModeChanged;
         }
 
-        foreach (var ancestor in _focusedWindowAncestorChain)
+        foreach (var ancestor in _focusedElementAncestorChain)
         {
-            ancestor.Closed -= OnFocusedWindowClosed;
+            ancestor.Closed -= OnFocusedElementClosed;
         }
-        _focusedWindowAncestorChain.Clear();
+        _focusedElementAncestorChain.Clear();
     }
 
-    private void OnFocusedWindowRequestedFocus(Window requestedWindow) => SetFocus(requestedWindow);
+    private void OnFocusedElementRequestedFocus(Element requestedElement) => SetFocus(requestedElement);
 
     /// <summary>
-    /// Fires for the focused window itself closing, or any of its ancestors (see
-    /// _focusedWindowAncestorChain) -- e.g. closing the quest-composer popup while its TextBox
+    /// Fires for the focused element itself closing, or any of its ancestors (see
+    /// _focusedElementAncestorChain) -- e.g. closing the quest-composer popup while its TextBox
     /// child holds focus: the popup is what actually calls Close(), the TextBox never does, so
     /// without the whole-chain subscription this would never fire at all and focus would be
     /// left dangling on a TextBox whose window is now hidden/pooled.
     /// </summary>
-    private void OnFocusedWindowClosed(Window closedWindow) => RedirectFocusAwayFrom();
+    private void OnFocusedElementClosed(Element closedElement) => RedirectFocusAwayFrom();
 
     /// <summary>
-    /// A minimized window reads as "no longer the active thing", the same as a closed one --
+    /// A minimized element reads as "no longer the active thing", the same as a closed one --
     /// redirect focus the same way. Fires on every DisplayModeChanged, not just transitions
     /// into Minimized (restoring back out of it, or an unrelated Fixed/Fill change, also raise
     /// this event), so only the Minimized case is treated as a redirect trigger here. Active
     /// notification popups never hit this path -- NotificationMinimizeBehavior's "minimize"
     /// dismisses via a real Close() (see NotificationCenter.MinimizeNotification), not
-    /// WindowDisplayMode.Minimized -- so OnFocusedWindowClosed above is what actually covers
+    /// WindowDisplayMode.Minimized -- so OnFocusedElementClosed above is what actually covers
     /// the notification case task 1 asked for.
     /// </summary>
-    private void OnFocusedWindowDisplayModeChanged(Window window)
+    private void OnFocusedElementDisplayModeChanged(Element element)
     {
-        if (window.WindowDisplay == WindowDisplayMode.Minimized)
+        if (element.DisplayMode == ElementDisplayMode.Minimized)
         {
             RedirectFocusAwayFrom();
         }
     }
 
     /// <summary>
-    /// Moves focus to a sibling of the currently focused window, rather than leaving focus on
+    /// Moves focus to a sibling of the currently focused element, rather than leaving focus on
     /// nothing, once it (or an ancestor of it) has closed or minimized. "Sibling" is scoped to
-    /// groups of genuinely interchangeable windows -- other children under the same parent
+    /// groups of genuinely interchangeable elements -- other children under the same parent
     /// (e.g. a future multi-TextBox form), or other always-on-top popups (e.g. the next active
     /// notification once the topmost one is dismissed) -- not the root tier, whose windows
     /// (map/debug/selection) are fixed, distinct panels rather than a stack of equivalent ones;
     /// closing the quest-composer popup (the only root window that can ever close) is meant to
-    /// fall all the way through to _defaultFocusWindow instead of grabbing some unrelated root
-    /// panel. Uses _focusedWindowSiblings (snapshotted when this window gained focus, see
-    /// SetFocus) rather than re-deriving its sibling group now, since a closing window may
+    /// fall all the way through to _defaultFocusElement instead of grabbing some unrelated root
+    /// panel. Uses _focusedElementSiblings (snapshotted when this element gained focus, see
+    /// SetFocus) rather than re-deriving its sibling group now, since a closing element may
     /// already have removed itself from that same list by the time this runs.
     /// </summary>
     private void RedirectFocusAwayFrom()
     {
-        var closingWindow = _focusedWindow;
-        if (closingWindow is null)
+        var closingElement = _focusedElement;
+        if (closingElement is null)
         {
             return;
         }
 
         UnsubscribeFocusTracking();
 
-        Window? nextSibling = null;
-        if (_focusedWindowSiblings is not null)
+        Element? nextSibling = null;
+        if (_focusedElementSiblings is not null)
         {
-            foreach (var candidate in _focusedWindowSiblings)
+            foreach (var candidate in _focusedElementSiblings)
             {
-                if (candidate != closingWindow && candidate.CanUserFocus)
+                if (candidate != closingElement && candidate.CanUserFocus)
                 {
                     nextSibling = candidate;
                 }
             }
         }
 
-        _focusedWindow = null;
-        _focusedWindowSiblings = null;
+        _focusedElement = null;
+        _focusedElementSiblings = null;
         SetFocus(nextSibling);
     }
 
     /// <summary>See RedirectFocusAwayFrom for why this deliberately excludes the root tier.</summary>
-    private List<Window>? GetSiblingContainer(Window window) =>
-        window.ParentWindow?.ChildWindows
-        ?? (_alwaysOnTopWindows.Contains(window) ? _alwaysOnTopWindows : null);
+    private List<Element>? GetSiblingContainer(Element element) =>
+        element.ParentElement?.ChildElements
+        ?? (_alwaysOnTopElements.Contains(element) ? _alwaysOnTopElements : null);
 
     /// <summary>
     /// Advances focus to the next (direction 1) or previous (direction -1) focusable Base/HUD
-    /// window (Window.CanUserFocus -- e.g. the debug stats window opts out, see
-    /// GameShellBootstrapper), wrapping past either end. rootWindows+hudWindows only (map/
+    /// element (Element.CanUserFocus -- e.g. the debug stats window opts out, see
+    /// GameShellBootstrapper), wrapping past either end. rootElements+hudElements only (map/
     /// debug/selection/health bar/quest trigger -- "fixed, distinct panels"), not
-    /// alwaysOnTopWindows: notifications are a separate tier dismissed via their own close/
+    /// alwaysOnTopElements: notifications are a separate tier dismissed via their own close/
     /// minimize button, not something a user tabs to.
     /// </summary>
     private void CycleFocus(int direction)
     {
-        var focusableWindows = new List<Window>();
-        foreach (var window in _rootWindows)
+        var focusableElements = new List<Element>();
+        foreach (var element in _rootElements)
         {
-            if (window.CanUserFocus)
+            if (element.CanUserFocus)
             {
-                focusableWindows.Add(window);
+                focusableElements.Add(element);
             }
         }
 
-        foreach (var window in _hudWindows)
+        foreach (var element in _hudElements)
         {
-            if (window.CanUserFocus)
+            if (element.CanUserFocus)
             {
-                focusableWindows.Add(window);
+                focusableElements.Add(element);
             }
         }
 
-        if (focusableWindows.Count == 0)
+        if (focusableElements.Count == 0)
         {
             return;
         }
 
-        var currentRoot = _focusedWindow is not null
-            ? GetRootAncestor(_focusedWindow)
+        var currentRoot = _focusedElement is not null
+            ? GetRootAncestor(_focusedElement)
             : null;
         var currentIndex = currentRoot is not null
-            ? focusableWindows.IndexOf(currentRoot)
+            ? focusableElements.IndexOf(currentRoot)
             : -1;
 
-        // Nothing focused yet: forward starts at the first window, backward at the last --
+        // Nothing focused yet: forward starts at the first element, backward at the last --
         // matching standard Tab/Shift+Tab behavior from "nothing focused" -- rather than both
-        // directions landing on the same window, which naive modulo wrapping from -1 would do.
+        // directions landing on the same element, which naive modulo wrapping from -1 would do.
         var unfocusedStartIndex = direction > 0
             ? 0
-            : focusableWindows.Count - 1;
+            : focusableElements.Count - 1;
         var nextIndex = currentIndex < 0
             ? unfocusedStartIndex
-            : ((currentIndex + direction) % focusableWindows.Count + focusableWindows.Count) % focusableWindows.Count;
+            : ((currentIndex + direction) % focusableElements.Count + focusableElements.Count) % focusableElements.Count;
 
-        SetFocus(focusableWindows[nextIndex]);
+        SetFocus(focusableElements[nextIndex]);
     }
 
-    /// <summary>Forwards every key newly pressed this frame to whichever window holds focus. Tab is excluded since it's already claimed above for focus-cycling.</summary>
-    private void RouteKeyPressesToFocusedWindow(KeyboardState keyboardState)
+    /// <summary>Forwards every key newly pressed this frame to whichever element holds focus. Tab is excluded since it's already claimed above for focus-cycling.</summary>
+    private void RouteKeyPressesToFocusedElement(KeyboardState keyboardState)
     {
-        if (_focusedWindow is null)
+        if (_focusedElement is null)
         {
             return;
         }
@@ -658,23 +658,23 @@ public sealed class GameInputController
         {
             if (key != Keys.Tab && _previousKeyboardState.IsKeyUp(key))
             {
-                _focusedWindow.HandleKeyPress(key);
+                _focusedElement.HandleKeyPress(key);
             }
         }
     }
 
     /// <summary>
     /// Drains characters buffered by OnTextInput (see the constructor's TextInputEXT
-    /// subscription) to whichever window holds focus. A separate buffer-then-drain step,
-    /// unlike RouteKeyPressesToFocusedWindow's direct poll of KeyboardState, because
+    /// subscription) to whichever element holds focus. A separate buffer-then-drain step,
+    /// unlike RouteKeyPressesToFocusedElement's direct poll of KeyboardState, because
     /// TextInputEXT.TextInput is an event, not a per-frame state snapshot -- characters can
     /// arrive between Update calls and need to be collected rather than read live.
     /// </summary>
-    private void RouteTextInputToFocusedWindow()
+    private void RouteTextInputToFocusedElement()
     {
         foreach (var character in _pendingTextInput)
         {
-            _focusedWindow?.HandleTextInput(character);
+            _focusedElement?.HandleTextInput(character);
         }
 
         _pendingTextInput.Clear();
@@ -685,32 +685,32 @@ public sealed class GameInputController
     /// Bottom grow the size directly (dragStartSize plus delta) with no position change.
     /// Left/Top must derive the position shift from the *actual clamped* size, not the raw
     /// drag delta -- otherwise the pinned (opposite) edge drifts once the drag exceeds
-    /// WindowMinimumSize/WindowMaximumSize, since the position shift and the size shrink have
+    /// MinimumSize/MaximumSize, since the position shift and the size shrink have
     /// to match exactly to keep that edge visually fixed. All four edges can combine (a corner
     /// drag sets two of them at once).
     /// </summary>
-    private static (Vector2 RelativePosition, Vector2 Size) ComputeResize(Window window, ResizeEdges edges, Vector2 dragStartRelativePosition, Vector2 dragStartSize, Vector2 dragDelta)
+    private static (Vector2 RelativePosition, Vector2 Size) ComputeResize(Element element, ResizeEdges edges, Vector2 dragStartRelativePosition, Vector2 dragStartSize, Vector2 dragDelta)
     {
         var relativePosition = dragStartRelativePosition;
         var size = dragStartSize;
 
         if (edges.HasFlag(ResizeEdges.Right))
         {
-            size.X = MathHelper.Clamp(dragStartSize.X + dragDelta.X, window.WindowMinimumSize.X, window.WindowMaximumSize.X);
+            size.X = MathHelper.Clamp(dragStartSize.X + dragDelta.X, element.MinimumSize.X, element.MaximumSize.X);
         }
         if (edges.HasFlag(ResizeEdges.Bottom))
         {
-            size.Y = MathHelper.Clamp(dragStartSize.Y + dragDelta.Y, window.WindowMinimumSize.Y, window.WindowMaximumSize.Y);
+            size.Y = MathHelper.Clamp(dragStartSize.Y + dragDelta.Y, element.MinimumSize.Y, element.MaximumSize.Y);
         }
         if (edges.HasFlag(ResizeEdges.Left))
         {
-            var clampedWidth = MathHelper.Clamp(dragStartSize.X - dragDelta.X, window.WindowMinimumSize.X, window.WindowMaximumSize.X);
+            var clampedWidth = MathHelper.Clamp(dragStartSize.X - dragDelta.X, element.MinimumSize.X, element.MaximumSize.X);
             relativePosition.X = dragStartRelativePosition.X + (dragStartSize.X - clampedWidth);
             size.X = clampedWidth;
         }
         if (edges.HasFlag(ResizeEdges.Top))
         {
-            var clampedHeight = MathHelper.Clamp(dragStartSize.Y - dragDelta.Y, window.WindowMinimumSize.Y, window.WindowMaximumSize.Y);
+            var clampedHeight = MathHelper.Clamp(dragStartSize.Y - dragDelta.Y, element.MinimumSize.Y, element.MaximumSize.Y);
             relativePosition.Y = dragStartRelativePosition.Y + (dragStartSize.Y - clampedHeight);
             size.Y = clampedHeight;
         }
@@ -719,16 +719,16 @@ public sealed class GameInputController
     }
 
     /// <summary>
-    /// The space a window's RelativePosition/Size are measured against: a root window's is the
+    /// The space an element's RelativePosition/Size are measured against: a root element's is the
     /// screen itself (RelativePosition doubles as its absolute screen position, see
-    /// Window.BuildWindow), a child window's is its parent's own content area (RelativePosition
+    /// Window.BuildWindow), a child element's is its parent's own content area (RelativePosition
     /// is relative to ContentAbsolutePosition).
     /// </summary>
-    private Vector2 GetPositionBounds(Window window) => window.ParentWindow?.ContentSize ?? _screenSize;
+    private Vector2 GetPositionBounds(Element element) => element.ParentElement?.ContentSize ?? _screenSize;
 
     /// <summary>
     /// Pulls a drag-to-move's destination position back inside GetPositionBounds -- called with
-    /// size unchanged, so a window dragged toward/past an edge simply stops there instead of
+    /// size unchanged, so an element dragged toward/past an edge simply stops there instead of
     /// continuing to follow the mouse off-screen (or out of its parent's content area).
     /// </summary>
     private static Vector2 ClampMoveToBounds(Vector2 position, Vector2 size, Vector2 bounds) => new(
@@ -738,9 +738,9 @@ public sealed class GameInputController
     /// <summary>
     /// Pulls a drag-to-resize's destination position+size back inside bounds. Unlike a move
     /// clamp (which only ever adjusts position), overflowing the left/top edge here must shrink
-    /// the size by the overflow amount (not just clamp position) -- the window is being resized,
+    /// the size by the overflow amount (not just clamp position) -- the element is being resized,
     /// not relocated, so running out of room at the edge being dragged should stop that edge
-    /// growing further rather than sliding the whole window back on-screen. The right/bottom
+    /// growing further rather than sliding the whole element back on-screen. The right/bottom
     /// edges never move on their own (see ComputeResize), so overflow there is always a pure
     /// size reduction with no position change.
     /// </summary>
@@ -778,9 +778,9 @@ public sealed class GameInputController
     /// e.g. a resize drag dragged inward past the border still shows the resize cursor, not
     /// whatever the mouse happens to be over), otherwise a hover hit-test. The hover hit-test
     /// is skipped when the mouse hasn't moved since last frame -- it's a full recursive
-    /// Rectangle.Contains walk over every root/always-on-top window and their descendants
+    /// Rectangle.Contains walk over every root/always-on-top element and their descendants
     /// (title buttons, tiled/floating children), which otherwise ran unconditionally every
-    /// single frame regardless of whether the mouse was even moving. A window appearing/
+    /// single frame regardless of whether the mouse was even moving. An element appearing/
     /// resizing/closing directly under a stationary mouse can leave the cursor stale for a
     /// frame until the mouse next moves -- an acceptable, self-correcting tradeoff for not
     /// re-walking the whole tree 60 times a second. Only calls MouseCursorEXT.SetCursor when
@@ -794,8 +794,8 @@ public sealed class GameInputController
 
         var cursor = _activeInteraction.Kind switch
         {
-            WindowInteractionKind.Resize => GetResizeCursor(_activeInteraction.Edges),
-            WindowInteractionKind.Move => MouseCursor.SizeAll,
+            ElementDragInteractionKind.Resize => GetResizeCursor(_activeInteraction.Edges),
+            ElementDragInteractionKind.Move => MouseCursor.SizeAll,
             _ when position == previousPosition => CurrentCursor,
             _ => GetHoverCursor(position),
         };
@@ -812,8 +812,8 @@ public sealed class GameInputController
         var interaction = TryHitTestInteraction(position);
         return interaction.Kind switch
         {
-            WindowInteractionKind.Resize => GetResizeCursor(interaction.Edges),
-            WindowInteractionKind.Move => MouseCursor.SizeAll,
+            ElementDragInteractionKind.Resize => GetResizeCursor(interaction.Edges),
+            ElementDragInteractionKind.Move => MouseCursor.SizeAll,
             _ => MouseCursor.Arrow,
         };
     }

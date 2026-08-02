@@ -4,7 +4,7 @@ namespace Game.Modules.Achievements.Components;
 /// Marks that an entity has earned a specific achievement. MultiComponentPool-backed since an
 /// entity earns many achievements over time (RaceComponent is the same shape, for the same
 /// reason). The real guarantee against earning the same achievement twice is each achievement's
-/// trigger unsubscribing itself once satisfied (see AchievementTriggerContext.SubscribeUntilUnlocked)
+/// trigger unsubscribing itself once satisfied (see AchievementTriggerContext.SubscribeUntilUnlockedForPlayer)
 /// -- this component is a secondary record of what's been earned, consulted by AchievementQueries.
 /// </summary>
 public struct AchievementUnlockedComponent(Guid achievementId, long earnedAtUtcTicks)

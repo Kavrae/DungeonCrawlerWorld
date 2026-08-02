@@ -16,14 +16,14 @@ namespace Tests.Presentation;
 [TestClass]
 public sealed class NotificationMinimizeBehaviorTests
 {
-    private static WindowService CreateWindowService() => new(new FontService("Fonts"), new GlyphRenderer());
+    private static ElementPoolService CreateWindowService() => new(new FontService("Fonts"), new GlyphRenderer());
 
-    private static Window CreateWindowWithCloseAndNotificationMinimize(WindowService windowService, Action onMinimize)
+    private static Window CreateWindowWithCloseAndNotificationMinimize(ElementPoolService windowService, Action onMinimize)
     {
-        var window = windowService.CreateWindow<Window>(null, new WindowOptions
+        var window = windowService.CreateElement<Window>(null, new ElementOptions
         {
-            Layout = new WindowLayoutOptions { Size = new Vector2(200, 100), DisplayMode = WindowDisplayMode.Fixed },
-            Chrome = new WindowChromeOptions { ShowTitle = true, TitleText = "Test Window", CanUserClose = true },
+            Layout = new ElementLayoutOptions { Size = new Vector2(200, 100), DisplayMode = ElementDisplayMode.Fixed },
+            Chrome = new ElementChromeOptions { ShowTitle = true, TitleText = "Test Window", CanUserClose = true },
         });
         window.Initialize();
 
@@ -53,11 +53,11 @@ public sealed class NotificationMinimizeBehaviorTests
         var window = CreateWindowWithCloseAndNotificationMinimize(CreateWindowService(), () => invoked = true);
         var dismissButton = window.TitleButtons[1];
 
-        window.HandleClick(dismissButton.ButtonRectangle.Center);
+        window.HandleClick(dismissButton.Rectangle.Center);
 
         Assert.IsTrue(invoked);
         // Unlike WindowMinimizeRestoreBehavior, this button never shrinks the window itself --
         // dismissing/requeuing is entirely the callback's (NotificationCenter's) job.
-        Assert.AreEqual(WindowDisplayMode.Fixed, window.WindowDisplay);
+        Assert.AreEqual(ElementDisplayMode.Fixed, window.DisplayMode);
     }
 }

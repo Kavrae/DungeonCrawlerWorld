@@ -5,31 +5,27 @@ using Presentation.Rendering;
 
 namespace Presentation.UI;
 
-public class Button
+/// <summary>
+/// A clickable, bordered box with centered text -- an Element in its own right (not a Window
+/// subclass), so it doesn't carry any of Window's title/content/hierarchy/chrome-behavior
+/// baggage. Reuses Element's own geometry/border/content state directly (RelativePosition/
+/// Size/ContentRectangle/ShowBorder/BorderStyle/BorderTopRectangle etc. are all the inherited
+/// Element properties, just populated by CalculateButtonPositionAndRectangle instead of
+/// Element's Measure/Arrange pipeline, which a simple one-rectangle control like this has no
+/// use for) rather than hand-rolling a second, parallel copy of the same rectangle/border math.
+/// </summary>
+public class Button : Element
 {
     public Guid ButtonId { get; } = Guid.NewGuid();
 
-    public Window ParentWindow { get; }
-
-    public Vector2 RelativePosition { get; private set; }
-    public Vector2 AbsolutePosition { get; private set; }
-
-    public Vector2 Size { get; }
-
-    public Rectangle ButtonRectangle { get; private set; }
-    public Rectangle ContentRectangle { get; private set; }
-
-    public Rectangle BorderTopRectangle { get; private set; }
-    public Rectangle BorderBottomRectangle { get; private set; }
-    public Rectangle BorderLeftRectangle { get; private set; }
-    public Rectangle BorderRightRectangle { get; private set; }
+    /// <summary>The window whose title bar hosts this button -- distinct from Element's own ParentElement (the ChildElements hierarchy), which a title button never participates in.</summary>
+    // TODO if buttons are ever attached to non-Window elements (e.g. a header button on
+    // Folder), HostWindow needs to widen to Element and DefaultTitleButtonSize below needs a
+    // non-Window-specific default size, since it currently derives from OriginalTitleSize (a
+    // Window-only text-title-bar concept Folder's icon header has no equivalent of).
+    public Window HostWindow { get; }
 
     public Color ButtonColor { get; }
-
-    public bool ShowBorder { get; }
-
-    /// <summary>Defaults to Outset -- unlike Window (which defaults to Flat), every title button gets the raised bevel look unless a caller opts out.</summary>
-    public BorderStyle BorderStyle { get; }
 
     public string Text { get; private set; }
 
@@ -48,21 +44,25 @@ public class Button
     private const float DefaultSizeTitleInset = 4;
 
     public Button(Window parentWindow, ButtonOptions buttonOptions)
+        : base((parentWindow ?? throw new ArgumentNullException(nameof(parentWindow))).FontService, parentWindow.ElementPoolService, parentWindow.GlyphRenderer)
     {
-        ArgumentNullException.ThrowIfNull(parentWindow);
         ArgumentNullException.ThrowIfNull(buttonOptions);
 
-        ParentWindow = parentWindow;
+        HostWindow = parentWindow;
 
         Text = buttonOptions.Text ?? string.Empty;
 
         Font = buttonOptions.Font ?? parentWindow.TitleFont;
         _glyphRenderer = parentWindow.GlyphRenderer;
 
-        RelativePosition = buttonOptions.RelativePosition ?? Vector2.Zero;
-        Size = buttonOptions.Size ?? DefaultTitleButtonSize(parentWindow);
-        ShowBorder = buttonOptions.ShowBorder ?? true;
-        BorderStyle = buttonOptions.BorderStyle ?? BorderStyle.Outset;
+        _geometry.RelativePosition = buttonOptions.RelativePosition ?? Vector2.Zero;
+        _geometry.CurrentSize = buttonOptions.Size ?? DefaultTitleButtonSize(parentWindow);
+
+        _border.Show = buttonOptions.ShowBorder ?? true;
+        // Defaults to Outset -- unlike Window (which defaults to Flat), every title button gets the raised bevel look unless a caller opts out.
+        _border.Style = buttonOptions.BorderStyle ?? BorderStyle.Outset;
+        _border.Thickness = DefaultBorderThickness;
+
         ButtonColor = buttonOptions.Color ?? Color.LightGray;
     }
 
@@ -72,12 +72,12 @@ public class Button
         return new Vector2(side, side);
     }
 
-    public virtual void Initialize()
+    public override void Initialize()
     {
         CalculateButtonPositionAndRectangle();
     }
 
-    public virtual void Update(GameTime gameTime)
+    public override void Update(GameTime gameTime)
     {
     }
 
@@ -122,7 +122,7 @@ public class Button
 
     public void ChangeRelativePosition(Vector2 newPosition)
     {
-        RelativePosition = newPosition;
+        _geometry.RelativePosition = newPosition;
         CalculateButtonPositionAndRectangle();
     }
 
@@ -134,25 +134,25 @@ public class Button
 
     public void CalculateButtonPositionAndRectangle()
     {
-        AbsolutePosition = RelativePosition + ParentWindow.WindowAbsolutePosition;
-        ButtonRectangle = new Rectangle((int)AbsolutePosition.X, (int)AbsolutePosition.Y, (int)Size.X, (int)Size.Y);
+        _geometry.AbsolutePosition = _geometry.RelativePosition + HostWindow.AbsolutePosition;
+        _geometry.Rectangle = new Rectangle((int)_geometry.AbsolutePosition.X, (int)_geometry.AbsolutePosition.Y, (int)_geometry.CurrentSize.X, (int)_geometry.CurrentSize.Y);
 
         if (ShowBorder)
         {
-            ContentRectangle = BorderThickness.Inset(ButtonRectangle, DefaultBorderThickness);
-            var (top, bottom, left, right) = BorderThickness.GetEdgeRectangles(ButtonRectangle, DefaultBorderThickness);
-            BorderTopRectangle = top;
-            BorderBottomRectangle = bottom;
-            BorderLeftRectangle = left;
-            BorderRightRectangle = right;
+            _contentState.Rectangle = BorderThickness.Inset(_geometry.Rectangle, DefaultBorderThickness);
+            var (top, bottom, left, right) = BorderThickness.GetEdgeRectangles(_geometry.Rectangle, DefaultBorderThickness);
+            _border.TopRectangle = top;
+            _border.BottomRectangle = bottom;
+            _border.LeftRectangle = left;
+            _border.RightRectangle = right;
         }
         else
         {
-            ContentRectangle = ButtonRectangle;
+            _contentState.Rectangle = _geometry.Rectangle;
         }
     }
 
-    public void HandleClick(Point mousePosition)
+    public new void HandleClick(Point mousePosition)
     {
         OnClickAction(mousePosition);
     }

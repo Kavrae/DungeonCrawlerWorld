@@ -11,8 +11,8 @@ namespace Presentation.UI;
 /// Page Up/Down) and SelectionWindowContent (which reads both to scope the inspector to
 /// what's actually on screen). Previously lived on World; moved here because nothing in
 /// Engine or Game ever read or wrote it. Follows the same *State plain-field convention as
-/// WindowGeometryState/WindowTitleState/WindowBorderState/WindowContentState -- see
-/// WindowGeometryState for why.
+/// ElementGeometryState/ElementHeaderState/ElementBorderState/ElementContentState -- see
+/// ElementGeometryState for why.
 /// </summary>
 public sealed class MapViewState
 {

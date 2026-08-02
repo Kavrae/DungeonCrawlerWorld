@@ -10,7 +10,7 @@ using Presentation.Rendering;
 
 namespace Presentation.UI.Content;
 
-public sealed class ActionLockContent(World world, ComponentManager componentManager, FontService fontService) : IWindowContent
+public sealed class ActionLockContent(World world, ComponentManager componentManager, FontService fontService) : IElementContent
 {
     public static readonly Vector2 Size = new(HudMetrics.EntrySize.Y * 1.5f, HudMetrics.EntrySize.Y * 1.5f);
 

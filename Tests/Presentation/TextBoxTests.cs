@@ -14,14 +14,14 @@ namespace Tests.Presentation;
 [TestClass]
 public sealed class TextBoxTests
 {
-    private static WindowService CreateWindowService() => new(new FontService("Fonts"), new GlyphRenderer());
+    private static ElementPoolService CreateWindowService() => new(new FontService("Fonts"), new GlyphRenderer());
 
-    private static TextBox CreateTextBox(WindowService windowService, bool multiline = false)
+    private static TextBox CreateTextBox(ElementPoolService windowService, bool multiline = false)
     {
-        var textBox = windowService.CreateWindow<TextBox>(null, new WindowOptions
+        var textBox = windowService.CreateElement<TextBox>(null, new ElementOptions
         {
-            Layout = new WindowLayoutOptions { Size = new Vector2(300, 100), DisplayMode = WindowDisplayMode.Fixed },
-            Chrome = new WindowChromeOptions { CanUserScrollVertical = true },
+            Layout = new ElementLayoutOptions { Size = new Vector2(300, 100), DisplayMode = ElementDisplayMode.Fixed },
+            Chrome = new ElementChromeOptions { CanUserScrollVertical = true },
             Text = new TextOptions { Multiline = multiline },
         });
         textBox.Initialize();
@@ -29,12 +29,12 @@ public sealed class TextBoxTests
     }
 
     /// <summary>A multiline box with an explicit MaximumSize.Y cap, for AutoSizeToContent tests. No border/title (both default off), so WindowCurrentSize.Y == content height exactly -- ContentFont.LineHeight * lines + TextWindow.LinePadding(3) * 2, the same formula TextWindowScrollingTests already hardcodes 3 for.</summary>
-    private static TextBox CreateGrowableMultilineTextBox(WindowService windowService, float maximumHeight)
+    private static TextBox CreateGrowableMultilineTextBox(ElementPoolService windowService, float maximumHeight)
     {
-        var textBox = windowService.CreateWindow<TextBox>(null, new WindowOptions
+        var textBox = windowService.CreateElement<TextBox>(null, new ElementOptions
         {
-            Layout = new WindowLayoutOptions { Size = new Vector2(300, 500), MaximumSize = new Vector2(300, maximumHeight), DisplayMode = WindowDisplayMode.Fixed },
-            Chrome = new WindowChromeOptions { CanUserScrollVertical = true },
+            Layout = new ElementLayoutOptions { Size = new Vector2(300, 500), MaximumSize = new Vector2(300, maximumHeight), DisplayMode = ElementDisplayMode.Fixed },
+            Chrome = new ElementChromeOptions { CanUserScrollVertical = true },
             Text = new TextOptions { Multiline = true },
         });
         textBox.Initialize();
@@ -151,7 +151,7 @@ public sealed class TextBoxTests
         var textBox = CreateGrowableMultilineTextBox(CreateWindowService(), maximumHeight: 1000);
 
         var expectedHeight = textBox.ContentFont.LineHeight * 2 + 3 * 2;
-        Assert.AreEqual(expectedHeight, textBox.WindowCurrentSize.Y);
+        Assert.AreEqual(expectedHeight, textBox.CurrentSize.Y);
     }
 
     /// <summary>Two lines is still the minimum (no growth yet); the third line is what actually needs more room.</summary>
@@ -159,23 +159,23 @@ public sealed class TextBoxTests
     public void TypingTwoNewlines_DoesNotGrowUntilTheThirdLine()
     {
         var textBox = CreateGrowableMultilineTextBox(CreateWindowService(), maximumHeight: 1000);
-        var twoLineHeight = textBox.WindowCurrentSize.Y;
+        var twoLineHeight = textBox.CurrentSize.Y;
 
         textBox.HandleHotkeys(new KeyboardState(Keys.Enter, Keys.LeftShift), new KeyboardState());
 
-        Assert.AreEqual(twoLineHeight, textBox.WindowCurrentSize.Y);
+        Assert.AreEqual(twoLineHeight, textBox.CurrentSize.Y);
     }
 
     [TestMethod]
     public void TypingAThirdLine_GrowsHeightByExactlyOneLine()
     {
         var textBox = CreateGrowableMultilineTextBox(CreateWindowService(), maximumHeight: 1000);
-        var twoLineHeight = textBox.WindowCurrentSize.Y;
+        var twoLineHeight = textBox.CurrentSize.Y;
 
         textBox.HandleHotkeys(new KeyboardState(Keys.Enter, Keys.LeftShift), new KeyboardState());
         textBox.HandleHotkeys(new KeyboardState(Keys.Enter, Keys.LeftShift), new KeyboardState());
 
-        Assert.AreEqual(twoLineHeight + textBox.ContentFont.LineHeight, textBox.WindowCurrentSize.Y);
+        Assert.AreEqual(twoLineHeight + textBox.ContentFont.LineHeight, textBox.CurrentSize.Y);
     }
 
     [TestMethod]
@@ -191,20 +191,20 @@ public sealed class TextBoxTests
             textBox.HandleHotkeys(new KeyboardState(Keys.Enter, Keys.LeftShift), new KeyboardState());
         }
 
-        Assert.AreEqual(threeLineCap, textBox.WindowCurrentSize.Y);
+        Assert.AreEqual(threeLineCap, textBox.CurrentSize.Y);
     }
 
     [TestMethod]
     public void SingleLineBox_HeightIsUnaffectedByTyping()
     {
         var textBox = CreateTextBox(CreateWindowService());
-        var initialHeight = textBox.WindowCurrentSize.Y;
+        var initialHeight = textBox.CurrentSize.Y;
 
         textBox.HandleTextInput('a');
         textBox.HandleTextInput('b');
         textBox.HandleTextInput('c');
 
-        Assert.AreEqual(initialHeight, textBox.WindowCurrentSize.Y);
+        Assert.AreEqual(initialHeight, textBox.CurrentSize.Y);
     }
 
     /// <summary>
@@ -227,32 +227,32 @@ public sealed class TextBoxTests
         var textBoxMaximumSize = new Vector2(300, 500);
         var chromeOverhead = parentSize.Y - textBoxMaximumSize.Y;
 
-        var parent = windowService.CreateWindow<Window>(null, new WindowOptions
+        var parent = windowService.CreateElement<Window>(null, new ElementOptions
         {
-            Hierarchy = new WindowHierarchyOptions { CanContainChildWindows = true },
-            Layout = new WindowLayoutOptions { Size = parentSize, DisplayMode = WindowDisplayMode.Fixed },
+            Hierarchy = new ElementHierarchyOptions { CanContainChildren = true },
+            Layout = new ElementLayoutOptions { Size = parentSize, DisplayMode = ElementDisplayMode.Fixed },
         });
         parent.Initialize();
 
-        var textBox = windowService.CreateWindow<TextBox>(parent, new WindowOptions
+        var textBox = windowService.CreateElement<TextBox>(parent, new ElementOptions
         {
-            Layout = new WindowLayoutOptions { Size = textBoxMaximumSize, MaximumSize = textBoxMaximumSize, DisplayMode = WindowDisplayMode.Fixed },
-            Chrome = new WindowChromeOptions { CanUserScrollVertical = true },
+            Layout = new ElementLayoutOptions { Size = textBoxMaximumSize, MaximumSize = textBoxMaximumSize, DisplayMode = ElementDisplayMode.Fixed },
+            Chrome = new ElementChromeOptions { CanUserScrollVertical = true },
             Text = new TextOptions { Multiline = true },
         });
         // Subscribed before AddChildWindow -- Initialize (called from within AddChildWindow)
         // is what fires the first Resized, shrinking the TextBox to its 2-line minimum, and
         // this must catch that first shrink too, not just later ones.
-        textBox.Resized += _ => parent.SetSize(new Vector2(parent.WindowCurrentSize.X, textBox.WindowCurrentSize.Y + chromeOverhead));
+        textBox.Resized += _ => parent.SetSize(new Vector2(parent.CurrentSize.X, textBox.CurrentSize.Y + chromeOverhead));
 
-        parent.AddChildWindow(textBox);
-        var shrunkParentHeight = parent.WindowCurrentSize.Y;
+        parent.AddChild(textBox);
+        var shrunkParentHeight = parent.CurrentSize.Y;
 
         Assert.IsLessThan(600, shrunkParentHeight);
 
         textBox.HandleHotkeys(new KeyboardState(Keys.Enter, Keys.LeftShift), new KeyboardState());
         textBox.HandleHotkeys(new KeyboardState(Keys.Enter, Keys.LeftShift), new KeyboardState());
 
-        Assert.IsGreaterThan(shrunkParentHeight, parent.WindowCurrentSize.Y);
+        Assert.IsGreaterThan(shrunkParentHeight, parent.CurrentSize.Y);
     }
 }

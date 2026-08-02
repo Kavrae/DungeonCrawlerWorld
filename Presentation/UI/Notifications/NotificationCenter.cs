@@ -16,7 +16,7 @@ namespace Presentation.UI.Notifications;
 /// NotificationRequested event, so a Game-layer caller (which can't reference this
 /// Presentation-layer type at all) can request a notification without a direct reference.
 /// </summary>
-public sealed class NotificationCenter(WindowService windowService, EventBus eventBus, List<Window> alwaysOnTopWindows)
+public sealed class NotificationCenter(ElementPoolService elementPoolService, EventBus eventBus, List<Element> alwaysOnTopElements)
 {
     private static readonly Vector2 FolderPosition = HudMetrics.Margin;
 
@@ -82,26 +82,26 @@ public sealed class NotificationCenter(WindowService windowService, EventBus eve
 
     public void Initialize()
     {
-        _folder = windowService.CreateWindow<Folder>(null, new WindowOptions
+        _folder = elementPoolService.CreateElement<Folder>(null, new ElementOptions
         {
-            Layout = new WindowLayoutOptions { RelativePosition = FolderPosition, MaximumSize = FolderMaximumSize, DisplayMode = WindowDisplayMode.WrapContent },
-            Chrome = new WindowChromeOptions { ShowBorder = true, BorderStyle = BorderStyle.Outset, CanUserFocus = false },
+            Layout = new ElementLayoutOptions { RelativePosition = FolderPosition, MaximumSize = FolderMaximumSize, DisplayMode = ElementDisplayMode.WrapContent },
+            Chrome = new ElementChromeOptions { ShowBorder = true, BorderStyle = BorderStyle.Outset, CanUserFocus = false },
             Folder = new FolderOptions { SpriteName = "AchievementCenter", FallbackGlyph = "★" },
         });
 
         foreach (var category in Enum.GetValues<NotificationCategory>())
         {
-            var countWindow = windowService.CreateWindow<TextWindow>(_folder, new WindowOptions
+            var countWindow = elementPoolService.CreateElement<TextWindow>(_folder, new ElementOptions
             {
-                Hierarchy = new WindowHierarchyOptions { CanContainChildWindows = false },
-                Layout = new WindowLayoutOptions { DisplayMode = WindowDisplayMode.Fixed, Size = SummaryEntrySize, IsTransparent = false },
-                Chrome = new WindowChromeOptions { ShowBorder = true, ShowTitle = false },
-                Content = new WindowContentOptions { ContentColor = Color.LightGray },
+                Hierarchy = new ElementHierarchyOptions { CanContainChildren = false },
+                Layout = new ElementLayoutOptions { DisplayMode = ElementDisplayMode.Fixed, Size = SummaryEntrySize, IsTransparent = false },
+                Chrome = new ElementChromeOptions { ShowBorder = true, ShowTitle = false },
+                Content = new ElementContentOptions { ContentColor = Color.LightGray },
                 Text = new TextOptions { Text = $"{category}: 0" },
             });
 
             _unreadByCategory.Add((category, countWindow, []));
-            _folder.AddChildWindow(countWindow);
+            _folder.AddChild(countWindow);
 
             // Summary count windows are created once here and never pooled/reused (unlike
             // active notification windows), so this subscription lives for the game's
@@ -112,7 +112,7 @@ public sealed class NotificationCenter(WindowService windowService, EventBus eve
         // Initialized last -- see the WrapContent comment above for why this must run only
         // after every child is already correctly tiled.
         _folder.Initialize();
-        alwaysOnTopWindows.Add(_folder);
+        alwaysOnTopElements.Add(_folder);
 
         eventBus.Subscribe<NotificationRequested>(OnNotificationRequested);
     }
@@ -187,16 +187,16 @@ public sealed class NotificationCenter(WindowService windowService, EventBus eve
         // Quest notifications can be dismissed (see NotificationMinimizeBehavior) freely.
         var canMinimize = notification.Category != NotificationCategory.System;
 
-        var notificationWindow = windowService.CreateWindow<TextWindow>(null, new WindowOptions
+        var notificationWindow = elementPoolService.CreateElement<TextWindow>(null, new ElementOptions
         {
-            Hierarchy = new WindowHierarchyOptions { CanContainChildWindows = false },
-            Layout = new WindowLayoutOptions
+            Hierarchy = new ElementHierarchyOptions { CanContainChildren = false },
+            Layout = new ElementLayoutOptions
             {
                 RelativePosition = ActiveNotificationBasePosition + new Vector2(offset, offset),
                 MaximumSize = ActiveNotificationMaximumSize,
-                DisplayMode = WindowDisplayMode.WrapContent,
+                DisplayMode = ElementDisplayMode.WrapContent,
             },
-            Chrome = new WindowChromeOptions
+            Chrome = new ElementChromeOptions
             {
                 ShowTitle = true,
                 ShowTitleWhenMinimized = true,
@@ -213,7 +213,7 @@ public sealed class NotificationCenter(WindowService windowService, EventBus eve
         notificationWindow.Closed += OnActiveNotificationClosed;
         _activeNotifications.Add((notificationWindow, notification));
         notificationWindow.Initialize();
-        alwaysOnTopWindows.Add(notificationWindow);
+        alwaysOnTopElements.Add(notificationWindow);
         ActiveNotificationOpened?.Invoke(notificationWindow);
 
         // Attached after Initialize() (which already attached WindowCloseBehavior, since
@@ -240,7 +240,7 @@ public sealed class NotificationCenter(WindowService windowService, EventBus eve
         CloseNotification(notification.Id);
     }
 
-    private void OnActiveNotificationClosed(Window closedWindow)
+    private void OnActiveNotificationClosed(Element closedWindow)
     {
         // Pooled windows get reused for unrelated future notifications, so this handler must
         // detach itself -- otherwise it stays subscribed and keeps firing (against a stale
@@ -254,13 +254,13 @@ public sealed class NotificationCenter(WindowService windowService, EventBus eve
             _activeNotifications.RemoveAt(index);
         }
 
-        alwaysOnTopWindows.Remove(closedWindow);
+        alwaysOnTopElements.Remove(closedWindow);
 
         // Closing the last unread notification auto-tidies the HUD back down -- SetWindowDisplayMode
         // no-ops if the Folder is already Minimized, so this is safe to call unconditionally.
         if (_unreadByCategory?.Sum(category => category.Notifications.Count) == 0)
         {
-            _folder.SetWindowDisplayMode(WindowDisplayMode.Minimized);
+            _folder.SetDisplayMode(ElementDisplayMode.Minimized);
         }
     }
 

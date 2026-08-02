@@ -5,7 +5,7 @@ namespace Presentation.UI;
 /// the industry-standard trio for this concept (e.g. Qt's QSizePolicy::Fixed, Android's
 /// WRAP_CONTENT): an explicit fixed size, filling the parent, or sizing to fit content.
 /// </summary>
-public enum WindowDisplayMode
+public enum ElementDisplayMode
 {
     /// <summary>Hides content; shows only the title bar if ShowTitleWhenMinimized is set.</summary>
     Minimized,

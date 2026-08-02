@@ -46,12 +46,12 @@ public static class GameShellBootstrapper
 
         // Constructed last, once every window/list it needs to wire already exists
         var inputController = new GameInputController(rootWindows, hudWindows, alwaysOnTopWindows, screenSize);
-        inputController.SetDefaultFocusWindow(mapWindow);
-        inputController.FocusWindow(mapWindow);
+        inputController.SetDefaultFocusElement(mapWindow);
+        inputController.FocusElement(mapWindow);
 
         // A notification popping up (fresh, or promoted from the unread queue) takes focus --
         // see NotificationCenter.ActiveNotificationOpened.
-        notificationCenter.ActiveNotificationOpened += notificationWindow => inputController.FocusWindow(notificationWindow);
+        notificationCenter.ActiveNotificationOpened += notificationWindow => inputController.FocusElement(notificationWindow);
 
         // Opening the quest composer focuses its TextBox (via GameInputController.SetFocus's
         // own NextTextBoxAfter redirect) immediately -- OpenQuestComposer returns the popup
@@ -60,16 +60,16 @@ public static class GameShellBootstrapper
         // always-visible HUD panels) isn't guaranteed to stay above a map click while it's open
         // -- AlwaysOnTop tier, the same tier NotificationCenter's own popups already use, not
         // Base/HUD.
-        questTriggerWindow.Clicked += _ => inputController.FocusWindow(OpenQuestComposer(presentation.WindowService, notificationCenter, alwaysOnTopWindows));
+        questTriggerWindow.Clicked += _ => inputController.FocusElement(OpenQuestComposer(presentation.ElementPoolService, notificationCenter, alwaysOnTopWindows));
 
         return new GameShellContext(mapWindow, notificationCenter, rootWindows, hudWindows, alwaysOnTopWindows, inputController);
     }
 
     /// <summary>Base tier: the map itself plus the debug stats footer directly beneath it -- see GameShellContext's doc comment for what "Base" means. mapViewState/mapSize are returned for BuildHudWindows, whose selection window needs both (mapViewState to scope the inspector, mapSize to dock against the map's actual bottom edge).</summary>
-    private static (List<Window> RootWindows, MapWindow MapWindow, MapViewState MapViewState, Vector2 MapSize) BuildRootWindows(
+    private static (List<Element> RootWindows, MapWindow MapWindow, MapViewState MapViewState, Vector2 MapSize) BuildRootWindows(
         PresentationContext presentation, World world, EcsContext ecsContext, AbilityCatalog abilityCatalog, Vector2 screenSize)
     {
-        var rootWindows = new List<Window>();
+        var rootWindows = new List<Element>();
 
         var mapSize = new Vector2(screenSize.X - ScreenMargin * 2, screenSize.Y - ScreenMargin * 3 - DebugWindowHeight);
 
@@ -82,9 +82,9 @@ public static class GameShellBootstrapper
         // and Presentation both, so it can't be registered inside WindowService's own
         // constructor the way Window/TextWindow are -- this is exactly what
         // WindowService.RegisterFactory exists for.
-        presentation.WindowService.RegisterFactory<MapWindow>((_, _) => new MapWindow(
+        presentation.ElementPoolService.RegisterFactory<MapWindow>((_, _) => new MapWindow(
             presentation.FontService,
-            presentation.WindowService,
+            presentation.ElementPoolService,
             world,
             mapViewState,
             ecsContext.ComponentManager,
@@ -94,15 +94,15 @@ public static class GameShellBootstrapper
             presentation.SpriteSheetService,
             presentation.SpriteRenderer));
 
-        var mapWindow = presentation.WindowService.CreateWindow<MapWindow>(null, new WindowOptions
+        var mapWindow = presentation.ElementPoolService.CreateElement<MapWindow>(null, new ElementOptions
         {
-            Layout = new WindowLayoutOptions
+            Layout = new ElementLayoutOptions
             {
                 RelativePosition = new Vector2(ScreenMargin, ScreenMargin),
                 Size = mapSize,
-                DisplayMode = WindowDisplayMode.Fixed,
+                DisplayMode = ElementDisplayMode.Fixed,
             },
-            Chrome = new WindowChromeOptions
+            Chrome = new ElementChromeOptions
             {
                 ShowBorder = true,
                 ShowTitle = true,
@@ -114,15 +114,15 @@ public static class GameShellBootstrapper
         mapWindow.Initialize();
         rootWindows.Add(mapWindow);
 
-        var debugWindow = presentation.WindowService.CreateWindow<Window>(null, new WindowOptions
+        var debugWindow = presentation.ElementPoolService.CreateElement<Window>(null, new ElementOptions
         {
-            Layout = new WindowLayoutOptions
+            Layout = new ElementLayoutOptions
             {
                 RelativePosition = new Vector2(ScreenMargin, ScreenMargin + mapSize.Y + ScreenMargin),
                 Size = new Vector2(mapSize.X, DebugWindowHeight),
-                DisplayMode = WindowDisplayMode.Fixed,
+                DisplayMode = ElementDisplayMode.Fixed,
             },
-            Chrome = new WindowChromeOptions { ShowBorder = true, CanUserFocus = false },
+            Chrome = new ElementChromeOptions { ShowBorder = true, CanUserFocus = false },
         });
         debugWindow.SetContent(new DebugWindowContent(presentation.FontService, ecsContext.EntityManager, ecsContext.ComponentManager, ecsContext.SystemManager));
         debugWindow.Initialize();
@@ -132,70 +132,70 @@ public static class GameShellBootstrapper
     }
 
     /// <summary>HUD tier: the selection/inspector panel, the player health bar, and the quest trigger -- see GameShellContext's doc comment for what "HUD" means. questTriggerWindow is returned for Build, which wires its Clicked event once the always-on-top tier (needed by OpenQuestComposer) also exists.</summary>
-    private static (List<Window> HudWindows, TextWindow QuestTriggerWindow) BuildHudWindows(
+    private static (List<Element> HudWindows, TextWindow QuestTriggerWindow) BuildHudWindows(
         PresentationContext presentation, World world, EcsContext ecsContext, AbilityCatalog abilityCatalog, Vector2 screenSize, MapViewState mapViewState, Vector2 mapSize)
     {
-        var hudWindows = new List<Window>();
+        var hudWindows = new List<Element>();
 
         var componentInspector = new ComponentInspector(ecsContext.ComponentManager);
         var selectionWindowHeight = screenSize.Y * 0.75f;
-        var selectionWindow = presentation.WindowService.CreateWindow<Window>(null, new WindowOptions
+        var selectionWindow = presentation.ElementPoolService.CreateElement<Window>(null, new ElementOptions
         {
-            Hierarchy = new WindowHierarchyOptions { CanContainChildWindows = true, ChildWindowTileMode = WindowTileMode.Vertical },
-            Layout = new WindowLayoutOptions
+            Hierarchy = new ElementHierarchyOptions { CanContainChildren = true, ChildrenTileMode = ChildElementTileMode.Vertical },
+            Layout = new ElementLayoutOptions
             {
                 RelativePosition = new Vector2(screenSize.X - HudMetrics.Margin.X - SelectionWindowWidth, ScreenMargin + mapSize.Y - selectionWindowHeight),
                 Size = new Vector2(SelectionWindowWidth, selectionWindowHeight),
-                DisplayMode = WindowDisplayMode.Fixed,
+                DisplayMode = ElementDisplayMode.Fixed,
                 IsTransparent = true,
             },
-            Chrome = new WindowChromeOptions { ShowBorder = false, ShowTitle = false, CanUserScrollVertical = true },
+            Chrome = new ElementChromeOptions { ShowBorder = false, ShowTitle = false, CanUserScrollVertical = true },
         });
-        selectionWindow.SetContent(new SelectionWindowContent(world, mapViewState, ecsContext.ComponentManager, componentInspector, presentation.WindowService));
+        selectionWindow.SetContent(new SelectionWindowContent(world, mapViewState, ecsContext.ComponentManager, componentInspector, presentation.ElementPoolService));
         selectionWindow.Initialize();
         hudWindows.Add(selectionWindow);
 
-        var playerHealthBarWindow = presentation.WindowService.CreateWindow<Window>(null, new WindowOptions
+        var playerHealthBarWindow = presentation.ElementPoolService.CreateElement<Window>(null, new ElementOptions
         {
-            Layout = new WindowLayoutOptions
+            Layout = new ElementLayoutOptions
             {
                 RelativePosition = new Vector2(screenSize.X - PlayerHealthBarContent.Size.X - HudMetrics.Margin.X, HudMetrics.Margin.Y),
                 Size = PlayerHealthBarContent.Size,
-                DisplayMode = WindowDisplayMode.Fixed,
+                DisplayMode = ElementDisplayMode.Fixed,
                 IsTransparent = true,
             },
             // BorderSize left at the default (1,1) -- a thinner outset reads as a subtle bevel rather than a heavy frame.
-            Chrome = new WindowChromeOptions { ShowTitle = false, ShowBorder = true, BorderStyle = BorderStyle.Outset, CanUserFocus = false },
+            Chrome = new ElementChromeOptions { ShowTitle = false, ShowBorder = true, BorderStyle = BorderStyle.Outset, CanUserFocus = false },
         });
         playerHealthBarWindow.SetContent(new PlayerHealthBarContent(world, ecsContext.ComponentManager));
         playerHealthBarWindow.Initialize();
         hudWindows.Add(playerHealthBarWindow);
 
-        var actionLockWindow = presentation.WindowService.CreateWindow<Window>(null, new WindowOptions
+        var actionLockWindow = presentation.ElementPoolService.CreateElement<Window>(null, new ElementOptions
         {
-            Layout = new WindowLayoutOptions
+            Layout = new ElementLayoutOptions
             {
                 RelativePosition = new Vector2(screenSize.X - PlayerHealthBarContent.Size.X - HudMetrics.Margin.X - ActionLockContent.Size.X - ActionLockGap, HudMetrics.Margin.Y),
                 Size = ActionLockContent.Size,
-                DisplayMode = WindowDisplayMode.Fixed,
+                DisplayMode = ElementDisplayMode.Fixed,
                 IsTransparent = true,
             },
-            Chrome = new WindowChromeOptions { ShowTitle = false, ShowBorder = true, BorderStyle = BorderStyle.Outset, CanUserFocus = false },
+            Chrome = new ElementChromeOptions { ShowTitle = false, ShowBorder = true, BorderStyle = BorderStyle.Outset, CanUserFocus = false },
         });
         actionLockWindow.SetContent(new ActionLockContent(world, ecsContext.ComponentManager, presentation.FontService));
         actionLockWindow.Initialize();
         hudWindows.Add(actionLockWindow);
 
-        var playerStatusEffectsWindow = presentation.WindowService.CreateWindow<Window>(null, new WindowOptions
+        var playerStatusEffectsWindow = presentation.ElementPoolService.CreateElement<Window>(null, new ElementOptions
         {
-            Layout = new WindowLayoutOptions
+            Layout = new ElementLayoutOptions
             {
                 RelativePosition = new Vector2(screenSize.X - PlayerHealthBarContent.Size.X - HudMetrics.Margin.X, HudMetrics.Margin.Y + PlayerHealthBarContent.Size.Y),
                 Size = PlayerStatusEffectsContent.Size,
-                DisplayMode = WindowDisplayMode.Fixed,
+                DisplayMode = ElementDisplayMode.Fixed,
                 IsTransparent = true,
             },
-            Chrome = new WindowChromeOptions { ShowTitle = false, ShowBorder = false, CanUserFocus = false },
+            Chrome = new ElementChromeOptions { ShowTitle = false, ShowBorder = false, CanUserFocus = false },
         });
         playerStatusEffectsWindow.SetContent(new PlayerStatusEffectsContent(world, ecsContext.ComponentManager, presentation.FontService));
         playerStatusEffectsWindow.Initialize();
@@ -203,16 +203,16 @@ public static class GameShellBootstrapper
 
         // Bottom-center, overlaying the map -- HUD tier draws over Base, the same way
         // selectionWindow/playerHealthBarWindow already do.
-        var hotbarWindow = presentation.WindowService.CreateWindow<Window>(null, new WindowOptions
+        var hotbarWindow = presentation.ElementPoolService.CreateElement<Window>(null, new ElementOptions
         {
-            Layout = new WindowLayoutOptions
+            Layout = new ElementLayoutOptions
             {
                 RelativePosition = new Vector2((screenSize.X - HotbarContent.Size.X) / 2f, screenSize.Y - HotbarContent.Size.Y - HudMetrics.Margin.Y * 1.5f),
                 Size = HotbarContent.Size,
-                DisplayMode = WindowDisplayMode.Fixed,
+                DisplayMode = ElementDisplayMode.Fixed,
                 IsTransparent = true,
             },
-            Chrome = new WindowChromeOptions { ShowTitle = false, ShowBorder = false, CanUserFocus = false },
+            Chrome = new ElementChromeOptions { ShowTitle = false, ShowBorder = false, CanUserFocus = false },
         });
         hotbarWindow.SetContent(new HotbarContent(world, mapViewState, ecsContext.ComponentManager, abilityCatalog, presentation.FontService));
         hotbarWindow.Initialize();
@@ -223,12 +223,12 @@ public static class GameShellBootstrapper
         // clickable TextWindow the same way NotificationCenter's own summary-bar entries are
         // (see NotificationCenter.Initialize's countWindow.Clicked wiring). HUD tier -- overlays
         // the fullscreen map, same reasoning as selectionWindow above.
-        var questTriggerWindow = presentation.WindowService.CreateWindow<TextWindow>(null, new WindowOptions
+        var questTriggerWindow = presentation.ElementPoolService.CreateElement<TextWindow>(null, new ElementOptions
         {
             // Left margin matches the notification count window's (HudMetrics.Margin.X).
-            Layout = new WindowLayoutOptions { RelativePosition = new Vector2(HudMetrics.Margin.X, 800), Size = new Vector2(120, 30), DisplayMode = WindowDisplayMode.Fixed },
-            Chrome = new WindowChromeOptions { ShowBorder = true, CanUserFocus = false },
-            Content = new WindowContentOptions { ContentColor = Color.LightGray },
+            Layout = new ElementLayoutOptions { RelativePosition = new Vector2(HudMetrics.Margin.X, 800), Size = new Vector2(120, 30), DisplayMode = ElementDisplayMode.Fixed },
+            Chrome = new ElementChromeOptions { ShowBorder = true, CanUserFocus = false },
+            Content = new ElementContentOptions { ContentColor = Color.LightGray },
             Text = new TextOptions { Text = "New Quest" },
         });
         questTriggerWindow.Initialize();
@@ -238,29 +238,29 @@ public static class GameShellBootstrapper
     }
 
     /// <summary>AlwaysOnTop tier: NotificationCenter owns/populates this list itself (summary bar + popups) -- see GameShellContext's doc comment for what "AlwaysOnTop" means. Build also passes this same list into OpenQuestComposer later, since that popup belongs in this tier too.</summary>
-    private static (List<Window> AlwaysOnTopWindows, NotificationCenter NotificationCenter) BuildAlwaysOnTopWindows(PresentationContext presentation, EcsContext ecsContext)
+    private static (List<Element> AlwaysOnTopWindows, NotificationCenter NotificationCenter) BuildAlwaysOnTopWindows(PresentationContext presentation, EcsContext ecsContext)
     {
-        var alwaysOnTopWindows = new List<Window>();
+        var alwaysOnTopWindows = new List<Element>();
 
         // Folder's dependencies (SpriteSheetService/SpriteRenderer) come from Presentation the
         // same way MapWindow's do (see BuildRootWindows) -- registered here, not inside
         // WindowService's own constructor, so window types that don't render sprites
         // (Window/TextWindow/TextBox) don't have to thread those dependencies through too.
-        presentation.WindowService.RegisterFactory<Folder>((_, _) => new Folder(
-            presentation.FontService, presentation.WindowService, presentation.GlyphRenderer, presentation.SpriteSheetService, presentation.SpriteRenderer));
+        presentation.ElementPoolService.RegisterFactory<Folder>((_, _) => new Folder(
+            presentation.FontService, presentation.ElementPoolService, presentation.GlyphRenderer, presentation.SpriteSheetService, presentation.SpriteRenderer));
 
-        var notificationCenter = new NotificationCenter(presentation.WindowService, ecsContext.EventBus, alwaysOnTopWindows);
+        var notificationCenter = new NotificationCenter(presentation.ElementPoolService, ecsContext.EventBus, alwaysOnTopWindows);
         notificationCenter.Initialize();
 
         return (alwaysOnTopWindows, notificationCenter);
     }
 
     /// <summary>TEMPORARYOpens a fresh closeable popup with one multiline TextBox; submitting posts a Quest notification and closes the popup. Returns the popup so the caller can focus it.</summary>
-    private static Window OpenQuestComposer(WindowService windowService, NotificationCenter notificationCenter, List<Window> alwaysOnTopWindows)
+    private static Window OpenQuestComposer(ElementPoolService windowService, NotificationCenter notificationCenter, List<Element> alwaysOnTopWindows)
     {
         // Deliberately Fixed, not WrapContent: a WrapContent parent's ContentSize starts at
         // ~(0,0) before it's ever measured a child, and Window.Measure overwrites a child's own
-        // MaximumSize with _parentWindow.ContentSize on every pass -- so a WrapContent popup
+        // MaximumSize with _parentElement.ContentSize on every pass -- so a WrapContent popup
         // and a TextBox whose growth cap is itself derived from that popup's ContentSize
         // collapse each other down to ~0 instead of settling on a real size (confirmed by a
         // failing test before this comment existed). Fixed has no such circularity: popupSize
@@ -272,11 +272,11 @@ public static class GameShellBootstrapper
         var textBoxMaximumSize = new Vector2(400, 190);
         var popupChromeHeight = popupSize.Y - textBoxMaximumSize.Y;
 
-        var popup = windowService.CreateWindow<Window>(null, new WindowOptions
+        var popup = windowService.CreateElement<Window>(null, new ElementOptions
         {
-            Hierarchy = new WindowHierarchyOptions { CanContainChildWindows = true },
-            Layout = new WindowLayoutOptions { RelativePosition = new Vector2(200, 250), Size = popupSize, DisplayMode = WindowDisplayMode.Fixed },
-            Chrome = new WindowChromeOptions { ShowBorder = true, ShowTitle = true, TitleText = "New Quest (Enter to submit)", CanUserClose = true, CanUserMove = true },
+            Hierarchy = new ElementHierarchyOptions { CanContainChildren = true },
+            Layout = new ElementLayoutOptions { RelativePosition = new Vector2(200, 250), Size = popupSize, DisplayMode = ElementDisplayMode.Fixed },
+            Chrome = new ElementChromeOptions { ShowBorder = true, ShowTitle = true, TitleText = "New Quest (Enter to submit)", CanUserClose = true, CanUserMove = true },
         });
         popup.Initialize();
         alwaysOnTopWindows.Add(popup);
@@ -286,7 +286,7 @@ public static class GameShellBootstrapper
         // NotificationCenter.OnActiveNotificationClosed already does for its own popups, or a
         // reopened composer would eventually add the same recycled instance to
         // alwaysOnTopWindows twice.
-        void onClosed(Window closedWindow)
+        void onClosed(Element closedWindow)
         {
             closedWindow.Closed -= onClosed;
             alwaysOnTopWindows.Remove(closedWindow);
@@ -297,16 +297,16 @@ public static class GameShellBootstrapper
         // Size.Y is only a starting point -- TextBox.AutoSizeToContent immediately shrinks it
         // to a 2-line minimum on Initialize, then grows it back up as text is typed, capped at
         // MaximumSize.Y; CanUserScrollVertical covers anything typed beyond that cap.
-        var textBox = windowService.CreateWindow<TextBox>(popup, new WindowOptions
+        var textBox = windowService.CreateElement<TextBox>(popup, new ElementOptions
         {
-            Layout = new WindowLayoutOptions { RelativePosition = new Vector2(0, 0), Size = textBoxMaximumSize, MaximumSize = textBoxMaximumSize, DisplayMode = WindowDisplayMode.Fixed },
-            Chrome = new WindowChromeOptions { ShowBorder = true, CanUserScrollVertical = true },
+            Layout = new ElementLayoutOptions { RelativePosition = new Vector2(0, 0), Size = textBoxMaximumSize, MaximumSize = textBoxMaximumSize, DisplayMode = ElementDisplayMode.Fixed },
+            Chrome = new ElementChromeOptions { ShowBorder = true, CanUserScrollVertical = true },
             Text = new TextOptions { Multiline = true },
         });
         // Subscribed before AddChildWindow -- Initialize (called from within AddChildWindow) is
         // what fires the first Resized, shrinking the popup down from popupSize to match the
         // TextBox's own initial 2-line height, not just later growth.
-        textBox.Resized += _ => popup.SetSize(new Vector2(popup.WindowCurrentSize.X, textBox.WindowCurrentSize.Y + popupChromeHeight));
+        textBox.Resized += _ => popup.SetSize(new Vector2(popup.CurrentSize.X, textBox.CurrentSize.Y + popupChromeHeight));
         textBox.TextSubmitted += text =>
         {
             // showImmediately: false -- created already minimized (queued in the Quest summary
@@ -314,13 +314,13 @@ public static class GameShellBootstrapper
             notificationCenter.AddNotification(NotificationCategory.Quest, text, showImmediately: false, title: "New Quest");
             popup.Close();
         };
-        popup.AddChildWindow(textBox);
+        popup.AddChild(textBox);
 
         return popup;
     }
 }
 
-public sealed record GameShellContext(MapWindow MapWindow, NotificationCenter NotificationCenter, List<Window> RootWindows, List<Window> HudWindows, List<Window> AlwaysOnTopWindows, GameInputController InputController)
+public sealed record GameShellContext(MapWindow MapWindow, NotificationCenter NotificationCenter, List<Element> RootWindows, List<Element> HudWindows, List<Element> AlwaysOnTopWindows, GameInputController InputController)
 {
     public void LoadContent()
     {

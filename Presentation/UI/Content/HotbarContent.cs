@@ -26,7 +26,7 @@ namespace Presentation.UI.Content;
 /// outline drawn first, with the slot's normal content inset within it. Implements TODO.md's
 /// "Inventory and spell hotbar" and "Player attack button or key" items.
 /// </summary>
-public sealed class HotbarContent(World world, MapViewState mapViewState, ComponentManager componentManager, AbilityCatalog abilityCatalog, FontService fontService) : IWindowContent
+public sealed class HotbarContent(World world, MapViewState mapViewState, ComponentManager componentManager, AbilityCatalog abilityCatalog, FontService fontService) : IElementContent
 {
     public static readonly Vector2 SlotSize = new(HudMetrics.EntrySize.Y * 2.25f, HudMetrics.EntrySize.Y * 2.25f);
 

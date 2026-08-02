@@ -11,7 +11,7 @@ namespace Presentation.UI;
 /// instead subclass Window and override DrawContent directly, since their rendering is
 /// tightly coupled to their own state and gains nothing from the extra indirection.
 /// </summary>
-public interface IWindowContent
+public interface IElementContent
 {
     /// <summary>
     /// Called once, after the host window's size/content area is known (so content can size

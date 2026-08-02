@@ -15,7 +15,7 @@ namespace Presentation.UI;
 /// GameInputController to hand focus to it. Shift+Enter inserts a newline instead, but only
 /// when Multiline -- a single-line box treats Shift+Enter the same as a plain Enter.
 /// </summary>
-public sealed class TextBox(FontService fontService, WindowService windowService, GlyphRenderer glyphRenderer) : TextWindow(fontService, windowService, glyphRenderer)
+public sealed class TextBox(FontService fontService, ElementPoolService elementPoolService, GlyphRenderer glyphRenderer) : TextWindow(fontService, elementPoolService, glyphRenderer)
 {
     private static readonly Color FocusIndicatorColor = Color.Gold;
     private static readonly BorderThickness FocusIndicatorThickness = BorderThickness.Uniform(new Vector2(2, 2));
@@ -28,11 +28,11 @@ public sealed class TextBox(FontService fontService, WindowService windowService
     /// <summary>Raised when Enter (or Shift+Enter on a non-multiline box) submits the current text.</summary>
     public event Action<string>? TextSubmitted;
 
-    public override void BuildWindow(Window? parentWindow, WindowOptions windowOptions)
+    public override void Build(Element? parent, ElementOptions options)
     {
-        base.BuildWindow(parentWindow, windowOptions);
+        base.Build(parent, options);
 
-        _multiline = windowOptions.Text?.Multiline ?? false;
+        _multiline = options.Text?.Multiline ?? false;
     }
 
     public override void Initialize()
@@ -78,7 +78,7 @@ public sealed class TextBox(FontService fontService, WindowService windowService
         {
             TextSubmitted?.Invoke(OriginalText);
 
-            var next = ParentWindow?.NextTextBoxAfter(this);
+            var next = ParentElement?.NextFocusableDescendant(this);
             if (next is not null)
             {
                 RequestFocus(next);
@@ -110,18 +110,18 @@ public sealed class TextBox(FontService fontService, WindowService windowService
         }
 
         var desiredContentHeight = ContentFont.LineHeight * System.Math.Max(MinimumVisibleLines, DisplayText.LineCount) + LinePadding * 2;
-        var desiredWindowHeight = desiredContentHeight + BorderInsetDoubled.Y + TitleInsetHeight;
+        var desiredWindowHeight = desiredContentHeight + BorderInsetDoubled.Y + HeaderInsetHeight;
 
-        if (desiredWindowHeight != WindowCurrentSize.Y)
+        if (desiredWindowHeight != CurrentSize.Y)
         {
-            SetSize(new Vector2(WindowCurrentSize.X, desiredWindowHeight));
+            SetSize(new Vector2(CurrentSize.X, desiredWindowHeight));
 
             // SetSize only re-measures this window itself. A WrapContent parent (e.g. the
             // quest-composer popup, sized to fit around this box) needs to be told separately
             // that a child it already contains has changed size -- AddChildWindow/
             // RemoveChildWindow handle that on attach/detach, but nothing does for a child
             // resizing itself afterward.
-            ParentWindow?.MeasureAndArrange();
+            ParentElement?.MeasureAndArrange();
         }
     }
 
@@ -165,7 +165,7 @@ public sealed class TextBox(FontService fontService, WindowService windowService
             return;
         }
 
-        var (top, bottom, left, right) = BorderThickness.GetEdgeRectangles(WindowRectangle, FocusIndicatorThickness);
+        var (top, bottom, left, right) = BorderThickness.GetEdgeRectangles(Rectangle, FocusIndicatorThickness);
         spriteBatch.Draw(unitRectangle, top, FocusIndicatorColor);
         spriteBatch.Draw(unitRectangle, bottom, FocusIndicatorColor);
         spriteBatch.Draw(unitRectangle, left, FocusIndicatorColor);

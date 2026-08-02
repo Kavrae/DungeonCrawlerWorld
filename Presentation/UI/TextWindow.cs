@@ -7,7 +7,7 @@ using Presentation.Rendering;
 
 namespace Presentation.UI;
 
-public class TextWindow(FontService fontService, WindowService windowService, GlyphRenderer glyphRenderer) : Window(fontService, windowService, glyphRenderer)
+public class TextWindow(FontService fontService, ElementPoolService elementPoolService, GlyphRenderer glyphRenderer) : Window(fontService, elementPoolService, glyphRenderer)
 {
     public string OriginalText { get; set; } = string.Empty;
     public DisplayText DisplayText { get; set; }
@@ -15,13 +15,13 @@ public class TextWindow(FontService fontService, WindowService windowService, Gl
     public Color TextColor { get; set; }
     protected const int LinePadding = 3;
 
-    public override void BuildWindow(Window? parentWindow, WindowOptions windowOptions)
+    public override void Build(Element? parent, ElementOptions options)
     {
-        base.BuildWindow(parentWindow, windowOptions);
+        base.Build(parent, options);
 
-        OriginalText = windowOptions.Text?.Text ?? string.Empty;
-        TextColor = windowOptions.Text?.TextColor ?? Color.Black;
-        _canContainChildWindows = false;
+        OriginalText = options.Text?.Text ?? string.Empty;
+        TextColor = options.Text?.TextColor ?? Color.Black;
+        _canContainChildren = false;
     }
 
     public override void DrawContent(GameTime gameTime, SpriteBatch spriteBatch, Texture2D unitRectangle)
@@ -35,33 +35,33 @@ public class TextWindow(FontService fontService, WindowService windowService, Gl
         }
     }
 
-    protected override void RecalculateFixedWindowSize()
+    protected override void RecalculateFixedSize()
     {
-        base.RecalculateFixedWindowSize();
+        base.RecalculateFixedSize();
 
         ReformatDisplayText();
         UpdateScrollBounds();
     }
 
-    protected override void RecalculateFillWindowSize()
+    protected override void RecalculateFillSize()
     {
-        base.RecalculateFillWindowSize();
+        base.RecalculateFillSize();
 
         ReformatDisplayText();
         UpdateScrollBounds();
     }
 
-    protected override void RecalculateWrapContentWindowSize()
+    protected override void RecalculateWrapContentSize()
     {
         // Only a child window's MaximumSize is actually a parent-relative boundary (inherited
-        // as _parentWindow.ContentSize, see BuildWindow) -- subtracting RelativePosition there
+        // as _parentElement.ContentSize, see BuildWindow) -- subtracting RelativePosition there
         // gives the space still available after this child's own offset within the parent. A
         // root window's MaximumSize (like a notification popup's explicit cap) is just a
         // literal bound with no parent edge to offset against; subtracting RelativePosition.X
         // from it used to pin the window's right edge to a fixed screen x regardless of
         // position -- invisible while notifications were stationary, but visible as "only the
         // right edge doesn't follow the drag" once Window Chrome Phase C made them draggable.
-        // Y has the same shape as X here, so it gets the same ParentWindow-is-null check.
+        // Y has the same shape as X here, so it gets the same ParentElement-is-null check.
         // Clamped to 0, not left possibly negative: a tiled sibling positioned far enough down
         // a tall column (e.g. by earlier siblings' own long text) can have RelativePosition.Y
         // exceed MaximumSize.Y outright. An unclamped negative maximumContentHeight fed into
@@ -71,12 +71,12 @@ public class TextWindow(FontService fontService, WindowService windowService, Gl
         // sibling on top of this one instead of below it. Confirmed by reproduction: a
         // goblin-engineer-plus-dirt tile's dirt component windows overlapping each other, but
         // only once the goblin engineer's own (longer) text pushed dirt's block far enough down.
-        var maximumContentWidth = System.Math.Max(0, ParentWindow is not null
+        var maximumContentWidth = System.Math.Max(0, ParentElement is not null
             ? _geometry.MaximumSize.X - _geometry.RelativePosition.X - BorderInsetDoubled.X
             : _geometry.MaximumSize.X - BorderInsetDoubled.X);
-        var maximumContentHeight = System.Math.Max(0, (ParentWindow is not null
+        var maximumContentHeight = System.Math.Max(0, (ParentElement is not null
             ? _geometry.MaximumSize.Y - _geometry.RelativePosition.Y
-            : _geometry.MaximumSize.Y) - BorderInsetDoubled.Y - TitleInsetHeight);
+            : _geometry.MaximumSize.Y) - BorderInsetDoubled.Y - HeaderInsetHeight);
 
         // Wrap against the maximum first (this is the width word-wrap decisions need), then
         // shrink the window itself to the widest line that wrapping actually produced --
@@ -87,9 +87,9 @@ public class TextWindow(FontService fontService, WindowService windowService, Gl
         ReformatDisplayText();
         _contentState.Size.X = System.Math.Min(WidestLineWidth() + ContentPadding.X * 2, maximumContentWidth);
 
-        if (_title.ShowTitle)
+        if (_headerState.ShowHeader)
         {
-            _contentState.Size.X = System.Math.Min(System.Math.Max(_contentState.Size.X, MinimumTitleWidth()), maximumContentWidth);
+            _contentState.Size.X = System.Math.Min(System.Math.Max(_contentState.Size.X, MinimumHeaderWidth()), maximumContentWidth);
         }
 
         var wrappedTextHeight = TextContentHeight();
@@ -103,11 +103,11 @@ public class TextWindow(FontService fontService, WindowService windowService, Gl
         _contentState.Size.Y = System.Math.Min(wrappedTextHeight, maximumContentHeight);
 
         _geometry.CurrentSize = _contentState.Size;
-        if (_title.ShowTitle)
+        if (_headerState.ShowHeader)
         {
             // Resize horizontally to fit the new content size, but keep the vertical size.
-            _title.Size = new Vector2(_contentState.Size.X, _title.OriginalSize.Y - BorderInset.Y);
-            _geometry.CurrentSize.Y += _title.Size.Y;
+            _headerState.Size = new Vector2(_contentState.Size.X, _headerState.OriginalSize.Y - BorderInset.Y);
+            _geometry.CurrentSize.Y += _headerState.Size.Y;
         }
         _geometry.CurrentSize += BorderInsetDoubled;
 
@@ -166,14 +166,14 @@ public class TextWindow(FontService fontService, WindowService windowService, Gl
 
         switch (_geometry.DisplayMode)
         {
-            case WindowDisplayMode.Fixed:
-                RecalculateFixedWindowSize();
+            case ElementDisplayMode.Fixed:
+                RecalculateFixedSize();
                 break;
-            case WindowDisplayMode.Fill:
-                RecalculateFillWindowSize();
+            case ElementDisplayMode.Fill:
+                RecalculateFillSize();
                 break;
-            case WindowDisplayMode.WrapContent:
-                RecalculateWrapContentWindowSize();
+            case ElementDisplayMode.WrapContent:
+                RecalculateWrapContentSize();
                 break;
         }
 

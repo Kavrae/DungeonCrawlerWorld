@@ -9,7 +9,7 @@ namespace Presentation.UI.Notifications;
 /// chrome action -- IWindowChromeBehavior already supports this (nothing requires the
 /// built-in behaviors), this is just the first thing that actually does it.
 /// </summary>
-public sealed class NotificationMinimizeBehavior(Action onMinimize) : IWindowChromeBehavior
+public sealed class NotificationMinimizeBehavior(Action onMinimize) : IChromeBehavior
 {
     public void Attach(Window window)
     {

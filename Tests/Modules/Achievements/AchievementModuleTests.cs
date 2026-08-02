@@ -16,11 +16,10 @@ namespace Tests.Modules.Achievements;
 /// Exercises the built-in achievements end-to-end through the real AchievementModule (Configure
 /// then RegisterSystems, mirroring GameBootstrapper.Build's own ordering -- see
 /// GameModuleIntegrationTests for the same pattern with other real modules) rather than
-/// against AchievementModule's internals directly. Deliberately publishes the spawn-sentinel
-/// EntityMoved *before* assigning World.PlayerEntityId in the Loner tests below, matching
-/// GameLoop/FloorBuilder.CreatePlayer's real ordering -- assigning it first (as an earlier
-/// version of this file did) would have hidden the exact bug LonerAchievement's own doc
-/// comment describes: PlayerEntityId isn't set yet at the moment this event actually fires.
+/// against AchievementModule's internals directly. The Loner/UnarmedCombat tests below assign
+/// World.PlayerEntityId *before* publishing EnteredDungeon, matching GameLoop's real ordering
+/// (EnteredDungeon is published only after _playerSpawned flips true, which happens after
+/// World.PlayerEntityId is assigned).
 /// </summary>
 [TestClass]
 public sealed class AchievementModuleTests
@@ -39,23 +38,48 @@ public sealed class AchievementModuleTests
         return (ecsContext, eventBus, world);
     }
 
-    private static void PublishSpawn(EventBus eventBus, int entityId, Vector3Int position) =>
-        eventBus.Publish(new EntityMoved(entityId, position, position, new Vector2Byte(1, 1)));
-
     private static readonly Guid LonerAchievementId = new LonerAchievement().Id;
 
     private static readonly Guid InflictedDamageAchievementId = new InflictedDamageAchievement().Id;
 
+    private static readonly Guid UnarmedCombatAchievementId = new UnarmedCombatAchievement().Id;
+
     [TestMethod]
-    public void PlayerSpawnSentinel_UnlocksLonerAndPublishesMinimizedNotification()
+    public void EnteredDungeon_WithoutPlayerQuery_NeverSubscribesSoNothingUnlocks()
+    {
+        var eventBus = new EventBus();
+
+        var module = new AchievementModule();
+        module.Configure(new GameModuleContext(new Game.World.World(new Map(new Vector3Int(5, 5, 1))), new MathUtility(), eventBus)); // PlayerQuery left null
+
+        IReadOnlyList<IModule> modules = [module];
+        Bootstrapper.Build(modules, initialEntityCapacity: 10, initialComponentCapacity: 10, eventBus);
+
+        var notificationCount = 0;
+        eventBus.Subscribe<NotificationRequested>(_ => notificationCount++);
+
+        eventBus.Publish(new EnteredDungeon());
+        eventBus.DispatchBuffered<NotificationRequested>();
+
+        Assert.AreEqual(0, notificationCount);
+    }
+
+    [TestMethod]
+    public void EnteredDungeon_UnlocksLonerAndPublishesMinimizedNotification()
     {
         var (ecsContext, eventBus, world) = Build();
         var playerEntityId = ecsContext.EntityManager.CreateEntity();
+        world.PlayerEntityId = playerEntityId;
         NotificationRequested? published = null;
-        eventBus.Subscribe<NotificationRequested>(requested => published = requested);
+        eventBus.Subscribe<NotificationRequested>(requested =>
+        {
+            if (requested.Title == "Loner")
+            {
+                published = requested;
+            }
+        });
 
-        PublishSpawn(eventBus, playerEntityId, new Vector3Int(1, 1, 0));
-        world.PlayerEntityId = playerEntityId; // assigned after publishing, matching GameLoop's real ordering
+        eventBus.Publish(new EnteredDungeon());
         eventBus.DispatchBuffered<NotificationRequested>(); // NotificationRequested is buffered -- see NotificationCenter.Update's own doc comment.
 
         Assert.IsTrue(AchievementQueries.HasEarned(
@@ -72,19 +96,25 @@ public sealed class AchievementModuleTests
     }
 
     [TestMethod]
-    public void PlayerSpawnSentinel_PublishedTwice_OnlyUnlocksAndNotifiesOnce()
+    public void EnteredDungeon_PublishedTwice_OnlyUnlocksAndNotifiesOnce()
     {
         var (ecsContext, eventBus, world) = Build();
         var playerEntityId = ecsContext.EntityManager.CreateEntity();
-        var notificationCount = 0;
-        eventBus.Subscribe<NotificationRequested>(_ => notificationCount++);
-
-        PublishSpawn(eventBus, playerEntityId, new Vector3Int(1, 1, 0));
         world.PlayerEntityId = playerEntityId;
-        PublishSpawn(eventBus, playerEntityId, new Vector3Int(2, 2, 0));
+        var lonerNotificationCount = 0;
+        eventBus.Subscribe<NotificationRequested>(requested =>
+        {
+            if (requested.Title == "Loner")
+            {
+                lonerNotificationCount++;
+            }
+        });
+
+        eventBus.Publish(new EnteredDungeon());
+        eventBus.Publish(new EnteredDungeon());
         eventBus.DispatchBuffered<NotificationRequested>();
 
-        Assert.AreEqual(1, notificationCount);
+        Assert.AreEqual(1, lonerNotificationCount);
 
         var unlockedAchievements = ecsContext.ComponentManager.GetMultiPool<AchievementUnlockedComponent>();
         var earnedCount = 0;
@@ -93,22 +123,66 @@ public sealed class AchievementModuleTests
             earnedCount++;
         }
 
-        Assert.AreEqual(1, earnedCount);
+        Assert.AreEqual(2, earnedCount);
     }
 
     [TestMethod]
-    public void RealMove_OldPositionDiffersFromNew_DoesNotUnlockLoner()
+    public void EntityMoved_DoesNotUnlockLoner()
     {
         var (ecsContext, eventBus, world) = Build();
         var playerEntityId = ecsContext.EntityManager.CreateEntity();
         world.PlayerEntityId = playerEntityId;
 
-        eventBus.Publish(new EntityMoved(playerEntityId, new Vector3Int(1, 1, 0), new Vector3Int(2, 1, 0), new Vector2Byte(1, 1)));
+        eventBus.Publish(new EntityMoved(playerEntityId, new Vector3Int(1, 1, 0), new Vector3Int(1, 1, 0), new Vector2Byte(1, 1)));
 
         Assert.IsFalse(AchievementQueries.HasEarned(
             ecsContext.ComponentManager.GetMultiPool<AchievementUnlockedComponent>(),
             playerEntityId,
             LonerAchievementId));
+    }
+
+    [TestMethod]
+    public void EnteredDungeon_UnlocksUnarmedCombatAndPublishesLootboxNotification()
+    {
+        var (ecsContext, eventBus, world) = Build();
+        var playerEntityId = ecsContext.EntityManager.CreateEntity();
+        world.PlayerEntityId = playerEntityId;
+        NotificationRequested? published = null;
+        eventBus.Subscribe<NotificationRequested>(requested =>
+        {
+            if (requested.Title == "Unarmed Combat")
+            {
+                published = requested;
+            }
+        });
+
+        eventBus.Publish(new EnteredDungeon());
+        eventBus.DispatchBuffered<NotificationRequested>(); // NotificationRequested is buffered -- see NotificationCenter.Update's own doc comment.
+
+        Assert.IsTrue(AchievementQueries.HasEarned(
+            ecsContext.ComponentManager.GetMultiPool<AchievementUnlockedComponent>(),
+            playerEntityId,
+            UnarmedCombatAchievementId));
+
+        Assert.IsNotNull(published);
+        Assert.AreEqual(NotificationCategory.Achievement, published!.Category);
+        Assert.IsNotNull(published.Achievement);
+        Assert.AreEqual("Bronze Weapon Box", published.Achievement!.LootboxLabel);
+    }
+
+    [TestMethod]
+    public void EntityMoved_DoesNotUnlockUnarmedCombat()
+    {
+        var (ecsContext, eventBus, world) = Build();
+        var playerEntityId = ecsContext.EntityManager.CreateEntity();
+        world.PlayerEntityId = playerEntityId;
+
+        eventBus.Publish(new EntityMoved(playerEntityId, new Vector3Int(1, 1, 0), new Vector3Int(1, 1, 0), new Vector2Byte(1, 1)));
+
+        Assert.IsFalse(AchievementQueries.HasEarned(
+            ecsContext.ComponentManager.GetMultiPool<AchievementUnlockedComponent>(),
+            playerEntityId,
+            UnarmedCombatAchievementId));
     }
 
     [TestMethod]
