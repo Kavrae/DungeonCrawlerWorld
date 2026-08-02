@@ -9,6 +9,7 @@ using Game.Blueprints.Objects;
 using Game.Blueprints.Races;
 using Game.Blueprints.Terrain;
 using Game.Modules.Core.Components;
+using Game.Modules.Crawler.Components;
 using Game.Modules.Movement.Components;
 
 namespace Game;
@@ -22,11 +23,14 @@ namespace Game;
 /// per PopulateFlyingFairy) -- plus a handful of standalone multi-trait fixtures, via the
 /// Blueprint composition system.
 /// </summary>
-public sealed class TestMapBuilder(EntityManager entityManager, ComponentManager componentManager, MathUtility mathUtility)
+public sealed class TestMapBuilder(EntityManager entityManager, ComponentManager componentManager, MathUtility mathUtility, UniqueNumberAllocator crawlerNumberAllocator)
 {
     private const int GroundPopulationPercent = 10;
     private const int UnderGroundGhostPercent = 5;
     private const int FlyingFairyPercent = 5;
+
+    /// <summary>Chance any given rolled NPC (see BuildRaceEntity) is also a Crawler -- deliberately small; most NPCs are not.</summary>
+    private const int CrawlerPercent = 2;
 
     private const string LongWordWrapDescription =
         "ThisIsAReallyLongDescriptionToTestTheWordWrapCapabilitiesAroundHyphenatingLongWordsMultipleTimes";
@@ -194,7 +198,7 @@ public sealed class TestMapBuilder(EntityManager entityManager, ComponentManager
         BuildRaceEntity(world, _fairy, column, row, size, MapLayer.Flying);
     }
 
-    /// <summary>Builds a race blueprint entity at the given size/layer with a staggered action lock -- the shared path for every PopulateEntity roll outcome.</summary>
+    /// <summary>Builds a race blueprint entity at the given size/layer with a staggered action lock -- the shared path for every PopulateEntity roll outcome. A small percentage also become Crawlers (see CrawlerPercent).</summary>
     private void BuildRaceEntity(World.World world, IBlueprint blueprint, int column, int row, Vector2Byte size, MapLayer mapLayer)
     {
         var entityId = entityManager.CreateEntity();
@@ -202,6 +206,11 @@ public sealed class TestMapBuilder(EntityManager entityManager, ComponentManager
 
         ref var transform = ref componentManager.GetDirectPool<TransformComponent>().Get(entityId);
         transform.Size = size;
+
+        if (mathUtility.Next(0, 100) < CrawlerPercent)
+        {
+            componentManager.Merge(entityId, new CrawlerComponent(crawlerNumberAllocator.Allocate()));
+        }
 
         StaggerActionLock(entityId);
         world.PlaceEntityOnMap(entityId, new Vector3Int(column, row, (int)mapLayer), ref transform);

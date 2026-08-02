@@ -26,6 +26,7 @@ public sealed class AchievementModule : IGameModule
     public IReadOnlyList<Type> Dependencies { get; } = [];
 
     private static readonly IReadOnlyList<IAchievementDefinition> Definitions = [
+        new EarlyAdopterAchievement(),
         new InflictedDamageAchievement(),
         new LonerAchievement(),
         new UnarmedCombatAchievement()
@@ -59,7 +60,7 @@ public sealed class AchievementModule : IGameModule
 
         foreach (var definition in Definitions)
         {
-            var triggerContext = new AchievementTriggerContext(eventBus, _playerQuery, entityId => Unlock(definition, entityId, unlockedAchievements, eventBus));
+            var triggerContext = new AchievementTriggerContext(eventBus, _playerQuery, componentManager, entityId => Unlock(definition, entityId, unlockedAchievements, eventBus));
             definition.RegisterTrigger(triggerContext);
         }
     }

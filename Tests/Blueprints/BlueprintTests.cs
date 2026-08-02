@@ -17,6 +17,8 @@ using Game.Modules.Class;
 using Game.Modules.Class.Components;
 using Game.Modules.Core;
 using Game.Modules.Core.Components;
+using Game.Modules.Crawler;
+using Game.Modules.Crawler.Components;
 using Game.Modules.Health;
 using Game.Modules.Health.Components;
 using Game.Modules.Melee;
@@ -51,6 +53,7 @@ public sealed class BlueprintTests
             new RaceModule(),
             new ClassModule(),
             abilitiesModule,
+            new CrawlerModule(),
         ];
 
         return Bootstrapper.Build(modules, initialEntityCapacity: 100, initialComponentCapacity: 50);
@@ -136,7 +139,7 @@ public sealed class BlueprintTests
         var ecsContext = BuildEcsContext();
         var entityId = ecsContext.EntityManager.CreateEntity();
 
-        new PlayerBlueprint(new MathUtility(new Random(1))).Build(ecsContext.ComponentManager, entityId);
+        new PlayerBlueprint(new MathUtility(new Random(1)), new UniqueNumberAllocator(new MathUtility(new Random(1)), 1, 13_000_000)).Build(ecsContext.ComponentManager, entityId);
 
         var glyph = ecsContext.ComponentManager.GetDirectPool<GlyphComponent>().GetReadonly(entityId);
         Assert.AreEqual("@", glyph.Glyph);
@@ -154,6 +157,9 @@ public sealed class BlueprintTests
         // No RaceComponent/ClassComponent -- nothing needs the player to have either.
         Assert.IsFalse(ecsContext.ComponentManager.GetMultiPool<RaceComponent>().Has(entityId));
         Assert.IsFalse(ecsContext.ComponentManager.GetMultiPool<ClassComponent>().Has(entityId));
+
+        // The player is always a Crawler.
+        Assert.IsTrue(ecsContext.ComponentManager.GetPackedPool<CrawlerComponent>().Has(entityId));
 
         var abilityInstances = ecsContext.ComponentManager.GetMultiPool<AbilityInstanceComponent>();
         Assert.IsTrue(AbilityInstanceQueries.TryGet(abilityInstances, entityId, MeleeModule.DefaultAttackId, out var defaultAttack));

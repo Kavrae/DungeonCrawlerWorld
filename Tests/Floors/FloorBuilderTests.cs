@@ -12,6 +12,7 @@ using Game.Modules.Class;
 using Game.Modules.ContactDamage;
 using Game.Modules.Core;
 using Game.Modules.Core.Components;
+using Game.Modules.Crawler;
 using Game.Modules.Health;
 using Game.Modules.Movement;
 using Game.Modules.Movement.Components;
@@ -62,6 +63,7 @@ public sealed class FloorBuilderTests
             poisonModule,
             contactDamageModule,
             statusEffectAuraModule,
+            new CrawlerModule(),
         ];
 
         return Bootstrapper.Build(modules, initialEntityCapacity: 5000, initialComponentCapacity: 5000);
@@ -83,8 +85,9 @@ public sealed class FloorBuilderTests
         var mathUtility = new MathUtility(new Random(1));
         var ecsContext = BuildEcsContext(world, mathUtility);
 
-        FloorBuilder.PopulateFloor(world, ecsContext, mathUtility);
-        world.PlayerEntityId = FloorBuilder.CreatePlayer(world, ecsContext, mathUtility, new FrameEventBuffer<EntityMoved>());
+        var crawlerNumberAllocator = new UniqueNumberAllocator(mathUtility, 1, 13_000_000);
+        FloorBuilder.PopulateFloor(world, ecsContext, mathUtility, crawlerNumberAllocator);
+        world.PlayerEntityId = FloorBuilder.CreatePlayer(world, ecsContext, mathUtility, new FrameEventBuffer<EntityMoved>(), crawlerNumberAllocator);
 
         Assert.IsTrue(ecsContext.EntityManager.IsAlive(world.PlayerEntityId));
 

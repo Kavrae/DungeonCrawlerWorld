@@ -7,6 +7,8 @@ using Game.Modules;
 using Game.Modules.Achievements;
 using Game.Modules.Achievements.Components;
 using Game.Modules.Achievements.Definitions;
+using Game.Modules.Crawler;
+using Game.Modules.Crawler.Components;
 using Game.Notifications;
 using Game.World;
 
@@ -32,11 +34,13 @@ public sealed class AchievementModuleTests
         var module = new AchievementModule();
         module.Configure(new GameModuleContext(world, new MathUtility(), eventBus) { PlayerQuery = world });
 
-        IReadOnlyList<IModule> modules = [module];
+        IReadOnlyList<IModule> modules = [module, new CrawlerModule()];
         var ecsContext = Bootstrapper.Build(modules, initialEntityCapacity: 10, initialComponentCapacity: 10, eventBus);
 
         return (ecsContext, eventBus, world);
     }
+
+    private static readonly Guid EarlyAdopterAchievementId = new EarlyAdopterAchievement().Id;
 
     private static readonly Guid LonerAchievementId = new LonerAchievement().Id;
 
@@ -183,6 +187,67 @@ public sealed class AchievementModuleTests
             ecsContext.ComponentManager.GetMultiPool<AchievementUnlockedComponent>(),
             playerEntityId,
             UnarmedCombatAchievementId));
+    }
+
+    [TestMethod]
+    public void EnteredDungeon_WithQualifyingCrawlerNumber_UnlocksEarlyAdopterAndPublishesLootboxNotification()
+    {
+        var (ecsContext, eventBus, world) = Build();
+        var playerEntityId = ecsContext.EntityManager.CreateEntity();
+        world.PlayerEntityId = playerEntityId;
+        ecsContext.ComponentManager.GetPackedPool<CrawlerComponent>().Add(playerEntityId, new CrawlerComponent(5000));
+        NotificationRequested? published = null;
+        eventBus.Subscribe<NotificationRequested>(requested =>
+        {
+            if (requested.Title == "Early Adopter")
+            {
+                published = requested;
+            }
+        });
+
+        eventBus.Publish(new EnteredDungeon());
+        eventBus.DispatchBuffered<NotificationRequested>();
+
+        Assert.IsTrue(AchievementQueries.HasEarned(
+            ecsContext.ComponentManager.GetMultiPool<AchievementUnlockedComponent>(),
+            playerEntityId,
+            EarlyAdopterAchievementId));
+
+        Assert.IsNotNull(published);
+        Assert.AreEqual(NotificationCategory.Achievement, published!.Category);
+        Assert.IsNotNull(published.Achievement);
+        Assert.AreEqual("Silver Adventurer Box", published.Achievement!.LootboxLabel);
+    }
+
+    [TestMethod]
+    public void EnteredDungeon_WithNonQualifyingCrawlerNumber_DoesNotUnlockEarlyAdopter()
+    {
+        var (ecsContext, eventBus, world) = Build();
+        var playerEntityId = ecsContext.EntityManager.CreateEntity();
+        world.PlayerEntityId = playerEntityId;
+        ecsContext.ComponentManager.GetPackedPool<CrawlerComponent>().Add(playerEntityId, new CrawlerComponent(5001));
+
+        eventBus.Publish(new EnteredDungeon());
+
+        Assert.IsFalse(AchievementQueries.HasEarned(
+            ecsContext.ComponentManager.GetMultiPool<AchievementUnlockedComponent>(),
+            playerEntityId,
+            EarlyAdopterAchievementId));
+    }
+
+    [TestMethod]
+    public void EnteredDungeon_WithoutCrawlerComponent_DoesNotUnlockEarlyAdopter()
+    {
+        var (ecsContext, eventBus, world) = Build();
+        var playerEntityId = ecsContext.EntityManager.CreateEntity();
+        world.PlayerEntityId = playerEntityId;
+
+        eventBus.Publish(new EnteredDungeon());
+
+        Assert.IsFalse(AchievementQueries.HasEarned(
+            ecsContext.ComponentManager.GetMultiPool<AchievementUnlockedComponent>(),
+            playerEntityId,
+            EarlyAdopterAchievementId));
     }
 
     [TestMethod]

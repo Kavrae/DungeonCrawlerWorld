@@ -38,6 +38,11 @@ public sealed class GameLoop : Microsoft.Xna.Framework.Game
     // actually needs to change it.
     private const int FloorNumber = 1;
 
+    // Range for CrawlerComponent.CrawlerNumber -- GameLoop's choice, not UniqueNumberAllocator's
+    // own (a generic Engine.Math utility), since that range is Crawler-specific.
+    private const int MinCrawlerNumber = 1;
+    private const int MaxCrawlerNumber = 13_000_000;
+
     private readonly GraphicsDeviceManager _graphics;
 
     private Game.World.World _world = null!;
@@ -49,6 +54,7 @@ public sealed class GameLoop : Microsoft.Xna.Framework.Game
     private PlayerActivityLog _playerActivityLog = null!;
     private PhaseProfiler _profiler = null!;
     private FrameEventBuffer<EntityMoved> _movedEntities = null!;
+    private UniqueNumberAllocator _crawlerNumberAllocator = null!;
     private bool _playerSpawned;
     private int _frameCount;
 
@@ -68,6 +74,7 @@ public sealed class GameLoop : Microsoft.Xna.Framework.Game
     protected override void Initialize()
     {
         _mathUtility = new MathUtility();
+        _crawlerNumberAllocator = new UniqueNumberAllocator(_mathUtility, MinCrawlerNumber, MaxCrawlerNumber);
 
         // World must exist before GameBootstrapper.Build: MovementModule's Configure step
         // needs an IMapQuery (World implements it), but GameBootstrapper.Build is what
@@ -91,7 +98,7 @@ public sealed class GameLoop : Microsoft.Xna.Framework.Game
             Console.Error.WriteLine($"[ModuleLoad] {failure.Source}: {failure.Exception}");
         }
 
-        FloorBuilder.PopulateFloor(_world, _ecsContext, _mathUtility);
+        FloorBuilder.PopulateFloor(_world, _ecsContext, _mathUtility, _crawlerNumberAllocator);
 
         var logFilePath = Path.Combine(FindProjectRoot(), "Log", "player-activity.log");
         _playerActivityLog = new PlayerActivityLog(_world, _ecsContext.EventBus, logFilePath);
@@ -132,7 +139,7 @@ public sealed class GameLoop : Microsoft.Xna.Framework.Game
             // ContactDamageSystem/StatusEffectAuraSystem in this same cycle.
             if (!_playerSpawned)
             {
-                _world.PlayerEntityId = FloorBuilder.CreatePlayer(_world, _ecsContext, _mathUtility, _movedEntities);
+                _world.PlayerEntityId = FloorBuilder.CreatePlayer(_world, _ecsContext, _mathUtility, _movedEntities, _crawlerNumberAllocator);
                 _playerSpawned = true;
 
                 _ecsContext.EventBus.Publish(new EnteredDungeon());

@@ -26,8 +26,8 @@ public static class FloorBuilder
 
     public static Game.World.Map CreateMap(int floorNumber) => new(TestMapSize);
 
-    public static void PopulateFloor(Game.World.World world, EcsContext ecsContext, MathUtility mathUtility) =>
-        new TestMapBuilder(ecsContext.EntityManager, ecsContext.ComponentManager, mathUtility).Populate(world);
+    public static void PopulateFloor(Game.World.World world, EcsContext ecsContext, MathUtility mathUtility, UniqueNumberAllocator crawlerNumberAllocator) =>
+        new TestMapBuilder(ecsContext.EntityManager, ecsContext.ComponentManager, mathUtility, crawlerNumberAllocator).Populate(world);
 
     // TEMPORARY test seeding -- exercises Poison until a real in-game source exists. Remove
     // once one does. 10 applications of a 5-tick duration each: since ApplyStack takes the
@@ -36,10 +36,10 @@ public static class FloorBuilder
     private const int TestPoisonStackCount = 10;
     private const int TestPoisonDurationTicks = 5;
 
-    public static int CreatePlayer(Game.World.World world, EcsContext ecsContext, MathUtility mathUtility, FrameEventBuffer<EntityMoved> movedEntities)
+    public static int CreatePlayer(Game.World.World world, EcsContext ecsContext, MathUtility mathUtility, FrameEventBuffer<EntityMoved> movedEntities, UniqueNumberAllocator crawlerNumberAllocator)
     {
         var entityId = ecsContext.EntityManager.CreateEntity();
-        new PlayerBlueprint(mathUtility).Build(ecsContext.ComponentManager, entityId);
+        new PlayerBlueprint(mathUtility, crawlerNumberAllocator).Build(ecsContext.ComponentManager, entityId);
 
         for (var i = 0; i < TestPoisonStackCount; i++)
         {

@@ -1,3 +1,4 @@
+using Engine.ECS.Components;
 using Engine.Events;
 using Game.World;
 
@@ -7,14 +8,18 @@ namespace Game.Modules.Achievements;
 /// What an IAchievementDefinition's RegisterTrigger needs: the EventBus to subscribe against,
 /// a live IPlayerQuery reference (nullable, same reasoning as GameModuleContext.PlayerQuery --
 /// read PlayerEntityId at event-fire time, not capture it here, since the player entity
-/// doesn't exist yet while modules are being configured), and the unlock callback bound to
-/// this specific achievement's identity by AchievementModule.
+/// doesn't exist yet while modules are being configured), the ComponentManager (for conditions
+/// that need to read a component's data rather than just an event's own fields -- e.g.
+/// EarlyAdopterAchievement reading CrawlerComponent off an event that carries no data itself),
+/// and the unlock callback bound to this specific achievement's identity by AchievementModule.
 /// </summary>
-public sealed class AchievementTriggerContext(EventBus eventBus, IPlayerQuery? playerQuery, Action<int> unlock)
+public sealed class AchievementTriggerContext(EventBus eventBus, IPlayerQuery? playerQuery, ComponentManager componentManager, Action<int> unlock)
 {
     public EventBus EventBus { get; } = eventBus;
 
     public IPlayerQuery? PlayerQuery { get; } = playerQuery;
+
+    public ComponentManager ComponentManager { get; } = componentManager;
 
     /// <summary>
     /// Subscribes a handler for TEvent that unlocks the achievement for the player -- the only

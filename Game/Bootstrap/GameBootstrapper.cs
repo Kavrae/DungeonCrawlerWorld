@@ -10,6 +10,7 @@ using Game.Modules.Class;
 using Game.Modules.ContactDamage;
 using Game.Modules.Core;
 using Game.Modules.Core.Components;
+using Game.Modules.Crawler;
 using Game.Modules.Health;
 using Game.Modules.Melee;
 using Game.Modules.Movement;
@@ -53,6 +54,7 @@ public static class GameBootstrapper
             new ContactDamageModule(),
             new StatusEffectAuraModule(),
             new AchievementModule(),
+            new CrawlerModule(),
         ];
 
         var mapQuery = (IMapQuery)world;

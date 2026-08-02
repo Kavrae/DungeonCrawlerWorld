@@ -3,6 +3,7 @@ using Engine.Math;
 using Game.Modules.Abilities;
 using Game.Modules.Abilities.Components;
 using Game.Modules.Core.Components;
+using Game.Modules.Crawler.Components;
 using Game.Modules.Health.Components;
 using Game.Modules.Melee;
 using Game.Modules.Movement.Components;
@@ -13,9 +14,9 @@ namespace Game.Blueprints;
 /// <summary>
 /// The player character: rendered as the ASCII-standard '@', moved by MapWindow's input
 /// handling (MovementMode.PlayerControlled -- see MovementSystem.SetNextMapPosition) rather
-/// than any algorithmic selection.
+/// than any algorithmic selection. Always a Crawler -- see CrawlerComponent's own doc comment.
 /// </summary>
-public sealed class PlayerBlueprint(MathUtility mathUtility) : IBlueprint
+public sealed class PlayerBlueprint(MathUtility mathUtility, UniqueNumberAllocator crawlerNumberAllocator) : IBlueprint
 {
     private const short MaximumHealth = 100;
     private const short HealthRegen = 10;
@@ -43,5 +44,7 @@ public sealed class PlayerBlueprint(MathUtility mathUtility) : IBlueprint
 
         componentManager.Merge(entityId, new HotkeyBindingComponent(HotkeySlot.Slot4, MeleeModule.DefaultAttackId));
         componentManager.Merge(entityId, new HotkeyBindingComponent(HotkeySlot.Slot5, PlayerTestAbilitiesModule.RangedTestAbilityId));
+
+        componentManager.Merge(entityId, new CrawlerComponent(crawlerNumberAllocator.Allocate()));
     }
 }
