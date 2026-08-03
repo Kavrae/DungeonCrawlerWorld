@@ -5,6 +5,7 @@ using Engine.Math;
 using Game.Modules.Abilities.Components;
 using Game.Modules.Core.Components;
 using Game.Modules.Health.Components;
+using Game.Modules.StatModifiers.Components;
 using Game.World;
 
 namespace Game.Modules.Abilities.Systems;
@@ -35,6 +36,7 @@ public sealed class AbilityActivationSystem : ISystem
     private readonly MultiComponentPool<AbilityInstanceComponent> _abilityInstances;
     private readonly PackedComponentPool<PendingDelayedActionComponent> _pendingDelayedActions;
     private readonly PackedComponentPool<HealthComponent> _health;
+    private readonly MultiComponentPool<StatModifierComponent>? _statModifiers;
     private readonly AbilityCatalog _abilityCatalog;
     private readonly IMapQuery _mapQuery;
     private readonly EventBus _eventBus;
@@ -50,13 +52,15 @@ public sealed class AbilityActivationSystem : ISystem
         AbilityCatalog abilityCatalog,
         IMapQuery mapQuery,
         EventBus eventBus,
-        IPlayerQuery? playerQuery)
+        IPlayerQuery? playerQuery,
+        MultiComponentPool<StatModifierComponent>? statModifiers = null)
     {
         _pendingActivations = pendingActivations;
         _actionLocks = actionLocks;
         _abilityInstances = abilityInstances;
         _pendingDelayedActions = pendingDelayedActions;
         _health = health;
+        _statModifiers = statModifiers;
         _abilityCatalog = abilityCatalog;
         _mapQuery = mapQuery;
         _eventBus = eventBus;
@@ -118,7 +122,7 @@ public sealed class AbilityActivationSystem : ISystem
             return false;
         }
 
-        AbilityEffectResolver.Apply(ability, instance, entityId, targetTiles, _mapQuery, _health, _eventBus, _playerQuery);
+        AbilityEffectResolver.Apply(ability, instance, entityId, targetTiles, _mapQuery, _health, _eventBus, _playerQuery, _statModifiers);
         ActionLockGate.Lock(_actionLocks, entityId, ability.Timing.ActionLockFrames);
         return true;
     }
@@ -138,7 +142,7 @@ public sealed class AbilityActivationSystem : ISystem
     //Note : bool to account for future casting costs.
     private bool TryActivateFreeCast(int entityId, AbilityDefinition ability, AbilityInstanceComponent instance, Vector3Int[] targetTiles)
     {
-        AbilityEffectResolver.Apply(ability, instance, entityId, targetTiles, _mapQuery, _health, _eventBus, _playerQuery);
+        AbilityEffectResolver.Apply(ability, instance, entityId, targetTiles, _mapQuery, _health, _eventBus, _playerQuery, _statModifiers);
         return true;
     }
 

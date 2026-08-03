@@ -8,6 +8,8 @@ using Game.Modules.Core;
 using Game.Modules.Core.Components;
 using Game.Modules.Health.Components;
 using Game.Modules.Movement.Components;
+using Game.Modules.StatModifiers;
+using Game.Modules.StatModifiers.Components;
 using Game.World;
 using Microsoft.Xna.Framework;
 using Microsoft.Xna.Framework.Graphics;
@@ -41,6 +43,8 @@ public sealed class MapWindow : Window
     private readonly DirectComponentPool<SpriteComponent> _spritePool;
     private readonly MultiComponentPool<NonBlockingComponent> _nonBlockingPool;
     private readonly PackedComponentPool<HealthComponent> _healthPool;
+    private readonly MultiComponentPool<StatModifierComponent>? _statModifiers;
+    private readonly PackedComponentPool<PendingDelayedActionComponent> _pendingDelayedActions;
     private readonly TileRenderer _tileRenderer;
     private readonly GlyphRenderer _glyphRenderer;
     private readonly SpriteSheetService _spriteSheetService;
@@ -90,6 +94,10 @@ public sealed class MapWindow : Window
         _spritePool = componentManager.GetDirectPool<SpriteComponent>();
         _nonBlockingPool = componentManager.GetMultiPool<NonBlockingComponent>();
         _healthPool = componentManager.GetPackedPool<HealthComponent>();
+        _statModifiers = componentManager.IsRegistered<StatModifierComponent>()
+            ? componentManager.GetMultiPool<StatModifierComponent>()
+            : null;
+        _pendingDelayedActions = componentManager.GetPackedPool<PendingDelayedActionComponent>();
         _tileRenderer = tileRenderer;
         _glyphRenderer = glyphRenderer;
         _spriteSheetService = spriteSheetService;
@@ -241,18 +249,31 @@ public sealed class MapWindow : Window
     /// from DrawSelectedTileHighlight below -- the two are conceptually distinct (ability
     /// targeting vs. the inspector's click-to-select), even though both now share the same
     /// border-plus-mask technique (see DrawMaskedTileHighlight).
+    ///
+    /// Once a Delayed ability is actually queued, Disarm already clears TargetableTiles (there's
+    /// nothing left to aim), but the player benefits from still seeing exactly which tiles are
+    /// about to be hit once the windup ends -- so this falls back to highlighting the player's
+    /// PendingDelayedActionComponent.TargetTiles (the already-resolved, locked-in footprint) in
+    /// the same red used for a confirmed hover target, for as long as that pending action exists.
     /// </summary>
     private void DrawTargetingHighlights(SpriteBatch spriteBatch, Texture2D unitRectangle)
     {
-        if (_mapViewState.TargetableTiles is not { Count: > 0 } targetableTiles)
+        if (_mapViewState.TargetableTiles is { Count: > 0 } targetableTiles)
         {
+            foreach (var tile in targetableTiles)
+            {
+                var borderColor = _abilityTargeting.HoveredFootprintContains(tile) ? HoveredTargetTileBorderColor : TargetableTileBorderColor;
+                DrawMaskedTileHighlight(spriteBatch, unitRectangle, tile.X, tile.Y, borderColor);
+            }
             return;
         }
 
-        foreach (var tile in targetableTiles)
+        if (_pendingDelayedActions.TryGetReadonly(_world.PlayerEntityId, out var pending))
         {
-            var borderColor = _abilityTargeting.HoveredFootprintContains(tile) ? HoveredTargetTileBorderColor : TargetableTileBorderColor;
-            DrawMaskedTileHighlight(spriteBatch, unitRectangle, tile.X, tile.Y, borderColor);
+            foreach (var tile in pending.TargetTiles)
+            {
+                DrawMaskedTileHighlight(spriteBatch, unitRectangle, tile.X, tile.Y, HoveredTargetTileBorderColor);
+            }
         }
     }
 
@@ -467,7 +488,13 @@ public sealed class MapWindow : Window
     /// <summary>Thin bar at the top of the entity's own footprint, above its glyph, hidden at full health. Black backdrop doubles as the outline and the "missing health" portion; the fill rect insets 1px and its width (not the outline's) scales with the health fraction.</summary>
     private void DrawHealthBar(SpriteBatch spriteBatch, Texture2D unitRectangle, int entityId, Vector2 footprintTopLeft, Vector2 footprintSize)
     {
-        if (!_healthPool.TryGetReadonly(entityId, out var health) || health.MaximumHealth <= 0 || health.CurrentHealth >= health.MaximumHealth)
+        if (!_healthPool.TryGetReadonly(entityId, out var health) || health.MaximumHealth <= 0)
+        {
+            return;
+        }
+
+        var effectiveMaximumHealth = StatModifierMath.GetEffectiveValue(_statModifiers, entityId, StatModifierTarget.MaximumHealth, health.MaximumHealth);
+        if (effectiveMaximumHealth <= 0 || health.CurrentHealth >= effectiveMaximumHealth)
         {
             return;
         }
@@ -479,7 +506,7 @@ public sealed class MapWindow : Window
         var outerRectangle = new Rectangle((int)barX, (int)barY, (int)barWidth, HealthBarHeightPixels);
         spriteBatch.Draw(unitRectangle, outerRectangle, HealthBarPalette.OutlineColor);
 
-        var healthFraction = (float)health.CurrentHealth / health.MaximumHealth;
+        var healthFraction = health.CurrentHealth / effectiveMaximumHealth;
         var innerWidth = (int)((outerRectangle.Width - 2) * healthFraction);
         if (innerWidth > 0)
         {

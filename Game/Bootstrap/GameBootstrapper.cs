@@ -16,6 +16,7 @@ using Game.Modules.Melee;
 using Game.Modules.Movement;
 using Game.Modules.Poison;
 using Game.Modules.Race;
+using Game.Modules.StatModifiers;
 using Game.Modules.StatusEffectAura;
 using Game.Modules.StatusEffects;
 using Game.World;
@@ -48,7 +49,9 @@ public static class GameBootstrapper
             new AbilitiesModule(),
             new MeleeModule(),
             new PlayerTestAbilitiesModule(),
+            new QuickCastTestModule(),
             new StatusEffectsModule(),
+            new StatModifiersModule(),
             new BurningModule(),
             new PoisonModule(),
             new ContactDamageModule(),

@@ -4,6 +4,7 @@ using Engine.Math;
 using Engine.Modules;
 using Game.Modules.Health.Components;
 using Game.Modules.Health.Systems;
+using Game.Modules.StatModifiers.Components;
 
 namespace Game.Modules.Health;
 
@@ -26,6 +27,15 @@ public sealed class HealthModule : IModule
 
     public void RegisterSystems(SystemManager systemManager, ComponentManager componentManager)
     {
-        systemManager.Register(new HealthRegenSystem(componentManager.GetPackedPool<HealthComponent>()));
+        // StatModifierComponent may not be registered at all (e.g. a test building a minimal
+        // module set without StatModifiersModule) -- HealthRegenSystem/HealthDamage both treat
+        // a null pool the same as "no active modifiers" (StatModifierMath.GetEffectiveValue
+        // returns the base value unchanged), so this stays optional rather than a hard
+        // Dependencies requirement that would force every such module list to include it.
+        var statModifiers = componentManager.IsRegistered<StatModifierComponent>()
+            ? componentManager.GetMultiPool<StatModifierComponent>()
+            : null;
+
+        systemManager.Register(new HealthRegenSystem(componentManager.GetPackedPool<HealthComponent>(), statModifiers));
     }
 }

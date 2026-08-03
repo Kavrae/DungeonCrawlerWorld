@@ -4,6 +4,7 @@ using Engine.Events;
 using Game.Modules.Health.Components;
 using Game.Modules.Poison.Components;
 using Game.Modules.Poison.Systems;
+using Game.Modules.StatModifiers.Components;
 using Game.Modules.StatusEffects;
 using Game.Modules.StatusEffects.Components;
 using Game.World;
@@ -57,11 +58,16 @@ public sealed class PoisonModule : IGameModule
             return;
         }
 
+        var statModifiers = componentManager.IsRegistered<StatModifierComponent>()
+            ? componentManager.GetMultiPool<StatModifierComponent>()
+            : null;
+
         systemManager.Register(new PoisonSystem(
             componentManager.GetPackedPool<PoisonTimerComponent>(),
             componentManager.GetMultiPool<StatusEffectStack>(),
             componentManager.GetPackedPool<HealthComponent>(),
             _eventBus,
-            _playerQuery));
+            _playerQuery,
+            statModifiers));
     }
 }

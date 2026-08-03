@@ -4,6 +4,7 @@ using Engine.Events;
 using Game.Modules.Abilities.Components;
 using Game.Modules.Core.Components;
 using Game.Modules.Health.Components;
+using Game.Modules.StatModifiers.Components;
 using Game.World;
 
 namespace Game.Modules.Abilities.Systems;
@@ -26,6 +27,7 @@ public sealed class DelayedActionSystem : ISystem
     private readonly PackedComponentPool<ActionLockComponent> _actionLocks;
     private readonly MultiComponentPool<AbilityInstanceComponent> _abilityInstances;
     private readonly PackedComponentPool<HealthComponent> _health;
+    private readonly MultiComponentPool<StatModifierComponent>? _statModifiers;
     private readonly AbilityCatalog _abilityCatalog;
     private readonly IMapQuery _mapQuery;
     private readonly EventBus _eventBus;
@@ -40,12 +42,14 @@ public sealed class DelayedActionSystem : ISystem
         AbilityCatalog abilityCatalog,
         IMapQuery mapQuery,
         EventBus eventBus,
-        IPlayerQuery? playerQuery)
+        IPlayerQuery? playerQuery,
+        MultiComponentPool<StatModifierComponent>? statModifiers = null)
     {
         _pendingActions = pendingActions;
         _actionLocks = actionLocks;
         _abilityInstances = abilityInstances;
         _health = health;
+        _statModifiers = statModifiers;
         _abilityCatalog = abilityCatalog;
         _mapQuery = mapQuery;
         _eventBus = eventBus;
@@ -70,7 +74,7 @@ public sealed class DelayedActionSystem : ISystem
             if (_abilityCatalog.TryGet(pending.AbilityId, out var ability) &&
                 AbilityInstanceQueries.TryGet(_abilityInstances, entityId, pending.AbilityId, out var instance))
             {
-                AbilityEffectResolver.Apply(ability, instance, entityId, pending.TargetTiles, _mapQuery, _health, _eventBus, _playerQuery);
+                AbilityEffectResolver.Apply(ability, instance, entityId, pending.TargetTiles, _mapQuery, _health, _eventBus, _playerQuery, _statModifiers);
             }
 
             _pendingActions.Remove(entityId);

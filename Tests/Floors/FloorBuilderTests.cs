@@ -18,6 +18,7 @@ using Game.Modules.Movement;
 using Game.Modules.Movement.Components;
 using Game.Modules.Poison;
 using Game.Modules.Race;
+using Game.Modules.StatModifiers;
 using Game.Modules.StatusEffectAura;
 using Game.Modules.StatusEffects;
 using Game.World;
@@ -54,6 +55,7 @@ public sealed class FloorBuilderTests
         [
             new CoreModule(),
             new HealthModule(),
+            new StatModifiersModule(),
             movementModule,
             new RaceModule(),
             new ClassModule(),

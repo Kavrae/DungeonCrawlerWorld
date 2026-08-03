@@ -4,6 +4,7 @@ using Engine.Events;
 using Game.Modules.Health;
 using Game.Modules.Health.Components;
 using Game.Modules.Poison.Components;
+using Game.Modules.StatModifiers.Components;
 using Game.Modules.StatusEffects;
 using Game.Modules.StatusEffects.Components;
 using Game.World;
@@ -25,6 +26,7 @@ public sealed class PoisonSystem : ISystem
     private readonly PackedComponentPool<PoisonTimerComponent> _timers;
     private readonly MultiComponentPool<StatusEffectStack> _stacks;
     private readonly PackedComponentPool<HealthComponent> _health;
+    private readonly MultiComponentPool<StatModifierComponent>? _statModifiers;
     private readonly EventBus _eventBus;
     private readonly IPlayerQuery? _playerQuery;
     private readonly List<int> _pendingTimerRemovals = [];
@@ -39,11 +41,13 @@ public sealed class PoisonSystem : ISystem
         MultiComponentPool<StatusEffectStack> stacks,
         PackedComponentPool<HealthComponent> health,
         EventBus eventBus,
-        IPlayerQuery? playerQuery)
+        IPlayerQuery? playerQuery,
+        MultiComponentPool<StatModifierComponent>? statModifiers = null)
     {
         _timers = timers;
         _stacks = stacks;
         _health = health;
+        _statModifiers = statModifiers;
         _eventBus = eventBus;
         _playerQuery = playerQuery;
         _tick = Tick;
@@ -55,7 +59,7 @@ public sealed class PoisonSystem : ISystem
     /// <summary>Returns whether the timer should be removed entirely (duration expired) -- see CountdownTicker.Tick's own doc comment for the contract. Drains every Poison stack itself before reporting removal, since that's a separate pool CountdownTicker knows nothing about (contrast BurningSystem, which only ever removes a single stack per tick, so it doesn't need this).</summary>
     private bool Tick(int entityId, PoisonTimerComponent timer)
     {
-        HealthDamage.Apply(_health, _eventBus, entityId, (short)timer.StackCount, timer.Source, _playerQuery, StatusEffectDamageType.Describe(StatusEffectType.Poison));
+        HealthDamage.Apply(_health, _eventBus, entityId, (short)timer.StackCount, timer.Source, _playerQuery, StatusEffectDamageType.Describe(StatusEffectType.Poison), _statModifiers);
 
         var remainingDuration = timer.RemainingDurationTicks - 1;
         if (remainingDuration <= 0)

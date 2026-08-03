@@ -4,6 +4,7 @@ using Engine.Events;
 using Game.Modules.ContactDamage.Components;
 using Game.Modules.Health;
 using Game.Modules.Health.Components;
+using Game.Modules.StatModifiers.Components;
 using Game.World;
 
 namespace Game.Modules.ContactDamage.Systems;
@@ -37,6 +38,7 @@ public sealed class ContactDamageSystem : ISystem
     private readonly PackedComponentPool<DamageOnContactComponent> _hazards;
     private readonly PackedComponentPool<ContactDamageExposureComponent> _exposures;
     private readonly PackedComponentPool<HealthComponent> _health;
+    private readonly MultiComponentPool<StatModifierComponent>? _statModifiers;
     private readonly EventBus _eventBus;
     private readonly IMapQuery _mapQuery;
     private readonly IPlayerQuery? _playerQuery;
@@ -61,11 +63,13 @@ public sealed class ContactDamageSystem : ISystem
         EventBus eventBus,
         IMapQuery mapQuery,
         IPlayerQuery? playerQuery,
-        FrameEventBuffer<EntityMoved> movedEntities)
+        FrameEventBuffer<EntityMoved> movedEntities,
+        MultiComponentPool<StatModifierComponent>? statModifiers = null)
     {
         _hazards = hazards;
         _exposures = exposures;
         _health = health;
+        _statModifiers = statModifiers;
         _eventBus = eventBus;
         _mapQuery = mapQuery;
         _playerQuery = playerQuery;
@@ -78,7 +82,7 @@ public sealed class ContactDamageSystem : ISystem
         var terrainEntityId = _mapQuery.GetTerrainEntityIdAt(moved.NewPosition);
         if (terrainEntityId != -1 && _hazards.TryGetReadonly(terrainEntityId, out var hazard))
         {
-            HealthDamage.Apply(_health, _eventBus, moved.EntityId, hazard.DamagePerTick, StatusEffectSource.FromEntity(terrainEntityId), _playerQuery, "Contact");
+            HealthDamage.Apply(_health, _eventBus, moved.EntityId, hazard.DamagePerTick, StatusEffectSource.FromEntity(terrainEntityId), _playerQuery, "Contact", _statModifiers);
 
             if (_exposures.Has(moved.EntityId))
             {
@@ -119,7 +123,7 @@ public sealed class ContactDamageSystem : ISystem
             return false;
         }
 
-        HealthDamage.Apply(_health, _eventBus, entityId, hazard.DamagePerTick, StatusEffectSource.FromEntity(exposure.SourceEntityId), _playerQuery, "Contact");
+        HealthDamage.Apply(_health, _eventBus, entityId, hazard.DamagePerTick, StatusEffectSource.FromEntity(exposure.SourceEntityId), _playerQuery, "Contact", _statModifiers);
 
         _exposures.TryUpdate(entityId, hazard.TickIntervalFrames, static (ref ContactDamageExposureComponent e, int tickIntervalFrames) => e.FramesUntilNextTick = tickIntervalFrames);
 

@@ -1,4 +1,7 @@
+using Engine.ECS.Components;
+using Engine.ECS.Components.Stores;
 using Engine.Events;
+using Game.Modules.Core.Components;
 using Game.World;
 
 namespace Game.Diagnostics;
@@ -12,14 +15,16 @@ namespace Game.Diagnostics;
 public sealed class PlayerActivityLog : IDisposable
 {
     private readonly Game.World.World _world;
+    private readonly DirectComponentPool<DisplayTextComponent> _displayTextPool;
     private readonly StreamWriter _writer;
 
     private int _currentFrameCount;
     private DateTime _currentTimestamp;
 
-    public PlayerActivityLog(Game.World.World world, EventBus eventBus, string logFilePath)
+    public PlayerActivityLog(Game.World.World world, ComponentManager componentManager, EventBus eventBus, string logFilePath)
     {
         _world = world;
+        _displayTextPool = componentManager.GetDirectPool<DisplayTextComponent>();
 
         var logDirectory = Path.GetDirectoryName(logFilePath);
         if (!string.IsNullOrEmpty(logDirectory))
@@ -54,15 +59,37 @@ public sealed class PlayerActivityLog : IDisposable
         Write($"MOVE from={moved.OldPosition} to={moved.NewPosition}");
     }
 
+    /// <summary>
+    /// Logs both directions the player can appear in a damage event: damage taken (EntityId is
+    /// the player) and damage dealt to an NPC (Source is the player -- HealthDamage.Apply
+    /// already publishes this case too, see its own playerInvolved check; only this log's own
+    /// EntityId-only filter was dropping it). Target is logged explicitly now that EntityId
+    /// isn't always the player, unlike before.
+    /// </summary>
     private void OnEntityDamaged(EntityDamaged damaged)
     {
-        if (damaged.EntityId != _world.PlayerEntityId)
+        var playerIsTarget = damaged.EntityId == _world.PlayerEntityId;
+        var playerIsSource = damaged.Source.Kind == StatusEffectSourceKind.Entity && damaged.Source.EntityId == _world.PlayerEntityId;
+
+        if (!playerIsTarget && !playerIsSource)
         {
             return;
         }
 
-        Write($"DAMAGE amount={damaged.Amount} type={damaged.DamageType} source={damaged.Source} currentHealth={damaged.CurrentHealth} maximumHealth={damaged.MaximumHealth}");
+        Write($"DAMAGE amount={damaged.Amount} type={damaged.DamageType} source={DescribeSource(damaged.Source)} target={DescribeEntity(damaged.EntityId)} currentHealth={damaged.CurrentHealth} maximumHealth={damaged.MaximumHealth}");
     }
+
+    /// <summary>entityId alone, or "entityId (Name)" if the entity has a DisplayTextComponent -- shared by both the source and target sides of a DAMAGE line.</summary>
+    private string DescribeEntity(int entityId) =>
+        _displayTextPool.TryGetReadonly(entityId, out var displayText)
+            ? $"{displayText.Name} (#{entityId})"
+            : entityId.ToString();
+
+    /// <summary>Admin/AI sources have no entity to name (StatusEffectSource.ToString() already covers them); an Entity source reuses DescribeEntity for its numeric+name part.</summary>
+    private string DescribeSource(StatusEffectSource source) =>
+        source.Kind == StatusEffectSourceKind.Entity
+            ? DescribeEntity(source.EntityId)
+            : source.ToString();
 
     private void Write(string message) =>
         _writer.WriteLine($"[{_currentTimestamp:O}] [Frame {_currentFrameCount}] {message}");

@@ -101,7 +101,7 @@ public sealed class GameLoop : Microsoft.Xna.Framework.Game
         FloorBuilder.PopulateFloor(_world, _ecsContext, _mathUtility, _crawlerNumberAllocator);
 
         var logFilePath = Path.Combine(FindProjectRoot(), "Log", "player-activity.log");
-        _playerActivityLog = new PlayerActivityLog(_world, _ecsContext.EventBus, logFilePath);
+        _playerActivityLog = new PlayerActivityLog(_world, _ecsContext.ComponentManager, _ecsContext.EventBus, logFilePath);
         Console.WriteLine($"[PlayerActivityLog] Writing to {logFilePath}");
 
         _presentation = PresentationBootstrapper.Build(GraphicsDevice, "Fonts", "Spritesheets");

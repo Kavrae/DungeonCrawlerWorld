@@ -48,6 +48,9 @@ public static class TargetShapeResolver
             case TargetShape.Cone:
                 ResolveCone(origin, cursorTile, range, mapSize, results);
                 break;
+            case TargetShape.Self:
+                results.Add(origin);
+                break;
         }
     }
 

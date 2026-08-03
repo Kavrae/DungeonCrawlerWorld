@@ -36,7 +36,7 @@ public sealed class PlayerTestAbilitiesModule : IGameModule
             "*",
             new AbilityTargeting(TargetShape.Burst, RangedTestAbilityRange, RangedTestAbilityAreaSize),
             new AbilityTiming(ActionTimingCategory.Immediate, ActionLockFrames: RangedTestAbilityActionLockFrames, CooldownFrames: null),
-            new AbilityEffect(DamageAmount: 10, StatusEffects: [])));
+            new AbilityEffect(DamageAmount: 10, StatusEffects: [], StatModifierGrants: [])));
     }
 
     public void RegisterComponents(ComponentManager componentManager)

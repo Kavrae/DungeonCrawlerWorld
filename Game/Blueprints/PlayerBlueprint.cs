@@ -7,6 +7,9 @@ using Game.Modules.Crawler.Components;
 using Game.Modules.Health.Components;
 using Game.Modules.Melee;
 using Game.Modules.Movement.Components;
+using Game.Modules.StatModifiers;
+using Game.Modules.StatModifiers.Components;
+using Game.World;
 using Microsoft.Xna.Framework;
 
 namespace Game.Blueprints;
@@ -27,6 +30,13 @@ public sealed class PlayerBlueprint(MathUtility mathUtility, UniqueNumberAllocat
     /// <summary>TEMPORARY -- see PlayerTestAbilitiesModule's own doc comment.</summary>
     private const short RangedTestAbilityDamage = 10;
 
+    /// <summary>TEMPORARY -- see QuickCastTestModule's own doc comment.</summary>
+    private const short RangedTestDebuffDamage = 20;
+
+    /// <summary>PermanentHybridBuffTest -- exercises a permanent modifier granting both a flat and a percentage bonus at once. See StatModifierComponent's own doc comment for why this never mutates HealthComponent/AbilityInstanceComponent directly.</summary>
+    private const float PermanentOutgoingDamageBonus = 2f;
+    private const float PermanentMaximumHealthMultiplierBonus = 0.5f;
+
     public void Build(ComponentManager componentManager, int entityId)
     {
         componentManager.Merge(entityId, new GlyphComponent("@", Color.White));
@@ -41,10 +51,21 @@ public sealed class PlayerBlueprint(MathUtility mathUtility, UniqueNumberAllocat
 
         componentManager.Merge(entityId, new AbilityInstanceComponent(MeleeModule.DefaultAttackId, damageAmount: DefaultAttackDamage, cooldownFramesRemaining: 0));
         componentManager.Merge(entityId, new AbilityInstanceComponent(PlayerTestAbilitiesModule.RangedTestAbilityId, damageAmount: RangedTestAbilityDamage, cooldownFramesRemaining: 0));
+        componentManager.Merge(entityId, new AbilityInstanceComponent(QuickCastTestModule.QuickCastAbilityId, damageAmount: 0, cooldownFramesRemaining: 0));
+        componentManager.Merge(entityId, new AbilityInstanceComponent(QuickCastTestModule.RangedTestDebuffAbilityId, damageAmount: RangedTestDebuffDamage, cooldownFramesRemaining: 0));
 
         componentManager.Merge(entityId, new HotkeyBindingComponent(HotkeySlot.Slot4, MeleeModule.DefaultAttackId));
         componentManager.Merge(entityId, new HotkeyBindingComponent(HotkeySlot.Slot5, PlayerTestAbilitiesModule.RangedTestAbilityId));
+        componentManager.Merge(entityId, new HotkeyBindingComponent(HotkeySlot.Slot6, QuickCastTestModule.QuickCastAbilityId));
+        componentManager.Merge(entityId, new HotkeyBindingComponent(HotkeySlot.Slot7, QuickCastTestModule.RangedTestDebuffAbilityId));
 
         componentManager.Merge(entityId, new CrawlerComponent(crawlerNumberAllocator.Allocate()));
+
+        componentManager.Merge(entityId, new DisplayTextComponent("Player1", "This is you. What else did you expect?"));
+
+        StatModifierEffects.Apply(componentManager, entityId, StatModifierTarget.OutgoingDamage, StatModifierOperation.Additive, StatModifierPolarity.Buff,
+            canModify: true, magnitude: PermanentOutgoingDamageBonus, durationFrames: StatModifierComponent.Permanent, StatusEffectSource.Admin);
+        StatModifierEffects.Apply(componentManager, entityId, StatModifierTarget.MaximumHealth, StatModifierOperation.Multiplicative, StatModifierPolarity.Buff,
+            canModify: true, magnitude: PermanentMaximumHealthMultiplierBonus, durationFrames: StatModifierComponent.Permanent, StatusEffectSource.Admin);
     }
 }

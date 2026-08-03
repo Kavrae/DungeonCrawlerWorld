@@ -23,4 +23,7 @@ public enum TargetShape
 
     /// <summary>A diamond-shaped area of Range tiles centered on the cursor.</summary>
     Burst,
+
+    /// <summary>The caster's own tile only -- no cursor/range involved. For no-target self-cast abilities (e.g. a self-buff); ignores whatever tile was clicked/hovered, the same way Adjacent ignores it.</summary>
+    Self
 }

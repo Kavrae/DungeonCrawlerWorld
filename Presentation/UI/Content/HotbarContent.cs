@@ -129,17 +129,24 @@ public sealed class HotbarContent(World world, MapViewState mapViewState, Compon
         }
     }
 
-    /// <summary>The greater of the shared ActionLock's fraction (Immediate/Delayed only) and the granted instance's own cooldown fraction (any category, if it has one) -- see this class's own doc comment.</summary>
+    /// <summary>
+    /// The granted instance's own cooldown fraction (any category, if it has one) whenever it's
+    /// actually counting down; only otherwise falls back to the shared ActionLock's fraction
+    /// (Immediate/Delayed only -- FreeCast bypasses the shared lock entirely).
+    ///
+    /// The shared ActionLock is genuinely shared across every Immediate/Delayed ability, not
+    /// scoped to whichever one actually set it -- so if this were always taken as
+    /// Math.Max(lockFraction, cooldownFraction), using a *different* ability (e.g. Default
+    /// Attack's short windup) while this one's own, longer, real cooldown is ticking down would
+    /// make this icon spike to whatever fraction that unrelated windup happens to be at, then
+    /// visibly snap back down once the windup ends -- confusing/wrong, since nothing about this
+    /// ability's own readiness actually changed. Preferring cooldownFraction whenever it's
+    /// nonzero avoids that: this ability's own cooldown is always the more specific, more
+    /// correct signal once it exists, so the shared lock only ever matters for an ability with no
+    /// cooldown of its own (e.g. Default Attack), where it's still the only fill signal available.
+    /// </summary>
     private float ComputeFillPercentage(int playerEntityId, AbilityDefinition ability)
     {
-        var lockFraction = 0f;
-        if (ability.Timing.Category != ActionTimingCategory.FreeCast &&
-            _actionLocks.TryGetReadonly(playerEntityId, out var actionLock) &&
-            actionLock.TotalLockFrames > 0)
-        {
-            lockFraction = (float)actionLock.LockFramesRemaining / actionLock.TotalLockFrames;
-        }
-
         var cooldownFraction = 0f;
         if (ability.Timing.CooldownFrames is { } cooldownFrames &&
             cooldownFrames > 0 &&
@@ -148,6 +155,18 @@ public sealed class HotbarContent(World world, MapViewState mapViewState, Compon
             cooldownFraction = (float)instance.CooldownFramesRemaining / cooldownFrames;
         }
 
-        return System.Math.Max(lockFraction, cooldownFraction);
+        if (cooldownFraction > 0f)
+        {
+            return cooldownFraction;
+        }
+
+        if (ability.Timing.Category != ActionTimingCategory.FreeCast &&
+            _actionLocks.TryGetReadonly(playerEntityId, out var actionLock) &&
+            actionLock.TotalLockFrames > 0)
+        {
+            return (float)actionLock.LockFramesRemaining / actionLock.TotalLockFrames;
+        }
+
+        return 0f;
     }
 }

@@ -34,7 +34,7 @@ public sealed class MeleeModule : IGameModule
             "/",
             new AbilityTargeting(TargetShape.Line, Range: 2),
             new AbilityTiming(ActionTimingCategory.Immediate, ActionLockFrames: DefaultAttackActionLockFrames, CooldownFrames: null),
-            new AbilityEffect(DamageAmount: 0, StatusEffects: [])));
+            new AbilityEffect(DamageAmount: 0, StatusEffects: [], StatModifierGrants: [])));
     }
 
     public void RegisterComponents(ComponentManager componentManager)

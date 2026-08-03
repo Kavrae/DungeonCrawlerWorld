@@ -1,6 +1,8 @@
 using Engine.ECS.Components;
 using Engine.ECS.Components.Stores;
 using Game.Modules.Health.Components;
+using Game.Modules.StatModifiers;
+using Game.Modules.StatModifiers.Components;
 using Game.World;
 using Microsoft.Xna.Framework;
 using Microsoft.Xna.Framework.Graphics;
@@ -27,6 +29,12 @@ public sealed class PlayerHealthBarContent(World world, ComponentManager compone
 
     private readonly PackedComponentPool<HealthComponent> _healthPool = componentManager.GetPackedPool<HealthComponent>();
 
+    // Optional -- see StatModifierMath.GetEffectiveValue's own doc comment for why a null pool
+    // (StatModifiersModule not registered) is treated the same as "no active modifiers."
+    private readonly MultiComponentPool<StatModifierComponent>? _statModifiers = componentManager.IsRegistered<StatModifierComponent>()
+        ? componentManager.GetMultiPool<StatModifierComponent>()
+        : null;
+
     private Window _hostWindow = null!;
 
     public void Initialize(Window hostWindow) => _hostWindow = hostWindow;
@@ -44,8 +52,14 @@ public sealed class PlayerHealthBarContent(World world, ComponentManager compone
         var outerRectangle = new Rectangle((int)origin.X, (int)origin.Y, (int)contentSize.X, (int)contentSize.Y);
         spriteBatch.Draw(unitRectangle, outerRectangle, HealthBarPalette.OutlineColor);
 
-        var hasHealth = _healthPool.TryGetReadonly(world.PlayerEntityId, out var health) && health.MaximumHealth > 0;
-        var healthFraction = hasHealth ? (float)health.CurrentHealth / health.MaximumHealth : 1f;
+        var playerEntityId = world.PlayerEntityId;
+        var hasHealth = _healthPool.TryGetReadonly(playerEntityId, out var health) && health.MaximumHealth > 0;
+        var effectiveMaximumHealth = hasHealth
+            ? StatModifierMath.GetEffectiveValue(_statModifiers, playerEntityId, StatModifierTarget.MaximumHealth, health.MaximumHealth)
+            : 0f;
+        var healthFraction = hasHealth && effectiveMaximumHealth > 0
+            ? MathHelper.Clamp(health.CurrentHealth / effectiveMaximumHealth, 0f, 1f)
+            : 1f;
         var fillColor = hasHealth ? HealthBarPalette.FractionColor(healthFraction) : NoHealthColor;
 
         var innerWidth = (int)((outerRectangle.Width - 2) * healthFraction);

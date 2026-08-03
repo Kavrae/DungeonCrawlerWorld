@@ -4,6 +4,7 @@ using Engine.Events;
 using Game.Modules.Burning.Components;
 using Game.Modules.Health;
 using Game.Modules.Health.Components;
+using Game.Modules.StatModifiers.Components;
 using Game.Modules.StatusEffects;
 using Game.Modules.StatusEffects.Components;
 using Game.World;
@@ -27,6 +28,7 @@ public sealed class BurningSystem : ISystem
     private readonly PackedComponentPool<BurningTimerComponent> _timers;
     private readonly MultiComponentPool<StatusEffectStack> _stacks;
     private readonly PackedComponentPool<HealthComponent> _health;
+    private readonly MultiComponentPool<StatModifierComponent>? _statModifiers;
     private readonly EventBus _eventBus;
     private readonly IPlayerQuery? _playerQuery;
     private readonly EntityStripeSet _stripeSet;
@@ -42,11 +44,13 @@ public sealed class BurningSystem : ISystem
         MultiComponentPool<StatusEffectStack> stacks,
         PackedComponentPool<HealthComponent> health,
         EventBus eventBus,
-        IPlayerQuery? playerQuery)
+        IPlayerQuery? playerQuery,
+        MultiComponentPool<StatModifierComponent>? statModifiers = null)
     {
         _timers = timers;
         _stacks = stacks;
         _health = health;
+        _statModifiers = statModifiers;
         _eventBus = eventBus;
         _playerQuery = playerQuery;
         _tick = Tick;
@@ -82,7 +86,7 @@ public sealed class BurningSystem : ISystem
             }
         }
 
-        HealthDamage.Apply(_health, _eventBus, entityId, (short)stackCount, source, _playerQuery, StatusEffectDamageType.Describe(StatusEffectType.Burning));
+        HealthDamage.Apply(_health, _eventBus, entityId, (short)stackCount, source, _playerQuery, StatusEffectDamageType.Describe(StatusEffectType.Burning), _statModifiers);
         _stacks.RemoveByDenseIndex(foundDenseIndex);
 
         var remainingStacks = stackCount - 1;

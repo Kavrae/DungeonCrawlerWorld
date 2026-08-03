@@ -5,6 +5,7 @@ using Game.Modules.ContactDamage.Components;
 using Game.Modules.ContactDamage.Systems;
 using Game.Modules.Health.Components;
 using Game.Modules.Movement;
+using Game.Modules.StatModifiers.Components;
 using Game.World;
 
 namespace Game.Modules.ContactDamage;
@@ -50,6 +51,10 @@ public sealed class ContactDamageModule : IGameModule
             return;
         }
 
+        var statModifiers = componentManager.IsRegistered<StatModifierComponent>()
+            ? componentManager.GetMultiPool<StatModifierComponent>()
+            : null;
+
         systemManager.Register(new ContactDamageSystem(
             componentManager.GetPackedPool<DamageOnContactComponent>(),
             componentManager.GetPackedPool<ContactDamageExposureComponent>(),
@@ -57,6 +62,7 @@ public sealed class ContactDamageModule : IGameModule
             _eventBus,
             _mapQuery,
             _playerQuery,
-            _movedEntities));
+            _movedEntities,
+            statModifiers));
     }
 }

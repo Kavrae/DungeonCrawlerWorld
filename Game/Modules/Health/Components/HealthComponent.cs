@@ -17,6 +17,6 @@ public struct HealthComponent(short currentHealth, short healthRegen, short maxi
     // the debug inspector that calls ToString() on whatever an entity actually has.
     public override readonly string ToString() =>
         MaximumHealth > 0
-            ? StringUtility.BuildPercentageBar("HP", CurrentHealth, MaximumHealth, 20)
+            ? $"{StringUtility.BuildPercentageBar("HP", CurrentHealth, MaximumHealth, 20)} {CurrentHealth}/{MaximumHealth}"
             : $"HP : [invalid MaximumHealth: {MaximumHealth}]";
 }

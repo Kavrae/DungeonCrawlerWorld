@@ -4,6 +4,7 @@ using Engine.Events;
 using Game.Modules.Burning.Components;
 using Game.Modules.Burning.Systems;
 using Game.Modules.Health.Components;
+using Game.Modules.StatModifiers.Components;
 using Game.Modules.StatusEffects;
 using Game.Modules.StatusEffects.Components;
 using Game.World;
@@ -44,11 +45,16 @@ public sealed class BurningModule : IGameModule
             return;
         }
 
+        var statModifiers = componentManager.IsRegistered<StatModifierComponent>()
+            ? componentManager.GetMultiPool<StatModifierComponent>()
+            : null;
+
         systemManager.Register(new BurningSystem(
             componentManager.GetPackedPool<BurningTimerComponent>(),
             componentManager.GetMultiPool<StatusEffectStack>(),
             componentManager.GetPackedPool<HealthComponent>(),
             _eventBus,
-            _playerQuery));
+            _playerQuery,
+            statModifiers));
     }
 }

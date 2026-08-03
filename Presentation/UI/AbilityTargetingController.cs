@@ -340,6 +340,16 @@ public sealed class AbilityTargetingController(
             return;
         }
 
+        // Self's only candidate tile is the caster's own position, which the occupied-tile
+        // filter below would always exclude (it deliberately drops tiles occupied by the
+        // caster itself, meant for every *other* shape) -- so Self needs its own direct
+        // resolve/queue, the same as Adjacent above, rather than falling through into that filter.
+        if (ability.Targeting.Shape == TargetShape.Self)
+        {
+            QueueActivation(entityId, abilityId, [attackerPosition]);
+            return;
+        }
+
         ComputeTargetableTiles(attackerPosition, ability, _candidateTilesBuffer);
 
         _occupiedCandidateTilesBuffer.Clear();

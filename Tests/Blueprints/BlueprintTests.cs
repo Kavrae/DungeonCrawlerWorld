@@ -26,6 +26,7 @@ using Game.Modules.Movement;
 using Game.Modules.Movement.Components;
 using Game.Modules.Race;
 using Game.Modules.Race.Components;
+using Game.Modules.StatModifiers;
 using Game.World;
 
 namespace Tests.Blueprints;
@@ -49,6 +50,7 @@ public sealed class BlueprintTests
         [
             new CoreModule(),
             new HealthModule(),
+            new StatModifiersModule(),
             movementModule,
             new RaceModule(),
             new ClassModule(),
