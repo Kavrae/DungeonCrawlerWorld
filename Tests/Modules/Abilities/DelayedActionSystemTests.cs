@@ -64,7 +64,9 @@ public sealed class DelayedActionSystemTests
             abilityCatalog,
             mapQuery,
             eventBus,
-            playerQuery: null);
+            playerQuery: null,
+            new StatusEffectAuraApplierRegistry(),
+            componentManager);
 
         return (system, componentManager, mapQuery, eventBus);
     }

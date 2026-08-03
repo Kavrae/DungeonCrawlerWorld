@@ -6,14 +6,19 @@ using Game.Modules.Abilities.Systems;
 using Game.Modules.Core.Components;
 using Game.Modules.Health.Components;
 using Game.Modules.StatModifiers.Components;
+using Game.Modules.StatusEffects;
 using Game.World;
 
 namespace Game.Modules.Abilities;
 
 /// <summary>
 /// Parameterless (required for runtime discovery) with its runtime dependencies (AbilityCatalog,
-/// IMapQuery, EventBus, IPlayerQuery) supplied via IGameModule.Configure instead of the
-/// constructor.
+/// IMapQuery, EventBus, IPlayerQuery, StatusEffectAuraApplierRegistry) supplied via
+/// IGameModule.Configure instead of the constructor. No hard Dependencies on StatusEffectsModule:
+/// GameModuleContext.StatusEffectAuraAppliers is always a live, shared registry regardless of
+/// which effect modules (if any) are loaded -- AbilityEffectResolver's StatusEffects grant is a
+/// graceful no-op (TryGet returning false) for any StatusEffectType nothing registered an
+/// applier for, the same optional treatment StatModifierComponent/HealthComponent already get.
 /// </summary>
 public sealed class AbilitiesModule : IGameModule
 {
@@ -25,6 +30,7 @@ public sealed class AbilitiesModule : IGameModule
     private IMapQuery _mapQuery = null!;
     private EventBus _eventBus = null!;
     private IPlayerQuery? _playerQuery;
+    private StatusEffectAuraApplierRegistry _statusEffectAppliers = null!;
 
     public void Configure(GameModuleContext context)
     {
@@ -32,6 +38,7 @@ public sealed class AbilitiesModule : IGameModule
         _mapQuery = context.MapQuery;
         _eventBus = context.EventBus;
         _playerQuery = context.PlayerQuery;
+        _statusEffectAppliers = context.StatusEffectAuraAppliers;
     }
 
     public void RegisterComponents(ComponentManager componentManager)
@@ -66,6 +73,8 @@ public sealed class AbilitiesModule : IGameModule
             _mapQuery,
             _eventBus,
             _playerQuery,
+            _statusEffectAppliers,
+            componentManager,
             statModifiers));
 
         systemManager.Register(new AbilityActivationSystem(
@@ -78,6 +87,8 @@ public sealed class AbilitiesModule : IGameModule
             _mapQuery,
             _eventBus,
             _playerQuery,
+            _statusEffectAppliers,
+            componentManager,
             statModifiers));
     }
 }

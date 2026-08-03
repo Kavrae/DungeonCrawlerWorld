@@ -2,6 +2,7 @@ using Engine.ECS.Components;
 using Engine.ECS.Components.Stores;
 using FontStashSharp;
 using Game.Modules.Burning;
+using Game.Modules.Paralysis;
 using Game.Modules.Poison;
 using Game.Modules.StatusEffects;
 using Game.Modules.StatusEffects.Components;
@@ -75,6 +76,7 @@ public sealed class PlayerStatusEffectsContent(World world, ComponentManager com
     {
         StatusEffectType.Burning => BurningEffects.Glyph,
         StatusEffectType.Poison => PoisonEffects.Glyph,
+        StatusEffectType.Paralysis => ParalysisEffects.Glyph,
         _ => "?",
     };
 
@@ -83,6 +85,7 @@ public sealed class PlayerStatusEffectsContent(World world, ComponentManager com
     {
         StatusEffectType.Burning => Color.Red,
         StatusEffectType.Poison => Color.DarkGreen,
+        StatusEffectType.Paralysis => Color.Yellow,
         _ => Color.Black,
     };
 }

@@ -16,25 +16,6 @@ Infinite storage per entity. The player character will carry a large amount (hun
 
 Engine-side equipment support (slots, equip/unequip mechanics). Companion to the Game-layer equipment rules and the Presentation-layer equipment menu below.
 
-#### Generic status-effect system
-
-The occupancy markers (`NonBlockingComponent`/`ForceBlockingComponent`) are `MultiComponentPool`-backed "many independent sources, count-based" components -- a reasonable, low-risk special case for exactly two boolean occupancy questions. Do **not** copy that pattern (a bespoke marker-component type plus a hand-written precedence function) for every future buff/debuff once real effect variety shows up (dozens of effects on the player character, overlapping sources assumed throughout) -- it doesn't scale:
-
-- Most real buffs carry data (magnitude, remaining duration, source), not just presence -- Burning already needs this (see its own TODO item under Game below: damage decreases over time, stacks increase both).
-- Precedence/interaction relationships between many effect types multiply, not add, and become impossible to audit as N separate "if pool A has, else if pool B has" checks hand-written and scattered across whichever system happens to care about each one.
-
-When that need arrives: build a generic "active effect" record (`EffectType` id/enum, `SourceEntityId`, `RemainingDuration`, `Magnitude`), still `MultiComponentPool`-backed since overlapping sources/stacking is the same requirement either way, with a small number of *derived-question* functions (`IsBlocking`, `IsStunned`, `GetSpeedMultiplier`, etc.) each independently scanning the relevant subset of active effects and applying its own precedence rule -- structurally the same shape `IsBlocking` already is, just generalized from two dedicated pools to filtering one shared effects table.
-
-Worth revisiting sooner rather than later given the new melee-attack item (under Game, High) explicitly wants status effects applicable to entities without hit points -- that's exactly the kind of effect this system is meant to generalize.
-
-#### Additive and multiplicative bonuses
-
-A general way to combine multiple simultaneous stat modifiers -- from equipment, buffs/debuffs, race, class, etc. -- needs both additive (flat `+N`) and multiplicative (`xN%`) stacking, with a defined, fixed order of operations: conventionally, sum every additive modifier onto the base value first, then apply every multiplicative modifier to that sum -- not interleaved in whatever order modifiers happen to be applied, which would make the same modifier set produce different results depending on ordering (confusing for a player to reason about, and hard to write a test for).
-
-Directly related to the generic status-effect system above -- `Magnitude` there is exactly this kind of value, and the derived-question functions it proposes (`GetSpeedMultiplier`, etc.) are where additive/multiplicative combination would actually get applied. Also directly relevant to the new stats items under Game/Presentation (stat points, buffs/debuffs) and equipment above.
-
-Concretely blocked on this now: Engineer's class-level +1 melee damage bonus (deferred rather than special-cased into the ability system -- see the Melee attack implementation item), and more generally, any ability's damage/cooldown/Action Lock frames/status effects needing modification both persistently (race/class/equipment) and temporarily (a cast-time buff spell), not just flat stat bonuses. Fold into this same design pass rather than a separate one; it's the same underlying requirement (sum additive modifiers, then apply multiplicative ones, fixed order) applied to ability data instead of raw stats.
-
 #### Explore the C# `Span<T>` structure for component storage
 
 Component pools (`DirectComponentPool<T>`/`PackedComponentPool<T>`/`MultiComponentPool<T>`, `Engine/ECS/Components/Stores`) are hot-path -- called every frame, per striped system (see `SystemManager`/`EntityStripeSet` in CLAUDE.md's ECS notes). Worth spiking whether exposing pool data as `Span<T>`/`ReadOnlySpan<T>` (bulk contiguous access, no per-element bounds-check/indirection, no allocation) is a meaningful win over the current per-entity-id indexed access pattern, particularly for systems that process most or all of a pool's population rather than a scattered subset.
@@ -57,7 +38,7 @@ Item interactions, storage rules, restricted items, etc. Governs how the Engine-
 
 #### Melee attack implementation
 
-For NPCs and the player. Attacking sets the same shared ActionLockComponent that movement sets on a successful move, creating a tactical decision between moving more vs. attacking more -- choosing to attack this window means not moving this window, and vice versa. Can target any entity one tile away that has physical collision -- even entities without hit points, since this allows status effects to be applied to otherwise-immortal entities. Depends on the Engine-layer generic status-effect system above for the "immortal but affectable" case.
+For NPCs and the player. Attacking sets the same shared ActionLockComponent that movement sets on a successful move, creating a tactical decision between moving more vs. attacking more -- choosing to attack this window means not moving this window, and vice versa. Can target any entity one tile away that has physical collision -- even entities without hit points, since this allows status effects to be applied to otherwise-immortal entities. The "immortal but affectable" case is proven out already: `AbilityEffectResolver` grants `AbilityEffect.StatusEffects` through the shared `StatusEffectAuraApplierRegistry` (`Game/Modules/StatusEffects/`) regardless of whether the target has a `HealthComponent`, and `MeleeModule`'s Default Attack grants Paralysis (`Game/Modules/Paralysis/`) this way today.
 
 #### Death at 0 HP
 
@@ -98,6 +79,10 @@ Defeat enemies to get experience points. Each class gets different stats, abilit
 - Goes away when damage hits 0
 - Can stack to increase damage and duration (so multiplicatively worse)
 - Gets worse for each movement the entity ends in lava
+
+#### Petrification status effect
+
+Distinct from Paralysis (`Game/Modules/Paralysis/`, which only locks `ActionLockComponent` and tracks its own `StatusEffectStack` entry) -- Petrification additionally turns the target to stone, forcing it to become `ForceBlockingComponent`-blocking for its duration regardless of the target's normal blocking state (`Game/Modules/Core/Components/ForceBlockingComponent.cs`, precedence in `World.IsBlocking`). That makes it a real map-occupancy problem, not just an ActionLock one: `Map` only tracks one Blocking occupant per `(x,y,MapLayer)` slot (see CLAUDE.md's World & Map notes), so turning an already-non-blocking or currently-moving entity into a forced-blocking one while it may be sharing a tile with another Blocking or non-Blocking occupant has no defined resolution policy yet -- what happens to whichever entity/tile already held the Blocking slot, whether a Tiny/Phasing entity petrifying mid-overlap becomes the new sole occupant or is rejected, etc. Needs its own design pass through `World`/`Map` placement logic, not a drop-in extension of `ParalysisEffects.Apply`.
 
 #### Goblins attack adjacent targets with default melee instead of moving
 

@@ -14,6 +14,7 @@ using Game.Modules.Crawler;
 using Game.Modules.Health;
 using Game.Modules.Melee;
 using Game.Modules.Movement;
+using Game.Modules.Paralysis;
 using Game.Modules.Poison;
 using Game.Modules.Race;
 using Game.Modules.StatModifiers;
@@ -54,6 +55,7 @@ public static class GameBootstrapper
             new StatModifiersModule(),
             new BurningModule(),
             new PoisonModule(),
+            new ParalysisModule(),
             new ContactDamageModule(),
             new StatusEffectAuraModule(),
             new AchievementModule(),

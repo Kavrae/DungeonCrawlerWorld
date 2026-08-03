@@ -98,7 +98,9 @@ public sealed class AbilityActivationSystemTests
             abilityCatalog,
             mapQuery,
             eventBus,
-            playerQuery: null);
+            playerQuery: null,
+            new StatusEffectAuraApplierRegistry(),
+            componentManager);
 
         return (system, componentManager, abilityCatalog, mapQuery);
     }

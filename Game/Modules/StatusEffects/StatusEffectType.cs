@@ -5,4 +5,5 @@ public enum StatusEffectType : byte
 {
     Burning,
     Poison,
+    Paralysis,
 }

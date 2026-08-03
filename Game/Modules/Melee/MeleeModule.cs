@@ -2,6 +2,7 @@ using Engine.ECS.Components;
 using Engine.ECS.Systems;
 using Engine.Math;
 using Game.Modules.Abilities;
+using Game.Modules.StatusEffects;
 
 namespace Game.Modules.Melee;
 
@@ -13,6 +14,11 @@ namespace Game.Modules.Melee;
 /// components or systems of its own: activation, effect resolution, and targeting are all
 /// generic Abilities-module machinery (see AbilitiesModule) that any ability, melee or
 /// otherwise, shares.
+///
+/// Grants Paralysis (Game.Modules.Paralysis) on every hit -- the concrete proof that
+/// AbilityEffectResolver's StatusEffects grant path actually works end to end, chosen here
+/// rather than only in a throwaway test ability since it's directly exercisable by attacking
+/// anything.
 /// </summary>
 public sealed class MeleeModule : IGameModule
 {
@@ -34,7 +40,7 @@ public sealed class MeleeModule : IGameModule
             "/",
             new AbilityTargeting(TargetShape.Line, Range: 2),
             new AbilityTiming(ActionTimingCategory.Immediate, ActionLockFrames: DefaultAttackActionLockFrames, CooldownFrames: null),
-            new AbilityEffect(DamageAmount: 0, StatusEffects: [], StatModifierGrants: [])));
+            new AbilityEffect(DamageAmount: 0, StatusEffects: [StatusEffectType.Paralysis], StatModifierGrants: [])));
     }
 
     public void RegisterComponents(ComponentManager componentManager)
