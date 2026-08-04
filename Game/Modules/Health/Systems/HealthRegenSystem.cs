@@ -3,6 +3,8 @@ using Engine.ECS.Systems;
 using Engine.Math;
 using Game.Modules.Death.Components;
 using Game.Modules.Health.Components;
+using Game.Modules.ProcessingTier;
+using Game.Modules.ProcessingTier.Components;
 using Game.Modules.StatModifiers;
 using Game.Modules.StatModifiers.Components;
 
@@ -24,21 +26,25 @@ public sealed class HealthRegenSystem : ISystem
     private readonly PackedComponentPool<HealthComponent> _healthComponents;
     private readonly MultiComponentPool<StatModifierComponent>? _statModifiers;
     private readonly PackedComponentPool<DeadComponent>? _deadEntities;
-    private readonly EntityStripeSet _stripeSet;
+    private readonly TieredEntityStripeSet _tieredStripeSet;
 
-    public HealthRegenSystem(PackedComponentPool<HealthComponent> healthComponents, MultiComponentPool<StatModifierComponent>? statModifiers = null, PackedComponentPool<DeadComponent>? deadEntities = null)
+    public HealthRegenSystem(
+        PackedComponentPool<HealthComponent> healthComponents,
+        DirectComponentPool<ProcessingTierComponent> processingTiers,
+        ProcessingTierEvents processingTierEvents,
+        MultiComponentPool<StatModifierComponent>? statModifiers = null,
+        PackedComponentPool<DeadComponent>? deadEntities = null)
     {
         _healthComponents = healthComponents;
         _statModifiers = statModifiers;
         _deadEntities = deadEntities;
-        _stripeSet = new EntityStripeSet(StripeCount, healthComponents.EntityIds);
-        healthComponents.EntityAdded += _stripeSet.OnEntityAdded;
-        healthComponents.EntityRemoved += _stripeSet.OnEntityRemoved;
+
+        _tieredStripeSet = ProcessingTierWiring.CreateAndWire(StripeCount, healthComponents, processingTiers, processingTierEvents);
     }
 
     public void Update(EngineTime time, byte stripeIndex)
     {
-        foreach (var entityId in _stripeSet.GetBucket(stripeIndex))
+        foreach (var entityId in _tieredStripeSet.GetDueEntities(time.FrameCount))
         {
             if (!_healthComponents.TryGetReadonly(entityId, out var currentHealthComponent))
             {
@@ -51,17 +57,20 @@ public sealed class HealthRegenSystem : ISystem
                 continue;
             }
 
-            var effectiveRegen = (int)StatModifierMath.GetEffectiveValue(_statModifiers, entityId, StatModifierTarget.HealthRegen, currentHealthComponent.HealthRegen);
+            var (effectiveRegenValue, effectiveMaximumHealthValue) = StatModifierMath.GetEffectiveValues(
+                _statModifiers, entityId,
+                StatModifierTarget.HealthRegen, currentHealthComponent.HealthRegen,
+                StatModifierTarget.MaximumHealth, currentHealthComponent.MaximumHealth);
+            var effectiveRegen = (int)effectiveRegenValue;
             if (effectiveRegen == 0)
             {
                 continue;
             }
 
-            _healthComponents.TryUpdate(entityId, (_statModifiers, entityId, effectiveRegen), static (ref HealthComponent healthComponent, (MultiComponentPool<StatModifierComponent>? StatModifiers, int EntityId, int EffectiveRegen) state) =>
+            _healthComponents.TryUpdate(entityId, (effectiveRegen, EffectiveMaximumHealth: (int)effectiveMaximumHealthValue), static (ref HealthComponent healthComponent, (int EffectiveRegen, int EffectiveMaximumHealth) state) =>
             {
-                var effectiveMaximumHealth = (int)StatModifierMath.GetEffectiveValue(state.StatModifiers, state.EntityId, StatModifierTarget.MaximumHealth, healthComponent.MaximumHealth);
                 var regeneratedHealth = healthComponent.CurrentHealth + state.EffectiveRegen;
-                healthComponent.CurrentHealth = (short)MathUtility.ClampInt(regeneratedHealth, 0, effectiveMaximumHealth);
+                healthComponent.CurrentHealth = (short)MathUtility.ClampInt(regeneratedHealth, 0, state.EffectiveMaximumHealth);
             });
         }
     }

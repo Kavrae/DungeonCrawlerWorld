@@ -8,6 +8,7 @@ using Game.Modules.Core;
 using Game.Modules.Health;
 using Game.Modules.Movement;
 using Game.Modules.Movement.Components;
+using Game.Modules.ProcessingTier;
 using Game.World;
 using Microsoft.Xna.Framework;
 using Presentation.Fonts;
@@ -25,14 +26,26 @@ public sealed class DebugWindowContentTests
         var world = new Game.World.World(new Map(new Vector3Int(5, 5, 1)));
         var mathUtility = new MathUtility();
 
+        var context = new GameModuleContext(world, mathUtility, new EventBus()) { EntityMoveSync = new WorldEventSync(world) };
+
         var movementModule = new MovementModule();
-        movementModule.Configure(new GameModuleContext(world, mathUtility, new EventBus()) { EntityMoveSync = new WorldEventSync(world) });
+        movementModule.Configure(context);
+
+        var processingTierModule = new ProcessingTierModule();
+        processingTierModule.Configure(context);
+
+        var coreModule = new CoreModule();
+        coreModule.Configure(context);
+
+        var healthModule = new HealthModule();
+        healthModule.Configure(context);
 
         IReadOnlyList<IModule> modules =
         [
-            new CoreModule(),
-            new HealthModule(),
+            coreModule,
+            healthModule,
             movementModule,
+            processingTierModule,
         ];
 
         return Bootstrapper.Build(modules, initialEntityCapacity: 100, initialComponentCapacity: 50);

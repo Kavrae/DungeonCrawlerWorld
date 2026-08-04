@@ -5,7 +5,7 @@ namespace Engine.ECS.Components.Stores;
 /// index space. Dense storage grows linearly (not exponentially) to bound peak memory
 /// for components most entities never have.
 /// </summary>
-public sealed class PackedComponentPool<T> : IReadOnlyComponentPool<T>, IInspectableComponentPool where T : struct
+public sealed class PackedComponentPool<T> : IReadOnlyComponentPool<T>, IInspectableComponentPool, IEntityMembershipPool where T : struct
 {
     public Type ComponentType => typeof(T);
     public ComponentPoolType ComponentPoolType => ComponentPoolType.Packed;

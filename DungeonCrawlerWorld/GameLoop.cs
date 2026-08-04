@@ -147,7 +147,7 @@ public sealed class GameLoop : Microsoft.Xna.Framework.Game
             }
 
             var ecsUpdateStart = Stopwatch.GetTimestamp();
-            _ecsContext.Update(new EngineTime(gameTime.TotalGameTime, gameTime.ElapsedGameTime, gameTime.IsRunningSlowly));
+            _ecsContext.Update(new EngineTime(gameTime.TotalGameTime, gameTime.ElapsedGameTime, gameTime.IsRunningSlowly, _frameCount));
             _profiler.Record("EcsContext.Update (all systems)", Stopwatch.GetElapsedTime(ecsUpdateStart));
 
             if (_frameCount % ProfileReportIntervalFrames == 0)

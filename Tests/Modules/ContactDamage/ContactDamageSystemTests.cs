@@ -6,6 +6,8 @@ using Game.Modules.ContactDamage.Components;
 using Game.Modules.ContactDamage.Systems;
 using Game.Modules.Death.Components;
 using Game.Modules.Health.Components;
+using Game.Modules.ProcessingTier;
+using Game.Modules.ProcessingTier.Components;
 using Game.World;
 
 namespace Tests.Modules.ContactDamage;
@@ -52,6 +54,9 @@ public sealed class ContactDamageSystemTests
     private static PackedComponentPool<DeadComponent> CreateDeadPool() =>
         new(maximumEntityCount: 200, initialCapacity: 4, static (ref existing, incoming) => existing = incoming);
 
+    private static DirectComponentPool<ProcessingTierComponent> CreateTiersPool() =>
+        new(initialCapacity: 200, static (ref existing, incoming) => existing = incoming);
+
     private static (
         ContactDamageSystem System,
         PackedComponentPool<DamageOnContactComponent> Hazards,
@@ -59,7 +64,8 @@ public sealed class ContactDamageSystemTests
         PackedComponentPool<HealthComponent> Health,
         FakeMapQuery MapQuery,
         FrameEventBuffer<EntityMoved> MovedEntities,
-        PackedComponentPool<DeadComponent> DeadEntities) Build()
+        PackedComponentPool<DeadComponent> DeadEntities,
+        DirectComponentPool<ProcessingTierComponent> ProcessingTiers) Build()
     {
         var hazards = CreateHazardPool();
         var exposures = CreateExposurePool();
@@ -67,14 +73,15 @@ public sealed class ContactDamageSystemTests
         var mapQuery = new FakeMapQuery();
         var movedEntities = new FrameEventBuffer<EntityMoved>();
         var deadEntities = CreateDeadPool();
+        var processingTiers = CreateTiersPool();
 
         health.Add(MoverEntityId, new HealthComponent(currentHealth: 100, healthRegen: 0, maximumHealth: 100));
         hazards.Add(TerrainEntityId, new DamageOnContactComponent(damagePerTick: 10, tickIntervalFrames: 60));
         mapQuery.SetTerrain(new Vector3Int(5, 5, 0), TerrainEntityId);
 
-        var system = new ContactDamageSystem(hazards, exposures, health, new EventBus(), mapQuery, new FakePlayerQuery(MoverEntityId), movedEntities, statModifiers: null, deadEntities);
+        var system = new ContactDamageSystem(hazards, exposures, health, new EventBus(), mapQuery, new FakePlayerQuery(MoverEntityId), movedEntities, processingTiers, new ProcessingTierEvents(), statModifiers: null, deadEntities: deadEntities);
 
-        return (system, hazards, exposures, health, mapQuery, movedEntities, deadEntities);
+        return (system, hazards, exposures, health, mapQuery, movedEntities, deadEntities, processingTiers);
     }
 
     /// <summary>
@@ -94,7 +101,7 @@ public sealed class ContactDamageSystemTests
     [TestMethod]
     public void SteppingOntoHazard_DealsImmediateDamage()
     {
-        var (system, _, _, health, _, movedEntities, _) = Build();
+        var (system, _, _, health, _, movedEntities, _, _) = Build();
 
         movedEntities.Record(new EntityMoved(MoverEntityId, new Vector3Int(4, 5, 0), new Vector3Int(5, 5, 0), new Vector2Byte(1, 1)));
         SimulateFrame(system, movedEntities);
@@ -116,7 +123,7 @@ public sealed class ContactDamageSystemTests
     [TestMethod]
     public void SteppingOntoHazard_AddsExposureWithCountdownAlreadyTickedOnceThisFrame()
     {
-        var (system, _, exposures, _, _, movedEntities, _) = Build();
+        var (system, _, exposures, _, _, movedEntities, _, _) = Build();
 
         movedEntities.Record(new EntityMoved(MoverEntityId, new Vector3Int(4, 5, 0), new Vector3Int(5, 5, 0), new Vector2Byte(1, 1)));
         SimulateFrame(system, movedEntities);
@@ -128,7 +135,7 @@ public sealed class ContactDamageSystemTests
     [TestMethod]
     public void SteppingOntoNonHazardTile_GrantsNoExposure()
     {
-        var (system, _, exposures, health, _, movedEntities, _) = Build();
+        var (system, _, exposures, health, _, movedEntities, _, _) = Build();
 
         movedEntities.Record(new EntityMoved(MoverEntityId, new Vector3Int(4, 5, 0), new Vector3Int(4, 6, 0), new Vector2Byte(1, 1)));
         SimulateFrame(system, movedEntities);
@@ -140,7 +147,7 @@ public sealed class ContactDamageSystemTests
     [TestMethod]
     public void RemainingOnHazard_DealsDamageAgainAfterSixtyFrames()
     {
-        var (system, _, _, health, _, movedEntities, _) = Build();
+        var (system, _, _, health, _, movedEntities, _, _) = Build();
         movedEntities.Record(new EntityMoved(MoverEntityId, new Vector3Int(4, 5, 0), new Vector3Int(5, 5, 0), new Vector2Byte(1, 1)));
 
         // The first of these 60 frames both drains the buffer (adding the exposure and dealing
@@ -157,7 +164,7 @@ public sealed class ContactDamageSystemTests
     [TestMethod]
     public void RemainingOnHazard_FiftyNineFrames_DoesNotDealDamageYet()
     {
-        var (system, _, _, health, _, movedEntities, _) = Build();
+        var (system, _, _, health, _, movedEntities, _, _) = Build();
         movedEntities.Record(new EntityMoved(MoverEntityId, new Vector3Int(4, 5, 0), new Vector3Int(5, 5, 0), new Vector2Byte(1, 1)));
 
         for (var frame = 0; frame < 59; frame++)
@@ -171,7 +178,7 @@ public sealed class ContactDamageSystemTests
     [TestMethod]
     public void DeadEntityAlreadyExposed_DoesNotTakeFurtherDamage()
     {
-        var (system, _, _, health, _, movedEntities, deadEntities) = Build();
+        var (system, _, _, health, _, movedEntities, deadEntities, _) = Build();
         movedEntities.Record(new EntityMoved(MoverEntityId, new Vector3Int(4, 5, 0), new Vector3Int(5, 5, 0), new Vector2Byte(1, 1)));
         SimulateFrame(system, movedEntities); // Onto the hazard: exposure added, immediate 10 damage -> 90.
         deadEntities.Add(MoverEntityId, new DeadComponent(KilledByEntityId: null));
@@ -187,7 +194,7 @@ public sealed class ContactDamageSystemTests
     [TestMethod]
     public void SteppingOffHazard_StopsFurtherDamage()
     {
-        var (system, _, exposures, health, _, movedEntities, _) = Build();
+        var (system, _, exposures, health, _, movedEntities, _, _) = Build();
         movedEntities.Record(new EntityMoved(MoverEntityId, new Vector3Int(4, 5, 0), new Vector3Int(5, 5, 0), new Vector2Byte(1, 1)));
         movedEntities.Record(new EntityMoved(MoverEntityId, new Vector3Int(5, 5, 0), new Vector3Int(6, 5, 0), new Vector2Byte(1, 1)));
         SimulateFrame(system, movedEntities); // Drains both buffered moves: onto the hazard (adds exposure + damage), then off it (removes the exposure) -- all before this call's own tick pass.
@@ -205,7 +212,7 @@ public sealed class ContactDamageSystemTests
     [TestMethod]
     public void HazardToHazardMove_RetriggersImmediateDamageAndResetsCountdown()
     {
-        var (system, hazards, exposures, health, mapQuery, movedEntities, _) = Build();
+        var (system, hazards, exposures, health, mapQuery, movedEntities, _, _) = Build();
         const int secondTerrainEntityId = 101;
         hazards.Add(secondTerrainEntityId, new DamageOnContactComponent(damagePerTick: 10, tickIntervalFrames: 60));
         mapQuery.SetTerrain(new Vector3Int(6, 5, 0), secondTerrainEntityId);
@@ -221,5 +228,32 @@ public sealed class ContactDamageSystemTests
 
         Assert.AreEqual(80, health.GetReadonly(MoverEntityId).CurrentHealth);
         Assert.AreEqual(59, exposures.GetReadonly(MoverEntityId).FramesUntilNextTick);
+    }
+
+    /// <summary>Only the periodic re-check pass (CountdownTicker.Tick) is ProcessingTier-gated, not the buffer drain -- see Update's own comment. Sets up an existing exposure directly (bypassing the move-based grant) to exercise that pass in isolation.</summary>
+    [TestMethod]
+    public void Update_ThrottledMover_OffCycle_DoesNotDecrementExposureCountdown()
+    {
+        var (system, _, exposures, _, _, _, _, processingTiers) = Build();
+        processingTiers.Add(MoverEntityId, new ProcessingTierComponent(ProcessingTierLevel.Neighborhood));
+        exposures.Add(MoverEntityId, new ContactDamageExposureComponent(60, TerrainEntityId));
+
+        // MoverEntityId (0), Neighborhood-tiered (base StripeCount 1 * divisor 2 = 2), lands in bucket 0 -- due only when FrameCount % 2 == 0.
+        system.Update(new EngineTime(default, default, false, FrameCount: 1), 0);
+
+        Assert.AreEqual(60, exposures.GetReadonly(MoverEntityId).FramesUntilNextTick);
+    }
+
+    [TestMethod]
+    public void Update_ThrottledMover_OnEligibleCycle_DecrementsExposureCountdown()
+    {
+        var (system, _, exposures, _, _, _, _, processingTiers) = Build();
+        processingTiers.Add(MoverEntityId, new ProcessingTierComponent(ProcessingTierLevel.Neighborhood));
+        exposures.Add(MoverEntityId, new ContactDamageExposureComponent(60, TerrainEntityId));
+
+        system.Update(new EngineTime(default, default, false, FrameCount: 2), 0);
+
+        // Decremented by the Neighborhood tier's own framesPerVisit (base StripeCount 1 * divisor 2 = 2).
+        Assert.AreEqual(58, exposures.GetReadonly(MoverEntityId).FramesUntilNextTick);
     }
 }

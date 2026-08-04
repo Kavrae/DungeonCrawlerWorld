@@ -6,6 +6,8 @@ using Game.Modules.Abilities.Systems;
 using Game.Modules.Core.Components;
 using Game.Modules.Death.Components;
 using Game.Modules.Health.Components;
+using Game.Modules.ProcessingTier;
+using Game.Modules.ProcessingTier.Components;
 using Game.Modules.StatModifiers.Components;
 using Game.Modules.StatusEffects;
 using Game.World;
@@ -32,6 +34,7 @@ public sealed class AbilitiesModule : IGameModule
     private EventBus _eventBus = null!;
     private IPlayerQuery? _playerQuery;
     private StatusEffectAuraApplierRegistry _statusEffectAppliers = null!;
+    private ProcessingTierEvents _processingTierEvents = null!;
 
     public void Configure(GameModuleContext context)
     {
@@ -40,6 +43,7 @@ public sealed class AbilitiesModule : IGameModule
         _eventBus = context.EventBus;
         _playerQuery = context.PlayerQuery;
         _statusEffectAppliers = context.StatusEffectAuraAppliers;
+        _processingTierEvents = context.ProcessingTierEvents;
     }
 
     public void RegisterComponents(ComponentManager componentManager)
@@ -54,7 +58,10 @@ public sealed class AbilitiesModule : IGameModule
 
     public void RegisterSystems(SystemManager systemManager, ComponentManager componentManager)
     {
-        systemManager.Register(new AbilityCooldownSystem(componentManager.GetMultiPool<AbilityInstanceComponent>()));
+        systemManager.Register(new AbilityCooldownSystem(
+            componentManager.GetMultiPool<AbilityInstanceComponent>(),
+            componentManager.GetDirectPool<ProcessingTierComponent>(),
+            _processingTierEvents));
 
         if (!componentManager.IsRegistered<HealthComponent>())
         {

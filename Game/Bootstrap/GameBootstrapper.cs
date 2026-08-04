@@ -17,6 +17,7 @@ using Game.Modules.Melee;
 using Game.Modules.Movement;
 using Game.Modules.Paralysis;
 using Game.Modules.Poison;
+using Game.Modules.ProcessingTier;
 using Game.Modules.Race;
 using Game.Modules.StatModifiers;
 using Game.Modules.StatusEffectAura;
@@ -47,6 +48,7 @@ public static class GameBootstrapper
             new HealthModule(),
             new MovementModule(),
             new DeathModule(),
+            new ProcessingTierModule(),
             new RaceModule(),
             new ClassModule(),
             new AbilitiesModule(),

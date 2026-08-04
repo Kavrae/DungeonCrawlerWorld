@@ -1,17 +1,24 @@
 using Engine.ECS.Components;
 using Engine.ECS.Systems;
 using Engine.Math;
-using Engine.Modules;
 using Game.Modules.Death.Components;
 using Game.Modules.Health.Components;
 using Game.Modules.Health.Systems;
+using Game.Modules.ProcessingTier;
+using Game.Modules.ProcessingTier.Components;
 using Game.Modules.StatModifiers.Components;
 
 namespace Game.Modules.Health;
 
-public sealed class HealthModule : IModule
+public sealed class HealthModule : IGameModule
 {
     public Guid Id { get; } = new("d9f6a1c4-8b2e-4f3a-9c1d-000000000003");
+
+    public IReadOnlyList<Type> Dependencies { get; } = [];
+
+    private ProcessingTierEvents _processingTierEvents = null!;
+
+    public void Configure(GameModuleContext context) => _processingTierEvents = context.ProcessingTierEvents;
 
     public void RegisterComponents(ComponentManager componentManager)
     {
@@ -40,6 +47,11 @@ public sealed class HealthModule : IModule
             ? componentManager.GetPackedPool<DeadComponent>()
             : null;
 
-        systemManager.Register(new HealthRegenSystem(componentManager.GetPackedPool<HealthComponent>(), statModifiers, deadEntities));
+        systemManager.Register(new HealthRegenSystem(
+            componentManager.GetPackedPool<HealthComponent>(),
+            componentManager.GetDirectPool<ProcessingTierComponent>(),
+            _processingTierEvents,
+            statModifiers,
+            deadEntities));
     }
 }

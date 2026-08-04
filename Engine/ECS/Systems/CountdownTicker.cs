@@ -34,7 +34,10 @@ public static class CountdownTicker
     /// here too -- otherwise decrementing by 1 per visit would stretch every tick interval out
     /// to TickIntervalFrames * StripeCount real frames instead of TickIntervalFrames, exactly
     /// the cadence bug a striped countdown has to avoid. The same technique MovementSystem's
-    /// own FramesToWait already uses (decrementing by its StripeCount per visit, not by 1).
+    /// own FramesToWait already uses (decrementing by its StripeCount per visit, not by 1). A
+    /// caller throttling far-from-player entities (see TieredEntityStripeSet) achieves the same
+    /// effect by simply not including a not-due entity in entityIds for this call at all, rather
+    /// than this method filtering one out itself.
     /// </summary>
     public static void Tick<T>(
         PackedComponentPool<T> pool,

@@ -7,6 +7,8 @@ using Game.Modules.Core.Components;
 using Game.Modules.Death.Components;
 using Game.Modules.Movement.Components;
 using Game.Modules.Movement.Systems;
+using Game.Modules.ProcessingTier;
+using Game.Modules.ProcessingTier.Components;
 using Game.World;
 
 namespace Game.Modules.Movement;
@@ -28,6 +30,7 @@ public sealed class MovementModule : IGameModule
     private IEntityMoveSync? _entityMoveSync;
     private FrameEventBuffer<EntityMoved> _movedEntities = null!;
     private IPlayerQuery? _playerQuery;
+    private ProcessingTierEvents _processingTierEvents = null!;
 
     public void Configure(GameModuleContext context)
     {
@@ -37,6 +40,7 @@ public sealed class MovementModule : IGameModule
         _entityMoveSync = context.EntityMoveSync;
         _movedEntities = context.MovedEntities;
         _playerQuery = context.PlayerQuery;
+        _processingTierEvents = context.ProcessingTierEvents;
     }
 
     public void RegisterComponents(ComponentManager componentManager)
@@ -72,6 +76,8 @@ public sealed class MovementModule : IGameModule
             _entityMoveSync,
             _movedEntities,
             _playerQuery,
+            componentManager.GetDirectPool<ProcessingTierComponent>(),
+            _processingTierEvents,
             deadEntities));
 
         systemManager.RegisterFrameScoped(_movedEntities);

@@ -5,6 +5,8 @@ using Game.Modules.ContactDamage.Components;
 using Game.Modules.Death.Components;
 using Game.Modules.Health;
 using Game.Modules.Health.Components;
+using Game.Modules.ProcessingTier;
+using Game.Modules.ProcessingTier.Components;
 using Game.Modules.StatModifiers.Components;
 using Game.World;
 
@@ -19,12 +21,12 @@ namespace Game.Modules.ContactDamage.Systems;
 /// ContactDamageExposureComponent pool. StripeCount is deliberately 1, not the 10
 /// HealthRegenSystem/ActionLockSystem use -- see BurningSystem's own doc comment for why:
 /// the population (entities currently standing on a hazard tile) is expected to stay small,
-/// and striping would stretch "every N frames" into "every N * StripeCount real frames." At
-/// StripeCount 1 there's only ever one stripe anyway, so Update iterates _exposures.EntityIds
-/// directly rather than wrapping it in an EntityStripeSet purely to reproduce the same single
-/// bucket (matching StatusEffectAuraSystem, the other StripeCount-1 system in this codebase).
-/// The decrement-or-fire loop itself is Engine.ECS.Systems.CountdownTicker.Tick, shared with
-/// BurningSystem/PoisonSystem/StatusEffectAuraSystem.
+/// and striping would stretch "every N frames" into "every N * StripeCount real frames." Still
+/// wrapped in a TieredEntityStripeSet despite base StripeCount 1, though (unlike the old plain
+/// EntityStripeSet this replaced) -- a Local-tier entity is visited every real frame same as
+/// before, but Neighborhood/Borough/Beyond-tier entities get their own coarser cadence on top of
+/// that base. The decrement-or-fire loop itself is Engine.ECS.Systems.CountdownTicker.Tick,
+/// shared with BurningSystem/PoisonSystem/StatusEffectAuraSystem.
 ///
 /// Per the literal spec, every buffered move landing on a hazard tile deals the immediate hit
 /// and resets the countdown -- including hazard-tile-to-hazard-tile moves, not just a fresh
@@ -45,6 +47,7 @@ public sealed class ContactDamageSystem : ISystem
     private readonly IPlayerQuery? _playerQuery;
     private readonly FrameEventBuffer<EntityMoved> _movedEntities;
     private readonly PackedComponentPool<DeadComponent>? _deadEntities;
+    private readonly TieredEntityStripeSet _tieredStripeSet;
 
     // CountdownTicker.Tick's contract needs a reused pendingRemovals list regardless -- this
     // system just never actually populates it, since Update here never removes exposure
@@ -66,6 +69,8 @@ public sealed class ContactDamageSystem : ISystem
         IMapQuery mapQuery,
         IPlayerQuery? playerQuery,
         FrameEventBuffer<EntityMoved> movedEntities,
+        DirectComponentPool<ProcessingTierComponent> processingTiers,
+        ProcessingTierEvents processingTierEvents,
         MultiComponentPool<StatModifierComponent>? statModifiers = null,
         PackedComponentPool<DeadComponent>? deadEntities = null)
     {
@@ -79,6 +84,8 @@ public sealed class ContactDamageSystem : ISystem
         _movedEntities = movedEntities;
         _deadEntities = deadEntities;
         _tick = Tick;
+
+        _tieredStripeSet = ProcessingTierWiring.CreateAndWire(StripeCount, exposures, processingTiers, processingTierEvents);
     }
 
     private void OnEntityMoved(EntityMoved moved)
@@ -119,7 +126,13 @@ public sealed class ContactDamageSystem : ISystem
             OnEntityMoved(moved);
         }
 
-        CountdownTicker.Tick(_exposures, _exposures.EntityIds, _pendingRemovals, _tick);
+        // The buffer drain above is NOT tier-gated -- see StatusEffectAuraSystem's own Update
+        // comment for why (already self-limiting to entities that moved this exact frame).
+        // Only the periodic re-check pass below is throttled.
+        for (var tierIndex = 0; tierIndex < _tieredStripeSet.TierCount; tierIndex++)
+        {
+            CountdownTicker.Tick(_exposures, _tieredStripeSet.GetTierBucket(tierIndex, time.FrameCount), _pendingRemovals, _tick, _tieredStripeSet.GetTierFramesPerVisit(tierIndex));
+        }
     }
 
     /// <summary>Always returns false (never removes here -- see this class's own doc comment for why); see CountdownTicker.Tick's own doc comment for the contract.</summary>

@@ -3,6 +3,7 @@ using Engine.Events;
 using Engine.Math;
 using Game.Modules.Abilities;
 using Game.Modules.Achievements;
+using Game.Modules.ProcessingTier;
 using Game.Modules.StatusEffects;
 using Game.World;
 
@@ -43,4 +44,12 @@ public sealed record GameModuleContext(IMapQuery MapQuery, MathUtility MathUtili
     /// always-safe-default reasoning as Abilities/StatusEffectAuraAppliers above.
     /// </summary>
     public FrameEventBuffer<EntityMoved> MovedEntities { get; init; } = new();
+
+    /// <summary>
+    /// Shared across every module's Configure call within one build -- same always-real-default
+    /// reasoning as MovedEntities above. Any module can subscribe to TierChanged regardless of
+    /// whether ProcessingTierModule has run its own Configure/RegisterSystems yet -- see
+    /// ProcessingTierEvents' own doc comment.
+    /// </summary>
+    public ProcessingTierEvents ProcessingTierEvents { get; init; } = new();
 }

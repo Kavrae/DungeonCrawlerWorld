@@ -11,6 +11,8 @@ using Game.Modules.Health;
 using Game.Modules.Health.Components;
 using Game.Modules.Health.Systems;
 using Game.Modules.Movement;
+using Game.Modules.ProcessingTier;
+using Game.Modules.ProcessingTier.Components;
 using Game.World;
 
 namespace Tests.Modules;
@@ -44,13 +46,14 @@ public sealed class EntityStripingTests
             pool.Add(entityId, new HealthComponent(currentHealth: 0, healthRegen: 1, maximumHealth: 1000));
         }
 
-        var system = new HealthRegenSystem(pool);
+        var processingTiers = new DirectComponentPool<ProcessingTierComponent>(initialCapacity: entityCount, static (ref existing, incoming) => existing = incoming);
+        var system = new HealthRegenSystem(pool, processingTiers, new ProcessingTierEvents());
         var touchCountByEntityId = new int[entityCount];
         var previousHealth = new short[entityCount];
 
         for (var frame = 0; frame < system.StripeCount; frame++)
         {
-            system.Update(default, (byte)frame);
+            system.Update(new EngineTime(default, default, false, FrameCount: frame), (byte)frame);
 
             var touchedThisFrame = 0;
             for (var entityId = 0; entityId < entityCount; entityId++)
@@ -96,7 +99,8 @@ public sealed class EntityStripingTests
         }
         pool.Add(19, new HealthComponent(currentHealth: 0, healthRegen: 1, maximumHealth: 1000)); // Stripe 9, alongside entity 9.
 
-        var system = new HealthRegenSystem(pool);
+        var processingTiers = new DirectComponentPool<ProcessingTierComponent>(initialCapacity: 30, static (ref existing, incoming) => existing = incoming);
+        var system = new HealthRegenSystem(pool, processingTiers, new ProcessingTierEvents());
         var touchCountByEntityId = new Dictionary<int, int>();
         var previousHealth = new Dictionary<int, short> { [19] = 0 };
         for (var entityId = 0; entityId < 10; entityId++)
@@ -124,7 +128,7 @@ public sealed class EntityStripingTests
 
         for (byte stripe = 0; stripe < 9; stripe++)
         {
-            system.Update(default, stripe);
+            system.Update(new EngineTime(default, default, false, FrameCount: stripe), stripe);
             RecordTouches();
         }
 
@@ -132,7 +136,7 @@ public sealed class EntityStripingTests
         // fired yet. Remove it now, before stripe 9 runs.
         pool.Remove(9);
 
-        system.Update(default, stripeIndex: 9);
+        system.Update(new EngineTime(default, default, false, FrameCount: 9), stripeIndex: 9);
         RecordTouches();
 
         Assert.IsFalse(pool.Has(9));
@@ -155,14 +159,26 @@ public sealed class EntityStripingTests
         var world = new Game.World.World(new Map(new Vector3Int(20, 20, 1)));
         var mathUtility = new MathUtility();
 
+        var context = new GameModuleContext(world, mathUtility, new EventBus()) { EntityMoveSync = new WorldEventSync(world) };
+
         var movementModule = new MovementModule();
-        movementModule.Configure(new GameModuleContext(world, mathUtility, new EventBus()) { EntityMoveSync = new WorldEventSync(world) });
+        movementModule.Configure(context);
+
+        var processingTierModule = new ProcessingTierModule();
+        processingTierModule.Configure(context);
+
+        var coreModule = new CoreModule();
+        coreModule.Configure(context);
+
+        var healthModule = new HealthModule();
+        healthModule.Configure(context);
 
         IReadOnlyList<IModule> modules =
         [
-            new CoreModule(),
-            new HealthModule(),
+            coreModule,
+            healthModule,
             movementModule,
+            processingTierModule,
         ];
 
         var ecsContext = Bootstrapper.Build(modules, initialEntityCapacity: 500, initialComponentCapacity: 500);
@@ -187,7 +203,7 @@ public sealed class EntityStripingTests
 
         for (var frame = 0; frame < 60; frame++)
         {
-            ecsContext.Update(default);
+            ecsContext.Update(new EngineTime(default, default, false, FrameCount: frame));
         }
 
         var rechargedCount = 0;

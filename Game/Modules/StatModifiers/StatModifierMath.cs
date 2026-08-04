@@ -45,4 +45,50 @@ public static class StatModifierMath
 
         return (baseValue + additiveSum) * (1f + multiplicativeSum);
     }
+
+    /// <summary>Same as GetEffectiveValue, but for two targets in a single walk of the entity's modifier chain -- for callers (e.g. HealthRegenSystem, needing both HealthRegen and MaximumHealth) that would otherwise walk the same chain twice per entity per cycle.</summary>
+    public static (float First, float Second) GetEffectiveValues(MultiComponentPool<StatModifierComponent>? pool, int entityId, StatModifierTarget firstTarget, float firstBaseValue, StatModifierTarget secondTarget, float secondBaseValue)
+    {
+        if (pool is null)
+        {
+            return (firstBaseValue, secondBaseValue);
+        }
+
+        var firstAdditiveSum = 0f;
+        var firstMultiplicativeSum = 0f;
+        var secondAdditiveSum = 0f;
+        var secondMultiplicativeSum = 0f;
+
+        for (var denseIndex = pool.GetFirstDenseIndex(entityId); denseIndex != -1; denseIndex = pool.GetNextDenseIndex(denseIndex))
+        {
+            ref readonly var modifier = ref pool.GetReadonlyByDenseIndex(denseIndex);
+
+            if (modifier.Target == firstTarget)
+            {
+                if (modifier.Operation == StatModifierOperation.Additive)
+                {
+                    firstAdditiveSum += modifier.Magnitude;
+                }
+                else
+                {
+                    firstMultiplicativeSum += modifier.Magnitude;
+                }
+            }
+            else if (modifier.Target == secondTarget)
+            {
+                if (modifier.Operation == StatModifierOperation.Additive)
+                {
+                    secondAdditiveSum += modifier.Magnitude;
+                }
+                else
+                {
+                    secondMultiplicativeSum += modifier.Magnitude;
+                }
+            }
+        }
+
+        return (
+            (firstBaseValue + firstAdditiveSum) * (1f + firstMultiplicativeSum),
+            (secondBaseValue + secondAdditiveSum) * (1f + secondMultiplicativeSum));
+    }
 }

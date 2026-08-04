@@ -4,6 +4,8 @@ using Engine.Events;
 using Game.Modules.Burning.Components;
 using Game.Modules.Health;
 using Game.Modules.Health.Components;
+using Game.Modules.ProcessingTier;
+using Game.Modules.ProcessingTier.Components;
 using Game.Modules.StatModifiers.Components;
 using Game.Modules.StatusEffects;
 using Game.Modules.StatusEffects.Components;
@@ -31,7 +33,7 @@ public sealed class BurningSystem : ISystem
     private readonly MultiComponentPool<StatModifierComponent>? _statModifiers;
     private readonly EventBus _eventBus;
     private readonly IPlayerQuery? _playerQuery;
-    private readonly EntityStripeSet _stripeSet;
+    private readonly TieredEntityStripeSet _tieredStripeSet;
     private readonly List<int> _pendingTimerRemovals = [];
 
     // Cached once instead of passing the Tick method group at the CountdownTicker.Tick call
@@ -45,6 +47,8 @@ public sealed class BurningSystem : ISystem
         PackedComponentPool<HealthComponent> health,
         EventBus eventBus,
         IPlayerQuery? playerQuery,
+        DirectComponentPool<ProcessingTierComponent> processingTiers,
+        ProcessingTierEvents processingTierEvents,
         MultiComponentPool<StatModifierComponent>? statModifiers = null)
     {
         _timers = timers;
@@ -55,13 +59,16 @@ public sealed class BurningSystem : ISystem
         _playerQuery = playerQuery;
         _tick = Tick;
 
-        _stripeSet = new EntityStripeSet(StripeCount, timers.EntityIds);
-        timers.EntityAdded += _stripeSet.OnEntityAdded;
-        timers.EntityRemoved += _stripeSet.OnEntityRemoved;
+        _tieredStripeSet = ProcessingTierWiring.CreateAndWire(StripeCount, timers, processingTiers, processingTierEvents);
     }
 
-    public void Update(EngineTime time, byte stripeIndex) =>
-        CountdownTicker.Tick(_timers, _stripeSet.GetBucket(stripeIndex), _pendingTimerRemovals, _tick, StripeCountValue);
+    public void Update(EngineTime time, byte stripeIndex)
+    {
+        for (var tierIndex = 0; tierIndex < _tieredStripeSet.TierCount; tierIndex++)
+        {
+            CountdownTicker.Tick(_timers, _tieredStripeSet.GetTierBucket(tierIndex, time.FrameCount), _pendingTimerRemovals, _tick, _tieredStripeSet.GetTierFramesPerVisit(tierIndex));
+        }
+    }
 
     /// <summary>Returns whether the timer should be removed entirely (stacks fully decayed) -- see CountdownTicker.Tick's own doc comment for the contract.</summary>
     private bool Tick(int entityId, BurningTimerComponent timer)

@@ -24,6 +24,7 @@ using Game.Modules.Health.Components;
 using Game.Modules.Melee;
 using Game.Modules.Movement;
 using Game.Modules.Movement.Components;
+using Game.Modules.ProcessingTier;
 using Game.Modules.Race;
 using Game.Modules.Race.Components;
 using Game.Modules.StatModifiers;
@@ -46,16 +47,29 @@ public sealed class BlueprintTests
         var abilitiesModule = new AbilitiesModule();
         abilitiesModule.Configure(context);
 
+        var processingTierModule = new ProcessingTierModule();
+        processingTierModule.Configure(context);
+
+        var coreModule = new CoreModule();
+        coreModule.Configure(context);
+
+        var healthModule = new HealthModule();
+        healthModule.Configure(context);
+
+        var statModifiersModule = new StatModifiersModule();
+        statModifiersModule.Configure(context);
+
         IReadOnlyList<IModule> modules =
         [
-            new CoreModule(),
-            new HealthModule(),
-            new StatModifiersModule(),
+            coreModule,
+            healthModule,
+            statModifiersModule,
             movementModule,
             new RaceModule(),
             new ClassModule(),
             abilitiesModule,
             new CrawlerModule(),
+            processingTierModule,
         ];
 
         return Bootstrapper.Build(modules, initialEntityCapacity: 100, initialComponentCapacity: 50);

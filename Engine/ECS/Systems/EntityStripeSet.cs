@@ -27,6 +27,8 @@ public sealed class EntityStripeSet
     private readonly Dictionary<int, (byte Stripe, int IndexInBucket)> _locationsByEntityId = [];
     private readonly byte _stripeCount;
 
+    public byte StripeCount => _stripeCount;
+
     public EntityStripeSet(byte stripeCount, ReadOnlySpan<int> existingEntityIds)
     {
         ArgumentOutOfRangeException.ThrowIfZero(stripeCount);

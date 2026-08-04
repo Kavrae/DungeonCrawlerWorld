@@ -9,6 +9,7 @@ using Game.Modules.Health;
 using Game.Modules.Health.Components;
 using Game.Modules.Movement;
 using Game.Modules.Movement.Components;
+using Game.Modules.ProcessingTier;
 using Game.World;
 
 namespace Tests.Modules;
@@ -21,11 +22,24 @@ namespace Tests.Modules;
 [TestClass]
 public sealed class GameModuleIntegrationTests
 {
-    private static MovementModule CreateConfiguredMovementModule(Game.World.World world, MathUtility mathUtility)
+    /// <summary>All IGameModules sharing one Bootstrapper.Build call must Configure off the same GameModuleContext instance, so they share one ProcessingTierEvents object -- separate contexts would leave ActionLockSystem's TierChanged subscription listening to a different event than the one ProcessingTierSystem actually raises on.</summary>
+    private static (CoreModule Core, HealthModule Health, MovementModule Movement, ProcessingTierModule ProcessingTier) CreateConfiguredModules(Game.World.World world, MathUtility mathUtility)
     {
+        var context = new GameModuleContext(world, mathUtility, new EventBus()) { EntityMoveSync = new WorldEventSync(world) };
+
+        var coreModule = new CoreModule();
+        coreModule.Configure(context);
+
+        var healthModule = new HealthModule();
+        healthModule.Configure(context);
+
         var movementModule = new MovementModule();
-        movementModule.Configure(new GameModuleContext(world, mathUtility, new EventBus()) { EntityMoveSync = new WorldEventSync(world) });
-        return movementModule;
+        movementModule.Configure(context);
+
+        var processingTierModule = new ProcessingTierModule();
+        processingTierModule.Configure(context);
+
+        return (coreModule, healthModule, movementModule, processingTierModule);
     }
 
     [TestMethod]
@@ -33,12 +47,14 @@ public sealed class GameModuleIntegrationTests
     {
         var world = new Game.World.World(new Map(new Vector3Int(5, 5, 1)));
         var mathUtility = new MathUtility();
+        var (coreModule, healthModule, movementModule, processingTierModule) = CreateConfiguredModules(world, mathUtility);
 
         IReadOnlyList<IModule> modules =
         [
-            new CoreModule(),
-            new HealthModule(),
-            CreateConfiguredMovementModule(world, mathUtility),
+            coreModule,
+            healthModule,
+            movementModule,
+            processingTierModule,
         ];
 
         var ecsContext = Bootstrapper.Build(modules, initialEntityCapacity: 100, initialComponentCapacity: 50);
@@ -59,12 +75,14 @@ public sealed class GameModuleIntegrationTests
         // caller-supplied order -- pass Movement (which depends on Core) first.
         var world = new Game.World.World(new Map(new Vector3Int(5, 5, 1)));
         var mathUtility = new MathUtility();
+        var (coreModule, healthModule, movementModule, processingTierModule) = CreateConfiguredModules(world, mathUtility);
 
         IReadOnlyList<IModule> modules =
         [
-            CreateConfiguredMovementModule(world, mathUtility),
-            new HealthModule(),
-            new CoreModule(),
+            movementModule,
+            healthModule,
+            coreModule,
+            processingTierModule,
         ];
 
         var ecsContext = Bootstrapper.Build(modules, initialEntityCapacity: 100, initialComponentCapacity: 50);
@@ -77,12 +95,14 @@ public sealed class GameModuleIntegrationTests
     {
         var world = new Game.World.World(new Map(new Vector3Int(5, 5, 1)));
         var mathUtility = new MathUtility();
+        var (coreModule, healthModule, movementModule, processingTierModule) = CreateConfiguredModules(world, mathUtility);
 
         IReadOnlyList<IModule> modules =
         [
-            new CoreModule(),
-            new HealthModule(),
-            CreateConfiguredMovementModule(world, mathUtility),
+            coreModule,
+            healthModule,
+            movementModule,
+            processingTierModule,
         ];
 
         var ecsContext = Bootstrapper.Build(modules, initialEntityCapacity: 100, initialComponentCapacity: 50);

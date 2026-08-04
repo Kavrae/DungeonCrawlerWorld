@@ -7,6 +7,8 @@ using Game.Modules.Core.Components;
 using Game.Modules.Death.Components;
 using Game.Modules.Poison;
 using Game.Modules.Poison.Components;
+using Game.Modules.ProcessingTier;
+using Game.Modules.ProcessingTier.Components;
 using Game.Modules.StatusEffectAura;
 using Game.Modules.StatusEffectAura.Components;
 using Game.Modules.StatusEffectAura.Systems;
@@ -58,13 +60,15 @@ public sealed class StatusEffectAuraSystemTests
     }
 
     /// <summary>
-    /// A stripe that never matches ObserverEntityId (0), SourceEntityId (100), or
-    /// secondSourceEntityId (101) under StripeCount 15 (0, 10, and 11 respectively) -- used to
-    /// drain a just-recorded move (grant/detect it) without also consuming one of the mover's
-    /// own real CountdownTicker.Tick opportunities that same call, so existing rotating-stripe
-    /// loops elsewhere in these tests keep landing on the same tick counts they always did.
+    /// Update's periodic re-check pass is now gated by EngineTime.FrameCount (via
+    /// TieredEntityStripeSet), not by the stripeIndex parameter -- stripeIndex is accepted for
+    /// ISystem compliance but otherwise unused. A FrameCount of 1 never lands ObserverEntityId
+    /// (0, Local-tiered, StripeCount 15) on its own due bucket (0), so draining a just-recorded
+    /// move doesn't also consume one of the mover's own real CountdownTicker.Tick opportunities
+    /// that same call -- existing rotating-FrameCount loops elsewhere in these tests keep
+    /// landing on the same tick counts they always did.
     /// </summary>
-    private const byte DrainOnlyStripeIndex = 1;
+    private const long DrainOnlyFrameCount = 1;
 
     /// <summary>Mirrors real game wiring (both BurningModule.Configure and PoisonModule.Configure registering their own applier into the same shared registry) -- the registry a caller can override via applierRegistry to exercise unsupported-effect-type behavior instead.</summary>
     private static (StatusEffectAuraSystem System, ComponentManager ComponentManager, FakeMapQuery MapQuery, FrameEventBuffer<EntityMoved> MovedEntities) Build(StatusEffectAuraApplierRegistry? applierRegistry = null)
@@ -77,6 +81,7 @@ public sealed class StatusEffectAuraSystemTests
         componentManager.RegisterPackedPool<PoisonTimerComponent>(static (ref existing, incoming) => { });
         componentManager.RegisterMultiPool<StatusEffectStack>();
         componentManager.RegisterPackedPool<DeadComponent>(static (ref existing, incoming) => existing = incoming);
+        componentManager.RegisterDirectPool<ProcessingTierComponent>(static (ref existing, incoming) => existing = incoming);
 
         var mapQuery = new FakeMapQuery();
         var movedEntities = new FrameEventBuffer<EntityMoved>();
@@ -89,6 +94,8 @@ public sealed class StatusEffectAuraSystemTests
             mapQuery,
             applierRegistry ?? DefaultApplierRegistry(),
             movedEntities,
+            componentManager.GetDirectPool<ProcessingTierComponent>(),
+            new ProcessingTierEvents(),
             componentManager.GetPackedPool<DeadComponent>());
 
         return (system, componentManager, mapQuery, movedEntities);
@@ -110,8 +117,8 @@ public sealed class StatusEffectAuraSystemTests
     }
 
     /// <summary>
-    /// Records the move into the shared buffer and immediately drains it via a stripe that
-    /// can't touch the mover's own exposure timer -- see DrainOnlyStripeIndex's own doc comment
+    /// Records the move into the shared buffer and immediately drains it via a FrameCount that
+    /// can't touch the mover's own exposure timer -- see DrainOnlyFrameCount's own doc comment
     /// for why this doesn't consume a real tick opportunity. Also clears the buffer afterward,
     /// the same way SystemManager would at the end of a real frame's cycle (see FrameEventBuffer's
     /// own doc comment) -- these tests construct StatusEffectAuraSystem directly, bypassing
@@ -122,7 +129,7 @@ public sealed class StatusEffectAuraSystemTests
     private static void MoveObserverTo(StatusEffectAuraSystem system, FrameEventBuffer<EntityMoved> movedEntities, Vector3Int from, Vector3Int to, int entityId = ObserverEntityId)
     {
         movedEntities.Record(new EntityMoved(entityId, from, to, UnitSize));
-        system.Update(default, DrainOnlyStripeIndex);
+        system.Update(new EngineTime(default, default, false, FrameCount: DrainOnlyFrameCount), 0);
         movedEntities.ClearFrame();
     }
 
@@ -194,7 +201,7 @@ public sealed class StatusEffectAuraSystemTests
         // fixed-stripeIndex loop wouldn't actually exercise striping at all.
         for (var frame = 0; frame < AuraEffects.TickIntervalFrames; frame++)
         {
-            system.Update(default, (byte)(frame % system.StripeCount));
+            system.Update(new EngineTime(default, default, false, FrameCount: frame), (byte)(frame % system.StripeCount));
         }
 
         Assert.AreEqual(8, StackCountOf(componentManager, ObserverEntityId));
@@ -217,7 +224,7 @@ public sealed class StatusEffectAuraSystemTests
 
         for (var frame = 0; frame < AuraEffects.TickIntervalFrames; frame++)
         {
-            system.Update(default, (byte)(frame % system.StripeCount));
+            system.Update(new EngineTime(default, default, false, FrameCount: frame), (byte)(frame % system.StripeCount));
         }
 
         Assert.AreEqual(8, StackCountOf(componentManager, ObserverEntityId), "Topped back up to the target (8), not added on top of the decayed value (5 + 8 = 13).");
@@ -260,7 +267,7 @@ public sealed class StatusEffectAuraSystemTests
 
         for (var frame = 0; frame < AuraEffects.TickIntervalFrames; frame++)
         {
-            system.Update(default, (byte)(frame % system.StripeCount));
+            system.Update(new EngineTime(default, default, false, FrameCount: frame), (byte)(frame % system.StripeCount));
         }
 
         Assert.IsFalse(componentManager.GetPackedPool<StatusEffectAuraExposureComponent>().Has(ObserverEntityId));
@@ -282,7 +289,7 @@ public sealed class StatusEffectAuraSystemTests
 
         for (var frame = 0; frame < 30; frame++)
         {
-            system.Update(default, (byte)(frame % system.StripeCount));
+            system.Update(new EngineTime(default, default, false, FrameCount: frame), (byte)(frame % system.StripeCount));
         }
 
         Assert.AreEqual(30, componentManager.GetPackedPool<StatusEffectAuraExposureComponent>().GetReadonly(ObserverEntityId).FramesUntilNextTick);
@@ -299,7 +306,7 @@ public sealed class StatusEffectAuraSystemTests
 
         for (var frame = 0; frame < 30; frame++)
         {
-            system.Update(default, (byte)(frame % system.StripeCount));
+            system.Update(new EngineTime(default, default, false, FrameCount: frame), (byte)(frame % system.StripeCount));
         }
 
         Assert.AreEqual(8, StackCountOf(componentManager, ObserverEntityId), "The original timer reaching 0 re-evaluates based on the entity's current (in-range) position, topping off to the target rather than adding to it again.");
@@ -425,5 +432,37 @@ public sealed class StatusEffectAuraSystemTests
         Assert.AreEqual(0, PoisonStackCountOf(componentManager, ObserverEntityId));
         Assert.IsFalse(componentManager.GetPackedPool<StatusEffectAuraExposureComponent>().Has(ObserverEntityId),
             "An effect type with no registered applier grants nothing, so it must not create a phantom exposure either.");
+    }
+
+    /// <summary>Only the periodic re-grant pass (CountdownTicker.Tick) is ProcessingTier-gated, not the buffer drain -- see Update's own comment. Sets up an existing exposure directly (bypassing MoveObserverTo's fresh-entry grant) to exercise that pass in isolation.</summary>
+    [TestMethod]
+    public void Update_ThrottledObserver_OffCycle_DoesNotDecrementExposureCountdown()
+    {
+        var (system, componentManager, _, _) = Build();
+        AddSource(componentManager, SourceEntityId, SourcePosition, StatusEffectType.Burning, strength: 8);
+        componentManager.Merge(ObserverEntityId, new TransformComponent(SourcePosition, UnitSize));
+        componentManager.GetDirectPool<ProcessingTierComponent>().Add(ObserverEntityId, new ProcessingTierComponent(ProcessingTierLevel.Neighborhood));
+        componentManager.GetPackedPool<StatusEffectAuraExposureComponent>().Add(ObserverEntityId, new StatusEffectAuraExposureComponent(AuraEffects.TickIntervalFrames));
+
+        // ObserverEntityId (0), Neighborhood-tiered (StripeCount 15 * divisor 2 = 30), lands in
+        // bucket 0 -- due only when FrameCount % 30 == 0.
+        system.Update(new EngineTime(default, default, false, FrameCount: 1), 0);
+
+        Assert.AreEqual(AuraEffects.TickIntervalFrames, componentManager.GetPackedPool<StatusEffectAuraExposureComponent>().GetReadonly(ObserverEntityId).FramesUntilNextTick);
+    }
+
+    [TestMethod]
+    public void Update_ThrottledObserver_OnEligibleCycle_DecrementsExposureCountdown()
+    {
+        var (system, componentManager, _, _) = Build();
+        AddSource(componentManager, SourceEntityId, SourcePosition, StatusEffectType.Burning, strength: 8);
+        componentManager.Merge(ObserverEntityId, new TransformComponent(SourcePosition, UnitSize));
+        componentManager.GetDirectPool<ProcessingTierComponent>().Add(ObserverEntityId, new ProcessingTierComponent(ProcessingTierLevel.Neighborhood));
+        componentManager.GetPackedPool<StatusEffectAuraExposureComponent>().Add(ObserverEntityId, new StatusEffectAuraExposureComponent(AuraEffects.TickIntervalFrames));
+
+        system.Update(new EngineTime(default, default, false, FrameCount: 0), 0);
+
+        // Decremented by the Neighborhood tier's own framesPerVisit (StripeCount 15 * divisor 2 = 30), not the base StripeCount.
+        Assert.AreEqual(AuraEffects.TickIntervalFrames - (system.StripeCount * 2), componentManager.GetPackedPool<StatusEffectAuraExposureComponent>().GetReadonly(ObserverEntityId).FramesUntilNextTick);
     }
 }

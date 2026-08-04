@@ -22,12 +22,6 @@ Component pools (`DirectComponentPool<T>`/`PackedComponentPool<T>`/`MultiCompone
 
 Explore before committing -- this is a profiling question (does indexed access actually show up as a real bottleneck anywhere) as much as an API design one; not worth restructuring the pools around until there's a measured case for it.
 
-#### Distance-based processing ("onion" processing)
-
-Complementary idea to the existing entity-striping scheme (`SystemManager` processes `Count`/`StripeCount` of a system's population per frame, round-robin regardless of position). Instead of, or in addition to, pure round-robin striping, bucket entities into concentric distance-from-player rings ("onions") and process outer rings less frequently or at reduced fidelity compared to the innermost ring.
-
-A real player-character position now exists to measure distance from (`World.PlayerEntityId`), independent of wherever the camera happens to be scrolled to. Related to the Movement System efficiency-update item under Game -- likely the same investigation; whichever gets tackled first should consider the other.
-
 ## Game
 
 ### High Priority
@@ -109,7 +103,6 @@ Companion example to the self-buff/poison-toggle items above -- a positive, self
 #### Movement System
 
 - `SeekTarget` movement mode
-- Efficiency update
 
 #### Achievement lootbox delivery
 
@@ -194,6 +187,10 @@ Deliberately out of scope for this first pass -- start narrow; see Text Input En
 Affected: `Presentation/UI/Window.cs` (new `HandleTextInput` hook, `NextTextBoxAfter`, `FocusRequested`), `Presentation/UI/IWindowContent.cs` (new hook), `Presentation/Input/GameInputController.cs` (new routing method, `SetFocus` auto-redirect), `Presentation/UI/TextBox.cs` (new), `Presentation/UI/Notifications/NotificationCenter.cs` (consumer for the demo).
 
 ### Low Priority
+
+#### Neighborhood/Borough zoom levels
+
+`MapCamera`'s `Neighborhood`/`Borough` zoom levels (`Presentation/UI/MapCamera.cs`) will render static structures only (walls/terrain) plus special sprites for bosses and important locations -- no moving entities. These are fixed-grid "check the larger map" views, not playable zoom levels: instead of centering on the player like `Team`/current zoom levels do, they snap to preset square regions -- a `Neighborhood` is 1000x1000 tiles, a `Borough` is 2000x2000 (a 2x2 block of neighborhoods) -- the same region sizes `Game/Modules/ProcessingTier/Systems/ProcessingTierSystem.cs` uses for its distance-throttle tiers, so both features share one spatial vocabulary.
 
 #### Per-entity sprite scale
 

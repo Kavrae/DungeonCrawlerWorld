@@ -5,6 +5,8 @@ using Engine.Math;
 using Game.Modules.Core.Components;
 using Game.Modules.Death.Components;
 using Game.Modules.Movement.Components;
+using Game.Modules.ProcessingTier;
+using Game.Modules.ProcessingTier.Components;
 using Game.World;
 
 namespace Game.Modules.Movement.Systems;
@@ -45,7 +47,7 @@ public sealed class MovementSystem : ISystem
     private readonly FrameEventBuffer<EntityMoved> _movedEntities;
     private readonly IPlayerQuery? _playerQuery;
     private readonly PackedComponentPool<DeadComponent>? _deadEntities;
-    private readonly EntityStripeSet _stripeSet;
+    private readonly TieredEntityStripeSet _tieredStripeSet;
 
     public MovementSystem(
         DirectComponentPool<TransformComponent> transformComponents,
@@ -57,6 +59,8 @@ public sealed class MovementSystem : ISystem
         IEntityMoveSync entityMoveSync,
         FrameEventBuffer<EntityMoved> movedEntities,
         IPlayerQuery? playerQuery,
+        DirectComponentPool<ProcessingTierComponent> processingTiers,
+        ProcessingTierEvents processingTierEvents,
         PackedComponentPool<DeadComponent>? deadEntities = null)
     {
         _transformComponents = transformComponents;
@@ -70,14 +74,12 @@ public sealed class MovementSystem : ISystem
         _playerQuery = playerQuery;
         _deadEntities = deadEntities;
 
-        _stripeSet = new EntityStripeSet(StripeCount, movementComponents.EntityIds);
-        movementComponents.EntityAdded += _stripeSet.OnEntityAdded;
-        movementComponents.EntityRemoved += _stripeSet.OnEntityRemoved;
+        _tieredStripeSet = ProcessingTierWiring.CreateAndWire(StripeCount, movementComponents, processingTiers, processingTierEvents);
     }
 
     public void Update(EngineTime time, byte stripeIndex)
     {
-        foreach (var entityId in _stripeSet.GetBucket(stripeIndex))
+        foreach (var entityId in _tieredStripeSet.GetDueEntities(time.FrameCount))
         {
             if (_deadEntities?.Has(entityId) == true)
             {

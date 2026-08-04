@@ -4,6 +4,8 @@ using Engine.ECS.Systems;
 using Engine.Math;
 using Game.Modules.Core.Components;
 using Game.Modules.Death.Components;
+using Game.Modules.ProcessingTier;
+using Game.Modules.ProcessingTier.Components;
 using Game.Modules.StatusEffectAura.Components;
 using Game.Modules.StatusEffects;
 using Game.World;
@@ -22,13 +24,13 @@ namespace Game.Modules.StatusEffectAura.Systems;
 /// exposed population isn't the "stays small" case ContactDamageSystem's own doc comment
 /// describes; profiling a gameplay demo showed this system costing as much wall-clock time as
 /// BurningSystem, both un-striped, combined exceeding MovementSystem's own (already-striped)
-/// cost. CountdownTicker.Tick is passed StripeCount as framesPerVisit so each entity's exposure
-/// still decrements by the correct number of real frames between visits (see
-/// CountdownTicker.Tick's own doc comment for why this matters), keeping
-/// AuraEffects.TickIntervalFrames accurate in real time despite each entity only being visited
-/// once every StripeCount frames -- note the buffer drain itself is NOT stripe-gated (every
-/// buffered move is processed every Update call, regardless of stripeIndex); only the ongoing
-/// CountdownTicker.Tick pass over the existing exposure population is. The decrement-or-fire
+/// cost. CountdownTicker.Tick is called once per TieredEntityStripeSet tier, each passed that
+/// tier's own GetTierFramesPerVisit as framesPerVisit, so each entity's exposure still
+/// decrements by the correct number of real frames between visits regardless of which tier's
+/// (possibly coarser than StripeCount) cadence it's on (see CountdownTicker.Tick's own doc
+/// comment for why this matters) -- note the buffer drain itself is NOT tier-gated (every
+/// buffered move is processed every Update call); only the ongoing CountdownTicker.Tick pass
+/// over the existing exposure population is. The decrement-or-fire
 /// loop itself is Engine.ECS.Systems.CountdownTicker.Tick, shared with BurningSystem/
 /// PoisonSystem/ContactDamageSystem.
 ///
@@ -79,7 +81,7 @@ public sealed class StatusEffectAuraSystem : ISystem
     private readonly IMapQuery _mapQuery;
     private readonly FrameEventBuffer<EntityMoved> _movedEntities;
     private readonly PackedComponentPool<DeadComponent>? _deadEntities;
-    private readonly EntityStripeSet _stripeSet;
+    private readonly TieredEntityStripeSet _tieredStripeSet;
 
     private readonly List<int> _pendingExposureRemovals = [];
 
@@ -102,6 +104,8 @@ public sealed class StatusEffectAuraSystem : ISystem
         IMapQuery mapQuery,
         StatusEffectAuraApplierRegistry applierRegistry,
         FrameEventBuffer<EntityMoved> movedEntities,
+        DirectComponentPool<ProcessingTierComponent> processingTiers,
+        ProcessingTierEvents processingTierEvents,
         PackedComponentPool<DeadComponent>? deadEntities = null)
     {
         _componentManager = componentManager;
@@ -116,9 +120,7 @@ public sealed class StatusEffectAuraSystem : ISystem
         _auraGrid = new AuraGrid(mapQuery.MapSize);
         _tick = Tick;
 
-        _stripeSet = new EntityStripeSet(StripeCount, exposures.EntityIds);
-        exposures.EntityAdded += _stripeSet.OnEntityAdded;
-        exposures.EntityRemoved += _stripeSet.OnEntityRemoved;
+        _tieredStripeSet = ProcessingTierWiring.CreateAndWire(StripeCount, exposures, processingTiers, processingTierEvents);
     }
 
     /// <summary>
@@ -189,6 +191,12 @@ public sealed class StatusEffectAuraSystem : ISystem
         // would flip _gridBuilt to true before the loop below ever runs, making every
         // buffered move -- even a source's very first one -- take the second, "already
         // built" branch and double-count its own contribution (confirmed by a failing test).
+        //
+        // The buffer drain itself is NOT ProcessingTier-gated -- it only ever processes
+        // entities that actually moved this exact frame (already self-limiting, unlike the
+        // periodic re-grant pass below), and a fresh entry into an aura's range is a one-time
+        // event a player could plausibly notice even off-screen (e.g. checking the entity's
+        // status later), unlike the periodic re-grant's steady-state pacing.
         foreach (var moved in _movedEntities.Items)
         {
             OnEntityMoved(moved);
@@ -198,7 +206,11 @@ public sealed class StatusEffectAuraSystem : ISystem
         // before the very first move of the whole game) -- CountdownTicker.Tick below needs
         // the grid to exist.
         EnsureGrid();
-        CountdownTicker.Tick(_exposures, _stripeSet.GetBucket(stripeIndex), _pendingExposureRemovals, _tick, StripeCountValue);
+
+        for (var tierIndex = 0; tierIndex < _tieredStripeSet.TierCount; tierIndex++)
+        {
+            CountdownTicker.Tick(_exposures, _tieredStripeSet.GetTierBucket(tierIndex, time.FrameCount), _pendingExposureRemovals, _tick, _tieredStripeSet.GetTierFramesPerVisit(tierIndex));
+        }
     }
 
     /// <summary>Returns whether the exposure should be removed entirely (no longer in range of anything, or the entity's own position can't be found) -- see CountdownTicker.Tick's own doc comment for the contract.</summary>

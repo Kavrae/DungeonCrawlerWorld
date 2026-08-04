@@ -1,17 +1,24 @@
 using Engine.ECS.Components;
 using Engine.ECS.Systems;
 using Engine.Math;
-using Engine.Modules;
 using Game.Modules.Core.Components;
 using Game.Modules.Core.Systems;
+using Game.Modules.ProcessingTier;
+using Game.Modules.ProcessingTier.Components;
 using Microsoft.Xna.Framework;
 
 namespace Game.Modules.Core;
 
 /// <summary>Shared components reused across other modules: Transform, DisplayText, Glyph, Sprite, Background, ActionLock.</summary>
-public sealed class CoreModule : IModule
+public sealed class CoreModule : IGameModule
 {
     public Guid Id { get; } = new("d9f6a1c4-8b2e-4f3a-9c1d-000000000001");
+
+    public IReadOnlyList<Type> Dependencies { get; } = [];
+
+    private ProcessingTierEvents _processingTierEvents = null!;
+
+    public void Configure(GameModuleContext context) => _processingTierEvents = context.ProcessingTierEvents;
 
     public void RegisterComponents(ComponentManager componentManager)
     {
@@ -50,8 +57,9 @@ public sealed class CoreModule : IModule
         });
     }
 
-    public void RegisterSystems(SystemManager systemManager, ComponentManager componentManager)
-    {
-        systemManager.Register(new ActionLockSystem(componentManager.GetPackedPool<ActionLockComponent>()));
-    }
+    public void RegisterSystems(SystemManager systemManager, ComponentManager componentManager) =>
+        systemManager.Register(new ActionLockSystem(
+            componentManager.GetPackedPool<ActionLockComponent>(),
+            componentManager.GetDirectPool<ProcessingTierComponent>(),
+            _processingTierEvents));
 }

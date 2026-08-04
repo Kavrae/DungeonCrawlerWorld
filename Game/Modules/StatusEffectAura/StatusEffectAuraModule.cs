@@ -3,6 +3,8 @@ using Engine.ECS.Systems;
 using Game.Modules.Core.Components;
 using Game.Modules.Death.Components;
 using Game.Modules.Movement;
+using Game.Modules.ProcessingTier;
+using Game.Modules.ProcessingTier.Components;
 using Game.Modules.StatusEffectAura.Components;
 using Game.Modules.StatusEffectAura.Systems;
 using Game.Modules.StatusEffects;
@@ -35,12 +37,14 @@ public sealed class StatusEffectAuraModule : IGameModule
     private IMapQuery _mapQuery = null!;
     private StatusEffectAuraApplierRegistry _applierRegistry = null!;
     private FrameEventBuffer<EntityMoved> _movedEntities = null!;
+    private ProcessingTierEvents _processingTierEvents = null!;
 
     public void Configure(GameModuleContext context)
     {
         _mapQuery = context.MapQuery;
         _applierRegistry = context.StatusEffectAuraAppliers;
         _movedEntities = context.MovedEntities;
+        _processingTierEvents = context.ProcessingTierEvents;
     }
 
     public void RegisterComponents(ComponentManager componentManager)
@@ -63,6 +67,8 @@ public sealed class StatusEffectAuraModule : IGameModule
             _mapQuery,
             _applierRegistry,
             _movedEntities,
+            componentManager.GetDirectPool<ProcessingTierComponent>(),
+            _processingTierEvents,
             deadEntities));
     }
 }

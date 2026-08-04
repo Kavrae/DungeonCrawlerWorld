@@ -4,6 +4,8 @@ using Engine.Events;
 using Game.Modules.Burning.Components;
 using Game.Modules.Burning.Systems;
 using Game.Modules.Health.Components;
+using Game.Modules.ProcessingTier;
+using Game.Modules.ProcessingTier.Components;
 using Game.Modules.StatModifiers.Components;
 using Game.Modules.StatusEffects;
 using Game.Modules.StatusEffects.Components;
@@ -27,11 +29,13 @@ public sealed class BurningModule : IGameModule
 
     private EventBus _eventBus = null!;
     private IPlayerQuery? _playerQuery;
+    private ProcessingTierEvents _processingTierEvents = null!;
 
     public void Configure(GameModuleContext context)
     {
         _eventBus = context.EventBus;
         _playerQuery = context.PlayerQuery;
+        _processingTierEvents = context.ProcessingTierEvents;
         context.StatusEffectAuraAppliers.Register(new TimerBasedAuraApplier<BurningTimerComponent>(StatusEffectType.Burning, BurningEffects.ApplyStack));
     }
 
@@ -55,6 +59,8 @@ public sealed class BurningModule : IGameModule
             componentManager.GetPackedPool<HealthComponent>(),
             _eventBus,
             _playerQuery,
+            componentManager.GetDirectPool<ProcessingTierComponent>(),
+            _processingTierEvents,
             statModifiers));
     }
 }

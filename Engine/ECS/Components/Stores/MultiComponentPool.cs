@@ -6,7 +6,7 @@ namespace Engine.ECS.Components.Stores;
 /// through the dense array per entity. Best for cases like Race/Class where an entity can
 /// legitimately have several.
 /// </summary>
-public sealed class MultiComponentPool<T> : IReadOnlyMultiComponentPool<T>, IInspectableComponentPool where T : struct
+public sealed class MultiComponentPool<T> : IReadOnlyMultiComponentPool<T>, IInspectableComponentPool, IEntityMembershipPool where T : struct
 {
     public Type ComponentType => typeof(T);
     public ComponentPoolType ComponentPoolType => ComponentPoolType.Multi;

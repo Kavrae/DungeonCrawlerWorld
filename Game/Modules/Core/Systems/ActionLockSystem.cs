@@ -1,6 +1,8 @@
 using Engine.ECS.Components.Stores;
 using Engine.ECS.Systems;
 using Game.Modules.Core.Components;
+using Game.Modules.ProcessingTier;
+using Game.Modules.ProcessingTier.Components;
 
 namespace Game.Modules.Core.Systems;
 
@@ -22,19 +24,18 @@ public sealed class ActionLockSystem : ISystem
     public byte StripeCount => StripeCountValue;
 
     private readonly PackedComponentPool<ActionLockComponent> _actionLocks;
-    private readonly EntityStripeSet _stripeSet;
+    private readonly TieredEntityStripeSet _tieredStripeSet;
 
-    public ActionLockSystem(PackedComponentPool<ActionLockComponent> actionLocks)
+    public ActionLockSystem(PackedComponentPool<ActionLockComponent> actionLocks, DirectComponentPool<ProcessingTierComponent> processingTiers, ProcessingTierEvents processingTierEvents)
     {
         _actionLocks = actionLocks;
-        _stripeSet = new EntityStripeSet(StripeCount, actionLocks.EntityIds);
-        actionLocks.EntityAdded += _stripeSet.OnEntityAdded;
-        actionLocks.EntityRemoved += _stripeSet.OnEntityRemoved;
+
+        _tieredStripeSet = ProcessingTierWiring.CreateAndWire(StripeCount, actionLocks, processingTiers, processingTierEvents);
     }
 
     public void Update(EngineTime time, byte stripeIndex)
     {
-        foreach (var entityId in _stripeSet.GetBucket(stripeIndex))
+        foreach (var entityId in _tieredStripeSet.GetDueEntities(time.FrameCount))
         {
             if (_actionLocks.TryGetReadonly(entityId, out var actionLock) && actionLock.LockFramesRemaining != 0)
             {

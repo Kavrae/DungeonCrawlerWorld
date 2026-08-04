@@ -1,6 +1,8 @@
 using Engine.ECS.Components.Stores;
 using Engine.ECS.Systems;
 using Game.Modules.Abilities.Components;
+using Game.Modules.ProcessingTier;
+using Game.Modules.ProcessingTier.Components;
 
 namespace Game.Modules.Abilities.Systems;
 
@@ -16,20 +18,18 @@ public sealed class AbilityCooldownSystem : ISystem
     public byte StripeCount => StripeCountValue;
 
     private readonly MultiComponentPool<AbilityInstanceComponent> _abilityInstances;
-    private readonly EntityStripeSet _stripeSet;
+    private readonly TieredEntityStripeSet _tieredStripeSet;
 
-    public AbilityCooldownSystem(MultiComponentPool<AbilityInstanceComponent> abilityInstances)
+    public AbilityCooldownSystem(MultiComponentPool<AbilityInstanceComponent> abilityInstances, DirectComponentPool<ProcessingTierComponent> processingTiers, ProcessingTierEvents processingTierEvents)
     {
         _abilityInstances = abilityInstances;
 
-        _stripeSet = new EntityStripeSet(StripeCount, abilityInstances.EntityIds);
-        abilityInstances.EntityAdded += _stripeSet.OnEntityAdded;
-        abilityInstances.EntityRemoved += _stripeSet.OnEntityRemoved;
+        _tieredStripeSet = ProcessingTierWiring.CreateAndWire(StripeCount, abilityInstances, processingTiers, processingTierEvents);
     }
 
     public void Update(EngineTime time, byte stripeIndex)
     {
-        foreach (var entityId in _stripeSet.GetBucket(stripeIndex))
+        foreach (var entityId in _tieredStripeSet.GetDueEntities(time.FrameCount))
         {
             for (var denseIndex = _abilityInstances.GetFirstDenseIndex(entityId); denseIndex != -1; denseIndex = _abilityInstances.GetNextDenseIndex(denseIndex))
             {

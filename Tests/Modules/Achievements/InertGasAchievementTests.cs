@@ -9,6 +9,8 @@ using Game.Modules.Achievements.Components;
 using Game.Modules.Achievements.Definitions;
 using Game.Modules.Core;
 using Game.Modules.Core.Components;
+using Game.Modules.Movement;
+using Game.Modules.ProcessingTier;
 using Game.Modules.StatusEffects;
 using Game.World;
 
@@ -31,10 +33,21 @@ public sealed class InertGasAchievementTests
         var world = new Game.World.World(new Map(new Vector3Int(5, 5, 1)));
         var eventBus = new EventBus();
 
-        var module = new AchievementModule();
-        module.Configure(new GameModuleContext(world, new MathUtility(), eventBus) { PlayerQuery = world });
+        var context = new GameModuleContext(world, new MathUtility(), eventBus) { PlayerQuery = world, EntityMoveSync = new WorldEventSync(world) };
 
-        IReadOnlyList<IModule> modules = [module, new CoreModule()];
+        var module = new AchievementModule();
+        module.Configure(context);
+
+        var processingTierModule = new ProcessingTierModule();
+        processingTierModule.Configure(context);
+
+        var coreModule = new CoreModule();
+        coreModule.Configure(context);
+
+        var movementModule = new MovementModule();
+        movementModule.Configure(context);
+
+        IReadOnlyList<IModule> modules = [module, coreModule, movementModule, processingTierModule];
         var ecsContext = Bootstrapper.Build(modules, initialEntityCapacity: 10, initialComponentCapacity: 10, eventBus);
 
         return (ecsContext, eventBus, world);
