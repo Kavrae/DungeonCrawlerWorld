@@ -130,6 +130,14 @@ Several depend on systems that don't exist yet (Inventory, a real companion/part
 
 `UnarmedCombatAchievement` (`Game/Modules/Achievements/Definitions/UnarmedCombatAchievement.cs`) unlocks on the same `EnteredDungeon` event, same unconditional reasoning as `LonerAchievement` above (no equipment or start-equipment-selection system exists yet, so every player is unarmed today). Revisit once equipment/start-equipment selection lands: it should then check whether the player actually chose to start without a weapon.
 
+#### Boundary-aware ProcessingTierSystem recompute
+
+`ProcessingTierSystem` (`Game/Modules/ProcessingTier/Systems/ProcessingTierSystem.cs`) recomputes every movement-capable entity's tier once per its own 15-frame stripe turn, regardless of whether that entity's classification could actually have changed since last time. A targeted alternative: a coarse spatial grid over entity positions -- bucket by `(X / cellSize, Y / cellSize, Z)`, separate from `Map`'s own per-tile occupancy array (see `AuraGrid`, `Game/Modules/StatusEffectAura/AuraGrid.cs`, for an existing precedent of a Game-layer sparse spatial index keyed by flat cell position) -- so a player move only re-tiers entities in the thin band of cells straddling the Local-radius ring at the old and new player position, instead of waiting out each entity's own stripe turn regardless of whether anything relevant changed.
+
+The Local ring (`LocalRadiusTiles`/`LocalExitBufferTiles`) moves with the player every step, so that band query needs to be genuinely cheap -- a handful of cell lookups, not a population scan. The Neighborhood/Borough boundaries are fixed absolute grid lines by contrast (`NeighborhoodSizeTiles`/`BoroughSizeTiles`), so they only need re-evaluating when the player's own cell index changes (rare) -- gate that behind a flag and drain it gradually rather than doing it in one frame. An entity moving under its own power (not the player) needs its own immediate recheck too, via the `EntityMoved` buffer `MovementSystem` already publishes.
+
+This is a real structural addition, not a small tweak: a new persistent spatial index with its own insert/remove/move bookkeeping on every entity move (the same shape of migration cost `TieredEntityStripeSet` already pays for tier-bucket membership, one layer earlier), plus a genuine correctness surface -- the boundary-band width has to account for how far the player can move between checks, or a transition gets missed, something today's brute-force periodic recompute can't get wrong by construction. Only worth taking on once `ProcessingTierSystem` is confirmed as an actual bottleneck via profiling, not assumed from a single snapshot -- its cost in one profiling pass this session was comparable to or higher than most other systems, but that pass also coincided with newly-added Paralysis load driving `StatModifierExpirySystem` up, so the two haven't been cleanly isolated yet.
+
 ## Presentation
 
 ### High Priority

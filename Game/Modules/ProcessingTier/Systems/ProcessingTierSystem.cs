@@ -9,12 +9,24 @@ using Game.World;
 namespace Game.Modules.ProcessingTier.Systems;
 
 /// <summary>
-/// Computes each movement-capable entity's ProcessingTierComponent once per its own stripe turn
-/// -- the one place distance-from-player is actually calculated -- and raises
+/// Computes each movement-capable entity's own ProcessingTierComponent, and raises
 /// ProcessingTierEvents.TierChanged whenever it differs from last time, so any number of hot
 /// systems can migrate the entity between their own TieredEntityStripeSet buckets instead of
 /// each recomputing distance itself. Adding a 9th or 10th consumer costs nothing here at all --
 /// see TODO.md's "Distance-based processing" entry, which this implements.
+///
+/// Self-tiered: this system's own recompute cadence for an entity is throttled by that same
+/// entity's last-known tier, via its own TieredEntityStripeSet wired against its own _tiers
+/// pool (the same ProcessingTierWiring.CreateAndWire every other consumer uses, just fed back
+/// into itself) -- a Beyond-tier entity gets its own tier rechecked at Beyond's cadence, not at
+/// the uniform base cadence every entity used to get regardless of how irrelevant it currently
+/// is. This trades a bounded, self-correcting staleness (a promotion can lag up to one full
+/// coarse-tier period behind the player closing distance -- e.g. up to StripeCount * 8 frames
+/// for a Beyond entity -- before its next check catches it up, after which its own cadence
+/// speeds up immediately) for reusing the exact same infrastructure as every other consumer,
+/// rather than a bespoke spatial index. A newly-added mover has no ProcessingTierComponent yet,
+/// so the existing fail-open-to-Local convention (TieredEntityStripeSet.OnMemberAdded's lookup
+/// delegate) puts it on the fastest cadence until its own first real computation lands.
 ///
 /// Four tiers, same-layer (Vector3Int.Z) entities only get past the first check -- a different
 /// MapLayer (Ground/UnderGround/Flying) is never visible to the player regardless of X/Y, so
@@ -47,7 +59,7 @@ public sealed class ProcessingTierSystem : ISystem
     private readonly DirectComponentPool<ProcessingTierComponent> _tiers;
     private readonly IPlayerQuery? _playerQuery;
     private readonly ProcessingTierEvents _events;
-    private readonly EntityStripeSet _stripeSet;
+    private readonly TieredEntityStripeSet _tieredStripeSet;
 
     public ProcessingTierSystem(
         DirectComponentPool<TransformComponent> transforms,
@@ -61,9 +73,7 @@ public sealed class ProcessingTierSystem : ISystem
         _playerQuery = playerQuery;
         _events = events;
 
-        _stripeSet = new EntityStripeSet(StripeCount, movementComponents.EntityIds);
-        movementComponents.EntityAdded += _stripeSet.OnEntityAdded;
-        movementComponents.EntityRemoved += _stripeSet.OnEntityRemoved;
+        _tieredStripeSet = ProcessingTierWiring.CreateAndWire(StripeCount, movementComponents, tiers, events);
     }
 
     /// <summary>Nothing to do before a real player position exists -- consumers treat an absent ProcessingTierComponent as Local (see TieredEntityStripeSet.OnMemberAdded), so leaving every entity untiered until spawn is the correct default, not a special case.</summary>
@@ -74,7 +84,7 @@ public sealed class ProcessingTierSystem : ISystem
             return;
         }
 
-        foreach (var entityId in _stripeSet.GetBucket(stripeIndex))
+        foreach (var entityId in _tieredStripeSet.GetDueEntities(time.FrameCount))
         {
             if (!_transforms.TryGetReadonly(entityId, out var transform))
             {
