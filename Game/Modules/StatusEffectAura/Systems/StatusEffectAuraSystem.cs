@@ -3,6 +3,7 @@ using Engine.ECS.Components.Stores;
 using Engine.ECS.Systems;
 using Engine.Math;
 using Game.Modules.Core.Components;
+using Game.Modules.Death.Components;
 using Game.Modules.StatusEffectAura.Components;
 using Game.Modules.StatusEffects;
 using Game.World;
@@ -77,6 +78,7 @@ public sealed class StatusEffectAuraSystem : ISystem
     private readonly StatusEffectAuraApplierRegistry _applierRegistry;
     private readonly IMapQuery _mapQuery;
     private readonly FrameEventBuffer<EntityMoved> _movedEntities;
+    private readonly PackedComponentPool<DeadComponent>? _deadEntities;
     private readonly EntityStripeSet _stripeSet;
 
     private readonly List<int> _pendingExposureRemovals = [];
@@ -99,7 +101,8 @@ public sealed class StatusEffectAuraSystem : ISystem
         DirectComponentPool<TransformComponent> transforms,
         IMapQuery mapQuery,
         StatusEffectAuraApplierRegistry applierRegistry,
-        FrameEventBuffer<EntityMoved> movedEntities)
+        FrameEventBuffer<EntityMoved> movedEntities,
+        PackedComponentPool<DeadComponent>? deadEntities = null)
     {
         _componentManager = componentManager;
         _exposures = exposures;
@@ -108,6 +111,7 @@ public sealed class StatusEffectAuraSystem : ISystem
         _mapQuery = mapQuery;
         _applierRegistry = applierRegistry;
         _movedEntities = movedEntities;
+        _deadEntities = deadEntities;
 
         _auraGrid = new AuraGrid(mapQuery.MapSize);
         _tick = Tick;
@@ -218,6 +222,14 @@ public sealed class StatusEffectAuraSystem : ISystem
     /// <summary>Grants stacks from every effect type actually in use that's applicable at position (each topped off via GrantStacks -- see its own doc comment), returning whether any effect type actually granted something (not just whether some total was positive -- an unsupported effect type, see GrantStacks, contributes nothing here even if the grid says otherwise). Shared by OnEntityMoved's fresh-entry path and Update's periodic re-grant, which otherwise duplicated this exact loop.</summary>
     private bool TryGrantApplicableStacks(int entityId, Vector3Int position)
     {
+        // A corpse doesn't accumulate new stacks -- returning false here reads to both callers
+        // as "nothing granted," which for Tick's periodic re-grant path means the exposure gets
+        // cleaned up next visit (see Tick's own contract), the same as walking out of range.
+        if (_deadEntities?.Has(entityId) == true)
+        {
+            return false;
+        }
+
         var anyGranted = false;
         foreach (var effectType in _effectTypesInUse)
         {

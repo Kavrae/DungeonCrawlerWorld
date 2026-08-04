@@ -20,6 +20,13 @@ public static class HealthDamage
         string damageType,
         MultiComponentPool<StatModifierComponent>? statModifiers = null)
     {
+        if (!health.TryGetReadonly(entityId, out var beforeHealth))
+        {
+            return; // No HealthComponent -- fine, e.g. an "immortal" entity a status effect still applied to.
+        }
+
+        var wasAlive = beforeHealth.CurrentHealth > 0;
+
         // Reduced by the target's own IncomingDamage modifiers (e.g. a flat damage-reduction
         // buff) before anything else -- clamped at 0 so a large enough reduction can't turn
         // damage into healing. Computed once up front (not per-call-site) since both the health
@@ -33,13 +40,23 @@ public static class HealthDamage
         // permanent +max-HP buff actually raises the ceiling damage is clamped against -- see
         // StatModifierMath's own doc comment for why this is recomputed here rather than baked
         // into HealthComponent.MaximumHealth itself.
-        if (!health.TryUpdate(entityId, (statModifiers, entityId, effectiveAmount), static (ref HealthComponent healthComponent, (MultiComponentPool<StatModifierComponent>? StatModifiers, int EntityId, short Amount) state) =>
+        health.TryUpdate(entityId, (statModifiers, entityId, effectiveAmount), static (ref HealthComponent healthComponent, (MultiComponentPool<StatModifierComponent>? StatModifiers, int EntityId, short Amount) state) =>
         {
             var effectiveMaximumHealth = (short)StatModifierMath.GetEffectiveValue(state.StatModifiers, state.EntityId, StatModifierTarget.MaximumHealth, healthComponent.MaximumHealth);
             healthComponent.CurrentHealth = MathUtility.ClampShort((short)(healthComponent.CurrentHealth - state.Amount), 0, effectiveMaximumHealth);
-        }))
+        });
+
+        health.TryGetReadonly(entityId, out var updatedHealth);
+
+        // Only on the wasAlive -> 0 transition, not every subsequent hit against an
+        // already-dead corpse -- and never for the player, who is deliberately exempted from
+        // dying for now (see TODO.md's Death at 0 HP item: the player-specific reaction, a game
+        // over screen, doesn't exist yet). Published unconditionally otherwise (unlike
+        // EntityDamaged below, which only fires when the player is involved) since death needs
+        // to be knowable for any entity, not just player-involved damage.
+        if (wasAlive && updatedHealth.CurrentHealth == 0 && entityId != playerQuery?.PlayerEntityId)
         {
-            return; // No HealthComponent -- fine, e.g. an "immortal" entity a status effect still applied to.
+            eventBus.Publish(new EntityDied(entityId, source));
         }
 
         if (playerQuery is null)
@@ -54,7 +71,6 @@ public static class HealthDamage
             return;
         }
 
-        health.TryGetReadonly(entityId, out var updatedHealth);
         var effectiveMaximumHealthForEvent = (short)StatModifierMath.GetEffectiveValue(statModifiers, entityId, StatModifierTarget.MaximumHealth, updatedHealth.MaximumHealth);
         eventBus.Publish(new EntityDamaged(entityId, effectiveAmount, source, updatedHealth.CurrentHealth, effectiveMaximumHealthForEvent, damageType));
     }

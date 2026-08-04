@@ -3,6 +3,7 @@ using Engine.ECS.Systems;
 using Engine.Events;
 using Engine.Math;
 using Game.Modules.Core.Components;
+using Game.Modules.Death.Components;
 using Game.Modules.Movement.Components;
 using Game.Modules.Movement.Systems;
 using Game.World;
@@ -34,6 +35,7 @@ public sealed class MovementSystemTests
     {
         public EntityMoved? LastSynced { get; private set; }
         public void SyncMove(EntityMoved moved) => LastSynced = moved;
+        public void ConvertToNonBlocking(int entityId, ref TransformComponent transform) { }
     }
 
     private sealed class FakePlayerQuery(int playerEntityId) : IPlayerQuery
@@ -91,6 +93,28 @@ public sealed class MovementSystemTests
         system.Update(default, 0);
 
         Assert.AreEqual(3, actionLockPool.GetReadonly(0).LockFramesRemaining);
+        Assert.AreEqual(new Vector3Int(2, 2, 0), transformPool.GetReadonly(0).Position);
+    }
+
+    [TestMethod]
+    public void Update_DeadEntity_DoesNotMove()
+    {
+        var transformPool = CreateTransformPool();
+        var actionLockPool = CreateActionLockPool();
+        var movementPool = CreateMovementPool();
+        var deadEntities = new PackedComponentPool<DeadComponent>(10, 10, static (ref existing, incoming) => existing = incoming);
+        var world = new Game.World.World(new Map(new Vector3Int(5, 5, 1)));
+
+        var transform = new TransformComponent(new Vector3Int(2, 2, 0), new Vector2Byte(1, 1));
+        transformPool.Add(0, transform);
+        world.PlaceEntityOnMap(0, transform.Position, ref transform);
+        actionLockPool.Add(0, new ActionLockComponent(totalLockFrames: 0, lockFramesRemaining: 0));
+        movementPool.Add(0, new MovementComponent(MovementMode.Random, 10, null, null));
+        deadEntities.Add(0, new DeadComponent(KilledByEntityId: null));
+
+        var system = new MovementSystem(transformPool, actionLockPool, movementPool, world, new MathUtility(), new EventBus(), new WorldEventSync(world), new FrameEventBuffer<EntityMoved>(), null, deadEntities);
+        system.Update(default, 0);
+
         Assert.AreEqual(new Vector3Int(2, 2, 0), transformPool.GetReadonly(0).Position);
     }
 

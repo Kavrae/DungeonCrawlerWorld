@@ -419,6 +419,78 @@ public sealed class WorldTests
     }
 
     [TestMethod]
+    public void ConvertToNonBlocking_ClearsBlockingSlot()
+    {
+        var world = CreateWorld();
+        var transform = new TransformComponent(new Vector3Int(), new Vector2Byte(1, 1));
+        world.PlaceEntityOnMap(9, new Vector3Int(4, 4, 1), ref transform);
+
+        world.ConvertToNonBlocking(9, ref transform);
+
+        Assert.AreEqual(-1, world.Map.GetEntityId(new Vector3Int(4, 4, 1)));
+    }
+
+    [TestMethod]
+    public void ConvertToNonBlocking_AddsToNonBlockingIndex()
+    {
+        var world = CreateWorld();
+        var transform = new TransformComponent(new Vector3Int(), new Vector2Byte(1, 1));
+        world.PlaceEntityOnMap(9, new Vector3Int(4, 4, 1), ref transform);
+
+        world.ConvertToNonBlocking(9, ref transform);
+
+        Assert.IsTrue(world.Map.GetNonBlockingEntityIdsAt(new Vector3Int(4, 4, 1)).Contains(9));
+    }
+
+    /// <summary>Unlike RemoveEntityFromMap, ConvertToNonBlocking must leave the corpse findable/renderable at its own death position -- Position must never reset to (0,0,0).</summary>
+    [TestMethod]
+    public void ConvertToNonBlocking_DoesNotResetPosition()
+    {
+        var world = CreateWorld();
+        var transform = new TransformComponent(new Vector3Int(), new Vector2Byte(1, 1));
+        world.PlaceEntityOnMap(9, new Vector3Int(4, 4, 1), ref transform);
+
+        world.ConvertToNonBlocking(9, ref transform);
+
+        Assert.AreEqual(new Vector3Int(4, 4, 1), transform.Position);
+    }
+
+    [TestMethod]
+    public void ConvertToNonBlocking_MultiTileEntity_ClearsEveryOccupiedCellAndAddsFootprint()
+    {
+        var world = CreateWorld();
+        var transform = new TransformComponent(new Vector3Int(), new Vector2Byte(2, 2));
+        world.PlaceEntityOnMap(9, new Vector3Int(2, 2, 1), ref transform);
+
+        world.ConvertToNonBlocking(9, ref transform);
+
+        Assert.AreEqual(-1, world.Map.GetEntityId(new Vector3Int(2, 2, 1)));
+        Assert.AreEqual(-1, world.Map.GetEntityId(new Vector3Int(3, 2, 1)));
+        Assert.AreEqual(-1, world.Map.GetEntityId(new Vector3Int(2, 3, 1)));
+        Assert.AreEqual(-1, world.Map.GetEntityId(new Vector3Int(3, 3, 1)));
+        Assert.IsTrue(world.Map.GetNonBlockingEntityIdsAt(new Vector3Int(2, 2, 1)).Contains(9));
+        Assert.IsTrue(world.Map.GetNonBlockingEntityIdsAt(new Vector3Int(3, 2, 1)).Contains(9));
+        Assert.IsTrue(world.Map.GetNonBlockingEntityIdsAt(new Vector3Int(2, 3, 1)).Contains(9));
+        Assert.IsTrue(world.Map.GetNonBlockingEntityIdsAt(new Vector3Int(3, 3, 1)).Contains(9));
+    }
+
+    /// <summary>End-to-end round-trip through World.IsBlocking itself, not just Map's raw index -- the same predicate MovementSystem.CanMove and DrawPrimaryOccupant actually consult.</summary>
+    [TestMethod]
+    public void ConvertToNonBlocking_ThenAddNonBlockingComponent_IsBlockingReturnsFalse()
+    {
+        var world = CreateWorld();
+        var nonBlockingPool = CreateNonBlockingPool();
+        world.NonBlockingComponents = nonBlockingPool;
+        var transform = new TransformComponent(new Vector3Int(), new Vector2Byte(1, 1));
+        world.PlaceEntityOnMap(9, new Vector3Int(4, 4, 1), ref transform);
+
+        world.ConvertToNonBlocking(9, ref transform);
+        nonBlockingPool.Add(9, new NonBlockingComponent());
+
+        Assert.IsFalse(world.IsBlocking(9));
+    }
+
+    [TestMethod]
     public void RemoveEntityFromMap_NonBlockingEntity_RemovesFromNonBlockingIndex()
     {
         var world = CreateWorld();

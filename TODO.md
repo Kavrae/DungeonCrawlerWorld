@@ -40,10 +40,6 @@ Item interactions, storage rules, restricted items, etc. Governs how the Engine-
 
 For NPCs and the player. Attacking sets the same shared ActionLockComponent that movement sets on a successful move, creating a tactical decision between moving more vs. attacking more -- choosing to attack this window means not moving this window, and vice versa. Can target any entity one tile away that has physical collision -- even entities without hit points, since this allows status effects to be applied to otherwise-immortal entities. The "immortal but affectable" case is proven out already: `AbilityEffectResolver` grants `AbilityEffect.StatusEffects` through the shared `StatusEffectAuraApplierRegistry` (`Game/Modules/StatusEffects/`) regardless of whether the target has a `HealthComponent`, and `MeleeModule`'s Default Attack grants Paralysis (`Game/Modules/Paralysis/`) this way today.
 
-#### Death at 0 HP
-
-`HealthComponent.CurrentHealth` can reach 0 today with no consequence -- nothing removes the entity, stops its systems from processing it, or notifies anything. Now that melee/abilities can reliably deal lethal damage (the ability/hotkey system above), an entity actually reaching 0 HP needs a real transition (map/occupancy removal at minimum). See the matching Presentation item below for the player-specific end state.
-
 ### Low Priority
 
 #### Replace MeleeModule with a general ability library
@@ -88,6 +84,10 @@ Distinct from Paralysis (`Game/Modules/Paralysis/`, which only locks `ActionLock
 
 Today's `MovementMode.Random` walks a goblin into an occupied tile as if it were empty (blocked by `CanMove`, so it just doesn't move) rather than attacking. Now that melee is a real action any entity can trigger, goblin AI should prefer activating its Default Attack against an adjacent blocking entity over its normal random-wander check.
 
+#### Corpse decay/destruction and destructible terrain
+
+`DeathSystem` (`Game/Modules/Death/`) deliberately never calls `EntityManager.DestroyEntity` -- a corpse is reclassified non-Blocking (`World.ConvertToNonBlocking`) and marked `DeadComponent`, but stays a real, fully-populated entity indefinitely (design intent: a future corpse-looting mechanic, see the Achievement content backlog item below, needs the entity's data to still exist). `EntityManager.DestroyEntity` (full removal, all components gone, id freed for reuse) is reserved for a genuinely separate, deliberate action -- e.g. a corpse-decay timer or "loot then destroy" step once Inventory exists. The same primitive would also apply to a future destructible-terrain entity (e.g. a breakable wall): that case skips `DeadComponent`/the corpse system entirely, since it was never a `HealthComponent`-driven creature death, and would just call `DestroyEntity` directly on whatever triggers its destruction.
+
 #### Self damage buff ability
 
 An example FreeCast or Immediate ability that raises the caster's own outgoing damage for a duration -- exercises the ability system on a non-damage-dealing, self-targeted effect.
@@ -117,7 +117,7 @@ Achievements can name a `LootboxReward` (rarity + box type, see `Game/Modules/Ac
 
 #### Achievement content backlog
 
-The Achievement system (`Game/Modules/Achievements/`) currently ships three achievements ("Loner", "You've Inflicted Damage on a Mob", "Unarmed Combat") to prove the pipeline; the rest is a deliberate, incremental backlog -- a few added alongside each future feature rather than all at once. Volume/pacing target: many low-value achievements early (deliberately "drowning the player in low-level loot boxes" at the start), tapering to fewer, higher-value ones by the midgame.
+The Achievement system (`Game/Modules/Achievements/`) currently ships six achievements ("Loner", "You've Inflicted Damage on a Mob", "Unarmed Combat", "Early Adopter", "Inert Gas", "You've killed a mob!") to prove the pipeline; the rest is a deliberate, incremental backlog -- a few added alongside each future feature rather than all at once. Volume/pacing target: many low-value achievements early (deliberately "drowning the player in low-level loot boxes" at the start), tapering to fewer, higher-value ones by the midgame.
 
 Design-target examples, not yet implemented:
 - Enter the dungeon with a cat (random starting-item selection)
@@ -147,7 +147,7 @@ Tabs, sorting, click-and-drag organization, icons, click-to-inspect. Depends on 
 
 #### Game over screen on player 0 HP
 
-Companion to the Game-layer Death at 0 HP item above, specifically for the player entity -- the player dying today has no distinct end state or UI at all.
+`Game/Modules/Death/` (`HealthDamage.Apply`/`DeathSystem`/`DeadComponent`) handles death at 0 HP for every entity except the player -- deliberately exempted for now, since the player dying today has no distinct end state or UI at all. Needs this Presentation-side piece (a real game-over screen) before the player-side exemption in `HealthDamage.Apply` can be lifted.
 
 #### Context menu / mouse button coverage
 

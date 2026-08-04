@@ -2,6 +2,7 @@ using Engine.ECS.Components;
 using Engine.ECS.Systems;
 using Engine.Math;
 using Engine.Modules;
+using Game.Modules.Death.Components;
 using Game.Modules.Health.Components;
 using Game.Modules.Health.Systems;
 using Game.Modules.StatModifiers.Components;
@@ -35,7 +36,10 @@ public sealed class HealthModule : IModule
         var statModifiers = componentManager.IsRegistered<StatModifierComponent>()
             ? componentManager.GetMultiPool<StatModifierComponent>()
             : null;
+        var deadEntities = componentManager.IsRegistered<DeadComponent>()
+            ? componentManager.GetPackedPool<DeadComponent>()
+            : null;
 
-        systemManager.Register(new HealthRegenSystem(componentManager.GetPackedPool<HealthComponent>(), statModifiers));
+        systemManager.Register(new HealthRegenSystem(componentManager.GetPackedPool<HealthComponent>(), statModifiers, deadEntities));
     }
 }

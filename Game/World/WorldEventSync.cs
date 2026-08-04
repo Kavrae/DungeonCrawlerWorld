@@ -16,4 +16,7 @@ public sealed class WorldEventSync(World world) : IEntityMoveSync
 
     public void SyncMove(EntityMoved moved) =>
         _world.MoveEntityUnchecked(moved.EntityId, moved.NewPosition, new TransformComponent(moved.OldPosition, moved.Size));
+
+    public void ConvertToNonBlocking(int entityId, ref TransformComponent transform) =>
+        _world.ConvertToNonBlocking(entityId, ref transform);
 }

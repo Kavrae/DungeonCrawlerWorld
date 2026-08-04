@@ -5,6 +5,7 @@ using Game.Modules.Abilities;
 using Game.Modules.Abilities.Components;
 using Game.Modules.Abilities.Systems;
 using Game.Modules.Core.Components;
+using Game.Modules.Death.Components;
 using Game.Modules.Health.Components;
 using Game.Modules.StatusEffects;
 using Game.World;
@@ -48,6 +49,7 @@ public sealed class AbilityActivationSystemTests
         componentManager.RegisterPackedPool<ActionLockComponent>(static (ref existing, incoming) => existing = incoming);
         componentManager.RegisterMultiPool<AbilityInstanceComponent>();
         componentManager.RegisterPackedPool<HealthComponent>(static (ref existing, incoming) => existing = incoming);
+        componentManager.RegisterPackedPool<DeadComponent>(static (ref existing, incoming) => existing = incoming);
 
         var mapQuery = new FakeMapQuery();
         var eventBus = new EventBus();
@@ -100,7 +102,9 @@ public sealed class AbilityActivationSystemTests
             eventBus,
             playerQuery: null,
             new StatusEffectAuraApplierRegistry(),
-            componentManager);
+            componentManager,
+            statModifiers: null,
+            componentManager.GetPackedPool<DeadComponent>());
 
         return (system, componentManager, abilityCatalog, mapQuery);
     }
@@ -138,6 +142,22 @@ public sealed class AbilityActivationSystemTests
         Assert.AreEqual(85, HealthOf(componentManager, TargetEntityId));
         Assert.AreEqual(30, componentManager.GetPackedPool<ActionLockComponent>().GetReadonly(CasterEntityId).LockFramesRemaining);
         Assert.IsFalse(componentManager.GetPackedPool<PendingAbilityActivationComponent>().Has(CasterEntityId));
+    }
+
+    [TestMethod]
+    public void Immediate_CasterIsDead_DoesNothing()
+    {
+        var (system, componentManager, _, mapQuery) = Build();
+        mapQuery.SetOccupant(TargetTile, TargetEntityId);
+        componentManager.Merge(TargetEntityId, new HealthComponent(100, 0, 100));
+        componentManager.Merge(CasterEntityId, new AbilityInstanceComponent(ImmediateAbilityId, damageAmount: 15, cooldownFramesRemaining: 0));
+        componentManager.Merge(CasterEntityId, new ActionLockComponent(totalLockFrames: 0, lockFramesRemaining: 0));
+        componentManager.Merge(CasterEntityId, new PendingAbilityActivationComponent(ImmediateAbilityId, [TargetTile]));
+        componentManager.GetPackedPool<DeadComponent>().Add(CasterEntityId, new DeadComponent(KilledByEntityId: null));
+
+        system.Update(default, 0);
+
+        Assert.AreEqual(100, HealthOf(componentManager, TargetEntityId), "A corpse can't act.");
     }
 
     [TestMethod]

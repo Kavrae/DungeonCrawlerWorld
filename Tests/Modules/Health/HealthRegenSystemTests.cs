@@ -1,4 +1,5 @@
 using Engine.ECS.Components.Stores;
+using Game.Modules.Death.Components;
 using Game.Modules.Health.Components;
 using Game.Modules.Health.Systems;
 
@@ -33,6 +34,20 @@ public sealed class HealthRegenSystemTests
         system.Update(default, 0);
 
         Assert.AreEqual(200, pool.GetReadonly(0).CurrentHealth);
+    }
+
+    [TestMethod]
+    public void Update_DeadEntity_DoesNotRegenerate()
+    {
+        var pool = CreatePool();
+        pool.Add(0, new HealthComponent(currentHealth: 0, healthRegen: 10, maximumHealth: 200));
+        var deadEntities = new PackedComponentPool<DeadComponent>(10, 10, static (ref existing, incoming) => existing = incoming);
+        deadEntities.Add(0, new DeadComponent(KilledByEntityId: null));
+        var system = new HealthRegenSystem(pool, statModifiers: null, deadEntities);
+
+        system.Update(default, 0);
+
+        Assert.AreEqual(0, pool.GetReadonly(0).CurrentHealth);
     }
 
     [TestMethod]

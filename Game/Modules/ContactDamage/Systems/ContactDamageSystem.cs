@@ -2,6 +2,7 @@ using Engine.ECS.Components.Stores;
 using Engine.ECS.Systems;
 using Engine.Events;
 using Game.Modules.ContactDamage.Components;
+using Game.Modules.Death.Components;
 using Game.Modules.Health;
 using Game.Modules.Health.Components;
 using Game.Modules.StatModifiers.Components;
@@ -43,6 +44,7 @@ public sealed class ContactDamageSystem : ISystem
     private readonly IMapQuery _mapQuery;
     private readonly IPlayerQuery? _playerQuery;
     private readonly FrameEventBuffer<EntityMoved> _movedEntities;
+    private readonly PackedComponentPool<DeadComponent>? _deadEntities;
 
     // CountdownTicker.Tick's contract needs a reused pendingRemovals list regardless -- this
     // system just never actually populates it, since Update here never removes exposure
@@ -64,7 +66,8 @@ public sealed class ContactDamageSystem : ISystem
         IMapQuery mapQuery,
         IPlayerQuery? playerQuery,
         FrameEventBuffer<EntityMoved> movedEntities,
-        MultiComponentPool<StatModifierComponent>? statModifiers = null)
+        MultiComponentPool<StatModifierComponent>? statModifiers = null,
+        PackedComponentPool<DeadComponent>? deadEntities = null)
     {
         _hazards = hazards;
         _exposures = exposures;
@@ -74,11 +77,17 @@ public sealed class ContactDamageSystem : ISystem
         _mapQuery = mapQuery;
         _playerQuery = playerQuery;
         _movedEntities = movedEntities;
+        _deadEntities = deadEntities;
         _tick = Tick;
     }
 
     private void OnEntityMoved(EntityMoved moved)
     {
+        if (_deadEntities?.Has(moved.EntityId) == true)
+        {
+            return;
+        }
+
         var terrainEntityId = _mapQuery.GetTerrainEntityIdAt(moved.NewPosition);
         if (terrainEntityId != -1 && _hazards.TryGetReadonly(terrainEntityId, out var hazard))
         {
@@ -116,6 +125,15 @@ public sealed class ContactDamageSystem : ISystem
     /// <summary>Always returns false (never removes here -- see this class's own doc comment for why); see CountdownTicker.Tick's own doc comment for the contract.</summary>
     private bool Tick(int entityId, ContactDamageExposureComponent exposure)
     {
+        // A corpse stops taking further contact damage -- otherwise a dead entity standing in
+        // lava would keep re-triggering HealthDamage.Apply/EntityDamaged forever. The stale
+        // exposure component is left in place but inert (matching the "never removes here"
+        // convention this method already follows), not cleared.
+        if (_deadEntities?.Has(entityId) == true)
+        {
+            return false;
+        }
+
         // Defensive only -- terrain is never removed once placed, so SourceEntityId should
         // always still have DamageOnContactComponent.
         if (!_hazards.TryGetReadonly(exposure.SourceEntityId, out var hazard))

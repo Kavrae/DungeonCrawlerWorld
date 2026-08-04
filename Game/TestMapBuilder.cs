@@ -25,9 +25,14 @@ namespace Game;
 /// </summary>
 public sealed class TestMapBuilder(EntityManager entityManager, ComponentManager componentManager, MathUtility mathUtility, UniqueNumberAllocator crawlerNumberAllocator)
 {
-    private const int GroundPopulationPercent = 10;
-    private const int UnderGroundGhostPercent = 5;
-    private const int FlyingFairyPercent = 5;
+    // TEMPORARY: halved from the original values below (10/5/5) to reduce the creature
+    // population -- Movement/HealthRegen/ContactDamage/StatusEffectAura all iterate this
+    // population every frame, and at the original density the game was effectively
+    // unplayable (5-10fps) for manual testing. Revert once the performance investigation
+    // these values are standing in for (see TODO.md) lands a real fix.
+    private const int GroundPopulationPercent = 5;
+    private const int UnderGroundGhostPercent = 3;
+    private const int FlyingFairyPercent = 3;
 
     /// <summary>Chance any given rolled NPC (see BuildRaceEntity) is also a Crawler -- deliberately small; most NPCs are not.</summary>
     private const int CrawlerPercent = 2;

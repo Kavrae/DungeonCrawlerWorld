@@ -1,0 +1,33 @@
+using Game.World;
+
+namespace Game.Modules.Achievements.Definitions;
+
+/// <summary>
+/// Awarded the first time the player kills an NPC (EntityDied sourced from the player -- see
+/// HealthDamage.Apply/DeathSystem). No "target != player" guard needed, unlike
+/// InertGasAchievement: HealthDamage.Apply never publishes EntityDied for the player itself (see
+/// its own doc comment on the death-at-0-HP exemption), so the player can never be the one who
+/// died under this design.
+/// </summary>
+public sealed class KilledAMobAchievement : IAchievementDefinition
+{
+    public Guid Id { get; } = new("3a1f8c2e-9d4b-47a6-8e2f-000000000006");
+
+    public string Name => "You've killed a mob!";
+
+    public string RequirementText => "Killed an NPC.";
+
+    public string Description =>
+        "You're a murderer! He probably had a family!";
+
+    public LootboxReward? Lootbox => null;
+
+    public string RewardText =>
+        "You can now gain experience. Get enough of it, and you might even go up a level.";
+
+    public void RegisterTrigger(AchievementTriggerContext context) =>
+        context.SubscribeUntilUnlocked<EntityDied>(died =>
+            died.Source.Kind == StatusEffectSourceKind.Entity
+            && died.EntityId != context.PlayerQuery!.PlayerEntityId
+            && died.Source.EntityId == context.PlayerQuery!.PlayerEntityId);
+}

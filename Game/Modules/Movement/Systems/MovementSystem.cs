@@ -3,6 +3,7 @@ using Engine.ECS.Systems;
 using Engine.Events;
 using Engine.Math;
 using Game.Modules.Core.Components;
+using Game.Modules.Death.Components;
 using Game.Modules.Movement.Components;
 using Game.World;
 
@@ -43,6 +44,7 @@ public sealed class MovementSystem : ISystem
     private readonly IEntityMoveSync _entityMoveSync;
     private readonly FrameEventBuffer<EntityMoved> _movedEntities;
     private readonly IPlayerQuery? _playerQuery;
+    private readonly PackedComponentPool<DeadComponent>? _deadEntities;
     private readonly EntityStripeSet _stripeSet;
 
     public MovementSystem(
@@ -54,7 +56,8 @@ public sealed class MovementSystem : ISystem
         EventBus eventBus,
         IEntityMoveSync entityMoveSync,
         FrameEventBuffer<EntityMoved> movedEntities,
-        IPlayerQuery? playerQuery)
+        IPlayerQuery? playerQuery,
+        PackedComponentPool<DeadComponent>? deadEntities = null)
     {
         _transformComponents = transformComponents;
         _actionLocks = actionLocks;
@@ -65,6 +68,7 @@ public sealed class MovementSystem : ISystem
         _entityMoveSync = entityMoveSync;
         _movedEntities = movedEntities;
         _playerQuery = playerQuery;
+        _deadEntities = deadEntities;
 
         _stripeSet = new EntityStripeSet(StripeCount, movementComponents.EntityIds);
         movementComponents.EntityAdded += _stripeSet.OnEntityAdded;
@@ -75,6 +79,11 @@ public sealed class MovementSystem : ISystem
     {
         foreach (var entityId in _stripeSet.GetBucket(stripeIndex))
         {
+            if (_deadEntities?.Has(entityId) == true)
+            {
+                continue;
+            }
+
             ref readonly var movementComponent = ref _movementComponents.GetReadonly(entityId);
 
             if (movementComponent.FramesToWait > 0)

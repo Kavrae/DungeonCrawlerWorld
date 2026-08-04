@@ -3,6 +3,7 @@ using Engine.ECS.Components.Stores;
 using Engine.Events;
 using Engine.Math;
 using Game.Modules.Abilities.Components;
+using Game.Modules.Death.Components;
 using Game.Modules.Health;
 using Game.Modules.Health.Components;
 using Game.Modules.StatModifiers;
@@ -45,7 +46,8 @@ public static class AbilityEffectResolver
         IPlayerQuery? playerQuery,
         StatusEffectAuraApplierRegistry statusEffectAppliers,
         ComponentManager componentManager,
-        MultiComponentPool<StatModifierComponent>? statModifiers = null)
+        MultiComponentPool<StatModifierComponent>? statModifiers = null,
+        PackedComponentPool<DeadComponent>? deadEntities = null)
     {
         var dealsDamage = instance.DamageAmount > 0;
         var effectiveDamage = dealsDamage
@@ -62,7 +64,7 @@ public static class AbilityEffectResolver
                     HealthDamage.Apply(health, eventBus, blockingEntityId, effectiveDamage, StatusEffectSource.FromEntity(sourceEntityId), playerQuery, ability.Name, statModifiers);
                 }
                 GrantStatModifiers(statModifiers, ability, blockingEntityId, sourceEntityId);
-                GrantStatusEffects(statusEffectAppliers, componentManager, eventBus, ability, blockingEntityId, sourceEntityId);
+                GrantStatusEffects(statusEffectAppliers, componentManager, eventBus, ability, blockingEntityId, sourceEntityId, deadEntities);
             }
 
             // Tiny/Phasing entities never occupy the Blocking slot GetEntityIdAt just checked
@@ -76,7 +78,7 @@ public static class AbilityEffectResolver
                     HealthDamage.Apply(health, eventBus, nonBlockingEntityId, effectiveDamage, StatusEffectSource.FromEntity(sourceEntityId), playerQuery, ability.Name, statModifiers);
                 }
                 GrantStatModifiers(statModifiers, ability, nonBlockingEntityId, sourceEntityId);
-                GrantStatusEffects(statusEffectAppliers, componentManager, eventBus, ability, nonBlockingEntityId, sourceEntityId);
+                GrantStatusEffects(statusEffectAppliers, componentManager, eventBus, ability, nonBlockingEntityId, sourceEntityId, deadEntities);
             }
         }
     }
@@ -96,9 +98,20 @@ public static class AbilityEffectResolver
         }
     }
 
-    /// <summary>Silently skips any StatusEffectType with no registered IStatusEffectAuraApplier -- not an error, the same "not yet supported" treatment StatusEffectAuraSystem.GrantStacks already gives an unregistered effect type.</summary>
-    private static void GrantStatusEffects(StatusEffectAuraApplierRegistry statusEffectAppliers, ComponentManager componentManager, EventBus eventBus, AbilityDefinition ability, int targetEntityId, int sourceEntityId)
+    /// <summary>
+    /// Silently skips any StatusEffectType with no registered IStatusEffectAuraApplier -- not an
+    /// error, the same "not yet supported" treatment StatusEffectAuraSystem.GrantStacks already
+    /// gives an unregistered effect type. Also skips a corpse entirely -- a dead target doesn't
+    /// receive newly-granted effects (see DeathSystem/DeadComponent); an effect already active on
+    /// an entity when it dies keeps ticking until it naturally expires, untouched here.
+    /// </summary>
+    private static void GrantStatusEffects(StatusEffectAuraApplierRegistry statusEffectAppliers, ComponentManager componentManager, EventBus eventBus, AbilityDefinition ability, int targetEntityId, int sourceEntityId, PackedComponentPool<DeadComponent>? deadEntities)
     {
+        if (deadEntities?.Has(targetEntityId) == true)
+        {
+            return;
+        }
+
         foreach (var effectType in ability.Effect.StatusEffects)
         {
             if (!statusEffectAppliers.TryGet(effectType, out var applier))

@@ -1,3 +1,5 @@
+using Game.Modules.Core.Components;
+
 namespace Game.World;
 
 /// <summary>
@@ -7,8 +9,14 @@ namespace Game.World;
 /// counterpart). Implemented by WorldEventSync, called directly by MovementSystem rather than
 /// through EventBus -- this reaction isn't optional/pluggable like ContactDamageSystem's or
 /// StatusEffectAuraSystem's, so it doesn't belong on the bus.
+///
+/// ConvertToNonBlocking is the same "mandatory map-occupancy bookkeeping" shape as SyncMove,
+/// just for a death transition instead of a move -- see DeathSystem, the other mandatory
+/// consumer of this abstraction.
 /// </summary>
 public interface IEntityMoveSync
 {
     void SyncMove(EntityMoved moved);
+
+    void ConvertToNonBlocking(int entityId, ref TransformComponent transform);
 }

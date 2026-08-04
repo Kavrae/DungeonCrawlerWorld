@@ -11,6 +11,7 @@ using Game.Modules.ContactDamage;
 using Game.Modules.Core;
 using Game.Modules.Core.Components;
 using Game.Modules.Crawler;
+using Game.Modules.Death;
 using Game.Modules.Health;
 using Game.Modules.Melee;
 using Game.Modules.Movement;
@@ -45,6 +46,7 @@ public static class GameBootstrapper
             new CoreModule(),
             new HealthModule(),
             new MovementModule(),
+            new DeathModule(),
             new RaceModule(),
             new ClassModule(),
             new AbilitiesModule(),

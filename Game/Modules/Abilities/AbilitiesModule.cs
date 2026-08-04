@@ -4,6 +4,7 @@ using Engine.Events;
 using Game.Modules.Abilities.Components;
 using Game.Modules.Abilities.Systems;
 using Game.Modules.Core.Components;
+using Game.Modules.Death.Components;
 using Game.Modules.Health.Components;
 using Game.Modules.StatModifiers.Components;
 using Game.Modules.StatusEffects;
@@ -63,6 +64,9 @@ public sealed class AbilitiesModule : IGameModule
         var statModifiers = componentManager.IsRegistered<StatModifierComponent>()
             ? componentManager.GetMultiPool<StatModifierComponent>()
             : null;
+        var deadEntities = componentManager.IsRegistered<DeadComponent>()
+            ? componentManager.GetPackedPool<DeadComponent>()
+            : null;
 
         systemManager.Register(new DelayedActionSystem(
             componentManager.GetPackedPool<PendingDelayedActionComponent>(),
@@ -75,7 +79,8 @@ public sealed class AbilitiesModule : IGameModule
             _playerQuery,
             _statusEffectAppliers,
             componentManager,
-            statModifiers));
+            statModifiers,
+            deadEntities));
 
         systemManager.Register(new AbilityActivationSystem(
             componentManager.GetPackedPool<PendingAbilityActivationComponent>(),
@@ -89,6 +94,7 @@ public sealed class AbilitiesModule : IGameModule
             _playerQuery,
             _statusEffectAppliers,
             componentManager,
-            statModifiers));
+            statModifiers,
+            deadEntities));
     }
 }

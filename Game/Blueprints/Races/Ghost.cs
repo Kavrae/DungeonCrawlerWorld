@@ -26,7 +26,7 @@ public sealed class Ghost(MathUtility mathUtility) : IBlueprint
     private const short DefaultAttackDamage = 5;
 
     /// <summary>ᗣ (U+15A3, Canadian Aboriginal Syllabics). Requires Symbola-Emoji.ttf loaded as a fallback font (see FontService)</summary>
-    private const string Glyph = "ᗣ";
+    private const string Glyph = "G";
 
     public void Build(ComponentManager componentManager, int entityId)
     {

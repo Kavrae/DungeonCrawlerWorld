@@ -214,6 +214,44 @@ public sealed class World(Map map) : IMapQuery, IPlayerQuery
         transformComponent.Position = new Vector3Int();
     }
 
+    /// <summary>
+    /// Transitions a currently-Blocking entity to non-Blocking at its own current position --
+    /// for a corpse (DeathSystem), which stops physically blocking movement but must stay
+    /// findable/renderable at the same spot, unlike RemoveEntityFromMap (a full despawn, which
+    /// also zeroes transformComponent.Position -- see that method's own doc comment). Caller
+    /// must already have added whatever component makes World.IsBlocking(entityId) return
+    /// false (e.g. NonBlockingComponent) before calling this, and must only call this for an
+    /// entity that actually held the Blocking slot -- calling it for an already-non-Blocking
+    /// entity (e.g. a Phasing Ghost, which may be sharing this tile with a real Blocking
+    /// occupant) would incorrectly clear that other occupant's Blocking registration. This
+    /// method only fixes up Map's own spatial index; it doesn't decide blocking state itself.
+    /// </summary>
+    public void ConvertToNonBlocking(int entityId, ref TransformComponent transformComponent)
+    {
+        if (!IsOnMap(transformComponent.Position))
+        {
+            return;
+        }
+
+        if (transformComponent.Size == TransformSize1)
+        {
+            Map.SetEntityId(transformComponent.Position, -1);
+        }
+        else
+        {
+            var z = transformComponent.Position.Z;
+            for (var x = transformComponent.Position.X; x < transformComponent.Position.X + transformComponent.Size.X; x++)
+            {
+                for (var y = transformComponent.Position.Y; y < transformComponent.Position.Y + transformComponent.Size.Y; y++)
+                {
+                    Map.SetEntityId(new Vector3Int(x, y, z), -1);
+                }
+            }
+        }
+
+        AddNonBlockingFootprint(entityId, transformComponent.Position, transformComponent.Size);
+    }
+
     public void PlaceEntityOnMap(int entityId, Vector3Int newPosition, ref TransformComponent transformComponent)
     {
         var size = transformComponent.Size;

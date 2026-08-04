@@ -4,6 +4,7 @@ using Engine.Math;
 using Game.Modules.Burning;
 using Game.Modules.Burning.Components;
 using Game.Modules.Core.Components;
+using Game.Modules.Death.Components;
 using Game.Modules.Poison;
 using Game.Modules.Poison.Components;
 using Game.Modules.StatusEffectAura;
@@ -75,6 +76,7 @@ public sealed class StatusEffectAuraSystemTests
         componentManager.RegisterPackedPool<BurningTimerComponent>(static (ref existing, incoming) => { });
         componentManager.RegisterPackedPool<PoisonTimerComponent>(static (ref existing, incoming) => { });
         componentManager.RegisterMultiPool<StatusEffectStack>();
+        componentManager.RegisterPackedPool<DeadComponent>(static (ref existing, incoming) => existing = incoming);
 
         var mapQuery = new FakeMapQuery();
         var movedEntities = new FrameEventBuffer<EntityMoved>();
@@ -86,7 +88,8 @@ public sealed class StatusEffectAuraSystemTests
             componentManager.GetDirectPool<TransformComponent>(),
             mapQuery,
             applierRegistry ?? DefaultApplierRegistry(),
-            movedEntities);
+            movedEntities,
+            componentManager.GetPackedPool<DeadComponent>());
 
         return (system, componentManager, mapQuery, movedEntities);
     }
@@ -394,6 +397,20 @@ public sealed class StatusEffectAuraSystemTests
 
         Assert.AreEqual(expectedStacks, PoisonStackCountOf(componentManager, ObserverEntityId));
         Assert.AreEqual(expectedStacks > 0, componentManager.GetPackedPool<StatusEffectAuraExposureComponent>().Has(ObserverEntityId));
+    }
+
+    /// <summary>A corpse doesn't accumulate new stacks from a nearby aura source -- see DeathSystem/DeadComponent.</summary>
+    [TestMethod]
+    public void DeadObserver_InRange_GrantsNothing()
+    {
+        var (system, componentManager, _, movedEntities) = Build();
+        AddSource(componentManager, SourceEntityId, SourcePosition, StatusEffectType.Burning, strength: 8);
+        componentManager.GetPackedPool<DeadComponent>().Add(ObserverEntityId, new DeadComponent(KilledByEntityId: null));
+
+        MoveObserverTo(system, movedEntities, new Vector3Int(0, 0, 0), SourcePosition);
+
+        Assert.AreEqual(0, StackCountOf(componentManager, ObserverEntityId));
+        Assert.IsFalse(componentManager.GetPackedPool<StatusEffectAuraExposureComponent>().Has(ObserverEntityId));
     }
 
     /// <summary>StatusEffectAuraSourceComponent generalizes over EffectType, but granting still requires some module to have actually registered an IStatusEffectAuraApplier for it (see GrantStacks) -- a source authored for an effect type nothing has registered yet must grant nothing rather than throwing, and since nothing is actually granted, it must not track exposure either. GrantStacks reports "has a registered applier or not" precisely so TryGrantApplicableStacks doesn't infer "in range of something real" from a grid whose effect type nothing can apply.</summary>

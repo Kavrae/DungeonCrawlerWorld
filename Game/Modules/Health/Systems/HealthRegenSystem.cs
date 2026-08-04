@@ -1,6 +1,7 @@
 using Engine.ECS.Components.Stores;
 using Engine.ECS.Systems;
 using Engine.Math;
+using Game.Modules.Death.Components;
 using Game.Modules.Health.Components;
 using Game.Modules.StatModifiers;
 using Game.Modules.StatModifiers.Components;
@@ -22,12 +23,14 @@ public sealed class HealthRegenSystem : ISystem
 
     private readonly PackedComponentPool<HealthComponent> _healthComponents;
     private readonly MultiComponentPool<StatModifierComponent>? _statModifiers;
+    private readonly PackedComponentPool<DeadComponent>? _deadEntities;
     private readonly EntityStripeSet _stripeSet;
 
-    public HealthRegenSystem(PackedComponentPool<HealthComponent> healthComponents, MultiComponentPool<StatModifierComponent>? statModifiers = null)
+    public HealthRegenSystem(PackedComponentPool<HealthComponent> healthComponents, MultiComponentPool<StatModifierComponent>? statModifiers = null, PackedComponentPool<DeadComponent>? deadEntities = null)
     {
         _healthComponents = healthComponents;
         _statModifiers = statModifiers;
+        _deadEntities = deadEntities;
         _stripeSet = new EntityStripeSet(StripeCount, healthComponents.EntityIds);
         healthComponents.EntityAdded += _stripeSet.OnEntityAdded;
         healthComponents.EntityRemoved += _stripeSet.OnEntityRemoved;
@@ -38,6 +41,12 @@ public sealed class HealthRegenSystem : ISystem
         foreach (var entityId in _stripeSet.GetBucket(stripeIndex))
         {
             if (!_healthComponents.TryGetReadonly(entityId, out var currentHealthComponent))
+            {
+                continue;
+            }
+
+            // A corpse shouldn't regenerate back above 0.
+            if (_deadEntities?.Has(entityId) == true)
             {
                 continue;
             }

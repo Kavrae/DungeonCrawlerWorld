@@ -123,4 +123,67 @@ public sealed class HealthDamageTests
 
         Assert.IsFalse(published);
     }
+
+    [TestMethod]
+    public void Apply_DamageBringsNonPlayerEntityToZero_PublishesEntityDiedWithSource()
+    {
+        var pool = CreatePool();
+        pool.Add(1, new HealthComponent(currentHealth: 5, healthRegen: 0, maximumHealth: 100));
+        var eventBus = new EventBus();
+        EntityDied? published = null;
+        eventBus.Subscribe<EntityDied>(e => published = e);
+
+        HealthDamage.Apply(pool, eventBus, 1, 10, StatusEffectSource.FromEntity(0), new FakePlayerQuery(0), "Default Attack");
+        eventBus.DispatchBuffered<EntityDied>();
+
+        Assert.IsNotNull(published);
+        Assert.AreEqual(1, published!.Value.EntityId);
+        Assert.AreEqual(StatusEffectSource.FromEntity(0), published.Value.Source);
+    }
+
+    [TestMethod]
+    public void Apply_DamageDoesNotReachZero_DoesNotPublishEntityDied()
+    {
+        var pool = CreatePool();
+        pool.Add(1, new HealthComponent(currentHealth: 50, healthRegen: 0, maximumHealth: 100));
+        var eventBus = new EventBus();
+        var published = false;
+        eventBus.Subscribe<EntityDied>(_ => published = true);
+
+        HealthDamage.Apply(pool, eventBus, 1, 10, StatusEffectSource.Admin, new FakePlayerQuery(0), "Contact");
+        eventBus.DispatchBuffered<EntityDied>();
+
+        Assert.IsFalse(published);
+    }
+
+    [TestMethod]
+    public void Apply_SecondHitAgainstAlreadyZeroEntity_DoesNotRepublishEntityDied()
+    {
+        var pool = CreatePool();
+        pool.Add(1, new HealthComponent(currentHealth: 5, healthRegen: 0, maximumHealth: 100));
+        var eventBus = new EventBus();
+        var publishCount = 0;
+        eventBus.Subscribe<EntityDied>(_ => publishCount++);
+
+        HealthDamage.Apply(pool, eventBus, 1, 10, StatusEffectSource.Admin, new FakePlayerQuery(0), "Contact");
+        HealthDamage.Apply(pool, eventBus, 1, 10, StatusEffectSource.Admin, new FakePlayerQuery(0), "Contact");
+        eventBus.DispatchBuffered<EntityDied>();
+
+        Assert.AreEqual(1, publishCount);
+    }
+
+    [TestMethod]
+    public void Apply_PlayerEntityAtExactlyZero_DoesNotPublishEntityDied()
+    {
+        var pool = CreatePool();
+        pool.Add(0, new HealthComponent(currentHealth: 5, healthRegen: 0, maximumHealth: 100));
+        var eventBus = new EventBus();
+        var published = false;
+        eventBus.Subscribe<EntityDied>(_ => published = true);
+
+        HealthDamage.Apply(pool, eventBus, 0, 10, StatusEffectSource.Admin, new FakePlayerQuery(0), "Contact");
+        eventBus.DispatchBuffered<EntityDied>();
+
+        Assert.IsFalse(published);
+    }
 }

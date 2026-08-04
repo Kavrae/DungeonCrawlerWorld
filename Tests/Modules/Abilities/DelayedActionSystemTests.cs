@@ -5,6 +5,7 @@ using Game.Modules.Abilities;
 using Game.Modules.Abilities.Components;
 using Game.Modules.Abilities.Systems;
 using Game.Modules.Core.Components;
+using Game.Modules.Death.Components;
 using Game.Modules.Health.Components;
 using Game.Modules.StatusEffects;
 using Game.World;
@@ -43,6 +44,7 @@ public sealed class DelayedActionSystemTests
         componentManager.RegisterPackedPool<ActionLockComponent>(static (ref existing, incoming) => existing = incoming);
         componentManager.RegisterMultiPool<AbilityInstanceComponent>();
         componentManager.RegisterPackedPool<HealthComponent>(static (ref existing, incoming) => existing = incoming);
+        componentManager.RegisterPackedPool<DeadComponent>(static (ref existing, incoming) => existing = incoming);
 
         var mapQuery = new FakeMapQuery();
         var eventBus = new EventBus();
@@ -66,7 +68,9 @@ public sealed class DelayedActionSystemTests
             eventBus,
             playerQuery: null,
             new StatusEffectAuraApplierRegistry(),
-            componentManager);
+            componentManager,
+            statModifiers: null,
+            componentManager.GetPackedPool<DeadComponent>());
 
         return (system, componentManager, mapQuery, eventBus);
     }
@@ -104,6 +108,22 @@ public sealed class DelayedActionSystemTests
 
         Assert.AreEqual(85, HealthOf(componentManager, TargetEntityId));
         Assert.IsFalse(componentManager.GetPackedPool<PendingDelayedActionComponent>().Has(CasterEntityId), "Resolved -- the pending action must be cleared so it isn't resolved again next visit.");
+    }
+
+    [TestMethod]
+    public void LockReachesZero_CasterIsDead_DoesNotResolveEffect()
+    {
+        var (system, componentManager, mapQuery, _) = Build();
+        mapQuery.SetOccupant(TargetTile, TargetEntityId);
+        componentManager.Merge(TargetEntityId, new HealthComponent(100, 0, 100));
+        componentManager.Merge(CasterEntityId, new AbilityInstanceComponent(AbilityId, damageAmount: 15, cooldownFramesRemaining: 0));
+        componentManager.Merge(CasterEntityId, new ActionLockComponent(totalLockFrames: 30, lockFramesRemaining: 0));
+        componentManager.Merge(CasterEntityId, new PendingDelayedActionComponent(AbilityId, [TargetTile]));
+        componentManager.GetPackedPool<DeadComponent>().Add(CasterEntityId, new DeadComponent(KilledByEntityId: null));
+
+        system.Update(default, 0);
+
+        Assert.AreEqual(100, HealthOf(componentManager, TargetEntityId), "A corpse can't finish a windup.");
     }
 
     [TestMethod]

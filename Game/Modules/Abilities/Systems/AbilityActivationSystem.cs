@@ -5,6 +5,7 @@ using Engine.Events;
 using Engine.Math;
 using Game.Modules.Abilities.Components;
 using Game.Modules.Core.Components;
+using Game.Modules.Death.Components;
 using Game.Modules.Health.Components;
 using Game.Modules.StatModifiers.Components;
 using Game.Modules.StatusEffects;
@@ -45,6 +46,7 @@ public sealed class AbilityActivationSystem : ISystem
     private readonly IPlayerQuery? _playerQuery;
     private readonly StatusEffectAuraApplierRegistry _statusEffectAppliers;
     private readonly ComponentManager _componentManager;
+    private readonly PackedComponentPool<DeadComponent>? _deadEntities;
     private readonly EntityStripeSet _stripeSet;
 
     public AbilityActivationSystem(
@@ -59,7 +61,8 @@ public sealed class AbilityActivationSystem : ISystem
         IPlayerQuery? playerQuery,
         StatusEffectAuraApplierRegistry statusEffectAppliers,
         ComponentManager componentManager,
-        MultiComponentPool<StatModifierComponent>? statModifiers = null)
+        MultiComponentPool<StatModifierComponent>? statModifiers = null,
+        PackedComponentPool<DeadComponent>? deadEntities = null)
     {
         _pendingActivations = pendingActivations;
         _actionLocks = actionLocks;
@@ -73,6 +76,7 @@ public sealed class AbilityActivationSystem : ISystem
         _playerQuery = playerQuery;
         _statusEffectAppliers = statusEffectAppliers;
         _componentManager = componentManager;
+        _deadEntities = deadEntities;
 
         _stripeSet = new EntityStripeSet(StripeCount, pendingActivations.EntityIds);
         pendingActivations.EntityAdded += _stripeSet.OnEntityAdded;
@@ -83,6 +87,11 @@ public sealed class AbilityActivationSystem : ISystem
     {
         foreach (var entityId in _stripeSet.GetBucket(stripeIndex))
         {
+            if (_deadEntities?.Has(entityId) == true)
+            {
+                continue;
+            }
+
             if (!_pendingActivations.TryGetReadonly(entityId, out var request))
             {
                 continue;
@@ -130,7 +139,7 @@ public sealed class AbilityActivationSystem : ISystem
             return false;
         }
 
-        AbilityEffectResolver.Apply(ability, instance, entityId, targetTiles, _mapQuery, _health, _eventBus, _playerQuery, _statusEffectAppliers, _componentManager, _statModifiers);
+        AbilityEffectResolver.Apply(ability, instance, entityId, targetTiles, _mapQuery, _health, _eventBus, _playerQuery, _statusEffectAppliers, _componentManager, _statModifiers, _deadEntities);
         ActionLockGate.Lock(_actionLocks, entityId, ability.Timing.ActionLockFrames);
         return true;
     }
@@ -150,7 +159,7 @@ public sealed class AbilityActivationSystem : ISystem
     //Note : bool to account for future casting costs.
     private bool TryActivateFreeCast(int entityId, AbilityDefinition ability, AbilityInstanceComponent instance, Vector3Int[] targetTiles)
     {
-        AbilityEffectResolver.Apply(ability, instance, entityId, targetTiles, _mapQuery, _health, _eventBus, _playerQuery, _statusEffectAppliers, _componentManager, _statModifiers);
+        AbilityEffectResolver.Apply(ability, instance, entityId, targetTiles, _mapQuery, _health, _eventBus, _playerQuery, _statusEffectAppliers, _componentManager, _statModifiers, _deadEntities);
         return true;
     }
 

@@ -4,6 +4,7 @@ using Engine.Events;
 using Engine.Math;
 using Game.Modules.ContactDamage.Components;
 using Game.Modules.ContactDamage.Systems;
+using Game.Modules.Death.Components;
 using Game.Modules.Health.Components;
 using Game.World;
 
@@ -48,27 +49,32 @@ public sealed class ContactDamageSystemTests
     private static PackedComponentPool<HealthComponent> CreateHealthPool() =>
         new(maximumEntityCount: 200, initialCapacity: 4, static (ref existing, incoming) => existing = incoming);
 
+    private static PackedComponentPool<DeadComponent> CreateDeadPool() =>
+        new(maximumEntityCount: 200, initialCapacity: 4, static (ref existing, incoming) => existing = incoming);
+
     private static (
         ContactDamageSystem System,
         PackedComponentPool<DamageOnContactComponent> Hazards,
         PackedComponentPool<ContactDamageExposureComponent> Exposures,
         PackedComponentPool<HealthComponent> Health,
         FakeMapQuery MapQuery,
-        FrameEventBuffer<EntityMoved> MovedEntities) Build()
+        FrameEventBuffer<EntityMoved> MovedEntities,
+        PackedComponentPool<DeadComponent> DeadEntities) Build()
     {
         var hazards = CreateHazardPool();
         var exposures = CreateExposurePool();
         var health = CreateHealthPool();
         var mapQuery = new FakeMapQuery();
         var movedEntities = new FrameEventBuffer<EntityMoved>();
+        var deadEntities = CreateDeadPool();
 
         health.Add(MoverEntityId, new HealthComponent(currentHealth: 100, healthRegen: 0, maximumHealth: 100));
         hazards.Add(TerrainEntityId, new DamageOnContactComponent(damagePerTick: 10, tickIntervalFrames: 60));
         mapQuery.SetTerrain(new Vector3Int(5, 5, 0), TerrainEntityId);
 
-        var system = new ContactDamageSystem(hazards, exposures, health, new EventBus(), mapQuery, new FakePlayerQuery(MoverEntityId), movedEntities);
+        var system = new ContactDamageSystem(hazards, exposures, health, new EventBus(), mapQuery, new FakePlayerQuery(MoverEntityId), movedEntities, statModifiers: null, deadEntities);
 
-        return (system, hazards, exposures, health, mapQuery, movedEntities);
+        return (system, hazards, exposures, health, mapQuery, movedEntities, deadEntities);
     }
 
     /// <summary>
@@ -88,7 +94,7 @@ public sealed class ContactDamageSystemTests
     [TestMethod]
     public void SteppingOntoHazard_DealsImmediateDamage()
     {
-        var (system, _, _, health, _, movedEntities) = Build();
+        var (system, _, _, health, _, movedEntities, _) = Build();
 
         movedEntities.Record(new EntityMoved(MoverEntityId, new Vector3Int(4, 5, 0), new Vector3Int(5, 5, 0), new Vector2Byte(1, 1)));
         SimulateFrame(system, movedEntities);
@@ -110,7 +116,7 @@ public sealed class ContactDamageSystemTests
     [TestMethod]
     public void SteppingOntoHazard_AddsExposureWithCountdownAlreadyTickedOnceThisFrame()
     {
-        var (system, _, exposures, _, _, movedEntities) = Build();
+        var (system, _, exposures, _, _, movedEntities, _) = Build();
 
         movedEntities.Record(new EntityMoved(MoverEntityId, new Vector3Int(4, 5, 0), new Vector3Int(5, 5, 0), new Vector2Byte(1, 1)));
         SimulateFrame(system, movedEntities);
@@ -122,7 +128,7 @@ public sealed class ContactDamageSystemTests
     [TestMethod]
     public void SteppingOntoNonHazardTile_GrantsNoExposure()
     {
-        var (system, _, exposures, health, _, movedEntities) = Build();
+        var (system, _, exposures, health, _, movedEntities, _) = Build();
 
         movedEntities.Record(new EntityMoved(MoverEntityId, new Vector3Int(4, 5, 0), new Vector3Int(4, 6, 0), new Vector2Byte(1, 1)));
         SimulateFrame(system, movedEntities);
@@ -134,7 +140,7 @@ public sealed class ContactDamageSystemTests
     [TestMethod]
     public void RemainingOnHazard_DealsDamageAgainAfterSixtyFrames()
     {
-        var (system, _, _, health, _, movedEntities) = Build();
+        var (system, _, _, health, _, movedEntities, _) = Build();
         movedEntities.Record(new EntityMoved(MoverEntityId, new Vector3Int(4, 5, 0), new Vector3Int(5, 5, 0), new Vector2Byte(1, 1)));
 
         // The first of these 60 frames both drains the buffer (adding the exposure and dealing
@@ -151,7 +157,7 @@ public sealed class ContactDamageSystemTests
     [TestMethod]
     public void RemainingOnHazard_FiftyNineFrames_DoesNotDealDamageYet()
     {
-        var (system, _, _, health, _, movedEntities) = Build();
+        var (system, _, _, health, _, movedEntities, _) = Build();
         movedEntities.Record(new EntityMoved(MoverEntityId, new Vector3Int(4, 5, 0), new Vector3Int(5, 5, 0), new Vector2Byte(1, 1)));
 
         for (var frame = 0; frame < 59; frame++)
@@ -163,9 +169,25 @@ public sealed class ContactDamageSystemTests
     }
 
     [TestMethod]
+    public void DeadEntityAlreadyExposed_DoesNotTakeFurtherDamage()
+    {
+        var (system, _, _, health, _, movedEntities, deadEntities) = Build();
+        movedEntities.Record(new EntityMoved(MoverEntityId, new Vector3Int(4, 5, 0), new Vector3Int(5, 5, 0), new Vector2Byte(1, 1)));
+        SimulateFrame(system, movedEntities); // Onto the hazard: exposure added, immediate 10 damage -> 90.
+        deadEntities.Add(MoverEntityId, new DeadComponent(KilledByEntityId: null));
+
+        for (var frame = 0; frame < 60; frame++)
+        {
+            SimulateFrame(system, movedEntities);
+        }
+
+        Assert.AreEqual(90, health.GetReadonly(MoverEntityId).CurrentHealth, "A corpse standing in lava must not keep taking contact damage forever.");
+    }
+
+    [TestMethod]
     public void SteppingOffHazard_StopsFurtherDamage()
     {
-        var (system, _, exposures, health, _, movedEntities) = Build();
+        var (system, _, exposures, health, _, movedEntities, _) = Build();
         movedEntities.Record(new EntityMoved(MoverEntityId, new Vector3Int(4, 5, 0), new Vector3Int(5, 5, 0), new Vector2Byte(1, 1)));
         movedEntities.Record(new EntityMoved(MoverEntityId, new Vector3Int(5, 5, 0), new Vector3Int(6, 5, 0), new Vector2Byte(1, 1)));
         SimulateFrame(system, movedEntities); // Drains both buffered moves: onto the hazard (adds exposure + damage), then off it (removes the exposure) -- all before this call's own tick pass.
@@ -183,7 +205,7 @@ public sealed class ContactDamageSystemTests
     [TestMethod]
     public void HazardToHazardMove_RetriggersImmediateDamageAndResetsCountdown()
     {
-        var (system, hazards, exposures, health, mapQuery, movedEntities) = Build();
+        var (system, hazards, exposures, health, mapQuery, movedEntities, _) = Build();
         const int secondTerrainEntityId = 101;
         hazards.Add(secondTerrainEntityId, new DamageOnContactComponent(damagePerTick: 10, tickIntervalFrames: 60));
         mapQuery.SetTerrain(new Vector3Int(6, 5, 0), secondTerrainEntityId);

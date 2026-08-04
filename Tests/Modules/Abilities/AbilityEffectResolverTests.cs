@@ -4,6 +4,7 @@ using Engine.Events;
 using Engine.Math;
 using Game.Modules.Abilities;
 using Game.Modules.Abilities.Components;
+using Game.Modules.Death.Components;
 using Game.Modules.Health.Components;
 using Game.Modules.StatusEffects;
 using Game.World;
@@ -237,5 +238,21 @@ public sealed class AbilityEffectResolverTests
         AbilityEffectResolver.Apply(AbilityWithStatusEffect, StatusEffectInstance, SourceEntityId, [TargetTile], mapQuery, health, eventBus, playerQuery: null, statusEffectAppliers, componentManager);
 
         Assert.IsFalse(published);
+    }
+
+    /// <summary>A corpse doesn't receive newly-granted status effects -- see DeathSystem/DeadComponent.</summary>
+    [TestMethod]
+    public void Apply_TargetIsDead_DoesNotGrantStatusEffect()
+    {
+        var (mapQuery, health, eventBus, statusEffectAppliers, componentManager) = Build();
+        var applier = new FakeStatusEffectAuraApplier(StatusEffectType.Paralysis);
+        statusEffectAppliers.Register(applier);
+        mapQuery.SetBlockingOccupant(TargetTile, BlockingTargetEntityId);
+        componentManager.RegisterPackedPool<DeadComponent>(static (ref existing, incoming) => existing = incoming);
+        componentManager.GetPackedPool<DeadComponent>().Add(BlockingTargetEntityId, new DeadComponent(KilledByEntityId: null));
+
+        AbilityEffectResolver.Apply(AbilityWithStatusEffect, StatusEffectInstance, SourceEntityId, [TargetTile], mapQuery, health, eventBus, playerQuery: null, statusEffectAppliers, componentManager, statModifiers: null, componentManager.GetPackedPool<DeadComponent>());
+
+        Assert.AreEqual(0, applier.AppliedCalls.Count);
     }
 }

@@ -29,6 +29,7 @@ public sealed class AchievementModule : IGameModule
         new EarlyAdopterAchievement(),
         new InertGasAchievement(),
         new InflictedDamageAchievement(),
+        new KilledAMobAchievement(),
         new LonerAchievement(),
         new UnarmedCombatAchievement()
         ];

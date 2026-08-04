@@ -1,6 +1,7 @@
 using Engine.ECS.Components;
 using Engine.ECS.Systems;
 using Game.Modules.Core.Components;
+using Game.Modules.Death.Components;
 using Game.Modules.Movement;
 using Game.Modules.StatusEffectAura.Components;
 using Game.Modules.StatusEffectAura.Systems;
@@ -48,7 +49,12 @@ public sealed class StatusEffectAuraModule : IGameModule
         componentManager.RegisterPackedPool<StatusEffectAuraExposureComponent>(static (ref existing, incoming) => { });
     }
 
-    public void RegisterSystems(SystemManager systemManager, ComponentManager componentManager) =>
+    public void RegisterSystems(SystemManager systemManager, ComponentManager componentManager)
+    {
+        var deadEntities = componentManager.IsRegistered<DeadComponent>()
+            ? componentManager.GetPackedPool<DeadComponent>()
+            : null;
+
         systemManager.Register(new StatusEffectAuraSystem(
             componentManager,
             componentManager.GetPackedPool<StatusEffectAuraExposureComponent>(),
@@ -56,5 +62,7 @@ public sealed class StatusEffectAuraModule : IGameModule
             componentManager.GetDirectPool<TransformComponent>(),
             _mapQuery,
             _applierRegistry,
-            _movedEntities));
+            _movedEntities,
+            deadEntities));
+    }
 }

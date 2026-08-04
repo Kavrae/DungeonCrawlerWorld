@@ -3,6 +3,7 @@ using Engine.ECS.Systems;
 using Engine.Events;
 using Game.Modules.ContactDamage.Components;
 using Game.Modules.ContactDamage.Systems;
+using Game.Modules.Death.Components;
 using Game.Modules.Health.Components;
 using Game.Modules.Movement;
 using Game.Modules.StatModifiers.Components;
@@ -54,6 +55,9 @@ public sealed class ContactDamageModule : IGameModule
         var statModifiers = componentManager.IsRegistered<StatModifierComponent>()
             ? componentManager.GetMultiPool<StatModifierComponent>()
             : null;
+        var deadEntities = componentManager.IsRegistered<DeadComponent>()
+            ? componentManager.GetPackedPool<DeadComponent>()
+            : null;
 
         systemManager.Register(new ContactDamageSystem(
             componentManager.GetPackedPool<DamageOnContactComponent>(),
@@ -63,6 +67,7 @@ public sealed class ContactDamageModule : IGameModule
             _mapQuery,
             _playerQuery,
             _movedEntities,
-            statModifiers));
+            statModifiers,
+            deadEntities));
     }
 }

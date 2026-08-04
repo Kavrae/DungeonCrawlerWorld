@@ -6,6 +6,7 @@ using Game.Modules.Abilities;
 using Game.Modules.Abilities.Components;
 using Game.Modules.Core;
 using Game.Modules.Core.Components;
+using Game.Modules.Death.Components;
 using Game.Modules.Health.Components;
 using Game.Modules.Movement.Components;
 using Game.Modules.StatModifiers;
@@ -44,6 +45,7 @@ public sealed class MapWindow : Window
     private readonly MultiComponentPool<NonBlockingComponent> _nonBlockingPool;
     private readonly PackedComponentPool<HealthComponent> _healthPool;
     private readonly MultiComponentPool<StatModifierComponent>? _statModifiers;
+    private readonly PackedComponentPool<DeadComponent>? _deadPool;
     private readonly PackedComponentPool<PendingDelayedActionComponent> _pendingDelayedActions;
     private readonly TileRenderer _tileRenderer;
     private readonly GlyphRenderer _glyphRenderer;
@@ -96,6 +98,9 @@ public sealed class MapWindow : Window
         _healthPool = componentManager.GetPackedPool<HealthComponent>();
         _statModifiers = componentManager.IsRegistered<StatModifierComponent>()
             ? componentManager.GetMultiPool<StatModifierComponent>()
+            : null;
+        _deadPool = componentManager.IsRegistered<DeadComponent>()
+            ? componentManager.GetPackedPool<DeadComponent>()
             : null;
         _pendingDelayedActions = componentManager.GetPackedPool<PendingDelayedActionComponent>();
         _tileRenderer = tileRenderer;
@@ -372,6 +377,7 @@ public sealed class MapWindow : Window
                 var tileOrigin = TileOrigin(columnIndex, rowIndex);
                 var occupantsHere = _world.GetNonBlockingEntityIdsAt(new Vector3Int(mapNodeX, mapNodeY, currentMapLayer));
 
+                DrawCorpses(spriteBatch, occupantsHere, mapNodeX, mapNodeY, tileOrigin);
                 DrawTinyGrid(spriteBatch, occupantsHere, tileOrigin);
                 DrawPrimaryOccupant(spriteBatch, unitRectangle, currentMapLayer, mapNodeX, mapNodeY, columnIndex, rowIndex);
                 DrawPhasingGlyphs(spriteBatch, occupantsHere, tileOrigin);
@@ -380,19 +386,23 @@ public sealed class MapWindow : Window
         }
     }
 
-    /// <summary>Draws entityId's sprite if it has one, else falls back to its glyph -- the one place that decides sprite-vs-glyph, shared by every per-tile visual draw below. Returns whether anything was actually drawn.</summary>
+    /// <summary>Draws entityId's sprite if it has one, else falls back to its glyph -- the one place that decides sprite-vs-glyph, shared by every per-tile visual draw below. Returns whether anything was actually drawn. A corpse (DeadComponent) draws with a flat Color.Gray tint instead of its normal color -- a color-multiply override, not a true desaturation shader (no shader/Effect infrastructure exists here).</summary>
     private bool TryDrawEntityVisual(SpriteBatch spriteBatch, int entityId, SpriteFontBase font, Vector2 footprintTopLeft, Vector2 footprintSize, float alphaMultiplier = 1f)
     {
+        var isDead = _deadPool?.Has(entityId) == true;
+
         if (_spritePool.TryGetReadonly(entityId, out var spriteComponent))
         {
             var texture = _spriteSheetService.GetTexture(spriteComponent.SheetPath);
-            _spriteRenderer.Draw(spriteBatch, texture, spriteComponent.SourceRectangle, footprintTopLeft, footprintSize, Color.White * alphaMultiplier);
+            var tint = isDead ? Color.Gray : Color.White;
+            _spriteRenderer.Draw(spriteBatch, texture, spriteComponent.SourceRectangle, footprintTopLeft, footprintSize, tint * alphaMultiplier);
             return true;
         }
 
         if (_glyphPool.TryGetReadonly(entityId, out var glyphComponent))
         {
-            _glyphRenderer.DrawCentered(spriteBatch, font, glyphComponent.Glyph, footprintTopLeft, footprintSize, glyphComponent.GlyphColor * alphaMultiplier);
+            var tint = isDead ? Color.Gray : glyphComponent.GlyphColor;
+            _glyphRenderer.DrawCentered(spriteBatch, font, glyphComponent.Glyph, footprintTopLeft, footprintSize, tint * alphaMultiplier);
             return true;
         }
 
@@ -472,6 +482,41 @@ public sealed class MapWindow : Window
 
         TryDrawEntityVisual(spriteBatch, entityId, FontForSize(transformComponent.Size.X), footprintTopLeft, footprintSize);
         DrawEntityIcons(spriteBatch, unitRectangle, entityId, footprintTopLeft, footprintSize);
+    }
+
+    /// <summary>
+    /// Draws each corpse (DeadComponent-marked occupant in the non-Blocking index) at its own
+    /// full footprint -- the same treatment DrawPrimaryOccupant gives the single Blocking
+    /// occupant, just sourced from the non-Blocking list instead: a corpse that used to be
+    /// Blocking no longer holds that slot (see DeathSystem/World.ConvertToNonBlocking), and
+    /// TryDrawEntityVisual's own DeadComponent check is what actually grey-tints it. A corpse
+    /// that was already non-Blocking when it died (e.g. a Phasing Ghost) is drawn by whichever
+    /// existing path already handles its Kind (DrawTinyGrid/DrawPhasingGlyphs), not here --
+    /// this only covers the "no NonBlockingKind flag" case those two paths don't draw at all.
+    /// </summary>
+    private void DrawCorpses(SpriteBatch spriteBatch, IReadOnlyList<int> occupants, int mapNodeX, int mapNodeY, Vector2 tileOrigin)
+    {
+        if (_deadPool is null)
+        {
+            return;
+        }
+
+        foreach (var entityId in occupants)
+        {
+            if (!_deadPool.Has(entityId) || (NonBlockingQueries.CombinedKind(_nonBlockingPool, entityId) & (NonBlockingKind.Tiny | NonBlockingKind.Phasing)) != 0)
+            {
+                continue;
+            }
+
+            if (!_transformPool.TryGetReadonly(entityId, out var transformComponent) ||
+                transformComponent.Position.X != mapNodeX || transformComponent.Position.Y != mapNodeY)
+            {
+                continue;
+            }
+
+            var footprintSize = new Vector2(transformComponent.Size.X * _camera.CurrentTileSize.X, transformComponent.Size.Y * _camera.CurrentTileSize.Y);
+            TryDrawEntityVisual(spriteBatch, entityId, FontForSize(transformComponent.Size.X), tileOrigin, footprintSize);
+        }
     }
 
     /// <summary>Skips the player entirely -- the top-right HUD health bar (see PlayerHealthBarContent) covers the player, so no per-tile icon here, now or for anything added to this method later, should duplicate it.</summary>

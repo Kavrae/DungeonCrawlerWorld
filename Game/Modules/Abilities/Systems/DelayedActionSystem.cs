@@ -4,6 +4,7 @@ using Engine.ECS.Systems;
 using Engine.Events;
 using Game.Modules.Abilities.Components;
 using Game.Modules.Core.Components;
+using Game.Modules.Death.Components;
 using Game.Modules.Health.Components;
 using Game.Modules.StatModifiers.Components;
 using Game.Modules.StatusEffects;
@@ -36,6 +37,7 @@ public sealed class DelayedActionSystem : ISystem
     private readonly IPlayerQuery? _playerQuery;
     private readonly StatusEffectAuraApplierRegistry _statusEffectAppliers;
     private readonly ComponentManager _componentManager;
+    private readonly PackedComponentPool<DeadComponent>? _deadEntities;
     private readonly EntityStripeSet _stripeSet;
 
     public DelayedActionSystem(
@@ -49,7 +51,8 @@ public sealed class DelayedActionSystem : ISystem
         IPlayerQuery? playerQuery,
         StatusEffectAuraApplierRegistry statusEffectAppliers,
         ComponentManager componentManager,
-        MultiComponentPool<StatModifierComponent>? statModifiers = null)
+        MultiComponentPool<StatModifierComponent>? statModifiers = null,
+        PackedComponentPool<DeadComponent>? deadEntities = null)
     {
         _pendingActions = pendingActions;
         _actionLocks = actionLocks;
@@ -62,6 +65,7 @@ public sealed class DelayedActionSystem : ISystem
         _playerQuery = playerQuery;
         _statusEffectAppliers = statusEffectAppliers;
         _componentManager = componentManager;
+        _deadEntities = deadEntities;
 
         _stripeSet = new EntityStripeSet(StripeCount, pendingActions.EntityIds);
         pendingActions.EntityAdded += _stripeSet.OnEntityAdded;
@@ -72,6 +76,11 @@ public sealed class DelayedActionSystem : ISystem
     {
         foreach (var entityId in _stripeSet.GetBucket(stripeIndex))
         {
+            if (_deadEntities?.Has(entityId) == true)
+            {
+                continue;
+            }
+
             if (!_pendingActions.TryGetReadonly(entityId, out var pending) ||
                 !_actionLocks.TryGetReadonly(entityId, out var actionLock) ||
                 actionLock.LockFramesRemaining > 0)
@@ -82,7 +91,7 @@ public sealed class DelayedActionSystem : ISystem
             if (_abilityCatalog.TryGet(pending.AbilityId, out var ability) &&
                 AbilityInstanceQueries.TryGet(_abilityInstances, entityId, pending.AbilityId, out var instance))
             {
-                AbilityEffectResolver.Apply(ability, instance, entityId, pending.TargetTiles, _mapQuery, _health, _eventBus, _playerQuery, _statusEffectAppliers, _componentManager, _statModifiers);
+                AbilityEffectResolver.Apply(ability, instance, entityId, pending.TargetTiles, _mapQuery, _health, _eventBus, _playerQuery, _statusEffectAppliers, _componentManager, _statModifiers, _deadEntities);
             }
 
             _pendingActions.Remove(entityId);

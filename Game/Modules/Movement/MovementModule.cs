@@ -4,6 +4,7 @@ using Engine.Events;
 using Engine.Math;
 using Game.Modules.Core;
 using Game.Modules.Core.Components;
+using Game.Modules.Death.Components;
 using Game.Modules.Movement.Components;
 using Game.Modules.Movement.Systems;
 using Game.World;
@@ -57,6 +58,10 @@ public sealed class MovementModule : IGameModule
             throw new InvalidOperationException($"{nameof(MovementModule)} requires {nameof(GameModuleContext)}.{nameof(GameModuleContext.EntityMoveSync)} to be set.");
         }
 
+        var deadEntities = componentManager.IsRegistered<DeadComponent>()
+            ? componentManager.GetPackedPool<DeadComponent>()
+            : null;
+
         systemManager.Register(new MovementSystem(
             componentManager.GetDirectPool<TransformComponent>(),
             componentManager.GetPackedPool<ActionLockComponent>(),
@@ -66,7 +71,8 @@ public sealed class MovementModule : IGameModule
             _eventBus,
             _entityMoveSync,
             _movedEntities,
-            _playerQuery));
+            _playerQuery,
+            deadEntities));
 
         systemManager.RegisterFrameScoped(_movedEntities);
     }
