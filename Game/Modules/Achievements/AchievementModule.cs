@@ -27,6 +27,7 @@ public sealed class AchievementModule : IGameModule
 
     private static readonly IReadOnlyList<IAchievementDefinition> Definitions = [
         new EarlyAdopterAchievement(),
+        new EmptyPocketsAchievement(),
         new InertGasAchievement(),
         new InflictedDamageAchievement(),
         new KilledAMobAchievement(),

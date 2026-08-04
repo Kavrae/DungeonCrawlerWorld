@@ -168,6 +168,61 @@ public sealed class MovementSystemTests
     }
 
     /// <summary>
+    /// Shallow stand-in for a future state where wandering entities only move when they have an
+    /// actual goal (see MovementSystem.SetNextMapPosition's own comment): half the time, a
+    /// Random-mode entity does nothing this cycle instead of searching for a step. Seed 1's
+    /// first coin-flip draw rolls Idle (confirmed by direct probe against MathUtility.Next) --
+    /// on an open map with no obstacles at all, so a move (if one happened) would be
+    /// unambiguously attributable to the search running, not to every direction failing.
+    /// </summary>
+    [TestMethod]
+    public void Update_RandomMode_IdleRoll_DoesNotMoveOrSearchForADirection()
+    {
+        var transformPool = CreateTransformPool();
+        var actionLockPool = CreateActionLockPool();
+        var movementPool = CreateMovementPool();
+        var world = new Game.World.World(new Map(new Vector3Int(5, 5, 1)));
+
+        var startPosition = new Vector3Int(2, 2, 0);
+        var transform = new TransformComponent(startPosition, new Vector2Byte(1, 1));
+        transformPool.Add(0, transform);
+        world.PlaceEntityOnMap(0, transform.Position, ref transform);
+        actionLockPool.Add(0, new ActionLockComponent(totalLockFrames: 0, lockFramesRemaining: 0));
+        movementPool.Add(0, new MovementComponent(MovementMode.Random, 10, null, null));
+
+        var system = new MovementSystem(transformPool, actionLockPool, movementPool, world, new MathUtility(new Random(1)), new EventBus(), new WorldEventSync(world), new FrameEventBuffer<EntityMoved>(), null, CreateProcessingTierPool(), new ProcessingTierEvents());
+        system.Update(default, 0);
+
+        Assert.AreEqual(startPosition, transformPool.GetReadonly(0).Position);
+        Assert.IsNull(movementPool.GetReadonly(0).NextMapPosition);
+        Assert.AreEqual(120, movementPool.GetReadonly(0).FramesToWait, "An Idle roll uses the same wait as a failed search, not a distinct value.");
+        Assert.AreEqual(0, actionLockPool.GetReadonly(0).LockFramesRemaining, "Going Idle isn't an action -- it must not touch the shared action lock.");
+    }
+
+    /// <summary>Complements the test above: a not-Idle roll (seed 2's first coin-flip draw) proceeds to a normal random step exactly as before this feature existed.</summary>
+    [TestMethod]
+    public void Update_RandomMode_NotIdleRoll_MovesNormally()
+    {
+        var transformPool = CreateTransformPool();
+        var actionLockPool = CreateActionLockPool();
+        var movementPool = CreateMovementPool();
+        var world = new Game.World.World(new Map(new Vector3Int(5, 5, 1)));
+
+        var startPosition = new Vector3Int(2, 2, 0);
+        var transform = new TransformComponent(startPosition, new Vector2Byte(1, 1));
+        transformPool.Add(0, transform);
+        world.PlaceEntityOnMap(0, transform.Position, ref transform);
+        actionLockPool.Add(0, new ActionLockComponent(totalLockFrames: 0, lockFramesRemaining: 0));
+        movementPool.Add(0, new MovementComponent(MovementMode.Random, 10, null, null));
+
+        var system = new MovementSystem(transformPool, actionLockPool, movementPool, world, new MathUtility(new Random(2)), new EventBus(), new WorldEventSync(world), new FrameEventBuffer<EntityMoved>(), null, CreateProcessingTierPool(), new ProcessingTierEvents());
+        system.Update(default, 0);
+
+        Assert.AreNotEqual(startPosition, transformPool.GetReadonly(0).Position);
+        Assert.AreEqual(10, actionLockPool.GetReadonly(0).LockFramesRemaining);
+    }
+
+    /// <summary>
     /// Regression test: another entity claiming NextMapPosition's target between selection and
     /// execution (e.g. the player queues a move the same real frame a wandering NPC steps into
     /// that cell first) used to go uncaught -- TryMoveToNextMapPosition wrote
@@ -282,7 +337,11 @@ public sealed class MovementSystemTests
         actionLockPool.Add(0, new ActionLockComponent(totalLockFrames: 0, lockFramesRemaining: 0));
         movementPool.Add(0, new MovementComponent(MovementMode.Random, 10, null, null));
 
-        var system = new MovementSystem(transformPool, actionLockPool, movementPool, mapQuery, new MathUtility(new Random(1)), new EventBus(), entityMoveSync, movedEntities, null, CreateProcessingTierPool(), new ProcessingTierEvents());
+        // Seed 2, not 1 -- MovementSystem's own Idle coin flip (50% chance to skip movement
+        // entirely, see SetNextMapPosition) now consumes the first draw from this shared
+        // Random; seed 1's first draw happens to roll Idle, which would leave this "a move
+        // actually happens" test with nothing to assert on. Seed 2 rolls not-idle first.
+        var system = new MovementSystem(transformPool, actionLockPool, movementPool, mapQuery, new MathUtility(new Random(2)), new EventBus(), entityMoveSync, movedEntities, null, CreateProcessingTierPool(), new ProcessingTierEvents());
         system.Update(default, 0);
 
         Assert.IsNotNull(entityMoveSync.LastSynced);
@@ -313,7 +372,8 @@ public sealed class MovementSystemTests
         EntityMoved? received = null;
         eventBus.Subscribe<EntityMoved>(e => received = e);
 
-        var system = new MovementSystem(transformPool, actionLockPool, movementPool, mapQuery, new MathUtility(new Random(1)), eventBus, new RecordingEntityMoveSync(), new FrameEventBuffer<EntityMoved>(), new FakePlayerQuery(0), CreateProcessingTierPool(), new ProcessingTierEvents());
+        // Seed 2 -- see Update_SuccessfulMove_SyncsMoveAndRecordsItWithoutTouchingWorld's own comment for why not seed 1.
+        var system = new MovementSystem(transformPool, actionLockPool, movementPool, mapQuery, new MathUtility(new Random(2)), eventBus, new RecordingEntityMoveSync(), new FrameEventBuffer<EntityMoved>(), new FakePlayerQuery(0), CreateProcessingTierPool(), new ProcessingTierEvents());
         system.Update(default, 0);
 
         Assert.IsNotNull(received, "The mover IS the configured player, so its move must still publish via EventBus.");
@@ -340,7 +400,8 @@ public sealed class MovementSystemTests
         var movedEntities = new FrameEventBuffer<EntityMoved>();
 
         // playerEntityId (99) never matches the mover (0) -- also covers a null IPlayerQuery, matching most tests above.
-        var system = new MovementSystem(transformPool, actionLockPool, movementPool, mapQuery, new MathUtility(new Random(1)), eventBus, new RecordingEntityMoveSync(), movedEntities, new FakePlayerQuery(99), CreateProcessingTierPool(), new ProcessingTierEvents());
+        // Seed 2 -- see Update_SuccessfulMove_SyncsMoveAndRecordsItWithoutTouchingWorld's own comment for why not seed 1.
+        var system = new MovementSystem(transformPool, actionLockPool, movementPool, mapQuery, new MathUtility(new Random(2)), eventBus, new RecordingEntityMoveSync(), movedEntities, new FakePlayerQuery(99), CreateProcessingTierPool(), new ProcessingTierEvents());
         system.Update(default, 0);
 
         Assert.IsFalse(published);
@@ -384,7 +445,8 @@ public sealed class MovementSystemTests
         transformPool.Add(2, westBlockerTransform);
         world.PlaceEntityOnMap(2, new Vector3Int(1, 0, 0), ref westBlockerTransform);
 
-        var system = new MovementSystem(transformPool, actionLockPool, movementPool, world, new MathUtility(new Random(1)), new EventBus(), new WorldEventSync(world), new FrameEventBuffer<EntityMoved>(), null, CreateProcessingTierPool(), new ProcessingTierEvents());
+        // Seed 2 -- see Update_SuccessfulMove_SyncsMoveAndRecordsItWithoutTouchingWorld's own comment for why not seed 1.
+        var system = new MovementSystem(transformPool, actionLockPool, movementPool, world, new MathUtility(new Random(2)), new EventBus(), new WorldEventSync(world), new FrameEventBuffer<EntityMoved>(), null, CreateProcessingTierPool(), new ProcessingTierEvents());
         system.Update(default, 0);
 
         Assert.AreEqual(5, actionLockPool.GetReadonly(0).LockFramesRemaining);
@@ -490,7 +552,8 @@ public sealed class MovementSystemTests
         movementPool.Add(0, new MovementComponent(MovementMode.Random, 10, null, null));
         processingTiers.Add(0, new ProcessingTierComponent(ProcessingTierLevel.Neighborhood));
 
-        var system = new MovementSystem(transformPool, actionLockPool, movementPool, mapQuery, new MathUtility(new Random(1)), new EventBus(), entityMoveSync, new FrameEventBuffer<EntityMoved>(), null, processingTiers, new ProcessingTierEvents());
+        // Seed 2 -- see Update_SuccessfulMove_SyncsMoveAndRecordsItWithoutTouchingWorld's own comment for why not seed 1.
+        var system = new MovementSystem(transformPool, actionLockPool, movementPool, mapQuery, new MathUtility(new Random(2)), new EventBus(), entityMoveSync, new FrameEventBuffer<EntityMoved>(), null, processingTiers, new ProcessingTierEvents());
         system.Update(new EngineTime(default, default, false, FrameCount: 0), 0);
 
         Assert.IsNotNull(entityMoveSync.LastSynced);
@@ -513,7 +576,8 @@ public sealed class MovementSystemTests
         actionLockPool.Add(0, new ActionLockComponent(totalLockFrames: 0, lockFramesRemaining: 0));
         movementPool.Add(0, new MovementComponent(MovementMode.Random, 10, null, null));
         // Entity 0 deliberately has no ProcessingTierComponent -- defaults to Local tier (divisor 1), the same cadence as before ProcessingTier existed (StripeCount 15, bucket 0, due when FrameCount % 15 == 0).
-        var system = new MovementSystem(transformPool, actionLockPool, movementPool, mapQuery, new MathUtility(new Random(1)), new EventBus(), entityMoveSync, new FrameEventBuffer<EntityMoved>(), null, processingTiers, new ProcessingTierEvents());
+        // Seed 2 -- see Update_SuccessfulMove_SyncsMoveAndRecordsItWithoutTouchingWorld's own comment for why not seed 1.
+        var system = new MovementSystem(transformPool, actionLockPool, movementPool, mapQuery, new MathUtility(new Random(2)), new EventBus(), entityMoveSync, new FrameEventBuffer<EntityMoved>(), null, processingTiers, new ProcessingTierEvents());
         system.Update(new EngineTime(default, default, false, FrameCount: 0), 0);
 
         Assert.IsNotNull(entityMoveSync.LastSynced);

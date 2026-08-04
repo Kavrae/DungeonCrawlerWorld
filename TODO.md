@@ -110,7 +110,7 @@ Achievements can name a `LootboxReward` (rarity + box type, see `Game/Modules/Ac
 
 #### Achievement content backlog
 
-The Achievement system (`Game/Modules/Achievements/`) currently ships six achievements ("Loner", "You've Inflicted Damage on a Mob", "Unarmed Combat", "Early Adopter", "Inert Gas", "You've killed a mob!") to prove the pipeline; the rest is a deliberate, incremental backlog -- a few added alongside each future feature rather than all at once. Volume/pacing target: many low-value achievements early (deliberately "drowning the player in low-level loot boxes" at the start), tapering to fewer, higher-value ones by the midgame.
+The Achievement system (`Game/Modules/Achievements/`) currently ships seven achievements ("Loner", "You've Inflicted Damage on a Mob", "Unarmed Combat", "Early Adopter", "Inert Gas", "You've killed a mob!", "Empty Pockets") to prove the pipeline; the rest is a deliberate, incremental backlog -- a few added alongside each future feature rather than all at once. Volume/pacing target: many low-value achievements early (deliberately "drowning the player in low-level loot boxes" at the start), tapering to fewer, higher-value ones by the midgame.
 
 Design-target examples, not yet implemented:
 - Enter the dungeon with a cat (random starting-item selection)
@@ -129,6 +129,8 @@ Several depend on systems that don't exist yet (Inventory, a real companion/part
 `LonerAchievement` (`Game/Modules/Achievements/Definitions/LonerAchievement.cs`) unlocks unconditionally on `Game.World.EnteredDungeon`, published once by `GameLoop` right after `_playerSpawned` flips true (so `IPlayerQuery.PlayerEntityId` is already assigned by the time the handler reads it -- no timing hazard the way the old `EntityMoved` spawn-sentinel trigger had). Once a real companion/party concept exists, this needs to actually check for a Human-race companion near the player at spawn instead of always succeeding.
 
 `UnarmedCombatAchievement` (`Game/Modules/Achievements/Definitions/UnarmedCombatAchievement.cs`) unlocks on the same `EnteredDungeon` event, same unconditional reasoning as `LonerAchievement` above (no equipment or start-equipment-selection system exists yet, so every player is unarmed today). Revisit once equipment/start-equipment selection lands: it should then check whether the player actually chose to start without a weapon.
+
+`EmptyPocketsAchievement` (`Game/Modules/Achievements/Definitions/EmptyPocketsAchievement.cs`) unlocks on the same `EnteredDungeon` event, same unconditional reasoning as `LonerAchievement`/`UnarmedCombatAchievement` above (no Inventory or start-equipment-selection system exists yet, so every player's inventory is empty today). Revisit once Inventory/start-equipment selection lands: it should then check whether the player's inventory is actually empty.
 
 #### Boundary-aware ProcessingTierSystem recompute
 

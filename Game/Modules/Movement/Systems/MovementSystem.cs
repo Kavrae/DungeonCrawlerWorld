@@ -125,6 +125,12 @@ public sealed class MovementSystem : ISystem
     {
         if (movementComponent.MovementMode == MovementMode.Random)
         {
+            if (_mathUtility.Next(0, 2) == 0)
+            {
+                SetIdle(entityId);
+                return;
+            }
+
             SetRandomMapPosition(entityId, movementComponent, transformComponent);
             return;
         }
@@ -295,9 +301,13 @@ public sealed class MovementSystem : ISystem
         }
         while (failedIndexCount < 4);
 
+        SetIdle(entityId);
+    }
+
+    /// <summary>Sets the entity's own FramesToWait (not the shared action lock -- going idle isn't an action) to FramesToWaitIfNoOptions.</summary>
+    private void SetIdle(int entityId) =>
         _movementComponents.TryUpdate(entityId, FramesToWaitIfNoOptions, static (ref MovementComponent movementComponent, short framesToWait) =>
         {
             movementComponent.FramesToWait = framesToWait;
         });
-    }
 }

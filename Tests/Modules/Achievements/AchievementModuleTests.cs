@@ -42,6 +42,8 @@ public sealed class AchievementModuleTests
 
     private static readonly Guid EarlyAdopterAchievementId = new EarlyAdopterAchievement().Id;
 
+    private static readonly Guid EmptyPocketsAchievementId = new EmptyPocketsAchievement().Id;
+
     private static readonly Guid LonerAchievementId = new LonerAchievement().Id;
 
     private static readonly Guid InflictedDamageAchievementId = new InflictedDamageAchievement().Id;
@@ -127,7 +129,7 @@ public sealed class AchievementModuleTests
             earnedCount++;
         }
 
-        Assert.AreEqual(2, earnedCount);
+        Assert.AreEqual(3, earnedCount, "Loner, Unarmed Combat, and Empty Pockets all unlock unconditionally on EnteredDungeon (Early Adopter needs a CrawlerComponent this test's player doesn't have).");
     }
 
     [TestMethod]
@@ -187,6 +189,50 @@ public sealed class AchievementModuleTests
             ecsContext.ComponentManager.GetMultiPool<AchievementUnlockedComponent>(),
             playerEntityId,
             UnarmedCombatAchievementId));
+    }
+
+    [TestMethod]
+    public void EnteredDungeon_UnlocksEmptyPocketsAndPublishesLootboxNotification()
+    {
+        var (ecsContext, eventBus, world) = Build();
+        var playerEntityId = ecsContext.EntityManager.CreateEntity();
+        world.PlayerEntityId = playerEntityId;
+        NotificationRequested? published = null;
+        eventBus.Subscribe<NotificationRequested>(requested =>
+        {
+            if (requested.Title == "Empty Pockets")
+            {
+                published = requested;
+            }
+        });
+
+        eventBus.Publish(new EnteredDungeon());
+        eventBus.DispatchBuffered<NotificationRequested>(); // NotificationRequested is buffered -- see NotificationCenter.Update's own doc comment.
+
+        Assert.IsTrue(AchievementQueries.HasEarned(
+            ecsContext.ComponentManager.GetMultiPool<AchievementUnlockedComponent>(),
+            playerEntityId,
+            EmptyPocketsAchievementId));
+
+        Assert.IsNotNull(published);
+        Assert.AreEqual(NotificationCategory.Achievement, published!.Category);
+        Assert.IsNotNull(published.Achievement);
+        Assert.AreEqual("Bronze Adventurer Box", published.Achievement!.LootboxLabel);
+    }
+
+    [TestMethod]
+    public void EntityMoved_DoesNotUnlockEmptyPockets()
+    {
+        var (ecsContext, eventBus, world) = Build();
+        var playerEntityId = ecsContext.EntityManager.CreateEntity();
+        world.PlayerEntityId = playerEntityId;
+
+        eventBus.Publish(new EntityMoved(playerEntityId, new Vector3Int(1, 1, 0), new Vector3Int(1, 1, 0), new Vector2Byte(1, 1)));
+
+        Assert.IsFalse(AchievementQueries.HasEarned(
+            ecsContext.ComponentManager.GetMultiPool<AchievementUnlockedComponent>(),
+            playerEntityId,
+            EmptyPocketsAchievementId));
     }
 
     [TestMethod]
