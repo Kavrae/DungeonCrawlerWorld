@@ -109,7 +109,7 @@ public sealed class InventoryGridContent(
                 Chrome = new ElementChromeOptions { ShowBorder = true, CanUserFocus = false },
                 Content = new ElementContentOptions { ContentColor = stack.IsDisabled ? DisabledCellColor : Color.White },
             });
-            cell.Configure(definition.SpriteName, definition.Glyph, definition.GlyphColor, stack.Quantity, stack.IsDisabled, CellSize);
+            cell.Configure(stack.ItemDefinitionId, definition.SpriteName, definition.Glyph, definition.GlyphColor, stack.Quantity, stack.IsDisabled, CellSize);
             _hostWindow.AddChild(cell);
 
             _cells.Add(cell);

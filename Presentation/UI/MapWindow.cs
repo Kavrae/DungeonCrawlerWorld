@@ -8,6 +8,8 @@ using Game.Modules.Core;
 using Game.Modules.Core.Components;
 using Game.Modules.Death.Components;
 using Game.Modules.Health.Components;
+using Game.Modules.Inventory;
+using Game.Modules.Inventory.Components;
 using Game.Modules.Movement.Components;
 using Game.Modules.StatModifiers;
 using Game.Modules.StatModifiers.Components;
@@ -75,6 +77,7 @@ public sealed class MapWindow : Window
         MapViewState mapViewState,
         ComponentManager componentManager,
         AbilityCatalog abilityCatalog,
+        ItemCatalog itemCatalog,
         TileRenderer tileRenderer,
         GlyphRenderer glyphRenderer,
         SpriteSheetService spriteSheetService,
@@ -84,6 +87,7 @@ public sealed class MapWindow : Window
         ArgumentNullException.ThrowIfNull(mapViewState);
         ArgumentNullException.ThrowIfNull(componentManager);
         ArgumentNullException.ThrowIfNull(abilityCatalog);
+        ArgumentNullException.ThrowIfNull(itemCatalog);
         ArgumentNullException.ThrowIfNull(tileRenderer);
         ArgumentNullException.ThrowIfNull(glyphRenderer);
         ArgumentNullException.ThrowIfNull(spriteSheetService);
@@ -114,10 +118,14 @@ public sealed class MapWindow : Window
             mapViewState,
             _camera,
             abilityCatalog,
+            itemCatalog,
             _transformPool,
             componentManager.GetPackedPool<MovementComponent>(),
-            componentManager.GetMultiPool<HotkeyBindingComponent>(),
+            componentManager.GetMultiPool<ActionHotkeyBindingComponent>(),
+            componentManager.GetMultiPool<ItemHotkeyBindingComponent>(),
+            componentManager.GetMultiPool<InventoryItemStackComponent>(),
             componentManager.GetPackedPool<PendingAbilityActivationComponent>(),
+            componentManager.GetPackedPool<PendingConsumableActivationComponent>(),
             componentManager.GetPackedPool<PendingDelayedActionComponent>(),
             componentManager.GetPackedPool<ActionLockComponent>());
         _tintGrid = new MapTintGrid(componentManager, world.Map.Size);
@@ -651,16 +659,16 @@ public sealed class MapWindow : Window
     }
 
     /// <summary>
-    /// A left-click confirms the armed ability's activation if an ability is armed, falling
-    /// back to the ordinary inspector click-select otherwise -- an armed ability's target
+    /// A left-click confirms the armed ability/item's activation if either is armed, falling
+    /// back to the ordinary inspector click-select otherwise -- an armed ability or item's target
     /// selection takes over the click entirely while it's active, matching how the outline
     /// describes left-click as the universal "activate" gesture once something is armed.
     /// </summary>
     protected override void OnContentClickAction(Point mousePosition)
     {
-        if (_mapViewState.ArmedAbilityId is { } abilityId)
+        if (_mapViewState.ArmedAbilityId is not null || _mapViewState.ArmedItemDefinitionId is not null)
         {
-            _abilityTargeting.TryConfirmActivation(mousePosition, _contentState.AbsolutePosition, abilityId);
+            _abilityTargeting.TryConfirmActivation(mousePosition, _contentState.AbsolutePosition);
             return;
         }
 

@@ -45,13 +45,13 @@ public sealed class InventoryFolderController(
 
     private Folder _folder = null!;
     private InventoryManagementWindow? _openWindow;
-    private List<Element> _alwaysOnTopElements = null!;
+    private List<Element> _dynamicHudElements = null!;
 
     public bool IsAnyWindowOpen => _openWindow is not null;
 
-    public void Initialize(List<Element> alwaysOnTopElements)
+    public void Initialize(List<Element> dynamicHudElements)
     {
-        _alwaysOnTopElements = alwaysOnTopElements;
+        _dynamicHudElements = dynamicHudElements;
 
         _folder = elementPoolService.CreateElement<Folder>(null, new ElementOptions
         {
@@ -72,7 +72,7 @@ public sealed class InventoryFolderController(
         tile.Clicked += _ => OpenInventoryWindow();
 
         _folder.Initialize();
-        alwaysOnTopElements.Add(_folder);
+        dynamicHudElements.Add(_folder);
 
         _folder.DisplayModeChanged += OnFolderDisplayModeChanged;
     }
@@ -107,7 +107,7 @@ public sealed class InventoryFolderController(
         window.Configure(world.PlayerEntityId);
         window.Closed += OnWindowClosed;
         window.Initialize();
-        _alwaysOnTopElements.Add(window);
+        _dynamicHudElements.Add(window);
         _openWindow = window;
     }
 
@@ -119,7 +119,7 @@ public sealed class InventoryFolderController(
         // NotificationCenter.OnActiveNotificationClosed.
         closedWindow.Closed -= OnWindowClosed;
 
-        _alwaysOnTopElements.Remove(closedWindow);
+        _dynamicHudElements.Remove(closedWindow);
         _openWindow = null;
 
         // Safe unconditionally -- SetDisplayMode no-ops (and doesn't refire DisplayModeChanged)

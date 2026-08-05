@@ -36,7 +36,7 @@ Items that get used up -- a potion drunk, a scroll read, ammo spent. Needs the i
 
 #### Move inventory items to the hotbar
 
-`Presentation/UI/Content/HotbarContent.cs` is ability-only today (`AbilityInstanceComponent`/`HotkeyBindingComponent`) despite its own doc comment calling out "Inventory and spell hotbar" as the target. Needs a way for a hotbar slot to reference an inventory item stack instead of (or alongside) an ability, and an activation path for "use this item" distinct from "cast this ability." Depends on the Standard widget set item below for any drag-and-drop involved in the actual assignment gesture.
+`ItemHotkeyBindingComponent` (`Game/Modules/Inventory/Components/`) plus `ConsumableActivationSystem`/`AbilityTargetingController`'s item-arm/target/confirm/double-tap path have landed -- a slot can reference an item and activate it (splash-throw or double-tap-self for potions), separately from `ActionHotkeyBindingComponent` (renamed from `HotkeyBindingComponent`, the ability-only original). `Presentation/UI/Content/HotbarContent.cs` still only *renders* ability slots though (Phase 4), and the only way to actually bind an item to a slot today is `PlayerBlueprint`'s TEMPORARY hardcoded grant -- real click-and-drag assignment (Phase 5) still depends on the Standard widget set item below.
 
 #### Shops and storage containers
 
@@ -126,7 +126,7 @@ Opening the player's inventory and a dead entity's inventory side-by-side. The c
 
 #### Achievement content backlog
 
-The Achievement system (`Game/Modules/Achievements/`) currently ships seven achievements ("Loner", "You've Inflicted Damage on a Mob", "Unarmed Combat", "Early Adopter", "Inert Gas", "You've killed a mob!", "Empty Pockets") to prove the pipeline; the rest is a deliberate, incremental backlog -- a few added alongside each future feature rather than all at once. Volume/pacing target: many low-value achievements early (deliberately "drowning the player in low-level loot boxes" at the start), tapering to fewer, higher-value ones by the midgame.
+The Achievement system (`Game/Modules/Achievements/`) currently ships eight achievements ("Loner", "You've Inflicted Damage on a Mob", "Unarmed Combat", "Early Adopter", "Inert Gas", "You've killed a mob!", "Empty Pockets", "Drinking Problem") to prove the pipeline; the rest is a deliberate, incremental backlog -- a few added alongside each future feature rather than all at once. Volume/pacing target: many low-value achievements early (deliberately "drowning the player in low-level loot boxes" at the start), tapering to fewer, higher-value ones by the midgame.
 
 Design-target examples, not yet implemented:
 - Enter the dungeon with a cat (random starting-item selection)
@@ -236,6 +236,10 @@ Affected: `Game/Modules/Core/Components/SpriteComponent.cs`, `Presentation/Rende
 
 A tooltip-style panel showing an ability's name/effect/cooldown when hovering its hotbar slot (`Presentation/UI/Content/HotbarContent.cs`) -- depends on the Hotbar UI existing first, which it now does.
 
+#### Status effect stack count on the player's status bar
+
+`PlayerStatusEffectsContent` (`Presentation/UI/Content/PlayerStatusEffectsContent.cs`) draws one icon per distinct status effect type the player currently has any stacks of, but never shows how many -- Poison/Burning/Paralysis all read as a single flat icon regardless of whether it's 1 stack or the type's max (e.g. `PoisonEffects.MaxStacks`). Should overlay the current stack count (`StatusEffectQueries.CountStacks`) on each icon, the same corner-text treatment `InventoryItemStackCell` already uses for item quantity.
+
 #### Player stats v2
 
 Allow the player to select which stats to display in their stats view. Follow-on to Player stats v1 above.
@@ -331,6 +335,14 @@ Affected: the new options-menu content (see Options menu above), `Presentation/I
 Not actually dependent on the Keybindings page item above -- `HandleKeyPress` (discrete edit-type keypresses, e.g. Backspace) and `HandleHotkeys` (continuous/combo game commands, what Keybindings remaps) are deliberately separate hooks. Sequenced here as a followup for proximity to the other keyboard-routing work, not a real ordering requirement.
 
 Affected: `Presentation/Input/GameInputController.cs` (`RouteKeyPressesToFocusedWindow`), `Presentation/UI/IWindowContent.cs`/`Window.cs` (a new way for content to declare its interested keys), `Presentation/UI/TextBox.cs` (the one current consumer, declaring interest in `Keys.Back`).
+
+#### Chat and speech
+
+Glowing speech bubbles over NPCs, clickable to open a larger text window for the full line -- an ambient, per-NPC presentation of dialogue rather than a single shared log. Separately, a WoW/other-MMO-style chat menu as a configurable output sink for debug info, loot drops, combat/damage numbers, NPC chatter, etc., with default built-in tabs ("Loot", "Combat", "Local Chat", "Notifications") and user-configurable routing of message types to tabs. `NotificationCenter` (`Presentation/UI/Notifications/`) is the closest existing precedent (categorized, tabbed-ish notification delivery) but is popup/toast-shaped, not a persistent scrollback log -- this is a different, bigger widget.
+
+#### Visual improvement pass
+
+A dedicated pass over UI sizing, placement, and colors across the whole Presentation layer once more of the HUD has landed and stopped churning -- today's values (`HudMetrics`, per-content `Size`/color constants scattered across `Presentation/UI/Content/`) were each chosen locally, one element at a time, not against a single coherent visual system.
 
 ## Global
 

@@ -1,6 +1,13 @@
 using Engine.ECS.Components;
 using Engine.ECS.Systems;
+using Engine.Events;
+using Game.Modules.Core.Components;
+using Game.Modules.Death.Components;
+using Game.Modules.Health.Components;
 using Game.Modules.Inventory.Components;
+using Game.Modules.Inventory.Systems;
+using Game.Modules.StatModifiers.Components;
+using Game.World;
 
 namespace Game.Modules.Inventory;
 
@@ -10,19 +17,52 @@ public sealed class InventoryModule : IGameModule
 
     public IReadOnlyList<Type> Dependencies { get; } = [];
 
+    private ItemCatalog _itemCatalog = null!;
+    private IMapQuery _mapQuery = null!;
+    private EventBus _eventBus = null!;
+
     public void Configure(GameModuleContext context)
     {
-        // No runtime context needed -- see class doc comment.
+        _itemCatalog = context.Items;
+        _mapQuery = context.MapQuery;
+        _eventBus = context.EventBus;
     }
 
     public void RegisterComponents(ComponentManager componentManager)
     {
         componentManager.RegisterMultiPool<InventoryItemStackComponent>();
         componentManager.RegisterDirectPool<InventoryDisabledComponent>(static (ref existing, incoming) => existing.IsDisabled = incoming.IsDisabled);
+        componentManager.RegisterPackedPool<PotionCooldownComponent>(static (ref existing, incoming) => existing = incoming);
+        componentManager.RegisterPackedPool<PendingConsumableActivationComponent>(static (ref existing, incoming) => existing = incoming);
+        componentManager.RegisterMultiPool<ItemHotkeyBindingComponent>();
     }
 
     public void RegisterSystems(SystemManager systemManager, ComponentManager componentManager)
     {
-        // No systems of its own -- this pass is storage + viewing only, nothing ticks per-frame.
+        systemManager.Register(new PotionCooldownSystem(componentManager.GetPackedPool<PotionCooldownComponent>()));
+
+        if (!componentManager.IsRegistered<HealthComponent>())
+        {
+            return;
+        }
+
+        var statModifiers = componentManager.IsRegistered<StatModifierComponent>()
+            ? componentManager.GetMultiPool<StatModifierComponent>()
+            : null;
+        var deadEntities = componentManager.IsRegistered<DeadComponent>()
+            ? componentManager.GetPackedPool<DeadComponent>()
+            : null;
+
+        systemManager.Register(new ConsumableActivationSystem(
+            componentManager.GetPackedPool<PendingConsumableActivationComponent>(),
+            componentManager.GetPackedPool<ActionLockComponent>(),
+            componentManager.GetPackedPool<PotionCooldownComponent>(),
+            componentManager.GetPackedPool<HealthComponent>(),
+            _itemCatalog,
+            _mapQuery,
+            _eventBus,
+            componentManager,
+            statModifiers,
+            deadEntities));
     }
 }

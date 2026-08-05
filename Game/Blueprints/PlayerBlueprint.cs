@@ -23,7 +23,7 @@ namespace Game.Blueprints;
 public sealed class PlayerBlueprint(MathUtility mathUtility, UniqueNumberAllocator crawlerNumberAllocator) : IBlueprint
 {
     private const short MaximumHealth = 100;
-    private const short HealthRegen = 10;
+    private const short HealthRegen = 1;
 
     /// <summary>Hardcoded stopgap until the Additive/Multiplicative bonuses system exists -- see TODO.md.</summary>
     private const short DefaultAttackDamage = 20;
@@ -55,10 +55,10 @@ public sealed class PlayerBlueprint(MathUtility mathUtility, UniqueNumberAllocat
         componentManager.Merge(entityId, new AbilityInstanceComponent(QuickCastTestModule.QuickCastAbilityId, damageAmount: 0, cooldownFramesRemaining: 0));
         componentManager.Merge(entityId, new AbilityInstanceComponent(QuickCastTestModule.RangedTestDebuffAbilityId, damageAmount: RangedTestDebuffDamage, cooldownFramesRemaining: 0));
 
-        componentManager.Merge(entityId, new HotkeyBindingComponent(HotkeySlot.Slot4, MeleeModule.DefaultAttackId));
-        componentManager.Merge(entityId, new HotkeyBindingComponent(HotkeySlot.Slot5, PlayerTestAbilitiesModule.RangedTestAbilityId));
-        componentManager.Merge(entityId, new HotkeyBindingComponent(HotkeySlot.Slot6, QuickCastTestModule.QuickCastAbilityId));
-        componentManager.Merge(entityId, new HotkeyBindingComponent(HotkeySlot.Slot7, QuickCastTestModule.RangedTestDebuffAbilityId));
+        componentManager.Merge(entityId, new ActionHotkeyBindingComponent(HotkeySlot.Slot4, MeleeModule.DefaultAttackId));
+        componentManager.Merge(entityId, new ActionHotkeyBindingComponent(HotkeySlot.Slot5, PlayerTestAbilitiesModule.RangedTestAbilityId));
+        componentManager.Merge(entityId, new ActionHotkeyBindingComponent(HotkeySlot.Slot6, QuickCastTestModule.QuickCastAbilityId));
+        componentManager.Merge(entityId, new ActionHotkeyBindingComponent(HotkeySlot.Slot7, QuickCastTestModule.RangedTestDebuffAbilityId));
 
         componentManager.Merge(entityId, new CrawlerComponent(crawlerNumberAllocator.Allocate()));
 

@@ -34,7 +34,7 @@ public sealed class PlayerTestAbilitiesModule : IGameModule
             RangedTestAbilityId,
             "Ranged Test Bolt",
             "*",
-            new AbilityTargeting(TargetShape.Burst, RangedTestAbilityRange, RangedTestAbilityAreaSize),
+            new TargetingSpec(TargetShape.Burst, RangedTestAbilityRange, RangedTestAbilityAreaSize),
             new AbilityTiming(ActionTimingCategory.Immediate, ActionLockFrames: RangedTestAbilityActionLockFrames, CooldownFrames: null),
             new AbilityEffect(DamageAmount: 10, StatusEffects: [], StatModifierGrants: [])));
     }

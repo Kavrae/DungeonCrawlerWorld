@@ -50,7 +50,7 @@ public sealed class QuickCastTestModule : IGameModule
             QuickCastAbilityId,
             "Quick Cast",
             "+",
-            new AbilityTargeting(TargetShape.Self, Range: 0),
+            new TargetingSpec(TargetShape.Self, Range: 0),
             new AbilityTiming(ActionTimingCategory.FreeCast, ActionLockFrames: 0, CooldownFrames: QuickCastCooldownFrames),
             new AbilityEffect(DamageAmount: 0, StatusEffects: [], StatModifierGrants:
             [
@@ -68,7 +68,7 @@ public sealed class QuickCastTestModule : IGameModule
             RangedTestDebuffAbilityId,
             "Ranged Test Debuff Bolt",
             "%",
-            new AbilityTargeting(TargetShape.Burst, RangedTestDebuffRange, RangedTestDebuffAreaSize),
+            new TargetingSpec(TargetShape.Burst, RangedTestDebuffRange, RangedTestDebuffAreaSize),
             new AbilityTiming(ActionTimingCategory.Delayed, ActionLockFrames: RangedTestDebuffActionLockFrames, CooldownFrames: RangedTestDebuffCooldownFrames),
             new AbilityEffect(DamageAmount: RangedTestDebuffDamage, StatusEffects: [], StatModifierGrants:
             [

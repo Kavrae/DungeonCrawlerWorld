@@ -23,6 +23,35 @@ public static class InventoryActions
         }
     }
 
+    /// <summary>
+    /// Ticks the matching stack's Quantity down by 1, removing the stack entirely once it hits
+    /// 0 (same "no instance for this item" empty-state convention InventoryItemStackComponent's
+    /// own doc comment describes) -- called by ConsumableActivationSystem after every successful
+    /// activation. A no-op if the entity doesn't actually have the item (defense-in-depth; the
+    /// caller is expected to have already checked).
+    /// </summary>
+    public static void ConsumeItem(ComponentManager componentManager, int entityId, Guid itemDefinitionId)
+    {
+        var stacks = componentManager.GetMultiPool<InventoryItemStackComponent>();
+
+        if (!InventoryQueries.TryGetStack(stacks, entityId, itemDefinitionId, out var stack))
+        {
+            return;
+        }
+
+        if (stack.Quantity <= 1)
+        {
+            stacks.RemoveFirst(entityId, itemDefinitionId, static (ref readonly s, id) => s.ItemDefinitionId == id);
+            return;
+        }
+
+        stacks.TryUpdateFirst(
+            entityId,
+            itemDefinitionId,
+            static (ref readonly s, id) => s.ItemDefinitionId == id,
+            static (ref s, id) => s.Quantity--);
+    }
+
     /// <summary>Disables/enables one specific stack (e.g. an item withheld until some later trigger) -- distinct from SetInventoryDisabled below, which disables the whole inventory.</summary>
     public static void SetStackDisabled(ComponentManager componentManager, int entityId, Guid itemDefinitionId, bool disabled)
     {

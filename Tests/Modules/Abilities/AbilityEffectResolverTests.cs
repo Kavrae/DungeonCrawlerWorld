@@ -23,7 +23,7 @@ public sealed class AbilityEffectResolverTests
         Guid.NewGuid(),
         "Test Attack",
         "#",
-        new AbilityTargeting(TargetShape.SingleTarget, Range: 10),
+        new TargetingSpec(TargetShape.SingleTarget, Range: 10),
         new AbilityTiming(ActionTimingCategory.Immediate, ActionLockFrames: 30, CooldownFrames: null),
         new AbilityEffect(DamageAmount: 0, StatusEffects: []));
     private static readonly AbilityInstanceComponent Instance = new(Ability.Id, damageAmount: 15, cooldownFramesRemaining: 0);
@@ -152,7 +152,7 @@ public sealed class AbilityEffectResolverTests
         Guid.NewGuid(),
         "Test Status Effect Attack",
         "#",
-        new AbilityTargeting(TargetShape.SingleTarget, Range: 10),
+        new TargetingSpec(TargetShape.SingleTarget, Range: 10),
         new AbilityTiming(ActionTimingCategory.Immediate, ActionLockFrames: 30, CooldownFrames: null),
         new AbilityEffect(DamageAmount: 0, StatusEffects: [StatusEffectType.Paralysis]));
     private static readonly AbilityInstanceComponent StatusEffectInstance = new(AbilityWithStatusEffect.Id, damageAmount: 0, cooldownFramesRemaining: 0);

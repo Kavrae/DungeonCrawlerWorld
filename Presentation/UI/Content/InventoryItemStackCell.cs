@@ -13,17 +13,15 @@ namespace Presentation.UI.Content;
 /// in the bottom-right corner when greater than 1. A plain Element (not Window) -- no title/
 /// chrome needed, same reasoning Folder/Button use. IsDisabled gray-tints the icon, mirroring
 /// Folder's own disabled tint and MapWindow's dead-entity tint (all three now share the same
-/// SpriteOrGlyphRenderer draw primitive).
+/// SpriteOrGlyphRenderer draw primitive). ItemDefinitionId is exposed publicly so
+/// GameInputController can read it directly (no Element-level drag hook needed -- see its own
+/// content-drag state machine) when a press starts a drag from this cell toward a hotbar slot.
 /// </summary>
 public sealed class InventoryItemStackCell(FontService fontService, ElementPoolService elementPoolService, GlyphRenderer glyphRenderer, SpriteSheetService spriteSheetService, SpriteRenderer spriteRenderer)
     : Element(fontService, elementPoolService, glyphRenderer)
 {
     private const float IconGlyphFontFraction = 0.6f;
     private const float QuantityFontFraction = 0.45f;
-    private static readonly Color QuantityShadowColor = Color.Black;
-    private static readonly Color QuantityTextColor = Color.White;
-    private static readonly Vector2 QuantityShadowOffset = new(-1, -1);
-    private static readonly Vector2 QuantityTextPadding = new(2, 0);
 
     private string? _spriteName;
     private string _glyph = string.Empty;
@@ -33,9 +31,12 @@ public sealed class InventoryItemStackCell(FontService fontService, ElementPoolS
     private SpriteFontBase _iconGlyphFont = null!;
     private SpriteFontBase _quantityFont = null!;
 
+    public Guid ItemDefinitionId { get; private set; }
+
     /// <summary>cellSize is the caller's known fixed cell size (see InventoryGridContent), not ContentSize -- Configure runs immediately after CreateElement, before this cell's own layout has necessarily settled.</summary>
-    public void Configure(string? spriteName, string glyph, Color glyphColor, int quantity, bool isDisabled, Vector2 cellSize)
+    public void Configure(Guid itemDefinitionId, string? spriteName, string glyph, Color glyphColor, int quantity, bool isDisabled, Vector2 cellSize)
     {
+        ItemDefinitionId = itemDefinitionId;
         _spriteName = spriteName;
         _glyph = glyph;
         _glyphColor = glyphColor;
@@ -53,13 +54,6 @@ public sealed class InventoryItemStackCell(FontService fontService, ElementPoolS
 
         SpriteOrGlyphRenderer.Draw(spriteBatch, spriteSheetService, spriteRenderer, GlyphRenderer, sprite, _iconGlyphFont, _glyph, glyphColor, ContentAbsolutePosition, ContentSize, spriteTint);
 
-        if (_quantity > 1)
-        {
-            var text = _quantity.ToString();
-            var textSize = _quantityFont.MeasureString(text);
-            var textPosition = ContentAbsolutePosition + ContentSize - textSize - QuantityTextPadding;
-            spriteBatch.DrawString(_quantityFont, text, textPosition, QuantityShadowColor);
-            spriteBatch.DrawString(_quantityFont, text, textPosition + QuantityShadowOffset, QuantityTextColor);
-        }
+        ItemIconRenderer.DrawQuantityBadge(spriteBatch, _quantityFont, _quantity, ContentAbsolutePosition, ContentSize);
     }
 }

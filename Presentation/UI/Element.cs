@@ -746,8 +746,8 @@ public class Element
     /// Moves this window to the end of its parent's child list, so it draws last (on top) and
     /// wins future overlapping hit-tests against its siblings. No-op for a root window (no
     /// parent) -- GameInputController is responsible for raising a root window to the front of
-    /// whichever shared tier list (RootWindows/AlwaysOnTopWindows) it belongs to, since Window
-    /// itself has no knowledge of those.
+    /// whichever shared tier list (BaseWindows/StaticHudWindows/DynamicHudWindows/UserWindows)
+    /// it belongs to, since Window itself has no knowledge of those.
     /// </summary>
     internal void RaiseToFront()
     {

@@ -4,6 +4,8 @@ using Game.Modules.Abilities;
 using Game.Modules.Abilities.Components;
 using Game.Modules.Core.Components;
 using Game.Modules.Health.Components;
+using Game.Modules.Inventory;
+using Game.Modules.Inventory.Components;
 using Game.Modules.Movement.Components;
 using Game.Modules.StatusEffectAura.Components;
 using Microsoft.Xna.Framework;
@@ -45,7 +47,15 @@ public sealed class MapWindowTests
         return (world, mapViewState, mapWindow, componentManager, abilityCatalog);
     }
 
-    private static (Game.World.World World, MapViewState MapViewState, MapWindow MapWindow, ComponentManager ComponentManager) BuildMapWindowCore(int mapSizeX, int mapSizeY, int mapSizeZ, Vector3Int? playerPosition, AbilityCatalog? abilityCatalog = null)
+    /// <summary>Same as BuildMapWindowWithPlayerAndAbilities, but hands back the ItemCatalog instead -- for hotkey/item tests that need to register a test ItemDefinition before pressing anything.</summary>
+    private static (Game.World.World World, MapViewState MapViewState, MapWindow MapWindow, ComponentManager ComponentManager, ItemCatalog ItemCatalog) BuildMapWindowWithPlayerAndItems(int mapSizeX, int mapSizeY, int mapSizeZ, Vector3Int playerPosition)
+    {
+        var itemCatalog = new ItemCatalog();
+        var (world, mapViewState, mapWindow, componentManager) = BuildMapWindowCore(mapSizeX, mapSizeY, mapSizeZ, playerPosition, itemCatalog: itemCatalog);
+        return (world, mapViewState, mapWindow, componentManager, itemCatalog);
+    }
+
+    private static (Game.World.World World, MapViewState MapViewState, MapWindow MapWindow, ComponentManager ComponentManager) BuildMapWindowCore(int mapSizeX, int mapSizeY, int mapSizeZ, Vector3Int? playerPosition, AbilityCatalog? abilityCatalog = null, ItemCatalog? itemCatalog = null)
     {
         var world = new Game.World.World(new Game.World.Map(new Vector3Int(mapSizeX, mapSizeY, mapSizeZ)));
         var mapViewState = new MapViewState();
@@ -62,8 +72,11 @@ public sealed class MapWindowTests
         componentManager.RegisterPackedPool<HealthComponent>(static (ref existing, incoming) => existing = incoming);
         componentManager.RegisterPackedPool<StatusEffectAuraSourceComponent>(static (ref existing, incoming) => existing = incoming);
         componentManager.RegisterMultiPool<AbilityInstanceComponent>();
-        componentManager.RegisterMultiPool<HotkeyBindingComponent>();
+        componentManager.RegisterMultiPool<ActionHotkeyBindingComponent>();
+        componentManager.RegisterMultiPool<ItemHotkeyBindingComponent>();
+        componentManager.RegisterMultiPool<InventoryItemStackComponent>();
         componentManager.RegisterPackedPool<PendingAbilityActivationComponent>(static (ref existing, incoming) => existing = incoming);
+        componentManager.RegisterPackedPool<PendingConsumableActivationComponent>(static (ref existing, incoming) => existing = incoming);
         componentManager.RegisterPackedPool<PendingDelayedActionComponent>(static (ref existing, incoming) => existing = incoming);
         componentManager.RegisterPackedPool<ActionLockComponent>(static (ref existing, incoming) => existing = incoming);
 
@@ -75,7 +88,7 @@ public sealed class MapWindowTests
         }
 
         windowService.RegisterFactory<MapWindow>((_, _) => new MapWindow(
-            fontService, windowService, world, mapViewState, componentManager, abilityCatalog ?? new AbilityCatalog(), new TileRenderer(), new GlyphRenderer(),
+            fontService, windowService, world, mapViewState, componentManager, abilityCatalog ?? new AbilityCatalog(), itemCatalog ?? new ItemCatalog(), new TileRenderer(), new GlyphRenderer(),
             new SpriteSheetService(null, "Spritesheets"), new SpriteRenderer()));
 
         var mapWindow = windowService.CreateElement<MapWindow>(null, new ElementOptions
@@ -497,7 +510,7 @@ public sealed class MapWindowTests
             TestAbilityId,
             "Test Adjacent",
             "#",
-            new AbilityTargeting(TargetShape.Adjacent, Range: 0),
+            new TargetingSpec(TargetShape.Adjacent, Range: 0),
             new AbilityTiming(ActionTimingCategory.Immediate, ActionLockFrames: 30, CooldownFrames: null),
             new AbilityEffect(DamageAmount: 0, StatusEffects: [])));
 
@@ -507,7 +520,7 @@ public sealed class MapWindowTests
         var (_, mapViewState, mapWindow, componentManager, abilityCatalog) = BuildMapWindowWithPlayerAndAbilities(300, 300, 1, new Vector3Int(100, 100, 0));
         RegisterTestAdjacentAbility(abilityCatalog);
         componentManager.Merge(PlayerEntityId, new AbilityInstanceComponent(TestAbilityId, damageAmount: 10, cooldownFramesRemaining: 0));
-        componentManager.Merge(PlayerEntityId, new HotkeyBindingComponent(HotkeySlot.Slot4, TestAbilityId));
+        componentManager.Merge(PlayerEntityId, new ActionHotkeyBindingComponent(HotkeySlot.Slot4, TestAbilityId));
 
         mapWindow.HandleHotkeys(new KeyboardState(Keys.F), new KeyboardState());
 
@@ -521,7 +534,7 @@ public sealed class MapWindowTests
         var (_, mapViewState, mapWindow, componentManager, abilityCatalog) = BuildMapWindowWithPlayerAndAbilities(300, 300, 1, new Vector3Int(100, 100, 0));
         RegisterTestAdjacentAbility(abilityCatalog);
         componentManager.Merge(PlayerEntityId, new AbilityInstanceComponent(TestAbilityId, damageAmount: 10, cooldownFramesRemaining: 0));
-        componentManager.Merge(PlayerEntityId, new HotkeyBindingComponent(HotkeySlot.Slot4, TestAbilityId));
+        componentManager.Merge(PlayerEntityId, new ActionHotkeyBindingComponent(HotkeySlot.Slot4, TestAbilityId));
 
         mapWindow.HandleHotkeys(new KeyboardState(Keys.F), new KeyboardState());
         Assert.IsNotNull(mapViewState.ArmedAbilityId);
@@ -565,7 +578,7 @@ public sealed class MapWindowTests
         var (_, mapViewState, mapWindow, componentManager, abilityCatalog) = BuildMapWindowWithPlayerAndAbilities(300, 300, 1, new Vector3Int(100, 100, 0));
         RegisterTestAdjacentAbility(abilityCatalog);
         componentManager.Merge(PlayerEntityId, new AbilityInstanceComponent(TestAbilityId, damageAmount: 10, cooldownFramesRemaining: 0));
-        componentManager.Merge(PlayerEntityId, new HotkeyBindingComponent(HotkeySlot.Slot4, TestAbilityId));
+        componentManager.Merge(PlayerEntityId, new ActionHotkeyBindingComponent(HotkeySlot.Slot4, TestAbilityId));
 
         mapWindow.HandleHotkeys(new KeyboardState(Keys.F), new KeyboardState());
         mapWindow.HandleHotkeys(new KeyboardState(Keys.F), new KeyboardState());
@@ -592,11 +605,11 @@ public sealed class MapWindowTests
             rangedAbilityId,
             "Test Ranged",
             "*",
-            new AbilityTargeting(TargetShape.SingleTarget, Range: 10),
+            new TargetingSpec(TargetShape.SingleTarget, Range: 10),
             new AbilityTiming(ActionTimingCategory.Immediate, ActionLockFrames: 30, CooldownFrames: null),
             new AbilityEffect(DamageAmount: 0, StatusEffects: [])));
         componentManager.Merge(PlayerEntityId, new AbilityInstanceComponent(rangedAbilityId, damageAmount: 10, cooldownFramesRemaining: 0));
-        componentManager.Merge(PlayerEntityId, new HotkeyBindingComponent(HotkeySlot.Slot5, rangedAbilityId));
+        componentManager.Merge(PlayerEntityId, new ActionHotkeyBindingComponent(HotkeySlot.Slot5, rangedAbilityId));
 
         var targetPosition = new Vector3Int(105, 100, 0);
         var targetTransform = new TransformComponent(targetPosition, new Vector2Byte(1, 1));
@@ -624,11 +637,11 @@ public sealed class MapWindowTests
             rangedAbilityId,
             "Test Ranged",
             "*",
-            new AbilityTargeting(TargetShape.SingleTarget, Range: 10),
+            new TargetingSpec(TargetShape.SingleTarget, Range: 10),
             new AbilityTiming(ActionTimingCategory.Immediate, ActionLockFrames: 30, CooldownFrames: null),
             new AbilityEffect(DamageAmount: 0, StatusEffects: [])));
         componentManager.Merge(PlayerEntityId, new AbilityInstanceComponent(rangedAbilityId, damageAmount: 10, cooldownFramesRemaining: 0));
-        componentManager.Merge(PlayerEntityId, new HotkeyBindingComponent(HotkeySlot.Slot5, rangedAbilityId));
+        componentManager.Merge(PlayerEntityId, new ActionHotkeyBindingComponent(HotkeySlot.Slot5, rangedAbilityId));
 
         mapWindow.HandleHotkeys(new KeyboardState(Keys.V), new KeyboardState());
         mapWindow.HandleHotkeys(new KeyboardState(Keys.V), new KeyboardState());
@@ -688,7 +701,7 @@ public sealed class MapWindowTests
         var (_, mapViewState, mapWindow, componentManager, abilityCatalog) = BuildMapWindowWithPlayerAndAbilities(300, 300, 1, new Vector3Int(100, 100, 0));
         RegisterTestAdjacentAbility(abilityCatalog);
         componentManager.Merge(PlayerEntityId, new AbilityInstanceComponent(TestAbilityId, damageAmount: 10, cooldownFramesRemaining: 0));
-        componentManager.Merge(PlayerEntityId, new HotkeyBindingComponent(HotkeySlot.Slot4, TestAbilityId));
+        componentManager.Merge(PlayerEntityId, new ActionHotkeyBindingComponent(HotkeySlot.Slot4, TestAbilityId));
 
         mapWindow.HandleHotkeys(new KeyboardState(Keys.F), new KeyboardState());
 
@@ -704,9 +717,9 @@ public sealed class MapWindowTests
     {
         var (_, mapViewState, mapWindow, componentManager, abilityCatalog) = BuildMapWindowWithPlayerAndAbilities(300, 300, 1, new Vector3Int(100, 100, 0));
         var rangedAbilityId = Guid.NewGuid();
-        abilityCatalog.Register(new AbilityDefinition(rangedAbilityId, "Test Ranged", "*", new AbilityTargeting(TargetShape.SingleTarget, Range: 10), new AbilityTiming(ActionTimingCategory.Immediate, ActionLockFrames: 30, CooldownFrames: null), new AbilityEffect(DamageAmount: 0, StatusEffects: [])));
+        abilityCatalog.Register(new AbilityDefinition(rangedAbilityId, "Test Ranged", "*", new TargetingSpec(TargetShape.SingleTarget, Range: 10), new AbilityTiming(ActionTimingCategory.Immediate, ActionLockFrames: 30, CooldownFrames: null), new AbilityEffect(DamageAmount: 0, StatusEffects: [])));
         componentManager.Merge(PlayerEntityId, new AbilityInstanceComponent(rangedAbilityId, damageAmount: 10, cooldownFramesRemaining: 0));
-        componentManager.Merge(PlayerEntityId, new HotkeyBindingComponent(HotkeySlot.Slot5, rangedAbilityId));
+        componentManager.Merge(PlayerEntityId, new ActionHotkeyBindingComponent(HotkeySlot.Slot5, rangedAbilityId));
 
         mapWindow.HandleHotkeys(new KeyboardState(Keys.V), new KeyboardState());
 
@@ -728,7 +741,7 @@ public sealed class MapWindowTests
         var (_, mapViewState, mapWindow, componentManager, abilityCatalog) = BuildMapWindowWithPlayerAndAbilities(300, 300, 1, new Vector3Int(100, 100, 0));
         RegisterTestAdjacentAbility(abilityCatalog);
         componentManager.Merge(PlayerEntityId, new AbilityInstanceComponent(TestAbilityId, damageAmount: 10, cooldownFramesRemaining: 0));
-        componentManager.Merge(PlayerEntityId, new HotkeyBindingComponent(HotkeySlot.Slot4, TestAbilityId));
+        componentManager.Merge(PlayerEntityId, new ActionHotkeyBindingComponent(HotkeySlot.Slot4, TestAbilityId));
         var transformPool = componentManager.GetDirectPool<TransformComponent>();
 
         mapWindow.HandleHotkeys(new KeyboardState(Keys.F), new KeyboardState());
@@ -752,7 +765,7 @@ public sealed class MapWindowTests
         var (_, mapViewState, mapWindow, componentManager, abilityCatalog) = BuildMapWindowWithPlayerAndAbilities(300, 300, 1, new Vector3Int(100, 100, 0));
         RegisterTestAdjacentAbility(abilityCatalog);
         componentManager.Merge(PlayerEntityId, new AbilityInstanceComponent(TestAbilityId, damageAmount: 10, cooldownFramesRemaining: 0));
-        componentManager.Merge(PlayerEntityId, new HotkeyBindingComponent(HotkeySlot.Slot4, TestAbilityId));
+        componentManager.Merge(PlayerEntityId, new ActionHotkeyBindingComponent(HotkeySlot.Slot4, TestAbilityId));
 
         mapWindow.HandleHotkeys(new KeyboardState(Keys.F), new KeyboardState());
         Assert.IsNotNull(mapViewState.TargetableTiles);
@@ -783,9 +796,9 @@ public sealed class MapWindowTests
     {
         var (_, mapViewState, mapWindow, componentManager, abilityCatalog) = BuildMapWindowWithPlayerAndAbilities(300, 300, 1, new Vector3Int(100, 100, 0));
         var rangedAbilityId = Guid.NewGuid();
-        abilityCatalog.Register(new AbilityDefinition(rangedAbilityId, "Test Ranged", "*", new AbilityTargeting(TargetShape.SingleTarget, Range: 10), new AbilityTiming(ActionTimingCategory.Immediate, ActionLockFrames: 30, CooldownFrames: null), new AbilityEffect(DamageAmount: 0, StatusEffects: [])));
+        abilityCatalog.Register(new AbilityDefinition(rangedAbilityId, "Test Ranged", "*", new TargetingSpec(TargetShape.SingleTarget, Range: 10), new AbilityTiming(ActionTimingCategory.Immediate, ActionLockFrames: 30, CooldownFrames: null), new AbilityEffect(DamageAmount: 0, StatusEffects: [])));
         componentManager.Merge(PlayerEntityId, new AbilityInstanceComponent(rangedAbilityId, damageAmount: 10, cooldownFramesRemaining: 0));
-        componentManager.Merge(PlayerEntityId, new HotkeyBindingComponent(HotkeySlot.Slot5, rangedAbilityId));
+        componentManager.Merge(PlayerEntityId, new ActionHotkeyBindingComponent(HotkeySlot.Slot5, rangedAbilityId));
 
         mapWindow.HandleHotkeys(new KeyboardState(Keys.V), new KeyboardState());
         mapWindow.UpdateHoveredTile(ComputeScreenPositionForMapPosition(mapWindow, mapViewState, new Vector3Int(101, 100, 0)));
@@ -800,9 +813,9 @@ public sealed class MapWindowTests
     {
         var (_, mapViewState, mapWindow, componentManager, abilityCatalog) = BuildMapWindowWithPlayerAndAbilities(300, 300, 1, new Vector3Int(100, 100, 0));
         var rangedAbilityId = Guid.NewGuid();
-        abilityCatalog.Register(new AbilityDefinition(rangedAbilityId, "Test Ranged", "*", new AbilityTargeting(TargetShape.SingleTarget, Range: 10), new AbilityTiming(ActionTimingCategory.Immediate, ActionLockFrames: 30, CooldownFrames: null), new AbilityEffect(DamageAmount: 0, StatusEffects: [])));
+        abilityCatalog.Register(new AbilityDefinition(rangedAbilityId, "Test Ranged", "*", new TargetingSpec(TargetShape.SingleTarget, Range: 10), new AbilityTiming(ActionTimingCategory.Immediate, ActionLockFrames: 30, CooldownFrames: null), new AbilityEffect(DamageAmount: 0, StatusEffects: [])));
         componentManager.Merge(PlayerEntityId, new AbilityInstanceComponent(rangedAbilityId, damageAmount: 10, cooldownFramesRemaining: 0));
-        componentManager.Merge(PlayerEntityId, new HotkeyBindingComponent(HotkeySlot.Slot5, rangedAbilityId));
+        componentManager.Merge(PlayerEntityId, new ActionHotkeyBindingComponent(HotkeySlot.Slot5, rangedAbilityId));
 
         mapWindow.HandleHotkeys(new KeyboardState(Keys.V), new KeyboardState());
         mapWindow.UpdateHoveredTile(ComputeScreenPositionForMapPosition(mapWindow, mapViewState, new Vector3Int(115, 100, 0)));
@@ -817,7 +830,7 @@ public sealed class MapWindowTests
         var (_, mapViewState, mapWindow, componentManager, abilityCatalog) = BuildMapWindowWithPlayerAndAbilities(300, 300, 1, new Vector3Int(100, 100, 0));
         RegisterTestAdjacentAbility(abilityCatalog);
         componentManager.Merge(PlayerEntityId, new AbilityInstanceComponent(TestAbilityId, damageAmount: 10, cooldownFramesRemaining: 0));
-        componentManager.Merge(PlayerEntityId, new HotkeyBindingComponent(HotkeySlot.Slot4, TestAbilityId));
+        componentManager.Merge(PlayerEntityId, new ActionHotkeyBindingComponent(HotkeySlot.Slot4, TestAbilityId));
 
         mapWindow.HandleHotkeys(new KeyboardState(Keys.F), new KeyboardState());
         mapWindow.UpdateHoveredTile(new Point(-100, -100));
@@ -832,7 +845,7 @@ public sealed class MapWindowTests
         var (_, mapViewState, mapWindow, componentManager, abilityCatalog) = BuildMapWindowWithPlayerAndAbilities(300, 300, 1, new Vector3Int(100, 100, 0));
         RegisterTestAdjacentAbility(abilityCatalog);
         componentManager.Merge(PlayerEntityId, new AbilityInstanceComponent(TestAbilityId, damageAmount: 10, cooldownFramesRemaining: 0));
-        componentManager.Merge(PlayerEntityId, new HotkeyBindingComponent(HotkeySlot.Slot4, TestAbilityId));
+        componentManager.Merge(PlayerEntityId, new ActionHotkeyBindingComponent(HotkeySlot.Slot4, TestAbilityId));
         mapWindow.HandleHotkeys(new KeyboardState(Keys.F), new KeyboardState());
 
         // The caster's own tile -- part of Adjacent's fixed footprint.
@@ -854,7 +867,7 @@ public sealed class MapWindowTests
         var (_, mapViewState, mapWindow, componentManager, abilityCatalog) = BuildMapWindowWithPlayerAndAbilities(300, 300, 1, new Vector3Int(100, 100, 0));
         RegisterTestAdjacentAbility(abilityCatalog);
         componentManager.Merge(PlayerEntityId, new AbilityInstanceComponent(TestAbilityId, damageAmount: 10, cooldownFramesRemaining: 0));
-        componentManager.Merge(PlayerEntityId, new HotkeyBindingComponent(HotkeySlot.Slot4, TestAbilityId));
+        componentManager.Merge(PlayerEntityId, new ActionHotkeyBindingComponent(HotkeySlot.Slot4, TestAbilityId));
         mapWindow.HandleHotkeys(new KeyboardState(Keys.F), new KeyboardState());
 
         // Outside Adjacent's 9-tile footprint around (100,100), but still comfortably within the visible viewport.
@@ -870,9 +883,9 @@ public sealed class MapWindowTests
     {
         var (_, mapViewState, mapWindow, componentManager, abilityCatalog) = BuildMapWindowWithPlayerAndAbilities(300, 300, 1, new Vector3Int(100, 100, 0));
         var lineAbilityId = Guid.NewGuid();
-        abilityCatalog.Register(new AbilityDefinition(lineAbilityId, "Test Line", "#", new AbilityTargeting(TargetShape.Line, Range: 2), new AbilityTiming(ActionTimingCategory.Immediate, ActionLockFrames: 30, CooldownFrames: null), new AbilityEffect(DamageAmount: 0, StatusEffects: [])));
+        abilityCatalog.Register(new AbilityDefinition(lineAbilityId, "Test Line", "#", new TargetingSpec(TargetShape.Line, Range: 2), new AbilityTiming(ActionTimingCategory.Immediate, ActionLockFrames: 30, CooldownFrames: null), new AbilityEffect(DamageAmount: 0, StatusEffects: [])));
         componentManager.Merge(PlayerEntityId, new AbilityInstanceComponent(lineAbilityId, damageAmount: 10, cooldownFramesRemaining: 0));
-        componentManager.Merge(PlayerEntityId, new HotkeyBindingComponent(HotkeySlot.Slot4, lineAbilityId));
+        componentManager.Merge(PlayerEntityId, new ActionHotkeyBindingComponent(HotkeySlot.Slot4, lineAbilityId));
         mapWindow.HandleHotkeys(new KeyboardState(Keys.F), new KeyboardState());
 
         // Two tiles east -- within the range-2 candidate diamond ComputeTargetableTiles builds around the caster.
@@ -891,9 +904,9 @@ public sealed class MapWindowTests
     {
         var (_, mapViewState, mapWindow, componentManager, abilityCatalog) = BuildMapWindowWithPlayerAndAbilities(300, 300, 1, new Vector3Int(100, 100, 0));
         var burstAbilityId = Guid.NewGuid();
-        abilityCatalog.Register(new AbilityDefinition(burstAbilityId, "Test Burst", "*", new AbilityTargeting(TargetShape.Burst, Range: 10, AreaSize: 1), new AbilityTiming(ActionTimingCategory.Immediate, ActionLockFrames: 30, CooldownFrames: null), new AbilityEffect(DamageAmount: 0, StatusEffects: [])));
+        abilityCatalog.Register(new AbilityDefinition(burstAbilityId, "Test Burst", "*", new TargetingSpec(TargetShape.Burst, Range: 10, AreaSize: 1), new AbilityTiming(ActionTimingCategory.Immediate, ActionLockFrames: 30, CooldownFrames: null), new AbilityEffect(DamageAmount: 0, StatusEffects: [])));
         componentManager.Merge(PlayerEntityId, new AbilityInstanceComponent(burstAbilityId, damageAmount: 10, cooldownFramesRemaining: 0));
-        componentManager.Merge(PlayerEntityId, new HotkeyBindingComponent(HotkeySlot.Slot5, burstAbilityId));
+        componentManager.Merge(PlayerEntityId, new ActionHotkeyBindingComponent(HotkeySlot.Slot5, burstAbilityId));
         mapWindow.HandleHotkeys(new KeyboardState(Keys.V), new KeyboardState());
 
         var clickedTile = new Vector3Int(105, 100, 0);
@@ -915,7 +928,7 @@ public sealed class MapWindowTests
         var (_, mapViewState, mapWindow, componentManager, abilityCatalog) = BuildMapWindowWithPlayerAndAbilities(300, 300, 1, new Vector3Int(100, 100, 0));
         RegisterTestAdjacentAbility(abilityCatalog);
         componentManager.Merge(PlayerEntityId, new AbilityInstanceComponent(TestAbilityId, damageAmount: 10, cooldownFramesRemaining: 0));
-        componentManager.Merge(PlayerEntityId, new HotkeyBindingComponent(HotkeySlot.Slot4, TestAbilityId));
+        componentManager.Merge(PlayerEntityId, new ActionHotkeyBindingComponent(HotkeySlot.Slot4, TestAbilityId));
         mapWindow.HandleHotkeys(new KeyboardState(Keys.F), new KeyboardState());
 
         mapWindow.HandleRightClickTap();
@@ -931,7 +944,7 @@ public sealed class MapWindowTests
         var (_, mapViewState, mapWindow, componentManager, abilityCatalog) = BuildMapWindowWithPlayerAndAbilities(300, 300, 1, new Vector3Int(100, 100, 0));
         RegisterTestAdjacentAbility(abilityCatalog);
         componentManager.Merge(PlayerEntityId, new AbilityInstanceComponent(TestAbilityId, damageAmount: 10, cooldownFramesRemaining: 0));
-        componentManager.Merge(PlayerEntityId, new HotkeyBindingComponent(HotkeySlot.Slot4, TestAbilityId));
+        componentManager.Merge(PlayerEntityId, new ActionHotkeyBindingComponent(HotkeySlot.Slot4, TestAbilityId));
         mapWindow.HandleHotkeys(new KeyboardState(Keys.F), new KeyboardState());
 
         mapWindow.HandleEscape();
@@ -976,5 +989,181 @@ public sealed class MapWindowTests
         mapWindow.HandleEscape();
 
         Assert.IsNull(mapViewState.ArmedAbilityId);
+    }
+
+    private static readonly Guid TestPotionId = new("66666666-6666-6666-6666-666666666666");
+    private static readonly Guid TestNonConsumableItemId = new("55555555-5555-5555-5555-555555555555");
+
+    private static void RegisterTestPotion(ItemCatalog itemCatalog) =>
+        itemCatalog.Register(new ItemDefinition(
+            TestPotionId, "Test Potion", null, "p", Color.Green, Tags: [],
+            Consumable: new ConsumableEffect(ConsumableKind.Potion, HealFraction: 0.5f, Targeting: new TargetingSpec(TargetShape.Burst, Range: 3, AreaSize: 1), ActionLockFrames: 60)));
+
+    private static void RegisterTestNonConsumableItem(ItemCatalog itemCatalog) =>
+        itemCatalog.Register(new ItemDefinition(TestNonConsumableItemId, "Test Hammer", null, "h", Color.Gray, Tags: []));
+
+    [TestMethod]
+    public void HandleHotkeys_PressingBoundItemSlot_ArmsIt()
+    {
+        var (_, mapViewState, mapWindow, componentManager, itemCatalog) = BuildMapWindowWithPlayerAndItems(300, 300, 1, new Vector3Int(100, 100, 0));
+        RegisterTestPotion(itemCatalog);
+        InventoryActions.AddItem(componentManager, PlayerEntityId, TestPotionId, quantity: 1);
+        componentManager.Merge(PlayerEntityId, new ItemHotkeyBindingComponent(HotkeySlot.Slot1, TestPotionId));
+
+        mapWindow.HandleHotkeys(new KeyboardState(Keys.Q), new KeyboardState());
+
+        Assert.AreEqual(TestPotionId, mapViewState.ArmedItemDefinitionId);
+        Assert.AreEqual(HotkeySlot.Slot1, mapViewState.ArmedSlot);
+        Assert.IsNull(mapViewState.ArmedAbilityId);
+    }
+
+    [TestMethod]
+    public void HandleHotkeys_PressingArmedItemSlotAgainAfterDoubleTapWindowElapses_Disarms()
+    {
+        var (_, mapViewState, mapWindow, componentManager, itemCatalog) = BuildMapWindowWithPlayerAndItems(300, 300, 1, new Vector3Int(100, 100, 0));
+        RegisterTestPotion(itemCatalog);
+        InventoryActions.AddItem(componentManager, PlayerEntityId, TestPotionId, quantity: 1);
+        componentManager.Merge(PlayerEntityId, new ItemHotkeyBindingComponent(HotkeySlot.Slot1, TestPotionId));
+
+        mapWindow.HandleHotkeys(new KeyboardState(Keys.Q), new KeyboardState());
+        Assert.IsNotNull(mapViewState.ArmedItemDefinitionId);
+
+        for (var i = 0; i < 20; i++)
+        {
+            mapWindow.Update(new GameTime());
+        }
+
+        mapWindow.HandleHotkeys(new KeyboardState(Keys.Q), new KeyboardState());
+
+        Assert.IsNull(mapViewState.ArmedItemDefinitionId);
+        Assert.IsNull(mapViewState.ArmedSlot);
+    }
+
+    [TestMethod]
+    public void HandleHotkeys_PressingBoundNonConsumableItemSlot_DoesNothing()
+    {
+        var (_, mapViewState, mapWindow, componentManager, itemCatalog) = BuildMapWindowWithPlayerAndItems(300, 300, 1, new Vector3Int(100, 100, 0));
+        RegisterTestNonConsumableItem(itemCatalog);
+        componentManager.Merge(PlayerEntityId, new ItemHotkeyBindingComponent(HotkeySlot.Slot1, TestNonConsumableItemId));
+
+        mapWindow.HandleHotkeys(new KeyboardState(Keys.Q), new KeyboardState());
+
+        Assert.IsNull(mapViewState.ArmedItemDefinitionId);
+        Assert.IsNull(mapViewState.ArmedSlot);
+    }
+
+    /// <summary>A user-friendly parallel to the inventory grid deleting the item once its last use is consumed -- a bound-but-out-of-stock slot must not arm, the same inert no-op a non-consumable (Hammer) slot already is.</summary>
+    [TestMethod]
+    public void HandleHotkeys_PressingBoundPotionSlotWithNoRemainingStock_DoesNothing()
+    {
+        var (_, mapViewState, mapWindow, componentManager, itemCatalog) = BuildMapWindowWithPlayerAndItems(300, 300, 1, new Vector3Int(100, 100, 0));
+        RegisterTestPotion(itemCatalog);
+        // Deliberately no InventoryActions.AddItem -- the entity has never had (or has fully
+        // consumed) this item.
+        componentManager.Merge(PlayerEntityId, new ItemHotkeyBindingComponent(HotkeySlot.Slot1, TestPotionId));
+
+        mapWindow.HandleHotkeys(new KeyboardState(Keys.Q), new KeyboardState());
+
+        Assert.IsNull(mapViewState.ArmedItemDefinitionId);
+        Assert.IsNull(mapViewState.ArmedSlot);
+    }
+
+    /// <summary>Two presses with no Update call in between read as a double-tap -- for a Potion, this always activates against the caster's own tile, never the arm/target flow.</summary>
+    [TestMethod]
+    public void HandleHotkeys_DoubleTapPotionSlot_QueuesSelfActivation_AndClearsAnyArming()
+    {
+        var (_, mapViewState, mapWindow, componentManager, itemCatalog) = BuildMapWindowWithPlayerAndItems(300, 300, 1, new Vector3Int(100, 100, 0));
+        RegisterTestPotion(itemCatalog);
+        InventoryActions.AddItem(componentManager, PlayerEntityId, TestPotionId, quantity: 1);
+        componentManager.Merge(PlayerEntityId, new ItemHotkeyBindingComponent(HotkeySlot.Slot1, TestPotionId));
+
+        mapWindow.HandleHotkeys(new KeyboardState(Keys.Q), new KeyboardState());
+        mapWindow.HandleHotkeys(new KeyboardState(Keys.Q), new KeyboardState());
+
+        var pendingActivations = componentManager.GetPackedPool<PendingConsumableActivationComponent>();
+        Assert.IsTrue(pendingActivations.Has(PlayerEntityId));
+        var pending = pendingActivations.GetReadonly(PlayerEntityId);
+        Assert.AreEqual(TestPotionId, pending.ItemDefinitionId);
+        Assert.HasCount(1, pending.TargetTiles);
+        Assert.AreEqual(new Vector3Int(100, 100, 0), pending.TargetTiles[0]);
+
+        Assert.IsNull(mapViewState.ArmedItemDefinitionId, "The first press of the pair armed this slot -- once the double-tap fires, it shouldn't be left stale-armed.");
+    }
+
+    [TestMethod]
+    public void HandleClick_ArmedItem_ClickWithinFootprint_QueuesConsumableActivationAndDisarms()
+    {
+        var (_, mapViewState, mapWindow, componentManager, itemCatalog) = BuildMapWindowWithPlayerAndItems(300, 300, 1, new Vector3Int(100, 100, 0));
+        RegisterTestPotion(itemCatalog);
+        InventoryActions.AddItem(componentManager, PlayerEntityId, TestPotionId, quantity: 1);
+        componentManager.Merge(PlayerEntityId, new ItemHotkeyBindingComponent(HotkeySlot.Slot1, TestPotionId));
+        mapWindow.HandleHotkeys(new KeyboardState(Keys.Q), new KeyboardState());
+
+        // Within the Potion's Range 3, so within TargetableTiles.
+        var clickPosition = ComputeScreenPositionForMapPosition(mapWindow, mapViewState, new Vector3Int(102, 100, 0));
+        mapWindow.HandleClick(clickPosition);
+
+        var pendingActivations = componentManager.GetPackedPool<PendingConsumableActivationComponent>();
+        Assert.IsTrue(pendingActivations.Has(PlayerEntityId));
+        Assert.AreEqual(TestPotionId, pendingActivations.GetReadonly(PlayerEntityId).ItemDefinitionId);
+        Assert.IsNull(mapViewState.ArmedItemDefinitionId, "Confirming a target must disarm.");
+        Assert.IsNull(mapViewState.TargetableTiles);
+    }
+
+    [TestMethod]
+    public void HandleRightClickTap_ArmedItem_CancelsIt()
+    {
+        var (_, mapViewState, mapWindow, componentManager, itemCatalog) = BuildMapWindowWithPlayerAndItems(300, 300, 1, new Vector3Int(100, 100, 0));
+        RegisterTestPotion(itemCatalog);
+        InventoryActions.AddItem(componentManager, PlayerEntityId, TestPotionId, quantity: 1);
+        componentManager.Merge(PlayerEntityId, new ItemHotkeyBindingComponent(HotkeySlot.Slot1, TestPotionId));
+        mapWindow.HandleHotkeys(new KeyboardState(Keys.Q), new KeyboardState());
+
+        mapWindow.HandleRightClickTap();
+
+        Assert.IsNull(mapViewState.ArmedItemDefinitionId);
+        Assert.IsNull(mapViewState.ArmedSlot);
+    }
+
+    [TestMethod]
+    public void HandleHotkeys_ArmingItemSlot_WhileAbilityArmed_DisarmsTheAbilityFirst()
+    {
+        var abilityCatalog = new AbilityCatalog();
+        RegisterTestAdjacentAbility(abilityCatalog);
+        var itemCatalog = new ItemCatalog();
+        RegisterTestPotion(itemCatalog);
+        var (_, mapViewState, mapWindow, componentManager) = BuildMapWindowCore(300, 300, 1, new Vector3Int(100, 100, 0), abilityCatalog, itemCatalog);
+        InventoryActions.AddItem(componentManager, PlayerEntityId, TestPotionId, quantity: 1);
+        componentManager.Merge(PlayerEntityId, new AbilityInstanceComponent(TestAbilityId, damageAmount: 10, cooldownFramesRemaining: 0));
+        componentManager.Merge(PlayerEntityId, new ActionHotkeyBindingComponent(HotkeySlot.Slot4, TestAbilityId));
+        componentManager.Merge(PlayerEntityId, new ItemHotkeyBindingComponent(HotkeySlot.Slot1, TestPotionId));
+
+        mapWindow.HandleHotkeys(new KeyboardState(Keys.F), new KeyboardState());
+        mapWindow.HandleHotkeys(new KeyboardState(Keys.Q), new KeyboardState());
+
+        Assert.IsNull(mapViewState.ArmedAbilityId);
+        Assert.AreEqual(TestPotionId, mapViewState.ArmedItemDefinitionId);
+        Assert.AreEqual(HotkeySlot.Slot1, mapViewState.ArmedSlot);
+    }
+
+    [TestMethod]
+    public void HandleHotkeys_ArmingAbilitySlot_WhileItemArmed_DisarmsTheItemFirst()
+    {
+        var abilityCatalog = new AbilityCatalog();
+        RegisterTestAdjacentAbility(abilityCatalog);
+        var itemCatalog = new ItemCatalog();
+        RegisterTestPotion(itemCatalog);
+        var (_, mapViewState, mapWindow, componentManager) = BuildMapWindowCore(300, 300, 1, new Vector3Int(100, 100, 0), abilityCatalog, itemCatalog);
+        InventoryActions.AddItem(componentManager, PlayerEntityId, TestPotionId, quantity: 1);
+        componentManager.Merge(PlayerEntityId, new AbilityInstanceComponent(TestAbilityId, damageAmount: 10, cooldownFramesRemaining: 0));
+        componentManager.Merge(PlayerEntityId, new ActionHotkeyBindingComponent(HotkeySlot.Slot4, TestAbilityId));
+        componentManager.Merge(PlayerEntityId, new ItemHotkeyBindingComponent(HotkeySlot.Slot1, TestPotionId));
+
+        mapWindow.HandleHotkeys(new KeyboardState(Keys.Q), new KeyboardState());
+        mapWindow.HandleHotkeys(new KeyboardState(Keys.F), new KeyboardState());
+
+        Assert.IsNull(mapViewState.ArmedItemDefinitionId);
+        Assert.AreEqual(TestAbilityId, mapViewState.ArmedAbilityId);
+        Assert.AreEqual(HotkeySlot.Slot4, mapViewState.ArmedSlot);
     }
 }

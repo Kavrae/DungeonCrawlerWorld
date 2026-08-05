@@ -20,3 +20,18 @@ public enum HotkeySlot
     Slot9,
     Slot10,
 }
+
+/// <summary>
+/// Shared shape for anything a hotkey slot can be bound to -- ActionHotkeyBindingComponent
+/// (Game.Modules.Abilities.Components) and ItemHotkeyBindingComponent
+/// (Game.Modules.Inventory.Components) both implement this rather than sharing a base class:
+/// every component pool in this ECS is constrained "where T : struct" (see
+/// PackedComponentPool/MultiComponentPool/DirectComponentPool), so C#'s no-struct-inheritance
+/// rule rules out a real base type -- an interface is the actual available equivalent. A slot
+/// binds to at most one of {action, item} at a time; whatever writes a new binding for a slot is
+/// responsible for clearing the other kind's entry for that same slot first.
+/// </summary>
+public interface IHotkeySlotBinding
+{
+    HotkeySlot Slot { get; }
+}

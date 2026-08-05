@@ -58,6 +58,40 @@ public sealed class InventoryActionsTests
     }
 
     [TestMethod]
+    public void ConsumeItem_StackAboveOne_DecrementsQuantityWithoutRemovingStack()
+    {
+        var manager = CreateRegisteredManager();
+        var itemId = Guid.NewGuid();
+        InventoryActions.AddItem(manager, entityId: 0, itemId, quantity: 3);
+
+        InventoryActions.ConsumeItem(manager, entityId: 0, itemId);
+
+        var pool = manager.GetMultiPool<InventoryItemStackComponent>();
+        Assert.AreEqual(1, pool.CountForEntity(0));
+        Assert.AreEqual(2, pool.GetReadonlyByDenseIndex(pool.GetFirstDenseIndex(0)).Quantity);
+    }
+
+    [TestMethod]
+    public void ConsumeItem_LastOneInStack_RemovesTheStackEntirely()
+    {
+        var manager = CreateRegisteredManager();
+        var itemId = Guid.NewGuid();
+        InventoryActions.AddItem(manager, entityId: 0, itemId, quantity: 1);
+
+        InventoryActions.ConsumeItem(manager, entityId: 0, itemId);
+
+        Assert.AreEqual(0, manager.GetMultiPool<InventoryItemStackComponent>().CountForEntity(0));
+    }
+
+    [TestMethod]
+    public void ConsumeItem_ItemNotInInventory_DoesNotThrow()
+    {
+        var manager = CreateRegisteredManager();
+
+        InventoryActions.ConsumeItem(manager, entityId: 0, Guid.NewGuid());
+    }
+
+    [TestMethod]
     public void SetInventoryDisabled_ThenQueried_RoundTrips()
     {
         var manager = CreateRegisteredManager();

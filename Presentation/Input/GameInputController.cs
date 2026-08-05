@@ -1,11 +1,21 @@
+using Game.Modules.Abilities;
 using Microsoft.Xna.Framework;
 using Microsoft.Xna.Framework.Input;
 using Presentation.UI;
+using Presentation.UI.Content;
 
 namespace Presentation.Input;
 
 /// <summary>
-/// Translates raw keyboard/mouse state into the app's UI-level interactions
+/// Translates raw keyboard/mouse state into the app's UI-level interactions. Elements live in
+/// four draw-order tiers, bottom to top: Base (map/debug/selection -- fixed, distinct panels),
+/// StaticHUD (health bar/hotbar/action lock/status effects -- persistent, not generally changed
+/// by the player), DynamicHUD (notifications, inventory management, the quest composer -- popups
+/// the player actually opens/closes/interacts with), and User (cursor-following drag feedback and
+/// other transient user-driven visual effects -- see DragGhostContent -- deliberately excluded
+/// from hit-testing priority mattering in practice, since nothing placed there today is itself
+/// interactive). A higher tier always wins hit-testing over a lower one, regardless of screen
+/// position.
 /// </summary>
 public sealed class GameInputController
 {
@@ -15,9 +25,10 @@ public sealed class GameInputController
     /// <summary>Content pixels scrolled per wheel detent -- roughly three lines of the 8pt font most window content uses, matching typical OS scroll-speed defaults.</summary>
     private const float ScrollPixelsPerNotch = 24f;
 
-    private readonly List<Element> _rootElements;
-    private readonly List<Element> _hudElements;
-    private readonly List<Element> _alwaysOnTopElements;
+    private readonly List<Element> _baseElements;
+    private readonly List<Element> _staticHudElements;
+    private readonly List<Element> _dynamicHudElements;
+    private readonly List<Element> _userElements;
     private readonly Vector2 _screenSize;
 
     private KeyboardState _previousKeyboardState;
@@ -40,11 +51,37 @@ public sealed class GameInputController
     /// <summary>Set once the current right-drag's total delta has ever exceeded RightClickTapThresholdPixels -- checked (not recomputed) at release, so a drag that wandered out past the threshold and back before releasing still counts as a drag, not a tap.</summary>
     private bool _rightDragExceededTapThreshold;
 
+    /// <summary>
+    /// Left-button content-drag state: an inventory item stack cell (InventoryItemStackCell) or
+    /// an already-bound hotbar slot (HotbarContent) picked up on press, carried as a plain
+    /// ItemDefinitionId payload, and resolved against whatever's under the cursor on release --
+    /// see HandleMousePress/ResolveContentDrag. Deliberately narrow (item-cell &lt;-&gt; hotbar-slot
+    /// only), not a generic Element-level drag-and-drop framework the way Move/Resize is: a
+    /// future Equipment menu drop target would add its own resolution branch here rather than
+    /// this becoming a virtual-hook mechanism every Element opts into. Independent of
+    /// _activeInteraction.Kind (which stays None for a plain content click on either source) --
+    /// this is tracked entirely by its own fields instead.
+    /// </summary>
+    private Guid? _contentDragItemDefinitionId;
+
+    /// <summary>The dragged source's own on-screen size at the moment the drag started -- InventoryItemStackCell.CurrentSize for an inventory cell, HotbarContent.SlotSize for a hotbar slot (the slot, not the whole hotbar window). DragGhostContent draws the ghost at this size rather than one fixed size for every drag, so it doesn't visibly jump in scale relative to wherever it was actually picked up from.</summary>
+    private Vector2 _contentDragSourceSize;
+
+    /// <summary>Set alongside _contentDragItemDefinitionId only when the drag started on an already-bound hotbar slot -- that slot's binding is removed on release regardless of where the drag ends (see ResolveContentDrag), so dragging an item off the hotbar entirely un-assigns it.</summary>
+    private HotbarContent? _contentDragOriginHotbar;
+    private HotkeySlot? _contentDragOriginSlot;
+
+    /// <summary>Mouse position when the current content-drag started -- ResolveContentDrag only actually resolves a drop if the release is at least ContentDragTapThresholdPixels away, so a plain click on a cell/slot (no real drag) doesn't spuriously unbind-then-rebind it.</summary>
+    private Vector2 _contentDragStartMousePosition;
+
+    /// <summary>Same reasoning/value as RightClickTapThresholdPixels -- small enough to absorb ordinary click jitter, comfortably smaller than an intentional drag.</summary>
+    private const float ContentDragTapThresholdPixels = 4f;
+
     private Element? _focusedElement;
 
     /// <summary>
-    /// The container (a parent's ChildElements, or the always-on-top tier) the currently
-    /// focused element belonged to at the moment it gained focus -- see GetSiblingContainer and
+    /// The container (a parent's ChildElements, or the DynamicHUD tier) the currently focused
+    /// element belonged to at the moment it gained focus -- see GetSiblingContainer and
     /// RedirectFocusAwayFrom. Snapshotted in SetFocus rather than recomputed at close/minimize
     /// time because a closing element may already have removed itself from that same list by
     /// then (e.g. NotificationCenter.OnActiveNotificationClosed), depending on event
@@ -87,11 +124,19 @@ public sealed class GameInputController
     /// <summary>See StartTextInput.</summary>
     internal Action StopTextInput = TextInputEXT.StopTextInput;
 
-    public GameInputController(List<Element> rootElements, List<Element> hudElements, List<Element> alwaysOnTopElements, Vector2 screenSize)
+    /// <summary>
+    /// userElements is typically still empty at construction time -- GameShellBootstrapper.Build
+    /// constructs GameInputController before it can build DragGhostContent (which needs a real
+    /// GameInputController reference to read the drag state from), then appends the ghost's host
+    /// window to this same list afterward. Passing the list itself (not a snapshot/copy) is what
+    /// makes that work -- this class only ever reads through the reference, never replaces it.
+    /// </summary>
+    public GameInputController(List<Element> baseElements, List<Element> staticHudElements, List<Element> dynamicHudElements, List<Element> userElements, Vector2 screenSize)
     {
-        _rootElements = rootElements;
-        _hudElements = hudElements;
-        _alwaysOnTopElements = alwaysOnTopElements;
+        _baseElements = baseElements;
+        _staticHudElements = staticHudElements;
+        _dynamicHudElements = dynamicHudElements;
+        _userElements = userElements;
         _screenSize = screenSize;
 
         // Subscribing is safe to do unconditionally and permanently -- SDL simply never raises
@@ -134,6 +179,15 @@ public sealed class GameInputController
     /// <summary>The last cursor UpdateCursor set (or the initial Arrow default, if it's never had reason to change) -- lets tests assert on cursor selection without depending on real OS cursor state.</summary>
     internal MouseCursor CurrentCursor { get; private set; } = MouseCursor.Arrow;
 
+    /// <summary>The item currently being content-dragged, if any -- see _contentDragItemDefinitionId's own doc comment. Read by DragGhostContent (same assembly, User tier) every DrawContent.</summary>
+    internal Guid? ContentDragItemDefinitionId => _contentDragItemDefinitionId;
+
+    /// <summary>See _contentDragSourceSize's own doc comment.</summary>
+    internal Vector2 ContentDragSourceSize => _contentDragSourceSize;
+
+    /// <summary>Current mouse screen position, refreshed at the top of every Update call -- paired with ContentDragItemDefinitionId for the same ghost-sprite use.</summary>
+    internal Point CurrentMousePosition { get; private set; }
+
     public void Update(GameTime gameTime) => Update(Keyboard.GetState(), Mouse.GetState());
 
     /// <summary>
@@ -143,6 +197,8 @@ public sealed class GameInputController
     /// </summary>
     internal void Update(KeyboardState keyboardState, MouseState mouseState)
     {
+        CurrentMousePosition = new Point(mouseState.X, mouseState.Y);
+
         RouteHotkeysToFocusedElement(keyboardState);
         HandleFocusCycling(keyboardState);
         HandleEscape(keyboardState);
@@ -206,13 +262,14 @@ public sealed class GameInputController
 
     /// <summary>
     /// Escape must stay unconditional too, the same reasoning as Tab above: broadcast to every
-    /// root/HUD element (not just whichever holds focus) rather than routed only to the focused
-    /// one, since an armed ability's own window (MapWindow) shouldn't have to hold keyboard
-    /// focus for Escape to cancel it -- e.g. a HUD panel could be focused while the map still
-    /// has an ability armed. AlwaysOnTop (notification popups) is deliberately excluded, the
-    /// same tier scope CycleFocus already uses. No-op by default (Window.OnEscapeAction);
-    /// MapWindow is the only override today. This is scoped to ability-cancel only -- the
-    /// separate "Escape opens the options menu" TODO.md item isn't implemented here.
+    /// Base/StaticHUD element (not just whichever holds focus) rather than routed only to the
+    /// focused one, since an armed ability's own window (MapWindow) shouldn't have to hold
+    /// keyboard focus for Escape to cancel it -- e.g. a StaticHUD panel could be focused while
+    /// the map still has an ability armed. DynamicHUD (notification popups) and User are
+    /// deliberately excluded, the same tier scope CycleFocus already uses. No-op by default
+    /// (Window.OnEscapeAction); MapWindow is the only override today. This is scoped to
+    /// ability-cancel only -- the separate "Escape opens the options menu" TODO.md item isn't
+    /// implemented here.
     /// </summary>
     private void HandleEscape(KeyboardState keyboardState)
     {
@@ -221,12 +278,12 @@ public sealed class GameInputController
             return;
         }
 
-        foreach (var element in _rootElements)
+        foreach (var element in _baseElements)
         {
             element.HandleEscape();
         }
 
-        foreach (var element in _hudElements)
+        foreach (var element in _staticHudElements)
         {
             element.HandleEscape();
         }
@@ -257,6 +314,59 @@ public sealed class GameInputController
                 _dragStartSize = _activeInteraction.Element.CurrentSize;
             }
         }
+
+        TryStartContentDrag(clickPosition);
+    }
+
+    /// <summary>
+    /// Captures a content-drag payload if the press landed on a drag source -- an
+    /// InventoryItemStackCell (its own ItemDefinitionId and CurrentSize), or a HotbarContent slot
+    /// that already has an item bound (that item's id, HotbarContent.SlotSize, and which
+    /// slot/HotbarContent to unbind from on release -- see _contentDragOriginHotbar's own doc
+    /// comment). Independent of _activeInteraction.Kind: a plain content click on either source
+    /// resolves to Kind None, so this runs unconditionally on every press rather than being
+    /// folded into the Kind-gated branch above.
+    /// </summary>
+    private void TryStartContentDrag(Point clickPosition)
+    {
+        _contentDragItemDefinitionId = null;
+        _contentDragOriginHotbar = null;
+        _contentDragOriginSlot = null;
+
+        if (_activeInteraction.Element is InventoryItemStackCell cell)
+        {
+            _contentDragItemDefinitionId = cell.ItemDefinitionId;
+            _contentDragSourceSize = cell.CurrentSize;
+            _contentDragStartMousePosition = new Vector2(clickPosition.X, clickPosition.Y);
+        }
+        else if (_activeInteraction.Element is Window { Content: HotbarContent hotbarContent } &&
+            hotbarContent.TryGetSlotAt(clickPosition, out var pressedSlot) &&
+            hotbarContent.TryGetBoundItemId(pressedSlot, out var boundItemId))
+        {
+            _contentDragItemDefinitionId = boundItemId;
+            _contentDragSourceSize = HotbarContent.SlotSize;
+            _contentDragOriginHotbar = hotbarContent;
+            _contentDragOriginSlot = pressedSlot;
+            _contentDragStartMousePosition = new Vector2(clickPosition.X, clickPosition.Y);
+        }
+
+        if (_contentDragItemDefinitionId is not null)
+        {
+            SetHotbarDragHighlight(true);
+        }
+    }
+
+    /// <summary>Turns HotbarContent's drop-target glow (see its own IsAcceptingDrag doc comment) on/off -- the hotbar itself may or may not exist in every scene (e.g. a test harness with no StaticHUD at all), so this is a no-op if none of staticHudElements hosts one.</summary>
+    private void SetHotbarDragHighlight(bool isAccepting)
+    {
+        foreach (var element in _staticHudElements)
+        {
+            if (element is Window { Content: HotbarContent hotbarContent })
+            {
+                hotbarContent.IsAcceptingDrag = isAccepting;
+                return;
+            }
+        }
     }
 
     /// <summary>
@@ -271,10 +381,59 @@ public sealed class GameInputController
     {
         _activeInteraction.Element?.HandleClick(new Point(mouseState.X, mouseState.Y));
 
+        ResolveContentDrag(new Point(mouseState.X, mouseState.Y));
+
         PressedButton?.SetPressed(false);
         PressedButton = null;
         _activeInteraction = ElementInteraction.NotHit;
         DragDelta = Vector2.Zero;
+    }
+
+    /// <summary>
+    /// Resolves an in-progress content-drag (see _contentDragItemDefinitionId's own doc comment)
+    /// against the release position -- a no-op if the mouse never actually moved past
+    /// ContentDragTapThresholdPixels (a plain click on a cell/slot must not spuriously unbind-
+    /// then-rebind it). Unbinding the drag's origin slot (if any) always happens first, then
+    /// binding the drop target (if the release landed on a hotbar slot) second -- dropping back
+    /// onto the same slot it came from is therefore a harmless unbind-then-immediately-rebind,
+    /// not a special case. Always clears the drag-highlight/state at the end, drop accepted or
+    /// not, so a cancelled/missed drag never leaves the hotbar glowing or a stale payload behind
+    /// for the next press to accidentally inherit.
+    /// </summary>
+    private void ResolveContentDrag(Point releasePosition)
+    {
+        if (_contentDragItemDefinitionId is not { } itemDefinitionId)
+        {
+            return;
+        }
+
+        try
+        {
+            var releaseVector = new Vector2(releasePosition.X, releasePosition.Y);
+            if (Vector2.Distance(_contentDragStartMousePosition, releaseVector) < ContentDragTapThresholdPixels)
+            {
+                return;
+            }
+
+            if (_contentDragOriginHotbar is { } originHotbar && _contentDragOriginSlot is { } originSlot)
+            {
+                originHotbar.UnbindItemSlot(originSlot);
+            }
+
+            var dropInteraction = TryHitTestInteraction(releasePosition);
+            if (dropInteraction.Element is Window { Content: HotbarContent dropHotbar } &&
+                dropHotbar.TryGetSlotAt(releasePosition, out var dropSlot))
+            {
+                dropHotbar.BindItem(dropSlot, itemDefinitionId);
+            }
+        }
+        finally
+        {
+            _contentDragItemDefinitionId = null;
+            _contentDragOriginHotbar = null;
+            _contentDragOriginSlot = null;
+            SetHotbarDragHighlight(false);
+        }
     }
 
     private void HandleMouseDrag(MouseState mouseState)
@@ -371,22 +530,28 @@ public sealed class GameInputController
         element.ScrollBy(new Vector2(0, -wheelDelta / WheelNotchValue * ScrollPixelsPerNotch));
     }
 
-    /// <summary>Always-on-top tier first, then HUD, then base (root) -- a higher tier can never lose to a lower one. Each tier topmost (last-raised) first.</summary>
+    /// <summary>User tier first, then DynamicHUD, then StaticHUD, then Base -- a higher tier can never lose to a lower one. Each tier topmost (last-raised) first. User is checked first purely for consistency (see the class's own doc comment) -- nothing placed there today is ever actually hit, since DragGhostContent's host window has no clickable content.</summary>
     private ElementInteraction TryHitTestInteraction(Point position)
     {
-        var interaction = TryHitTestInList(_alwaysOnTopElements, position);
+        var interaction = TryHitTestInList(_userElements, position);
         if (interaction.Element is not null)
         {
             return interaction;
         }
 
-        interaction = TryHitTestInList(_hudElements, position);
+        interaction = TryHitTestInList(_dynamicHudElements, position);
         if (interaction.Element is not null)
         {
             return interaction;
         }
 
-        return TryHitTestInList(_rootElements, position);
+        interaction = TryHitTestInList(_staticHudElements, position);
+        if (interaction.Element is not null)
+        {
+            return interaction;
+        }
+
+        return TryHitTestInList(_baseElements, position);
     }
 
     private static ElementInteraction TryHitTestInList(List<Element> elements, Point position)
@@ -406,8 +571,8 @@ public sealed class GameInputController
     /// <summary>
     /// Raises element within its own parent's children (no-op if it has no parent -- see
     /// Element.RaiseToFront), then raises whichever top-level ancestor contains it within its
-    /// own tier (rootElements/hudElements/alwaysOnTopElements), so the whole subtree ends up
-    /// drawn/hit-tested on top of its siblings at every level.
+    /// own tier (baseElements/staticHudElements/dynamicHudElements/userElements), so the whole
+    /// subtree ends up drawn/hit-tested on top of its siblings at every level.
     /// </summary>
     private void RaiseToFront(Element element)
     {
@@ -415,21 +580,25 @@ public sealed class GameInputController
 
         var rootAncestor = GetRootAncestor(element);
 
-        if (_rootElements.Remove(rootAncestor))
+        if (_baseElements.Remove(rootAncestor))
         {
-            _rootElements.Add(rootAncestor);
+            _baseElements.Add(rootAncestor);
         }
-        else if (_hudElements.Remove(rootAncestor))
+        else if (_staticHudElements.Remove(rootAncestor))
         {
-            _hudElements.Add(rootAncestor);
+            _staticHudElements.Add(rootAncestor);
         }
-        else if (_alwaysOnTopElements.Remove(rootAncestor))
+        else if (_dynamicHudElements.Remove(rootAncestor))
         {
-            _alwaysOnTopElements.Add(rootAncestor);
+            _dynamicHudElements.Add(rootAncestor);
+        }
+        else if (_userElements.Remove(rootAncestor))
+        {
+            _userElements.Add(rootAncestor);
         }
     }
 
-    /// <summary>Walks up ParentElement to the top-level ancestor -- shared by RaiseToFront and CycleFocus, both of which operate on whichever root/always-on-top element a given element belongs to, not the element itself.</summary>
+    /// <summary>Walks up ParentElement to the top-level ancestor -- shared by RaiseToFront and CycleFocus, both of which operate on whichever tier-root element a given element belongs to, not the element itself.</summary>
     private static Element GetRootAncestor(Element element)
     {
         var rootAncestor = element;
@@ -553,11 +722,11 @@ public sealed class GameInputController
     /// Moves focus to a sibling of the currently focused element, rather than leaving focus on
     /// nothing, once it (or an ancestor of it) has closed or minimized. "Sibling" is scoped to
     /// groups of genuinely interchangeable elements -- other children under the same parent
-    /// (e.g. a future multi-TextBox form), or other always-on-top popups (e.g. the next active
-    /// notification once the topmost one is dismissed) -- not the root tier, whose windows
+    /// (e.g. a future multi-TextBox form), or other DynamicHUD popups (e.g. the next active
+    /// notification once the topmost one is dismissed) -- not the Base tier, whose windows
     /// (map/debug/selection) are fixed, distinct panels rather than a stack of equivalent ones;
-    /// closing the quest-composer popup (the only root window that can ever close) is meant to
-    /// fall all the way through to _defaultFocusElement instead of grabbing some unrelated root
+    /// closing the quest-composer popup (the only Base window that can ever close) is meant to
+    /// fall all the way through to _defaultFocusElement instead of grabbing some unrelated Base
     /// panel. Uses _focusedElementSiblings (snapshotted when this element gained focus, see
     /// SetFocus) rather than re-deriving its sibling group now, since a closing element may
     /// already have removed itself from that same list by the time this runs.
@@ -589,23 +758,24 @@ public sealed class GameInputController
         SetFocus(nextSibling);
     }
 
-    /// <summary>See RedirectFocusAwayFrom for why this deliberately excludes the root tier.</summary>
+    /// <summary>See RedirectFocusAwayFrom for why this deliberately excludes the Base tier.</summary>
     private List<Element>? GetSiblingContainer(Element element) =>
         element.ParentElement?.ChildElements
-        ?? (_alwaysOnTopElements.Contains(element) ? _alwaysOnTopElements : null);
+        ?? (_dynamicHudElements.Contains(element) ? _dynamicHudElements : null);
 
     /// <summary>
-    /// Advances focus to the next (direction 1) or previous (direction -1) focusable Base/HUD
-    /// element (Element.CanUserFocus -- e.g. the debug stats window opts out, see
-    /// GameShellBootstrapper), wrapping past either end. rootElements+hudElements only (map/
-    /// debug/selection/health bar/quest trigger -- "fixed, distinct panels"), not
-    /// alwaysOnTopElements: notifications are a separate tier dismissed via their own close/
-    /// minimize button, not something a user tabs to.
+    /// Advances focus to the next (direction 1) or previous (direction -1) focusable Base/
+    /// StaticHUD element (Element.CanUserFocus -- e.g. the debug stats window opts out, see
+    /// GameShellBootstrapper), wrapping past either end. baseElements+staticHudElements only
+    /// (map/debug/selection/health bar/quest trigger -- "fixed, distinct panels"), not
+    /// dynamicHudElements or userElements: notifications are a separate tier dismissed via their
+    /// own close/minimize button, not something a user tabs to, and User holds nothing
+    /// focusable at all.
     /// </summary>
     private void CycleFocus(int direction)
     {
         var focusableElements = new List<Element>();
-        foreach (var element in _rootElements)
+        foreach (var element in _baseElements)
         {
             if (element.CanUserFocus)
             {
@@ -613,7 +783,7 @@ public sealed class GameInputController
             }
         }
 
-        foreach (var element in _hudElements)
+        foreach (var element in _staticHudElements)
         {
             if (element.CanUserFocus)
             {
@@ -778,7 +948,7 @@ public sealed class GameInputController
     /// e.g. a resize drag dragged inward past the border still shows the resize cursor, not
     /// whatever the mouse happens to be over), otherwise a hover hit-test. The hover hit-test
     /// is skipped when the mouse hasn't moved since last frame -- it's a full recursive
-    /// Rectangle.Contains walk over every root/always-on-top element and their descendants
+    /// Rectangle.Contains walk over every element across all four tiers and their descendants
     /// (title buttons, tiled/floating children), which otherwise ran unconditionally every
     /// single frame regardless of whether the mouse was even moving. An element appearing/
     /// resizing/closing directly under a stationary mouse can leave the cursor stale for a

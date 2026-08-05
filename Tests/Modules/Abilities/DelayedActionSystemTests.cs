@@ -54,7 +54,7 @@ public sealed class DelayedActionSystemTests
             AbilityId,
             "Test Delayed Attack",
             "#",
-            new AbilityTargeting(TargetShape.SingleTarget, Range: 10),
+            new TargetingSpec(TargetShape.SingleTarget, Range: 10),
             new AbilityTiming(ActionTimingCategory.Delayed, ActionLockFrames: 30, CooldownFrames: null),
             new AbilityEffect(DamageAmount: 0, StatusEffects: [])));
 

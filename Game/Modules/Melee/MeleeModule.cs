@@ -38,7 +38,7 @@ public sealed class MeleeModule : IGameModule
             DefaultAttackId,
             "Default Attack",
             "/",
-            new AbilityTargeting(TargetShape.Line, Range: 2),
+            new TargetingSpec(TargetShape.Line, Range: 2),
             new AbilityTiming(ActionTimingCategory.Immediate, ActionLockFrames: DefaultAttackActionLockFrames, CooldownFrames: null),
             new AbilityEffect(DamageAmount: 0, StatusEffects: [StatusEffectType.Paralysis], StatModifierGrants: [])));
     }

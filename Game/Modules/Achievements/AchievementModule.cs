@@ -26,6 +26,7 @@ public sealed class AchievementModule : IGameModule
     public IReadOnlyList<Type> Dependencies { get; } = [];
 
     private static readonly IReadOnlyList<IAchievementDefinition> Definitions = [
+        new DrinkingProblemAchievement(),
         new EarlyAdopterAchievement(),
         new EmptyPocketsAchievement(),
         new InertGasAchievement(),

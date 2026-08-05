@@ -38,6 +38,25 @@ public sealed class InventoryQueriesTests
     }
 
     [TestMethod]
+    public void TryGetStack_MatchingItemDefinitionId_ReturnsTrueWithTheStack()
+    {
+        var pool = new MultiComponentPool<InventoryItemStackComponent>(maximumEntityCount: 10, initialCapacity: 4);
+        var potionId = Guid.NewGuid();
+        pool.Add(0, new InventoryItemStackComponent(potionId, quantity: 5));
+
+        Assert.IsTrue(InventoryQueries.TryGetStack(pool, 0, potionId, out var stack));
+        Assert.AreEqual(5, stack.Quantity);
+    }
+
+    [TestMethod]
+    public void TryGetStack_NoMatchingStack_ReturnsFalse()
+    {
+        var pool = new MultiComponentPool<InventoryItemStackComponent>(maximumEntityCount: 10, initialCapacity: 4);
+
+        Assert.IsFalse(InventoryQueries.TryGetStack(pool, 0, Guid.NewGuid(), out _));
+    }
+
+    [TestMethod]
     public void IsInventoryDisabled_NoComponentPresent_DefaultsToFalse()
     {
         var pool = new DirectComponentPool<InventoryDisabledComponent>(initialCapacity: 10, static (ref existing, incoming) => existing.IsDisabled = incoming.IsDisabled);

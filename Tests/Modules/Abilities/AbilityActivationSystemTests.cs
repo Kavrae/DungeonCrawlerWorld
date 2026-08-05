@@ -59,35 +59,35 @@ public sealed class AbilityActivationSystemTests
             ImmediateAbilityId,
             "Test Immediate Attack",
             "#",
-            new AbilityTargeting(TargetShape.SingleTarget, Range: 10),
+            new TargetingSpec(TargetShape.SingleTarget, Range: 10),
             new AbilityTiming(ActionTimingCategory.Immediate, ActionLockFrames: 30, CooldownFrames: null),
             new AbilityEffect(DamageAmount: 0, StatusEffects: [])));
         abilityCatalog.Register(new AbilityDefinition(
             DelayedAbilityId,
             "Test Delayed Attack",
             "#",
-            new AbilityTargeting(TargetShape.SingleTarget, Range: 10),
+            new TargetingSpec(TargetShape.SingleTarget, Range: 10),
             new AbilityTiming(ActionTimingCategory.Delayed, ActionLockFrames: 30, CooldownFrames: null),
             new AbilityEffect(DamageAmount: 0, StatusEffects: [])));
         abilityCatalog.Register(new AbilityDefinition(
             FreeCastAbilityId,
             "Test FreeCast Bolt",
             "#",
-            new AbilityTargeting(TargetShape.SingleTarget, Range: 10),
+            new TargetingSpec(TargetShape.SingleTarget, Range: 10),
             new AbilityTiming(ActionTimingCategory.FreeCast, ActionLockFrames: 0, CooldownFrames: 40),
             new AbilityEffect(DamageAmount: 0, StatusEffects: [])));
         abilityCatalog.Register(new AbilityDefinition(
             ImmediateWithCooldownAbilityId,
             "Test Immediate Attack With Cooldown",
             "#",
-            new AbilityTargeting(TargetShape.SingleTarget, Range: 10),
+            new TargetingSpec(TargetShape.SingleTarget, Range: 10),
             new AbilityTiming(ActionTimingCategory.Immediate, ActionLockFrames: 10, CooldownFrames: 200),
             new AbilityEffect(DamageAmount: 0, StatusEffects: [])));
         abilityCatalog.Register(new AbilityDefinition(
             DelayedWithCooldownAbilityId,
             "Test Delayed Attack With Cooldown",
             "#",
-            new AbilityTargeting(TargetShape.SingleTarget, Range: 10),
+            new TargetingSpec(TargetShape.SingleTarget, Range: 10),
             new AbilityTiming(ActionTimingCategory.Delayed, ActionLockFrames: 30, CooldownFrames: 150),
             new AbilityEffect(DamageAmount: 0, StatusEffects: [])));
 

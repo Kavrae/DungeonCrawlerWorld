@@ -16,7 +16,7 @@ namespace Presentation.UI.Notifications;
 /// NotificationRequested event, so a Game-layer caller (which can't reference this
 /// Presentation-layer type at all) can request a notification without a direct reference.
 /// </summary>
-public sealed class NotificationCenter(ElementPoolService elementPoolService, EventBus eventBus, List<Element> alwaysOnTopElements)
+public sealed class NotificationCenter(ElementPoolService elementPoolService, EventBus eventBus, List<Element> dynamicHudElements)
 {
     private static readonly Vector2 FolderPosition = HudMetrics.Margin;
 
@@ -114,15 +114,15 @@ public sealed class NotificationCenter(ElementPoolService elementPoolService, Ev
         // Initialized last -- see the WrapContent comment above for why this must run only
         // after every child is already correctly tiled.
         _folder.Initialize();
-        alwaysOnTopElements.Add(_folder);
+        dynamicHudElements.Add(_folder);
 
         eventBus.Subscribe<NotificationRequested>(OnNotificationRequested);
     }
 
     /// <summary>
     /// Notifications update even while the game is paused (see GameLoop) -- true today because
-    /// GameShellContext's own per-tier Update loop over AlwaysOnTopWindows is unconditional,
-    /// the same way it already is for RootWindows, not because of anything here. This method
+    /// GameShellContext's own per-tier Update loop over DynamicHudWindows is unconditional,
+    /// the same way it already is for BaseWindows, not because of anything here. This method
     /// only does the notification-domain part: dispatching buffered NotificationRequested
     /// events, which must run before GameLoop's pause check reads HasBlockingNotification (a
     /// notification published this same frame needs to be reflected before that check).
@@ -215,7 +215,7 @@ public sealed class NotificationCenter(ElementPoolService elementPoolService, Ev
         notificationWindow.Closed += OnActiveNotificationClosed;
         _activeNotifications.Add((notificationWindow, notification));
         notificationWindow.Initialize();
-        alwaysOnTopElements.Add(notificationWindow);
+        dynamicHudElements.Add(notificationWindow);
         ActiveNotificationOpened?.Invoke(notificationWindow);
 
         // Attached after Initialize() (which already attached WindowCloseBehavior, since
@@ -256,7 +256,7 @@ public sealed class NotificationCenter(ElementPoolService elementPoolService, Ev
             _activeNotifications.RemoveAt(index);
         }
 
-        alwaysOnTopElements.Remove(closedWindow);
+        dynamicHudElements.Remove(closedWindow);
 
         // Closing the last unread notification auto-tidies the HUD back down -- SetWindowDisplayMode
         // no-ops if the Folder is already Minimized, so this is safe to call unconditionally.

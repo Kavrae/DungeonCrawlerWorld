@@ -1,10 +1,18 @@
 using FontStashSharp;
+using Game.Modules.Core.Components;
 using Microsoft.Xna.Framework;
 using Microsoft.Xna.Framework.Graphics;
 
 namespace Presentation.Rendering;
 
-public sealed class RadialFillRenderer(GlyphRenderer glyphRenderer)
+/// <summary>
+/// spriteSheetService/spriteRenderer are optional -- every existing caller (ActionLockContent,
+/// and HotbarContent's ability slots) draws glyphs only and never sets Sprite, so they're left
+/// null and Draw falls back to the original glyph-only path unchanged. HotbarContent's item
+/// slots are the one caller that supplies both (items can have real sprites, unlike abilities
+/// today) and sets Sprite/SpriteTint per draw.
+/// </summary>
+public sealed class RadialFillRenderer(GlyphRenderer glyphRenderer, SpriteSheetService? spriteSheetService = null, SpriteRenderer? spriteRenderer = null)
 {
     private const int SliverCount = 72;
     private static readonly Color MaskColor = new Color(64, 64, 64) * 0.5f;
@@ -14,10 +22,28 @@ public sealed class RadialFillRenderer(GlyphRenderer glyphRenderer)
     public Color BackgroundColor { get; set; }
     public float FillPercentage { get; set; }
 
+    /// <summary>Drawn instead of Glyph when set (see SpriteOrGlyphRenderer's own sprite-first-glyph-fallback convention) -- reset to null between draws by callers that don't always have one (see HotbarContent.DrawAbilitySlot).</summary>
+    public SpriteComponent? Sprite { get; set; }
+
+    /// <summary>Tint applied to Sprite only -- GlyphColor plays the equivalent role for Glyph, kept separate since SpriteOrGlyphRenderer.Draw itself takes them as two independent parameters.</summary>
+    public Color SpriteTint { get; set; } = Color.White;
+
     public void Draw(SpriteBatch spriteBatch, Texture2D unitRectangle, SpriteFontBase font, Rectangle bounds)
     {
         spriteBatch.Draw(unitRectangle, bounds, BackgroundColor);
-        glyphRenderer.DrawCentered(spriteBatch, font, Glyph, new Vector2(bounds.X, bounds.Y), new Vector2(bounds.Width, bounds.Height), GlyphColor);
+
+        var position = new Vector2(bounds.X, bounds.Y);
+        var size = new Vector2(bounds.Width, bounds.Height);
+
+        if (Sprite is { } sprite && spriteSheetService is not null && spriteRenderer is not null)
+        {
+            SpriteOrGlyphRenderer.Draw(spriteBatch, spriteSheetService, spriteRenderer, glyphRenderer, sprite, font, Glyph, GlyphColor, position, size, SpriteTint);
+        }
+        else
+        {
+            glyphRenderer.DrawCentered(spriteBatch, font, Glyph, position, size, GlyphColor);
+        }
+
         DrawRadialMask(spriteBatch, unitRectangle, bounds);
     }
 

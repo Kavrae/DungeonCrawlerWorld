@@ -1,6 +1,10 @@
-using Engine.ECS.Components;
+﻿using Engine.ECS.Components;
 using Engine.Math;
+using Game.Modules.Abilities;
+using Game.Modules.Abilities.Components;
 using Game.Modules.Core.Components;
+using Game.Modules.Inventory;
+using Game.Modules.Inventory.Components;
 using Microsoft.Xna.Framework;
 using Microsoft.Xna.Framework.Graphics;
 using Microsoft.Xna.Framework.Input;
@@ -8,6 +12,7 @@ using Presentation.Fonts;
 using Presentation.Input;
 using Presentation.Rendering;
 using Presentation.UI;
+using Presentation.UI.Content;
 
 namespace Tests.Presentation;
 
@@ -166,7 +171,7 @@ public sealed class GameInputControllerTests
         var windowService = CreateWindowService();
         var window = CreateRootWindowWithCloseButton(windowService, new Vector2(0, 0));
         var closeButton = window.TitleButtons[0];
-        var controller = new GameInputController([window], [], [], LargeScreenSize);
+        var controller = new GameInputController([window], [], [], [], LargeScreenSize);
 
         var pressPoint = closeButton.Rectangle.Center;
         controller.Update(NoKeys, MouseAt(pressPoint.X, pressPoint.Y, ButtonState.Released));
@@ -181,7 +186,7 @@ public sealed class GameInputControllerTests
         var windowService = CreateWindowService();
         var window = CreateRootWindowWithCloseButton(windowService, new Vector2(0, 0));
         var closeButton = window.TitleButtons[0];
-        var controller = new GameInputController([window], [], [], LargeScreenSize);
+        var controller = new GameInputController([window], [], [], [], LargeScreenSize);
 
         var pressPoint = closeButton.Rectangle.Center;
         controller.Update(NoKeys, MouseAt(pressPoint.X, pressPoint.Y, ButtonState.Released));
@@ -200,7 +205,7 @@ public sealed class GameInputControllerTests
         var windowService = CreateWindowService();
         var window = CreateRootWindowWithCloseButton(windowService, new Vector2(0, 0));
         var closeButton = window.TitleButtons[0];
-        var controller = new GameInputController([window], [], [], LargeScreenSize);
+        var controller = new GameInputController([window], [], [], [], LargeScreenSize);
 
         var pressPoint = closeButton.Rectangle.Center;
         controller.Update(NoKeys, MouseAt(pressPoint.X, pressPoint.Y, ButtonState.Released));
@@ -215,7 +220,7 @@ public sealed class GameInputControllerTests
         var windowService = CreateWindowService();
         var window = CreateRootWindowWithCloseButton(windowService, new Vector2(0, 0));
         var closeButton = window.TitleButtons[0];
-        var controller = new GameInputController([window], [], [], LargeScreenSize);
+        var controller = new GameInputController([window], [], [], [], LargeScreenSize);
 
         var pressPoint = closeButton.Rectangle.Center;
         controller.Update(NoKeys, MouseAt(pressPoint.X, pressPoint.Y, ButtonState.Released));
@@ -232,7 +237,7 @@ public sealed class GameInputControllerTests
     {
         var windowService = CreateWindowService();
         var window = CreateRootWindowWithCloseButton(windowService, new Vector2(0, 0));
-        var controller = new GameInputController([window], [], [], LargeScreenSize);
+        var controller = new GameInputController([window], [], [], [], LargeScreenSize);
 
         // Well inside the window's content area, nowhere near its title/close button.
         var contentPoint = window.ContentRectangle.Center;
@@ -256,7 +261,7 @@ public sealed class GameInputControllerTests
         var closeButton = window.TitleButtons[0];
         var closed = false;
         window.Closed += _ => closed = true;
-        var controller = new GameInputController([window], [], [], LargeScreenSize);
+        var controller = new GameInputController([window], [], [], [], LargeScreenSize);
 
         var pressPoint = closeButton.Rectangle.Center;
         controller.Update(NoKeys, MouseAt(pressPoint.X, pressPoint.Y, ButtonState.Released));
@@ -281,7 +286,7 @@ public sealed class GameInputControllerTests
         var closeButton = window.TitleButtons[0];
         var closed = false;
         window.Closed += _ => closed = true;
-        var controller = new GameInputController([window], [], [], LargeScreenSize);
+        var controller = new GameInputController([window], [], [], [], LargeScreenSize);
 
         var pressPoint = closeButton.Rectangle.Center;
         controller.Update(NoKeys, MouseAt(pressPoint.X, pressPoint.Y, ButtonState.Released));
@@ -304,7 +309,7 @@ public sealed class GameInputControllerTests
         var windowA = CreateRootWindowWithCloseButton(windowService, new Vector2(0, 0));
         var windowB = CreateRootWindowWithCloseButton(windowService, new Vector2(400, 400));
         var rootWindows = new List<Element> { windowA, windowB };
-        var controller = new GameInputController(rootWindows, [], [], LargeScreenSize);
+        var controller = new GameInputController(rootWindows, [], [], [], LargeScreenSize);
 
         var pressPoint = windowA.ContentRectangle.Center;
         controller.Update(NoKeys, MouseAt(pressPoint.X, pressPoint.Y, ButtonState.Released));
@@ -328,7 +333,7 @@ public sealed class GameInputControllerTests
         var frontClosed = false;
         back.Closed += _ => backClosed = true;
         front.Closed += _ => frontClosed = true;
-        var controller = new GameInputController([back, front], [], [], LargeScreenSize);
+        var controller = new GameInputController([back, front], [], [], [], LargeScreenSize);
 
         var pressPoint = front.TitleButtons[0].Rectangle.Center;
         controller.Update(NoKeys, MouseAt(pressPoint.X, pressPoint.Y, ButtonState.Released));
@@ -340,29 +345,29 @@ public sealed class GameInputControllerTests
     }
 
     /// <summary>
-    /// A root window and an always-on-top window sharing identical bounds -- the always-on-top
-    /// tier must win the hit-test regardless of list order, mirroring notifications always
-    /// floating above ordinary windows (see the plan's two-tier design).
+    /// A base window and a DynamicHud window sharing identical bounds -- the DynamicHud tier
+    /// must win the hit-test regardless of list order, mirroring notifications always floating
+    /// above ordinary windows (see the plan's four-tier design).
     /// </summary>
     [TestMethod]
-    public void PressingOverlappingWindows_AlwaysOnTopWins_EvenWhenCheckedSecond()
+    public void PressingOverlappingWindows_DynamicHudWins_EvenWhenCheckedSecond()
     {
         var windowService = CreateWindowService();
-        var rootWindow = CreateRootWindowWithCloseButton(windowService, new Vector2(0, 0));
-        var alwaysOnTopWindow = CreateRootWindowWithCloseButton(windowService, new Vector2(0, 0));
-        var rootClosed = false;
-        var alwaysOnTopClosed = false;
-        rootWindow.Closed += _ => rootClosed = true;
-        alwaysOnTopWindow.Closed += _ => alwaysOnTopClosed = true;
-        var controller = new GameInputController([rootWindow], [], [alwaysOnTopWindow], LargeScreenSize);
+        var baseWindow = CreateRootWindowWithCloseButton(windowService, new Vector2(0, 0));
+        var dynamicHudWindow = CreateRootWindowWithCloseButton(windowService, new Vector2(0, 0));
+        var baseClosed = false;
+        var dynamicHudClosed = false;
+        baseWindow.Closed += _ => baseClosed = true;
+        dynamicHudWindow.Closed += _ => dynamicHudClosed = true;
+        var controller = new GameInputController([baseWindow], [], [dynamicHudWindow], [], LargeScreenSize);
 
-        var pressPoint = alwaysOnTopWindow.TitleButtons[0].Rectangle.Center;
+        var pressPoint = dynamicHudWindow.TitleButtons[0].Rectangle.Center;
         controller.Update(NoKeys, MouseAt(pressPoint.X, pressPoint.Y, ButtonState.Released));
         controller.Update(NoKeys, MouseAt(pressPoint.X, pressPoint.Y, ButtonState.Pressed));
         controller.Update(NoKeys, MouseAt(pressPoint.X, pressPoint.Y, ButtonState.Released));
 
-        Assert.IsTrue(alwaysOnTopClosed);
-        Assert.IsFalse(rootClosed);
+        Assert.IsTrue(dynamicHudClosed);
+        Assert.IsFalse(baseClosed);
     }
 
     /// <summary>Pressing a movable window's title bar (away from any button) starts a Move interaction and snapshots its position/size for the drag.</summary>
@@ -371,7 +376,7 @@ public sealed class GameInputControllerTests
     {
         var windowService = CreateWindowService();
         var window = CreateMovableWindow(windowService, new Vector2(50, 60));
-        var controller = new GameInputController([window], [], [], LargeScreenSize);
+        var controller = new GameInputController([window], [], [], [], LargeScreenSize);
 
         var pressPoint = window.TitleRectangle.Center;
         controller.Update(NoKeys, MouseAt(pressPoint.X, pressPoint.Y, ButtonState.Released));
@@ -389,7 +394,7 @@ public sealed class GameInputControllerTests
     {
         var windowService = CreateWindowService();
         var window = CreateMovableWindow(windowService, new Vector2(50, 60));
-        var controller = new GameInputController([window], [], [], LargeScreenSize);
+        var controller = new GameInputController([window], [], [], [], LargeScreenSize);
 
         var pressPoint = window.TitleRectangle.Center;
         controller.Update(NoKeys, MouseAt(pressPoint.X, pressPoint.Y, ButtonState.Released));
@@ -406,7 +411,7 @@ public sealed class GameInputControllerTests
     {
         var windowService = CreateWindowService();
         var window = CreateMovableWindow(windowService, new Vector2(50, 60));
-        var controller = new GameInputController([window], [], [], LargeScreenSize);
+        var controller = new GameInputController([window], [], [], [], LargeScreenSize);
 
         var pressPoint = window.TitleRectangle.Center;
         controller.Update(NoKeys, MouseAt(pressPoint.X, pressPoint.Y, ButtonState.Released));
@@ -440,7 +445,7 @@ public sealed class GameInputControllerTests
             Chrome = new ElementChromeOptions { ShowTitle = true, TitleText = "Tiled", CanUserMove = true },
         });
         parent.AddChild(child);
-        var controller = new GameInputController([parent], [], [], LargeScreenSize);
+        var controller = new GameInputController([parent], [], [], [], LargeScreenSize);
 
         var pressPoint = child.TitleRectangle.Center;
         controller.Update(NoKeys, MouseAt(pressPoint.X, pressPoint.Y, ButtonState.Released));
@@ -455,7 +460,7 @@ public sealed class GameInputControllerTests
     {
         var windowService = CreateWindowService();
         var window = CreateMovableWindow(windowService, new Vector2(50, 60));
-        var controller = new GameInputController([window], [], [], LargeScreenSize);
+        var controller = new GameInputController([window], [], [], [], LargeScreenSize);
 
         var pressPoint = window.TitleRectangle.Center;
         controller.Update(NoKeys, MouseAt(pressPoint.X, pressPoint.Y, ButtonState.Released));
@@ -473,7 +478,7 @@ public sealed class GameInputControllerTests
     {
         var windowService = CreateWindowService();
         var window = CreateResizableWindow(windowService, new Vector2(50, 60));
-        var controller = new GameInputController([window], [], [], LargeScreenSize);
+        var controller = new GameInputController([window], [], [], [], LargeScreenSize);
 
         var pressPoint = window.BorderRightRectangle.Center;
         controller.Update(NoKeys, MouseAt(pressPoint.X, pressPoint.Y, ButtonState.Released));
@@ -489,7 +494,7 @@ public sealed class GameInputControllerTests
     {
         var windowService = CreateWindowService();
         var window = CreateResizableWindow(windowService, new Vector2(50, 60));
-        var controller = new GameInputController([window], [], [], LargeScreenSize);
+        var controller = new GameInputController([window], [], [], [], LargeScreenSize);
 
         var pressPoint = window.BorderRightRectangle.Center;
         controller.Update(NoKeys, MouseAt(pressPoint.X, pressPoint.Y, ButtonState.Released));
@@ -512,7 +517,7 @@ public sealed class GameInputControllerTests
     {
         var windowService = CreateWindowService();
         var window = CreateResizableWindow(windowService, new Vector2(50, 60));
-        var controller = new GameInputController([window], [], [], LargeScreenSize);
+        var controller = new GameInputController([window], [], [], [], LargeScreenSize);
         var rightEdgeBeforeDrag = window.RelativePosition.X + window.CurrentSize.X;
 
         var pressPoint = window.BorderLeftRectangle.Center;
@@ -536,7 +541,7 @@ public sealed class GameInputControllerTests
     {
         var windowService = CreateWindowService();
         var window = CreateResizableWindow(windowService, new Vector2(50, 60), maximumSize: new Vector2(250, 500));
-        var controller = new GameInputController([window], [], [], LargeScreenSize);
+        var controller = new GameInputController([window], [], [], [], LargeScreenSize);
         var rightEdgeBeforeDrag = window.RelativePosition.X + window.CurrentSize.X;
 
         var pressPoint = window.BorderLeftRectangle.Center;
@@ -556,7 +561,7 @@ public sealed class GameInputControllerTests
     {
         var windowService = CreateWindowService();
         var window = CreateResizableWindow(windowService, new Vector2(50, 60));
-        var controller = new GameInputController([window], [], [], LargeScreenSize);
+        var controller = new GameInputController([window], [], [], [], LargeScreenSize);
 
         var pressPoint = new Point(window.Rectangle.Right - 2, window.Rectangle.Bottom - 2);
         controller.Update(NoKeys, MouseAt(pressPoint.X, pressPoint.Y, ButtonState.Released));
@@ -580,7 +585,7 @@ public sealed class GameInputControllerTests
             Text = new TextOptions { Text = "Hello" },
         });
         window.Initialize();
-        var controller = new GameInputController([window], [], [], LargeScreenSize);
+        var controller = new GameInputController([window], [], [], [], LargeScreenSize);
 
         var pressPoint = window.BorderRightRectangle.Center;
         controller.Update(NoKeys, MouseAt(pressPoint.X, pressPoint.Y, ButtonState.Released));
@@ -607,7 +612,7 @@ public sealed class GameInputControllerTests
             Chrome = new ElementChromeOptions { ShowBorder = true, CanUserResize = true },
         });
         parent.AddChild(child);
-        var controller = new GameInputController([parent], [], [], LargeScreenSize);
+        var controller = new GameInputController([parent], [], [], [], LargeScreenSize);
 
         var pressPoint = child.BorderRightRectangle.Center;
         controller.Update(NoKeys, MouseAt(pressPoint.X, pressPoint.Y, ButtonState.Released));
@@ -623,7 +628,7 @@ public sealed class GameInputControllerTests
         var windowService = CreateWindowService();
         var window = CreateMovableWindow(windowService, new Vector2(50, 60));
         var smallScreen = new Vector2(300, 200);
-        var controller = new GameInputController([window], [], [], smallScreen);
+        var controller = new GameInputController([window], [], [], [], smallScreen);
 
         var pressPoint = window.TitleRectangle.Center;
         controller.Update(NoKeys, MouseAt(pressPoint.X, pressPoint.Y, ButtonState.Released));
@@ -641,7 +646,7 @@ public sealed class GameInputControllerTests
     {
         var windowService = CreateWindowService();
         var window = CreateMovableWindow(windowService, new Vector2(50, 60));
-        var controller = new GameInputController([window], [], [], LargeScreenSize);
+        var controller = new GameInputController([window], [], [], [], LargeScreenSize);
 
         var pressPoint = window.TitleRectangle.Center;
         controller.Update(NoKeys, MouseAt(pressPoint.X, pressPoint.Y, ButtonState.Released));
@@ -672,7 +677,7 @@ public sealed class GameInputControllerTests
             Chrome = new ElementChromeOptions { ShowTitle = true, TitleText = "Child", CanUserMove = true },
         });
         parent.AddChild(child);
-        var controller = new GameInputController([parent], [], [], LargeScreenSize);
+        var controller = new GameInputController([parent], [], [], [], LargeScreenSize);
 
         var pressPoint = child.TitleRectangle.Center;
         controller.Update(NoKeys, MouseAt(pressPoint.X, pressPoint.Y, ButtonState.Released));
@@ -695,7 +700,7 @@ public sealed class GameInputControllerTests
         var windowService = CreateWindowService();
         var window = CreateResizableWindow(windowService, new Vector2(50, 60), maximumSize: new Vector2(1000, 1000));
         var smallScreen = new Vector2(300, 200);
-        var controller = new GameInputController([window], [], [], smallScreen);
+        var controller = new GameInputController([window], [], [], [], smallScreen);
         var rightEdgeBeforeDrag = window.RelativePosition.X + window.CurrentSize.X;
 
         var pressPoint = window.BorderLeftRectangle.Center;
@@ -715,7 +720,7 @@ public sealed class GameInputControllerTests
         var windowService = CreateWindowService();
         var window = CreateResizableWindow(windowService, new Vector2(50, 60), maximumSize: new Vector2(1000, 1000));
         var smallScreen = new Vector2(300, 200);
-        var controller = new GameInputController([window], [], [], smallScreen);
+        var controller = new GameInputController([window], [], [], [], smallScreen);
 
         var pressPoint = window.BorderRightRectangle.Center;
         controller.Update(NoKeys, MouseAt(pressPoint.X, pressPoint.Y, ButtonState.Released));
@@ -736,7 +741,7 @@ public sealed class GameInputControllerTests
     {
         var windowService = CreateWindowService();
         var window = CreateResizableWindow(windowService, new Vector2(50, 60));
-        var controller = new GameInputController([window], [], [], LargeScreenSize);
+        var controller = new GameInputController([window], [], [], [], LargeScreenSize);
 
         // 5px in from the right edge, vertically centered (well clear of the corner zones).
         var pressPoint = new Point(window.Rectangle.Right - 5, window.Rectangle.Y + (int)(window.CurrentSize.Y / 2));
@@ -753,7 +758,7 @@ public sealed class GameInputControllerTests
     {
         var windowService = CreateWindowService();
         var window = CreateResizableWindow(windowService, new Vector2(50, 60));
-        var controller = new GameInputController([window], [], [], LargeScreenSize);
+        var controller = new GameInputController([window], [], [], [], LargeScreenSize);
 
         var hoverPoint = window.BorderRightRectangle.Center;
         controller.Update(NoKeys, MouseAt(hoverPoint.X, hoverPoint.Y, ButtonState.Released));
@@ -766,7 +771,7 @@ public sealed class GameInputControllerTests
     {
         var windowService = CreateWindowService();
         var window = CreateResizableWindow(windowService, new Vector2(50, 60));
-        var controller = new GameInputController([window], [], [], LargeScreenSize);
+        var controller = new GameInputController([window], [], [], [], LargeScreenSize);
 
         var hoverPoint = window.BorderTopRectangle.Center;
         controller.Update(NoKeys, MouseAt(hoverPoint.X, hoverPoint.Y, ButtonState.Released));
@@ -779,7 +784,7 @@ public sealed class GameInputControllerTests
     {
         var windowService = CreateWindowService();
         var window = CreateResizableWindow(windowService, new Vector2(50, 60));
-        var controller = new GameInputController([window], [], [], LargeScreenSize);
+        var controller = new GameInputController([window], [], [], [], LargeScreenSize);
 
         var hoverPoint = new Point(window.Rectangle.X + 2, window.Rectangle.Y + 2);
         controller.Update(NoKeys, MouseAt(hoverPoint.X, hoverPoint.Y, ButtonState.Released));
@@ -792,7 +797,7 @@ public sealed class GameInputControllerTests
     {
         var windowService = CreateWindowService();
         var window = CreateResizableWindow(windowService, new Vector2(50, 60));
-        var controller = new GameInputController([window], [], [], LargeScreenSize);
+        var controller = new GameInputController([window], [], [], [], LargeScreenSize);
 
         var hoverPoint = new Point(window.Rectangle.Right - 2, window.Rectangle.Y + 2);
         controller.Update(NoKeys, MouseAt(hoverPoint.X, hoverPoint.Y, ButtonState.Released));
@@ -805,7 +810,7 @@ public sealed class GameInputControllerTests
     {
         var windowService = CreateWindowService();
         var window = CreateMovableWindow(windowService, new Vector2(50, 60));
-        var controller = new GameInputController([window], [], [], LargeScreenSize);
+        var controller = new GameInputController([window], [], [], [], LargeScreenSize);
 
         var hoverPoint = window.TitleRectangle.Center;
         controller.Update(NoKeys, MouseAt(hoverPoint.X, hoverPoint.Y, ButtonState.Released));
@@ -818,7 +823,7 @@ public sealed class GameInputControllerTests
     {
         var windowService = CreateWindowService();
         var window = CreateRootWindowWithCloseButton(windowService, new Vector2(50, 60));
-        var controller = new GameInputController([window], [], [], LargeScreenSize);
+        var controller = new GameInputController([window], [], [], [], LargeScreenSize);
 
         var hoverPoint = window.ContentRectangle.Center;
         controller.Update(NoKeys, MouseAt(hoverPoint.X, hoverPoint.Y, ButtonState.Released));
@@ -844,7 +849,7 @@ public sealed class GameInputControllerTests
         // sitting right under the mouse, since the edge tracks it 1:1 -- that would make the
         // two behaviors indistinguishable).
         var window = CreateResizableWindow(windowService, new Vector2(50, 60), maximumSize: new Vector2(250, 500));
-        var controller = new GameInputController([window], [], [], LargeScreenSize);
+        var controller = new GameInputController([window], [], [], [], LargeScreenSize);
 
         var pressPoint = window.BorderRightRectangle.Center;
         controller.Update(NoKeys, MouseAt(pressPoint.X, pressPoint.Y, ButtonState.Released));
@@ -861,7 +866,7 @@ public sealed class GameInputControllerTests
     {
         var windowService = CreateWindowService();
         var window = CreateScrollableTextWindow(windowService, new Vector2(50, 60));
-        var controller = new GameInputController([window], [], [], LargeScreenSize);
+        var controller = new GameInputController([window], [], [], [], LargeScreenSize);
 
         var hoverPoint = window.ContentRectangle.Center;
         // -120 = one notch "down" (the FNA/XNA convention -- see GameInputController.UpdateMouseWheelScroll), which should scroll forward into the content (ScrollOffset increases), matching every other app's convention.
@@ -876,7 +881,7 @@ public sealed class GameInputControllerTests
     {
         var windowService = CreateWindowService();
         var window = CreateMovableWindow(windowService, new Vector2(50, 60));
-        var controller = new GameInputController([window], [], [], LargeScreenSize);
+        var controller = new GameInputController([window], [], [], [], LargeScreenSize);
 
         var hoverPoint = window.ContentRectangle.Center;
         controller.Update(NoKeys, MouseAtWithScroll(hoverPoint.X, hoverPoint.Y, -120));
@@ -897,7 +902,7 @@ public sealed class GameInputControllerTests
         var fontService = new FontService("Fonts");
         var windowService = new ElementPoolService(fontService, new GlyphRenderer());
         var window = CreateRightDragSpyWindow(windowService, fontService, new Vector2(0, 0));
-        var controller = new GameInputController([window], [], [], LargeScreenSize);
+        var controller = new GameInputController([window], [], [], [], LargeScreenSize);
 
         var pressPoint = window.ContentRectangle.Center;
         controller.Update(NoKeys, MouseAtWithRightButton(pressPoint.X, pressPoint.Y, ButtonState.Released));
@@ -920,7 +925,7 @@ public sealed class GameInputControllerTests
         var fontService = new FontService("Fonts");
         var windowService = new ElementPoolService(fontService, new GlyphRenderer());
         var window = CreateRightDragSpyWindow(windowService, fontService, new Vector2(0, 0));
-        var controller = new GameInputController([window], [], [], LargeScreenSize);
+        var controller = new GameInputController([window], [], [], [], LargeScreenSize);
 
         var pressPoint = window.ContentRectangle.Center;
         controller.Update(NoKeys, MouseAtWithRightButton(pressPoint.X, pressPoint.Y, ButtonState.Released));
@@ -944,7 +949,7 @@ public sealed class GameInputControllerTests
         var fontService = new FontService("Fonts");
         var windowService = new ElementPoolService(fontService, new GlyphRenderer());
         var window = CreateRightDragSpyWindow(windowService, fontService, new Vector2(0, 0));
-        var controller = new GameInputController([window], [], [], LargeScreenSize);
+        var controller = new GameInputController([window], [], [], [], LargeScreenSize);
 
         var pressPoint = window.ContentRectangle.Center;
         controller.Update(NoKeys, MouseAtWithRightButton(pressPoint.X, pressPoint.Y, ButtonState.Released));
@@ -964,7 +969,7 @@ public sealed class GameInputControllerTests
         var fontService = new FontService("Fonts");
         var windowService = new ElementPoolService(fontService, new GlyphRenderer());
         var window = CreateRightDragSpyWindow(windowService, fontService, new Vector2(0, 0));
-        var controller = new GameInputController([window], [], [], LargeScreenSize);
+        var controller = new GameInputController([window], [], [], [], LargeScreenSize);
 
         var pressPoint = window.ContentRectangle.Center;
         controller.Update(NoKeys, MouseAtWithRightButton(pressPoint.X, pressPoint.Y, ButtonState.Released));
@@ -982,7 +987,7 @@ public sealed class GameInputControllerTests
         var fontService = new FontService("Fonts");
         var windowService = new ElementPoolService(fontService, new GlyphRenderer());
         var window = CreateRightDragSpyWindow(windowService, fontService, new Vector2(0, 0));
-        var controller = new GameInputController([window], [], [], LargeScreenSize);
+        var controller = new GameInputController([window], [], [], [], LargeScreenSize);
 
         var pressPoint = window.ContentRectangle.Center;
         controller.Update(NoKeys, MouseAtWithRightButton(pressPoint.X, pressPoint.Y, ButtonState.Released));
@@ -1001,7 +1006,7 @@ public sealed class GameInputControllerTests
         var fontService = new FontService("Fonts");
         var windowService = new ElementPoolService(fontService, new GlyphRenderer());
         var window = CreateRightDragSpyWindow(windowService, fontService, new Vector2(0, 0));
-        var controller = new GameInputController([window], [], [], LargeScreenSize);
+        var controller = new GameInputController([window], [], [], [], LargeScreenSize);
 
         var pressPoint = window.ContentRectangle.Center;
         controller.Update(NoKeys, MouseAtWithRightButton(pressPoint.X, pressPoint.Y, ButtonState.Released));
@@ -1020,7 +1025,7 @@ public sealed class GameInputControllerTests
         var fontService = new FontService("Fonts");
         var windowService = new ElementPoolService(fontService, new GlyphRenderer());
         var window = CreateRightDragSpyWindow(windowService, fontService, new Vector2(0, 0));
-        var controller = new GameInputController([window], [], [], LargeScreenSize);
+        var controller = new GameInputController([window], [], [], [], LargeScreenSize);
 
         var pressPoint = window.ContentRectangle.Center;
         controller.Update(NoKeys, MouseAtWithRightButton(pressPoint.X, pressPoint.Y, ButtonState.Released));
@@ -1039,7 +1044,7 @@ public sealed class GameInputControllerTests
     {
         var windowService = CreateWindowService();
         var window = CreateRootWindowWithCloseButton(windowService, new Vector2(0, 0));
-        var controller = new GameInputController([window], [], [], LargeScreenSize);
+        var controller = new GameInputController([window], [], [], [], LargeScreenSize);
 
         controller.Update(NoKeys, MouseAtWithRightButton(1900, 1900, ButtonState.Released));
         controller.Update(NoKeys, MouseAtWithRightButton(1900, 1900, ButtonState.Pressed));
@@ -1053,7 +1058,7 @@ public sealed class GameInputControllerTests
         var windowService = CreateWindowService();
         var windowA = CreateRootWindowWithCloseButton(windowService, new Vector2(0, 0));
         var windowB = CreateRootWindowWithCloseButton(windowService, new Vector2(400, 400));
-        var controller = new GameInputController([windowA, windowB], [], [], LargeScreenSize);
+        var controller = new GameInputController([windowA, windowB], [], [], [], LargeScreenSize);
 
         var pressPointA = windowA.ContentRectangle.Center;
         controller.Update(NoKeys, MouseAt(pressPointA.X, pressPointA.Y, ButtonState.Released));
@@ -1078,7 +1083,7 @@ public sealed class GameInputControllerTests
     {
         var windowService = CreateWindowService();
         var window = CreateRootWindowWithCloseButton(windowService, new Vector2(0, 0));
-        var controller = new GameInputController([window], [], [], LargeScreenSize);
+        var controller = new GameInputController([window], [], [], [], LargeScreenSize);
 
         var pressPoint = window.ContentRectangle.Center;
         controller.Update(NoKeys, MouseAt(pressPoint.X, pressPoint.Y, ButtonState.Released));
@@ -1103,7 +1108,7 @@ public sealed class GameInputControllerTests
     {
         var windowService = CreateWindowService();
         var window = CreateRootWindowWithCloseButton(windowService, new Vector2(0, 0));
-        var controller = new GameInputController([window], [], [], LargeScreenSize);
+        var controller = new GameInputController([window], [], [], [], LargeScreenSize);
 
         var pressPoint = window.ContentRectangle.Center;
         controller.Update(NoKeys, MouseAt(pressPoint.X, pressPoint.Y, ButtonState.Released));
@@ -1122,7 +1127,7 @@ public sealed class GameInputControllerTests
         var windowService = CreateWindowService();
         var (focused, focusedContent) = CreateFocusableWindowWithContent(windowService, new Vector2(0, 0));
         var (other, otherContent) = CreateFocusableWindowWithContent(windowService, new Vector2(400, 400));
-        var controller = new GameInputController([focused, other], [], [], LargeScreenSize);
+        var controller = new GameInputController([focused, other], [], [], [], LargeScreenSize);
 
         var pressPoint = focused.ContentRectangle.Center;
         controller.Update(NoKeys, MouseAt(pressPoint.X, pressPoint.Y, ButtonState.Released));
@@ -1147,7 +1152,7 @@ public sealed class GameInputControllerTests
     {
         var windowService = CreateWindowService();
         var (focused, focusedContent) = CreateFocusableWindowWithContent(windowService, new Vector2(0, 0));
-        var controller = new GameInputController([focused], [], [], LargeScreenSize);
+        var controller = new GameInputController([focused], [], [], [], LargeScreenSize);
 
         var pressPoint = focused.ContentRectangle.Center;
         controller.Update(NoKeys, MouseAt(pressPoint.X, pressPoint.Y, ButtonState.Released));
@@ -1171,7 +1176,7 @@ public sealed class GameInputControllerTests
         var windowService = CreateWindowService();
         var (focused, focusedContent) = CreateFocusableWindowWithContent(windowService, new Vector2(0, 0));
         var (other, otherContent) = CreateFocusableWindowWithContent(windowService, new Vector2(400, 400));
-        var controller = new GameInputController([focused, other], [], [], LargeScreenSize);
+        var controller = new GameInputController([focused, other], [], [], [], LargeScreenSize);
 
         var pressPoint = focused.ContentRectangle.Center;
         controller.Update(NoKeys, MouseAt(pressPoint.X, pressPoint.Y, ButtonState.Released));
@@ -1190,7 +1195,7 @@ public sealed class GameInputControllerTests
     {
         var windowService = CreateWindowService();
         var (window, content) = CreateFocusableWindowWithContent(windowService, new Vector2(0, 0));
-        var controller = new GameInputController([window], [], [], LargeScreenSize);
+        var controller = new GameInputController([window], [], [], [], LargeScreenSize);
 
         controller.Update(NoKeys, MouseAt(0, 0, ButtonState.Released));
 
@@ -1209,7 +1214,7 @@ public sealed class GameInputControllerTests
         var windowService = CreateWindowService();
         var (focused, focusedContent) = CreateFocusableWindowWithContent(windowService, new Vector2(0, 0));
         var (other, otherContent) = CreateFocusableWindowWithContent(windowService, new Vector2(400, 400));
-        var controller = new GameInputController([focused, other], [], [], LargeScreenSize);
+        var controller = new GameInputController([focused, other], [], [], [], LargeScreenSize);
 
         var pressPoint = focused.ContentRectangle.Center;
         controller.Update(NoKeys, MouseAt(pressPoint.X, pressPoint.Y, ButtonState.Released));
@@ -1229,7 +1234,7 @@ public sealed class GameInputControllerTests
     {
         var windowService = CreateWindowService();
         var (focused, focusedContent) = CreateFocusableWindowWithContent(windowService, new Vector2(0, 0));
-        var controller = new GameInputController([focused], [], [], LargeScreenSize);
+        var controller = new GameInputController([focused], [], [], [], LargeScreenSize);
         controller.FocusElement(focused);
 
         controller.OnTextInput('h');
@@ -1260,7 +1265,7 @@ public sealed class GameInputControllerTests
             Layout = new ElementLayoutOptions { RelativePosition = new Vector2(0, 0), Size = new Vector2(180, 50), DisplayMode = ElementDisplayMode.Fixed },
         });
         container.AddChild(textBox);
-        var controller = new GameInputController([container], [], [], LargeScreenSize);
+        var controller = new GameInputController([container], [], [], [], LargeScreenSize);
 
         // Click the container's title bar -- content-agnostic, so it can't be mistaken for
         // directly clicking the TextBox child itself.
@@ -1294,7 +1299,7 @@ public sealed class GameInputControllerTests
             Layout = new ElementLayoutOptions { RelativePosition = new Vector2(0, 60), Size = new Vector2(180, 50), DisplayMode = ElementDisplayMode.Fixed },
         });
         container.AddChild(secondTextBox);
-        var controller = new GameInputController([container], [], [], LargeScreenSize);
+        var controller = new GameInputController([container], [], [], [], LargeScreenSize);
         controller.FocusElement(firstTextBox);
 
         controller.Update(new KeyboardState(Keys.Enter), MouseAt(0, 0, ButtonState.Released));
@@ -1310,7 +1315,7 @@ public sealed class GameInputControllerTests
         var windowA = CreateRootWindowWithCloseButton(windowService, new Vector2(0, 0));
         var windowB = CreateRootWindowWithCloseButton(windowService, new Vector2(400, 400));
         var rootWindows = new List<Element> { windowA, windowB };
-        var controller = new GameInputController(rootWindows, [], [], LargeScreenSize);
+        var controller = new GameInputController(rootWindows, [], [], [], LargeScreenSize);
 
         controller.Update(NoKeys, MouseAt(0, 0, ButtonState.Released));
         controller.Update(new KeyboardState(Keys.Tab), MouseAt(0, 0, ButtonState.Released));
@@ -1338,7 +1343,7 @@ public sealed class GameInputControllerTests
         var windowA = CreateRootWindowWithCloseButton(windowService, new Vector2(0, 0));
         var windowB = CreateRootWindowWithCloseButton(windowService, new Vector2(400, 400));
         var rootWindows = new List<Element> { windowA, windowB };
-        var controller = new GameInputController(rootWindows, [], [], LargeScreenSize);
+        var controller = new GameInputController(rootWindows, [], [], [], LargeScreenSize);
 
         controller.Update(NoKeys, MouseAt(0, 0, ButtonState.Released));
         controller.Update(new KeyboardState(Keys.Tab), MouseAt(0, 0, ButtonState.Released));
@@ -1354,7 +1359,7 @@ public sealed class GameInputControllerTests
         var windowA = CreateRootWindowWithCloseButton(windowService, new Vector2(0, 0));
         var windowB = CreateRootWindowWithCloseButton(windowService, new Vector2(400, 400));
         var rootWindows = new List<Element> { windowA, windowB };
-        var controller = new GameInputController(rootWindows, [], [], LargeScreenSize);
+        var controller = new GameInputController(rootWindows, [], [], [], LargeScreenSize);
 
         controller.Update(NoKeys, MouseAt(0, 0, ButtonState.Released));
         controller.Update(new KeyboardState(Keys.Tab, Keys.LeftShift), MouseAt(0, 0, ButtonState.Released));
@@ -1378,7 +1383,7 @@ public sealed class GameInputControllerTests
         var windowB = CreateRootWindowWithCloseButton(windowService, new Vector2(400, 0));
         var windowC = CreateRootWindowWithCloseButton(windowService, new Vector2(0, 400));
         var rootWindows = new List<Element> { windowA, windowB, windowC };
-        var controller = new GameInputController(rootWindows, [], [], LargeScreenSize);
+        var controller = new GameInputController(rootWindows, [], [], [], LargeScreenSize);
 
         var visited = new List<Element>();
         for (var i = 0; i < 6; i++)
@@ -1405,7 +1410,7 @@ public sealed class GameInputControllerTests
             Chrome = new ElementChromeOptions { CanUserFocus = false },
         });
         nonFocusable.Initialize();
-        var controller = new GameInputController([focusable, nonFocusable], [], [], LargeScreenSize);
+        var controller = new GameInputController([focusable, nonFocusable], [], [], [], LargeScreenSize);
 
         var pressPointFocusable = focusable.ContentRectangle.Center;
         controller.Update(NoKeys, MouseAt(pressPointFocusable.X, pressPointFocusable.Y, ButtonState.Released));
@@ -1434,7 +1439,7 @@ public sealed class GameInputControllerTests
         nonFocusable.Initialize();
         var windowB = CreateRootWindowWithCloseButton(windowService, new Vector2(0, 400));
         var rootWindows = new List<Element> { windowA, nonFocusable, windowB };
-        var controller = new GameInputController(rootWindows, [], [], LargeScreenSize);
+        var controller = new GameInputController(rootWindows, [], [], [], LargeScreenSize);
 
         controller.Update(NoKeys, MouseAt(0, 0, ButtonState.Released));
         controller.Update(new KeyboardState(Keys.Tab), MouseAt(0, 0, ButtonState.Released));
@@ -1485,7 +1490,7 @@ public sealed class GameInputControllerTests
         var windowService = CreateWindowService();
         var notificationA = CreateRootWindowWithCloseButton(windowService, new Vector2(0, 0));
         var notificationB = CreateRootWindowWithCloseButton(windowService, new Vector2(300, 0));
-        var controller = new GameInputController([], [], [notificationA, notificationB], LargeScreenSize);
+        var controller = new GameInputController([], [], [notificationA, notificationB], [], LargeScreenSize);
 
         var pressPoint = notificationA.ContentRectangle.Center;
         controller.Update(NoKeys, MouseAt(pressPoint.X, pressPoint.Y, ButtonState.Released));
@@ -1531,7 +1536,7 @@ public sealed class GameInputControllerTests
         var windowService = CreateWindowService();
         var (popup, child) = CreatePopupWithFocusableChild(windowService, new Vector2(0, 0));
         var mapWindowStandIn = CreateRootWindowWithCloseButton(windowService, new Vector2(400, 0));
-        var controller = new GameInputController([popup, mapWindowStandIn], [], [], LargeScreenSize);
+        var controller = new GameInputController([popup, mapWindowStandIn], [], [], [], LargeScreenSize);
         controller.SetDefaultFocusElement(mapWindowStandIn);
 
         var pressPoint = child.ContentRectangle.Center;
@@ -1550,7 +1555,7 @@ public sealed class GameInputControllerTests
     {
         var windowService = CreateWindowService();
         var (parent, childA, childB) = CreateParentWithTwoCloseableChildren(windowService);
-        var controller = new GameInputController([parent], [], [], LargeScreenSize);
+        var controller = new GameInputController([parent], [], [], [], LargeScreenSize);
 
         var pressPoint = childA.ContentRectangle.Center;
         controller.Update(NoKeys, MouseAt(pressPoint.X, pressPoint.Y, ButtonState.Released));
@@ -1569,7 +1574,7 @@ public sealed class GameInputControllerTests
         var windowService = CreateWindowService();
         var notificationA = CreateRootWindowWithCloseButton(windowService, new Vector2(0, 0));
         var notificationB = CreateRootWindowWithCloseButton(windowService, new Vector2(300, 0));
-        var controller = new GameInputController([], [], [notificationA, notificationB], LargeScreenSize);
+        var controller = new GameInputController([], [], [notificationA, notificationB], [], LargeScreenSize);
 
         var pressPoint = notificationA.ContentRectangle.Center;
         controller.Update(NoKeys, MouseAt(pressPoint.X, pressPoint.Y, ButtonState.Released));
@@ -1587,7 +1592,7 @@ public sealed class GameInputControllerTests
     {
         var windowService = CreateWindowService();
         var window = CreateRootWindowWithCloseButton(windowService, new Vector2(0, 0));
-        var controller = new GameInputController([window], [], [], LargeScreenSize);
+        var controller = new GameInputController([window], [], [], [], LargeScreenSize);
 
         var pressPoint = window.ContentRectangle.Center;
         controller.Update(NoKeys, MouseAt(pressPoint.X, pressPoint.Y, ButtonState.Released));
@@ -1613,7 +1618,7 @@ public sealed class GameInputControllerTests
         var popup = CreateRootWindowWithCloseButton(windowService, new Vector2(0, 0));
         var unrelatedRootWindow = CreateRootWindowWithCloseButton(windowService, new Vector2(300, 0));
         var mapWindowStandIn = CreateRootWindowWithCloseButton(windowService, new Vector2(0, 300));
-        var controller = new GameInputController([popup, unrelatedRootWindow, mapWindowStandIn], [], [], LargeScreenSize);
+        var controller = new GameInputController([popup, unrelatedRootWindow, mapWindowStandIn], [], [], [], LargeScreenSize);
         controller.SetDefaultFocusElement(mapWindowStandIn);
 
         var pressPoint = popup.ContentRectangle.Center;
@@ -1632,7 +1637,7 @@ public sealed class GameInputControllerTests
     {
         var windowService = CreateWindowService();
         var window = CreateRootWindowWithCloseButton(windowService, new Vector2(0, 0));
-        var controller = new GameInputController([window], [], [], LargeScreenSize);
+        var controller = new GameInputController([window], [], [], [], LargeScreenSize);
 
         var pressPoint = window.ContentRectangle.Center;
         controller.Update(NoKeys, MouseAt(pressPoint.X, pressPoint.Y, ButtonState.Released));
@@ -1663,7 +1668,7 @@ public sealed class GameInputControllerTests
         summaryBarStandIn.Initialize();
         var notification = CreateRootWindowWithCloseButton(windowService, new Vector2(0, 0));
         var mapWindowStandIn = CreateRootWindowWithCloseButton(windowService, new Vector2(0, 400));
-        var controller = new GameInputController([], [], [summaryBarStandIn, notification], LargeScreenSize);
+        var controller = new GameInputController([], [], [summaryBarStandIn, notification], [], LargeScreenSize);
         controller.SetDefaultFocusElement(mapWindowStandIn);
 
         var pressPoint = notification.ContentRectangle.Center;
@@ -1701,7 +1706,7 @@ public sealed class GameInputControllerTests
         var windowService = CreateWindowService();
         var textBox = CreateFocusableTextBox(windowService, new Vector2(0, 0));
         var plainWindow = CreateRootWindowWithCloseButton(windowService, new Vector2(400, 0));
-        var controller = new GameInputController([textBox, plainWindow], [], [], LargeScreenSize);
+        var controller = new GameInputController([textBox, plainWindow], [], [], [], LargeScreenSize);
         var startCount = 0;
         var stopCount = 0;
         controller.StartTextInput = () => startCount++;
@@ -1729,7 +1734,7 @@ public sealed class GameInputControllerTests
         var windowService = CreateWindowService();
         var windowA = CreateRootWindowWithCloseButton(windowService, new Vector2(0, 0));
         var windowB = CreateRootWindowWithCloseButton(windowService, new Vector2(400, 0));
-        var controller = new GameInputController([windowA, windowB], [], [], LargeScreenSize);
+        var controller = new GameInputController([windowA, windowB], [], [], [], LargeScreenSize);
         var startCount = 0;
         var stopCount = 0;
         controller.StartTextInput = () => startCount++;
@@ -1744,5 +1749,182 @@ public sealed class GameInputControllerTests
 
         Assert.AreEqual(0, startCount);
         Assert.AreEqual(0, stopCount);
+    }
+
+    /// <summary>
+    /// Builds an InventoryItemStackCell (a drag source) and a HotbarContent-hosting Window (a
+    /// drag source/drop target) sharing one ComponentManager/ItemCatalog/player entity, the
+    /// pieces GameInputController's content-drag path needs -- see its own doc comment. The cell
+    /// is placed far from the hotbar window so a press-then-release pair between them always
+    /// exceeds ContentDragTapThresholdPixels.
+    /// </summary>
+    private static (InventoryItemStackCell Cell, Window HotbarWindow, HotbarContent Hotbar, ComponentManager ComponentManager, Guid ItemId) BuildDragAndDropHarness()
+    {
+        const int playerEntityId = 1;
+
+        var componentManager = new ComponentManager(initialEntityCapacity: 20, initialComponentCapacity: 10);
+        componentManager.RegisterMultiPool<ActionHotkeyBindingComponent>();
+        componentManager.RegisterMultiPool<ItemHotkeyBindingComponent>();
+        componentManager.RegisterMultiPool<AbilityInstanceComponent>();
+        componentManager.RegisterMultiPool<InventoryItemStackComponent>();
+        componentManager.RegisterPackedPool<ActionLockComponent>(static (ref existing, incoming) => existing = incoming);
+        componentManager.RegisterPackedPool<PotionCooldownComponent>(static (ref existing, incoming) => existing = incoming);
+
+        var world = new Game.World.World(new Game.World.Map(new Vector3Int(10, 10, 1))) { PlayerEntityId = playerEntityId };
+        var itemId = Guid.NewGuid();
+        var itemCatalog = new ItemCatalog();
+        itemCatalog.Register(new ItemDefinition(itemId, "Test Item", null, "t", Color.White, Tags: []));
+        InventoryActions.AddItem(componentManager, playerEntityId, itemId, quantity: 1);
+
+        var fontService = new FontService("Fonts");
+        var glyphRenderer = new GlyphRenderer();
+        var windowService = new ElementPoolService(fontService, glyphRenderer);
+        windowService.RegisterFactory<InventoryItemStackCell>((_, _) => new InventoryItemStackCell(
+            fontService, windowService, glyphRenderer, new SpriteSheetService(null, "Spritesheets"), new SpriteRenderer()));
+
+        var cell = windowService.CreateElement<InventoryItemStackCell>(null, new ElementOptions
+        {
+            Hierarchy = new ElementHierarchyOptions { CanContainChildren = false },
+            Layout = new ElementLayoutOptions { RelativePosition = new Vector2(0, 0), Size = new Vector2(24, 24), DisplayMode = ElementDisplayMode.Fixed },
+            Chrome = new ElementChromeOptions { ShowBorder = true, CanUserFocus = false },
+        });
+        cell.Configure(itemId, null, "t", Color.White, quantity: 1, isDisabled: false, cellSize: new Vector2(24, 24));
+        cell.Initialize();
+
+        var hotbar = new HotbarContent(
+            world, new MapViewState(), componentManager, new AbilityCatalog(), itemCatalog,
+            fontService, new SpriteSheetService(null, "Spritesheets"), new SpriteRenderer());
+        var hotbarWindow = windowService.CreateElement<Window>(null, new ElementOptions
+        {
+            Layout = new ElementLayoutOptions { RelativePosition = new Vector2(500, 0), Size = HotbarContent.Size, DisplayMode = ElementDisplayMode.Fixed },
+        });
+        hotbarWindow.SetContent(hotbar);
+        hotbarWindow.Initialize();
+
+        return (cell, hotbarWindow, hotbar, componentManager, itemId);
+    }
+
+    [TestMethod]
+    public void Drag_FromInventoryCellToHotbarSlot_BindsTheItem()
+    {
+        var (cell, hotbarWindow, _, componentManager, itemId) = BuildDragAndDropHarness();
+        var controller = new GameInputController([cell], [hotbarWindow], [], [], LargeScreenSize);
+
+        var pressPoint = cell.ContentRectangle.Center;
+        controller.Update(NoKeys, MouseAt(pressPoint.X, pressPoint.Y, ButtonState.Released));
+        controller.Update(NoKeys, MouseAt(pressPoint.X, pressPoint.Y, ButtonState.Pressed));
+
+        var dropPoint = new Point((int)hotbarWindow.ContentAbsolutePosition.X + 1, (int)hotbarWindow.ContentAbsolutePosition.Y + 1);
+        controller.Update(NoKeys, MouseAt(dropPoint.X, dropPoint.Y, ButtonState.Released));
+
+        Assert.IsTrue(ItemHotkeyBindingQueries.TryGet(componentManager.GetMultiPool<ItemHotkeyBindingComponent>(), 1, HotkeySlot.Slot1, out var boundItemId));
+        Assert.AreEqual(itemId, boundItemId);
+    }
+
+    /// <summary>Binding is a reference, not a transfer -- InventoryItemStackComponent's own Quantity must be untouched by the drag.</summary>
+    [TestMethod]
+    public void Drag_FromInventoryCellToHotbarSlot_DoesNotRemoveTheItemFromInventory()
+    {
+        var (cell, hotbarWindow, _, componentManager, itemId) = BuildDragAndDropHarness();
+        var controller = new GameInputController([cell], [hotbarWindow], [], [], LargeScreenSize);
+
+        var pressPoint = cell.ContentRectangle.Center;
+        controller.Update(NoKeys, MouseAt(pressPoint.X, pressPoint.Y, ButtonState.Released));
+        controller.Update(NoKeys, MouseAt(pressPoint.X, pressPoint.Y, ButtonState.Pressed));
+        var dropPoint = new Point((int)hotbarWindow.ContentAbsolutePosition.X + 1, (int)hotbarWindow.ContentAbsolutePosition.Y + 1);
+        controller.Update(NoKeys, MouseAt(dropPoint.X, dropPoint.Y, ButtonState.Released));
+
+        Assert.IsTrue(InventoryQueries.TryGetStack(componentManager.GetMultiPool<InventoryItemStackComponent>(), 1, itemId, out var stack));
+        Assert.AreEqual(1, stack.Quantity);
+    }
+
+    [TestMethod]
+    public void Drag_FromInventoryCellReleasedAwayFromTheHotbar_BindsNothing()
+    {
+        var (cell, hotbarWindow, _, componentManager, _) = BuildDragAndDropHarness();
+        var controller = new GameInputController([cell], [hotbarWindow], [], [], LargeScreenSize);
+
+        var pressPoint = cell.ContentRectangle.Center;
+        controller.Update(NoKeys, MouseAt(pressPoint.X, pressPoint.Y, ButtonState.Released));
+        controller.Update(NoKeys, MouseAt(pressPoint.X, pressPoint.Y, ButtonState.Pressed));
+
+        controller.Update(NoKeys, MouseAt(1000, 1000, ButtonState.Released));
+
+        Assert.IsFalse(ItemHotkeyBindingQueries.TryGet(componentManager.GetMultiPool<ItemHotkeyBindingComponent>(), 1, HotkeySlot.Slot1, out _));
+    }
+
+    [TestMethod]
+    public void Drag_FromABoundHotbarSlotToAwayFromTheHotbar_UnbindsIt()
+    {
+        var (_, hotbarWindow, hotbar, componentManager, itemId) = BuildDragAndDropHarness();
+        hotbar.BindItem(HotkeySlot.Slot1, itemId);
+        var controller = new GameInputController([], [hotbarWindow], [], [], LargeScreenSize);
+
+        var pressPoint = new Point((int)hotbarWindow.ContentAbsolutePosition.X + 1, (int)hotbarWindow.ContentAbsolutePosition.Y + 1);
+        controller.Update(NoKeys, MouseAt(pressPoint.X, pressPoint.Y, ButtonState.Released));
+        controller.Update(NoKeys, MouseAt(pressPoint.X, pressPoint.Y, ButtonState.Pressed));
+
+        controller.Update(NoKeys, MouseAt(1000, 1000, ButtonState.Released));
+
+        Assert.IsFalse(ItemHotkeyBindingQueries.TryGet(componentManager.GetMultiPool<ItemHotkeyBindingComponent>(), 1, HotkeySlot.Slot1, out _));
+    }
+
+    /// <summary>Dragging a bound slot onto a different hotbar slot moves the binding rather than duplicating it.</summary>
+    [TestMethod]
+    public void Drag_FromABoundHotbarSlotToADifferentSlot_MovesTheBinding()
+    {
+        var (_, hotbarWindow, hotbar, componentManager, itemId) = BuildDragAndDropHarness();
+        hotbar.BindItem(HotkeySlot.Slot1, itemId);
+        var controller = new GameInputController([], [hotbarWindow], [], [], LargeScreenSize);
+
+        Assert.IsTrue(hotbar.TryGetSlotAt(new Point((int)hotbarWindow.ContentAbsolutePosition.X + 1, (int)hotbarWindow.ContentAbsolutePosition.Y + 1), out var sourceSlot));
+        Assert.AreEqual(HotkeySlot.Slot1, sourceSlot);
+
+        var pressPoint = new Point((int)hotbarWindow.ContentAbsolutePosition.X + 1, (int)hotbarWindow.ContentAbsolutePosition.Y + 1);
+        controller.Update(NoKeys, MouseAt(pressPoint.X, pressPoint.Y, ButtonState.Released));
+        controller.Update(NoKeys, MouseAt(pressPoint.X, pressPoint.Y, ButtonState.Pressed));
+
+        // Far enough along the hotbar's own width to land in a different slot -- exact slot
+        // doesn't matter, only that it's not Slot1.
+        var dropPoint = new Point((int)hotbarWindow.ContentAbsolutePosition.X + (int)HotbarContent.Size.X - 1, (int)hotbarWindow.ContentAbsolutePosition.Y + 1);
+        controller.Update(NoKeys, MouseAt(dropPoint.X, dropPoint.Y, ButtonState.Released));
+
+        Assert.IsFalse(ItemHotkeyBindingQueries.TryGet(componentManager.GetMultiPool<ItemHotkeyBindingComponent>(), 1, HotkeySlot.Slot1, out _), "The origin slot must no longer be bound once the item has moved elsewhere.");
+        Assert.IsTrue(hotbar.TryGetSlotAt(dropPoint, out var dropSlot));
+        Assert.IsTrue(ItemHotkeyBindingQueries.TryGet(componentManager.GetMultiPool<ItemHotkeyBindingComponent>(), 1, dropSlot, out var boundItemId));
+        Assert.AreEqual(itemId, boundItemId);
+    }
+
+    /// <summary>A plain click (press and release at the same spot, well under the tap threshold) on an already-bound slot must not unbind it -- only an actual drag should.</summary>
+    [TestMethod]
+    public void ClickingABoundHotbarSlot_WithoutDragging_LeavesTheBindingUnchanged()
+    {
+        var (_, hotbarWindow, hotbar, componentManager, itemId) = BuildDragAndDropHarness();
+        hotbar.BindItem(HotkeySlot.Slot1, itemId);
+        var controller = new GameInputController([], [hotbarWindow], [], [], LargeScreenSize);
+
+        var point = new Point((int)hotbarWindow.ContentAbsolutePosition.X + 1, (int)hotbarWindow.ContentAbsolutePosition.Y + 1);
+        controller.Update(NoKeys, MouseAt(point.X, point.Y, ButtonState.Released));
+        controller.Update(NoKeys, MouseAt(point.X, point.Y, ButtonState.Pressed));
+        controller.Update(NoKeys, MouseAt(point.X, point.Y, ButtonState.Released));
+
+        Assert.IsTrue(ItemHotkeyBindingQueries.TryGet(componentManager.GetMultiPool<ItemHotkeyBindingComponent>(), 1, HotkeySlot.Slot1, out var boundItemId));
+        Assert.AreEqual(itemId, boundItemId);
+    }
+
+    [TestMethod]
+    public void Drag_FromInventoryCell_TurnsOnHotbarDragHighlight_UntilReleased()
+    {
+        var (cell, hotbarWindow, hotbar, _, _) = BuildDragAndDropHarness();
+        var controller = new GameInputController([cell], [hotbarWindow], [], [], LargeScreenSize);
+        Assert.IsFalse(hotbar.IsAcceptingDrag);
+
+        var pressPoint = cell.ContentRectangle.Center;
+        controller.Update(NoKeys, MouseAt(pressPoint.X, pressPoint.Y, ButtonState.Released));
+        controller.Update(NoKeys, MouseAt(pressPoint.X, pressPoint.Y, ButtonState.Pressed));
+        Assert.IsTrue(hotbar.IsAcceptingDrag);
+
+        controller.Update(NoKeys, MouseAt(1000, 1000, ButtonState.Released));
+        Assert.IsFalse(hotbar.IsAcceptingDrag);
     }
 }
