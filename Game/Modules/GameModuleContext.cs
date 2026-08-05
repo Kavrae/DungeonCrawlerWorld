@@ -3,6 +3,7 @@ using Engine.Events;
 using Engine.Math;
 using Game.Modules.Abilities;
 using Game.Modules.Achievements;
+using Game.Modules.Inventory;
 using Game.Modules.ProcessingTier;
 using Game.Modules.StatusEffects;
 using Game.World;
@@ -36,6 +37,9 @@ public sealed record GameModuleContext(IMapQuery MapQuery, MathUtility MathUtili
 
     /// <summary>Shared across every module's Configure call within one build -- same reasoning as Abilities above; a mod could register its own achievements the same way a mod could register its own abilities.</summary>
     public AchievementCatalog Achievements { get; init; } = new();
+
+    /// <summary>Shared across every module's Configure call within one build -- same reasoning as Abilities/Achievements above; a mod could register its own items the same way.</summary>
+    public ItemCatalog Items { get; init; } = new();
 
     /// <summary>
     /// MovementSystem's confirmed moves this frame, shared with ContactDamageSystem/

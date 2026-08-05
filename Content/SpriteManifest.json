@@ -147,5 +147,41 @@
         "CellHeight": 16
       }
     ]
+  },
+  {
+    "Name": "HealthPotion",
+    "Cells": [
+      {
+        "SheetPath": "Pixel Crawler - Free Pack/Environment/Props/Static/Esoteric.png",
+        "Column": 0,
+        "Row": 4,
+        "CellWidth": 16,
+        "CellHeight": 16
+      }
+    ]
+  },
+  {
+    "Name": "Hammer",
+    "Cells": [
+      {
+        "SheetPath": "Pixel Crawler - Free Pack/Environment/Props/Static/Tools.png",
+        "Column": 3,
+        "Row": 16,
+        "CellWidth": 16,
+        "CellHeight": 16
+      }
+    ]
+  },
+  {
+    "Name": "Inventory",
+    "Cells": [
+      {
+        "SheetPath": "Pixel Crawler - Free Pack/Environment/Props/Static/Furniture.png",
+        "Column": 47,
+        "Row": 11,
+        "CellWidth": 16,
+        "CellHeight": 16
+      }
+    ]
   }
 ]

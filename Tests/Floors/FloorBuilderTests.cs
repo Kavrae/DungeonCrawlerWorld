@@ -14,6 +14,7 @@ using Game.Modules.Core;
 using Game.Modules.Core.Components;
 using Game.Modules.Crawler;
 using Game.Modules.Health;
+using Game.Modules.Inventory;
 using Game.Modules.Movement;
 using Game.Modules.Movement.Components;
 using Game.Modules.Poison;
@@ -64,6 +65,9 @@ public sealed class FloorBuilderTests
         var statModifiersModule = new StatModifiersModule();
         statModifiersModule.Configure(context);
 
+        var testItemsModule = new TestItemsModule();
+        testItemsModule.Configure(context);
+
         IReadOnlyList<IModule> modules =
         [
             coreModule,
@@ -80,6 +84,8 @@ public sealed class FloorBuilderTests
             statusEffectAuraModule,
             new CrawlerModule(),
             processingTierModule,
+            new InventoryModule(),
+            testItemsModule,
         ];
 
         return Bootstrapper.Build(modules, initialEntityCapacity: 5000, initialComponentCapacity: 5000);

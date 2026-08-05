@@ -13,6 +13,7 @@ using Game.Modules.Core.Components;
 using Game.Modules.Crawler;
 using Game.Modules.Death;
 using Game.Modules.Health;
+using Game.Modules.Inventory;
 using Game.Modules.Melee;
 using Game.Modules.Movement;
 using Game.Modules.Paralysis;
@@ -64,6 +65,8 @@ public static class GameBootstrapper
             new StatusEffectAuraModule(),
             new AchievementModule(),
             new CrawlerModule(),
+            new InventoryModule(),
+            new TestItemsModule(),
         ];
 
         var mapQuery = (IMapQuery)world;
@@ -92,7 +95,7 @@ public static class GameBootstrapper
         world.NonBlockingComponents = ecsContext.ComponentManager.GetMultiPool<NonBlockingComponent>();
         world.ForceBlockingComponents = ecsContext.ComponentManager.GetMultiPool<ForceBlockingComponent>();
 
-        return new GameBootstrapResult(ecsContext, failures, context.Abilities, context.MovedEntities);
+        return new GameBootstrapResult(ecsContext, failures, context.Abilities, context.MovedEntities, context.Items);
     }
 
     /// <summary>

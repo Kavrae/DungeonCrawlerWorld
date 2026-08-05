@@ -1,6 +1,7 @@
 using Engine.Diagnostics;
 using Engine.ECS.Context;
 using Game.Modules.Abilities;
+using Game.Modules.Inventory;
 using Game.Notifications;
 using Game.World;
 using Microsoft.Xna.Framework;
@@ -9,6 +10,7 @@ using Presentation.Bootstrap;
 using Presentation.Input;
 using Presentation.UI;
 using Presentation.UI.Content;
+using Presentation.UI.Inventory;
 using Presentation.UI.Notifications;
 
 namespace DungeonCrawlerWorld;
@@ -33,16 +35,17 @@ public static class GameShellBootstrapper
     private const float SelectionWindowWidth = 300f;
     private const float ActionLockGap = 8f;
 
-    public static GameShellContext Build(PresentationContext presentation, World world, EcsContext ecsContext, AbilityCatalog abilityCatalog, Vector2 screenSize)
+    public static GameShellContext Build(PresentationContext presentation, World world, EcsContext ecsContext, AbilityCatalog abilityCatalog, ItemCatalog itemCatalog, Vector2 screenSize)
     {
         ArgumentNullException.ThrowIfNull(presentation);
         ArgumentNullException.ThrowIfNull(world);
         ArgumentNullException.ThrowIfNull(ecsContext);
         ArgumentNullException.ThrowIfNull(abilityCatalog);
+        ArgumentNullException.ThrowIfNull(itemCatalog);
 
         var (rootWindows, mapWindow, mapViewState, mapSize) = BuildRootWindows(presentation, world, ecsContext, abilityCatalog, screenSize);
         var (hudWindows, questTriggerWindow) = BuildHudWindows(presentation, world, ecsContext, abilityCatalog, screenSize, mapViewState, mapSize);
-        var (alwaysOnTopWindows, notificationCenter) = BuildAlwaysOnTopWindows(presentation, ecsContext);
+        var (alwaysOnTopWindows, notificationCenter, inventory) = BuildAlwaysOnTopWindows(presentation, world, ecsContext, itemCatalog);
 
         // Constructed last, once every window/list it needs to wire already exists
         var inputController = new GameInputController(rootWindows, hudWindows, alwaysOnTopWindows, screenSize);
@@ -62,7 +65,7 @@ public static class GameShellBootstrapper
         // Base/HUD.
         questTriggerWindow.Clicked += _ => inputController.FocusElement(OpenQuestComposer(presentation.ElementPoolService, notificationCenter, alwaysOnTopWindows));
 
-        return new GameShellContext(mapWindow, notificationCenter, rootWindows, hudWindows, alwaysOnTopWindows, inputController);
+        return new GameShellContext(mapWindow, notificationCenter, inventory, rootWindows, hudWindows, alwaysOnTopWindows, inputController);
     }
 
     /// <summary>Base tier: the map itself plus the debug stats footer directly beneath it -- see GameShellContext's doc comment for what "Base" means. mapViewState/mapSize are returned for BuildHudWindows, whose selection window needs both (mapViewState to scope the inspector, mapSize to dock against the map's actual bottom edge).</summary>
@@ -237,8 +240,8 @@ public static class GameShellBootstrapper
         return (hudWindows, questTriggerWindow);
     }
 
-    /// <summary>AlwaysOnTop tier: NotificationCenter owns/populates this list itself (summary bar + popups) -- see GameShellContext's doc comment for what "AlwaysOnTop" means. Build also passes this same list into OpenQuestComposer later, since that popup belongs in this tier too.</summary>
-    private static (List<Element> AlwaysOnTopWindows, NotificationCenter NotificationCenter) BuildAlwaysOnTopWindows(PresentationContext presentation, EcsContext ecsContext)
+    /// <summary>AlwaysOnTop tier: NotificationCenter owns/populates this list itself (summary bar + popups), and InventoryFolderController does the same for its own folder+window -- see GameShellContext's doc comment for what "AlwaysOnTop" means. Build also passes this same list into OpenQuestComposer later, since that popup belongs in this tier too.</summary>
+    private static (List<Element> AlwaysOnTopWindows, NotificationCenter NotificationCenter, InventoryFolderController Inventory) BuildAlwaysOnTopWindows(PresentationContext presentation, World world, EcsContext ecsContext, ItemCatalog itemCatalog)
     {
         var alwaysOnTopWindows = new List<Element>();
 
@@ -252,7 +255,18 @@ public static class GameShellBootstrapper
         var notificationCenter = new NotificationCenter(presentation.ElementPoolService, ecsContext.EventBus, alwaysOnTopWindows);
         notificationCenter.Initialize();
 
-        return (alwaysOnTopWindows, notificationCenter);
+        presentation.ElementPoolService.RegisterFactory<InventoryManagementWindow>((_, _) => new InventoryManagementWindow(
+            presentation.FontService, presentation.ElementPoolService, presentation.GlyphRenderer, presentation.SpriteSheetService, presentation.SpriteRenderer,
+            ecsContext.ComponentManager, itemCatalog));
+        presentation.ElementPoolService.RegisterFactory<InventoryItemStackCell>((_, _) => new InventoryItemStackCell(
+            presentation.FontService, presentation.ElementPoolService, presentation.GlyphRenderer, presentation.SpriteSheetService, presentation.SpriteRenderer));
+
+        var inventory = new InventoryFolderController(
+            presentation.ElementPoolService, world, ecsContext.ComponentManager, presentation.FontService, presentation.GlyphRenderer,
+            presentation.SpriteSheetService, presentation.SpriteRenderer, itemCatalog);
+        inventory.Initialize(alwaysOnTopWindows);
+
+        return (alwaysOnTopWindows, notificationCenter, inventory);
     }
 
     /// <summary>TEMPORARYOpens a fresh closeable popup with one multiline TextBox; submitting posts a Quest notification and closes the popup. Returns the popup so the caller can focus it.</summary>
@@ -320,7 +334,7 @@ public static class GameShellBootstrapper
     }
 }
 
-public sealed record GameShellContext(MapWindow MapWindow, NotificationCenter NotificationCenter, List<Element> RootWindows, List<Element> HudWindows, List<Element> AlwaysOnTopWindows, GameInputController InputController)
+public sealed record GameShellContext(MapWindow MapWindow, NotificationCenter NotificationCenter, InventoryFolderController Inventory, List<Element> RootWindows, List<Element> HudWindows, List<Element> AlwaysOnTopWindows, GameInputController InputController)
 {
     public void LoadContent()
     {

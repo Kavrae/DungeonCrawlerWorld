@@ -106,7 +106,7 @@ public sealed class GameLoop : Microsoft.Xna.Framework.Game
 
         _presentation = PresentationBootstrapper.Build(GraphicsDevice, "Fonts", "Spritesheets");
         var screenSize = new Vector2(_graphics.PreferredBackBufferWidth, _graphics.PreferredBackBufferHeight);
-        _shell = GameShellBootstrapper.Build(_presentation, _world, _ecsContext, bootstrapResult.AbilityCatalog, screenSize);
+        _shell = GameShellBootstrapper.Build(_presentation, _world, _ecsContext, bootstrapResult.AbilityCatalog, bootstrapResult.ItemCatalog, screenSize);
         _inputController = _shell.InputController;
 
         base.Initialize();
@@ -127,8 +127,9 @@ public sealed class GameLoop : Microsoft.Xna.Framework.Game
         _inputController.Update(gameTime);
 
         _shell.NotificationCenter.Update(gameTime);
+        _shell.Inventory.Update(gameTime);
 
-        if (!(_shell.MapWindow.IsPaused || _shell.NotificationCenter.HasBlockingNotification))
+        if (!(_shell.MapWindow.IsPaused || _shell.NotificationCenter.HasBlockingNotification || _shell.Inventory.IsAnyWindowOpen))
         {
             _frameCount++;
             _playerActivityLog.BeginFrame(_frameCount, DateTime.Now);

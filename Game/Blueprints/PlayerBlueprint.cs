@@ -5,6 +5,7 @@ using Game.Modules.Abilities.Components;
 using Game.Modules.Core.Components;
 using Game.Modules.Crawler.Components;
 using Game.Modules.Health.Components;
+using Game.Modules.Inventory;
 using Game.Modules.Melee;
 using Game.Modules.Movement.Components;
 using Game.Modules.StatModifiers;
@@ -62,6 +63,13 @@ public sealed class PlayerBlueprint(MathUtility mathUtility, UniqueNumberAllocat
         componentManager.Merge(entityId, new CrawlerComponent(crawlerNumberAllocator.Allocate()));
 
         componentManager.Merge(entityId, new DisplayTextComponent("Player1", "This is you. What else did you expect?"));
+
+        InventoryActions.AddItem(componentManager, entityId, TestItemsModule.HealthPotionId, quantity: 5);
+        InventoryActions.AddItem(componentManager, entityId, TestItemsModule.HammerId, quantity: 1);
+
+        // TEMPORARY: proves out the disabled-item gray-tint visual until a real disable
+        // trigger (e.g. a quest) exists -- remove once one does.
+        InventoryActions.SetStackDisabled(componentManager, entityId, TestItemsModule.HammerId, disabled: true);
 
         StatModifierEffects.Apply(componentManager, entityId, StatModifierTarget.OutgoingDamage, StatModifierOperation.Additive, StatModifierPolarity.Buff,
             canModify: true, magnitude: PermanentOutgoingDamageBonus, durationFrames: StatModifierComponent.Permanent, StatusEffectSource.Admin);

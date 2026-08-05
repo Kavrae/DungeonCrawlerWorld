@@ -27,8 +27,10 @@ public sealed class NotificationCenter(ElementPoolService elementPoolService, Ev
     /// has neither a parent nor a fixed Size), which would zero-cap every child's own Measure
     /// pass forever, since a root window's MaximumSize is otherwise never recomputed after
     /// BuildWindow. Comfortably larger than the widest/tallest the category stack can ever be.
+    /// Public: InventoryFolderController positions its own folder beneath this one, derived
+    /// from this ceiling rather than a second, silently-driftable duplicate of the same number.
     /// </summary>
-    private static readonly Vector2 FolderMaximumSize = new(200, 400);
+    public static readonly Vector2 FolderMaximumSize = new(200, 400);
 
     /// <summary>
     /// Deliberately its own constant, not HudMetrics.EntrySize (65px wide -- sized for short

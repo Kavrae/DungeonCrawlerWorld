@@ -31,4 +31,7 @@ public interface IElementContent
 
     /// <summary>Default-implemented as a no-op so existing content types don't need to change.</summary>
     void HandleTextInput(char character) { }
+
+    /// <summary>Called when this content is swapped out of its host window (e.g. TabbedContent switching tabs) so it can tear down whatever child Elements it created. Default-implemented as a no-op so existing content types don't need to change.</summary>
+    void Deactivate() { }
 }

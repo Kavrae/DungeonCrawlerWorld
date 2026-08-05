@@ -21,6 +21,8 @@ using Game.Modules.Crawler;
 using Game.Modules.Crawler.Components;
 using Game.Modules.Health;
 using Game.Modules.Health.Components;
+using Game.Modules.Inventory;
+using Game.Modules.Inventory.Components;
 using Game.Modules.Melee;
 using Game.Modules.Movement;
 using Game.Modules.Movement.Components;
@@ -59,6 +61,9 @@ public sealed class BlueprintTests
         var statModifiersModule = new StatModifiersModule();
         statModifiersModule.Configure(context);
 
+        var testItemsModule = new TestItemsModule();
+        testItemsModule.Configure(context);
+
         IReadOnlyList<IModule> modules =
         [
             coreModule,
@@ -70,6 +75,8 @@ public sealed class BlueprintTests
             abilitiesModule,
             new CrawlerModule(),
             processingTierModule,
+            new InventoryModule(),
+            testItemsModule,
         ];
 
         return Bootstrapper.Build(modules, initialEntityCapacity: 100, initialComponentCapacity: 50);
@@ -182,6 +189,19 @@ public sealed class BlueprintTests
         Assert.AreEqual((short)20, defaultAttack.DamageAmount);
         Assert.IsTrue(AbilityInstanceQueries.TryGet(abilityInstances, entityId, PlayerTestAbilitiesModule.RangedTestAbilityId, out var rangedTest));
         Assert.AreEqual((short)10, rangedTest.DamageAmount);
+
+        // Starting items: 5 (enabled) Health Potions, 1 (disabled -- proves out the disabled-item gray-tint visual) Hammer.
+        var stacks = new List<InventoryItemStackComponent>();
+        InventoryQueries.CopyStacksForEntity(ecsContext.ComponentManager.GetMultiPool<InventoryItemStackComponent>(), entityId, stacks);
+        Assert.HasCount(2, stacks);
+
+        var potionStack = stacks.Single(stack => stack.ItemDefinitionId == TestItemsModule.HealthPotionId);
+        Assert.AreEqual(5, potionStack.Quantity);
+        Assert.IsFalse(potionStack.IsDisabled);
+
+        var hammerStack = stacks.Single(stack => stack.ItemDefinitionId == TestItemsModule.HammerId);
+        Assert.AreEqual(1, hammerStack.Quantity);
+        Assert.IsTrue(hammerStack.IsDisabled);
     }
 
     [TestMethod]

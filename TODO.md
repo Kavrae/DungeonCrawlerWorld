@@ -8,13 +8,13 @@ Non-urgent architectural items worth revisiting later -- things noticed in passi
 
 #### Inventory system
 
-Infinite storage per entity. The player character will carry a large amount (hundreds of items); NPCs will carry very little each (a dozen items or so). Items have persisted state within an inventory slot rather than always reverting to their starting values -- e.g. a partially consumed potion stays partially consumed while sitting in inventory, rather than resetting.
+Storage + viewing landed (`Game/Modules/Inventory/`, `Presentation/UI/Inventory/`) -- infinite per-entity storage, identical-item stacking, an entity-wide and a per-stack disabled flag, and a read-only management window behind a new HUD folder. Built entirely on the existing generic `MultiComponentPool<T>` (see `NonBlockingComponent` for the same "many-per-entity" shape) -- no new Engine-layer primitive was actually needed. Still open: persisted per-slot modification state, so an item genuinely diverges from its `ItemDefinition` rather than always reverting to it -- e.g. a partially consumed potion stays partially consumed while sitting in inventory. Deliberately not designed for yet (`InventoryItemStackComponent` intentionally carries no placeholder field for it -- the shape of ammo-count vs. limited-uses vs. rolled-crafting-mods is different enough per case that guessing one now risks being wrong later).
 
 ### Low Priority
 
 #### Equipment
 
-Engine-side equipment support (slots, equip/unequip mechanics). Companion to the Game-layer equipment rules and the Presentation-layer equipment menu below.
+Engine-side equipment support (slots, equip/unequip mechanics). Companion to the Game-layer equipment rules and the Presentation-layer equipment menu below. Unblocked now that Inventory (above) exists -- equipping is expected to move an `InventoryItemStackComponent` stack into a slot rather than invent its own separate storage.
 
 #### Explore the C# `Span<T>` structure for component storage
 
@@ -28,7 +28,19 @@ Explore before committing -- this is a profiling question (does indexed access a
 
 #### Inventory management rules
 
-Item interactions, storage rules, restricted items, etc. Governs how the Engine-layer inventory system above is actually used -- what can stack, what can't be picked up by whom, interactions between items, and similar rules.
+Item interactions, storage rules, restricted items, etc. Governs how the Engine-layer inventory system above is actually used. Base storage and identical-stack merging (exact `ItemDefinition` match only) already exist -- remaining scope is interaction/restriction rules: stacking beyond exact-match, what can't be picked up by whom, interactions between items.
+
+#### Consumable items
+
+Items that get used up -- a potion drunk, a scroll read, ammo spent. Needs the item-instance-divergence design noted under Inventory system above (a consumable's remaining-uses count is exactly the kind of per-slot state that doesn't exist yet) plus an actual "use" action, which interacting-with-items work (out of scope for the storage/viewing pass that landed Inventory) will need to define.
+
+#### Move inventory items to the hotbar
+
+`Presentation/UI/Content/HotbarContent.cs` is ability-only today (`AbilityInstanceComponent`/`HotkeyBindingComponent`) despite its own doc comment calling out "Inventory and spell hotbar" as the target. Needs a way for a hotbar slot to reference an inventory item stack instead of (or alongside) an ability, and an activation path for "use this item" distinct from "cast this ability." Depends on the Standard widget set item below for any drag-and-drop involved in the actual assignment gesture.
+
+#### Shops and storage containers
+
+Reuse the same `Game/Modules/Inventory/` storage any entity already gets -- a shop or a chest is just another entity with `InventoryItemStackComponent` stacks, no new storage primitive needed. What's missing is the trade/transfer UI and rules (pricing, what a shop restocks, container capacity if any).
 
 #### Melee attack implementation
 
@@ -52,7 +64,7 @@ Game-side logic for descending/ascending a level. See the matching Presentation 
 
 #### Equipment
 
-Game-side equipment rules (what can go in which slot, stat effects of equipping). Companion to the Engine-layer equipment item above and the Presentation-layer equipment menu below.
+Game-side equipment rules (what can go in which slot, stat effects of equipping). Companion to the Engine-layer equipment item above and the Presentation-layer equipment menu below. Unblocked now that Inventory exists (see the Engine-layer Inventory system item).
 
 #### Stats
 
@@ -106,7 +118,11 @@ Companion example to the self-buff/poison-toggle items above -- a positive, self
 
 #### Achievement lootbox delivery
 
-Achievements can name a `LootboxReward` (rarity + box type, see `Game/Modules/Achievements/LootboxReward.cs`), but nothing delivers it yet -- the Inventory system above doesn't exist. Once it does, `AchievementModule`'s unlock path needs to actually add the lootbox's contents to the player's inventory instead of only describing it in the notification. Lootboxes themselves can only be *opened* in Safe Rooms once opening exists as a mechanic -- this is not a purchased gambling item, it's a pre-set reward tied to how it was earned.
+Achievements can name a `LootboxReward` (rarity + box type, see `Game/Modules/Achievements/LootboxReward.cs`), but nothing delivers it yet. `InventoryActions.AddItem` (`Game/Modules/Inventory/InventoryActions.cs`) is now available as the actual delivery primitive -- unblocked, but `AchievementModule`'s unlock path still doesn't call it, only describes the reward in the notification. Lootboxes themselves can only be *opened* in Safe Rooms once opening exists as a mechanic -- this is not a purchased gambling item, it's a pre-set reward tied to how it was earned.
+
+#### Corpse looting
+
+Opening the player's inventory and a dead entity's inventory side-by-side. The corpse stays a real, fully-populated entity after death specifically so this works (see the Corpse decay/destruction item above) -- once it has its own `InventoryItemStackComponent` stacks, this is a second `InventoryManagementWindow`-shaped view (`Presentation/UI/Inventory/`) targeting the corpse's entity id, opened alongside the player's own. Ties to the achievement backlog's "Loot a corpse for the first time" bullet below.
 
 #### Achievement content backlog
 
@@ -124,13 +140,13 @@ Design-target examples, not yet implemented:
 - Loot a corpse for the first time
 - Store 10 tons of weight in inventory
 
-Several depend on systems that don't exist yet (Inventory, a real companion/party concept + Human race, levels/experience, magic/spell gear, corpse looting) -- implement each achievement once its underlying system actually lands, not before.
+Several depend on systems that don't exist yet (a real companion/party concept + Human race, levels/experience, magic/spell gear, corpse looting) -- implement each achievement once its underlying system actually lands, not before.
 
 `LonerAchievement` (`Game/Modules/Achievements/Definitions/LonerAchievement.cs`) unlocks unconditionally on `Game.World.EnteredDungeon`, published once by `GameLoop` right after `_playerSpawned` flips true (so `IPlayerQuery.PlayerEntityId` is already assigned by the time the handler reads it -- no timing hazard the way the old `EntityMoved` spawn-sentinel trigger had). Once a real companion/party concept exists, this needs to actually check for a Human-race companion near the player at spawn instead of always succeeding.
 
 `UnarmedCombatAchievement` (`Game/Modules/Achievements/Definitions/UnarmedCombatAchievement.cs`) unlocks on the same `EnteredDungeon` event, same unconditional reasoning as `LonerAchievement` above (no equipment or start-equipment-selection system exists yet, so every player is unarmed today). Revisit once equipment/start-equipment selection lands: it should then check whether the player actually chose to start without a weapon.
 
-`EmptyPocketsAchievement` (`Game/Modules/Achievements/Definitions/EmptyPocketsAchievement.cs`) unlocks on the same `EnteredDungeon` event, same unconditional reasoning as `LonerAchievement`/`UnarmedCombatAchievement` above (no Inventory or start-equipment-selection system exists yet, so every player's inventory is empty today). Revisit once Inventory/start-equipment selection lands: it should then check whether the player's inventory is actually empty.
+`EmptyPocketsAchievement` (`Game/Modules/Achievements/Definitions/EmptyPocketsAchievement.cs`) unlocks on the same `EnteredDungeon` event, same unconditional reasoning as `LonerAchievement`/`UnarmedCombatAchievement` above -- Inventory now exists, but the player starts with test items (`TestItemsModule`, temporary), so every player's inventory is still non-empty today for an unrelated reason. Revisit once start-equipment selection lands and the temporary test items are gone: it should then check whether the player's inventory is actually empty (`InventoryQueries.CopyStacksForEntity`).
 
 #### Boundary-aware ProcessingTierSystem recompute
 
@@ -146,7 +162,15 @@ This is a real structural addition, not a small tweak: a new persistent spatial 
 
 #### Inventory management
 
-Tabs, sorting, click-and-drag organization, icons, click-to-inspect. Depends on the Standard widget set item below for list/tab-style controls, and on the Engine inventory system and Game inventory rules above for the data it's displaying.
+The read-only view landed: `Presentation/UI/Inventory/InventoryManagementWindow.cs` behind a new Inventory HUD folder (`InventoryFolderController`), tabbed (`Presentation/UI/Content/TabbedContent.cs`, one static "All" tab today) over a scrolling icon grid (`InventoryGridContent`/`InventoryItemStackCell`) -- pause-while-open included. Remaining scope is interaction: searching, auto-sorting, click-and-drag organization, click-to-inspect (see Item inspection popup below). Depends on the Standard widget set item below for any of that which needs controls beyond what already exists.
+
+#### Item inspection popup
+
+Click an inventory item cell (`InventoryItemStackCell`, `Presentation/UI/Content/InventoryItemStackCell.cs`) to see its full detail -- name, description, and whatever properties land alongside it (tags are already on `ItemDefinition`, just not surfaced in the grid yet, which only shows sprite/glyph + quantity). Depends on Inventory management above for the grid to click into.
+
+#### Dynamic per-tag inventory tabs
+
+Each unique tag across the player's inventory (`ItemDefinition.Tags`, e.g. "Potion"/"Consumable"/"Healing" on the temporary Health Potion) auto-creates an inventory tab, default-sorted by how many unique items in the inventory carry that tag, user-reorderable (overrides the default sort). Clicking a tab filters the grid to items with that tag. A trailing "+" tab lets the player create custom tags. First real second consumer of `TabbedContent` (`Presentation/UI/Content/TabbedContent.cs`) beyond the single static "All" tab it ships with today -- `TabbedContent.SwitchTab` already supports swapping to an arbitrary tab list, so this is additive, not a redesign.
 
 #### Game over screen on player 0 HP
 
@@ -168,7 +192,7 @@ Partially addressed by the hotkey/ability system: Default Attack is bound to F b
 
 #### Standard widget set
 
-The entire control set today is `Window`, `TextWindow`, `Button`, and `MapWindow` -- no checkbox, radio button, dropdown/combo box, slider, list box, or tree view. Previously "build once something list-heavy needs one" -- that need has now arrived: inventory management, the inventory/spell hotbar, the equipment menu, and the stats window above/below all want list- or grid-like controls that don't exist yet.
+The control set today is `Window`, `TextWindow`, `Button`, `MapWindow`, `Folder`, and `TabbedContent` -- no checkbox, radio button, dropdown/combo box, slider, list box, or tree view. Tabs no longer need building (`Presentation/UI/Content/TabbedContent.cs`, landed alongside Inventory management above); the inventory/spell hotbar and the equipment/stats windows still want list- or grid-like controls beyond what exists.
 
 #### Text input
 
@@ -222,7 +246,7 @@ Presentation-side rendering/interaction for the staircase. See the matching Game
 
 #### Equipment menu
 
-Exists side-by-side with inventory for easy click-and-drag equipping. Collapsible either direction -- inventory collapsible to give the equipment menu full screen space, and vice versa. Pauses the game while open (see Pause modality under Global).
+Exists side-by-side with inventory for easy click-and-drag equipping. Collapsible either direction -- inventory collapsible to give the equipment menu full screen space, and vice versa. Pauses the game while open (see Pause modality under Global) -- Inventory management's own pause-while-open wiring (a third OR-term in `GameLoop.Update`, alongside `MapWindow.IsPaused`/`NotificationCenter.HasBlockingNotification`) is the seam to extend, not re-solve.
 
 #### Stats window
 
@@ -316,7 +340,7 @@ Affected: `Presentation/Input/GameInputController.cs` (`RouteKeyPressesToFocused
 
 A `NotificationCategory.System` notification pauses the simulation (`NotificationCenter.HasBlockingNotification`, checked in `GameLoop.Update`), but doesn't actually block input to or dim whatever's behind it -- other windows (map, selection, debug) stay fully interactive underneath a "blocking" notification, which reads as a bug the first time someone notices it. Needs an actual modal concept: input to other windows either ignored or visually indicated as unavailable while a modal window is up.
 
-Promoted to High: both the new equipment menu and the Options menu (see Presentation) explicitly need "pause game while open" behavior, and neither should re-solve modality on its own.
+Promoted to High: both the new equipment menu and the Options menu (see Presentation) explicitly need "pause game while open" behavior, and neither should re-solve modality on its own. Inventory management landed as a third OR-term in `GameLoop.Update` (`_shell.Inventory.IsAnyWindowOpen`, alongside `MapWindow.IsPaused`/`NotificationCenter.HasBlockingNotification`) the same minimally-invasive way -- generalizing this into a real modal concept still hasn't happened, it just has one more un-generalized consumer now.
 
 ### Low Priority
 

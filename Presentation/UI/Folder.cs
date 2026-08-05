@@ -1,5 +1,6 @@
 using FontStashSharp;
 using Game.Blueprints;
+using Game.Modules.Core.Components;
 using Microsoft.Xna.Framework;
 using Microsoft.Xna.Framework.Graphics;
 using Presentation.Fonts;
@@ -28,6 +29,9 @@ public sealed class Folder : Element
     private string _fallbackGlyph = string.Empty;
     private SpriteFontBase _fallbackGlyphFont = null!;
     private Color _backgroundColor;
+
+    /// <summary>Gray-tints the icon when true (e.g. InventoryFolderController reflecting the entity's InventoryDisabledComponent) -- purely visual, doesn't affect whether the folder can still be clicked/expanded.</summary>
+    public bool IsDisabled { get; set; }
 
     public Folder(FontService fontService, ElementPoolService elementPoolService, GlyphRenderer glyphRenderer, SpriteSheetService spriteSheetService, SpriteRenderer spriteRenderer)
         : base(fontService, elementPoolService, glyphRenderer)
@@ -112,7 +116,7 @@ public sealed class Folder : Element
             : ElementDisplayMode.Minimized);
     }
 
-    /// <summary>Background fill, then sprite-else-glyph icon, mirroring MapWindow.TryDrawEntityVisual's fallback for entities with no manifest entry.</summary>
+    /// <summary>Background fill, then sprite-else-glyph icon via the shared SpriteOrGlyphRenderer -- IsDisabled gray-tints either form, mirroring MapWindow's dead-entity tint.</summary>
     protected override void DrawHeader(GameTime gameTime, SpriteBatch spriteBatch, Texture2D unitRectangle)
     {
         if (!IsTransparent)
@@ -126,16 +130,10 @@ public sealed class Folder : Element
         // rect rather than stretched to fill it.
         var iconTopLeft = HeaderAbsolutePosition + (HeaderSize - _iconSize) / 2f;
 
-        if (_spriteName is not null && SpriteManifest.TryGet(_spriteName, out var spriteComponent))
-        {
-            var texture = _spriteSheetService.GetTexture(spriteComponent.SheetPath);
-            _spriteRenderer.Draw(spriteBatch, texture, spriteComponent.SourceRectangle, iconTopLeft, _iconSize, Color.White);
-            return;
-        }
+        SpriteComponent? sprite = _spriteName is not null && SpriteManifest.TryGet(_spriteName, out var spriteComponent) ? spriteComponent : null;
+        var spriteTint = IsDisabled ? Color.Gray : Color.White;
+        var glyphColor = IsDisabled ? Color.Gray : Color.Black;
 
-        if (!string.IsNullOrEmpty(_fallbackGlyph))
-        {
-            GlyphRenderer.DrawCentered(spriteBatch, _fallbackGlyphFont, _fallbackGlyph, iconTopLeft, _iconSize, Color.Black);
-        }
+        SpriteOrGlyphRenderer.Draw(spriteBatch, _spriteSheetService, _spriteRenderer, GlyphRenderer, sprite, _fallbackGlyphFont, _fallbackGlyph, glyphColor, iconTopLeft, _iconSize, spriteTint);
     }
 }

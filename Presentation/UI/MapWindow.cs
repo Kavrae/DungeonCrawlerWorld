@@ -386,27 +386,17 @@ public sealed class MapWindow : Window
         }
     }
 
-    /// <summary>Draws entityId's sprite if it has one, else falls back to its glyph -- the one place that decides sprite-vs-glyph, shared by every per-tile visual draw below. Returns whether anything was actually drawn. A corpse (DeadComponent) draws with a flat Color.Gray tint instead of its normal color -- a color-multiply override, not a true desaturation shader (no shader/Effect infrastructure exists here).</summary>
+    /// <summary>Draws entityId's sprite if it has one, else falls back to its glyph -- the one place that decides sprite-vs-glyph, shared by every per-tile visual draw below. Returns whether anything was actually drawn. A corpse (DeadComponent) draws with a flat Color.Gray tint instead of its normal color -- a color-multiply override, not a true desaturation shader (no shader/Effect infrastructure exists here). Delegates the actual draw to SpriteOrGlyphRenderer, shared with Folder/inventory item cells -- this method's only job is resolving entityId's own sprite/glyph/dead-tint inputs.</summary>
     private bool TryDrawEntityVisual(SpriteBatch spriteBatch, int entityId, SpriteFontBase font, Vector2 footprintTopLeft, Vector2 footprintSize, float alphaMultiplier = 1f)
     {
         var isDead = _deadPool?.Has(entityId) == true;
 
-        if (_spritePool.TryGetReadonly(entityId, out var spriteComponent))
-        {
-            var texture = _spriteSheetService.GetTexture(spriteComponent.SheetPath);
-            var tint = isDead ? Color.Gray : Color.White;
-            _spriteRenderer.Draw(spriteBatch, texture, spriteComponent.SourceRectangle, footprintTopLeft, footprintSize, tint * alphaMultiplier);
-            return true;
-        }
+        SpriteComponent? sprite = _spritePool.TryGetReadonly(entityId, out var spriteComponent) ? spriteComponent : null;
+        var glyph = _glyphPool.TryGetReadonly(entityId, out var glyphComponent) ? glyphComponent.Glyph : string.Empty;
+        var glyphColor = isDead ? Color.Gray : glyphComponent.GlyphColor;
+        var spriteTint = isDead ? Color.Gray : Color.White;
 
-        if (_glyphPool.TryGetReadonly(entityId, out var glyphComponent))
-        {
-            var tint = isDead ? Color.Gray : glyphComponent.GlyphColor;
-            _glyphRenderer.DrawCentered(spriteBatch, font, glyphComponent.Glyph, footprintTopLeft, footprintSize, tint * alphaMultiplier);
-            return true;
-        }
-
-        return false;
+        return SpriteOrGlyphRenderer.Draw(spriteBatch, _spriteSheetService, _spriteRenderer, _glyphRenderer, sprite, font, glyph, glyphColor, footprintTopLeft, footprintSize, spriteTint, alphaMultiplier);
     }
 
     private void DrawTerrainGlyph(SpriteBatch spriteBatch, TerrainLayer? terrainLayer, int mapNodeX, int mapNodeY, Vector2 tileOrigin)
