@@ -547,8 +547,9 @@ public sealed class MapWindowTests
         Assert.AreEqual(HotkeySlot.Slot4, mapViewState.ArmedSlot);
     }
 
+    /// <summary>A non-double-tap re-press confirms against wherever the cursor currently is -- same as a click -- rather than cancelling (see HandleAbilitySlotPress's own doc comment; right-click/Escape is the cancel path now).</summary>
     [TestMethod]
-    public void HandleHotkeys_PressingArmedSlotAgainAfterDoubleTapWindowElapses_Disarms()
+    public void HandleHotkeys_PressingArmedSlotAgainAfterDoubleTapWindowElapses_ConfirmsAgainstHoveredTile()
     {
         var (_, mapViewState, mapWindow, componentManager, abilityCatalog) = BuildMapWindowWithPlayerAndAbilities(300, 300, 1, new Vector3Int(100, 100, 0));
         RegisterTestAdjacentAbility(abilityCatalog);
@@ -565,10 +566,39 @@ public sealed class MapWindowTests
             mapWindow.Update(new GameTime());
         }
 
+        // The caster's own tile -- part of Adjacent's fixed footprint.
+        mapWindow.UpdateHoveredTile(ComputeScreenPositionForMapPosition(mapWindow, mapViewState, new Vector3Int(100, 100, 0)));
         mapWindow.HandleHotkeys(new KeyboardState(Keys.F), new KeyboardState());
 
+        var pendingActivations = componentManager.GetPackedPool<PendingAbilityActivationComponent>();
+        Assert.IsTrue(pendingActivations.Has(PlayerEntityId));
+        Assert.AreEqual(TestAbilityId, pendingActivations.GetReadonly(PlayerEntityId).AbilityId);
         Assert.IsNull(mapViewState.ArmedAbilityId);
         Assert.IsNull(mapViewState.ArmedSlot);
+    }
+
+    /// <summary>With no hovered tile at all (cursor never over the map), a re-press has nothing to confirm against -- a miss, same as HandleClick_ArmedAbility_ClickOutsideTargetableTiles_DoesNothingAndStaysArmed -- so it stays armed rather than silently cancelling.</summary>
+    [TestMethod]
+    public void HandleHotkeys_PressingArmedSlotAgainWithNoHoveredTile_DoesNothingAndStaysArmed()
+    {
+        var (_, mapViewState, mapWindow, componentManager, abilityCatalog) = BuildMapWindowWithPlayerAndAbilities(300, 300, 1, new Vector3Int(100, 100, 0));
+        RegisterTestAdjacentAbility(abilityCatalog);
+        componentManager.Merge(PlayerEntityId, new AbilityInstanceComponent(TestAbilityId, damageAmount: 10, cooldownFramesRemaining: 0));
+        componentManager.Merge(PlayerEntityId, new ActionHotkeyBindingComponent(HotkeySlot.Slot4, TestAbilityId));
+
+        mapWindow.HandleHotkeys(new KeyboardState(Keys.F), new KeyboardState());
+        Assert.IsNotNull(mapViewState.ArmedAbilityId);
+
+        for (var i = 0; i < 20; i++)
+        {
+            mapWindow.Update(new GameTime());
+        }
+
+        mapWindow.HandleHotkeys(new KeyboardState(Keys.F), new KeyboardState());
+
+        Assert.IsFalse(componentManager.GetPackedPool<PendingAbilityActivationComponent>().Has(PlayerEntityId));
+        Assert.IsNotNull(mapViewState.ArmedAbilityId);
+        Assert.AreEqual(HotkeySlot.Slot4, mapViewState.ArmedSlot);
     }
 
     [TestMethod]
@@ -778,8 +808,9 @@ public sealed class MapWindowTests
         Assert.IsTrue(mapViewState.TargetableTiles.Contains(new Vector3Int(105, 100, 0)));
     }
 
+    /// <summary>Right-click/Escape is the cancel path now (see CancelArmedOrPendingAction) -- re-pressing the same hotkey confirms rather than disarms, so this exercises the actual disarm path.</summary>
     [TestMethod]
-    public void HandleHotkeys_Disarming_ClearsTargetableTiles()
+    public void HandleRightClickTap_Disarming_ClearsTargetableTiles()
     {
         var (_, mapViewState, mapWindow, componentManager, abilityCatalog) = BuildMapWindowWithPlayerAndAbilities(300, 300, 1, new Vector3Int(100, 100, 0));
         RegisterTestAdjacentAbility(abilityCatalog);
@@ -789,11 +820,7 @@ public sealed class MapWindowTests
         mapWindow.HandleHotkeys(new KeyboardState(Keys.F), new KeyboardState());
         Assert.IsNotNull(mapViewState.TargetableTiles);
 
-        for (var i = 0; i < 20; i++)
-        {
-            mapWindow.Update(new GameTime());
-        }
-        mapWindow.HandleHotkeys(new KeyboardState(Keys.F), new KeyboardState());
+        mapWindow.HandleRightClickTap();
 
         Assert.IsNull(mapViewState.TargetableTiles);
     }
@@ -1036,8 +1063,37 @@ public sealed class MapWindowTests
         Assert.IsNull(mapViewState.ArmedAbilityId);
     }
 
+    /// <summary>Same re-press-confirms rhythm as HandleHotkeys_PressingArmedSlotAgainAfterDoubleTapWindowElapses_ConfirmsAgainstHoveredTile, for an item slot.</summary>
     [TestMethod]
-    public void HandleHotkeys_PressingArmedItemSlotAgainAfterDoubleTapWindowElapses_Disarms()
+    public void HandleHotkeys_PressingArmedItemSlotAgainAfterDoubleTapWindowElapses_ConfirmsAgainstHoveredTile()
+    {
+        var (_, mapViewState, mapWindow, componentManager, itemCatalog) = BuildMapWindowWithPlayerAndItems(300, 300, 1, new Vector3Int(100, 100, 0));
+        RegisterTestPotion(itemCatalog);
+        InventoryActions.AddItem(componentManager, PlayerEntityId, TestPotionId, quantity: 1);
+        componentManager.Merge(PlayerEntityId, new ItemHotkeyBindingComponent(HotkeySlot.Slot1, TestPotionId));
+
+        mapWindow.HandleHotkeys(new KeyboardState(Keys.Q), new KeyboardState());
+        Assert.IsNotNull(mapViewState.ArmedItemDefinitionId);
+
+        for (var i = 0; i < 20; i++)
+        {
+            mapWindow.Update(new GameTime());
+        }
+
+        // The caster's own tile -- within the Potion's Burst/3/1 footprint.
+        mapWindow.UpdateHoveredTile(ComputeScreenPositionForMapPosition(mapWindow, mapViewState, new Vector3Int(100, 100, 0)));
+        mapWindow.HandleHotkeys(new KeyboardState(Keys.Q), new KeyboardState());
+
+        var pendingActivations = componentManager.GetPackedPool<PendingConsumableActivationComponent>();
+        Assert.IsTrue(pendingActivations.Has(PlayerEntityId));
+        Assert.AreEqual(TestPotionId, pendingActivations.GetReadonly(PlayerEntityId).ItemDefinitionId);
+        Assert.IsNull(mapViewState.ArmedItemDefinitionId);
+        Assert.IsNull(mapViewState.ArmedSlot);
+    }
+
+    /// <summary>Item counterpart to HandleHotkeys_PressingArmedSlotAgainWithNoHoveredTile_DoesNothingAndStaysArmed.</summary>
+    [TestMethod]
+    public void HandleHotkeys_PressingArmedItemSlotAgainWithNoHoveredTile_DoesNothingAndStaysArmed()
     {
         var (_, mapViewState, mapWindow, componentManager, itemCatalog) = BuildMapWindowWithPlayerAndItems(300, 300, 1, new Vector3Int(100, 100, 0));
         RegisterTestPotion(itemCatalog);
@@ -1054,8 +1110,9 @@ public sealed class MapWindowTests
 
         mapWindow.HandleHotkeys(new KeyboardState(Keys.Q), new KeyboardState());
 
-        Assert.IsNull(mapViewState.ArmedItemDefinitionId);
-        Assert.IsNull(mapViewState.ArmedSlot);
+        Assert.IsFalse(componentManager.GetPackedPool<PendingConsumableActivationComponent>().Has(PlayerEntityId));
+        Assert.IsNotNull(mapViewState.ArmedItemDefinitionId);
+        Assert.AreEqual(HotkeySlot.Slot1, mapViewState.ArmedSlot);
     }
 
     [TestMethod]

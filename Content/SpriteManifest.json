@@ -183,5 +183,65 @@
         "CellHeight": 16
       }
     ]
+  },
+  {
+    "Name": "Spell-Weak",
+    "Cells": [
+      {
+        "SheetPath": "Pixel Crawler - Free Pack/Environment/Props/Static/Esoteric.png",
+        "Column": 2,
+        "Row": 8,
+        "CellWidth": 16,
+        "CellHeight": 16
+      }
+    ]
+  },
+  {
+    "Name": "Spell-Modate",
+    "Cells": [
+      {
+        "SheetPath": "Pixel Crawler - Free Pack/Environment/Props/Static/Esoteric.png",
+        "Column": 0,
+        "Row": 10,
+        "CellWidth": 16,
+        "CellHeight": 16
+      }
+    ]
+  },
+  {
+    "Name": "Scroll",
+    "Cells": [
+      {
+        "SheetPath": "Pixel Crawler - Free Pack/Environment/Props/Static/Esoteric.png",
+        "Column": 0,
+        "Row": 8,
+        "CellWidth": 16,
+        "CellHeight": 16
+      }
+    ]
+  },
+  {
+    "Name": "Punch",
+    "Cells": [
+      {
+        "SheetPath": "Pixel Crawler - Free Pack/Weapons/Hands/Hands.png",
+        "Column": 0,
+        "Row": 3,
+        "CellWidth": 16,
+        "CellHeight": 16
+      }
+    ]
+  },
+  {
+    "Name": "Magic Missile",
+    "Cells": [
+      {
+        "SheetPath": "Pixel Crawler - Free Pack/Environment/Props/Static/Dungeon_Props.png",
+        "Column": 1,
+        "Row": 5,
+        "CellWidth": 16,
+        "CellHeight": 16
+      }
+    ]
   }
 ]

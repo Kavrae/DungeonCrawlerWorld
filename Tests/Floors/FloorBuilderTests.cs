@@ -41,6 +41,9 @@ public sealed class FloorBuilderTests
         var abilitiesModule = new AbilitiesModule();
         abilitiesModule.Configure(context);
 
+        var coreAbilitiesModule = new CoreAbilitiesModule();
+        coreAbilitiesModule.Configure(context);
+
         var burningModule = new BurningModule();
         burningModule.Configure(context);
 
@@ -65,8 +68,8 @@ public sealed class FloorBuilderTests
         var statModifiersModule = new StatModifiersModule();
         statModifiersModule.Configure(context);
 
-        var testItemsModule = new TestItemsModule();
-        testItemsModule.Configure(context);
+        var coreItemsModule = new CoreItemsModule();
+        coreItemsModule.Configure(context);
 
         IReadOnlyList<IModule> modules =
         [
@@ -77,6 +80,7 @@ public sealed class FloorBuilderTests
             new RaceModule(),
             new ClassModule(),
             abilitiesModule,
+            coreAbilitiesModule,
             new StatusEffectsModule(),
             burningModule,
             poisonModule,
@@ -85,7 +89,7 @@ public sealed class FloorBuilderTests
             new CrawlerModule(),
             processingTierModule,
             new InventoryModule(),
-            testItemsModule,
+            coreItemsModule,
         ];
 
         return Bootstrapper.Build(modules, initialEntityCapacity: 5000, initialComponentCapacity: 5000);

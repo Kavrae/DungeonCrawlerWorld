@@ -44,19 +44,13 @@ Reuse the same `Game/Modules/Inventory/` storage any entity already gets -- a sh
 
 #### Melee attack implementation
 
-For NPCs and the player. Attacking sets the same shared ActionLockComponent that movement sets on a successful move, creating a tactical decision between moving more vs. attacking more -- choosing to attack this window means not moving this window, and vice versa. Can target any entity one tile away that has physical collision -- even entities without hit points, since this allows status effects to be applied to otherwise-immortal entities. The "immortal but affectable" case is proven out already: `AbilityEffectResolver` grants `AbilityEffect.StatusEffects` through the shared `StatusEffectAuraApplierRegistry` (`Game/Modules/StatusEffects/`) regardless of whether the target has a `HealthComponent`, and `MeleeModule`'s Default Attack grants Paralysis (`Game/Modules/Paralysis/`) this way today.
+For NPCs and the player. Attacking sets the same shared ActionLockComponent that movement sets on a successful move, creating a tactical decision between moving more vs. attacking more -- choosing to attack this window means not moving this window, and vice versa. Can target any entity one tile away that has physical collision -- even entities without hit points, since this allows status effects to be applied to otherwise-immortal entities. The "immortal but affectable" case is proven out already: `AbilityEffectResolver` grants `AbilityEffect.StatusEffects` through the shared `StatusEffectAuraApplierRegistry` (`Game/Modules/StatusEffects/`) regardless of whether the target has a `HealthComponent` -- an ability's own `AbilityEffect.StatusEffects` (e.g. a future Paralysis-on-hit melee ability, `Game/Modules/Paralysis/`) can use this path.
+
+#### AbilityEffectResolver damage/heal consistency
+
+`AbilityEffectResolver.Apply` (`Game/Modules/Abilities/AbilityEffectResolver.cs`) treats damage and healing asymmetrically today: damage is scaled by the *caster's* `StatModifierTarget.OutgoingDamage` before `HealthDamage.Apply` further reduces it by the *target's* `IncomingDamage` -- a real two-sided pipeline. `TryApplyHeal` has no equivalent -- `HealFraction` is only ever multiplied by the target's (modifier-adjusted) `MaximumHealth`, with no caster-side "healing power" or target-side "incoming healing" modifier in the chain at all. Once base stats (see the Stats item below) and Equipment (see the Equipment items below) can actually modify incoming/outgoing damage *and* healing, revisit this resolver so both paths go through the same caster-then-target modifier shape -- e.g. a `StatModifierTarget.OutgoingHealing`/`IncomingHealing` pair mirroring `OutgoingDamage`/`IncomingDamage`, consumed the same two-stage way.
 
 ### Low Priority
-
-#### Replace MeleeModule with a general ability library
-
-`Game/Modules/Melee/MeleeModule.cs` registers exactly one ability definition ("Default Attack") directly in its own `Configure` -- a reasonable first step (see the Melee attack implementation item above), but it hard-codes "melee module = one fallback attack" rather than being a real content library. Once more than one race/class-agnostic ability exists (e.g. the self-buff/poison-toggle/self-heal examples below), replace it with a proper catalog of premade, off-the-shelf `AbilityDefinition`s that aren't tied to any specific race or class -- race/class blueprints then pick whichever ones they want to grant (Default Attack among them), rather than every generic ability living inside a module named after one specific attack.
-
-#### Tag abilities
-
-`AbilityDefinition` (`Game/Modules/Abilities/AbilityDefinition.cs`) has no `Tags` field, unlike `ItemDefinition` (`Game/Modules/Inventory/ItemDefinition.cs`), which already carries `IReadOnlyList<string> Tags` and drives real behavior off it (see the Dynamic per-tag inventory tabs item below). Add the same `Tags` field to `AbilityDefinition`, with `"Spell"` as the first concrete tag value -- every ability that reads as a spell (buffs/debuffs/summons/etc., as opposed to a mundane melee/ranged physical attack) should carry it, starting with `QuickCastTestModule`'s two abilities and the planned starter self-heal spell (see the Self heal ability item above).
-
-`SpellCasterAchievement` (`Game/Modules/Achievements/Definitions/SpellCasterAchievement.cs`) needs its condition switched from the current hardcoded `SpellAbilityIds` allowlist to a real `ability.Tags.Contains("Spell")` check once this lands -- see that achievement's own doc comment.
 
 #### Show runner race
 
@@ -74,7 +68,15 @@ Game-side equipment rules (what can go in which slot, stat effects of equipping)
 
 #### Stats
 
-Randomly generated starting stats within a range. Increases can be automatic (level-up) or player-chosen (spending stat points). See the matching Presentation stats window item below.
+Randomly generated starting stats within a range (1-10, with most entities in the 3-5 range), used to modify ability/item effects -- e.g. `CoreAbilitiesModule`'s Punch (`Game/Modules/Abilities/CoreAbilitiesModule.cs`) should scale its damage off a stat once this exists, instead of the flat per-race/per-player hardcoded overrides it uses today. Increases can be automatic (level-up) or player-chosen (spending stat points). See the matching Presentation stats window item below.
+
+#### Mana
+
+A mana system, using `HealthComponent`/the health bar (`Game/Modules/Health/`) as a template -- a current/maximum pool plus regen, the same shape health already has. Heal (`Game/Modules/Abilities/CoreAbilitiesModule.cs`) should cost 2 MP and Magic Missile 5 MP once this lands -- both are free to cast until then. Starting `MaximumMana` should equal Intelligence once the Stats item above exists.
+
+#### Damage types
+
+No damage-type concept exists anywhere in `HealthDamage`/`AbilityEffect` today -- every hit is an undifferentiated number. Starting set: Magic, Blunt, Explosive, Slashing.
 
 #### Experience and level up system
 
@@ -107,10 +109,6 @@ An example FreeCast or Immediate ability that raises the caster's own outgoing d
 #### Toggle poison aura ability
 
 A FreeCast-style ability that turns an existing Poison/StatusEffectAura source on/off around the caster -- exercises FreeCast's "usable during an Action Lock" behavior against the existing aura machinery.
-
-#### Self heal ability
-
-Companion example to the self-buff/poison-toggle items above -- a positive, self-targeted effect using the same plumbing. Doubles as the planned basic/weak starter spell every player begins with (design intent, not yet reflected in `PlayerBlueprint`) -- once `AbilityDefinition.Tags` exists (see the Tag abilities item above) it should carry the `"Spell"` tag, which is what's expected to make `SpellCasterAchievement` (`Game/Modules/Achievements/Definitions/SpellCasterAchievement.cs`) trivially easy to earn.
 
 #### Body parts
 
@@ -152,9 +150,9 @@ Several depend on systems that don't exist yet (a real companion/party concept +
 
 `UnarmedCombatAchievement` (`Game/Modules/Achievements/Definitions/UnarmedCombatAchievement.cs`) unlocks on the same `EnteredDungeon` event, same unconditional reasoning as `LonerAchievement` above (no equipment or start-equipment-selection system exists yet, so every player is unarmed today). Revisit once equipment/start-equipment selection lands: it should then check whether the player actually chose to start without a weapon.
 
-`EmptyPocketsAchievement` (`Game/Modules/Achievements/Definitions/EmptyPocketsAchievement.cs`) unlocks on the same `EnteredDungeon` event, same unconditional reasoning as `LonerAchievement`/`UnarmedCombatAchievement` above -- Inventory now exists, but the player starts with test items (`TestItemsModule`, temporary), so every player's inventory is still non-empty today for an unrelated reason. Revisit once start-equipment selection lands and the temporary test items are gone: it should then check whether the player's inventory is actually empty (`InventoryQueries.CopyStacksForEntity`).
+`EmptyPocketsAchievement` (`Game/Modules/Achievements/Definitions/EmptyPocketsAchievement.cs`) unlocks on the same `EnteredDungeon` event, same unconditional reasoning as `LonerAchievement`/`UnarmedCombatAchievement` above -- Inventory now exists, but the player starts with 5 Health Potions (`CoreItemsModule`, granted in `PlayerBlueprint`), so every player's inventory is still non-empty today for an unrelated reason. Revisit once start-equipment selection lands and the player's starting kit is no longer hardcoded: it should then check whether the player's inventory is actually empty (`InventoryQueries.CopyStacksForEntity`).
 
-`SpellCasterAchievement` (`Game/Modules/Achievements/Definitions/SpellCasterAchievement.cs`) unlocks on `Game.World.AbilityActivated` (a new event, published by `AbilityEffectResolver.Apply` for every successful activation regardless of category), filtered by a hardcoded `SpellAbilityIds` allowlist rather than a real tag check -- `AbilityDefinition` has no `Tags` field yet (see the Tag abilities item above). Revisit once `AbilityDefinition.Tags` lands: switch the condition to `ability.Tags.Contains("Spell")` so every Spell-tagged ability qualifies automatically, including the planned starter self-heal spell (see the Self heal ability item above), which is expected to make this trivially easy to earn.
+`SpellCasterAchievement` (`Game/Modules/Achievements/Definitions/SpellCasterAchievement.cs`) unlocks on `Game.World.AbilityActivated` (published by `AbilityEffectResolver.Apply` for every successful activation regardless of category), filtered by a real `ability.Tags.Contains(Tag.Spell)` check via `AchievementTriggerContext.Abilities` -- every Spell-tagged ability qualifies automatically, including the starter Heal spell (`CoreAbilitiesModule`), which makes this trivially easy to earn.
 
 #### Boundary-aware ProcessingTierSystem recompute
 
@@ -178,7 +176,7 @@ Click an inventory item cell (`InventoryItemStackCell`, `Presentation/UI/Content
 
 #### Dynamic per-tag inventory tabs
 
-Each unique tag across the player's inventory (`ItemDefinition.Tags`, e.g. "Potion"/"Consumable"/"Healing" on the temporary Health Potion) auto-creates an inventory tab, default-sorted by how many unique items in the inventory carry that tag, user-reorderable (overrides the default sort). Clicking a tab filters the grid to items with that tag. A trailing "+" tab lets the player create custom tags. First real second consumer of `TabbedContent` (`Presentation/UI/Content/TabbedContent.cs`) beyond the single static "All" tab it ships with today -- `TabbedContent.SwitchTab` already supports swapping to an arbitrary tab list, so this is additive, not a redesign.
+Each unique tag across the player's inventory (`ItemDefinition.Tags`, e.g. `Tag.Potion`/`Tag.Consumable`/`Tag.Healing` on the Health Potion) auto-creates an inventory tab, default-sorted by how many unique items in the inventory carry that tag, user-reorderable (overrides the default sort). Clicking a tab filters the grid to items with that tag. A trailing "+" tab lets the player create custom tags. First real second consumer of `TabbedContent` (`Presentation/UI/Content/TabbedContent.cs`) beyond the single static "All" tab it ships with today -- `TabbedContent.SwitchTab` already supports swapping to an arbitrary tab list, so this is additive, not a redesign.
 
 #### Game over screen on player 0 HP
 

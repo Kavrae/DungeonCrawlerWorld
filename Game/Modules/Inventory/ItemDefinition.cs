@@ -1,3 +1,4 @@
+using Game.Modules;
 using Microsoft.Xna.Framework;
 
 namespace Game.Modules.Inventory;
@@ -13,7 +14,7 @@ namespace Game.Modules.Inventory;
 /// InventoryActions.AddItem -- nothing grants more than a handful of any one item today, so
 /// there's no real call site to wire the clamp through yet (see TODO.md's Inventory system note
 /// on not designing storage-divergence machinery before something actually needs it). Consumable
-/// is null for anything that isn't usable/consumable (e.g. the Hammer, an Equipment/Tool item) --
+/// is null for anything that isn't usable/consumable (e.g. an Equipment/Tool item) --
 /// ConsumableActivationSystem is what actually interprets it.
 ///
 /// Summary vs Description: Summary is a short, concrete statement of exact effect (e.g. "Heal
@@ -22,4 +23,4 @@ namespace Game.Modules.Inventory;
 /// longer flavor/detail text for future, larger text boxes elsewhere -- the two are deliberately
 /// separate fields, not one field reused for both purposes.
 /// </summary>
-public sealed record ItemDefinition(Guid Id, string Name, string? SpriteName, string Glyph, Color GlyphColor, IReadOnlyList<string> Tags, string Description = "", string Summary = "", int? MaxStackSize = null, ConsumableEffect? Consumable = null);
+public sealed record ItemDefinition(Guid Id, string Name, string? SpriteName, string Glyph, Color GlyphColor, IReadOnlyList<Tag> Tags, string Description = "", string Summary = "", int? MaxStackSize = null, ConsumableEffect? Consumable = null);

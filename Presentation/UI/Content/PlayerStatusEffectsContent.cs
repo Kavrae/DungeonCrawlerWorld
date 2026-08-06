@@ -103,7 +103,7 @@ public sealed class PlayerStatusEffectsContent(World world, ComponentManager com
     {
         DrawIconBackground(spriteBatch, unitRectangle, origin, size);
 
-        if (itemCatalog.TryGet(TestItemsModule.HealthPotionId, out var healthPotion))
+        if (itemCatalog.TryGet(CoreItemsModule.HealthPotionId, out var healthPotion))
         {
             _glyphRenderer.DrawCentered(spriteBatch, _font, healthPotion.Glyph, origin, size, healthPotion.GlyphColor);
         }

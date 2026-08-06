@@ -1,9 +1,9 @@
 using Engine.ECS.Components;
 using Engine.Math;
+using Game.Modules.Abilities;
 using Game.Modules.Abilities.Components;
 using Game.Modules.Core.Components;
 using Game.Modules.Health.Components;
-using Game.Modules.Melee;
 using Game.Modules.Movement.Components;
 using Game.Modules.Race.Components;
 using Game.Modules.StatModifiers;
@@ -30,7 +30,7 @@ public sealed class Goblin(MathUtility mathUtility) : IBlueprint
     private const short HealthRegen = 2;
 
     /// <summary>Hardcoded stopgap until the Additive/Multiplicative bonuses system exists -- see TODO.md.</summary>
-    private const short DefaultAttackDamage = 10;
+    private const short PunchDamage = 10;
 
     /// <summary>Permanent racial toughness -- reduces all damage this goblin takes by 1, regardless of source (melee, ranged, status effects, contact hazards -- see HealthDamage.Apply, the single chokepoint IncomingDamage is consumed at).</summary>
     private const float DamageReductionAmount = -1f;
@@ -54,7 +54,7 @@ public sealed class Goblin(MathUtility mathUtility) : IBlueprint
         componentManager.Merge(entityId, new TransformComponent(
             new Vector3Int(-1, -1, (int)MapLayer.Ground), new Vector2Byte(1, 1)));
 
-        componentManager.Merge(entityId, new AbilityInstanceComponent(MeleeModule.DefaultAttackId, damageAmount: DefaultAttackDamage, cooldownFramesRemaining: 0));
+        componentManager.Merge(entityId, new AbilityInstanceComponent(CoreAbilitiesModule.PunchId, damageAmount: PunchDamage, cooldownFramesRemaining: 0));
 
         StatModifierEffects.Apply(componentManager, entityId, StatModifierTarget.IncomingDamage, StatModifierOperation.Additive, StatModifierPolarity.Buff,
             canModify: true, magnitude: DamageReductionAmount, durationFrames: StatModifierComponent.Permanent, StatusEffectSource.Admin);

@@ -65,6 +65,7 @@ public static class AbilityEffectResolver
                 {
                     HealthDamage.Apply(health, eventBus, blockingEntityId, effectiveDamage, StatusEffectSource.FromEntity(sourceEntityId), playerQuery, ability.Name, statModifiers);
                 }
+                TryApplyHeal(ability, health, blockingEntityId, statModifiers);
                 GrantStatModifiers(statModifiers, ability, blockingEntityId, sourceEntityId);
                 GrantStatusEffects(statusEffectAppliers, componentManager, eventBus, ability, blockingEntityId, sourceEntityId, deadEntities);
             }
@@ -79,10 +80,28 @@ public static class AbilityEffectResolver
                 {
                     HealthDamage.Apply(health, eventBus, nonBlockingEntityId, effectiveDamage, StatusEffectSource.FromEntity(sourceEntityId), playerQuery, ability.Name, statModifiers);
                 }
+                TryApplyHeal(ability, health, nonBlockingEntityId, statModifiers);
                 GrantStatModifiers(statModifiers, ability, nonBlockingEntityId, sourceEntityId);
                 GrantStatusEffects(statusEffectAppliers, componentManager, eventBus, ability, nonBlockingEntityId, sourceEntityId, deadEntities);
             }
         }
+    }
+
+    /// <summary>
+    /// Mirrors ConsumableActivationSystem.HealTarget: HealFraction is computed per target off the
+    /// target's own effective MaximumHealth (not the caster's), so a splash-shaped heal hitting
+    /// entities with different max HP heals each by its own fraction. No-op for a target with no
+    /// HealthComponent (e.g. an "immortal" entity) -- see HealthHeal.Apply's own doc comment.
+    /// </summary>
+    private static void TryApplyHeal(AbilityDefinition ability, PackedComponentPool<HealthComponent> health, int targetEntityId, MultiComponentPool<StatModifierComponent>? statModifiers)
+    {
+        if (ability.Effect.HealFraction <= 0 || !health.TryGetReadonly(targetEntityId, out var targetHealth))
+        {
+            return;
+        }
+
+        var effectiveMaximumHealth = StatModifierMath.GetEffectiveValue(statModifiers, targetEntityId, StatModifierTarget.MaximumHealth, targetHealth.MaximumHealth);
+        HealthHeal.Apply(health, targetEntityId, (short)(ability.Effect.HealFraction * effectiveMaximumHealth), statModifiers);
     }
 
     /// <summary>No-op when statModifiers is null (StatModifiersModule not registered in this build) -- same graceful-optional treatment as the damage/regen consume side.</summary>

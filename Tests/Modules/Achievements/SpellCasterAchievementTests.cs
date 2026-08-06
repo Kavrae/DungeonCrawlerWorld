@@ -8,7 +8,6 @@ using Game.Modules.Abilities;
 using Game.Modules.Achievements;
 using Game.Modules.Achievements.Components;
 using Game.Modules.Achievements.Definitions;
-using Game.Modules.Melee;
 using Game.World;
 
 namespace Tests.Modules.Achievements;
@@ -23,11 +22,15 @@ public sealed class SpellCasterAchievementTests
     {
         var world = new Game.World.World(new Map(new Vector3Int(5, 5, 1)));
         var eventBus = new EventBus();
+        var context = new GameModuleContext(world, new MathUtility(), eventBus) { PlayerQuery = world };
+
+        var coreAbilitiesModule = new CoreAbilitiesModule();
+        coreAbilitiesModule.Configure(context);
 
         var module = new AchievementModule();
-        module.Configure(new GameModuleContext(world, new MathUtility(), eventBus) { PlayerQuery = world });
+        module.Configure(context);
 
-        IReadOnlyList<IModule> modules = [module];
+        IReadOnlyList<IModule> modules = [module, coreAbilitiesModule];
         var ecsContext = Bootstrapper.Build(modules, initialEntityCapacity: 10, initialComponentCapacity: 10, eventBus);
 
         return (ecsContext, eventBus, world);
@@ -40,7 +43,7 @@ public sealed class SpellCasterAchievementTests
         var playerEntityId = ecsContext.EntityManager.CreateEntity();
         world.PlayerEntityId = playerEntityId;
 
-        eventBus.Publish(new AbilityActivated(playerEntityId, QuickCastTestModule.QuickCastAbilityId));
+        eventBus.Publish(new AbilityActivated(playerEntityId, CoreAbilitiesModule.HealId));
 
         Assert.IsTrue(AchievementQueries.HasEarned(
             ecsContext.ComponentManager.GetMultiPool<AchievementUnlockedComponent>(),
@@ -55,7 +58,7 @@ public sealed class SpellCasterAchievementTests
         var playerEntityId = ecsContext.EntityManager.CreateEntity();
         world.PlayerEntityId = playerEntityId;
 
-        eventBus.Publish(new AbilityActivated(playerEntityId, QuickCastTestModule.RangedTestDebuffAbilityId));
+        eventBus.Publish(new AbilityActivated(playerEntityId, CoreAbilitiesModule.MagicMissileId));
 
         Assert.IsTrue(AchievementQueries.HasEarned(
             ecsContext.ComponentManager.GetMultiPool<AchievementUnlockedComponent>(),
@@ -70,7 +73,7 @@ public sealed class SpellCasterAchievementTests
         var playerEntityId = ecsContext.EntityManager.CreateEntity();
         world.PlayerEntityId = playerEntityId;
 
-        eventBus.Publish(new AbilityActivated(playerEntityId, MeleeModule.DefaultAttackId));
+        eventBus.Publish(new AbilityActivated(playerEntityId, CoreAbilitiesModule.PunchId));
 
         Assert.IsFalse(AchievementQueries.HasEarned(
             ecsContext.ComponentManager.GetMultiPool<AchievementUnlockedComponent>(),
@@ -86,7 +89,7 @@ public sealed class SpellCasterAchievementTests
         var npcEntityId = ecsContext.EntityManager.CreateEntity();
         world.PlayerEntityId = playerEntityId;
 
-        eventBus.Publish(new AbilityActivated(npcEntityId, QuickCastTestModule.QuickCastAbilityId));
+        eventBus.Publish(new AbilityActivated(npcEntityId, CoreAbilitiesModule.HealId));
 
         Assert.IsFalse(AchievementQueries.HasEarned(
             ecsContext.ComponentManager.GetMultiPool<AchievementUnlockedComponent>(),

@@ -14,7 +14,6 @@ using Game.Modules.Crawler;
 using Game.Modules.Death;
 using Game.Modules.Health;
 using Game.Modules.Inventory;
-using Game.Modules.Melee;
 using Game.Modules.Movement;
 using Game.Modules.Paralysis;
 using Game.Modules.Poison;
@@ -53,9 +52,7 @@ public static class GameBootstrapper
             new RaceModule(),
             new ClassModule(),
             new AbilitiesModule(),
-            new MeleeModule(),
-            new PlayerTestAbilitiesModule(),
-            new QuickCastTestModule(),
+            new CoreAbilitiesModule(),
             new StatusEffectsModule(),
             new StatModifiersModule(),
             new BurningModule(),
@@ -66,7 +63,7 @@ public static class GameBootstrapper
             new AchievementModule(),
             new CrawlerModule(),
             new InventoryModule(),
-            new TestItemsModule(),
+            new CoreItemsModule(),
         ];
 
         var mapQuery = (IMapQuery)world;

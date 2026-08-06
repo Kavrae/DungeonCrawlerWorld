@@ -23,7 +23,6 @@ using Game.Modules.Health;
 using Game.Modules.Health.Components;
 using Game.Modules.Inventory;
 using Game.Modules.Inventory.Components;
-using Game.Modules.Melee;
 using Game.Modules.Movement;
 using Game.Modules.Movement.Components;
 using Game.Modules.ProcessingTier;
@@ -49,6 +48,9 @@ public sealed class BlueprintTests
         var abilitiesModule = new AbilitiesModule();
         abilitiesModule.Configure(context);
 
+        var coreAbilitiesModule = new CoreAbilitiesModule();
+        coreAbilitiesModule.Configure(context);
+
         var processingTierModule = new ProcessingTierModule();
         processingTierModule.Configure(context);
 
@@ -61,8 +63,8 @@ public sealed class BlueprintTests
         var statModifiersModule = new StatModifiersModule();
         statModifiersModule.Configure(context);
 
-        var testItemsModule = new TestItemsModule();
-        testItemsModule.Configure(context);
+        var coreItemsModule = new CoreItemsModule();
+        coreItemsModule.Configure(context);
 
         IReadOnlyList<IModule> modules =
         [
@@ -73,10 +75,11 @@ public sealed class BlueprintTests
             new RaceModule(),
             new ClassModule(),
             abilitiesModule,
+            coreAbilitiesModule,
             new CrawlerModule(),
             processingTierModule,
             new InventoryModule(),
-            testItemsModule,
+            coreItemsModule,
         ];
 
         return Bootstrapper.Build(modules, initialEntityCapacity: 100, initialComponentCapacity: 50);
@@ -152,8 +155,8 @@ public sealed class BlueprintTests
         Assert.IsTrue(ecsContext.ComponentManager.GetPackedPool<ActionLockComponent>().Has(entityId));
         Assert.IsTrue(ecsContext.ComponentManager.GetDirectPool<TransformComponent>().Has(entityId));
 
-        Assert.IsTrue(AbilityInstanceQueries.TryGet(ecsContext.ComponentManager.GetMultiPool<AbilityInstanceComponent>(), entityId, MeleeModule.DefaultAttackId, out var defaultAttack));
-        Assert.AreEqual((short)10, defaultAttack.DamageAmount);
+        Assert.IsTrue(AbilityInstanceQueries.TryGet(ecsContext.ComponentManager.GetMultiPool<AbilityInstanceComponent>(), entityId, CoreAbilitiesModule.PunchId, out var punch));
+        Assert.AreEqual((short)10, punch.DamageAmount);
     }
 
     [TestMethod]
@@ -185,23 +188,20 @@ public sealed class BlueprintTests
         Assert.IsTrue(ecsContext.ComponentManager.GetPackedPool<CrawlerComponent>().Has(entityId));
 
         var abilityInstances = ecsContext.ComponentManager.GetMultiPool<AbilityInstanceComponent>();
-        Assert.IsTrue(AbilityInstanceQueries.TryGet(abilityInstances, entityId, MeleeModule.DefaultAttackId, out var defaultAttack));
-        Assert.AreEqual((short)20, defaultAttack.DamageAmount);
-        Assert.IsTrue(AbilityInstanceQueries.TryGet(abilityInstances, entityId, PlayerTestAbilitiesModule.RangedTestAbilityId, out var rangedTest));
-        Assert.AreEqual((short)10, rangedTest.DamageAmount);
+        Assert.IsTrue(AbilityInstanceQueries.TryGet(abilityInstances, entityId, CoreAbilitiesModule.PunchId, out var punch));
+        Assert.AreEqual((short)20, punch.DamageAmount);
+        Assert.IsTrue(AbilityInstanceQueries.TryGet(abilityInstances, entityId, CoreAbilitiesModule.MagicMissileId, out var magicMissile));
+        Assert.AreEqual((short)5, magicMissile.DamageAmount);
+        Assert.IsTrue(AbilityInstanceQueries.TryGet(abilityInstances, entityId, CoreAbilitiesModule.HealId, out _));
 
-        // Starting items: 5 (enabled) Health Potions, 1 (disabled -- proves out the disabled-item gray-tint visual) Hammer.
+        // Starting items: 5 Health Potions.
         var stacks = new List<InventoryItemStackComponent>();
         InventoryQueries.CopyStacksForEntity(ecsContext.ComponentManager.GetMultiPool<InventoryItemStackComponent>(), entityId, stacks);
-        Assert.HasCount(2, stacks);
+        Assert.HasCount(1, stacks);
 
-        var potionStack = stacks.Single(stack => stack.ItemDefinitionId == TestItemsModule.HealthPotionId);
+        var potionStack = stacks.Single(stack => stack.ItemDefinitionId == CoreItemsModule.HealthPotionId);
         Assert.AreEqual(5, potionStack.Quantity);
         Assert.IsFalse(potionStack.IsDisabled);
-
-        var hammerStack = stacks.Single(stack => stack.ItemDefinitionId == TestItemsModule.HammerId);
-        Assert.AreEqual(1, hammerStack.Quantity);
-        Assert.IsTrue(hammerStack.IsDisabled);
     }
 
     [TestMethod]
@@ -219,8 +219,8 @@ public sealed class BlueprintTests
         Assert.IsTrue(ecsContext.ComponentManager.GetPackedPool<ActionLockComponent>().Has(entityId));
         Assert.IsTrue(ecsContext.ComponentManager.GetDirectPool<TransformComponent>().Has(entityId));
 
-        Assert.IsTrue(AbilityInstanceQueries.TryGet(ecsContext.ComponentManager.GetMultiPool<AbilityInstanceComponent>(), entityId, MeleeModule.DefaultAttackId, out var defaultAttack));
-        Assert.AreEqual((short)5, defaultAttack.DamageAmount);
+        Assert.IsTrue(AbilityInstanceQueries.TryGet(ecsContext.ComponentManager.GetMultiPool<AbilityInstanceComponent>(), entityId, CoreAbilitiesModule.PunchId, out var punch));
+        Assert.AreEqual((short)5, punch.DamageAmount);
     }
 
     [TestMethod]

@@ -29,8 +29,8 @@ namespace Presentation.UI.Content;
 /// neither simply never shows a mask, since RadialFillRenderer already no-ops at FillPercentage
 /// &lt;= 0. A bound item slot draws its sprite/glyph and inventory quantity the same way
 /// InventoryItemStackCell's grid cells do (see ItemIconRenderer), greyed out (no radial mask
-/// either) if it has no ConsumableEffect at all (e.g. the Hammer -- Equipment, no activated
-/// ability yet). A Potion slot with an active PotionCooldownComponent additionally shows the
+/// either) if it has no ConsumableEffect at all (an Equipment/Tool item with no activated
+/// ability). A Potion slot with an active PotionCooldownComponent additionally shows the
 /// remaining seconds as plain green text above the slot -- informational only, not a gate (see
 /// PotionCooldownEffects' own doc comment: the cooldown never blocks a second potion, so this
 /// deliberately isn't what drives the slot's own radial mask). The currently-armed slot
@@ -281,16 +281,17 @@ public sealed class HotbarContent(
 
     private void DrawAbilitySlot(SpriteBatch spriteBatch, Texture2D unitRectangle, int playerEntityId, AbilityDefinition ability, Rectangle contentBounds)
     {
-        _radialFill.Sprite = null;
+        _radialFill.Sprite = ability.SpriteName is not null && SpriteManifest.TryGet(ability.SpriteName, out var sprite) ? sprite : null;
+        _radialFill.SpriteTint = Color.White;
         _radialFill.Glyph = ability.Glyph;
-        _radialFill.GlyphColor = BoundSlotGlyphColor;
+        _radialFill.GlyphColor = ability.GlyphColor;
         _radialFill.BackgroundColor = BoundSlotBackgroundColor;
         _radialFill.FillPercentage = ComputeAbilityFillPercentage(playerEntityId, ability);
         _radialFill.Draw(spriteBatch, unitRectangle, _font, contentBounds);
     }
 
     /// <summary>
-    /// isUsable requires both a ConsumableEffect (e.g. excludes the Hammer -- Equipment, no
+    /// isUsable requires both a ConsumableEffect (e.g. excludes an Equipment/Tool item with no
     /// activated ability yet) and actual remaining stock -- InventoryActions.ConsumeItem removes
     /// the InventoryItemStackComponent entirely once Quantity hits 0 (see its own doc comment),
     /// so "no stack found" here means "used the last one." Greyed out exactly like a

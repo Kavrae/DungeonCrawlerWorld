@@ -39,7 +39,7 @@ public sealed class AbilityTargetingController(
     PackedComponentPool<PendingDelayedActionComponent> pendingDelayedActions,
     PackedComponentPool<ActionLockComponent> actionLocks)
 {
-    /// <summary>~300ms -- a second press of the same slot within this many frames of the first is a double-tap (see HandleHotkeySlotPress), not two independent arm/disarm presses.</summary>
+    /// <summary>~300ms -- a second press of the same slot within this many frames of the first is a double-tap (auto-target the closest candidate, see HandleHotkeySlotPress), as opposed to a slower second press (confirm against the cursor, same as a click).</summary>
     private static readonly int DoubleTapWindowFrames = GameTiming.FramesForSeconds(0.3f);
 
     private static readonly int FramesPerPlayerMove = GameTiming.FramesForSeconds(0.25f);
@@ -118,33 +118,44 @@ public sealed class AbilityTargetingController(
 
     /// <summary>
     /// A left-click confirms the armed ability or item's activation against whichever tile was
-    /// clicked, provided that tile is actually within TargetableTiles (clicking outside the
-    /// highlighted area is a no-op -- whatever's armed stays armed, exactly like clicking empty
-    /// space doesn't clear an inspector selection either). Resolves the real Shape anchored on
-    /// the clicked tile (not the fixed candidate-enumeration shape ComputeTargetableTiles uses)
-    /// -- for Adjacent this produces the same fixed footprint regardless of which of its tiles
-    /// was clicked, since Adjacent ignores the cursor entirely. Reads which of {ability, item} is
-    /// armed from MapViewState itself rather than taking either id as a parameter -- mirrors
-    /// CancelArmedOrPendingAction, which already does the same.
+    /// clicked -- see TryConfirmActivationAtTile, the shared implementation this and a same-slot
+    /// hotkey re-press (see HandleAbilitySlotPress/HandleItemSlotPress) both funnel into.
     /// </summary>
     public void TryConfirmActivation(Point mousePosition, Vector2 contentAbsolutePosition)
     {
         if (!camera.TryGetHoveredMapPosition(mousePosition, contentAbsolutePosition, out var clickedColumnRow) ||
-            !TryGetArmedTargeting(out var targeting) ||
             !transformPool.TryGetReadonly(world.PlayerEntityId, out var transform))
         {
             return;
         }
 
-        var attackerPosition = transform.Position;
-        var clickedTile = new Vector3Int(clickedColumnRow.X, clickedColumnRow.Y, attackerPosition.Z);
+        var clickedTile = new Vector3Int(clickedColumnRow.X, clickedColumnRow.Y, transform.Position.Z);
+        TryConfirmActivationAtTile(clickedTile);
+    }
 
-        if (mapViewState.TargetableTiles is not { } targetableTiles || !targetableTiles.Contains(clickedTile))
+    /// <summary>
+    /// Confirms the armed ability or item's activation against targetTile, provided it's actually
+    /// within TargetableTiles (a miss is a no-op -- whatever's armed stays armed, exactly like
+    /// clicking empty space doesn't clear an inspector selection either). Resolves the real Shape
+    /// anchored on targetTile (not the fixed candidate-enumeration shape ComputeTargetableTiles
+    /// uses) -- for Adjacent this produces the same fixed footprint regardless of which of its
+    /// tiles was targeted, since Adjacent ignores the cursor entirely. Reads which of
+    /// {ability, item} is armed from MapViewState itself rather than taking either id as a
+    /// parameter -- mirrors CancelArmedOrPendingAction, which already does the same.
+    /// </summary>
+    private void TryConfirmActivationAtTile(Vector3Int targetTile)
+    {
+        if (!TryGetArmedTargeting(out var targeting) || !transformPool.TryGetReadonly(world.PlayerEntityId, out var transform))
         {
             return;
         }
 
-        TargetShapeResolver.Resolve(targeting.Shape, attackerPosition, clickedTile, targeting.Range, targeting.AreaSize, world.Map.Size, _finalTargetTilesBuffer);
+        if (mapViewState.TargetableTiles is not { } targetableTiles || !targetableTiles.Contains(targetTile))
+        {
+            return;
+        }
+
+        TargetShapeResolver.Resolve(targeting.Shape, transform.Position, targetTile, targeting.Range, targeting.AreaSize, world.Map.Size, _finalTargetTilesBuffer);
         QueueArmedActivation(world.PlayerEntityId, _finalTargetTilesBuffer);
         Disarm();
     }
@@ -215,9 +226,12 @@ public sealed class AbilityTargetingController(
     }
 
     /// <summary>
-    /// Arms/disarms the pressed slot's ability, or -- on a double-tap within
-    /// DoubleTapWindowFrames -- skips arming entirely and immediately activates against an
-    /// auto-picked target (see TryActivateWithAutoTarget).
+    /// Arms the pressed slot's ability, or -- if it's already armed -- confirms it instead: a
+    /// double-tap within DoubleTapWindowFrames skips arming entirely and immediately activates
+    /// against an auto-picked target (see TryActivateWithAutoTarget); a slower re-press confirms
+    /// against wherever the cursor currently is (see TryConfirmActivationAtTile), the same as a
+    /// click would. Cancelling an armed slot is right-click/Escape's job now (see
+    /// CancelArmedOrPendingAction) -- re-pressing the same key always means "go," not "nevermind."
     /// </summary>
     private void HandleAbilitySlotPress(HotkeySlot slot, Guid abilityId, bool isDoubleTap)
     {
@@ -238,12 +252,11 @@ public sealed class AbilityTargetingController(
 
         if (mapViewState.ArmedSlot == slot)
         {
-            // Pressing the already-armed slot again disarms it. A no-target ability activating
-            // on this same press is a later Presentation phase's concern (it needs to know the
-            // ability's Shape doesn't require a target tile at all, not just that its slot was
-            // pressed again) -- every ability granted so far requires a target, so disarm-only
-            // is the complete, correct behavior today.
-            Disarm();
+            if (mapViewState.HoveredTile is { } hoveredTile)
+            {
+                TryConfirmActivationAtTile(hoveredTile);
+            }
+
             return;
         }
 
@@ -251,8 +264,8 @@ public sealed class AbilityTargetingController(
     }
 
     /// <summary>
-    /// A bound item with no ConsumableEffect (e.g. the Hammer -- Equipment, no activated ability
-    /// yet), or with no remaining stock (the player's stack was fully consumed -- see
+    /// A bound item with no ConsumableEffect (e.g. an Equipment/Tool item with no activated
+    /// ability yet), or with no remaining stock (the player's stack was fully consumed -- see
     /// InventoryItemStackComponent's "no instance means empty" convention, the same one
     /// InventoryActions.ConsumeItem relies on), is inert, the same no-op an unbound slot already
     /// is -- HotbarContent greys it out the same way, so "can't be armed" and "looks unusable"
@@ -261,7 +274,9 @@ public sealed class AbilityTargetingController(
     /// potion on the user," regardless of what's currently armed. Not generalized to every
     /// ConsumableKind: a future self-only kind (e.g. a bandage) already resolves to Self via its
     /// own ConsumableEffect.Targeting through the ordinary arm/confirm path below, so it doesn't
-    /// need this shortcut to behave the same way.
+    /// need this shortcut to behave the same way. A non-double-tap re-press of an already-armed
+    /// slot confirms against the cursor instead (see TryConfirmActivationAtTile) -- same rhythm
+    /// as HandleAbilitySlotPress, cancelling is right-click/Escape's job now.
     /// </summary>
     private void HandleItemSlotPress(HotkeySlot slot, Guid itemDefinitionId, bool isDoubleTap)
     {
@@ -289,7 +304,11 @@ public sealed class AbilityTargetingController(
 
         if (mapViewState.ArmedSlot == slot)
         {
-            Disarm();
+            if (mapViewState.HoveredTile is { } hoveredTile)
+            {
+                TryConfirmActivationAtTile(hoveredTile);
+            }
+
             return;
         }
 
