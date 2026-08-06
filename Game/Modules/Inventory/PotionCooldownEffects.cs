@@ -1,4 +1,5 @@
 using Engine.ECS.Components;
+using Engine.Utilities;
 using Game.Modules.Inventory.Components;
 using Game.Modules.Poison;
 
@@ -12,11 +13,8 @@ namespace Game.Modules.Inventory;
 /// </summary>
 public static class PotionCooldownEffects
 {
-    /// <summary>This codebase's standing frame-rate assumption (see PoisonEffects.TickIntervalFrames, AbilityTargetingController.DoubleTapWindowFrames) -- the one place it's named, rather than a bare "60" at every frames-to-seconds call site.</summary>
-    public const int FramesPerSecond = 60;
-
-    /// <summary>20s @ FramesPerSecond.</summary>
-    public const short DurationFrames = FramesPerSecond * 20;
+    /// <summary>20s @ GameTiming.FramesPerSecond.</summary>
+    public const short DurationFrames = GameTiming.FramesPerSecond * 20;
 
     /// <summary>
     /// The abuse-punishment Poison stack's duration, in PoisonSystem's own "ticks" (one tick per
@@ -32,5 +30,5 @@ public static class PotionCooldownEffects
 
     /// <summary>Whole seconds remaining, rounded up -- so the displayed number only reaches 0 once FramesRemaining actually does, rather than a moment early. Shared by every Presentation display of this cooldown (PlayerStatusEffectsContent, HotbarContent) so they can't disagree with each other.</summary>
     public static int RemainingSeconds(short framesRemaining) =>
-        (int)System.Math.Ceiling(framesRemaining / (float)FramesPerSecond);
+        (int)System.Math.Ceiling(framesRemaining / (float)GameTiming.FramesPerSecond);
 }

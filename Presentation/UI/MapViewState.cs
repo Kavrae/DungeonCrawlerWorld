@@ -36,6 +36,18 @@ public sealed class MapViewState
     /// <summary>See ArmedAbilityId/ArmedItemDefinitionId -- shared regardless of which of the two is actually armed.</summary>
     public HotkeySlot? ArmedSlot;
 
+    /// <summary>The hotbar slot the player clicked to preview its summary without arming it (see
+    /// HotbarController) -- null when no preview is open. Cleared whenever anything becomes armed
+    /// (ArmAbility/ArmItem), so a stale preview can't resurface once the armed slot later disarms.
+    /// ArmedHotkeySummaryWindow prefers ArmedSlot over this, and HoverSlot over both.</summary>
+    public HotkeySlot? PreviewSlot;
+
+    /// <summary>The hotbar slot currently under the cursor, once HotbarController's hover tracking
+    /// has held on the same bound slot for at least HudMetrics.HoverTooltipDelayFrames -- null the
+    /// instant the cursor moves off that slot (no delay on hiding, only on showing). Takes priority
+    /// over ArmedSlot/PreviewSlot, since a live hover is the most immediate signal of intent.</summary>
+    public HotkeySlot? HoverSlot;
+
     /// <summary>Every tile the currently-armed ability could possibly be aimed at from the caster's current position -- Adjacent's fixed footprint, or every tile within the ability's Range for cursor-directed shapes. Computed at arm time and recomputed if the caster moves while still armed (see AbilityTargetingController.RefreshTargetableTiles). Null when nothing is armed.</summary>
     public IReadOnlySet<Vector3Int>? TargetableTiles;
 

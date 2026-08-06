@@ -52,6 +52,12 @@ For NPCs and the player. Attacking sets the same shared ActionLockComponent that
 
 `Game/Modules/Melee/MeleeModule.cs` registers exactly one ability definition ("Default Attack") directly in its own `Configure` -- a reasonable first step (see the Melee attack implementation item above), but it hard-codes "melee module = one fallback attack" rather than being a real content library. Once more than one race/class-agnostic ability exists (e.g. the self-buff/poison-toggle/self-heal examples below), replace it with a proper catalog of premade, off-the-shelf `AbilityDefinition`s that aren't tied to any specific race or class -- race/class blueprints then pick whichever ones they want to grant (Default Attack among them), rather than every generic ability living inside a module named after one specific attack.
 
+#### Tag abilities
+
+`AbilityDefinition` (`Game/Modules/Abilities/AbilityDefinition.cs`) has no `Tags` field, unlike `ItemDefinition` (`Game/Modules/Inventory/ItemDefinition.cs`), which already carries `IReadOnlyList<string> Tags` and drives real behavior off it (see the Dynamic per-tag inventory tabs item below). Add the same `Tags` field to `AbilityDefinition`, with `"Spell"` as the first concrete tag value -- every ability that reads as a spell (buffs/debuffs/summons/etc., as opposed to a mundane melee/ranged physical attack) should carry it, starting with `QuickCastTestModule`'s two abilities and the planned starter self-heal spell (see the Self heal ability item above).
+
+`SpellCasterAchievement` (`Game/Modules/Achievements/Definitions/SpellCasterAchievement.cs`) needs its condition switched from the current hardcoded `SpellAbilityIds` allowlist to a real `ability.Tags.Contains("Spell")` check once this lands -- see that achievement's own doc comment.
+
 #### Show runner race
 
 Randomly selected. Affects UI appearance, and gives a bias towards selected quests and enemy types.
@@ -104,7 +110,7 @@ A FreeCast-style ability that turns an existing Poison/StatusEffectAura source o
 
 #### Self heal ability
 
-Companion example to the self-buff/poison-toggle items above -- a positive, self-targeted effect using the same plumbing.
+Companion example to the self-buff/poison-toggle items above -- a positive, self-targeted effect using the same plumbing. Doubles as the planned basic/weak starter spell every player begins with (design intent, not yet reflected in `PlayerBlueprint`) -- once `AbilityDefinition.Tags` exists (see the Tag abilities item above) it should carry the `"Spell"` tag, which is what's expected to make `SpellCasterAchievement` (`Game/Modules/Achievements/Definitions/SpellCasterAchievement.cs`) trivially easy to earn.
 
 #### Body parts
 
@@ -126,7 +132,7 @@ Opening the player's inventory and a dead entity's inventory side-by-side. The c
 
 #### Achievement content backlog
 
-The Achievement system (`Game/Modules/Achievements/`) currently ships eight achievements ("Loner", "You've Inflicted Damage on a Mob", "Unarmed Combat", "Early Adopter", "Inert Gas", "You've killed a mob!", "Empty Pockets", "Drinking Problem") to prove the pipeline; the rest is a deliberate, incremental backlog -- a few added alongside each future feature rather than all at once. Volume/pacing target: many low-value achievements early (deliberately "drowning the player in low-level loot boxes" at the start), tapering to fewer, higher-value ones by the midgame.
+The Achievement system (`Game/Modules/Achievements/`) currently ships nine achievements ("Loner", "You've Inflicted Damage on a Mob", "Unarmed Combat", "Early Adopter", "Inert Gas", "You've killed a mob!", "Empty Pockets", "Drinking Problem", "You're a wizard, apprentice") to prove the pipeline; the rest is a deliberate, incremental backlog -- a few added alongside each future feature rather than all at once. Volume/pacing target: many low-value achievements early (deliberately "drowning the player in low-level loot boxes" at the start), tapering to fewer, higher-value ones by the midgame.
 
 Design-target examples, not yet implemented:
 - Enter the dungeon with a cat (random starting-item selection)
@@ -147,6 +153,8 @@ Several depend on systems that don't exist yet (a real companion/party concept +
 `UnarmedCombatAchievement` (`Game/Modules/Achievements/Definitions/UnarmedCombatAchievement.cs`) unlocks on the same `EnteredDungeon` event, same unconditional reasoning as `LonerAchievement` above (no equipment or start-equipment-selection system exists yet, so every player is unarmed today). Revisit once equipment/start-equipment selection lands: it should then check whether the player actually chose to start without a weapon.
 
 `EmptyPocketsAchievement` (`Game/Modules/Achievements/Definitions/EmptyPocketsAchievement.cs`) unlocks on the same `EnteredDungeon` event, same unconditional reasoning as `LonerAchievement`/`UnarmedCombatAchievement` above -- Inventory now exists, but the player starts with test items (`TestItemsModule`, temporary), so every player's inventory is still non-empty today for an unrelated reason. Revisit once start-equipment selection lands and the temporary test items are gone: it should then check whether the player's inventory is actually empty (`InventoryQueries.CopyStacksForEntity`).
+
+`SpellCasterAchievement` (`Game/Modules/Achievements/Definitions/SpellCasterAchievement.cs`) unlocks on `Game.World.AbilityActivated` (a new event, published by `AbilityEffectResolver.Apply` for every successful activation regardless of category), filtered by a hardcoded `SpellAbilityIds` allowlist rather than a real tag check -- `AbilityDefinition` has no `Tags` field yet (see the Tag abilities item above). Revisit once `AbilityDefinition.Tags` lands: switch the condition to `ability.Tags.Contains("Spell")` so every Spell-tagged ability qualifies automatically, including the planned starter self-heal spell (see the Self heal ability item above), which is expected to make this trivially easy to earn.
 
 #### Boundary-aware ProcessingTierSystem recompute
 
@@ -231,10 +239,6 @@ Affected: `Presentation/UI/Window.cs` (new `HandleTextInput` hook, `NextTextBoxA
 `SpriteRenderer.Draw` (`Presentation/Rendering/SpriteRenderer.cs`) always stretches a sprite's source rectangle to fill its tile footprint exactly -- fine for tile-sized art (Wall, Grass) but wrong for character sprites, which don't all read at a consistent apparent size relative to their footprint: confirmed in-game, the player sprite needs to render larger and goblin sprites smaller. Needs a per-entity (or per-`SpriteComponent`) scale factor -- e.g. a `Scale` field on `SpriteComponent` (`Game/Modules/Core/Components/SpriteComponent.cs`) that `MapWindow.TryDrawEntityVisual` applies when computing the destination rectangle passed to `SpriteRenderer.Draw`, rather than always drawing at exactly the tile's own footprint size.
 
 Affected: `Game/Modules/Core/Components/SpriteComponent.cs`, `Presentation/Rendering/SpriteRenderer.cs`, `Presentation/UI/MapWindow.cs` (`TryDrawEntityVisual`), `Game/Blueprints/SpriteManifest.cs` (Player/Goblin entries would set their chosen scale here).
-
-#### Ability summary on hotkey hover
-
-A tooltip-style panel showing an ability's name/effect/cooldown when hovering its hotbar slot (`Presentation/UI/Content/HotbarContent.cs`) -- depends on the Hotbar UI existing first, which it now does.
 
 #### Status effect stack count on the player's status bar
 

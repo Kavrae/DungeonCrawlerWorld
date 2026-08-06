@@ -2,6 +2,7 @@ using Engine.Diagnostics;
 using Engine.ECS.Context;
 using Engine.ECS.Systems;
 using Engine.Math;
+using Engine.Utilities;
 using Game.Bootstrap;
 using Game.Diagnostics;
 using Game.Floors;
@@ -26,11 +27,11 @@ public sealed class GameLoop : Microsoft.Xna.Framework.Game
     private const int InitialEntityCapacity = 2_600_000;
     private const int InitialComponentCapacity = 220_000;
 
-    // ~5 seconds at 60fps -- how often ReportTopPhases dumps the full per-phase ranking to the
-    // console. PhaseProfiler.TopPhases itself refreshes every real second regardless; this only
-    // paces how often that snapshot gets printed, so a gameplay demo's console log doesn't fill
-    // with a duplicate ranking every single frame.
-    private const int ProfileReportIntervalFrames = 300;
+    // ~5 seconds -- how often ReportTopPhases dumps the full per-phase ranking to the console.
+    // PhaseProfiler.TopPhases itself refreshes every real second regardless; this only paces how
+    // often that snapshot gets printed, so a gameplay demo's console log doesn't fill with a
+    // duplicate ranking every single frame.
+    private static readonly int ProfileReportIntervalFrames = GameTiming.FramesForSeconds(5f);
 
     // Floor 1 of (eventually) 18 -- floors are strictly sequential, no skipping or
     // backtracking. There's no advance trigger yet (that needs a win-condition system that

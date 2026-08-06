@@ -49,6 +49,8 @@ public static class AbilityEffectResolver
         MultiComponentPool<StatModifierComponent>? statModifiers = null,
         PackedComponentPool<DeadComponent>? deadEntities = null)
     {
+        eventBus.Publish(new AbilityActivated(sourceEntityId, ability.Id));
+
         var dealsDamage = instance.DamageAmount > 0;
         var effectiveDamage = dealsDamage
             ? (short)StatModifierMath.GetEffectiveValue(statModifiers, sourceEntityId, StatModifierTarget.OutgoingDamage, instance.DamageAmount)

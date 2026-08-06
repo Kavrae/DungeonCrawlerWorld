@@ -1,4 +1,5 @@
 using Engine.ECS.Components;
+using Engine.Utilities;
 using Game.Modules.Poison.Components;
 using Game.Modules.StatusEffects;
 using Game.Modules.StatusEffects.Components;
@@ -12,7 +13,9 @@ public static class PoisonEffects
     // No explicit cap was specified for Poison -- mirrors Burning's cap as a reasonable default
     // (every stacking effect needs *some* limit; see the original stacking-status-effects spec).
     public const int MaxStacks = 20;
-    public const int TickIntervalFrames = 60;
+
+    /// <summary>Once per second -- literally GameTiming.FramesPerSecond, not a converted duration.</summary>
+    public const int TickIntervalFrames = GameTiming.FramesPerSecond;
 
     /// <summary>☠ (U+2620, "skull and crossbones"). Requires Symbola-Emoji.ttf loaded as a fallback font (see FontService).</summary>
     public const string Glyph = "☠";

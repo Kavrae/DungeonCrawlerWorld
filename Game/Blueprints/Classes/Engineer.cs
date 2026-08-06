@@ -1,5 +1,6 @@
 using Engine.ECS.Components;
 using Engine.Math;
+using Engine.Utilities;
 using Game.Modules.Class.Components;
 using Game.Modules.Core.Components;
 using Game.Modules.Movement.Components;
@@ -15,7 +16,7 @@ public sealed class Engineer : IBlueprint
     private const string ClassName = "Engineer";
     private const string Description = "TODO default engineer description";
 
-    private const short BaselineActionCooldownFrames = 60;
+    private static readonly short BaselineActionCooldownFrames = (short)GameTiming.FramesForSeconds(1f);
 
     public void Build(ComponentManager componentManager, int entityId)
     {

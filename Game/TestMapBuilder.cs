@@ -2,6 +2,7 @@ using Engine.ECS.Components;
 using Engine.ECS.Components.Stores;
 using Engine.ECS.Entities;
 using Engine.Math;
+using Engine.Utilities;
 using Game.Blueprints;
 using Game.Blueprints.Classes;
 using Game.Blueprints.NPCs.Generic;
@@ -365,7 +366,7 @@ public sealed class TestMapBuilder(EntityManager entityManager, ComponentManager
         }
     }
 
-    private const short MaximumStaggerFrames = 60;
+    private static readonly short MaximumStaggerFrames = (short)GameTiming.FramesForSeconds(1f);
 
     /// <summary>
     /// Randomizes a freshly-built goblin/fairy's starting action lock to a value between 0 and

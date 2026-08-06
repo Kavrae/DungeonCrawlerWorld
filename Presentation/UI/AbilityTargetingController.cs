@@ -1,5 +1,6 @@
 using Engine.ECS.Components.Stores;
 using Engine.Math;
+using Engine.Utilities;
 using Game.Modules.Abilities;
 using Game.Modules.Abilities.Components;
 using Game.Modules.Core.Components;
@@ -38,10 +39,10 @@ public sealed class AbilityTargetingController(
     PackedComponentPool<PendingDelayedActionComponent> pendingDelayedActions,
     PackedComponentPool<ActionLockComponent> actionLocks)
 {
-    /// <summary>~300ms at 60fps -- a second press of the same slot within this many frames of the first is a double-tap (see HandleHotkeySlotPress), not two independent arm/disarm presses.</summary>
-    private const int DoubleTapWindowFrames = 18;
+    /// <summary>~300ms -- a second press of the same slot within this many frames of the first is a double-tap (see HandleHotkeySlotPress), not two independent arm/disarm presses.</summary>
+    private static readonly int DoubleTapWindowFrames = GameTiming.FramesForSeconds(0.3f);
 
-    private const int FramesPerPlayerMove = 15;
+    private static readonly int FramesPerPlayerMove = GameTiming.FramesForSeconds(0.25f);
 
     private int _frameCounter;
     private int _playerMoveCooldownFrames;
@@ -300,6 +301,7 @@ public sealed class AbilityTargetingController(
         mapViewState.ArmedAbilityId = abilityId;
         mapViewState.ArmedItemDefinitionId = null;
         mapViewState.ArmedSlot = slot;
+        mapViewState.PreviewSlot = null; // Arming takes over the Armed Hotkey Summary display -- a stale click-preview must not resurface once this later disarms.
         _targetableTilesOrigin = null; // Forces RefreshTargetableTiles below to (re)compute regardless of any stale origin left over from a previous arm.
 
         if (abilityCatalog.TryGet(abilityId, out var ability) && transformPool.TryGetReadonly(world.PlayerEntityId, out var transform))
@@ -313,6 +315,7 @@ public sealed class AbilityTargetingController(
         mapViewState.ArmedItemDefinitionId = itemDefinitionId;
         mapViewState.ArmedAbilityId = null;
         mapViewState.ArmedSlot = slot;
+        mapViewState.PreviewSlot = null; // See ArmAbility's own comment.
         _targetableTilesOrigin = null;
 
         if (transformPool.TryGetReadonly(world.PlayerEntityId, out var transform))

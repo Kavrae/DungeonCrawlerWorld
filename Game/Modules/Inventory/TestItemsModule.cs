@@ -1,6 +1,7 @@
 using Engine.ECS.Components;
 using Engine.ECS.Systems;
 using Engine.Math;
+using Engine.Utilities;
 using Microsoft.Xna.Framework;
 
 namespace Game.Modules.Inventory;
@@ -24,11 +25,14 @@ public sealed class TestItemsModule : IGameModule
     private const int HealthPotionMaxStackSize = 999;
     private const int HealthPotionSplashRange = 3;
     private const int HealthPotionSplashAreaSize = 1;
-    private const short HealthPotionActionLockFrames = 60;
+    private static readonly short HealthPotionActionLockFrames = (short)GameTiming.FramesForSeconds(1f);
 
     private const string HealthPotionDescription =
         "Increases your health by at least 50%. Doesn't cure poison or other health-seeping " +
         "conditions such as succubus-inflicted gonorrhea. So remember to wrap it up, bucko.";
+
+    private const string HealthPotionSummary = "Heal target(s) by 50%.";
+    private const string HammerSummary = "Bonk";
 
     public void Configure(GameModuleContext context)
     {
@@ -36,6 +40,7 @@ public sealed class TestItemsModule : IGameModule
             HealthPotionId, "Health Potion", "HealthPotion", "h", Color.Green,
             Tags: ["Potion", "Consumable", "Healing"],
             Description: HealthPotionDescription,
+            Summary: HealthPotionSummary,
             MaxStackSize: HealthPotionMaxStackSize,
             Consumable: new ConsumableEffect(
                 ConsumableKind.Potion,
@@ -43,7 +48,7 @@ public sealed class TestItemsModule : IGameModule
                 Targeting: new TargetingSpec(TargetShape.Burst, HealthPotionSplashRange, HealthPotionSplashAreaSize),
                 ActionLockFrames: HealthPotionActionLockFrames)));
 
-        context.Items.Register(new ItemDefinition(HammerId, "Hammer", "Hammer", "h", Color.Gray, Tags: ["Equipment", "Tool"]));
+        context.Items.Register(new ItemDefinition(HammerId, "Hammer", "Hammer", "h", Color.Gray, Tags: ["Equipment", "Tool"], Summary: HammerSummary));
     }
 
     public void RegisterComponents(ComponentManager componentManager)

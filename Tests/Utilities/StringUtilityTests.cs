@@ -106,7 +106,7 @@ public sealed class StringUtilityTests
 
         var result = StringUtility.FormatText(criteria);
 
-        Assert.AreEqual($"ABC{Environment.NewLine}DEF{Environment.NewLine}GHI", result.FormattedText);
+        Assert.AreEqual("ABC\nDEF\nGHI", result.FormattedText);
         Assert.AreEqual(4, result.LineCount);
     }
 
@@ -154,7 +154,7 @@ public sealed class StringUtilityTests
 
         var result = StringUtility.FormatText(criteria);
 
-        Assert.AreEqual($"Hello {Environment.NewLine}World", result.FormattedText);
+        Assert.AreEqual("Hello \nWorld", result.FormattedText);
         Assert.AreEqual(2, result.LineCount);
     }
 
@@ -168,7 +168,7 @@ public sealed class StringUtilityTests
 
         var result = StringUtility.FormatText(criteria);
 
-        Assert.AreEqual($"ABCDEFG-{Environment.NewLine}HIJ", result.FormattedText);
+        Assert.AreEqual("ABCDEFG-\nHIJ", result.FormattedText);
         Assert.AreEqual(2, result.LineCount);
     }
 
@@ -281,6 +281,6 @@ public sealed class StringUtilityTests
 
         // If the newline were respected as a forced break, "AB" would be its own line.
         // Instead 5-character chunking swallows it into the middle of the first chunk.
-        Assert.AreEqual($"AB\nCD{Environment.NewLine}EFGHI{Environment.NewLine}J", result.FormattedText);
+        Assert.AreEqual("AB\nCD\nEFGHI\nJ", result.FormattedText);
     }
 }

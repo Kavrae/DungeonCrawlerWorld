@@ -1,6 +1,7 @@
 using Engine.ECS.Components;
 using Engine.ECS.Systems;
 using Engine.Math;
+using Engine.Utilities;
 using Game.Modules.Abilities;
 using Game.Modules.StatusEffects;
 
@@ -28,7 +29,7 @@ public sealed class MeleeModule : IGameModule
 
     public static readonly Guid DefaultAttackId = new("3f6e9c2a-8b4d-47a1-9c3e-5d2f7b1a6c9e");
 
-    private const short DefaultAttackActionLockFrames = 60;
+    private static readonly short DefaultAttackActionLockFrames = (short)GameTiming.FramesForSeconds(1f);
 
     public void Configure(GameModuleContext context)
     {
@@ -40,7 +41,9 @@ public sealed class MeleeModule : IGameModule
             "/",
             new TargetingSpec(TargetShape.Line, Range: 2),
             new AbilityTiming(ActionTimingCategory.Immediate, ActionLockFrames: DefaultAttackActionLockFrames, CooldownFrames: null),
-            new AbilityEffect(DamageAmount: 0, StatusEffects: [StatusEffectType.Paralysis], StatModifierGrants: [])));
+            new AbilityEffect(DamageAmount: 0, StatusEffects: [StatusEffectType.Paralysis], StatModifierGrants: []),
+            Description: "A basic melee strike against a nearby foe. Inflicts Paralysis on hit.",
+            Summary: "Melee strike that paralyzes the target."));
     }
 
     public void RegisterComponents(ComponentManager componentManager)

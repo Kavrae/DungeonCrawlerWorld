@@ -1,6 +1,7 @@
 using Engine.ECS.Components;
 using Engine.ECS.Systems;
 using Engine.Math;
+using Engine.Utilities;
 using Game.Modules.StatModifiers;
 
 namespace Game.Modules.Abilities;
@@ -27,8 +28,8 @@ public sealed class QuickCastTestModule : IGameModule
     public static readonly Guid QuickCastAbilityId = new("2b6d4f8a-1c3e-4a5d-9f7b-6e8c1a3d5f9b");
     public static readonly Guid RangedTestDebuffAbilityId = new("8e4a2c6f-3b5d-4e7a-8c1f-9d3b5a7c2e4f");
 
-    private const int QuickCastBuffDurationFrames = 600;
-    private const short QuickCastCooldownFrames = 600;
+    private static readonly int QuickCastBuffDurationFrames = GameTiming.FramesForSeconds(10f);
+    private static readonly short QuickCastCooldownFrames = (short)GameTiming.FramesForSeconds(10f);
 
     // See StatModifierMath's own doc comment: a multiplicative Magnitude is the decimal delta
     // from 1.0 (+100% = 1.0, -20% = -0.2), while an additive Magnitude is a flat amount (+5, -2).
@@ -39,10 +40,10 @@ public sealed class QuickCastTestModule : IGameModule
 
     private const int RangedTestDebuffRange = 10;
     private const int RangedTestDebuffAreaSize = 4;
-    private const short RangedTestDebuffActionLockFrames = 60;
-    private const short RangedTestDebuffCooldownFrames = 600;
+    private static readonly short RangedTestDebuffActionLockFrames = (short)GameTiming.FramesForSeconds(1f);
+    private static readonly short RangedTestDebuffCooldownFrames = (short)GameTiming.FramesForSeconds(10f);
     private const short RangedTestDebuffDamage = 20;
-    private const int RangedTestDebuffDurationFrames = 300;
+    private static readonly int RangedTestDebuffDurationFrames = GameTiming.FramesForSeconds(5f);
 
     public void Configure(GameModuleContext context)
     {
@@ -62,7 +63,9 @@ public sealed class QuickCastTestModule : IGameModule
                     CanModify: true, Magnitude: QuickCastDamageMultiplierBuff, DurationFrames: QuickCastBuffDurationFrames),
                 new StatModifierGrant(StatModifierTarget.OutgoingDamage, StatModifierOperation.Multiplicative, StatModifierPolarity.Debuff,
                     CanModify: true, Magnitude: QuickCastDamageMultiplierDebuff, DurationFrames: QuickCastBuffDurationFrames),
-            ])));
+            ]),
+            Description: "Grants a mix of outgoing-damage buffs and debuffs for 10 seconds. 10 second cooldown.",
+            Summary: "Buffs and debuffs your outgoing damage."));
 
         context.Abilities.Register(new AbilityDefinition(
             RangedTestDebuffAbilityId,
@@ -74,7 +77,9 @@ public sealed class QuickCastTestModule : IGameModule
             [
                 new StatModifierGrant(StatModifierTarget.HealthRegen, StatModifierOperation.Multiplicative, StatModifierPolarity.Debuff,
                     CanModify: true, Magnitude: -1, DurationFrames: RangedTestDebuffDurationFrames),
-            ])));
+            ]),
+            Description: "Launches a bolt dealing 20 damage in a burst and halting health regeneration for 5 seconds. 10 second cooldown.",
+            Summary: "Ranged bolt that damages enemies and halts their health regeneration."));
     }
 
     public void RegisterComponents(ComponentManager componentManager)

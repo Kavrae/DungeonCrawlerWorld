@@ -1,5 +1,6 @@
 using Engine.ECS.Components;
 using Engine.Math;
+using Engine.Utilities;
 using Game.Modules.ContactDamage.Components;
 using Game.Modules.Core.Components;
 using Game.Modules.StatusEffectAura.Components;
@@ -26,7 +27,7 @@ public sealed class Lava : IBlueprint
         componentManager.Merge(entityId, new TransformComponent(
             new Vector3Int(0, 0, (int)MapLayer.Ground), new Vector2Byte(1, 1)));
 
-        componentManager.Merge(entityId, new DamageOnContactComponent(damagePerTick: 10, tickIntervalFrames: 60));
+        componentManager.Merge(entityId, new DamageOnContactComponent(damagePerTick: 10, tickIntervalFrames: GameTiming.FramesPerSecond));
         componentManager.Merge(entityId, new StatusEffectAuraSourceComponent(StatusEffectType.Burning, AuraAndGlowStrength, Color.DarkOrange));
     }
 }

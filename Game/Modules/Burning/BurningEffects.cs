@@ -1,4 +1,5 @@
 using Engine.ECS.Components;
+using Engine.Utilities;
 using Game.Modules.Burning.Components;
 using Game.Modules.StatusEffects;
 using Game.Modules.StatusEffects.Components;
@@ -10,7 +11,9 @@ namespace Game.Modules.Burning;
 public static class BurningEffects
 {
     public const int MaxStacks = 20;
-    public const int TickIntervalFrames = 60;
+
+    /// <summary>Once per second -- literally GameTiming.FramesPerSecond, not a converted duration.</summary>
+    public const int TickIntervalFrames = GameTiming.FramesPerSecond;
 
     /// <summary>🔥 (U+1F525, "fire"). Requires Symbola-Emoji.ttf loaded as a fallback font (see FontService).</summary>
     public const string Glyph = "🔥";

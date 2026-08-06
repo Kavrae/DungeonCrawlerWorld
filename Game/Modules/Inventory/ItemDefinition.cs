@@ -15,5 +15,11 @@ namespace Game.Modules.Inventory;
 /// on not designing storage-divergence machinery before something actually needs it). Consumable
 /// is null for anything that isn't usable/consumable (e.g. the Hammer, an Equipment/Tool item) --
 /// ConsumableActivationSystem is what actually interprets it.
+///
+/// Summary vs Description: Summary is a short, concrete statement of exact effect (e.g. "Heal
+/// target(s) by 50%.") meant to be read at a glance in a small window -- see HotbarContent.
+/// TryGetSlotSummary, the Armed Hotkey Summary window's only consumer of it today. Description is
+/// longer flavor/detail text for future, larger text boxes elsewhere -- the two are deliberately
+/// separate fields, not one field reused for both purposes.
 /// </summary>
-public sealed record ItemDefinition(Guid Id, string Name, string? SpriteName, string Glyph, Color GlyphColor, IReadOnlyList<string> Tags, string Description = "", int? MaxStackSize = null, ConsumableEffect? Consumable = null);
+public sealed record ItemDefinition(Guid Id, string Name, string? SpriteName, string Glyph, Color GlyphColor, IReadOnlyList<string> Tags, string Description = "", string Summary = "", int? MaxStackSize = null, ConsumableEffect? Consumable = null);

@@ -77,6 +77,12 @@ public sealed class GameInputController
     /// <summary>Same reasoning/value as RightClickTapThresholdPixels -- small enough to absorb ordinary click jitter, comfortably smaller than an intentional drag.</summary>
     private const float ContentDragTapThresholdPixels = 4f;
 
+    /// <summary>Owns the Armed Hotkey Summary window's arm/preview/hover state machine -- see its own doc comment. Null in test setups that don't build one (e.g. GameInputControllerTests' own harness), in which case hotbar-slot press/release/hover handling is simply skipped.</summary>
+    private readonly HotbarController? _hotbarController;
+
+    /// <summary>Mouse position when the current hotbar-slot press started -- ResolveHotbarSlotClick only treats the release as a tap if it's within ContentDragTapThresholdPixels of this, the same tap-vs-drag distinction ResolveContentDrag already makes for content-drags.</summary>
+    private Vector2 _hotbarPressMousePosition;
+
     private Element? _focusedElement;
 
     /// <summary>
@@ -131,13 +137,14 @@ public sealed class GameInputController
     /// window to this same list afterward. Passing the list itself (not a snapshot/copy) is what
     /// makes that work -- this class only ever reads through the reference, never replaces it.
     /// </summary>
-    public GameInputController(List<Element> baseElements, List<Element> staticHudElements, List<Element> dynamicHudElements, List<Element> userElements, Vector2 screenSize)
+    public GameInputController(List<Element> baseElements, List<Element> staticHudElements, List<Element> dynamicHudElements, List<Element> userElements, Vector2 screenSize, HotbarController? hotbarController = null)
     {
         _baseElements = baseElements;
         _staticHudElements = staticHudElements;
         _dynamicHudElements = dynamicHudElements;
         _userElements = userElements;
         _screenSize = screenSize;
+        _hotbarController = hotbarController;
 
         // Subscribing is safe to do unconditionally and permanently -- SDL simply never raises
         // SDL_TEXTINPUT while text input is stopped (see SetFocus's Start/StopTextInput calls
@@ -233,6 +240,7 @@ public sealed class GameInputController
 
         UpdateMouseWheelScroll(mouseState);
         UpdateCursor(mouseState);
+        HandleHotbarHover(mouseState);
 
         _previousKeyboardState = keyboardState;
         _previousMouseState = mouseState;
@@ -316,6 +324,38 @@ public sealed class GameInputController
         }
 
         TryStartContentDrag(clickPosition);
+        CaptureHotbarPressSlot(clickPosition);
+    }
+
+    /// <summary>
+    /// Records which hotbar slot (if any) the press landed on, for ResolveHotbarSlotClick to
+    /// compare against on release -- a separate method from TryStartContentDrag, not a widening of
+    /// it, since that method's own gate (TryGetBoundItemId, item-only) is narrower by design for
+    /// drag-payload capture; reusing/widening it here would risk accidentally enabling drag-rebind
+    /// for ability slots. If the press landed anywhere else entirely, an open click-preview closes
+    /// immediately rather than waiting for release.
+    /// </summary>
+    private void CaptureHotbarPressSlot(Point clickPosition)
+    {
+        if (_hotbarController is null)
+        {
+            return;
+        }
+
+        // Recorded on every press regardless of what was hit -- ResolveHotbarSlotClick's own
+        // re-hit-test of the release position is what actually gates whether a tap fires, so this
+        // just needs to always reflect the most recent press position rather than going stale.
+        _hotbarPressMousePosition = new Vector2(clickPosition.X, clickPosition.Y);
+
+        if (_activeInteraction.Element is Window { Content: HotbarContent hotbarContent } &&
+            hotbarContent.TryGetSlotAt(clickPosition, out var pressedSlot))
+        {
+            _hotbarController.OnSlotPressed(pressedSlot);
+        }
+        else
+        {
+            _hotbarController.OnPressOutsideHotbar();
+        }
     }
 
     /// <summary>
@@ -370,6 +410,42 @@ public sealed class GameInputController
     }
 
     /// <summary>
+    /// Feeds HotbarController.UpdateHover every frame with whichever bound hotbar slot (if any)
+    /// the cursor is currently over -- unbound slots never count (hovering one while something
+    /// else is armed/previewed elsewhere would otherwise blank the already-visible summary, since
+    /// HotbarController resolves a null candidate as "nothing hovered" rather than "hovering
+    /// nothing in particular"). Suppressed during an active drag -- a summary popping up mid-drag
+    /// (rebinding a slot, moving a window) would just be visual noise over something the player is
+    /// already doing.
+    /// </summary>
+    private void HandleHotbarHover(MouseState mouseState)
+    {
+        if (_hotbarController is null)
+        {
+            return;
+        }
+
+        HotkeySlot? candidateSlot = null;
+
+        if (_activeInteraction.Kind == ElementDragInteractionKind.None)
+        {
+            var mousePosition = new Point(mouseState.X, mouseState.Y);
+            foreach (var element in _staticHudElements)
+            {
+                if (element is Window { Content: HotbarContent hotbarContent } &&
+                    hotbarContent.TryGetSlotAt(mousePosition, out var slot) &&
+                    hotbarContent.TryGetSlotSummary(slot, out _, out _))
+                {
+                    candidateSlot = slot;
+                    break;
+                }
+            }
+        }
+
+        _hotbarController.UpdateHover(candidateSlot);
+    }
+
+    /// <summary>
     /// Fires on release, not press -- standard button convention (press only starts the pressed
     /// visual; release commits, re-hit-testing the same element at the release position so a
     /// button/title/content click that's been dragged off its target quietly does nothing rather
@@ -382,6 +458,7 @@ public sealed class GameInputController
         _activeInteraction.Element?.HandleClick(new Point(mouseState.X, mouseState.Y));
 
         ResolveContentDrag(new Point(mouseState.X, mouseState.Y));
+        ResolveHotbarSlotClick(new Point(mouseState.X, mouseState.Y));
 
         PressedButton?.SetPressed(false);
         PressedButton = null;
@@ -433,6 +510,36 @@ public sealed class GameInputController
             _contentDragOriginHotbar = null;
             _contentDragOriginSlot = null;
             SetHotbarDragHighlight(false);
+        }
+    }
+
+    /// <summary>
+    /// Resolves a hotbar-slot press/release pair into a tap on the Armed Hotkey Summary's
+    /// HotbarController, if the release is close enough to the press to count as a tap (not a
+    /// drag -- same ContentDragTapThresholdPixels distinction ResolveContentDrag already makes)
+    /// and lands on a hotbar slot at all. HotbarController.OnSlotTapped itself verifies the
+    /// release slot matches whichever slot was actually pressed (see CaptureHotbarPressSlot),
+    /// so a press-then-drag that happens to end back within the tap threshold, but over a
+    /// different slot, doesn't spuriously count as a tap there.
+    /// </summary>
+    private void ResolveHotbarSlotClick(Point releasePosition)
+    {
+        if (_hotbarController is null)
+        {
+            return;
+        }
+
+        var releaseVector = new Vector2(releasePosition.X, releasePosition.Y);
+        if (Vector2.Distance(_hotbarPressMousePosition, releaseVector) >= ContentDragTapThresholdPixels)
+        {
+            return;
+        }
+
+        var dropInteraction = TryHitTestInteraction(releasePosition);
+        if (dropInteraction.Element is Window { Content: HotbarContent hotbarContent } &&
+            hotbarContent.TryGetSlotAt(releasePosition, out var releasedSlot))
+        {
+            _hotbarController.OnSlotTapped(releasedSlot);
         }
     }
 

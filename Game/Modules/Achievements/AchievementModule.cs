@@ -33,6 +33,7 @@ public sealed class AchievementModule : IGameModule
         new InflictedDamageAchievement(),
         new KilledAMobAchievement(),
         new LonerAchievement(),
+        new SpellCasterAchievement(),
         new UnarmedCombatAchievement()
         ];
 

@@ -18,6 +18,13 @@ public static class StringUtility
     /// <summary>Minimum characters that must appear after a hyphenated line break.</summary>
     private const int MinimumCharactersAfterLineBreak = MinimumCharacterCountToLineBreak - MinimumCharactersBeforeLineBreak;
 
+    /// <summary>'\n' specifically, not Environment.NewLine -- every consumer downstream
+    /// (DrawString, WidestLineWidth's line split, CountNewlineCharacters) treats '\n' alone as the
+    /// line break; Environment.NewLine's extra '\r' on Windows rode along into the drawn text with
+    /// no consumer that strips it, rendering as a missing-glyph square (no font has a glyph for a
+    /// bare carriage return).</summary>
+    private const string LineBreak = "\n";
+
     /// <summary>Builds a UI bar of the given size and prefix (e.g. "HP", "E"), filled to a percentage of currentValue/maximumValue.</summary>
     public static string BuildPercentageBar(string prefix, int currentValue, int maximumValue, int barSize)
     {
@@ -135,12 +142,11 @@ public static class StringUtility
             return text;
         }
 
-        var lineBreak = Environment.NewLine;
-        var outputLength = text.Length + fullChunkCount * lineBreak.Length;
+        var outputLength = text.Length + fullChunkCount * LineBreak.Length;
 
-        return string.Create(outputLength, (text, lineLength, fullChunkCount, lineBreak), static (destination, state) =>
+        return string.Create(outputLength, (text, lineLength, fullChunkCount), static (destination, state) =>
         {
-            var (sourceText, chunkLength, chunkCount, sourceLineBreak) = state;
+            var (sourceText, chunkLength, chunkCount) = state;
             var sourceIndex = 0;
             var destinationIndex = 0;
 
@@ -150,8 +156,8 @@ public static class StringUtility
                 destinationIndex += chunkLength;
                 sourceIndex += chunkLength;
 
-                sourceLineBreak.AsSpan().CopyTo(destination[destinationIndex..]);
-                destinationIndex += sourceLineBreak.Length;
+                LineBreak.AsSpan().CopyTo(destination[destinationIndex..]);
+                destinationIndex += LineBreak.Length;
             }
 
             sourceText.AsSpan(sourceIndex).CopyTo(destination[destinationIndex..]);
@@ -250,8 +256,9 @@ public static class StringUtility
                 {
                     // Not enough space on this partially-used line -- try a fresh line
                     // before giving up (a full line may fit or be hyphenatable even if the
-                    // remainder of this one wasn't).
-                    stringBuilder.Append(Environment.NewLine);
+                    // remainder of this one wasn't). See LineBreak's own doc comment for why
+                    // it's '\n' specifically, not Environment.NewLine.
+                    stringBuilder.Append(LineBreak);
                     remainingLineWidth = criteria.MaximumPixelWidth;
                 }
             }

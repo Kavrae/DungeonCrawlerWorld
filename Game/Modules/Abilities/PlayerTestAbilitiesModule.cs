@@ -1,6 +1,7 @@
 using Engine.ECS.Components;
 using Engine.ECS.Systems;
 using Engine.Math;
+using Engine.Utilities;
 
 namespace Game.Modules.Abilities;
 
@@ -24,7 +25,7 @@ public sealed class PlayerTestAbilitiesModule : IGameModule
 
     private const int RangedTestAbilityRange = 10;
     private const int RangedTestAbilityAreaSize = 3;
-    private const short RangedTestAbilityActionLockFrames = 60;
+    private static readonly short RangedTestAbilityActionLockFrames = (short)GameTiming.FramesForSeconds(1f);
 
     public void Configure(GameModuleContext context)
     {
@@ -36,7 +37,9 @@ public sealed class PlayerTestAbilitiesModule : IGameModule
             "*",
             new TargetingSpec(TargetShape.Burst, RangedTestAbilityRange, RangedTestAbilityAreaSize),
             new AbilityTiming(ActionTimingCategory.Immediate, ActionLockFrames: RangedTestAbilityActionLockFrames, CooldownFrames: null),
-            new AbilityEffect(DamageAmount: 10, StatusEffects: [], StatModifierGrants: [])));
+            new AbilityEffect(DamageAmount: 10, StatusEffects: [], StatModifierGrants: []),
+            Description: "Launches a bolt that deals 10 damage to enemies in a burst around the target tile.",
+            Summary: "Ranged bolt that damages enemies in an area."));
     }
 
     public void RegisterComponents(ComponentManager componentManager)

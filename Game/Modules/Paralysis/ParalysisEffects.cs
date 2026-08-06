@@ -1,4 +1,5 @@
 using Engine.ECS.Components;
+using Engine.Utilities;
 using Game.Modules.Core.Components;
 using Game.Modules.Paralysis.Components;
 using Game.Modules.StatusEffects;
@@ -22,7 +23,7 @@ namespace Game.Modules.Paralysis;
 /// </summary>
 public static class ParalysisEffects
 {
-    public const short DurationFrames = 300;
+    public static readonly short DurationFrames = (short)GameTiming.FramesForSeconds(5f);
 
     /// <summary>⚡ (U+26A1, "high voltage"). Requires Symbola-Emoji.ttf loaded as a fallback font (see FontService).</summary>
     public const string Glyph = "⚡";

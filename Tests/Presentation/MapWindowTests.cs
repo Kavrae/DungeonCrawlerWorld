@@ -87,9 +87,28 @@ public sealed class MapWindowTests
             world.PlayerEntityId = PlayerEntityId;
         }
 
+        var resolvedAbilityCatalog = abilityCatalog ?? new AbilityCatalog();
+        var resolvedItemCatalog = itemCatalog ?? new ItemCatalog();
+        var camera = new MapCamera(world);
+        var abilityTargeting = new AbilityTargetingController(
+            world,
+            mapViewState,
+            camera,
+            resolvedAbilityCatalog,
+            resolvedItemCatalog,
+            componentManager.GetDirectPool<TransformComponent>(),
+            componentManager.GetPackedPool<MovementComponent>(),
+            componentManager.GetMultiPool<ActionHotkeyBindingComponent>(),
+            componentManager.GetMultiPool<ItemHotkeyBindingComponent>(),
+            componentManager.GetMultiPool<InventoryItemStackComponent>(),
+            componentManager.GetPackedPool<PendingAbilityActivationComponent>(),
+            componentManager.GetPackedPool<PendingConsumableActivationComponent>(),
+            componentManager.GetPackedPool<PendingDelayedActionComponent>(),
+            componentManager.GetPackedPool<ActionLockComponent>());
+
         windowService.RegisterFactory<MapWindow>((_, _) => new MapWindow(
-            fontService, windowService, world, mapViewState, componentManager, abilityCatalog ?? new AbilityCatalog(), itemCatalog ?? new ItemCatalog(), new TileRenderer(), new GlyphRenderer(),
-            new SpriteSheetService(null, "Spritesheets"), new SpriteRenderer()));
+            fontService, windowService, world, mapViewState, componentManager, resolvedAbilityCatalog, resolvedItemCatalog, new TileRenderer(), new GlyphRenderer(),
+            new SpriteSheetService(null, "Spritesheets"), new SpriteRenderer(), camera, abilityTargeting));
 
         var mapWindow = windowService.CreateElement<MapWindow>(null, new ElementOptions
         {

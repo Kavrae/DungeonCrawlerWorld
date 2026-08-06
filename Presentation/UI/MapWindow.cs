@@ -81,7 +81,9 @@ public sealed class MapWindow : Window
         TileRenderer tileRenderer,
         GlyphRenderer glyphRenderer,
         SpriteSheetService spriteSheetService,
-        SpriteRenderer spriteRenderer) : base(fontService, elementPoolService, glyphRenderer)
+        SpriteRenderer spriteRenderer,
+        MapCamera camera,
+        AbilityTargetingController abilityTargeting) : base(fontService, elementPoolService, glyphRenderer)
     {
         ArgumentNullException.ThrowIfNull(world);
         ArgumentNullException.ThrowIfNull(mapViewState);
@@ -92,6 +94,8 @@ public sealed class MapWindow : Window
         ArgumentNullException.ThrowIfNull(glyphRenderer);
         ArgumentNullException.ThrowIfNull(spriteSheetService);
         ArgumentNullException.ThrowIfNull(spriteRenderer);
+        ArgumentNullException.ThrowIfNull(camera);
+        ArgumentNullException.ThrowIfNull(abilityTargeting);
 
         _world = world;
         _mapViewState = mapViewState;
@@ -112,22 +116,8 @@ public sealed class MapWindow : Window
         _spriteSheetService = spriteSheetService;
         _spriteRenderer = spriteRenderer;
 
-        _camera = new MapCamera(world);
-        _abilityTargeting = new AbilityTargetingController(
-            world,
-            mapViewState,
-            _camera,
-            abilityCatalog,
-            itemCatalog,
-            _transformPool,
-            componentManager.GetPackedPool<MovementComponent>(),
-            componentManager.GetMultiPool<ActionHotkeyBindingComponent>(),
-            componentManager.GetMultiPool<ItemHotkeyBindingComponent>(),
-            componentManager.GetMultiPool<InventoryItemStackComponent>(),
-            componentManager.GetPackedPool<PendingAbilityActivationComponent>(),
-            componentManager.GetPackedPool<PendingConsumableActivationComponent>(),
-            componentManager.GetPackedPool<PendingDelayedActionComponent>(),
-            componentManager.GetPackedPool<ActionLockComponent>());
+        _camera = camera;
+        _abilityTargeting = abilityTargeting;
         _tintGrid = new MapTintGrid(componentManager, world.Map.Size);
         _backgroundCache = new MapBackgroundCache(
             world,

@@ -68,6 +68,12 @@ public sealed class HotbarContent(
 
     public static readonly Vector2 Size = ComputeTotalSize();
 
+    /// <summary>Width for the Armed Hotkey Summary window: 3 slots plus the 2 inter-slot gaps
+    /// between them (see ArmedHotkeySummaryWindow, which centers this over whichever single slot
+    /// it's currently showing).</summary>
+    internal const int SummarySlotSpan = 3;
+    internal static readonly float SummaryWidth = SummarySlotSpan * SlotSize.X + (SummarySlotSpan - 1) * SlotGap;
+
     private static readonly Color DragDropTargetGlowColor = Color.Gold;
 
     /// <summary>
@@ -176,6 +182,51 @@ public sealed class HotbarContent(
     /// <summary>The item (if any) currently bound to slot -- GameInputController's content-drag path reads this at press time to capture the payload of a drag starting on an already-bound hotbar slot.</summary>
     internal bool TryGetBoundItemId(HotkeySlot slot, out Guid itemDefinitionId) =>
         ItemHotkeyBindingQueries.TryGet(_itemHotkeyBindings, world.PlayerEntityId, slot, out itemDefinitionId);
+
+    /// <summary>slot's bound ability/item resolved to a title+summary pair, for the Armed Hotkey
+    /// Summary window -- false if the slot has no binding. Summary, not Description: a short,
+    /// concrete statement of exact effect meant to be read at a glance in this small window (see
+    /// AbilityDefinition/ItemDefinition's own doc comments on the Summary vs Description split) --
+    /// Description is reserved for future, larger text boxes elsewhere.</summary>
+    internal bool TryGetSlotSummary(HotkeySlot slot, out string title, out string summary)
+    {
+        var playerEntityId = world.PlayerEntityId;
+
+        if (ActionHotkeyBindingQueries.TryGet(_actionHotkeyBindings, playerEntityId, slot, out var abilityId) &&
+            abilityCatalog.TryGet(abilityId, out var ability))
+        {
+            title = ability.Name;
+            summary = ability.Summary;
+            return true;
+        }
+
+        if (ItemHotkeyBindingQueries.TryGet(_itemHotkeyBindings, playerEntityId, slot, out var itemDefinitionId) &&
+            itemCatalog.TryGet(itemDefinitionId, out var item))
+        {
+            title = item.Name;
+            summary = item.Summary;
+            return true;
+        }
+
+        title = string.Empty;
+        summary = string.Empty;
+        return false;
+    }
+
+    /// <summary>slot's on-screen bounds -- reuses the same EnumerateSlotBounds walk DrawContent/
+    /// TryGetSlotAt already share as their single source of truth.</summary>
+    internal Rectangle GetSlotBounds(HotkeySlot slot)
+    {
+        foreach (var (candidateSlot, bounds) in EnumerateSlotBounds())
+        {
+            if (candidateSlot == slot)
+            {
+                return bounds;
+            }
+        }
+
+        return Rectangle.Empty;
+    }
 
     /// <summary>
     /// Writes (or overwrites) slot's item binding -- clears any existing action or item binding
