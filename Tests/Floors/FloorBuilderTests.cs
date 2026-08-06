@@ -7,6 +7,7 @@ using Engine.Modules;
 using Game.Floors;
 using Game.Modules;
 using Game.Modules.Abilities;
+using Game.Modules.AbilityScores;
 using Game.Modules.Burning;
 using Game.Modules.Class;
 using Game.Modules.ContactDamage;
@@ -68,6 +69,9 @@ public sealed class FloorBuilderTests
         var statModifiersModule = new StatModifiersModule();
         statModifiersModule.Configure(context);
 
+        var abilityScoresModule = new AbilityScoresModule();
+        abilityScoresModule.Configure(context);
+
         var coreItemsModule = new CoreItemsModule();
         coreItemsModule.Configure(context);
 
@@ -76,6 +80,7 @@ public sealed class FloorBuilderTests
             coreModule,
             healthModule,
             statModifiersModule,
+            abilityScoresModule,
             movementModule,
             new RaceModule(),
             new ClassModule(),

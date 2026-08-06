@@ -13,6 +13,7 @@ using Game.Blueprints.Terrain;
 using Game.Modules;
 using Game.Modules.Abilities;
 using Game.Modules.Abilities.Components;
+using Game.Modules.AbilityScores;
 using Game.Modules.Class;
 using Game.Modules.Class.Components;
 using Game.Modules.Core;
@@ -63,6 +64,9 @@ public sealed class BlueprintTests
         var statModifiersModule = new StatModifiersModule();
         statModifiersModule.Configure(context);
 
+        var abilityScoresModule = new AbilityScoresModule();
+        abilityScoresModule.Configure(context);
+
         var coreItemsModule = new CoreItemsModule();
         coreItemsModule.Configure(context);
 
@@ -71,6 +75,7 @@ public sealed class BlueprintTests
             coreModule,
             healthModule,
             statModifiersModule,
+            abilityScoresModule,
             movementModule,
             new RaceModule(),
             new ClassModule(),

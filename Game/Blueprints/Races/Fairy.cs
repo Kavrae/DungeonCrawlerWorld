@@ -2,6 +2,7 @@ using Engine.ECS.Components;
 using Engine.Math;
 using Game.Modules.Abilities;
 using Game.Modules.Abilities.Components;
+using Game.Modules.AbilityScores;
 using Game.Modules.Core.Components;
 using Game.Modules.Health.Components;
 using Game.Modules.Movement.Components;
@@ -26,6 +27,9 @@ public sealed class Fairy(MathUtility mathUtility) : IBlueprint
     /// <summary>Hardcoded stopgap until the Additive/Multiplicative bonuses system exists -- see TODO.md.</summary>
     private const short PunchDamage = 3;
 
+    /// <summary>Flat default for every NPC race, adjustable in a later balance pass -- see TODO.md's Stats entry.</summary>
+    private const short DefaultAbilityScoreBaseValue = 5;
+
     public void Build(ComponentManager componentManager, int entityId)
     {
         componentManager.Merge(entityId, new RaceComponent(RaceId, RaceName, Description));
@@ -42,5 +46,7 @@ public sealed class Fairy(MathUtility mathUtility) : IBlueprint
             new Vector3Int(0, 0, (int)MapLayer.Flying), new Vector2Byte(1, 1)));
 
         componentManager.Merge(entityId, new AbilityInstanceComponent(CoreAbilitiesModule.PunchId, damageAmount: PunchDamage, cooldownFramesRemaining: 0));
+
+        AbilityScoreEffects.GrantDefaults(componentManager, entityId, DefaultAbilityScoreBaseValue);
     }
 }

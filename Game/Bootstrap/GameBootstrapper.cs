@@ -4,6 +4,7 @@ using Engine.Math;
 using Engine.Modules;
 using Game.Modules;
 using Game.Modules.Abilities;
+using Game.Modules.AbilityScores;
 using Game.Modules.Achievements;
 using Game.Modules.Burning;
 using Game.Modules.Class;
@@ -55,6 +56,7 @@ public static class GameBootstrapper
             new CoreAbilitiesModule(),
             new StatusEffectsModule(),
             new StatModifiersModule(),
+            new AbilityScoresModule(),
             new BurningModule(),
             new PoisonModule(),
             new ParalysisModule(),

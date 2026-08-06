@@ -1,5 +1,6 @@
 using Engine.ECS.Components.Stores;
 using Engine.ECS.Systems;
+using Engine.Events;
 using Game.Modules.ProcessingTier;
 using Game.Modules.ProcessingTier.Components;
 using Game.Modules.StatModifiers.Components;
@@ -24,9 +25,13 @@ namespace Game.Modules.StatModifiers.Systems;
 /// if a removal happened mid-walk -- the same hazard CountdownTicker.Tick defers removals to
 /// avoid, just not reusable here directly since CountdownTicker is PackedComponentPool-only and
 /// this pool is Multi (several independent expiries per entity). Pass 1 only mutates in place
-/// (UpdateByDenseIndex never moves entries) so it's safe to run the whole chain walk; pass 2
-/// then removes whatever hit 0, one at a time via RemoveFirst, mirroring PoisonSystem's own
-/// RemoveAllStacks loop.
+/// (UpdateByDenseIndex never moves entries) so it's safe to run the whole chain walk -- it also
+/// collects the Target of any modifier about to hit 0 (RemainingDurationFrames == 1, i.e. this
+/// decrement is its last) into a reused per-visit buffer, since pass 2's removal doesn't report
+/// what it removed. Pass 2 then removes whatever hit 0, one at a time via RemoveFirst, mirroring
+/// PoisonSystem's own RemoveAllStacks loop; StatModifierExpiredEvent is published afterward, once
+/// removal is safely done, for each collected Target -- generic (any module can subscribe), not
+/// just for AbilityScoresModule's benefit.
 /// </summary>
 public sealed class StatModifierExpirySystem : ISystem
 {
@@ -35,11 +40,14 @@ public sealed class StatModifierExpirySystem : ISystem
     public byte StripeCount => StripeCountValue;
 
     private readonly MultiComponentPool<StatModifierComponent> _statModifiers;
+    private readonly EventBus _eventBus;
     private readonly TieredEntityStripeSet _tieredStripeSet;
+    private readonly List<StatModifierTarget> _pendingExpirations = [];
 
-    public StatModifierExpirySystem(MultiComponentPool<StatModifierComponent> statModifiers, DirectComponentPool<ProcessingTierComponent> processingTiers, ProcessingTierEvents processingTierEvents)
+    public StatModifierExpirySystem(MultiComponentPool<StatModifierComponent> statModifiers, DirectComponentPool<ProcessingTierComponent> processingTiers, ProcessingTierEvents processingTierEvents, EventBus eventBus)
     {
         _statModifiers = statModifiers;
+        _eventBus = eventBus;
 
         _tieredStripeSet = ProcessingTierWiring.CreateAndWire(StripeCount, statModifiers, processingTiers, processingTierEvents);
     }
@@ -48,16 +56,29 @@ public sealed class StatModifierExpirySystem : ISystem
     {
         foreach (var entityId in _tieredStripeSet.GetDueEntities(time.FrameCount))
         {
+            _pendingExpirations.Clear();
+
             for (var denseIndex = _statModifiers.GetFirstDenseIndex(entityId); denseIndex != -1; denseIndex = _statModifiers.GetNextDenseIndex(denseIndex))
             {
-                if (_statModifiers.GetReadonlyByDenseIndex(denseIndex).RemainingDurationFrames > 0)
+                ref readonly var modifier = ref _statModifiers.GetReadonlyByDenseIndex(denseIndex);
+                if (modifier.RemainingDurationFrames > 0)
                 {
+                    if (modifier.RemainingDurationFrames == 1)
+                    {
+                        _pendingExpirations.Add(modifier.Target);
+                    }
+
                     _statModifiers.UpdateByDenseIndex(denseIndex, static (ref StatModifierComponent modifier) => modifier.RemainingDurationFrames--);
                 }
             }
 
             while (_statModifiers.RemoveFirst(entityId, static (ref readonly StatModifierComponent modifier) => modifier.RemainingDurationFrames == 0))
             {
+            }
+
+            foreach (var target in _pendingExpirations)
+            {
+                _eventBus.Publish(new StatModifierExpiredEvent(entityId, target));
             }
         }
     }

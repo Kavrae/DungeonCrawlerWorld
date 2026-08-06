@@ -1,5 +1,6 @@
 using Engine.ECS.Components;
 using Engine.ECS.Systems;
+using Engine.Events;
 using Game.Modules.ProcessingTier;
 using Game.Modules.ProcessingTier.Components;
 using Game.Modules.StatModifiers.Components;
@@ -21,8 +22,13 @@ public sealed class StatModifiersModule : IGameModule
     public IReadOnlyList<Type> Dependencies { get; } = [];
 
     private ProcessingTierEvents _processingTierEvents = null!;
+    private EventBus _eventBus = null!;
 
-    public void Configure(GameModuleContext context) => _processingTierEvents = context.ProcessingTierEvents;
+    public void Configure(GameModuleContext context)
+    {
+        _processingTierEvents = context.ProcessingTierEvents;
+        _eventBus = context.EventBus;
+    }
 
     public void RegisterComponents(ComponentManager componentManager) =>
         componentManager.RegisterMultiPool<StatModifierComponent>();
@@ -31,5 +37,6 @@ public sealed class StatModifiersModule : IGameModule
         systemManager.Register(new StatModifierExpirySystem(
             componentManager.GetMultiPool<StatModifierComponent>(),
             componentManager.GetDirectPool<ProcessingTierComponent>(),
-            _processingTierEvents));
+            _processingTierEvents,
+            _eventBus));
 }

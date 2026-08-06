@@ -1,5 +1,6 @@
 using Engine.ECS.Components.Stores;
 using Engine.ECS.Systems;
+using Engine.Events;
 using Game.Modules.ProcessingTier;
 using Game.Modules.ProcessingTier.Components;
 using Game.Modules.StatModifiers;
@@ -26,7 +27,7 @@ public sealed class StatModifierExpirySystemTests
     {
         var pool = CreatePool();
         pool.Add(0, Modifier(5));
-        var system = new StatModifierExpirySystem(pool, CreateTiersPool(), new ProcessingTierEvents());
+        var system = new StatModifierExpirySystem(pool, CreateTiersPool(), new ProcessingTierEvents(), new EventBus());
 
         system.Update(default, 0);
 
@@ -38,7 +39,7 @@ public sealed class StatModifierExpirySystemTests
     {
         var pool = CreatePool();
         pool.Add(0, Modifier(0));
-        var system = new StatModifierExpirySystem(pool, CreateTiersPool(), new ProcessingTierEvents());
+        var system = new StatModifierExpirySystem(pool, CreateTiersPool(), new ProcessingTierEvents(), new EventBus());
 
         system.Update(default, 0);
 
@@ -52,7 +53,7 @@ public sealed class StatModifierExpirySystemTests
         var tiers = CreateTiersPool();
         pool.Add(0, Modifier(5));
         tiers.Add(0, new ProcessingTierComponent(ProcessingTierLevel.Neighborhood));
-        var system = new StatModifierExpirySystem(pool, tiers, new ProcessingTierEvents());
+        var system = new StatModifierExpirySystem(pool, tiers, new ProcessingTierEvents(), new EventBus());
 
         system.Update(new EngineTime(default, default, false, FrameCount: 1), 0);
 
@@ -66,10 +67,42 @@ public sealed class StatModifierExpirySystemTests
         var tiers = CreateTiersPool();
         pool.Add(0, Modifier(5));
         tiers.Add(0, new ProcessingTierComponent(ProcessingTierLevel.Neighborhood));
-        var system = new StatModifierExpirySystem(pool, tiers, new ProcessingTierEvents());
+        var system = new StatModifierExpirySystem(pool, tiers, new ProcessingTierEvents(), new EventBus());
 
         system.Update(new EngineTime(default, default, false, FrameCount: 2), 0);
 
         Assert.AreEqual(4, pool.GetReadonlyByDenseIndex(pool.GetFirstDenseIndex(0)).RemainingDurationFrames);
+    }
+
+    [TestMethod]
+    public void Update_ModifierExpires_PublishesStatModifierExpiredEventWithEntityIdAndTarget()
+    {
+        var pool = CreatePool();
+        pool.Add(0, Modifier(1));
+        var eventBus = new EventBus();
+        var system = new StatModifierExpirySystem(pool, CreateTiersPool(), new ProcessingTierEvents(), eventBus);
+        StatModifierExpiredEvent? published = null;
+        eventBus.Subscribe<StatModifierExpiredEvent>(evt => published = evt);
+
+        system.Update(default, 0);
+
+        Assert.IsNotNull(published);
+        Assert.AreEqual(0, published.Value.EntityId);
+        Assert.AreEqual(StatModifierTarget.HealthRegen, published.Value.Target);
+    }
+
+    [TestMethod]
+    public void Update_ModifierNotYetExpired_DoesNotPublishEvent()
+    {
+        var pool = CreatePool();
+        pool.Add(0, Modifier(5));
+        var eventBus = new EventBus();
+        var system = new StatModifierExpirySystem(pool, CreateTiersPool(), new ProcessingTierEvents(), eventBus);
+        var publishedCount = 0;
+        eventBus.Subscribe<StatModifierExpiredEvent>(_ => publishedCount++);
+
+        system.Update(default, 0);
+
+        Assert.AreEqual(0, publishedCount);
     }
 }

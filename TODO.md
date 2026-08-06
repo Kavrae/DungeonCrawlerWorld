@@ -66,13 +66,18 @@ Game-side logic for descending/ascending a level. See the matching Presentation 
 
 Game-side equipment rules (what can go in which slot, stat effects of equipping). Companion to the Engine-layer equipment item above and the Presentation-layer equipment menu below. Unblocked now that Inventory exists (see the Engine-layer Inventory system item).
 
-#### Stats
+#### Stats (infrastructure landed -- consumers still TODO)
 
-Randomly generated starting stats within a range (1-10, with most entities in the 3-5 range), used to modify ability/item effects -- e.g. `CoreAbilitiesModule`'s Punch (`Game/Modules/Abilities/CoreAbilitiesModule.cs`) should scale its damage off a stat once this exists, instead of the flat per-race/per-player hardcoded overrides it uses today. Increases can be automatic (level-up) or player-chosen (spending stat points). See the matching Presentation stats window item below.
+`Game/Modules/AbilityScores/` now exists: `AbilityScoreComponent` (base value 1-300, precomputed `Total`) for the 5 Core scores (Strength, Intelligence, Constitution, Dexterity, Charisma) and 2 Hidden scores (Luck, Wisdom) never shown to the player or touched by level-up. Modifiers reuse `StatModifierComponent`/`StatModifierTarget` (`Game/Modules/StatModifiers/`) rather than a separate list -- grant one via `AbilityScoreEffects.GrantModifier`, not raw `StatModifierEffects.Apply`, so `Total` stays in sync (it's precomputed eagerly on grant/expiry, not lazily on read like every other stat -- see `AbilityScoreComponent`'s own doc comment). The player rolls randomized starting values (2-10, clustering 3-7); every other race (Goblin/Fairy/Ghost) currently defaults to a flat 5 across all 7 scores, adjustable in a balance pass. Remaining work:
+
+- **Split hidden ability scores into composites.** Luck and Wisdom (and future hidden scores) should eventually be derived from combinations of *other* hidden ability scores rather than being standalone base values. Not designed yet -- needs its own pass once there are enough hidden scores for composition to make sense.
+- **Wire the concrete "modifies" behaviors.** Strength->melee damage (retire the hardcoded `PunchDamage` consts in `PlayerBlueprint`/`Goblin`/`Fairy`/`Ghost`), Constitution->`MaximumHealth`(x10)/`HealthRegen`/potion cooldown, Dexterity->`ActionLockComponent` duration (100% at 1 dex down to 25% at 300), Intelligence->mana once the Mana item below lands, Charisma->shop/charm/pet-bond mechanics once those exist, Luck->loot/AI once those exist.
+- **Non-player starting ability scores.** Give race/class blueprints their own baseline scores instead of the flat default-5 placeholder above.
+- **Level-up modifying Core scores.** Flat increases from the future level-up process (Hidden scores explicitly excluded). See the matching Presentation stats window item below.
 
 #### Mana
 
-A mana system, using `HealthComponent`/the health bar (`Game/Modules/Health/`) as a template -- a current/maximum pool plus regen, the same shape health already has. Heal (`Game/Modules/Abilities/CoreAbilitiesModule.cs`) should cost 2 MP and Magic Missile 5 MP once this lands -- both are free to cast until then. Starting `MaximumMana` should equal Intelligence once the Stats item above exists.
+A mana system, using `HealthComponent`/the health bar (`Game/Modules/Health/`) as a template -- a current/maximum pool plus regen, the same shape health already has. Heal (`Game/Modules/Abilities/CoreAbilitiesModule.cs`) should cost 2 MP and Magic Missile 5 MP once this lands -- both are free to cast until then. Starting `MaximumMana` should equal Intelligence's `Total` (`Game/Modules/AbilityScores/`) now that ability scores exist.
 
 #### Damage types
 
@@ -256,7 +261,7 @@ Exists side-by-side with inventory for easy click-and-drag equipping. Collapsibl
 
 #### Stats window
 
-Display current stats and total buffs/debuffs, with an explanation popup showing the origin of each buff/debuff. Lets the player assign stat points to increase stats. See the matching Game stats item above.
+No way to view a player's ability scores exists today -- add one alongside the inventory window (same `Folder` + pooled-`Window` pattern as `InventoryFolderController`/`InventoryManagementWindow`, `Presentation/UI/Inventory/`). Display the 5 Core scores' `Total` (Hidden scores stay invisible by design) and total buffs/debuffs, with an explanation popup showing the origin of each -- filterable straight out of `MultiComponentPool<StatModifierComponent>` by `Target` (`Game/Modules/StatModifiers/`). Lets the player assign stat points to increase stats once level-up exists. See the matching Game stats item above.
 
 #### Text Input Enhanced Features
 

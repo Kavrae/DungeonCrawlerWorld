@@ -2,6 +2,7 @@ using Engine.ECS.Components;
 using Engine.Math;
 using Game.Modules.Abilities;
 using Game.Modules.Abilities.Components;
+using Game.Modules.AbilityScores;
 using Game.Modules.Core.Components;
 using Game.Modules.Crawler.Components;
 using Game.Modules.Health.Components;
@@ -59,9 +60,17 @@ public sealed class PlayerBlueprint(MathUtility mathUtility, UniqueNumberAllocat
 
         InventoryActions.AddItem(componentManager, entityId, CoreItemsModule.HealthPotionId, quantity: 5);
 
+        foreach (var abilityScoreType in Enum.GetValues<AbilityScoreType>())
+        {
+            AbilityScoreEffects.Grant(componentManager, entityId, abilityScoreType, RollAbilityScoreBaseValue());
+        }
+
         StatModifierEffects.Apply(componentManager, entityId, StatModifierTarget.OutgoingDamage, StatModifierOperation.Additive, StatModifierPolarity.Buff,
             canModify: true, magnitude: PermanentOutgoingDamageBonus, durationFrames: StatModifierComponent.Permanent, StatusEffectSource.Admin);
         StatModifierEffects.Apply(componentManager, entityId, StatModifierTarget.MaximumHealth, StatModifierOperation.Multiplicative, StatModifierPolarity.Buff,
             canModify: true, magnitude: PermanentMaximumHealthMultiplierBonus, durationFrames: StatModifierComponent.Permanent, StatusEffectSource.Admin);
     }
+
+    /// <summary>Two Next(1,6) rolls summed -- range [2,10] per the spec, clustering around the middle rather than uniform across the whole range. Exact shape isn't load-bearing since level-up moves these later.</summary>
+    private short RollAbilityScoreBaseValue() => (short)(mathUtility.Next(1, 6) + mathUtility.Next(1, 6));
 }

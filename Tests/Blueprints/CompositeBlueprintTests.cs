@@ -10,6 +10,7 @@ using Game.Blueprints.Objects;
 using Game.Blueprints.Races;
 using Game.Modules;
 using Game.Modules.Abilities;
+using Game.Modules.AbilityScores;
 using Game.Modules.Class;
 using Game.Modules.Class.Components;
 using Game.Modules.Core;
@@ -52,11 +53,15 @@ public sealed class CompositeBlueprintTests
         var statModifiersModule = new StatModifiersModule();
         statModifiersModule.Configure(context);
 
+        var abilityScoresModule = new AbilityScoresModule();
+        abilityScoresModule.Configure(context);
+
         IReadOnlyList<IModule> modules =
         [
             coreModule,
             healthModule,
             statModifiersModule,
+            abilityScoresModule,
             movementModule,
             new RaceModule(),
             new ClassModule(),
