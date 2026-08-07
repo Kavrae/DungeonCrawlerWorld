@@ -2,8 +2,11 @@ using Engine.ECS.Context;
 using Engine.ECS.Systems;
 using Engine.Math;
 using Game.Blueprints;
+using Game.Modules.AbilityScores;
 using Game.Modules.Core.Components;
 using Game.Modules.Poison;
+using Game.Modules.StatModifiers;
+using Game.Modules.StatModifiers.Components;
 using Game.World;
 
 namespace Game.Floors;
@@ -36,6 +39,21 @@ public static class FloorBuilder
     private const int TestPoisonStackCount = 10;
     private const int TestPoisonDurationTicks = 5;
 
+    // TEMPORARY: exercises the Ability Score window's ordering/formatting (flat before
+    // multiplicative, positive before negative) and its right-aligned scrolling list with real
+    // modifier data, until real content (equipment, buffs, level-up -- see TODO.md's Stats
+    // entry) grants these itself. Remove once one does. One of each shape per Core score --
+    // positive/negative additive, positive/negative multiplicative -- with varied magnitude and
+    // source so the window shows real variety, not five identical columns.
+    private static readonly (AbilityScoreType Type, float PositiveFlat, float NegativeFlat, float PositiveMultiplier, float NegativeMultiplier)[] TestAbilityScoreModifierSeeds =
+    [
+        (AbilityScoreType.Strength, 3f, -1f, 0.20f, -0.05f),
+        (AbilityScoreType.Intelligence, 2f, -2f, 0.10f, -0.15f),
+        (AbilityScoreType.Constitution, 5f, -3f, 0.30f, -0.10f),
+        (AbilityScoreType.Dexterity, 1f, -4f, 0.15f, -0.20f),
+        (AbilityScoreType.Charisma, 4f, -1f, 0.25f, -0.08f),
+    ];
+
     public static int CreatePlayer(Game.World.World world, EcsContext ecsContext, MathUtility mathUtility, FrameEventBuffer<EntityMoved> movedEntities, UniqueNumberAllocator crawlerNumberAllocator)
     {
         var entityId = ecsContext.EntityManager.CreateEntity();
@@ -44,6 +62,18 @@ public static class FloorBuilder
         for (var i = 0; i < TestPoisonStackCount; i++)
         {
             PoisonEffects.ApplyStack(ecsContext.ComponentManager, entityId, StatusEffectSource.Admin, TestPoisonDurationTicks);
+        }
+
+        foreach (var seed in TestAbilityScoreModifierSeeds)
+        {
+            AbilityScoreEffects.GrantModifier(ecsContext.ComponentManager, entityId, seed.Type, StatModifierOperation.Additive, StatModifierPolarity.Buff,
+                canModify: true, seed.PositiveFlat, durationFrames: StatModifierComponent.Permanent, StatusEffectSource.Admin);
+            AbilityScoreEffects.GrantModifier(ecsContext.ComponentManager, entityId, seed.Type, StatModifierOperation.Additive, StatModifierPolarity.Debuff,
+                canModify: true, seed.NegativeFlat, durationFrames: StatModifierComponent.Permanent, StatusEffectSource.AI);
+            AbilityScoreEffects.GrantModifier(ecsContext.ComponentManager, entityId, seed.Type, StatModifierOperation.Multiplicative, StatModifierPolarity.Buff,
+                canModify: true, seed.PositiveMultiplier, durationFrames: StatModifierComponent.Permanent, StatusEffectSource.FromEntity(entityId));
+            AbilityScoreEffects.GrantModifier(ecsContext.ComponentManager, entityId, seed.Type, StatModifierOperation.Multiplicative, StatModifierPolarity.Debuff,
+                canModify: true, seed.NegativeMultiplier, durationFrames: StatModifierComponent.Permanent, StatusEffectSource.Admin);
         }
 
         // TEMPORARY: spawn beside TestMapBuilder's column-16 wall corridor (a fixed column

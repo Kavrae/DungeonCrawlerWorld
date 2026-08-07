@@ -26,8 +26,8 @@ public sealed class InventoryManagementWindow(
     ComponentManager componentManager,
     ItemCatalog itemCatalog) : Window(fontService, elementPoolService, glyphRenderer)
 {
-    /// <summary>Dark grey background for both this window's own content area and TabbedContent's body window (see Configure) -- individual grid cells stay white-with-a-black-border (InventoryItemStackCell) so they read as distinct squares against it.</summary>
-    public static readonly Color BackgroundColor = new(45, 45, 45);
+    /// <summary>Dark grey background for both this window's own content area and TabbedContent's body window (see Configure) -- individual grid cells stay white-with-a-black-border (InventoryItemStackCell) so they read as distinct squares against it. Shared with AbilityScoreWindow's own background -- see WindowPalette.</summary>
+    public static readonly Color BackgroundColor = WindowPalette.PanelBackgroundColor;
 
     private TabbedContent _tabbedContent = null!;
 

@@ -85,7 +85,7 @@ public class Button : Element
     {
         if (ShowBorder)
         {
-            BorderRenderer.Draw(spriteBatch, unitRectangle, EffectiveBorderStyle, BorderTopRectangle, BorderBottomRectangle, BorderLeftRectangle, BorderRightRectangle);
+            BorderRenderer.Draw(spriteBatch, unitRectangle, EffectiveBorderStyle, BorderColor, BorderTopRectangle, BorderBottomRectangle, BorderLeftRectangle, BorderRightRectangle);
         }
 
         spriteBatch.Draw(unitRectangle, ContentRectangle, ButtonColor);

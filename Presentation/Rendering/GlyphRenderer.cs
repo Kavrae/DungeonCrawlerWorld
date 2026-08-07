@@ -42,6 +42,21 @@ public sealed class GlyphRenderer
     public void DrawCentered(SpriteBatch spriteBatch, SpriteFontBase font, string glyph, Vector2 footprintTopLeft, Vector2 footprintSize, Color color) =>
         Draw(spriteBatch, font, glyph, GetCenteredPosition(font, glyph, footprintTopLeft, footprintSize), color);
 
+    /// <summary>
+    /// Where text must be drawn so it's flush against footprintSize's right edge and vertically
+    /// centered within it -- a plain MeasureString-based line-box position, not GetCenteredPosition's
+    /// ink-bound centering (right-aligned text like "Source : +2" needs its whole line box flush
+    /// right so a column of these lines up cleanly, not each string's individual ink).
+    /// </summary>
+    public Vector2 GetRightAlignedPosition(SpriteFontBase font, string text, Vector2 footprintTopLeft, Vector2 footprintSize)
+    {
+        var textSize = font.MeasureString(text);
+        return footprintTopLeft + new Vector2(footprintSize.X - textSize.X, (footprintSize.Y - textSize.Y) / 2f);
+    }
+
+    public void DrawRightAligned(SpriteBatch spriteBatch, SpriteFontBase font, string text, Vector2 footprintTopLeft, Vector2 footprintSize, Color color) =>
+        Draw(spriteBatch, font, text, GetRightAlignedPosition(font, text, footprintTopLeft, footprintSize), color);
+
     /// <summary>The center of glyph's tight ink bounding box if drawn at (0,0) -- TextBounds translates linearly with position, so this alone is enough to center at any footprint.</summary>
     private Vector2 GetInkCenterAtOrigin(SpriteFontBase font, string glyph)
     {

@@ -33,11 +33,10 @@ public sealed class InventoryGridContent(
 
     private readonly MultiComponentPool<InventoryItemStackComponent> _stacks = componentManager.GetMultiPool<InventoryItemStackComponent>();
     private readonly List<InventoryItemStackComponent> _reusableStacks = [];
-    private readonly List<InventoryItemStackCell> _cells = [];
+
+    private readonly VersionWatcher _versionWatcher = new();
 
     private Window _hostWindow = null!;
-    private bool _hasBuiltOnce;
-    private uint _lastSeenVersion;
 
     public void Initialize(Window hostWindow)
     {
@@ -47,14 +46,11 @@ public sealed class InventoryGridContent(
 
     public void Update(GameTime gameTime)
     {
-        var currentVersion = _stacks.GetEntityVersion(entityId);
-        if (_hasBuiltOnce && currentVersion == _lastSeenVersion)
+        if (!_versionWatcher.HasChanged(_stacks.GetEntityVersion(entityId)))
         {
             return;
         }
 
-        _hasBuiltOnce = true;
-        _lastSeenVersion = currentVersion;
         RebuildCells();
     }
 
@@ -65,26 +61,13 @@ public sealed class InventoryGridContent(
     }
 
     /// <summary>Removes every cell -- called by TabbedContent when this tab is switched away from.</summary>
-    public void Deactivate()
-    {
-        foreach (var cell in _cells)
-        {
-            cell.Close();
-        }
-
-        _cells.Clear();
-    }
+    public void Deactivate() => elementPoolService.CloseAllChildren(_hostWindow);
 
     private void OnHostWindowResized(Element _) => RebuildCells();
 
     private void RebuildCells()
     {
-        foreach (var cell in _cells)
-        {
-            cell.Close();
-        }
-
-        _cells.Clear();
+        elementPoolService.CloseAllChildren(_hostWindow);
 
         InventoryQueries.CopyStacksForEntity(_stacks, entityId, _reusableStacks);
 
@@ -111,8 +94,6 @@ public sealed class InventoryGridContent(
             });
             cell.Configure(stack.ItemDefinitionId, definition.SpriteName, definition.Glyph, definition.GlyphColor, stack.Quantity, stack.IsDisabled, CellSize);
             _hostWindow.AddChild(cell);
-
-            _cells.Add(cell);
         }
     }
 

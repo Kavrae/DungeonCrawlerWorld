@@ -202,6 +202,7 @@ public class Element
     public Rectangle BorderLeftRectangle => _border.LeftRectangle;
     public Rectangle BorderRightRectangle => _border.RightRectangle;
     public BorderStyle BorderStyle => _border.Style;
+    public Color BorderColor => _border.Color;
 
     /*========Content========*/
     /// <summary>Content-area bookkeeping -- see ElementGeometryState's doc comment for the same "grouped, plain fields" rationale. Named _contentState, not _content, to avoid colliding with the name of Window's own pluggable IElementContent field.</summary>
@@ -300,9 +301,10 @@ public class Element
         _border.Show = chrome?.ShowBorder ?? false;
         _border.Thickness = BorderThickness.Uniform(chrome?.BorderSize ?? new Vector2(1, 1));
         _border.Style = chrome?.BorderStyle ?? BorderStyle.Flat;
+        _border.Color = chrome?.BorderColor ?? WindowPalette.BorderColor;
 
         /*========Content========*/
-        _contentState.BackgroundColor = content?.ContentColor ?? Color.White;
+        _contentState.BackgroundColor = content?.ContentColor ?? WindowPalette.BodyColor;
 
         /*========User Controls========*/
         CanUserMove = chrome?.CanUserMove ?? false;
@@ -426,7 +428,7 @@ public class Element
 
         if (_border.Show)
         {
-            BorderRenderer.Draw(spriteBatch, unitRectangle, _border.Style, _border.TopRectangle, _border.BottomRectangle, _border.LeftRectangle, _border.RightRectangle);
+            BorderRenderer.Draw(spriteBatch, unitRectangle, _border.Style, _border.Color, _border.TopRectangle, _border.BottomRectangle, _border.LeftRectangle, _border.RightRectangle);
         }
 
         if (_isGlowing)

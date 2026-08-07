@@ -52,7 +52,7 @@ public sealed class Folder : Element
         _spriteName = folderOptions?.SpriteName;
         _fallbackGlyph = folderOptions?.FallbackGlyph ?? string.Empty;
         _fallbackGlyphFont = FontService.GetFont((int)(_iconSize.Y * 0.6f));
-        _backgroundColor = folderOptions?.BackgroundColor ?? Color.LightBlue;
+        _backgroundColor = folderOptions?.BackgroundColor ?? WindowPalette.HeaderColor;
 
         _canContainChildren = true;
         _childrenTileMode = ChildElementTileMode.Vertical;

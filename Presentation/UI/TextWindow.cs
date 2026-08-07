@@ -20,7 +20,7 @@ public class TextWindow(FontService fontService, ElementPoolService elementPoolS
         base.Build(parent, options);
 
         OriginalText = options.Text?.Text ?? string.Empty;
-        TextColor = options.Text?.TextColor ?? Color.Black;
+        TextColor = options.Text?.TextColor ?? WindowPalette.BodyTextColor;
         _canContainChildren = false;
     }
 

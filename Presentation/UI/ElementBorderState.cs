@@ -9,6 +9,9 @@ internal sealed class ElementBorderState
     public BorderThickness Thickness;
     public BorderStyle Style;
 
+    /// <summary>Defaulted here, not just in Element.Build, since Button never calls Build (see its own constructor) and would otherwise start from Color's zero-value (fully transparent) instead of a real color.</summary>
+    public Color Color = WindowPalette.BorderColor;
+
     /// <summary>
     /// The four edge strips a border draws as (see Element.RecalculateBorderRectangles) --
     /// four independently-addressable rectangles, not one solid rectangle, so a future 3D

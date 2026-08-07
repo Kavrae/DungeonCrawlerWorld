@@ -20,6 +20,7 @@ public sealed class ElementChromeOptions
 
     public Color? TitleColor { get; set; }
     public Color? FocusedTitleColor { get; set; }
+    public Color? TitleTextColor { get; set; }
 
     /*========Border========*/
     public bool? ShowBorder { get; set; }
@@ -28,6 +29,9 @@ public sealed class ElementChromeOptions
 
     /// <summary>Defaults to Flat (today's solid-color look) -- Outset/Inset are opt-in for windows.</summary>
     public BorderStyle? BorderStyle { get; set; }
+
+    /// <summary>Only affects BorderStyle.Flat -- Outset/Inset's bevel shading (see BorderRenderer) is independent of this.</summary>
+    public Color? BorderColor { get; set; }
 
     /*========User Controls========*/
     public bool? CanUserClose { get; set; }

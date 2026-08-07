@@ -13,6 +13,7 @@ using Microsoft.Xna.Framework.Graphics;
 using Presentation.Bootstrap;
 using Presentation.Input;
 using Presentation.UI;
+using Presentation.UI.AbilityScores;
 using Presentation.UI.Content;
 using Presentation.UI.Inventory;
 using Presentation.UI.Notifications;
@@ -49,7 +50,7 @@ public static class GameShellBootstrapper
 
         var (baseWindows, mapWindow, mapViewState, mapSize, abilityTargeting) = BuildBaseWindows(presentation, world, ecsContext, abilityCatalog, itemCatalog, screenSize);
         var (staticHudWindows, questTriggerWindow, hotbarContent) = BuildStaticHudWindows(presentation, world, ecsContext, abilityCatalog, itemCatalog, screenSize, mapViewState, mapSize);
-        var (dynamicHudWindows, notificationCenter, inventory) = BuildDynamicHudWindows(presentation, world, ecsContext, itemCatalog);
+        var (dynamicHudWindows, notificationCenter, inventory) = BuildDynamicHudWindows(presentation, world, ecsContext, itemCatalog, mapWindow);
         var hotbarController = BuildHotbarController(presentation, mapViewState, hotbarContent, abilityTargeting, dynamicHudWindows);
 
         // Empty for now -- GameInputController only needs the list *reference*, not its final
@@ -278,7 +279,7 @@ public static class GameShellBootstrapper
     }
 
     /// <summary>DynamicHUD tier: NotificationCenter owns/populates this list itself (summary bar + popups), and InventoryFolderController does the same for its own folder+window -- see GameInputController's own doc comment for what each of the four tiers means. Build also passes this same list into OpenQuestComposer later, since that popup belongs in this tier too.</summary>
-    private static (List<Element> DynamicHudWindows, NotificationCenter NotificationCenter, InventoryFolderController Inventory) BuildDynamicHudWindows(PresentationContext presentation, World world, EcsContext ecsContext, ItemCatalog itemCatalog)
+    private static (List<Element> DynamicHudWindows, NotificationCenter NotificationCenter, InventoryFolderController Inventory) BuildDynamicHudWindows(PresentationContext presentation, World world, EcsContext ecsContext, ItemCatalog itemCatalog, MapWindow mapWindow)
     {
         var dynamicHudWindows = new List<Element>();
 
@@ -298,9 +299,16 @@ public static class GameShellBootstrapper
         presentation.ElementPoolService.RegisterFactory<InventoryItemStackCell>((_, _) => new InventoryItemStackCell(
             presentation.FontService, presentation.ElementPoolService, presentation.GlyphRenderer, presentation.SpriteSheetService, presentation.SpriteRenderer));
 
+        presentation.ElementPoolService.RegisterFactory<AbilityScoreWindow>((_, _) => new AbilityScoreWindow(
+            presentation.FontService, presentation.ElementPoolService, presentation.GlyphRenderer, ecsContext.ComponentManager));
+        presentation.ElementPoolService.RegisterFactory<AbilityScoreColumnHeader>((_, _) => new AbilityScoreColumnHeader(
+            presentation.FontService, presentation.ElementPoolService, presentation.GlyphRenderer));
+        presentation.ElementPoolService.RegisterFactory<AbilityScoreModifierRow>((_, _) => new AbilityScoreModifierRow(
+            presentation.FontService, presentation.ElementPoolService, presentation.GlyphRenderer));
+
         var inventory = new InventoryFolderController(
             presentation.ElementPoolService, world, ecsContext.ComponentManager, presentation.FontService, presentation.GlyphRenderer,
-            presentation.SpriteSheetService, presentation.SpriteRenderer, itemCatalog);
+            presentation.SpriteSheetService, presentation.SpriteRenderer, itemCatalog, mapWindow);
         inventory.Initialize(dynamicHudWindows);
 
         return (dynamicHudWindows, notificationCenter, inventory);

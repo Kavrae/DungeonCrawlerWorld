@@ -42,6 +42,9 @@ public class Window : Element
     private Color _focusedTitleColor;
     public Color FocusedTitleColor => _focusedTitleColor;
 
+    private Color _titleTextColor;
+    public Color TitleTextColor => _titleTextColor;
+
     private List<Button> _titleButtons = [];
     public List<Button> TitleButtons { get => _titleButtons; set => _titleButtons = value; }
 
@@ -77,8 +80,9 @@ public class Window : Element
         var chrome = options.Chrome;
 
         _titleText = chrome?.TitleText ?? string.Empty;
-        _titleColor = chrome?.TitleColor ?? Color.LightBlue;
-        _focusedTitleColor = chrome?.FocusedTitleColor ?? Color.Gold;
+        _titleColor = chrome?.TitleColor ?? WindowPalette.TitleColor;
+        _focusedTitleColor = chrome?.FocusedTitleColor ?? WindowPalette.TitleFocusedColor;
+        _titleTextColor = chrome?.TitleTextColor ?? WindowPalette.TitleTextColor;
         _titleButtons = [];
 
         CanUserClose = chrome?.CanUserClose ?? false;
@@ -175,7 +179,7 @@ public class Window : Element
                 : _titleColor;
             spriteBatch.Draw(unitRectangle, HeaderRectangle, titleBackgroundColor);
         }
-        spriteBatch.DrawString(TitleFont, _titleText, HeaderAbsolutePosition + TitlePadding, Color.Black);
+        spriteBatch.DrawString(TitleFont, _titleText, HeaderAbsolutePosition + TitlePadding, _titleTextColor);
 
         foreach (var button in _titleButtons)
         {

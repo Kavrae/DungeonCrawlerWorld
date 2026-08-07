@@ -74,4 +74,21 @@ public sealed class ElementPoolService
 
         element.ParentElement?.RemoveChild(element.ElementId);
     }
+
+    /// <summary>
+    /// Closes (returns to their own type pool, per CloseElement above) every current child of
+    /// parent -- the "destroy-all, rebuild-fresh" idiom several content panes use when their
+    /// backing data changes (InventoryGridContent's item cells, AbilityScoreWindow's columns/
+    /// rows). Snapshots ChildElements first: CloseElement mutates parent's own child list as it
+    /// goes (via RemoveChild), which would corrupt an in-progress enumeration of that same list.
+    /// </summary>
+    public void CloseAllChildren(Element parent)
+    {
+        ArgumentNullException.ThrowIfNull(parent);
+
+        foreach (var child in parent.ChildElements.ToArray())
+        {
+            CloseElement(child);
+        }
+    }
 }

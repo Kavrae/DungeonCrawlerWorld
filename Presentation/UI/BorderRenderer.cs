@@ -10,19 +10,19 @@ namespace Presentation.UI;
 /// </summary>
 public static class BorderRenderer
 {
-    private static readonly Color FlatColor = Color.Black;
     private static readonly Color LightBevelColor = Color.White;
     private static readonly Color DarkBevelColor = Color.Black;
 
-    public static void Draw(SpriteBatch spriteBatch, Texture2D unitRectangle, BorderStyle style, Rectangle top, Rectangle bottom, Rectangle left, Rectangle right)
+    /// <summary>flatColor only affects BorderStyle.Flat -- Outset/Inset always use the fixed light/dark bevel pair above, an independent two-color shading effect rather than a single overridable color.</summary>
+    public static void Draw(SpriteBatch spriteBatch, Texture2D unitRectangle, BorderStyle style, Color flatColor, Rectangle top, Rectangle bottom, Rectangle left, Rectangle right)
     {
         switch (style)
         {
             case BorderStyle.Flat:
-                spriteBatch.Draw(unitRectangle, top, FlatColor);
-                spriteBatch.Draw(unitRectangle, bottom, FlatColor);
-                spriteBatch.Draw(unitRectangle, left, FlatColor);
-                spriteBatch.Draw(unitRectangle, right, FlatColor);
+                spriteBatch.Draw(unitRectangle, top, flatColor);
+                spriteBatch.Draw(unitRectangle, bottom, flatColor);
+                spriteBatch.Draw(unitRectangle, left, flatColor);
+                spriteBatch.Draw(unitRectangle, right, flatColor);
                 break;
 
             case BorderStyle.Outset:
