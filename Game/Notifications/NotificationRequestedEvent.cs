@@ -1,4 +1,4 @@
-using Engine.Events;
+﻿using Engine.Events;
 
 namespace Game.Notifications;
 
@@ -9,7 +9,7 @@ namespace Game.Notifications;
 /// per-frame drain point (the top of its own Update). Mirrors NotificationCenter.AddNotification's
 /// existing parameters exactly, so it's a drop-in alternate entry point, not a new concept.
 /// </summary>
-public sealed record NotificationRequested(
+public sealed record NotificationRequestedEvent(
     NotificationCategory Category,
     string Text,
     bool ShowImmediately,

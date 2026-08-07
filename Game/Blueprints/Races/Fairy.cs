@@ -21,6 +21,8 @@ public sealed class Fairy(MathUtility mathUtility) : IBlueprint
 
     private const string Description = "TODO fairy description. Their magic is stored in their wings.";
 
+    private static readonly string[] DisplayNames = DisplayNameCache.BuildDisplayNames(PersonalNameOptions, RaceName);
+
     private const short MaximumHealth = 100;
 
     /// <summary>Hardcoded stopgap until the Additive/Multiplicative bonuses system exists -- see TODO.md.</summary>
@@ -33,8 +35,7 @@ public sealed class Fairy(MathUtility mathUtility) : IBlueprint
     {
         componentManager.Merge(entityId, new RaceComponent(RaceId, RaceName, Description));
 
-        var personalName = PersonalNameOptions[mathUtility.Next(0, PersonalNameOptions.Length)];
-        componentManager.Merge(entityId, new DisplayTextComponent($"{personalName} : {RaceName}", Description));
+        componentManager.Merge(entityId, new DisplayTextComponent(DisplayNames[mathUtility.Next(0, DisplayNames.Length)], Description));
 
         componentManager.Merge(entityId, new GlyphComponent("f", Color.DeepPink));
         componentManager.Merge(entityId, new HealthComponent((short)mathUtility.Next(1, MaximumHealth + 1), MaximumHealth));

@@ -1,4 +1,4 @@
-using Game.Modules.Core;
+﻿using Game.Modules.Core;
 using Game.Modules.Core.Components;
 using Game.Modules.StatusEffects;
 using Game.World;
@@ -9,7 +9,7 @@ namespace Game.Modules.Achievements.Definitions;
 /// Awarded the first time the player paralyzes a Phasing entity (e.g. a Ghost) -- the concrete,
 /// player-visible proof that Paralysis (an ActionLock-based effect with no HealthComponent
 /// involvement) applies correctly to an incorporeal target, not just a normal Blocking one.
-/// Reads NonBlockingComponent off StatusEffectApplied.EntityId via AchievementTriggerContext.
+/// Reads NonBlockingComponent off StatusEffectAppliedEvent.EntityId via AchievementTriggerContext.
 /// ComponentManager the same way EarlyAdopterAchievement reads CrawlerComponent off an event
 /// that carries no Phasing data itself.
 /// </summary>
@@ -29,7 +29,7 @@ public sealed class InertGasAchievement : IAchievementDefinition
     public string RewardText => "I'm not even sure what to give you for this. I'll figure it out later.";
 
     public void RegisterTrigger(AchievementTriggerContext context) =>
-        context.SubscribeUntilUnlocked<StatusEffectApplied>(applied =>
+        context.SubscribeUntilUnlocked<StatusEffectAppliedEvent>(applied =>
             applied.EffectType == StatusEffectType.Paralysis
             && applied.Source.Kind == StatusEffectSourceKind.Entity
             && applied.Source.EntityId == context.PlayerQuery!.PlayerEntityId

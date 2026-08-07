@@ -1,4 +1,4 @@
-using Engine.Bootstrap;
+﻿using Engine.Bootstrap;
 using Engine.ECS.Context;
 using Engine.Events;
 using Engine.Math;
@@ -39,8 +39,8 @@ public sealed class KilledAMobAchievementTests
         var npcEntityId = ecsContext.EntityManager.CreateEntity();
         world.PlayerEntityId = playerEntityId;
 
-        eventBus.Publish(new EntityDied(npcEntityId, StatusEffectSource.FromEntity(playerEntityId)));
-        eventBus.DispatchBuffered<EntityDied>();
+        eventBus.Publish(new EntityDiedEvent(npcEntityId, StatusEffectSource.FromEntity(playerEntityId)));
+        eventBus.DispatchBuffered<EntityDiedEvent>();
 
         Assert.IsTrue(AchievementQueries.HasEarned(
             ecsContext.ComponentManager.GetMultiPool<AchievementUnlockedComponent>(),
@@ -57,8 +57,8 @@ public sealed class KilledAMobAchievementTests
         var otherEntityId = ecsContext.EntityManager.CreateEntity();
         world.PlayerEntityId = playerEntityId;
 
-        eventBus.Publish(new EntityDied(npcEntityId, StatusEffectSource.FromEntity(otherEntityId)));
-        eventBus.DispatchBuffered<EntityDied>();
+        eventBus.Publish(new EntityDiedEvent(npcEntityId, StatusEffectSource.FromEntity(otherEntityId)));
+        eventBus.DispatchBuffered<EntityDiedEvent>();
 
         Assert.IsFalse(AchievementQueries.HasEarned(
             ecsContext.ComponentManager.GetMultiPool<AchievementUnlockedComponent>(),
@@ -74,8 +74,8 @@ public sealed class KilledAMobAchievementTests
         var npcEntityId = ecsContext.EntityManager.CreateEntity();
         world.PlayerEntityId = playerEntityId;
 
-        eventBus.Publish(new EntityDied(npcEntityId, StatusEffectSource.Admin));
-        eventBus.DispatchBuffered<EntityDied>();
+        eventBus.Publish(new EntityDiedEvent(npcEntityId, StatusEffectSource.Admin));
+        eventBus.DispatchBuffered<EntityDiedEvent>();
 
         Assert.IsFalse(AchievementQueries.HasEarned(
             ecsContext.ComponentManager.GetMultiPool<AchievementUnlockedComponent>(),

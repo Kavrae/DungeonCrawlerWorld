@@ -1,4 +1,4 @@
-using Engine.ECS.Components;
+﻿using Engine.ECS.Components;
 using Engine.ECS.Components.Stores;
 using Engine.ECS.Systems;
 using Engine.Events;
@@ -9,8 +9,8 @@ using Game.World;
 namespace Game.Modules.Death.Systems;
 
 /// <summary>
-/// The sole handler for EntityDied: subscribes once at construction, then Update() just drains
-/// whatever queued up this frame via DispatchBuffered -- see EntityDied's own doc comment for
+/// The sole handler for EntityDiedEvent: subscribes once at construction, then Update() just drains
+/// whatever queued up this frame via DispatchBuffered -- see EntityDiedEvent's own doc comment for
 /// why this indirection (never handling it inline from whichever system published it) matters.
 /// No population of its own to stripe over (nothing to iterate every frame besides the queue
 /// itself), so StripeCount is 1 and there's no EntityStripeSet.
@@ -41,13 +41,13 @@ public sealed class DeathSystem : ISystem
         _mapQuery = mapQuery;
         _eventBus = eventBus;
 
-        eventBus.Subscribe<EntityDied>(OnEntityDied);
+        eventBus.Subscribe<EntityDiedEvent>(OnEntityDied);
     }
 
-    public void Update(EngineTime time, byte stripeIndex) => _eventBus.DispatchBuffered<EntityDied>();
+    public void Update(EngineTime time, byte stripeIndex) => _eventBus.DispatchBuffered<EntityDiedEvent>();
 
-    /// <summary>Defensive against a duplicate EntityDied for the same entity -- HealthDamage.Apply's own wasAlive transition guard should already make this unreachable, but a corpse should never be double-processed if it somehow happens.</summary>
-    private void OnEntityDied(EntityDied died)
+    /// <summary>Defensive against a duplicate EntityDiedEvent for the same entity -- HealthDamage.Apply's own wasAlive transition guard should already make this unreachable, but a corpse should never be double-processed if it somehow happens.</summary>
+    private void OnEntityDied(EntityDiedEvent died)
     {
         if (_deadEntities.Has(died.EntityId))
         {

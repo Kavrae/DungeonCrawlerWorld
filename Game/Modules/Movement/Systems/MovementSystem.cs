@@ -1,4 +1,4 @@
-using Engine.ECS.Components.Stores;
+﻿using Engine.ECS.Components.Stores;
 using Engine.ECS.Systems;
 using Engine.Events;
 using Engine.Math;
@@ -24,7 +24,7 @@ namespace Game.Modules.Movement.Systems;
 /// - movedEntities.Record: a per-frame buffer ContactDamageSystem/StatusEffectAuraSystem drain
 ///   during their own Update, instead of each subscribing to a per-move event (see
 ///   FrameEventBuffer's own doc comment).
-/// - eventBus.Publish(EntityMoved), only for the player's own move: PlayerActivityLog still
+/// - eventBus.Publish(EntityMovedEvent), only for the player's own move: PlayerActivityLog still
 ///   subscribes to this on the bus exactly as before, just now firing at player-move frequency
 ///   (a handful/sec) instead of the full population's.
 /// </summary>
@@ -44,7 +44,7 @@ public sealed class MovementSystem : ISystem
     private readonly MathUtility _mathUtility;
     private readonly EventBus _eventBus;
     private readonly IEntityMoveSync _entityMoveSync;
-    private readonly FrameEventBuffer<EntityMoved> _movedEntities;
+    private readonly FrameEventBuffer<EntityMovedEvent> _movedEntities;
     private readonly IPlayerQuery? _playerQuery;
     private readonly PackedComponentPool<DeadComponent>? _deadEntities;
     private readonly TieredEntityStripeSet _tieredStripeSet;
@@ -57,7 +57,7 @@ public sealed class MovementSystem : ISystem
         MathUtility mathUtility,
         EventBus eventBus,
         IEntityMoveSync entityMoveSync,
-        FrameEventBuffer<EntityMoved> movedEntities,
+        FrameEventBuffer<EntityMovedEvent> movedEntities,
         IPlayerQuery? playerQuery,
         DirectComponentPool<ProcessingTierComponent> processingTiers,
         ProcessingTierEvents processingTierEvents,
@@ -144,10 +144,10 @@ public sealed class MovementSystem : ISystem
         // cleared here -- otherwise it stays set to the position the entity is already
         // standing on, and the very next Update call where the action lock allows it would
         // re-run TryMoveToNextMapPosition against that same value: a same-position "move" that
-        // sets the action lock and publishes a spurious EntityMoved(old == new) every cycle,
+        // sets the action lock and publishes a spurious EntityMovedEvent(old == new) every cycle,
         // repeating forever instead of the entity going idle until a real move is queued. This
-        // was previously harmless (only WorldEventSync/PlayerActivityLog consumed EntityMoved,
-        // both tolerant of Old == New) but became consequential once EntityMoved-driven
+        // was previously harmless (only WorldEventSync/PlayerActivityLog consumed EntityMovedEvent,
+        // both tolerant of Old == New) but became consequential once EntityMovedEvent-driven
         // systems (ContactDamageSystem, StatusEffectAuraSystem) started treating every such
         // event as a fresh step onto whatever tile the entity is on.
         _movementComponents.TryUpdate(entityId, static (ref MovementComponent m) => m.NextMapPosition = null);
@@ -184,7 +184,7 @@ public sealed class MovementSystem : ISystem
         {
             ActionLockGate.Lock(_actionLocks, entityId, movementComponent.ActionCooldownFrames);
 
-            var moved = new EntityMoved(entityId, oldPosition, newPosition, transformComponent.Size);
+            var moved = new EntityMovedEvent(entityId, oldPosition, newPosition, transformComponent.Size);
             _entityMoveSync.SyncMove(moved);
             _movedEntities.Record(moved);
 

@@ -1,4 +1,4 @@
-using Engine.ECS.Components;
+﻿using Engine.ECS.Components;
 using Engine.ECS.Components.Stores;
 using Engine.Events;
 using Engine.Math;
@@ -216,8 +216,8 @@ public sealed class AbilityEffectResolverTests
         var (mapQuery, health, eventBus, statusEffectAppliers, componentManager) = Build();
         statusEffectAppliers.Register(new FakeStatusEffectAuraApplier(StatusEffectType.Paralysis));
         mapQuery.SetBlockingOccupant(TargetTile, BlockingTargetEntityId);
-        StatusEffectApplied? published = null;
-        eventBus.Subscribe<StatusEffectApplied>(e => published = e);
+        StatusEffectAppliedEvent? published = null;
+        eventBus.Subscribe<StatusEffectAppliedEvent>(e => published = e);
 
         AbilityEffectResolver.Apply(AbilityWithStatusEffect, StatusEffectInstance, SourceEntityId, [TargetTile], mapQuery, health, eventBus, playerQuery: null, statusEffectAppliers, componentManager);
 
@@ -233,7 +233,7 @@ public sealed class AbilityEffectResolverTests
         var (mapQuery, health, eventBus, statusEffectAppliers, componentManager) = Build();
         mapQuery.SetBlockingOccupant(TargetTile, BlockingTargetEntityId);
         var published = false;
-        eventBus.Subscribe<StatusEffectApplied>(_ => published = true);
+        eventBus.Subscribe<StatusEffectAppliedEvent>(_ => published = true);
 
         AbilityEffectResolver.Apply(AbilityWithStatusEffect, StatusEffectInstance, SourceEntityId, [TargetTile], mapQuery, health, eventBus, playerQuery: null, statusEffectAppliers, componentManager);
 

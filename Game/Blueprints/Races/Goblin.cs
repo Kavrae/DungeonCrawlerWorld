@@ -1,5 +1,6 @@
 using Engine.ECS.Components;
 using Engine.Math;
+using Game.Blueprints;
 using Game.Modules.Abilities;
 using Game.Modules.Abilities.Components;
 using Game.Modules.AbilityScores;
@@ -27,6 +28,8 @@ public sealed class Goblin(MathUtility mathUtility) : IBlueprint
 
     private const string Description = "Small, green and smart. What Goblins lack in physical strength they make up in pure spunk.";
 
+    private static readonly string[] DisplayNames = DisplayNameCache.BuildDisplayNames(PersonalNameOptions, RaceName);
+
     private const short MaximumHealth = 200;
 
     /// <summary>Flat default for every NPC race, adjustable in a later balance pass -- see TODO.md's Stats entry.</summary>
@@ -42,8 +45,7 @@ public sealed class Goblin(MathUtility mathUtility) : IBlueprint
     {
         componentManager.Merge(entityId, new RaceComponent(RaceId, RaceName, Description));
 
-        var personalName = PersonalNameOptions[mathUtility.Next(0, PersonalNameOptions.Length)];
-        componentManager.Merge(entityId, new DisplayTextComponent($"{personalName} : {RaceName}", Description));
+        componentManager.Merge(entityId, new DisplayTextComponent(DisplayNames[mathUtility.Next(0, DisplayNames.Length)], Description));
 
         componentManager.Merge(entityId, new GlyphComponent("g", Color.DarkGreen));
         if (SpriteManifest.TryGet("Goblin", out var sprite))

@@ -1,4 +1,4 @@
-using Engine.ECS.Components.Stores;
+﻿using Engine.ECS.Components.Stores;
 using Engine.ECS.Systems;
 using Engine.Events;
 using Game.Modules.Burning;
@@ -171,8 +171,8 @@ public sealed class BurningSystemTests
         stacks.Add(0, new StatusEffectStack(StatusEffectType.Burning, StatusEffectSource.Admin));
         timers.Add(0, new BurningTimerComponent(1, stackCount: 1));
         var eventBus = new EventBus();
-        EntityDamaged? published = null;
-        eventBus.Subscribe<EntityDamaged>(e => published = e);
+        EntityDamagedEvent? published = null;
+        eventBus.Subscribe<EntityDamagedEvent>(e => published = e);
         var system = new BurningSystem(timers, stacks, health, eventBus, new FakePlayerQuery(0), CreateTiersPool(), new ProcessingTierEvents());
 
         system.Update(default, 0);
@@ -194,7 +194,7 @@ public sealed class BurningSystemTests
         timers.Add(1, new BurningTimerComponent(1, stackCount: 1));
         var eventBus = new EventBus();
         var published = false;
-        eventBus.Subscribe<EntityDamaged>(_ => published = true);
+        eventBus.Subscribe<EntityDamagedEvent>(_ => published = true);
         var system = new BurningSystem(timers, stacks, health, eventBus, new FakePlayerQuery(playerEntityId: 0), CreateTiersPool(), new ProcessingTierEvents());
 
         // Entity 1 lands in stripe 1 (entityId % StripeCount), not stripe 0.

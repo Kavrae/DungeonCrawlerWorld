@@ -1,4 +1,4 @@
-using Engine.Bootstrap;
+﻿using Engine.Bootstrap;
 using Engine.ECS.Context;
 using Engine.Events;
 using Engine.Math;
@@ -19,8 +19,8 @@ namespace Tests.Modules.Achievements;
 /// then RegisterSystems, mirroring GameBootstrapper.Build's own ordering -- see
 /// GameModuleIntegrationTests for the same pattern with other real modules) rather than
 /// against AchievementModule's internals directly. The Loner/UnarmedCombat tests below assign
-/// World.PlayerEntityId *before* publishing EnteredDungeon, matching GameLoop's real ordering
-/// (EnteredDungeon is published only after _playerSpawned flips true, which happens after
+/// World.PlayerEntityId *before* publishing EnteredDungeonEvent, matching GameLoop's real ordering
+/// (EnteredDungeonEvent is published only after _playerSpawned flips true, which happens after
 /// World.PlayerEntityId is assigned).
 /// </summary>
 [TestClass]
@@ -62,10 +62,10 @@ public sealed class AchievementModuleTests
         Bootstrapper.Build(modules, initialEntityCapacity: 10, initialComponentCapacity: 10, eventBus);
 
         var notificationCount = 0;
-        eventBus.Subscribe<NotificationRequested>(_ => notificationCount++);
+        eventBus.Subscribe<NotificationRequestedEvent>(_ => notificationCount++);
 
-        eventBus.Publish(new EnteredDungeon());
-        eventBus.DispatchBuffered<NotificationRequested>();
+        eventBus.Publish(new EnteredDungeonEvent());
+        eventBus.DispatchBuffered<NotificationRequestedEvent>();
 
         Assert.AreEqual(0, notificationCount);
     }
@@ -76,8 +76,8 @@ public sealed class AchievementModuleTests
         var (ecsContext, eventBus, world) = Build();
         var playerEntityId = ecsContext.EntityManager.CreateEntity();
         world.PlayerEntityId = playerEntityId;
-        NotificationRequested? published = null;
-        eventBus.Subscribe<NotificationRequested>(requested =>
+        NotificationRequestedEvent? published = null;
+        eventBus.Subscribe<NotificationRequestedEvent>(requested =>
         {
             if (requested.Title == "Loner")
             {
@@ -85,8 +85,8 @@ public sealed class AchievementModuleTests
             }
         });
 
-        eventBus.Publish(new EnteredDungeon());
-        eventBus.DispatchBuffered<NotificationRequested>(); // NotificationRequested is buffered -- see NotificationCenter.Update's own doc comment.
+        eventBus.Publish(new EnteredDungeonEvent());
+        eventBus.DispatchBuffered<NotificationRequestedEvent>(); // NotificationRequestedEvent is buffered -- see NotificationCenter.Update's own doc comment.
 
         Assert.IsTrue(AchievementQueries.HasEarned(
             ecsContext.ComponentManager.GetMultiPool<AchievementUnlockedComponent>(),
@@ -108,7 +108,7 @@ public sealed class AchievementModuleTests
         var playerEntityId = ecsContext.EntityManager.CreateEntity();
         world.PlayerEntityId = playerEntityId;
         var lonerNotificationCount = 0;
-        eventBus.Subscribe<NotificationRequested>(requested =>
+        eventBus.Subscribe<NotificationRequestedEvent>(requested =>
         {
             if (requested.Title == "Loner")
             {
@@ -116,9 +116,9 @@ public sealed class AchievementModuleTests
             }
         });
 
-        eventBus.Publish(new EnteredDungeon());
-        eventBus.Publish(new EnteredDungeon());
-        eventBus.DispatchBuffered<NotificationRequested>();
+        eventBus.Publish(new EnteredDungeonEvent());
+        eventBus.Publish(new EnteredDungeonEvent());
+        eventBus.DispatchBuffered<NotificationRequestedEvent>();
 
         Assert.AreEqual(1, lonerNotificationCount);
 
@@ -129,7 +129,7 @@ public sealed class AchievementModuleTests
             earnedCount++;
         }
 
-        Assert.AreEqual(3, earnedCount, "Loner, Unarmed Combat, and Empty Pockets all unlock unconditionally on EnteredDungeon (Early Adopter needs a CrawlerComponent this test's player doesn't have).");
+        Assert.AreEqual(3, earnedCount, "Loner, Unarmed Combat, and Empty Pockets all unlock unconditionally on EnteredDungeonEvent (Early Adopter needs a CrawlerComponent this test's player doesn't have).");
     }
 
     [TestMethod]
@@ -139,7 +139,7 @@ public sealed class AchievementModuleTests
         var playerEntityId = ecsContext.EntityManager.CreateEntity();
         world.PlayerEntityId = playerEntityId;
 
-        eventBus.Publish(new EntityMoved(playerEntityId, new Vector3Int(1, 1, 0), new Vector3Int(1, 1, 0), new Vector2Byte(1, 1)));
+        eventBus.Publish(new EntityMovedEvent(playerEntityId, new Vector3Int(1, 1, 0), new Vector3Int(1, 1, 0), new Vector2Byte(1, 1)));
 
         Assert.IsFalse(AchievementQueries.HasEarned(
             ecsContext.ComponentManager.GetMultiPool<AchievementUnlockedComponent>(),
@@ -153,8 +153,8 @@ public sealed class AchievementModuleTests
         var (ecsContext, eventBus, world) = Build();
         var playerEntityId = ecsContext.EntityManager.CreateEntity();
         world.PlayerEntityId = playerEntityId;
-        NotificationRequested? published = null;
-        eventBus.Subscribe<NotificationRequested>(requested =>
+        NotificationRequestedEvent? published = null;
+        eventBus.Subscribe<NotificationRequestedEvent>(requested =>
         {
             if (requested.Title == "Unarmed Combat")
             {
@@ -162,8 +162,8 @@ public sealed class AchievementModuleTests
             }
         });
 
-        eventBus.Publish(new EnteredDungeon());
-        eventBus.DispatchBuffered<NotificationRequested>(); // NotificationRequested is buffered -- see NotificationCenter.Update's own doc comment.
+        eventBus.Publish(new EnteredDungeonEvent());
+        eventBus.DispatchBuffered<NotificationRequestedEvent>(); // NotificationRequestedEvent is buffered -- see NotificationCenter.Update's own doc comment.
 
         Assert.IsTrue(AchievementQueries.HasEarned(
             ecsContext.ComponentManager.GetMultiPool<AchievementUnlockedComponent>(),
@@ -183,7 +183,7 @@ public sealed class AchievementModuleTests
         var playerEntityId = ecsContext.EntityManager.CreateEntity();
         world.PlayerEntityId = playerEntityId;
 
-        eventBus.Publish(new EntityMoved(playerEntityId, new Vector3Int(1, 1, 0), new Vector3Int(1, 1, 0), new Vector2Byte(1, 1)));
+        eventBus.Publish(new EntityMovedEvent(playerEntityId, new Vector3Int(1, 1, 0), new Vector3Int(1, 1, 0), new Vector2Byte(1, 1)));
 
         Assert.IsFalse(AchievementQueries.HasEarned(
             ecsContext.ComponentManager.GetMultiPool<AchievementUnlockedComponent>(),
@@ -197,8 +197,8 @@ public sealed class AchievementModuleTests
         var (ecsContext, eventBus, world) = Build();
         var playerEntityId = ecsContext.EntityManager.CreateEntity();
         world.PlayerEntityId = playerEntityId;
-        NotificationRequested? published = null;
-        eventBus.Subscribe<NotificationRequested>(requested =>
+        NotificationRequestedEvent? published = null;
+        eventBus.Subscribe<NotificationRequestedEvent>(requested =>
         {
             if (requested.Title == "Empty Pockets")
             {
@@ -206,8 +206,8 @@ public sealed class AchievementModuleTests
             }
         });
 
-        eventBus.Publish(new EnteredDungeon());
-        eventBus.DispatchBuffered<NotificationRequested>(); // NotificationRequested is buffered -- see NotificationCenter.Update's own doc comment.
+        eventBus.Publish(new EnteredDungeonEvent());
+        eventBus.DispatchBuffered<NotificationRequestedEvent>(); // NotificationRequestedEvent is buffered -- see NotificationCenter.Update's own doc comment.
 
         Assert.IsTrue(AchievementQueries.HasEarned(
             ecsContext.ComponentManager.GetMultiPool<AchievementUnlockedComponent>(),
@@ -227,7 +227,7 @@ public sealed class AchievementModuleTests
         var playerEntityId = ecsContext.EntityManager.CreateEntity();
         world.PlayerEntityId = playerEntityId;
 
-        eventBus.Publish(new EntityMoved(playerEntityId, new Vector3Int(1, 1, 0), new Vector3Int(1, 1, 0), new Vector2Byte(1, 1)));
+        eventBus.Publish(new EntityMovedEvent(playerEntityId, new Vector3Int(1, 1, 0), new Vector3Int(1, 1, 0), new Vector2Byte(1, 1)));
 
         Assert.IsFalse(AchievementQueries.HasEarned(
             ecsContext.ComponentManager.GetMultiPool<AchievementUnlockedComponent>(),
@@ -242,8 +242,8 @@ public sealed class AchievementModuleTests
         var playerEntityId = ecsContext.EntityManager.CreateEntity();
         world.PlayerEntityId = playerEntityId;
         ecsContext.ComponentManager.GetPackedPool<CrawlerComponent>().Add(playerEntityId, new CrawlerComponent(5000));
-        NotificationRequested? published = null;
-        eventBus.Subscribe<NotificationRequested>(requested =>
+        NotificationRequestedEvent? published = null;
+        eventBus.Subscribe<NotificationRequestedEvent>(requested =>
         {
             if (requested.Title == "Early Adopter")
             {
@@ -251,8 +251,8 @@ public sealed class AchievementModuleTests
             }
         });
 
-        eventBus.Publish(new EnteredDungeon());
-        eventBus.DispatchBuffered<NotificationRequested>();
+        eventBus.Publish(new EnteredDungeonEvent());
+        eventBus.DispatchBuffered<NotificationRequestedEvent>();
 
         Assert.IsTrue(AchievementQueries.HasEarned(
             ecsContext.ComponentManager.GetMultiPool<AchievementUnlockedComponent>(),
@@ -273,7 +273,7 @@ public sealed class AchievementModuleTests
         world.PlayerEntityId = playerEntityId;
         ecsContext.ComponentManager.GetPackedPool<CrawlerComponent>().Add(playerEntityId, new CrawlerComponent(5001));
 
-        eventBus.Publish(new EnteredDungeon());
+        eventBus.Publish(new EnteredDungeonEvent());
 
         Assert.IsFalse(AchievementQueries.HasEarned(
             ecsContext.ComponentManager.GetMultiPool<AchievementUnlockedComponent>(),
@@ -288,7 +288,7 @@ public sealed class AchievementModuleTests
         var playerEntityId = ecsContext.EntityManager.CreateEntity();
         world.PlayerEntityId = playerEntityId;
 
-        eventBus.Publish(new EnteredDungeon());
+        eventBus.Publish(new EnteredDungeonEvent());
 
         Assert.IsFalse(AchievementQueries.HasEarned(
             ecsContext.ComponentManager.GetMultiPool<AchievementUnlockedComponent>(),
@@ -303,11 +303,11 @@ public sealed class AchievementModuleTests
         var playerEntityId = ecsContext.EntityManager.CreateEntity();
         var npcEntityId = ecsContext.EntityManager.CreateEntity();
         world.PlayerEntityId = playerEntityId;
-        NotificationRequested? published = null;
-        eventBus.Subscribe<NotificationRequested>(requested => published = requested);
+        NotificationRequestedEvent? published = null;
+        eventBus.Subscribe<NotificationRequestedEvent>(requested => published = requested);
 
-        eventBus.Publish(new EntityDamaged(npcEntityId, 5, StatusEffectSource.FromEntity(playerEntityId), 15, 20, "Default Attack"));
-        eventBus.DispatchBuffered<NotificationRequested>();
+        eventBus.Publish(new EntityDamagedEvent(npcEntityId, 5, StatusEffectSource.FromEntity(playerEntityId), 15, 20, "Default Attack"));
+        eventBus.DispatchBuffered<NotificationRequestedEvent>();
 
         Assert.IsTrue(AchievementQueries.HasEarned(
             ecsContext.ComponentManager.GetMultiPool<AchievementUnlockedComponent>(),
@@ -327,7 +327,7 @@ public sealed class AchievementModuleTests
         var npcEntityId = ecsContext.EntityManager.CreateEntity();
         world.PlayerEntityId = playerEntityId;
 
-        eventBus.Publish(new EntityDamaged(playerEntityId, 5, StatusEffectSource.FromEntity(npcEntityId), 15, 20, "Contact"));
+        eventBus.Publish(new EntityDamagedEvent(playerEntityId, 5, StatusEffectSource.FromEntity(npcEntityId), 15, 20, "Contact"));
 
         Assert.IsFalse(AchievementQueries.HasEarned(
             ecsContext.ComponentManager.GetMultiPool<AchievementUnlockedComponent>(),

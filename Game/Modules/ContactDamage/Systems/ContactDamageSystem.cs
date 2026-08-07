@@ -1,4 +1,4 @@
-using Engine.ECS.Components.Stores;
+﻿using Engine.ECS.Components.Stores;
 using Engine.ECS.Systems;
 using Engine.Events;
 using Game.Modules.ContactDamage.Components;
@@ -13,8 +13,8 @@ using Game.World;
 namespace Game.Modules.ContactDamage.Systems;
 
 /// <summary>
-/// Detects contact by draining MovementSystem's shared FrameEventBuffer&lt;EntityMoved&gt; at
-/// the start of each Update (replacing an EntityMoved EventBus subscription -- a gameplay-demo
+/// Detects contact by draining MovementSystem's shared FrameEventBuffer&lt;EntityMovedEvent&gt; at
+/// the start of each Update (replacing an EntityMovedEvent EventBus subscription -- a gameplay-demo
 /// profiling investigation found that pattern, multiplied across every subscriber and the full
 /// moving population, a measured hotspot; see FrameEventBuffer's own doc comment) and ticks
 /// ongoing exposure via the same Update, combined in one class since both operate on the same
@@ -31,7 +31,7 @@ namespace Game.Modules.ContactDamage.Systems;
 /// Per the literal spec, every buffered move landing on a hazard tile deals the immediate hit
 /// and resets the countdown -- including hazard-tile-to-hazard-tile moves, not just a fresh
 /// entry after being off one. EventBus is still a constructor dependency -- HealthDamage.Apply
-/// publishes EntityDamaged through it, an unrelated, low-frequency event this redesign doesn't
+/// publishes EntityDamagedEvent through it, an unrelated, low-frequency event this redesign doesn't
 /// touch.
 /// </summary>
 public sealed class ContactDamageSystem : ISystem
@@ -45,7 +45,7 @@ public sealed class ContactDamageSystem : ISystem
     private readonly EventBus _eventBus;
     private readonly IMapQuery _mapQuery;
     private readonly IPlayerQuery? _playerQuery;
-    private readonly FrameEventBuffer<EntityMoved> _movedEntities;
+    private readonly FrameEventBuffer<EntityMovedEvent> _movedEntities;
     private readonly PackedComponentPool<DeadComponent>? _deadEntities;
     private readonly TieredEntityStripeSet _tieredStripeSet;
 
@@ -68,7 +68,7 @@ public sealed class ContactDamageSystem : ISystem
         EventBus eventBus,
         IMapQuery mapQuery,
         IPlayerQuery? playerQuery,
-        FrameEventBuffer<EntityMoved> movedEntities,
+        FrameEventBuffer<EntityMovedEvent> movedEntities,
         DirectComponentPool<ProcessingTierComponent> processingTiers,
         ProcessingTierEvents processingTierEvents,
         MultiComponentPool<StatModifierComponent>? statModifiers = null,
@@ -88,7 +88,7 @@ public sealed class ContactDamageSystem : ISystem
         _tieredStripeSet = ProcessingTierWiring.CreateAndWire(StripeCount, exposures, processingTiers, processingTierEvents);
     }
 
-    private void OnEntityMoved(EntityMoved moved)
+    private void OnEntityMoved(EntityMovedEvent moved)
     {
         if (_deadEntities?.Has(moved.EntityId) == true)
         {
@@ -139,7 +139,7 @@ public sealed class ContactDamageSystem : ISystem
     private bool Tick(int entityId, ContactDamageExposureComponent exposure)
     {
         // A corpse stops taking further contact damage -- otherwise a dead entity standing in
-        // lava would keep re-triggering HealthDamage.Apply/EntityDamaged forever. The stale
+        // lava would keep re-triggering HealthDamage.Apply/EntityDamagedEvent forever. The stale
         // exposure component is left in place but inert (matching the "never removes here"
         // convention this method already follows), not cleared.
         if (_deadEntities?.Has(entityId) == true)

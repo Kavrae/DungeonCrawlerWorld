@@ -1,4 +1,4 @@
-using Engine.ECS.Systems;
+﻿using Engine.ECS.Systems;
 using Engine.Events;
 using Engine.Math;
 using Game.Modules.Abilities;
@@ -47,7 +47,7 @@ public sealed record GameModuleContext(IMapQuery MapQuery, MathUtility MathUtili
     /// FrameEventBuffer's own doc comment. Always a real instance (never null), the same
     /// always-safe-default reasoning as Abilities/StatusEffectAuraAppliers above.
     /// </summary>
-    public FrameEventBuffer<EntityMoved> MovedEntities { get; init; } = new();
+    public FrameEventBuffer<EntityMovedEvent> MovedEntities { get; init; } = new();
 
     /// <summary>
     /// Shared across every module's Configure call within one build -- same always-real-default

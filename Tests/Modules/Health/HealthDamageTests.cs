@@ -1,4 +1,4 @@
-using Engine.ECS.Components.Stores;
+﻿using Engine.ECS.Components.Stores;
 using Engine.Events;
 using Game.Modules.Health;
 using Game.Modules.Health.Components;
@@ -53,8 +53,8 @@ public sealed class HealthDamageTests
         var pool = CreatePool();
         pool.Add(0, new HealthComponent(currentHealth: 50, maximumHealth: 100));
         var eventBus = new EventBus();
-        EntityDamaged? published = null;
-        eventBus.Subscribe<EntityDamaged>(e => published = e);
+        EntityDamagedEvent? published = null;
+        eventBus.Subscribe<EntityDamagedEvent>(e => published = e);
 
         HealthDamage.Apply(pool, eventBus, 0, 10, StatusEffectSource.Admin, new FakePlayerQuery(0), "Status Effect (Burning)");
 
@@ -72,7 +72,7 @@ public sealed class HealthDamageTests
         pool.Add(1, new HealthComponent(currentHealth: 50, maximumHealth: 100));
         var eventBus = new EventBus();
         var published = false;
-        eventBus.Subscribe<EntityDamaged>(_ => published = true);
+        eventBus.Subscribe<EntityDamagedEvent>(_ => published = true);
 
         HealthDamage.Apply(pool, eventBus, 1, 10, StatusEffectSource.Admin, new FakePlayerQuery(0), "Status Effect (Burning)");
 
@@ -85,8 +85,8 @@ public sealed class HealthDamageTests
         var pool = CreatePool();
         pool.Add(1, new HealthComponent(currentHealth: 50, maximumHealth: 100));
         var eventBus = new EventBus();
-        EntityDamaged? published = null;
-        eventBus.Subscribe<EntityDamaged>(e => published = e);
+        EntityDamagedEvent? published = null;
+        eventBus.Subscribe<EntityDamagedEvent>(e => published = e);
 
         HealthDamage.Apply(pool, eventBus, 1, 10, StatusEffectSource.FromEntity(0), new FakePlayerQuery(0), "Default Attack");
 
@@ -103,7 +103,7 @@ public sealed class HealthDamageTests
         pool.Add(1, new HealthComponent(currentHealth: 50, maximumHealth: 100));
         var eventBus = new EventBus();
         var published = false;
-        eventBus.Subscribe<EntityDamaged>(_ => published = true);
+        eventBus.Subscribe<EntityDamagedEvent>(_ => published = true);
 
         HealthDamage.Apply(pool, eventBus, 1, 10, StatusEffectSource.FromEntity(2), new FakePlayerQuery(0), "Contact");
 
@@ -117,7 +117,7 @@ public sealed class HealthDamageTests
         pool.Add(0, new HealthComponent(currentHealth: 50, maximumHealth: 100));
         var eventBus = new EventBus();
         var published = false;
-        eventBus.Subscribe<EntityDamaged>(_ => published = true);
+        eventBus.Subscribe<EntityDamagedEvent>(_ => published = true);
 
         HealthDamage.Apply(pool, eventBus, 0, 10, StatusEffectSource.Admin, null, "Status Effect (Burning)");
 
@@ -130,11 +130,11 @@ public sealed class HealthDamageTests
         var pool = CreatePool();
         pool.Add(1, new HealthComponent(currentHealth: 5, maximumHealth: 100));
         var eventBus = new EventBus();
-        EntityDied? published = null;
-        eventBus.Subscribe<EntityDied>(e => published = e);
+        EntityDiedEvent? published = null;
+        eventBus.Subscribe<EntityDiedEvent>(e => published = e);
 
         HealthDamage.Apply(pool, eventBus, 1, 10, StatusEffectSource.FromEntity(0), new FakePlayerQuery(0), "Default Attack");
-        eventBus.DispatchBuffered<EntityDied>();
+        eventBus.DispatchBuffered<EntityDiedEvent>();
 
         Assert.IsNotNull(published);
         Assert.AreEqual(1, published!.Value.EntityId);
@@ -148,10 +148,10 @@ public sealed class HealthDamageTests
         pool.Add(1, new HealthComponent(currentHealth: 50, maximumHealth: 100));
         var eventBus = new EventBus();
         var published = false;
-        eventBus.Subscribe<EntityDied>(_ => published = true);
+        eventBus.Subscribe<EntityDiedEvent>(_ => published = true);
 
         HealthDamage.Apply(pool, eventBus, 1, 10, StatusEffectSource.Admin, new FakePlayerQuery(0), "Contact");
-        eventBus.DispatchBuffered<EntityDied>();
+        eventBus.DispatchBuffered<EntityDiedEvent>();
 
         Assert.IsFalse(published);
     }
@@ -163,11 +163,11 @@ public sealed class HealthDamageTests
         pool.Add(1, new HealthComponent(currentHealth: 5, maximumHealth: 100));
         var eventBus = new EventBus();
         var publishCount = 0;
-        eventBus.Subscribe<EntityDied>(_ => publishCount++);
+        eventBus.Subscribe<EntityDiedEvent>(_ => publishCount++);
 
         HealthDamage.Apply(pool, eventBus, 1, 10, StatusEffectSource.Admin, new FakePlayerQuery(0), "Contact");
         HealthDamage.Apply(pool, eventBus, 1, 10, StatusEffectSource.Admin, new FakePlayerQuery(0), "Contact");
-        eventBus.DispatchBuffered<EntityDied>();
+        eventBus.DispatchBuffered<EntityDiedEvent>();
 
         Assert.AreEqual(1, publishCount);
     }
@@ -179,10 +179,10 @@ public sealed class HealthDamageTests
         pool.Add(0, new HealthComponent(currentHealth: 5, maximumHealth: 100));
         var eventBus = new EventBus();
         var published = false;
-        eventBus.Subscribe<EntityDied>(_ => published = true);
+        eventBus.Subscribe<EntityDiedEvent>(_ => published = true);
 
         HealthDamage.Apply(pool, eventBus, 0, 10, StatusEffectSource.Admin, new FakePlayerQuery(0), "Contact");
-        eventBus.DispatchBuffered<EntityDied>();
+        eventBus.DispatchBuffered<EntityDiedEvent>();
 
         Assert.IsFalse(published);
     }

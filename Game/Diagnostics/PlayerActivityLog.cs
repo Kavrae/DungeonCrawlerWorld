@@ -1,4 +1,4 @@
-using Engine.ECS.Components;
+﻿using Engine.ECS.Components;
 using Engine.ECS.Components.Stores;
 using Engine.Events;
 using Game.Modules.Core.Components;
@@ -34,8 +34,8 @@ public sealed class PlayerActivityLog : IDisposable
 
         _writer = new StreamWriter(logFilePath, append: true) { AutoFlush = true };
 
-        eventBus.Subscribe<EntityMoved>(OnEntityMoved);
-        eventBus.Subscribe<EntityDamaged>(OnEntityDamaged);
+        eventBus.Subscribe<EntityMovedEvent>(OnEntityMoved);
+        eventBus.Subscribe<EntityDamagedEvent>(OnEntityDamaged);
     }
 
     /// <summary>
@@ -49,7 +49,7 @@ public sealed class PlayerActivityLog : IDisposable
         _currentTimestamp = timestamp;
     }
 
-    private void OnEntityMoved(EntityMoved moved)
+    private void OnEntityMoved(EntityMovedEvent moved)
     {
         if (moved.EntityId != _world.PlayerEntityId)
         {
@@ -66,7 +66,7 @@ public sealed class PlayerActivityLog : IDisposable
     /// EntityId-only filter was dropping it). Target is logged explicitly now that EntityId
     /// isn't always the player, unlike before.
     /// </summary>
-    private void OnEntityDamaged(EntityDamaged damaged)
+    private void OnEntityDamaged(EntityDamagedEvent damaged)
     {
         var playerIsTarget = damaged.EntityId == _world.PlayerEntityId;
         var playerIsSource = damaged.Source.Kind == StatusEffectSourceKind.Entity && damaged.Source.EntityId == _world.PlayerEntityId;

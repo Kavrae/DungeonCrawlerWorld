@@ -1,4 +1,4 @@
-using Engine.ECS.Components.Stores;
+﻿using Engine.ECS.Components.Stores;
 using Engine.ECS.Systems;
 using Engine.Events;
 using Engine.Math;
@@ -63,7 +63,7 @@ public sealed class ContactDamageSystemTests
         PackedComponentPool<ContactDamageExposureComponent> Exposures,
         PackedComponentPool<HealthComponent> Health,
         FakeMapQuery MapQuery,
-        FrameEventBuffer<EntityMoved> MovedEntities,
+        FrameEventBuffer<EntityMovedEvent> MovedEntities,
         PackedComponentPool<DeadComponent> DeadEntities,
         DirectComponentPool<ProcessingTierComponent> ProcessingTiers) Build()
     {
@@ -71,7 +71,7 @@ public sealed class ContactDamageSystemTests
         var exposures = CreateExposurePool();
         var health = CreateHealthPool();
         var mapQuery = new FakeMapQuery();
-        var movedEntities = new FrameEventBuffer<EntityMoved>();
+        var movedEntities = new FrameEventBuffer<EntityMovedEvent>();
         var deadEntities = CreateDeadPool();
         var processingTiers = CreateTiersPool();
 
@@ -92,7 +92,7 @@ public sealed class ContactDamageSystemTests
     /// loop iteration, getting silently reprocessed (re-adding the exposure, re-dealing contact
     /// damage) every single call instead of just once.
     /// </summary>
-    private static void SimulateFrame(ContactDamageSystem system, FrameEventBuffer<EntityMoved> movedEntities, byte stripeIndex = 0)
+    private static void SimulateFrame(ContactDamageSystem system, FrameEventBuffer<EntityMovedEvent> movedEntities, byte stripeIndex = 0)
     {
         system.Update(default, stripeIndex);
         movedEntities.ClearFrame();
@@ -103,7 +103,7 @@ public sealed class ContactDamageSystemTests
     {
         var (system, _, _, health, _, movedEntities, _, _) = Build();
 
-        movedEntities.Record(new EntityMoved(MoverEntityId, new Vector3Int(4, 5, 0), new Vector3Int(5, 5, 0), new Vector2Byte(1, 1)));
+        movedEntities.Record(new EntityMovedEvent(MoverEntityId, new Vector3Int(4, 5, 0), new Vector3Int(5, 5, 0), new Vector2Byte(1, 1)));
         SimulateFrame(system, movedEntities);
 
         Assert.AreEqual(90, health.GetReadonly(MoverEntityId).CurrentHealth);
@@ -114,7 +114,7 @@ public sealed class ContactDamageSystemTests
     /// Update call (draining the moved-entities buffer, then CountdownTicker.Tick) -- so a
     /// freshly-added exposure is also ticked once within that same call, landing at 59, not the
     /// full 60. This actually matches real gameplay more accurately than the old EventBus-based
-    /// version's "60 immediately after publish" ever did: MovementSystem published EntityMoved
+    /// version's "60 immediately after publish" ever did: MovementSystem published EntityMovedEvent
     /// synchronously mid-Update, before ContactDamageSystem's own registered Update (and its
     /// tick pass) ran later that same frame -- so the exposure was already ticked once by the
     /// end of that real frame too, just via a separate call the old isolated-publish-then-assert
@@ -125,7 +125,7 @@ public sealed class ContactDamageSystemTests
     {
         var (system, _, exposures, _, _, movedEntities, _, _) = Build();
 
-        movedEntities.Record(new EntityMoved(MoverEntityId, new Vector3Int(4, 5, 0), new Vector3Int(5, 5, 0), new Vector2Byte(1, 1)));
+        movedEntities.Record(new EntityMovedEvent(MoverEntityId, new Vector3Int(4, 5, 0), new Vector3Int(5, 5, 0), new Vector2Byte(1, 1)));
         SimulateFrame(system, movedEntities);
 
         Assert.IsTrue(exposures.Has(MoverEntityId));
@@ -137,7 +137,7 @@ public sealed class ContactDamageSystemTests
     {
         var (system, _, exposures, health, _, movedEntities, _, _) = Build();
 
-        movedEntities.Record(new EntityMoved(MoverEntityId, new Vector3Int(4, 5, 0), new Vector3Int(4, 6, 0), new Vector2Byte(1, 1)));
+        movedEntities.Record(new EntityMovedEvent(MoverEntityId, new Vector3Int(4, 5, 0), new Vector3Int(4, 6, 0), new Vector2Byte(1, 1)));
         SimulateFrame(system, movedEntities);
 
         Assert.IsFalse(exposures.Has(MoverEntityId));
@@ -148,7 +148,7 @@ public sealed class ContactDamageSystemTests
     public void RemainingOnHazard_DealsDamageAgainAfterSixtyFrames()
     {
         var (system, _, _, health, _, movedEntities, _, _) = Build();
-        movedEntities.Record(new EntityMoved(MoverEntityId, new Vector3Int(4, 5, 0), new Vector3Int(5, 5, 0), new Vector2Byte(1, 1)));
+        movedEntities.Record(new EntityMovedEvent(MoverEntityId, new Vector3Int(4, 5, 0), new Vector3Int(5, 5, 0), new Vector2Byte(1, 1)));
 
         // The first of these 60 frames both drains the buffer (adding the exposure and dealing
         // the initial hit) and runs the first tick-decrement, so the total tick count across
@@ -165,7 +165,7 @@ public sealed class ContactDamageSystemTests
     public void RemainingOnHazard_FiftyNineFrames_DoesNotDealDamageYet()
     {
         var (system, _, _, health, _, movedEntities, _, _) = Build();
-        movedEntities.Record(new EntityMoved(MoverEntityId, new Vector3Int(4, 5, 0), new Vector3Int(5, 5, 0), new Vector2Byte(1, 1)));
+        movedEntities.Record(new EntityMovedEvent(MoverEntityId, new Vector3Int(4, 5, 0), new Vector3Int(5, 5, 0), new Vector2Byte(1, 1)));
 
         for (var frame = 0; frame < 59; frame++)
         {
@@ -179,7 +179,7 @@ public sealed class ContactDamageSystemTests
     public void DeadEntityAlreadyExposed_DoesNotTakeFurtherDamage()
     {
         var (system, _, _, health, _, movedEntities, deadEntities, _) = Build();
-        movedEntities.Record(new EntityMoved(MoverEntityId, new Vector3Int(4, 5, 0), new Vector3Int(5, 5, 0), new Vector2Byte(1, 1)));
+        movedEntities.Record(new EntityMovedEvent(MoverEntityId, new Vector3Int(4, 5, 0), new Vector3Int(5, 5, 0), new Vector2Byte(1, 1)));
         SimulateFrame(system, movedEntities); // Onto the hazard: exposure added, immediate 10 damage -> 90.
         deadEntities.Add(MoverEntityId, new DeadComponent(KilledByEntityId: null));
 
@@ -195,8 +195,8 @@ public sealed class ContactDamageSystemTests
     public void SteppingOffHazard_StopsFurtherDamage()
     {
         var (system, _, exposures, health, _, movedEntities, _, _) = Build();
-        movedEntities.Record(new EntityMoved(MoverEntityId, new Vector3Int(4, 5, 0), new Vector3Int(5, 5, 0), new Vector2Byte(1, 1)));
-        movedEntities.Record(new EntityMoved(MoverEntityId, new Vector3Int(5, 5, 0), new Vector3Int(6, 5, 0), new Vector2Byte(1, 1)));
+        movedEntities.Record(new EntityMovedEvent(MoverEntityId, new Vector3Int(4, 5, 0), new Vector3Int(5, 5, 0), new Vector2Byte(1, 1)));
+        movedEntities.Record(new EntityMovedEvent(MoverEntityId, new Vector3Int(5, 5, 0), new Vector3Int(6, 5, 0), new Vector2Byte(1, 1)));
         SimulateFrame(system, movedEntities); // Drains both buffered moves: onto the hazard (adds exposure + damage), then off it (removes the exposure) -- all before this call's own tick pass.
 
         Assert.IsFalse(exposures.Has(MoverEntityId));
@@ -217,13 +217,13 @@ public sealed class ContactDamageSystemTests
         hazards.Add(secondTerrainEntityId, new DamageOnContactComponent(damagePerTick: 10, tickIntervalFrames: 60));
         mapQuery.SetTerrain(new Vector3Int(6, 5, 0), secondTerrainEntityId);
 
-        movedEntities.Record(new EntityMoved(MoverEntityId, new Vector3Int(4, 5, 0), new Vector3Int(5, 5, 0), new Vector2Byte(1, 1)));
+        movedEntities.Record(new EntityMovedEvent(MoverEntityId, new Vector3Int(4, 5, 0), new Vector3Int(5, 5, 0), new Vector2Byte(1, 1)));
         for (var frame = 0; frame < 30; frame++)
         {
             SimulateFrame(system, movedEntities);
         }
 
-        movedEntities.Record(new EntityMoved(MoverEntityId, new Vector3Int(5, 5, 0), new Vector3Int(6, 5, 0), new Vector2Byte(1, 1)));
+        movedEntities.Record(new EntityMovedEvent(MoverEntityId, new Vector3Int(5, 5, 0), new Vector3Int(6, 5, 0), new Vector2Byte(1, 1)));
         SimulateFrame(system, movedEntities); // Drains the second move (retrigger + reset to 60) then ticks it once in this same call, landing at 59 -- see SteppingOntoHazard_AddsExposureWithCountdownAlreadyTickedOnceThisFrame's own doc comment for why.
 
         Assert.AreEqual(80, health.GetReadonly(MoverEntityId).CurrentHealth);

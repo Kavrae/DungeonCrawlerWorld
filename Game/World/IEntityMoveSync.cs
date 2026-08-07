@@ -1,4 +1,4 @@
-using Game.Modules.Core.Components;
+﻿using Game.Modules.Core.Components;
 
 namespace Game.World;
 
@@ -16,7 +16,7 @@ namespace Game.World;
 /// </summary>
 public interface IEntityMoveSync
 {
-    void SyncMove(EntityMoved moved);
+    void SyncMove(EntityMovedEvent moved);
 
     void ConvertToNonBlocking(int entityId, ref TransformComponent transform);
 }

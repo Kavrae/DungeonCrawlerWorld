@@ -1,4 +1,4 @@
-using Engine.Events;
+﻿using Engine.Events;
 using Game.Notifications;
 using Microsoft.Xna.Framework;
 
@@ -13,7 +13,7 @@ namespace Presentation.UI.Notifications;
 /// "dismissed for now, reopen it later from the summary Folder", not "still on screen, just
 /// collapsed". Closing is driven by Window's real Closed event rather than a public
 /// CloseNotification(Guid) callers had to remember to call. Also subscribes to the buffered
-/// NotificationRequested event, so a Game-layer caller (which can't reference this
+/// NotificationRequestedEvent, so a Game-layer caller (which can't reference this
 /// Presentation-layer type at all) can request a notification without a direct reference.
 /// </summary>
 public sealed class NotificationCenter(ElementPoolService elementPoolService, EventBus eventBus, List<Element> dynamicHudElements)
@@ -116,18 +116,18 @@ public sealed class NotificationCenter(ElementPoolService elementPoolService, Ev
         _folder.Initialize();
         dynamicHudElements.Add(_folder);
 
-        eventBus.Subscribe<NotificationRequested>(OnNotificationRequested);
+        eventBus.Subscribe<NotificationRequestedEvent>(OnNotificationRequested);
     }
 
     /// <summary>
     /// Notifications update even while the game is paused (see GameLoop) -- true today because
     /// GameShellContext's own per-tier Update loop over DynamicHudWindows is unconditional,
     /// the same way it already is for BaseWindows, not because of anything here. This method
-    /// only does the notification-domain part: dispatching buffered NotificationRequested
+    /// only does the notification-domain part: dispatching buffered NotificationRequestedEvent
     /// events, which must run before GameLoop's pause check reads HasBlockingNotification (a
     /// notification published this same frame needs to be reflected before that check).
     /// </summary>
-    public void Update(GameTime gameTime) => eventBus.DispatchBuffered<NotificationRequested>();
+    public void Update(GameTime gameTime) => eventBus.DispatchBuffered<NotificationRequestedEvent>();
 
     public Guid AddNotification(NotificationCategory category, string text, bool showImmediately = true, string? title = null, AchievementNotificationDetails? achievement = null)
     {
@@ -178,7 +178,7 @@ public sealed class NotificationCenter(ElementPoolService elementPoolService, Ev
         return true;
     }
 
-    private void OnNotificationRequested(NotificationRequested requested) =>
+    private void OnNotificationRequested(NotificationRequestedEvent requested) =>
         AddNotification(requested.Category, requested.Text, requested.ShowImmediately, requested.Title, requested.Achievement);
 
     private void ShowActive(Notification notification)

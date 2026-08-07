@@ -1,4 +1,4 @@
-using Engine.ECS.Components.Stores;
+﻿using Engine.ECS.Components.Stores;
 using Engine.Events;
 using Engine.Math;
 using Game.Modules.Health.Components;
@@ -31,7 +31,7 @@ public static class HealthDamage
         // Reduced by the target's own IncomingDamage modifiers (e.g. a flat damage-reduction
         // buff) before anything else -- clamped at 0 so a large enough reduction can't turn
         // damage into healing. Computed once up front (not per-call-site) since both the health
-        // clamp below and the EntityDamaged event need the same, already-reduced amount.
+        // clamp below and the EntityDamagedEvent need the same, already-reduced amount.
         var effectiveAmount = MathUtility.ClampShort(
             (short)StatModifierMath.GetEffectiveValue(statModifiers, entityId, StatModifierTarget.IncomingDamage, amount),
             0,
@@ -53,11 +53,11 @@ public static class HealthDamage
         // already-dead corpse -- and never for the player, who is deliberately exempted from
         // dying for now (see TODO.md's Death at 0 HP item: the player-specific reaction, a game
         // over screen, doesn't exist yet). Published unconditionally otherwise (unlike
-        // EntityDamaged below, which only fires when the player is involved) since death needs
+        // EntityDamagedEvent below, which only fires when the player is involved) since death needs
         // to be knowable for any entity, not just player-involved damage.
         if (wasAlive && updatedHealth.CurrentHealth == 0 && entityId != playerQuery?.PlayerEntityId)
         {
-            eventBus.Publish(new EntityDied(entityId, source));
+            eventBus.Publish(new EntityDiedEvent(entityId, source));
         }
 
         if (playerQuery is null)
@@ -72,11 +72,11 @@ public static class HealthDamage
             return;
         }
 
-        // EntityDamaged's Current/MaximumHealth are short -- it's a display/logging event (see
+        // EntityDamagedEvent's Current/MaximumHealth are short -- it's a display/logging event (see
         // its own doc comment), not simulation state, so it truncates the same way HealthComponent.
         // ToString() does rather than widening its contract to float for a fractional value
         // nothing reading this event needs.
         var effectiveMaximumHealthForEvent = (short)StatModifierMath.GetEffectiveValue(statModifiers, entityId, StatModifierTarget.MaximumHealth, updatedHealth.MaximumHealth);
-        eventBus.Publish(new EntityDamaged(entityId, effectiveAmount, source, (short)updatedHealth.CurrentHealth, effectiveMaximumHealthForEvent, damageType));
+        eventBus.Publish(new EntityDamagedEvent(entityId, effectiveAmount, source, (short)updatedHealth.CurrentHealth, effectiveMaximumHealthForEvent, damageType));
     }
 }

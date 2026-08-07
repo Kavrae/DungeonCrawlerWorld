@@ -1,11 +1,11 @@
-using Game.World;
+﻿using Game.World;
 
 namespace Game.Modules.Achievements.Definitions;
 
 /// <summary>
 /// Awarded for entering the dungeon without a weapon. No equipment or start-equipment-selection
 /// system exists yet (see TODO.md's Achievement content backlog), so every player is unarmed
-/// today -- this unlocks unconditionally on EnteredDungeon, mirroring LonerAchievement's own
+/// today -- this unlocks unconditionally on EnteredDungeonEvent, mirroring LonerAchievement's own
 /// reasoning (see its doc comment for why reading IPlayerQuery.PlayerEntityId here is safe).
 ///
 /// Revisit the condition itself once equipment and start-equipment selection exist: it should
@@ -28,5 +28,5 @@ public sealed class UnarmedCombatAchievement : IAchievementDefinition
     public string RewardText => "You've received a bronze weapon box!";
 
     public void RegisterTrigger(AchievementTriggerContext context) =>
-        context.SubscribeUntilUnlocked<EnteredDungeon>();
+        context.SubscribeUntilUnlocked<EnteredDungeonEvent>();
 }

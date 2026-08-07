@@ -1,4 +1,4 @@
-using System.Diagnostics;
+﻿using System.Diagnostics;
 using Engine.Diagnostics;
 
 namespace Engine.Events;
@@ -19,7 +19,7 @@ public sealed class EventBus
     /// <summary>
     /// Cached "EventBus.Publish&lt;TypeName&gt;" phase-name string per event type, built once on
     /// first profiled Publish rather than re-interpolated every call -- unlike the per-handler
-    /// breakdown this once had (reverted: on a hyper-frequent event like EntityMoved, splitting
+    /// breakdown this once had (reverted: on a hyper-frequent event like EntityMovedEvent, splitting
     /// one timed region into several multiplied Stopwatch/PhaseProfiler.Record overhead enough
     /// to become a measurable fraction of the reported cost itself), this cache only depends on
     /// T, not on the current handler set, so Subscribe/Unsubscribe don't need to invalidate it.
@@ -30,7 +30,7 @@ public sealed class EventBus
     /// Opt-in dispatch-cost tracking, keyed by "EventBus.Publish&lt;TypeName&gt;" -- see
     /// PhaseProfiler's own doc comment. Immediate (non-buffered) dispatch runs subscribers
     /// synchronously in-line with whatever called Publish, so a system that publishes mid-
-    /// Update (e.g. MovementSystem publishing EntityMoved) has every subscriber's cost nested
+    /// Update (e.g. MovementSystem publishing EntityMovedEvent) has every subscriber's cost nested
     /// inside that system's own SystemManager.Profiler timing -- this records dispatch cost
     /// separately, so the two can be told apart when tracking down a gameplay demo's actual
     /// frame cost. Null (the default) skips the Stopwatch calls entirely.

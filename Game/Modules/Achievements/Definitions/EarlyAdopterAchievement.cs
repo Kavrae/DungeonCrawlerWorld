@@ -1,14 +1,14 @@
-using Game.Modules.Crawler.Components;
+﻿using Game.Modules.Crawler.Components;
 using Game.World;
 
 namespace Game.Modules.Achievements.Definitions;
 
 /// <summary>
-/// Awarded for entering the dungeon as one of the first 5,000 Crawlers. EnteredDungeon carries
+/// Awarded for entering the dungeon as one of the first 5,000 Crawlers. EnteredDungeonEvent carries
 /// no data (see its own doc comment), so the condition reads CrawlerComponent off the player
 /// entity directly via AchievementTriggerContext.ComponentManager -- safe because
 /// FloorBuilder.CreatePlayer (and PlayerBlueprint.Build within it) always runs before GameLoop
-/// publishes EnteredDungeon, so the player's CrawlerComponent already exists by the time this
+/// publishes EnteredDungeonEvent, so the player's CrawlerComponent already exists by the time this
 /// fires. A player entity always has CrawlerComponent (PlayerBlueprint merges it unconditionally),
 /// so TryGetReadonly failing here would indicate a real bug, not an expected case.
 /// </summary>
@@ -30,7 +30,7 @@ public sealed class EarlyAdopterAchievement : IAchievementDefinition
     public string RewardText => "";
 
     public void RegisterTrigger(AchievementTriggerContext context) =>
-        context.SubscribeUntilUnlocked<EnteredDungeon>(_ =>
+        context.SubscribeUntilUnlocked<EnteredDungeonEvent>(_ =>
             context.ComponentManager.GetPackedPool<CrawlerComponent>().TryGetReadonly(context.PlayerQuery!.PlayerEntityId, out var crawler)
             && crawler.CrawlerNumber <= MaxQualifyingCrawlerNumber);
 }

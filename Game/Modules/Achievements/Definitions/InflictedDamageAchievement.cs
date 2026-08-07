@@ -1,11 +1,11 @@
-using Game.World;
+﻿using Game.World;
 
 namespace Game.Modules.Achievements.Definitions;
 
 /// <summary>
 /// Awarded the first time the player deals damage to a non-player entity. Relies on
-/// HealthDamage.Apply publishing EntityDamaged when the player is the damage source, not just
-/// when the player is the entity damaged -- see EntityDamaged's own doc comment.
+/// HealthDamage.Apply publishing EntityDamagedEvent when the player is the damage source, not just
+/// when the player is the entity damaged -- see EntityDamagedEvent's own doc comment.
 /// </summary>
 public sealed class InflictedDamageAchievement : IAchievementDefinition
 {
@@ -23,7 +23,7 @@ public sealed class InflictedDamageAchievement : IAchievementDefinition
     public string RewardText => "It's probably going to hit back.";
 
     public void RegisterTrigger(AchievementTriggerContext context) =>
-        context.SubscribeUntilUnlocked<EntityDamaged>(entityDamaged =>
+        context.SubscribeUntilUnlocked<EntityDamagedEvent>(entityDamaged =>
             entityDamaged.Source.Kind == StatusEffectSourceKind.Entity
             && entityDamaged.Source.EntityId == context.PlayerQuery!.PlayerEntityId
             && entityDamaged.EntityId != context.PlayerQuery.PlayerEntityId);

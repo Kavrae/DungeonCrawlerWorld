@@ -1,4 +1,4 @@
-using Game.World;
+﻿using Game.World;
 
 namespace Game.Modules.Achievements.Definitions;
 
@@ -24,7 +24,7 @@ public sealed class SpellCasterAchievement : IAchievementDefinition
     public string RewardText => "";
 
     public void RegisterTrigger(AchievementTriggerContext context) =>
-        context.SubscribeUntilUnlocked<AbilityActivated>(activated =>
+        context.SubscribeUntilUnlocked<AbilityActivatedEvent>(activated =>
             activated.EntityId == context.PlayerQuery!.PlayerEntityId
             && context.Abilities.TryGet(activated.AbilityId, out var ability)
             && ability.Tags.Contains(Tag.Spell));

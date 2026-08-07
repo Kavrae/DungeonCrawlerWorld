@@ -1,4 +1,4 @@
-using Engine.ECS.Components;
+﻿using Engine.ECS.Components;
 using Engine.ECS.Systems;
 using Engine.Events;
 using Game.Modules.ContactDamage.Components;
@@ -19,7 +19,7 @@ namespace Game.Modules.ContactDamage;
 /// Parameterless, with runtime dependencies (EventBus, IMapQuery, IPlayerQuery) supplied via
 /// IGameModule.Configure. Depends on MovementModule so ContactDamageSystem's own Update
 /// always runs after MovementSystem's within the same SystemManager.Update() cycle -- required
-/// for it to see this frame's moves via the shared FrameEventBuffer&lt;EntityMoved&gt; (see
+/// for it to see this frame's moves via the shared FrameEventBuffer&lt;EntityMovedEvent&gt; (see
 /// that class's own doc comment on why producer-before-consumer ordering matters).
 /// </summary>
 public sealed class ContactDamageModule : IGameModule
@@ -31,7 +31,7 @@ public sealed class ContactDamageModule : IGameModule
     private EventBus _eventBus = null!;
     private IMapQuery _mapQuery = null!;
     private IPlayerQuery? _playerQuery;
-    private FrameEventBuffer<EntityMoved> _movedEntities = null!;
+    private FrameEventBuffer<EntityMovedEvent> _movedEntities = null!;
     private ProcessingTierEvents _processingTierEvents = null!;
 
     public void Configure(GameModuleContext context)

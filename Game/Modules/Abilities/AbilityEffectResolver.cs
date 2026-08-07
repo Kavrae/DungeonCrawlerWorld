@@ -1,4 +1,4 @@
-using Engine.ECS.Components;
+﻿using Engine.ECS.Components;
 using Engine.ECS.Components.Stores;
 using Engine.Events;
 using Engine.Math;
@@ -49,7 +49,7 @@ public static class AbilityEffectResolver
         MultiComponentPool<StatModifierComponent>? statModifiers = null,
         PackedComponentPool<DeadComponent>? deadEntities = null)
     {
-        eventBus.Publish(new AbilityActivated(sourceEntityId, ability.Id));
+        eventBus.Publish(new AbilityActivatedEvent(sourceEntityId, ability.Id));
 
         var dealsDamage = instance.DamageAmount > 0;
         var effectiveDamage = dealsDamage
@@ -142,7 +142,7 @@ public static class AbilityEffectResolver
 
             var source = StatusEffectSource.FromEntity(sourceEntityId);
             applier.ApplyStack(componentManager, targetEntityId, source);
-            eventBus.Publish(new StatusEffectApplied(targetEntityId, effectType, source));
+            eventBus.Publish(new StatusEffectAppliedEvent(targetEntityId, effectType, source));
         }
     }
 }

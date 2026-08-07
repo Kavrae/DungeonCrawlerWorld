@@ -1,4 +1,4 @@
-using Engine.ECS.Components;
+﻿using Engine.ECS.Components;
 using Engine.Events;
 using Engine.Math;
 using Game.Modules.Core.Components;
@@ -209,8 +209,8 @@ public sealed class ConsumableActivationSystemTests
         componentManager.Merge(CasterEntityId, new ActionLockComponent(totalLockFrames: 0, lockFramesRemaining: 0));
         componentManager.GetPackedPool<PotionCooldownComponent>().Add(TargetEntityId, new PotionCooldownComponent(totalFrames: 1200, framesRemaining: 500));
 
-        PotionCooldownAbused? published = null;
-        eventBus.Subscribe<PotionCooldownAbused>(e => published = e);
+        PotionCooldownAbusedEvent? published = null;
+        eventBus.Subscribe<PotionCooldownAbusedEvent>(e => published = e);
 
         system.Update(default, 0);
 
@@ -231,7 +231,7 @@ public sealed class ConsumableActivationSystemTests
         componentManager.Merge(CasterEntityId, new ActionLockComponent(totalLockFrames: 0, lockFramesRemaining: 0));
 
         var published = false;
-        eventBus.Subscribe<PotionCooldownAbused>(_ => published = true);
+        eventBus.Subscribe<PotionCooldownAbusedEvent>(_ => published = true);
 
         system.Update(default, 0);
 

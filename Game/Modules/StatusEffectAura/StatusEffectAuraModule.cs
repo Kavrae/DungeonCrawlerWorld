@@ -1,4 +1,4 @@
-using Engine.ECS.Components;
+﻿using Engine.ECS.Components;
 using Engine.ECS.Systems;
 using Game.Modules.Core.Components;
 using Game.Modules.Death.Components;
@@ -23,7 +23,7 @@ namespace Game.Modules.StatusEffectAura;
 /// list StatusEffectsModule (shared stack storage) and, now, MovementModule -- the latter so
 /// StatusEffectAuraSystem's own Update always runs after MovementSystem's within the same
 /// SystemManager.Update() cycle, required for it to see this frame's moves via the shared
-/// FrameEventBuffer&lt;EntityMoved&gt; (see that class's own doc comment on why
+/// FrameEventBuffer&lt;EntityMovedEvent&gt; (see that class's own doc comment on why
 /// producer-before-consumer ordering matters). Parameterless, with runtime dependencies
 /// (IMapQuery, the applier registry, the moved-entities buffer) supplied via
 /// IGameModule.Configure.
@@ -36,7 +36,7 @@ public sealed class StatusEffectAuraModule : IGameModule
 
     private IMapQuery _mapQuery = null!;
     private StatusEffectAuraApplierRegistry _applierRegistry = null!;
-    private FrameEventBuffer<EntityMoved> _movedEntities = null!;
+    private FrameEventBuffer<EntityMovedEvent> _movedEntities = null!;
     private ProcessingTierEvents _processingTierEvents = null!;
 
     public void Configure(GameModuleContext context)

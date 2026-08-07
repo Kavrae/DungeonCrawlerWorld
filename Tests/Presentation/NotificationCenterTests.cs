@@ -423,7 +423,7 @@ public sealed class NotificationCenterTests
         var notificationCenter = new NotificationCenter(CreateWindowService(), eventBus, dynamicHudWindows);
         notificationCenter.Initialize();
 
-        eventBus.Publish(new NotificationRequested(NotificationCategory.System, "You have entered the dungeon", ShowImmediately: true));
+        eventBus.Publish(new NotificationRequestedEvent(NotificationCategory.System, "You have entered the dungeon", ShowImmediately: true));
 
         // Not dispatched yet -- Publish on a buffered event only enqueues.
         Assert.IsFalse(notificationCenter.HasBlockingNotification);

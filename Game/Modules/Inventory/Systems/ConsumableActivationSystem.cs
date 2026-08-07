@@ -1,4 +1,4 @@
-using Engine.ECS.Components;
+﻿using Engine.ECS.Components;
 using Engine.ECS.Components.Stores;
 using Engine.ECS.Systems;
 using Engine.Events;
@@ -25,7 +25,7 @@ namespace Game.Modules.Inventory.Systems;
 /// Delayed/FreeCast equivalent for consumables today. The stack is ticked down
 /// (InventoryActions.ConsumeItem) before the effect applies, per spec order. Only
 /// ConsumableKind.Potion exists today: PotionCooldownComponent -- and the punishment Poison
-/// stack/PotionCooldownAbused event for activating it again too soon -- belongs to whoever
+/// stack/PotionCooldownAbusedEvent for activating it again too soon -- belongs to whoever
 /// actually receives the potion's effect (see ApplyPotionToTarget), not whoever drank/threw it.
 /// Drinking your own potion means those are the same entity; throwing one at a goblin means the
 /// goblin's own cooldown ticks, the thrower's does not. Shared across both potion effects
@@ -173,7 +173,7 @@ public sealed class ConsumableActivationSystem : ISystem
         if (_potionCooldowns.TryGetReadonly(targetEntityId, out var cooldown) && cooldown.FramesRemaining > 0)
         {
             PoisonEffects.ApplyStack(_componentManager, targetEntityId, StatusEffectSource.FromEntity(targetEntityId), PotionCooldownEffects.AbusePoisonDurationTicks);
-            _eventBus.Publish(new PotionCooldownAbused(targetEntityId));
+            _eventBus.Publish(new PotionCooldownAbusedEvent(targetEntityId));
         }
 
         if (consumable.HealFraction > 0)

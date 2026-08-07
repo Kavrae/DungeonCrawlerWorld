@@ -1,13 +1,13 @@
-using Game.World;
+﻿using Game.World;
 
 namespace Game.Modules.Achievements.Definitions;
 
 /// <summary>
 /// Awarded for entering the dungeon without a human companion. No companion/party system or
 /// Human race exists yet (see TODO.md's Achievement content backlog), so a companion literally
-/// cannot exist today -- this unlocks unconditionally on EnteredDungeon, which GameLoop
+/// cannot exist today -- this unlocks unconditionally on EnteredDungeonEvent, which GameLoop
 /// publishes only after World.PlayerEntityId is already assigned, so reading
-/// IPlayerQuery.PlayerEntityId here is safe (unlike the EntityMoved spawn-sentinel this used to
+/// IPlayerQuery.PlayerEntityId here is safe (unlike the EntityMovedEvent spawn-sentinel this used to
 /// rely on, which fired before that assignment).
 ///
 /// Revisit the condition itself once a real companion/party concept exists: it should then
@@ -30,5 +30,5 @@ public sealed class LonerAchievement : IAchievementDefinition
     public string RewardText => "None! Haha. You are so dead.";
 
     public void RegisterTrigger(AchievementTriggerContext context) =>
-        context.SubscribeUntilUnlocked<EnteredDungeon>();
+        context.SubscribeUntilUnlocked<EnteredDungeonEvent>();
 }

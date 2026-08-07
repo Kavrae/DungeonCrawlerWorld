@@ -1,4 +1,4 @@
-using Engine.ECS.Components.Stores;
+﻿using Engine.ECS.Components.Stores;
 using Engine.ECS.Systems;
 using Engine.Events;
 using Engine.Math;
@@ -35,8 +35,8 @@ public sealed class MovementSystemTests
     /// <summary>Records the last SyncMove call instead of touching any real World -- pairs with FakeMapQuery so a test can run with no Game.World.World anywhere in the object graph while still verifying the mandatory map-sync path was invoked.</summary>
     private sealed class RecordingEntityMoveSync : IEntityMoveSync
     {
-        public EntityMoved? LastSynced { get; private set; }
-        public void SyncMove(EntityMoved moved) => LastSynced = moved;
+        public EntityMovedEvent? LastSynced { get; private set; }
+        public void SyncMove(EntityMovedEvent moved) => LastSynced = moved;
         public void ConvertToNonBlocking(int entityId, ref TransformComponent transform) { }
     }
 
@@ -67,7 +67,7 @@ public sealed class MovementSystemTests
         movementPool.Add(0, new MovementComponent(MovementMode.Random, 10, null, null));
         // Entity 0 has no TransformComponent or ActionLockComponent registered.
 
-        var system = new MovementSystem(transformPool, actionLockPool, movementPool, world, new MathUtility(), new EventBus(), new WorldEventSync(world), new FrameEventBuffer<EntityMoved>(), null, CreateProcessingTierPool(), new ProcessingTierEvents());
+        var system = new MovementSystem(transformPool, actionLockPool, movementPool, world, new MathUtility(), new EventBus(), new WorldEventSync(world), new FrameEventBuffer<EntityMovedEvent>(), null, CreateProcessingTierPool(), new ProcessingTierEvents());
 
         system.Update(default, 0);
     }
@@ -91,7 +91,7 @@ public sealed class MovementSystemTests
         actionLockPool.Add(0, new ActionLockComponent(totalLockFrames: 3, lockFramesRemaining: 3));
         movementPool.Add(0, new MovementComponent(MovementMode.Random, 10, null, null));
 
-        var system = new MovementSystem(transformPool, actionLockPool, movementPool, world, new MathUtility(), new EventBus(), new WorldEventSync(world), new FrameEventBuffer<EntityMoved>(), null, CreateProcessingTierPool(), new ProcessingTierEvents());
+        var system = new MovementSystem(transformPool, actionLockPool, movementPool, world, new MathUtility(), new EventBus(), new WorldEventSync(world), new FrameEventBuffer<EntityMovedEvent>(), null, CreateProcessingTierPool(), new ProcessingTierEvents());
         system.Update(default, 0);
 
         Assert.AreEqual(3, actionLockPool.GetReadonly(0).LockFramesRemaining);
@@ -114,7 +114,7 @@ public sealed class MovementSystemTests
         movementPool.Add(0, new MovementComponent(MovementMode.Random, 10, null, null));
         deadEntities.Add(0, new DeadComponent(KilledByEntityId: null));
 
-        var system = new MovementSystem(transformPool, actionLockPool, movementPool, world, new MathUtility(), new EventBus(), new WorldEventSync(world), new FrameEventBuffer<EntityMoved>(), null, CreateProcessingTierPool(), new ProcessingTierEvents(), deadEntities);
+        var system = new MovementSystem(transformPool, actionLockPool, movementPool, world, new MathUtility(), new EventBus(), new WorldEventSync(world), new FrameEventBuffer<EntityMovedEvent>(), null, CreateProcessingTierPool(), new ProcessingTierEvents(), deadEntities);
         system.Update(default, 0);
 
         Assert.AreEqual(new Vector3Int(2, 2, 0), transformPool.GetReadonly(0).Position);
@@ -155,7 +155,7 @@ public sealed class MovementSystemTests
         transformPool.Add(2, westBlockerTransform);
         world.PlaceEntityOnMap(2, new Vector3Int(2, 0, 0), ref westBlockerTransform);
 
-        var system = new MovementSystem(transformPool, actionLockPool, movementPool, world, new MathUtility(new Random(1)), new EventBus(), new WorldEventSync(world), new FrameEventBuffer<EntityMoved>(), null, CreateProcessingTierPool(), new ProcessingTierEvents());
+        var system = new MovementSystem(transformPool, actionLockPool, movementPool, world, new MathUtility(new Random(1)), new EventBus(), new WorldEventSync(world), new FrameEventBuffer<EntityMovedEvent>(), null, CreateProcessingTierPool(), new ProcessingTierEvents());
         system.Update(default, 0);
 
         Assert.AreEqual(new Vector3Int(0, 0, 0), transformPool.GetReadonly(0).Position);
@@ -190,7 +190,7 @@ public sealed class MovementSystemTests
         actionLockPool.Add(0, new ActionLockComponent(totalLockFrames: 0, lockFramesRemaining: 0));
         movementPool.Add(0, new MovementComponent(MovementMode.Random, 10, null, null));
 
-        var system = new MovementSystem(transformPool, actionLockPool, movementPool, world, new MathUtility(new Random(1)), new EventBus(), new WorldEventSync(world), new FrameEventBuffer<EntityMoved>(), null, CreateProcessingTierPool(), new ProcessingTierEvents());
+        var system = new MovementSystem(transformPool, actionLockPool, movementPool, world, new MathUtility(new Random(1)), new EventBus(), new WorldEventSync(world), new FrameEventBuffer<EntityMovedEvent>(), null, CreateProcessingTierPool(), new ProcessingTierEvents());
         system.Update(default, 0);
 
         Assert.AreEqual(startPosition, transformPool.GetReadonly(0).Position);
@@ -215,7 +215,7 @@ public sealed class MovementSystemTests
         actionLockPool.Add(0, new ActionLockComponent(totalLockFrames: 0, lockFramesRemaining: 0));
         movementPool.Add(0, new MovementComponent(MovementMode.Random, 10, null, null));
 
-        var system = new MovementSystem(transformPool, actionLockPool, movementPool, world, new MathUtility(new Random(2)), new EventBus(), new WorldEventSync(world), new FrameEventBuffer<EntityMoved>(), null, CreateProcessingTierPool(), new ProcessingTierEvents());
+        var system = new MovementSystem(transformPool, actionLockPool, movementPool, world, new MathUtility(new Random(2)), new EventBus(), new WorldEventSync(world), new FrameEventBuffer<EntityMovedEvent>(), null, CreateProcessingTierPool(), new ProcessingTierEvents());
         system.Update(default, 0);
 
         Assert.AreNotEqual(startPosition, transformPool.GetReadonly(0).Position);
@@ -256,17 +256,17 @@ public sealed class MovementSystemTests
         transformPool.Add(1, blockerTransform);
         world.PlaceEntityOnMap(1, contestedPosition, ref blockerTransform);
 
-        EntityMoved? received = null;
+        EntityMovedEvent? received = null;
         var eventBus = new EventBus();
-        eventBus.Subscribe<EntityMoved>(e => received = e);
-        var movedEntities = new FrameEventBuffer<EntityMoved>();
+        eventBus.Subscribe<EntityMovedEvent>(e => received = e);
+        var movedEntities = new FrameEventBuffer<EntityMovedEvent>();
 
         var system = new MovementSystem(transformPool, actionLockPool, movementPool, world, new MathUtility(), eventBus, new WorldEventSync(world), movedEntities, new FakePlayerQuery(0), CreateProcessingTierPool(), new ProcessingTierEvents());
         system.Update(default, 0);
 
         Assert.AreEqual(startPosition, transformPool.GetReadonly(0).Position, "Mover must stay put -- the target was already taken.");
         Assert.IsNull(movementPool.GetReadonly(0).NextMapPosition, "The stale target must be cleared so a fresh one can be queued.");
-        Assert.IsNull(received, "No move actually happened, so no EntityMoved should publish.");
+        Assert.IsNull(received, "No move actually happened, so no EntityMovedEvent should publish.");
         Assert.IsEmpty(movedEntities.Items, "No move actually happened, so nothing should be recorded either.");
         Assert.AreEqual(0, world.GetEntityIdAt(startPosition), "The mover's own cell must still correctly list the mover.");
         Assert.AreEqual(1, world.GetEntityIdAt(contestedPosition), "The contested cell must still correctly list only the blocker.");
@@ -286,7 +286,7 @@ public sealed class MovementSystemTests
         actionLockPool.Add(0, new ActionLockComponent(totalLockFrames: 0, lockFramesRemaining: 0));
         movementPool.Add(0, new MovementComponent(MovementMode.Random, 10, null, null) { FramesToWait = 40 });
 
-        var system = new MovementSystem(transformPool, actionLockPool, movementPool, world, new MathUtility(), new EventBus(), new WorldEventSync(world), new FrameEventBuffer<EntityMoved>(), null, CreateProcessingTierPool(), new ProcessingTierEvents());
+        var system = new MovementSystem(transformPool, actionLockPool, movementPool, world, new MathUtility(), new EventBus(), new WorldEventSync(world), new FrameEventBuffer<EntityMovedEvent>(), null, CreateProcessingTierPool(), new ProcessingTierEvents());
         system.Update(default, 0);
 
         Assert.AreEqual(25, movementPool.GetReadonly(0).FramesToWait);
@@ -308,7 +308,7 @@ public sealed class MovementSystemTests
         actionLockPool.Add(0, new ActionLockComponent(totalLockFrames: 0, lockFramesRemaining: 0));
         movementPool.Add(0, new MovementComponent(MovementMode.Random, 10, null, null) { FramesToWait = 6 });
 
-        var system = new MovementSystem(transformPool, actionLockPool, movementPool, world, new MathUtility(), new EventBus(), new WorldEventSync(world), new FrameEventBuffer<EntityMoved>(), null, CreateProcessingTierPool(), new ProcessingTierEvents());
+        var system = new MovementSystem(transformPool, actionLockPool, movementPool, world, new MathUtility(), new EventBus(), new WorldEventSync(world), new FrameEventBuffer<EntityMovedEvent>(), null, CreateProcessingTierPool(), new ProcessingTierEvents());
         system.Update(default, 0);
 
         Assert.AreEqual(0, movementPool.GetReadonly(0).FramesToWait);
@@ -330,7 +330,7 @@ public sealed class MovementSystemTests
         var movementPool = CreateMovementPool();
         var mapQuery = new FakeMapQuery(new Vector3Int(5, 5, 1));
         var entityMoveSync = new RecordingEntityMoveSync();
-        var movedEntities = new FrameEventBuffer<EntityMoved>();
+        var movedEntities = new FrameEventBuffer<EntityMovedEvent>();
 
         var startPosition = new Vector3Int(2, 2, 0);
         transformPool.Add(0, new TransformComponent(startPosition, new Vector2Byte(1, 1)));
@@ -354,7 +354,7 @@ public sealed class MovementSystemTests
         Assert.AreEqual(entityMoveSync.LastSynced.Value, movedEntities.Items[0]);
     }
 
-    /// <summary>Regression test for the redesign's dual dispatch: EventBus.Publish&lt;EntityMoved&gt; is now reserved for the player's own move (a handful/sec) instead of firing for the whole population, since PlayerActivityLog subscribes to it directly and expects nothing else on the bus.</summary>
+    /// <summary>Regression test for the redesign's dual dispatch: EventBus.Publish&lt;EntityMovedEvent&gt; is now reserved for the player's own move (a handful/sec) instead of firing for the whole population, since PlayerActivityLog subscribes to it directly and expects nothing else on the bus.</summary>
     [TestMethod]
     public void Update_PlayerControlledMoversMove_AlsoPublishesEntityMovedForThatEntityOnly()
     {
@@ -369,11 +369,11 @@ public sealed class MovementSystemTests
         actionLockPool.Add(0, new ActionLockComponent(totalLockFrames: 0, lockFramesRemaining: 0));
         movementPool.Add(0, new MovementComponent(MovementMode.Random, 10, null, null));
 
-        EntityMoved? received = null;
-        eventBus.Subscribe<EntityMoved>(e => received = e);
+        EntityMovedEvent? received = null;
+        eventBus.Subscribe<EntityMovedEvent>(e => received = e);
 
         // Seed 2 -- see Update_SuccessfulMove_SyncsMoveAndRecordsItWithoutTouchingWorld's own comment for why not seed 1.
-        var system = new MovementSystem(transformPool, actionLockPool, movementPool, mapQuery, new MathUtility(new Random(2)), eventBus, new RecordingEntityMoveSync(), new FrameEventBuffer<EntityMoved>(), new FakePlayerQuery(0), CreateProcessingTierPool(), new ProcessingTierEvents());
+        var system = new MovementSystem(transformPool, actionLockPool, movementPool, mapQuery, new MathUtility(new Random(2)), eventBus, new RecordingEntityMoveSync(), new FrameEventBuffer<EntityMovedEvent>(), new FakePlayerQuery(0), CreateProcessingTierPool(), new ProcessingTierEvents());
         system.Update(default, 0);
 
         Assert.IsNotNull(received, "The mover IS the configured player, so its move must still publish via EventBus.");
@@ -396,8 +396,8 @@ public sealed class MovementSystemTests
         movementPool.Add(0, new MovementComponent(MovementMode.Random, 10, null, null));
 
         var published = false;
-        eventBus.Subscribe<EntityMoved>(_ => published = true);
-        var movedEntities = new FrameEventBuffer<EntityMoved>();
+        eventBus.Subscribe<EntityMovedEvent>(_ => published = true);
+        var movedEntities = new FrameEventBuffer<EntityMovedEvent>();
 
         // playerEntityId (99) never matches the mover (0) -- also covers a null IPlayerQuery, matching most tests above.
         // Seed 2 -- see Update_SuccessfulMove_SyncsMoveAndRecordsItWithoutTouchingWorld's own comment for why not seed 1.
@@ -446,7 +446,7 @@ public sealed class MovementSystemTests
         world.PlaceEntityOnMap(2, new Vector3Int(1, 0, 0), ref westBlockerTransform);
 
         // Seed 2 -- see Update_SuccessfulMove_SyncsMoveAndRecordsItWithoutTouchingWorld's own comment for why not seed 1.
-        var system = new MovementSystem(transformPool, actionLockPool, movementPool, world, new MathUtility(new Random(2)), new EventBus(), new WorldEventSync(world), new FrameEventBuffer<EntityMoved>(), null, CreateProcessingTierPool(), new ProcessingTierEvents());
+        var system = new MovementSystem(transformPool, actionLockPool, movementPool, world, new MathUtility(new Random(2)), new EventBus(), new WorldEventSync(world), new FrameEventBuffer<EntityMovedEvent>(), null, CreateProcessingTierPool(), new ProcessingTierEvents());
         system.Update(default, 0);
 
         Assert.AreEqual(5, actionLockPool.GetReadonly(0).LockFramesRemaining);
@@ -500,7 +500,7 @@ public sealed class MovementSystemTests
         Assert.IsNull(movementPool.GetReadonly(secondEntityId).NextMapPosition,
             "The second entity's own validation must reject a move into the wall, independent of the first entity's move.");
 
-        var system = new MovementSystem(transformPool, actionLockPool, movementPool, world, new MathUtility(), new EventBus(), new WorldEventSync(world), new FrameEventBuffer<EntityMoved>(), null, CreateProcessingTierPool(), new ProcessingTierEvents());
+        var system = new MovementSystem(transformPool, actionLockPool, movementPool, world, new MathUtility(), new EventBus(), new WorldEventSync(world), new FrameEventBuffer<EntityMovedEvent>(), null, CreateProcessingTierPool(), new ProcessingTierEvents());
         system.Update(default, 0);
 
         Assert.AreEqual(new Vector3Int(3, 2, 0), transformPool.GetReadonly(firstEntityId).Position, "First entity moves to its own valid target.");
@@ -528,7 +528,7 @@ public sealed class MovementSystemTests
         processingTiers.Add(0, new ProcessingTierComponent(ProcessingTierLevel.Neighborhood));
 
         // Entity 0, Neighborhood-tiered (StripeCount 15 * divisor 2 = 30), lands in bucket 0 -- due only when FrameCount % 30 == 0.
-        var system = new MovementSystem(transformPool, actionLockPool, movementPool, mapQuery, new MathUtility(new Random(1)), new EventBus(), entityMoveSync, new FrameEventBuffer<EntityMoved>(), null, processingTiers, new ProcessingTierEvents());
+        var system = new MovementSystem(transformPool, actionLockPool, movementPool, mapQuery, new MathUtility(new Random(1)), new EventBus(), entityMoveSync, new FrameEventBuffer<EntityMovedEvent>(), null, processingTiers, new ProcessingTierEvents());
         system.Update(new EngineTime(default, default, false, FrameCount: 1), 0);
 
         Assert.IsNull(entityMoveSync.LastSynced);
@@ -553,7 +553,7 @@ public sealed class MovementSystemTests
         processingTiers.Add(0, new ProcessingTierComponent(ProcessingTierLevel.Neighborhood));
 
         // Seed 2 -- see Update_SuccessfulMove_SyncsMoveAndRecordsItWithoutTouchingWorld's own comment for why not seed 1.
-        var system = new MovementSystem(transformPool, actionLockPool, movementPool, mapQuery, new MathUtility(new Random(2)), new EventBus(), entityMoveSync, new FrameEventBuffer<EntityMoved>(), null, processingTiers, new ProcessingTierEvents());
+        var system = new MovementSystem(transformPool, actionLockPool, movementPool, mapQuery, new MathUtility(new Random(2)), new EventBus(), entityMoveSync, new FrameEventBuffer<EntityMovedEvent>(), null, processingTiers, new ProcessingTierEvents());
         system.Update(new EngineTime(default, default, false, FrameCount: 0), 0);
 
         Assert.IsNotNull(entityMoveSync.LastSynced);
@@ -577,7 +577,7 @@ public sealed class MovementSystemTests
         movementPool.Add(0, new MovementComponent(MovementMode.Random, 10, null, null));
         // Entity 0 deliberately has no ProcessingTierComponent -- defaults to Local tier (divisor 1), the same cadence as before ProcessingTier existed (StripeCount 15, bucket 0, due when FrameCount % 15 == 0).
         // Seed 2 -- see Update_SuccessfulMove_SyncsMoveAndRecordsItWithoutTouchingWorld's own comment for why not seed 1.
-        var system = new MovementSystem(transformPool, actionLockPool, movementPool, mapQuery, new MathUtility(new Random(2)), new EventBus(), entityMoveSync, new FrameEventBuffer<EntityMoved>(), null, processingTiers, new ProcessingTierEvents());
+        var system = new MovementSystem(transformPool, actionLockPool, movementPool, mapQuery, new MathUtility(new Random(2)), new EventBus(), entityMoveSync, new FrameEventBuffer<EntityMovedEvent>(), null, processingTiers, new ProcessingTierEvents());
         system.Update(new EngineTime(default, default, false, FrameCount: 0), 0);
 
         Assert.IsNotNull(entityMoveSync.LastSynced);

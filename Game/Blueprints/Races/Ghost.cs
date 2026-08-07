@@ -1,5 +1,6 @@
 using Engine.ECS.Components;
 using Engine.Math;
+using Game.Blueprints;
 using Game.Modules.Abilities.Components;
 using Game.Modules.Abilities;
 using Game.Modules.AbilityScores;
@@ -23,6 +24,8 @@ public sealed class Ghost(MathUtility mathUtility) : IBlueprint
 
     private const string Description = "A wandering spirit with no physical form. Used to test melee status effects against a target with no Health to damage.";
 
+    private static readonly string[] DisplayNames = DisplayNameCache.BuildDisplayNames(PersonalNameOptions, RaceName);
+
     /// <summary>Hardcoded stopgap until the Additive/Multiplicative bonuses system exists -- see TODO.md.</summary>
     private const short PunchDamage = 5;
 
@@ -36,8 +39,7 @@ public sealed class Ghost(MathUtility mathUtility) : IBlueprint
     {
         componentManager.Merge(entityId, new RaceComponent(RaceId, RaceName, Description));
 
-        var personalName = PersonalNameOptions[mathUtility.Next(0, PersonalNameOptions.Length)];
-        componentManager.Merge(entityId, new DisplayTextComponent($"{personalName} : {RaceName}", Description));
+        componentManager.Merge(entityId, new DisplayTextComponent(DisplayNames[mathUtility.Next(0, DisplayNames.Length)], Description));
 
         componentManager.Merge(entityId, new GlyphComponent(Glyph, Color.Blue));
         componentManager.Merge(entityId, new MovementComponent(MovementMode.Random, 48, null, null));

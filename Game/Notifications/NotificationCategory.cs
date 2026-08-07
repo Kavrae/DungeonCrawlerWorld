@@ -1,8 +1,8 @@
-namespace Game.Notifications;
+﻿namespace Game.Notifications;
 
 /// <summary>
 /// Lives in Game, not Presentation, specifically so a Game-layer system can publish a
-/// NotificationRequested event without referencing Presentation (Game has no reference to
+/// NotificationRequestedEvent without referencing Presentation (Game has no reference to
 /// Presentation, by design) -- Presentation is explicitly allowed to reference Game, so
 /// NotificationCenter uses this directly instead of maintaining a parallel Presentation-side
 /// enum with a translation step.

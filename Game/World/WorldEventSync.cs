@@ -1,4 +1,4 @@
-using Game.Modules.Core.Components;
+﻿using Game.Modules.Core.Components;
 
 namespace Game.World;
 
@@ -14,7 +14,7 @@ public sealed class WorldEventSync(World world) : IEntityMoveSync
 {
     private readonly World _world = world;
 
-    public void SyncMove(EntityMoved moved) =>
+    public void SyncMove(EntityMovedEvent moved) =>
         _world.MoveEntityUnchecked(moved.EntityId, moved.NewPosition, new TransformComponent(moved.OldPosition, moved.Size));
 
     public void ConvertToNonBlocking(int entityId, ref TransformComponent transform) =>

@@ -1,4 +1,4 @@
-using Engine.Bootstrap;
+﻿using Engine.Bootstrap;
 using Engine.ECS.Context;
 using Engine.Events;
 using Engine.Math;
@@ -43,7 +43,7 @@ public sealed class SpellCasterAchievementTests
         var playerEntityId = ecsContext.EntityManager.CreateEntity();
         world.PlayerEntityId = playerEntityId;
 
-        eventBus.Publish(new AbilityActivated(playerEntityId, CoreAbilitiesModule.HealId));
+        eventBus.Publish(new AbilityActivatedEvent(playerEntityId, CoreAbilitiesModule.HealId));
 
         Assert.IsTrue(AchievementQueries.HasEarned(
             ecsContext.ComponentManager.GetMultiPool<AchievementUnlockedComponent>(),
@@ -58,7 +58,7 @@ public sealed class SpellCasterAchievementTests
         var playerEntityId = ecsContext.EntityManager.CreateEntity();
         world.PlayerEntityId = playerEntityId;
 
-        eventBus.Publish(new AbilityActivated(playerEntityId, CoreAbilitiesModule.MagicMissileId));
+        eventBus.Publish(new AbilityActivatedEvent(playerEntityId, CoreAbilitiesModule.MagicMissileId));
 
         Assert.IsTrue(AchievementQueries.HasEarned(
             ecsContext.ComponentManager.GetMultiPool<AchievementUnlockedComponent>(),
@@ -73,7 +73,7 @@ public sealed class SpellCasterAchievementTests
         var playerEntityId = ecsContext.EntityManager.CreateEntity();
         world.PlayerEntityId = playerEntityId;
 
-        eventBus.Publish(new AbilityActivated(playerEntityId, CoreAbilitiesModule.PunchId));
+        eventBus.Publish(new AbilityActivatedEvent(playerEntityId, CoreAbilitiesModule.PunchId));
 
         Assert.IsFalse(AchievementQueries.HasEarned(
             ecsContext.ComponentManager.GetMultiPool<AchievementUnlockedComponent>(),
@@ -89,7 +89,7 @@ public sealed class SpellCasterAchievementTests
         var npcEntityId = ecsContext.EntityManager.CreateEntity();
         world.PlayerEntityId = playerEntityId;
 
-        eventBus.Publish(new AbilityActivated(npcEntityId, CoreAbilitiesModule.HealId));
+        eventBus.Publish(new AbilityActivatedEvent(npcEntityId, CoreAbilitiesModule.HealId));
 
         Assert.IsFalse(AchievementQueries.HasEarned(
             ecsContext.ComponentManager.GetMultiPool<AchievementUnlockedComponent>(),

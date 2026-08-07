@@ -1,4 +1,4 @@
-using Engine.ECS.Components;
+﻿using Engine.ECS.Components;
 using Engine.ECS.Components.Stores;
 using Engine.ECS.Systems;
 using Engine.Events;
@@ -82,7 +82,7 @@ public sealed class AchievementModule : IGameModule
 
         unlockedAchievements.Add(entityId, new AchievementUnlockedComponent(definition.Id, DateTime.UtcNow.Ticks));
 
-        eventBus.Publish(new NotificationRequested(
+        eventBus.Publish(new NotificationRequestedEvent(
             NotificationCategory.Achievement,
             definition.Description,
             ShowImmediately: false,

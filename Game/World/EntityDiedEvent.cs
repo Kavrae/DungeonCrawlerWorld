@@ -1,4 +1,4 @@
-using Engine.Events;
+﻿using Engine.Events;
 
 namespace Game.World;
 
@@ -12,4 +12,4 @@ namespace Game.World;
 /// avoid. Buffering defers actual handling (see DeathSystem) to a dedicated system's own
 /// Update(), never from inside another system's per-entity loop.
 /// </summary>
-public readonly record struct EntityDied(int EntityId, StatusEffectSource Source) : IBufferedEvent;
+public readonly record struct EntityDiedEvent(int EntityId, StatusEffectSource Source) : IBufferedEvent;

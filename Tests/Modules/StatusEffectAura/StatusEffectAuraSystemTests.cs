@@ -1,4 +1,4 @@
-using Engine.ECS.Components;
+﻿using Engine.ECS.Components;
 using Engine.ECS.Systems;
 using Engine.Math;
 using Game.Modules.Burning;
@@ -71,7 +71,7 @@ public sealed class StatusEffectAuraSystemTests
     private const long DrainOnlyFrameCount = 1;
 
     /// <summary>Mirrors real game wiring (both BurningModule.Configure and PoisonModule.Configure registering their own applier into the same shared registry) -- the registry a caller can override via applierRegistry to exercise unsupported-effect-type behavior instead.</summary>
-    private static (StatusEffectAuraSystem System, ComponentManager ComponentManager, FakeMapQuery MapQuery, FrameEventBuffer<EntityMoved> MovedEntities) Build(StatusEffectAuraApplierRegistry? applierRegistry = null)
+    private static (StatusEffectAuraSystem System, ComponentManager ComponentManager, FakeMapQuery MapQuery, FrameEventBuffer<EntityMovedEvent> MovedEntities) Build(StatusEffectAuraApplierRegistry? applierRegistry = null)
     {
         var componentManager = new ComponentManager(initialEntityCapacity: 200, initialComponentCapacity: 50);
         componentManager.RegisterDirectPool<TransformComponent>(static (ref existing, incoming) => existing = incoming);
@@ -84,7 +84,7 @@ public sealed class StatusEffectAuraSystemTests
         componentManager.RegisterDirectPool<ProcessingTierComponent>(static (ref existing, incoming) => existing = incoming);
 
         var mapQuery = new FakeMapQuery();
-        var movedEntities = new FrameEventBuffer<EntityMoved>();
+        var movedEntities = new FrameEventBuffer<EntityMovedEvent>();
 
         var system = new StatusEffectAuraSystem(
             componentManager,
@@ -126,9 +126,9 @@ public sealed class StatusEffectAuraSystemTests
     /// buffer on every later Update call in these tests' own tick loops, getting silently
     /// reprocessed (re-detecting the same move, over and over) instead of just once.
     /// </summary>
-    private static void MoveObserverTo(StatusEffectAuraSystem system, FrameEventBuffer<EntityMoved> movedEntities, Vector3Int from, Vector3Int to, int entityId = ObserverEntityId)
+    private static void MoveObserverTo(StatusEffectAuraSystem system, FrameEventBuffer<EntityMovedEvent> movedEntities, Vector3Int from, Vector3Int to, int entityId = ObserverEntityId)
     {
-        movedEntities.Record(new EntityMoved(entityId, from, to, UnitSize));
+        movedEntities.Record(new EntityMovedEvent(entityId, from, to, UnitSize));
         system.Update(new EngineTime(default, default, false, FrameCount: DrainOnlyFrameCount), 0);
         movedEntities.ClearFrame();
     }
@@ -262,7 +262,7 @@ public sealed class StatusEffectAuraSystemTests
         var farAwayPosition = new Vector3Int(SourcePosition.X + 50, SourcePosition.Y, SourcePosition.Z);
         MoveObserverTo(system, movedEntities, SourcePosition, farAwayPosition);
         // Update reads the observer's *current* Transform.Position, independent of the
-        // EntityMoved event itself -- must reflect where it actually ended up.
+        // EntityMovedEvent itself -- must reflect where it actually ended up.
         componentManager.Merge(ObserverEntityId, new TransformComponent(farAwayPosition, UnitSize));
 
         for (var frame = 0; frame < AuraEffects.TickIntervalFrames; frame++)
@@ -357,7 +357,7 @@ public sealed class StatusEffectAuraSystemTests
         Assert.IsTrue(componentManager.GetPackedPool<StatusEffectAuraExposureComponent>().Has(ObserverEntityId));
 
         // The source itself moves far away -- the observer never moves again. Transform is
-        // updated to the new position first, mirroring EntityMoved's own contract ("Position
+        // updated to the new position first, mirroring EntityMovedEvent's own contract ("Position
         // is already updated by the time this fires").
         mapQuery.ClearOccupant(SourcePosition);
         var farAwayPosition = new Vector3Int(SourcePosition.X + 50, SourcePosition.Y, SourcePosition.Z);

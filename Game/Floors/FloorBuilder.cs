@@ -1,4 +1,4 @@
-using Engine.ECS.Context;
+﻿using Engine.ECS.Context;
 using Engine.ECS.Systems;
 using Engine.Math;
 using Game.Blueprints;
@@ -54,7 +54,7 @@ public static class FloorBuilder
         (AbilityScoreType.Charisma, 4f, -1f, 0.25f, -0.08f),
     ];
 
-    public static int CreatePlayer(Game.World.World world, EcsContext ecsContext, MathUtility mathUtility, FrameEventBuffer<EntityMoved> movedEntities, UniqueNumberAllocator crawlerNumberAllocator)
+    public static int CreatePlayer(Game.World.World world, EcsContext ecsContext, MathUtility mathUtility, FrameEventBuffer<EntityMovedEvent> movedEntities, UniqueNumberAllocator crawlerNumberAllocator)
     {
         var entityId = ecsContext.EntityManager.CreateEntity();
         new PlayerBlueprint(mathUtility, crawlerNumberAllocator).Build(ecsContext.ComponentManager, entityId);
@@ -87,14 +87,14 @@ public static class FloorBuilder
         ref var transform = ref ecsContext.ComponentManager.GetDirectPool<TransformComponent>().Get(entityId);
         world.PlaceEntityOnMap(entityId, spawnPosition, ref transform);
 
-        // Spawning counts as a move (see EntityMoved's own doc comment) so hazard/aura
+        // Spawning counts as a move (see EntityMovedEvent's own doc comment) so hazard/aura
         // detection (ContactDamageSystem, StatusEffectAuraSystem) sees the player immediately
         // if spawned onto/next to one, rather than only on their first real move. Recorded into
         // the shared buffer those systems actually drain now (see FrameEventBuffer's own doc
         // comment), not published on the bus -- EventBus.Publish is kept alongside it purely so
         // PlayerActivityLog's existing spawn-time log line is preserved unchanged.
-        movedEntities.Record(new EntityMoved(entityId, spawnPosition, spawnPosition, transform.Size));
-        ecsContext.EventBus.Publish(new EntityMoved(entityId, spawnPosition, spawnPosition, transform.Size));
+        movedEntities.Record(new EntityMovedEvent(entityId, spawnPosition, spawnPosition, transform.Size));
+        ecsContext.EventBus.Publish(new EntityMovedEvent(entityId, spawnPosition, spawnPosition, transform.Size));
 
         return entityId;
     }

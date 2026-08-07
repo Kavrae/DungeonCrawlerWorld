@@ -1,4 +1,4 @@
-using Engine.Diagnostics;
+﻿using Engine.Diagnostics;
 using Engine.ECS.Context;
 using Engine.ECS.Systems;
 using Engine.Math;
@@ -54,7 +54,7 @@ public sealed class GameLoop : Microsoft.Xna.Framework.Game
     private GameInputController _inputController = null!;
     private PlayerActivityLog _playerActivityLog = null!;
     private PhaseProfiler _profiler = null!;
-    private FrameEventBuffer<EntityMoved> _movedEntities = null!;
+    private FrameEventBuffer<EntityMovedEvent> _movedEntities = null!;
     private UniqueNumberAllocator _crawlerNumberAllocator = null!;
     private bool _playerSpawned;
     private int _frameCount;
@@ -137,15 +137,15 @@ public sealed class GameLoop : Microsoft.Xna.Framework.Game
 
             // TEMPORARY Once, on this class's first live tick -- not during Initialize() -- see
             // FloorBuilder's own doc comment for why. Runs before EcsContext.Update below so
-            // the spawn's buffered EntityMoved (see FloorBuilder.CreatePlayer) is picked up by
+            // the spawn's buffered EntityMovedEvent (see FloorBuilder.CreatePlayer) is picked up by
             // ContactDamageSystem/StatusEffectAuraSystem in this same cycle.
             if (!_playerSpawned)
             {
                 _world.PlayerEntityId = FloorBuilder.CreatePlayer(_world, _ecsContext, _mathUtility, _movedEntities, _crawlerNumberAllocator);
                 _playerSpawned = true;
 
-                _ecsContext.EventBus.Publish(new EnteredDungeon());
-                _ecsContext.EventBus.Publish(new FloorEntered(FloorNumber));
+                _ecsContext.EventBus.Publish(new EnteredDungeonEvent());
+                _ecsContext.EventBus.Publish(new FloorEnteredEvent(FloorNumber));
             }
 
             var ecsUpdateStart = Stopwatch.GetTimestamp();

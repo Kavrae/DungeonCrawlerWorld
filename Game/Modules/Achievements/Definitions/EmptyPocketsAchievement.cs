@@ -1,11 +1,11 @@
-using Game.World;
+﻿using Game.World;
 
 namespace Game.Modules.Achievements.Definitions;
 
 /// <summary>
 /// Awarded for entering the dungeon with an empty inventory. No Inventory system or
 /// start-equipment-selection system exists yet (see TODO.md's Achievement content backlog), so
-/// every player's inventory is empty today -- this unlocks unconditionally on EnteredDungeon,
+/// every player's inventory is empty today -- this unlocks unconditionally on EnteredDungeonEvent,
 /// same reasoning as LonerAchievement/UnarmedCombatAchievement (see LonerAchievement's own doc
 /// comment for why reading IPlayerQuery.PlayerEntityId here is safe).
 ///
@@ -28,5 +28,5 @@ public sealed class EmptyPocketsAchievement : IAchievementDefinition
     public string RewardText => "";
 
     public void RegisterTrigger(AchievementTriggerContext context) =>
-        context.SubscribeUntilUnlocked<EnteredDungeon>();
+        context.SubscribeUntilUnlocked<EnteredDungeonEvent>();
 }

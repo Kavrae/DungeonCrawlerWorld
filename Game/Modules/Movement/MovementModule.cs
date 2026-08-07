@@ -1,4 +1,4 @@
-using Engine.ECS.Components;
+﻿using Engine.ECS.Components;
 using Engine.ECS.Systems;
 using Engine.Events;
 using Engine.Math;
@@ -28,7 +28,7 @@ public sealed class MovementModule : IGameModule
     private MathUtility _mathUtility = null!;
     private EventBus _eventBus = null!;
     private IEntityMoveSync? _entityMoveSync;
-    private FrameEventBuffer<EntityMoved> _movedEntities = null!;
+    private FrameEventBuffer<EntityMovedEvent> _movedEntities = null!;
     private IPlayerQuery? _playerQuery;
     private ProcessingTierEvents _processingTierEvents = null!;
 

@@ -1,4 +1,4 @@
-using Engine.ECS.Components;
+﻿using Engine.ECS.Components;
 using Engine.ECS.Components.Stores;
 using Engine.ECS.Systems;
 using Engine.Math;
@@ -13,8 +13,8 @@ using Game.World;
 namespace Game.Modules.StatusEffectAura.Systems;
 
 /// <summary>
-/// Detects aura range by draining MovementSystem's shared FrameEventBuffer&lt;EntityMoved&gt;
-/// at the start of each Update (replacing an EntityMoved EventBus subscription -- a
+/// Detects aura range by draining MovementSystem's shared FrameEventBuffer&lt;EntityMovedEvent&gt;
+/// at the start of each Update (replacing an EntityMovedEvent EventBus subscription -- a
 /// gameplay-demo profiling investigation found that pattern, multiplied across every
 /// subscriber and the full moving population, a measured hotspot; see FrameEventBuffer's own
 /// doc comment) and ticks ongoing exposure via the same Update, combined in one class since
@@ -38,7 +38,7 @@ namespace Game.Modules.StatusEffectAura.Systems;
 /// cell and StatusEffectType internally -- see its own doc comment for why one shared sparse
 /// grid replaced an earlier one-dense-array-per-effect-type version), not a live per-mover box
 /// scan -- an earlier version of this class scanned a fixed radius around every single
-/// EntityMoved in the game, which is correct but was a measured production performance bug
+/// EntityMovedEvent in the game, which is correct but was a measured production performance bug
 /// once real lava density and TestMapBuilder's real wandering-population scale were involved.
 ///
 /// _effectTypesInUse tracks which StatusEffectTypes actually have a registered source, so
@@ -47,7 +47,7 @@ namespace Game.Modules.StatusEffectAura.Systems;
 /// lava tile next to a Poison bog) still never have their Strengths summed together into one
 /// meaningless total, since AuraGrid keys every total by (cell, effectType) together.
 ///
-/// EntityMoved is still handled two ways, since an aura source can in principle be a moving
+/// EntityMovedEvent is still handled two ways, since an aura source can in principle be a moving
 /// entity (e.g. a future lava golem), not just static terrain:
 /// - The mover is treated as an observer, but movement only ever *starts* exposure, never
 ///   re-grants or resets it: an entity with an already-running exposure timer is left alone
@@ -79,7 +79,7 @@ public sealed class StatusEffectAuraSystem : ISystem
     private readonly DirectComponentPool<TransformComponent> _transforms;
     private readonly StatusEffectAuraApplierRegistry _applierRegistry;
     private readonly IMapQuery _mapQuery;
-    private readonly FrameEventBuffer<EntityMoved> _movedEntities;
+    private readonly FrameEventBuffer<EntityMovedEvent> _movedEntities;
     private readonly PackedComponentPool<DeadComponent>? _deadEntities;
     private readonly TieredEntityStripeSet _tieredStripeSet;
 
@@ -103,7 +103,7 @@ public sealed class StatusEffectAuraSystem : ISystem
         DirectComponentPool<TransformComponent> transforms,
         IMapQuery mapQuery,
         StatusEffectAuraApplierRegistry applierRegistry,
-        FrameEventBuffer<EntityMoved> movedEntities,
+        FrameEventBuffer<EntityMovedEvent> movedEntities,
         DirectComponentPool<ProcessingTierComponent> processingTiers,
         ProcessingTierEvents processingTierEvents,
         PackedComponentPool<DeadComponent>? deadEntities = null)
@@ -128,7 +128,7 @@ public sealed class StatusEffectAuraSystem : ISystem
     /// StatusEffectAuraModule.RegisterSystems runs during GameBootstrapper.Build, which is
     /// before FloorBuilder.PopulateFloor places any terrain (e.g. Lava) -- so no
     /// StatusEffectAuraSourceComponent exists yet at construction time. By the time the first
-    /// EntityMoved/Update fires, population has finished.
+    /// EntityMovedEvent/Update fires, population has finished.
     /// </summary>
     private void EnsureGrid()
     {
@@ -155,7 +155,7 @@ public sealed class StatusEffectAuraSystem : ISystem
         _gridBuilt = true;
     }
 
-    private void OnEntityMoved(EntityMoved moved)
+    private void OnEntityMoved(EntityMovedEvent moved)
     {
         var gridAlreadyBuilt = _gridBuilt;
         EnsureGrid();

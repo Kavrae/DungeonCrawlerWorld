@@ -1,4 +1,4 @@
-using Engine.Math;
+﻿using Engine.Math;
 
 namespace Game.World;
 
@@ -13,7 +13,7 @@ namespace Game.World;
 /// placing it -- e.g. FloorBuilder.CreatePlayer. WorldEventSync's handler tolerates Old ==
 /// New harmlessly (clears then immediately re-sets the same cell). Without this, an entity
 /// spawned directly onto/next to a hazard (ContactDamageSystem/StatusEffectAuraSystem, both
-/// EntityMoved-driven) would stay undetected until it next actually moved. Any future spawn
+/// EntityMovedEvent-driven) would stay undetected until it next actually moved. Any future spawn
 /// path (a monster spawner, once one exists) must do the same.
 /// </summary>
-public readonly record struct EntityMoved(int EntityId, Vector3Int OldPosition, Vector3Int NewPosition, Vector2Byte Size);
+public readonly record struct EntityMovedEvent(int EntityId, Vector3Int OldPosition, Vector3Int NewPosition, Vector2Byte Size);

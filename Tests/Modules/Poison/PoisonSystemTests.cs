@@ -1,4 +1,4 @@
-using Engine.ECS.Components.Stores;
+﻿using Engine.ECS.Components.Stores;
 using Engine.Events;
 using Game.Modules.Health.Components;
 using Game.Modules.Poison;
@@ -179,8 +179,8 @@ public sealed class PoisonSystemTests
         health.Add(0, new HealthComponent(currentHealth: 100, maximumHealth: 100));
         timers.Add(0, new PoisonTimerComponent(1, stackCount: 1, remainingDurationTicks: 5, StatusEffectSource.Admin));
         var eventBus = new EventBus();
-        EntityDamaged? published = null;
-        eventBus.Subscribe<EntityDamaged>(e => published = e);
+        EntityDamagedEvent? published = null;
+        eventBus.Subscribe<EntityDamagedEvent>(e => published = e);
         var system = new PoisonSystem(timers, stacks, health, eventBus, new FakePlayerQuery(0));
 
         system.Update(default, 0);
@@ -201,7 +201,7 @@ public sealed class PoisonSystemTests
         timers.Add(1, new PoisonTimerComponent(1, stackCount: 1, remainingDurationTicks: 5, StatusEffectSource.Admin));
         var eventBus = new EventBus();
         var published = false;
-        eventBus.Subscribe<EntityDamaged>(_ => published = true);
+        eventBus.Subscribe<EntityDamagedEvent>(_ => published = true);
         var system = new PoisonSystem(timers, stacks, health, eventBus, new FakePlayerQuery(playerEntityId: 0));
 
         system.Update(default, 0);

@@ -1,4 +1,4 @@
-using Engine.ECS.Components;
+﻿using Engine.ECS.Components;
 using Engine.Events;
 using Engine.Math;
 using Game.Diagnostics;
@@ -33,7 +33,7 @@ public sealed class PlayerActivityLogTests
             var log = new PlayerActivityLog(world, CreateComponentManager(), eventBus, logPath);
             log.BeginFrame(5, new DateTime(2026, 1, 1));
 
-            eventBus.Publish(new EntityMoved(0, new Vector3Int(1, 1, 0), new Vector3Int(2, 1, 0), new Vector2Byte(1, 1)));
+            eventBus.Publish(new EntityMovedEvent(0, new Vector3Int(1, 1, 0), new Vector3Int(2, 1, 0), new Vector2Byte(1, 1)));
             log.Dispose();
 
             var contents = File.ReadAllText(logPath);
@@ -57,7 +57,7 @@ public sealed class PlayerActivityLogTests
             using var log = new PlayerActivityLog(world, CreateComponentManager(), eventBus, logPath);
             log.BeginFrame(1, DateTime.Now);
 
-            eventBus.Publish(new EntityMoved(1, new Vector3Int(1, 1, 0), new Vector3Int(2, 1, 0), new Vector2Byte(1, 1)));
+            eventBus.Publish(new EntityMovedEvent(1, new Vector3Int(1, 1, 0), new Vector3Int(2, 1, 0), new Vector2Byte(1, 1)));
 
             Assert.AreEqual(0L, new FileInfo(logPath).Length);
         }
@@ -78,7 +78,7 @@ public sealed class PlayerActivityLogTests
             var log = new PlayerActivityLog(world, CreateComponentManager(), eventBus, logPath);
             log.BeginFrame(9, DateTime.Now);
 
-            eventBus.Publish(new EntityDamaged(0, 7, StatusEffectSource.Admin, 93, 100, "Status Effect (Burning)"));
+            eventBus.Publish(new EntityDamagedEvent(0, 7, StatusEffectSource.Admin, 93, 100, "Status Effect (Burning)"));
             log.Dispose();
 
             var contents = File.ReadAllText(logPath);
@@ -104,7 +104,7 @@ public sealed class PlayerActivityLogTests
             using var log = new PlayerActivityLog(world, CreateComponentManager(), eventBus, logPath);
             log.BeginFrame(1, DateTime.Now);
 
-            eventBus.Publish(new EntityDamaged(1, 7, StatusEffectSource.Admin, 93, 100, "Status Effect (Burning)"));
+            eventBus.Publish(new EntityDamagedEvent(1, 7, StatusEffectSource.Admin, 93, 100, "Status Effect (Burning)"));
 
             Assert.AreEqual(0L, new FileInfo(logPath).Length);
         }
@@ -126,7 +126,7 @@ public sealed class PlayerActivityLogTests
             var log = new PlayerActivityLog(world, CreateComponentManager(), eventBus, logPath);
             log.BeginFrame(3, DateTime.Now);
 
-            eventBus.Publish(new EntityDamaged(5, 12, StatusEffectSource.FromEntity(0), 88, 100, "Default Attack"));
+            eventBus.Publish(new EntityDamagedEvent(5, 12, StatusEffectSource.FromEntity(0), 88, 100, "Default Attack"));
             log.Dispose();
 
             var contents = File.ReadAllText(logPath);
@@ -153,7 +153,7 @@ public sealed class PlayerActivityLogTests
             var log = new PlayerActivityLog(world, componentManager, eventBus, logPath);
             log.BeginFrame(4, DateTime.Now);
 
-            eventBus.Publish(new EntityDamaged(5, 12, StatusEffectSource.FromEntity(0), 88, 100, "Default Attack"));
+            eventBus.Publish(new EntityDamagedEvent(5, 12, StatusEffectSource.FromEntity(0), 88, 100, "Default Attack"));
             log.Dispose();
 
             var contents = File.ReadAllText(logPath);
@@ -178,7 +178,7 @@ public sealed class PlayerActivityLogTests
             var log = new PlayerActivityLog(world, componentManager, eventBus, logPath);
             log.BeginFrame(4, DateTime.Now);
 
-            eventBus.Publish(new EntityDamaged(5, 12, StatusEffectSource.FromEntity(0), 88, 100, "Default Attack"));
+            eventBus.Publish(new EntityDamagedEvent(5, 12, StatusEffectSource.FromEntity(0), 88, 100, "Default Attack"));
             log.Dispose();
 
             var contents = File.ReadAllText(logPath);

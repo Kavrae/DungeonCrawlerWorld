@@ -1,4 +1,4 @@
-using Engine.Bootstrap;
+﻿using Engine.Bootstrap;
 using Engine.ECS.Context;
 using Engine.Events;
 using Engine.Math;
@@ -38,7 +38,7 @@ public sealed class DrinkingProblemAchievementTests
         var playerEntityId = ecsContext.EntityManager.CreateEntity();
         world.PlayerEntityId = playerEntityId;
 
-        eventBus.Publish(new PotionCooldownAbused(playerEntityId));
+        eventBus.Publish(new PotionCooldownAbusedEvent(playerEntityId));
 
         Assert.IsTrue(AchievementQueries.HasEarned(
             ecsContext.ComponentManager.GetMultiPool<AchievementUnlockedComponent>(),
@@ -54,7 +54,7 @@ public sealed class DrinkingProblemAchievementTests
         var npcEntityId = ecsContext.EntityManager.CreateEntity();
         world.PlayerEntityId = playerEntityId;
 
-        eventBus.Publish(new PotionCooldownAbused(npcEntityId));
+        eventBus.Publish(new PotionCooldownAbusedEvent(npcEntityId));
 
         Assert.IsFalse(AchievementQueries.HasEarned(
             ecsContext.ComponentManager.GetMultiPool<AchievementUnlockedComponent>(),
