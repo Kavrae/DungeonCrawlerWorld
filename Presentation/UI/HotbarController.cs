@@ -8,12 +8,15 @@ namespace Presentation.UI;
 
 /// <summary>
 /// Owns the Armed Hotkey Summary window's lifecycle and turns "a press/release/hover happened on
-/// the hotbar" into arm/preview/hover state changes -- a standalone manager class, not an
+/// the hotbar" into arm/activate/hover state changes -- a standalone manager class, not an
 /// Element/Window itself, following the same relationship NotificationCenter has to its own
 /// popups. GameInputController does all hit-testing (unchanged, its existing centralized job) and
 /// forwards resolved hotbar-slot events here instead of containing this decision logic inline;
 /// this keeps MapWindow (map rendering) and GameInputController (dispatch) from having to grow to
-/// accommodate hotbar-specific state.
+/// accommodate hotbar-specific state. A tap (OnSlotTapped) is deliberately a thin forward into
+/// AbilityTargetingController.HandleHotkeySlotPress rather than its own parallel decision tree --
+/// see that method's own doc comment for why clicking and key-pressing a slot need to be the
+/// exact same code path, not two implementations kept in sync by hand.
 /// </summary>
 public sealed class HotbarController(MapViewState mapViewState, HotbarContent hotbarContent, AbilityTargetingController abilityTargeting)
 {
@@ -30,7 +33,7 @@ public sealed class HotbarController(MapViewState mapViewState, HotbarContent ho
         {
             Layout = new ElementLayoutOptions
             {
-                RelativePosition = Vector2.Zero, // Repositioned every frame by ArmedHotkeySummaryWindow.Update once something's armed/previewed/hovered.
+                RelativePosition = Vector2.Zero, // Repositioned every frame by ArmedHotkeySummaryWindow.Update once something's armed or hovered.
                 MaximumSize = new Vector2(HotbarContent.SummaryWidth, 10000f), // Fixed width; effectively-unbounded height cap.
                 DisplayMode = ElementDisplayMode.WrapContent,
                 IsVisible = false,
@@ -44,18 +47,19 @@ public sealed class HotbarController(MapViewState mapViewState, HotbarContent ho
     /// <summary>Called by GameInputController.HandleMousePress when the press lands on a hotbar slot.</summary>
     public void OnSlotPressed(HotkeySlot slot) => _pressedSlot = slot;
 
-    /// <summary>Called by GameInputController.HandleMousePress when the press lands anywhere else -- an open preview closes immediately rather than waiting for release.</summary>
-    public void OnPressOutsideHotbar()
-    {
-        _pressedSlot = null;
-        mapViewState.PreviewSlot = null;
-    }
+    /// <summary>Called by GameInputController.HandleMousePress when the press lands anywhere else.</summary>
+    public void OnPressOutsideHotbar() => _pressedSlot = null;
 
-    /// <summary>Called by GameInputController.HandleMouseRelease once it's determined the release
-    /// landed on a hotbar slot within the tap-distance threshold of the press -- ignored unless
-    /// slot also matches whichever slot was actually pressed (OnSlotPressed), so a press-then-drag
+    /// <summary>
+    /// Called by GameInputController.HandleMouseRelease once it's determined the release landed
+    /// on a hotbar slot within the tap-distance threshold of the press -- ignored unless slot
+    /// also matches whichever slot was actually pressed (OnSlotPressed), so a press-then-drag
     /// that happens to end up back within the tap threshold, but over a different slot, doesn't
-    /// spuriously count as a tap on it.</summary>
+    /// spuriously count as a tap on it. A confirmed tap is forwarded to AbilityTargetingController.
+    /// HandleHotkeySlotPress -- the same method the keyboard path calls -- so clicking a slot
+    /// behaves exactly like pressing its key: arms an unarmed bound slot, confirms/re-presses an
+    /// already-armed one, and shares that method's own double-tap window with the keyboard path.
+    /// </summary>
     public void OnSlotTapped(HotkeySlot slot)
     {
         var wasPressedSlot = _pressedSlot == slot;
@@ -66,19 +70,7 @@ public sealed class HotbarController(MapViewState mapViewState, HotbarContent ho
             return;
         }
 
-        if (slot == mapViewState.ArmedSlot)
-        {
-            abilityTargeting.CancelArmedOrPendingAction();
-            return;
-        }
-
-        if (!hotbarContent.TryGetSlotSummary(slot, out _, out _))
-        {
-            mapViewState.PreviewSlot = null; // Unbound slot -- nothing to preview.
-            return;
-        }
-
-        mapViewState.PreviewSlot = mapViewState.PreviewSlot == slot ? null : slot;
+        abilityTargeting.HandleHotkeySlotPress(slot);
     }
 
     /// <summary>Called by GameInputController every frame with its own hit-test result -- null if the cursor isn't over a bound hotbar slot, or during an active drag (see GameInputController's own suppression).</summary>

@@ -1503,6 +1503,55 @@ public sealed class GameInputControllerTests
         Assert.AreSame(notificationB, controller.FocusedElement);
     }
 
+    /// <summary>A single Escape tap closes only the frontmost (last in the list -- see GameInputController's own "topmost (last-raised) first" tier-ordering doc comment) closeable DynamicHUD window, leaving the rest open.</summary>
+    [TestMethod]
+    public void HandleEscape_SingleTap_ClosesOnlyTheTopmostClosableDynamicHudWindow()
+    {
+        var windowService = CreateWindowService();
+        var back = CreateRootWindowWithCloseButton(windowService, new Vector2(0, 0));
+        var front = CreateRootWindowWithCloseButton(windowService, new Vector2(300, 0));
+        var controller = new GameInputController([], [], [back, front], [], LargeScreenSize);
+
+        controller.Update(new KeyboardState(Keys.Escape), MouseAt(0, 0, ButtonState.Released));
+
+        Assert.IsFalse(front.IsVisible, "The topmost (last-added) window must close.");
+        Assert.IsTrue(back.IsVisible, "A single tap must not touch anything else.");
+    }
+
+    /// <summary>Non-closeable DynamicHUD elements (Folder icons, the Armed Hotkey Summary -- CanUserClose false, or not even a Window) are never targeted -- Escape skips past one to find the next real closeable window underneath it.</summary>
+    [TestMethod]
+    public void HandleEscape_TopmostElementIsNotCloseable_SkipsItAndClosesTheNextOneDown()
+    {
+        var windowService = CreateWindowService();
+        var closeable = CreateRootWindowWithCloseButton(windowService, new Vector2(0, 0));
+        var chrome = CreateMovableWindow(windowService, new Vector2(300, 0)); // CanUserClose defaults false.
+        var controller = new GameInputController([], [], [closeable, chrome], [], LargeScreenSize);
+
+        controller.Update(new KeyboardState(Keys.Escape), MouseAt(0, 0, ButtonState.Released));
+
+        Assert.IsFalse(closeable.IsVisible);
+        Assert.IsTrue(chrome.IsVisible, "Non-closeable chrome must never be closed by Escape.");
+    }
+
+    /// <summary>Holding Escape past EscapeHoldCloseAllFrames closes every closeable DynamicHUD window at once, not just the topmost -- the escape hatch for a player buried under several popups at once.</summary>
+    [TestMethod]
+    public void HandleEscape_HeldPastThreshold_ClosesEveryClosableDynamicHudWindow()
+    {
+        var windowService = CreateWindowService();
+        var back = CreateRootWindowWithCloseButton(windowService, new Vector2(0, 0));
+        var front = CreateRootWindowWithCloseButton(windowService, new Vector2(300, 0));
+        var controller = new GameInputController([], [], [back, front], [], LargeScreenSize);
+
+        // 40 frames (~0.67s at 60fps) is comfortably past the 0.5s hold threshold.
+        for (var frame = 0; frame < 40; frame++)
+        {
+            controller.Update(new KeyboardState(Keys.Escape), MouseAt(0, 0, ButtonState.Released));
+        }
+
+        Assert.IsFalse(front.IsVisible);
+        Assert.IsFalse(back.IsVisible);
+    }
+
     private static (Window Popup, Window Child) CreatePopupWithFocusableChild(ElementPoolService windowService, Vector2 relativePosition)
     {
         var popup = windowService.CreateElement<Window>(null, new ElementOptions

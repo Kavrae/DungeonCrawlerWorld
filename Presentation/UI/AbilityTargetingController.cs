@@ -208,8 +208,18 @@ public sealed class AbilityTargetingController(
         }
     }
 
-    /// <summary>Looks up which of {action, item} (if either) is bound to the pressed slot and dispatches to its own handler -- the two are mutually exclusive per slot (see IHotkeySlotBinding's own doc comment), so checking action first and falling through to item is safe.</summary>
-    private void HandleHotkeySlotPress(HotkeySlot slot)
+    /// <summary>
+    /// Looks up which of {action, item} (if either) is bound to the pressed slot and dispatches
+    /// to its own handler -- the two are mutually exclusive per slot (see IHotkeySlotBinding's
+    /// own doc comment), so checking action first and falling through to item is safe. Internal
+    /// (not private): HandleHotbarHotkeys below is the keyboard entry point, but
+    /// HotbarController.OnSlotTapped calls this exact same method for a mouse click on a hotbar
+    /// slot, so a click behaves identically to pressing that slot's key -- including sharing this
+    /// method's own double-tap-window tracking (_lastHotkeyPressFrameBySlot is keyed by slot and
+    /// frame only, never by input source), so a click closely following a key press (or another
+    /// click) on the same slot counts as a double-tap exactly the way two key presses would.
+    /// </summary>
+    internal void HandleHotkeySlotPress(HotkeySlot slot)
     {
         var isDoubleTap = _lastHotkeyPressFrameBySlot.TryGetValue(slot, out var lastPressFrame) &&
             _frameCounter - lastPressFrame <= DoubleTapWindowFrames;
@@ -331,7 +341,6 @@ public sealed class AbilityTargetingController(
         mapViewState.ArmedAbilityId = abilityId;
         mapViewState.ArmedItemDefinitionId = null;
         mapViewState.ArmedSlot = slot;
-        mapViewState.PreviewSlot = null; // Arming takes over the Armed Hotkey Summary display -- a stale click-preview must not resurface once this later disarms.
         _targetableTilesOrigin = null; // Forces RefreshTargetableTiles below to (re)compute regardless of any stale origin left over from a previous arm.
 
         if (abilityCatalog.TryGet(abilityId, out var ability) && transformPool.TryGetReadonly(world.PlayerEntityId, out var transform))
@@ -345,7 +354,6 @@ public sealed class AbilityTargetingController(
         mapViewState.ArmedItemDefinitionId = itemDefinitionId;
         mapViewState.ArmedAbilityId = null;
         mapViewState.ArmedSlot = slot;
-        mapViewState.PreviewSlot = null; // See ArmAbility's own comment.
         _targetableTilesOrigin = null;
 
         if (transformPool.TryGetReadonly(world.PlayerEntityId, out var transform))

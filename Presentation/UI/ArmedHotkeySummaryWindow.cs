@@ -9,12 +9,12 @@ namespace Presentation.UI;
 /// <summary>
 /// Shows the name/summary (see AbilityDefinition/ItemDefinition's Summary vs Description doc
 /// comments -- this window uses Summary, the concise one) of whichever hotbar slot is currently
-/// armed, click-previewed, or hovered (see HotbarController, the only writer of MapViewState.
-/// ArmedSlot/PreviewSlot/HoverSlot relevant here) -- a single persistent, pooled-style TextWindow
-/// toggled via IsVisible rather than created/closed per notification the way NotificationCenter's
-/// own popups are, since this shows/hides far more often. Width is fixed (HotbarContent.
-/// SummaryWidth, set via this window's MaximumSize.X at construction) with only height
-/// auto-growing with content -- see the RecalculateWrapContentSize override below.
+/// armed or hovered (see HotbarController, the only writer of MapViewState.ArmedSlot/HoverSlot
+/// relevant here) -- a single persistent, pooled-style TextWindow toggled via IsVisible rather
+/// than created/closed per notification the way NotificationCenter's own popups are, since this
+/// shows/hides far more often. Width is fixed (HotbarContent.SummaryWidth, set via this window's
+/// MaximumSize.X at construction) with only height auto-growing with content -- see the
+/// RecalculateWrapContentSize override below.
 /// </summary>
 public sealed class ArmedHotkeySummaryWindow(
     FontService fontService,
@@ -33,7 +33,7 @@ public sealed class ArmedHotkeySummaryWindow(
     {
         base.Update(gameTime);
 
-        var slotToShow = mapViewState.HoverSlot ?? mapViewState.ArmedSlot ?? mapViewState.PreviewSlot;
+        var slotToShow = mapViewState.HoverSlot ?? mapViewState.ArmedSlot;
 
         if (slotToShow == _displayedSlot)
         {

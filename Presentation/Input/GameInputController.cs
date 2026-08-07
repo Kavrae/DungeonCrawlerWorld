@@ -1,3 +1,4 @@
+using Engine.Utilities;
 using Game.Modules.Abilities;
 using Microsoft.Xna.Framework;
 using Microsoft.Xna.Framework.Input;
@@ -24,6 +25,15 @@ public sealed class GameInputController
 
     /// <summary>Content pixels scrolled per wheel detent -- roughly three lines of the 8pt font most window content uses, matching typical OS scroll-speed defaults.</summary>
     private const float ScrollPixelsPerNotch = 24f;
+
+    /// <summary>How long Escape must be held (not just tapped) before it closes every closeable DynamicHUD window at once instead of just the topmost -- see HandleEscape. Comfortably longer than DoubleTapWindowFrames-style thresholds elsewhere (0.3s), so an ordinary tap can never accidentally read as a hold.</summary>
+    private static readonly int EscapeHoldCloseAllFrames = GameTiming.FramesForSeconds(0.5f);
+
+    /// <summary>Consecutive frames Escape has been held down, 0 while it's up -- HandleEscape's own edge/hold distinction (1 == a fresh press).</summary>
+    private int _escapeHeldFrames;
+
+    /// <summary>Guards CloseAllClosableDynamicHudWindows to firing once per hold, not every frame past EscapeHoldCloseAllFrames -- reset the moment Escape is released.</summary>
+    private bool _escapeHoldCloseAllFired;
 
     private readonly List<Element> _baseElements;
     private readonly List<Element> _staticHudElements;
@@ -273,27 +283,88 @@ public sealed class GameInputController
     /// Base/StaticHUD element (not just whichever holds focus) rather than routed only to the
     /// focused one, since an armed ability's own window (MapWindow) shouldn't have to hold
     /// keyboard focus for Escape to cancel it -- e.g. a StaticHUD panel could be focused while
-    /// the map still has an ability armed. DynamicHUD (notification popups) and User are
-    /// deliberately excluded, the same tier scope CycleFocus already uses. No-op by default
-    /// (Window.OnEscapeAction); MapWindow is the only override today. This is scoped to
-    /// ability-cancel only -- the separate "Escape opens the options menu" TODO.md item isn't
-    /// implemented here.
+    /// the map still has an ability armed. No-op by default (Window.OnEscapeAction); MapWindow
+    /// is the only override today. This is scoped to ability-cancel only -- the separate "Escape
+    /// opens the options menu" TODO.md item isn't implemented here.
+    ///
+    /// A fresh press (the first held frame) also closes the frontmost closeable DynamicHUD
+    /// window, if any -- notification popups, the Inventory/Ability Score windows, the quest
+    /// composer, anything else that tier ever grows -- one at a time, same as clicking its own
+    /// close button would (see CloseTopmostClosableDynamicHudWindow). Continuing to hold Escape
+    /// past EscapeHoldCloseAllFrames instead sweeps every closeable DynamicHUD window closed at
+    /// once (see CloseAllClosableDynamicHudWindows), so a player buried under several popups can
+    /// clear them all without repeated presses.
     /// </summary>
     private void HandleEscape(KeyboardState keyboardState)
     {
-        if (!IsKeyPressed(keyboardState, Keys.Escape))
+        if (!keyboardState.IsKeyDown(Keys.Escape))
         {
+            _escapeHeldFrames = 0;
+            _escapeHoldCloseAllFired = false;
             return;
         }
 
-        foreach (var element in _baseElements)
+        _escapeHeldFrames++;
+
+        if (_escapeHeldFrames == 1)
         {
-            element.HandleEscape();
+            foreach (var element in _baseElements)
+            {
+                element.HandleEscape();
+            }
+
+            foreach (var element in _staticHudElements)
+            {
+                element.HandleEscape();
+            }
+
+            CloseTopmostClosableDynamicHudWindow();
+            return;
         }
 
-        foreach (var element in _staticHudElements)
+        if (!_escapeHoldCloseAllFired && _escapeHeldFrames >= EscapeHoldCloseAllFrames)
         {
-            element.HandleEscape();
+            _escapeHoldCloseAllFired = true;
+            CloseAllClosableDynamicHudWindows();
+        }
+    }
+
+    /// <summary>
+    /// Closes just the frontmost (last-raised, drawn-on-top) closeable DynamicHUD window -- a
+    /// Window with CanUserClose true. Deliberately excludes non-Window elements (the Notification/
+    /// Inventory Folder icons, plain Element subclasses) and Windows with CanUserClose false (the
+    /// Armed Hotkey Summary) -- neither is something a player "closes," they're persistent HUD
+    /// chrome. A no-op if nothing closeable is currently open.
+    /// </summary>
+    private void CloseTopmostClosableDynamicHudWindow()
+    {
+        for (var index = _dynamicHudElements.Count - 1; index >= 0; index--)
+        {
+            if (_dynamicHudElements[index] is Window { CanUserClose: true } window)
+            {
+                window.Close();
+                return;
+            }
+        }
+    }
+
+    /// <summary>
+    /// Same eligibility as CloseTopmostClosableDynamicHudWindow, but closes every match, topmost
+    /// first. Snapshotted into an array before iterating: Window.Close() removes itself from
+    /// _dynamicHudElements via its own Closed handler (see NotificationCenter.
+    /// OnActiveNotificationClosed / InventoryFolderController.WindowSlot.HandleClosed), which
+    /// would otherwise corrupt an in-progress enumeration of that same live list -- the same
+    /// snapshot-first reasoning ElementPoolService.CloseAllChildren already uses.
+    /// </summary>
+    private void CloseAllClosableDynamicHudWindows()
+    {
+        var snapshot = _dynamicHudElements.ToArray();
+        for (var index = snapshot.Length - 1; index >= 0; index--)
+        {
+            if (snapshot[index] is Window { CanUserClose: true } window)
+            {
+                window.Close();
+            }
         }
     }
 
@@ -332,8 +403,7 @@ public sealed class GameInputController
     /// compare against on release -- a separate method from TryStartContentDrag, not a widening of
     /// it, since that method's own gate (TryGetBoundItemId, item-only) is narrower by design for
     /// drag-payload capture; reusing/widening it here would risk accidentally enabling drag-rebind
-    /// for ability slots. If the press landed anywhere else entirely, an open click-preview closes
-    /// immediately rather than waiting for release.
+    /// for ability slots.
     /// </summary>
     private void CaptureHotbarPressSlot(Point clickPosition)
     {
@@ -514,13 +584,13 @@ public sealed class GameInputController
     }
 
     /// <summary>
-    /// Resolves a hotbar-slot press/release pair into a tap on the Armed Hotkey Summary's
-    /// HotbarController, if the release is close enough to the press to count as a tap (not a
-    /// drag -- same ContentDragTapThresholdPixels distinction ResolveContentDrag already makes)
-    /// and lands on a hotbar slot at all. HotbarController.OnSlotTapped itself verifies the
-    /// release slot matches whichever slot was actually pressed (see CaptureHotbarPressSlot),
-    /// so a press-then-drag that happens to end back within the tap threshold, but over a
-    /// different slot, doesn't spuriously count as a tap there.
+    /// Resolves a hotbar-slot press/release pair into a tap on HotbarController, if the release
+    /// is close enough to the press to count as a tap (not a drag -- same
+    /// ContentDragTapThresholdPixels distinction ResolveContentDrag already makes) and lands on a
+    /// hotbar slot at all. HotbarController.OnSlotTapped itself verifies the release slot matches
+    /// whichever slot was actually pressed (see CaptureHotbarPressSlot), so a press-then-drag that
+    /// happens to end back within the tap threshold, but over a different slot, doesn't
+    /// spuriously count as a tap there.
     /// </summary>
     private void ResolveHotbarSlotClick(Point releasePosition)
     {
