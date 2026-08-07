@@ -7,6 +7,8 @@ using Game.Modules.Abilities.Systems;
 using Game.Modules.Core.Components;
 using Game.Modules.Death.Components;
 using Game.Modules.Health.Components;
+using Game.Modules.Mana;
+using Game.Modules.Mana.Components;
 using Game.Modules.StatusEffects;
 using Game.World;
 
@@ -22,6 +24,8 @@ public sealed class AbilityActivationSystemTests
     private static readonly Guid FreeCastAbilityId = new("33333333-3333-3333-3333-333333333333");
     private static readonly Guid ImmediateWithCooldownAbilityId = new("44444444-4444-4444-4444-444444444444");
     private static readonly Guid DelayedWithCooldownAbilityId = new("55555555-5555-5555-5555-555555555555");
+    private static readonly Guid ImmediateWithManaCostAbilityId = new("66666666-6666-6666-6666-666666666666");
+    private static readonly Guid FreeCastWithManaCostAbilityId = new("77777777-7777-7777-7777-777777777777");
     private static readonly Vector3Int TargetTile = new(5, 5, 0);
 
     private sealed class FakeMapQuery : IMapQuery
@@ -50,6 +54,7 @@ public sealed class AbilityActivationSystemTests
         componentManager.RegisterMultiPool<AbilityInstanceComponent>();
         componentManager.RegisterPackedPool<HealthComponent>(static (ref existing, incoming) => existing = incoming);
         componentManager.RegisterPackedPool<DeadComponent>(static (ref existing, incoming) => existing = incoming);
+        componentManager.RegisterPackedPool<ManaComponent>(static (ref existing, incoming) => existing = incoming);
 
         var mapQuery = new FakeMapQuery();
         var eventBus = new EventBus();
@@ -90,6 +95,22 @@ public sealed class AbilityActivationSystemTests
             new TargetingSpec(TargetShape.SingleTarget, Range: 10),
             new AbilityTiming(ActionTimingCategory.Delayed, ActionLockFrames: 30, CooldownFrames: 150),
             new AbilityEffect(DamageAmount: 0, StatusEffects: [])));
+        abilityCatalog.Register(new AbilityDefinition(
+            ImmediateWithManaCostAbilityId,
+            "Test Immediate Spell",
+            "#",
+            new TargetingSpec(TargetShape.SingleTarget, Range: 10),
+            new AbilityTiming(ActionTimingCategory.Immediate, ActionLockFrames: 30, CooldownFrames: null),
+            new AbilityEffect(DamageAmount: 0, StatusEffects: []),
+            ManaCost: 5));
+        abilityCatalog.Register(new AbilityDefinition(
+            FreeCastWithManaCostAbilityId,
+            "Test FreeCast Spell",
+            "#",
+            new TargetingSpec(TargetShape.SingleTarget, Range: 10),
+            new AbilityTiming(ActionTimingCategory.FreeCast, ActionLockFrames: 0, CooldownFrames: null),
+            new AbilityEffect(DamageAmount: 0, StatusEffects: []),
+            ManaCost: 5));
 
         var system = new AbilityActivationSystem(
             componentManager.GetPackedPool<PendingAbilityActivationComponent>(),
@@ -104,13 +125,17 @@ public sealed class AbilityActivationSystemTests
             new StatusEffectAuraApplierRegistry(),
             componentManager,
             statModifiers: null,
-            componentManager.GetPackedPool<DeadComponent>());
+            componentManager.GetPackedPool<DeadComponent>(),
+            componentManager.GetPackedPool<ManaComponent>());
 
         return (system, componentManager, abilityCatalog, mapQuery);
     }
 
-    private static short HealthOf(ComponentManager componentManager, int entityId) =>
-        componentManager.GetPackedPool<HealthComponent>().TryGetReadonly(entityId, out var health) ? health.CurrentHealth : (short)-1;
+    private static float ManaOf(ComponentManager componentManager, int entityId) =>
+        componentManager.GetPackedPool<ManaComponent>().TryGetReadonly(entityId, out var mana) ? mana.CurrentMana : -1f;
+
+    private static float HealthOf(ComponentManager componentManager, int entityId) =>
+        componentManager.GetPackedPool<HealthComponent>().TryGetReadonly(entityId, out var health) ? health.CurrentHealth : -1f;
 
     private static short CooldownOf(ComponentManager componentManager, int entityId, Guid abilityId)
     {
@@ -132,7 +157,7 @@ public sealed class AbilityActivationSystemTests
     {
         var (system, componentManager, _, mapQuery) = Build();
         mapQuery.SetOccupant(TargetTile, TargetEntityId);
-        componentManager.Merge(TargetEntityId, new HealthComponent(100, 0, 100));
+        componentManager.Merge(TargetEntityId, new HealthComponent(100, 100));
         componentManager.Merge(CasterEntityId, new AbilityInstanceComponent(ImmediateAbilityId, damageAmount: 15, cooldownFramesRemaining: 0));
         componentManager.Merge(CasterEntityId, new ActionLockComponent(totalLockFrames: 0, lockFramesRemaining: 0));
         componentManager.Merge(CasterEntityId, new PendingAbilityActivationComponent(ImmediateAbilityId, [TargetTile]));
@@ -149,7 +174,7 @@ public sealed class AbilityActivationSystemTests
     {
         var (system, componentManager, _, mapQuery) = Build();
         mapQuery.SetOccupant(TargetTile, TargetEntityId);
-        componentManager.Merge(TargetEntityId, new HealthComponent(100, 0, 100));
+        componentManager.Merge(TargetEntityId, new HealthComponent(100, 100));
         componentManager.Merge(CasterEntityId, new AbilityInstanceComponent(ImmediateAbilityId, damageAmount: 15, cooldownFramesRemaining: 0));
         componentManager.Merge(CasterEntityId, new ActionLockComponent(totalLockFrames: 0, lockFramesRemaining: 0));
         componentManager.Merge(CasterEntityId, new PendingAbilityActivationComponent(ImmediateAbilityId, [TargetTile]));
@@ -165,7 +190,7 @@ public sealed class AbilityActivationSystemTests
     {
         var (system, componentManager, _, mapQuery) = Build();
         mapQuery.SetOccupant(TargetTile, TargetEntityId);
-        componentManager.Merge(TargetEntityId, new HealthComponent(100, 0, 100));
+        componentManager.Merge(TargetEntityId, new HealthComponent(100, 100));
         componentManager.Merge(CasterEntityId, new AbilityInstanceComponent(ImmediateAbilityId, damageAmount: 15, cooldownFramesRemaining: 0));
         componentManager.Merge(CasterEntityId, new ActionLockComponent(totalLockFrames: 30, lockFramesRemaining: 10));
         componentManager.Merge(CasterEntityId, new PendingAbilityActivationComponent(ImmediateAbilityId, [TargetTile]));
@@ -181,7 +206,7 @@ public sealed class AbilityActivationSystemTests
     {
         var (system, componentManager, _, mapQuery) = Build();
         mapQuery.SetOccupant(TargetTile, TargetEntityId);
-        componentManager.Merge(TargetEntityId, new HealthComponent(100, 0, 100));
+        componentManager.Merge(TargetEntityId, new HealthComponent(100, 100));
         componentManager.Merge(CasterEntityId, new AbilityInstanceComponent(ImmediateWithCooldownAbilityId, damageAmount: 15, cooldownFramesRemaining: 50));
         componentManager.Merge(CasterEntityId, new ActionLockComponent(totalLockFrames: 0, lockFramesRemaining: 0));
         componentManager.Merge(CasterEntityId, new PendingAbilityActivationComponent(ImmediateWithCooldownAbilityId, [TargetTile]));
@@ -198,7 +223,7 @@ public sealed class AbilityActivationSystemTests
     {
         var (system, componentManager, _, mapQuery) = Build();
         mapQuery.SetOccupant(TargetTile, TargetEntityId);
-        componentManager.Merge(TargetEntityId, new HealthComponent(100, 0, 100));
+        componentManager.Merge(TargetEntityId, new HealthComponent(100, 100));
         componentManager.Merge(CasterEntityId, new AbilityInstanceComponent(ImmediateWithCooldownAbilityId, damageAmount: 15, cooldownFramesRemaining: 0));
         componentManager.Merge(CasterEntityId, new ActionLockComponent(totalLockFrames: 0, lockFramesRemaining: 0));
         componentManager.Merge(CasterEntityId, new PendingAbilityActivationComponent(ImmediateWithCooldownAbilityId, [TargetTile]));
@@ -215,7 +240,7 @@ public sealed class AbilityActivationSystemTests
     {
         var (system, componentManager, _, mapQuery) = Build();
         mapQuery.SetOccupant(TargetTile, TargetEntityId);
-        componentManager.Merge(TargetEntityId, new HealthComponent(100, 0, 100));
+        componentManager.Merge(TargetEntityId, new HealthComponent(100, 100));
         componentManager.Merge(CasterEntityId, new AbilityInstanceComponent(DelayedAbilityId, damageAmount: 15, cooldownFramesRemaining: 0));
         componentManager.Merge(CasterEntityId, new ActionLockComponent(totalLockFrames: 0, lockFramesRemaining: 0));
         componentManager.Merge(CasterEntityId, new PendingAbilityActivationComponent(DelayedAbilityId, [TargetTile]));
@@ -232,7 +257,7 @@ public sealed class AbilityActivationSystemTests
     {
         var (system, componentManager, _, mapQuery) = Build();
         mapQuery.SetOccupant(TargetTile, TargetEntityId);
-        componentManager.Merge(TargetEntityId, new HealthComponent(100, 0, 100));
+        componentManager.Merge(TargetEntityId, new HealthComponent(100, 100));
         componentManager.Merge(CasterEntityId, new AbilityInstanceComponent(DelayedWithCooldownAbilityId, damageAmount: 15, cooldownFramesRemaining: 0));
         componentManager.Merge(CasterEntityId, new ActionLockComponent(totalLockFrames: 0, lockFramesRemaining: 0));
         componentManager.Merge(CasterEntityId, new PendingAbilityActivationComponent(DelayedWithCooldownAbilityId, [TargetTile]));
@@ -249,7 +274,7 @@ public sealed class AbilityActivationSystemTests
     {
         var (system, componentManager, _, mapQuery) = Build();
         mapQuery.SetOccupant(TargetTile, TargetEntityId);
-        componentManager.Merge(TargetEntityId, new HealthComponent(100, 0, 100));
+        componentManager.Merge(TargetEntityId, new HealthComponent(100, 100));
         componentManager.Merge(CasterEntityId, new AbilityInstanceComponent(DelayedWithCooldownAbilityId, damageAmount: 15, cooldownFramesRemaining: 60));
         componentManager.Merge(CasterEntityId, new ActionLockComponent(totalLockFrames: 0, lockFramesRemaining: 0));
         componentManager.Merge(CasterEntityId, new PendingAbilityActivationComponent(DelayedWithCooldownAbilityId, [TargetTile]));
@@ -265,7 +290,7 @@ public sealed class AbilityActivationSystemTests
     {
         var (system, componentManager, _, mapQuery) = Build();
         mapQuery.SetOccupant(TargetTile, TargetEntityId);
-        componentManager.Merge(TargetEntityId, new HealthComponent(100, 0, 100));
+        componentManager.Merge(TargetEntityId, new HealthComponent(100, 100));
         componentManager.Merge(CasterEntityId, new AbilityInstanceComponent(FreeCastAbilityId, damageAmount: 20, cooldownFramesRemaining: 0));
         componentManager.Merge(CasterEntityId, new ActionLockComponent(totalLockFrames: 30, lockFramesRemaining: 30));
         componentManager.Merge(CasterEntityId, new PendingAbilityActivationComponent(FreeCastAbilityId, [TargetTile]));
@@ -282,7 +307,7 @@ public sealed class AbilityActivationSystemTests
     {
         var (system, componentManager, _, mapQuery) = Build();
         mapQuery.SetOccupant(TargetTile, TargetEntityId);
-        componentManager.Merge(TargetEntityId, new HealthComponent(100, 0, 100));
+        componentManager.Merge(TargetEntityId, new HealthComponent(100, 100));
         componentManager.Merge(CasterEntityId, new AbilityInstanceComponent(FreeCastAbilityId, damageAmount: 20, cooldownFramesRemaining: 5));
         componentManager.Merge(CasterEntityId, new ActionLockComponent(totalLockFrames: 0, lockFramesRemaining: 0));
         componentManager.Merge(CasterEntityId, new PendingAbilityActivationComponent(FreeCastAbilityId, [TargetTile]));
@@ -291,6 +316,89 @@ public sealed class AbilityActivationSystemTests
 
         Assert.AreEqual(100, HealthOf(componentManager, TargetEntityId));
         Assert.AreEqual(5, CooldownOf(componentManager, CasterEntityId, FreeCastAbilityId), "Cooldown must be left untouched, not restarted, by a rejected activation.");
+    }
+
+    [TestMethod]
+    public void Immediate_InsufficientMana_DoesNothing()
+    {
+        var (system, componentManager, _, mapQuery) = Build();
+        mapQuery.SetOccupant(TargetTile, TargetEntityId);
+        componentManager.Merge(TargetEntityId, new HealthComponent(100, 100));
+        componentManager.Merge(CasterEntityId, new ManaComponent(currentMana: 4, maximumMana: 100));
+        componentManager.Merge(CasterEntityId, new AbilityInstanceComponent(ImmediateWithManaCostAbilityId, damageAmount: 15, cooldownFramesRemaining: 0));
+        componentManager.Merge(CasterEntityId, new ActionLockComponent(totalLockFrames: 0, lockFramesRemaining: 0));
+        componentManager.Merge(CasterEntityId, new PendingAbilityActivationComponent(ImmediateWithManaCostAbilityId, [TargetTile]));
+
+        system.Update(default, 0);
+
+        Assert.AreEqual(100, HealthOf(componentManager, TargetEntityId), "1 mana short of the cost -- blocked, no effect.");
+        Assert.AreEqual(4, ManaOf(componentManager, CasterEntityId), "A blocked activation must not spend mana.");
+        Assert.AreEqual(0, componentManager.GetPackedPool<ActionLockComponent>().GetReadonly(CasterEntityId).LockFramesRemaining, "A blocked activation must not set the lock either.");
+    }
+
+    [TestMethod]
+    public void Immediate_SufficientMana_AppliesDamageAndSpendsMana()
+    {
+        var (system, componentManager, _, mapQuery) = Build();
+        mapQuery.SetOccupant(TargetTile, TargetEntityId);
+        componentManager.Merge(TargetEntityId, new HealthComponent(100, 100));
+        componentManager.Merge(CasterEntityId, new ManaComponent(currentMana: 5, maximumMana: 100));
+        componentManager.Merge(CasterEntityId, new AbilityInstanceComponent(ImmediateWithManaCostAbilityId, damageAmount: 15, cooldownFramesRemaining: 0));
+        componentManager.Merge(CasterEntityId, new ActionLockComponent(totalLockFrames: 0, lockFramesRemaining: 0));
+        componentManager.Merge(CasterEntityId, new PendingAbilityActivationComponent(ImmediateWithManaCostAbilityId, [TargetTile]));
+
+        system.Update(default, 0);
+
+        Assert.AreEqual(85, HealthOf(componentManager, TargetEntityId));
+        Assert.AreEqual(0, ManaOf(componentManager, CasterEntityId), "Exactly enough -- spent down to 0.");
+        Assert.AreEqual(30, componentManager.GetPackedPool<ActionLockComponent>().GetReadonly(CasterEntityId).LockFramesRemaining);
+    }
+
+    [TestMethod]
+    public void Immediate_NoManaComponentAtAll_ManaCostAbility_DoesNothing()
+    {
+        var (system, componentManager, _, mapQuery) = Build();
+        mapQuery.SetOccupant(TargetTile, TargetEntityId);
+        componentManager.Merge(TargetEntityId, new HealthComponent(100, 100));
+        componentManager.Merge(CasterEntityId, new AbilityInstanceComponent(ImmediateWithManaCostAbilityId, damageAmount: 15, cooldownFramesRemaining: 0));
+        componentManager.Merge(CasterEntityId, new ActionLockComponent(totalLockFrames: 0, lockFramesRemaining: 0));
+        componentManager.Merge(CasterEntityId, new PendingAbilityActivationComponent(ImmediateWithManaCostAbilityId, [TargetTile]));
+
+        system.Update(default, 0);
+
+        Assert.AreEqual(100, HealthOf(componentManager, TargetEntityId), "An entity that never gained a ManaComponent can't afford any ManaCost > 0 ability -- this is what makes an ability the entity can never cast possible by design.");
+    }
+
+    [TestMethod]
+    public void Immediate_ZeroManaCostAbility_IgnoresManaEntirely()
+    {
+        var (system, componentManager, _, mapQuery) = Build();
+        mapQuery.SetOccupant(TargetTile, TargetEntityId);
+        componentManager.Merge(TargetEntityId, new HealthComponent(100, 100));
+        componentManager.Merge(CasterEntityId, new AbilityInstanceComponent(ImmediateAbilityId, damageAmount: 15, cooldownFramesRemaining: 0));
+        componentManager.Merge(CasterEntityId, new ActionLockComponent(totalLockFrames: 0, lockFramesRemaining: 0));
+        componentManager.Merge(CasterEntityId, new PendingAbilityActivationComponent(ImmediateAbilityId, [TargetTile]));
+
+        system.Update(default, 0);
+
+        Assert.AreEqual(85, HealthOf(componentManager, TargetEntityId), "ManaCost 0 (the default) -- no ManaComponent needed at all, same as Punch.");
+    }
+
+    [TestMethod]
+    public void FreeCast_InsufficientMana_DoesNothing()
+    {
+        var (system, componentManager, _, mapQuery) = Build();
+        mapQuery.SetOccupant(TargetTile, TargetEntityId);
+        componentManager.Merge(TargetEntityId, new HealthComponent(100, 100));
+        componentManager.Merge(CasterEntityId, new ManaComponent(currentMana: 4, maximumMana: 100));
+        componentManager.Merge(CasterEntityId, new AbilityInstanceComponent(FreeCastWithManaCostAbilityId, damageAmount: 20, cooldownFramesRemaining: 0));
+        componentManager.Merge(CasterEntityId, new ActionLockComponent(totalLockFrames: 0, lockFramesRemaining: 0));
+        componentManager.Merge(CasterEntityId, new PendingAbilityActivationComponent(FreeCastWithManaCostAbilityId, [TargetTile]));
+
+        system.Update(default, 0);
+
+        Assert.AreEqual(100, HealthOf(componentManager, TargetEntityId), "FreeCast bypasses the shared lock but not a mana cost it can't afford.");
+        Assert.AreEqual(4, ManaOf(componentManager, CasterEntityId));
     }
 
     [TestMethod]
@@ -310,7 +418,7 @@ public sealed class AbilityActivationSystemTests
     {
         var (system, componentManager, _, mapQuery) = Build();
         mapQuery.SetOccupant(TargetTile, TargetEntityId);
-        componentManager.Merge(TargetEntityId, new HealthComponent(100, 0, 100));
+        componentManager.Merge(TargetEntityId, new HealthComponent(100, 100));
 
         system.Update(default, 0);
 

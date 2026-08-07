@@ -15,6 +15,7 @@ using Game.Modules.Crawler;
 using Game.Modules.Death;
 using Game.Modules.Health;
 using Game.Modules.Inventory;
+using Game.Modules.Mana;
 using Game.Modules.Movement;
 using Game.Modules.Paralysis;
 using Game.Modules.Poison;
@@ -47,6 +48,7 @@ public static class GameBootstrapper
         [
             new CoreModule(),
             new HealthModule(),
+            new ManaModule(),
             new MovementModule(),
             new DeathModule(),
             new ProcessingTierModule(),

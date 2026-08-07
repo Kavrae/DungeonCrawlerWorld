@@ -1,12 +1,13 @@
 using Engine.ECS.Components;
 using Engine.ECS.Systems;
-using Engine.Math;
+using Game.Modules.AbilityScores.Components;
 using Game.Modules.Death.Components;
 using Game.Modules.Health.Components;
 using Game.Modules.Health.Systems;
 using Game.Modules.ProcessingTier;
 using Game.Modules.ProcessingTier.Components;
 using Game.Modules.StatModifiers.Components;
+using Microsoft.Xna.Framework;
 
 namespace Game.Modules.Health;
 
@@ -24,12 +25,11 @@ public sealed class HealthModule : IGameModule
     {
         componentManager.RegisterPackedPool<HealthComponent>(static (ref existing, incoming) =>
         {
-            existing.HealthRegen = (short)((existing.HealthRegen + incoming.HealthRegen) / 2);
-            // Floored at 0: a negative MaximumHealth here would make the ClampShort below
-            // throw (min > max), and "negative max health" isn't a meaningful state regardless
-            // of how it arose (e.g. merging in a component that never validated Maximum* >= 0).
-            existing.MaximumHealth = MathUtility.ClampShort((short)((existing.MaximumHealth + incoming.MaximumHealth) / 2), 0, short.MaxValue);
-            existing.CurrentHealth = MathUtility.ClampShort((short)((existing.CurrentHealth + incoming.CurrentHealth) / 2), 0, existing.MaximumHealth);
+            // Floored at 0: a negative MaximumHealth here would make the Clamp below throw
+            // (min > max), and "negative max health" isn't a meaningful state regardless of how
+            // it arose (e.g. merging in a component that never validated Maximum* >= 0).
+            existing.MaximumHealth = MathHelper.Clamp((existing.MaximumHealth + incoming.MaximumHealth) / 2f, 0f, float.MaxValue);
+            existing.CurrentHealth = MathHelper.Clamp((existing.CurrentHealth + incoming.CurrentHealth) / 2f, 0f, existing.MaximumHealth);
         });
     }
 
@@ -46,12 +46,19 @@ public sealed class HealthModule : IGameModule
         var deadEntities = componentManager.IsRegistered<DeadComponent>()
             ? componentManager.GetPackedPool<DeadComponent>()
             : null;
+        // Optional for the same reason statModifiers/deadEntities are -- a module set built
+        // without AbilityScoresModule (e.g. a minimal test) still works, just with 0 regen
+        // (no Constitution total found) rather than a hard dependency.
+        var abilityScores = componentManager.IsRegistered<AbilityScoreComponent>()
+            ? componentManager.GetMultiPool<AbilityScoreComponent>()
+            : null;
 
         systemManager.Register(new HealthRegenSystem(
             componentManager.GetPackedPool<HealthComponent>(),
             componentManager.GetDirectPool<ProcessingTierComponent>(),
             _processingTierEvents,
             statModifiers,
-            deadEntities));
+            deadEntities,
+            abilityScores));
     }
 }

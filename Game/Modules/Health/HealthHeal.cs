@@ -1,8 +1,8 @@
 using Engine.ECS.Components.Stores;
-using Engine.Math;
 using Game.Modules.Health.Components;
 using Game.Modules.StatModifiers;
 using Game.Modules.StatModifiers.Components;
+using Microsoft.Xna.Framework;
 
 namespace Game.Modules.Health;
 
@@ -22,8 +22,8 @@ public static class HealthHeal
 
         health.TryUpdate(entityId, (statModifiers, entityId, amount), static (ref HealthComponent healthComponent, (MultiComponentPool<StatModifierComponent>? StatModifiers, int EntityId, short Amount) state) =>
         {
-            var effectiveMaximumHealth = (short)StatModifierMath.GetEffectiveValue(state.StatModifiers, state.EntityId, StatModifierTarget.MaximumHealth, healthComponent.MaximumHealth);
-            healthComponent.CurrentHealth = MathUtility.ClampShort((short)(healthComponent.CurrentHealth + state.Amount), 0, effectiveMaximumHealth);
+            var effectiveMaximumHealth = StatModifierMath.GetEffectiveValue(state.StatModifiers, state.EntityId, StatModifierTarget.MaximumHealth, healthComponent.MaximumHealth);
+            healthComponent.CurrentHealth = MathHelper.Clamp(healthComponent.CurrentHealth + state.Amount, 0f, effectiveMaximumHealth);
         });
     }
 }

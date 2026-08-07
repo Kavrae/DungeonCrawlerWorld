@@ -14,7 +14,7 @@ public sealed class HealthHealTests
     public void Apply_RaisesCurrentHealthByAmount()
     {
         var pool = CreatePool();
-        pool.Add(0, new HealthComponent(currentHealth: 50, healthRegen: 0, maximumHealth: 100));
+        pool.Add(0, new HealthComponent(currentHealth: 50, maximumHealth: 100));
 
         HealthHeal.Apply(pool, 0, 10);
 
@@ -25,7 +25,7 @@ public sealed class HealthHealTests
     public void Apply_ClampsAtMaximumHealth()
     {
         var pool = CreatePool();
-        pool.Add(0, new HealthComponent(currentHealth: 95, healthRegen: 0, maximumHealth: 100));
+        pool.Add(0, new HealthComponent(currentHealth: 95, maximumHealth: 100));
 
         HealthHeal.Apply(pool, 0, 50);
 

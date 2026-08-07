@@ -75,15 +75,15 @@ public sealed class DelayedActionSystemTests
         return (system, componentManager, mapQuery, eventBus);
     }
 
-    private static short HealthOf(ComponentManager componentManager, int entityId) =>
-        componentManager.GetPackedPool<HealthComponent>().TryGetReadonly(entityId, out var health) ? health.CurrentHealth : (short)-1;
+    private static float HealthOf(ComponentManager componentManager, int entityId) =>
+        componentManager.GetPackedPool<HealthComponent>().TryGetReadonly(entityId, out var health) ? health.CurrentHealth : -1f;
 
     [TestMethod]
     public void LockStillCounting_EffectIsNotResolved()
     {
         var (system, componentManager, mapQuery, _) = Build();
         mapQuery.SetOccupant(TargetTile, TargetEntityId);
-        componentManager.Merge(TargetEntityId, new HealthComponent(100, 0, 100));
+        componentManager.Merge(TargetEntityId, new HealthComponent(100, 100));
         componentManager.Merge(CasterEntityId, new AbilityInstanceComponent(AbilityId, damageAmount: 15, cooldownFramesRemaining: 0));
         componentManager.Merge(CasterEntityId, new ActionLockComponent(totalLockFrames: 30, lockFramesRemaining: 10));
         componentManager.Merge(CasterEntityId, new PendingDelayedActionComponent(AbilityId, [TargetTile]));
@@ -99,7 +99,7 @@ public sealed class DelayedActionSystemTests
     {
         var (system, componentManager, mapQuery, _) = Build();
         mapQuery.SetOccupant(TargetTile, TargetEntityId);
-        componentManager.Merge(TargetEntityId, new HealthComponent(100, 0, 100));
+        componentManager.Merge(TargetEntityId, new HealthComponent(100, 100));
         componentManager.Merge(CasterEntityId, new AbilityInstanceComponent(AbilityId, damageAmount: 15, cooldownFramesRemaining: 0));
         componentManager.Merge(CasterEntityId, new ActionLockComponent(totalLockFrames: 30, lockFramesRemaining: 0));
         componentManager.Merge(CasterEntityId, new PendingDelayedActionComponent(AbilityId, [TargetTile]));
@@ -115,7 +115,7 @@ public sealed class DelayedActionSystemTests
     {
         var (system, componentManager, mapQuery, _) = Build();
         mapQuery.SetOccupant(TargetTile, TargetEntityId);
-        componentManager.Merge(TargetEntityId, new HealthComponent(100, 0, 100));
+        componentManager.Merge(TargetEntityId, new HealthComponent(100, 100));
         componentManager.Merge(CasterEntityId, new AbilityInstanceComponent(AbilityId, damageAmount: 15, cooldownFramesRemaining: 0));
         componentManager.Merge(CasterEntityId, new ActionLockComponent(totalLockFrames: 30, lockFramesRemaining: 0));
         componentManager.Merge(CasterEntityId, new PendingDelayedActionComponent(AbilityId, [TargetTile]));
@@ -131,7 +131,7 @@ public sealed class DelayedActionSystemTests
     {
         var (system, componentManager, mapQuery, _) = Build();
         mapQuery.SetOccupant(TargetTile, TargetEntityId);
-        componentManager.Merge(TargetEntityId, new HealthComponent(100, 0, 100));
+        componentManager.Merge(TargetEntityId, new HealthComponent(100, 100));
 
         system.Update(default, 0);
 

@@ -664,7 +664,7 @@ public sealed class MapWindowTests
         var targetTransform = new TransformComponent(targetPosition, new Vector2Byte(1, 1));
         componentManager.Merge(TargetEntityId, targetTransform);
         world.PlaceEntityOnMap(TargetEntityId, targetPosition, ref targetTransform);
-        componentManager.Merge(TargetEntityId, new HealthComponent(100, 0, 100));
+        componentManager.Merge(TargetEntityId, new HealthComponent(100, 100));
 
         mapWindow.HandleHotkeys(new KeyboardState(Keys.V), new KeyboardState());
         mapWindow.HandleHotkeys(new KeyboardState(Keys.V), new KeyboardState());

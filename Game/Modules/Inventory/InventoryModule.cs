@@ -6,6 +6,7 @@ using Game.Modules.Death.Components;
 using Game.Modules.Health.Components;
 using Game.Modules.Inventory.Components;
 using Game.Modules.Inventory.Systems;
+using Game.Modules.Mana.Components;
 using Game.Modules.StatModifiers.Components;
 using Game.World;
 
@@ -52,6 +53,9 @@ public sealed class InventoryModule : IGameModule
         var deadEntities = componentManager.IsRegistered<DeadComponent>()
             ? componentManager.GetPackedPool<DeadComponent>()
             : null;
+        var mana = componentManager.IsRegistered<ManaComponent>()
+            ? componentManager.GetPackedPool<ManaComponent>()
+            : null;
 
         systemManager.Register(new ConsumableActivationSystem(
             componentManager.GetPackedPool<PendingConsumableActivationComponent>(),
@@ -63,6 +67,7 @@ public sealed class InventoryModule : IGameModule
             _eventBus,
             componentManager,
             statModifiers,
-            deadEntities));
+            deadEntities,
+            mana));
     }
 }

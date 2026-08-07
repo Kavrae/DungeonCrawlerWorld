@@ -5,6 +5,7 @@ using Game.Modules.Abilities.Components;
 using Game.Modules.Core.Components;
 using Game.Modules.Inventory;
 using Game.Modules.Inventory.Components;
+using Game.Modules.Mana.Components;
 using Microsoft.Xna.Framework;
 using Presentation.Fonts;
 using Presentation.Rendering;
@@ -53,6 +54,7 @@ public sealed class HotbarContentTests
         componentManager.RegisterMultiPool<InventoryItemStackComponent>();
         componentManager.RegisterPackedPool<ActionLockComponent>(static (ref existing, incoming) => existing = incoming);
         componentManager.RegisterPackedPool<PotionCooldownComponent>(static (ref existing, incoming) => existing = incoming);
+        componentManager.RegisterPackedPool<ManaComponent>(static (ref existing, incoming) => existing = incoming);
 
         var world = new Game.World.World(new Game.World.Map(new Vector3Int(10, 10, 1))) { PlayerEntityId = PlayerEntityId };
         var fontService = new FontService("Fonts");

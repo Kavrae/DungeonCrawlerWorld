@@ -24,12 +24,14 @@ using Game.Modules.Health;
 using Game.Modules.Health.Components;
 using Game.Modules.Inventory;
 using Game.Modules.Inventory.Components;
+using Game.Modules.Mana;
 using Game.Modules.Movement;
 using Game.Modules.Movement.Components;
 using Game.Modules.ProcessingTier;
 using Game.Modules.Race;
 using Game.Modules.Race.Components;
 using Game.Modules.StatModifiers;
+using Game.Modules.StatModifiers.Components;
 using Game.World;
 
 namespace Tests.Blueprints;
@@ -61,6 +63,9 @@ public sealed class BlueprintTests
         var healthModule = new HealthModule();
         healthModule.Configure(context);
 
+        var manaModule = new ManaModule();
+        manaModule.Configure(context);
+
         var statModifiersModule = new StatModifiersModule();
         statModifiersModule.Configure(context);
 
@@ -74,6 +79,7 @@ public sealed class BlueprintTests
         [
             coreModule,
             healthModule,
+            manaModule,
             statModifiersModule,
             abilityScoresModule,
             movementModule,
@@ -199,14 +205,18 @@ public sealed class BlueprintTests
         Assert.AreEqual((short)5, magicMissile.DamageAmount);
         Assert.IsTrue(AbilityInstanceQueries.TryGet(abilityInstances, entityId, CoreAbilitiesModule.HealId, out _));
 
-        // Starting items: 5 Health Potions.
+        // Starting items: 5 Health Potions, 5 Mana Potions.
         var stacks = new List<InventoryItemStackComponent>();
         InventoryQueries.CopyStacksForEntity(ecsContext.ComponentManager.GetMultiPool<InventoryItemStackComponent>(), entityId, stacks);
-        Assert.HasCount(1, stacks);
+        Assert.HasCount(2, stacks);
 
-        var potionStack = stacks.Single(stack => stack.ItemDefinitionId == CoreItemsModule.HealthPotionId);
-        Assert.AreEqual(5, potionStack.Quantity);
-        Assert.IsFalse(potionStack.IsDisabled);
+        var healthPotionStack = stacks.Single(stack => stack.ItemDefinitionId == CoreItemsModule.HealthPotionId);
+        Assert.AreEqual(5, healthPotionStack.Quantity);
+        Assert.IsFalse(healthPotionStack.IsDisabled);
+
+        var manaPotionStack = stacks.Single(stack => stack.ItemDefinitionId == CoreItemsModule.ManaPotionId);
+        Assert.AreEqual(5, manaPotionStack.Quantity);
+        Assert.IsFalse(manaPotionStack.IsDisabled);
     }
 
     [TestMethod]
@@ -271,9 +281,9 @@ public sealed class BlueprintTests
         // nothing -- the class still functions when composed (or used) without a race.
         var health = ecsContext.ComponentManager.GetPackedPool<HealthComponent>().GetReadonly(entityId);
         Assert.AreEqual((short)100, health.MaximumHealth);
-        Assert.AreEqual((short)10, health.HealthRegen);
         Assert.IsTrue(health.CurrentHealth >= 1 && health.CurrentHealth <= health.MaximumHealth);
         Assert.IsTrue(ecsContext.ComponentManager.GetMultiPool<ClassComponent>().Has(entityId));
+        AssertHasHealthRegenBonusModifier(ecsContext.ComponentManager, entityId);
     }
 
     /// <summary>
@@ -305,13 +315,29 @@ public sealed class BlueprintTests
     {
         var ecsContext = BuildEcsContext();
         var entityId = ecsContext.EntityManager.CreateEntity();
-        ecsContext.ComponentManager.GetPackedPool<HealthComponent>().Add(entityId, new HealthComponent(50, 10, 100));
+        ecsContext.ComponentManager.GetPackedPool<HealthComponent>().Add(entityId, new HealthComponent(50, 100));
 
         new Tank(new MathUtility(new Random(1))).Build(ecsContext.ComponentManager, entityId);
 
         var health = ecsContext.ComponentManager.GetPackedPool<HealthComponent>().GetReadonly(entityId);
         Assert.AreEqual((short)110, health.MaximumHealth);
-        Assert.AreEqual((short)11, health.HealthRegen);
+        AssertHasHealthRegenBonusModifier(ecsContext.ComponentManager, entityId);
+    }
+
+    /// <summary>Regen has no stored field for Tank to have multiplied in place anymore (see HealthRegenSystem) -- its +10% bonus is a granted StatModifier instead, asserted here by presence/shape rather than by reading a HealthComponent field.</summary>
+    private static void AssertHasHealthRegenBonusModifier(ComponentManager componentManager, int entityId)
+    {
+        var statModifiers = componentManager.GetMultiPool<StatModifierComponent>();
+        for (var denseIndex = statModifiers.GetFirstDenseIndex(entityId); denseIndex != -1; denseIndex = statModifiers.GetNextDenseIndex(denseIndex))
+        {
+            var modifier = statModifiers.GetReadonlyByDenseIndex(denseIndex);
+            if (modifier.Target == StatModifierTarget.HealthRegen && modifier.Operation == StatModifierOperation.Multiplicative && modifier.Magnitude == 0.10f)
+            {
+                return;
+            }
+        }
+
+        Assert.Fail("Expected a permanent +10% HealthRegen StatModifier granted by Tank.");
     }
 
     /// <summary>

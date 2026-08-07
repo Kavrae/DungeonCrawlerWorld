@@ -5,6 +5,7 @@ using Game.Modules.StatModifiers.Components;
 using Microsoft.Xna.Framework;
 using Presentation.Fonts;
 using Presentation.Rendering;
+using Presentation.UI.ColorPalettes;
 
 namespace Presentation.UI.AbilityScores;
 

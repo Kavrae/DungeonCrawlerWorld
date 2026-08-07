@@ -86,7 +86,7 @@ public sealed class AbilityEffectResolverTests
     {
         var (mapQuery, health, eventBus, statusEffectAppliers, componentManager) = Build();
         mapQuery.SetBlockingOccupant(TargetTile, BlockingTargetEntityId);
-        health.Add(BlockingTargetEntityId, new HealthComponent(100, 0, 100));
+        health.Add(BlockingTargetEntityId, new HealthComponent(100, 100));
 
         AbilityEffectResolver.Apply(Ability, Instance, SourceEntityId, [TargetTile], mapQuery, health, eventBus, playerQuery: null, statusEffectAppliers, componentManager);
 
@@ -99,7 +99,7 @@ public sealed class AbilityEffectResolverTests
     {
         var (mapQuery, health, eventBus, statusEffectAppliers, componentManager) = Build();
         mapQuery.AddNonBlockingOccupant(TargetTile, NonBlockingTargetEntityId);
-        health.Add(NonBlockingTargetEntityId, new HealthComponent(100, 0, 100));
+        health.Add(NonBlockingTargetEntityId, new HealthComponent(100, 100));
 
         AbilityEffectResolver.Apply(Ability, Instance, SourceEntityId, [TargetTile], mapQuery, health, eventBus, playerQuery: null, statusEffectAppliers, componentManager);
 
@@ -113,8 +113,8 @@ public sealed class AbilityEffectResolverTests
         var (mapQuery, health, eventBus, statusEffectAppliers, componentManager) = Build();
         mapQuery.AddNonBlockingOccupant(TargetTile, NonBlockingTargetEntityId);
         mapQuery.AddNonBlockingOccupant(TargetTile, SecondNonBlockingTargetEntityId);
-        health.Add(NonBlockingTargetEntityId, new HealthComponent(100, 0, 100));
-        health.Add(SecondNonBlockingTargetEntityId, new HealthComponent(100, 0, 100));
+        health.Add(NonBlockingTargetEntityId, new HealthComponent(100, 100));
+        health.Add(SecondNonBlockingTargetEntityId, new HealthComponent(100, 100));
 
         AbilityEffectResolver.Apply(Ability, Instance, SourceEntityId, [TargetTile], mapQuery, health, eventBus, playerQuery: null, statusEffectAppliers, componentManager);
 
@@ -129,8 +129,8 @@ public sealed class AbilityEffectResolverTests
         var (mapQuery, health, eventBus, statusEffectAppliers, componentManager) = Build();
         mapQuery.SetBlockingOccupant(TargetTile, BlockingTargetEntityId);
         mapQuery.AddNonBlockingOccupant(TargetTile, NonBlockingTargetEntityId);
-        health.Add(BlockingTargetEntityId, new HealthComponent(100, 0, 100));
-        health.Add(NonBlockingTargetEntityId, new HealthComponent(100, 0, 100));
+        health.Add(BlockingTargetEntityId, new HealthComponent(100, 100));
+        health.Add(NonBlockingTargetEntityId, new HealthComponent(100, 100));
 
         AbilityEffectResolver.Apply(Ability, Instance, SourceEntityId, [TargetTile], mapQuery, health, eventBus, playerQuery: null, statusEffectAppliers, componentManager);
 

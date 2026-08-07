@@ -5,6 +5,7 @@ using Microsoft.Xna.Framework.Input;
 using Presentation.Fonts;
 using Presentation.Rendering;
 using Presentation.UI.ChromeBehaviors;
+using Presentation.UI.ColorPalettes;
 
 namespace Presentation.UI;
 

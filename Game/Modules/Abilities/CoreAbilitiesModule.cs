@@ -22,6 +22,9 @@ public sealed class CoreAbilitiesModule : IGameModule
     public static readonly Guid PunchId = new("7a1c3e5f-9b2d-4c6a-8e1f-3d5b7a9c2e4f");
     public static readonly Guid MagicMissileId = new("2b6d4f8a-1c3e-4a5d-9f7b-6e8c1a3d5f9b");
 
+    public const short HealManaCost = 2;
+    public const short MagicMissileManaCost = 5;
+
     public void Configure(GameModuleContext context)
     {
         context.Abilities.Register(new AbilityDefinition(
@@ -29,6 +32,7 @@ public sealed class CoreAbilitiesModule : IGameModule
             new TargetingSpec(TargetShape.Self, Range: 0),
             new AbilityTiming(ActionTimingCategory.Immediate, ActionLockFrames: (short)GameTiming.FramesForSeconds(1f), CooldownFrames: null),
             new AbilityEffect(DamageAmount: 0, StatusEffects: [], HealFraction: 0.2f),
+            ManaCost: HealManaCost,
             Description: "The user glows red while casting and immediately recovers up to 20% of their maximum health. This spell does not level up.",
             Summary: "Heals 20% of Max Health",
             SpriteName: "Spell-Weak",
@@ -39,7 +43,7 @@ public sealed class CoreAbilitiesModule : IGameModule
             PunchId, "Punch", "p",
             new TargetingSpec(TargetShape.Adjacent, Range: 0),
             new AbilityTiming(ActionTimingCategory.Immediate, ActionLockFrames: (short)GameTiming.FramesForSeconds(1f), CooldownFrames: null),
-            new AbilityEffect(DamageAmount: 5, StatusEffects: []),
+            new AbilityEffect(DamageAmount: 10, StatusEffects: []),
             Description: "It doesn't get any more simple than this. Just keep hitting the target with your bare fists until they stop moving. This ability is primarily modified by the Bare Knuckle skill.",
             Summary: "Basic melee attack",
             SpriteName: "Punch",
@@ -50,7 +54,8 @@ public sealed class CoreAbilitiesModule : IGameModule
             MagicMissileId, "Magic Missile", "m",
             new TargetingSpec(TargetShape.SingleTarget, Range: 20),
             new AbilityTiming(ActionTimingCategory.Immediate, ActionLockFrames: (short)GameTiming.FramesForSeconds(1f), CooldownFrames: null),
-            new AbilityEffect(DamageAmount: 5, StatusEffects: []),
+            new AbilityEffect(DamageAmount: 25, StatusEffects: []),
+            ManaCost: MagicMissileManaCost,
             Description: "A basic single target ranged attack spell that shoots hot laser bolts from the caster's eyes, one bolt after another.",
             Summary: "Single target ranged attack.",
             SpriteName: "Magic Missile",

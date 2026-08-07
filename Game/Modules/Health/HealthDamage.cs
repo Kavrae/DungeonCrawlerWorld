@@ -5,6 +5,7 @@ using Game.Modules.Health.Components;
 using Game.Modules.StatModifiers;
 using Game.Modules.StatModifiers.Components;
 using Game.World;
+using Microsoft.Xna.Framework;
 
 namespace Game.Modules.Health;
 
@@ -42,8 +43,8 @@ public static class HealthDamage
         // into HealthComponent.MaximumHealth itself.
         health.TryUpdate(entityId, (statModifiers, entityId, effectiveAmount), static (ref HealthComponent healthComponent, (MultiComponentPool<StatModifierComponent>? StatModifiers, int EntityId, short Amount) state) =>
         {
-            var effectiveMaximumHealth = (short)StatModifierMath.GetEffectiveValue(state.StatModifiers, state.EntityId, StatModifierTarget.MaximumHealth, healthComponent.MaximumHealth);
-            healthComponent.CurrentHealth = MathUtility.ClampShort((short)(healthComponent.CurrentHealth - state.Amount), 0, effectiveMaximumHealth);
+            var effectiveMaximumHealth = StatModifierMath.GetEffectiveValue(state.StatModifiers, state.EntityId, StatModifierTarget.MaximumHealth, healthComponent.MaximumHealth);
+            healthComponent.CurrentHealth = MathHelper.Clamp(healthComponent.CurrentHealth - state.Amount, 0f, effectiveMaximumHealth);
         });
 
         health.TryGetReadonly(entityId, out var updatedHealth);
@@ -71,7 +72,11 @@ public static class HealthDamage
             return;
         }
 
+        // EntityDamaged's Current/MaximumHealth are short -- it's a display/logging event (see
+        // its own doc comment), not simulation state, so it truncates the same way HealthComponent.
+        // ToString() does rather than widening its contract to float for a fractional value
+        // nothing reading this event needs.
         var effectiveMaximumHealthForEvent = (short)StatModifierMath.GetEffectiveValue(statModifiers, entityId, StatModifierTarget.MaximumHealth, updatedHealth.MaximumHealth);
-        eventBus.Publish(new EntityDamaged(entityId, effectiveAmount, source, updatedHealth.CurrentHealth, effectiveMaximumHealthForEvent, damageType));
+        eventBus.Publish(new EntityDamaged(entityId, effectiveAmount, source, (short)updatedHealth.CurrentHealth, effectiveMaximumHealthForEvent, damageType));
     }
 }

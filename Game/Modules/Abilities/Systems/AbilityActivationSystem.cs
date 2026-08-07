@@ -7,6 +7,8 @@ using Game.Modules.Abilities.Components;
 using Game.Modules.Core.Components;
 using Game.Modules.Death.Components;
 using Game.Modules.Health.Components;
+using Game.Modules.Mana;
+using Game.Modules.Mana.Components;
 using Game.Modules.StatModifiers.Components;
 using Game.Modules.StatusEffects;
 using Game.World;
@@ -27,6 +29,11 @@ namespace Game.Modules.Abilities.Systems;
 /// dropped, not queued to retry, since Presentation is expected to have already checked
 /// targeting validity before ever writing the request; this system's own gate checks are
 /// defense-in-depth against state changing between that check and this system's next visit.
+///
+/// All three dispatch paths also gate on AbilityDefinition.ManaCost via HasEnoughMana/SpendManaIfAny
+/// -- a zero-cost ability (ManaCost &lt;= 0, e.g. Punch) always passes for free, so this is a no-op
+/// for every ability that doesn't opt into a cost. Mana is spent only on a successful activation
+/// (after the lock/effect, mirroring where ActionLock itself gets set), never speculatively.
 /// </summary>
 public sealed class AbilityActivationSystem : ISystem
 {
@@ -47,6 +54,7 @@ public sealed class AbilityActivationSystem : ISystem
     private readonly StatusEffectAuraApplierRegistry _statusEffectAppliers;
     private readonly ComponentManager _componentManager;
     private readonly PackedComponentPool<DeadComponent>? _deadEntities;
+    private readonly PackedComponentPool<ManaComponent>? _mana;
     private readonly EntityStripeSet _stripeSet;
 
     public AbilityActivationSystem(
@@ -62,7 +70,8 @@ public sealed class AbilityActivationSystem : ISystem
         StatusEffectAuraApplierRegistry statusEffectAppliers,
         ComponentManager componentManager,
         MultiComponentPool<StatModifierComponent>? statModifiers = null,
-        PackedComponentPool<DeadComponent>? deadEntities = null)
+        PackedComponentPool<DeadComponent>? deadEntities = null,
+        PackedComponentPool<ManaComponent>? mana = null)
     {
         _pendingActivations = pendingActivations;
         _actionLocks = actionLocks;
@@ -77,6 +86,7 @@ public sealed class AbilityActivationSystem : ISystem
         _statusEffectAppliers = statusEffectAppliers;
         _componentManager = componentManager;
         _deadEntities = deadEntities;
+        _mana = mana;
 
         _stripeSet = new EntityStripeSet(StripeCount, pendingActivations.EntityIds);
         pendingActivations.EntityAdded += _stripeSet.OnEntityAdded;
@@ -134,33 +144,59 @@ public sealed class AbilityActivationSystem : ISystem
 
     private bool TryActivateImmediate(int entityId, AbilityDefinition ability, AbilityInstanceComponent instance, Vector3Int[] targetTiles)
     {
-        if (ActionLockGate.IsBlocked(_actionLocks, entityId))
+        if (ActionLockGate.IsBlocked(_actionLocks, entityId) || !HasEnoughMana(entityId, ability.ManaCost))
         {
             return false;
         }
 
         AbilityEffectResolver.Apply(ability, instance, entityId, targetTiles, _mapQuery, _health, _eventBus, _playerQuery, _statusEffectAppliers, _componentManager, _statModifiers, _deadEntities);
         ActionLockGate.Lock(_actionLocks, entityId, ability.Timing.ActionLockFrames);
+        SpendManaIfAny(entityId, ability.ManaCost);
         return true;
     }
 
     private bool TryActivateDelayed(int entityId, AbilityDefinition ability, Vector3Int[] targetTiles)
     {
-        if (ActionLockGate.IsBlocked(_actionLocks, entityId))
+        if (ActionLockGate.IsBlocked(_actionLocks, entityId) || !HasEnoughMana(entityId, ability.ManaCost))
         {
             return false;
         }
 
         ActionLockGate.Lock(_actionLocks, entityId, ability.Timing.ActionLockFrames);
         _pendingDelayedActions.Merge(entityId, new PendingDelayedActionComponent(ability.Id, targetTiles));
+        SpendManaIfAny(entityId, ability.ManaCost);
         return true;
     }
 
-    //Note : bool to account for future casting costs.
     private bool TryActivateFreeCast(int entityId, AbilityDefinition ability, AbilityInstanceComponent instance, Vector3Int[] targetTiles)
     {
+        if (!HasEnoughMana(entityId, ability.ManaCost))
+        {
+            return false;
+        }
+
         AbilityEffectResolver.Apply(ability, instance, entityId, targetTiles, _mapQuery, _health, _eventBus, _playerQuery, _statusEffectAppliers, _componentManager, _statModifiers, _deadEntities);
+        SpendManaIfAny(entityId, ability.ManaCost);
         return true;
+    }
+
+    /// <summary>A ManaCost &lt;= 0 (the default) always passes, even with no ManaComponent pool registered at all -- most abilities (e.g. Punch) never touch mana.</summary>
+    private bool HasEnoughMana(int entityId, short manaCost)
+    {
+        if (manaCost <= 0)
+        {
+            return true;
+        }
+
+        return _mana is not null && _mana.TryGetReadonly(entityId, out var mana) && mana.CurrentMana >= manaCost;
+    }
+
+    private void SpendManaIfAny(int entityId, short manaCost)
+    {
+        if (manaCost > 0)
+        {
+            ManaSpend.Apply(_mana!, entityId, manaCost, _statModifiers);
+        }
     }
 
     private void StartCooldownIfAny(int entityId, AbilityDefinition ability)

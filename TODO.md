@@ -171,6 +171,10 @@ This is a real structural addition, not a small tweak: a new persistent spatial 
 
 ### High Priority
 
+#### Component ToString coverage for the selection inspector
+
+`SelectionWindowContent`'s inspector (`Presentation/UI/Content/SelectionWindowContent.cs`, via `ComponentInspector`) displays whatever `ToString()` a selected entity's components return -- most component structs still fall back to the default `ToString()` (the type name only, no field values), so the inspector shows little beyond "this entity has a HealthComponent" without the actual numbers. `HealthComponent` is the one existing example of a component with a real, informative `ToString()` (a percentage bar plus current/max, see its own doc comment on why it degrades gracefully for an invalid MaximumHealth rather than throwing). Worth a pass giving every component struct (or at least the ones a player/dev would actually want to inspect -- `ManaComponent`, `AbilityScoreComponent`, `StatModifierComponent`, `InventoryItemStackComponent`, etc.) an equivalent field-dump `ToString()`, so the inspector actually earns its name instead of just confirming presence/absence.
+
 #### Inventory management
 
 The read-only view landed: `Presentation/UI/Inventory/InventoryManagementWindow.cs` behind a new Inventory HUD folder (`InventoryFolderController`), tabbed (`Presentation/UI/Content/TabbedContent.cs`, one static "All" tab today) over a scrolling icon grid (`InventoryGridContent`/`InventoryItemStackCell`) -- pause-while-open included. Remaining scope is interaction: searching, auto-sorting, click-and-drag organization, click-to-inspect (see Item inspection popup below). Depends on the Standard widget set item below for any of that which needs controls beyond what already exists.
@@ -236,6 +240,10 @@ Affected: `Presentation/UI/Window.cs` (new `HandleTextInput` hook, `NextTextBoxA
 #### Neighborhood/Borough zoom levels
 
 `MapCamera`'s `Neighborhood`/`Borough` zoom levels (`Presentation/UI/MapCamera.cs`) will render static structures only (walls/terrain) plus special sprites for bosses and important locations -- no moving entities. These are fixed-grid "check the larger map" views, not playable zoom levels: instead of centering on the player like `Team`/current zoom levels do, they snap to preset square regions -- a `Neighborhood` is 1000x1000 tiles, a `Borough` is 2000x2000 (a 2x2 block of neighborhoods) -- the same region sizes `Game/Modules/ProcessingTier/Systems/ProcessingTierSystem.cs` uses for its distance-throttle tiers, so both features share one spatial vocabulary.
+
+#### Extract a shared tick-fraction HUD bar element
+
+`PlayerHealthBarContent` and `PlayerManaBarContent` (`Presentation/UI/Content/`) are near-duplicates: same outer-outline-plus-inset-fill draw shape, same `MajorTickFractions`/`MinorTickFractions` ruler graduations (`DrawTicks`/`DrawTick`), same `ContentSize`-not-`Size` sizing rationale, same no-component fallback-color pattern -- only the backing component/pool, `StatModifierTarget`, and palette (`HealthBarPalette`/`ManaBarPalette`) actually differ. Tolerable at two copies; if a third tick-fraction bar shows up (e.g. a Soul Essence bar for soul-based abilities), abstract the shared draw logic out into one generic element instead of copy-pasting a third time -- e.g. a base class or a small shared renderer taking (current, effectiveMax, palette, no-value fallback color) and leaving only the component/pool lookup to each concrete bar.
 
 #### Per-entity sprite scale
 
@@ -378,6 +386,10 @@ and eventually other entities/event types, not just the player's moves and damag
 No serialization/save-and-load system exists anywhere yet. Window layout (`WindowRelativePosition`/`WindowCurrentSize`/`WindowDisplay` -- see `Window.cs`) is the first concrete use case: every launch starts from whatever `GameShellBootstrapper` hardcodes, with no way to remember where the player last left the map/debug/selection windows or which were minimized.
 
 Worth treating as the first slice of a general data-storage system (entity/world save state will eventually need the same serialize-to-disk mechanism -- including, eventually, inventory/equipment/stats state from the new Engine/Game items above) rather than a one-off "just persist these three floats" hack -- but start narrow. Window geometry is small, self-contained, and has no cross-entity references to untangle, which makes it a good first slice specifically *because* it won't force premature decisions about how the general system should handle things like entity references that a save format will eventually need to solve.
+
+#### Long parameter lists
+
+Several write-surface methods have grown a lot of positional/optional parameters as the features behind them expanded -- e.g. `AbilityDefinition`'s constructor (`Game/Modules/Abilities/AbilityDefinition.cs`, up to 12 params after `ManaCost` landed alongside Mana), `AbilityGrantEffects.Grant` (`Game/Modules/Abilities/AbilityGrantEffects.cs`), `StatModifierEffects.Apply` (`Game/Modules/StatModifiers/StatModifierEffects.cs`), and the near-identical `HealthRegenSystem`/`ManaRegenSystem` constructors (`Game/Modules/Health/Systems/`, `Game/Modules/Mana/Systems/`). Worth a pass once the current wave of stat/resource features (Mana, Stats consumers, Equipment) stops churning: candidates include grouping related params into small option records (the same shape `AbilityDefinition` already uses internally for `Targeting`/`Timing`/`Effect`), or builder-style construction for the worst offenders. Not urgent today -- most call sites still read fine with named arguments -- but worth revisiting before it gets worse.
 
 #### Field and property cleanup
 

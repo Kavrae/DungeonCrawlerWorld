@@ -7,6 +7,7 @@ using Game.Modules.Health.Components;
 using Game.Modules.Inventory;
 using Game.Modules.Inventory.Components;
 using Game.Modules.Inventory.Systems;
+using Game.Modules.Mana.Components;
 using Game.Modules.Poison;
 using Game.Modules.Poison.Components;
 using Game.Modules.StatusEffects;
@@ -22,6 +23,7 @@ public sealed class ConsumableActivationSystemTests
     private const int CasterEntityId = 1;
     private const int TargetEntityId = 2;
     private static readonly Guid PotionId = Guid.NewGuid();
+    private static readonly Guid ManaPotionId = Guid.NewGuid();
     private static readonly Guid NonConsumableId = Guid.NewGuid();
     private static readonly Vector3Int TargetTile = new(5, 5, 0);
 
@@ -50,6 +52,7 @@ public sealed class ConsumableActivationSystemTests
         componentManager.RegisterPackedPool<PotionCooldownComponent>(static (ref existing, incoming) => existing = incoming);
         componentManager.RegisterPackedPool<HealthComponent>(static (ref existing, incoming) => existing = incoming);
         componentManager.RegisterPackedPool<DeadComponent>(static (ref existing, incoming) => existing = incoming);
+        componentManager.RegisterPackedPool<ManaComponent>(static (ref existing, incoming) => existing = incoming);
         componentManager.RegisterMultiPool<InventoryItemStackComponent>();
         componentManager.RegisterMultiPool<StatusEffectStack>();
         componentManager.RegisterPackedPool<PoisonTimerComponent>(static (ref existing, incoming) => { });
@@ -58,6 +61,9 @@ public sealed class ConsumableActivationSystemTests
         itemCatalog.Register(new ItemDefinition(
             PotionId, "Test Potion", null, "p", Color.Green, Tags: [],
             Consumable: new ConsumableEffect(ConsumableKind.Potion, HealFraction: 0.5f, Targeting: new TargetingSpec(TargetShape.Burst, Range: 3, AreaSize: 1), ActionLockFrames: 60)));
+        itemCatalog.Register(new ItemDefinition(
+            ManaPotionId, "Test Mana Potion", null, "m", Color.Blue, Tags: [],
+            Consumable: new ConsumableEffect(ConsumableKind.Potion, HealFraction: 0f, Targeting: new TargetingSpec(TargetShape.Burst, Range: 3, AreaSize: 1), ActionLockFrames: 60, ManaFraction: 1f)));
         itemCatalog.Register(new ItemDefinition(NonConsumableId, "Test Hammer", null, "h", Color.Gray, Tags: []));
 
         var mapQuery = new FakeMapQuery();
@@ -73,13 +79,17 @@ public sealed class ConsumableActivationSystemTests
             eventBus,
             componentManager,
             statModifiers: null,
-            componentManager.GetPackedPool<DeadComponent>());
+            componentManager.GetPackedPool<DeadComponent>(),
+            componentManager.GetPackedPool<ManaComponent>());
 
         return (system, componentManager, mapQuery, eventBus);
     }
 
-    private static short HealthOf(ComponentManager componentManager, int entityId) =>
-        componentManager.GetPackedPool<HealthComponent>().TryGetReadonly(entityId, out var health) ? health.CurrentHealth : (short)-1;
+    private static float HealthOf(ComponentManager componentManager, int entityId) =>
+        componentManager.GetPackedPool<HealthComponent>().TryGetReadonly(entityId, out var health) ? health.CurrentHealth : -1f;
+
+    private static float ManaOf(ComponentManager componentManager, int entityId) =>
+        componentManager.GetPackedPool<ManaComponent>().TryGetReadonly(entityId, out var mana) ? mana.CurrentMana : -1f;
 
     private static int StackQuantity(ComponentManager componentManager, int entityId, Guid itemDefinitionId) =>
         InventoryQueries.TryGetStack(componentManager.GetMultiPool<InventoryItemStackComponent>(), entityId, itemDefinitionId, out var stack) ? stack.Quantity : -1;
@@ -89,7 +99,7 @@ public sealed class ConsumableActivationSystemTests
     {
         var (system, componentManager, mapQuery, _) = Build();
         mapQuery.SetOccupant(TargetTile, TargetEntityId);
-        componentManager.Merge(TargetEntityId, new HealthComponent(currentHealth: 20, healthRegen: 0, maximumHealth: 100));
+        componentManager.Merge(TargetEntityId, new HealthComponent(currentHealth: 20, maximumHealth: 100));
         InventoryActions.AddItem(componentManager, CasterEntityId, PotionId, quantity: 1);
         componentManager.Merge(CasterEntityId, new PendingConsumableActivationComponent(PotionId, [TargetTile]));
         componentManager.Merge(CasterEntityId, new ActionLockComponent(totalLockFrames: 0, lockFramesRemaining: 0));
@@ -100,11 +110,47 @@ public sealed class ConsumableActivationSystemTests
     }
 
     [TestMethod]
+    public void ManaPotion_TargetOccupantAtTargetTile_FullyRestoresMana()
+    {
+        var (system, componentManager, mapQuery, _) = Build();
+        mapQuery.SetOccupant(TargetTile, TargetEntityId);
+        componentManager.Merge(TargetEntityId, new HealthComponent(currentHealth: 20, maximumHealth: 100));
+        componentManager.Merge(TargetEntityId, new ManaComponent(currentMana: 3, maximumMana: 10));
+        InventoryActions.AddItem(componentManager, CasterEntityId, ManaPotionId, quantity: 1);
+        componentManager.Merge(CasterEntityId, new PendingConsumableActivationComponent(ManaPotionId, [TargetTile]));
+        componentManager.Merge(CasterEntityId, new ActionLockComponent(totalLockFrames: 0, lockFramesRemaining: 0));
+
+        system.Update(default, 0);
+
+        Assert.AreEqual(10, ManaOf(componentManager, TargetEntityId), "ManaFraction 1f -- a full restore regardless of starting mana.");
+        Assert.AreEqual(20, HealthOf(componentManager, TargetEntityId), "HealFraction 0f on the Mana Potion -- health must be untouched.");
+    }
+
+    /// <summary>An entity with Health but no ManaComponent (never gained a mana-costing ability) is still a legitimate potion target -- the potion is consumed and the target's cooldown still resets, it just has nothing to restore.</summary>
+    [TestMethod]
+    public void ManaPotion_TargetHasNoManaComponent_StillConsumesPotionAndSetsCooldownButRestoresNothing()
+    {
+        var (system, componentManager, mapQuery, _) = Build();
+        mapQuery.SetOccupant(TargetTile, TargetEntityId);
+        componentManager.Merge(TargetEntityId, new HealthComponent(currentHealth: 20, maximumHealth: 100));
+        InventoryActions.AddItem(componentManager, CasterEntityId, ManaPotionId, quantity: 1);
+        componentManager.Merge(CasterEntityId, new PendingConsumableActivationComponent(ManaPotionId, [TargetTile]));
+        componentManager.Merge(CasterEntityId, new ActionLockComponent(totalLockFrames: 0, lockFramesRemaining: 0));
+
+        system.Update(default, 0);
+
+        Assert.IsFalse(componentManager.GetPackedPool<ManaComponent>().Has(TargetEntityId));
+        Assert.AreEqual(-1, StackQuantity(componentManager, CasterEntityId, ManaPotionId), "The single potion was consumed -- StackQuantity's -1 sentinel means no stack found at all, per InventoryActions.ConsumeItem's own doc comment.");
+        var cooldown = componentManager.GetPackedPool<PotionCooldownComponent>().GetReadonly(TargetEntityId);
+        Assert.AreEqual(PotionCooldownEffects.DurationFrames, cooldown.FramesRemaining);
+    }
+
+    [TestMethod]
     public void Potion_Activation_DecrementsInventoryStackAndSetsActionLock()
     {
         var (system, componentManager, mapQuery, _) = Build();
         mapQuery.SetOccupant(TargetTile, TargetEntityId);
-        componentManager.Merge(TargetEntityId, new HealthComponent(currentHealth: 20, healthRegen: 0, maximumHealth: 100));
+        componentManager.Merge(TargetEntityId, new HealthComponent(currentHealth: 20, maximumHealth: 100));
         InventoryActions.AddItem(componentManager, CasterEntityId, PotionId, quantity: 3);
         componentManager.Merge(CasterEntityId, new PendingConsumableActivationComponent(PotionId, [TargetTile]));
         componentManager.Merge(CasterEntityId, new ActionLockComponent(totalLockFrames: 0, lockFramesRemaining: 0));
@@ -122,7 +168,7 @@ public sealed class ConsumableActivationSystemTests
     {
         var (system, componentManager, mapQuery, _) = Build();
         mapQuery.SetOccupant(TargetTile, TargetEntityId);
-        componentManager.Merge(TargetEntityId, new HealthComponent(currentHealth: 20, healthRegen: 0, maximumHealth: 100));
+        componentManager.Merge(TargetEntityId, new HealthComponent(currentHealth: 20, maximumHealth: 100));
         InventoryActions.AddItem(componentManager, CasterEntityId, PotionId, quantity: 1);
         componentManager.Merge(CasterEntityId, new PendingConsumableActivationComponent(PotionId, [TargetTile]));
         componentManager.Merge(CasterEntityId, new ActionLockComponent(totalLockFrames: 0, lockFramesRemaining: 0));
@@ -141,7 +187,7 @@ public sealed class ConsumableActivationSystemTests
         var (system, componentManager, mapQuery, _) = Build();
         var selfTile = new Vector3Int(9, 9, 0);
         mapQuery.SetOccupant(selfTile, CasterEntityId);
-        componentManager.Merge(CasterEntityId, new HealthComponent(currentHealth: 20, healthRegen: 0, maximumHealth: 100));
+        componentManager.Merge(CasterEntityId, new HealthComponent(currentHealth: 20, maximumHealth: 100));
         InventoryActions.AddItem(componentManager, CasterEntityId, PotionId, quantity: 1);
         componentManager.Merge(CasterEntityId, new PendingConsumableActivationComponent(PotionId, [selfTile]));
         componentManager.Merge(CasterEntityId, new ActionLockComponent(totalLockFrames: 0, lockFramesRemaining: 0));
@@ -157,7 +203,7 @@ public sealed class ConsumableActivationSystemTests
     {
         var (system, componentManager, mapQuery, eventBus) = Build();
         mapQuery.SetOccupant(TargetTile, TargetEntityId);
-        componentManager.Merge(TargetEntityId, new HealthComponent(currentHealth: 20, healthRegen: 0, maximumHealth: 100));
+        componentManager.Merge(TargetEntityId, new HealthComponent(currentHealth: 20, maximumHealth: 100));
         InventoryActions.AddItem(componentManager, CasterEntityId, PotionId, quantity: 1);
         componentManager.Merge(CasterEntityId, new PendingConsumableActivationComponent(PotionId, [TargetTile]));
         componentManager.Merge(CasterEntityId, new ActionLockComponent(totalLockFrames: 0, lockFramesRemaining: 0));
@@ -179,7 +225,7 @@ public sealed class ConsumableActivationSystemTests
     {
         var (system, componentManager, mapQuery, eventBus) = Build();
         mapQuery.SetOccupant(TargetTile, TargetEntityId);
-        componentManager.Merge(TargetEntityId, new HealthComponent(currentHealth: 20, healthRegen: 0, maximumHealth: 100));
+        componentManager.Merge(TargetEntityId, new HealthComponent(currentHealth: 20, maximumHealth: 100));
         InventoryActions.AddItem(componentManager, CasterEntityId, PotionId, quantity: 1);
         componentManager.Merge(CasterEntityId, new PendingConsumableActivationComponent(PotionId, [TargetTile]));
         componentManager.Merge(CasterEntityId, new ActionLockComponent(totalLockFrames: 0, lockFramesRemaining: 0));
@@ -198,7 +244,7 @@ public sealed class ConsumableActivationSystemTests
     {
         var (system, componentManager, mapQuery, _) = Build();
         mapQuery.SetOccupant(TargetTile, TargetEntityId);
-        componentManager.Merge(TargetEntityId, new HealthComponent(currentHealth: 20, healthRegen: 0, maximumHealth: 100));
+        componentManager.Merge(TargetEntityId, new HealthComponent(currentHealth: 20, maximumHealth: 100));
         componentManager.Merge(CasterEntityId, new PendingConsumableActivationComponent(PotionId, [TargetTile]));
 
         system.Update(default, 0);
@@ -225,7 +271,7 @@ public sealed class ConsumableActivationSystemTests
     {
         var (system, componentManager, mapQuery, _) = Build();
         mapQuery.SetOccupant(TargetTile, TargetEntityId);
-        componentManager.Merge(TargetEntityId, new HealthComponent(currentHealth: 20, healthRegen: 0, maximumHealth: 100));
+        componentManager.Merge(TargetEntityId, new HealthComponent(currentHealth: 20, maximumHealth: 100));
         InventoryActions.AddItem(componentManager, CasterEntityId, PotionId, quantity: 1);
         componentManager.Merge(CasterEntityId, new PendingConsumableActivationComponent(PotionId, [TargetTile]));
         componentManager.Merge(CasterEntityId, new ActionLockComponent(totalLockFrames: 30, lockFramesRemaining: 30));
@@ -241,7 +287,7 @@ public sealed class ConsumableActivationSystemTests
     {
         var (system, componentManager, mapQuery, _) = Build();
         mapQuery.SetOccupant(TargetTile, TargetEntityId);
-        componentManager.Merge(TargetEntityId, new HealthComponent(currentHealth: 20, healthRegen: 0, maximumHealth: 100));
+        componentManager.Merge(TargetEntityId, new HealthComponent(currentHealth: 20, maximumHealth: 100));
         InventoryActions.AddItem(componentManager, CasterEntityId, PotionId, quantity: 1);
         componentManager.Merge(CasterEntityId, new PendingConsumableActivationComponent(PotionId, [TargetTile]));
         componentManager.GetPackedPool<DeadComponent>().Add(CasterEntityId, new DeadComponent(KilledByEntityId: null));

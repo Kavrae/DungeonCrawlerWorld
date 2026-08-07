@@ -54,7 +54,7 @@ public sealed class BurningSystemTests
         var timers = CreateTimerPool();
         var stacks = CreateStackPool();
         var health = CreateHealthPool();
-        health.Add(0, new HealthComponent(currentHealth: 100, healthRegen: 0, maximumHealth: 100));
+        health.Add(0, new HealthComponent(currentHealth: 100, maximumHealth: 100));
         for (var i = 0; i < 7; i++)
         {
             stacks.Add(0, new StatusEffectStack(StatusEffectType.Burning, StatusEffectSource.Admin));
@@ -83,7 +83,7 @@ public sealed class BurningSystemTests
         var timers = CreateTimerPool();
         var stacks = CreateStackPool();
         var health = CreateHealthPool();
-        health.Add(0, new HealthComponent(currentHealth: 100, healthRegen: 0, maximumHealth: 100));
+        health.Add(0, new HealthComponent(currentHealth: 100, maximumHealth: 100));
         stacks.Add(0, new StatusEffectStack(StatusEffectType.Burning, StatusEffectSource.Admin));
         timers.Add(0, new BurningTimerComponent(BurningEffects.TickIntervalFrames, stackCount: 1));
         var system = new BurningSystem(timers, stacks, health, new EventBus(), new FakePlayerQuery(0), CreateTiersPool(), new ProcessingTierEvents());
@@ -102,7 +102,7 @@ public sealed class BurningSystemTests
         var timers = CreateTimerPool();
         var stacks = CreateStackPool();
         var health = CreateHealthPool();
-        health.Add(0, new HealthComponent(currentHealth: 100, healthRegen: 0, maximumHealth: 100));
+        health.Add(0, new HealthComponent(currentHealth: 100, maximumHealth: 100));
         stacks.Add(0, new StatusEffectStack(StatusEffectType.Burning, StatusEffectSource.Admin));
         timers.Add(0, new BurningTimerComponent(1, stackCount: 1));
         var system = new BurningSystem(timers, stacks, health, new EventBus(), new FakePlayerQuery(0), CreateTiersPool(), new ProcessingTierEvents());
@@ -118,7 +118,7 @@ public sealed class BurningSystemTests
         var timers = CreateTimerPool();
         var stacks = CreateStackPool();
         var health = CreateHealthPool();
-        health.Add(0, new HealthComponent(currentHealth: 100, healthRegen: 0, maximumHealth: 100));
+        health.Add(0, new HealthComponent(currentHealth: 100, maximumHealth: 100));
         stacks.Add(0, new StatusEffectStack(StatusEffectType.Burning, StatusEffectSource.Admin));
         timers.Add(0, new BurningTimerComponent(1, stackCount: 1));
         var system = new BurningSystem(timers, stacks, health, new EventBus(), new FakePlayerQuery(0), CreateTiersPool(), new ProcessingTierEvents());
@@ -133,7 +133,7 @@ public sealed class BurningSystemTests
         var timers = CreateTimerPool();
         var stacks = CreateStackPool();
         var health = CreateHealthPool();
-        health.Add(0, new HealthComponent(currentHealth: 3, healthRegen: 0, maximumHealth: 100));
+        health.Add(0, new HealthComponent(currentHealth: 3, maximumHealth: 100));
         for (var i = 0; i < 5; i++)
         {
             stacks.Add(0, new StatusEffectStack(StatusEffectType.Burning, StatusEffectSource.Admin));
@@ -167,7 +167,7 @@ public sealed class BurningSystemTests
         var timers = CreateTimerPool();
         var stacks = CreateStackPool();
         var health = CreateHealthPool();
-        health.Add(0, new HealthComponent(currentHealth: 100, healthRegen: 0, maximumHealth: 100));
+        health.Add(0, new HealthComponent(currentHealth: 100, maximumHealth: 100));
         stacks.Add(0, new StatusEffectStack(StatusEffectType.Burning, StatusEffectSource.Admin));
         timers.Add(0, new BurningTimerComponent(1, stackCount: 1));
         var eventBus = new EventBus();
@@ -189,7 +189,7 @@ public sealed class BurningSystemTests
         var timers = CreateTimerPool();
         var stacks = CreateStackPool();
         var health = CreateHealthPool();
-        health.Add(1, new HealthComponent(currentHealth: 100, healthRegen: 0, maximumHealth: 100));
+        health.Add(1, new HealthComponent(currentHealth: 100, maximumHealth: 100));
         stacks.Add(1, new StatusEffectStack(StatusEffectType.Burning, StatusEffectSource.Admin));
         timers.Add(1, new BurningTimerComponent(1, stackCount: 1));
         var eventBus = new EventBus();

@@ -28,7 +28,6 @@ public sealed class Goblin(MathUtility mathUtility) : IBlueprint
     private const string Description = "Small, green and smart. What Goblins lack in physical strength they make up in pure spunk.";
 
     private const short MaximumHealth = 200;
-    private const short HealthRegen = 2;
 
     /// <summary>Flat default for every NPC race, adjustable in a later balance pass -- see TODO.md's Stats entry.</summary>
     private const short DefaultAbilityScoreBaseValue = 5;
@@ -51,7 +50,7 @@ public sealed class Goblin(MathUtility mathUtility) : IBlueprint
         {
             componentManager.Merge(entityId, sprite);
         }
-        componentManager.Merge(entityId, new HealthComponent((short)mathUtility.Next(1, MaximumHealth + 1), HealthRegen, MaximumHealth));
+        componentManager.Merge(entityId, new HealthComponent((short)mathUtility.Next(1, MaximumHealth + 1), MaximumHealth));
         componentManager.Merge(entityId, new MovementComponent(MovementMode.Random, 54, null, null));
         componentManager.Merge(entityId, new ActionLockComponent(totalLockFrames: 0, lockFramesRemaining: 0));
 

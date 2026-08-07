@@ -75,7 +75,7 @@ public sealed class ContactDamageSystemTests
         var deadEntities = CreateDeadPool();
         var processingTiers = CreateTiersPool();
 
-        health.Add(MoverEntityId, new HealthComponent(currentHealth: 100, healthRegen: 0, maximumHealth: 100));
+        health.Add(MoverEntityId, new HealthComponent(currentHealth: 100, maximumHealth: 100));
         hazards.Add(TerrainEntityId, new DamageOnContactComponent(damagePerTick: 10, tickIntervalFrames: 60));
         mapQuery.SetTerrain(new Vector3Int(5, 5, 0), TerrainEntityId);
 

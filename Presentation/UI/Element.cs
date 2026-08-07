@@ -4,6 +4,7 @@ using Microsoft.Xna.Framework.Input;
 using Presentation.Fonts;
 using Presentation.Input;
 using Presentation.Rendering;
+using Presentation.UI.ColorPalettes;
 
 namespace Presentation.UI;
 

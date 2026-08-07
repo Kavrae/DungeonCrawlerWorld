@@ -8,7 +8,14 @@ public enum StatModifierTarget
 {
     OutgoingDamage,
     MaximumHealth,
+
+    /// <summary>Layers on top of HealthRegenSystem's live-computed (Constitution-derived) base regen amount -- see AbilityScoreRegenMath. Not a stored base value of its own; there's nothing left to modify in place, StatModifierMath.GetEffectiveValue is applied to the freshly-computed amount each visit.</summary>
     HealthRegen,
+
+    MaximumMana,
+
+    /// <summary>Mirrors HealthRegen -- layers on top of ManaRegenSystem's live-computed (Intelligence-derived) base regen amount. Unused by any built-in content today; kept for symmetry so equipment/buffs have the same seam Health already gets.</summary>
+    ManaRegen,
 
     /// <summary>Damage an entity receives, consumed at HealthDamage.Apply -- the single chokepoint for every damage source (abilities, Burning, Poison, contact hazards) -- so a reduction here applies uniformly regardless of what dealt the damage.</summary>
     IncomingDamage,

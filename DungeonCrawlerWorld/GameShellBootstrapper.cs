@@ -5,6 +5,7 @@ using Game.Modules.Abilities.Components;
 using Game.Modules.Core.Components;
 using Game.Modules.Inventory;
 using Game.Modules.Inventory.Components;
+using Game.Modules.Mana.Components;
 using Game.Modules.Movement.Components;
 using Game.Notifications;
 using Game.World;
@@ -39,6 +40,7 @@ public static class GameShellBootstrapper
     private const float DebugWindowHeight = 24f;
     private const float SelectionWindowWidth = 300f;
     private const float ActionLockGap = 8f;
+    private const float ManaBarGap = 3f;
 
     public static GameShellContext Build(PresentationContext presentation, World world, EcsContext ecsContext, AbilityCatalog abilityCatalog, ItemCatalog itemCatalog, Vector2 screenSize)
     {
@@ -113,7 +115,8 @@ public static class GameShellBootstrapper
             componentManager.GetPackedPool<PendingAbilityActivationComponent>(),
             componentManager.GetPackedPool<PendingConsumableActivationComponent>(),
             componentManager.GetPackedPool<PendingDelayedActionComponent>(),
-            componentManager.GetPackedPool<ActionLockComponent>());
+            componentManager.GetPackedPool<ActionLockComponent>(),
+            componentManager.GetPackedPool<ManaComponent>());
 
         // MapWindow's dependencies (World/ComponentManager/renderers) come from Engine/Game
         // and Presentation both, so it can't be registered inside WindowService's own
@@ -211,6 +214,21 @@ public static class GameShellBootstrapper
         playerHealthBarWindow.Initialize();
         staticHudWindows.Add(playerHealthBarWindow);
 
+        var playerManaBarWindow = presentation.ElementPoolService.CreateElement<Window>(null, new ElementOptions
+        {
+            Layout = new ElementLayoutOptions
+            {
+                RelativePosition = new Vector2(screenSize.X - PlayerManaBarContent.Size.X - HudMetrics.Margin.X, HudMetrics.Margin.Y + PlayerHealthBarContent.Size.Y + ManaBarGap),
+                Size = PlayerManaBarContent.Size,
+                DisplayMode = ElementDisplayMode.Fixed,
+                IsTransparent = true,
+            },
+            Chrome = new ElementChromeOptions { ShowTitle = false, ShowBorder = true, BorderStyle = BorderStyle.Outset, CanUserFocus = false },
+        });
+        playerManaBarWindow.SetContent(new PlayerManaBarContent(world, ecsContext.ComponentManager));
+        playerManaBarWindow.Initialize();
+        staticHudWindows.Add(playerManaBarWindow);
+
         var actionLockWindow = presentation.ElementPoolService.CreateElement<Window>(null, new ElementOptions
         {
             Layout = new ElementLayoutOptions
@@ -230,7 +248,7 @@ public static class GameShellBootstrapper
         {
             Layout = new ElementLayoutOptions
             {
-                RelativePosition = new Vector2(screenSize.X - PlayerHealthBarContent.Size.X - HudMetrics.Margin.X, HudMetrics.Margin.Y + PlayerHealthBarContent.Size.Y),
+                RelativePosition = new Vector2(screenSize.X - PlayerHealthBarContent.Size.X - HudMetrics.Margin.X, HudMetrics.Margin.Y + PlayerHealthBarContent.Size.Y + ManaBarGap + PlayerManaBarContent.Size.Y),
                 Size = PlayerStatusEffectsContent.Size,
                 DisplayMode = ElementDisplayMode.Fixed,
                 IsTransparent = true,

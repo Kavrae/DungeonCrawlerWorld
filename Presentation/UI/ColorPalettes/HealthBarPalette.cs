@@ -1,6 +1,6 @@
 using Microsoft.Xna.Framework;
 
-namespace Presentation.UI;
+namespace Presentation.UI.ColorPalettes;
 
 /// <summary>Health-bar color logic shared by MapWindow's per-tile bars and PlayerHealthBarContent's HUD bar, so both render identically.</summary>
 internal static class HealthBarPalette

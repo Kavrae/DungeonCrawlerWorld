@@ -23,7 +23,6 @@ namespace Game.Blueprints;
 public sealed class PlayerBlueprint(MathUtility mathUtility, UniqueNumberAllocator crawlerNumberAllocator) : IBlueprint
 {
     private const short MaximumHealth = 100;
-    private const short HealthRegen = 1;
 
     /// <summary>Hardcoded stopgap until the Additive/Multiplicative bonuses system exists -- see TODO.md.</summary>
     private const short PunchDamage = 20;
@@ -41,14 +40,19 @@ public sealed class PlayerBlueprint(MathUtility mathUtility, UniqueNumberAllocat
         {
             componentManager.Merge(entityId, sprite);
         }
-        componentManager.Merge(entityId, new HealthComponent((short)mathUtility.Next(1, MaximumHealth + 1), HealthRegen, MaximumHealth));
+        componentManager.Merge(entityId, new HealthComponent((short)mathUtility.Next(1, MaximumHealth + 1), MaximumHealth));
         componentManager.Merge(entityId, new MovementComponent(MovementMode.PlayerControlled, 20, null, null));
         componentManager.Merge(entityId, new ActionLockComponent(totalLockFrames: 0, lockFramesRemaining: 0));
         componentManager.Merge(entityId, new TransformComponent(new Vector3Int(-1, -1, (int)MapLayer.Ground), new Vector2Byte(1, 1)));
 
-        componentManager.Merge(entityId, new AbilityInstanceComponent(CoreAbilitiesModule.HealId, damageAmount: 0, cooldownFramesRemaining: 0));
-        componentManager.Merge(entityId, new AbilityInstanceComponent(CoreAbilitiesModule.PunchId, damageAmount: PunchDamage, cooldownFramesRemaining: 0));
-        componentManager.Merge(entityId, new AbilityInstanceComponent(CoreAbilitiesModule.MagicMissileId, damageAmount: MagicMissileDamage, cooldownFramesRemaining: 0));
+        foreach (var abilityScoreType in Enum.GetValues<AbilityScoreType>())
+        {
+            AbilityScoreEffects.Grant(componentManager, entityId, abilityScoreType, RollAbilityScoreBaseValue());
+        }
+
+        AbilityGrantEffects.Grant(componentManager, entityId, CoreAbilitiesModule.HealId, CoreAbilitiesModule.HealManaCost, damageAmount: 0, cooldownFramesRemaining: 0);
+        AbilityGrantEffects.Grant(componentManager, entityId, CoreAbilitiesModule.PunchId, manaCost: 0, damageAmount: PunchDamage, cooldownFramesRemaining: 0);
+        AbilityGrantEffects.Grant(componentManager, entityId, CoreAbilitiesModule.MagicMissileId, CoreAbilitiesModule.MagicMissileManaCost, damageAmount: MagicMissileDamage, cooldownFramesRemaining: 0);
 
         componentManager.Merge(entityId, new ActionHotkeyBindingComponent(HotkeySlot.Slot4, CoreAbilitiesModule.HealId));
         componentManager.Merge(entityId, new ActionHotkeyBindingComponent(HotkeySlot.Slot5, CoreAbilitiesModule.PunchId));
@@ -59,11 +63,7 @@ public sealed class PlayerBlueprint(MathUtility mathUtility, UniqueNumberAllocat
         componentManager.Merge(entityId, new DisplayTextComponent("Player1", "This is you. What else did you expect?"));
 
         InventoryActions.AddItem(componentManager, entityId, CoreItemsModule.HealthPotionId, quantity: 5);
-
-        foreach (var abilityScoreType in Enum.GetValues<AbilityScoreType>())
-        {
-            AbilityScoreEffects.Grant(componentManager, entityId, abilityScoreType, RollAbilityScoreBaseValue());
-        }
+        InventoryActions.AddItem(componentManager, entityId, CoreItemsModule.ManaPotionId, quantity: 5);
 
         StatModifierEffects.Apply(componentManager, entityId, StatModifierTarget.OutgoingDamage, StatModifierOperation.Additive, StatModifierPolarity.Buff,
             canModify: true, magnitude: PermanentOutgoingDamageBonus, durationFrames: StatModifierComponent.Permanent, StatusEffectSource.Admin);

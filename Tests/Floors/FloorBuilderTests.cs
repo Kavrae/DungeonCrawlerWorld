@@ -16,6 +16,7 @@ using Game.Modules.Core.Components;
 using Game.Modules.Crawler;
 using Game.Modules.Health;
 using Game.Modules.Inventory;
+using Game.Modules.Mana;
 using Game.Modules.Movement;
 using Game.Modules.Movement.Components;
 using Game.Modules.Poison;
@@ -66,6 +67,9 @@ public sealed class FloorBuilderTests
         var healthModule = new HealthModule();
         healthModule.Configure(context);
 
+        var manaModule = new ManaModule();
+        manaModule.Configure(context);
+
         var statModifiersModule = new StatModifiersModule();
         statModifiersModule.Configure(context);
 
@@ -79,6 +83,7 @@ public sealed class FloorBuilderTests
         [
             coreModule,
             healthModule,
+            manaModule,
             statModifiersModule,
             abilityScoresModule,
             movementModule,

@@ -7,6 +7,7 @@ using Microsoft.Xna.Framework;
 using Presentation.Fonts;
 using Presentation.Rendering;
 using Presentation.UI.AbilityScores;
+using Presentation.UI.ColorPalettes;
 using Presentation.UI.Notifications;
 
 namespace Presentation.UI.Inventory;

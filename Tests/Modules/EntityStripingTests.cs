@@ -5,6 +5,8 @@ using Engine.Events;
 using Engine.Math;
 using Engine.Modules;
 using Game.Modules;
+using Game.Modules.AbilityScores;
+using Game.Modules.AbilityScores.Components;
 using Game.Modules.Core;
 using Game.Modules.Core.Components;
 using Game.Modules.Health;
@@ -13,6 +15,7 @@ using Game.Modules.Health.Systems;
 using Game.Modules.Movement;
 using Game.Modules.ProcessingTier;
 using Game.Modules.ProcessingTier.Components;
+using Game.Modules.StatModifiers;
 using Game.World;
 
 namespace Tests.Modules;
@@ -30,26 +33,32 @@ public sealed class EntityStripingTests
 {
     /// <summary>
     /// Deep correctness check against the real HealthRegenSystem: a population that
-    /// doesn't divide evenly by StripeCount (23 entities, 10 stripes) must still have every
+    /// doesn't divide evenly by StripeCount (133 entities, 60 stripes -- StripeCount is a full
+    /// second's worth of frames, see HealthRegenSystem's own doc comment) must still have every
     /// entity touched exactly once per full cycle, with each individual frame touching only
-    /// ceil(23/10)=3 or floor(23/10)=2 entities -- never the whole population at once.
+    /// ceil(133/60)=3 or floor(133/60)=2 entities -- never the whole population at once.
     /// </summary>
     [TestMethod]
     public void HealthRegenSystem_OverOneFullCycle_TouchesEveryEntityExactlyOnceWithBoundedPerFrameWork()
     {
-        const int entityCount = 23;
+        const int entityCount = 133;
         var pool = new PackedComponentPool<HealthComponent>(entityCount, entityCount,
             static (ref existing, incoming) => existing = incoming);
 
+        var abilityScores = new MultiComponentPool<AbilityScoreComponent>(entityCount, entityCount);
         for (var entityId = 0; entityId < entityCount; entityId++)
         {
-            pool.Add(entityId, new HealthComponent(currentHealth: 0, healthRegen: 1, maximumHealth: 1000));
+            pool.Add(entityId, new HealthComponent(currentHealth: 0, maximumHealth: 1000));
+            // Constitution total 300 -- AbilityScoreRegenMath's top rate -- so every visit
+            // actually changes CurrentHealth (a nonzero, easily-detected "touch"), same role
+            // the old flat healthRegen:1 constructor argument used to play.
+            abilityScores.Add(entityId, new AbilityScoreComponent(AbilityScoreType.Constitution, baseValue: 300, total: 300));
         }
 
         var processingTiers = new DirectComponentPool<ProcessingTierComponent>(initialCapacity: entityCount, static (ref existing, incoming) => existing = incoming);
-        var system = new HealthRegenSystem(pool, processingTiers, new ProcessingTierEvents());
+        var system = new HealthRegenSystem(pool, processingTiers, new ProcessingTierEvents(), abilityScores: abilityScores);
         var touchCountByEntityId = new int[entityCount];
-        var previousHealth = new short[entityCount];
+        var previousHealth = new float[entityCount];
 
         for (var frame = 0; frame < system.StripeCount; frame++)
         {
@@ -81,28 +90,32 @@ public sealed class EntityStripingTests
     /// an entity from a not-yet-visited stripe mid-cycle used to be able (under the old
     /// dense-index striding) to relocate a different, already-visited entity into that
     /// stripe's index range via PackedComponentPool.Remove's swap-with-last, causing a
-    /// double-process. Entities 9 and 19 are both in stripe 9 (entityId % 10); entity 9 is
-    /// removed after stripes 0-8 have already fired this cycle but before stripe 9 fires.
-    /// EntityStripeSet buckets by entityId, so removing 9 can only ever affect stripe 9's own
-    /// bucket -- entity 19 must still be touched exactly once when stripe 9 fires, not zero
-    /// and not twice, and entities 0-8 (in unrelated stripes) must be completely unaffected.
+    /// double-process. Entities 9 and 69 are both in stripe 9 (entityId % 60 -- StripeCount is
+    /// 60, see HealthRegenSystem's own doc comment); entity 9 is removed after stripes 0-8 have
+    /// already fired this cycle but before stripe 9 fires. EntityStripeSet buckets by entityId,
+    /// so removing 9 can only ever affect stripe 9's own bucket -- entity 69 must still be
+    /// touched exactly once when stripe 9 fires, not zero and not twice, and entities 0-8 (in
+    /// unrelated stripes) must be completely unaffected.
     /// </summary>
     [TestMethod]
     public void HealthRegenSystem_EntityRemovedMidCycle_DoesNotCorruptOtherStripes()
     {
-        var pool = new PackedComponentPool<HealthComponent>(30, 30,
+        var pool = new PackedComponentPool<HealthComponent>(100, 100,
             static (ref existing, incoming) => existing = incoming);
 
+        var abilityScores = new MultiComponentPool<AbilityScoreComponent>(100, 100);
         for (var entityId = 0; entityId < 10; entityId++)
         {
-            pool.Add(entityId, new HealthComponent(currentHealth: 0, healthRegen: 1, maximumHealth: 1000));
+            pool.Add(entityId, new HealthComponent(currentHealth: 0, maximumHealth: 1000));
+            abilityScores.Add(entityId, new AbilityScoreComponent(AbilityScoreType.Constitution, baseValue: 300, total: 300));
         }
-        pool.Add(19, new HealthComponent(currentHealth: 0, healthRegen: 1, maximumHealth: 1000)); // Stripe 9, alongside entity 9.
+        pool.Add(69, new HealthComponent(currentHealth: 0, maximumHealth: 1000)); // Stripe 9 (69 % 60), alongside entity 9.
+        abilityScores.Add(69, new AbilityScoreComponent(AbilityScoreType.Constitution, baseValue: 300, total: 300));
 
-        var processingTiers = new DirectComponentPool<ProcessingTierComponent>(initialCapacity: 30, static (ref existing, incoming) => existing = incoming);
-        var system = new HealthRegenSystem(pool, processingTiers, new ProcessingTierEvents());
+        var processingTiers = new DirectComponentPool<ProcessingTierComponent>(initialCapacity: 100, static (ref existing, incoming) => existing = incoming);
+        var system = new HealthRegenSystem(pool, processingTiers, new ProcessingTierEvents(), abilityScores: abilityScores);
         var touchCountByEntityId = new Dictionary<int, int>();
-        var previousHealth = new Dictionary<int, short> { [19] = 0 };
+        var previousHealth = new Dictionary<int, float> { [69] = 0 };
         for (var entityId = 0; entityId < 10; entityId++)
         {
             previousHealth[entityId] = 0;
@@ -140,7 +153,7 @@ public sealed class EntityStripingTests
         RecordTouches();
 
         Assert.IsFalse(pool.Has(9));
-        Assert.AreEqual(1, touchCountByEntityId.GetValueOrDefault(19), "Entity 19 (same stripe as the removed entity) must be touched exactly once, not skipped or double-processed.");
+        Assert.AreEqual(1, touchCountByEntityId.GetValueOrDefault(69), "Entity 69 (same stripe as the removed entity) must be touched exactly once, not skipped or double-processed.");
         for (var entityId = 0; entityId < 9; entityId++)
         {
             Assert.AreEqual(1, touchCountByEntityId.GetValueOrDefault(entityId), $"Entity {entityId} in an unrelated stripe must be unaffected by the removal.");
@@ -173,10 +186,18 @@ public sealed class EntityStripingTests
         var healthModule = new HealthModule();
         healthModule.Configure(context);
 
+        var statModifiersModule = new StatModifiersModule();
+        statModifiersModule.Configure(context);
+
+        var abilityScoresModule = new AbilityScoresModule();
+        abilityScoresModule.Configure(context);
+
         IReadOnlyList<IModule> modules =
         [
             coreModule,
             healthModule,
+            statModifiersModule,
+            abilityScoresModule,
             movementModule,
             processingTierModule,
         ];
@@ -198,7 +219,8 @@ public sealed class EntityStripingTests
             // doesn't touch HealthComponent, so there's no cross-contamination to avoid --
             // MovementModule stays registered purely to prove the two real systems still
             // coexist without throwing, with an empty movement population).
-            healthPool.Add(entityId, new HealthComponent(currentHealth: 0, healthRegen: 5, maximumHealth: 1000));
+            healthPool.Add(entityId, new HealthComponent(currentHealth: 0, maximumHealth: 1000));
+            AbilityScoreEffects.Grant(ecsContext.ComponentManager, entityId, AbilityScoreType.Constitution, baseValue: 300);
         }
 
         for (var frame = 0; frame < 60; frame++)
@@ -215,7 +237,8 @@ public sealed class EntityStripingTests
             }
         }
 
-        // 60 frames is 6 full HealthRegenSystem cycles (StripeCount 10) -- every entity
+        // 60 frames is exactly 1 full HealthRegenSystem cycle now (StripeCount is a full
+        // second's worth of frames -- see HealthRegenSystem's own doc comment) -- every entity
         // should have been touched at least once by now.
         Assert.AreEqual(entityCount, rechargedCount);
     }

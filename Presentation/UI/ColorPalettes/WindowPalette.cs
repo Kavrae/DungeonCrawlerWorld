@@ -1,6 +1,6 @@
 using Microsoft.Xna.Framework;
 
-namespace Presentation.UI;
+namespace Presentation.UI.ColorPalettes;
 
 /// <summary>
 /// Shared chrome-color defaults so windows read as one consistent UI instead of each hardcoding

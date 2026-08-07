@@ -3,6 +3,7 @@ using Game.Modules.Inventory;
 using Microsoft.Xna.Framework;
 using Presentation.Fonts;
 using Presentation.Rendering;
+using Presentation.UI.ColorPalettes;
 using Presentation.UI.Content;
 
 namespace Presentation.UI.Inventory;

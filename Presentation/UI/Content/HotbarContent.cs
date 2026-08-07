@@ -7,6 +7,7 @@ using Game.Modules.Abilities.Components;
 using Game.Modules.Core.Components;
 using Game.Modules.Inventory;
 using Game.Modules.Inventory.Components;
+using Game.Modules.Mana.Components;
 using Game.World;
 using Microsoft.Xna.Framework;
 using Microsoft.Xna.Framework.Graphics;
@@ -93,6 +94,7 @@ public sealed class HotbarContent(
     private readonly MultiComponentPool<InventoryItemStackComponent> _inventoryStacks = componentManager.GetMultiPool<InventoryItemStackComponent>();
     private readonly PackedComponentPool<ActionLockComponent> _actionLocks = componentManager.GetPackedPool<ActionLockComponent>();
     private readonly PackedComponentPool<PotionCooldownComponent> _potionCooldowns = componentManager.GetPackedPool<PotionCooldownComponent>();
+    private readonly PackedComponentPool<ManaComponent> _mana = componentManager.GetPackedPool<ManaComponent>();
     private readonly RadialFillRenderer _radialFill = new(new GlyphRenderer(), spriteSheetService, spriteRenderer);
 
     private Window _hostWindow = null!;
@@ -279,16 +281,23 @@ public sealed class HotbarContent(
         }
     }
 
+    /// <summary>An ability the player can't currently afford (see HasEnoughMana) greys out exactly like an unusable item slot -- same DisabledItemTintColor, same fully-suppressed radial fill (0f) rather than showing a cooldown/lock mask that would read as "almost ready" when it's actually just unaffordable.</summary>
     private void DrawAbilitySlot(SpriteBatch spriteBatch, Texture2D unitRectangle, int playerEntityId, AbilityDefinition ability, Rectangle contentBounds)
     {
+        var isUsable = HasEnoughMana(playerEntityId, ability);
+
         _radialFill.Sprite = ability.SpriteName is not null && SpriteManifest.TryGet(ability.SpriteName, out var sprite) ? sprite : null;
-        _radialFill.SpriteTint = Color.White;
+        _radialFill.SpriteTint = isUsable ? Color.White : DisabledItemTintColor;
         _radialFill.Glyph = ability.Glyph;
-        _radialFill.GlyphColor = ability.GlyphColor;
-        _radialFill.BackgroundColor = BoundSlotBackgroundColor;
-        _radialFill.FillPercentage = ComputeAbilityFillPercentage(playerEntityId, ability);
+        _radialFill.GlyphColor = isUsable ? ability.GlyphColor : DisabledItemTintColor;
+        _radialFill.BackgroundColor = isUsable ? BoundSlotBackgroundColor : UnboundSlotColor;
+        _radialFill.FillPercentage = isUsable ? ComputeAbilityFillPercentage(playerEntityId, ability) : 0f;
         _radialFill.Draw(spriteBatch, unitRectangle, _font, contentBounds);
     }
+
+    /// <summary>Mirrors AbilityActivationSystem/AbilityTargetingController's own gate (see either's doc comment) -- a zero-cost ability (e.g. Punch) always passes.</summary>
+    private bool HasEnoughMana(int playerEntityId, AbilityDefinition ability) =>
+        ability.ManaCost <= 0 || (_mana.TryGetReadonly(playerEntityId, out var mana) && mana.CurrentMana >= ability.ManaCost);
 
     /// <summary>
     /// isUsable requires both a ConsumableEffect (e.g. excludes an Equipment/Tool item with no

@@ -6,6 +6,7 @@ using Game.Modules.Abilities.Components;
 using Game.Modules.Core.Components;
 using Game.Modules.Inventory;
 using Game.Modules.Inventory.Components;
+using Game.Modules.Mana.Components;
 using Game.Modules.Movement.Components;
 using Game.World;
 using Microsoft.Xna.Framework;
@@ -37,7 +38,8 @@ public sealed class AbilityTargetingController(
     PackedComponentPool<PendingAbilityActivationComponent> pendingActivations,
     PackedComponentPool<PendingConsumableActivationComponent> pendingConsumableActivations,
     PackedComponentPool<PendingDelayedActionComponent> pendingDelayedActions,
-    PackedComponentPool<ActionLockComponent> actionLocks)
+    PackedComponentPool<ActionLockComponent> actionLocks,
+    PackedComponentPool<ManaComponent>? manaPool = null)
 {
     /// <summary>~300ms -- a second press of the same slot within this many frames of the first is a double-tap (auto-target the closest candidate, see HandleHotkeySlotPress), as opposed to a slower second press (confirm against the cursor, same as a click).</summary>
     private static readonly int DoubleTapWindowFrames = GameTiming.FramesForSeconds(0.3f);
@@ -232,9 +234,18 @@ public sealed class AbilityTargetingController(
     /// against wherever the cursor currently is (see TryConfirmActivationAtTile), the same as a
     /// click would. Cancelling an armed slot is right-click/Escape's job now (see
     /// CancelArmedOrPendingAction) -- re-pressing the same key always means "go," not "nevermind."
+    /// An ability the player can't currently afford (see HasEnoughMana) is inert, the same no-op
+    /// an unbound slot already is -- HotbarContent greys it out the same way (see its own
+    /// isUsable check), so "can't be armed" and "looks unusable" stay in sync, mirroring
+    /// HandleItemSlotPress's identical treatment of an unusable item slot.
     /// </summary>
     private void HandleAbilitySlotPress(HotkeySlot slot, Guid abilityId, bool isDoubleTap)
     {
+        if (!HasEnoughMana(world.PlayerEntityId, abilityId))
+        {
+            return;
+        }
+
         if (isDoubleTap)
         {
             TryActivateWithAutoTarget(world.PlayerEntityId, abilityId);
@@ -350,6 +361,17 @@ public sealed class AbilityTargetingController(
         mapViewState.ArmedSlot = null;
         mapViewState.TargetableTiles = null;
         _targetableTilesOrigin = null;
+    }
+
+    /// <summary>Mirrors AbilityActivationSystem's own gate (see its own doc comment) -- a zero-cost ability (or an unknown abilityId, left for the actual activation attempt to reject) always passes, even with no ManaComponent pool wired in.</summary>
+    private bool HasEnoughMana(int entityId, Guid abilityId)
+    {
+        if (!abilityCatalog.TryGet(abilityId, out var ability) || ability.ManaCost <= 0)
+        {
+            return true;
+        }
+
+        return manaPool is not null && manaPool.TryGetReadonly(entityId, out var mana) && mana.CurrentMana >= ability.ManaCost;
     }
 
     /// <summary>Resolves whichever of {ability, item} is currently armed to its shared TargetingSpec -- the one piece both kinds need for every targeting computation below, so callers stop caring which kind they're dealing with past this point.</summary>

@@ -23,8 +23,12 @@ namespace Game.Modules.Abilities;
 /// Description is longer flavor/detail text for future, larger text boxes elsewhere -- the two
 /// are deliberately separate fields, not one field reused for both purposes (see
 /// Game.Modules.Inventory.ItemDefinition, which draws the same distinction).
+///
+/// ManaCost defaults to 0 (free to cast, e.g. Punch) -- AbilityGrantEffects.Grant is what grants
+/// an entity a ManaComponent the first time it's given an ability with a nonzero cost (see
+/// ManaGrant.EnsureManaComponentExists); AbilityActivationSystem is what actually gates/spends it at cast time.
 /// </summary>
-public sealed record AbilityDefinition(Guid Id, string Name, string Glyph, TargetingSpec Targeting, AbilityTiming Timing, AbilityEffect Effect, string Description = "", string Summary = "", string? SpriteName = null, Color GlyphColor = default, IReadOnlyList<Tag> Tags = null!)
+public sealed record AbilityDefinition(Guid Id, string Name, string Glyph, TargetingSpec Targeting, AbilityTiming Timing, AbilityEffect Effect, short ManaCost = 0, string Description = "", string Summary = "", string? SpriteName = null, Color GlyphColor = default, IReadOnlyList<Tag> Tags = null!)
 {
     public IReadOnlyList<Tag> Tags { get; init; } = Tags ?? [];
 }
