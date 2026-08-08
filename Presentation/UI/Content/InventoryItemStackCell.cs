@@ -21,7 +21,7 @@ public sealed class InventoryItemStackCell(FontService fontService, ElementPoolS
     : Element(fontService, elementPoolService, glyphRenderer)
 {
     private const float IconGlyphFontFraction = 0.6f;
-    private const float QuantityFontFraction = 0.45f;
+    private const float QuantityFontFraction = 0.5f;
 
     private string? _spriteName;
     private string _glyph = string.Empty;

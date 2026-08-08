@@ -3,6 +3,8 @@ using Engine.ECS.Components.Stores;
 using Engine.ECS.Systems;
 using Engine.Events;
 using Engine.Math;
+using Game.Modules.Abilities;
+using Game.Modules.Abilities.Components;
 using Game.Modules.Core.Components;
 using Game.Modules.Death.Components;
 using Game.Modules.Health;
@@ -49,6 +51,7 @@ public sealed class ConsumableActivationSystem : ISystem
     private readonly ComponentManager _componentManager;
     private readonly PackedComponentPool<DeadComponent>? _deadEntities;
     private readonly PackedComponentPool<ManaComponent>? _mana;
+    private readonly PackedComponentPool<HotkeyExpansionUnlockComponent>? _hotkeyExpansionUnlocks;
     private readonly EntityStripeSet _stripeSet;
 
     public ConsumableActivationSystem(
@@ -62,7 +65,8 @@ public sealed class ConsumableActivationSystem : ISystem
         ComponentManager componentManager,
         MultiComponentPool<StatModifierComponent>? statModifiers = null,
         PackedComponentPool<DeadComponent>? deadEntities = null,
-        PackedComponentPool<ManaComponent>? mana = null)
+        PackedComponentPool<ManaComponent>? mana = null,
+        PackedComponentPool<HotkeyExpansionUnlockComponent>? hotkeyExpansionUnlocks = null)
     {
         _pendingActivations = pendingActivations;
         _actionLocks = actionLocks;
@@ -75,6 +79,7 @@ public sealed class ConsumableActivationSystem : ISystem
         _statModifiers = statModifiers;
         _deadEntities = deadEntities;
         _mana = mana;
+        _hotkeyExpansionUnlocks = hotkeyExpansionUnlocks;
 
         _stripeSet = new EntityStripeSet(StripeCount, pendingActivations.EntityIds);
         pendingActivations.EntityAdded += _stripeSet.OnEntityAdded;
@@ -162,6 +167,8 @@ public sealed class ConsumableActivationSystem : ISystem
     /// -- see this class's own doc comment for why, and are shared across both potion kinds
     /// rather than per-resource. Skipped entirely for a dead target -- "the target of a potion"
     /// means it landed on them, not just that a target tile happened to contain them.
+    /// HotkeySlotGrant (the Hotkey Expansion Potion) is a third, unrelated effect applied the same
+    /// per-target way, gated on _hotkeyExpansionUnlocks being wired (it's optional, like _mana).
     /// </summary>
     private void ApplyPotionToTarget(ConsumableEffect consumable, int targetEntityId)
     {
@@ -188,6 +195,11 @@ public sealed class ConsumableActivationSystem : ISystem
             var effectiveMaximumMana = StatModifierMath.GetEffectiveValue(_statModifiers, targetEntityId, StatModifierTarget.MaximumMana, targetMana.MaximumMana);
             var manaAmount = (short)(consumable.ManaFraction * effectiveMaximumMana);
             ManaRestore.Apply(_mana, targetEntityId, manaAmount, _statModifiers);
+        }
+
+        if (consumable.HotkeySlotGrant > 0 && _hotkeyExpansionUnlocks is not null)
+        {
+            HotkeyExpansionEffects.Grant(_hotkeyExpansionUnlocks, targetEntityId, consumable.HotkeySlotGrant);
         }
 
         PotionCooldownEffects.Reset(_componentManager, targetEntityId);

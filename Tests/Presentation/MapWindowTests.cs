@@ -1,5 +1,6 @@
 using Engine.ECS.Components;
 using Engine.Math;
+using Game.Modules;
 using Game.Modules.Abilities;
 using Game.Modules.Abilities.Components;
 using Game.Modules.Core.Components;
@@ -542,7 +543,7 @@ public sealed class MapWindowTests
         componentManager.Merge(PlayerEntityId, new AbilityInstanceComponent(TestAbilityId, damageAmount: 10, cooldownFramesRemaining: 0));
         componentManager.Merge(PlayerEntityId, new ActionHotkeyBindingComponent(HotkeySlot.Slot4, TestAbilityId));
 
-        mapWindow.HandleHotkeys(new KeyboardState(Keys.F), new KeyboardState());
+        mapWindow.HandleHotkeys(new KeyboardState(Keys.D4), new KeyboardState());
 
         Assert.AreEqual(TestAbilityId, mapViewState.ArmedAbilityId);
         Assert.AreEqual(HotkeySlot.Slot4, mapViewState.ArmedSlot);
@@ -557,7 +558,7 @@ public sealed class MapWindowTests
         componentManager.Merge(PlayerEntityId, new AbilityInstanceComponent(TestAbilityId, damageAmount: 10, cooldownFramesRemaining: 0));
         componentManager.Merge(PlayerEntityId, new ActionHotkeyBindingComponent(HotkeySlot.Slot4, TestAbilityId));
 
-        mapWindow.HandleHotkeys(new KeyboardState(Keys.F), new KeyboardState());
+        mapWindow.HandleHotkeys(new KeyboardState(Keys.D4), new KeyboardState());
         Assert.IsNotNull(mapViewState.ArmedAbilityId);
 
         // Advance well past the ~18-frame double-tap window so the next press reads as an
@@ -569,7 +570,7 @@ public sealed class MapWindowTests
 
         // One of the caster's 8 neighbors -- part of Adjacent's fixed footprint (the caster's own tile no longer is).
         mapWindow.UpdateHoveredTile(ComputeScreenPositionForMapPosition(mapWindow, mapViewState, new Vector3Int(101, 100, 0)));
-        mapWindow.HandleHotkeys(new KeyboardState(Keys.F), new KeyboardState());
+        mapWindow.HandleHotkeys(new KeyboardState(Keys.D4), new KeyboardState());
 
         var pendingActivations = componentManager.GetPackedPool<PendingAbilityActivationComponent>();
         Assert.IsTrue(pendingActivations.Has(PlayerEntityId));
@@ -587,7 +588,7 @@ public sealed class MapWindowTests
         componentManager.Merge(PlayerEntityId, new AbilityInstanceComponent(TestAbilityId, damageAmount: 10, cooldownFramesRemaining: 0));
         componentManager.Merge(PlayerEntityId, new ActionHotkeyBindingComponent(HotkeySlot.Slot4, TestAbilityId));
 
-        mapWindow.HandleHotkeys(new KeyboardState(Keys.F), new KeyboardState());
+        mapWindow.HandleHotkeys(new KeyboardState(Keys.D4), new KeyboardState());
         Assert.IsNotNull(mapViewState.ArmedAbilityId);
 
         for (var i = 0; i < 20; i++)
@@ -595,7 +596,7 @@ public sealed class MapWindowTests
             mapWindow.Update(new GameTime());
         }
 
-        mapWindow.HandleHotkeys(new KeyboardState(Keys.F), new KeyboardState());
+        mapWindow.HandleHotkeys(new KeyboardState(Keys.D4), new KeyboardState());
 
         Assert.IsFalse(componentManager.GetPackedPool<PendingAbilityActivationComponent>().Has(PlayerEntityId));
         Assert.IsNotNull(mapViewState.ArmedAbilityId);
@@ -607,7 +608,7 @@ public sealed class MapWindowTests
     {
         var (_, mapViewState, mapWindow, _, _) = BuildMapWindowWithPlayerAndAbilities(300, 300, 1, new Vector3Int(100, 100, 0));
 
-        mapWindow.HandleHotkeys(new KeyboardState(Keys.Q), new KeyboardState());
+        mapWindow.HandleHotkeys(new KeyboardState(Keys.D1), new KeyboardState());
 
         Assert.IsNull(mapViewState.ArmedAbilityId);
         Assert.IsNull(mapViewState.ArmedSlot);
@@ -630,8 +631,8 @@ public sealed class MapWindowTests
         componentManager.Merge(PlayerEntityId, new AbilityInstanceComponent(TestAbilityId, damageAmount: 10, cooldownFramesRemaining: 0));
         componentManager.Merge(PlayerEntityId, new ActionHotkeyBindingComponent(HotkeySlot.Slot4, TestAbilityId));
 
-        mapWindow.HandleHotkeys(new KeyboardState(Keys.F), new KeyboardState());
-        mapWindow.HandleHotkeys(new KeyboardState(Keys.F), new KeyboardState());
+        mapWindow.HandleHotkeys(new KeyboardState(Keys.D4), new KeyboardState());
+        mapWindow.HandleHotkeys(new KeyboardState(Keys.D4), new KeyboardState());
 
         var pendingActivations = componentManager.GetPackedPool<PendingAbilityActivationComponent>();
         Assert.IsTrue(pendingActivations.Has(PlayerEntityId));
@@ -667,8 +668,8 @@ public sealed class MapWindowTests
         world.PlaceEntityOnMap(TargetEntityId, targetPosition, ref targetTransform);
         componentManager.Merge(TargetEntityId, new HealthComponent(100, 100));
 
-        mapWindow.HandleHotkeys(new KeyboardState(Keys.V), new KeyboardState());
-        mapWindow.HandleHotkeys(new KeyboardState(Keys.V), new KeyboardState());
+        mapWindow.HandleHotkeys(new KeyboardState(Keys.D5), new KeyboardState());
+        mapWindow.HandleHotkeys(new KeyboardState(Keys.D5), new KeyboardState());
 
         var pendingActivations = componentManager.GetPackedPool<PendingAbilityActivationComponent>();
         Assert.IsTrue(pendingActivations.Has(PlayerEntityId));
@@ -693,8 +694,8 @@ public sealed class MapWindowTests
         componentManager.Merge(PlayerEntityId, new AbilityInstanceComponent(rangedAbilityId, damageAmount: 10, cooldownFramesRemaining: 0));
         componentManager.Merge(PlayerEntityId, new ActionHotkeyBindingComponent(HotkeySlot.Slot5, rangedAbilityId));
 
-        mapWindow.HandleHotkeys(new KeyboardState(Keys.V), new KeyboardState());
-        mapWindow.HandleHotkeys(new KeyboardState(Keys.V), new KeyboardState());
+        mapWindow.HandleHotkeys(new KeyboardState(Keys.D5), new KeyboardState());
+        mapWindow.HandleHotkeys(new KeyboardState(Keys.D5), new KeyboardState());
 
         Assert.IsFalse(componentManager.GetPackedPool<PendingAbilityActivationComponent>().Has(PlayerEntityId));
     }
@@ -753,7 +754,7 @@ public sealed class MapWindowTests
         componentManager.Merge(PlayerEntityId, new AbilityInstanceComponent(TestAbilityId, damageAmount: 10, cooldownFramesRemaining: 0));
         componentManager.Merge(PlayerEntityId, new ActionHotkeyBindingComponent(HotkeySlot.Slot4, TestAbilityId));
 
-        mapWindow.HandleHotkeys(new KeyboardState(Keys.F), new KeyboardState());
+        mapWindow.HandleHotkeys(new KeyboardState(Keys.D4), new KeyboardState());
 
         Assert.IsNotNull(mapViewState.TargetableTiles);
         Assert.HasCount(8, mapViewState.TargetableTiles);
@@ -771,7 +772,7 @@ public sealed class MapWindowTests
         componentManager.Merge(PlayerEntityId, new AbilityInstanceComponent(rangedAbilityId, damageAmount: 10, cooldownFramesRemaining: 0));
         componentManager.Merge(PlayerEntityId, new ActionHotkeyBindingComponent(HotkeySlot.Slot5, rangedAbilityId));
 
-        mapWindow.HandleHotkeys(new KeyboardState(Keys.V), new KeyboardState());
+        mapWindow.HandleHotkeys(new KeyboardState(Keys.D5), new KeyboardState());
 
         // Diamond of radius 10: 2*10^2 + 2*10 + 1 = 221 (same worked formula as DistanceFalloffTests).
         Assert.IsNotNull(mapViewState.TargetableTiles);
@@ -794,7 +795,7 @@ public sealed class MapWindowTests
         componentManager.Merge(PlayerEntityId, new ActionHotkeyBindingComponent(HotkeySlot.Slot4, TestAbilityId));
         var transformPool = componentManager.GetDirectPool<TransformComponent>();
 
-        mapWindow.HandleHotkeys(new KeyboardState(Keys.F), new KeyboardState());
+        mapWindow.HandleHotkeys(new KeyboardState(Keys.D4), new KeyboardState());
         Assert.IsNotNull(mapViewState.TargetableTiles);
         Assert.IsTrue(mapViewState.TargetableTiles.Contains(new Vector3Int(101, 100, 0)));
         Assert.IsFalse(mapViewState.TargetableTiles.Contains(new Vector3Int(105, 100, 0)));
@@ -819,7 +820,7 @@ public sealed class MapWindowTests
         componentManager.Merge(PlayerEntityId, new AbilityInstanceComponent(TestAbilityId, damageAmount: 10, cooldownFramesRemaining: 0));
         componentManager.Merge(PlayerEntityId, new ActionHotkeyBindingComponent(HotkeySlot.Slot4, TestAbilityId));
 
-        mapWindow.HandleHotkeys(new KeyboardState(Keys.F), new KeyboardState());
+        mapWindow.HandleHotkeys(new KeyboardState(Keys.D4), new KeyboardState());
         Assert.IsNotNull(mapViewState.TargetableTiles);
 
         mapWindow.HandleRightClickTap();
@@ -848,7 +849,7 @@ public sealed class MapWindowTests
         componentManager.Merge(PlayerEntityId, new AbilityInstanceComponent(rangedAbilityId, damageAmount: 10, cooldownFramesRemaining: 0));
         componentManager.Merge(PlayerEntityId, new ActionHotkeyBindingComponent(HotkeySlot.Slot5, rangedAbilityId));
 
-        mapWindow.HandleHotkeys(new KeyboardState(Keys.V), new KeyboardState());
+        mapWindow.HandleHotkeys(new KeyboardState(Keys.D5), new KeyboardState());
         mapWindow.UpdateHoveredTile(ComputeScreenPositionForMapPosition(mapWindow, mapViewState, new Vector3Int(101, 100, 0)));
 
         Assert.AreEqual(new Vector3Int(101, 100, 0), mapViewState.HoveredTile);
@@ -865,7 +866,7 @@ public sealed class MapWindowTests
         componentManager.Merge(PlayerEntityId, new AbilityInstanceComponent(rangedAbilityId, damageAmount: 10, cooldownFramesRemaining: 0));
         componentManager.Merge(PlayerEntityId, new ActionHotkeyBindingComponent(HotkeySlot.Slot5, rangedAbilityId));
 
-        mapWindow.HandleHotkeys(new KeyboardState(Keys.V), new KeyboardState());
+        mapWindow.HandleHotkeys(new KeyboardState(Keys.D5), new KeyboardState());
         mapWindow.UpdateHoveredTile(ComputeScreenPositionForMapPosition(mapWindow, mapViewState, new Vector3Int(115, 100, 0)));
 
         Assert.AreEqual(new Vector3Int(115, 100, 0), mapViewState.HoveredTile);
@@ -880,7 +881,7 @@ public sealed class MapWindowTests
         componentManager.Merge(PlayerEntityId, new AbilityInstanceComponent(TestAbilityId, damageAmount: 10, cooldownFramesRemaining: 0));
         componentManager.Merge(PlayerEntityId, new ActionHotkeyBindingComponent(HotkeySlot.Slot4, TestAbilityId));
 
-        mapWindow.HandleHotkeys(new KeyboardState(Keys.F), new KeyboardState());
+        mapWindow.HandleHotkeys(new KeyboardState(Keys.D4), new KeyboardState());
         mapWindow.UpdateHoveredTile(new Point(-100, -100));
 
         Assert.IsNull(mapViewState.HoveredTile);
@@ -894,7 +895,7 @@ public sealed class MapWindowTests
         RegisterTestAdjacentAbility(abilityCatalog);
         componentManager.Merge(PlayerEntityId, new AbilityInstanceComponent(TestAbilityId, damageAmount: 10, cooldownFramesRemaining: 0));
         componentManager.Merge(PlayerEntityId, new ActionHotkeyBindingComponent(HotkeySlot.Slot4, TestAbilityId));
-        mapWindow.HandleHotkeys(new KeyboardState(Keys.F), new KeyboardState());
+        mapWindow.HandleHotkeys(new KeyboardState(Keys.D4), new KeyboardState());
 
         // One of the caster's 8 neighbors -- part of Adjacent's fixed footprint (the caster's own tile no longer is).
         var clickPosition = ComputeScreenPositionForMapPosition(mapWindow, mapViewState, new Vector3Int(101, 100, 0));
@@ -916,7 +917,7 @@ public sealed class MapWindowTests
         RegisterTestAdjacentAbility(abilityCatalog);
         componentManager.Merge(PlayerEntityId, new AbilityInstanceComponent(TestAbilityId, damageAmount: 10, cooldownFramesRemaining: 0));
         componentManager.Merge(PlayerEntityId, new ActionHotkeyBindingComponent(HotkeySlot.Slot4, TestAbilityId));
-        mapWindow.HandleHotkeys(new KeyboardState(Keys.F), new KeyboardState());
+        mapWindow.HandleHotkeys(new KeyboardState(Keys.D4), new KeyboardState());
 
         // Outside Adjacent's 9-tile footprint around (100,100), but still comfortably within the visible viewport.
         var farClickPosition = ComputeScreenPositionForMapPosition(mapWindow, mapViewState, new Vector3Int(105, 100, 0));
@@ -934,7 +935,7 @@ public sealed class MapWindowTests
         abilityCatalog.Register(new AbilityDefinition(lineAbilityId, "Test Line", "#", new TargetingSpec(TargetShape.Line, Range: 2), new AbilityTiming(ActionTimingCategory.Immediate, ActionLockFrames: 30, CooldownFrames: null), new AbilityEffect(DamageAmount: 0, StatusEffects: [])));
         componentManager.Merge(PlayerEntityId, new AbilityInstanceComponent(lineAbilityId, damageAmount: 10, cooldownFramesRemaining: 0));
         componentManager.Merge(PlayerEntityId, new ActionHotkeyBindingComponent(HotkeySlot.Slot4, lineAbilityId));
-        mapWindow.HandleHotkeys(new KeyboardState(Keys.F), new KeyboardState());
+        mapWindow.HandleHotkeys(new KeyboardState(Keys.D4), new KeyboardState());
 
         // Two tiles east -- within the range-2 candidate diamond ComputeTargetableTiles builds around the caster.
         var clickPosition = ComputeScreenPositionForMapPosition(mapWindow, mapViewState, new Vector3Int(102, 100, 0));
@@ -955,7 +956,7 @@ public sealed class MapWindowTests
         abilityCatalog.Register(new AbilityDefinition(burstAbilityId, "Test Burst", "*", new TargetingSpec(TargetShape.Burst, Range: 10, AreaSize: 1), new AbilityTiming(ActionTimingCategory.Immediate, ActionLockFrames: 30, CooldownFrames: null), new AbilityEffect(DamageAmount: 0, StatusEffects: [])));
         componentManager.Merge(PlayerEntityId, new AbilityInstanceComponent(burstAbilityId, damageAmount: 10, cooldownFramesRemaining: 0));
         componentManager.Merge(PlayerEntityId, new ActionHotkeyBindingComponent(HotkeySlot.Slot5, burstAbilityId));
-        mapWindow.HandleHotkeys(new KeyboardState(Keys.V), new KeyboardState());
+        mapWindow.HandleHotkeys(new KeyboardState(Keys.D5), new KeyboardState());
 
         var clickedTile = new Vector3Int(105, 100, 0);
         var clickPosition = ComputeScreenPositionForMapPosition(mapWindow, mapViewState, clickedTile);
@@ -977,7 +978,7 @@ public sealed class MapWindowTests
         RegisterTestAdjacentAbility(abilityCatalog);
         componentManager.Merge(PlayerEntityId, new AbilityInstanceComponent(TestAbilityId, damageAmount: 10, cooldownFramesRemaining: 0));
         componentManager.Merge(PlayerEntityId, new ActionHotkeyBindingComponent(HotkeySlot.Slot4, TestAbilityId));
-        mapWindow.HandleHotkeys(new KeyboardState(Keys.F), new KeyboardState());
+        mapWindow.HandleHotkeys(new KeyboardState(Keys.D4), new KeyboardState());
 
         mapWindow.HandleRightClickTap();
 
@@ -993,7 +994,7 @@ public sealed class MapWindowTests
         RegisterTestAdjacentAbility(abilityCatalog);
         componentManager.Merge(PlayerEntityId, new AbilityInstanceComponent(TestAbilityId, damageAmount: 10, cooldownFramesRemaining: 0));
         componentManager.Merge(PlayerEntityId, new ActionHotkeyBindingComponent(HotkeySlot.Slot4, TestAbilityId));
-        mapWindow.HandleHotkeys(new KeyboardState(Keys.F), new KeyboardState());
+        mapWindow.HandleHotkeys(new KeyboardState(Keys.D4), new KeyboardState());
 
         mapWindow.HandleEscape();
 
@@ -1041,10 +1042,17 @@ public sealed class MapWindowTests
 
     private static readonly Guid TestPotionId = new("66666666-6666-6666-6666-666666666666");
     private static readonly Guid TestNonConsumableItemId = new("55555555-5555-5555-5555-555555555555");
+    private static readonly Guid TestNonSelfPotionId = new("77777777-7777-7777-7777-777777777777");
 
     private static void RegisterTestPotion(ItemCatalog itemCatalog) =>
         itemCatalog.Register(new ItemDefinition(
-            TestPotionId, "Test Potion", null, "p", Color.Green, Tags: [],
+            TestPotionId, "Test Potion", null, "p", Color.Green, Tags: [Tag.Self],
+            Consumable: new ConsumableEffect(ConsumableKind.Potion, HealFraction: 0.5f, Targeting: new TargetingSpec(TargetShape.Burst, Range: 3, AreaSize: 1), ActionLockFrames: 60)));
+
+    /// <summary>Same ConsumableKind.Potion/Burst shape as RegisterTestPotion, but deliberately untagged Self -- covers the double-tap shortcut now being keyed off Tag.Self rather than ConsumableKind.Potion.</summary>
+    private static void RegisterTestNonSelfPotion(ItemCatalog itemCatalog) =>
+        itemCatalog.Register(new ItemDefinition(
+            TestNonSelfPotionId, "Test Non-Self Potion", null, "p", Color.Green, Tags: [],
             Consumable: new ConsumableEffect(ConsumableKind.Potion, HealFraction: 0.5f, Targeting: new TargetingSpec(TargetShape.Burst, Range: 3, AreaSize: 1), ActionLockFrames: 60)));
 
     private static void RegisterTestNonConsumableItem(ItemCatalog itemCatalog) =>
@@ -1058,7 +1066,7 @@ public sealed class MapWindowTests
         InventoryActions.AddItem(componentManager, PlayerEntityId, TestPotionId, quantity: 1);
         componentManager.Merge(PlayerEntityId, new ItemHotkeyBindingComponent(HotkeySlot.Slot1, TestPotionId));
 
-        mapWindow.HandleHotkeys(new KeyboardState(Keys.Q), new KeyboardState());
+        mapWindow.HandleHotkeys(new KeyboardState(Keys.D1), new KeyboardState());
 
         Assert.AreEqual(TestPotionId, mapViewState.ArmedItemDefinitionId);
         Assert.AreEqual(HotkeySlot.Slot1, mapViewState.ArmedSlot);
@@ -1074,7 +1082,7 @@ public sealed class MapWindowTests
         InventoryActions.AddItem(componentManager, PlayerEntityId, TestPotionId, quantity: 1);
         componentManager.Merge(PlayerEntityId, new ItemHotkeyBindingComponent(HotkeySlot.Slot1, TestPotionId));
 
-        mapWindow.HandleHotkeys(new KeyboardState(Keys.Q), new KeyboardState());
+        mapWindow.HandleHotkeys(new KeyboardState(Keys.D1), new KeyboardState());
         Assert.IsNotNull(mapViewState.ArmedItemDefinitionId);
 
         for (var i = 0; i < 20; i++)
@@ -1084,7 +1092,7 @@ public sealed class MapWindowTests
 
         // The caster's own tile -- within the Potion's Burst/3/1 footprint.
         mapWindow.UpdateHoveredTile(ComputeScreenPositionForMapPosition(mapWindow, mapViewState, new Vector3Int(100, 100, 0)));
-        mapWindow.HandleHotkeys(new KeyboardState(Keys.Q), new KeyboardState());
+        mapWindow.HandleHotkeys(new KeyboardState(Keys.D1), new KeyboardState());
 
         var pendingActivations = componentManager.GetPackedPool<PendingConsumableActivationComponent>();
         Assert.IsTrue(pendingActivations.Has(PlayerEntityId));
@@ -1102,7 +1110,7 @@ public sealed class MapWindowTests
         InventoryActions.AddItem(componentManager, PlayerEntityId, TestPotionId, quantity: 1);
         componentManager.Merge(PlayerEntityId, new ItemHotkeyBindingComponent(HotkeySlot.Slot1, TestPotionId));
 
-        mapWindow.HandleHotkeys(new KeyboardState(Keys.Q), new KeyboardState());
+        mapWindow.HandleHotkeys(new KeyboardState(Keys.D1), new KeyboardState());
         Assert.IsNotNull(mapViewState.ArmedItemDefinitionId);
 
         for (var i = 0; i < 20; i++)
@@ -1110,7 +1118,7 @@ public sealed class MapWindowTests
             mapWindow.Update(new GameTime());
         }
 
-        mapWindow.HandleHotkeys(new KeyboardState(Keys.Q), new KeyboardState());
+        mapWindow.HandleHotkeys(new KeyboardState(Keys.D1), new KeyboardState());
 
         Assert.IsFalse(componentManager.GetPackedPool<PendingConsumableActivationComponent>().Has(PlayerEntityId));
         Assert.IsNotNull(mapViewState.ArmedItemDefinitionId);
@@ -1124,7 +1132,7 @@ public sealed class MapWindowTests
         RegisterTestNonConsumableItem(itemCatalog);
         componentManager.Merge(PlayerEntityId, new ItemHotkeyBindingComponent(HotkeySlot.Slot1, TestNonConsumableItemId));
 
-        mapWindow.HandleHotkeys(new KeyboardState(Keys.Q), new KeyboardState());
+        mapWindow.HandleHotkeys(new KeyboardState(Keys.D1), new KeyboardState());
 
         Assert.IsNull(mapViewState.ArmedItemDefinitionId);
         Assert.IsNull(mapViewState.ArmedSlot);
@@ -1140,7 +1148,7 @@ public sealed class MapWindowTests
         // consumed) this item.
         componentManager.Merge(PlayerEntityId, new ItemHotkeyBindingComponent(HotkeySlot.Slot1, TestPotionId));
 
-        mapWindow.HandleHotkeys(new KeyboardState(Keys.Q), new KeyboardState());
+        mapWindow.HandleHotkeys(new KeyboardState(Keys.D1), new KeyboardState());
 
         Assert.IsNull(mapViewState.ArmedItemDefinitionId);
         Assert.IsNull(mapViewState.ArmedSlot);
@@ -1155,8 +1163,8 @@ public sealed class MapWindowTests
         InventoryActions.AddItem(componentManager, PlayerEntityId, TestPotionId, quantity: 1);
         componentManager.Merge(PlayerEntityId, new ItemHotkeyBindingComponent(HotkeySlot.Slot1, TestPotionId));
 
-        mapWindow.HandleHotkeys(new KeyboardState(Keys.Q), new KeyboardState());
-        mapWindow.HandleHotkeys(new KeyboardState(Keys.Q), new KeyboardState());
+        mapWindow.HandleHotkeys(new KeyboardState(Keys.D1), new KeyboardState());
+        mapWindow.HandleHotkeys(new KeyboardState(Keys.D1), new KeyboardState());
 
         var pendingActivations = componentManager.GetPackedPool<PendingConsumableActivationComponent>();
         Assert.IsTrue(pendingActivations.Has(PlayerEntityId));
@@ -1168,6 +1176,22 @@ public sealed class MapWindowTests
         Assert.IsNull(mapViewState.ArmedItemDefinitionId, "The first press of the pair armed this slot -- once the double-tap fires, it shouldn't be left stale-armed.");
     }
 
+    /// <summary>The double-tap self-cast shortcut is now keyed off Tag.Self, not ConsumableKind.Potion -- a Potion-kind item that isn't tagged Self (e.g. today's Health/Mana Potion before this fix) no longer gets it, and instead just arms normally like any other slot.</summary>
+    [TestMethod]
+    public void HandleHotkeys_DoubleTapNonSelfPotionSlot_ArmsInsteadOfSelfActivating()
+    {
+        var (_, mapViewState, mapWindow, componentManager, itemCatalog) = BuildMapWindowWithPlayerAndItems(300, 300, 1, new Vector3Int(100, 100, 0));
+        RegisterTestNonSelfPotion(itemCatalog);
+        InventoryActions.AddItem(componentManager, PlayerEntityId, TestNonSelfPotionId, quantity: 1);
+        componentManager.Merge(PlayerEntityId, new ItemHotkeyBindingComponent(HotkeySlot.Slot1, TestNonSelfPotionId));
+
+        mapWindow.HandleHotkeys(new KeyboardState(Keys.D1), new KeyboardState());
+        mapWindow.HandleHotkeys(new KeyboardState(Keys.D1), new KeyboardState());
+
+        Assert.IsFalse(componentManager.GetPackedPool<PendingConsumableActivationComponent>().Has(PlayerEntityId), "No self-cast shortcut without Tag.Self -- a second rapid press just confirms against the cursor, which has no hovered tile here, so nothing should queue.");
+        Assert.AreEqual(TestNonSelfPotionId, mapViewState.ArmedItemDefinitionId, "Still armed -- the second press had nothing to confirm against.");
+    }
+
     [TestMethod]
     public void HandleClick_ArmedItem_ClickWithinFootprint_QueuesConsumableActivationAndDisarms()
     {
@@ -1175,7 +1199,7 @@ public sealed class MapWindowTests
         RegisterTestPotion(itemCatalog);
         InventoryActions.AddItem(componentManager, PlayerEntityId, TestPotionId, quantity: 1);
         componentManager.Merge(PlayerEntityId, new ItemHotkeyBindingComponent(HotkeySlot.Slot1, TestPotionId));
-        mapWindow.HandleHotkeys(new KeyboardState(Keys.Q), new KeyboardState());
+        mapWindow.HandleHotkeys(new KeyboardState(Keys.D1), new KeyboardState());
 
         // Within the Potion's Range 3, so within TargetableTiles.
         var clickPosition = ComputeScreenPositionForMapPosition(mapWindow, mapViewState, new Vector3Int(102, 100, 0));
@@ -1202,7 +1226,7 @@ public sealed class MapWindowTests
         RegisterTestPotion(itemCatalog);
         InventoryActions.AddItem(componentManager, PlayerEntityId, TestPotionId, quantity: 1);
         componentManager.Merge(PlayerEntityId, new ItemHotkeyBindingComponent(HotkeySlot.Slot1, TestPotionId));
-        mapWindow.HandleHotkeys(new KeyboardState(Keys.Q), new KeyboardState());
+        mapWindow.HandleHotkeys(new KeyboardState(Keys.D1), new KeyboardState());
 
         var clickPosition = ComputeScreenPositionForMapPosition(mapWindow, mapViewState, new Vector3Int(100, 100, 0));
         mapWindow.HandleClick(clickPosition);
@@ -1223,7 +1247,7 @@ public sealed class MapWindowTests
         RegisterTestPotion(itemCatalog);
         InventoryActions.AddItem(componentManager, PlayerEntityId, TestPotionId, quantity: 1);
         componentManager.Merge(PlayerEntityId, new ItemHotkeyBindingComponent(HotkeySlot.Slot1, TestPotionId));
-        mapWindow.HandleHotkeys(new KeyboardState(Keys.Q), new KeyboardState());
+        mapWindow.HandleHotkeys(new KeyboardState(Keys.D1), new KeyboardState());
 
         mapWindow.HandleRightClickTap();
 
@@ -1244,8 +1268,8 @@ public sealed class MapWindowTests
         componentManager.Merge(PlayerEntityId, new ActionHotkeyBindingComponent(HotkeySlot.Slot4, TestAbilityId));
         componentManager.Merge(PlayerEntityId, new ItemHotkeyBindingComponent(HotkeySlot.Slot1, TestPotionId));
 
-        mapWindow.HandleHotkeys(new KeyboardState(Keys.F), new KeyboardState());
-        mapWindow.HandleHotkeys(new KeyboardState(Keys.Q), new KeyboardState());
+        mapWindow.HandleHotkeys(new KeyboardState(Keys.D4), new KeyboardState());
+        mapWindow.HandleHotkeys(new KeyboardState(Keys.D1), new KeyboardState());
 
         Assert.IsNull(mapViewState.ArmedAbilityId);
         Assert.AreEqual(TestPotionId, mapViewState.ArmedItemDefinitionId);
@@ -1265,8 +1289,8 @@ public sealed class MapWindowTests
         componentManager.Merge(PlayerEntityId, new ActionHotkeyBindingComponent(HotkeySlot.Slot4, TestAbilityId));
         componentManager.Merge(PlayerEntityId, new ItemHotkeyBindingComponent(HotkeySlot.Slot1, TestPotionId));
 
-        mapWindow.HandleHotkeys(new KeyboardState(Keys.Q), new KeyboardState());
-        mapWindow.HandleHotkeys(new KeyboardState(Keys.F), new KeyboardState());
+        mapWindow.HandleHotkeys(new KeyboardState(Keys.D1), new KeyboardState());
+        mapWindow.HandleHotkeys(new KeyboardState(Keys.D4), new KeyboardState());
 
         Assert.IsNull(mapViewState.ArmedItemDefinitionId);
         Assert.AreEqual(TestAbilityId, mapViewState.ArmedAbilityId);

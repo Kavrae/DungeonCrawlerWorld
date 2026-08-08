@@ -38,13 +38,19 @@ public sealed class PlayerStatusEffectsContent(World world, ComponentManager com
     // Glyph drawn smaller than its background square -- a glyph sized to exactly fill the
     // square read as cramped/touching the border.
     private const float GlyphSizeFraction = 0.75f;
-    private const float CountdownFontFraction = 0.4f;
+    private const float CountdownFontFraction = 0.6f;
     private const float CountdownTextGap = 1f;
 
     private readonly MultiComponentPool<StatusEffectStack> _statusEffectStacks = componentManager.GetMultiPool<StatusEffectStack>();
     private readonly PackedComponentPool<PotionCooldownComponent> _potionCooldowns = componentManager.GetPackedPool<PotionCooldownComponent>();
     private readonly GlyphRenderer _glyphRenderer = new();
     private readonly List<StatusEffectType> _activeEffectTypes = [];
+
+    /// <summary>Poison/Burning's own current stack counts, keyed by type -- only ever holds entries for types that actually want a count shown (see DrawIcon's own Poison/Burning check, mirrored in RefreshStatusEffectState below).</summary>
+    private readonly Dictionary<StatusEffectType, int> _stackCountsByType = [];
+
+    private bool _hasPotionCooldown;
+    private short _potionCooldownFramesRemaining;
 
     private Window _hostWindow = null!;
     private SpriteFontBase _font = null!;
@@ -57,16 +63,36 @@ public sealed class PlayerStatusEffectsContent(World world, ComponentManager com
         _countdownFont = fontService.GetFont((int)(Size.Y * CountdownFontFraction));
     }
 
-    public void Update(GameTime gameTime) { }
+    /// <summary>Which status effect types are active, their stack counts, and the potion cooldown are all decided here -- Draw only reads the cached results and lays out icons/text.</summary>
+    public void Update(GameTime gameTime)
+    {
+        var playerEntityId = world.PlayerEntityId;
+        if (playerEntityId < 0)
+        {
+            _activeEffectTypes.Clear();
+            _stackCountsByType.Clear();
+            _hasPotionCooldown = false;
+            return;
+        }
+
+        StatusEffectQueries.GetActiveEffectTypes(_statusEffectStacks, playerEntityId, _activeEffectTypes);
+
+        _stackCountsByType.Clear();
+        foreach (var effectType in _activeEffectTypes)
+        {
+            if (effectType is StatusEffectType.Poison or StatusEffectType.Burning)
+            {
+                _stackCountsByType[effectType] = StatusEffectQueries.CountStacks(_statusEffectStacks, playerEntityId, effectType);
+            }
+        }
+
+        _hasPotionCooldown = _potionCooldowns.TryGetReadonly(playerEntityId, out var potionCooldown) && potionCooldown.FramesRemaining > 0;
+        _potionCooldownFramesRemaining = _hasPotionCooldown ? potionCooldown.FramesRemaining : (short)0;
+    }
 
     public void DrawContent(GameTime gameTime, SpriteBatch spriteBatch, Texture2D unitRectangle)
     {
-        var playerEntityId = world.PlayerEntityId;
-
-        StatusEffectQueries.GetActiveEffectTypes(_statusEffectStacks, playerEntityId, _activeEffectTypes);
-        var hasPotionCooldown = _potionCooldowns.TryGetReadonly(playerEntityId, out var potionCooldown) && potionCooldown.FramesRemaining > 0;
-
-        if (_activeEffectTypes.Count == 0 && !hasPotionCooldown)
+        if (_activeEffectTypes.Count == 0 && !_hasPotionCooldown)
         {
             return;
         }
@@ -77,25 +103,25 @@ public sealed class PlayerStatusEffectsContent(World world, ComponentManager com
         for (var i = 0; i < _activeEffectTypes.Count; i++)
         {
             var iconOrigin = origin + new Vector2((iconSize.X + IconSpacing) * i, 0);
-            DrawIcon(spriteBatch, unitRectangle, iconOrigin, iconSize, _activeEffectTypes[i], playerEntityId);
+            DrawIcon(spriteBatch, unitRectangle, iconOrigin, iconSize, _activeEffectTypes[i]);
         }
 
-        if (hasPotionCooldown)
+        if (_hasPotionCooldown)
         {
             var iconOrigin = origin + new Vector2((iconSize.X + IconSpacing) * _activeEffectTypes.Count, 0);
-            DrawPotionCooldownIcon(spriteBatch, unitRectangle, iconOrigin, iconSize, potionCooldown.FramesRemaining);
+            DrawPotionCooldownIcon(spriteBatch, unitRectangle, iconOrigin, iconSize, _potionCooldownFramesRemaining);
         }
     }
 
-    private void DrawIcon(SpriteBatch spriteBatch, Texture2D unitRectangle, Vector2 origin, Vector2 size, StatusEffectType effectType, int playerEntityId)
+    private void DrawIcon(SpriteBatch spriteBatch, Texture2D unitRectangle, Vector2 origin, Vector2 size, StatusEffectType effectType)
     {
         DrawIconBackground(spriteBatch, unitRectangle, origin, size);
 
         _glyphRenderer.DrawCentered(spriteBatch, _font, GetGlyph(effectType), origin, size, GetColor(effectType));
 
-        if (effectType is StatusEffectType.Poison or StatusEffectType.Burning)
+        if (_stackCountsByType.TryGetValue(effectType, out var stackCount))
         {
-            DrawStackCount(spriteBatch, origin, size, StatusEffectQueries.CountStacks(_statusEffectStacks, playerEntityId, effectType));
+            DrawStackCount(spriteBatch, origin, size, stackCount);
         }
     }
 
@@ -127,7 +153,7 @@ public sealed class PlayerStatusEffectsContent(World world, ComponentManager com
         var textSize = _countdownFont.MeasureString(text);
         var textPosition = new Vector2(origin.X + (size.X - textSize.X) / 2f, origin.Y + size.Y + CountdownTextGap);
 
-        ShadowedTextRenderer.Draw(spriteBatch, _countdownFont, text, textPosition);
+        ContrastTextRenderer.Draw(spriteBatch, _countdownFont, text, textPosition);
     }
 
     /// <summary>The square white tile with a 1px black border shared by every status/cooldown icon here -- DrawIcon and DrawPotionCooldownIcon otherwise only differ in what's drawn on top of it.</summary>

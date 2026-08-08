@@ -28,21 +28,30 @@ public sealed class HotbarContentTests
 {
     private const int PlayerEntityId = 1;
 
+    private static readonly Vector2 ScreenSize = new(1920, 1080);
+
     [TestMethod]
-    public void Size_AccountsForTenSlotsAcrossThreeVisualGroups()
+    public void Size_DefaultTenUnlockedExpansionSlots_AccountsForBaseDefaultAttackAndTwoExpansionRows()
     {
-        // 10 slots total across groups of 2, 3, and 5 (QE / RFV / 12345): (2-1)+(3-1)+(5-1) = 7
-        // intra-group gaps, plus 2 gaps between the 3 groups themselves. SlotGap (1) and
+        // Default 10 unlocked Expansion slots (no HotkeyExpansionUnlockComponent registered on
+        // the player -- see HotbarContent.GetUnlockedExpansionSlots' fallback) -- 2 rows visible.
+        // Width: Base (3 slots) + gap + DefaultAttack (1 slot) + gap + Expansion (5-wide, always
+        // full width regardless of row count). Height: 2 Expansion rows. SlotGap (1) and
         // GroupGap (10) are HotbarContent's own private constants, duplicated here rather than
         // exposed publicly just for this test -- keep in sync if those ever change.
         const float slotGap = 1f;
         const float groupGap = 10f;
 
+        var (hotbar, _) = Build();
         var slotSize = HotbarContent.SlotSize;
-        var expectedWidth = 10 * slotSize.X + 7 * slotGap + 2 * groupGap;
 
-        Assert.AreEqual(expectedWidth, HotbarContent.Size.X, 0.01f);
-        Assert.AreEqual(slotSize.Y, HotbarContent.Size.Y);
+        var baseWidth = 3 * slotSize.X + 2 * slotGap;
+        var expansionWidth = 5 * slotSize.X + 4 * slotGap;
+        var expectedWidth = baseWidth + groupGap + slotSize.X + groupGap + expansionWidth;
+        var expectedHeight = 2 * slotSize.Y + slotGap;
+
+        Assert.AreEqual(expectedWidth, hotbar.Size.X, 0.01f);
+        Assert.AreEqual(expectedHeight, hotbar.Size.Y, 0.01f);
     }
 
     private static (HotbarContent Hotbar, ComponentManager ComponentManager) Build()
@@ -56,6 +65,7 @@ public sealed class HotbarContentTests
         componentManager.RegisterPackedPool<ActionLockComponent>(static (ref existing, incoming) => existing = incoming);
         componentManager.RegisterPackedPool<PotionCooldownComponent>(static (ref existing, incoming) => existing = incoming);
         componentManager.RegisterPackedPool<ManaComponent>(static (ref existing, incoming) => existing = incoming);
+        componentManager.RegisterPackedPool<HotkeyExpansionUnlockComponent>(static (ref existing, incoming) => existing = incoming);
 
         var world = new Game.World.World(new Game.World.Map(new Vector3Int(10, 10, 1))) { PlayerEntityId = PlayerEntityId };
         var fontService = new FontService("Fonts");
@@ -63,11 +73,11 @@ public sealed class HotbarContentTests
 
         var hotbar = new HotbarContent(
             world, new MapViewState(), componentManager, new AbilityCatalog(), new ItemCatalog(),
-            fontService, new SpriteSheetService(null, "Spritesheets"), new SpriteRenderer());
+            fontService, new SpriteSheetService(null, "Spritesheets"), new SpriteRenderer(), ScreenSize);
 
         var hostWindow = windowService.CreateElement<Window>(null, new ElementOptions
         {
-            Layout = new ElementLayoutOptions { Size = HotbarContent.Size, DisplayMode = ElementDisplayMode.Fixed },
+            Layout = new ElementLayoutOptions { Size = hotbar.Size, DisplayMode = ElementDisplayMode.Fixed },
         });
         hostWindow.SetContent(hotbar);
         hostWindow.Initialize();
@@ -76,12 +86,16 @@ public sealed class HotbarContentTests
     }
 
     [TestMethod]
-    public void TryGetSlotAt_PointWithinTheFirstSlot_ReturnsSlot1()
+    public void TryGetSlotAt_PointWithinTheFirstSlot_ReturnsBase1()
     {
         var (hotbar, _) = Build();
 
-        Assert.IsTrue(hotbar.TryGetSlotAt(new Point(1, 1), out var slot));
-        Assert.AreEqual(HotkeySlot.Slot1, slot);
+        // Base is vertically centered against Expansion's current (2-row) height, not flush at
+        // the top -- the window's own vertical center always falls inside Base1's row.
+        var point = new Point(1, (int)(hotbar.Size.Y / 2f));
+
+        Assert.IsTrue(hotbar.TryGetSlotAt(point, out var slot));
+        Assert.AreEqual(HotkeySlot.Base1, slot);
     }
 
     [TestMethod]

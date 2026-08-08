@@ -398,6 +398,87 @@ public sealed class MovementSystemTests
         Assert.AreEqual(new Vector3Int(7, 7, 0), transformPool.GetReadonly(secondEntityId).Position, "Second entity stays put -- it never had a valid queued move.");
     }
 
+    /// <summary>A diagonal step covers √2 the distance of a cardinal one, so the shared ActionLock it sets must scale by the same factor.</summary>
+    [TestMethod]
+    public void Update_DiagonalMove_ScalesActionLockBySqrtTwo()
+    {
+        var transformPool = CreateTransformPool();
+        var actionLockPool = CreateActionLockPool();
+        var movementPool = CreateMovementPool();
+        var world = new Game.World.World(new Map(new Vector3Int(5, 5, 1)));
+
+        var transform = new TransformComponent(new Vector3Int(2, 2, 0), new Vector2Byte(1, 1));
+        transformPool.Add(0, transform);
+        world.PlaceEntityOnMap(0, transform.Position, ref transform);
+        actionLockPool.Add(0, new ActionLockComponent(totalLockFrames: 0, lockFramesRemaining: 0));
+        movementPool.Add(0, new MovementComponent(MovementMode.PlayerControlled, 20, null, new Vector3Int(3, 3, 0)));
+
+        var system = new MovementSystem(transformPool, actionLockPool, movementPool, world, new EventBus(), new WorldEventSync(world), new FrameEventBuffer<EntityMovedEvent>(), null, CreateProcessingTierPool(), new ProcessingTierEvents());
+        system.Update(default, 0);
+
+        Assert.AreEqual(new Vector3Int(3, 3, 0), transformPool.GetReadonly(0).Position);
+        Assert.AreEqual(28, actionLockPool.GetReadonly(0).TotalLockFrames, "round(20 * 1.41421356) == 28.");
+    }
+
+    /// <summary>Regression coverage for corner-cutting prevention: a diagonal move must be rejected when both flanking orthogonal tiles are blocked, since neither side of the corner is actually open to pass through.</summary>
+    [TestMethod]
+    public void Update_DiagonalMove_BothFlanksBlocked_DoesNotMove()
+    {
+        var transformPool = CreateTransformPool();
+        var actionLockPool = CreateActionLockPool();
+        var movementPool = CreateMovementPool();
+        var world = new Game.World.World(new Map(new Vector3Int(5, 5, 1)));
+
+        var startPosition = new Vector3Int(2, 2, 0);
+        var transform = new TransformComponent(startPosition, new Vector2Byte(1, 1));
+        transformPool.Add(0, transform);
+        world.PlaceEntityOnMap(0, transform.Position, ref transform);
+        actionLockPool.Add(0, new ActionLockComponent(totalLockFrames: 0, lockFramesRemaining: 0));
+        movementPool.Add(0, new MovementComponent(MovementMode.PlayerControlled, 20, null, new Vector3Int(3, 3, 0)));
+
+        // Both tiles flanking the diagonal step from (2,2,0) to (3,3,0) -- (3,2,0) and (2,3,0) -- are walls.
+        var wallOneTransform = new TransformComponent(new Vector3Int(), new Vector2Byte(1, 1));
+        transformPool.Add(1, wallOneTransform);
+        world.PlaceEntityOnMap(1, new Vector3Int(3, 2, 0), ref wallOneTransform);
+
+        var wallTwoTransform = new TransformComponent(new Vector3Int(), new Vector2Byte(1, 1));
+        transformPool.Add(2, wallTwoTransform);
+        world.PlaceEntityOnMap(2, new Vector3Int(2, 3, 0), ref wallTwoTransform);
+
+        var system = new MovementSystem(transformPool, actionLockPool, movementPool, world, new EventBus(), new WorldEventSync(world), new FrameEventBuffer<EntityMovedEvent>(), null, CreateProcessingTierPool(), new ProcessingTierEvents());
+        system.Update(default, 0);
+
+        Assert.AreEqual(startPosition, transformPool.GetReadonly(0).Position, "Both corner flanks blocked -- the diagonal cut must be rejected.");
+        Assert.IsNull(movementPool.GetReadonly(0).NextMapPosition);
+        Assert.AreEqual(0, actionLockPool.GetReadonly(0).LockFramesRemaining, "A rejected move isn't an action -- it must not touch the shared action lock.");
+    }
+
+    /// <summary>Complements the test above: only one flanking tile blocked still leaves a way through the corner, so the diagonal move must succeed.</summary>
+    [TestMethod]
+    public void Update_DiagonalMove_OneFlankBlocked_StillMoves()
+    {
+        var transformPool = CreateTransformPool();
+        var actionLockPool = CreateActionLockPool();
+        var movementPool = CreateMovementPool();
+        var world = new Game.World.World(new Map(new Vector3Int(5, 5, 1)));
+
+        var transform = new TransformComponent(new Vector3Int(2, 2, 0), new Vector2Byte(1, 1));
+        transformPool.Add(0, transform);
+        world.PlaceEntityOnMap(0, transform.Position, ref transform);
+        actionLockPool.Add(0, new ActionLockComponent(totalLockFrames: 0, lockFramesRemaining: 0));
+        movementPool.Add(0, new MovementComponent(MovementMode.PlayerControlled, 20, null, new Vector3Int(3, 3, 0)));
+
+        // Only one of the two flanking tiles, (3,2,0), is a wall -- (2,3,0) stays open.
+        var wallTransform = new TransformComponent(new Vector3Int(), new Vector2Byte(1, 1));
+        transformPool.Add(1, wallTransform);
+        world.PlaceEntityOnMap(1, new Vector3Int(3, 2, 0), ref wallTransform);
+
+        var system = new MovementSystem(transformPool, actionLockPool, movementPool, world, new EventBus(), new WorldEventSync(world), new FrameEventBuffer<EntityMovedEvent>(), null, CreateProcessingTierPool(), new ProcessingTierEvents());
+        system.Update(default, 0);
+
+        Assert.AreEqual(new Vector3Int(3, 3, 0), transformPool.GetReadonly(0).Position, "One flank still open -- the diagonal move must succeed.");
+    }
+
     private static DirectComponentPool<ProcessingTierComponent> CreateProcessingTierPool(int capacity = 10) =>
         new(capacity, static (ref existing, incoming) => existing = incoming);
 

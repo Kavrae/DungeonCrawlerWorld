@@ -1,6 +1,7 @@
 using Engine.ECS.Components;
 using Engine.ECS.Systems;
 using Engine.Events;
+using Game.Modules.Abilities.Components;
 using Game.Modules.Core.Components;
 using Game.Modules.Death.Components;
 using Game.Modules.Health.Components;
@@ -57,6 +58,9 @@ public sealed class InventoryModule : IGameModule
         var mana = componentManager.IsRegistered<ManaComponent>()
             ? componentManager.GetPackedPool<ManaComponent>()
             : null;
+        var hotkeyExpansionUnlocks = componentManager.IsRegistered<HotkeyExpansionUnlockComponent>()
+            ? componentManager.GetPackedPool<HotkeyExpansionUnlockComponent>()
+            : null;
 
         systemManager.Register(new ConsumableActivationSystem(
             componentManager.GetPackedPool<PendingConsumableActivationComponent>(),
@@ -69,6 +73,7 @@ public sealed class InventoryModule : IGameModule
             componentManager,
             statModifiers,
             deadEntities,
-            mana));
+            mana,
+            hotkeyExpansionUnlocks));
     }
 }

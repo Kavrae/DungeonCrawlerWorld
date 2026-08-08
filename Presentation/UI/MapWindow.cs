@@ -9,8 +9,6 @@ using Game.Modules.Core.Components;
 using Game.Modules.Death.Components;
 using Game.Modules.Health.Components;
 using Game.Modules.Inventory;
-using Game.Modules.Inventory.Components;
-using Game.Modules.Movement.Components;
 using Game.Modules.StatModifiers;
 using Game.Modules.StatModifiers.Components;
 using Game.World;
@@ -50,6 +48,10 @@ public sealed class MapWindow : Window
     private readonly MultiComponentPool<StatModifierComponent>? _statModifiers;
     private readonly PackedComponentPool<DeadComponent>? _deadPool;
     private readonly PackedComponentPool<PendingDelayedActionComponent> _pendingDelayedActions;
+
+    /// <summary>The player's own pending Delayed action's already-resolved target tiles, refreshed once per Update -- null when there is none. See DrawTargetingHighlights' own doc comment for why this is the fallback highlight once TargetableTiles itself is cleared.</summary>
+    private Vector3Int[]? _pendingDelayedActionTargetTiles;
+
     private readonly TileRenderer _tileRenderer;
     private readonly GlyphRenderer _glyphRenderer;
     private readonly SpriteSheetService _spriteSheetService;
@@ -173,6 +175,8 @@ public sealed class MapWindow : Window
 
         var mouseState = Mouse.GetState();
         UpdateHoveredTile(new Point(mouseState.X, mouseState.Y));
+
+        _pendingDelayedActionTargetTiles = _pendingDelayedActions.TryGetReadonly(_world.PlayerEntityId, out var pending) ? pending.TargetTiles : null;
     }
 
     /// <summary>
@@ -272,9 +276,9 @@ public sealed class MapWindow : Window
             return;
         }
 
-        if (_pendingDelayedActions.TryGetReadonly(_world.PlayerEntityId, out var pending))
+        if (_pendingDelayedActionTargetTiles is { } pendingTargetTiles)
         {
-            foreach (var tile in pending.TargetTiles)
+            foreach (var tile in pendingTargetTiles)
             {
                 DrawMaskedTileHighlight(spriteBatch, unitRectangle, tile.X, tile.Y, HoveredTargetTileBorderColor);
             }

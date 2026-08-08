@@ -16,6 +16,9 @@ namespace Game.Modules.Inventory;
 /// user-only item (e.g. a bandage) would just carry TargetShape.Self/0/0 instead. ActionLockFrames
 /// sets the shared ActionLock on activation, the same way an Immediate AbilityTiming.
 /// ActionLockFrames does -- using a consumable is its own action, not a free extra on top of
-/// whatever else the entity is doing.
+/// whatever else the entity is doing. HotkeySlotGrant is a third independent effect alongside
+/// Heal/ManaFraction (the Hotkey Expansion Potion sets only this one) -- see
+/// HotkeyExpansionEffects.Grant, and TODO.md's note on why one dedicated field per rare effect
+/// like this isn't the long-term shape for ConsumableEffect.
 /// </summary>
-public sealed record ConsumableEffect(ConsumableKind Kind, float HealFraction, TargetingSpec Targeting, short ActionLockFrames, float ManaFraction = 0f);
+public sealed record ConsumableEffect(ConsumableKind Kind, float HealFraction, TargetingSpec Targeting, short ActionLockFrames, float ManaFraction = 0f, short HotkeySlotGrant = 0);

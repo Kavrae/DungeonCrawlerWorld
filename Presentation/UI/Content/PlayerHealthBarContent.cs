@@ -38,9 +38,28 @@ public sealed class PlayerHealthBarContent(World world, ComponentManager compone
 
     private Window _hostWindow = null!;
 
+    private bool _hasHealth;
+    private float _healthFraction = 1f;
+
     public void Initialize(Window hostWindow) => _hostWindow = hostWindow;
 
-    public void Update(GameTime gameTime) { }
+    /// <summary>Whether the player currently has a HealthComponent and what fraction of effective max health remains is decided here -- Draw only reads the cached fraction and maps it to a fill color/width.</summary>
+    public void Update(GameTime gameTime)
+    {
+        var playerEntityId = world.PlayerEntityId;
+        if (playerEntityId < 0 || !_healthPool.TryGetReadonly(playerEntityId, out var health) || health.MaximumHealth <= 0)
+        {
+            _hasHealth = false;
+            _healthFraction = 1f;
+            return;
+        }
+
+        _hasHealth = true;
+        var effectiveMaximumHealth = StatModifierMath.GetEffectiveValue(_statModifiers, playerEntityId, StatModifierTarget.MaximumHealth, health.MaximumHealth);
+        _healthFraction = effectiveMaximumHealth > 0
+            ? MathHelper.Clamp(health.CurrentHealth / effectiveMaximumHealth, 0f, 1f)
+            : 1f;
+    }
 
     public void DrawContent(GameTime gameTime, SpriteBatch spriteBatch, Texture2D unitRectangle)
     {
@@ -53,17 +72,9 @@ public sealed class PlayerHealthBarContent(World world, ComponentManager compone
         var outerRectangle = new Rectangle((int)origin.X, (int)origin.Y, (int)contentSize.X, (int)contentSize.Y);
         spriteBatch.Draw(unitRectangle, outerRectangle, HealthBarPalette.OutlineColor);
 
-        var playerEntityId = world.PlayerEntityId;
-        var hasHealth = _healthPool.TryGetReadonly(playerEntityId, out var health) && health.MaximumHealth > 0;
-        var effectiveMaximumHealth = hasHealth
-            ? StatModifierMath.GetEffectiveValue(_statModifiers, playerEntityId, StatModifierTarget.MaximumHealth, health.MaximumHealth)
-            : 0f;
-        var healthFraction = hasHealth && effectiveMaximumHealth > 0
-            ? MathHelper.Clamp(health.CurrentHealth / effectiveMaximumHealth, 0f, 1f)
-            : 1f;
-        var fillColor = hasHealth ? HealthBarPalette.FractionColor(healthFraction) : NoHealthColor;
+        var fillColor = _hasHealth ? HealthBarPalette.FractionColor(_healthFraction) : NoHealthColor;
 
-        var innerWidth = (int)((outerRectangle.Width - 2) * healthFraction);
+        var innerWidth = (int)((outerRectangle.Width - 2) * _healthFraction);
         if (innerWidth > 0)
         {
             spriteBatch.Draw(unitRectangle, new Rectangle(outerRectangle.X + 1, outerRectangle.Y + 1, innerWidth, outerRectangle.Height - 2), fillColor);

@@ -260,19 +260,23 @@ public static class GameShellBootstrapper
         staticHudWindows.Add(playerStatusEffectsWindow);
 
         // Bottom-center, overlaying the map -- StaticHUD tier draws over Base, the same way
-        // selectionWindow/playerHealthBarWindow already do.
+        // selectionWindow/playerHealthBarWindow already do. HotbarContent's Size depends on the
+        // player's currently-unlocked Expansion slot count, so it's constructed first and its own
+        // Size read to size/position this window -- see HotbarContent.RefreshLayoutIfChanged for
+        // how it keeps itself bottom-anchored/horizontally-centered as that Size changes later.
+        var hotbarContent = new HotbarContent(world, mapViewState, ecsContext.ComponentManager, abilityCatalog, itemCatalog, presentation.FontService, presentation.SpriteSheetService, presentation.SpriteRenderer, screenSize);
+        var hotbarSize = hotbarContent.Size;
         var hotbarWindow = presentation.ElementPoolService.CreateElement<Window>(null, new ElementOptions
         {
             Layout = new ElementLayoutOptions
             {
-                RelativePosition = new Vector2((screenSize.X - HotbarContent.Size.X) / 2f, screenSize.Y - HotbarContent.Size.Y - HudMetrics.Margin.Y * 1.5f),
-                Size = HotbarContent.Size,
+                RelativePosition = HotbarContent.ComputeBottomCenteredPosition(hotbarSize, screenSize),
+                Size = hotbarSize,
                 DisplayMode = ElementDisplayMode.Fixed,
                 IsTransparent = true,
             },
             Chrome = new ElementChromeOptions { ShowTitle = false, ShowBorder = false, CanUserFocus = false },
         });
-        var hotbarContent = new HotbarContent(world, mapViewState, ecsContext.ComponentManager, abilityCatalog, itemCatalog, presentation.FontService, presentation.SpriteSheetService, presentation.SpriteRenderer);
         hotbarWindow.SetContent(hotbarContent);
         hotbarWindow.Initialize();
         staticHudWindows.Add(hotbarWindow);

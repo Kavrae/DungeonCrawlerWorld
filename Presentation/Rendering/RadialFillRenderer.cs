@@ -28,20 +28,21 @@ public sealed class RadialFillRenderer(GlyphRenderer glyphRenderer, SpriteSheetS
     /// <summary>Tint applied to Sprite only -- GlyphColor plays the equivalent role for Glyph, kept separate since SpriteOrGlyphRenderer.Draw itself takes them as two independent parameters.</summary>
     public Color SpriteTint { get; set; } = Color.White;
 
-    public void Draw(SpriteBatch spriteBatch, Texture2D unitRectangle, SpriteFontBase font, Rectangle bounds)
+    /// <summary>alphaMultiplier fades BackgroundColor and the sprite/glyph together -- HotbarContent's disabled-slot treatment (see its own doc comment) -- but never the radial mask itself, which stays scoped to whether this icon is on cooldown/unaffordable, not whether the whole slot is currently faded.</summary>
+    public void Draw(SpriteBatch spriteBatch, Texture2D unitRectangle, SpriteFontBase font, Rectangle bounds, float alphaMultiplier = 1f)
     {
-        spriteBatch.Draw(unitRectangle, bounds, BackgroundColor);
+        spriteBatch.Draw(unitRectangle, bounds, BackgroundColor * alphaMultiplier);
 
         var position = new Vector2(bounds.X, bounds.Y);
         var size = new Vector2(bounds.Width, bounds.Height);
 
         if (Sprite is { } sprite && spriteSheetService is not null && spriteRenderer is not null)
         {
-            SpriteOrGlyphRenderer.Draw(spriteBatch, spriteSheetService, spriteRenderer, glyphRenderer, sprite, font, Glyph, GlyphColor, position, size, SpriteTint);
+            SpriteOrGlyphRenderer.Draw(spriteBatch, spriteSheetService, spriteRenderer, glyphRenderer, sprite, font, Glyph, GlyphColor, position, size, SpriteTint, alphaMultiplier);
         }
         else
         {
-            glyphRenderer.DrawCentered(spriteBatch, font, Glyph, position, size, GlyphColor);
+            glyphRenderer.DrawCentered(spriteBatch, font, Glyph, position, size, GlyphColor * alphaMultiplier);
         }
 
         DrawRadialMask(spriteBatch, unitRectangle, bounds);

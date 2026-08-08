@@ -38,6 +38,9 @@ public sealed class MovementSystem : ISystem
 {
     private const byte StripeCountValue = 15;
 
+    /// <summary>√2 -- a diagonal step covers that much more distance than a cardinal one, so it sets the shared ActionLock for proportionally longer.</summary>
+    private const float DiagonalActionLockMultiplier = 1.41421356f;
+
     public byte StripeCount => StripeCountValue;
 
     private readonly DirectComponentPool<TransformComponent> _transformComponents;
@@ -162,21 +165,27 @@ public sealed class MovementSystem : ISystem
     private void TryMoveToNextMapPosition(int entityId, MovementComponent movementComponent, TransformComponent transformComponent)
     {
         var newPosition = movementComponent.NextMapPosition!.Value;
+        var oldPosition = transformComponent.Position;
+        var isBlocking = _mapQuery.IsBlocking(entityId);
 
-        if (!MovementCandidates.CanOccupy(_mapQuery, newPosition, transformComponent.Size, entityId, _mapQuery.IsBlocking(entityId)))
+        if (!MovementCandidates.CanOccupy(_mapQuery, newPosition, transformComponent.Size, entityId, isBlocking) ||
+            !MovementCandidates.IsDiagonalMoveClear(_mapQuery, oldPosition, newPosition, transformComponent.Size, entityId, isBlocking))
         {
             _movementComponents.TryUpdate(entityId, static (ref MovementComponent m) => m.NextMapPosition = null);
             return;
         }
-
-        var oldPosition = transformComponent.Position;
 
         if (_transformComponents.TryUpdate(entityId, newPosition, static (ref transformComponent, newPosition) =>
         {
             transformComponent.Position = newPosition;
         }))
         {
-            ActionLockGate.Lock(_actionLocks, entityId, movementComponent.ActionCooldownFrames);
+            var isDiagonal = newPosition.X != oldPosition.X && newPosition.Y != oldPosition.Y;
+            var lockFrames = isDiagonal
+                ? (short)MathF.Round(movementComponent.ActionCooldownFrames * DiagonalActionLockMultiplier)
+                : movementComponent.ActionCooldownFrames;
+
+            ActionLockGate.Lock(_actionLocks, entityId, lockFrames);
 
             var moved = new EntityMovedEvent(entityId, oldPosition, newPosition, transformComponent.Size);
             _entityMoveSync.SyncMove(moved);

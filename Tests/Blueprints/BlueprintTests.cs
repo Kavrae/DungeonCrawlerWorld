@@ -205,10 +205,10 @@ public sealed class BlueprintTests
         Assert.AreEqual((short)5, magicMissile.DamageAmount);
         Assert.IsTrue(AbilityInstanceQueries.TryGet(abilityInstances, entityId, CoreAbilitiesModule.HealId, out _));
 
-        // Starting items: 5 Health Potions, 5 Mana Potions.
+        // Starting items: 5 Health Potions, 5 Mana Potions, 3 Hotkey Expansion Potions.
         var stacks = new List<InventoryItemStackComponent>();
         InventoryQueries.CopyStacksForEntity(ecsContext.ComponentManager.GetMultiPool<InventoryItemStackComponent>(), entityId, stacks);
-        Assert.HasCount(2, stacks);
+        Assert.HasCount(3, stacks);
 
         var healthPotionStack = stacks.Single(stack => stack.ItemDefinitionId == CoreItemsModule.HealthPotionId);
         Assert.AreEqual(5, healthPotionStack.Quantity);
@@ -217,6 +217,13 @@ public sealed class BlueprintTests
         var manaPotionStack = stacks.Single(stack => stack.ItemDefinitionId == CoreItemsModule.ManaPotionId);
         Assert.AreEqual(5, manaPotionStack.Quantity);
         Assert.IsFalse(manaPotionStack.IsDisabled);
+
+        var hotkeyExpansionPotionStack = stacks.Single(stack => stack.ItemDefinitionId == CoreItemsModule.HotkeyExpansionPotionId);
+        Assert.AreEqual(3, hotkeyExpansionPotionStack.Quantity);
+        Assert.IsFalse(hotkeyExpansionPotionStack.IsDisabled);
+
+        var hotkeyExpansionUnlock = ecsContext.ComponentManager.GetPackedPool<HotkeyExpansionUnlockComponent>().GetReadonly(entityId);
+        Assert.AreEqual((short)5, hotkeyExpansionUnlock.UnlockedSlotCount);
     }
 
     [TestMethod]

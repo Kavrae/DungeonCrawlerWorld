@@ -1,6 +1,8 @@
 ﻿using Engine.ECS.Components;
 using Engine.Events;
 using Engine.Math;
+using Game.Modules.Abilities;
+using Game.Modules.Abilities.Components;
 using Game.Modules.Core.Components;
 using Game.Modules.Death.Components;
 using Game.Modules.Health.Components;
@@ -24,6 +26,7 @@ public sealed class ConsumableActivationSystemTests
     private const int TargetEntityId = 2;
     private static readonly Guid PotionId = Guid.NewGuid();
     private static readonly Guid ManaPotionId = Guid.NewGuid();
+    private static readonly Guid HotkeyExpansionPotionId = Guid.NewGuid();
     private static readonly Guid NonConsumableId = Guid.NewGuid();
     private static readonly Vector3Int TargetTile = new(5, 5, 0);
 
@@ -57,6 +60,7 @@ public sealed class ConsumableActivationSystemTests
         componentManager.RegisterPackedPool<InventoryComponent>(static (ref existing, incoming) => existing = incoming);
         componentManager.RegisterMultiPool<StatusEffectStack>();
         componentManager.RegisterPackedPool<PoisonTimerComponent>(static (ref existing, incoming) => { });
+        componentManager.RegisterPackedPool<HotkeyExpansionUnlockComponent>(static (ref existing, incoming) => existing = incoming);
 
         var itemCatalog = new ItemCatalog();
         itemCatalog.Register(new ItemDefinition(
@@ -65,6 +69,9 @@ public sealed class ConsumableActivationSystemTests
         itemCatalog.Register(new ItemDefinition(
             ManaPotionId, "Test Mana Potion", null, "m", Color.Blue, Tags: [],
             Consumable: new ConsumableEffect(ConsumableKind.Potion, HealFraction: 0f, Targeting: new TargetingSpec(TargetShape.Burst, Range: 3, AreaSize: 1), ActionLockFrames: 60, ManaFraction: 1f)));
+        itemCatalog.Register(new ItemDefinition(
+            HotkeyExpansionPotionId, "Test Hotkey Expansion Potion", null, "k", Color.Orange, Tags: [],
+            Consumable: new ConsumableEffect(ConsumableKind.Potion, HealFraction: 0f, Targeting: new TargetingSpec(TargetShape.Self, Range: 0, AreaSize: 0), ActionLockFrames: 60, HotkeySlotGrant: 5)));
         itemCatalog.Register(new ItemDefinition(NonConsumableId, "Test Hammer", null, "h", Color.Gray, Tags: []));
 
         var mapQuery = new FakeMapQuery();
@@ -81,7 +88,8 @@ public sealed class ConsumableActivationSystemTests
             componentManager,
             statModifiers: null,
             componentManager.GetPackedPool<DeadComponent>(),
-            componentManager.GetPackedPool<ManaComponent>());
+            componentManager.GetPackedPool<ManaComponent>(),
+            componentManager.GetPackedPool<HotkeyExpansionUnlockComponent>());
 
         return (system, componentManager, mapQuery, eventBus);
     }
@@ -297,5 +305,37 @@ public sealed class ConsumableActivationSystemTests
 
         Assert.AreEqual(20, HealthOf(componentManager, TargetEntityId));
         Assert.AreEqual(1, StackQuantity(componentManager, CasterEntityId, PotionId));
+    }
+
+    [TestMethod]
+    public void HotkeyExpansionPotion_TargetOccupantAtTargetTile_GrantsFiveMoreUnlockedSlots()
+    {
+        var (system, componentManager, mapQuery, _) = Build();
+        mapQuery.SetOccupant(TargetTile, TargetEntityId);
+        componentManager.Merge(TargetEntityId, new HealthComponent(currentHealth: 20, maximumHealth: 100));
+        componentManager.GetPackedPool<HotkeyExpansionUnlockComponent>().Add(TargetEntityId, new HotkeyExpansionUnlockComponent(unlockedSlotCount: 10));
+        InventoryActions.AddItem(componentManager, CasterEntityId, HotkeyExpansionPotionId, quantity: 1);
+        componentManager.Merge(CasterEntityId, new PendingConsumableActivationComponent(HotkeyExpansionPotionId, [TargetTile]));
+        componentManager.Merge(CasterEntityId, new ActionLockComponent(totalLockFrames: 0, lockFramesRemaining: 0));
+
+        system.Update(default, 0);
+
+        Assert.AreEqual((short)15, componentManager.GetPackedPool<HotkeyExpansionUnlockComponent>().GetReadonly(TargetEntityId).UnlockedSlotCount);
+    }
+
+    [TestMethod]
+    public void HotkeyExpansionPotion_WouldExceedCap_ClampsToMaxUnlockedSlots()
+    {
+        var (system, componentManager, mapQuery, _) = Build();
+        mapQuery.SetOccupant(TargetTile, TargetEntityId);
+        componentManager.Merge(TargetEntityId, new HealthComponent(currentHealth: 20, maximumHealth: 100));
+        componentManager.GetPackedPool<HotkeyExpansionUnlockComponent>().Add(TargetEntityId, new HotkeyExpansionUnlockComponent(unlockedSlotCount: 18));
+        InventoryActions.AddItem(componentManager, CasterEntityId, HotkeyExpansionPotionId, quantity: 1);
+        componentManager.Merge(CasterEntityId, new PendingConsumableActivationComponent(HotkeyExpansionPotionId, [TargetTile]));
+        componentManager.Merge(CasterEntityId, new ActionLockComponent(totalLockFrames: 0, lockFramesRemaining: 0));
+
+        system.Update(default, 0);
+
+        Assert.AreEqual(HotkeyExpansionEffects.MaxUnlockedSlots, componentManager.GetPackedPool<HotkeyExpansionUnlockComponent>().GetReadonly(TargetEntityId).UnlockedSlotCount);
     }
 }

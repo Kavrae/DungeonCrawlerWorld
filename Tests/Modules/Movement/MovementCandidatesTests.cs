@@ -79,6 +79,41 @@ public sealed class MovementCandidatesTests
     }
 
     [TestMethod]
+    public void IsDiagonalMoveClear_CardinalDelta_AlwaysReturnsTrue()
+    {
+        var mapQuery = new FakeMapQuery(new Vector3Int(5, 5, 1));
+
+        Assert.IsTrue(MovementCandidates.IsDiagonalMoveClear(mapQuery, new Vector3Int(2, 2, 0), new Vector3Int(3, 2, 0), SingleTile, entityId: 0, isBlocking: true));
+    }
+
+    [TestMethod]
+    public void IsDiagonalMoveClear_BothFlanksBlocked_ReturnsFalse()
+    {
+        var mapQuery = new FakeMapQuery(new Vector3Int(5, 5, 1));
+        mapQuery.SetOccupant(new Vector3Int(3, 2, 0), entityId: 99);
+        mapQuery.SetOccupant(new Vector3Int(2, 3, 0), entityId: 98);
+
+        Assert.IsFalse(MovementCandidates.IsDiagonalMoveClear(mapQuery, new Vector3Int(2, 2, 0), new Vector3Int(3, 3, 0), SingleTile, entityId: 0, isBlocking: true));
+    }
+
+    [TestMethod]
+    public void IsDiagonalMoveClear_OneFlankBlocked_ReturnsTrue()
+    {
+        var mapQuery = new FakeMapQuery(new Vector3Int(5, 5, 1));
+        mapQuery.SetOccupant(new Vector3Int(3, 2, 0), entityId: 99);
+
+        Assert.IsTrue(MovementCandidates.IsDiagonalMoveClear(mapQuery, new Vector3Int(2, 2, 0), new Vector3Int(3, 3, 0), SingleTile, entityId: 0, isBlocking: true));
+    }
+
+    [TestMethod]
+    public void IsDiagonalMoveClear_NeitherFlankBlocked_ReturnsTrue()
+    {
+        var mapQuery = new FakeMapQuery(new Vector3Int(5, 5, 1));
+
+        Assert.IsTrue(MovementCandidates.IsDiagonalMoveClear(mapQuery, new Vector3Int(2, 2, 0), new Vector3Int(3, 3, 0), SingleTile, entityId: 0, isBlocking: true));
+    }
+
+    [TestMethod]
     public void TryPickRandomAdjacentPosition_AllFourDirectionsBlocked_ReturnsFalse()
     {
         var mapQuery = new FakeMapQuery(new Vector3Int(5, 5, 1));

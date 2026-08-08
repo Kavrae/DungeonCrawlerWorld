@@ -1,14 +1,21 @@
 namespace Game.Modules.Abilities;
 
 /// <summary>
-/// Generic numbered hotkey slots -- named by number, not by physical key, so slots never need
-/// renaming once rebinding becomes player-configurable (see Presentation's HotkeySlotLayout for
-/// the current default slot-to-physical-key mapping and visual grouping). 10 is the starting
-/// count; more slots are an expected future addition, so nothing should hardcode "10" where it
-/// can instead read HotkeySlotLayout's own slot list.
+/// Named by category+number, not by physical key, so slots never need renaming once rebinding
+/// becomes player-configurable (see Presentation's HotkeySlotLayout for the current default
+/// slot-to-physical-key mapping, category grouping, and Expansion unlock/row-reveal behavior).
+/// Base1-3 and DefaultAttack are fixed, always-available slots. Slot1-Slot20 are the Expansion
+/// group -- Slot1-10 is "page 1", Slot11-20 is "page 2" (reached via Shift); how many of the 20
+/// are actually unlocked for a given entity is tracked separately by
+/// HotkeyExpansionUnlockComponent, not by this enum itself. 20 is the current cap; see
+/// HotkeyExpansionUnlockComponent's own doc comment for why.
 /// </summary>
 public enum HotkeySlot
 {
+    Base1,
+    Base2,
+    Base3,
+    DefaultAttack,
     Slot1,
     Slot2,
     Slot3,
@@ -19,6 +26,16 @@ public enum HotkeySlot
     Slot8,
     Slot9,
     Slot10,
+    Slot11,
+    Slot12,
+    Slot13,
+    Slot14,
+    Slot15,
+    Slot16,
+    Slot17,
+    Slot18,
+    Slot19,
+    Slot20,
 }
 
 /// <summary>

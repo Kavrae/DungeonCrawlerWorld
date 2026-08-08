@@ -49,6 +49,7 @@ public sealed class HotbarControllerTests
         componentManager.RegisterPackedPool<ActionLockComponent>(static (ref existing, incoming) => existing = incoming);
         componentManager.RegisterPackedPool<ManaComponent>(static (ref existing, incoming) => existing = incoming);
         componentManager.RegisterPackedPool<PotionCooldownComponent>(static (ref existing, incoming) => existing = incoming);
+        componentManager.RegisterPackedPool<HotkeyExpansionUnlockComponent>(static (ref existing, incoming) => existing = incoming);
 
         componentManager.Merge(PlayerEntityId, new TransformComponent(PlayerPosition, new Vector2Byte(1, 1)));
         componentManager.Merge(PlayerEntityId, new MovementComponent(MovementMode.PlayerControlled, 0, null, null));
@@ -83,7 +84,7 @@ public sealed class HotbarControllerTests
             componentManager.GetPackedPool<ManaComponent>());
 
         var fontService = new FontService("Fonts");
-        var hotbarContent = new HotbarContent(world, mapViewState, componentManager, abilityCatalog, itemCatalog, fontService, new SpriteSheetService(null, "Spritesheets"), new SpriteRenderer());
+        var hotbarContent = new HotbarContent(world, mapViewState, componentManager, abilityCatalog, itemCatalog, fontService, new SpriteSheetService(null, "Spritesheets"), new SpriteRenderer(), new Vector2(1920, 1080));
         var hotbarController = new HotbarController(mapViewState, hotbarContent, abilityTargeting);
 
         return (hotbarController, mapViewState, componentManager);

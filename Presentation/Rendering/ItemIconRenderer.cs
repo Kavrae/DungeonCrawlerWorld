@@ -10,7 +10,7 @@ public static class ItemIconRenderer
     private static readonly Color QuantityShadowColor = Color.Black;
     private static readonly Color QuantityTextColor = Color.White;
     private static readonly Vector2 QuantityShadowOffset = new(-1, -1);
-    private static readonly Vector2 QuantityTextPadding = new(2, 0);
+    private static readonly Vector2 QuantityTextPadding = new(0, 0);
 
     /// <summary>No-ops for quantity &lt;= 1 -- a lone item doesn't need a count badge.</summary>
     public static void DrawQuantityBadge(SpriteBatch spriteBatch, SpriteFontBase quantityFont, int quantity, Vector2 contentPosition, Vector2 contentSize)

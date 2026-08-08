@@ -66,6 +66,29 @@ public static class MovementCandidates
     }
 
     /// <summary>
+    /// Whether a diagonal step from oldPosition to newPosition is legal -- rejects cutting
+    /// through a wall corner by requiring at least one of the two flanking orthogonal tiles
+    /// (the ones a straight N/S and E/W step from oldPosition would land on) to itself be
+    /// occupiable. Callers only need this for an actual diagonal delta (both axes nonzero);
+    /// for a cardinal move flanking tiles don't apply, so this always returns true then.
+    /// </summary>
+    public static bool IsDiagonalMoveClear(IMapQuery mapQuery, Vector3Int oldPosition, Vector3Int newPosition, Vector2Byte size, int entityId, bool isBlocking)
+    {
+        var deltaX = newPosition.X - oldPosition.X;
+        var deltaY = newPosition.Y - oldPosition.Y;
+        if (deltaX == 0 || deltaY == 0)
+        {
+            return true;
+        }
+
+        var horizontalFlank = new Vector3Int(newPosition.X, oldPosition.Y, oldPosition.Z);
+        var verticalFlank = new Vector3Int(oldPosition.X, newPosition.Y, oldPosition.Z);
+
+        return CanOccupy(mapQuery, horizontalFlank, size, entityId, isBlocking) ||
+            CanOccupy(mapQuery, verticalFlank, size, entityId, isBlocking);
+    }
+
+    /// <summary>
     /// Picks a random neighboring node the entity could occupy, retrying up to 3 more directions
     /// on failure -- mirrors MovementSystem's old SetRandomMapPosition, minus the
     /// MovementComponent.NextMapPosition write/idle-fallback side effects (the caller owns

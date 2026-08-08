@@ -24,27 +24,46 @@ public sealed class ActionLockContent(World world, ComponentManager componentMan
     private Window _hostWindow = null!;
     private SpriteFontBase _font = null!;
 
+    private bool _hasActionLock;
+    private string _glyph = string.Empty;
+    private Color _glyphColor;
+    private float _fillPercentage;
+
     public void Initialize(Window hostWindow)
     {
         _hostWindow = hostWindow;
         _font = fontService.GetFont((int)(Size.Y * GlyphSizeFraction));
     }
 
-    public void Update(GameTime gameTime) { }
+    /// <summary>Whether the player currently has an action lock to show, and its fill fraction, is decided here -- Draw only reads the cached result and turns it into pixels.</summary>
+    public void Update(GameTime gameTime)
+    {
+        var playerEntityId = world.PlayerEntityId;
+        if (playerEntityId < 0 || !_actionLocks.TryGetReadonly(playerEntityId, out var actionLock) || !_glyphs.TryGetReadonly(playerEntityId, out var glyphComponent))
+        {
+            _hasActionLock = false;
+            return;
+        }
+
+        _hasActionLock = true;
+        _glyph = glyphComponent.Glyph;
+        _glyphColor = glyphComponent.GlyphColor;
+        _fillPercentage = actionLock.TotalLockFrames > 0
+            ? (float)actionLock.LockFramesRemaining / actionLock.TotalLockFrames
+            : 0f;
+    }
 
     public void DrawContent(GameTime gameTime, SpriteBatch spriteBatch, Texture2D unitRectangle)
     {
-        if (!_actionLocks.TryGetReadonly(world.PlayerEntityId, out var actionLock) || !_glyphs.TryGetReadonly(world.PlayerEntityId, out var glyphComponent))
+        if (!_hasActionLock)
         {
             return;
         }
 
-        _radialFill.Glyph = glyphComponent.Glyph;
-        _radialFill.GlyphColor = glyphComponent.GlyphColor;
+        _radialFill.Glyph = _glyph;
+        _radialFill.GlyphColor = _glyphColor;
         _radialFill.BackgroundColor = Color.Blue;
-        _radialFill.FillPercentage = actionLock.TotalLockFrames > 0
-            ? (float)actionLock.LockFramesRemaining / actionLock.TotalLockFrames
-            : 0f;
+        _radialFill.FillPercentage = _fillPercentage;
 
         var origin = _hostWindow.ContentAbsolutePosition;
         var contentSize = _hostWindow.ContentSize;

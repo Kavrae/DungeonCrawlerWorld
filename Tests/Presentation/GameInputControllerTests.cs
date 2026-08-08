@@ -1860,6 +1860,7 @@ public sealed class GameInputControllerTests
         componentManager.RegisterPackedPool<ActionLockComponent>(static (ref existing, incoming) => existing = incoming);
         componentManager.RegisterPackedPool<PotionCooldownComponent>(static (ref existing, incoming) => existing = incoming);
         componentManager.RegisterPackedPool<ManaComponent>(static (ref existing, incoming) => existing = incoming);
+        componentManager.RegisterPackedPool<HotkeyExpansionUnlockComponent>(static (ref existing, incoming) => existing = incoming);
 
         var world = new Game.World.World(new Game.World.Map(new Vector3Int(10, 10, 1))) { PlayerEntityId = playerEntityId };
         var itemId = Guid.NewGuid();
@@ -1884,10 +1885,10 @@ public sealed class GameInputControllerTests
 
         var hotbar = new HotbarContent(
             world, new MapViewState(), componentManager, new AbilityCatalog(), itemCatalog,
-            fontService, new SpriteSheetService(null, "Spritesheets"), new SpriteRenderer());
+            fontService, new SpriteSheetService(null, "Spritesheets"), new SpriteRenderer(), new Vector2(1920, 1080));
         var hotbarWindow = windowService.CreateElement<Window>(null, new ElementOptions
         {
-            Layout = new ElementLayoutOptions { RelativePosition = new Vector2(500, 0), Size = HotbarContent.Size, DisplayMode = ElementDisplayMode.Fixed },
+            Layout = new ElementLayoutOptions { RelativePosition = new Vector2(500, 0), Size = hotbar.Size, DisplayMode = ElementDisplayMode.Fixed },
         });
         hotbarWindow.SetContent(hotbar);
         hotbarWindow.Initialize();
@@ -1898,17 +1899,19 @@ public sealed class GameInputControllerTests
     [TestMethod]
     public void Drag_FromInventoryCellToHotbarSlot_BindsTheItem()
     {
-        var (cell, hotbarWindow, _, componentManager, itemId) = BuildDragAndDropHarness();
+        var (cell, hotbarWindow, hotbar, componentManager, itemId) = BuildDragAndDropHarness();
         var controller = new GameInputController([cell], [hotbarWindow], [], [], LargeScreenSize);
 
         var pressPoint = cell.ContentRectangle.Center;
         controller.Update(NoKeys, MouseAt(pressPoint.X, pressPoint.Y, ButtonState.Released));
         controller.Update(NoKeys, MouseAt(pressPoint.X, pressPoint.Y, ButtonState.Pressed));
 
-        var dropPoint = new Point((int)hotbarWindow.ContentAbsolutePosition.X + 1, (int)hotbarWindow.ContentAbsolutePosition.Y + 1);
+        // Base is vertically centered against Expansion's current height, not flush at the top --
+        // the window's own vertical center always falls inside Base1's row.
+        var dropPoint = new Point((int)hotbarWindow.ContentAbsolutePosition.X + 1, (int)hotbarWindow.ContentAbsolutePosition.Y + (int)(hotbar.Size.Y / 2f));
         controller.Update(NoKeys, MouseAt(dropPoint.X, dropPoint.Y, ButtonState.Released));
 
-        Assert.IsTrue(ItemHotkeyBindingQueries.TryGet(componentManager.GetMultiPool<ItemHotkeyBindingComponent>(), 1, HotkeySlot.Slot1, out var boundItemId));
+        Assert.IsTrue(ItemHotkeyBindingQueries.TryGet(componentManager.GetMultiPool<ItemHotkeyBindingComponent>(), 1, HotkeySlot.Base1, out var boundItemId));
         Assert.AreEqual(itemId, boundItemId);
     }
 
@@ -1916,13 +1919,13 @@ public sealed class GameInputControllerTests
     [TestMethod]
     public void Drag_FromInventoryCellToHotbarSlot_DoesNotRemoveTheItemFromInventory()
     {
-        var (cell, hotbarWindow, _, componentManager, itemId) = BuildDragAndDropHarness();
+        var (cell, hotbarWindow, hotbar, componentManager, itemId) = BuildDragAndDropHarness();
         var controller = new GameInputController([cell], [hotbarWindow], [], [], LargeScreenSize);
 
         var pressPoint = cell.ContentRectangle.Center;
         controller.Update(NoKeys, MouseAt(pressPoint.X, pressPoint.Y, ButtonState.Released));
         controller.Update(NoKeys, MouseAt(pressPoint.X, pressPoint.Y, ButtonState.Pressed));
-        var dropPoint = new Point((int)hotbarWindow.ContentAbsolutePosition.X + 1, (int)hotbarWindow.ContentAbsolutePosition.Y + 1);
+        var dropPoint = new Point((int)hotbarWindow.ContentAbsolutePosition.X + 1, (int)hotbarWindow.ContentAbsolutePosition.Y + (int)(hotbar.Size.Y / 2f));
         controller.Update(NoKeys, MouseAt(dropPoint.X, dropPoint.Y, ButtonState.Released));
 
         Assert.IsTrue(InventoryQueries.TryGetStack(componentManager.GetMultiPool<InventoryItemStackComponent>(), 1, itemId, out var stack));
@@ -1948,16 +1951,18 @@ public sealed class GameInputControllerTests
     public void Drag_FromABoundHotbarSlotToAwayFromTheHotbar_UnbindsIt()
     {
         var (_, hotbarWindow, hotbar, componentManager, itemId) = BuildDragAndDropHarness();
-        hotbar.BindItem(HotkeySlot.Slot1, itemId);
+        hotbar.BindItem(HotkeySlot.Base1, itemId);
         var controller = new GameInputController([], [hotbarWindow], [], [], LargeScreenSize);
 
-        var pressPoint = new Point((int)hotbarWindow.ContentAbsolutePosition.X + 1, (int)hotbarWindow.ContentAbsolutePosition.Y + 1);
+        // Base is vertically centered against Expansion's current height, not flush at the top --
+        // the window's own vertical center always falls inside Base1's row.
+        var pressPoint = new Point((int)hotbarWindow.ContentAbsolutePosition.X + 1, (int)hotbarWindow.ContentAbsolutePosition.Y + (int)(hotbar.Size.Y / 2f));
         controller.Update(NoKeys, MouseAt(pressPoint.X, pressPoint.Y, ButtonState.Released));
         controller.Update(NoKeys, MouseAt(pressPoint.X, pressPoint.Y, ButtonState.Pressed));
 
         controller.Update(NoKeys, MouseAt(1000, 1000, ButtonState.Released));
 
-        Assert.IsFalse(ItemHotkeyBindingQueries.TryGet(componentManager.GetMultiPool<ItemHotkeyBindingComponent>(), 1, HotkeySlot.Slot1, out _));
+        Assert.IsFalse(ItemHotkeyBindingQueries.TryGet(componentManager.GetMultiPool<ItemHotkeyBindingComponent>(), 1, HotkeySlot.Base1, out _));
     }
 
     /// <summary>Dragging a bound slot onto a different hotbar slot moves the binding rather than duplicating it.</summary>
@@ -1965,22 +1970,27 @@ public sealed class GameInputControllerTests
     public void Drag_FromABoundHotbarSlotToADifferentSlot_MovesTheBinding()
     {
         var (_, hotbarWindow, hotbar, componentManager, itemId) = BuildDragAndDropHarness();
-        hotbar.BindItem(HotkeySlot.Slot1, itemId);
+        hotbar.BindItem(HotkeySlot.Base1, itemId);
         var controller = new GameInputController([], [hotbarWindow], [], [], LargeScreenSize);
 
-        Assert.IsTrue(hotbar.TryGetSlotAt(new Point((int)hotbarWindow.ContentAbsolutePosition.X + 1, (int)hotbarWindow.ContentAbsolutePosition.Y + 1), out var sourceSlot));
-        Assert.AreEqual(HotkeySlot.Slot1, sourceSlot);
+        // Base is vertically centered against Expansion's current height, not flush at the top --
+        // the window's own vertical center always falls inside Base1's row.
+        var baseRowY = (int)hotbarWindow.ContentAbsolutePosition.Y + (int)(hotbar.Size.Y / 2f);
+        Assert.IsTrue(hotbar.TryGetSlotAt(new Point((int)hotbarWindow.ContentAbsolutePosition.X + 1, baseRowY), out var sourceSlot));
+        Assert.AreEqual(HotkeySlot.Base1, sourceSlot);
 
-        var pressPoint = new Point((int)hotbarWindow.ContentAbsolutePosition.X + 1, (int)hotbarWindow.ContentAbsolutePosition.Y + 1);
+        var pressPoint = new Point((int)hotbarWindow.ContentAbsolutePosition.X + 1, baseRowY);
         controller.Update(NoKeys, MouseAt(pressPoint.X, pressPoint.Y, ButtonState.Released));
         controller.Update(NoKeys, MouseAt(pressPoint.X, pressPoint.Y, ButtonState.Pressed));
 
         // Far enough along the hotbar's own width to land in a different slot -- exact slot
-        // doesn't matter, only that it's not Slot1.
-        var dropPoint = new Point((int)hotbarWindow.ContentAbsolutePosition.X + (int)HotbarContent.Size.X - 1, (int)hotbarWindow.ContentAbsolutePosition.Y + 1);
+        // doesn't matter, only that it's not Base1. Half a slot in from the right edge (the last
+        // Expansion column, row 0 -- flush at the content origin's Y) rather than the very last
+        // pixel of the bar, which is fragile against float-to-int rounding across many slots/gaps.
+        var dropPoint = new Point((int)hotbarWindow.ContentAbsolutePosition.X + (int)(hotbar.Size.X - HotbarContent.SlotSize.X / 2f), (int)hotbarWindow.ContentAbsolutePosition.Y + 1);
         controller.Update(NoKeys, MouseAt(dropPoint.X, dropPoint.Y, ButtonState.Released));
 
-        Assert.IsFalse(ItemHotkeyBindingQueries.TryGet(componentManager.GetMultiPool<ItemHotkeyBindingComponent>(), 1, HotkeySlot.Slot1, out _), "The origin slot must no longer be bound once the item has moved elsewhere.");
+        Assert.IsFalse(ItemHotkeyBindingQueries.TryGet(componentManager.GetMultiPool<ItemHotkeyBindingComponent>(), 1, HotkeySlot.Base1, out _), "The origin slot must no longer be bound once the item has moved elsewhere.");
         Assert.IsTrue(hotbar.TryGetSlotAt(dropPoint, out var dropSlot));
         Assert.IsTrue(ItemHotkeyBindingQueries.TryGet(componentManager.GetMultiPool<ItemHotkeyBindingComponent>(), 1, dropSlot, out var boundItemId));
         Assert.AreEqual(itemId, boundItemId);
@@ -1991,15 +2001,17 @@ public sealed class GameInputControllerTests
     public void ClickingABoundHotbarSlot_WithoutDragging_LeavesTheBindingUnchanged()
     {
         var (_, hotbarWindow, hotbar, componentManager, itemId) = BuildDragAndDropHarness();
-        hotbar.BindItem(HotkeySlot.Slot1, itemId);
+        hotbar.BindItem(HotkeySlot.Base1, itemId);
         var controller = new GameInputController([], [hotbarWindow], [], [], LargeScreenSize);
 
-        var point = new Point((int)hotbarWindow.ContentAbsolutePosition.X + 1, (int)hotbarWindow.ContentAbsolutePosition.Y + 1);
+        // Base is vertically centered against Expansion's current height, not flush at the top --
+        // the window's own vertical center always falls inside Base1's row.
+        var point = new Point((int)hotbarWindow.ContentAbsolutePosition.X + 1, (int)hotbarWindow.ContentAbsolutePosition.Y + (int)(hotbar.Size.Y / 2f));
         controller.Update(NoKeys, MouseAt(point.X, point.Y, ButtonState.Released));
         controller.Update(NoKeys, MouseAt(point.X, point.Y, ButtonState.Pressed));
         controller.Update(NoKeys, MouseAt(point.X, point.Y, ButtonState.Released));
 
-        Assert.IsTrue(ItemHotkeyBindingQueries.TryGet(componentManager.GetMultiPool<ItemHotkeyBindingComponent>(), 1, HotkeySlot.Slot1, out var boundItemId));
+        Assert.IsTrue(ItemHotkeyBindingQueries.TryGet(componentManager.GetMultiPool<ItemHotkeyBindingComponent>(), 1, HotkeySlot.Base1, out var boundItemId));
         Assert.AreEqual(itemId, boundItemId);
     }
 

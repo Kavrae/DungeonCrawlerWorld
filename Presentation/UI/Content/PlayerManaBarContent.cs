@@ -36,9 +36,28 @@ public sealed class PlayerManaBarContent(World world, ComponentManager component
 
     private Window _hostWindow = null!;
 
+    private bool _hasMana;
+    private float _manaFraction = 1f;
+
     public void Initialize(Window hostWindow) => _hostWindow = hostWindow;
 
-    public void Update(GameTime gameTime) { }
+    /// <summary>Whether the player currently has a ManaComponent and what fraction of effective max mana remains is decided here -- Draw only reads the cached fraction and maps it to a fill color/width.</summary>
+    public void Update(GameTime gameTime)
+    {
+        var playerEntityId = world.PlayerEntityId;
+        if (playerEntityId < 0 || !_manaPool.TryGetReadonly(playerEntityId, out var mana) || mana.MaximumMana <= 0)
+        {
+            _hasMana = false;
+            _manaFraction = 1f;
+            return;
+        }
+
+        _hasMana = true;
+        var effectiveMaximumMana = StatModifierMath.GetEffectiveValue(_statModifiers, playerEntityId, StatModifierTarget.MaximumMana, mana.MaximumMana);
+        _manaFraction = effectiveMaximumMana > 0
+            ? MathHelper.Clamp(mana.CurrentMana / effectiveMaximumMana, 0f, 1f)
+            : 1f;
+    }
 
     public void DrawContent(GameTime gameTime, SpriteBatch spriteBatch, Texture2D unitRectangle)
     {
@@ -51,17 +70,9 @@ public sealed class PlayerManaBarContent(World world, ComponentManager component
         var outerRectangle = new Rectangle((int)origin.X, (int)origin.Y, (int)contentSize.X, (int)contentSize.Y);
         spriteBatch.Draw(unitRectangle, outerRectangle, ManaBarPalette.OutlineColor);
 
-        var playerEntityId = world.PlayerEntityId;
-        var hasMana = _manaPool.TryGetReadonly(playerEntityId, out var mana) && mana.MaximumMana > 0;
-        var effectiveMaximumMana = hasMana
-            ? StatModifierMath.GetEffectiveValue(_statModifiers, playerEntityId, StatModifierTarget.MaximumMana, mana.MaximumMana)
-            : 0f;
-        var manaFraction = hasMana && effectiveMaximumMana > 0
-            ? MathHelper.Clamp(mana.CurrentMana / effectiveMaximumMana, 0f, 1f)
-            : 1f;
-        var fillColor = hasMana ? ManaBarPalette.FractionColor(manaFraction) : NoManaColor;
+        var fillColor = _hasMana ? ManaBarPalette.FractionColor(_manaFraction) : NoManaColor;
 
-        var innerWidth = (int)((outerRectangle.Width - 2) * manaFraction);
+        var innerWidth = (int)((outerRectangle.Width - 2) * _manaFraction);
         if (innerWidth > 0)
         {
             spriteBatch.Draw(unitRectangle, new Rectangle(outerRectangle.X + 1, outerRectangle.Y + 1, innerWidth, outerRectangle.Height - 2), fillColor);

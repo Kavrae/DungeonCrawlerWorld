@@ -29,6 +29,9 @@ public sealed class PlayerBlueprint(MathUtility mathUtility, UniqueNumberAllocat
 
     private const short MagicMissileDamage = 5;
 
+    /// <summary>Matches the Expansion group's old fixed slot count -- nobody loses hotkey access just because Expansion now grows past 10. See HotkeyExpansionUnlockComponent's own doc comment.</summary>
+    private const short DefaultUnlockedExpansionSlots = 5;
+
     /// <summary>PermanentHybridBuffTest -- exercises a permanent modifier granting both a flat and a percentage bonus at once. See StatModifierComponent's own doc comment for why this never mutates HealthComponent/AbilityInstanceComponent directly.</summary>
     private const float PermanentOutgoingDamageBonus = 2f;
     private const float PermanentMaximumHealthMultiplierBonus = 0.5f;
@@ -54,9 +57,10 @@ public sealed class PlayerBlueprint(MathUtility mathUtility, UniqueNumberAllocat
         AbilityGrantEffects.Grant(componentManager, entityId, CoreAbilitiesModule.PunchId, manaCost: 0, damageAmount: PunchDamage, cooldownFramesRemaining: 0);
         AbilityGrantEffects.Grant(componentManager, entityId, CoreAbilitiesModule.MagicMissileId, CoreAbilitiesModule.MagicMissileManaCost, damageAmount: MagicMissileDamage, cooldownFramesRemaining: 0);
 
-        componentManager.Merge(entityId, new ActionHotkeyBindingComponent(HotkeySlot.Slot4, CoreAbilitiesModule.HealId));
-        componentManager.Merge(entityId, new ActionHotkeyBindingComponent(HotkeySlot.Slot5, CoreAbilitiesModule.PunchId));
-        componentManager.Merge(entityId, new ActionHotkeyBindingComponent(HotkeySlot.Slot6, CoreAbilitiesModule.MagicMissileId));
+        componentManager.Merge(entityId, new ActionHotkeyBindingComponent(HotkeySlot.DefaultAttack, CoreAbilitiesModule.PunchId));
+        componentManager.Merge(entityId, new ActionHotkeyBindingComponent(HotkeySlot.Base1, CoreAbilitiesModule.HealId));
+        componentManager.Merge(entityId, new ActionHotkeyBindingComponent(HotkeySlot.Base2, CoreAbilitiesModule.MagicMissileId));
+        componentManager.Merge(entityId, new HotkeyExpansionUnlockComponent(unlockedSlotCount: DefaultUnlockedExpansionSlots));
 
         componentManager.Merge(entityId, new CrawlerComponent(crawlerNumberAllocator.Allocate()));
 
@@ -64,6 +68,7 @@ public sealed class PlayerBlueprint(MathUtility mathUtility, UniqueNumberAllocat
 
         InventoryActions.AddItem(componentManager, entityId, CoreItemsModule.HealthPotionId, quantity: 5);
         InventoryActions.AddItem(componentManager, entityId, CoreItemsModule.ManaPotionId, quantity: 5);
+        InventoryActions.AddItem(componentManager, entityId, CoreItemsModule.HotkeyExpansionPotionId, quantity: 3);
 
         StatModifierEffects.Apply(componentManager, entityId, StatModifierTarget.OutgoingDamage, StatModifierOperation.Additive, StatModifierPolarity.Buff,
             canModify: true, magnitude: PermanentOutgoingDamageBonus, durationFrames: StatModifierComponent.Permanent, StatusEffectSource.Admin);

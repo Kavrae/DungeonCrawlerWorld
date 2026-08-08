@@ -56,6 +56,7 @@ public sealed class AbilitiesModule : IGameModule
         componentManager.RegisterPackedPool<PendingAbilityActivationComponent>(
             static (ref PendingAbilityActivationComponent existing, PendingAbilityActivationComponent incoming) => existing = incoming);
         componentManager.RegisterMultiPool<ActionHotkeyBindingComponent>();
+        componentManager.RegisterPackedPool<HotkeyExpansionUnlockComponent>(static (ref existing, incoming) => existing = incoming);
     }
 
     public void RegisterSystems(SystemManager systemManager, ComponentManager componentManager)

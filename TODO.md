@@ -16,12 +16,6 @@ Storage + viewing landed (`Game/Modules/Inventory/`, `Presentation/UI/Inventory/
 
 Engine-side equipment support (slots, equip/unequip mechanics). Companion to the Game-layer equipment rules and the Presentation-layer equipment menu below. Unblocked now that Inventory (above) exists -- equipping is expected to move an `InventoryItemStackComponent` stack into a slot rather than invent its own separate storage.
 
-#### Explore the C# `Span<T>` structure for component storage
-
-Component pools (`DirectComponentPool<T>`/`PackedComponentPool<T>`/`MultiComponentPool<T>`, `Engine/ECS/Components/Stores`) are hot-path -- called every frame, per striped system (see `SystemManager`/`EntityStripeSet` in CLAUDE.md's ECS notes). Worth spiking whether exposing pool data as `Span<T>`/`ReadOnlySpan<T>` (bulk contiguous access, no per-element bounds-check/indirection, no allocation) is a meaningful win over the current per-entity-id indexed access pattern, particularly for systems that process most or all of a pool's population rather than a scattered subset.
-
-Explore before committing -- this is a profiling question (does indexed access actually show up as a real bottleneck anywhere) as much as an API design one; not worth restructuring the pools around until there's a measured case for it.
-
 ## Game
 
 ### High Priority
@@ -33,6 +27,10 @@ Item interactions, storage rules, restricted items, etc. Governs how the Engine-
 #### Consumable items
 
 Items that get used up -- a potion drunk, a scroll read, ammo spent. Needs the item-instance-divergence design noted under Inventory system above (a consumable's remaining-uses count is exactly the kind of per-slot state that doesn't exist yet) plus an actual "use" action, which interacting-with-items work (out of scope for the storage/viewing pass that landed Inventory) will need to define.
+
+#### ConsumableEffect effect shape doesn't scale
+
+`ConsumableEffect` (`Game/Modules/Inventory/ConsumableEffect.cs`) grows a new dedicated field every time a consumable needs a new kind of effect -- `HealFraction`, `ManaFraction`, and now `HotkeySlotGrant` (the Hotkey Expansion Potion), each read independently by `ConsumableActivationSystem.ApplyPotionToTarget`. That's fine at 3 effects, but a real consumable system will eventually want dozens or hundreds of distinct effects (buffs, debuffs, teleports, summons, ...), and one dedicated record field per effect doesn't scale to that -- revisit with a real data-driven/composable effect list (closer to how `AbilityEffect`/`AbilityEffectResolver` already handle an ability's own varied effects) before adding a fourth or fifth one-off field here.
 
 #### Move inventory items to the hotbar
 
@@ -247,6 +245,20 @@ First concrete implementation, landed: a popup window (`GameShellBootstrapper.Op
 Deliberately out of scope for this first pass -- start narrow; see Text Input Enhanced Features below for what's deferred and why.
 
 Affected: `Presentation/UI/Window.cs` (new `HandleTextInput` hook, `NextTextBoxAfter`, `FocusRequested`), `Presentation/UI/IWindowContent.cs` (new hook), `Presentation/Input/GameInputController.cs` (new routing method, `SetFocus` auto-redirect), `Presentation/UI/TextBox.cs` (new), `Presentation/UI/Notifications/NotificationCenter.cs` (consumer for the demo).
+
+#### AbilityTargetingController name no longer matches its scope
+
+`Presentation/UI/AbilityTargetingController.cs`'s own doc comment describes it as "player's moment-to-moment action input" -- WASD movement (`HandlePlayerMovementInput`) and hotbar hotkey routing (`HandleHotkeys`/`HandleHotbarHotkeys`) are handled there "alongside" ability/item arm-target-confirm, not incidentally. The name only reflects the targeting piece, which is now a minority of what the class does.
+
+Before just renaming it (candidate: `PlayerActionController`, or something that avoids colliding with `GameInputController`), work out a proper division of responsibilities between this class and `Presentation/Input/GameInputController.cs`: `GameInputController` already owns general input dispatch (mouse, focus, hit-testing, content-drag) and forwards raw hotkey `KeyboardState` into windows via `OnHotkeysAction`, while `AbilityTargetingController` owns both the keyboard-to-slot translation (`HandleHotbarHotkeys`) and the resulting arm/target/confirm state machine. Decide whether movement input, hotkey-to-slot routing, and ability/item targeting genuinely belong in one class or should split along a cleaner "raw input dispatch" vs. "player action state machine" boundary -- then rename to match whatever that boundary turns out to be, rather than renaming first and leaving the actual scope question unresolved.
+
+### Medium Priority
+
+#### Diagonal movement input timing
+
+`AbilityTargetingController.HandlePlayerMovementInput` reads `KeyboardState` once per poll and only treats a move as diagonal if both direction keys happen to be down in that same instant. A human rarely presses two keys in the exact same frame -- a few-frame gap between, say, pressing W then D lands as a cardinal move (consuming its cooldown) before the second key registers, even though the player meant to move diagonally. Needs a short input-buffering window (hold the first key's delta briefly, waiting to see if a second orthogonal key follows, before committing to a cardinal move) instead of reading raw simultaneity.
+
+Affected: `Presentation/UI/AbilityTargetingController.cs` (`HandlePlayerMovementInput`).
 
 ### Low Priority
 

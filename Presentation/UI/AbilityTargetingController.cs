@@ -1,6 +1,7 @@
 using Engine.ECS.Components.Stores;
 using Engine.Math;
 using Engine.Utilities;
+using Game.Modules;
 using Game.Modules.Abilities;
 using Game.Modules.Abilities.Components;
 using Game.Modules.Core.Components;
@@ -145,8 +146,8 @@ public sealed class AbilityTargetingController(
     /// {ability, item} is armed from MapViewState itself rather than taking either id as a
     /// parameter -- mirrors CancelArmedOrPendingAction, which already does the same.
     ///
-    /// A Potion specifically gets one more special case: clicking your own tile confirms as a
-    /// self-only activation (see TryActivateItemOnSelf) rather than resolving the real Burst
+    /// A Tag.Self item specifically gets one more special case: clicking your own tile confirms
+    /// as a self-only activation (see TryActivateItemOnSelf) rather than resolving the real Burst
     /// shape centered on yourself -- otherwise a manual click on your own tile would splash onto
     /// your neighbors while double-tapping the same slot (also self-targeted) wouldn't, two
     /// different results for the same intent. Targeting any other tile is untouched -- still the
@@ -168,7 +169,7 @@ public sealed class AbilityTargetingController(
         if (targetTile == transform.Position &&
             mapViewState.ArmedItemDefinitionId is { } itemId &&
             itemCatalog.TryGet(itemId, out var item) &&
-            item.Consumable is { Kind: ConsumableKind.Potion })
+            item.Tags.Contains(Tag.Self))
         {
             TryActivateItemOnSelf(world.PlayerEntityId, itemId);
             Disarm();
@@ -210,18 +211,23 @@ public sealed class AbilityTargetingController(
     }
 
     /// <summary>
-    /// One hotkey slot per HotkeySlotLayout.PhysicalKeyBySlot entry -- an unbound slot's press
-    /// is silently a no-op (see HandleHotkeySlotPress), which is exactly what a slot with neither
-    /// an ActionHotkeyBindingComponent nor an ItemHotkeyBindingComponent instance already
-    /// produces, so no separate "is this slot enabled" check is needed here.
+    /// One hotkey slot per HotkeySlotLayout.Entries entry -- an unbound slot's press is silently
+    /// a no-op (see HandleHotkeySlotPress), which is exactly what a slot with neither an
+    /// ActionHotkeyBindingComponent nor an ItemHotkeyBindingComponent instance already produces,
+    /// so no separate "is this slot enabled" check is needed here. A Shift-page Expansion slot
+    /// (RequiresShift) only fires while Shift is actually held -- e.g. plain "1" and Shift+"1" are
+    /// two different slots (Slot1 and Slot11) sharing the same physical key, distinguished only by
+    /// current Shift state, not by two separate keys.
     /// </summary>
     private void HandleHotbarHotkeys(KeyboardState keyboardState, KeyboardState previousKeyboardState)
     {
-        foreach (var (slot, physicalKey) in HotkeySlotLayout.PhysicalKeyBySlot)
+        var shiftHeld = keyboardState.IsKeyDown(Keys.LeftShift) || keyboardState.IsKeyDown(Keys.RightShift);
+
+        foreach (var entry in HotkeySlotLayout.Entries)
         {
-            if (Window.WasKeyPressed(keyboardState, previousKeyboardState, physicalKey))
+            if (entry.RequiresShift == shiftHeld && Window.WasKeyPressed(keyboardState, previousKeyboardState, entry.Key))
             {
-                HandleHotkeySlotPress(slot);
+                HandleHotkeySlotPress(entry.Slot);
             }
         }
     }
@@ -308,14 +314,14 @@ public sealed class AbilityTargetingController(
     /// InventoryItemStackComponent's "no instance means empty" convention, the same one
     /// InventoryActions.ConsumeItem relies on), is inert, the same no-op an unbound slot already
     /// is -- HotbarContent greys it out the same way, so "can't be armed" and "looks unusable"
-    /// stay in sync. A Potion double-tap always activates on the caster's own tile
-    /// (TryActivateItemOnSelf), skipping arm/target entirely -- "double-tap always uses the
-    /// potion on the user," regardless of what's currently armed. Not generalized to every
-    /// ConsumableKind: a future self-only kind (e.g. a bandage) already resolves to Self via its
-    /// own ConsumableEffect.Targeting through the ordinary arm/confirm path below, so it doesn't
-    /// need this shortcut to behave the same way. A non-double-tap re-press of an already-armed
-    /// slot confirms against the cursor instead (see TryConfirmActivationAtTile) -- same rhythm
-    /// as HandleAbilitySlotPress, cancelling is right-click/Escape's job now.
+    /// stay in sync. Any item tagged Tag.Self (Health/Mana/Hotkey Expansion Potion today) has its
+    /// double-tap always activate on the caster's own tile (TryActivateItemOnSelf), skipping
+    /// arm/target entirely -- "double-tap always uses it on the user," regardless of what's
+    /// currently armed. Keyed off the tag rather than ConsumableKind.Potion specifically, so a
+    /// future non-Potion self-only item (e.g. a bandage) gets the same shortcut just by carrying
+    /// Tag.Self. A non-double-tap re-press of an already-armed slot confirms against the cursor
+    /// instead (see TryConfirmActivationAtTile) -- same rhythm as HandleAbilitySlotPress,
+    /// cancelling is right-click/Escape's job now.
     /// </summary>
     private void HandleItemSlotPress(HotkeySlot slot, Guid itemDefinitionId, bool isDoubleTap)
     {
@@ -329,7 +335,7 @@ public sealed class AbilityTargetingController(
             return;
         }
 
-        if (isDoubleTap && consumable.Kind == ConsumableKind.Potion)
+        if (isDoubleTap && item.Tags.Contains(Tag.Self))
         {
             TryActivateItemOnSelf(world.PlayerEntityId, itemDefinitionId);
 
