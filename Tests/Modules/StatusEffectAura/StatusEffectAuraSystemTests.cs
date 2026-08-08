@@ -282,6 +282,11 @@ public sealed class StatusEffectAuraSystemTests
     public void MovingOutAndBackInBeforeNextTick_DoesNotRegrantOrResetTimer()
     {
         var (system, componentManager, _, movedEntities) = Build();
+        // Pinned to Local so the two 30-frame loops' exact FramesUntilNextTick assertions below
+        // (framesPerVisit == base StripeCount, matching AuraEffects.TickIntervalFrames pacing)
+        // don't depend on whatever the untiered fail-open default happens to be -- this test is
+        // about regrant/reset behavior, not tier throttling.
+        componentManager.GetDirectPool<ProcessingTierComponent>().Add(ObserverEntityId, new ProcessingTierComponent(ProcessingTierLevel.Local));
         AddSource(componentManager, SourceEntityId, SourcePosition, StatusEffectType.Burning, strength: 8);
 
         MoveObserverTo(system, movedEntities, new Vector3Int(0, 0, 0), SourcePosition);

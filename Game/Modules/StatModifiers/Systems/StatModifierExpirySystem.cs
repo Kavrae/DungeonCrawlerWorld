@@ -10,7 +10,12 @@ namespace Game.Modules.StatModifiers.Systems;
 /// <summary>
 /// Ticks every active StatModifierComponent's RemainingDurationFrames down toward 0 and removes
 /// it once it gets there -- a permanent modifier (RemainingDurationFrames == Permanent, -1)
-/// never enters the decrement branch and never equals 0, so it's untouched forever. StripeCount
+/// never enters the decrement branch and never equals 0, so it's untouched forever. Because of
+/// that, this system's TieredEntityStripeSet is driven off ExpiringStatModifierComponent
+/// membership, not StatModifierComponent membership directly -- an entity holding only permanent
+/// modifiers (most of the game's population, e.g. every Goblin's racial damage reduction) is
+/// never due at all, rather than being visited every cycle just to find nothing to do. See
+/// ExpiringStatModifierComponent's own doc comment for the full reasoning. StripeCount
 /// 1 (visits every entity every real frame) for exact frame counting, the same reasoning
 /// DelayedActionSystem/PoisonSystem use -- exact only for a Local-tier entity, though: a
 /// throttled (Neighborhood/Borough/Beyond-tier) entity is visited less often via
@@ -40,16 +45,27 @@ public sealed class StatModifierExpirySystem : ISystem
     public byte StripeCount => StripeCountValue;
 
     private readonly MultiComponentPool<StatModifierComponent> _statModifiers;
+    private readonly MultiComponentPool<ExpiringStatModifierComponent> _expiringMarkers;
     private readonly EventBus _eventBus;
     private readonly TieredEntityStripeSet _tieredStripeSet;
     private readonly List<StatModifierTarget> _pendingExpirations = [];
 
-    public StatModifierExpirySystem(MultiComponentPool<StatModifierComponent> statModifiers, DirectComponentPool<ProcessingTierComponent> processingTiers, ProcessingTierEvents processingTierEvents, EventBus eventBus)
+    public StatModifierExpirySystem(
+        MultiComponentPool<StatModifierComponent> statModifiers,
+        MultiComponentPool<ExpiringStatModifierComponent> expiringMarkers,
+        DirectComponentPool<ProcessingTierComponent> processingTiers,
+        ProcessingTierEvents processingTierEvents,
+        EventBus eventBus)
     {
         _statModifiers = statModifiers;
+        _expiringMarkers = expiringMarkers;
         _eventBus = eventBus;
 
-        _tieredStripeSet = ProcessingTierWiring.CreateAndWire(StripeCount, statModifiers, processingTiers, processingTierEvents);
+        // Driven off expiringMarkers, not statModifiers -- see ExpiringStatModifierComponent's
+        // own doc comment. statModifiers is still what Update actually walks below (a due
+        // entity's permanent and temporary modifiers live in the same chain), this just
+        // controls which entities are ever due at all.
+        _tieredStripeSet = ProcessingTierWiring.CreateAndWire(StripeCount, expiringMarkers, processingTiers, processingTierEvents);
     }
 
     public void Update(EngineTime time, byte stripeIndex)
@@ -74,6 +90,15 @@ public sealed class StatModifierExpirySystem : ISystem
 
             while (_statModifiers.RemoveFirst(entityId, static (ref readonly StatModifierComponent modifier) => modifier.RemainingDurationFrames == 0))
             {
+            }
+
+            // One marker per modifier that just expired -- _pendingExpirations was collected
+            // above from RemainingDurationFrames == 1 entries only, which are exactly the
+            // non-permanent ones the while loop just removed (a permanent modifier's -1 never
+            // satisfies either condition), so the counts line up 1:1.
+            for (var i = 0; i < _pendingExpirations.Count; i++)
+            {
+                _expiringMarkers.RemoveFirst(entityId, static (ref readonly ExpiringStatModifierComponent _) => true);
             }
 
             foreach (var target in _pendingExpirations)

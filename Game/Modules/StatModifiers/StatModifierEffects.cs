@@ -20,5 +20,10 @@ public static class StatModifierEffects
     {
         componentManager.GetMultiPool<StatModifierComponent>().Add(entityId, new StatModifierComponent(
             target, operation, polarity, canModify, magnitude, durationFrames, source));
+
+        if (durationFrames != StatModifierComponent.Permanent)
+        {
+            componentManager.GetMultiPool<ExpiringStatModifierComponent>().Add(entityId, new ExpiringStatModifierComponent());
+        }
     }
 }

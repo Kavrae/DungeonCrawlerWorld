@@ -123,7 +123,12 @@ public sealed class ContactDamageSystemTests
     [TestMethod]
     public void SteppingOntoHazard_AddsExposureWithCountdownAlreadyTickedOnceThisFrame()
     {
-        var (system, _, exposures, _, _, movedEntities, _, _) = Build();
+        var (system, _, exposures, _, _, movedEntities, _, processingTiers) = Build();
+        // Pinned to Local so this test's per-frame decrement math (framesPerVisit == 1) is exact
+        // -- it's testing damage timing, not tier throttling (see the Update_ThrottledMover_*
+        // tests below for that), so it shouldn't depend on whatever the untiered fail-open
+        // default happens to be.
+        processingTiers.Add(MoverEntityId, new ProcessingTierComponent(ProcessingTierLevel.Local));
 
         movedEntities.Record(new EntityMovedEvent(MoverEntityId, new Vector3Int(4, 5, 0), new Vector3Int(5, 5, 0), new Vector2Byte(1, 1)));
         SimulateFrame(system, movedEntities);
@@ -147,7 +152,9 @@ public sealed class ContactDamageSystemTests
     [TestMethod]
     public void RemainingOnHazard_DealsDamageAgainAfterSixtyFrames()
     {
-        var (system, _, _, health, _, movedEntities, _, _) = Build();
+        var (system, _, _, health, _, movedEntities, _, processingTiers) = Build();
+        // See SteppingOntoHazard_AddsExposureWithCountdownAlreadyTickedOnceThisFrame's own comment.
+        processingTiers.Add(MoverEntityId, new ProcessingTierComponent(ProcessingTierLevel.Local));
         movedEntities.Record(new EntityMovedEvent(MoverEntityId, new Vector3Int(4, 5, 0), new Vector3Int(5, 5, 0), new Vector2Byte(1, 1)));
 
         // The first of these 60 frames both drains the buffer (adding the exposure and dealing
@@ -164,7 +171,9 @@ public sealed class ContactDamageSystemTests
     [TestMethod]
     public void RemainingOnHazard_FiftyNineFrames_DoesNotDealDamageYet()
     {
-        var (system, _, _, health, _, movedEntities, _, _) = Build();
+        var (system, _, _, health, _, movedEntities, _, processingTiers) = Build();
+        // See SteppingOntoHazard_AddsExposureWithCountdownAlreadyTickedOnceThisFrame's own comment.
+        processingTiers.Add(MoverEntityId, new ProcessingTierComponent(ProcessingTierLevel.Local));
         movedEntities.Record(new EntityMovedEvent(MoverEntityId, new Vector3Int(4, 5, 0), new Vector3Int(5, 5, 0), new Vector2Byte(1, 1)));
 
         for (var frame = 0; frame < 59; frame++)
@@ -212,7 +221,9 @@ public sealed class ContactDamageSystemTests
     [TestMethod]
     public void HazardToHazardMove_RetriggersImmediateDamageAndResetsCountdown()
     {
-        var (system, hazards, exposures, health, mapQuery, movedEntities, _, _) = Build();
+        var (system, hazards, exposures, health, mapQuery, movedEntities, _, processingTiers) = Build();
+        // See SteppingOntoHazard_AddsExposureWithCountdownAlreadyTickedOnceThisFrame's own comment.
+        processingTiers.Add(MoverEntityId, new ProcessingTierComponent(ProcessingTierLevel.Local));
         const int secondTerrainEntityId = 101;
         hazards.Add(secondTerrainEntityId, new DamageOnContactComponent(damagePerTick: 10, tickIntervalFrames: 60));
         mapQuery.SetTerrain(new Vector3Int(6, 5, 0), secondTerrainEntityId);

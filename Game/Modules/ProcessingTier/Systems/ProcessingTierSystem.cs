@@ -25,8 +25,16 @@ namespace Game.Modules.ProcessingTier.Systems;
 /// for a Beyond entity -- before its next check catches it up, after which its own cadence
 /// speeds up immediately) for reusing the exact same infrastructure as every other consumer,
 /// rather than a bespoke spatial index. A newly-added mover has no ProcessingTierComponent yet,
-/// so the existing fail-open-to-Local convention (TieredEntityStripeSet.OnMemberAdded's lookup
-/// delegate) puts it on the fastest cadence until its own first real computation lands.
+/// so it fails open to Beyond (TieredEntityStripeSet.OnMemberAdded's lookup delegate, see
+/// ProcessingTierWiring's own doc comment) -- the slowest cadence, not the fastest -- until its
+/// own first real computation lands. Bulk population creates the overwhelming majority of the
+/// game's entities all at once, before this system has run even a single time, so "unknown"
+/// needs to default cheap: assuming every one of them might be right next to the player would
+/// make the exact same startup cost this system exists to avoid, just deferred by zero frames
+/// instead of avoided. A newly-spawned entity that's genuinely close to the player pays the same
+/// bounded promotion lag any other entity closing distance already does (see the Local-entry
+/// paragraph below) -- self-correcting within one coarse-tier period, not a permanent
+/// misclassification.
 ///
 /// Four tiers, same-layer (Vector3Int.Z) entities only get past the first check -- a different
 /// MapLayer (Ground/UnderGround/Flying) is never visible to the player regardless of X/Y, so
@@ -76,7 +84,7 @@ public sealed class ProcessingTierSystem : ISystem
         _tieredStripeSet = ProcessingTierWiring.CreateAndWire(StripeCount, movementComponents, tiers, events);
     }
 
-    /// <summary>Nothing to do before a real player position exists -- consumers treat an absent ProcessingTierComponent as Local (see TieredEntityStripeSet.OnMemberAdded), so leaving every entity untiered until spawn is the correct default, not a special case.</summary>
+    /// <summary>Nothing to do before a real player position exists -- consumers treat an absent ProcessingTierComponent as Beyond (see TieredEntityStripeSet.OnMemberAdded / ProcessingTierWiring's own doc comment), so leaving every entity untiered until spawn is the correct default, not a special case.</summary>
     public void Update(EngineTime time, byte stripeIndex)
     {
         if (_playerQuery is null || !_transforms.TryGetReadonly(_playerQuery.PlayerEntityId, out var playerTransform))

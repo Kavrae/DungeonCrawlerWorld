@@ -32,16 +32,26 @@ public sealed class BurningSystemTests
     private static DirectComponentPool<ProcessingTierComponent> CreateTiersPool() =>
         new(initialCapacity: 10, static (ref existing, incoming) => existing = incoming);
 
-    /// <summary>BurningSystem is striped (see its own doc comment), so CountdownTicker.Tick decrements FramesUntilNextTick by StripeCount per visit, not by 1 -- otherwise a striped entity's timer would take TickIntervalFrames * StripeCount real frames to fire instead of TickIntervalFrames.</summary>
+    /// <summary>
+    /// BurningSystem is striped (see its own doc comment), so CountdownTicker.Tick decrements
+    /// FramesUntilNextTick by StripeCount per visit, not by 1 -- otherwise a striped entity's
+    /// timer would take TickIntervalFrames * StripeCount real frames to fire instead of
+    /// TickIntervalFrames. Pinned to Local (framesPerVisit == base StripeCount exactly, no tier
+    /// divisor on top) since that's what this test is verifying -- untiered would fail open to
+    /// Beyond's divisor-8 framesPerVisit instead, which is a different (and separately tested,
+    /// see Update_ThrottledEntity_*) concern.
+    /// </summary>
     [TestMethod]
     public void Update_CountdownDecrementsByStripeCountPerVisit()
     {
         var timers = CreateTimerPool();
         var stacks = CreateStackPool();
         var health = CreateHealthPool();
+        var tiers = CreateTiersPool();
         stacks.Add(0, new StatusEffectStack(StatusEffectType.Burning, StatusEffectSource.Admin));
         timers.Add(0, new BurningTimerComponent(60, stackCount: 1));
-        var system = new BurningSystem(timers, stacks, health, new EventBus(), new FakePlayerQuery(0), CreateTiersPool(), new ProcessingTierEvents());
+        tiers.Add(0, new ProcessingTierComponent(ProcessingTierLevel.Local));
+        var system = new BurningSystem(timers, stacks, health, new EventBus(), new FakePlayerQuery(0), tiers, new ProcessingTierEvents());
 
         system.Update(default, 0);
 

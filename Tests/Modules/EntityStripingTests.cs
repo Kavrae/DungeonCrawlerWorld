@@ -46,6 +46,7 @@ public sealed class EntityStripingTests
             static (ref existing, incoming) => existing = incoming);
 
         var abilityScores = new MultiComponentPool<AbilityScoreComponent>(entityCount, entityCount);
+        var processingTiers = new DirectComponentPool<ProcessingTierComponent>(initialCapacity: entityCount, static (ref existing, incoming) => existing = incoming);
         for (var entityId = 0; entityId < entityCount; entityId++)
         {
             pool.Add(entityId, new HealthComponent(currentHealth: 0, maximumHealth: 1000));
@@ -53,9 +54,12 @@ public sealed class EntityStripingTests
             // actually changes CurrentHealth (a nonzero, easily-detected "touch"), same role
             // the old flat healthRegen:1 constructor argument used to play.
             abilityScores.Add(entityId, new AbilityScoreComponent(AbilityScoreType.Constitution, baseValue: 300, total: 300));
+            // Pinned to Local -- this test is about striping/cycle-coverage correctness
+            // (StripeCount frames == one full cycle), not tier throttling, so it shouldn't
+            // depend on whatever the untiered fail-open default happens to be.
+            processingTiers.Add(entityId, new ProcessingTierComponent(ProcessingTierLevel.Local));
         }
 
-        var processingTiers = new DirectComponentPool<ProcessingTierComponent>(initialCapacity: entityCount, static (ref existing, incoming) => existing = incoming);
         var system = new HealthRegenSystem(pool, processingTiers, new ProcessingTierEvents(), abilityScores: abilityScores);
         var touchCountByEntityId = new int[entityCount];
         var previousHealth = new float[entityCount];
@@ -104,15 +108,18 @@ public sealed class EntityStripingTests
             static (ref existing, incoming) => existing = incoming);
 
         var abilityScores = new MultiComponentPool<AbilityScoreComponent>(100, 100);
+        // Pinned to Local for every entity below -- see the previous test's own comment on why.
+        var processingTiers = new DirectComponentPool<ProcessingTierComponent>(initialCapacity: 100, static (ref existing, incoming) => existing = incoming);
         for (var entityId = 0; entityId < 10; entityId++)
         {
             pool.Add(entityId, new HealthComponent(currentHealth: 0, maximumHealth: 1000));
             abilityScores.Add(entityId, new AbilityScoreComponent(AbilityScoreType.Constitution, baseValue: 300, total: 300));
+            processingTiers.Add(entityId, new ProcessingTierComponent(ProcessingTierLevel.Local));
         }
         pool.Add(69, new HealthComponent(currentHealth: 0, maximumHealth: 1000)); // Stripe 9 (69 % 60), alongside entity 9.
         abilityScores.Add(69, new AbilityScoreComponent(AbilityScoreType.Constitution, baseValue: 300, total: 300));
+        processingTiers.Add(69, new ProcessingTierComponent(ProcessingTierLevel.Local));
 
-        var processingTiers = new DirectComponentPool<ProcessingTierComponent>(initialCapacity: 100, static (ref existing, incoming) => existing = incoming);
         var system = new HealthRegenSystem(pool, processingTiers, new ProcessingTierEvents(), abilityScores: abilityScores);
         var touchCountByEntityId = new Dictionary<int, int>();
         var previousHealth = new Dictionary<int, float> { [69] = 0 };
@@ -212,6 +219,18 @@ public sealed class EntityStripingTests
             var transform = new TransformComponent(new Vector3Int(x % 20, x / 20, 0), new Vector2Byte(1, 1));
             ecsContext.ComponentManager.GetDirectPool<TransformComponent>().Add(entityId, transform);
             world.PlaceEntityOnMap(entityId, transform.Position, ref transform);
+
+            // Pinned to Local, and added *before* HealthComponent below -- there's no player
+            // entity/IPlayerQuery registered in this test, so the real ProcessingTierSystem
+            // never actually computes a tier for anyone (its own Update no-ops without a
+            // player). This test is about striping/cycle-coverage correctness across real
+            // systems, not tier throttling, so it shouldn't depend on whatever the untiered
+            // fail-open default happens to be. Must come before healthPool.Add: HealthRegenSystem's
+            // TieredEntityStripeSet is driven off the health pool's EntityAdded event, which
+            // looks up this entity's tier at the moment it fires -- adding the
+            // ProcessingTierComponent afterward wouldn't retroactively fix its bucket, since
+            // nothing in this test ever raises TierChanged to migrate it later.
+            ecsContext.ComponentManager.GetDirectPool<ProcessingTierComponent>().Add(entityId, new ProcessingTierComponent(ProcessingTierLevel.Local));
 
             // Starts at 0, not MaximumHealth, so "CurrentHealth > 0" below actually proves
             // HealthRegenSystem touched this entity rather than being vacuously true from

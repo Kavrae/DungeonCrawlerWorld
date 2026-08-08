@@ -531,9 +531,17 @@ public sealed class MovementSystemTests
         Assert.AreNotEqual(startPosition, transformPool.GetReadonly(0).Position);
     }
 
-    /// <summary>The pool is wired (unlike every test above, which passes null outright) but this entity has never been visited by ProcessingTierSystem, so it has no ProcessingTierComponent yet -- must fail open to full, unthrottled processing rather than being treated as maximally throttled.</summary>
+    /// <summary>
+    /// The pool is wired (unlike every test above, which passes null outright) but this entity
+    /// has never been visited by ProcessingTierSystem, so it has no ProcessingTierComponent yet
+    /// -- must fail open to Beyond (the slowest cadence, see ProcessingTierWiring's own doc
+    /// comment on why), not Local. Entity 0's stripe bucket is always 0 (entityId % StripeCount
+    /// == 0 for entity 0, regardless of StripeCount), and MovementSystem's own base StripeCount
+    /// is 15, so Beyond's divisor-8 EntityStripeSet has StripeCount 120: due at FrameCount 120,
+    /// not due at FrameCount 15 (which would only be due under the old, incorrect Local default).
+    /// </summary>
     [TestMethod]
-    public void Update_ProcessingTierPoolWiredButEntityUntiered_ProcessesNormally()
+    public void Update_ProcessingTierPoolWiredButEntityUntiered_FailsOpenToBeyond_NotDueAtLocalCadence()
     {
         var transformPool = CreateTransformPool();
         var actionLockPool = CreateActionLockPool();
@@ -546,9 +554,30 @@ public sealed class MovementSystemTests
         transformPool.Add(0, new TransformComponent(startPosition, new Vector2Byte(1, 1)));
         actionLockPool.Add(0, new ActionLockComponent(totalLockFrames: 0, lockFramesRemaining: 0));
         movementPool.Add(0, new MovementComponent(MovementMode.Random, 10, null, new Vector3Int(3, 2, 0)));
-        // Entity 0 deliberately has no ProcessingTierComponent -- defaults to Local tier (divisor 1), the same cadence as before ProcessingTier existed (StripeCount 15, bucket 0, due when FrameCount % 15 == 0).
         var system = new MovementSystem(transformPool, actionLockPool, movementPool, mapQuery, new EventBus(), entityMoveSync, new FrameEventBuffer<EntityMovedEvent>(), null, processingTiers, new ProcessingTierEvents());
-        system.Update(new EngineTime(default, default, false, FrameCount: 0), 0);
+        system.Update(new EngineTime(default, default, false, FrameCount: 15), 0);
+
+        Assert.IsNull(entityMoveSync.LastSynced);
+        Assert.AreEqual(startPosition, transformPool.GetReadonly(0).Position);
+    }
+
+    /// <summary>Same setup as above, but at FrameCount 120 -- genuinely due under the Beyond default (StripeCount 15 * divisor 8), not just the FrameCount-0 case every StripeCount is trivially due at.</summary>
+    [TestMethod]
+    public void Update_ProcessingTierPoolWiredButEntityUntiered_ProcessesOnBeyondCadence()
+    {
+        var transformPool = CreateTransformPool();
+        var actionLockPool = CreateActionLockPool();
+        var movementPool = CreateMovementPool();
+        var processingTiers = CreateProcessingTierPool();
+        var mapQuery = new FakeMapQuery(new Vector3Int(5, 5, 1));
+        var entityMoveSync = new RecordingEntityMoveSync();
+
+        var startPosition = new Vector3Int(2, 2, 0);
+        transformPool.Add(0, new TransformComponent(startPosition, new Vector2Byte(1, 1)));
+        actionLockPool.Add(0, new ActionLockComponent(totalLockFrames: 0, lockFramesRemaining: 0));
+        movementPool.Add(0, new MovementComponent(MovementMode.Random, 10, null, new Vector3Int(3, 2, 0)));
+        var system = new MovementSystem(transformPool, actionLockPool, movementPool, mapQuery, new EventBus(), entityMoveSync, new FrameEventBuffer<EntityMovedEvent>(), null, processingTiers, new ProcessingTierEvents());
+        system.Update(new EngineTime(default, default, false, FrameCount: 120), 0);
 
         Assert.IsNotNull(entityMoveSync.LastSynced);
         Assert.AreNotEqual(startPosition, transformPool.GetReadonly(0).Position);

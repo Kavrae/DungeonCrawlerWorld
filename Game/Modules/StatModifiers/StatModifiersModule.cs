@@ -30,12 +30,16 @@ public sealed class StatModifiersModule : IGameModule
         _eventBus = context.EventBus;
     }
 
-    public void RegisterComponents(ComponentManager componentManager) =>
+    public void RegisterComponents(ComponentManager componentManager)
+    {
         componentManager.RegisterMultiPool<StatModifierComponent>();
+        componentManager.RegisterMultiPool<ExpiringStatModifierComponent>();
+    }
 
     public void RegisterSystems(SystemManager systemManager, ComponentManager componentManager) =>
         systemManager.Register(new StatModifierExpirySystem(
             componentManager.GetMultiPool<StatModifierComponent>(),
+            componentManager.GetMultiPool<ExpiringStatModifierComponent>(),
             componentManager.GetDirectPool<ProcessingTierComponent>(),
             _processingTierEvents,
             _eventBus));
