@@ -34,7 +34,7 @@ Items that get used up -- a potion drunk, a scroll read, ammo spent. Needs the i
 
 #### Move inventory items to the hotbar
 
-`ItemHotkeyBindingComponent` (`Game/Modules/Inventory/Components/`) plus `ConsumableActivationSystem`/`AbilityTargetingController`'s item-arm/target/confirm/double-tap path have landed -- a slot can reference an item and activate it (splash-throw or double-tap-self for potions), separately from `ActionHotkeyBindingComponent` (renamed from `HotkeyBindingComponent`, the ability-only original). `Presentation/UI/Content/HotbarContent.cs` still only *renders* ability slots though (Phase 4), and the only way to actually bind an item to a slot today is `PlayerBlueprint`'s TEMPORARY hardcoded grant -- real click-and-drag assignment (Phase 5) still depends on the Standard widget set item below.
+`ItemHotkeyBindingComponent` (`Game/Modules/Inventory/Components/`) plus `ConsumableActivationSystem`/`ActionTargetingController`'s item-arm/target/confirm/double-tap path have landed -- a slot can reference an item and activate it (splash-throw or double-tap-self for potions), separately from `ActionHotkeyBindingComponent` (renamed from `HotkeyBindingComponent`, the ability-only original). `Presentation/UI/Content/HotbarContent.cs` still only *renders* ability slots though (Phase 4), and the only way to actually bind an item to a slot today is `PlayerBlueprint`'s TEMPORARY hardcoded grant -- real click-and-drag assignment (Phase 5) still depends on the Standard widget set item below.
 
 #### Shops and storage containers
 
@@ -204,7 +204,7 @@ Each unique tag across the player's inventory (`ItemDefinition.Tags`, e.g. `Tag.
 
 #### Context menu / mouse button coverage
 
-Right-click dropdown of options. `GameInputController` today only ever reads `MouseState.LeftButton` -- no right-click, middle-click, or double-click detection exists anywhere, so building this needs that mouse-button coverage added first (also enables incidental wins like double-click-title-bar-to-maximize).
+Right-click dropdown of options. `UiInputController` today only ever reads `MouseState.LeftButton` -- no right-click, middle-click, or double-click detection exists anywhere, so building this needs that mouse-button coverage added first (also enables incidental wins like double-click-title-bar-to-maximize).
 
 #### Player stats v1
 
@@ -224,7 +224,7 @@ The control set today is `Window`, `TextWindow`, `Button`, `MapWindow`, `Folder`
 
 No editable text control exists -- `TextWindow` only ever displays text, never accepts it. Needed for anything resembling a settings screen, chat/console input, search/filter boxes, etc.
 
-Focus (`Window.IsFocused`, `GameInputController`) and two keyboard-routing hooks already exist for a focused window to consume input: `Window.HandleKeyPress`/`OnKeyPressAction` (one discrete key-press event at a time) and `Window.HandleHotkeys`/`OnHotkeysAction` (the whole `KeyboardState`, for modifier-aware combos -- see `MapWindow.OnHotkeysAction`). Neither delivers actual typed *characters* (shifted case, punctuation, OS keyboard layout) though -- that needs a third hook fed from FNA's `TextInputEXT.TextInput` static event (the same "*EXT" extension-class pattern `GameInputController.UpdateCursor` already uses for `MouseCursorEXT`), mirrored the same way as the other two: `Window.HandleTextInput(char)`/`OnTextInputAction`/`IWindowContent.HandleTextInput`, fed by a new `GameInputController.RouteTextInputToFocusedWindow` subscribed to that event once.
+Focus (`Window.IsFocused`, `UiInputController`) and two keyboard-routing hooks already exist for a focused window to consume input: `Window.HandleKeyPress`/`OnKeyPressAction` (one discrete key-press event at a time) and `Window.HandleHotkeys`/`OnHotkeysAction` (the whole `KeyboardState`, for modifier-aware combos -- see `MapWindow.OnHotkeysAction`). Neither delivers actual typed *characters* (shifted case, punctuation, OS keyboard layout) though -- that needs a third hook fed from FNA's `TextInputEXT.TextInput` static event (the same "*EXT" extension-class pattern `UiInputController.UpdateCursor` already uses for `MouseCursorEXT`), mirrored the same way as the other two: `Window.HandleTextInput(char)`/`OnTextInputAction`/`IWindowContent.HandleTextInput`, fed by a new `UiInputController.RouteTextInputToFocusedWindow` subscribed to that event once.
 
 A new `TextBox : TextWindow` control (reusing `TextWindow`'s existing wrap/scroll/draw machinery rather than rebuilding it, single-line just being a fixed-height case of the same class) would be the first thing to actually need all three hooks together:
 
@@ -235,8 +235,8 @@ A new `TextBox : TextWindow` control (reusing `TextWindow`'s existing wrap/scrol
 Behavior once submitted:
 
 - Submitting (plain Enter) raises a `TextSubmitted` event (mirrors `Button.Clicked`) carrying the current text -- the TextBox itself stays generic; whatever hosts it decides what "submit" means.
-- If the TextBox's parent window has another TextBox child, submitting moves focus to it rather than leaving focus on a dead end. Needs a new `Window.NextTextBoxAfter(Window? after)` helper (walks `ChildWindows` in order) plus a way for the TextBox to ask `GameInputController` to actually move focus, since `Window` has no reference to it -- a new `Window.FocusRequested` event, subscribed/unsubscribed by `GameInputController.SetFocus` exactly the way it already subscribes to `Closed`.
-- Whenever a window with TextBox children becomes the focused window (click, Tab-cycle, or `FocusWindow`), redirect into its first TextBox automatically rather than leaving the container itself as the dead-end focus target. Natural place: `GameInputController.SetFocus` itself -- after focusing `newWindow`, check `newWindow.NextTextBoxAfter(null)` and redirect if found. This and the Enter-driven case above are the same underlying primitive (find the next TextBox sibling); `NextTextBoxAfter(null)` doubles as "find the first one."
+- If the TextBox's parent window has another TextBox child, submitting moves focus to it rather than leaving focus on a dead end. Needs a new `Window.NextTextBoxAfter(Window? after)` helper (walks `ChildWindows` in order) plus a way for the TextBox to ask `UiInputController` to actually move focus, since `Window` has no reference to it -- a new `Window.FocusRequested` event, subscribed/unsubscribed by `UiInputController.SetFocus` exactly the way it already subscribes to `Closed`.
+- Whenever a window with TextBox children becomes the focused window (click, Tab-cycle, or `FocusWindow`), redirect into its first TextBox automatically rather than leaving the container itself as the dead-end focus target. Natural place: `UiInputController.SetFocus` itself -- after focusing `newWindow`, check `newWindow.NextTextBoxAfter(null)` and redirect if found. This and the Enter-driven case above are the same underlying primitive (find the next TextBox sibling); `NextTextBoxAfter(null)` doubles as "find the first one."
 
 A visual focus indicator is also needed specifically for this control -- not optional, since without one there's no way to tell a TextBox is focused at all: the existing indicator (`Window.FocusedTitleColor`) only paints a title bar, but a TextBox is expected to be titleless, so it needs its own border/highlight-based indicator instead.
 
@@ -244,21 +244,15 @@ First concrete implementation, landed: a popup window (`GameShellBootstrapper.Op
 
 Deliberately out of scope for this first pass -- start narrow; see Text Input Enhanced Features below for what's deferred and why.
 
-Affected: `Presentation/UI/Window.cs` (new `HandleTextInput` hook, `NextTextBoxAfter`, `FocusRequested`), `Presentation/UI/IWindowContent.cs` (new hook), `Presentation/Input/GameInputController.cs` (new routing method, `SetFocus` auto-redirect), `Presentation/UI/TextBox.cs` (new), `Presentation/UI/Notifications/NotificationCenter.cs` (consumer for the demo).
-
-#### AbilityTargetingController name no longer matches its scope
-
-`Presentation/UI/AbilityTargetingController.cs`'s own doc comment describes it as "player's moment-to-moment action input" -- WASD movement (`HandlePlayerMovementInput`) and hotbar hotkey routing (`HandleHotkeys`/`HandleHotbarHotkeys`) are handled there "alongside" ability/item arm-target-confirm, not incidentally. The name only reflects the targeting piece, which is now a minority of what the class does.
-
-Before just renaming it (candidate: `PlayerActionController`, or something that avoids colliding with `GameInputController`), work out a proper division of responsibilities between this class and `Presentation/Input/GameInputController.cs`: `GameInputController` already owns general input dispatch (mouse, focus, hit-testing, content-drag) and forwards raw hotkey `KeyboardState` into windows via `OnHotkeysAction`, while `AbilityTargetingController` owns both the keyboard-to-slot translation (`HandleHotbarHotkeys`) and the resulting arm/target/confirm state machine. Decide whether movement input, hotkey-to-slot routing, and ability/item targeting genuinely belong in one class or should split along a cleaner "raw input dispatch" vs. "player action state machine" boundary -- then rename to match whatever that boundary turns out to be, rather than renaming first and leaving the actual scope question unresolved.
+Affected: `Presentation/UI/Window.cs` (new `HandleTextInput` hook, `NextTextBoxAfter`, `FocusRequested`), `Presentation/UI/IWindowContent.cs` (new hook), `Presentation/Input/UiInputController.cs` (new routing method, `SetFocus` auto-redirect), `Presentation/UI/TextBox.cs` (new), `Presentation/UI/Notifications/NotificationCenter.cs` (consumer for the demo).
 
 ### Medium Priority
 
 #### Diagonal movement input timing
 
-`AbilityTargetingController.HandlePlayerMovementInput` reads `KeyboardState` once per poll and only treats a move as diagonal if both direction keys happen to be down in that same instant. A human rarely presses two keys in the exact same frame -- a few-frame gap between, say, pressing W then D lands as a cardinal move (consuming its cooldown) before the second key registers, even though the player meant to move diagonally. Needs a short input-buffering window (hold the first key's delta briefly, waiting to see if a second orthogonal key follows, before committing to a cardinal move) instead of reading raw simultaneity.
+`PlayerMovementController.HandleInput` reads `KeyboardState` once per poll and only treats a move as diagonal if both direction keys happen to be down in that same instant. A human rarely presses two keys in the exact same frame -- a few-frame gap between, say, pressing W then D lands as a cardinal move (consuming its cooldown) before the second key registers, even though the player meant to move diagonally. Needs a short input-buffering window (hold the first key's delta briefly, waiting to see if a second orthogonal key follows, before committing to a cardinal move) instead of reading raw simultaneity.
 
-Affected: `Presentation/UI/AbilityTargetingController.cs` (`HandlePlayerMovementInput`).
+Affected: `Presentation/UI/PlayerMovementController.cs` (`HandleInput`).
 
 ### Low Priority
 
@@ -326,7 +320,7 @@ Affected: `Presentation/UI/Window.cs` (`Measure`, `MeasureAndArrange`, `Recalcul
 
 #### Scrollbars
 
-Scrolling itself works (`Window.ScrollBy`/`MaxScrollOffset`, mouse-wheel-driven via `GameInputController.UpdateMouseWheelScroll`), but there's no visual affordance for it -- no thumb, no track, nothing indicating a window's content extends past what's visible or where the current scroll position sits within it, and no way to click-drag to a position directly. Right now a user has to already know to try the mouse wheel.
+Scrolling itself works (`Window.ScrollBy`/`MaxScrollOffset`, mouse-wheel-driven via `UiInputController.UpdateMouseWheelScroll`), but there's no visual affordance for it -- no thumb, no track, nothing indicating a window's content extends past what's visible or where the current scroll position sits within it, and no way to click-drag to a position directly. Right now a user has to already know to try the mouse wheel.
 
 Affected: `Presentation/UI/Window.cs`, `Presentation/UI/TextWindow.cs`.
 
@@ -350,31 +344,31 @@ Everything -- opening, closing, minimizing, restoring, a notification appearing 
 
 #### Options menu
 
-No settings/options screen exists -- pressing Escape currently does nothing. Wanted: Escape (global and unconditional, the same way Tab is -- see `GameInputController.HandleFocusCycling`'s "must stay unconditional" note -- not gated to whichever window holds focus) opens an options menu, and the game pauses while it's open.
+No settings/options screen exists -- pressing Escape currently does nothing. Wanted: Escape (global and unconditional, the same way Tab is -- see `UiInputController.HandleFocusCycling`'s "must stay unconditional" note -- not gated to whichever window holds focus) opens an options menu, and the game pauses while it's open.
 
 `MapWindow.IsPaused` (see `OnHotkeysAction`) is today the only pause trigger, and was flagged when it moved there as a seam to revisit once a second trigger showed up -- this is that second trigger. Worth generalizing pause into something both the options menu and MapWindow's own Space hotkey set, rather than the options menu reaching into MapWindow to flip its flag directly.
 
 Directly related to Pause modality under Global: an open options menu is itself the kind of modal window that item wants -- solving "block/dim input to other windows while a modal is up" there would cover the options menu for free, not just System notifications.
 
-Affected: `Presentation/Input/GameInputController.cs` (Escape handling), `Presentation/UI/` (a new options-menu window), `DungeonCrawlerWorld/GameShellBootstrapper.cs`/`GameLoop.cs` (wiring it in and gating the simulation update on it, alongside `MapWindow.IsPaused`/`NotificationCenter.HasBlockingNotification`).
+Affected: `Presentation/Input/UiInputController.cs` (Escape handling), `Presentation/UI/` (a new options-menu window), `DungeonCrawlerWorld/GameShellBootstrapper.cs`/`GameLoop.cs` (wiring it in and gating the simulation update on it, alongside `MapWindow.IsPaused`/`NotificationCenter.HasBlockingNotification`).
 
 #### Keybindings page on the options menu
 
-After Options menu above -- needs somewhere to live. A page/tab within the options menu listing the game's hotkeys (today hardcoded in `MapWindow.OnHotkeysAction`, plus `GameInputController`'s own Tab/Escape handling) and letting the player remap them.
+After Options menu above -- needs somewhere to live. A page/tab within the options menu listing the game's hotkeys (today hardcoded in `MapWindow.OnHotkeysAction`, plus `UiInputController`'s own Tab/Escape handling) and letting the player remap them.
 
 Depends on Options menu above and Standard widget set above -- listing/remapping actions needs more than `Window`/`TextWindow`/`Button`, at minimum something list-like. Would also eventually want persisted storage for the rebound keys -- see Data storage under Global, though today that item only covers window geometry.
 
-Affected: the new options-menu content (see Options menu above), `Presentation/Input/GameInputController.cs` and `Presentation/UI/MapWindow.cs` (the hotkeys being made rebindable).
+Affected: the new options-menu content (see Options menu above), `Presentation/Input/UiInputController.cs` and `Presentation/UI/MapWindow.cs` (the hotkeys being made rebindable).
 
 #### Targeted key-press routing instead of a full-keyboard scan
 
-`GameInputController.RouteKeyPressesToFocusedWindow` calls `KeyboardState.GetPressedKeys()` every frame a window is focused (effectively always) -- confirmed via reflection against the actual FNA assembly that this is the only overload (no non-allocating variant like MonoGame added), so it allocates a new array every frame for the life of the session.
+`UiInputController.RouteKeyPressesToFocusedWindow` calls `KeyboardState.GetPressedKeys()` every frame a window is focused (effectively always) -- confirmed via reflection against the actual FNA assembly that this is the only overload (no non-allocating variant like MonoGame added), so it allocates a new array every frame for the life of the session.
 
 `HandleKeyPress`/`OnKeyPressAction` (what this routes into) has exactly one real consumer today -- `TextBox.OnKeyPressAction`, which only cares about `Keys.Back`; `IWindowContent.HandleKeyPress` defaults to a no-op for everything else. Rather than scanning the whole keyboard (or, worse, manually diffing all ~130 `Keys` values via `IsKeyDown` every frame as a naive fix), let the currently-focused window's content declare the small set of keys it actually wants checked, and only call `IsKeyDown` for that declared set.
 
 Not actually dependent on the Keybindings page item above -- `HandleKeyPress` (discrete edit-type keypresses, e.g. Backspace) and `HandleHotkeys` (continuous/combo game commands, what Keybindings remaps) are deliberately separate hooks. Sequenced here as a followup for proximity to the other keyboard-routing work, not a real ordering requirement.
 
-Affected: `Presentation/Input/GameInputController.cs` (`RouteKeyPressesToFocusedWindow`), `Presentation/UI/IWindowContent.cs`/`Window.cs` (a new way for content to declare its interested keys), `Presentation/UI/TextBox.cs` (the one current consumer, declaring interest in `Keys.Back`).
+Affected: `Presentation/Input/UiInputController.cs` (`RouteKeyPressesToFocusedWindow`), `Presentation/UI/IWindowContent.cs`/`Window.cs` (a new way for content to declare its interested keys), `Presentation/UI/TextBox.cs` (the one current consumer, declaring interest in `Keys.Back`).
 
 #### Chat and speech
 
@@ -422,13 +416,13 @@ General pass over field/property usage across the codebase once UI and core game
 
 #### Solution-wide code style cleanup
 
-A few conventions got clarified while building the focus/keyboard-routing system (`Window.IsFocused`, `GameInputController`, `MapWindow.OnHotkeysAction`) that haven't been retroactively applied anywhere else in the solution:
+A few conventions got clarified while building the focus/keyboard-routing system (`Window.IsFocused`, `UiInputController`, `MapWindow.OnHotkeysAction`) that haven't been retroactively applied anywhere else in the solution:
 
 - Comments should only explain the WHY when it's genuinely unique or non-intuitive (a hidden constraint, a subtle invariant, a bug workaround) -- not restate what well-named code already makes obvious.
 - Ternary expressions are written on three lines (the condition, then the `?` and `:` branches each on their own indented line), not packed onto one line.
 - Each method should contain a single return, except for leading guard clauses.
 
-`GameInputController.cs`, `Window.cs`, and `MapWindow.cs` were brought up to these as part of that work, but only the parts actually touched -- pre-existing methods in those same files (e.g. `Window.FindTitleButtonAt`/`TryHitTestInteraction`, `GameInputController.GetResizeCursor`, most of `MapWindow`'s rendering code) still predate them, and nothing elsewhere in the solution has been touched at all. Worth a dedicated pass once things settle rather than drive-by reformatting unrelated code mid-feature. Related to Field and property cleanup above -- possibly the same pass.
+`UiInputController.cs`, `Window.cs`, and `MapWindow.cs` were brought up to these as part of that work, but only the parts actually touched -- pre-existing methods in those same files (e.g. `Window.FindTitleButtonAt`/`TryHitTestInteraction`, `UiInputController.GetResizeCursor`, most of `MapWindow`'s rendering code) still predate them, and nothing elsewhere in the solution has been touched at all. Worth a dedicated pass once things settle rather than drive-by reformatting unrelated code mid-feature. Related to Field and property cleanup above -- possibly the same pass.
 
 #### Possible future UI gaps, likely out of scope for this project
 

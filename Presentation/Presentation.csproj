@@ -19,7 +19,7 @@
   </ItemGroup>
 
   <ItemGroup>
-    <!-- Lets Tests exercise internal-scoped seams (e.g. GameInputController's testable
+    <!-- Lets Tests exercise internal-scoped seams (e.g. UiInputController's testable
          state-driven Update overload) without widening them to full public API. -->
     <InternalsVisibleTo Include="Tests" />
   </ItemGroup>

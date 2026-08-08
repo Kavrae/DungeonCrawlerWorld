@@ -29,7 +29,7 @@ public class Button : Element
 
     public string Text { get; private set; }
 
-    /// <summary>True while the mouse is held down over this button -- Draw() swaps Outset/Inset while true, giving the pressed-in look. See GameInputController, which calls SetPressed on press/release.</summary>
+    /// <summary>True while the mouse is held down over this button -- Draw() swaps Outset/Inset while true, giving the pressed-in look. See UiInputController, which calls SetPressed on press/release.</summary>
     public bool IsPressed { get; private set; }
 
     protected SpriteFontBase? Font { get; }

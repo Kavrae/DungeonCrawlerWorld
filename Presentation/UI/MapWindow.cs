@@ -37,7 +37,8 @@ public sealed class MapWindow : Window
     private readonly World _world;
     private readonly MapViewState _mapViewState;
     private readonly MapCamera _camera;
-    private readonly AbilityTargetingController _abilityTargeting;
+    private readonly ActionTargetingController _actionTargeting;
+    private readonly PlayerMovementController _playerMovement;
     private readonly MapBackgroundCache _backgroundCache;
     private readonly MapTintGrid _tintGrid;
     private readonly DirectComponentPool<TransformComponent> _transformPool;
@@ -86,7 +87,8 @@ public sealed class MapWindow : Window
         SpriteSheetService spriteSheetService,
         SpriteRenderer spriteRenderer,
         MapCamera camera,
-        AbilityTargetingController abilityTargeting) : base(fontService, elementPoolService, glyphRenderer)
+        ActionTargetingController actionTargeting,
+        PlayerMovementController playerMovement) : base(fontService, elementPoolService, glyphRenderer)
     {
         ArgumentNullException.ThrowIfNull(world);
         ArgumentNullException.ThrowIfNull(mapViewState);
@@ -98,7 +100,8 @@ public sealed class MapWindow : Window
         ArgumentNullException.ThrowIfNull(spriteSheetService);
         ArgumentNullException.ThrowIfNull(spriteRenderer);
         ArgumentNullException.ThrowIfNull(camera);
-        ArgumentNullException.ThrowIfNull(abilityTargeting);
+        ArgumentNullException.ThrowIfNull(actionTargeting);
+        ArgumentNullException.ThrowIfNull(playerMovement);
 
         _world = world;
         _mapViewState = mapViewState;
@@ -120,7 +123,8 @@ public sealed class MapWindow : Window
         _spriteRenderer = spriteRenderer;
 
         _camera = camera;
-        _abilityTargeting = abilityTargeting;
+        _actionTargeting = actionTargeting;
+        _playerMovement = playerMovement;
         _tintGrid = new MapTintGrid(componentManager, world.Map.Size);
         _backgroundCache = new MapBackgroundCache(
             world,
@@ -161,7 +165,7 @@ public sealed class MapWindow : Window
     {
         base.Update(gameTime);
 
-        _abilityTargeting.Tick();
+        _actionTargeting.Tick();
 
         if (_transformPool.TryGetReadonly(_world.PlayerEntityId, out var playerTransform) && playerTransform.Position != _camera.LastKnownPlayerPosition)
         {
@@ -180,14 +184,14 @@ public sealed class MapWindow : Window
     }
 
     /// <summary>
-    /// Delegates to AbilityTargetingController.UpdateHoveredTile -- kept as a method on MapWindow
+    /// Delegates to ActionTargetingController.UpdateHoveredTile -- kept as a method on MapWindow
     /// (internal, not private) since MapWindowTests exercises it directly the same way it does
     /// Window.HandleHotkeys, simulating a mouse position without a real OS cursor.
     /// </summary>
-    internal void UpdateHoveredTile(Point mousePosition) => _abilityTargeting.UpdateHoveredTile(mousePosition, _contentState.AbsolutePosition);
+    internal void UpdateHoveredTile(Point mousePosition) => _actionTargeting.UpdateHoveredTile(mousePosition, _contentState.AbsolutePosition);
 
-    /// <summary>Read-only view of the armed ability's current hit-footprint -- see AbilityTargetingController.HoveredFootprint.</summary>
-    internal IReadOnlyList<Vector3Int> HoveredFootprint => _abilityTargeting.HoveredFootprint;
+    /// <summary>Read-only view of the armed ability's current hit-footprint -- see ActionTargetingController.HoveredFootprint.</summary>
+    internal IReadOnlyList<Vector3Int> HoveredFootprint => _actionTargeting.HoveredFootprint;
 
     private void SnapCameraToPlayer(Vector3Int position)
     {
@@ -252,7 +256,7 @@ public sealed class MapWindow : Window
     /// Every tile the currently-armed ability could be aimed at (see MapViewState.TargetableTiles,
     /// computed once at arm time) -- a white border + 50% white mask for "targetable, not
     /// currently hovered," a red border + 50% red mask for whichever of those tiles the armed
-    /// shape's hover-resolved footprint (see AbilityTargetingController.HoveredFootprint,
+    /// shape's hover-resolved footprint (see ActionTargetingController.HoveredFootprint,
     /// recomputed every Update) actually covers right now. A separate, independent draw call
     /// from DrawSelectedTileHighlight below -- the two are conceptually distinct (ability
     /// targeting vs. the inspector's click-to-select), even though both now share the same
@@ -270,7 +274,7 @@ public sealed class MapWindow : Window
         {
             foreach (var tile in targetableTiles)
             {
-                var borderColor = _abilityTargeting.HoveredFootprintContains(tile) ? HoveredTargetTileBorderColor : TargetableTileBorderColor;
+                var borderColor = _actionTargeting.HoveredFootprintContains(tile) ? HoveredTargetTileBorderColor : TargetableTileBorderColor;
                 DrawMaskedTileHighlight(spriteBatch, unitRectangle, tile.X, tile.Y, borderColor);
             }
             return;
@@ -663,18 +667,18 @@ public sealed class MapWindow : Window
     {
         if (_mapViewState.ArmedAbilityId is not null || _mapViewState.ArmedItemDefinitionId is not null)
         {
-            _abilityTargeting.TryConfirmActivation(mousePosition, _contentState.AbsolutePosition);
+            _actionTargeting.TryConfirmActivation(mousePosition, _contentState.AbsolutePosition);
             return;
         }
 
         SelectMapNodes(mousePosition);
     }
 
-    protected override void OnRightClickTapAction() => _abilityTargeting.CancelArmedOrPendingAction();
+    protected override void OnRightClickTapAction() => _actionTargeting.CancelArmedOrPendingAction();
 
-    protected override void OnEscapeAction() => _abilityTargeting.CancelArmedOrPendingAction();
+    protected override void OnEscapeAction() => _actionTargeting.CancelArmedOrPendingAction();
 
-    /// <summary>The map's own hotkeys -- only invoked while this window holds focus (see GameInputController.RouteHotkeysToFocusedWindow).</summary>
+    /// <summary>The map's own hotkeys -- only invoked while this window holds focus (see UiInputController.RouteHotkeysToFocusedWindow).</summary>
     protected override void OnHotkeysAction(KeyboardState keyboardState, KeyboardState previousKeyboardState)
     {
         if (WasKeyPressed(keyboardState, previousKeyboardState, Keys.Space))
@@ -709,7 +713,8 @@ public sealed class MapWindow : Window
             ChangeLayer(-1);
         }
 
-        _abilityTargeting.HandleHotkeys(keyboardState, previousKeyboardState);
+        _playerMovement.HandleInput(keyboardState);
+        _actionTargeting.HandleHotbarHotkeys(keyboardState, previousKeyboardState);
     }
 
     private void CenterCameraOn(Vector3Int position)

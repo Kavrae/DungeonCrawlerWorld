@@ -12,7 +12,7 @@ public static class HudMetrics
     /// <summary>Standard hover-tooltip wait time before a hover-triggered popup (e.g. the Armed
     /// Hotkey Summary, and future hover-triggered UI) appears -- shared so every such element feels
     /// consistent. 0.4s, expressed in frames via GameTiming.FramesForSeconds so it stays testable
-    /// via repeated synthetic Update() calls the same way AbilityTargetingController.
+    /// via repeated synthetic Update() calls the same way ActionTargetingController.
     /// DoubleTapWindowFrames already is.</summary>
     public static readonly int HoverTooltipDelayFrames = GameTiming.FramesForSeconds(0.4f);
 }

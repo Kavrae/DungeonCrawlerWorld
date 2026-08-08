@@ -20,7 +20,7 @@ namespace Tests.Presentation;
 /// PlayerStatusEffectsContent have no test coverage either; verified by running the game
 /// instead (see CLAUDE.md's UI-change rule). Size is the one piece of this class that's pure
 /// arithmetic with no rendering dependency, so it's worth covering directly. The bind/unbind/
-/// hit-test query methods (added for GameInputController's content-drag path) touch only
+/// hit-test query methods (added for UiInputController's content-drag path) touch only
 /// component pools and geometry -- no SpriteBatch involved -- so they're covered here too.
 /// </summary>
 [TestClass]

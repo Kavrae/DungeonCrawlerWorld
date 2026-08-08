@@ -3,7 +3,7 @@ namespace Engine.Utilities;
 /// <summary>
 /// This codebase's standing frame-rate assumption -- the single source of truth for converting
 /// between frames and seconds, so anywhere a duration is expressed in frames (e.g.
-/// PotionCooldownEffects.DurationFrames, AbilityTargetingController.DoubleTapWindowFrames,
+/// PotionCooldownEffects.DurationFrames, ActionTargetingController.DoubleTapWindowFrames,
 /// HudMetrics.HoverTooltipDelayFrames) can state its real-world duration without hardcoding a
 /// bare "60", and without those unrelated call sites having to depend on each other to share it.
 /// </summary>

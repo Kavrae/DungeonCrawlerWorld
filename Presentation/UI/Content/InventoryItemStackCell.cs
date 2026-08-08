@@ -14,7 +14,7 @@ namespace Presentation.UI.Content;
 /// chrome needed, same reasoning Folder/Button use. IsDisabled gray-tints the icon, mirroring
 /// Folder's own disabled tint and MapWindow's dead-entity tint (all three now share the same
 /// SpriteOrGlyphRenderer draw primitive). ItemDefinitionId is exposed publicly so
-/// GameInputController can read it directly (no Element-level drag hook needed -- see its own
+/// UiInputController can read it directly (no Element-level drag hook needed -- see its own
 /// content-drag state machine) when a press starts a drag from this cell toward a hotbar slot.
 /// </summary>
 public sealed class InventoryItemStackCell(FontService fontService, ElementPoolService elementPoolService, GlyphRenderer glyphRenderer, SpriteSheetService spriteSheetService, SpriteRenderer spriteRenderer)

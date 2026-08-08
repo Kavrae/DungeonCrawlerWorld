@@ -92,14 +92,13 @@ public sealed class MapWindowTests
         var resolvedAbilityCatalog = abilityCatalog ?? new AbilityCatalog();
         var resolvedItemCatalog = itemCatalog ?? new ItemCatalog();
         var camera = new MapCamera(world);
-        var abilityTargeting = new AbilityTargetingController(
+        var actionTargeting = new ActionTargetingController(
             world,
             mapViewState,
             camera,
             resolvedAbilityCatalog,
             resolvedItemCatalog,
             componentManager.GetDirectPool<TransformComponent>(),
-            componentManager.GetPackedPool<MovementComponent>(),
             componentManager.GetMultiPool<ActionHotkeyBindingComponent>(),
             componentManager.GetMultiPool<ItemHotkeyBindingComponent>(),
             componentManager.GetMultiPool<InventoryItemStackComponent>(),
@@ -107,10 +106,14 @@ public sealed class MapWindowTests
             componentManager.GetPackedPool<PendingConsumableActivationComponent>(),
             componentManager.GetPackedPool<PendingDelayedActionComponent>(),
             componentManager.GetPackedPool<ActionLockComponent>());
+        var playerMovement = new PlayerMovementController(
+            world,
+            componentManager.GetDirectPool<TransformComponent>(),
+            componentManager.GetPackedPool<MovementComponent>());
 
         windowService.RegisterFactory<MapWindow>((_, _) => new MapWindow(
             fontService, windowService, world, mapViewState, componentManager, resolvedAbilityCatalog, resolvedItemCatalog, new TileRenderer(), new GlyphRenderer(),
-            new SpriteSheetService(null, "Spritesheets"), new SpriteRenderer(), camera, abilityTargeting));
+            new SpriteSheetService(null, "Spritesheets"), new SpriteRenderer(), camera, actionTargeting, playerMovement));
 
         var mapWindow = windowService.CreateElement<MapWindow>(null, new ElementOptions
         {
@@ -206,10 +209,10 @@ public sealed class MapWindowTests
     }
 
     /// <summary>
-    /// MapWindow's own hotkeys (see OnHotkeysAction) -- GameInputController only ever routes
+    /// MapWindow's own hotkeys (see OnHotkeysAction) -- UiInputController only ever routes
     /// the whole keyboard state to whichever window is focused (see
-    /// GameInputControllerTests.HotkeysAreRoutedToTheFocusedWindow), so these are tested
-    /// directly against HandleHotkeys rather than through a real GameInputController.
+    /// UiInputControllerTests.HotkeysAreRoutedToTheFocusedWindow), so these are tested
+    /// directly against HandleHotkeys rather than through a real UiInputController.
     /// </summary>
     [TestMethod]
     public void HandleHotkeys_PressingSpace_TogglesIsPaused()
@@ -783,7 +786,7 @@ public sealed class MapWindowTests
 
     /// <summary>
     /// TargetableTiles must follow the caster, not stay anchored to wherever it was standing at
-    /// arm time -- Update (via AbilityTargetingController.RefreshTargetableTiles) recomputes it
+    /// arm time -- Update (via ActionTargetingController.RefreshTargetableTiles) recomputes it
     /// from the caster's current TransformComponent every frame an ability stays armed.
     /// </summary>
     [TestMethod]

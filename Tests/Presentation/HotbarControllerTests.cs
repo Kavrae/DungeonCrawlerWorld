@@ -17,9 +17,9 @@ namespace Tests.Presentation;
 
 /// <summary>
 /// Covers the actual new behavior: clicking a hotbar slot (HotbarController.OnSlotTapped) must
-/// behave exactly like pressing that slot's key (AbilityTargetingController.HandleHotkeySlotPress)
+/// behave exactly like pressing that slot's key (ActionTargetingController.HandleHotkeySlotPress)
 /// -- arm an unarmed bound slot, confirm/fire an already-armed one, rather than the old
-/// click-to-preview/click-to-cancel behavior. Uses a real AbilityTargetingController (not a fake)
+/// click-to-preview/click-to-cancel behavior. Uses a real ActionTargetingController (not a fake)
 /// so this actually proves the forwarding wiring works end-to-end, not just that OnSlotTapped
 /// calls some method.
 /// </summary>
@@ -66,14 +66,13 @@ public sealed class HotbarControllerTests
         var itemCatalog = new ItemCatalog();
 
         var camera = new MapCamera(world);
-        var abilityTargeting = new AbilityTargetingController(
+        var actionTargeting = new ActionTargetingController(
             world,
             mapViewState,
             camera,
             abilityCatalog,
             itemCatalog,
             componentManager.GetDirectPool<TransformComponent>(),
-            componentManager.GetPackedPool<MovementComponent>(),
             componentManager.GetMultiPool<ActionHotkeyBindingComponent>(),
             componentManager.GetMultiPool<ItemHotkeyBindingComponent>(),
             componentManager.GetMultiPool<InventoryItemStackComponent>(),
@@ -85,7 +84,7 @@ public sealed class HotbarControllerTests
 
         var fontService = new FontService("Fonts");
         var hotbarContent = new HotbarContent(world, mapViewState, componentManager, abilityCatalog, itemCatalog, fontService, new SpriteSheetService(null, "Spritesheets"), new SpriteRenderer(), new Vector2(1920, 1080));
-        var hotbarController = new HotbarController(mapViewState, hotbarContent, abilityTargeting);
+        var hotbarController = new HotbarController(mapViewState, hotbarContent, actionTargeting);
 
         return (hotbarController, mapViewState, componentManager);
     }

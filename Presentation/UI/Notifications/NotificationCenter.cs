@@ -75,7 +75,7 @@ public sealed class NotificationCenter(ElementPoolService elementPoolService, Ev
     /// <summary>
     /// Raised whenever a notification popup actually shows on screen (a fresh one via
     /// AddNotification(showImmediately: true), or a queued one via OpenNextNotification) -- see
-    /// ShowActive. GameLoop subscribes once it has a GameInputController (which doesn't exist
+    /// ShowActive. GameLoop subscribes once it has a UiInputController (which doesn't exist
     /// yet while GameShellBootstrapper.Build, and so NotificationCenter.Initialize, are still
     /// running) and focuses the new popup, the same composition-root role its existing
     /// QuestComposerOpened subscription plays for the quest-composer popup.

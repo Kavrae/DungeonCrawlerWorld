@@ -164,7 +164,7 @@ public sealed class TestCombatBehaviorSystem : ISystem
     /// Only fires if this entity was actually granted Punch. Queues the whole resolved Adjacent
     /// footprint (now excluding the entity's own tiles, see TargetShapeResolver) rather than a
     /// single target tile -- AbilityEffectResolver figures out who's actually there, the same
-    /// "let the resolver sort it out" pattern AbilityTargetingController.TryActivateWithAutoTarget
+    /// "let the resolver sort it out" pattern ActionTargetingController.TryActivateWithAutoTarget
     /// already uses for player-driven Adjacent abilities.
     /// </summary>
     private bool TryDecideMeleeAttack(int entityId, TransformComponent transform)

@@ -18,7 +18,7 @@ namespace Presentation.Input;
 /// interactive). A higher tier always wins hit-testing over a lower one, regardless of screen
 /// position.
 /// </summary>
-public sealed class GameInputController
+public sealed class UiInputController
 {
     /// <summary>MouseState.ScrollWheelValue's units per standard wheel detent -- the FNA/XNA convention, not configurable per-device.</summary>
     private const float WheelNotchValue = 120f;
@@ -87,7 +87,7 @@ public sealed class GameInputController
     /// <summary>Same reasoning/value as RightClickTapThresholdPixels -- small enough to absorb ordinary click jitter, comfortably smaller than an intentional drag.</summary>
     private const float ContentDragTapThresholdPixels = 4f;
 
-    /// <summary>Owns the Armed Hotkey Summary window's arm/preview/hover state machine -- see its own doc comment. Null in test setups that don't build one (e.g. GameInputControllerTests' own harness), in which case hotbar-slot press/release/hover handling is simply skipped.</summary>
+    /// <summary>Owns the Armed Hotkey Summary window's arm/preview/hover state machine -- see its own doc comment. Null in test setups that don't build one (e.g. UiInputControllerTests' own harness), in which case hotbar-slot press/release/hover handling is simply skipped.</summary>
     private readonly HotbarController? _hotbarController;
 
     /// <summary>Mouse position when the current hotbar-slot press started -- ResolveHotbarSlotClick only treats the release as a tap if it's within ContentDragTapThresholdPixels of this, the same tap-vs-drag distinction ResolveContentDrag already makes for content-drags.</summary>
@@ -123,7 +123,7 @@ public sealed class GameInputController
     /// <summary>
     /// Characters typed this frame, buffered from FNA's static TextInputEXT.TextInput event
     /// (subscribed once, in the constructor) and drained by RouteTextInputToFocusedElement.
-    /// Per-instance, not static, so each GameInputController -- including the many short-lived
+    /// Per-instance, not static, so each UiInputController -- including the many short-lived
     /// ones tests construct -- only ever sees characters typed while it itself is subscribed.
     /// </summary>
     private readonly List<char> _pendingTextInput = [];
@@ -142,12 +142,12 @@ public sealed class GameInputController
 
     /// <summary>
     /// userElements is typically still empty at construction time -- GameShellBootstrapper.Build
-    /// constructs GameInputController before it can build DragGhostContent (which needs a real
-    /// GameInputController reference to read the drag state from), then appends the ghost's host
+    /// constructs UiInputController before it can build DragGhostContent (which needs a real
+    /// UiInputController reference to read the drag state from), then appends the ghost's host
     /// window to this same list afterward. Passing the list itself (not a snapshot/copy) is what
     /// makes that work -- this class only ever reads through the reference, never replaces it.
     /// </summary>
-    public GameInputController(List<Element> baseElements, List<Element> staticHudElements, List<Element> dynamicHudElements, List<Element> userElements, Vector2 screenSize, HotbarController? hotbarController = null)
+    public UiInputController(List<Element> baseElements, List<Element> staticHudElements, List<Element> dynamicHudElements, List<Element> userElements, Vector2 screenSize, HotbarController? hotbarController = null)
     {
         _baseElements = baseElements;
         _staticHudElements = staticHudElements;
@@ -259,7 +259,7 @@ public sealed class GameInputController
     /// <summary>
     /// Routes the whole keyboard state to whichever element is focused, once per frame (see
     /// Window.HandleHotkeys) -- e.g. MapWindow's WASD/zoom/PageUp/PageDown/Space, or a future
-    /// inventory window's own navigation keys. GameInputController itself knows nothing about
+    /// inventory window's own navigation keys. UiInputController itself knows nothing about
     /// what any element's hotkeys are; it only knows which element is focused.
     /// </summary>
     private void RouteHotkeysToFocusedElement(KeyboardState keyboardState) => _focusedElement?.HandleHotkeys(keyboardState, _previousKeyboardState);

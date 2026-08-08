@@ -9,7 +9,7 @@ namespace Tests.Presentation;
 /// <summary>
 /// TextBox's own behavior in isolation, via its internal HandleTextInput/HandleKeyPress/
 /// HandleHotkeys hooks directly (see Window's InternalsVisibleTo) -- independent of
-/// GameInputController's routing, which has its own coverage in GameInputControllerTests.
+/// UiInputController's routing, which has its own coverage in UiInputControllerTests.
 /// </summary>
 [TestClass]
 public sealed class TextBoxTests

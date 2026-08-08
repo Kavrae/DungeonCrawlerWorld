@@ -50,21 +50,21 @@ public static class GameShellBootstrapper
         ArgumentNullException.ThrowIfNull(abilityCatalog);
         ArgumentNullException.ThrowIfNull(itemCatalog);
 
-        var (baseWindows, mapWindow, mapViewState, mapSize, abilityTargeting) = BuildBaseWindows(presentation, world, ecsContext, abilityCatalog, itemCatalog, screenSize);
+        var (baseWindows, mapWindow, mapViewState, mapSize, actionTargeting) = BuildBaseWindows(presentation, world, ecsContext, abilityCatalog, itemCatalog, screenSize);
         var (staticHudWindows, questTriggerWindow, hotbarContent) = BuildStaticHudWindows(presentation, world, ecsContext, abilityCatalog, itemCatalog, screenSize, mapViewState, mapSize);
         var (dynamicHudWindows, notificationCenter, inventory) = BuildDynamicHudWindows(presentation, world, ecsContext, itemCatalog, mapWindow);
-        var hotbarController = BuildHotbarController(presentation, mapViewState, hotbarContent, abilityTargeting, dynamicHudWindows);
+        var hotbarController = BuildHotbarController(presentation, mapViewState, hotbarContent, actionTargeting, dynamicHudWindows);
 
-        // Empty for now -- GameInputController only needs the list *reference*, not its final
-        // contents, since it never replaces the reference (see GameInputController's own
+        // Empty for now -- UiInputController only needs the list *reference*, not its final
+        // contents, since it never replaces the reference (see UiInputController's own
         // constructor doc comment). BuildUserWindows appends to this same list below, once
         // inputController exists to hand to DragGhostContent.
         var userWindows = new List<Element>();
 
         // Constructed after every other tier's windows exist, but before User's own content is
-        // built -- DragGhostContent (User tier) needs a real GameInputController reference,
+        // built -- DragGhostContent (User tier) needs a real UiInputController reference,
         // which can't exist before this point.
-        var inputController = new GameInputController(baseWindows, staticHudWindows, dynamicHudWindows, userWindows, screenSize, hotbarController);
+        var inputController = new UiInputController(baseWindows, staticHudWindows, dynamicHudWindows, userWindows, screenSize, hotbarController);
         inputController.SetDefaultFocusElement(mapWindow);
         inputController.FocusElement(mapWindow);
 
@@ -72,7 +72,7 @@ public static class GameShellBootstrapper
         // see NotificationCenter.ActiveNotificationOpened.
         notificationCenter.ActiveNotificationOpened += notificationWindow => inputController.FocusElement(notificationWindow);
 
-        // Opening the quest composer focuses its TextBox (via GameInputController.SetFocus's
+        // Opening the quest composer focuses its TextBox (via UiInputController.SetFocus's
         // own NextTextBoxAfter redirect) immediately -- OpenQuestComposer returns the popup
         // synchronously, so this can call FocusWindow directly instead of needing an event.
         // The composer popup overlaps the fullscreen map like any other popup, and (unlike the
@@ -86,8 +86,8 @@ public static class GameShellBootstrapper
         return new GameShellContext(mapWindow, notificationCenter, inventory, baseWindows, staticHudWindows, dynamicHudWindows, userWindows, inputController);
     }
 
-    /// <summary>Base tier: the map itself plus the debug stats footer directly beneath it -- see GameInputController's own doc comment for what each of the four tiers means. mapViewState/mapSize are returned for BuildStaticHudWindows, whose selection window needs both (mapViewState to scope the inspector, mapSize to dock against the map's actual bottom edge). abilityTargeting is returned too, promoted here (rather than built privately inside MapWindow's own constructor) so BuildHotbarController can share the same instance instead of forwarding through MapWindow.</summary>
-    private static (List<Element> BaseWindows, MapWindow MapWindow, MapViewState MapViewState, Vector2 MapSize, AbilityTargetingController AbilityTargeting) BuildBaseWindows(
+    /// <summary>Base tier: the map itself plus the debug stats footer directly beneath it -- see UiInputController's own doc comment for what each of the four tiers means. mapViewState/mapSize are returned for BuildStaticHudWindows, whose selection window needs both (mapViewState to scope the inspector, mapSize to dock against the map's actual bottom edge). actionTargeting is returned too, promoted here (rather than built privately inside MapWindow's own constructor) so BuildHotbarController can share the same instance instead of forwarding through MapWindow. playerMovement isn't returned -- nothing outside MapWindow's own factory closure needs it, unlike actionTargeting.</summary>
+    private static (List<Element> BaseWindows, MapWindow MapWindow, MapViewState MapViewState, Vector2 MapSize, ActionTargetingController ActionTargeting) BuildBaseWindows(
         PresentationContext presentation, World world, EcsContext ecsContext, AbilityCatalog abilityCatalog, ItemCatalog itemCatalog, Vector2 screenSize)
     {
         var baseWindows = new List<Element>();
@@ -101,14 +101,13 @@ public static class GameShellBootstrapper
 
         var componentManager = ecsContext.ComponentManager;
         var camera = new MapCamera(world);
-        var abilityTargeting = new AbilityTargetingController(
+        var actionTargeting = new ActionTargetingController(
             world,
             mapViewState,
             camera,
             abilityCatalog,
             itemCatalog,
             componentManager.GetDirectPool<TransformComponent>(),
-            componentManager.GetPackedPool<MovementComponent>(),
             componentManager.GetMultiPool<ActionHotkeyBindingComponent>(),
             componentManager.GetMultiPool<ItemHotkeyBindingComponent>(),
             componentManager.GetMultiPool<InventoryItemStackComponent>(),
@@ -117,6 +116,10 @@ public static class GameShellBootstrapper
             componentManager.GetPackedPool<PendingDelayedActionComponent>(),
             componentManager.GetPackedPool<ActionLockComponent>(),
             componentManager.GetPackedPool<ManaComponent>());
+        var playerMovement = new PlayerMovementController(
+            world,
+            componentManager.GetDirectPool<TransformComponent>(),
+            componentManager.GetPackedPool<MovementComponent>());
 
         // MapWindow's dependencies (World/ComponentManager/renderers) come from Engine/Game
         // and Presentation both, so it can't be registered inside WindowService's own
@@ -135,7 +138,8 @@ public static class GameShellBootstrapper
             presentation.SpriteSheetService,
             presentation.SpriteRenderer,
             camera,
-            abilityTargeting));
+            actionTargeting,
+            playerMovement));
 
         var mapWindow = presentation.ElementPoolService.CreateElement<MapWindow>(null, new ElementOptions
         {
@@ -171,10 +175,10 @@ public static class GameShellBootstrapper
         debugWindow.Initialize();
         baseWindows.Add(debugWindow);
 
-        return (baseWindows, mapWindow, mapViewState, mapSize, abilityTargeting);
+        return (baseWindows, mapWindow, mapViewState, mapSize, actionTargeting);
     }
 
-    /// <summary>StaticHUD tier: the selection/inspector panel, the player health bar, action lock, status effects, the hotbar, and the quest trigger -- see GameInputController's own doc comment for what each of the four tiers means. questTriggerWindow is returned for Build, which wires its Clicked event once the DynamicHUD tier (needed by OpenQuestComposer) also exists. hotbarContent is returned too, for BuildHotbarController.</summary>
+    /// <summary>StaticHUD tier: the selection/inspector panel, the player health bar, action lock, status effects, the hotbar, and the quest trigger -- see UiInputController's own doc comment for what each of the four tiers means. questTriggerWindow is returned for Build, which wires its Clicked event once the DynamicHUD tier (needed by OpenQuestComposer) also exists. hotbarContent is returned too, for BuildHotbarController.</summary>
     private static (List<Element> StaticHudWindows, TextWindow QuestTriggerWindow, HotbarContent HotbarContent) BuildStaticHudWindows(
         PresentationContext presentation, World world, EcsContext ecsContext, AbilityCatalog abilityCatalog, ItemCatalog itemCatalog, Vector2 screenSize, MapViewState mapViewState, Vector2 mapSize)
     {
@@ -300,7 +304,7 @@ public static class GameShellBootstrapper
         return (staticHudWindows, questTriggerWindow, hotbarContent);
     }
 
-    /// <summary>DynamicHUD tier: NotificationCenter owns/populates this list itself (summary bar + popups), and InventoryFolderController does the same for its own folder+window -- see GameInputController's own doc comment for what each of the four tiers means. Build also passes this same list into OpenQuestComposer later, since that popup belongs in this tier too.</summary>
+    /// <summary>DynamicHUD tier: NotificationCenter owns/populates this list itself (summary bar + popups), and InventoryFolderController does the same for its own folder+window -- see UiInputController's own doc comment for what each of the four tiers means. Build also passes this same list into OpenQuestComposer later, since that popup belongs in this tier too.</summary>
     private static (List<Element> DynamicHudWindows, NotificationCenter NotificationCenter, InventoryFolderController Inventory) BuildDynamicHudWindows(PresentationContext presentation, World world, EcsContext ecsContext, ItemCatalog itemCatalog, MapWindow mapWindow)
     {
         var dynamicHudWindows = new List<Element>();
@@ -336,17 +340,17 @@ public static class GameShellBootstrapper
         return (dynamicHudWindows, notificationCenter, inventory);
     }
 
-    /// <summary>Constructs HotbarController and lets it add the Armed Hotkey Summary window into the DynamicHUD tier -- mirrors NotificationCenter/InventoryFolderController's own Initialize(dynamicHudWindows) call shape above. Needs mapViewState/hotbarContent (from BuildBaseWindows/BuildStaticHudWindows) and abilityTargeting (from BuildBaseWindows, promoted there rather than built privately inside MapWindow so this can share the same instance).</summary>
+    /// <summary>Constructs HotbarController and lets it add the Armed Hotkey Summary window into the DynamicHUD tier -- mirrors NotificationCenter/InventoryFolderController's own Initialize(dynamicHudWindows) call shape above. Needs mapViewState/hotbarContent (from BuildBaseWindows/BuildStaticHudWindows) and actionTargeting (from BuildBaseWindows, promoted there rather than built privately inside MapWindow so this can share the same instance).</summary>
     private static HotbarController BuildHotbarController(
-        PresentationContext presentation, MapViewState mapViewState, HotbarContent hotbarContent, AbilityTargetingController abilityTargeting, List<Element> dynamicHudWindows)
+        PresentationContext presentation, MapViewState mapViewState, HotbarContent hotbarContent, ActionTargetingController actionTargeting, List<Element> dynamicHudWindows)
     {
-        var hotbarController = new HotbarController(mapViewState, hotbarContent, abilityTargeting);
+        var hotbarController = new HotbarController(mapViewState, hotbarContent, actionTargeting);
         hotbarController.Initialize(presentation.ElementPoolService, presentation.FontService, presentation.GlyphRenderer, dynamicHudWindows);
         return hotbarController;
     }
 
-    /// <summary>User tier: today, just DragGhostContent's host window -- see GameInputController's own doc comment for what this tier is for. Split out from the other three Build* methods since it needs a real GameInputController reference (see Build), which doesn't exist yet while those run.</summary>
-    private static void BuildUserWindows(PresentationContext presentation, GameInputController inputController, ItemCatalog itemCatalog, List<Element> userWindows)
+    /// <summary>User tier: today, just DragGhostContent's host window -- see UiInputController's own doc comment for what this tier is for. Split out from the other three Build* methods since it needs a real UiInputController reference (see Build), which doesn't exist yet while those run.</summary>
+    private static void BuildUserWindows(PresentationContext presentation, UiInputController inputController, ItemCatalog itemCatalog, List<Element> userWindows)
     {
         // Zero-size and fully transparent -- DragGhostContent draws directly at the live mouse
         // position (see its own doc comment), not relative to this window's own bounds, so the
@@ -435,7 +439,7 @@ public sealed record GameShellContext(
     List<Element> StaticHudWindows,
     List<Element> DynamicHudWindows,
     List<Element> UserWindows,
-    GameInputController InputController)
+    UiInputController InputController)
 {
     public void LoadContent()
     {
@@ -483,7 +487,7 @@ public sealed record GameShellContext(
         }
     }
 
-    /// <summary>Drawn bottom-to-top: Base, StaticHUD, DynamicHUD, User -- see GameInputController's own doc comment for what each tier holds. User last and unconditionally, so drag feedback is never occluded by whatever it's passing over on its way to a drop target.</summary>
+    /// <summary>Drawn bottom-to-top: Base, StaticHUD, DynamicHUD, User -- see UiInputController's own doc comment for what each tier holds. User last and unconditionally, so drag feedback is never occluded by whatever it's passing over on its way to a drop target.</summary>
     public void Draw(GameTime gameTime, GraphicsDevice graphicsDevice, SpriteBatch spriteBatch, Texture2D unitRectangle)
     {
         foreach (var window in BaseWindows)

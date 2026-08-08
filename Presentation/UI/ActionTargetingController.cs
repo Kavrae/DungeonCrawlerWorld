@@ -8,7 +8,6 @@ using Game.Modules.Core.Components;
 using Game.Modules.Inventory;
 using Game.Modules.Inventory.Components;
 using Game.Modules.Mana.Components;
-using Game.Modules.Movement.Components;
 using Game.World;
 using Microsoft.Xna.Framework;
 using Microsoft.Xna.Framework.Input;
@@ -18,21 +17,23 @@ namespace Presentation.UI;
 
 /// <summary>
 /// Player's moment-to-moment action input -- arming/disarming/confirming/auto-targeting abilities
-/// and consumable items via their hotbar hotkeys, and WASD movement, which is handled here
-/// alongside them. Abilities and items share the same arm/target/confirm rhythm (both ultimately
-/// reduce to a TargetingSpec -- see Engine.Math.TargetingSpec's own doc comment for why that type
-/// is shared rather than duplicated), but only one of {ability, item} is ever armed at once
-/// (MapViewState.ArmedAbilityId/ArmedItemDefinitionId) and each queues into its own pending-
-/// activation component for its own System to consume.
+/// and consumable items via their hotbar hotkeys. "Action" (not "Ability") because items go
+/// through this same arm/target/confirm rhythm too -- matches ActionHotkeyBindingComponent's own
+/// umbrella-term reasoning (see its doc comment). Abilities and items share that rhythm because
+/// both ultimately reduce to a TargetingSpec (see Engine.Math.TargetingSpec's own doc comment for
+/// why that type is shared rather than duplicated), but only one of {ability, item} is ever armed
+/// at once (MapViewState.ArmedAbilityId/ArmedItemDefinitionId) and each queues into its own
+/// pending-activation component for its own System to consume. Player movement is a separate
+/// concern handled by the sibling PlayerMovementController -- MapWindow.OnHotkeysAction calls both
+/// every frame, but the two share no state.
 /// </summary>
-public sealed class AbilityTargetingController(
+public sealed class ActionTargetingController(
     World world,
     MapViewState mapViewState,
     MapCamera camera,
     AbilityCatalog abilityCatalog,
     ItemCatalog itemCatalog,
     DirectComponentPool<TransformComponent> transformPool,
-    PackedComponentPool<MovementComponent> movementPool,
     MultiComponentPool<ActionHotkeyBindingComponent> actionHotkeyBindings,
     MultiComponentPool<ItemHotkeyBindingComponent> itemHotkeyBindings,
     MultiComponentPool<InventoryItemStackComponent> inventoryStacks,
@@ -45,10 +46,7 @@ public sealed class AbilityTargetingController(
     /// <summary>~300ms -- a second press of the same slot within this many frames of the first is a double-tap (auto-target the closest candidate, see HandleHotkeySlotPress), as opposed to a slower second press (confirm against the cursor, same as a click).</summary>
     private static readonly int DoubleTapWindowFrames = GameTiming.FramesForSeconds(0.3f);
 
-    private static readonly int FramesPerPlayerMove = GameTiming.FramesForSeconds(0.25f);
-
     private int _frameCounter;
-    private int _playerMoveCooldownFrames;
 
     private readonly Dictionary<HotkeySlot, int> _lastHotkeyPressFrameBySlot = [];
 
@@ -73,7 +71,7 @@ public sealed class AbilityTargetingController(
     /// <summary>The armed ability/item's actual hit-footprint at the current hover position, recomputed every Update (see UpdateHoveredTile).</summary>
     private readonly List<Vector3Int> _hoveredFootprintBuffer = [];
 
-    /// <summary>Read-only view of _hoveredFootprintBuffer for tests -- same internal-for-test-visibility pattern as GameInputController.CurrentCursor/DragDelta.</summary>
+    /// <summary>Read-only view of _hoveredFootprintBuffer for tests -- same internal-for-test-visibility pattern as UiInputController.CurrentCursor/DragDelta.</summary>
     internal IReadOnlyList<Vector3Int> HoveredFootprint => _hoveredFootprintBuffer;
 
     /// <summary>Avoids exposing List&lt;T&gt;.Contains through the IReadOnlyList&lt;T&gt; above via a LINQ extension -- MapWindow's targeting-highlight draw calls this once per visible targetable tile, every frame something is armed.</summary>
@@ -203,13 +201,6 @@ public sealed class AbilityTargetingController(
         }
     }
 
-    /// <summary>Movement first (matches MapWindow's original per-frame hotkey ordering), then hotbar-slot hotkeys -- both are "what does this frame's input do to the player entity," so a single entry point handles them together.</summary>
-    public void HandleHotkeys(KeyboardState keyboardState, KeyboardState previousKeyboardState)
-    {
-        HandlePlayerMovementInput(keyboardState);
-        HandleHotbarHotkeys(keyboardState, previousKeyboardState);
-    }
-
     /// <summary>
     /// One hotkey slot per HotkeySlotLayout.Entries entry -- an unbound slot's press is silently
     /// a no-op (see HandleHotkeySlotPress), which is exactly what a slot with neither an
@@ -217,9 +208,11 @@ public sealed class AbilityTargetingController(
     /// so no separate "is this slot enabled" check is needed here. A Shift-page Expansion slot
     /// (RequiresShift) only fires while Shift is actually held -- e.g. plain "1" and Shift+"1" are
     /// two different slots (Slot1 and Slot11) sharing the same physical key, distinguished only by
-    /// current Shift state, not by two separate keys.
+    /// current Shift state, not by two separate keys. Public: MapWindow.OnHotkeysAction calls this
+    /// directly (alongside, and after, PlayerMovementController.HandleInput -- see that class's
+    /// own doc comment for the ordering).
     /// </summary>
-    private void HandleHotbarHotkeys(KeyboardState keyboardState, KeyboardState previousKeyboardState)
+    public void HandleHotbarHotkeys(KeyboardState keyboardState, KeyboardState previousKeyboardState)
     {
         var shiftHeld = keyboardState.IsKeyDown(Keys.LeftShift) || keyboardState.IsKeyDown(Keys.RightShift);
 
@@ -582,67 +575,4 @@ public sealed class AbilityTargetingController(
         }
     }
 
-    private void HandlePlayerMovementInput(KeyboardState keyboardState)
-    {
-        if (_playerMoveCooldownFrames > 0)
-        {
-            _playerMoveCooldownFrames--;
-        }
-
-        var delta = new Vector3Int();
-        if (keyboardState.IsKeyDown(Keys.W))
-        {
-            delta.Y -= 1;
-        }
-        if (keyboardState.IsKeyDown(Keys.S))
-        {
-            delta.Y += 1;
-        }
-        if (keyboardState.IsKeyDown(Keys.A))
-        {
-            delta.X -= 1;
-        }
-        if (keyboardState.IsKeyDown(Keys.D))
-        {
-            delta.X += 1;
-        }
-
-        if (delta == new Vector3Int() || _playerMoveCooldownFrames > 0)
-        {
-            return;
-        }
-
-        _playerMoveCooldownFrames = FramesPerPlayerMove;
-        TryQueuePlayerMove(delta);
-    }
-
-    private void TryQueuePlayerMove(Vector3Int delta)
-    {
-        var playerEntityId = world.PlayerEntityId;
-        if (!transformPool.TryGetReadonly(playerEntityId, out var transformComponent) ||
-            !movementPool.TryGetReadonly(playerEntityId, out var movementComponent))
-        {
-            return;
-        }
-
-        // Only queue a new move while at rest -- avoids redirecting a move that's already
-        // pending (e.g. still waiting on MovementSystem's action lock).
-        var isAtRest = movementComponent.NextMapPosition is null || movementComponent.NextMapPosition.Value == transformComponent.Position;
-        if (!isAtRest)
-        {
-            return;
-        }
-
-        var candidate = transformComponent.Position + delta;
-        var occupyingEntityId = world.GetEntityIdAt(candidate);
-        if (!world.IsOnMap(candidate) || (occupyingEntityId != -1 && occupyingEntityId != playerEntityId))
-        {
-            return;
-        }
-
-        movementPool.TryUpdate(playerEntityId, candidate, static (ref MovementComponent movement, Vector3Int target) =>
-        {
-            movement.NextMapPosition = target;
-        });
-    }
 }

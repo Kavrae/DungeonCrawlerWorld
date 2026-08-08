@@ -10,9 +10,9 @@ using Presentation.Rendering;
 namespace Presentation.UI.Content;
 
 /// <summary>
-/// A cursor-following copy of a dragged item's icon while GameInputController's content-drag
+/// A cursor-following copy of a dragged item's icon while UiInputController's content-drag
 /// (inventory cell &lt;-&gt; hotbar slot, see its own doc comment) is in progress -- purely
-/// visual feedback, no gameplay state of its own. Sized to GameInputController.ContentDragSourceSize
+/// visual feedback, no gameplay state of its own. Sized to UiInputController.ContentDragSourceSize
 /// -- the actual size of whatever element the drag started on -- rather than one fixed size for
 /// every drag, so the ghost doesn't visibly jump in scale relative to wherever it was picked up
 /// from. Hosted in a minimal (zero-size, fully transparent) User-tier Window -- see
@@ -20,7 +20,7 @@ namespace Presentation.UI.Content;
 /// mouse position, not relative to any window's own bounds.
 /// </summary>
 public sealed class DragGhostContent(
-    GameInputController inputController,
+    UiInputController inputController,
     ItemCatalog itemCatalog,
     FontService fontService,
     SpriteSheetService spriteSheetService,

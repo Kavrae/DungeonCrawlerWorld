@@ -81,7 +81,7 @@ public sealed class HotbarContent(
     internal static readonly float SummaryWidth = SummarySlotSpan * SlotSize.X + (SummarySlotSpan - 1) * SlotGap;
 
     /// <summary>
-    /// Set by GameInputController while a content-drag (an inventory item cell, or an already-
+    /// Set by UiInputController while a content-drag (an inventory item cell, or an already-
     /// bound hotbar slot, picked up toward a new binding -- see its own doc comment) is in
     /// progress, so every slot glows to invite the drop -- any slot can accept any item, so
     /// there's no single "hovered" target the way a more typical drop zone would highlight.
@@ -286,7 +286,7 @@ public sealed class HotbarContent(
         }
     }
 
-    /// <summary>Screen-position hit test for exactly which hotbar slot (if any) screenPosition falls within -- GameInputController's content-drag path uses this both as a bind-drop target and, combined with TryGetBoundItemId, to detect a drag starting on an already-bound slot.</summary>
+    /// <summary>Screen-position hit test for exactly which hotbar slot (if any) screenPosition falls within -- UiInputController's content-drag path uses this both as a bind-drop target and, combined with TryGetBoundItemId, to detect a drag starting on an already-bound slot.</summary>
     internal bool TryGetSlotAt(Point screenPosition, out HotkeySlot slot)
     {
         foreach (var (candidateSlot, bounds) in EnumerateSlotBounds())
@@ -302,7 +302,7 @@ public sealed class HotbarContent(
         return false;
     }
 
-    /// <summary>The item (if any) currently bound to slot -- GameInputController's content-drag path reads this at press time to capture the payload of a drag starting on an already-bound hotbar slot.</summary>
+    /// <summary>The item (if any) currently bound to slot -- UiInputController's content-drag path reads this at press time to capture the payload of a drag starting on an already-bound hotbar slot.</summary>
     internal bool TryGetBoundItemId(HotkeySlot slot, out Guid itemDefinitionId) =>
         ItemHotkeyBindingQueries.TryGet(_itemHotkeyBindings, world.PlayerEntityId, slot, out itemDefinitionId);
 
@@ -356,10 +356,10 @@ public sealed class HotbarContent(
     /// on that slot first, since a slot binds to at most one of {action, item} at a time (see
     /// IHotkeySlotBinding's own doc comment). Does not touch the inventory stack itself: binding
     /// is a reference, not a transfer (see ItemHotkeyBindingComponent's own doc comment). The
-    /// real assignment path, driven by GameInputController's content-drag drop resolution. A
+    /// real assignment path, driven by UiInputController's content-drag drop resolution. A
     /// not-yet-unlocked Expansion slot silently refuses the binding -- it isn't a valid drop
     /// target (see this class's own doc comment on the disabled-alpha treatment) -- rather than
-    /// GameInputController needing its own separate lock-awareness.
+    /// UiInputController needing its own separate lock-awareness.
     /// </summary>
     internal void BindItem(HotkeySlot slot, Guid itemDefinitionId)
     {
@@ -374,7 +374,7 @@ public sealed class HotbarContent(
         _itemHotkeyBindings.Add(playerEntityId, new ItemHotkeyBindingComponent(slot, itemDefinitionId));
     }
 
-    /// <summary>Removes slot's item binding, if any -- dragging a bound item off the hotbar entirely (see GameInputController's content-drag path).</summary>
+    /// <summary>Removes slot's item binding, if any -- dragging a bound item off the hotbar entirely (see UiInputController's content-drag path).</summary>
     internal void UnbindItemSlot(HotkeySlot slot) =>
         ItemHotkeyBindingQueries.Unbind(_itemHotkeyBindings, world.PlayerEntityId, slot);
 
@@ -458,7 +458,7 @@ public sealed class HotbarContent(
         _radialFill.Draw(spriteBatch, unitRectangle, _font, contentBounds, AlphaFor(isActive));
     }
 
-    /// <summary>Mirrors AbilityActivationSystem/AbilityTargetingController's own gate (see either's doc comment) -- a zero-cost ability (e.g. Punch) always passes.</summary>
+    /// <summary>Mirrors AbilityActivationSystem/ActionTargetingController's own gate (see either's doc comment) -- a zero-cost ability (e.g. Punch) always passes.</summary>
     private bool HasEnoughMana(int playerEntityId, AbilityDefinition ability) =>
         ability.ManaCost <= 0 || (_mana.TryGetReadonly(playerEntityId, out var mana) && mana.CurrentMana >= ability.ManaCost);
 

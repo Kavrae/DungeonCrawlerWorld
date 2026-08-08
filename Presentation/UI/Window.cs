@@ -22,7 +22,7 @@ public class Window : Element
     /// </summary>
     private IElementContent? _content;
 
-    /// <summary>Internal, not public -- GameInputController's content-drag path (see its own doc comment) needs to check whether a hit window hosts a specific IElementContent (e.g. HotbarContent), the same "concrete type check on a generic hit-test result" GameInputController already does for InventoryItemStackCell.</summary>
+    /// <summary>Internal, not public -- UiInputController's content-drag path (see its own doc comment) needs to check whether a hit window hosts a specific IElementContent (e.g. HotbarContent), the same "concrete type check on a generic hit-test result" UiInputController already does for InventoryItemStackCell.</summary>
     internal IElementContent? Content => _content;
 
     /// <summary>

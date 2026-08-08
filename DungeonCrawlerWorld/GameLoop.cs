@@ -51,7 +51,7 @@ public sealed class GameLoop : Microsoft.Xna.Framework.Game
     private EcsContext _ecsContext = null!;
     private PresentationContext _presentation = null!;
     private GameShellContext _shell = null!;
-    private GameInputController _inputController = null!;
+    private UiInputController _inputController = null!;
     private PlayerActivityLog _playerActivityLog = null!;
     private PhaseProfiler _profiler = null!;
     private FrameEventBuffer<EntityMovedEvent> _movedEntities = null!;

@@ -12,7 +12,7 @@ namespace Presentation.UI;
 /// cursor-addressable editing, arrow-key navigation, click-to-position, selection, or
 /// copy/paste yet -- see the Text Input Enhanced Features TODO for those. Enter submits
 /// (TextSubmitted) and, if a sibling TextBox exists under the same parent, asks
-/// GameInputController to hand focus to it. Shift+Enter inserts a newline instead, but only
+/// UiInputController to hand focus to it. Shift+Enter inserts a newline instead, but only
 /// when Multiline -- a single-line box treats Shift+Enter the same as a plain Enter.
 /// </summary>
 public sealed class TextBox(FontService fontService, ElementPoolService elementPoolService, GlyphRenderer glyphRenderer) : TextWindow(fontService, elementPoolService, glyphRenderer)

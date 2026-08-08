@@ -19,7 +19,7 @@ dotnet run --project DungeonCrawlerWorld/DungeonCrawlerWorld.csproj
 - **Engine**: generic ECS + modding infra. No game-specific knowledge.
 - **Game**: world/map, blueprints (entity templates), built-in modules (Core, Movement, Health, Energy, Race, Class).
 - **Presentation**: FNA (XNA-compat) rendering + window/UI. No gameplay logic.
-- **DungeonCrawlerWorld**: exe. `GameLoop.cs` = composition root. `GameShellBootstrapper.cs` = windows/layout. `Presentation/Input/GameInputController.cs` = input.
+- **DungeonCrawlerWorld**: exe. `GameLoop.cs` = composition root. `GameShellBootstrapper.cs` = windows/layout. `Presentation/Input/UiInputController.cs` = input.
 - **Content**: copies `Content/Fonts/*.ttf` to output only; not a compiled MonoGame pipeline.
 - **Mods.ExampleMod**: real mod pattern — refs Engine/Game with `Private="false"` (no duplicate copies shipped). **Mods.TestFixtures**: mod DLLs for ModuleLoader failure-path tests.
 

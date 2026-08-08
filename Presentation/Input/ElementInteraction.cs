@@ -13,7 +13,7 @@ internal enum ElementDragInteractionKind
 /// <summary>
 /// The result of Element.TryHitTestInteraction: which element (if any) was hit, what drag
 /// interaction (if any) it starts, and -- for a button hit -- which button, so
-/// GameInputController can track press/release state (Window Chrome Phase A0/B) from the same
+/// UiInputController can track press/release state (Window Chrome Phase A0/B) from the same
 /// hit-test that also drives raise-to-front and Move/Resize (Phase A1/C/D). Window is null
 /// only when nothing was hit at all; it's still set (with Kind None) for a plain button/title/
 /// content click, since that still needs to raise the window to front.

@@ -72,7 +72,7 @@ public class Element
     /// </summary>
     public event Action<Element>? DisplayModeChanged;
 
-    /// <summary>Raised by a window that can't move focus itself (e.g. a TextBox submitting via Enter) to ask GameInputController to move it elsewhere -- see GameInputController.SetFocus, which subscribes/unsubscribes this the same way it does Closed.</summary>
+    /// <summary>Raised by a window that can't move focus itself (e.g. a TextBox submitting via Enter) to ask UiInputController to move it elsewhere -- see UiInputController.SetFocus, which subscribes/unsubscribes this the same way it does Closed.</summary>
     public event Action<Element>? FocusRequested;
 
     /// <summary>Events can only be raised from their declaring class, so subclasses (e.g. TextBox) go through this instead of invoking FocusRequested directly.</summary>
@@ -133,7 +133,7 @@ public class Element
 
     protected bool _isFocused;
 
-    /// <summary>True while this window holds input focus -- set by GameInputController, not this window itself.</summary>
+    /// <summary>True while this window holds input focus -- set by UiInputController, not this window itself.</summary>
     public bool IsFocused => _isFocused;
 
     /*========Header========*/
@@ -480,14 +480,14 @@ public class Element
     /// <summary>No-op by default; TextWindow/MapWindow override this directly, Window overrides it to host IElementContent.</summary>
     public virtual void DrawContent(GameTime gameTime, SpriteBatch spriteBatch, Texture2D unitRectangle) { }
 
-    /// <summary>Routes a key newly pressed this frame to this window while it holds focus -- see GameInputController.RouteKeyPressesToFocusedWindow.</summary>
+    /// <summary>Routes a key newly pressed this frame to this window while it holds focus -- see UiInputController.RouteKeyPressesToFocusedWindow.</summary>
     internal void HandleKeyPress(Keys key) => OnKeyPressAction(key);
 
     protected virtual void OnKeyPressAction(Keys key) { }
 
     /// <summary>
     /// Routes the whole keyboard state to this window once per frame while it holds focus --
-    /// see GameInputController.RouteHotkeysToFocusedWindow. Unlike HandleKeyPress (one discrete
+    /// see UiInputController.RouteHotkeysToFocusedWindow. Unlike HandleKeyPress (one discrete
     /// key-press event at a time), this is for windows whose own hotkeys need continuous or
     /// combined multi-key state (e.g. MapWindow's WASD scroll, which reads all four keys'
     /// current down-state together rather than reacting to one press event).
@@ -496,12 +496,12 @@ public class Element
 
     protected virtual void OnHotkeysAction(KeyboardState keyboardState, KeyboardState previousKeyboardState) { }
 
-    /// <summary>Shared "newly pressed this frame" edge-detection for OnHotkeysAction overrides and GameInputController's own Tab handling.</summary>
+    /// <summary>Shared "newly pressed this frame" edge-detection for OnHotkeysAction overrides and UiInputController's own Tab handling.</summary>
     internal static bool WasKeyPressed(KeyboardState current, KeyboardState previous, Keys key) => current.IsKeyDown(key) && previous.IsKeyUp(key);
 
     /// <summary>
     /// Fires once when a right-mouse-button drag starts over this window -- see
-    /// GameInputController's right-button state machine. No-op by default; MapWindow uses
+    /// UiInputController's right-button state machine. No-op by default; MapWindow uses
     /// this to snapshot its own scroll position as the drag's anchor, so every subsequent
     /// HandleRightDrag call (which reports the *total* delta since the drag started, not a
     /// per-frame increment) can recompute the desired scroll from a fixed reference point
@@ -514,7 +514,7 @@ public class Element
     /// <summary>
     /// Routes the total mouse-pixel delta of an in-progress right-mouse-button drag (measured
     /// from where the drag started, not since the last frame) to whichever window the drag
-    /// started over -- see GameInputController's right-button state machine and
+    /// started over -- see UiInputController's right-button state machine and
     /// HandleRightDragStart. No-op by default (only MapWindow overrides this today, to pan its
     /// camera); unlike HandleHotkeys this doesn't depend on focus, since a drag-to-pan gesture
     /// shouldn't require clicking to focus a window first.
@@ -525,7 +525,7 @@ public class Element
 
     /// <summary>
     /// Fires once when an in-progress right-mouse-button drag ends (button released) -- see
-    /// GameInputController's right-button state machine. No-op by default; MapWindow uses this
+    /// UiInputController's right-button state machine. No-op by default; MapWindow uses this
     /// to settle its smooth sub-tile scroll offset onto the tile grid once the gesture is over,
     /// rather than mid-drag on every frame.
     /// </summary>
@@ -535,7 +535,7 @@ public class Element
 
     /// <summary>
     /// Fires instead of HandleRightDragEnd when a right-button press/release never moved the
-    /// mouse past GameInputController's small tap-vs-drag pixel threshold -- a right-click
+    /// mouse past UiInputController's small tap-vs-drag pixel threshold -- a right-click
     /// "tap," distinct from the drag-to-pan gesture the same button also drives. No-op by
     /// default; MapWindow uses this to cancel an armed ability, since a genuine right-drag
     /// (panning the camera) must keep behaving exactly as it already does.
@@ -546,7 +546,7 @@ public class Element
 
     /// <summary>
     /// Fires on every root/HUD window when Escape is pressed -- see
-    /// GameInputController.HandleEscape for why this is broadcast unconditionally rather than
+    /// UiInputController.HandleEscape for why this is broadcast unconditionally rather than
     /// routed only to whichever window holds focus. No-op by default; MapWindow uses this to
     /// cancel an armed ability or an in-progress Delayed action windup, the same cancellation
     /// OnRightClickTapAction triggers.
@@ -557,7 +557,7 @@ public class Element
 
     /// <summary>
     /// Routes an actual typed character (shifted case, punctuation, OS keyboard layout) to
-    /// this window while it holds focus -- see GameInputController.RouteTextInputToFocusedWindow.
+    /// this window while it holds focus -- see UiInputController.RouteTextInputToFocusedWindow.
     /// Neither HandleKeyPress (raw Keys values) nor HandleHotkeys (modifier-aware combos) can
     /// deliver real characters; this is fed from FNA's TextInputEXT.
     /// </summary>
@@ -568,7 +568,7 @@ public class Element
     /// <summary>
     /// Finds the next focusable TextBox among this window's direct children, starting right
     /// after `after` and wrapping around (after: null means "the first one"). Shared by
-    /// TextBox's own Enter-to-advance and GameInputController.SetFocus's auto-redirect into a
+    /// TextBox's own Enter-to-advance and UiInputController.SetFocus's auto-redirect into a
     /// container's first TextBox -- both are "find the next TextBox sibling," the second just
     /// with after: null.
     /// </summary>
@@ -748,7 +748,7 @@ public class Element
     /// <summary>
     /// Moves this window to the end of its parent's child list, so it draws last (on top) and
     /// wins future overlapping hit-tests against its siblings. No-op for a root window (no
-    /// parent) -- GameInputController is responsible for raising a root window to the front of
+    /// parent) -- UiInputController is responsible for raising a root window to the front of
     /// whichever shared tier list (BaseWindows/StaticHudWindows/DynamicHudWindows/UserWindows)
     /// it belongs to, since Window itself has no knowledge of those.
     /// </summary>

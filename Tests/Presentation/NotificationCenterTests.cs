@@ -15,7 +15,7 @@ namespace Tests.Presentation;
 /// clickable (its Window has actually been detached from the active list, not just hidden).
 ///
 /// Click routing/hit-testing is no longer NotificationCenter's job (Window Chrome Phase A1)
-/// -- production code (GameInputController) hit-tests the shared dynamicHudWindows list
+/// -- production code (UiInputController) hit-tests the shared dynamicHudWindows list
 /// directly. ClickDynamicHud below mirrors that exact topmost-first
 /// TryHitTestInteraction-then-HandleClick sequence, against the same list this
 /// NotificationCenter was constructed with, so these tests still exercise real click-to-
@@ -69,7 +69,7 @@ public sealed class NotificationCenterTests
         Assert.IsTrue(ClickDynamicHud(dynamicHudWindows, FirstActiveNotificationTopLeft));
     }
 
-    /// <summary>Feature: opening a notification (fresh, via showImmediately: true) should let a caller (GameInputController, in production) focus the new popup -- see ActiveNotificationOpened.</summary>
+    /// <summary>Feature: opening a notification (fresh, via showImmediately: true) should let a caller (UiInputController, in production) focus the new popup -- see ActiveNotificationOpened.</summary>
     [TestMethod]
     public void AddNotification_ShowImmediately_RaisesActiveNotificationOpenedWithTheNewWindow()
     {
