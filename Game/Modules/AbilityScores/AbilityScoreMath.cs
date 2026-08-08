@@ -17,7 +17,28 @@ public static class AbilityScoreMath
     public const short MinimumBaseValue = 1;
     public const short MaximumBaseValue = 300;
 
+    // Precomputed once rather than divided out on every Lerp call -- Lerp runs on hot paths
+    // (per-visit regen ticks, per-target potion cooldown resets), and a multiply by a cached
+    // reciprocal is cheaper than a float divide repeated across every one of those calls.
+    private static readonly float InverseBaseValueRange = 1f / (MaximumBaseValue - MinimumBaseValue);
+
     public static short ClampBaseValue(short baseValue) => MathUtility.ClampShort(baseValue, MinimumBaseValue, MaximumBaseValue);
+
+    /// <summary>
+    /// Linear ramp from atMin (at ability score total MinimumBaseValue) to atMax (at
+    /// MaximumBaseValue) -- abilityScoreTotal is clamped into that range first via
+    /// ClampBaseValue. Shared by every "output scales smoothly across an ability score's full
+    /// range" formula (AbilityScoreRegenMath, PotionCooldownEffects.ComputeDurationFrames, ...)
+    /// so they don't each duplicate the same normalize-then-lerp arithmetic. atMin may be
+    /// greater than atMax -- callers whose output should shrink as the score rises (e.g. a
+    /// cooldown) just pass their endpoints in that order.
+    /// </summary>
+    public static float Lerp(short abilityScoreTotal, float atMin, float atMax)
+    {
+        var clampedTotal = ClampBaseValue(abilityScoreTotal);
+        var normalized = (clampedTotal - MinimumBaseValue) * InverseBaseValueRange;
+        return atMin + normalized * (atMax - atMin);
+    }
 
     /// <summary>Which StatModifierTarget a given AbilityScoreType's modifiers are filed under -- the two enums are deliberately kept 1:1 (see StatModifierTarget's own comment).</summary>
     public static StatModifierTarget ToStatModifierTarget(AbilityScoreType type) => type switch

@@ -3,6 +3,8 @@ using Engine.Events;
 using Engine.Math;
 using Game.Modules.Abilities;
 using Game.Modules.Abilities.Components;
+using Game.Modules.AbilityScores;
+using Game.Modules.AbilityScores.Components;
 using Game.Modules.Core.Components;
 using Game.Modules.Death.Components;
 using Game.Modules.Health.Components;
@@ -90,6 +92,49 @@ public sealed class ConsumableActivationSystemTests
             componentManager.GetPackedPool<DeadComponent>(),
             componentManager.GetPackedPool<ManaComponent>(),
             componentManager.GetPackedPool<HotkeyExpansionUnlockComponent>());
+
+        return (system, componentManager, mapQuery, eventBus);
+    }
+
+    /// <summary>Same wiring as Build, plus an AbilityScoreComponent pool -- for tests exercising Constitution's effect on the potion cooldown duration.</summary>
+    private static (ConsumableActivationSystem System, ComponentManager ComponentManager, FakeMapQuery MapQuery, EventBus EventBus) BuildWithAbilityScores()
+    {
+        var componentManager = new ComponentManager(initialEntityCapacity: 20, initialComponentCapacity: 10);
+        componentManager.RegisterPackedPool<PendingConsumableActivationComponent>(static (ref existing, incoming) => existing = incoming);
+        componentManager.RegisterPackedPool<ActionLockComponent>(static (ref existing, incoming) => existing = incoming);
+        componentManager.RegisterPackedPool<PotionCooldownComponent>(static (ref existing, incoming) => existing = incoming);
+        componentManager.RegisterPackedPool<HealthComponent>(static (ref existing, incoming) => existing = incoming);
+        componentManager.RegisterPackedPool<DeadComponent>(static (ref existing, incoming) => existing = incoming);
+        componentManager.RegisterPackedPool<ManaComponent>(static (ref existing, incoming) => existing = incoming);
+        componentManager.RegisterMultiPool<InventoryItemStackComponent>();
+        componentManager.RegisterPackedPool<InventoryComponent>(static (ref existing, incoming) => existing = incoming);
+        componentManager.RegisterMultiPool<StatusEffectStack>();
+        componentManager.RegisterPackedPool<PoisonTimerComponent>(static (ref existing, incoming) => { });
+        componentManager.RegisterPackedPool<HotkeyExpansionUnlockComponent>(static (ref existing, incoming) => existing = incoming);
+        componentManager.RegisterMultiPool<AbilityScoreComponent>();
+
+        var itemCatalog = new ItemCatalog();
+        itemCatalog.Register(new ItemDefinition(
+            PotionId, "Test Potion", null, "p", Color.Green, Tags: [],
+            Consumable: new ConsumableEffect(ConsumableKind.Potion, HealFraction: 0.5f, Targeting: new TargetingSpec(TargetShape.Burst, Range: 3, AreaSize: 1), ActionLockFrames: 60)));
+
+        var mapQuery = new FakeMapQuery();
+        var eventBus = new EventBus();
+
+        var system = new ConsumableActivationSystem(
+            componentManager.GetPackedPool<PendingConsumableActivationComponent>(),
+            componentManager.GetPackedPool<ActionLockComponent>(),
+            componentManager.GetPackedPool<PotionCooldownComponent>(),
+            componentManager.GetPackedPool<HealthComponent>(),
+            itemCatalog,
+            mapQuery,
+            eventBus,
+            componentManager,
+            statModifiers: null,
+            componentManager.GetPackedPool<DeadComponent>(),
+            componentManager.GetPackedPool<ManaComponent>(),
+            componentManager.GetPackedPool<HotkeyExpansionUnlockComponent>(),
+            componentManager.GetMultiPool<AbilityScoreComponent>());
 
         return (system, componentManager, mapQuery, eventBus);
     }
@@ -205,6 +250,24 @@ public sealed class ConsumableActivationSystemTests
 
         var cooldown = componentManager.GetPackedPool<PotionCooldownComponent>().GetReadonly(CasterEntityId);
         Assert.AreEqual(PotionCooldownEffects.DurationFrames, cooldown.FramesRemaining);
+    }
+
+    [TestMethod]
+    public void Potion_TargetHasHighConstitution_ResetsCooldownToScaledDuration()
+    {
+        var (system, componentManager, mapQuery, _) = BuildWithAbilityScores();
+        mapQuery.SetOccupant(TargetTile, TargetEntityId);
+        componentManager.Merge(TargetEntityId, new HealthComponent(currentHealth: 20, maximumHealth: 100));
+        componentManager.GetMultiPool<AbilityScoreComponent>().Add(TargetEntityId, new AbilityScoreComponent(AbilityScoreType.Constitution, baseValue: 300, total: 300));
+        InventoryActions.AddItem(componentManager, CasterEntityId, PotionId, quantity: 1);
+        componentManager.Merge(CasterEntityId, new PendingConsumableActivationComponent(PotionId, [TargetTile]));
+        componentManager.Merge(CasterEntityId, new ActionLockComponent(totalLockFrames: 0, lockFramesRemaining: 0));
+
+        system.Update(default, 0);
+
+        var cooldown = componentManager.GetPackedPool<PotionCooldownComponent>().GetReadonly(TargetEntityId);
+        Assert.AreEqual(PotionCooldownEffects.MinDurationFrames, cooldown.FramesRemaining);
+        Assert.AreEqual(PotionCooldownEffects.MinDurationFrames, cooldown.TotalFrames);
     }
 
     [TestMethod]

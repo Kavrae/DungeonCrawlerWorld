@@ -2,6 +2,7 @@ using Engine.ECS.Components;
 using Engine.ECS.Systems;
 using Engine.Events;
 using Game.Modules.Abilities.Components;
+using Game.Modules.AbilityScores.Components;
 using Game.Modules.Core.Components;
 using Game.Modules.Death.Components;
 using Game.Modules.Health.Components;
@@ -61,6 +62,9 @@ public sealed class InventoryModule : IGameModule
         var hotkeyExpansionUnlocks = componentManager.IsRegistered<HotkeyExpansionUnlockComponent>()
             ? componentManager.GetPackedPool<HotkeyExpansionUnlockComponent>()
             : null;
+        var abilityScores = componentManager.IsRegistered<AbilityScoreComponent>()
+            ? componentManager.GetMultiPool<AbilityScoreComponent>()
+            : null;
 
         systemManager.Register(new ConsumableActivationSystem(
             componentManager.GetPackedPool<PendingConsumableActivationComponent>(),
@@ -74,6 +78,7 @@ public sealed class InventoryModule : IGameModule
             statModifiers,
             deadEntities,
             mana,
-            hotkeyExpansionUnlocks));
+            hotkeyExpansionUnlocks,
+            abilityScores));
     }
 }

@@ -10,17 +10,8 @@ namespace Game.Modules.AbilityScores;
 public static class AbilityScoreRegenMath
 {
     private const float MinPercentPerSecond = 2f;
-    private const float PercentPerSecondRange = 6f - MinPercentPerSecond;
+    private const float MaxPercentPerSecond = 6f;
 
-    // Precomputed once rather than divided out on every call: this runs per due entity per
-    // regen tick (HealthRegenSystem/ManaRegenSystem), and a multiply by a cached reciprocal is
-    // cheaper than a float divide repeated across every one of those visits.
-    private static readonly float InverseBaseValueRange = 1f / (AbilityScoreMath.MaximumBaseValue - AbilityScoreMath.MinimumBaseValue);
-
-    public static float ComputePercentPerSecond(short abilityScoreTotal)
-    {
-        var clampedTotal = AbilityScoreMath.ClampBaseValue(abilityScoreTotal);
-        var normalized = (clampedTotal - AbilityScoreMath.MinimumBaseValue) * InverseBaseValueRange;
-        return MinPercentPerSecond + normalized * PercentPerSecondRange;
-    }
+    public static float ComputePercentPerSecond(short abilityScoreTotal) =>
+        AbilityScoreMath.Lerp(abilityScoreTotal, MinPercentPerSecond, MaxPercentPerSecond);
 }

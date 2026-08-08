@@ -32,6 +32,10 @@ Items that get used up -- a potion drunk, a scroll read, ammo spent. Needs the i
 
 `ConsumableEffect` (`Game/Modules/Inventory/ConsumableEffect.cs`) grows a new dedicated field every time a consumable needs a new kind of effect -- `HealFraction`, `ManaFraction`, and now `HotkeySlotGrant` (the Hotkey Expansion Potion), each read independently by `ConsumableActivationSystem.ApplyPotionToTarget`. That's fine at 3 effects, but a real consumable system will eventually want dozens or hundreds of distinct effects (buffs, debuffs, teleports, summons, ...), and one dedicated record field per effect doesn't scale to that -- revisit with a real data-driven/composable effect list (closer to how `AbilityEffect`/`AbilityEffectResolver` already handle an ability's own varied effects) before adding a fourth or fifth one-off field here.
 
+#### Scrolls (requires restructuring actions into ActionEffects/ActionActivators)
+
+A scroll is a one-time-use item that triggers an ability-like effect without a caster needing mana or the ability itself, the same way a potion delivers a fixed effect today. Landing it needs splitting the current ability/consumable action shape into two pieces: **ActionEffects** -- what an action actually does (damage, heal, status effects, optional resource costs), the same shape `AbilityEffect`/`ConsumableEffect` already have -- and **ActionActivators** -- how, how often, and which of an ActionEffect's optional costs actually apply. A spell activator requires and spends the mana cost; a potion activator is one-time-use with splash targeting; a scroll activator is one-time-use with its own special targeting rules; a wand activator (see the Wands item below) spends a charge instead of mana. ActionActivators are what get added to inventories and hotbars; ActionEffects themselves are never added directly anywhere -- they're only ever triggered by whichever ActionActivator owns them. This is the same generalization the ConsumableEffect item above already flags as eventually necessary -- scrolls (and wands) are the concrete features that finally require doing it, since a scroll, a wand, and a spell all need to share the exact same effect definition under different activation rules.
+
 #### Move inventory items to the hotbar
 
 `ItemHotkeyBindingComponent` (`Game/Modules/Inventory/Components/`) plus `ConsumableActivationSystem`/`ActionTargetingController`'s item-arm/target/confirm/double-tap path have landed -- a slot can reference an item and activate it (splash-throw or double-tap-self for potions), separately from `ActionHotkeyBindingComponent` (renamed from `HotkeyBindingComponent`, the ability-only original). `Presentation/UI/Content/HotbarContent.cs` still only *renders* ability slots though (Phase 4), and the only way to actually bind an item to a slot today is `PlayerBlueprint`'s TEMPORARY hardcoded grant -- real click-and-drag assignment (Phase 5) still depends on the Standard widget set item below.
@@ -64,18 +68,30 @@ Game-side logic for descending/ascending a level. See the matching Presentation 
 
 Game-side equipment rules (what can go in which slot, stat effects of equipping). Companion to the Engine-layer equipment item above and the Presentation-layer equipment menu below. Unblocked now that Inventory exists (see the Engine-layer Inventory system item).
 
+#### Wands
+
+A Wand is an Equipment item (see above) that must be equipped to activate, unlike a potion or scroll which activates straight from a hotbar slot. It carries a limited number of charges, spends one per activation via its own ActionActivator (see the Scrolls item above), and is destroyed once its charges run out. Depends on both ActionEffects/ActionActivators and Equipment landing first -- a wand's activator needs the ActionActivator split to express "spend a charge instead of mana or a one-time use," and equip/unequip mechanics to gate activation on actually being equipped.
+
 #### Stats (infrastructure landed -- consumers still TODO)
 
 `Game/Modules/AbilityScores/` now exists: `AbilityScoreComponent` (base value 1-300, precomputed `Total`) for the 5 Core scores (Strength, Intelligence, Constitution, Dexterity, Charisma) and 2 Hidden scores (Luck, Wisdom) never shown to the player or touched by level-up. Modifiers reuse `StatModifierComponent`/`StatModifierTarget` (`Game/Modules/StatModifiers/`) rather than a separate list -- grant one via `AbilityScoreEffects.GrantModifier`, not raw `StatModifierEffects.Apply`, so `Total` stays in sync (it's precomputed eagerly on grant/expiry, not lazily on read like every other stat -- see `AbilityScoreComponent`'s own doc comment). The player rolls randomized starting values (2-10, clustering 3-7); every other race (Goblin/Fairy/Ghost) currently defaults to a flat 5 across all 7 scores, adjustable in a balance pass. Remaining work:
 
 - **Split hidden ability scores into composites.** Luck and Wisdom (and future hidden scores) should eventually be derived from combinations of *other* hidden ability scores rather than being standalone base values. Not designed yet -- needs its own pass once there are enough hidden scores for composition to make sense.
-- **Wire the concrete "modifies" behaviors.** Strength->melee damage (retire the hardcoded `PunchDamage` consts in `PlayerBlueprint`/`Goblin`/`Fairy`/`Ghost`), Constitution->`MaximumHealth`(x10)/`HealthRegen`/potion cooldown, Dexterity->`ActionLockComponent` duration (100% at 1 dex down to 25% at 300), Intelligence->mana once the Mana item below lands, Charisma->shop/charm/pet-bond mechanics once those exist, Luck->loot/AI once those exist.
+- **Wire the concrete "modifies" behaviors.** Strength->melee damage (retire the hardcoded `PunchDamage` consts in `PlayerBlueprint`/`Goblin`/`Fairy`/`Ghost`), Constitution->`MaximumHealth`(x10) still open (`HealthRegen` and potion cooldown -- `PotionCooldownEffects.ComputeDurationFrames`, 20s at total 1 down to 5s at total 300 -- have landed), Dexterity->`ActionLockComponent` duration (100% at 1 dex down to 25% at 300), Intelligence->mana once the Mana item below lands, Charisma->shop/charm/pet-bond mechanics once those exist, Luck->loot/AI once those exist.
 - **Non-player starting ability scores.** Give race/class blueprints their own baseline scores instead of the flat default-5 placeholder above.
 - **Level-up modifying Core scores.** Flat increases from the future level-up process (Hidden scores explicitly excluded). See the matching Presentation stats window item below.
+
+#### Item weight and carry capacity scaling with Strength
+
+No item has a weight today (`ItemDefinition`/`InventoryItemStackComponent`), and inventory storage is unlimited (see the Inventory system item above). Add a weight field to items and a carry-capacity limit derived from the holder's Strength `AbilityScoreComponent.Total`, then gate picking up (or otherwise receiving) an item on it not exceeding that capacity -- the same kind of restricted-pickup rule the Inventory management rules item above already anticipates. A concrete instance of the Stats item's own "wire the concrete modifies behaviors" bullet, which doesn't yet cover Strength -> carry capacity specifically.
 
 #### Mana
 
 A mana system, using `HealthComponent`/the health bar (`Game/Modules/Health/`) as a template -- a current/maximum pool plus regen, the same shape health already has. Heal (`Game/Modules/Abilities/CoreAbilitiesModule.cs`) should cost 2 MP and Magic Missile 5 MP once this lands -- both are free to cast until then. Starting `MaximumMana` should equal Intelligence's `Total` (`Game/Modules/AbilityScores/`) now that ability scores exist.
+
+#### Scroll and spell durations scaling with Intelligence
+
+Once scrolls and ActionEffects/ActionActivators exist (see the Scrolls item above), a spell or scroll's duration-based effects (buffs, DoTs, status effects granted through an ActionEffect) should scale with the caster's Intelligence `AbilityScoreComponent.Total` -- higher Intelligence extending how long the effect lasts, the same way Constitution now scales the potion cooldown (`PotionCooldownEffects.ComputeDurationFrames`) rather than leaving it flat. Needs the ActionEffect duration field(s) to exist as a real concept first, which they don't until the Scrolls restructuring lands.
 
 #### Damage types
 

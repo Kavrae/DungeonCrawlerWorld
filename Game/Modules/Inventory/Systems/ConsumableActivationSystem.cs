@@ -5,6 +5,8 @@ using Engine.Events;
 using Engine.Math;
 using Game.Modules.Abilities;
 using Game.Modules.Abilities.Components;
+using Game.Modules.AbilityScores;
+using Game.Modules.AbilityScores.Components;
 using Game.Modules.Core.Components;
 using Game.Modules.Death.Components;
 using Game.Modules.Health;
@@ -52,6 +54,7 @@ public sealed class ConsumableActivationSystem : ISystem
     private readonly PackedComponentPool<DeadComponent>? _deadEntities;
     private readonly PackedComponentPool<ManaComponent>? _mana;
     private readonly PackedComponentPool<HotkeyExpansionUnlockComponent>? _hotkeyExpansionUnlocks;
+    private readonly MultiComponentPool<AbilityScoreComponent>? _abilityScores;
     private readonly EntityStripeSet _stripeSet;
 
     public ConsumableActivationSystem(
@@ -66,7 +69,8 @@ public sealed class ConsumableActivationSystem : ISystem
         MultiComponentPool<StatModifierComponent>? statModifiers = null,
         PackedComponentPool<DeadComponent>? deadEntities = null,
         PackedComponentPool<ManaComponent>? mana = null,
-        PackedComponentPool<HotkeyExpansionUnlockComponent>? hotkeyExpansionUnlocks = null)
+        PackedComponentPool<HotkeyExpansionUnlockComponent>? hotkeyExpansionUnlocks = null,
+        MultiComponentPool<AbilityScoreComponent>? abilityScores = null)
     {
         _pendingActivations = pendingActivations;
         _actionLocks = actionLocks;
@@ -80,6 +84,7 @@ public sealed class ConsumableActivationSystem : ISystem
         _deadEntities = deadEntities;
         _mana = mana;
         _hotkeyExpansionUnlocks = hotkeyExpansionUnlocks;
+        _abilityScores = abilityScores;
 
         _stripeSet = new EntityStripeSet(StripeCount, pendingActivations.EntityIds);
         pendingActivations.EntityAdded += _stripeSet.OnEntityAdded;
@@ -169,6 +174,10 @@ public sealed class ConsumableActivationSystem : ISystem
     /// means it landed on them, not just that a target tile happened to contain them.
     /// HotkeySlotGrant (the Hotkey Expansion Potion) is a third, unrelated effect applied the same
     /// per-target way, gated on _hotkeyExpansionUnlocks being wired (it's optional, like _mana).
+    /// The cooldown's own duration is computed from the target's Constitution
+    /// (PotionCooldownEffects.ComputeDurationFrames), falling back to the un-scaled
+    /// PotionCooldownEffects.DurationFrames when _abilityScores isn't wired or the target has no
+    /// Constitution score.
     /// </summary>
     private void ApplyPotionToTarget(ConsumableEffect consumable, int targetEntityId)
     {
@@ -177,9 +186,13 @@ public sealed class ConsumableActivationSystem : ISystem
             return;
         }
 
+        var durationFrames = _abilityScores is not null && AbilityScoreQueries.TryGetComponent(_abilityScores, targetEntityId, AbilityScoreType.Constitution, out var constitution)
+            ? PotionCooldownEffects.ComputeDurationFrames(constitution.Total)
+            : PotionCooldownEffects.DurationFrames;
+
         if (_potionCooldowns.TryGetReadonly(targetEntityId, out var cooldown) && cooldown.FramesRemaining > 0)
         {
-            PoisonEffects.ApplyStack(_componentManager, targetEntityId, StatusEffectSource.FromEntity(targetEntityId), PotionCooldownEffects.AbusePoisonDurationTicks);
+            PoisonEffects.ApplyStack(_componentManager, targetEntityId, StatusEffectSource.FromEntity(targetEntityId), PotionCooldownEffects.ComputeAbusePoisonDurationTicks(durationFrames));
             _eventBus.Publish(new PotionCooldownAbusedEvent(targetEntityId));
         }
 
@@ -202,6 +215,6 @@ public sealed class ConsumableActivationSystem : ISystem
             HotkeyExpansionEffects.Grant(_hotkeyExpansionUnlocks, targetEntityId, consumable.HotkeySlotGrant);
         }
 
-        PotionCooldownEffects.Reset(_componentManager, targetEntityId);
+        PotionCooldownEffects.Reset(_componentManager, targetEntityId, durationFrames);
     }
 }
