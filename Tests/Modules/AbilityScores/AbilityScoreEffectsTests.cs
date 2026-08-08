@@ -1,4 +1,5 @@
 using Engine.ECS.Components;
+using Engine.Events;
 using Game.Modules.AbilityScores;
 using Game.Modules.AbilityScores.Components;
 using Game.Modules.StatModifiers;
@@ -115,5 +116,66 @@ public sealed class AbilityScoreEffectsTests
         new StatModifiersModule().RegisterComponents(manager);
 
         AbilityScoreEffects.RecomputeIfAbilityScore(manager, 0, StatModifierTarget.Strength);
+    }
+
+    [TestMethod]
+    public void SetBaseValue_UpdatesBaseAndTotalAndPublishesEvent()
+    {
+        var manager = CreateRegisteredManager();
+        var eventBus = new EventBus();
+        AbilityScoreEffects.Grant(manager, 0, AbilityScoreType.Strength, 5);
+        AbilityScoreBaseValueChangedEvent? published = null;
+        eventBus.Subscribe<AbilityScoreBaseValueChangedEvent>(changed => published = changed);
+
+        AbilityScoreEffects.SetBaseValue(manager, eventBus, 0, AbilityScoreType.Strength, 100);
+
+        var score = GetAbilityScore(manager, 0, AbilityScoreType.Strength);
+        Assert.AreEqual((short)100, score.BaseValue);
+        Assert.AreEqual((short)100, score.Total);
+        Assert.IsNotNull(published);
+        Assert.AreEqual(0, published!.Value.EntityId);
+        Assert.AreEqual(AbilityScoreType.Strength, published.Value.Type);
+        Assert.AreEqual((short)100, published.Value.NewBaseValue);
+    }
+
+    [TestMethod]
+    public void SetBaseValue_OutOfRange_ClampsAndPublishesClampedValue()
+    {
+        var manager = CreateRegisteredManager();
+        var eventBus = new EventBus();
+        AbilityScoreEffects.Grant(manager, 0, AbilityScoreType.Strength, 5);
+        AbilityScoreBaseValueChangedEvent? published = null;
+        eventBus.Subscribe<AbilityScoreBaseValueChangedEvent>(changed => published = changed);
+
+        AbilityScoreEffects.SetBaseValue(manager, eventBus, 0, AbilityScoreType.Strength, 500);
+
+        Assert.AreEqual((short)300, GetAbilityScore(manager, 0, AbilityScoreType.Strength).BaseValue);
+        Assert.AreEqual((short)300, published!.Value.NewBaseValue);
+    }
+
+    [TestMethod]
+    public void SetBaseValue_DoesNotTouchOtherScores()
+    {
+        var manager = CreateRegisteredManager();
+        var eventBus = new EventBus();
+        AbilityScoreEffects.Grant(manager, 0, AbilityScoreType.Strength, 5);
+        AbilityScoreEffects.Grant(manager, 0, AbilityScoreType.Dexterity, 5);
+
+        AbilityScoreEffects.SetBaseValue(manager, eventBus, 0, AbilityScoreType.Strength, 100);
+
+        Assert.AreEqual((short)5, GetAbilityScore(manager, 0, AbilityScoreType.Dexterity).BaseValue);
+    }
+
+    [TestMethod]
+    public void SetBaseValue_EntityHasNoAbilityScoreOfType_DoesNotThrowOrPublish()
+    {
+        var manager = CreateRegisteredManager();
+        var eventBus = new EventBus();
+        var published = false;
+        eventBus.Subscribe<AbilityScoreBaseValueChangedEvent>(_ => published = true);
+
+        AbilityScoreEffects.SetBaseValue(manager, eventBus, 0, AbilityScoreType.Strength, 100);
+
+        Assert.IsFalse(published);
     }
 }

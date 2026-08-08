@@ -27,15 +27,21 @@ public sealed class AchievementModule : IGameModule
     public IReadOnlyList<Type> Dependencies { get; } = [];
 
     private static readonly IReadOnlyList<IAchievementDefinition> Definitions = [
+        new BigMusclesAchievement(),
         new DrinkingProblemAchievement(),
         new EarlyAdopterAchievement(),
         new EmptyPocketsAchievement(),
         new InertGasAchievement(),
         new InflictedDamageAchievement(),
         new KilledAMobAchievement(),
+        new KillerQueenAchievement(),
         new LonerAchievement(),
+        new MinMaxerAchievement(),
+        new RevengeOfTheNerdsAchievement(),
+        new ShanghaiKidAchievement(),
         new SpellCasterAchievement(),
-        new UnarmedCombatAchievement()
+        new UnarmedCombatAchievement(),
+        new UnbreakableAchievement()
         ];
 
     private EventBus? _eventBus;

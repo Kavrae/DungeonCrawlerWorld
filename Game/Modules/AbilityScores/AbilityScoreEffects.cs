@@ -1,4 +1,5 @@
 using Engine.ECS.Components;
+using Engine.Events;
 using Game.Modules.AbilityScores.Components;
 using Game.Modules.StatModifiers;
 using Game.Modules.StatModifiers.Components;
@@ -61,6 +62,42 @@ public static class AbilityScoreEffects
     {
         StatModifierEffects.Apply(componentManager, entityId, AbilityScoreMath.ToStatModifierTarget(type), operation, polarity, canModify, magnitude, durationFrames, source);
         RecomputeAbilityScore(componentManager, entityId, type);
+    }
+
+    /// <summary>
+    /// Entry point for any future code that permanently raises an entity's base ability score
+    /// after creation -- level-up, an "item of divine suffering", etc. (see TODO.md) -- as
+    /// opposed to GrantModifier, which only ever layers a temporary/removable modifier on top of
+    /// BaseValue. Publishes AbilityScoreBaseValueChangedEvent so the base-score milestone
+    /// achievements (Game/Modules/Achievements/Definitions/) can react without polling every
+    /// entity's ability scores every frame. No-ops if the entity has no AbilityScoreComponent of
+    /// type.
+    /// </summary>
+    public static void SetBaseValue(ComponentManager componentManager, EventBus eventBus, int entityId, AbilityScoreType type, short newBaseValue)
+    {
+        var clampedBase = AbilityScoreMath.ClampBaseValue(newBaseValue);
+        var abilityScores = componentManager.GetMultiPool<AbilityScoreComponent>();
+        var statModifiers = componentManager.IsRegistered<StatModifierComponent>()
+            ? componentManager.GetMultiPool<StatModifierComponent>()
+            : null;
+
+        for (var denseIndex = abilityScores.GetFirstDenseIndex(entityId); denseIndex != -1; denseIndex = abilityScores.GetNextDenseIndex(denseIndex))
+        {
+            ref readonly var abilityScore = ref abilityScores.GetReadonlyByDenseIndex(denseIndex);
+            if (abilityScore.Type != type)
+            {
+                continue;
+            }
+
+            var newTotal = AbilityScoreMath.ComputeTotal(statModifiers, entityId, type, clampedBase);
+            abilityScores.UpdateByDenseIndex(denseIndex, (clampedBase, newTotal), static (ref AbilityScoreComponent component, (short Base, short Total) values) =>
+            {
+                component.BaseValue = values.Base;
+                component.Total = values.Total;
+            });
+            eventBus.Publish(new AbilityScoreBaseValueChangedEvent(entityId, type, clampedBase));
+            return;
+        }
     }
 
     /// <summary>
