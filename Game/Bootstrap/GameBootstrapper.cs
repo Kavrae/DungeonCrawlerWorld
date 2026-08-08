@@ -17,6 +17,7 @@ using Game.Modules.Health;
 using Game.Modules.Inventory;
 using Game.Modules.Mana;
 using Game.Modules.Movement;
+using Game.Modules.NpcBehavior;
 using Game.Modules.Paralysis;
 using Game.Modules.Poison;
 using Game.Modules.ProcessingTier;
@@ -49,6 +50,13 @@ public static class GameBootstrapper
             new CoreModule(),
             new HealthModule(),
             new ManaModule(),
+            // NpcBehaviorModule before MovementModule -- TestCombatBehaviorSystem must run before
+            // MovementSystem every frame so a heal/attack decision this tick is visible to
+            // MovementSystem's same-frame pending-activation check (see both systems' own doc
+            // comments). Component *registration* order doesn't depend on this (every module's
+            // RegisterComponents runs before any module's RegisterSystems), only per-frame
+            // Update/system-registration order does.
+            new NpcBehaviorModule(),
             new MovementModule(),
             new DeathModule(),
             new ProcessingTierModule(),

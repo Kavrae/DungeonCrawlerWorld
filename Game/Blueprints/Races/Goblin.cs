@@ -6,6 +6,7 @@ using Game.Modules.Abilities.Components;
 using Game.Modules.AbilityScores;
 using Game.Modules.Core.Components;
 using Game.Modules.Health.Components;
+using Game.Modules.Inventory;
 using Game.Modules.Movement.Components;
 using Game.Modules.Race.Components;
 using Game.Modules.StatModifiers;
@@ -21,7 +22,7 @@ namespace Game.Blueprints.Races;
 /// </summary>
 public sealed class Goblin(MathUtility mathUtility) : IBlueprint
 {
-    private static readonly Guid RaceId = new("1aa7b1c2-0b54-4745-b616-8aaff734a7d6");
+    public static readonly Guid RaceId = new("1aa7b1c2-0b54-4745-b616-8aaff734a7d6");
     private const string RaceName = "Goblin";
 
     private static readonly string[] PersonalNameOptions = ["TestName1", "TestName2"];
@@ -60,6 +61,12 @@ public sealed class Goblin(MathUtility mathUtility) : IBlueprint
             new Vector3Int(-1, -1, (int)MapLayer.Ground), new Vector2Byte(1, 1)));
 
         componentManager.Merge(entityId, new AbilityInstanceComponent(CoreAbilitiesModule.PunchId, damageAmount: PunchDamage, cooldownFramesRemaining: 0));
+
+        var potionCount = mathUtility.Next(0, 3); // [0, 2] inclusive.
+        if (potionCount > 0)
+        {
+            InventoryActions.AddItem(componentManager, entityId, CoreItemsModule.HealthPotionId, quantity: potionCount);
+        }
 
         AbilityScoreEffects.GrantDefaults(componentManager, entityId, DefaultAbilityScoreBaseValue);
 

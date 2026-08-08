@@ -36,6 +36,7 @@ public sealed class InventoryModule : IGameModule
         componentManager.RegisterPackedPool<PotionCooldownComponent>(static (ref existing, incoming) => existing = incoming);
         componentManager.RegisterPackedPool<PendingConsumableActivationComponent>(static (ref existing, incoming) => existing = incoming);
         componentManager.RegisterMultiPool<ItemHotkeyBindingComponent>();
+        componentManager.RegisterPackedPool<InventoryComponent>(static (ref existing, incoming) => existing = incoming);
     }
 
     public void RegisterSystems(SystemManager systemManager, ComponentManager componentManager)

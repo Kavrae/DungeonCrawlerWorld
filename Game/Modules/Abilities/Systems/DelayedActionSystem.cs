@@ -3,6 +3,7 @@ using Engine.ECS.Components.Stores;
 using Engine.ECS.Systems;
 using Engine.Events;
 using Game.Modules.Abilities.Components;
+using Game.Modules.AbilityScores.Components;
 using Game.Modules.Core.Components;
 using Game.Modules.Death.Components;
 using Game.Modules.Health.Components;
@@ -38,6 +39,7 @@ public sealed class DelayedActionSystem : ISystem
     private readonly StatusEffectAuraApplierRegistry _statusEffectAppliers;
     private readonly ComponentManager _componentManager;
     private readonly PackedComponentPool<DeadComponent>? _deadEntities;
+    private readonly MultiComponentPool<AbilityScoreComponent>? _abilityScores;
     private readonly EntityStripeSet _stripeSet;
 
     public DelayedActionSystem(
@@ -52,7 +54,8 @@ public sealed class DelayedActionSystem : ISystem
         StatusEffectAuraApplierRegistry statusEffectAppliers,
         ComponentManager componentManager,
         MultiComponentPool<StatModifierComponent>? statModifiers = null,
-        PackedComponentPool<DeadComponent>? deadEntities = null)
+        PackedComponentPool<DeadComponent>? deadEntities = null,
+        MultiComponentPool<AbilityScoreComponent>? abilityScores = null)
     {
         _pendingActions = pendingActions;
         _actionLocks = actionLocks;
@@ -66,6 +69,7 @@ public sealed class DelayedActionSystem : ISystem
         _statusEffectAppliers = statusEffectAppliers;
         _componentManager = componentManager;
         _deadEntities = deadEntities;
+        _abilityScores = abilityScores;
 
         _stripeSet = new EntityStripeSet(StripeCount, pendingActions.EntityIds);
         pendingActions.EntityAdded += _stripeSet.OnEntityAdded;
@@ -91,7 +95,7 @@ public sealed class DelayedActionSystem : ISystem
             if (_abilityCatalog.TryGet(pending.AbilityId, out var ability) &&
                 AbilityInstanceQueries.TryGet(_abilityInstances, entityId, pending.AbilityId, out var instance))
             {
-                AbilityEffectResolver.Apply(ability, instance, entityId, pending.TargetTiles, _mapQuery, _health, _eventBus, _playerQuery, _statusEffectAppliers, _componentManager, _statModifiers, _deadEntities);
+                AbilityEffectResolver.Apply(ability, instance, entityId, pending.TargetTiles, _mapQuery, _health, _eventBus, _playerQuery, _statusEffectAppliers, _componentManager, _statModifiers, _deadEntities, _abilityScores);
             }
 
             _pendingActions.Remove(entityId);

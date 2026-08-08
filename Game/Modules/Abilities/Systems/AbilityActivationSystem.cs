@@ -4,6 +4,7 @@ using Engine.ECS.Systems;
 using Engine.Events;
 using Engine.Math;
 using Game.Modules.Abilities.Components;
+using Game.Modules.AbilityScores.Components;
 using Game.Modules.Core.Components;
 using Game.Modules.Death.Components;
 using Game.Modules.Health.Components;
@@ -55,6 +56,7 @@ public sealed class AbilityActivationSystem : ISystem
     private readonly ComponentManager _componentManager;
     private readonly PackedComponentPool<DeadComponent>? _deadEntities;
     private readonly PackedComponentPool<ManaComponent>? _mana;
+    private readonly MultiComponentPool<AbilityScoreComponent>? _abilityScores;
     private readonly EntityStripeSet _stripeSet;
 
     public AbilityActivationSystem(
@@ -71,7 +73,8 @@ public sealed class AbilityActivationSystem : ISystem
         ComponentManager componentManager,
         MultiComponentPool<StatModifierComponent>? statModifiers = null,
         PackedComponentPool<DeadComponent>? deadEntities = null,
-        PackedComponentPool<ManaComponent>? mana = null)
+        PackedComponentPool<ManaComponent>? mana = null,
+        MultiComponentPool<AbilityScoreComponent>? abilityScores = null)
     {
         _pendingActivations = pendingActivations;
         _actionLocks = actionLocks;
@@ -87,6 +90,7 @@ public sealed class AbilityActivationSystem : ISystem
         _componentManager = componentManager;
         _deadEntities = deadEntities;
         _mana = mana;
+        _abilityScores = abilityScores;
 
         _stripeSet = new EntityStripeSet(StripeCount, pendingActivations.EntityIds);
         pendingActivations.EntityAdded += _stripeSet.OnEntityAdded;
@@ -149,7 +153,7 @@ public sealed class AbilityActivationSystem : ISystem
             return false;
         }
 
-        AbilityEffectResolver.Apply(ability, instance, entityId, targetTiles, _mapQuery, _health, _eventBus, _playerQuery, _statusEffectAppliers, _componentManager, _statModifiers, _deadEntities);
+        AbilityEffectResolver.Apply(ability, instance, entityId, targetTiles, _mapQuery, _health, _eventBus, _playerQuery, _statusEffectAppliers, _componentManager, _statModifiers, _deadEntities, _abilityScores);
         ActionLockGate.Lock(_actionLocks, entityId, ability.Timing.ActionLockFrames);
         SpendManaIfAny(entityId, ability.ManaCost);
         return true;
@@ -175,7 +179,7 @@ public sealed class AbilityActivationSystem : ISystem
             return false;
         }
 
-        AbilityEffectResolver.Apply(ability, instance, entityId, targetTiles, _mapQuery, _health, _eventBus, _playerQuery, _statusEffectAppliers, _componentManager, _statModifiers, _deadEntities);
+        AbilityEffectResolver.Apply(ability, instance, entityId, targetTiles, _mapQuery, _health, _eventBus, _playerQuery, _statusEffectAppliers, _componentManager, _statModifiers, _deadEntities, _abilityScores);
         SpendManaIfAny(entityId, ability.ManaCost);
         return true;
     }

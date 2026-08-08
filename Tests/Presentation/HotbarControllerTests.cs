@@ -42,6 +42,7 @@ public sealed class HotbarControllerTests
         componentManager.RegisterMultiPool<ActionHotkeyBindingComponent>();
         componentManager.RegisterMultiPool<ItemHotkeyBindingComponent>();
         componentManager.RegisterMultiPool<InventoryItemStackComponent>();
+        componentManager.RegisterPackedPool<InventoryComponent>(static (ref existing, incoming) => existing = incoming);
         componentManager.RegisterPackedPool<PendingAbilityActivationComponent>(static (ref existing, incoming) => existing = incoming);
         componentManager.RegisterPackedPool<PendingConsumableActivationComponent>(static (ref existing, incoming) => existing = incoming);
         componentManager.RegisterPackedPool<PendingDelayedActionComponent>(static (ref existing, incoming) => existing = incoming);

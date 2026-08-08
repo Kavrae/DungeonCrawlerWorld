@@ -678,12 +678,18 @@ public sealed class GameInputController
     }
 
     /// <summary>
-    /// Scrolls whichever element is directly under the cursor, if it opts into
-    /// CanUserScrollVertical/Horizontal (see Window.ScrollBy) -- independent of
-    /// ActiveInteraction, so scrolling one element mid-drag of another is harmless rather than
-    /// something that needs guarding against. ScrollWheelValue is cumulative, not per-frame, so
-    /// this reads like every other per-frame delta here (see the mouse-button handling above):
-    /// diffed against last frame's value.
+    /// Scrolls whichever element under the cursor opts into
+    /// CanUserScrollVertical/Horizontal (see Window.ScrollBy) -- if the element directly under
+    /// the cursor can't scroll itself, walks up ParentElement to the nearest ancestor that can
+    /// (e.g. hovering a non-scrollable inspector component box inside a scrollable inspection
+    /// container scrolls the container), the same walk-up shape GetRootAncestor already uses,
+    /// just stopping early at the first scrollable ancestor instead of going all the way to
+    /// root. A chain with no scrollable element anywhere (the pre-existing behavior for a lone
+    /// non-scrollable window) is still a no-op. Independent of ActiveInteraction, so scrolling
+    /// one element mid-drag of another is harmless rather than something that needs guarding
+    /// against. ScrollWheelValue is cumulative, not per-frame, so this reads like every other
+    /// per-frame delta here (see the mouse-button handling above): diffed against last frame's
+    /// value.
     /// </summary>
     private void UpdateMouseWheelScroll(MouseState mouseState)
     {
@@ -695,7 +701,7 @@ public sealed class GameInputController
 
         var position = new Point(mouseState.X, mouseState.Y);
         var hoveredInteraction = TryHitTestInteraction(position);
-        if (hoveredInteraction.Element is not { } element || !(element.CanUserScrollVertical || element.CanUserScrollHorizontal))
+        if (hoveredInteraction.Element is not { } element || FindScrollableAncestor(element) is not { } scrollableElement)
         {
             return;
         }
@@ -704,7 +710,21 @@ public sealed class GameInputController
         // universal convention -- hence the negation. Vertical only: shift+wheel-for-horizontal
         // is a reasonable future addition, but nothing today needs it (see TextWindow, whose
         // wrapped text can only ever overflow horizontally by a single unbreakable word).
-        element.ScrollBy(new Vector2(0, -wheelDelta / WheelNotchValue * ScrollPixelsPerNotch));
+        scrollableElement.ScrollBy(new Vector2(0, -wheelDelta / WheelNotchValue * ScrollPixelsPerNotch));
+    }
+
+    /// <summary>Starts at element itself (so an already-scrollable hit is unchanged) and walks ParentElement upward, returning the first element that opts into CanUserScrollVertical/Horizontal, or null if nothing in the chain does.</summary>
+    private static Element? FindScrollableAncestor(Element element)
+    {
+        for (var candidate = (Element?)element; candidate is not null; candidate = candidate.ParentElement)
+        {
+            if (candidate.CanUserScrollVertical || candidate.CanUserScrollHorizontal)
+            {
+                return candidate;
+            }
+        }
+
+        return null;
     }
 
     /// <summary>User tier first, then DynamicHUD, then StaticHUD, then Base -- a higher tier can never lose to a lower one. Each tier topmost (last-raised) first. User is checked first purely for consistency (see the class's own doc comment) -- nothing placed there today is ever actually hit, since DragGhostContent's host window has no clickable content.</summary>

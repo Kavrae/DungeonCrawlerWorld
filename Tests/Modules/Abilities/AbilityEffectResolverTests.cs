@@ -2,8 +2,11 @@
 using Engine.ECS.Components.Stores;
 using Engine.Events;
 using Engine.Math;
+using Game.Modules;
 using Game.Modules.Abilities;
 using Game.Modules.Abilities.Components;
+using Game.Modules.AbilityScores;
+using Game.Modules.AbilityScores.Components;
 using Game.Modules.Death.Components;
 using Game.Modules.Health.Components;
 using Game.Modules.StatusEffects;
@@ -146,6 +149,59 @@ public sealed class AbilityEffectResolverTests
         AbilityEffectResolver.Apply(Ability, Instance, SourceEntityId, [TargetTile], mapQuery, health, eventBus, playerQuery: null, statusEffectAppliers, componentManager);
 
         Assert.IsFalse(health.Has(BlockingTargetEntityId));
+    }
+
+    private static readonly AbilityDefinition StrengthTaggedAbility = new(
+        Guid.NewGuid(),
+        "Test Strength Attack",
+        "#",
+        new TargetingSpec(TargetShape.SingleTarget, Range: 10),
+        new AbilityTiming(ActionTimingCategory.Immediate, ActionLockFrames: 30, CooldownFrames: null),
+        new AbilityEffect(DamageAmount: 0, StatusEffects: []),
+        Tags: [Tag.Strength]);
+    private static readonly AbilityInstanceComponent StrengthTaggedInstance = new(StrengthTaggedAbility.Id, damageAmount: 15, cooldownFramesRemaining: 0);
+
+    [TestMethod]
+    public void Apply_AbilityTaggedWithMatchingAbilityScore_AddsScoreTotalToBaseDamage()
+    {
+        var (mapQuery, health, eventBus, statusEffectAppliers, componentManager) = Build();
+        mapQuery.SetBlockingOccupant(TargetTile, BlockingTargetEntityId);
+        health.Add(BlockingTargetEntityId, new HealthComponent(100, 100));
+        componentManager.RegisterMultiPool<AbilityScoreComponent>();
+        var abilityScores = componentManager.GetMultiPool<AbilityScoreComponent>();
+        abilityScores.Add(SourceEntityId, new AbilityScoreComponent(AbilityScoreType.Strength, baseValue: 8, total: 8));
+
+        AbilityEffectResolver.Apply(StrengthTaggedAbility, StrengthTaggedInstance, SourceEntityId, [TargetTile], mapQuery, health, eventBus, playerQuery: null, statusEffectAppliers, componentManager, statModifiers: null, deadEntities: null, abilityScores: abilityScores);
+
+        // 15 base damage + 8 Strength Total = 23.
+        Assert.AreEqual(77, health.GetReadonly(BlockingTargetEntityId).CurrentHealth);
+    }
+
+    [TestMethod]
+    public void Apply_NullAbilityScoresPool_BehavesExactlyAsToday_NoBonusNoCrash()
+    {
+        var (mapQuery, health, eventBus, statusEffectAppliers, componentManager) = Build();
+        mapQuery.SetBlockingOccupant(TargetTile, BlockingTargetEntityId);
+        health.Add(BlockingTargetEntityId, new HealthComponent(100, 100));
+
+        AbilityEffectResolver.Apply(StrengthTaggedAbility, StrengthTaggedInstance, SourceEntityId, [TargetTile], mapQuery, health, eventBus, playerQuery: null, statusEffectAppliers, componentManager);
+
+        Assert.AreEqual(85, health.GetReadonly(BlockingTargetEntityId).CurrentHealth);
+    }
+
+    [TestMethod]
+    public void Apply_AbilityScoresPoolPresentButSourceHasNoMatchingScore_NoBonus()
+    {
+        var (mapQuery, health, eventBus, statusEffectAppliers, componentManager) = Build();
+        mapQuery.SetBlockingOccupant(TargetTile, BlockingTargetEntityId);
+        health.Add(BlockingTargetEntityId, new HealthComponent(100, 100));
+        componentManager.RegisterMultiPool<AbilityScoreComponent>();
+        var abilityScores = componentManager.GetMultiPool<AbilityScoreComponent>();
+        // SourceEntityId has no AbilityScoreComponent entries at all.
+
+        AbilityEffectResolver.Apply(StrengthTaggedAbility, StrengthTaggedInstance, SourceEntityId, [TargetTile], mapQuery, health, eventBus, playerQuery: null, statusEffectAppliers, componentManager, statModifiers: null, deadEntities: null, abilityScores: abilityScores);
+
+        Assert.AreEqual(85, health.GetReadonly(BlockingTargetEntityId).CurrentHealth);
     }
 
     private static readonly AbilityDefinition AbilityWithStatusEffect = new(

@@ -3,6 +3,8 @@ using Engine.ECS.Components.Stores;
 using Engine.Events;
 using Engine.Math;
 using Game.Modules.Abilities.Components;
+using Game.Modules.AbilityScores;
+using Game.Modules.AbilityScores.Components;
 using Game.Modules.Death.Components;
 using Game.Modules.Health;
 using Game.Modules.Health.Components;
@@ -32,6 +34,15 @@ namespace Game.Modules.Abilities;
 /// ability (DamageAmount 0, e.g. a self-buff whose only real effect is a StatModifierGrant) into
 /// one that deals a phantom hit; a modifier can only scale damage that already exists, never
 /// create it from nothing.
+///
+/// Any ability score whose matching Tag (see ComputeAbilityScoreDamageBonus) the ability carries
+/// adds its Total to the base damage before OutgoingDamage's additive-then-multiplicative scaling
+/// runs -- the same "live-read a score, fold it into a derived base, then layer generic modifiers
+/// on top" shape HealthRegenSystem/ManaRegenSystem already use for Constitution/Intelligence,
+/// rather than a granted StatModifierComponent (whose Magnitude is always a fixed value baked in
+/// at grant time, unable to track a live, per-caster ability score). Folding it into the base
+/// means a caster's own OutgoingDamage buffs scale the ability-score-driven bonus too, not just
+/// the ability's flat number.
 /// </summary>
 public static class AbilityEffectResolver
 {
@@ -47,13 +58,15 @@ public static class AbilityEffectResolver
         StatusEffectAuraApplierRegistry statusEffectAppliers,
         ComponentManager componentManager,
         MultiComponentPool<StatModifierComponent>? statModifiers = null,
-        PackedComponentPool<DeadComponent>? deadEntities = null)
+        PackedComponentPool<DeadComponent>? deadEntities = null,
+        MultiComponentPool<AbilityScoreComponent>? abilityScores = null)
     {
         eventBus.Publish(new AbilityActivatedEvent(sourceEntityId, ability.Id));
 
         var dealsDamage = instance.DamageAmount > 0;
         var effectiveDamage = dealsDamage
-            ? (short)StatModifierMath.GetEffectiveValue(statModifiers, sourceEntityId, StatModifierTarget.OutgoingDamage, instance.DamageAmount)
+            ? (short)StatModifierMath.GetEffectiveValue(statModifiers, sourceEntityId, StatModifierTarget.OutgoingDamage,
+                (short)(instance.DamageAmount + ComputeAbilityScoreBonus(ability, sourceEntityId, abilityScores)))
             : (short)0;
 
         foreach (var tile in targetTiles)
@@ -145,4 +158,45 @@ public static class AbilityEffectResolver
             eventBus.Publish(new StatusEffectAppliedEvent(targetEntityId, effectType, source));
         }
     }
+
+    /// <summary>
+    /// Sums the caster's own Total for every ability score whose matching Tag (see
+    /// MapTagToAbilityScore) this ability carries -- generic by design, not specific to Melee or
+    /// Strength: an ability tagged with more than one ability-score Tag stacks all of them
+    /// additively, and a future ability tagged e.g. Tag.Intelligence gets an Intelligence-sized
+    /// bonus through this exact same path, no special-casing per tag. No-op (returns 0) when
+    /// abilityScores is null (AbilityScoresModule not registered in this build) -- same graceful-
+    /// optional treatment as the damage/regen consume side.
+    /// </summary>
+    private static short ComputeAbilityScoreBonus(AbilityDefinition ability, int sourceEntityId, MultiComponentPool<AbilityScoreComponent>? abilityScores)
+    {
+        if (abilityScores is null)
+        {
+            return 0;
+        }
+
+        short bonus = 0;
+        foreach (var tag in ability.Tags)
+        {
+            if (MapTagToAbilityScore(tag) is { } scoreType &&
+                AbilityScoreQueries.TryGetComponent(abilityScores, sourceEntityId, scoreType, out var score))
+            {
+                bonus += score.Total;
+            }
+        }
+
+        return bonus;
+    }
+
+    private static AbilityScoreType? MapTagToAbilityScore(Tag tag) => tag switch
+    {
+        Tag.Strength => AbilityScoreType.Strength,
+        Tag.Intelligence => AbilityScoreType.Intelligence,
+        Tag.Constitution => AbilityScoreType.Constitution,
+        Tag.Dexterity => AbilityScoreType.Dexterity,
+        Tag.Charisma => AbilityScoreType.Charisma,
+        Tag.Luck => AbilityScoreType.Luck,
+        Tag.Wisdom => AbilityScoreType.Wisdom,
+        _ => null,
+    };
 }

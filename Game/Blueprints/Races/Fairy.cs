@@ -14,7 +14,7 @@ namespace Game.Blueprints.Races;
 /// <summary>Their magic is stored in their wings.</summary>
 public sealed class Fairy(MathUtility mathUtility) : IBlueprint
 {
-    private static readonly Guid RaceId = new("c22f6339-0a56-4528-b818-10052a831dc5");
+    public static readonly Guid RaceId = new("c22f6339-0a56-4528-b818-10052a831dc5");
     private const string RaceName = "Fairy";
 
     private static readonly string[] PersonalNameOptions = ["Fairy1", "Fairy2"];

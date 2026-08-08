@@ -104,7 +104,7 @@ public sealed class AbilityTargetingController(
             return;
         }
 
-        RefreshTargetableTiles(targeting, playerTransform.Position);
+        RefreshTargetableTiles(targeting, playerTransform.Position, playerTransform.Size);
 
         if (!camera.TryGetHoveredMapPosition(mousePosition, contentAbsolutePosition, out var hoveredColumnRow))
         {
@@ -115,7 +115,7 @@ public sealed class AbilityTargetingController(
         var hoveredTile = new Vector3Int(hoveredColumnRow.X, hoveredColumnRow.Y, playerTransform.Position.Z);
         mapViewState.HoveredTile = hoveredTile;
 
-        TargetShapeResolver.Resolve(targeting.Shape, playerTransform.Position, hoveredTile, targeting.Range, targeting.AreaSize, world.Map.Size, _hoveredFootprintBuffer);
+        TargetShapeResolver.Resolve(targeting.Shape, playerTransform.Position, playerTransform.Size, hoveredTile, targeting.Range, targeting.AreaSize, world.Map.Size, _hoveredFootprintBuffer);
     }
 
     /// <summary>
@@ -144,6 +144,14 @@ public sealed class AbilityTargetingController(
     /// tiles was targeted, since Adjacent ignores the cursor entirely. Reads which of
     /// {ability, item} is armed from MapViewState itself rather than taking either id as a
     /// parameter -- mirrors CancelArmedOrPendingAction, which already does the same.
+    ///
+    /// A Potion specifically gets one more special case: clicking your own tile confirms as a
+    /// self-only activation (see TryActivateItemOnSelf) rather than resolving the real Burst
+    /// shape centered on yourself -- otherwise a manual click on your own tile would splash onto
+    /// your neighbors while double-tapping the same slot (also self-targeted) wouldn't, two
+    /// different results for the same intent. Targeting any other tile is untouched -- still the
+    /// real Burst/AreaSize splash centered on that tile, which may or may not catch you depending
+    /// on distance, same as always.
     /// </summary>
     private void TryConfirmActivationAtTile(Vector3Int targetTile)
     {
@@ -157,7 +165,17 @@ public sealed class AbilityTargetingController(
             return;
         }
 
-        TargetShapeResolver.Resolve(targeting.Shape, transform.Position, targetTile, targeting.Range, targeting.AreaSize, world.Map.Size, _finalTargetTilesBuffer);
+        if (targetTile == transform.Position &&
+            mapViewState.ArmedItemDefinitionId is { } itemId &&
+            itemCatalog.TryGet(itemId, out var item) &&
+            item.Consumable is { Kind: ConsumableKind.Potion })
+        {
+            TryActivateItemOnSelf(world.PlayerEntityId, itemId);
+            Disarm();
+            return;
+        }
+
+        TargetShapeResolver.Resolve(targeting.Shape, transform.Position, transform.Size, targetTile, targeting.Range, targeting.AreaSize, world.Map.Size, _finalTargetTilesBuffer);
         QueueArmedActivation(world.PlayerEntityId, _finalTargetTilesBuffer);
         Disarm();
     }
@@ -345,7 +363,7 @@ public sealed class AbilityTargetingController(
 
         if (abilityCatalog.TryGet(abilityId, out var ability) && transformPool.TryGetReadonly(world.PlayerEntityId, out var transform))
         {
-            RefreshTargetableTiles(ability.Targeting, transform.Position);
+            RefreshTargetableTiles(ability.Targeting, transform.Position, transform.Size);
         }
     }
 
@@ -358,7 +376,7 @@ public sealed class AbilityTargetingController(
 
         if (transformPool.TryGetReadonly(world.PlayerEntityId, out var transform))
         {
-            RefreshTargetableTiles(targeting, transform.Position);
+            RefreshTargetableTiles(targeting, transform.Position, transform.Size);
         }
     }
 
@@ -410,7 +428,7 @@ public sealed class AbilityTargetingController(
     /// time. Repopulates the shared _targetableTilesSet in place (Clear + re-add) rather than
     /// assigning a fresh HashSet -- see that field's own doc comment for why.
     /// </summary>
-    private void RefreshTargetableTiles(TargetingSpec targeting, Vector3Int currentPosition)
+    private void RefreshTargetableTiles(TargetingSpec targeting, Vector3Int currentPosition, Vector2Byte currentSize)
     {
         if (_targetableTilesOrigin == currentPosition)
         {
@@ -419,7 +437,7 @@ public sealed class AbilityTargetingController(
 
         _targetableTilesOrigin = currentPosition;
 
-        ComputeTargetableTiles(currentPosition, targeting, _candidateTilesBuffer);
+        ComputeTargetableTiles(currentPosition, currentSize, targeting, _candidateTilesBuffer);
 
         _targetableTilesSet.Clear();
         foreach (var tile in _candidateTilesBuffer)
@@ -432,22 +450,22 @@ public sealed class AbilityTargetingController(
 
     /// <summary>
     /// The full universe of tiles the given targeting could possibly be aimed at from
-    /// attackerPosition -- Adjacent's fixed self-plus-8-neighbors footprint, or every tile
-    /// within Range for every cursor-directed shape (SingleTarget/Burst/Line/Cone) via a
+    /// attackerPosition -- Adjacent's fixed perimeter-around-the-attacker's-footprint, or every
+    /// tile within Range for every cursor-directed shape (SingleTarget/Burst/Line/Cone) via a
     /// Burst-shaped scatter, not the real Shape -- there's no single "aim direction" yet at arm
     /// time, only a reachable area. Shared by Arm (for highlighting) and
     /// TryActivateWithAutoTarget (for double-tap's candidate pool), so the two never drift out
     /// of sync with each other.
     /// </summary>
-    private void ComputeTargetableTiles(Vector3Int attackerPosition, TargetingSpec targeting, List<Vector3Int> buffer)
+    private void ComputeTargetableTiles(Vector3Int attackerPosition, Vector2Byte attackerSize, TargetingSpec targeting, List<Vector3Int> buffer)
     {
         if (targeting.Shape == TargetShape.Adjacent)
         {
-            TargetShapeResolver.Resolve(TargetShape.Adjacent, attackerPosition, attackerPosition, range: 0, areaSize: 0, world.Map.Size, buffer);
+            TargetShapeResolver.Resolve(TargetShape.Adjacent, attackerPosition, attackerSize, attackerPosition, range: 0, areaSize: 0, world.Map.Size, buffer);
             return;
         }
 
-        TargetShapeResolver.Resolve(TargetShape.Burst, attackerPosition, attackerPosition, range: 0, targeting.Range, world.Map.Size, buffer);
+        TargetShapeResolver.Resolve(TargetShape.Burst, attackerPosition, attackerSize, attackerPosition, range: 0, targeting.Range, world.Map.Size, buffer);
     }
 
     /// <summary>
@@ -470,11 +488,12 @@ public sealed class AbilityTargetingController(
         }
 
         var attackerPosition = transform.Position;
+        var attackerSize = transform.Size;
         var mapSize = world.Map.Size;
 
         if (ability.Targeting.Shape == TargetShape.Adjacent)
         {
-            ComputeTargetableTiles(attackerPosition, ability.Targeting, _candidateTilesBuffer);
+            ComputeTargetableTiles(attackerPosition, attackerSize, ability.Targeting, _candidateTilesBuffer);
             QueueAbilityActivation(entityId, abilityId, _candidateTilesBuffer);
             return;
         }
@@ -489,7 +508,7 @@ public sealed class AbilityTargetingController(
             return;
         }
 
-        ComputeTargetableTiles(attackerPosition, ability.Targeting, _candidateTilesBuffer);
+        ComputeTargetableTiles(attackerPosition, attackerSize, ability.Targeting, _candidateTilesBuffer);
 
         _occupiedCandidateTilesBuffer.Clear();
         foreach (var tile in _candidateTilesBuffer)
@@ -507,7 +526,7 @@ public sealed class AbilityTargetingController(
             return;
         }
 
-        TargetShapeResolver.Resolve(ability.Targeting.Shape, attackerPosition, chosenTile, ability.Targeting.Range, ability.Targeting.AreaSize, mapSize, _finalTargetTilesBuffer);
+        TargetShapeResolver.Resolve(ability.Targeting.Shape, attackerPosition, attackerSize, chosenTile, ability.Targeting.Range, ability.Targeting.AreaSize, mapSize, _finalTargetTilesBuffer);
         QueueAbilityActivation(entityId, abilityId, _finalTargetTilesBuffer);
     }
 

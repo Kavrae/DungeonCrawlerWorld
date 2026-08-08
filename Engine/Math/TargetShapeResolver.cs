@@ -25,16 +25,19 @@ public static class TargetShapeResolver
     /// <summary>
     /// Range and areaSize are read differently per shape -- see AbilityTargeting's own doc
     /// comment for the general split. Adjacent ignores both entirely: its footprint is always
-    /// exactly the caster's own tile plus its 8 surrounding neighbors, not a per-ability tunable.
+    /// exactly the perimeter ring around the caster's own originSize footprint, not a per-ability
+    /// tunable. originSize is otherwise only consulted by Adjacent and Line/Cone (see their own
+    /// doc comments) -- Burst/SingleTarget/Self deliberately keep resolving from the single
+    /// origin point regardless of the caster's footprint size ("no change for AOE abilities").
     /// </summary>
-    public static void Resolve(TargetShape shape, Vector3Int origin, Vector3Int cursorTile, int range, int areaSize, Vector3Int mapSize, List<Vector3Int> results)
+    public static void Resolve(TargetShape shape, Vector3Int origin, Vector2Byte originSize, Vector3Int cursorTile, int range, int areaSize, Vector3Int mapSize, List<Vector3Int> results)
     {
         results.Clear();
 
         switch (shape)
         {
             case TargetShape.Adjacent:
-                ResolveAdjacent(origin, mapSize, results);
+                ResolveAdjacent(origin, originSize, mapSize, results);
                 break;
             case TargetShape.SingleTarget:
                 ResolveSingleTarget(origin, cursorTile, range, results);
@@ -43,10 +46,10 @@ public static class TargetShapeResolver
                 ResolveBurst(origin, cursorTile, range, areaSize, mapSize, results);
                 break;
             case TargetShape.Line:
-                ResolveLine(origin, cursorTile, range, mapSize, results);
+                ResolveLine(origin, originSize, cursorTile, range, mapSize, results);
                 break;
             case TargetShape.Cone:
-                ResolveCone(origin, cursorTile, range, mapSize, results);
+                ResolveCone(origin, originSize, cursorTile, range, mapSize, results);
                 break;
             case TargetShape.Self:
                 results.Add(origin);
@@ -72,33 +75,89 @@ public static class TargetShapeResolver
         DistanceFalloff.ScatterManhattan(anchor, 1 << radius, mapSize, results, static (cellPosition, _, resultsList) => resultsList.Add(cellPosition));
     }
 
+    /// <summary>The caster's own WxH footprint size, as a single point -- see ResolveAdjacent's fast path.</summary>
+    private static readonly Vector2Byte SingleTileFootprint = new(1, 1);
+
     /// <summary>
-    /// The caster's own tile plus its 8 surrounding neighbors (Chebyshev distance &lt;= 1) --
-    /// melee default. Includes the caster's own tile so a Phasing/Tiny entity sharing it is
-    /// still a valid target. A fixed 3x3 block, not the diamond-shaped scatter Burst uses, since
-    /// Adjacent's radius is always exactly 1 and diagonals must be included.
+    /// The perimeter ring of tiles surrounding the caster's own originSize footprint (Chebyshev
+    /// distance &lt;= 1 from any footprint cell) -- melee default. Deliberately excludes every
+    /// tile of the caster's own footprint, even for a Phasing/Tiny entity sharing one of those
+    /// tiles -- an entity hugging the caster's own footprint is meant to be a real, hard-to-deal-
+    /// with melee threat, not an automatic target. For a 1x1 caster this is the classic 8
+    /// neighbors; for a WxH caster it's 2W + 2H + 4 tiles (e.g. 12 for 2x2, 14 for 2x3).
+    ///
+    /// Runs every frame for any armed/hovering Adjacent-shaped ability, so the common 1x1 case
+    /// (every entity in the game today) takes a fully unrolled fast path with no loop at all --
+    /// the same "special-case the 1x1 footprint separately from the general WxH case" precedent
+    /// MovementSystem.CanMove already established for this codebase. The general case is four
+    /// straight edge scans (top row, bottom row, left column, right column) rather than a
+    /// bounding-box loop with a per-cell "is this the caster's own footprint" skip check -- the
+    /// latter would visit (W+2)*(H+2) cells and discard W*H of them; four edge scans visit
+    /// exactly the 2W + 2H + 4 perimeter cells and nothing else.
     /// </summary>
-    private static void ResolveAdjacent(Vector3Int origin, Vector3Int mapSize, List<Vector3Int> results)
+    private static void ResolveAdjacent(Vector3Int origin, Vector2Byte originSize, Vector3Int mapSize, List<Vector3Int> results)
     {
-        for (var offsetY = -1; offsetY <= 1; offsetY++)
+        if (originSize == SingleTileFootprint)
         {
-            var cellY = origin.Y + offsetY;
-            if (cellY < 0 || cellY >= mapSize.Y)
-            {
-                continue;
-            }
-
-            for (var offsetX = -1; offsetX <= 1; offsetX++)
-            {
-                var cellX = origin.X + offsetX;
-                if (cellX < 0 || cellX >= mapSize.X)
-                {
-                    continue;
-                }
-
-                results.Add(new Vector3Int(cellX, cellY, origin.Z));
-            }
+            AddIfOnMap(origin.X - 1, origin.Y - 1, origin.Z, mapSize, results);
+            AddIfOnMap(origin.X, origin.Y - 1, origin.Z, mapSize, results);
+            AddIfOnMap(origin.X + 1, origin.Y - 1, origin.Z, mapSize, results);
+            AddIfOnMap(origin.X - 1, origin.Y, origin.Z, mapSize, results);
+            AddIfOnMap(origin.X + 1, origin.Y, origin.Z, mapSize, results);
+            AddIfOnMap(origin.X - 1, origin.Y + 1, origin.Z, mapSize, results);
+            AddIfOnMap(origin.X, origin.Y + 1, origin.Z, mapSize, results);
+            AddIfOnMap(origin.X + 1, origin.Y + 1, origin.Z, mapSize, results);
+            return;
         }
+
+        var left = origin.X - 1;
+        var right = origin.X + originSize.X;
+        var top = origin.Y - 1;
+        var bottom = origin.Y + originSize.Y;
+
+        for (var x = left; x <= right; x++)
+        {
+            AddIfOnMap(x, top, origin.Z, mapSize, results);
+            AddIfOnMap(x, bottom, origin.Z, mapSize, results);
+        }
+
+        for (var y = origin.Y; y < origin.Y + originSize.Y; y++)
+        {
+            AddIfOnMap(left, y, origin.Z, mapSize, results);
+            AddIfOnMap(right, y, origin.Z, mapSize, results);
+        }
+    }
+
+    /// <summary>Bounds-checked single-cell add, shared by ResolveAdjacent's two branches and Line/Cone's own footprint-exclusion pass below.</summary>
+    private static void AddIfOnMap(int x, int y, int z, Vector3Int mapSize, List<Vector3Int> results)
+    {
+        if (x >= 0 && x < mapSize.X && y >= 0 && y < mapSize.Y)
+        {
+            results.Add(new Vector3Int(x, y, z));
+        }
+    }
+
+    /// <summary>
+    /// Whether tile falls within originSize's own footprint at origin -- used by Line/Cone to
+    /// exclude the caster's own tiles from their resolved results (see ResolveLine/ResolveCone's
+    /// own doc comments), the same "not my tiles" guarantee Adjacent gets structurally above.
+    /// </summary>
+    private static bool IsWithinFootprint(Vector3Int tile, Vector3Int origin, Vector2Byte originSize) =>
+        tile.X >= origin.X && tile.X < origin.X + originSize.X &&
+        tile.Y >= origin.Y && tile.Y < origin.Y + originSize.Y;
+
+    /// <summary>
+    /// The footprint cell closest to cursorTile -- the standard closest-point-on-an-axis-aligned-
+    /// rectangle formula (clamp the external point onto each axis' footprint range), exact and
+    /// O(1). Used as Line/Cone's effective origin for a multi-tile caster, so the aimed line/cone
+    /// visibly originates from whichever edge of the caster's footprint is nearest the cursor
+    /// rather than always from a single fixed corner.
+    /// </summary>
+    private static Vector3Int ClosestFootprintCellToCursor(Vector3Int origin, Vector2Byte originSize, Vector3Int cursorTile)
+    {
+        var closestX = System.Math.Clamp(cursorTile.X, origin.X, origin.X + originSize.X - 1);
+        var closestY = System.Math.Clamp(cursorTile.Y, origin.Y, origin.Y + originSize.Y - 1);
+        return new Vector3Int(closestX, closestY, origin.Z);
     }
 
     /// <summary>Exactly cursorTile, valid only when it's within range of the caster -- otherwise no valid target exists at all.</summary>
@@ -121,73 +180,69 @@ public static class TargetShapeResolver
         ResolveManhattanBurst(cursorTile, areaSize, mapSize, results);
     }
 
-    /// <summary>Steps from origin toward cursorTile along whichever of the 8 cardinal/diagonal directions is nearest the cursor direction, for up to range tiles, stopping early at the map edge.</summary>
-    private static void ResolveLine(Vector3Int origin, Vector3Int cursorTile, int range, Vector3Int mapSize, List<Vector3Int> results)
+    /// <summary>
+    /// Steps from the caster's footprint cell closest to cursorTile toward cursorTile along a
+    /// continuous ray -- Bresenham's line algorithm (the standard integer-arithmetic "plotLine",
+    /// extended past cursorTile at the same slope rather than stopping once it's reached) -- for
+    /// up to range tiles, stopping early at the map edge. Aimable at any point in range, not
+    /// snapped to one of 8 buckets the way this used to work -- two cursor tiles that would
+    /// previously have collapsed onto the same "mostly horizontal" (or vertical/diagonal) bucket
+    /// now trace genuinely different lines, the same "any angle" freedom Cone already has (see
+    /// ResolveCone's own doc comment). No floating-point/trig involved -- Bresenham decides each
+    /// step's direction from an integer error accumulator, exactly one new grid cell per range
+    /// step, same contract the old 8-direction stepper had. For a 1x1 caster the closest
+    /// footprint cell is always origin itself (unchanged from before multi-tile support existed).
+    /// Explicitly strips out any resulting tile that falls back within the caster's own
+    /// footprint -- never happens for a 1x1 caster (a line steps away from its own origin, never
+    /// back onto it), but a large-enough footprint stepping from one corner could otherwise clip
+    /// back across another part of the same rectangle.
+    /// </summary>
+    private static void ResolveLine(Vector3Int origin, Vector2Byte originSize, Vector3Int cursorTile, int range, Vector3Int mapSize, List<Vector3Int> results)
     {
-        var direction = NearestEightDirection(origin, cursorTile);
-        if (direction.X == 0 && direction.Y == 0)
+        var effectiveOrigin = ClosestFootprintCellToCursor(origin, originSize, cursorTile);
+        var deltaX = cursorTile.X - effectiveOrigin.X;
+        var deltaY = cursorTile.Y - effectiveOrigin.Y;
+        if (deltaX == 0 && deltaY == 0)
         {
             return;
         }
 
-        var current = origin;
+        var absDeltaX = System.Math.Abs(deltaX);
+        var negativeAbsDeltaY = -System.Math.Abs(deltaY);
+        var signX = System.Math.Sign(deltaX);
+        var signY = System.Math.Sign(deltaY);
+        var error = absDeltaX + negativeAbsDeltaY;
+
+        var x = effectiveOrigin.X;
+        var y = effectiveOrigin.Y;
+
         for (var step = 0; step < range; step++)
         {
-            current = new Vector3Int(current.X + direction.X, current.Y + direction.Y, origin.Z);
+            var doubleError = 2 * error;
+            if (doubleError >= negativeAbsDeltaY)
+            {
+                error += negativeAbsDeltaY;
+                x += signX;
+            }
+            if (doubleError <= absDeltaX)
+            {
+                error += absDeltaX;
+                y += signY;
+            }
+
+            var current = new Vector3Int(x, y, origin.Z);
             if (current.X < 0 || current.X >= mapSize.X || current.Y < 0 || current.Y >= mapSize.Y)
             {
                 break;
             }
 
+            if (IsWithinFootprint(current, origin, originSize))
+            {
+                continue;
+            }
+
             results.Add(current);
         }
-    }
-
-    /// <summary>tan(22.5 degrees) and tan(67.5 degrees) -- the octant boundaries a direction's |deltaY|/|deltaX| ratio is compared against below.</summary>
-    private const double OctantLowRatio = 0.41421356237; // tan(22.5deg)
-    private const double OctantHighRatio = 2.41421356237; // tan(67.5deg)
-
-    /// <summary>
-    /// Snaps the origin-to-cursorTile direction to the nearest of the 8 cardinal/diagonal unit
-    /// vectors (N/S/E/W/NE/NW/SE/SW), each covering a 45-degree wedge centered on its own axis.
-    /// Purely a ratio-of-magnitudes comparison (no trig call needed per resolve, unlike Cone,
-    /// since there are only 3 buckets: mostly-horizontal, mostly-vertical, or roughly diagonal).
-    /// </summary>
-    private static Vector3Int NearestEightDirection(Vector3Int origin, Vector3Int cursorTile)
-    {
-        var deltaX = cursorTile.X - origin.X;
-        var deltaY = cursorTile.Y - origin.Y;
-
-        if (deltaX == 0 && deltaY == 0)
-        {
-            return new Vector3Int(0, 0, 0);
-        }
-
-        var signX = System.Math.Sign(deltaX);
-        var signY = System.Math.Sign(deltaY);
-
-        if (deltaX == 0)
-        {
-            return new Vector3Int(0, signY, 0);
-        }
-
-        if (deltaY == 0)
-        {
-            return new Vector3Int(signX, 0, 0);
-        }
-
-        var ratio = (double)System.Math.Abs(deltaY) / System.Math.Abs(deltaX);
-        if (ratio < OctantLowRatio)
-        {
-            return new Vector3Int(signX, 0, 0);
-        }
-
-        if (ratio > OctantHighRatio)
-        {
-            return new Vector3Int(0, signY, 0);
-        }
-
-        return new Vector3Int(signX, signY, 0);
     }
 
     /// <summary>
@@ -207,11 +262,19 @@ public static class TargetShapeResolver
     ///    the true angle already exceeds 90, so it's rejected before the squared comparison ever
     ///    needs to distinguish it from a reflex angle). ConeHalfAngleDegrees is 45 today; if a
     ///    future ability ever wants a half-angle &gt; 90, this shortcut needs revisiting.
+    ///
+    /// The angular sweep is centered on the caster's footprint cell closest to cursorTile (see
+    /// ClosestFootprintCellToCursor), same as Line, and every candidate cell within the caster's
+    /// own footprint is excluded from the results regardless of angle -- for a 1x1 caster this
+    /// is exactly the old "skip offset (0,0)" special case; for a multi-tile caster it's a real
+    /// membership check, since the swept circle can extend past the effective-origin corner and
+    /// clip back across another part of the same footprint rectangle.
     /// </summary>
-    private static void ResolveCone(Vector3Int origin, Vector3Int cursorTile, int range, Vector3Int mapSize, List<Vector3Int> results)
+    private static void ResolveCone(Vector3Int origin, Vector2Byte originSize, Vector3Int cursorTile, int range, Vector3Int mapSize, List<Vector3Int> results)
     {
-        var directionDeltaX = cursorTile.X - origin.X;
-        var directionDeltaY = cursorTile.Y - origin.Y;
+        var effectiveOrigin = ClosestFootprintCellToCursor(origin, originSize, cursorTile);
+        var directionDeltaX = cursorTile.X - effectiveOrigin.X;
+        var directionDeltaY = cursorTile.Y - effectiveOrigin.Y;
         if (directionDeltaX == 0 && directionDeltaY == 0)
         {
             return;
@@ -222,7 +285,7 @@ public static class TargetShapeResolver
 
         for (var offsetY = -range; offsetY <= range; offsetY++)
         {
-            var cellY = origin.Y + offsetY;
+            var cellY = effectiveOrigin.Y + offsetY;
             if (cellY < 0 || cellY >= mapSize.Y)
             {
                 continue;
@@ -233,13 +296,14 @@ public static class TargetShapeResolver
 
             for (var offsetX = -maxOffsetXForRow; offsetX <= maxOffsetXForRow; offsetX++)
             {
-                if (offsetX == 0 && offsetY == 0)
+                var cellX = effectiveOrigin.X + offsetX;
+                if (cellX < 0 || cellX >= mapSize.X)
                 {
                     continue;
                 }
 
-                var cellX = origin.X + offsetX;
-                if (cellX < 0 || cellX >= mapSize.X)
+                var candidate = new Vector3Int(cellX, cellY, origin.Z);
+                if (IsWithinFootprint(candidate, origin, originSize))
                 {
                     continue;
                 }
@@ -256,7 +320,7 @@ public static class TargetShapeResolver
                     continue;
                 }
 
-                results.Add(new Vector3Int(cellX, cellY, origin.Z));
+                results.Add(candidate);
             }
         }
     }

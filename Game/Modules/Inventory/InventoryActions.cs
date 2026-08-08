@@ -6,9 +6,18 @@ namespace Game.Modules.Inventory;
 /// <summary>Write-side counterpart to InventoryQueries -- mutates an entity's inventory storage.</summary>
 public static class InventoryActions
 {
-    /// <summary>Grants quantity of itemDefinitionId, stacking onto an existing matching stack if one exists rather than always creating a new one -- this is the "identical items grouped with a count" behavior.</summary>
+    /// <summary>
+    /// Grants quantity of itemDefinitionId, stacking onto an existing matching stack if one
+    /// exists rather than always creating a new one -- this is the "identical items grouped with
+    /// a count" behavior. The single chokepoint every item grant goes through (starting kits,
+    /// future loot drops), so it's also where InventoryGrant.EnsureInventoryComponentExists runs
+    /// -- every caller gets the "gains an inventory on first item" behavior for free, the player
+    /// included, with no per-call-site handling needed.
+    /// </summary>
     public static void AddItem(ComponentManager componentManager, int entityId, Guid itemDefinitionId, int quantity)
     {
+        InventoryGrant.EnsureInventoryComponentExists(componentManager, entityId);
+
         var stacks = componentManager.GetMultiPool<InventoryItemStackComponent>();
 
         var stacked = stacks.TryUpdateFirst(

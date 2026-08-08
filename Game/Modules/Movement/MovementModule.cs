@@ -1,10 +1,11 @@
 ﻿using Engine.ECS.Components;
 using Engine.ECS.Systems;
 using Engine.Events;
-using Engine.Math;
+using Game.Modules.Abilities.Components;
 using Game.Modules.Core;
 using Game.Modules.Core.Components;
 using Game.Modules.Death.Components;
+using Game.Modules.Inventory.Components;
 using Game.Modules.Movement.Components;
 using Game.Modules.Movement.Systems;
 using Game.Modules.ProcessingTier;
@@ -15,8 +16,8 @@ namespace Game.Modules.Movement;
 
 /// <summary>
 /// Parameterless (required for runtime discovery -- see decision #1/#2 in the modding plan)
-/// with its runtime dependencies (IMapQuery, MathUtility, EventBus) supplied via
-/// IGameModule.Configure instead of the constructor.
+/// with its runtime dependencies (IMapQuery, EventBus) supplied via IGameModule.Configure
+/// instead of the constructor.
 /// </summary>
 public sealed class MovementModule : IGameModule
 {
@@ -25,7 +26,6 @@ public sealed class MovementModule : IGameModule
     public IReadOnlyList<Type> Dependencies { get; } = [typeof(CoreModule)];
 
     private IMapQuery _mapQuery = null!;
-    private MathUtility _mathUtility = null!;
     private EventBus _eventBus = null!;
     private IEntityMoveSync? _entityMoveSync;
     private FrameEventBuffer<EntityMovedEvent> _movedEntities = null!;
@@ -35,7 +35,6 @@ public sealed class MovementModule : IGameModule
     public void Configure(GameModuleContext context)
     {
         _mapQuery = context.MapQuery;
-        _mathUtility = context.MathUtility;
         _eventBus = context.EventBus;
         _entityMoveSync = context.EntityMoveSync;
         _movedEntities = context.MovedEntities;
@@ -65,20 +64,27 @@ public sealed class MovementModule : IGameModule
         var deadEntities = componentManager.IsRegistered<DeadComponent>()
             ? componentManager.GetPackedPool<DeadComponent>()
             : null;
+        var pendingAbilityActivations = componentManager.IsRegistered<PendingAbilityActivationComponent>()
+            ? componentManager.GetPackedPool<PendingAbilityActivationComponent>()
+            : null;
+        var pendingConsumableActivations = componentManager.IsRegistered<PendingConsumableActivationComponent>()
+            ? componentManager.GetPackedPool<PendingConsumableActivationComponent>()
+            : null;
 
         systemManager.Register(new MovementSystem(
             componentManager.GetDirectPool<TransformComponent>(),
             componentManager.GetPackedPool<ActionLockComponent>(),
             componentManager.GetPackedPool<MovementComponent>(),
             _mapQuery,
-            _mathUtility,
             _eventBus,
             _entityMoveSync,
             _movedEntities,
             _playerQuery,
             componentManager.GetDirectPool<ProcessingTierComponent>(),
             _processingTierEvents,
-            deadEntities));
+            deadEntities,
+            pendingAbilityActivations,
+            pendingConsumableActivations));
 
         systemManager.RegisterFrameScoped(_movedEntities);
     }

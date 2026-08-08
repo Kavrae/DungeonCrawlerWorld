@@ -54,6 +54,7 @@ public sealed class ConsumableActivationSystemTests
         componentManager.RegisterPackedPool<DeadComponent>(static (ref existing, incoming) => existing = incoming);
         componentManager.RegisterPackedPool<ManaComponent>(static (ref existing, incoming) => existing = incoming);
         componentManager.RegisterMultiPool<InventoryItemStackComponent>();
+        componentManager.RegisterPackedPool<InventoryComponent>(static (ref existing, incoming) => existing = incoming);
         componentManager.RegisterMultiPool<StatusEffectStack>();
         componentManager.RegisterPackedPool<PoisonTimerComponent>(static (ref existing, incoming) => { });
 

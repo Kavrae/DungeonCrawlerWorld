@@ -18,4 +18,16 @@ public enum Tag
     Tool,
     Unarmed,
     Weapon,
+
+    // AbilityScoreType's 7 members, mirrored 1:1 -- lets an ability tagged with one of these get
+    // a damage bonus from the matching ability score (see AbilityEffectResolver.
+    // ComputeAbilityScoreDamageBonus), the same generic tag-driven mechanism regardless of which
+    // score actually applies to a given ability.
+    Strength,
+    Intelligence,
+    Constitution,
+    Dexterity,
+    Charisma,
+    Luck,
+    Wisdom,
 }

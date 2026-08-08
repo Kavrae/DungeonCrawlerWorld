@@ -891,6 +891,45 @@ public sealed class GameInputControllerTests
     }
 
     /// <summary>
+    /// The reported bug: hovering a non-scrollable child inside a scrollable parent (e.g. an
+    /// inspector's per-component box inside its scrollable inspection container) must scroll the
+    /// parent, not silently do nothing -- see UpdateMouseWheelScroll's ancestor walk-up.
+    /// </summary>
+    [TestMethod]
+    public void MouseWheel_OverANonScrollableChildOfAScrollableParent_ScrollsTheParentInstead()
+    {
+        var windowService = CreateWindowService();
+        var parent = windowService.CreateElement<Window>(null, new ElementOptions
+        {
+            Hierarchy = new ElementHierarchyOptions { CanContainChildren = true, ChildrenTileMode = ChildElementTileMode.Vertical },
+            Layout = new ElementLayoutOptions { RelativePosition = new Vector2(50, 60), Size = new Vector2(300, 40), DisplayMode = ElementDisplayMode.Fixed },
+            Chrome = new ElementChromeOptions { CanUserScrollVertical = true },
+        });
+        parent.Initialize();
+
+        for (var index = 0; index < 3; index++)
+        {
+            var child = windowService.CreateElement<TextWindow>(parent, new ElementOptions
+            {
+                Layout = new ElementLayoutOptions { MaximumSize = new Vector2(parent.ContentSize.X, 1000), DisplayMode = ElementDisplayMode.WrapContent },
+                Text = new TextOptions { Text = $"Child {index}" },
+            });
+            parent.AddChild(child);
+        }
+
+        Assert.IsGreaterThan(0, parent.MaxScrollOffset.Y, "Sanity check: the parent must actually have room to scroll.");
+        var firstChild = (TextWindow)parent.ChildElements[0];
+        Assert.IsFalse(firstChild.CanUserScrollVertical || firstChild.CanUserScrollHorizontal, "Sanity check: the child itself must not be scrollable -- that's the whole point of this test.");
+
+        var controller = new GameInputController([parent], [], [], [], LargeScreenSize);
+        var hoverPoint = firstChild.ContentRectangle.Center;
+        controller.Update(NoKeys, MouseAtWithScroll(hoverPoint.X, hoverPoint.Y, -120));
+
+        Assert.IsGreaterThan(0, parent.ScrollOffset.Y);
+        Assert.AreEqual(Vector2.Zero, firstChild.ScrollOffset);
+    }
+
+    /// <summary>
     /// Right-press hit-tests (like a left-click) to find the drag's target and fires
     /// HandleRightDragStart on it exactly once; every held frame afterward reports the total
     /// pixel delta since the drag started (not a per-frame increment) via HandleRightDrag.
@@ -1817,6 +1856,7 @@ public sealed class GameInputControllerTests
         componentManager.RegisterMultiPool<ItemHotkeyBindingComponent>();
         componentManager.RegisterMultiPool<AbilityInstanceComponent>();
         componentManager.RegisterMultiPool<InventoryItemStackComponent>();
+        componentManager.RegisterPackedPool<InventoryComponent>(static (ref existing, incoming) => existing = incoming);
         componentManager.RegisterPackedPool<ActionLockComponent>(static (ref existing, incoming) => existing = incoming);
         componentManager.RegisterPackedPool<PotionCooldownComponent>(static (ref existing, incoming) => existing = incoming);
         componentManager.RegisterPackedPool<ManaComponent>(static (ref existing, incoming) => existing = incoming);

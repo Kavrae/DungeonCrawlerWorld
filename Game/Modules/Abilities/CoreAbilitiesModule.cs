@@ -48,7 +48,7 @@ public sealed class CoreAbilitiesModule : IGameModule
             Summary: "Basic melee attack",
             SpriteName: "Punch",
             GlyphColor: Color.Black,
-            Tags: [Tag.Melee, Tag.Unarmed, Tag.Attack]));
+            Tags: [Tag.Melee, Tag.Unarmed, Tag.Attack, Tag.Strength]));
 
         context.Abilities.Register(new AbilityDefinition(
             MagicMissileId, "Magic Missile", "m",

@@ -75,6 +75,7 @@ public sealed class MapWindowTests
         componentManager.RegisterMultiPool<ActionHotkeyBindingComponent>();
         componentManager.RegisterMultiPool<ItemHotkeyBindingComponent>();
         componentManager.RegisterMultiPool<InventoryItemStackComponent>();
+        componentManager.RegisterPackedPool<InventoryComponent>(static (ref existing, incoming) => existing = incoming);
         componentManager.RegisterPackedPool<PendingAbilityActivationComponent>(static (ref existing, incoming) => existing = incoming);
         componentManager.RegisterPackedPool<PendingConsumableActivationComponent>(static (ref existing, incoming) => existing = incoming);
         componentManager.RegisterPackedPool<PendingDelayedActionComponent>(static (ref existing, incoming) => existing = incoming);
@@ -566,8 +567,8 @@ public sealed class MapWindowTests
             mapWindow.Update(new GameTime());
         }
 
-        // The caster's own tile -- part of Adjacent's fixed footprint.
-        mapWindow.UpdateHoveredTile(ComputeScreenPositionForMapPosition(mapWindow, mapViewState, new Vector3Int(100, 100, 0)));
+        // One of the caster's 8 neighbors -- part of Adjacent's fixed footprint (the caster's own tile no longer is).
+        mapWindow.UpdateHoveredTile(ComputeScreenPositionForMapPosition(mapWindow, mapViewState, new Vector3Int(101, 100, 0)));
         mapWindow.HandleHotkeys(new KeyboardState(Keys.F), new KeyboardState());
 
         var pendingActivations = componentManager.GetPackedPool<PendingAbilityActivationComponent>();
@@ -615,11 +616,11 @@ public sealed class MapWindowTests
     /// <summary>
     /// Two presses with no Update call in between leave the frame counter unchanged, so the
     /// second press reads as a double-tap (see HandleHotkeySlotPress) -- this activates
-    /// immediately against Adjacent's fixed footprint (the caster's own tile plus its 8
-    /// surrounding neighbors) rather than merely arming, and the queued PendingAbilityActivationComponent
-    /// is the observable proof (actual damage application is AbilityActivationSystem's own
-    /// responsibility, covered by AbilityActivationSystemTests, not exercised by this
-    /// ComponentManager-only test harness).
+    /// immediately against Adjacent's fixed footprint (the caster's 8 surrounding neighbors,
+    /// excluding the caster's own tile) rather than merely arming, and the queued
+    /// PendingAbilityActivationComponent is the observable proof (actual damage application is
+    /// AbilityActivationSystem's own responsibility, covered by AbilityActivationSystemTests, not
+    /// exercised by this ComponentManager-only test harness).
     /// </summary>
     [TestMethod]
     public void HandleHotkeys_DoubleTapAdjacentAbility_QueuesActivationAgainstTheFixedFootprint_AndClearsAnyArming()
@@ -636,8 +637,8 @@ public sealed class MapWindowTests
         Assert.IsTrue(pendingActivations.Has(PlayerEntityId));
         var pending = pendingActivations.GetReadonly(PlayerEntityId);
         Assert.AreEqual(TestAbilityId, pending.AbilityId);
-        Assert.HasCount(9, pending.TargetTiles);
-        CollectionAssert.Contains(pending.TargetTiles, new Vector3Int(100, 100, 0));
+        Assert.HasCount(8, pending.TargetTiles);
+        CollectionAssert.DoesNotContain(pending.TargetTiles, new Vector3Int(100, 100, 0));
         CollectionAssert.Contains(pending.TargetTiles, new Vector3Int(101, 100, 0));
 
         Assert.IsNull(mapViewState.ArmedAbilityId, "The first press of the pair armed this slot -- once the double-tap fires, it shouldn't be left stale-armed.");
@@ -755,8 +756,8 @@ public sealed class MapWindowTests
         mapWindow.HandleHotkeys(new KeyboardState(Keys.F), new KeyboardState());
 
         Assert.IsNotNull(mapViewState.TargetableTiles);
-        Assert.HasCount(9, mapViewState.TargetableTiles);
-        Assert.IsTrue(mapViewState.TargetableTiles.Contains(new Vector3Int(100, 100, 0)));
+        Assert.HasCount(8, mapViewState.TargetableTiles);
+        Assert.IsFalse(mapViewState.TargetableTiles.Contains(new Vector3Int(100, 100, 0)), "The caster's own tile is no longer part of Adjacent's footprint.");
         Assert.IsTrue(mapViewState.TargetableTiles.Contains(new Vector3Int(101, 100, 0)));
         Assert.IsFalse(mapViewState.TargetableTiles.Contains(new Vector3Int(102, 100, 0)));
     }
@@ -795,7 +796,7 @@ public sealed class MapWindowTests
 
         mapWindow.HandleHotkeys(new KeyboardState(Keys.F), new KeyboardState());
         Assert.IsNotNull(mapViewState.TargetableTiles);
-        Assert.IsTrue(mapViewState.TargetableTiles.Contains(new Vector3Int(100, 100, 0)));
+        Assert.IsTrue(mapViewState.TargetableTiles.Contains(new Vector3Int(101, 100, 0)));
         Assert.IsFalse(mapViewState.TargetableTiles.Contains(new Vector3Int(105, 100, 0)));
 
         // Simulate MovementSystem actually applying a move while the ability stays armed.
@@ -803,9 +804,10 @@ public sealed class MapWindowTests
         mapWindow.Update(new GameTime());
 
         Assert.IsNotNull(mapViewState.TargetableTiles);
-        Assert.HasCount(9, mapViewState.TargetableTiles);
-        Assert.IsFalse(mapViewState.TargetableTiles.Contains(new Vector3Int(100, 100, 0)), "The footprint must move with the caster, not stay anchored to the position it was armed at.");
-        Assert.IsTrue(mapViewState.TargetableTiles.Contains(new Vector3Int(105, 100, 0)));
+        Assert.HasCount(8, mapViewState.TargetableTiles);
+        Assert.IsFalse(mapViewState.TargetableTiles.Contains(new Vector3Int(101, 100, 0)), "The footprint must move with the caster, not stay anchored to the position it was armed at.");
+        Assert.IsFalse(mapViewState.TargetableTiles.Contains(new Vector3Int(105, 100, 0)), "The caster's own new tile is no longer part of Adjacent's footprint either.");
+        Assert.IsTrue(mapViewState.TargetableTiles.Contains(new Vector3Int(106, 100, 0)));
     }
 
     /// <summary>Right-click/Escape is the cancel path now (see CancelArmedOrPendingAction) -- re-pressing the same hotkey confirms rather than disarms, so this exercises the actual disarm path.</summary>
@@ -894,15 +896,15 @@ public sealed class MapWindowTests
         componentManager.Merge(PlayerEntityId, new ActionHotkeyBindingComponent(HotkeySlot.Slot4, TestAbilityId));
         mapWindow.HandleHotkeys(new KeyboardState(Keys.F), new KeyboardState());
 
-        // The caster's own tile -- part of Adjacent's fixed footprint.
-        var clickPosition = ComputeScreenPositionForMapPosition(mapWindow, mapViewState, new Vector3Int(100, 100, 0));
+        // One of the caster's 8 neighbors -- part of Adjacent's fixed footprint (the caster's own tile no longer is).
+        var clickPosition = ComputeScreenPositionForMapPosition(mapWindow, mapViewState, new Vector3Int(101, 100, 0));
         mapWindow.HandleClick(clickPosition);
 
         var pendingActivations = componentManager.GetPackedPool<PendingAbilityActivationComponent>();
         Assert.IsTrue(pendingActivations.Has(PlayerEntityId));
         var pending = pendingActivations.GetReadonly(PlayerEntityId);
         Assert.AreEqual(TestAbilityId, pending.AbilityId);
-        Assert.HasCount(9, pending.TargetTiles);
+        Assert.HasCount(8, pending.TargetTiles);
         Assert.IsNull(mapViewState.ArmedAbilityId, "Confirming a target must disarm.");
         Assert.IsNull(mapViewState.TargetableTiles);
     }
@@ -1184,6 +1186,34 @@ public sealed class MapWindowTests
         Assert.AreEqual(TestPotionId, pendingActivations.GetReadonly(PlayerEntityId).ItemDefinitionId);
         Assert.IsNull(mapViewState.ArmedItemDefinitionId, "Confirming a target must disarm.");
         Assert.IsNull(mapViewState.TargetableTiles);
+    }
+
+    /// <summary>
+    /// Clicking your own tile with a Potion armed must produce the exact same single-tile,
+    /// no-splash result double-tap already does (see HandleHotkeys_DoubleTapPotionSlot_QueuesSelfActivation_AndClearsAnyArming)
+    /// -- not the real Burst/AreaSize splash the shape would otherwise resolve to when centered
+    /// on yourself, which is what made "drink by double-tap" and "drink by clicking your own
+    /// tile" behave differently before this fix.
+    /// </summary>
+    [TestMethod]
+    public void HandleClick_ArmedItem_ClickOwnTile_QueuesSelfOnlyActivation_NotTheRealSplashShape()
+    {
+        var (_, mapViewState, mapWindow, componentManager, itemCatalog) = BuildMapWindowWithPlayerAndItems(300, 300, 1, new Vector3Int(100, 100, 0));
+        RegisterTestPotion(itemCatalog);
+        InventoryActions.AddItem(componentManager, PlayerEntityId, TestPotionId, quantity: 1);
+        componentManager.Merge(PlayerEntityId, new ItemHotkeyBindingComponent(HotkeySlot.Slot1, TestPotionId));
+        mapWindow.HandleHotkeys(new KeyboardState(Keys.Q), new KeyboardState());
+
+        var clickPosition = ComputeScreenPositionForMapPosition(mapWindow, mapViewState, new Vector3Int(100, 100, 0));
+        mapWindow.HandleClick(clickPosition);
+
+        var pendingActivations = componentManager.GetPackedPool<PendingConsumableActivationComponent>();
+        Assert.IsTrue(pendingActivations.Has(PlayerEntityId));
+        var pending = pendingActivations.GetReadonly(PlayerEntityId);
+        Assert.AreEqual(TestPotionId, pending.ItemDefinitionId);
+        Assert.HasCount(1, pending.TargetTiles, "A Potion's real Burst/AreaSize:1 shape centered on the caster would resolve to 5 tiles -- clicking your own tile must bypass that and self-target only.");
+        Assert.AreEqual(new Vector3Int(100, 100, 0), pending.TargetTiles[0]);
+        Assert.IsNull(mapViewState.ArmedItemDefinitionId, "Confirming a target must disarm.");
     }
 
     [TestMethod]
