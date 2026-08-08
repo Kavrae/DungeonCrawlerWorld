@@ -12,5 +12,5 @@ public struct RaceComponent(Guid id, string name, string description)
     public string Name { get; set; } = name;
     public string Description { get; set; } = description;
 
-    public override readonly string ToString() => $"Race : {Name}";
+    public override readonly string ToString() => $"Id : {Id}\nName : {Name}\nDescription : {Description}";
 }

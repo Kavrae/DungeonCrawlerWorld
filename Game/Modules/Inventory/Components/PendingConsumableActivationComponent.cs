@@ -13,4 +13,6 @@ public struct PendingConsumableActivationComponent(Guid itemDefinitionId, Vector
 {
     public Guid ItemDefinitionId { get; set; } = itemDefinitionId;
     public Vector3Int[] TargetTiles { get; set; } = targetTiles;
+
+    public override readonly string ToString() => $"ItemDefinitionId : {ItemDefinitionId}\nTargetTiles : [{string.Join(", ", TargetTiles)}]";
 }

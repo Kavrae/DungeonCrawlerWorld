@@ -16,4 +16,6 @@ public struct ActionLockComponent(short totalLockFrames, short lockFramesRemaini
 {
     public short TotalLockFrames { get; set; } = totalLockFrames;
     public short LockFramesRemaining { get; set; } = lockFramesRemaining;
+
+    public override readonly string ToString() => $"TotalLockFrames : {TotalLockFrames}\nLockFramesRemaining : {LockFramesRemaining}";
 }

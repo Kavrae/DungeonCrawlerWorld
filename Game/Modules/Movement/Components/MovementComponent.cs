@@ -26,5 +26,5 @@ public struct MovementComponent(MovementMode movementMode, short actionCooldownF
     /// <summary>The map node to attempt to move to next, as a step toward TargetMapPosition -- separated out to allow delayed/recalculated movement.</summary>
     public Vector3Int? NextMapPosition { get; set; } = nextMapPosition;
 
-    public override readonly string ToString() => $"Movement : {MovementMode}";
+    public override readonly string ToString() => $"Mode : {MovementMode}\nActionCooldownFrames : {ActionCooldownFrames}\nFramesToWait : {FramesToWait}\nTargetMapPosition : {TargetMapPosition}\nNextMapPosition : {NextMapPosition}";
 }

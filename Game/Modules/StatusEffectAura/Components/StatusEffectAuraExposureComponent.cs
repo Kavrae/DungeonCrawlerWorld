@@ -15,4 +15,6 @@ namespace Game.Modules.StatusEffectAura.Components;
 public struct StatusEffectAuraExposureComponent(int framesUntilNextTick) : ITickCountdown
 {
     public int FramesUntilNextTick { get; set; } = framesUntilNextTick;
+
+    public override readonly string ToString() => $"FramesUntilNextTick : {FramesUntilNextTick}";
 }

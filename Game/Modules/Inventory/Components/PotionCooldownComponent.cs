@@ -13,4 +13,6 @@ public struct PotionCooldownComponent(short totalFrames, short framesRemaining)
 {
     public short TotalFrames { get; set; } = totalFrames;
     public short FramesRemaining { get; set; } = framesRemaining;
+
+    public override readonly string ToString() => $"TotalFrames : {TotalFrames}\nFramesRemaining : {FramesRemaining}";
 }

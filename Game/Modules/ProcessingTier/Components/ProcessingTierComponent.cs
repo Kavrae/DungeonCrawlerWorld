@@ -14,4 +14,7 @@ namespace Game.Modules.ProcessingTier.Components;
 /// entity up to capacity rather than only entities that have a tier (a couple MB at this game's
 /// scale) -- cheap relative to what it saves.
 /// </summary>
-public readonly record struct ProcessingTierComponent(ProcessingTierLevel Tier);
+public readonly record struct ProcessingTierComponent(ProcessingTierLevel Tier)
+{
+    public override readonly string ToString() => $"Tier : {Tier}";
+}

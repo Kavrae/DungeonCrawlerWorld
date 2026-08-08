@@ -19,5 +19,5 @@ public struct SpriteComponent(string sheetPath, Rectangle sourceRectangle)
     public static SpriteComponent FromCell(string sheetPath, int column, int row, int cellWidth = 16, int cellHeight = 16) =>
         new(sheetPath, new Rectangle(column * cellWidth, row * cellHeight, cellWidth, cellHeight));
 
-    public override readonly string ToString() => $"Sprite : {SheetPath} {SourceRectangle}";
+    public override readonly string ToString() => $"SheetPath : {SheetPath}\nSourceRectangle : {SourceRectangle}";
 }

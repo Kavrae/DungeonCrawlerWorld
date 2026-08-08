@@ -17,4 +17,6 @@ public struct InventoryItemStackComponent(Guid itemDefinitionId, int quantity, b
     public int Quantity { get; set; } = quantity;
 
     public bool IsDisabled { get; set; } = isDisabled;
+
+    public override readonly string ToString() => $"ItemDefinitionId : {ItemDefinitionId}\nQuantity : {Quantity}\nIsDisabled : {IsDisabled}";
 }

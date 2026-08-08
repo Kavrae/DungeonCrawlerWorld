@@ -9,4 +9,6 @@ namespace Game.Modules.Crawler.Components;
 public struct CrawlerComponent(int crawlerNumber)
 {
     public int CrawlerNumber { get; } = crawlerNumber;
+
+    public override readonly string ToString() => $"CrawlerNumber : {CrawlerNumber}";
 }

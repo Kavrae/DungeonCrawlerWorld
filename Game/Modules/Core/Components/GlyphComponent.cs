@@ -14,5 +14,5 @@ public struct GlyphComponent(string glyph, Color glyphColor)
 
     public Color GlyphColor { get; set; } = glyphColor;
 
-    public override readonly string ToString() => $"Glyph : {Glyph}";
+    public override readonly string ToString() => $"Glyph : {Glyph}\nGlyphColor : {GlyphColor}";
 }

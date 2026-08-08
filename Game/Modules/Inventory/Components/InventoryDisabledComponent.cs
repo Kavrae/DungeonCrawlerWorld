@@ -10,4 +10,6 @@ namespace Game.Modules.Inventory.Components;
 public struct InventoryDisabledComponent(bool isDisabled)
 {
     public bool IsDisabled { get; set; } = isDisabled;
+
+    public override readonly string ToString() => $"IsDisabled : {IsDisabled}";
 }

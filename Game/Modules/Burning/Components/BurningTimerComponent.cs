@@ -17,4 +17,6 @@ public struct BurningTimerComponent(int framesUntilNextTick, int stackCount) : I
     /// BurningEffects.ApplyStack (increment) and BurningSystem.Tick (decrement)
     /// </summary>
     public int StackCount { get; set; } = stackCount;
+
+    public override readonly string ToString() => $"FramesUntilNextTick : {FramesUntilNextTick}\nStackCount : {StackCount}";
 }

@@ -19,4 +19,6 @@ public struct StatusEffectAuraSourceComponent(StatusEffectType effectType, int a
     public StatusEffectType EffectType { get; set; } = effectType;
     public int AuraAndGlowStrength { get; set; } = auraAndGlowStrength;
     public Color GlowColor { get; set; } = glowColor;
+
+    public override readonly string ToString() => $"EffectType : {EffectType}\nAuraAndGlowStrength : {AuraAndGlowStrength}\nGlowColor : {GlowColor}";
 }

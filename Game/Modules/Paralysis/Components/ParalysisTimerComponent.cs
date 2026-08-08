@@ -15,4 +15,6 @@ public struct ParalysisTimerComponent(int framesUntilNextTick) : ITickCountdown,
     public int FramesUntilNextTick { get; set; } = framesUntilNextTick;
 
     public readonly int StackCount => 1;
+
+    public override readonly string ToString() => $"FramesUntilNextTick : {FramesUntilNextTick}\nStackCount : {StackCount}";
 }

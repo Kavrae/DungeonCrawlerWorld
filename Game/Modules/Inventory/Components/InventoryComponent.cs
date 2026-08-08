@@ -8,4 +8,7 @@ namespace Game.Modules.Inventory.Components;
 /// "can this entity be looted/managed at all" signal a future corpse-looting UI needs, so "empty
 /// inventory" and "no inventory" stop being the same question.
 /// </summary>
-public readonly record struct InventoryComponent;
+public readonly record struct InventoryComponent
+{
+    public override readonly string ToString() => nameof(InventoryComponent);
+}

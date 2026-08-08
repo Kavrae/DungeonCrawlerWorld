@@ -8,5 +8,5 @@ public struct TransformComponent(Vector3Int position, Vector2Byte size)
     public Vector3Int Position { get; set; } = position;
     public Vector2Byte Size { get; set; } = size;
 
-    public override readonly string ToString() => $"Transform : {Position} {Size}";
+    public override readonly string ToString() => $"Position : {Position}\nSize : {Size}";
 }

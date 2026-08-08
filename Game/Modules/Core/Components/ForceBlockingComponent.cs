@@ -6,4 +6,7 @@ namespace Game.Modules.Core.Components;
 /// NonBlockingComponent when both are present -- see IMapQuery.IsBlocking. Multi-pooled for
 /// the same overlapping-sources reason as NonBlockingComponent.
 /// </summary>
-public struct ForceBlockingComponent;
+public struct ForceBlockingComponent
+{
+    public override readonly string ToString() => nameof(ForceBlockingComponent);
+}

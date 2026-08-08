@@ -6,5 +6,5 @@ public struct DisplayTextComponent(string name, string description)
     public string Name { get; set; } = name;
     public string Description { get; set; } = description;
 
-    public override readonly string ToString() => $"{Name} : {Description}";
+    public override readonly string ToString() => $"Name : {Name}\nDescription : {Description}";
 }

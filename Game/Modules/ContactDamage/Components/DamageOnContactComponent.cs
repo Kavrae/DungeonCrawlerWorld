@@ -11,4 +11,6 @@ public struct DamageOnContactComponent(short damagePerTick, int tickIntervalFram
 {
     public short DamagePerTick { get; set; } = damagePerTick;
     public int TickIntervalFrames { get; set; } = tickIntervalFrames;
+
+    public override readonly string ToString() => $"DamagePerTick : {DamagePerTick}\nTickIntervalFrames : {TickIntervalFrames}";
 }

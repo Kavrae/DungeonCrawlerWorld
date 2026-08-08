@@ -15,4 +15,6 @@ public struct ManaComponent(float currentMana, float maximumMana)
 {
     public float CurrentMana { get; set; } = currentMana;
     public float MaximumMana { get; set; } = maximumMana;
+
+    public override readonly string ToString() => $"CurrentMana : {CurrentMana}\nMaximumMana : {MaximumMana}";
 }

@@ -17,4 +17,6 @@ public struct PoisonTimerComponent(int framesUntilNextTick, int stackCount, int 
     public int RemainingDurationTicks { get; set; } = remainingDurationTicks;
 
     public StatusEffectSource Source { get; set; } = source;
+
+    public override readonly string ToString() => $"FramesUntilNextTick : {FramesUntilNextTick}\nStackCount : {StackCount}\nRemainingDurationTicks : {RemainingDurationTicks}\nSource : {Source}";
 }

@@ -6,4 +6,7 @@ namespace Game.Modules.StatusEffects.Components;
 /// One stack unit of one effect from one source -- an entity holding N of these (in the
 /// MultiComponentPool this is registered as) has N stacks. 
 /// </summary>
-public readonly record struct StatusEffectStack(StatusEffectType EffectType, StatusEffectSource Source);
+public readonly record struct StatusEffectStack(StatusEffectType EffectType, StatusEffectSource Source)
+{
+    public override readonly string ToString() => $"EffectType : {EffectType}\nSource : {Source}";
+}

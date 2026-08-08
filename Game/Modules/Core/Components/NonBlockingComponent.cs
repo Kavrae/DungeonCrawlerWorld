@@ -37,4 +37,6 @@ public enum NonBlockingKind
 public struct NonBlockingComponent(NonBlockingKind kind = NonBlockingKind.None)
 {
     public NonBlockingKind Kind = kind;
+
+    public override readonly string ToString() => $"Kind : {Kind}";
 }

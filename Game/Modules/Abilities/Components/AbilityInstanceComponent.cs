@@ -15,4 +15,6 @@ public struct AbilityInstanceComponent(Guid abilityId, short damageAmount, short
     public Guid AbilityId { get; } = abilityId;
     public short DamageAmount { get; set; } = damageAmount;
     public short CooldownFramesRemaining { get; set; } = cooldownFramesRemaining;
+
+    public override readonly string ToString() => $"AbilityId : {AbilityId}\nDamageAmount : {DamageAmount}\nCooldownFramesRemaining : {CooldownFramesRemaining}";
 }

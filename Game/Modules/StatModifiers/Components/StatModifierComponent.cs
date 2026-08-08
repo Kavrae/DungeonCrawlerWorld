@@ -35,4 +35,6 @@ public struct StatModifierComponent(
     public float Magnitude { get; } = magnitude;
     public int RemainingDurationFrames { get; set; } = remainingDurationFrames;
     public StatusEffectSource Source { get; } = source;
+
+    public override readonly string ToString() => $"Target : {Target}\nOperation : {Operation}\nPolarity : {Polarity}\nCanModify : {CanModify}\nMagnitude : {Magnitude}\nRemainingDurationFrames : {RemainingDurationFrames}\nSource : {Source}";
 }

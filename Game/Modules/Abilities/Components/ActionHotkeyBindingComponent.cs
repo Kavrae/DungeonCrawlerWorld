@@ -16,4 +16,6 @@ public struct ActionHotkeyBindingComponent(HotkeySlot slot, Guid abilityId) : IH
 {
     public HotkeySlot Slot { get; } = slot;
     public Guid AbilityId { get; set; } = abilityId;
+
+    public override readonly string ToString() => $"Slot : {Slot}\nAbilityId : {AbilityId}";
 }

@@ -11,5 +11,5 @@ public struct ClassComponent(Guid id, string name, string description)
     public string Name { get; set; } = name;
     public string Description { get; set; } = description;
 
-    public override readonly string ToString() => $"Class : {Name}";
+    public override readonly string ToString() => $"Id : {Id}\nName : {Name}\nDescription : {Description}";
 }

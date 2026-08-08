@@ -5,4 +5,7 @@
 /// EntityDiedEvent.Source.EntityId when Source.Kind == StatusEffectSourceKind.Entity, else null (a
 /// hazard/Admin/AI source with no single entity to attribute the kill to).
 /// </summary>
-public readonly record struct DeadComponent(int? KilledByEntityId);
+public readonly record struct DeadComponent(int? KilledByEntityId)
+{
+    public override readonly string ToString() => $"KilledByEntityId : {KilledByEntityId}";
+}

@@ -15,4 +15,6 @@ public struct ItemHotkeyBindingComponent(HotkeySlot slot, Guid itemDefinitionId)
 {
     public HotkeySlot Slot { get; } = slot;
     public Guid ItemDefinitionId { get; set; } = itemDefinitionId;
+
+    public override readonly string ToString() => $"Slot : {Slot}\nItemDefinitionId : {ItemDefinitionId}";
 }

@@ -10,5 +10,5 @@ public struct BackgroundComponent(Color backgroundColor)
 {
     public Color BackgroundColor { get; set; } = backgroundColor;
 
-    public override readonly string ToString() => $"Background : {BackgroundColor}";
+    public override readonly string ToString() => $"BackgroundColor : {BackgroundColor}";
 }

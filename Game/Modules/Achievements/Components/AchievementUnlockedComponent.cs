@@ -11,4 +11,6 @@ public struct AchievementUnlockedComponent(Guid achievementId, long earnedAtUtcT
 {
     public Guid AchievementId { get; } = achievementId;
     public long EarnedAtUtcTicks { get; } = earnedAtUtcTicks;
+
+    public override readonly string ToString() => $"AchievementId : {AchievementId}\nEarnedAtUtcTicks : {EarnedAtUtcTicks}";
 }

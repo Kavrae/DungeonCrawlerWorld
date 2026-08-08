@@ -14,4 +14,6 @@ public struct ContactDamageExposureComponent(int framesUntilNextTick, int source
 {
     public int FramesUntilNextTick { get; set; } = framesUntilNextTick;
     public int SourceEntityId { get; set; } = sourceEntityId;
+
+    public override readonly string ToString() => $"FramesUntilNextTick : {FramesUntilNextTick}\nSourceEntityId : {SourceEntityId}";
 }

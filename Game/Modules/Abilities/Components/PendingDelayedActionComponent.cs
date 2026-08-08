@@ -13,4 +13,6 @@ public struct PendingDelayedActionComponent(Guid abilityId, Vector3Int[] targetT
 {
     public Guid AbilityId { get; set; } = abilityId;
     public Vector3Int[] TargetTiles { get; set; } = targetTiles;
+
+    public override readonly string ToString() => $"AbilityId : {AbilityId}\nTargetTiles : [{string.Join(", ", TargetTiles)}]";
 }
