@@ -61,7 +61,7 @@ public sealed class ConsumableActivationSystem : ISystem
     private readonly MultiComponentPool<AbilityScoreComponent>? _abilityScores;
     private readonly StatusEffectAuraApplierRegistry? _statusEffectAppliers;
     private readonly IPlayerQuery? _playerQuery;
-    private readonly PackedComponentPool<StatusEffectAuraSourceComponent>? _auraSources;
+    private readonly MultiComponentPool<StatusEffectAuraSourceComponent>? _auraSources;
     private readonly EntityStripeSet _stripeSet;
 
     public ConsumableActivationSystem(
@@ -81,7 +81,7 @@ public sealed class ConsumableActivationSystem : ISystem
         MultiComponentPool<AbilityScoreComponent>? abilityScores = null,
         StatusEffectAuraApplierRegistry? statusEffectAppliers = null,
         IPlayerQuery? playerQuery = null,
-        PackedComponentPool<StatusEffectAuraSourceComponent>? auraSources = null)
+        MultiComponentPool<StatusEffectAuraSourceComponent>? auraSources = null)
     {
         _pendingActivations = pendingActivations;
         _actionLocks = actionLocks;

@@ -1,5 +1,6 @@
 ﻿using Engine.ECS.Components;
 using Engine.ECS.Systems;
+using Engine.Events;
 using Game.Modules.Core.Components;
 using Game.Modules.Death.Components;
 using Game.Modules.Movement;
@@ -35,6 +36,7 @@ public sealed class StatusEffectAuraModule : IGameModule
     public IReadOnlyList<Type> Dependencies { get; } = [typeof(StatusEffectsModule), typeof(MovementModule)];
 
     private IMapQuery _mapQuery = null!;
+    private EventBus _eventBus = null!;
     private StatusEffectAuraApplierRegistry _applierRegistry = null!;
     private FrameEventBuffer<EntityMovedEvent> _movedEntities = null!;
     private ProcessingTierEvents _processingTierEvents = null!;
@@ -42,6 +44,7 @@ public sealed class StatusEffectAuraModule : IGameModule
     public void Configure(GameModuleContext context)
     {
         _mapQuery = context.MapQuery;
+        _eventBus = context.EventBus;
         _applierRegistry = context.StatusEffectAuraAppliers;
         _movedEntities = context.MovedEntities;
         _processingTierEvents = context.ProcessingTierEvents;
@@ -49,8 +52,8 @@ public sealed class StatusEffectAuraModule : IGameModule
 
     public void RegisterComponents(ComponentManager componentManager)
     {
-        componentManager.RegisterPackedPool<StatusEffectAuraSourceComponent>(static (ref existing, incoming) => { });
-        componentManager.RegisterPackedPool<StatusEffectAuraExposureComponent>(static (ref existing, incoming) => { });
+        componentManager.RegisterMultiPool<StatusEffectAuraSourceComponent>();
+        componentManager.RegisterMultiPool<StatusEffectAuraExposureComponent>();
     }
 
     public void RegisterSystems(SystemManager systemManager, ComponentManager componentManager)
@@ -61,10 +64,11 @@ public sealed class StatusEffectAuraModule : IGameModule
 
         systemManager.Register(new StatusEffectAuraSystem(
             componentManager,
-            componentManager.GetPackedPool<StatusEffectAuraExposureComponent>(),
-            componentManager.GetPackedPool<StatusEffectAuraSourceComponent>(),
+            componentManager.GetMultiPool<StatusEffectAuraExposureComponent>(),
+            componentManager.GetMultiPool<StatusEffectAuraSourceComponent>(),
             componentManager.GetDirectPool<TransformComponent>(),
             _mapQuery,
+            _eventBus,
             _applierRegistry,
             _movedEntities,
             componentManager.GetDirectPool<ProcessingTierComponent>(),

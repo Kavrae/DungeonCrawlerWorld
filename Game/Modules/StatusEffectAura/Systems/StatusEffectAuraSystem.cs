@@ -1,6 +1,7 @@
-﻿using Engine.ECS.Components;
+using Engine.ECS.Components;
 using Engine.ECS.Components.Stores;
 using Engine.ECS.Systems;
+using Engine.Events;
 using Engine.Math;
 using Game.Modules.Core.Components;
 using Game.Modules.Death.Components;
@@ -24,15 +25,7 @@ namespace Game.Modules.StatusEffectAura.Systems;
 /// exposed population isn't the "stays small" case ContactDamageSystem's own doc comment
 /// describes; profiling a gameplay demo showed this system costing as much wall-clock time as
 /// BurningSystem, both un-striped, combined exceeding MovementSystem's own (already-striped)
-/// cost. CountdownTicker.Tick is called once per TieredEntityStripeSet tier, each passed that
-/// tier's own GetTierFramesPerVisit as framesPerVisit, so each entity's exposure still
-/// decrements by the correct number of real frames between visits regardless of which tier's
-/// (possibly coarser than StripeCount) cadence it's on (see CountdownTicker.Tick's own doc
-/// comment for why this matters) -- note the buffer drain itself is NOT tier-gated (every
-/// buffered move is processed every Update call); only the ongoing CountdownTicker.Tick pass
-/// over the existing exposure population is. The decrement-or-fire
-/// loop itself is Engine.ECS.Systems.CountdownTicker.Tick, shared with BurningSystem/
-/// PoisonSystem/ContactDamageSystem.
+/// cost.
 ///
 /// All range checks go through a single lazily-built AuraGrid (O(1) per lookup, keyed by both
 /// cell and StatusEffectType internally -- see its own doc comment for why one shared sparse
@@ -42,30 +35,58 @@ namespace Game.Modules.StatusEffectAura.Systems;
 /// once real lava density and TestMapBuilder's real wandering-population scale were involved.
 ///
 /// _effectTypesInUse tracks which StatusEffectTypes actually have a registered source, so
-/// TryGrantApplicableStacks/IsExposedToAny only ever query effect types that could possibly
-/// have a nonzero total -- two sources granting *different* effects (e.g. a future Burning
-/// lava tile next to a Poison bog) still never have their Strengths summed together into one
-/// meaningless total, since AuraGrid keys every total by (cell, effectType) together.
+/// TryGrantApplicableStacks only ever queries effect types that could possibly have a nonzero
+/// total -- two sources granting *different* effects (e.g. a future Burning lava tile next to a
+/// Poison bog) still never have their Strengths summed together into one meaningless total,
+/// since AuraGrid keys every total by (cell, effectType) together.
+///
+/// Exposure is tracked per (entity, EffectType) -- StatusEffectAuraExposureComponent is a
+/// MultiComponentPool entry, mirroring StatusEffectAuraSourceComponent's own per-type-instance
+/// shape -- rather than one shared flag per entity. This means every grant path
+/// (TryGrantApplicableStacks/TryGrantSingleType) can always be called unconditionally, for
+/// every effect type in use, on every move or reactive scan: an entity already exposed to one
+/// type is never a reason to skip checking whether a second, different type newly applies too
+/// (GrantStacks only ever tops a type's own count UP to its current target, never down, so
+/// re-checking an already-topped-off type is always a safe no-op) -- the "already exposed, so
+/// skip the check entirely" shortcut that caused a real regression here once is now structurally
+/// impossible to reintroduce, since there is no single "already exposed" flag left to shortcut
+/// on. Each type's own tick countdown is independent too: a fast-decaying type and a slow one no
+/// longer force each other's regrant cadence the way sharing one countdown used to.
 ///
 /// EntityMovedEvent is still handled two ways, since an aura source can in principle be a moving
 /// entity (e.g. a future lava golem), not just static terrain:
 /// - The mover is treated as an observer, but movement only ever *starts* exposure, never
-///   re-grants or resets it: an entity with an already-running exposure timer is left alone
-///   by its own movement entirely, so walking out of range and back in before the timer's
-///   next scheduled tick grants nothing extra and doesn't restart the countdown. Only Update
-///   ever grants again (on schedule) or removes a stale exposure (once the timer ticks while
-///   genuinely out of range) -- this is deliberately different from ContactDamageSystem,
+///   re-grants or resets it: an entity with an already-running exposure timer for some type is
+///   left alone by its own movement entirely, so walking out of range and back in before that
+///   type's next scheduled tick grants nothing extra and doesn't restart its countdown. Only
+///   Update ever grants again (on schedule) or removes a stale exposure (once the timer ticks
+///   while genuinely out of range) -- this is deliberately different from ContactDamageSystem,
 ///   which *does* re-trigger on every single step onto a hazard tile by design (see that
 ///   system's own doc comment); an aura's grant cadence is a property of the timer, not of
 ///   the entity's exact path in and out of range.
-/// - If the mover itself carries StatusEffectAuraSourceComponent, that one effect type's grid
-///   is updated (its old contribution removed, new contribution added) and everyone near its
-///   old/new position is re-checked, so a moving source correctly stops affecting entities it
-///   walks away from (removal only -- newly gaining exposure purely because a source
-///   approached a stationary entity is an accepted gap: that entity picks up the aura the
-///   next time it moves itself). This path is rare (no moving source exists in the game
-///   today) so the box query it still uses (see _maxScanRadius, to find candidate nearby
-///   occupants) is not on the hot path.
+/// - If the mover itself carries StatusEffectAuraSourceComponent, its own reach needs to be
+///   resynced in the grid (old position unsplatted, new position splatted) and nearby occupants
+///   re-evaluated (see ResyncSourceIfStale). This is only ever done synchronously, on the spot,
+///   for a Local-ProcessingTier source -- correctness matters where the player can actually
+///   observe it. A source at any other tier is left stale (see _lastSyncedSourcePosition) and
+///   picked up by Update's own periodic catch-up pass instead, at that tier's own coarser
+///   cadence -- the same bounded-staleness trade ActionCooldownSystem/MovementSystem/
+///   ProcessingTierSystem already make elsewhere in this codebase, applied here to keep a
+///   moving source's O(radius^2) resync cost from multiplying across a whole population of
+///   moving auras the same way EntityMovedEvent's own FrameEventBuffer exists to avoid for
+///   plain movement. A player carrying a toggled-on item (see AuraSourceEffects.Toggle below)
+///   is always Local relative to itself, so this is unobservable behavior change for that case;
+///   it only matters once a non-player moving source exists.
+///
+/// A source can also now appear/disappear outside of blueprint-time population (see
+/// AuraSourceEffects.Toggle, used by AuraSourceToggleEntry -- an item like Toxic Idol, or a
+/// future creature-cast action effect). OnSourceAdded/OnSourceRemoved react to
+/// AuraSourceAddedEvent/AuraSourceRemovedEvent the same way OnEntityMoved reacts to a move,
+/// splatting/unsplatting exactly that one source's own radius, and -- like the moving-source
+/// case above -- Added proactively grants to anyone already standing in range via the same
+/// GrantToOccupantsNear box scan, rather than waiting for a stationary target to move first.
+/// Both grant paths are safe to run synchronously (not deferred to a later tick) because
+/// GrantStacks never itself publishes anything -- no reentrancy hazard to guard against.
 /// </summary>
 public sealed class StatusEffectAuraSystem : ISystem
 {
@@ -74,34 +95,36 @@ public sealed class StatusEffectAuraSystem : ISystem
     public byte StripeCount => StripeCountValue;
 
     private readonly ComponentManager _componentManager;
-    private readonly PackedComponentPool<StatusEffectAuraExposureComponent> _exposures;
-    private readonly PackedComponentPool<StatusEffectAuraSourceComponent> _sources;
+    private readonly MultiComponentPool<StatusEffectAuraExposureComponent> _exposures;
+    private readonly MultiComponentPool<StatusEffectAuraSourceComponent> _sources;
     private readonly DirectComponentPool<TransformComponent> _transforms;
     private readonly StatusEffectAuraApplierRegistry _applierRegistry;
     private readonly IMapQuery _mapQuery;
     private readonly FrameEventBuffer<EntityMovedEvent> _movedEntities;
     private readonly PackedComponentPool<DeadComponent>? _deadEntities;
+    private readonly DirectComponentPool<ProcessingTierComponent> _processingTiers;
     private readonly TieredEntityStripeSet _tieredStripeSet;
+    private readonly TieredEntityStripeSet _sourceTieredStripeSet;
 
-    private readonly List<int> _pendingExposureRemovals = [];
+    private readonly List<(int EntityId, StatusEffectType EffectType)> _pendingExposureRemovals = [];
+    private readonly List<StatusEffectType> _staleExposureTypesScratch = [];
 
     private readonly AuraGrid _auraGrid;
     private readonly HashSet<StatusEffectType> _effectTypesInUse = [];
     private bool _gridBuilt;
 
-    private int _maxScanRadius;
+    /// <summary>Per-source-entity position the grid currently reflects -- may lag a non-Local source's real (_transforms) position by however many moves it's made since its own last resync. See ResyncSourceIfStale.</summary>
+    private readonly Dictionary<int, Vector3Int> _lastSyncedSourcePosition = [];
 
-    // Cached once instead of passing the Tick method group at the CountdownTicker.Tick call
-    // site every Update -- see ContactDamageSystem's own field for why this matters (an
-    // instance method group conversion allocates a fresh delegate every evaluation).
-    private readonly Func<int, StatusEffectAuraExposureComponent, bool> _tick;
+    private int _maxScanRadius;
 
     public StatusEffectAuraSystem(
         ComponentManager componentManager,
-        PackedComponentPool<StatusEffectAuraExposureComponent> exposures,
-        PackedComponentPool<StatusEffectAuraSourceComponent> sources,
+        MultiComponentPool<StatusEffectAuraExposureComponent> exposures,
+        MultiComponentPool<StatusEffectAuraSourceComponent> sources,
         DirectComponentPool<TransformComponent> transforms,
         IMapQuery mapQuery,
+        EventBus eventBus,
         StatusEffectAuraApplierRegistry applierRegistry,
         FrameEventBuffer<EntityMovedEvent> movedEntities,
         DirectComponentPool<ProcessingTierComponent> processingTiers,
@@ -116,11 +139,15 @@ public sealed class StatusEffectAuraSystem : ISystem
         _applierRegistry = applierRegistry;
         _movedEntities = movedEntities;
         _deadEntities = deadEntities;
+        _processingTiers = processingTiers;
 
         _auraGrid = new AuraGrid(mapQuery.MapSize);
-        _tick = Tick;
+
+        eventBus.Subscribe<AuraSourceAddedEvent>(OnSourceAdded);
+        eventBus.Subscribe<AuraSourceRemovedEvent>(OnSourceRemoved);
 
         _tieredStripeSet = ProcessingTierWiring.CreateAndWire(StripeCount, exposures, processingTiers, processingTierEvents);
+        _sourceTieredStripeSet = ProcessingTierWiring.CreateAndWire(StripeCount, sources, processingTiers, processingTierEvents);
     }
 
     /// <summary>
@@ -137,64 +164,153 @@ public sealed class StatusEffectAuraSystem : ISystem
             return;
         }
 
-        var sourceIds = _sources.EntityIds;
-        var sourceComponents = _sources.Components;
-        for (var i = 0; i < sourceIds.Length; i++)
+        SourceSplatting.ScatterAll(_sources, TryGetTransformPosition, (entityId, source, position) =>
         {
-            if (!_transforms.TryGetReadonly(sourceIds[i], out var transform))
-            {
-                continue;
-            }
-
-            var source = sourceComponents[i];
             _effectTypesInUse.Add(source.EffectType);
-            _auraGrid.AddSource(transform.Position, source.AuraAndGlowStrength, source.EffectType);
+            _auraGrid.AddSource(position, source.AuraAndGlowStrength, source.EffectType);
             _maxScanRadius = Math.Max(_maxScanRadius, DistanceFalloff.MaxRadius(source.AuraAndGlowStrength));
-        }
+            _lastSyncedSourcePosition[entityId] = position;
+        });
 
         _gridBuilt = true;
     }
 
+    private Vector3Int? TryGetTransformPosition(int entityId) =>
+        _transforms.TryGetReadonly(entityId, out var transform) ? transform.Position : null;
+
     private void OnEntityMoved(EntityMovedEvent moved)
     {
-        var gridAlreadyBuilt = _gridBuilt;
         EnsureGrid();
 
-        if (gridAlreadyBuilt && _sources.TryGetReadonly(moved.EntityId, out var movedSource))
+        if (_sources.Has(moved.EntityId) && GetSourceTier(moved.EntityId) == ProcessingTierLevel.Local)
         {
-            _auraGrid.RemoveSource(moved.OldPosition, movedSource.AuraAndGlowStrength, movedSource.EffectType);
-            _auraGrid.AddSource(moved.NewPosition, movedSource.AuraAndGlowStrength, movedSource.EffectType);
+            ResyncSourceIfStale(moved.EntityId);
         }
 
-        // Only a genuinely fresh entry (no exposure already running) grants anything here --
-        // see this class's own doc comment for why an already-exposed entity's own movement
-        // must not re-grant or reset the timer.
-        if (!_exposures.Has(moved.EntityId) && TryGrantApplicableStacks(moved.EntityId, moved.NewPosition))
+        // Always attempted, even for an entity already exposed to some OTHER effect type -- see
+        // this class's own doc comment for why there's no "already exposed" shortcut left to
+        // gate this on. Exposure-entry bookkeeping (only a genuinely new type creates a fresh
+        // countdown) is handled internally by TryGrantApplicableStacks now.
+        TryGrantApplicableStacks(moved.EntityId, moved.NewPosition);
+    }
+
+    /// <summary>
+    /// Resyncs entityId's own source contribution(s) into the grid if _lastSyncedSourcePosition
+    /// disagrees with its current Transform -- a no-op otherwise. Called synchronously (every
+    /// move) for a Local-tier source by OnEntityMoved, and periodically (at whatever cadence
+    /// GetSourceTier last computed) for every other tier by Update's own catch-up pass -- either
+    /// way this is the only place that actually mutates AuraGrid/re-evaluates nearby occupants
+    /// for a moving source, so a source that moved several times while non-Local still resyncs
+    /// correctly using its last KNOWN grid position (not just "this one event's" old position,
+    /// which could be several moves stale by the time a deferred catch-up runs).
+    /// </summary>
+    private void ResyncSourceIfStale(int entityId)
+    {
+        if (!_transforms.TryGetReadonly(entityId, out var transform))
         {
-            _exposures.Add(moved.EntityId, new StatusEffectAuraExposureComponent(AuraEffects.TickIntervalFrames));
+            return;
         }
 
-        if (_sources.Has(moved.EntityId))
+        var currentPosition = transform.Position;
+        var hadPreviousPosition = _lastSyncedSourcePosition.TryGetValue(entityId, out var previousPosition);
+        if (hadPreviousPosition && previousPosition == currentPosition)
         {
-            ReEvaluateExposuresNear(moved.OldPosition);
-            ReEvaluateExposuresNear(moved.NewPosition);
+            return;
+        }
+
+        SourceSplatting.ResyncEntity(_sources, entityId, hadPreviousPosition ? previousPosition : null, currentPosition,
+            unsplat: (source, position) => _auraGrid.RemoveSource(position, source.AuraAndGlowStrength, source.EffectType),
+            splat: (source, position) => _auraGrid.AddSource(position, source.AuraAndGlowStrength, source.EffectType));
+
+        if (hadPreviousPosition)
+        {
+            ReEvaluateExposuresNear(previousPosition);
+        }
+
+        ReEvaluateExposuresNear(currentPosition);
+        GrantToOccupantsNear(currentPosition);
+
+        _lastSyncedSourcePosition[entityId] = currentPosition;
+    }
+
+    /// <summary>Fails open to Beyond (the coarsest, least-frequently-visited tier) for a source with no ProcessingTierComponent yet -- the same "unknown = probably far, self-corrects once its real tier lands" bias ProcessingTierWiring's own lookup delegate already uses, not a new tradeoff invented here.</summary>
+    private ProcessingTierLevel GetSourceTier(int entityId) =>
+        _processingTiers.TryGetReadonly(entityId, out var tier) ? tier.Tier : ProcessingTierLevel.Beyond;
+
+    /// <summary>
+    /// Splats a source that appeared outside of blueprint-time population (see
+    /// AuraSourceEffects.Toggle). Guarded by _gridBuilt -- if the grid hasn't been built yet,
+    /// the source is already sitting in the pool by the time EnsureGrid's own full scan
+    /// eventually runs, so splatting it here too would double-count it. Also does a synchronous
+    /// box-scan grant to anyone already standing in range -- unlike a moving source's own
+    /// tier-gated resync (see ResyncSourceIfStale), a toggle-on is a rare, one-shot event
+    /// regardless of the toggling entity's own tier, and GrantStacks itself never publishes
+    /// anything (confirmed: no nested-Toggle reentrancy hazard exists today), so there's no
+    /// reason to make the player wait for a stationary target to move before an aura they just
+    /// turned on starts doing anything.
+    /// </summary>
+    private void OnSourceAdded(AuraSourceAddedEvent added)
+    {
+        if (!_gridBuilt || !_transforms.TryGetReadonly(added.EntityId, out var transform))
+        {
+            return;
+        }
+
+        _effectTypesInUse.Add(added.Source.EffectType);
+        _auraGrid.AddSource(transform.Position, added.Source.AuraAndGlowStrength, added.Source.EffectType);
+        _maxScanRadius = Math.Max(_maxScanRadius, DistanceFalloff.MaxRadius(added.Source.AuraAndGlowStrength));
+        _lastSyncedSourcePosition[added.EntityId] = transform.Position;
+
+        GrantToOccupantsNear(transform.Position);
+    }
+
+    /// <summary>Unsplats a source that was removed outside of blueprint-time population (toggle-off, or DeathSystem retracting a corpse's still-active aura). Same _gridBuilt guard as OnSourceAdded, for the same reason. Also immediately re-checks nearby exposures (ReEvaluateExposuresNear, the same removal-only pass a moving source's old position already gets) so toggling off reads as instant, not laggy until each affected entity's own next tick.</summary>
+    private void OnSourceRemoved(AuraSourceRemovedEvent removed)
+    {
+        _lastSyncedSourcePosition.Remove(removed.EntityId);
+
+        if (!_gridBuilt || !_transforms.TryGetReadonly(removed.EntityId, out var transform))
+        {
+            return;
+        }
+
+        _auraGrid.RemoveSource(transform.Position, removed.Source.AuraAndGlowStrength, removed.Source.EffectType);
+        ReEvaluateExposuresNear(transform.Position);
+    }
+
+    /// <summary>
+    /// Grant-only counterpart to ReEvaluateExposuresNear -- same box-scan shape, but for
+    /// wherever a source is now (just toggled on, via OnSourceAdded, or just resynced to, via
+    /// ResyncSourceIfStale) rather than wherever one just left. A candidate already self-excludes
+    /// correctly via TotalStacksExcludingSelf (see SourceDoesNotIgniteItself), so the source
+    /// entity itself showing up in this same scan is harmless.
+    /// </summary>
+    private void GrantToOccupantsNear(Vector3Int center)
+    {
+        var boxWidth = _maxScanRadius * 2 + 1;
+        var box = new CubeInt(
+            new Vector3Int(center.X - _maxScanRadius, center.Y - _maxScanRadius, center.Z),
+            new Vector3Int(boxWidth, boxWidth, 1));
+
+        Span<int> occupantIds = stackalloc int[boxWidth * boxWidth];
+        _mapQuery.GetEntityIdsInBox(box, occupantIds);
+
+        foreach (var occupantId in occupantIds)
+        {
+            if (occupantId == -1 || !_transforms.TryGetReadonly(occupantId, out var occupantTransform))
+            {
+                continue;
+            }
+
+            TryGrantApplicableStacks(occupantId, occupantTransform.Position);
         }
     }
 
     public void Update(EngineTime time, byte stripeIndex)
     {
-        // Deliberately NOT EnsureGrid() up front: OnEntityMoved's own internal EnsureGrid()
-        // call captures gridAlreadyBuilt BEFORE building the grid, to tell "the grid didn't
-        // exist yet, so building it just now already accounts for wherever this source
-        // currently stands" apart from "the grid already existed with a stale position, so
-        // this move needs an explicit remove-old/add-new". Calling EnsureGrid() here first
-        // would flip _gridBuilt to true before the loop below ever runs, making every
-        // buffered move -- even a source's very first one -- take the second, "already
-        // built" branch and double-count its own contribution (confirmed by a failing test).
-        //
         // The buffer drain itself is NOT ProcessingTier-gated -- it only ever processes
         // entities that actually moved this exact frame (already self-limiting, unlike the
-        // periodic re-grant pass below), and a fresh entry into an aura's range is a one-time
+        // periodic passes below), and a fresh entry into an aura's range is a one-time
         // event a player could plausibly notice even off-screen (e.g. checking the entity's
         // status later), unlike the periodic re-grant's steady-state pacing.
         foreach (var moved in _movedEntities.Items)
@@ -203,63 +319,101 @@ public sealed class StatusEffectAuraSystem : ISystem
         }
 
         // Still needed here, idempotently, in case this frame had zero buffered moves (e.g.
-        // before the very first move of the whole game) -- CountdownTicker.Tick below needs
-        // the grid to exist.
+        // before the very first move of the whole game) -- both periodic passes below need the
+        // grid to exist.
         EnsureGrid();
 
         for (var tierIndex = 0; tierIndex < _tieredStripeSet.TierCount; tierIndex++)
         {
-            CountdownTicker.Tick(_exposures, _tieredStripeSet.GetTierBucket(tierIndex, time.FrameCount), _pendingExposureRemovals, _tick, _tieredStripeSet.GetTierFramesPerVisit(tierIndex));
+            TickExposures(_tieredStripeSet.GetTierBucket(tierIndex, time.FrameCount), _tieredStripeSet.GetTierFramesPerVisit(tierIndex));
+        }
+
+        // Catches up any non-Local source OnEntityMoved deferred (see ResyncSourceIfStale) --
+        // a no-op for a Local source (already resynced on every move) or a source that hasn't
+        // moved since its last resync, so chaining every tier via GetDueEntities and letting the
+        // position-equality check inside ResyncSourceIfStale short-circuit is simpler than
+        // excluding tier 0 here and no more expensive for it.
+        foreach (var entityId in _sourceTieredStripeSet.GetDueEntities(time.FrameCount))
+        {
+            ResyncSourceIfStale(entityId);
         }
     }
 
-    /// <summary>Returns whether the exposure should be removed entirely (no longer in range of anything, or the entity's own position can't be found) -- see CountdownTicker.Tick's own doc comment for the contract.</summary>
-    private bool Tick(int entityId, StatusEffectAuraExposureComponent exposure)
+    /// <summary>Per-tier decrement-or-tick pass over _exposures, mirroring Engine.ECS.Systems.CountdownTicker.Tick's shape but walking a MultiComponentPool's own per-entity dense chain (one or more instances per due entity, one per currently-exposed EffectType) instead of a single PackedComponentPool value. Deferred removals are keyed by (entityId, EffectType) identity, not a raw dense index -- MultiComponentPool.RemoveByDenseIndex swaps the last dense entry into a removed slot, so a batch of removals recorded by index could invalidate each other; MultiComponentPool.RemoveFirst re-resolves by identity at removal time instead.</summary>
+    private void TickExposures(ReadOnlySpan<int> dueEntityIds, int framesPerVisit)
     {
-        if (!_transforms.TryGetReadonly(entityId, out var transform))
+        _pendingExposureRemovals.Clear();
+
+        foreach (var entityId in dueEntityIds)
         {
-            return true;
+            for (var denseIndex = _exposures.GetFirstDenseIndex(entityId); denseIndex != -1; denseIndex = _exposures.GetNextDenseIndex(denseIndex))
+            {
+                var exposure = _exposures.GetReadonlyByDenseIndex(denseIndex);
+
+                if (exposure.FramesUntilNextTick > framesPerVisit)
+                {
+                    _exposures.UpdateByDenseIndex(denseIndex, framesPerVisit, static (ref StatusEffectAuraExposureComponent e, int frames) => e.FramesUntilNextTick -= frames);
+                    continue;
+                }
+
+                if (Tick(entityId, exposure))
+                {
+                    _pendingExposureRemovals.Add((entityId, exposure.EffectType));
+                }
+                else
+                {
+                    _exposures.UpdateByDenseIndex(denseIndex, static (ref StatusEffectAuraExposureComponent e) => e.FramesUntilNextTick = AuraEffects.TickIntervalFrames);
+                }
+            }
         }
 
-        if (!TryGrantApplicableStacks(entityId, transform.Position))
+        foreach (var (entityId, effectType) in _pendingExposureRemovals)
         {
-            return true;
+            _exposures.RemoveFirst(entityId, effectType, static (ref readonly StatusEffectAuraExposureComponent e, StatusEffectType type) => e.EffectType == type);
         }
-
-        _exposures.TryUpdate(entityId, static (ref StatusEffectAuraExposureComponent e) => e.FramesUntilNextTick = AuraEffects.TickIntervalFrames);
-
-        return false;
     }
 
-    /// <summary>Grants stacks from every effect type actually in use that's applicable at position (each topped off via GrantStacks -- see its own doc comment), returning whether any effect type actually granted something (not just whether some total was positive -- an unsupported effect type, see GrantStacks, contributes nothing here even if the grid says otherwise). Shared by OnEntityMoved's fresh-entry path and Update's periodic re-grant, which otherwise duplicated this exact loop.</summary>
-    private bool TryGrantApplicableStacks(int entityId, Vector3Int position)
+    /// <summary>Returns whether this specific (entity, EffectType) exposure entry should be removed entirely (no longer in range of this type, or the entity's own position can't be found) -- see TickExposures' own contract.</summary>
+    private bool Tick(int entityId, StatusEffectAuraExposureComponent exposure) =>
+        !_transforms.TryGetReadonly(entityId, out var transform) || !TryGrantSingleType(entityId, transform.Position, exposure.EffectType);
+
+    /// <summary>Grants stacks from every effect type actually in use that's applicable at position (each topped off via GrantStacks -- see its own doc comment), creating a fresh exposure entry for any type that's newly applicable and doesn't already have one. Shared by OnEntityMoved's fresh-entry path and GrantToOccupantsNear's reactive scan, which otherwise duplicated this exact loop.</summary>
+    private void TryGrantApplicableStacks(int entityId, Vector3Int position)
     {
-        // A corpse doesn't accumulate new stacks -- returning false here reads to both callers
-        // as "nothing granted," which for Tick's periodic re-grant path means the exposure gets
-        // cleaned up next visit (see Tick's own contract), the same as walking out of range.
+        foreach (var effectType in _effectTypesInUse)
+        {
+            if (TryGrantSingleType(entityId, position, effectType) && !HasExposure(entityId, effectType))
+            {
+                _exposures.Add(entityId, new StatusEffectAuraExposureComponent(effectType, AuraEffects.TickIntervalFrames));
+            }
+        }
+    }
+
+    /// <summary>
+    /// Tops entityId's current stack count for effectType *up to* its distance-based target at
+    /// position, if the aura reaches it and something is registered to receive it -- shared by
+    /// TryGrantApplicableStacks (looping every type in use, to catch a newly-in-range one) and
+    /// Tick (revisiting one already-tracked type). A corpse never accumulates new stacks (see
+    /// DeathSystem/DeadComponent): checked here, not by the caller, so every caller gets the
+    /// same "corpse reads as no longer applicable" answer for free, the same as walking out of
+    /// range would.
+    /// </summary>
+    private bool TryGrantSingleType(int entityId, Vector3Int position, StatusEffectType effectType)
+    {
         if (_deadEntities?.Has(entityId) == true)
         {
             return false;
         }
 
-        var anyGranted = false;
-        foreach (var effectType in _effectTypesInUse)
-        {
-            if (TotalStacksExcludingSelf(entityId, position, effectType) is var totalStacks and > 0)
-            {
-                anyGranted |= GrantStacks(entityId, effectType, totalStacks);
-            }
-        }
-
-        return anyGranted;
+        var totalStacks = TotalStacksExcludingSelf(entityId, position, effectType);
+        return totalStacks > 0 && GrantStacks(entityId, effectType, totalStacks);
     }
 
-    /// <summary>The read-only half of TryGrantApplicableStacks -- whether any effect type still has a positive contribution at position, without granting anything. Used where only "is this still in range of something" matters (ReEvaluateExposuresNear's removal check).</summary>
-    private bool IsExposedToAny(int entityId, Vector3Int position)
+    private bool HasExposure(int entityId, StatusEffectType effectType)
     {
-        foreach (var effectType in _effectTypesInUse)
+        for (var denseIndex = _exposures.GetFirstDenseIndex(entityId); denseIndex != -1; denseIndex = _exposures.GetNextDenseIndex(denseIndex))
         {
-            if (TotalStacksExcludingSelf(entityId, position, effectType) > 0)
+            if (_exposures.GetReadonlyByDenseIndex(denseIndex).EffectType == effectType)
             {
                 return true;
             }
@@ -271,12 +425,17 @@ public sealed class StatusEffectAuraSystem : ISystem
     private int TotalStacksExcludingSelf(int entityId, Vector3Int position, StatusEffectType effectType)
     {
         var totalStacks = _auraGrid.GetTotalStacksAt(position, effectType);
-        if (_sources.TryGetReadonly(entityId, out var selfSource) && selfSource.EffectType == effectType)
+
+        for (var denseIndex = _sources.GetFirstDenseIndex(entityId); denseIndex != -1; denseIndex = _sources.GetNextDenseIndex(denseIndex))
         {
-            totalStacks = Math.Max(0, totalStacks - selfSource.AuraAndGlowStrength);
+            var selfSource = _sources.GetReadonlyByDenseIndex(denseIndex);
+            if (selfSource.EffectType == effectType)
+            {
+                totalStacks -= selfSource.AuraAndGlowStrength;
+            }
         }
 
-        return totalStacks;
+        return Math.Max(0, totalStacks);
     }
 
     /// <summary>
@@ -299,9 +458,8 @@ public sealed class StatusEffectAuraSystem : ISystem
     /// IStatusEffectAuraApplier (see BurningModule/PoisonModule.Configure). Returns whether
     /// effectType actually has a registered applier, not whether stacks were added on this
     /// specific call -- an entity already topped off to its target still counts as validly
-    /// exposed. TryGrantApplicableStacks relies on this to tell "exposed to an effect type
-    /// with no registered applier" apart from "exposed to a supported effect but already at
-    /// target."
+    /// exposed. TryGrantSingleType relies on this to tell "exposed to an effect type with no
+    /// registered applier" apart from "exposed to a supported effect but already at target."
     /// </summary>
     private bool GrantStacks(int entityId, StatusEffectType effectType, int targetStackCount)
     {
@@ -328,7 +486,15 @@ public sealed class StatusEffectAuraSystem : ISystem
         return true;
     }
 
-    /// <summary>Removal-only re-check for occupants near a moving aura source -- see this class's own doc comment for why granting is not handled here. Each candidate's own check is now O(1) per effect type via the grid, not a nested box scan -- only the "who might be nearby" part still uses a box query, and only on this rare (no moving source exists today) path.</summary>
+    /// <summary>
+    /// Removal-only re-check for occupants near a moving/toggled aura source -- see this
+    /// class's own doc comment for why granting is not handled here. Per-effect-type now: an
+    /// occupant exposed to two different types (e.g. Burning from one source, Poison from
+    /// another) only has the type whose contribution actually dropped to zero removed, not its
+    /// whole exposure wholesale -- a stale entry for a still-out-of-reach type would otherwise
+    /// have kept ticking (harmlessly, since GrantStacks re-tops-off to zero to nothing there)
+    /// until its own next scheduled visit, rather than being cleaned up immediately here.
+    /// </summary>
     private void ReEvaluateExposuresNear(Vector3Int center)
     {
         var boxWidth = _maxScanRadius * 2 + 1;
@@ -341,14 +507,27 @@ public sealed class StatusEffectAuraSystem : ISystem
 
         foreach (var occupantId in occupantIds)
         {
-            if (occupantId == -1 || !_exposures.Has(occupantId) || !_transforms.TryGetReadonly(occupantId, out var occupantTransform))
+            if (occupantId == -1 || !_transforms.TryGetReadonly(occupantId, out var occupantTransform))
             {
                 continue;
             }
 
-            if (!IsExposedToAny(occupantId, occupantTransform.Position))
+            // Snapshot which of the occupant's current exposure types are now out of range
+            // before removing any of them -- MultiComponentPool.RemoveFirst reorders the dense
+            // chain, so removing mid-walk of that same chain would skip or revisit entries.
+            _staleExposureTypesScratch.Clear();
+            for (var denseIndex = _exposures.GetFirstDenseIndex(occupantId); denseIndex != -1; denseIndex = _exposures.GetNextDenseIndex(denseIndex))
             {
-                _exposures.Remove(occupantId);
+                var exposure = _exposures.GetReadonlyByDenseIndex(denseIndex);
+                if (TotalStacksExcludingSelf(occupantId, occupantTransform.Position, exposure.EffectType) <= 0)
+                {
+                    _staleExposureTypesScratch.Add(exposure.EffectType);
+                }
+            }
+
+            foreach (var staleType in _staleExposureTypesScratch)
+            {
+                _exposures.RemoveFirst(occupantId, staleType, static (ref readonly StatusEffectAuraExposureComponent e, StatusEffectType type) => e.EffectType == type);
             }
         }
     }

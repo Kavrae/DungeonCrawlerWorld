@@ -38,6 +38,10 @@ public static class HotkeySlotLayout
     private static readonly Keys[] ExpansionRowKeys = [Keys.D1, Keys.D2, Keys.D3, Keys.D4, Keys.D5];
     private static readonly Keys[] ExpansionRowTwoKeys = [Keys.Z, Keys.X, Keys.C, Keys.V, Keys.B];
 
+    private const int ExpansionColumnsPerRow = 5;
+    private const int ExpansionRowsPerPage = 2;
+    private const int SlotsPerExpansionPage = ExpansionColumnsPerRow * ExpansionRowsPerPage;
+
     public static readonly IReadOnlyList<HotkeySlotLayoutEntry> Entries = BuildEntries();
 
     private static readonly IReadOnlyDictionary<HotkeySlot, HotkeySlotLayoutEntry> EntryBySlot =
@@ -72,6 +76,28 @@ public static class HotkeySlotLayout
     }
 
     public static HotkeySlotLayoutEntry GetEntry(HotkeySlot slot) => EntryBySlot[slot];
+
+    /// <summary>
+    /// Whether slot is still locked given unlockedExpansionSlots -- Base/DefaultAttack slots are
+    /// never locked; only Expansion slots grow. globalIndex is 1-based (page*10 + row*5 +
+    /// column + 1), matching HotkeyExpansionUnlockComponent.UnlockedSlotCount's own "how many
+    /// are unlocked" counting, which runs Slot1..Slot20 in order regardless of page 2 sitting to
+    /// the right rather than below. Shared by HotbarContent (rendering/drag-bind refusal) and
+    /// ActionTargetingController (activation gating) so the two can't disagree about which slots
+    /// are actually usable -- a binding placed on a locked slot (e.g. by a blueprint grant that
+    /// doesn't go through HotbarContent.BindItem's own lock check) must still refuse to activate.
+    /// </summary>
+    public static bool IsLocked(HotkeySlot slot, short unlockedExpansionSlots)
+    {
+        var entry = GetEntry(slot);
+        if (entry.Category != HotkeyCategory.Expansion)
+        {
+            return false;
+        }
+
+        var globalIndex = entry.Page * SlotsPerExpansionPage + entry.Row * ExpansionColumnsPerRow + entry.Column + 1;
+        return globalIndex > unlockedExpansionSlots;
+    }
 
     /// <summary>Display label for a slot's bind key -- e.g. "Q", "1", "↑1" for a Shift-page Expansion slot. Digit keys (D1-D5) print as their digit, not "D1".</summary>
     public static string GetKeyLabel(HotkeySlot slot)

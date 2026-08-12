@@ -9,6 +9,7 @@ using Game.Modules.Inventory.Components;
 using Game.Modules.Movement.Components;
 using Game.Modules.ProcessingTier;
 using Game.Modules.ProcessingTier.Components;
+using Game.Modules.StatusEffectAura.Components;
 using Game.World;
 
 namespace Game.Modules.Movement.Systems;
@@ -30,9 +31,16 @@ namespace Game.Modules.Movement.Systems;
 /// - movedEntities.Record: a per-frame buffer ContactDamageSystem/StatusEffectAuraSystem drain
 ///   during their own Update, instead of each subscribing to a per-move event (see
 ///   FrameEventBuffer's own doc comment).
-/// - eventBus.Publish(EntityMovedEvent), only for the player's own move: PlayerActivityLog still
-///   subscribes to this on the bus exactly as before, just now firing at player-move frequency
-///   (a handful/sec) instead of the full population's.
+/// - eventBus.Publish(EntityMovedEvent), for the player's own move, and (soft-wired, see
+///   auraSources below) for any mover that itself carries a StatusEffectAuraSourceComponent:
+///   PlayerActivityLog still subscribes to this on the bus exactly as before, and
+///   Presentation.UI.MapTintGrid (the only other current subscriber) needs an aura-carrying
+///   mover's own move published too, or its glow desyncs from wherever the source has actually
+///   moved to (StatusEffectAuraSystem itself never needed this -- it drains movedEntities
+///   directly). Both gates are cheap, bounded checks (an equality compare, an optional sparse
+///   pool lookup) paid only on an already-happening move, not a new per-frame population scan --
+///   still nowhere near the old "publish for the whole population" hotspot this redesign removed,
+///   since both the player and aura-carrying movers are rare relative to the full population.
 /// </summary>
 public sealed class MovementSystem : ISystem
 {
@@ -54,6 +62,7 @@ public sealed class MovementSystem : ISystem
     private readonly PackedComponentPool<DeadComponent>? _deadEntities;
     private readonly PackedComponentPool<PendingActionActivationComponent>? _pendingActionActivations;
     private readonly PackedComponentPool<PendingConsumableActivationComponent>? _pendingConsumableActivations;
+    private readonly MultiComponentPool<StatusEffectAuraSourceComponent>? _auraSources;
     private readonly TieredEntityStripeSet _tieredStripeSet;
 
     public MovementSystem(
@@ -69,7 +78,8 @@ public sealed class MovementSystem : ISystem
         ProcessingTierEvents processingTierEvents,
         PackedComponentPool<DeadComponent>? deadEntities = null,
         PackedComponentPool<PendingActionActivationComponent>? pendingActionActivations = null,
-        PackedComponentPool<PendingConsumableActivationComponent>? pendingConsumableActivations = null)
+        PackedComponentPool<PendingConsumableActivationComponent>? pendingConsumableActivations = null,
+        MultiComponentPool<StatusEffectAuraSourceComponent>? auraSources = null)
     {
         _transformComponents = transformComponents;
         _actionLocks = actionLocks;
@@ -82,6 +92,7 @@ public sealed class MovementSystem : ISystem
         _deadEntities = deadEntities;
         _pendingActionActivations = pendingActionActivations;
         _pendingConsumableActivations = pendingConsumableActivations;
+        _auraSources = auraSources;
 
         _tieredStripeSet = ProcessingTierWiring.CreateAndWire(StripeCount, movementComponents, processingTiers, processingTierEvents);
     }
@@ -191,7 +202,7 @@ public sealed class MovementSystem : ISystem
             _entityMoveSync.SyncMove(moved);
             _movedEntities.Record(moved);
 
-            if (entityId == _playerQuery?.PlayerEntityId)
+            if (entityId == _playerQuery?.PlayerEntityId || _auraSources?.Has(entityId) == true)
             {
                 _eventBus.Publish(moved);
             }

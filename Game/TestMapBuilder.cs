@@ -1,6 +1,7 @@
 using Engine.ECS.Components;
 using Engine.ECS.Components.Stores;
 using Engine.ECS.Entities;
+using Engine.ECS.Systems;
 using Engine.Math;
 using Engine.Utilities;
 using Game.Blueprints;
@@ -12,6 +13,7 @@ using Game.Blueprints.Terrain;
 using Game.Modules.Core.Components;
 using Game.Modules.Crawler.Components;
 using Game.Modules.Movement.Components;
+using Game.World;
 
 namespace Game;
 
@@ -24,7 +26,7 @@ namespace Game;
 /// per PopulateFlyingFairy) -- plus a handful of standalone multi-trait fixtures, via the
 /// Blueprint composition system.
 /// </summary>
-public sealed class TestMapBuilder(EntityManager entityManager, ComponentManager componentManager, MathUtility mathUtility, UniqueNumberAllocator crawlerNumberAllocator)
+public sealed class TestMapBuilder(EntityManager entityManager, ComponentManager componentManager, MathUtility mathUtility, UniqueNumberAllocator crawlerNumberAllocator, FrameEventBuffer<EntityMovedEvent> movedEntities)
 {
     // TEMPORARY: halved from the original values below (10/5/5) to reduce the creature
     // population -- Movement/HealthRegen/ContactDamage/StatusEffectAura all iterate this
@@ -219,7 +221,20 @@ public sealed class TestMapBuilder(EntityManager entityManager, ComponentManager
         }
 
         StaggerActionLock(entityId);
-        world.PlaceEntityOnMap(entityId, new Vector3Int(column, row, (int)mapLayer), ref transform);
+        var position = new Vector3Int(column, row, (int)mapLayer);
+        world.PlaceEntityOnMap(entityId, position, ref transform);
+
+        // Spawning counts as a move (see FloorBuilder.CreatePlayer's identical reasoning) so a
+        // creature placed directly into a static aura source's range (e.g. spawned beside Lava)
+        // is granted immediately, the same as one that later steps into range under its own
+        // power -- World.PlaceEntityOnMap itself never raises an EntityMovedEvent, and
+        // StatusEffectAuraSystem's own one-time startup scatter (EnsureGrid) only registers
+        // SOURCES into the grid, it never grants to occupants already standing in one's radius.
+        // Recorded into the shared buffer StatusEffectAuraSystem/ContactDamageSystem actually
+        // drain, not published on the bus -- this is bulk population-time placement (tens of
+        // thousands of entities per floor), not the rare player-move frequency PlayerActivityLog
+        // is built around.
+        movedEntities.Record(new EntityMovedEvent(entityId, position, position, transform.Size));
     }
 
     private int BuildFromBlueprint(World.World world, IBlueprint blueprint, int column, int row)

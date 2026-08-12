@@ -56,6 +56,7 @@ public sealed class HotbarControllerTests
         componentManager.Merge(PlayerEntityId, new MovementComponent(MovementMode.PlayerControlled, 0, null, null));
         componentManager.Merge(PlayerEntityId, new ActionLockComponent(totalLockFrames: 0, lockFramesRemaining: 0));
         componentManager.Merge(PlayerEntityId, new ActionInstanceComponent(TestActionId, damageAmount: 0, cooldownFramesRemaining: 0));
+        componentManager.Merge(PlayerEntityId, new HotkeyExpansionUnlockComponent(unlockedSlotCount: 5));
         componentManager.GetMultiPool<ActionHotkeyBindingComponent>().Add(PlayerEntityId, new ActionHotkeyBindingComponent(HotkeySlot.Slot1, TestActionId));
 
         var actionCatalog = new ActionCatalog();
@@ -78,6 +79,7 @@ public sealed class HotbarControllerTests
             componentManager.GetMultiPool<ActionHotkeyBindingComponent>(),
             componentManager.GetMultiPool<ItemHotkeyBindingComponent>(),
             componentManager.GetMultiPool<InventoryItemStackComponent>(),
+            componentManager.GetPackedPool<HotkeyExpansionUnlockComponent>(),
             componentManager.GetPackedPool<PendingActionActivationComponent>(),
             componentManager.GetPackedPool<PendingConsumableActivationComponent>(),
             componentManager.GetPackedPool<PendingDelayedActionComponent>(),
@@ -142,5 +144,25 @@ public sealed class HotbarControllerTests
 
         Assert.IsNull(mapViewState.ArmedActionId);
         Assert.IsNull(mapViewState.ArmedItemDefinitionId);
+    }
+
+    /// <summary>
+    /// The reported bug: a binding placed on a not-yet-unlocked Expansion slot (e.g. by a
+    /// blueprint grant, which -- unlike HotbarContent.BindItem's own drag-drop path -- writes
+    /// the ItemHotkeyBindingComponent/ActionHotkeyBindingComponent directly and never checks
+    /// the lock) must still refuse to activate, not just render dim.
+    /// </summary>
+    [TestMethod]
+    public void OnSlotTapped_BoundButLockedSlot_DoesNothing()
+    {
+        var (controller, mapViewState, componentManager) = Build();
+        // Slot6 is the 6th Expansion slot, beyond Build()'s 5 unlocked -- bound directly the same
+        // way a blueprint grant would, bypassing HotbarContent.BindItem's own lock refusal.
+        componentManager.GetMultiPool<ActionHotkeyBindingComponent>().Add(PlayerEntityId, new ActionHotkeyBindingComponent(HotkeySlot.Slot6, TestActionId));
+
+        controller.OnSlotPressed(HotkeySlot.Slot6);
+        controller.OnSlotTapped(HotkeySlot.Slot6);
+
+        Assert.IsNull(mapViewState.ArmedActionId, "A locked slot must not arm even though something is bound to it.");
     }
 }

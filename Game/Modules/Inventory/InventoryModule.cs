@@ -74,7 +74,7 @@ public sealed class InventoryModule : IGameModule
             ? componentManager.GetMultiPool<AbilityScoreComponent>()
             : null;
         var auraSources = componentManager.IsRegistered<StatusEffectAuraSourceComponent>()
-            ? componentManager.GetPackedPool<StatusEffectAuraSourceComponent>()
+            ? componentManager.GetMultiPool<StatusEffectAuraSourceComponent>()
             : null;
 
         systemManager.Register(new ConsumableActivationSystem(

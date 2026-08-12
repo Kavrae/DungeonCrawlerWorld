@@ -40,7 +40,7 @@ public static class ActionEffectResolver
         MultiComponentPool<StatModifierComponent>? statModifiers = null,
         PackedComponentPool<DeadComponent>? deadEntities = null,
         MultiComponentPool<AbilityScoreComponent>? abilityScores = null,
-        PackedComponentPool<StatusEffectAuraSourceComponent>? auraSources = null,
+        MultiComponentPool<StatusEffectAuraSourceComponent>? auraSources = null,
         PackedComponentPool<HotkeyExpansionUnlockComponent>? hotkeyExpansionUnlocks = null)
     {
         eventBus.Publish(new ActionActivatedEvent(sourceEntityId, action.Id));

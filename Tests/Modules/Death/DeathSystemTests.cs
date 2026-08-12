@@ -4,7 +4,10 @@ using Engine.Math;
 using Game.Modules.Core.Components;
 using Game.Modules.Death.Components;
 using Game.Modules.Death.Systems;
+using Game.Modules.StatusEffectAura.Components;
+using Game.Modules.StatusEffects;
 using Game.World;
+using Microsoft.Xna.Framework;
 
 namespace Tests.Modules.Death;
 
@@ -52,6 +55,9 @@ public sealed class DeathSystemTests
         pool.Add(0, new TransformComponent(new Vector3Int(1, 1, 0), new Vector2Byte(1, 1)));
         return pool;
     }
+
+    private static MultiComponentPool<StatusEffectAuraSourceComponent> CreateAuraSourcePool() =>
+        new(maximumEntityCount: 10, initialCapacity: 4);
 
     private static (DeathSystem System, PackedComponentPool<DeadComponent> DeadEntities, MultiComponentPool<NonBlockingComponent> NonBlockingEntities, RecordingEntityMoveSync EntityMoveSync, FakeMapQuery MapQuery, EventBus EventBus) Build()
     {
@@ -154,5 +160,43 @@ public sealed class DeathSystemTests
         system.Update(default, 0);
 
         Assert.IsTrue(deadEntities.Has(0));
+    }
+
+    /// <summary>The corpse-radiates-forever gap this AuraSourceEffects.RemoveAll wiring closes -- a corpse persists indefinitely (see this class's own doc comments above), so a source active at death time must be explicitly retracted here, not left for something else to eventually notice.</summary>
+    [TestMethod]
+    public void EntityDied_HasActiveAuraSource_RetractsItAndPublishesRemoved()
+    {
+        var deadEntities = CreateDeadPool();
+        var nonBlockingEntities = CreateNonBlockingPool();
+        var transforms = CreateTransformPool();
+        var entityMoveSync = new RecordingEntityMoveSync();
+        var mapQuery = new FakeMapQuery();
+        var eventBus = new EventBus();
+        var auraSources = CreateAuraSourcePool();
+        var source = new StatusEffectAuraSourceComponent(StatusEffectType.Poison, auraAndGlowStrength: 5, Color.Purple);
+        auraSources.Add(0, source);
+
+        var system = new DeathSystem(deadEntities, nonBlockingEntities, transforms, entityMoveSync, mapQuery, eventBus, auraSources);
+
+        AuraSourceRemovedEvent? published = null;
+        eventBus.Subscribe<AuraSourceRemovedEvent>(e => published = e);
+
+        eventBus.Publish(new EntityDiedEvent(0, StatusEffectSource.FromEntity(1)));
+        eventBus.DispatchBuffered<EntityDiedEvent>();
+
+        Assert.IsFalse(auraSources.Has(0));
+        Assert.IsNotNull(published);
+        Assert.AreEqual(0, published!.Value.EntityId);
+        Assert.AreEqual(source, published.Value.Source);
+    }
+
+    [TestMethod]
+    public void EntityDied_NoAuraSourcesPoolWired_DoesNotThrow()
+    {
+        var (_, _, _, _, mapQuery, eventBus) = Build();
+        mapQuery.SetBlocking(0);
+
+        eventBus.Publish(new EntityDiedEvent(0, StatusEffectSource.FromEntity(1)));
+        eventBus.DispatchBuffered<EntityDiedEvent>();
     }
 }

@@ -10,6 +10,7 @@ using Game.Modules.Movement.Components;
 using Game.Modules.Movement.Systems;
 using Game.Modules.ProcessingTier;
 using Game.Modules.ProcessingTier.Components;
+using Game.Modules.StatusEffectAura.Components;
 using Game.World;
 
 namespace Game.Modules.Movement;
@@ -70,6 +71,16 @@ public sealed class MovementModule : IGameModule
         var pendingConsumableActivations = componentManager.IsRegistered<PendingConsumableActivationComponent>()
             ? componentManager.GetPackedPool<PendingConsumableActivationComponent>()
             : null;
+        // Soft, IsRegistered-guarded dependency on StatusEffectAuraModule's own component --
+        // MovementModule can't take a hard Dependencies entry on it, since StatusEffectAuraModule
+        // itself already depends on MovementModule (see that module's own doc comment), so a
+        // hard dependency the other way would be circular. Mirrors DeathModule's identical soft
+        // dependency on the same component. Only used to widen MovementSystem's EventBus.Publish
+        // gate to an aura-carrying mover (see MovementSystem's own doc comment) -- MovementModule
+        // doesn't otherwise need anything from that module.
+        var auraSources = componentManager.IsRegistered<StatusEffectAuraSourceComponent>()
+            ? componentManager.GetMultiPool<StatusEffectAuraSourceComponent>()
+            : null;
 
         systemManager.Register(new MovementSystem(
             componentManager.GetDirectPool<TransformComponent>(),
@@ -84,7 +95,8 @@ public sealed class MovementModule : IGameModule
             _processingTierEvents,
             deadEntities,
             pendingActionActivations,
-            pendingConsumableActivations));
+            pendingConsumableActivations,
+            auraSources));
 
         systemManager.RegisterFrameScoped(_movedEntities);
     }

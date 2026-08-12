@@ -97,7 +97,7 @@ public sealed class ActionsModule : IGameModule
             ? componentManager.GetMultiPool<AbilityScoreComponent>()
             : null;
         var auraSources = componentManager.IsRegistered<StatusEffectAuraSourceComponent>()
-            ? componentManager.GetPackedPool<StatusEffectAuraSourceComponent>()
+            ? componentManager.GetMultiPool<StatusEffectAuraSourceComponent>()
             : null;
         var hotkeyExpansionUnlocks = componentManager.GetPackedPool<HotkeyExpansionUnlockComponent>();
 

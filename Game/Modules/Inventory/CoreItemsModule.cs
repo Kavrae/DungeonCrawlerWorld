@@ -21,6 +21,7 @@ public sealed class CoreItemsModule : IGameModule
         HotkeyExpansionPotion.Build,
         DamagePotion.Build,
         ToxicPotion.Build,
+        ToxicIdol.Build,
     ];
 
     public void Configure(GameModuleContext context)

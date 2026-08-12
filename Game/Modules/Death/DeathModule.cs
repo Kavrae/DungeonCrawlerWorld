@@ -4,6 +4,7 @@ using Engine.Events;
 using Game.Modules.Core.Components;
 using Game.Modules.Death.Components;
 using Game.Modules.Death.Systems;
+using Game.Modules.StatusEffectAura.Components;
 using Game.World;
 
 namespace Game.Modules.Death;
@@ -40,12 +41,22 @@ public sealed class DeathModule : IGameModule
             throw new InvalidOperationException($"{nameof(DeathModule)} requires {nameof(GameModuleContext)}.{nameof(GameModuleContext.EntityMoveSync)} to be set.");
         }
 
+        // Soft, IsRegistered-guarded dependency on StatusEffectAuraModule's own component --
+        // DeathModule doesn't otherwise need anything from that module, so this stays optional
+        // rather than a declared Dependencies entry (contrast InventoryModule's own hard
+        // dependency on ActionsModule's PotionCooldownComponent, which InventoryModule cannot
+        // function without at all).
+        var auraSources = componentManager.IsRegistered<StatusEffectAuraSourceComponent>()
+            ? componentManager.GetMultiPool<StatusEffectAuraSourceComponent>()
+            : null;
+
         systemManager.Register(new DeathSystem(
             componentManager.GetPackedPool<DeadComponent>(),
             componentManager.GetMultiPool<NonBlockingComponent>(),
             componentManager.GetDirectPool<TransformComponent>(),
             _entityMoveSync,
             _mapQuery,
-            _eventBus));
+            _eventBus,
+            auraSources));
     }
 }

@@ -214,11 +214,11 @@ public sealed class BlueprintTests
         Assert.IsTrue(ActionInstanceQueries.TryGet(abilityInstances, entityId, ToxicStrikeAction.Id, out _));
 
         // Starting items: 5 Health Potions, 5 Mana Potions, 3 Hotkey Expansion Potions, 5 Volatile
-        // Concoctions (damage), 5 Toxic Flasks (Poison+Burning) -- see the ActionEffect/
-        // ActionActivator plan's concrete test content.
+        // Concoctions (damage), 5 Toxic Flasks (Poison+Burning), 5 Toxic Idols (Poison aura toggle)
+        // -- see the ActionEffect/ActionActivator plan's concrete test content.
         var stacks = new List<InventoryItemStackComponent>();
         InventoryQueries.CopyStacksForEntity(ecsContext.ComponentManager.GetMultiPool<InventoryItemStackComponent>(), entityId, stacks);
-        Assert.HasCount(5, stacks);
+        Assert.HasCount(6, stacks);
 
         var healthPotionStack = stacks.Single(stack => stack.ItemDefinitionId == HealthPotion.Id);
         Assert.AreEqual(5, healthPotionStack.Quantity);
@@ -239,6 +239,10 @@ public sealed class BlueprintTests
         var toxicPotionStack = stacks.Single(stack => stack.ItemDefinitionId == ToxicPotion.Id);
         Assert.AreEqual(5, toxicPotionStack.Quantity);
         Assert.IsFalse(toxicPotionStack.IsDisabled);
+
+        var toxicIdolStack = stacks.Single(stack => stack.ItemDefinitionId == ToxicIdol.Id);
+        Assert.AreEqual(5, toxicIdolStack.Quantity);
+        Assert.IsFalse(toxicIdolStack.IsDisabled);
 
         var hotkeyExpansionUnlock = ecsContext.ComponentManager.GetPackedPool<HotkeyExpansionUnlockComponent>().GetReadonly(entityId);
         Assert.AreEqual((short)5, hotkeyExpansionUnlock.UnlockedSlotCount);

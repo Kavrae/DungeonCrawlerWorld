@@ -38,7 +38,7 @@ public sealed record ActionEffectContext(
     PackedComponentPool<HotkeyExpansionUnlockComponent>? HotkeyExpansionUnlocks = null,
     StatusEffectAuraApplierRegistry? StatusEffectAppliers = null,
     PackedComponentPool<DeadComponent>? DeadEntities = null,
-    PackedComponentPool<StatusEffectAuraSourceComponent>? AuraSources = null,
+    MultiComponentPool<StatusEffectAuraSourceComponent>? AuraSources = null,
     IPlayerQuery? PlayerQuery = null,
     short? DamageOverride = null,
     int ChainDepth = 0);

@@ -379,18 +379,8 @@ public sealed class HotbarContent(
     internal void UnbindItemSlot(HotkeySlot slot) =>
         ItemHotkeyBindingQueries.Unbind(_itemHotkeyBindings, world.PlayerEntityId, slot);
 
-    /// <summary>Only Expansion slots can ever be locked -- Base/DefaultAttack are always exactly 3+1 and never grow (see this class's own doc comment). globalIndex is 1-based (page*10 + row*5 + column + 1) to match UnlockedSlotCount's own "how many are unlocked" counting, which still runs Slot1..Slot20 in order regardless of page 2 sitting to the right rather than below.</summary>
-    private bool IsSlotLocked(HotkeySlot slot)
-    {
-        var entry = HotkeySlotLayout.GetEntry(slot);
-        if (entry.Category != HotkeyCategory.Expansion)
-        {
-            return false;
-        }
-
-        var globalIndex = entry.Page * SlotsPerExpansionPage + entry.Row * ExpansionColumnsPerRow + entry.Column + 1;
-        return globalIndex > _unlockedExpansionSlots;
-    }
+    /// <summary>Delegates to HotkeySlotLayout.IsLocked -- shared with ActionTargetingController's own activation gate, so rendering and activation can't disagree about which slots are actually usable.</summary>
+    private bool IsSlotLocked(HotkeySlot slot) => HotkeySlotLayout.IsLocked(slot, _unlockedExpansionSlots);
 
     private void DrawSlot(SpriteBatch spriteBatch, Texture2D unitRectangle, int playerEntityId, HotkeySlot slot, Rectangle bounds)
     {

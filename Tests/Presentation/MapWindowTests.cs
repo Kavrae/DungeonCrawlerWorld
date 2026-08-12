@@ -1,4 +1,5 @@
 using Engine.ECS.Components;
+using Engine.Events;
 using Engine.Math;
 using Game.Modules;
 using Game.Modules.Actions;
@@ -73,10 +74,11 @@ public sealed class MapWindowTests
         componentManager.RegisterMultiPool<NonBlockingComponent>();
         componentManager.RegisterPackedPool<MovementComponent>(static (ref existing, incoming) => existing = incoming);
         componentManager.RegisterPackedPool<HealthComponent>(static (ref existing, incoming) => existing = incoming);
-        componentManager.RegisterPackedPool<StatusEffectAuraSourceComponent>(static (ref existing, incoming) => existing = incoming);
+        componentManager.RegisterMultiPool<StatusEffectAuraSourceComponent>();
         componentManager.RegisterMultiPool<ActionInstanceComponent>();
         componentManager.RegisterMultiPool<ActionHotkeyBindingComponent>();
         componentManager.RegisterMultiPool<ItemHotkeyBindingComponent>();
+        componentManager.RegisterPackedPool<HotkeyExpansionUnlockComponent>(static (ref existing, incoming) => existing = incoming);
         componentManager.RegisterMultiPool<InventoryItemStackComponent>();
         componentManager.RegisterPackedPool<InventoryComponent>(static (ref existing, incoming) => existing = incoming);
         componentManager.RegisterPackedPool<PendingActionActivationComponent>(static (ref existing, incoming) => existing = incoming);
@@ -88,6 +90,8 @@ public sealed class MapWindowTests
         {
             componentManager.Merge(PlayerEntityId, new TransformComponent(position, new Vector2Byte(1, 1)));
             componentManager.Merge(PlayerEntityId, new MovementComponent(MovementMode.PlayerControlled, 0, null, null));
+            // Fully unlocked -- these tests are about arm/target/confirm behavior, not the Expansion lock itself, so default to every slot being usable rather than incidentally locking out whichever slot a given test happens to bind to.
+            componentManager.Merge(PlayerEntityId, new HotkeyExpansionUnlockComponent(unlockedSlotCount: 20));
             world.PlayerEntityId = PlayerEntityId;
         }
 
@@ -104,6 +108,7 @@ public sealed class MapWindowTests
             componentManager.GetMultiPool<ActionHotkeyBindingComponent>(),
             componentManager.GetMultiPool<ItemHotkeyBindingComponent>(),
             componentManager.GetMultiPool<InventoryItemStackComponent>(),
+            componentManager.GetPackedPool<HotkeyExpansionUnlockComponent>(),
             componentManager.GetPackedPool<PendingActionActivationComponent>(),
             componentManager.GetPackedPool<PendingConsumableActivationComponent>(),
             componentManager.GetPackedPool<PendingDelayedActionComponent>(),
@@ -114,7 +119,7 @@ public sealed class MapWindowTests
             componentManager.GetPackedPool<MovementComponent>());
 
         windowService.RegisterFactory<MapWindow>((_, _) => new MapWindow(
-            fontService, windowService, world, mapViewState, componentManager, resolvedActionCatalog, resolvedItemCatalog, new TileRenderer(), new GlyphRenderer(),
+            fontService, windowService, world, mapViewState, componentManager, new EventBus(), resolvedActionCatalog, resolvedItemCatalog, new TileRenderer(), new GlyphRenderer(),
             new SpriteSheetService(null, "Spritesheets"), new SpriteRenderer(), camera, actionTargeting, playerMovement));
 
         var mapWindow = windowService.CreateElement<MapWindow>(null, new ElementOptions

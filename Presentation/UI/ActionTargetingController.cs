@@ -38,6 +38,7 @@ public sealed class ActionTargetingController(
     MultiComponentPool<ActionHotkeyBindingComponent> actionHotkeyBindings,
     MultiComponentPool<ItemHotkeyBindingComponent> itemHotkeyBindings,
     MultiComponentPool<InventoryItemStackComponent> inventoryStacks,
+    PackedComponentPool<HotkeyExpansionUnlockComponent> hotkeyExpansionUnlocks,
     PackedComponentPool<PendingActionActivationComponent> pendingActivations,
     PackedComponentPool<PendingConsumableActivationComponent> pendingConsumableActivations,
     PackedComponentPool<PendingDelayedActionComponent> pendingDelayedActions,
@@ -239,6 +240,11 @@ public sealed class ActionTargetingController(
     /// </summary>
     internal void HandleHotkeySlotPress(HotkeySlot slot)
     {
+        if (IsSlotLocked(slot))
+        {
+            return;
+        }
+
         var isDoubleTap = _lastHotkeyPressFrameBySlot.TryGetValue(slot, out var lastPressFrame) &&
             _frameCounter - lastPressFrame <= DoubleTapWindowFrames;
         _lastHotkeyPressFrameBySlot[slot] = _frameCounter;
@@ -253,6 +259,19 @@ public sealed class ActionTargetingController(
         {
             HandleItemSlotPress(slot, itemDefinitionId, isDoubleTap);
         }
+    }
+
+    /// <summary>
+    /// Mirrors HotbarContent's own lock check (HotkeySlotLayout.IsLocked) -- a locked slot must
+    /// refuse to activate even if something bound it anyway (e.g. a blueprint grant that writes
+    /// an ItemHotkeyBindingComponent directly, bypassing HotbarContent.BindItem's own lock
+    /// refusal), not just render dim. Checked first, before any double-tap bookkeeping, so a
+    /// press on a locked slot leaves no trace for once it becomes unlocked later.
+    /// </summary>
+    private bool IsSlotLocked(HotkeySlot slot)
+    {
+        var unlockedSlots = hotkeyExpansionUnlocks.TryGetReadonly(world.PlayerEntityId, out var unlock) ? unlock.UnlockedSlotCount : (short)0;
+        return HotkeySlotLayout.IsLocked(slot, unlockedSlots);
     }
 
     /// <summary>

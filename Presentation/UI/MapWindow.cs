@@ -1,5 +1,6 @@
 using Engine.ECS.Components;
 using Engine.ECS.Components.Stores;
+using Engine.Events;
 using Engine.Math;
 using FontStashSharp;
 using Game.Modules.Actions;
@@ -61,6 +62,10 @@ public sealed class MapWindow : Window
     private static readonly Color TargetableTileBorderColor = Color.White;
     private static readonly Color HoveredTargetTileBorderColor = Color.Red;
     private const float TargetSelectionMaskAlpha = 0.5f;
+
+    /// <summary>Halves MapTintGrid's own already-falloff-scaled Factor so a full-strength aura glow (Factor 1) still lets whatever's standing on that tile -- terrain, an occupant sprite/glyph -- read through, rather than washing it out at the source tile itself.</summary>
+    private const float GlowOpacityMultiplier = 0.5f;
+
     private static readonly Color MapBackgroundColor = new(40, 40, 40);
 
     private SpriteFontBase _mediumFont = null!;
@@ -80,6 +85,7 @@ public sealed class MapWindow : Window
         World world,
         MapViewState mapViewState,
         ComponentManager componentManager,
+        EventBus eventBus,
         ActionCatalog actionCatalog,
         ItemCatalog itemCatalog,
         TileRenderer tileRenderer,
@@ -93,6 +99,7 @@ public sealed class MapWindow : Window
         ArgumentNullException.ThrowIfNull(world);
         ArgumentNullException.ThrowIfNull(mapViewState);
         ArgumentNullException.ThrowIfNull(componentManager);
+        ArgumentNullException.ThrowIfNull(eventBus);
         ArgumentNullException.ThrowIfNull(actionCatalog);
         ArgumentNullException.ThrowIfNull(itemCatalog);
         ArgumentNullException.ThrowIfNull(tileRenderer);
@@ -125,7 +132,7 @@ public sealed class MapWindow : Window
         _camera = camera;
         _actionTargeting = actionTargeting;
         _playerMovement = playerMovement;
-        _tintGrid = new MapTintGrid(componentManager, world.Map.Size);
+        _tintGrid = new MapTintGrid(componentManager, world.Map.Size, eventBus);
         _backgroundCache = new MapBackgroundCache(
             world,
             mapViewState,
@@ -244,7 +251,7 @@ public sealed class MapWindow : Window
 
                 var tileOrigin = TileOrigin(columnIndex, rowIndex);
                 var destination = new Rectangle((int)tileOrigin.X, (int)tileOrigin.Y, _camera.CurrentTileSize.X, _camera.CurrentTileSize.Y);
-                spriteBatch.Draw(unitRectangle, destination, tint.Color * tint.Factor);
+                spriteBatch.Draw(unitRectangle, destination, tint.Color * tint.Factor * GlowOpacityMultiplier);
             }
         }
     }

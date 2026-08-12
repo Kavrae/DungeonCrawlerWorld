@@ -76,12 +76,14 @@ public sealed class PlayerBlueprint(MathUtility mathUtility, UniqueNumberAllocat
         InventoryActions.AddItem(componentManager, entityId, HotkeyExpansionPotion.Id, quantity: 3);
         InventoryActions.AddItem(componentManager, entityId, DamagePotion.Id, quantity: 5);
         InventoryActions.AddItem(componentManager, entityId, ToxicPotion.Id, quantity: 5);
+        InventoryActions.AddItem(componentManager, entityId, ToxicIdol.Id, quantity: 5);
 
         componentManager.Merge(entityId, new ItemHotkeyBindingComponent(HotkeySlot.Slot1, HealthPotion.Id));
         componentManager.Merge(entityId, new ItemHotkeyBindingComponent(HotkeySlot.Slot2, ManaPotion.Id));
         componentManager.Merge(entityId, new ItemHotkeyBindingComponent(HotkeySlot.Slot3, HotkeyExpansionPotion.Id));
         componentManager.Merge(entityId, new ItemHotkeyBindingComponent(HotkeySlot.Slot4, DamagePotion.Id));
         componentManager.Merge(entityId, new ItemHotkeyBindingComponent(HotkeySlot.Slot5, ToxicPotion.Id));
+        componentManager.Merge(entityId, new ItemHotkeyBindingComponent(HotkeySlot.Slot6, ToxicIdol.Id));
 
         StatModifierEffects.Apply(componentManager, entityId, StatModifierTarget.OutgoingDamage, StatModifierOperation.Additive, StatModifierPolarity.Buff,
             canModify: true, magnitude: PermanentOutgoingDamageBonus, durationFrames: StatModifierComponent.Permanent, StatusEffectSource.Admin);

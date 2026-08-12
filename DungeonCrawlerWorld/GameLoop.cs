@@ -99,7 +99,7 @@ public sealed class GameLoop : Microsoft.Xna.Framework.Game
             Console.Error.WriteLine($"[ModuleLoad] {failure.Source}: {failure.Exception}");
         }
 
-        FloorBuilder.PopulateFloor(_world, _ecsContext, _mathUtility, _crawlerNumberAllocator);
+        FloorBuilder.PopulateFloor(_world, _ecsContext, _mathUtility, _crawlerNumberAllocator, _movedEntities);
 
         var logFilePath = Path.Combine(FindProjectRoot(), "Log", "player-activity.log");
         _playerActivityLog = new PlayerActivityLog(_world, _ecsContext.ComponentManager, _ecsContext.EventBus, logFilePath);

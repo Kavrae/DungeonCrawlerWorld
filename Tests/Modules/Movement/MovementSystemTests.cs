@@ -8,7 +8,10 @@ using Game.Modules.Movement.Components;
 using Game.Modules.Movement.Systems;
 using Game.Modules.ProcessingTier;
 using Game.Modules.ProcessingTier.Components;
+using Game.Modules.StatusEffectAura.Components;
+using Game.Modules.StatusEffects;
 using Game.World;
+using Microsoft.Xna.Framework;
 
 namespace Tests.Modules.Movement;
 
@@ -342,6 +345,42 @@ public sealed class MovementSystemTests
 
         Assert.IsFalse(published);
         Assert.HasCount(1, movedEntities.Items, "The move must still reach the buffer-based consumers even though it's not the player's.");
+    }
+
+    /// <summary>
+    /// Widens the player-only EventBus gate above: a non-player mover that itself carries a
+    /// StatusEffectAuraSourceComponent must still publish, since Presentation.UI.MapTintGrid
+    /// (the visual glow grid) only reacts to EntityMovedEvent on the bus, not the buffer -- a
+    /// moving aura source that only reached the buffer would keep its gameplay effect in sync
+    /// (StatusEffectAuraSystem drains the buffer directly) but leave its glow stuck at its last
+    /// bus-published position.
+    /// </summary>
+    [TestMethod]
+    public void Update_NonPlayerMoverCarryingAuraSource_PublishesEntityMovedViaEventBus()
+    {
+        var transformPool = CreateTransformPool();
+        var actionLockPool = CreateActionLockPool();
+        var movementPool = CreateMovementPool();
+        var mapQuery = new FakeMapQuery(new Vector3Int(5, 5, 1));
+        var eventBus = new EventBus();
+
+        var startPosition = new Vector3Int(2, 2, 0);
+        transformPool.Add(0, new TransformComponent(startPosition, new Vector2Byte(1, 1)));
+        actionLockPool.Add(0, new ActionLockComponent(totalLockFrames: 0, lockFramesRemaining: 0));
+        movementPool.Add(0, new MovementComponent(MovementMode.Random, 10, null, new Vector3Int(3, 2, 0)));
+
+        var auraSources = new MultiComponentPool<StatusEffectAuraSourceComponent>(maximumEntityCount: 10, initialCapacity: 4);
+        auraSources.Add(0, new StatusEffectAuraSourceComponent(StatusEffectType.Poison, auraAndGlowStrength: 8, Color.DarkGreen));
+
+        EntityMovedEvent? received = null;
+        eventBus.Subscribe<EntityMovedEvent>(e => received = e);
+
+        // playerEntityId (99) never matches the mover (0) -- proves the aura-source gate alone is what publishes here, not the player gate.
+        var system = new MovementSystem(transformPool, actionLockPool, movementPool, mapQuery, eventBus, new RecordingEntityMoveSync(), new FrameEventBuffer<EntityMovedEvent>(), new FakePlayerQuery(99), CreateProcessingTierPool(), new ProcessingTierEvents(), auraSources: auraSources);
+        system.Update(default, 0);
+
+        Assert.IsNotNull(received, "A non-player mover carrying its own aura source must still publish, so MapTintGrid's glow follows it.");
+        Assert.AreEqual(0, received!.Value.EntityId);
     }
 
     /// <summary>

@@ -1,9 +1,10 @@
-﻿using Engine.ECS.Components;
-using Engine.ECS.Components.Stores;
+﻿using Engine.ECS.Components.Stores;
 using Engine.ECS.Systems;
 using Engine.Events;
 using Game.Modules.Core.Components;
 using Game.Modules.Death.Components;
+using Game.Modules.StatusEffectAura;
+using Game.Modules.StatusEffectAura.Components;
 using Game.World;
 
 namespace Game.Modules.Death.Systems;
@@ -25,6 +26,7 @@ public sealed class DeathSystem : ISystem
     private readonly IEntityMoveSync _entityMoveSync;
     private readonly IMapQuery _mapQuery;
     private readonly EventBus _eventBus;
+    private readonly MultiComponentPool<StatusEffectAuraSourceComponent>? _auraSources;
 
     public DeathSystem(
         PackedComponentPool<DeadComponent> deadEntities,
@@ -32,7 +34,8 @@ public sealed class DeathSystem : ISystem
         DirectComponentPool<TransformComponent> transforms,
         IEntityMoveSync entityMoveSync,
         IMapQuery mapQuery,
-        EventBus eventBus)
+        EventBus eventBus,
+        MultiComponentPool<StatusEffectAuraSourceComponent>? auraSources = null)
     {
         _deadEntities = deadEntities;
         _nonBlockingEntities = nonBlockingEntities;
@@ -40,6 +43,7 @@ public sealed class DeathSystem : ISystem
         _entityMoveSync = entityMoveSync;
         _mapQuery = mapQuery;
         _eventBus = eventBus;
+        _auraSources = auraSources;
 
         eventBus.Subscribe<EntityDiedEvent>(OnEntityDied);
     }
@@ -71,5 +75,10 @@ public sealed class DeathSystem : ISystem
             ? died.Source.EntityId
             : (int?)null;
         _deadEntities.Add(died.EntityId, new DeadComponent(killedBy));
+
+        if (_auraSources is not null)
+        {
+            AuraSourceEffects.RemoveAll(_auraSources, _eventBus, died.EntityId);
+        }
     }
 }

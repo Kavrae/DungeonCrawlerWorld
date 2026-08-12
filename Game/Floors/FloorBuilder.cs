@@ -29,8 +29,8 @@ public static class FloorBuilder
 
     public static Game.World.Map CreateMap(int floorNumber) => new(TestMapSize);
 
-    public static void PopulateFloor(Game.World.World world, EcsContext ecsContext, MathUtility mathUtility, UniqueNumberAllocator crawlerNumberAllocator) =>
-        new TestMapBuilder(ecsContext.EntityManager, ecsContext.ComponentManager, mathUtility, crawlerNumberAllocator).Populate(world);
+    public static void PopulateFloor(Game.World.World world, EcsContext ecsContext, MathUtility mathUtility, UniqueNumberAllocator crawlerNumberAllocator, FrameEventBuffer<EntityMovedEvent> movedEntities) =>
+        new TestMapBuilder(ecsContext.EntityManager, ecsContext.ComponentManager, mathUtility, crawlerNumberAllocator, movedEntities).Populate(world);
 
     // TEMPORARY test seeding -- exercises Poison until a real in-game source exists. Remove
     // once one does. 10 applications of a 5-tick duration each: since ApplyStack takes the

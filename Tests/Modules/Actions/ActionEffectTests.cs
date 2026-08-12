@@ -180,8 +180,8 @@ public sealed class ActionEffectTests
     public void AuraSourceToggleEntry_AbsentThenPresent_TogglesOnSourceEntityNotTarget()
     {
         var (componentManager, health, eventBus) = Build();
-        componentManager.RegisterPackedPool<StatusEffectAuraSourceComponent>(static (ref existing, incoming) => existing = incoming);
-        var auraSources = componentManager.GetPackedPool<StatusEffectAuraSourceComponent>();
+        componentManager.RegisterMultiPool<StatusEffectAuraSourceComponent>();
+        var auraSources = componentManager.GetMultiPool<StatusEffectAuraSourceComponent>();
         var mathUtility = new MathUtility();
         var entry = new AuraSourceToggleEntry(StatusEffectType.Poison, AuraAndGlowStrength: 5, Color.Purple);
         var context = Context(componentManager, health, eventBus, mathUtility) with { AuraSources = auraSources };

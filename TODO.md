@@ -54,6 +54,19 @@ For NPCs and the player. Attacking sets the same shared ActionLockComponent that
 
 `ActionInstanceComponent.DamageOverride` (`Game/Modules/Actions/Components/ActionInstanceComponent.cs`) is the only per-instance override an action supports today, hardcoded to one field (`DamageAmount`, read by `DamageEffectEntry` alone) and set once at grant time by whichever blueprint calls `ActionGrantEffects.Grant` (e.g. Goblin's Punch grant overriding damage to a flat 10). Nothing else about an action -- targeting, an effect entry's other parameters, an activator's own settings like `SpellActivator.ManaCost` -- can be overridden per-instance or per-activation this way. Worth generalizing into a real override system once a second use case actually needs it (e.g. a buff that temporarily widens an action's targeting, or an NPC AI that wants to fire a cheaper/weaker version of a shared action): let the `IActionActivator` or whoever queues the activation (Presentation, NPC AI, a future equipment/buff system) supply an override for any part of the resolved action, not just damage. Likely requires `PendingActionActivationComponent` to carry the actual (possibly-overridden) action data through to `ActionActivationSystem`/`ActionEffectResolver`, not just a bare `Guid ActionId` re-looked-up fresh from `ActionCatalog` every time.
 
+### Medium Priority
+
+#### Toggle item activator
+
+Every item today activates through `Game.Modules.Actions.Activators.PotionActivator`, which `ConsumableActivationSystem` unconditionally consumes a stack for on every activation -- correct for a potion or scroll, wrong for a stateful toggle. Toxic Idol (`Game/Modules/Inventory/Definitions/ToxicIdol.cs`, the first real user of `AuraSourceToggleEntry`) is the concrete case that exposes it: turning its Poison aura back *off* costs a stack the same as turning it on, so a player down to their last one can't stop the effect without losing the item.
+
+Needs a new `IActionActivator` kind (e.g. `ToggleItemActivator`) alongside `PotionActivator`/`DirectAction`/`SpellActivator` that `ConsumableActivationSystem` recognizes and does *not* consume a stack for. Open design questions to resolve before landing it, not just a mechanical addition:
+
+- Does toggling still require the item to be present in inventory at all times it's active -- and if the stack empties, or the item is dropped/sold/traded away while toggled on, does the effect force-untoggle? (Mirrors the "a corpse retracts its still-active aura on death" cleanup `AuraSourceEffects.RemoveAll`/`DeathSystem` already do for the action-granted case -- the same class of "owner lost its ability to sustain this" cleanup, one layer up at the inventory-slot level instead of the entity-death level.)
+- Is "currently toggled on" state that needs its own tracking, independent of whatever effect it drives? Today `AuraSourceToggleEntry`'s own on/off state is entirely implicit in whether the entity's `StatusEffectAuraSourceComponent` exists, which works because that's the only effect kind a toggle item grants so far -- it wouldn't generalize cleanly to a toggle item driving a different kind of effect (e.g. a future toggled `StatModifierComponent` buff), where "is this toggled on" and "does the entity have the effect" aren't necessarily the same question.
+
+Once this lands, Toxic Idol should migrate from `PotionActivator` to it as the concrete proof/test case this item was already built to be.
+
 ### Low Priority
 
 #### Show runner race
@@ -138,7 +151,7 @@ An example FreeCast or Immediate ability that raises the caster's own outgoing d
 
 #### Toggle poison aura ability
 
-A FreeCast-style ability that turns an existing Poison/StatusEffectAura source on/off around the caster -- exercises FreeCast's "usable during an Action Lock" behavior against the existing aura machinery.
+The item side landed: Toxic Idol (`Game/Modules/Inventory/Definitions/ToxicIdol.cs`, granted to the player) is the first real user of `AuraSourceToggleEntry`, toggling a Poison aura (range 4) on/off around whoever activates it -- this is also what the aura sync bug fix (`AuraSourceAddedEvent`/`AuraSourceRemovedEvent`, `Game/Modules/StatusEffectAura/AuraSourceEffects.cs`) and multi-aura-per-entity support were built for. Still open: the original ask was specifically a *FreeCast ability* (`Game/Modules/Actions/Definitions/`), not an item -- Toxic Idol uses `PotionActivator`/Immediate timing like every other item, so it doesn't exercise FreeCast's "usable during an Action Lock" behavior against the aura machinery, and it's consumed one-per-toggle (drinking/using it to turn the aura back off costs a stack, same as every other potion) rather than being a reusable toggle -- see the Toggle item activator item above, which would remove that specific quirk. Landing the actual FreeCast action version is still worth doing for that specific coverage.
 
 #### Body parts
 
@@ -410,6 +423,12 @@ A `NotificationCategory.System` notification pauses the simulation (`Notificatio
 
 Promoted to High: both the new equipment menu and the Options menu (see Presentation) explicitly need "pause game while open" behavior, and neither should re-solve modality on its own. Inventory management landed as a third OR-term in `GameLoop.Update` (`_shell.Inventory.IsAnyWindowOpen`, alongside `MapWindow.IsPaused`/`NotificationCenter.HasBlockingNotification`) the same minimally-invasive way -- generalizing this into a real modal concept still hasn't happened, it just has one more un-generalized consumer now.
 
+#### Plan a refactor for long constructor parameter lists
+
+Promoted to High from the old "Long parameter lists" note below (which had drifted stale -- it cited `Game/Modules/Abilities/`, since renamed to `Game/Modules/Actions/`). The convention is deliberate, not accidental: ECS systems and Presentation controllers take component pools as explicit, individually-typed constructor params (required vs. nullable-optional) instead of storing `ComponentManager` and resolving lazily, so a class's exact dependencies are visible and typed at its own call site, with each `*Module.RegisterSystems`/`GameShellBootstrapper` owning the actual resolve-plus-`IsRegistered`-guard logic. But it's grown long enough to be a real "long parameter list" smell by conventional standards: `ActionActivationSystem`/`DelayedActionSystem`/`ConsumableActivationSystem` (`Game/Modules/Actions/Systems/`, `Game/Modules/Inventory/Systems/`, ~15-16 params each), `ActionTargetingController`/`MapWindow` (`Presentation/UI/`, 14-15 params each), `StatusEffectAuraSystem` (`Game/Modules/StatusEffectAura/Systems/`, ~11).
+
+This item is to *plan*, not execute, a refactor -- and the plan needs to resolve a real design fork before touching code: (1) group related pools into small parameter-object records per cluster (e.g. a targeting-pools bundle, an action-pending-components bundle), mirroring the shape `ActionTiming`/`TargetingSpec` already use internally for a handful of related fields; or (2) reconsider whether some of these classes should just take `ComponentManager` and resolve their own pools instead, giving up the call-site-visible-dependency benefit for a shorter signature. Whichever direction, it has to be applied consistently across every constructor above, not fixed one class at a time -- a half-migrated codebase with two different "how a system gets its pools" conventions would be worse than the current, at least-consistent state.
+
 ### Low Priority
 
 #### Debug/event logging with levels
@@ -429,10 +448,6 @@ No serialization/save-and-load system exists anywhere yet. Window layout (`Windo
 Worth treating as the first slice of a general data-storage system (entity/world save state will eventually need the same serialize-to-disk mechanism -- including, eventually, inventory/equipment/stats state from the new Engine/Game items above) rather than a one-off "just persist these three floats" hack -- but start narrow. Window geometry is small, self-contained, and has no cross-entity references to untangle, which makes it a good first slice specifically *because* it won't force premature decisions about how the general system should handle things like entity references that a save format will eventually need to solve.
 
 **Modded content must degrade gracefully, not corrupt a save.** Once entity/world save state (inventory items, granted abilities, and `IActionActivator`/`ActionEffect`-bearing catalog entries -- see `PLAN-action-effect-activator.md`) starts getting serialized, a saved reference (by `Guid`) to a mod-defined item/ability/effect can go stale if that mod is updated, disabled, or removed before the save is loaded again -- a well-known failure mode in every moddable game with real save compatibility (RimWorld, Path of Exile). Worth a fail hierarchy decided up front rather than crashing or silently corrupting state on a missing id: (1) prefer a mod-supplied replacement/migration for a renamed or updated id, (2) fall back to dropping just the affected reference (the one item stack, granted ability, or effect entry) while the rest of the save loads normally, (3) as a last resort, when the missing content is load-bearing for the entity itself, drop the whole entity. Consider letting a mod register its own fallback id (a vanilla or generic substitute) per content id it defines, so an update or removal degrades a save gracefully instead of just vanishing content outright.
-
-#### Long parameter lists
-
-Several write-surface methods have grown a lot of positional/optional parameters as the features behind them expanded -- e.g. `AbilityDefinition`'s constructor (`Game/Modules/Abilities/AbilityDefinition.cs`, up to 12 params after `ManaCost` landed alongside Mana), `AbilityGrantEffects.Grant` (`Game/Modules/Abilities/AbilityGrantEffects.cs`), `StatModifierEffects.Apply` (`Game/Modules/StatModifiers/StatModifierEffects.cs`), and the near-identical `HealthRegenSystem`/`ManaRegenSystem` constructors (`Game/Modules/Health/Systems/`, `Game/Modules/Mana/Systems/`). Worth a pass once the current wave of stat/resource features (Mana, Stats consumers, Equipment) stops churning: candidates include grouping related params into small option records (the same shape `AbilityDefinition` already uses internally for `Targeting`/`Timing`/`Effect`), or builder-style construction for the worst offenders. Not urgent today -- most call sites still read fine with named arguments -- but worth revisiting before it gets worse.
 
 #### Field and property cleanup
 

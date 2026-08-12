@@ -123,7 +123,7 @@ public sealed class FloorBuilderTests
         var ecsContext = BuildEcsContext(world, mathUtility);
 
         var crawlerNumberAllocator = new UniqueNumberAllocator(mathUtility, 1, 13_000_000);
-        FloorBuilder.PopulateFloor(world, ecsContext, mathUtility, crawlerNumberAllocator);
+        FloorBuilder.PopulateFloor(world, ecsContext, mathUtility, crawlerNumberAllocator, new FrameEventBuffer<EntityMovedEvent>());
         world.PlayerEntityId = FloorBuilder.CreatePlayer(world, ecsContext, mathUtility, new FrameEventBuffer<EntityMovedEvent>(), crawlerNumberAllocator);
 
         Assert.IsTrue(ecsContext.EntityManager.IsAlive(world.PlayerEntityId));

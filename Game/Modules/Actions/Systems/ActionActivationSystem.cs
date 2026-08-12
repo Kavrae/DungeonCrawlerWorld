@@ -65,7 +65,7 @@ public sealed class ActionActivationSystem : ISystem
     private readonly PackedComponentPool<ManaComponent>? _mana;
     private readonly MultiComponentPool<AbilityScoreComponent>? _abilityScores;
     private readonly MathUtility _mathUtility;
-    private readonly PackedComponentPool<StatusEffectAuraSourceComponent>? _auraSources;
+    private readonly MultiComponentPool<StatusEffectAuraSourceComponent>? _auraSources;
     private readonly PackedComponentPool<HotkeyExpansionUnlockComponent>? _hotkeyExpansionUnlocks;
     private readonly EntityStripeSet _stripeSet;
 
@@ -86,7 +86,7 @@ public sealed class ActionActivationSystem : ISystem
         PackedComponentPool<DeadComponent>? deadEntities = null,
         PackedComponentPool<ManaComponent>? mana = null,
         MultiComponentPool<AbilityScoreComponent>? abilityScores = null,
-        PackedComponentPool<StatusEffectAuraSourceComponent>? auraSources = null,
+        MultiComponentPool<StatusEffectAuraSourceComponent>? auraSources = null,
         PackedComponentPool<HotkeyExpansionUnlockComponent>? hotkeyExpansionUnlocks = null)
     {
         _pendingActivations = pendingActivations;
