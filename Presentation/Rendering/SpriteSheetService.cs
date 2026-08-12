@@ -12,7 +12,7 @@ public sealed class SpriteSheetService
 {
     private readonly GraphicsDevice? _graphicsDevice;
     private readonly string _spritesheetsDirectory;
-    private readonly Dictionary<string, Texture2D> _textures = [];
+    private readonly Dictionary<string, Texture2D> _textures = new(ReferenceEqualityComparer.Instance);
 
     /// <param name="graphicsDevice">
     /// Nullable so this type can be constructed in headless tests that never call GetTexture --
