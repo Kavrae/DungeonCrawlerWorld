@@ -1,7 +1,8 @@
 using Engine.ECS.Components;
 using Engine.Math;
-using Game.Modules.Abilities;
-using Game.Modules.Abilities.Components;
+using Game.Modules.Actions;
+using Game.Modules.Actions.Activators;
+using Game.Modules.Actions.Components;
 using Game.Modules.Core.Components;
 using Game.Modules.Inventory;
 using Game.Modules.Inventory.Components;
@@ -59,7 +60,7 @@ public sealed class HotbarContentTests
         var componentManager = new ComponentManager(initialEntityCapacity: 20, initialComponentCapacity: 10);
         componentManager.RegisterMultiPool<ActionHotkeyBindingComponent>();
         componentManager.RegisterMultiPool<ItemHotkeyBindingComponent>();
-        componentManager.RegisterMultiPool<AbilityInstanceComponent>();
+        componentManager.RegisterMultiPool<ActionInstanceComponent>();
         componentManager.RegisterMultiPool<InventoryItemStackComponent>();
         componentManager.RegisterPackedPool<InventoryComponent>(static (ref existing, incoming) => existing = incoming);
         componentManager.RegisterPackedPool<ActionLockComponent>(static (ref existing, incoming) => existing = incoming);
@@ -72,7 +73,7 @@ public sealed class HotbarContentTests
         var windowService = new ElementPoolService(fontService, new GlyphRenderer());
 
         var hotbar = new HotbarContent(
-            world, new MapViewState(), componentManager, new AbilityCatalog(), new ItemCatalog(),
+            world, new MapViewState(), componentManager, new ActionCatalog(), new ItemCatalog(),
             fontService, new SpriteSheetService(null, "Spritesheets"), new SpriteRenderer(), ScreenSize);
 
         var hostWindow = windowService.CreateElement<Window>(null, new ElementOptions
@@ -122,8 +123,8 @@ public sealed class HotbarContentTests
     public void BindItem_ClearsAnyExistingActionBindingOnTheSameSlot()
     {
         var (hotbar, componentManager) = Build();
-        var abilityId = Guid.NewGuid();
-        componentManager.GetMultiPool<ActionHotkeyBindingComponent>().Add(PlayerEntityId, new ActionHotkeyBindingComponent(HotkeySlot.Slot3, abilityId));
+        var actionId = Guid.NewGuid();
+        componentManager.GetMultiPool<ActionHotkeyBindingComponent>().Add(PlayerEntityId, new ActionHotkeyBindingComponent(HotkeySlot.Slot3, actionId));
 
         hotbar.BindItem(HotkeySlot.Slot3, Guid.NewGuid());
 

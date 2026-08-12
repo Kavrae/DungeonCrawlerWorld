@@ -3,9 +3,10 @@ using Engine.Events;
 using Engine.Math;
 using Engine.Modules;
 using Game.Modules;
-using Game.Modules.Abilities;
 using Game.Modules.AbilityScores;
 using Game.Modules.Achievements;
+using Game.Modules.Actions;
+using Game.Modules.Actions.Definitions;
 using Game.Modules.Burning;
 using Game.Modules.Class;
 using Game.Modules.ContactDamage;
@@ -62,8 +63,8 @@ public static class GameBootstrapper
             new ProcessingTierModule(),
             new RaceModule(),
             new ClassModule(),
-            new AbilitiesModule(),
-            new CoreAbilitiesModule(),
+            new ActionsModule(),
+            new CoreActionsModule(),
             new StatusEffectsModule(),
             new StatModifiersModule(),
             new AbilityScoresModule(),
@@ -104,7 +105,7 @@ public static class GameBootstrapper
         world.NonBlockingComponents = ecsContext.ComponentManager.GetMultiPool<NonBlockingComponent>();
         world.ForceBlockingComponents = ecsContext.ComponentManager.GetMultiPool<ForceBlockingComponent>();
 
-        return new GameBootstrapResult(ecsContext, failures, context.Abilities, context.MovedEntities, context.Items);
+        return new GameBootstrapResult(ecsContext, failures, context.Actions, context.MovedEntities, context.Items);
     }
 
     /// <summary>

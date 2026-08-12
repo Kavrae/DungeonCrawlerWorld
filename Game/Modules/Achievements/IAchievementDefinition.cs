@@ -1,7 +1,7 @@
 namespace Game.Modules.Achievements;
 
 /// <summary>
-/// Static content plus trigger wiring for one achievement -- mirrors AbilityDefinition's role
+/// Static content plus trigger wiring for one achievement -- mirrors ActionDefinition's role
 /// as a small self-contained content record, except an achievement also owns behavior
 /// (RegisterTrigger) since "when is this earned" varies per achievement rather than being data
 /// a shared system can interpret uniformly.

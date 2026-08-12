@@ -6,11 +6,11 @@ using Game.Modules.Mana.Components;
 namespace Game.Modules.Mana;
 
 /// <summary>
-/// The "gains mana on first mana-costing ability" hook -- called from AbilityGrantEffects.Grant
-/// whenever the ability being granted has a nonzero ManaCost. A no-op if the entity already has a
-/// ManaComponent (only the first mana-costing ability actually grants one) or if it has no
+/// The "gains mana on first mana-costing action" hook -- called from ActionGrantEffects.Grant
+/// whenever the action being granted has a nonzero ManaCost. A no-op if the entity already has a
+/// ManaComponent (only the first mana-costing action actually grants one) or if it has no
 /// Intelligence AbilityScoreComponent yet (nothing sensible to size MaximumMana from -- callers
-/// must grant ability scores before granting a mana-costing ability, the same ordering
+/// must grant ability scores before granting a mana-costing action, the same ordering
 /// PlayerBlueprint follows). MaximumMana is a one-time snapshot of Intelligence's Total at grant
 /// time, not a value that tracks Intelligence forever after -- mirrors how HealthComponent.
 /// MaximumHealth is baked once at blueprint-build time rather than recomputed live, with

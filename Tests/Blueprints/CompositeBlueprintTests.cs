@@ -9,8 +9,8 @@ using Game.Blueprints.Classes;
 using Game.Blueprints.Objects;
 using Game.Blueprints.Races;
 using Game.Modules;
-using Game.Modules.Abilities;
 using Game.Modules.AbilityScores;
+using Game.Modules.Actions;
 using Game.Modules.Class;
 using Game.Modules.Class.Components;
 using Game.Modules.Core;
@@ -39,8 +39,8 @@ public sealed class CompositeBlueprintTests
         var movementModule = new MovementModule();
         movementModule.Configure(context);
 
-        var abilitiesModule = new AbilitiesModule();
-        abilitiesModule.Configure(context);
+        var actionsModule = new ActionsModule();
+        actionsModule.Configure(context);
 
         var processingTierModule = new ProcessingTierModule();
         processingTierModule.Configure(context);
@@ -66,7 +66,7 @@ public sealed class CompositeBlueprintTests
             movementModule,
             new RaceModule(),
             new ClassModule(),
-            abilitiesModule,
+            actionsModule,
             processingTierModule,
             new InventoryModule(),
         ];

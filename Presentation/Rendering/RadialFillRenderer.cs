@@ -22,7 +22,7 @@ public sealed class RadialFillRenderer(GlyphRenderer glyphRenderer, SpriteSheetS
     public Color BackgroundColor { get; set; }
     public float FillPercentage { get; set; }
 
-    /// <summary>Drawn instead of Glyph when set (see SpriteOrGlyphRenderer's own sprite-first-glyph-fallback convention) -- reset to null between draws by callers that don't always have one (see HotbarContent.DrawAbilitySlot).</summary>
+    /// <summary>Drawn instead of Glyph when set (see SpriteOrGlyphRenderer's own sprite-first-glyph-fallback convention) -- reset to null between draws by callers that don't always have one (see HotbarContent.DrawActionSlot).</summary>
     public SpriteComponent? Sprite { get; set; }
 
     /// <summary>Tint applied to Sprite only -- GlyphColor plays the equivalent role for Glyph, kept separate since SpriteOrGlyphRenderer.Draw itself takes them as two independent parameters.</summary>

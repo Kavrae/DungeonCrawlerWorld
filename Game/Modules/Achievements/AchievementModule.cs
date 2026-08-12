@@ -2,8 +2,8 @@
 using Engine.ECS.Components.Stores;
 using Engine.ECS.Systems;
 using Engine.Events;
-using Game.Modules.Abilities;
 using Game.Modules.Achievements.Components;
+using Game.Modules.Actions;
 using Game.Modules.Achievements.Definitions;
 using Game.Notifications;
 using Game.World;
@@ -46,13 +46,13 @@ public sealed class AchievementModule : IGameModule
 
     private EventBus? _eventBus;
     private IPlayerQuery? _playerQuery;
-    private AbilityCatalog? _abilityCatalog;
+    private ActionCatalog? _actionCatalog;
 
     public void Configure(GameModuleContext context)
     {
         _eventBus = context.EventBus;
         _playerQuery = context.PlayerQuery;
-        _abilityCatalog = context.Abilities;
+        _actionCatalog = context.Actions;
 
         foreach (var definition in Definitions)
         {
@@ -65,7 +65,7 @@ public sealed class AchievementModule : IGameModule
 
     public void RegisterSystems(SystemManager systemManager, ComponentManager componentManager)
     {
-        if (_eventBus is not { } eventBus || _abilityCatalog is not { } abilityCatalog)
+        if (_eventBus is not { } eventBus || _actionCatalog is not { } actionCatalog)
         {
             throw new InvalidOperationException("AchievementModule.Configure must run before RegisterSystems.");
         }
@@ -74,7 +74,7 @@ public sealed class AchievementModule : IGameModule
 
         foreach (var definition in Definitions)
         {
-            var triggerContext = new AchievementTriggerContext(eventBus, _playerQuery, componentManager, abilityCatalog, entityId => Unlock(definition, entityId, unlockedAchievements, eventBus));
+            var triggerContext = new AchievementTriggerContext(eventBus, _playerQuery, componentManager, actionCatalog, entityId => Unlock(definition, entityId, unlockedAchievements, eventBus));
             definition.RegisterTrigger(triggerContext);
         }
     }

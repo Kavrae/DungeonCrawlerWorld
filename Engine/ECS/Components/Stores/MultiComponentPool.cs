@@ -47,7 +47,7 @@ public sealed class MultiComponentPool<T> : IReadOnlyMultiComponentPool<T>, IIns
     /// instances at once here. Mirrors PackedComponentPool's own EntityAdded/EntityRemoved (same
     /// purpose: letting an EntityStripeSet maintain incremental bucket membership), scoped to
     /// "does this entity have any instance at all" rather than "an instance changed," so a
-    /// system striping over this pool (e.g. AbilityCooldownSystem) still gets exactly one bucket
+    /// system striping over this pool (e.g. ActionCooldownSystem) still gets exactly one bucket
     /// entry per entity regardless of how many instances that entity carries.
     /// </summary>
     public event Action<int>? EntityAdded;

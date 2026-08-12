@@ -2,7 +2,7 @@ using Engine.ECS.Components.Stores;
 using Engine.ECS.Systems;
 using Engine.Events;
 using Engine.Math;
-using Game.Modules.Abilities.Components;
+using Game.Modules.Actions.Components;
 using Game.Modules.Core.Components;
 using Game.Modules.Death.Components;
 using Game.Modules.Inventory.Components;
@@ -52,7 +52,7 @@ public sealed class MovementSystem : ISystem
     private readonly FrameEventBuffer<EntityMovedEvent> _movedEntities;
     private readonly IPlayerQuery? _playerQuery;
     private readonly PackedComponentPool<DeadComponent>? _deadEntities;
-    private readonly PackedComponentPool<PendingAbilityActivationComponent>? _pendingAbilityActivations;
+    private readonly PackedComponentPool<PendingActionActivationComponent>? _pendingActionActivations;
     private readonly PackedComponentPool<PendingConsumableActivationComponent>? _pendingConsumableActivations;
     private readonly TieredEntityStripeSet _tieredStripeSet;
 
@@ -68,7 +68,7 @@ public sealed class MovementSystem : ISystem
         DirectComponentPool<ProcessingTierComponent> processingTiers,
         ProcessingTierEvents processingTierEvents,
         PackedComponentPool<DeadComponent>? deadEntities = null,
-        PackedComponentPool<PendingAbilityActivationComponent>? pendingAbilityActivations = null,
+        PackedComponentPool<PendingActionActivationComponent>? pendingActionActivations = null,
         PackedComponentPool<PendingConsumableActivationComponent>? pendingConsumableActivations = null)
     {
         _transformComponents = transformComponents;
@@ -80,7 +80,7 @@ public sealed class MovementSystem : ISystem
         _movedEntities = movedEntities;
         _playerQuery = playerQuery;
         _deadEntities = deadEntities;
-        _pendingAbilityActivations = pendingAbilityActivations;
+        _pendingActionActivations = pendingActionActivations;
         _pendingConsumableActivations = pendingConsumableActivations;
 
         _tieredStripeSet = ProcessingTierWiring.CreateAndWire(StripeCount, movementComponents, processingTiers, processingTierEvents);
@@ -118,10 +118,10 @@ public sealed class MovementSystem : ISystem
             }
 
             // Something upstream (TestCombatBehaviorSystem) already decided this entity's turn
-            // this frame via a queued ability/consumable activation -- don't also try to move
+            // this frame via a queued action/consumable activation -- don't also try to move
             // it. Requires TestCombatBehaviorSystem to run earlier in the frame (see
             // GameBootstrapper's module order) so this check sees the same-frame request.
-            if (_pendingAbilityActivations?.Has(entityId) == true || _pendingConsumableActivations?.Has(entityId) == true)
+            if (_pendingActionActivations?.Has(entityId) == true || _pendingConsumableActivations?.Has(entityId) == true)
             {
                 continue;
             }

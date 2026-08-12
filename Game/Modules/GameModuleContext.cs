@@ -1,8 +1,8 @@
 ﻿using Engine.ECS.Systems;
 using Engine.Events;
 using Engine.Math;
-using Game.Modules.Abilities;
 using Game.Modules.Achievements;
+using Game.Modules.Actions;
 using Game.Modules.Inventory;
 using Game.Modules.ProcessingTier;
 using Game.Modules.StatusEffects;
@@ -33,19 +33,19 @@ public sealed record GameModuleContext(IMapQuery MapQuery, MathUtility MathUtili
     public StatusEffectAuraApplierRegistry StatusEffectAuraAppliers { get; init; } = new();
 
     /// <summary>Shared across every module's Configure call within one build -- same reasoning as StatusEffectAuraAppliers above.</summary>
-    public AbilityCatalog Abilities { get; init; } = new();
+    public ActionCatalog Actions { get; init; } = new();
 
-    /// <summary>Shared across every module's Configure call within one build -- same reasoning as Abilities above; a mod could register its own achievements the same way a mod could register its own abilities.</summary>
+    /// <summary>Shared across every module's Configure call within one build -- same reasoning as Actions above; a mod could register its own achievements the same way a mod could register its own actions.</summary>
     public AchievementCatalog Achievements { get; init; } = new();
 
-    /// <summary>Shared across every module's Configure call within one build -- same reasoning as Abilities/Achievements above; a mod could register its own items the same way.</summary>
+    /// <summary>Shared across every module's Configure call within one build -- same reasoning as Actions/Achievements above; a mod could register its own items the same way.</summary>
     public ItemCatalog Items { get; init; } = new();
 
     /// <summary>
     /// MovementSystem's confirmed moves this frame, shared with ContactDamageSystem/
     /// StatusEffectAuraSystem so they can react without a per-move EventBus dispatch -- see
     /// FrameEventBuffer's own doc comment. Always a real instance (never null), the same
-    /// always-safe-default reasoning as Abilities/StatusEffectAuraAppliers above.
+    /// always-safe-default reasoning as Actions/StatusEffectAuraAppliers above.
     /// </summary>
     public FrameEventBuffer<EntityMovedEvent> MovedEntities { get; init; } = new();
 

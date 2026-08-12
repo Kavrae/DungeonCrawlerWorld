@@ -1,11 +1,12 @@
 namespace Engine.Math;
 
 /// <summary>
-/// Resolves a TargetShape into the actual set of map tiles it hits, given where the caster
-/// stands and where the cursor currently is. Pure grid math (no IMapQuery/ComponentManager
-/// dependency), the same layering reason DistanceFalloff lives here rather than in a Game-layer
-/// namespace -- both Game (hit resolution) and Presentation (tile highlighting) call this
-/// directly rather than Presentation depending sideways on a Game-layer algorithm.
+/// Resolves a TargetShape into the actual set of map tiles it hits based on the caster and cursor positions.
+/// </summary>
+/// <remarks>
+/// Pure grid math (no IMapQuery/ComponentManager dependency)
+/// 
+/// Utilized by both Game (hit resolution) and Presentation (tile highlighting).
 ///
 /// Writes into a caller-owned results buffer rather than allocating and returning a new
 /// collection -- this is expected to run every frame per armed ability (live hover-tracking
@@ -13,7 +14,7 @@ namespace Engine.Math;
 /// so a fresh List/closure per call would be a permanent, avoidable per-frame GC cost. Callers
 /// own one List&lt;Vector3Int&gt; and reuse it call over call; Resolve clears it every call, so
 /// the list's capacity stabilizes after the first few frames instead of reallocating.
-/// </summary>
+/// </remarks>
 public static class TargetShapeResolver
 {
     /// <summary>Half-width of a Cone's angular spread, in degrees, on either side of the caster-to-cursor direction. The dot-product test in ResolveCone assumes this stays &lt;= 90 -- see that method's own note.</summary>
@@ -23,9 +24,9 @@ public static class TargetShapeResolver
     private static readonly double ConeHalfAngleCosineSquared = Square(System.Math.Cos(ConeHalfAngleDegrees * System.Math.PI / 180.0));
 
     /// <summary>
-    /// Range and areaSize are read differently per shape -- see AbilityTargeting's own doc
+    /// Range and areaSize are read differently per shape -- see TargetingSpec's own doc
     /// comment for the general split. Adjacent ignores both entirely: its footprint is always
-    /// exactly the perimeter ring around the caster's own originSize footprint, not a per-ability
+    /// exactly the perimeter ring around the caster's own originSize footprint, not a per-action
     /// tunable. originSize is otherwise only consulted by Adjacent and Line/Cone (see their own
     /// doc comments) -- Burst/SingleTarget/Self deliberately keep resolving from the single
     /// origin point regardless of the caster's footprint size ("no change for AOE abilities").

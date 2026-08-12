@@ -1,10 +1,10 @@
 using Engine.ECS.Components.Stores;
-using Game.Modules.Abilities;
+using Game.Modules.Actions;
 using Game.Modules.Inventory.Components;
 
 namespace Game.Modules.Inventory;
 
-/// <summary>Shared read helper for ItemHotkeyBindingComponent's MultiComponentPool -- mirrors Game.Modules.Abilities.ActionHotkeyBindingQueries exactly, walking the dense per-entity chain to find the binding matching a given HotkeySlot.</summary>
+/// <summary>Shared read helper for ItemHotkeyBindingComponent's MultiComponentPool -- mirrors Game.Modules.Actions.ActionHotkeyBindingQueries exactly, walking the dense per-entity chain to find the binding matching a given HotkeySlot.</summary>
 public static class ItemHotkeyBindingQueries
 {
     public static bool TryGet(MultiComponentPool<ItemHotkeyBindingComponent> bindings, int entityId, HotkeySlot slot, out Guid itemDefinitionId)

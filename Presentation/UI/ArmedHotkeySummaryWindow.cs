@@ -1,4 +1,4 @@
-using Game.Modules.Abilities;
+using Game.Modules.Actions;
 using Microsoft.Xna.Framework;
 using Presentation.Fonts;
 using Presentation.Rendering;
@@ -7,7 +7,7 @@ using Presentation.UI.Content;
 namespace Presentation.UI;
 
 /// <summary>
-/// Shows the name/summary (see AbilityDefinition/ItemDefinition's Summary vs Description doc
+/// Shows the name/summary (see ActionDefinition/ItemDefinition's Summary vs Description doc
 /// comments -- this window uses Summary, the concise one) of whichever hotbar slot is currently
 /// armed or hovered (see HotbarController, the only writer of MapViewState.ArmedSlot/HoverSlot
 /// relevant here) -- a single persistent, pooled-style TextWindow toggled via IsVisible rather

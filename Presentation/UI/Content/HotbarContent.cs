@@ -2,8 +2,9 @@ using Engine.ECS.Components;
 using Engine.ECS.Components.Stores;
 using FontStashSharp;
 using Game.Blueprints;
-using Game.Modules.Abilities;
-using Game.Modules.Abilities.Components;
+using Game.Modules.Actions;
+using Game.Modules.Actions.Activators;
+using Game.Modules.Actions.Components;
 using Game.Modules.Core.Components;
 using Game.Modules.Inventory;
 using Game.Modules.Inventory.Components;
@@ -29,7 +30,7 @@ namespace Presentation.UI.Content;
 /// slot always renders (bound, unbound, or not-yet-unlocked alike) with a permanent
 /// BorderStyle.FlatContrast border; the armed slot additionally gets GlowRenderer's outward glow
 /// (see NotificationCenter's own unread-glow for the same primitive). A slot that's disabled for
-/// any reason -- an unaffordable ability, an unusable/out-of-stock item, or a not-yet-unlocked
+/// any reason -- an unaffordable action, an unusable/out-of-stock item, or a not-yet-unlocked
 /// Expansion slot in an already-revealed row/page -- draws its border, icon, and text overlays
 /// all at DisabledSlotAlpha; the radial cooldown/lock wedge (RadialFillRenderer) stays scoped to
 /// the icon itself regardless. Implements TODO.md's "Inventory and spell hotbar" and "Player
@@ -39,7 +40,7 @@ public sealed class HotbarContent(
     World world,
     MapViewState mapViewState,
     ComponentManager componentManager,
-    AbilityCatalog abilityCatalog,
+    ActionCatalog actionCatalog,
     ItemCatalog itemCatalog,
     FontService fontService,
     SpriteSheetService spriteSheetService,
@@ -93,7 +94,7 @@ public sealed class HotbarContent(
 
     private readonly MultiComponentPool<ActionHotkeyBindingComponent> _actionHotkeyBindings = componentManager.GetMultiPool<ActionHotkeyBindingComponent>();
     private readonly MultiComponentPool<ItemHotkeyBindingComponent> _itemHotkeyBindings = componentManager.GetMultiPool<ItemHotkeyBindingComponent>();
-    private readonly MultiComponentPool<AbilityInstanceComponent> _abilityInstances = componentManager.GetMultiPool<AbilityInstanceComponent>();
+    private readonly MultiComponentPool<ActionInstanceComponent> _actionInstances = componentManager.GetMultiPool<ActionInstanceComponent>();
     private readonly MultiComponentPool<InventoryItemStackComponent> _inventoryStacks = componentManager.GetMultiPool<InventoryItemStackComponent>();
     private readonly PackedComponentPool<ActionLockComponent> _actionLocks = componentManager.GetPackedPool<ActionLockComponent>();
     private readonly PackedComponentPool<PotionCooldownComponent> _potionCooldowns = componentManager.GetPackedPool<PotionCooldownComponent>();
@@ -106,7 +107,7 @@ public sealed class HotbarContent(
     private SpriteFontBase _overlayFont = null!;
     private SpriteFontBase _countdownFont = null!;
 
-    /// <summary>Whether each slot is currently active (usable) -- refreshed once per Update (see RefreshSlotActiveStates), not recomputed during Draw. Deciding *whether* a slot is disabled (locked, unaffordable, out of stock) is state/game logic; Draw only ever asks "is this slot active" and independently decides how that reads visually (see AlphaFor) -- the two are deliberately kept separate rather than DrawAbilitySlot/DrawItemSlot each computing and returning their own alpha for the rest of DrawSlot to reuse.</summary>
+    /// <summary>Whether each slot is currently active (usable) -- refreshed once per Update (see RefreshSlotActiveStates), not recomputed during Draw. Deciding *whether* a slot is disabled (locked, unaffordable, out of stock) is state/game logic; Draw only ever asks "is this slot active" and independently decides how that reads visually (see AlphaFor) -- the two are deliberately kept separate rather than DrawActionSlot/DrawItemSlot each computing and returning their own alpha for the rest of DrawSlot to reuse.</summary>
     private readonly Dictionary<HotkeySlot, bool> _slotActiveStates = [];
 
     /// <summary>Read directly from the pool at construction (not deferred to Initialize/Update) specifically so GameShellBootstrapper can read a correct Size immediately after `new HotbarContent(...)`, before the host Window -- which needs that Size to construct itself -- exists at all. Field initializers can't reference another instance field (only the primary constructor's own parameters), hence re-resolving the pool from componentManager here rather than reusing _hotkeyExpansionUnlocks.</summary>
@@ -158,7 +159,7 @@ public sealed class HotbarContent(
     }
 
     /// <summary>
-    /// Whether each slot is disabled -- locked (see IsSlotLocked), an unaffordable ability, or an
+    /// Whether each slot is disabled -- locked (see IsSlotLocked), an unaffordable action, or an
     /// unusable/out-of-stock item -- is entirely decided here, once per frame, not inside Draw.
     /// playerEntityId can still be -1 on the very first Update (see GetUnlockedExpansionSlots'
     /// own doc comment on why) -- skip entirely rather than indexing the component pools with it;
@@ -187,9 +188,9 @@ public sealed class HotbarContent(
             return false;
         }
 
-        if (ActionHotkeyBindingQueries.TryGet(_actionHotkeyBindings, playerEntityId, slot, out var abilityId) && abilityCatalog.TryGet(abilityId, out var ability))
+        if (ActionHotkeyBindingQueries.TryGet(_actionHotkeyBindings, playerEntityId, slot, out var actionId) && actionCatalog.TryGet(actionId, out var action))
         {
-            return HasEnoughMana(playerEntityId, ability);
+            return HasEnoughMana(playerEntityId, action);
         }
 
         if (ItemHotkeyBindingQueries.TryGet(_itemHotkeyBindings, playerEntityId, slot, out var itemDefinitionId) && itemCatalog.TryGet(itemDefinitionId, out var item))
@@ -306,20 +307,20 @@ public sealed class HotbarContent(
     internal bool TryGetBoundItemId(HotkeySlot slot, out Guid itemDefinitionId) =>
         ItemHotkeyBindingQueries.TryGet(_itemHotkeyBindings, world.PlayerEntityId, slot, out itemDefinitionId);
 
-    /// <summary>slot's bound ability/item resolved to a title+summary pair, for the Armed Hotkey
+    /// <summary>slot's bound action/item resolved to a title+summary pair, for the Armed Hotkey
     /// Summary window -- false if the slot has no binding. Summary, not Description: a short,
     /// concrete statement of exact effect meant to be read at a glance in this small window (see
-    /// AbilityDefinition/ItemDefinition's own doc comments on the Summary vs Description split) --
+    /// ActionDefinition/ItemDefinition's own doc comments on the Summary vs Description split) --
     /// Description is reserved for future, larger text boxes elsewhere.</summary>
     internal bool TryGetSlotSummary(HotkeySlot slot, out string title, out string summary)
     {
         var playerEntityId = world.PlayerEntityId;
 
-        if (ActionHotkeyBindingQueries.TryGet(_actionHotkeyBindings, playerEntityId, slot, out var abilityId) &&
-            abilityCatalog.TryGet(abilityId, out var ability))
+        if (ActionHotkeyBindingQueries.TryGet(_actionHotkeyBindings, playerEntityId, slot, out var actionId) &&
+            actionCatalog.TryGet(actionId, out var action))
         {
-            title = ability.Name;
-            summary = ability.Summary;
+            title = action.Name;
+            summary = action.Summary;
             return true;
         }
 
@@ -399,12 +400,13 @@ public sealed class HotbarContent(
         string? manaCostText = null;
         string? stackText = null;
 
-        if (ActionHotkeyBindingQueries.TryGet(_actionHotkeyBindings, playerEntityId, slot, out var abilityId) && abilityCatalog.TryGet(abilityId, out var ability))
+        if (ActionHotkeyBindingQueries.TryGet(_actionHotkeyBindings, playerEntityId, slot, out var actionId) && actionCatalog.TryGet(actionId, out var action))
         {
-            DrawAbilitySlot(spriteBatch, unitRectangle, playerEntityId, ability, contentBounds, isActive);
-            if (ability.ManaCost > 0)
+            DrawActionSlot(spriteBatch, unitRectangle, playerEntityId, action, contentBounds, isActive);
+            var manaCost = SpellActivator.ManaCostOf(action.Activator);
+            if (manaCost > 0)
             {
-                manaCostText = ability.ManaCost.ToString();
+                manaCostText = manaCost.ToString();
             }
         }
         else if (ItemHotkeyBindingQueries.TryGet(_itemHotkeyBindings, playerEntityId, slot, out var itemDefinitionId) && itemCatalog.TryGet(itemDefinitionId, out var item))
@@ -446,30 +448,33 @@ public sealed class HotbarContent(
     /// <summary>The one place isActive turns into an opacity -- every draw call in DrawSlot (border, icon, every text overlay) goes through this same mapping, rather than each piece deciding its own alpha.</summary>
     private static float AlphaFor(bool isActive) => isActive ? 1f : DisabledSlotAlpha;
 
-    /// <summary>isActive (see RefreshSlotActiveStates -- an Update-time decision) drives both the icon's opacity and whether the cooldown/lock wedge shows at all: an inactive (unaffordable) ability suppresses the radial fill entirely (0f) rather than showing a mask that would read as "almost ready" when it's actually just unaffordable.</summary>
-    private void DrawAbilitySlot(SpriteBatch spriteBatch, Texture2D unitRectangle, int playerEntityId, AbilityDefinition ability, Rectangle contentBounds, bool isActive)
+    /// <summary>isActive (see RefreshSlotActiveStates -- an Update-time decision) drives both the icon's opacity and whether the cooldown/lock wedge shows at all: an inactive (unaffordable) action suppresses the radial fill entirely (0f) rather than showing a mask that would read as "almost ready" when it's actually just unaffordable.</summary>
+    private void DrawActionSlot(SpriteBatch spriteBatch, Texture2D unitRectangle, int playerEntityId, ActionDefinition action, Rectangle contentBounds, bool isActive)
     {
-        _radialFill.Sprite = ability.SpriteName is not null && SpriteManifest.TryGet(ability.SpriteName, out var sprite) ? sprite : null;
+        _radialFill.Sprite = action.SpriteName is not null && SpriteManifest.TryGet(action.SpriteName, out var sprite) ? sprite : null;
         _radialFill.SpriteTint = Color.White;
-        _radialFill.Glyph = ability.Glyph;
-        _radialFill.GlyphColor = ability.GlyphColor;
+        _radialFill.Glyph = action.Glyph;
+        _radialFill.GlyphColor = action.GlyphColor;
         _radialFill.BackgroundColor = BoundSlotBackgroundColor;
-        _radialFill.FillPercentage = isActive ? ComputeAbilityFillPercentage(playerEntityId, ability) : 0f;
+        _radialFill.FillPercentage = isActive ? ComputeActionFillPercentage(playerEntityId, action) : 0f;
         _radialFill.Draw(spriteBatch, unitRectangle, _font, contentBounds, AlphaFor(isActive));
     }
 
-    /// <summary>Mirrors AbilityActivationSystem/ActionTargetingController's own gate (see either's doc comment) -- a zero-cost ability (e.g. Punch) always passes.</summary>
-    private bool HasEnoughMana(int playerEntityId, AbilityDefinition ability) =>
-        ability.ManaCost <= 0 || (_mana.TryGetReadonly(playerEntityId, out var mana) && mana.CurrentMana >= ability.ManaCost);
+    /// <summary>Mirrors ActionActivationSystem/ActionTargetingController's own gate (see either's doc comment) -- a zero-cost action (e.g. Punch) always passes.</summary>
+    private bool HasEnoughMana(int playerEntityId, ActionDefinition action)
+    {
+        var manaCost = SpellActivator.ManaCostOf(action.Activator);
+        return manaCost <= 0 || (_mana.TryGetReadonly(playerEntityId, out var mana) && mana.CurrentMana >= manaCost);
+    }
 
-    /// <summary>Requires both a ConsumableEffect (e.g. excludes an Equipment/Tool item with no activated ability yet) and actual remaining stock -- InventoryActions.ConsumeItem removes the InventoryItemStackComponent entirely once Quantity hits 0 (see its own doc comment), so "no stack found" here means "used the last one."</summary>
+    /// <summary>Requires both an Activator (e.g. excludes an Equipment/Tool item with no activated action yet) and actual remaining stock -- InventoryActions.ConsumeItem removes the InventoryItemStackComponent entirely once Quantity hits 0 (see its own doc comment), so "no stack found" here means "used the last one."</summary>
     private bool IsItemUsable(int playerEntityId, ItemDefinition item) =>
-        item.Consumable is not null && InventoryQueries.TryGetStack(_inventoryStacks, playerEntityId, item.Id, out var stack) && stack.Quantity > 0;
+        item.Activator is not null && InventoryQueries.TryGetStack(_inventoryStacks, playerEntityId, item.Id, out var stack) && stack.Quantity > 0;
 
     /// <summary>
     /// isActive (see RefreshSlotActiveStates -- an Update-time decision, via IsItemUsable) drives
     /// both the icon's opacity and whether the cooldown/lock wedge shows at all, the same as
-    /// DrawAbilitySlot. quantity is always returned (0 if no stack at all) so the caller can
+    /// DrawActionSlot. quantity is always returned (0 if no stack at all) so the caller can
     /// decide whether to draw the "x{n}" overlay without a second inventory lookup.
     /// </summary>
     private void DrawItemSlot(SpriteBatch spriteBatch, Texture2D unitRectangle, int playerEntityId, ItemDefinition item, Rectangle bounds, Rectangle contentBounds, bool isActive, out int quantity)
@@ -491,7 +496,7 @@ public sealed class HotbarContent(
         // cooldown. Always drawn at full alpha -- informational, not gated by this slot's own
         // disabled state (see PotionCooldownEffects' own doc comment: the cooldown never blocks a
         // second potion in the first place).
-        if (item.Consumable is { Kind: ConsumableKind.Potion } &&
+        if (item.Activator is PotionActivator &&
             _potionCooldowns.TryGetReadonly(playerEntityId, out var cooldown) && cooldown.FramesRemaining > 0)
         {
             DrawCountdownAboveSlot(spriteBatch, bounds, PotionCooldownEffects.RemainingSeconds(cooldown.FramesRemaining));
@@ -516,7 +521,7 @@ public sealed class HotbarContent(
         ContrastTextRenderer.Draw(spriteBatch, _overlayFont, text, position, alpha);
     }
 
-    /// <summary>Bottom-left -- an ability's mana cost, only ever called when ManaCost > 0.</summary>
+    /// <summary>Bottom-left -- an action's mana cost, only ever called when ManaCost > 0.</summary>
     private void DrawBottomLeftText(SpriteBatch spriteBatch, Rectangle bounds, string text, float alpha)
     {
         var textSize = _overlayFont.MeasureString(text);
@@ -537,23 +542,23 @@ public sealed class HotbarContent(
     /// actually counting down; only otherwise falls back to the shared ActionLock's fraction
     /// (Immediate/Delayed only -- FreeCast bypasses the shared lock entirely).
     ///
-    /// The shared ActionLock is genuinely shared across every Immediate/Delayed ability, not
+    /// The shared ActionLock is genuinely shared across every Immediate/Delayed action, not
     /// scoped to whichever one actually set it -- so if this were always taken as
-    /// Math.Max(lockFraction, cooldownFraction), using a *different* ability (e.g. Default
+    /// Math.Max(lockFraction, cooldownFraction), using a *different* action (e.g. Default
     /// Attack's short windup) while this one's own, longer, real cooldown is ticking down would
     /// make this icon spike to whatever fraction that unrelated windup happens to be at, then
     /// visibly snap back down once the windup ends -- confusing/wrong, since nothing about this
-    /// ability's own readiness actually changed. Preferring cooldownFraction whenever it's
-    /// nonzero avoids that: this ability's own cooldown is always the more specific, more
-    /// correct signal once it exists, so the shared lock only ever matters for an ability with no
+    /// action's own readiness actually changed. Preferring cooldownFraction whenever it's
+    /// nonzero avoids that: this action's own cooldown is always the more specific, more
+    /// correct signal once it exists, so the shared lock only ever matters for an action with no
     /// cooldown of its own (e.g. Default Attack), where it's still the only fill signal available.
     /// </summary>
-    private float ComputeAbilityFillPercentage(int playerEntityId, AbilityDefinition ability)
+    private float ComputeActionFillPercentage(int playerEntityId, ActionDefinition action)
     {
         var cooldownFraction = 0f;
-        if (ability.Timing.CooldownFrames is { } cooldownFrames &&
+        if (action.Activator.Timing.CooldownFrames is { } cooldownFrames &&
             cooldownFrames > 0 &&
-            AbilityInstanceQueries.TryGet(_abilityInstances, playerEntityId, ability.Id, out var instance))
+            ActionInstanceQueries.TryGet(_actionInstances, playerEntityId, action.Id, out var instance))
         {
             cooldownFraction = (float)instance.CooldownFramesRemaining / cooldownFrames;
         }
@@ -563,7 +568,7 @@ public sealed class HotbarContent(
             return cooldownFraction;
         }
 
-        if (ability.Timing.Category != ActionTimingCategory.FreeCast &&
+        if (action.Activator.Timing.Category != ActionTimingCategory.FreeCast &&
             _actionLocks.TryGetReadonly(playerEntityId, out var actionLock) &&
             actionLock.TotalLockFrames > 0)
         {
@@ -574,8 +579,8 @@ public sealed class HotbarContent(
     }
 
     /// <summary>
-    /// Items have no per-instance cooldown the way abilities do -- ConsumableActivationSystem
-    /// only ever sets the shared ActionLock (see ConsumableEffect.ActionLockFrames' own doc
+    /// Items have no per-instance cooldown the way actions do -- ConsumableActivationSystem
+    /// only ever sets the shared ActionLock (see PotionActivator.Timing.ActionLockFrames' own doc
     /// comment), so that's the only fill signal here. Deliberately not PotionCooldownComponent:
     /// that cooldown never blocks a second potion (see PotionCooldownEffects' own doc comment),
     /// so masking the slot as if it were on cooldown would be actively misleading -- it gets its

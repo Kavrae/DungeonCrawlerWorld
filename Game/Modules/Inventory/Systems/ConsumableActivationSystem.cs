@@ -1,40 +1,43 @@
-﻿using Engine.ECS.Components;
+using Engine.ECS.Components;
 using Engine.ECS.Components.Stores;
 using Engine.ECS.Systems;
 using Engine.Events;
 using Engine.Math;
-using Game.Modules.Abilities;
-using Game.Modules.Abilities.Components;
+using Game.Modules.Actions;
+using Game.Modules.Actions.Activators;
+using Game.Modules.Actions.Components;
 using Game.Modules.AbilityScores;
 using Game.Modules.AbilityScores.Components;
 using Game.Modules.Core.Components;
 using Game.Modules.Death.Components;
-using Game.Modules.Health;
 using Game.Modules.Health.Components;
 using Game.Modules.Inventory.Components;
-using Game.Modules.Mana;
 using Game.Modules.Mana.Components;
 using Game.Modules.Poison;
-using Game.Modules.StatModifiers;
 using Game.Modules.StatModifiers.Components;
+using Game.Modules.StatusEffectAura.Components;
+using Game.Modules.StatusEffects;
 using Game.World;
 
 namespace Game.Modules.Inventory.Systems;
 
 /// <summary>
 /// Consumes a PendingConsumableActivationComponent (queued by Presentation, never applied by it
-/// -- mirrors AbilityActivationSystem/PendingAbilityActivationComponent exactly). Every
+/// -- mirrors ActionActivationSystem/PendingActionActivationComponent exactly). Every
 /// consumable activation sets the shared ActionLock on the *activating* entity, the same as an
-/// Immediate ability (see ConsumableEffect.ActionLockFrames' own doc comment) -- there's no
-/// Delayed/FreeCast equivalent for consumables today. The stack is ticked down
+/// Immediate action (see PotionActivator.Timing's own doc comment) -- there's no Delayed/
+/// FreeCast equivalent for consumables today. The stack is ticked down
 /// (InventoryActions.ConsumeItem) before the effect applies, per spec order. Only
-/// ConsumableKind.Potion exists today: PotionCooldownComponent -- and the punishment Poison
-/// stack/PotionCooldownAbusedEvent for activating it again too soon -- belongs to whoever
+/// item.Activator is PotionActivator exists today: PotionCooldownComponent -- and the punishment
+/// Poison stack/PotionCooldownAbusedEvent for activating it again too soon -- belongs to whoever
 /// actually receives the potion's effect (see ApplyPotionToTarget), not whoever drank/threw it.
 /// Drinking your own potion means those are the same entity; throwing one at a goblin means the
-/// goblin's own cooldown ticks, the thrower's does not. Shared across both potion effects
-/// (Health/Mana) rather than per-resource, since it's the target's own overdose state, not tied
-/// to which resource the potion happened to restore.
+/// goblin's own cooldown ticks, the thrower's does not. This stays this system's own kind-uniform
+/// logic rather than a composable IActionEffectEntry -- see PLAN-action-effect-activator.md's
+/// scoping decision for why: it doesn't vary per potion (Constitution, the only varying input, is
+/// caster-side), so every potion already gets it automatically, and making it an entry every
+/// item's Effects list must remember to include (including mod-defined potions) would
+/// turn a currently-impossible-to-forget mechanic into a silently-omittable one.
 /// </summary>
 public sealed class ConsumableActivationSystem : ISystem
 {
@@ -50,11 +53,15 @@ public sealed class ConsumableActivationSystem : ISystem
     private readonly ItemCatalog _itemCatalog;
     private readonly IMapQuery _mapQuery;
     private readonly EventBus _eventBus;
+    private readonly MathUtility _mathUtility;
     private readonly ComponentManager _componentManager;
     private readonly PackedComponentPool<DeadComponent>? _deadEntities;
     private readonly PackedComponentPool<ManaComponent>? _mana;
     private readonly PackedComponentPool<HotkeyExpansionUnlockComponent>? _hotkeyExpansionUnlocks;
     private readonly MultiComponentPool<AbilityScoreComponent>? _abilityScores;
+    private readonly StatusEffectAuraApplierRegistry? _statusEffectAppliers;
+    private readonly IPlayerQuery? _playerQuery;
+    private readonly PackedComponentPool<StatusEffectAuraSourceComponent>? _auraSources;
     private readonly EntityStripeSet _stripeSet;
 
     public ConsumableActivationSystem(
@@ -65,12 +72,16 @@ public sealed class ConsumableActivationSystem : ISystem
         ItemCatalog itemCatalog,
         IMapQuery mapQuery,
         EventBus eventBus,
+        MathUtility mathUtility,
         ComponentManager componentManager,
         MultiComponentPool<StatModifierComponent>? statModifiers = null,
         PackedComponentPool<DeadComponent>? deadEntities = null,
         PackedComponentPool<ManaComponent>? mana = null,
         PackedComponentPool<HotkeyExpansionUnlockComponent>? hotkeyExpansionUnlocks = null,
-        MultiComponentPool<AbilityScoreComponent>? abilityScores = null)
+        MultiComponentPool<AbilityScoreComponent>? abilityScores = null,
+        StatusEffectAuraApplierRegistry? statusEffectAppliers = null,
+        IPlayerQuery? playerQuery = null,
+        PackedComponentPool<StatusEffectAuraSourceComponent>? auraSources = null)
     {
         _pendingActivations = pendingActivations;
         _actionLocks = actionLocks;
@@ -79,12 +90,16 @@ public sealed class ConsumableActivationSystem : ISystem
         _itemCatalog = itemCatalog;
         _mapQuery = mapQuery;
         _eventBus = eventBus;
+        _mathUtility = mathUtility;
         _componentManager = componentManager;
         _statModifiers = statModifiers;
         _deadEntities = deadEntities;
         _mana = mana;
         _hotkeyExpansionUnlocks = hotkeyExpansionUnlocks;
         _abilityScores = abilityScores;
+        _statusEffectAppliers = statusEffectAppliers;
+        _playerQuery = playerQuery;
+        _auraSources = auraSources;
 
         _stripeSet = new EntityStripeSet(StripeCount, pendingActivations.EntityIds);
         pendingActivations.EntityAdded += _stripeSet.OnEntityAdded;
@@ -109,7 +124,7 @@ public sealed class ConsumableActivationSystem : ISystem
             // so there's no outcome that should leave this request standing for a future visit.
             _pendingActivations.Remove(entityId);
 
-            if (!_itemCatalog.TryGet(request.ItemDefinitionId, out var item) || item.Consumable is not { } consumable)
+            if (!_itemCatalog.TryGet(request.ItemDefinitionId, out var item) || item.Activator is not PotionActivator potionActivator)
             {
                 continue;
             }
@@ -126,62 +141,40 @@ public sealed class ConsumableActivationSystem : ISystem
 
             InventoryActions.ConsumeItem(_componentManager, entityId, request.ItemDefinitionId);
 
-            switch (consumable.Kind)
-            {
-                case ConsumableKind.Potion:
-                    ActivatePotion(consumable, request.TargetTiles);
-                    break;
-            }
+            ActivatePotion(item, potionActivator, entityId, request.TargetTiles);
 
-            ActionLockGate.Lock(_actionLocks, entityId, consumable.ActionLockFrames);
+            ActionLockGate.Lock(_actionLocks, entityId, potionActivator.Timing.ActionLockFrames);
         }
     }
 
-    private void ActivatePotion(ConsumableEffect consumable, Vector3Int[] targetTiles)
+    private void ActivatePotion(ItemDefinition item, PotionActivator potionActivator, int sourceEntityId, Vector3Int[] targetTiles)
     {
         foreach (var tile in targetTiles)
         {
-            var blockingEntityId = _mapQuery.GetEntityIdAt(tile);
-            if (blockingEntityId != -1)
+            foreach (var targetEntityId in TargetResolution.EnumerateTargets(tile, _mapQuery))
             {
-                ApplyPotionToTarget(consumable, blockingEntityId);
-            }
-
-            // Tiny/Phasing entities never occupy the Blocking slot GetEntityIdAt just checked
-            // (see World.IsBlocking) -- mirrors AbilityEffectResolver's own per-tile loop so a
-            // thrown potion's splash hits every non-Blocking occupant too, not just the one
-            // Blocking one.
-            foreach (var nonBlockingEntityId in _mapQuery.GetNonBlockingEntityIdsAt(tile))
-            {
-                ApplyPotionToTarget(consumable, nonBlockingEntityId);
+                ApplyPotionToTarget(item, sourceEntityId, targetEntityId);
             }
         }
     }
 
     /// <summary>
-    /// HealFraction/ManaFraction are each a fraction of the target's own effective Maximum*, so
-    /// they're computed per target here (unlike ability damage, which scales once from the
-    /// caster's own modifiers before the target loop) -- a splash hitting entities with different
-    /// maximums restores each by its own fraction, not the caster's. Requires a HealthComponent
-    /// to be considered a valid target at all (the same "is this a real, alive target" gate the
-    /// Health-only version of this method always used) -- a Mana Potion additionally requires the
-    /// target to actually have a ManaComponent (not every entity does, see ManaComponent's own
-    /// doc comment) to receive anything, but a target with Health and no Mana still counts as
-    /// legitimately hit for the cooldown-abuse/reset bookkeeping below. The cooldown-abuse check
-    /// and PotionCooldownComponent reset both key off targetEntityId, not the activating entity
-    /// -- see this class's own doc comment for why, and are shared across both potion kinds
-    /// rather than per-resource. Skipped entirely for a dead target -- "the target of a potion"
-    /// means it landed on them, not just that a target tile happened to contain them.
-    /// HotkeySlotGrant (the Hotkey Expansion Potion) is a third, unrelated effect applied the same
-    /// per-target way, gated on _hotkeyExpansionUnlocks being wired (it's optional, like _mana).
-    /// The cooldown's own duration is computed from the target's Constitution
+    /// Requires a HealthComponent to be considered a valid target at all (the same "is this a
+    /// real, alive target" gate this method has always used) -- a target with Health but no
+    /// pool a given entry actually needs (e.g. no ManaComponent for a Mana Potion) still counts
+    /// as legitimately hit for the cooldown-abuse/reset bookkeeping below, since each entry
+    /// no-ops gracefully on its own missing pool. Skipped entirely for a dead target -- "the
+    /// target of a potion" means it landed on them, not just that a target tile happened to
+    /// contain them. The cooldown-abuse check and PotionCooldownComponent reset both key off
+    /// targetEntityId, not sourceEntityId -- see this class's own doc comment for why. The
+    /// cooldown's own duration is computed from the target's Constitution
     /// (PotionCooldownEffects.ComputeDurationFrames), falling back to the un-scaled
     /// PotionCooldownEffects.DurationFrames when _abilityScores isn't wired or the target has no
     /// Constitution score.
     /// </summary>
-    private void ApplyPotionToTarget(ConsumableEffect consumable, int targetEntityId)
+    private void ApplyPotionToTarget(ItemDefinition item, int sourceEntityId, int targetEntityId)
     {
-        if (_deadEntities?.Has(targetEntityId) == true || !_health.TryGetReadonly(targetEntityId, out var targetHealth))
+        if (_deadEntities?.Has(targetEntityId) == true || !_health.TryGetReadonly(targetEntityId, out _))
         {
             return;
         }
@@ -196,24 +189,26 @@ public sealed class ConsumableActivationSystem : ISystem
             _eventBus.Publish(new PotionCooldownAbusedEvent(targetEntityId));
         }
 
-        if (consumable.HealFraction > 0)
-        {
-            var effectiveMaximumHealth = StatModifierMath.GetEffectiveValue(_statModifiers, targetEntityId, StatModifierTarget.MaximumHealth, targetHealth.MaximumHealth);
-            var healAmount = (short)(consumable.HealFraction * effectiveMaximumHealth);
-            HealthHeal.Apply(_health, targetEntityId, healAmount, _statModifiers);
-        }
+        var context = new ActionEffectContext(
+            SourceEntityId: sourceEntityId,
+            TargetEntityId: targetEntityId,
+            Health: _health,
+            EventBus: _eventBus,
+            MathUtility: _mathUtility,
+            ComponentManager: _componentManager,
+            ActivatorName: item.Name,
+            ActivatorTags: item.Tags,
+            StatModifiers: _statModifiers,
+            AbilityScores: _abilityScores,
+            Mana: _mana,
+            HotkeyExpansionUnlocks: _hotkeyExpansionUnlocks,
+            StatusEffectAppliers: _statusEffectAppliers,
+            DeadEntities: _deadEntities,
+            AuraSources: _auraSources,
+            PlayerQuery: _playerQuery,
+            DamageOverride: null);
 
-        if (consumable.ManaFraction > 0 && _mana is not null && _mana.TryGetReadonly(targetEntityId, out var targetMana))
-        {
-            var effectiveMaximumMana = StatModifierMath.GetEffectiveValue(_statModifiers, targetEntityId, StatModifierTarget.MaximumMana, targetMana.MaximumMana);
-            var manaAmount = (short)(consumable.ManaFraction * effectiveMaximumMana);
-            ManaRestore.Apply(_mana, targetEntityId, manaAmount, _statModifiers);
-        }
-
-        if (consumable.HotkeySlotGrant > 0 && _hotkeyExpansionUnlocks is not null)
-        {
-            HotkeyExpansionEffects.Grant(_hotkeyExpansionUnlocks, targetEntityId, consumable.HotkeySlotGrant);
-        }
+        ActionEffectSequence.Apply(item.Effects, context);
 
         PotionCooldownEffects.Reset(_componentManager, targetEntityId, durationFrames);
     }

@@ -3,7 +3,7 @@
 namespace Game.World;
 
 /// <summary>
-/// Published by AbilityEffectResolver.GrantStatusEffects each time an ability successfully
+/// Published by ActionEffectResolver.GrantStatusEffects each time an action successfully
 /// grants one status effect to one target via a registered IStatusEffectAuraApplier -- not
 /// published for aura-granted stacks (Burning/Poison via StatusEffectAuraSystem), only the
 /// ability-activation path. Exists for achievement/logging consumers (see InertGasAchievement)

@@ -1,12 +1,13 @@
 using Engine.ECS.Components;
 using Engine.Math;
 using Game.Blueprints;
-using Game.Modules.Abilities;
-using Game.Modules.Abilities.Components;
 using Game.Modules.AbilityScores;
+using Game.Modules.Actions.Components;
+using Game.Modules.Actions.Definitions.DirectActions;
 using Game.Modules.Core.Components;
 using Game.Modules.Health.Components;
 using Game.Modules.Inventory;
+using Game.Modules.Inventory.Definitions;
 using Game.Modules.Movement.Components;
 using Game.Modules.Race.Components;
 using Game.Modules.StatModifiers;
@@ -60,12 +61,12 @@ public sealed class Goblin(MathUtility mathUtility) : IBlueprint
         componentManager.Merge(entityId, new TransformComponent(
             new Vector3Int(-1, -1, (int)MapLayer.Ground), new Vector2Byte(1, 1)));
 
-        componentManager.Merge(entityId, new AbilityInstanceComponent(CoreAbilitiesModule.PunchId, damageAmount: PunchDamage, cooldownFramesRemaining: 0));
+        componentManager.Merge(entityId, new ActionInstanceComponent(PunchAction.Id, damageAmount: PunchDamage, cooldownFramesRemaining: 0));
 
         var potionCount = mathUtility.Next(0, 3); // [0, 2] inclusive.
         if (potionCount > 0)
         {
-            InventoryActions.AddItem(componentManager, entityId, CoreItemsModule.HealthPotionId, quantity: potionCount);
+            InventoryActions.AddItem(componentManager, entityId, HealthPotion.Id, quantity: potionCount);
         }
 
         AbilityScoreEffects.GrantDefaults(componentManager, entityId, DefaultAbilityScoreBaseValue);

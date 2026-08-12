@@ -2,6 +2,9 @@
 
 Guidance for Claude Code in this repo.
 
+## Git
+Do not stage, commit, push, or run any other git commands (including read-only ones like `git status`/`git diff`/`git log`) in this repo. Leave all git operations to the user.
+
 ## Commands
 ```
 dotnet build DungeonCrawlerWorld.sln

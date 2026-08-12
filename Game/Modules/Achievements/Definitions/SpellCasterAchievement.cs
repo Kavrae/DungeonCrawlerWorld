@@ -3,9 +3,9 @@
 namespace Game.Modules.Achievements.Definitions;
 
 /// <summary>
-/// Awarded the first time the player activates an ability that reads as a spell (a buff, debuff,
-/// or other magic effect) rather than a mundane physical attack -- a real AbilityDefinition.Tags
-/// check via AchievementTriggerContext.Abilities, so every Spell-tagged ability qualifies
+/// Awarded the first time the player activates an action that reads as a spell (a buff, debuff,
+/// or other magic effect) rather than a mundane physical attack -- a real ActionDefinition.Tags
+/// check via AchievementTriggerContext.Actions, so every Spell-tagged action qualifies
 /// automatically (Heal and Magic Missile today).
 /// </summary>
 public sealed class SpellCasterAchievement : IAchievementDefinition
@@ -24,8 +24,8 @@ public sealed class SpellCasterAchievement : IAchievementDefinition
     public string RewardText => "";
 
     public void RegisterTrigger(AchievementTriggerContext context) =>
-        context.SubscribeUntilUnlocked<AbilityActivatedEvent>(activated =>
+        context.SubscribeUntilUnlocked<ActionActivatedEvent>(activated =>
             activated.EntityId == context.PlayerQuery!.PlayerEntityId
-            && context.Abilities.TryGet(activated.AbilityId, out var ability)
-            && ability.Tags.Contains(Tag.Spell));
+            && context.Actions.TryGet(activated.ActionId, out var action)
+            && action.Tags.Contains(Tag.Spell));
 }

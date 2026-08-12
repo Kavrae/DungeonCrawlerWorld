@@ -11,11 +11,11 @@ namespace Game.Modules.Paralysis;
 /// <summary>
 /// Paralysis's own rules: how long it lasts and how a grant is applied. Locks the shared
 /// ActionLockComponent for DurationFrames -- the same chokepoint MovementSystem and
-/// AbilityActivationSystem's Immediate/Delayed paths already gate through (see
+/// ActionActivationSystem's Immediate/Delayed paths already gate through (see
 /// ActionLockGate.IsBlocked), so movement and Immediate/Delayed ability activation are blocked
 /// for free, with no gating code of Paralysis's own.
 ///
-/// Deliberately does NOT block FreeCast: AbilityActivationSystem.TryActivateFreeCast never
+/// Deliberately does NOT block FreeCast: ActionActivationSystem.TryActivateFreeCast never
 /// checks ActionLockGate.IsBlocked at all, so a paralyzed entity can still activate a
 /// FreeCast-category ability. This is intentional, not a gap -- it's what lets a debuff-removal
 /// spell/item (a FreeCast ability, usable during an Action Lock by design) actually be cast

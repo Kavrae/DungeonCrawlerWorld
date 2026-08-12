@@ -11,8 +11,8 @@ namespace Game.Modules.Paralysis;
 /// <summary>
 /// Paralysis-specific: its own timer component and system, depending on StatusEffectsModule
 /// (shared stack storage). Registers a TimerBasedAuraApplier&lt;ParalysisTimerComponent&gt; into
-/// the shared StatusEffectAuraApplierRegistry during Configure, so any future aura source (or
-/// AbilityEffectResolver, an ability's own AbilityEffect.StatusEffects can) can grant Paralysis
+/// the shared StatusEffectAuraApplierRegistry during Configure, so any future aura source (or a
+/// StatusEffectGrantEntry inside any IActionActivator's own ActionEffect) can grant Paralysis
 /// without depending on this module directly. Unlike BurningModule/PoisonModule,
 /// RegisterSystems does NOT gate on HealthComponent -- Paralysis has nothing to do with hit
 /// points, only ActionLockComponent -- the concrete proof that a status effect can apply to

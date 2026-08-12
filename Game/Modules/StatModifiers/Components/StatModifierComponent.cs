@@ -4,7 +4,7 @@ namespace Game.Modules.StatModifiers.Components;
 
 /// <summary>
 /// One active modifier from one source -- an entity holding N of these (MultiComponentPool,
-/// same shape as StatusEffectStack/AbilityInstanceComponent) has N modifiers, which may target
+/// same shape as StatusEffectStack/ActionInstanceComponent) has N modifiers, which may target
 /// the same or different stats and stack freely. Never mutates the stat it targets: every
 /// reader recomputes the effective value from the stat's own untouched base plus whichever
 /// modifiers are currently active (see StatModifierMath.GetEffectiveValue) -- so RemainingDurationFrames

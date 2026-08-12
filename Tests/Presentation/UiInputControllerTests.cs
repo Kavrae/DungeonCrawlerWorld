@@ -1,7 +1,8 @@
 ﻿using Engine.ECS.Components;
 using Engine.Math;
-using Game.Modules.Abilities;
-using Game.Modules.Abilities.Components;
+using Game.Modules.Actions;
+using Game.Modules.Actions.Activators;
+using Game.Modules.Actions.Components;
 using Game.Modules.Core.Components;
 using Game.Modules.Inventory;
 using Game.Modules.Inventory.Components;
@@ -1854,7 +1855,7 @@ public sealed class UiInputControllerTests
         var componentManager = new ComponentManager(initialEntityCapacity: 20, initialComponentCapacity: 10);
         componentManager.RegisterMultiPool<ActionHotkeyBindingComponent>();
         componentManager.RegisterMultiPool<ItemHotkeyBindingComponent>();
-        componentManager.RegisterMultiPool<AbilityInstanceComponent>();
+        componentManager.RegisterMultiPool<ActionInstanceComponent>();
         componentManager.RegisterMultiPool<InventoryItemStackComponent>();
         componentManager.RegisterPackedPool<InventoryComponent>(static (ref existing, incoming) => existing = incoming);
         componentManager.RegisterPackedPool<ActionLockComponent>(static (ref existing, incoming) => existing = incoming);
@@ -1865,7 +1866,7 @@ public sealed class UiInputControllerTests
         var world = new Game.World.World(new Game.World.Map(new Vector3Int(10, 10, 1))) { PlayerEntityId = playerEntityId };
         var itemId = Guid.NewGuid();
         var itemCatalog = new ItemCatalog();
-        itemCatalog.Register(new ItemDefinition(itemId, "Test Item", null, "t", Color.White, Tags: []));
+        itemCatalog.Register(new ItemDefinition(itemId, "Test Item", null, "t", Color.White, Tags: [], Effects: []));
         InventoryActions.AddItem(componentManager, playerEntityId, itemId, quantity: 1);
 
         var fontService = new FontService("Fonts");
@@ -1884,7 +1885,7 @@ public sealed class UiInputControllerTests
         cell.Initialize();
 
         var hotbar = new HotbarContent(
-            world, new MapViewState(), componentManager, new AbilityCatalog(), itemCatalog,
+            world, new MapViewState(), componentManager, new ActionCatalog(), itemCatalog,
             fontService, new SpriteSheetService(null, "Spritesheets"), new SpriteRenderer(), new Vector2(1920, 1080));
         var hotbarWindow = windowService.CreateElement<Window>(null, new ElementOptions
         {

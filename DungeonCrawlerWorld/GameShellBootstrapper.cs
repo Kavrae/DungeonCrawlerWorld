@@ -1,7 +1,7 @@
 using Engine.Diagnostics;
 using Engine.ECS.Context;
-using Game.Modules.Abilities;
-using Game.Modules.Abilities.Components;
+using Game.Modules.Actions;
+using Game.Modules.Actions.Components;
 using Game.Modules.Core.Components;
 using Game.Modules.Inventory;
 using Game.Modules.Inventory.Components;
@@ -22,16 +22,11 @@ using Presentation.UI.Notifications;
 namespace DungeonCrawlerWorld;
 
 /// <summary>
-/// Builds the app's specific screen -- the map/debug/selection windows and the notification
-/// center -- on top of the services PresentationBootstrapper already constructed, and wires up
-/// input focus for that screen (default/initial focus, and what gains focus when a notification
-/// opens or the quest composer opens). Kept separate from PresentationBootstrapper (which only
+/// Builds the app's specific screen on top of the services PresentationBootstrapper already constructed.
+/// Wires up input focus for those screens.
+/// Kept separate from PresentationBootstrapper (which only
 /// builds reusable Presentation services and knows nothing about what windows this particular
-/// game has) the same way GameBootstrapper is kept separate from Engine's Bootstrapper. Owning
-/// the input wiring here too, not just the windows, keeps GameLoop down to per-frame
-/// orchestration -- everything about this specific screen (what it contains AND how focus moves
-/// around it) is a single composition step rather than split across two files for no reason
-/// beyond construction order.
+/// game has) the same way GameBootstrapper is kept separate from Engine's Bootstrapper.
 /// </summary>
 public static class GameShellBootstrapper
 {
@@ -42,23 +37,20 @@ public static class GameShellBootstrapper
     private const float ActionLockGap = 8f;
     private const float ManaBarGap = 3f;
 
-    public static GameShellContext Build(PresentationContext presentation, World world, EcsContext ecsContext, AbilityCatalog abilityCatalog, ItemCatalog itemCatalog, Vector2 screenSize)
+    public static GameShellContext Build(PresentationContext presentation, World world, EcsContext ecsContext, ActionCatalog actionCatalog, ItemCatalog itemCatalog, Vector2 screenSize)
     {
         ArgumentNullException.ThrowIfNull(presentation);
         ArgumentNullException.ThrowIfNull(world);
         ArgumentNullException.ThrowIfNull(ecsContext);
-        ArgumentNullException.ThrowIfNull(abilityCatalog);
+        ArgumentNullException.ThrowIfNull(actionCatalog);
         ArgumentNullException.ThrowIfNull(itemCatalog);
 
-        var (baseWindows, mapWindow, mapViewState, mapSize, actionTargeting) = BuildBaseWindows(presentation, world, ecsContext, abilityCatalog, itemCatalog, screenSize);
-        var (staticHudWindows, questTriggerWindow, hotbarContent) = BuildStaticHudWindows(presentation, world, ecsContext, abilityCatalog, itemCatalog, screenSize, mapViewState, mapSize);
+        var (baseWindows, mapWindow, mapViewState, mapSize, actionTargeting) = BuildBaseWindows(presentation, world, ecsContext, actionCatalog, itemCatalog, screenSize);
+        var (staticHudWindows, questTriggerWindow, hotbarContent) = BuildStaticHudWindows(presentation, world, ecsContext, actionCatalog, itemCatalog, screenSize, mapViewState, mapSize);
         var (dynamicHudWindows, notificationCenter, inventory) = BuildDynamicHudWindows(presentation, world, ecsContext, itemCatalog, mapWindow);
         var hotbarController = BuildHotbarController(presentation, mapViewState, hotbarContent, actionTargeting, dynamicHudWindows);
 
-        // Empty for now -- UiInputController only needs the list *reference*, not its final
-        // contents, since it never replaces the reference (see UiInputController's own
-        // constructor doc comment). BuildUserWindows appends to this same list below, once
-        // inputController exists to hand to DragGhostContent.
+        // Empty list for BuildUserWindows to populate
         var userWindows = new List<Element>();
 
         // Constructed after every other tier's windows exist, but before User's own content is
@@ -88,7 +80,7 @@ public static class GameShellBootstrapper
 
     /// <summary>Base tier: the map itself plus the debug stats footer directly beneath it -- see UiInputController's own doc comment for what each of the four tiers means. mapViewState/mapSize are returned for BuildStaticHudWindows, whose selection window needs both (mapViewState to scope the inspector, mapSize to dock against the map's actual bottom edge). actionTargeting is returned too, promoted here (rather than built privately inside MapWindow's own constructor) so BuildHotbarController can share the same instance instead of forwarding through MapWindow. playerMovement isn't returned -- nothing outside MapWindow's own factory closure needs it, unlike actionTargeting.</summary>
     private static (List<Element> BaseWindows, MapWindow MapWindow, MapViewState MapViewState, Vector2 MapSize, ActionTargetingController ActionTargeting) BuildBaseWindows(
-        PresentationContext presentation, World world, EcsContext ecsContext, AbilityCatalog abilityCatalog, ItemCatalog itemCatalog, Vector2 screenSize)
+        PresentationContext presentation, World world, EcsContext ecsContext, ActionCatalog actionCatalog, ItemCatalog itemCatalog, Vector2 screenSize)
     {
         var baseWindows = new List<Element>();
 
@@ -105,13 +97,13 @@ public static class GameShellBootstrapper
             world,
             mapViewState,
             camera,
-            abilityCatalog,
+            actionCatalog,
             itemCatalog,
             componentManager.GetDirectPool<TransformComponent>(),
             componentManager.GetMultiPool<ActionHotkeyBindingComponent>(),
             componentManager.GetMultiPool<ItemHotkeyBindingComponent>(),
             componentManager.GetMultiPool<InventoryItemStackComponent>(),
-            componentManager.GetPackedPool<PendingAbilityActivationComponent>(),
+            componentManager.GetPackedPool<PendingActionActivationComponent>(),
             componentManager.GetPackedPool<PendingConsumableActivationComponent>(),
             componentManager.GetPackedPool<PendingDelayedActionComponent>(),
             componentManager.GetPackedPool<ActionLockComponent>(),
@@ -131,7 +123,7 @@ public static class GameShellBootstrapper
             world,
             mapViewState,
             componentManager,
-            abilityCatalog,
+            actionCatalog,
             itemCatalog,
             presentation.TileRenderer,
             presentation.GlyphRenderer,
@@ -180,7 +172,7 @@ public static class GameShellBootstrapper
 
     /// <summary>StaticHUD tier: the selection/inspector panel, the player health bar, action lock, status effects, the hotbar, and the quest trigger -- see UiInputController's own doc comment for what each of the four tiers means. questTriggerWindow is returned for Build, which wires its Clicked event once the DynamicHUD tier (needed by OpenQuestComposer) also exists. hotbarContent is returned too, for BuildHotbarController.</summary>
     private static (List<Element> StaticHudWindows, TextWindow QuestTriggerWindow, HotbarContent HotbarContent) BuildStaticHudWindows(
-        PresentationContext presentation, World world, EcsContext ecsContext, AbilityCatalog abilityCatalog, ItemCatalog itemCatalog, Vector2 screenSize, MapViewState mapViewState, Vector2 mapSize)
+        PresentationContext presentation, World world, EcsContext ecsContext, ActionCatalog actionCatalog, ItemCatalog itemCatalog, Vector2 screenSize, MapViewState mapViewState, Vector2 mapSize)
     {
         var staticHudWindows = new List<Element>();
 
@@ -268,7 +260,7 @@ public static class GameShellBootstrapper
         // player's currently-unlocked Expansion slot count, so it's constructed first and its own
         // Size read to size/position this window -- see HotbarContent.RefreshLayoutIfChanged for
         // how it keeps itself bottom-anchored/horizontally-centered as that Size changes later.
-        var hotbarContent = new HotbarContent(world, mapViewState, ecsContext.ComponentManager, abilityCatalog, itemCatalog, presentation.FontService, presentation.SpriteSheetService, presentation.SpriteRenderer, screenSize);
+        var hotbarContent = new HotbarContent(world, mapViewState, ecsContext.ComponentManager, actionCatalog, itemCatalog, presentation.FontService, presentation.SpriteSheetService, presentation.SpriteRenderer, screenSize);
         var hotbarSize = hotbarContent.Size;
         var hotbarWindow = presentation.ElementPoolService.CreateElement<Window>(null, new ElementOptions
         {

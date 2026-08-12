@@ -11,9 +11,12 @@ using Game.Blueprints.Objects;
 using Game.Blueprints.Races;
 using Game.Blueprints.Terrain;
 using Game.Modules;
-using Game.Modules.Abilities;
-using Game.Modules.Abilities.Components;
 using Game.Modules.AbilityScores;
+using Game.Modules.Actions;
+using Game.Modules.Actions.Components;
+using Game.Modules.Actions.Definitions;
+using Game.Modules.Actions.Definitions.DirectActions;
+using Game.Modules.Actions.Definitions.Spells;
 using Game.Modules.Class;
 using Game.Modules.Class.Components;
 using Game.Modules.Core;
@@ -24,6 +27,7 @@ using Game.Modules.Health;
 using Game.Modules.Health.Components;
 using Game.Modules.Inventory;
 using Game.Modules.Inventory.Components;
+using Game.Modules.Inventory.Definitions;
 using Game.Modules.Mana;
 using Game.Modules.Movement;
 using Game.Modules.Movement.Components;
@@ -48,11 +52,11 @@ public sealed class BlueprintTests
         var movementModule = new MovementModule();
         movementModule.Configure(context);
 
-        var abilitiesModule = new AbilitiesModule();
-        abilitiesModule.Configure(context);
+        var actionsModule = new ActionsModule();
+        actionsModule.Configure(context);
 
-        var coreAbilitiesModule = new CoreAbilitiesModule();
-        coreAbilitiesModule.Configure(context);
+        var coreActionsModule = new CoreActionsModule();
+        coreActionsModule.Configure(context);
 
         var processingTierModule = new ProcessingTierModule();
         processingTierModule.Configure(context);
@@ -85,8 +89,8 @@ public sealed class BlueprintTests
             movementModule,
             new RaceModule(),
             new ClassModule(),
-            abilitiesModule,
-            coreAbilitiesModule,
+            actionsModule,
+            coreActionsModule,
             new CrawlerModule(),
             processingTierModule,
             new InventoryModule(),
@@ -166,7 +170,7 @@ public sealed class BlueprintTests
         Assert.IsTrue(ecsContext.ComponentManager.GetPackedPool<ActionLockComponent>().Has(entityId));
         Assert.IsTrue(ecsContext.ComponentManager.GetDirectPool<TransformComponent>().Has(entityId));
 
-        Assert.IsTrue(AbilityInstanceQueries.TryGet(ecsContext.ComponentManager.GetMultiPool<AbilityInstanceComponent>(), entityId, CoreAbilitiesModule.PunchId, out var punch));
+        Assert.IsTrue(ActionInstanceQueries.TryGet(ecsContext.ComponentManager.GetMultiPool<ActionInstanceComponent>(), entityId, PunchAction.Id, out var punch));
         Assert.AreEqual((short)10, punch.DamageAmount);
     }
 
@@ -198,29 +202,43 @@ public sealed class BlueprintTests
         // The player is always a Crawler.
         Assert.IsTrue(ecsContext.ComponentManager.GetPackedPool<CrawlerComponent>().Has(entityId));
 
-        var abilityInstances = ecsContext.ComponentManager.GetMultiPool<AbilityInstanceComponent>();
-        Assert.IsTrue(AbilityInstanceQueries.TryGet(abilityInstances, entityId, CoreAbilitiesModule.PunchId, out var punch));
-        Assert.AreEqual((short)20, punch.DamageAmount);
-        Assert.IsTrue(AbilityInstanceQueries.TryGet(abilityInstances, entityId, CoreAbilitiesModule.MagicMissileId, out var magicMissile));
+        var abilityInstances = ecsContext.ComponentManager.GetMultiPool<ActionInstanceComponent>();
+        // DamageAmount 0 -- no per-instance override, unlike every other race's Punch grant -- so the
+        // player's Punch rolls its catalog DamageEffectEntry's own MinAmount..MaxAmount range instead
+        // of a fixed number (see ActionEffectContext.DamageOverride's own doc comment).
+        Assert.IsTrue(ActionInstanceQueries.TryGet(abilityInstances, entityId, PunchAction.Id, out var punch));
+        Assert.AreEqual((short)0, punch.DamageAmount);
+        Assert.IsTrue(ActionInstanceQueries.TryGet(abilityInstances, entityId, MagicMissileAction.Id, out var magicMissile));
         Assert.AreEqual((short)5, magicMissile.DamageAmount);
-        Assert.IsTrue(AbilityInstanceQueries.TryGet(abilityInstances, entityId, CoreAbilitiesModule.HealId, out _));
+        Assert.IsTrue(ActionInstanceQueries.TryGet(abilityInstances, entityId, HealAction.Id, out _));
+        Assert.IsTrue(ActionInstanceQueries.TryGet(abilityInstances, entityId, ToxicStrikeAction.Id, out _));
 
-        // Starting items: 5 Health Potions, 5 Mana Potions, 3 Hotkey Expansion Potions.
+        // Starting items: 5 Health Potions, 5 Mana Potions, 3 Hotkey Expansion Potions, 5 Volatile
+        // Concoctions (damage), 5 Toxic Flasks (Poison+Burning) -- see the ActionEffect/
+        // ActionActivator plan's concrete test content.
         var stacks = new List<InventoryItemStackComponent>();
         InventoryQueries.CopyStacksForEntity(ecsContext.ComponentManager.GetMultiPool<InventoryItemStackComponent>(), entityId, stacks);
-        Assert.HasCount(3, stacks);
+        Assert.HasCount(5, stacks);
 
-        var healthPotionStack = stacks.Single(stack => stack.ItemDefinitionId == CoreItemsModule.HealthPotionId);
+        var healthPotionStack = stacks.Single(stack => stack.ItemDefinitionId == HealthPotion.Id);
         Assert.AreEqual(5, healthPotionStack.Quantity);
         Assert.IsFalse(healthPotionStack.IsDisabled);
 
-        var manaPotionStack = stacks.Single(stack => stack.ItemDefinitionId == CoreItemsModule.ManaPotionId);
+        var manaPotionStack = stacks.Single(stack => stack.ItemDefinitionId == ManaPotion.Id);
         Assert.AreEqual(5, manaPotionStack.Quantity);
         Assert.IsFalse(manaPotionStack.IsDisabled);
 
-        var hotkeyExpansionPotionStack = stacks.Single(stack => stack.ItemDefinitionId == CoreItemsModule.HotkeyExpansionPotionId);
+        var hotkeyExpansionPotionStack = stacks.Single(stack => stack.ItemDefinitionId == HotkeyExpansionPotion.Id);
         Assert.AreEqual(3, hotkeyExpansionPotionStack.Quantity);
         Assert.IsFalse(hotkeyExpansionPotionStack.IsDisabled);
+
+        var damagePotionStack = stacks.Single(stack => stack.ItemDefinitionId == DamagePotion.Id);
+        Assert.AreEqual(5, damagePotionStack.Quantity);
+        Assert.IsFalse(damagePotionStack.IsDisabled);
+
+        var toxicPotionStack = stacks.Single(stack => stack.ItemDefinitionId == ToxicPotion.Id);
+        Assert.AreEqual(5, toxicPotionStack.Quantity);
+        Assert.IsFalse(toxicPotionStack.IsDisabled);
 
         var hotkeyExpansionUnlock = ecsContext.ComponentManager.GetPackedPool<HotkeyExpansionUnlockComponent>().GetReadonly(entityId);
         Assert.AreEqual((short)5, hotkeyExpansionUnlock.UnlockedSlotCount);
@@ -241,7 +259,7 @@ public sealed class BlueprintTests
         Assert.IsTrue(ecsContext.ComponentManager.GetPackedPool<ActionLockComponent>().Has(entityId));
         Assert.IsTrue(ecsContext.ComponentManager.GetDirectPool<TransformComponent>().Has(entityId));
 
-        Assert.IsTrue(AbilityInstanceQueries.TryGet(ecsContext.ComponentManager.GetMultiPool<AbilityInstanceComponent>(), entityId, CoreAbilitiesModule.PunchId, out var punch));
+        Assert.IsTrue(ActionInstanceQueries.TryGet(ecsContext.ComponentManager.GetMultiPool<ActionInstanceComponent>(), entityId, PunchAction.Id, out var punch));
         Assert.AreEqual((short)5, punch.DamageAmount);
     }
 

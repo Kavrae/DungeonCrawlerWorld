@@ -1,4 +1,4 @@
-using Game.Modules.Abilities;
+using Game.Modules.Actions;
 using Microsoft.Xna.Framework;
 using Presentation.Fonts;
 using Presentation.Rendering;

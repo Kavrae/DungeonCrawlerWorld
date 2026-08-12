@@ -1,7 +1,8 @@
 using Engine.ECS.Components;
 using Engine.Math;
-using Game.Modules.Abilities;
-using Game.Modules.Abilities.Components;
+using Game.Modules.Actions;
+using Game.Modules.Actions.Activators;
+using Game.Modules.Actions.Components;
 using Game.Modules.Core.Components;
 using Game.Modules.Inventory;
 using Game.Modules.Inventory.Components;
@@ -28,7 +29,7 @@ public sealed class HotbarControllerTests
 {
     private const int PlayerEntityId = 1;
     private static readonly Vector3Int PlayerPosition = new(5, 5, 0);
-    private static readonly Guid TestAbilityId = new("55555555-6666-7777-8888-999999999999");
+    private static readonly Guid TestActionId = new("55555555-6666-7777-8888-999999999999");
 
     private static (HotbarController Controller, MapViewState MapViewState, ComponentManager ComponentManager) Build()
     {
@@ -38,12 +39,12 @@ public sealed class HotbarControllerTests
         var componentManager = new ComponentManager(20, 10);
         componentManager.RegisterDirectPool<TransformComponent>(static (ref existing, incoming) => existing = incoming);
         componentManager.RegisterPackedPool<MovementComponent>(static (ref existing, incoming) => existing = incoming);
-        componentManager.RegisterMultiPool<AbilityInstanceComponent>();
+        componentManager.RegisterMultiPool<ActionInstanceComponent>();
         componentManager.RegisterMultiPool<ActionHotkeyBindingComponent>();
         componentManager.RegisterMultiPool<ItemHotkeyBindingComponent>();
         componentManager.RegisterMultiPool<InventoryItemStackComponent>();
         componentManager.RegisterPackedPool<InventoryComponent>(static (ref existing, incoming) => existing = incoming);
-        componentManager.RegisterPackedPool<PendingAbilityActivationComponent>(static (ref existing, incoming) => existing = incoming);
+        componentManager.RegisterPackedPool<PendingActionActivationComponent>(static (ref existing, incoming) => existing = incoming);
         componentManager.RegisterPackedPool<PendingConsumableActivationComponent>(static (ref existing, incoming) => existing = incoming);
         componentManager.RegisterPackedPool<PendingDelayedActionComponent>(static (ref existing, incoming) => existing = incoming);
         componentManager.RegisterPackedPool<ActionLockComponent>(static (ref existing, incoming) => existing = incoming);
@@ -54,15 +55,16 @@ public sealed class HotbarControllerTests
         componentManager.Merge(PlayerEntityId, new TransformComponent(PlayerPosition, new Vector2Byte(1, 1)));
         componentManager.Merge(PlayerEntityId, new MovementComponent(MovementMode.PlayerControlled, 0, null, null));
         componentManager.Merge(PlayerEntityId, new ActionLockComponent(totalLockFrames: 0, lockFramesRemaining: 0));
-        componentManager.Merge(PlayerEntityId, new AbilityInstanceComponent(TestAbilityId, damageAmount: 0, cooldownFramesRemaining: 0));
-        componentManager.GetMultiPool<ActionHotkeyBindingComponent>().Add(PlayerEntityId, new ActionHotkeyBindingComponent(HotkeySlot.Slot1, TestAbilityId));
+        componentManager.Merge(PlayerEntityId, new ActionInstanceComponent(TestActionId, damageAmount: 0, cooldownFramesRemaining: 0));
+        componentManager.GetMultiPool<ActionHotkeyBindingComponent>().Add(PlayerEntityId, new ActionHotkeyBindingComponent(HotkeySlot.Slot1, TestActionId));
 
-        var abilityCatalog = new AbilityCatalog();
-        abilityCatalog.Register(new AbilityDefinition(
-            TestAbilityId, "Test Self Spell", "*",
-            new TargetingSpec(TargetShape.Self, Range: 0),
-            new AbilityTiming(ActionTimingCategory.Immediate, ActionLockFrames: 30, CooldownFrames: null),
-            new AbilityEffect(DamageAmount: 0, StatusEffects: [])));
+        var actionCatalog = new ActionCatalog();
+        actionCatalog.Register(new ActionDefinition(
+            TestActionId, "Test Self Spell", null, "*", default, [],
+            Effects: [ActionEffect.None],
+            Activator: new SpellActivator(
+                new TargetingSpec(TargetShape.Self, Range: 0),
+                new ActionTiming(ActionTimingCategory.Immediate, ActionLockFrames: 30, CooldownFrames: null))));
         var itemCatalog = new ItemCatalog();
 
         var camera = new MapCamera(world);
@@ -70,20 +72,20 @@ public sealed class HotbarControllerTests
             world,
             mapViewState,
             camera,
-            abilityCatalog,
+            actionCatalog,
             itemCatalog,
             componentManager.GetDirectPool<TransformComponent>(),
             componentManager.GetMultiPool<ActionHotkeyBindingComponent>(),
             componentManager.GetMultiPool<ItemHotkeyBindingComponent>(),
             componentManager.GetMultiPool<InventoryItemStackComponent>(),
-            componentManager.GetPackedPool<PendingAbilityActivationComponent>(),
+            componentManager.GetPackedPool<PendingActionActivationComponent>(),
             componentManager.GetPackedPool<PendingConsumableActivationComponent>(),
             componentManager.GetPackedPool<PendingDelayedActionComponent>(),
             componentManager.GetPackedPool<ActionLockComponent>(),
             componentManager.GetPackedPool<ManaComponent>());
 
         var fontService = new FontService("Fonts");
-        var hotbarContent = new HotbarContent(world, mapViewState, componentManager, abilityCatalog, itemCatalog, fontService, new SpriteSheetService(null, "Spritesheets"), new SpriteRenderer(), new Vector2(1920, 1080));
+        var hotbarContent = new HotbarContent(world, mapViewState, componentManager, actionCatalog, itemCatalog, fontService, new SpriteSheetService(null, "Spritesheets"), new SpriteRenderer(), new Vector2(1920, 1080));
         var hotbarController = new HotbarController(mapViewState, hotbarContent, actionTargeting);
 
         return (hotbarController, mapViewState, componentManager);
@@ -97,7 +99,7 @@ public sealed class HotbarControllerTests
         controller.OnSlotPressed(HotkeySlot.Slot1);
         controller.OnSlotTapped(HotkeySlot.Slot1);
 
-        Assert.AreEqual(TestAbilityId, mapViewState.ArmedAbilityId);
+        Assert.AreEqual(TestActionId, mapViewState.ArmedActionId);
         Assert.AreEqual(HotkeySlot.Slot1, mapViewState.ArmedSlot);
     }
 
@@ -108,15 +110,15 @@ public sealed class HotbarControllerTests
         var (controller, mapViewState, componentManager) = Build();
         controller.OnSlotPressed(HotkeySlot.Slot1);
         controller.OnSlotTapped(HotkeySlot.Slot1);
-        Assert.IsNotNull(mapViewState.ArmedAbilityId, "Sanity check: the first tap must have armed it.");
+        Assert.IsNotNull(mapViewState.ArmedActionId, "Sanity check: the first tap must have armed it.");
 
         mapViewState.HoveredTile = PlayerPosition; // Self-targeted -- always resolves to the caster's own tile regardless of where the cursor actually is.
 
         controller.OnSlotPressed(HotkeySlot.Slot1);
         controller.OnSlotTapped(HotkeySlot.Slot1);
 
-        Assert.IsNull(mapViewState.ArmedAbilityId, "A confirmed activation disarms.");
-        Assert.IsTrue(componentManager.GetPackedPool<PendingAbilityActivationComponent>().Has(PlayerEntityId), "The second tap must have queued a real activation, not just cancelled the arm.");
+        Assert.IsNull(mapViewState.ArmedActionId, "A confirmed activation disarms.");
+        Assert.IsTrue(componentManager.GetPackedPool<PendingActionActivationComponent>().Has(PlayerEntityId), "The second tap must have queued a real activation, not just cancelled the arm.");
     }
 
     [TestMethod]
@@ -127,7 +129,7 @@ public sealed class HotbarControllerTests
         controller.OnSlotPressed(HotkeySlot.Slot2); // Pressed a different, unbound slot...
         controller.OnSlotTapped(HotkeySlot.Slot1); // ...but the release is reported against this one.
 
-        Assert.IsNull(mapViewState.ArmedAbilityId);
+        Assert.IsNull(mapViewState.ArmedActionId);
     }
 
     [TestMethod]
@@ -138,7 +140,7 @@ public sealed class HotbarControllerTests
         controller.OnSlotPressed(HotkeySlot.Slot2);
         controller.OnSlotTapped(HotkeySlot.Slot2);
 
-        Assert.IsNull(mapViewState.ArmedAbilityId);
+        Assert.IsNull(mapViewState.ArmedActionId);
         Assert.IsNull(mapViewState.ArmedItemDefinitionId);
     }
 }

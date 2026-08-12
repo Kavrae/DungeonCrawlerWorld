@@ -2,7 +2,7 @@ namespace Game.Modules.Achievements;
 
 /// <summary>
 /// Collects every IAchievementDefinition registered during IGameModule.Configure, keyed by Id
-/// -- mirrors AbilityCatalog. A fresh instance per GameModuleContext, so a dry-run
+/// -- mirrors ActionCatalog. A fresh instance per GameModuleContext, so a dry-run
 /// mod-validation trial's registrations never leak into the real build's.
 /// </summary>
 public sealed class AchievementCatalog

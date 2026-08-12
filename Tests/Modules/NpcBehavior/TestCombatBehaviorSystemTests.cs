@@ -2,13 +2,14 @@ using Engine.ECS.Components;
 using Engine.ECS.Components.Stores;
 using Engine.Math;
 using Game.Blueprints.Races;
-using Game.Modules.Abilities;
-using Game.Modules.Abilities.Components;
+using Game.Modules.Actions.Components;
+using Game.Modules.Actions.Definitions.DirectActions;
 using Game.Modules.Core.Components;
 using Game.Modules.Death.Components;
 using Game.Modules.Health.Components;
 using Game.Modules.Inventory;
 using Game.Modules.Inventory.Components;
+using Game.Modules.Inventory.Definitions;
 using Game.Modules.Movement;
 using Game.Modules.Movement.Components;
 using Game.Modules.Movement.Systems;
@@ -30,7 +31,7 @@ public sealed class TestCombatBehaviorSystemTests
     private static readonly Vector3Int AdjacentTile = new(6, 5, 0); // due east of the goblin -- part of Adjacent's 8-neighbor footprint.
     private static readonly Vector2Byte SingleTile = new(1, 1);
 
-    /// <summary>Minimal IMapQuery test double with a configurable Blocking/non-Blocking occupant index -- same shape as AbilityEffectResolverTests' own fake.</summary>
+    /// <summary>Minimal IMapQuery test double with a configurable Blocking/non-Blocking occupant index -- same shape as ActionEffectResolverTests' own fake.</summary>
     private sealed class FakeMapQuery : IMapQuery
     {
         private readonly Dictionary<Vector3Int, int> _blockingByPosition = [];
@@ -75,9 +76,9 @@ public sealed class TestCombatBehaviorSystemTests
         PackedComponentPool<ActionLockComponent> ActionLockPool,
         PackedComponentPool<HealthComponent> HealthPool,
         MultiComponentPool<InventoryItemStackComponent> InventoryStacks,
-        MultiComponentPool<AbilityInstanceComponent> AbilityInstances,
+        MultiComponentPool<ActionInstanceComponent> ActionInstances,
         MultiComponentPool<RaceComponent> RaceComponents,
-        PackedComponentPool<PendingAbilityActivationComponent> PendingActivations,
+        PackedComponentPool<PendingActionActivationComponent> PendingActivations,
         PackedComponentPool<PendingConsumableActivationComponent> PendingConsumableActivations,
         MathUtility MathUtility);
 
@@ -88,18 +89,18 @@ public sealed class TestCombatBehaviorSystemTests
         var actionLockPool = new PackedComponentPool<ActionLockComponent>(10, 10, static (ref existing, incoming) => existing = incoming);
         var healthPool = new PackedComponentPool<HealthComponent>(10, 10, static (ref existing, incoming) => existing = incoming);
         var inventoryStacks = new MultiComponentPool<InventoryItemStackComponent>(10, 10);
-        var abilityInstances = new MultiComponentPool<AbilityInstanceComponent>(10, 10);
+        var actionInstances = new MultiComponentPool<ActionInstanceComponent>(10, 10);
         var raceComponents = new MultiComponentPool<RaceComponent>(10, 10);
-        var pendingActivations = new PackedComponentPool<PendingAbilityActivationComponent>(10, 10, static (ref existing, incoming) => existing = incoming);
+        var pendingActivations = new PackedComponentPool<PendingActionActivationComponent>(10, 10, static (ref existing, incoming) => existing = incoming);
         var pendingConsumableActivations = new PackedComponentPool<PendingConsumableActivationComponent>(10, 10, static (ref existing, incoming) => existing = incoming);
         var mapQuery = new FakeMapQuery();
         var math = mathUtility ?? new MathUtility();
 
         var system = new TestCombatBehaviorSystem(
-            movementPool, transformPool, actionLockPool, healthPool, inventoryStacks, abilityInstances, raceComponents,
+            movementPool, transformPool, actionLockPool, healthPool, inventoryStacks, actionInstances, raceComponents,
             pendingActivations, pendingConsumableActivations, mapQuery, math, new FakePlayerQuery(playerEntityId));
 
-        return new Fixture(system, mapQuery, movementPool, transformPool, actionLockPool, healthPool, inventoryStacks, abilityInstances, raceComponents, pendingActivations, pendingConsumableActivations, math);
+        return new Fixture(system, mapQuery, movementPool, transformPool, actionLockPool, healthPool, inventoryStacks, actionInstances, raceComponents, pendingActivations, pendingConsumableActivations, math);
     }
 
     private static void PlaceGoblin(Fixture fixture, int entityId, short currentHealth = 200, short maximumHealth = 200, bool grantPunch = true)
@@ -110,7 +111,7 @@ public sealed class TestCombatBehaviorSystemTests
         fixture.HealthPool.Add(entityId, new HealthComponent(currentHealth, maximumHealth));
         if (grantPunch)
         {
-            fixture.AbilityInstances.Add(entityId, new AbilityInstanceComponent(CoreAbilitiesModule.PunchId, damageAmount: 10, cooldownFramesRemaining: 0));
+            fixture.ActionInstances.Add(entityId, new ActionInstanceComponent(PunchAction.Id, damageAmount: 10, cooldownFramesRemaining: 0));
         }
     }
 
@@ -119,14 +120,14 @@ public sealed class TestCombatBehaviorSystemTests
     {
         var fixture = Build();
         PlaceGoblin(fixture, GoblinEntityId, currentHealth: 50, maximumHealth: 200);
-        fixture.InventoryStacks.Add(GoblinEntityId, new InventoryItemStackComponent(CoreItemsModule.HealthPotionId, quantity: 1));
+        fixture.InventoryStacks.Add(GoblinEntityId, new InventoryItemStackComponent(HealthPotion.Id, quantity: 1));
         fixture.MapQuery.SetBlockingOccupant(AdjacentTile, PlayerEntityId);
 
         fixture.System.Update(default, 0);
 
         Assert.IsTrue(fixture.PendingConsumableActivations.Has(GoblinEntityId));
         var pending = fixture.PendingConsumableActivations.GetReadonly(GoblinEntityId);
-        Assert.AreEqual(CoreItemsModule.HealthPotionId, pending.ItemDefinitionId);
+        Assert.AreEqual(HealthPotion.Id, pending.ItemDefinitionId);
         Assert.HasCount(1, pending.TargetTiles);
         Assert.AreEqual(GoblinPosition, pending.TargetTiles[0]);
         Assert.IsFalse(fixture.PendingActivations.Has(GoblinEntityId), "Healing takes priority over attacking -- both should never fire the same tick.");
@@ -156,8 +157,8 @@ public sealed class TestCombatBehaviorSystemTests
 
         Assert.IsTrue(fixture.PendingActivations.Has(GoblinEntityId));
         var pending = fixture.PendingActivations.GetReadonly(GoblinEntityId);
-        Assert.AreEqual(CoreAbilitiesModule.PunchId, pending.AbilityId);
-        Assert.HasCount(8, pending.TargetTiles, "The whole resolved Adjacent footprint is queued, not just the occupied tile -- AbilityEffectResolver sorts out who's actually there.");
+        Assert.AreEqual(PunchAction.Id, pending.ActionId);
+        Assert.HasCount(8, pending.TargetTiles, "The whole resolved Adjacent footprint is queued, not just the occupied tile -- ActionEffectResolver sorts out who's actually there.");
         CollectionAssert.Contains(pending.TargetTiles, AdjacentTile);
         CollectionAssert.DoesNotContain(pending.TargetTiles, GoblinPosition);
     }
@@ -197,7 +198,7 @@ public sealed class TestCombatBehaviorSystemTests
         fixture.TransformPool.Add(GoblinEntityId, new TransformComponent(GoblinPosition, SingleTile));
         fixture.MovementPool.Add(GoblinEntityId, new MovementComponent(MovementMode.Random, 10, null, null));
         fixture.ActionLockPool.Add(GoblinEntityId, new ActionLockComponent(totalLockFrames: 30, lockFramesRemaining: 30));
-        // Deliberately no HealthComponent/InventoryItemStackComponent/AbilityInstanceComponent
+        // Deliberately no HealthComponent/InventoryItemStackComponent/ActionInstanceComponent
         // registered for this entity -- if the system tried to read any of them before checking
         // the action lock, this would throw or behave unexpectedly instead of just skipping.
 
@@ -222,7 +223,7 @@ public sealed class TestCombatBehaviorSystemTests
             fixture.TransformPool, fixture.ActionLockPool, fixture.MovementPool, fixture.MapQuery, eventBus,
             new RecordingEntityMoveSync(), new Engine.ECS.Systems.FrameEventBuffer<EntityMovedEvent>(), null,
             new DirectComponentPool<ProcessingTierComponent>(10, static (ref existing, incoming) => existing = incoming),
-            new ProcessingTierEvents(), pendingAbilityActivations: fixture.PendingActivations, pendingConsumableActivations: fixture.PendingConsumableActivations);
+            new ProcessingTierEvents(), pendingActionActivations: fixture.PendingActivations, pendingConsumableActivations: fixture.PendingConsumableActivations);
 
         movementSystem.Update(default, 0);
 

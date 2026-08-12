@@ -75,7 +75,7 @@ public sealed class Map
         return true;
     }
 
-    /// <summary>Every non-Blocking entity occupying position -- empty if none. Does NOT include the (at most one) Blocking entity GetEntityId already answers for the same position; callers that need everyone at a tile combine both (see AbilityEffectResolver.Apply).</summary>
+    /// <summary>Every non-Blocking entity occupying position -- empty if none. Does NOT include the (at most one) Blocking entity GetEntityId already answers for the same position; callers that need everyone at a tile combine both (see ActionEffectResolver.Apply).</summary>
     public IReadOnlyList<int> GetNonBlockingEntityIdsAt(Vector3Int position) =>
         _nonBlockingEntityIdsByPosition.TryGetValue(position.FlatIndex(Size), out var entityIds) ? entityIds : EmptyEntityIds;
 

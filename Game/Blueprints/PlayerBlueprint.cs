@@ -1,12 +1,16 @@
 using Engine.ECS.Components;
 using Engine.Math;
-using Game.Modules.Abilities;
-using Game.Modules.Abilities.Components;
 using Game.Modules.AbilityScores;
+using Game.Modules.Actions;
+using Game.Modules.Actions.Components;
+using Game.Modules.Actions.Definitions.DirectActions;
+using Game.Modules.Actions.Definitions.Spells;
 using Game.Modules.Core.Components;
 using Game.Modules.Crawler.Components;
 using Game.Modules.Health.Components;
 using Game.Modules.Inventory;
+using Game.Modules.Inventory.Components;
+using Game.Modules.Inventory.Definitions;
 using Game.Modules.Movement.Components;
 using Game.Modules.StatModifiers;
 using Game.Modules.StatModifiers.Components;
@@ -24,15 +28,12 @@ public sealed class PlayerBlueprint(MathUtility mathUtility, UniqueNumberAllocat
 {
     private const short MaximumHealth = 100;
 
-    /// <summary>Hardcoded stopgap until the Additive/Multiplicative bonuses system exists -- see TODO.md.</summary>
-    private const short PunchDamage = 20;
-
     private const short MagicMissileDamage = 5;
 
     /// <summary>Matches the Expansion group's old fixed slot count -- nobody loses hotkey access just because Expansion now grows past 10. See HotkeyExpansionUnlockComponent's own doc comment.</summary>
     private const short DefaultUnlockedExpansionSlots = 5;
 
-    /// <summary>PermanentHybridBuffTest -- exercises a permanent modifier granting both a flat and a percentage bonus at once. See StatModifierComponent's own doc comment for why this never mutates HealthComponent/AbilityInstanceComponent directly.</summary>
+    /// <summary>PermanentHybridBuffTest -- exercises a permanent modifier granting both a flat and a percentage bonus at once. See StatModifierComponent's own doc comment for why this never mutates HealthComponent/ActionInstanceComponent directly.</summary>
     private const float PermanentOutgoingDamageBonus = 2f;
     private const float PermanentMaximumHealthMultiplierBonus = 0.5f;
 
@@ -53,22 +54,34 @@ public sealed class PlayerBlueprint(MathUtility mathUtility, UniqueNumberAllocat
             AbilityScoreEffects.Grant(componentManager, entityId, abilityScoreType, RollAbilityScoreBaseValue());
         }
 
-        AbilityGrantEffects.Grant(componentManager, entityId, CoreAbilitiesModule.HealId, CoreAbilitiesModule.HealManaCost, damageAmount: 0, cooldownFramesRemaining: 0);
-        AbilityGrantEffects.Grant(componentManager, entityId, CoreAbilitiesModule.PunchId, manaCost: 0, damageAmount: PunchDamage, cooldownFramesRemaining: 0);
-        AbilityGrantEffects.Grant(componentManager, entityId, CoreAbilitiesModule.MagicMissileId, CoreAbilitiesModule.MagicMissileManaCost, damageAmount: MagicMissileDamage, cooldownFramesRemaining: 0);
+        ActionGrantEffects.Grant(componentManager, entityId, HealAction.Id, HealAction.ManaCost, damageAmount: 0, cooldownFramesRemaining: 0);
+        // damageAmount: 0 -- no per-instance override, so Punch rolls its catalog DamageEffectEntry's own
+        // MinAmount..MaxAmount range (18-22, roughly +-10% of the old flat 20) instead of a fixed number.
+        ActionGrantEffects.Grant(componentManager, entityId, PunchAction.Id, manaCost: 0, damageAmount: 0, cooldownFramesRemaining: 0);
+        ActionGrantEffects.Grant(componentManager, entityId, MagicMissileAction.Id, MagicMissileAction.ManaCost, damageAmount: MagicMissileDamage, cooldownFramesRemaining: 0);
+        ActionGrantEffects.Grant(componentManager, entityId, ToxicStrikeAction.Id, manaCost: 0, damageAmount: 0, cooldownFramesRemaining: 0);
 
-        componentManager.Merge(entityId, new ActionHotkeyBindingComponent(HotkeySlot.DefaultAttack, CoreAbilitiesModule.PunchId));
-        componentManager.Merge(entityId, new ActionHotkeyBindingComponent(HotkeySlot.Base1, CoreAbilitiesModule.HealId));
-        componentManager.Merge(entityId, new ActionHotkeyBindingComponent(HotkeySlot.Base2, CoreAbilitiesModule.MagicMissileId));
+        componentManager.Merge(entityId, new ActionHotkeyBindingComponent(HotkeySlot.DefaultAttack, PunchAction.Id));
+        componentManager.Merge(entityId, new ActionHotkeyBindingComponent(HotkeySlot.Base1, HealAction.Id));
+        componentManager.Merge(entityId, new ActionHotkeyBindingComponent(HotkeySlot.Base2, MagicMissileAction.Id));
+        componentManager.Merge(entityId, new ActionHotkeyBindingComponent(HotkeySlot.Base3, ToxicStrikeAction.Id));
         componentManager.Merge(entityId, new HotkeyExpansionUnlockComponent(unlockedSlotCount: DefaultUnlockedExpansionSlots));
 
         componentManager.Merge(entityId, new CrawlerComponent(crawlerNumberAllocator.Allocate()));
 
         componentManager.Merge(entityId, new DisplayTextComponent("Player1", "This is you. What else did you expect?"));
 
-        InventoryActions.AddItem(componentManager, entityId, CoreItemsModule.HealthPotionId, quantity: 5);
-        InventoryActions.AddItem(componentManager, entityId, CoreItemsModule.ManaPotionId, quantity: 5);
-        InventoryActions.AddItem(componentManager, entityId, CoreItemsModule.HotkeyExpansionPotionId, quantity: 3);
+        InventoryActions.AddItem(componentManager, entityId, HealthPotion.Id, quantity: 5);
+        InventoryActions.AddItem(componentManager, entityId, ManaPotion.Id, quantity: 5);
+        InventoryActions.AddItem(componentManager, entityId, HotkeyExpansionPotion.Id, quantity: 3);
+        InventoryActions.AddItem(componentManager, entityId, DamagePotion.Id, quantity: 5);
+        InventoryActions.AddItem(componentManager, entityId, ToxicPotion.Id, quantity: 5);
+
+        componentManager.Merge(entityId, new ItemHotkeyBindingComponent(HotkeySlot.Slot1, HealthPotion.Id));
+        componentManager.Merge(entityId, new ItemHotkeyBindingComponent(HotkeySlot.Slot2, ManaPotion.Id));
+        componentManager.Merge(entityId, new ItemHotkeyBindingComponent(HotkeySlot.Slot3, HotkeyExpansionPotion.Id));
+        componentManager.Merge(entityId, new ItemHotkeyBindingComponent(HotkeySlot.Slot4, DamagePotion.Id));
+        componentManager.Merge(entityId, new ItemHotkeyBindingComponent(HotkeySlot.Slot5, ToxicPotion.Id));
 
         StatModifierEffects.Apply(componentManager, entityId, StatModifierTarget.OutgoingDamage, StatModifierOperation.Additive, StatModifierPolarity.Buff,
             canModify: true, magnitude: PermanentOutgoingDamageBonus, durationFrames: StatModifierComponent.Permanent, StatusEffectSource.Admin);

@@ -1,9 +1,10 @@
 using Engine.ECS.Components;
 using Engine.ECS.Components.Stores;
 using FontStashSharp;
+using Game.Modules.Actions.Activators;
 using Game.Modules.Burning;
 using Game.Modules.Inventory;
-using Game.Modules.Inventory.Components;
+using Game.Modules.Inventory.Definitions;
 using Game.Modules.Paralysis;
 using Game.Modules.Poison;
 using Game.Modules.StatusEffects;
@@ -24,8 +25,9 @@ namespace Presentation.UI.Content;
 /// own StackCount is always exactly 1 (see ParalysisTimerComponent), so a count there would just
 /// be noise. PotionCooldownComponent isn't a StatusEffectStack entry (it's not a stacking status
 /// effect -- see PotionCooldownEffects' own doc comment), so it gets its own trailing icon, keyed
-/// to the Health Potion's glyph/color (the only potion today -- revisit if ConsumableKind.Potion
-/// ever covers more than one concrete item) with the remaining seconds in green below the icon
+/// to the Health Potion's glyph/color (the cooldown is shared across every PotionActivator --
+/// revisit this fixed glyph/color choice if that ever reads as misleading for a non-Health
+/// potion) with the remaining seconds in green below the icon
 /// (not overlaid on top of it -- that read as visual clutter against the glyph) instead of a
 /// stack count.
 /// </summary>
@@ -129,7 +131,7 @@ public sealed class PlayerStatusEffectsContent(World world, ComponentManager com
     {
         DrawIconBackground(spriteBatch, unitRectangle, origin, size);
 
-        if (itemCatalog.TryGet(CoreItemsModule.HealthPotionId, out var healthPotion))
+        if (itemCatalog.TryGet(HealthPotion.Id, out var healthPotion))
         {
             _glyphRenderer.DrawCentered(spriteBatch, _font, healthPotion.Glyph, origin, size, healthPotion.GlyphColor);
         }

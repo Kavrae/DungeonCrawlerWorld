@@ -3,13 +3,15 @@ using Engine.ECS.Components.Stores;
 using Engine.ECS.Systems;
 using Engine.Math;
 using Game.Blueprints.Races;
-using Game.Modules.Abilities;
-using Game.Modules.Abilities.Components;
+using Game.Modules.Actions;
+using Game.Modules.Actions.Components;
+using Game.Modules.Actions.Definitions.DirectActions;
 using Game.Modules.Core.Components;
 using Game.Modules.Death.Components;
 using Game.Modules.Health.Components;
 using Game.Modules.Inventory;
 using Game.Modules.Inventory.Components;
+using Game.Modules.Inventory.Definitions;
 using Game.Modules.Movement;
 using Game.Modules.Movement.Components;
 using Game.Modules.Race.Components;
@@ -30,13 +32,13 @@ namespace Game.Modules.NpcBehavior.Systems;
 /// Not goblin-specific by name or by filter, despite currently only being exercised by Goblins
 /// (the only race with both Punch and, per Goblin's starting-kit change, potions) -- it runs for
 /// any Random-mode entity, and each branch is a no-op unless the entity actually carries the
-/// components it needs (no Punch AbilityInstanceComponent -> the attack branch never fires; no
+/// components it needs (no Punch ActionInstanceComponent -> the attack branch never fires; no
 /// potion stack -> the heal branch never fires). That's what avoids needing a new system class
 /// per NPC race: a future race that wants this exact temporary loadout just needs the same
 /// components granted, not a new system.
 ///
 /// One accepted consequence of that generic filter, worth being explicit about: Fairies also
-/// carry a Punch AbilityInstanceComponent, so a Fairy adjacent to *another* Fairy will also
+/// carry a Punch ActionInstanceComponent, so a Fairy adjacent to *another* Fairy will also
 /// attack it under this system's plain "player or Fairy" attackable-check -- nothing here
 /// excludes "an entity of my own race." This is a real, visible quirk of the generic design, not
 /// a bug -- see TODO.md's entry on composing entity behavior from smaller, race-configurable
@@ -57,9 +59,9 @@ public sealed class TestCombatBehaviorSystem : ISystem
     private readonly PackedComponentPool<ActionLockComponent> _actionLocks;
     private readonly PackedComponentPool<HealthComponent> _health;
     private readonly MultiComponentPool<InventoryItemStackComponent> _inventoryStacks;
-    private readonly MultiComponentPool<AbilityInstanceComponent> _abilityInstances;
+    private readonly MultiComponentPool<ActionInstanceComponent> _actionInstances;
     private readonly MultiComponentPool<RaceComponent> _raceComponents;
-    private readonly PackedComponentPool<PendingAbilityActivationComponent> _pendingActivations;
+    private readonly PackedComponentPool<PendingActionActivationComponent> _pendingActivations;
     private readonly PackedComponentPool<PendingConsumableActivationComponent> _pendingConsumableActivations;
     private readonly IMapQuery _mapQuery;
     private readonly MathUtility _mathUtility;
@@ -75,9 +77,9 @@ public sealed class TestCombatBehaviorSystem : ISystem
         PackedComponentPool<ActionLockComponent> actionLocks,
         PackedComponentPool<HealthComponent> health,
         MultiComponentPool<InventoryItemStackComponent> inventoryStacks,
-        MultiComponentPool<AbilityInstanceComponent> abilityInstances,
+        MultiComponentPool<ActionInstanceComponent> actionInstances,
         MultiComponentPool<RaceComponent> raceComponents,
-        PackedComponentPool<PendingAbilityActivationComponent> pendingActivations,
+        PackedComponentPool<PendingActionActivationComponent> pendingActivations,
         PackedComponentPool<PendingConsumableActivationComponent> pendingConsumableActivations,
         IMapQuery mapQuery,
         MathUtility mathUtility,
@@ -89,7 +91,7 @@ public sealed class TestCombatBehaviorSystem : ISystem
         _actionLocks = actionLocks;
         _health = health;
         _inventoryStacks = inventoryStacks;
-        _abilityInstances = abilityInstances;
+        _actionInstances = actionInstances;
         _raceComponents = raceComponents;
         _pendingActivations = pendingActivations;
         _pendingConsumableActivations = pendingConsumableActivations;
@@ -151,25 +153,25 @@ public sealed class TestCombatBehaviorSystem : ISystem
             return false;
         }
 
-        if (!InventoryQueries.TryGetStack(_inventoryStacks, entityId, CoreItemsModule.HealthPotionId, out var potionStack) || potionStack.Quantity <= 0)
+        if (!InventoryQueries.TryGetStack(_inventoryStacks, entityId, HealthPotion.Id, out var potionStack) || potionStack.Quantity <= 0)
         {
             return false;
         }
 
-        _pendingConsumableActivations.Merge(entityId, new PendingConsumableActivationComponent(CoreItemsModule.HealthPotionId, [transform.Position]));
+        _pendingConsumableActivations.Merge(entityId, new PendingConsumableActivationComponent(HealthPotion.Id, [transform.Position]));
         return true;
     }
 
     /// <summary>
     /// Only fires if this entity was actually granted Punch. Queues the whole resolved Adjacent
     /// footprint (now excluding the entity's own tiles, see TargetShapeResolver) rather than a
-    /// single target tile -- AbilityEffectResolver figures out who's actually there, the same
+    /// single target tile -- ActionEffectResolver figures out who's actually there, the same
     /// "let the resolver sort it out" pattern ActionTargetingController.TryActivateWithAutoTarget
-    /// already uses for player-driven Adjacent abilities.
+    /// already uses for player-driven Adjacent actions.
     /// </summary>
     private bool TryDecideMeleeAttack(int entityId, TransformComponent transform)
     {
-        if (!AbilityInstanceQueries.TryGet(_abilityInstances, entityId, CoreAbilitiesModule.PunchId, out _))
+        if (!ActionInstanceQueries.TryGet(_actionInstances, entityId, PunchAction.Id, out _))
         {
             return false;
         }
@@ -181,13 +183,13 @@ public sealed class TestCombatBehaviorSystem : ISystem
             return false;
         }
 
-        _pendingActivations.Merge(entityId, new PendingAbilityActivationComponent(CoreAbilitiesModule.PunchId, _adjacentTilesBuffer.ToArray()));
+        _pendingActivations.Merge(entityId, new PendingActionActivationComponent(PunchAction.Id, _adjacentTilesBuffer.ToArray()));
         return true;
     }
 
     /// <summary>
     /// Checks both the Blocking occupant and every non-Blocking occupant of each tile (see
-    /// AbilityEffectResolver.Apply's own dual loop) -- melee is not restricted to Blocking
+    /// ActionEffectResolver.Apply's own dual loop) -- melee is not restricted to Blocking
     /// targets only, so a non-Blocking Fairy/player sharing an adjacent tile still counts.
     /// </summary>
     private bool HasAttackableNeighbor(List<Vector3Int> adjacentTiles)

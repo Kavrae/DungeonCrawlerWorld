@@ -20,6 +20,12 @@ public enum StatModifierTarget
     /// <summary>Damage an entity receives, consumed at HealthDamage.Apply -- the single chokepoint for every damage source (abilities, Burning, Poison, contact hazards) -- so a reduction here applies uniformly regardless of what dealt the damage.</summary>
     IncomingDamage,
 
+    /// <summary>Chance (0..1) DamageEffectEntry rolls a crit, consumed via StatModifierMath.GetEffectiveValue against CritMath.BaseCritChance. Lets equipment/buffs (e.g. a stacking, self-granted "Double Tap" modifier) raise a caster's own crit chance the same generic way anything already modifies OutgoingDamage.</summary>
+    CritChance,
+
+    /// <summary>Multiplier DamageEffectEntry applies to a fully-scaled hit once CritChance rolls a crit, consumed via StatModifierMath.GetEffectiveValue against CritMath.BaseCritMultiplier.</summary>
+    CritMultiplier,
+
     // AbilityScoreType's 7 members, mirrored 1:1 -- lets equipment/class/buffs grant a
     // StatModifierComponent targeting an ability score via the existing StatModifierEffects.Apply,
     // with no new grant API. See AbilityScoreEffects for the write path that keeps

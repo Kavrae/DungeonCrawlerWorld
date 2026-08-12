@@ -1,7 +1,7 @@
 ﻿using Engine.ECS.Components;
 using Engine.ECS.Systems;
 using Engine.Events;
-using Game.Modules.Abilities.Components;
+using Game.Modules.Actions.Components;
 using Game.Modules.Core;
 using Game.Modules.Core.Components;
 using Game.Modules.Death.Components;
@@ -64,8 +64,8 @@ public sealed class MovementModule : IGameModule
         var deadEntities = componentManager.IsRegistered<DeadComponent>()
             ? componentManager.GetPackedPool<DeadComponent>()
             : null;
-        var pendingAbilityActivations = componentManager.IsRegistered<PendingAbilityActivationComponent>()
-            ? componentManager.GetPackedPool<PendingAbilityActivationComponent>()
+        var pendingActionActivations = componentManager.IsRegistered<PendingActionActivationComponent>()
+            ? componentManager.GetPackedPool<PendingActionActivationComponent>()
             : null;
         var pendingConsumableActivations = componentManager.IsRegistered<PendingConsumableActivationComponent>()
             ? componentManager.GetPackedPool<PendingConsumableActivationComponent>()
@@ -83,7 +83,7 @@ public sealed class MovementModule : IGameModule
             componentManager.GetDirectPool<ProcessingTierComponent>(),
             _processingTierEvents,
             deadEntities,
-            pendingAbilityActivations,
+            pendingActionActivations,
             pendingConsumableActivations));
 
         systemManager.RegisterFrameScoped(_movedEntities);

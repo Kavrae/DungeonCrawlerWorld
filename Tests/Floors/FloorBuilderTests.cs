@@ -6,8 +6,9 @@ using Engine.Math;
 using Engine.Modules;
 using Game.Floors;
 using Game.Modules;
-using Game.Modules.Abilities;
 using Game.Modules.AbilityScores;
+using Game.Modules.Actions;
+using Game.Modules.Actions.Definitions;
 using Game.Modules.Burning;
 using Game.Modules.Class;
 using Game.Modules.ContactDamage;
@@ -40,11 +41,11 @@ public sealed class FloorBuilderTests
         var movementModule = new MovementModule();
         movementModule.Configure(context);
 
-        var abilitiesModule = new AbilitiesModule();
-        abilitiesModule.Configure(context);
+        var actionsModule = new ActionsModule();
+        actionsModule.Configure(context);
 
-        var coreAbilitiesModule = new CoreAbilitiesModule();
-        coreAbilitiesModule.Configure(context);
+        var coreActionsModule = new CoreActionsModule();
+        coreActionsModule.Configure(context);
 
         var burningModule = new BurningModule();
         burningModule.Configure(context);
@@ -89,8 +90,8 @@ public sealed class FloorBuilderTests
             movementModule,
             new RaceModule(),
             new ClassModule(),
-            abilitiesModule,
-            coreAbilitiesModule,
+            actionsModule,
+            coreActionsModule,
             new StatusEffectsModule(),
             burningModule,
             poisonModule,

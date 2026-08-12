@@ -2,8 +2,9 @@ using Engine.ECS.Components.Stores;
 using Engine.Math;
 using Engine.Utilities;
 using Game.Modules;
-using Game.Modules.Abilities;
-using Game.Modules.Abilities.Components;
+using Game.Modules.Actions;
+using Game.Modules.Actions.Activators;
+using Game.Modules.Actions.Components;
 using Game.Modules.Core.Components;
 using Game.Modules.Inventory;
 using Game.Modules.Inventory.Components;
@@ -16,13 +17,13 @@ using Presentation.Input;
 namespace Presentation.UI;
 
 /// <summary>
-/// Player's moment-to-moment action input -- arming/disarming/confirming/auto-targeting abilities
-/// and consumable items via their hotbar hotkeys. "Action" (not "Ability") because items go
-/// through this same arm/target/confirm rhythm too -- matches ActionHotkeyBindingComponent's own
-/// umbrella-term reasoning (see its doc comment). Abilities and items share that rhythm because
-/// both ultimately reduce to a TargetingSpec (see Engine.Math.TargetingSpec's own doc comment for
-/// why that type is shared rather than duplicated), but only one of {ability, item} is ever armed
-/// at once (MapViewState.ArmedAbilityId/ArmedItemDefinitionId) and each queues into its own
+/// Player's moment-to-moment action input -- arming/disarming/confirming/auto-targeting actions
+/// and consumable items via their hotbar hotkeys. Items go through this same arm/target/confirm
+/// rhythm too -- matches ActionHotkeyBindingComponent's own umbrella-term reasoning (see its doc
+/// comment). Actions and items share that rhythm because both ultimately reduce to a
+/// TargetingSpec (see Engine.Math.TargetingSpec's own doc comment for why that type is shared
+/// rather than duplicated), but only one of {action, item} is ever armed at once
+/// (MapViewState.ArmedActionId/ArmedItemDefinitionId) and each queues into its own
 /// pending-activation component for its own System to consume. Player movement is a separate
 /// concern handled by the sibling PlayerMovementController -- MapWindow.OnHotkeysAction calls both
 /// every frame, but the two share no state.
@@ -31,13 +32,13 @@ public sealed class ActionTargetingController(
     World world,
     MapViewState mapViewState,
     MapCamera camera,
-    AbilityCatalog abilityCatalog,
+    ActionCatalog actionCatalog,
     ItemCatalog itemCatalog,
     DirectComponentPool<TransformComponent> transformPool,
     MultiComponentPool<ActionHotkeyBindingComponent> actionHotkeyBindings,
     MultiComponentPool<ItemHotkeyBindingComponent> itemHotkeyBindings,
     MultiComponentPool<InventoryItemStackComponent> inventoryStacks,
-    PackedComponentPool<PendingAbilityActivationComponent> pendingActivations,
+    PackedComponentPool<PendingActionActivationComponent> pendingActivations,
     PackedComponentPool<PendingConsumableActivationComponent> pendingConsumableActivations,
     PackedComponentPool<PendingDelayedActionComponent> pendingDelayedActions,
     PackedComponentPool<ActionLockComponent> actionLocks,
@@ -68,7 +69,7 @@ public sealed class ActionTargetingController(
     /// <summary>The caster position TargetableTiles was last computed from -- lets RefreshTargetableTiles (called every frame something is armed) cheaply skip recomputation on frames where the caster hasn't moved.</summary>
     private Vector3Int? _targetableTilesOrigin;
 
-    /// <summary>The armed ability/item's actual hit-footprint at the current hover position, recomputed every Update (see UpdateHoveredTile).</summary>
+    /// <summary>The armed action/item's actual hit-footprint at the current hover position, recomputed every Update (see UpdateHoveredTile).</summary>
     private readonly List<Vector3Int> _hoveredFootprintBuffer = [];
 
     /// <summary>Read-only view of _hoveredFootprintBuffer for tests -- same internal-for-test-visibility pattern as UiInputController.CurrentCursor/DragDelta.</summary>
@@ -81,7 +82,7 @@ public sealed class ActionTargetingController(
     public void Tick() => _frameCounter++;
 
     /// <summary>
-    /// While an ability or item is armed, tracks which map tile the mouse is currently over (on
+    /// While an action or item is armed, tracks which map tile the mouse is currently over (on
     /// the player's own Z layer, not necessarily whatever layer the camera happens to be showing)
     /// and, if so, recomputes the armed thing's actual hit-footprint from that hover position via
     /// TargetShapeResolver -- this is what lets Burst/Cone/Line's highlighted tiles move with the
@@ -118,9 +119,9 @@ public sealed class ActionTargetingController(
     }
 
     /// <summary>
-    /// A left-click confirms the armed ability or item's activation against whichever tile was
+    /// A left-click confirms the armed action or item's activation against whichever tile was
     /// clicked -- see TryConfirmActivationAtTile, the shared implementation this and a same-slot
-    /// hotkey re-press (see HandleAbilitySlotPress/HandleItemSlotPress) both funnel into.
+    /// hotkey re-press (see HandleActionSlotPress/HandleItemSlotPress) both funnel into.
     /// </summary>
     public void TryConfirmActivation(Point mousePosition, Vector2 contentAbsolutePosition)
     {
@@ -135,13 +136,13 @@ public sealed class ActionTargetingController(
     }
 
     /// <summary>
-    /// Confirms the armed ability or item's activation against targetTile, provided it's actually
+    /// Confirms the armed action or item's activation against targetTile, provided it's actually
     /// within TargetableTiles (a miss is a no-op -- whatever's armed stays armed, exactly like
     /// clicking empty space doesn't clear an inspector selection either). Resolves the real Shape
     /// anchored on targetTile (not the fixed candidate-enumeration shape ComputeTargetableTiles
     /// uses) -- for Adjacent this produces the same fixed footprint regardless of which of its
     /// tiles was targeted, since Adjacent ignores the cursor entirely. Reads which of
-    /// {ability, item} is armed from MapViewState itself rather than taking either id as a
+    /// {action, item} is armed from MapViewState itself rather than taking either id as a
     /// parameter -- mirrors CancelArmedOrPendingAction, which already does the same.
     ///
     /// A Tag.Self item specifically gets one more special case: clicking your own tile confirms
@@ -180,15 +181,15 @@ public sealed class ActionTargetingController(
     }
 
     /// <summary>
-    /// Cancels an armed ability/item (right-click tap or Escape), or, if nothing is armed,
-    /// cancels a Delayed ability's in-progress windup instead: clears PendingDelayedActionComponent
+    /// Cancels an armed action/item (right-click tap or Escape), or, if nothing is armed,
+    /// cancels a Delayed action's in-progress windup instead: clears PendingDelayedActionComponent
     /// and zeroes the shared ActionLock directly (via ActionLockGate.Lock(..., 0)) so cancelling
     /// frees the entity immediately rather than still waiting out the full wind-up with no
     /// effect at the end -- see PendingDelayedActionComponent's own doc comment.
     /// </summary>
     public void CancelArmedOrPendingAction()
     {
-        if (mapViewState.ArmedAbilityId is not null || mapViewState.ArmedItemDefinitionId is not null)
+        if (mapViewState.ArmedActionId is not null || mapViewState.ArmedItemDefinitionId is not null)
         {
             Disarm();
             return;
@@ -242,9 +243,9 @@ public sealed class ActionTargetingController(
             _frameCounter - lastPressFrame <= DoubleTapWindowFrames;
         _lastHotkeyPressFrameBySlot[slot] = _frameCounter;
 
-        if (ActionHotkeyBindingQueries.TryGet(actionHotkeyBindings, world.PlayerEntityId, slot, out var abilityId))
+        if (ActionHotkeyBindingQueries.TryGet(actionHotkeyBindings, world.PlayerEntityId, slot, out var actionId))
         {
-            HandleAbilitySlotPress(slot, abilityId, isDoubleTap);
+            HandleActionSlotPress(slot, actionId, isDoubleTap);
             return;
         }
 
@@ -255,27 +256,27 @@ public sealed class ActionTargetingController(
     }
 
     /// <summary>
-    /// Arms the pressed slot's ability, or -- if it's already armed -- confirms it instead: a
+    /// Arms the pressed slot's action, or -- if it's already armed -- confirms it instead: a
     /// double-tap within DoubleTapWindowFrames skips arming entirely and immediately activates
     /// against an auto-picked target (see TryActivateWithAutoTarget); a slower re-press confirms
     /// against wherever the cursor currently is (see TryConfirmActivationAtTile), the same as a
     /// click would. Cancelling an armed slot is right-click/Escape's job now (see
     /// CancelArmedOrPendingAction) -- re-pressing the same key always means "go," not "nevermind."
-    /// An ability the player can't currently afford (see HasEnoughMana) is inert, the same no-op
+    /// An action the player can't currently afford (see HasEnoughMana) is inert, the same no-op
     /// an unbound slot already is -- HotbarContent greys it out the same way (see its own
     /// isUsable check), so "can't be armed" and "looks unusable" stay in sync, mirroring
     /// HandleItemSlotPress's identical treatment of an unusable item slot.
     /// </summary>
-    private void HandleAbilitySlotPress(HotkeySlot slot, Guid abilityId, bool isDoubleTap)
+    private void HandleActionSlotPress(HotkeySlot slot, Guid actionId, bool isDoubleTap)
     {
-        if (!HasEnoughMana(world.PlayerEntityId, abilityId))
+        if (!HasEnoughMana(world.PlayerEntityId, actionId))
         {
             return;
         }
 
         if (isDoubleTap)
         {
-            TryActivateWithAutoTarget(world.PlayerEntityId, abilityId);
+            TryActivateWithAutoTarget(world.PlayerEntityId, actionId);
 
             // The pair's first press (a moment ago, within the double-tap window) armed this
             // same slot -- now that it's fired, leaving it visually armed would be stale/
@@ -298,27 +299,27 @@ public sealed class ActionTargetingController(
             return;
         }
 
-        ArmAbility(slot, abilityId);
+        ArmAction(slot, actionId);
     }
 
     /// <summary>
-    /// A bound item with no ConsumableEffect (e.g. an Equipment/Tool item with no activated
-    /// ability yet), or with no remaining stock (the player's stack was fully consumed -- see
+    /// A bound item with no Activator (e.g. an Equipment/Tool item with no activated
+    /// action yet), or with no remaining stock (the player's stack was fully consumed -- see
     /// InventoryItemStackComponent's "no instance means empty" convention, the same one
     /// InventoryActions.ConsumeItem relies on), is inert, the same no-op an unbound slot already
     /// is -- HotbarContent greys it out the same way, so "can't be armed" and "looks unusable"
     /// stay in sync. Any item tagged Tag.Self (Health/Mana/Hotkey Expansion Potion today) has its
     /// double-tap always activate on the caster's own tile (TryActivateItemOnSelf), skipping
     /// arm/target entirely -- "double-tap always uses it on the user," regardless of what's
-    /// currently armed. Keyed off the tag rather than ConsumableKind.Potion specifically, so a
+    /// currently armed. Keyed off the tag rather than any particular IActionActivator kind, so a
     /// future non-Potion self-only item (e.g. a bandage) gets the same shortcut just by carrying
     /// Tag.Self. A non-double-tap re-press of an already-armed slot confirms against the cursor
-    /// instead (see TryConfirmActivationAtTile) -- same rhythm as HandleAbilitySlotPress,
+    /// instead (see TryConfirmActivationAtTile) -- same rhythm as HandleActionSlotPress,
     /// cancelling is right-click/Escape's job now.
     /// </summary>
     private void HandleItemSlotPress(HotkeySlot slot, Guid itemDefinitionId, bool isDoubleTap)
     {
-        if (!itemCatalog.TryGet(itemDefinitionId, out var item) || item.Consumable is not { } consumable)
+        if (!itemCatalog.TryGet(itemDefinitionId, out var item) || item.Activator is not { } activator)
         {
             return;
         }
@@ -350,26 +351,26 @@ public sealed class ActionTargetingController(
             return;
         }
 
-        ArmItem(slot, itemDefinitionId, consumable.Targeting);
+        ArmItem(slot, itemDefinitionId, activator.Targeting);
     }
 
-    private void ArmAbility(HotkeySlot slot, Guid abilityId)
+    private void ArmAction(HotkeySlot slot, Guid actionId)
     {
-        mapViewState.ArmedAbilityId = abilityId;
+        mapViewState.ArmedActionId = actionId;
         mapViewState.ArmedItemDefinitionId = null;
         mapViewState.ArmedSlot = slot;
         _targetableTilesOrigin = null; // Forces RefreshTargetableTiles below to (re)compute regardless of any stale origin left over from a previous arm.
 
-        if (abilityCatalog.TryGet(abilityId, out var ability) && transformPool.TryGetReadonly(world.PlayerEntityId, out var transform))
+        if (actionCatalog.TryGet(actionId, out var action) && transformPool.TryGetReadonly(world.PlayerEntityId, out var transform))
         {
-            RefreshTargetableTiles(ability.Targeting, transform.Position, transform.Size);
+            RefreshTargetableTiles(action.Activator.Targeting, transform.Position, transform.Size);
         }
     }
 
     private void ArmItem(HotkeySlot slot, Guid itemDefinitionId, TargetingSpec targeting)
     {
         mapViewState.ArmedItemDefinitionId = itemDefinitionId;
-        mapViewState.ArmedAbilityId = null;
+        mapViewState.ArmedActionId = null;
         mapViewState.ArmedSlot = slot;
         _targetableTilesOrigin = null;
 
@@ -381,36 +382,42 @@ public sealed class ActionTargetingController(
 
     private void Disarm()
     {
-        mapViewState.ArmedAbilityId = null;
+        mapViewState.ArmedActionId = null;
         mapViewState.ArmedItemDefinitionId = null;
         mapViewState.ArmedSlot = null;
         mapViewState.TargetableTiles = null;
         _targetableTilesOrigin = null;
     }
 
-    /// <summary>Mirrors AbilityActivationSystem's own gate (see its own doc comment) -- a zero-cost ability (or an unknown abilityId, left for the actual activation attempt to reject) always passes, even with no ManaComponent pool wired in.</summary>
-    private bool HasEnoughMana(int entityId, Guid abilityId)
+    /// <summary>Mirrors ActionActivationSystem's own gate (see its own doc comment) -- a zero-cost action (or an unknown actionId, left for the actual activation attempt to reject) always passes, even with no ManaComponent pool wired in.</summary>
+    private bool HasEnoughMana(int entityId, Guid actionId)
     {
-        if (!abilityCatalog.TryGet(abilityId, out var ability) || ability.ManaCost <= 0)
+        if (!actionCatalog.TryGet(actionId, out var action))
         {
             return true;
         }
 
-        return manaPool is not null && manaPool.TryGetReadonly(entityId, out var mana) && mana.CurrentMana >= ability.ManaCost;
+        var manaCost = SpellActivator.ManaCostOf(action.Activator);
+        if (manaCost <= 0)
+        {
+            return true;
+        }
+
+        return manaPool is not null && manaPool.TryGetReadonly(entityId, out var mana) && mana.CurrentMana >= manaCost;
     }
 
-    /// <summary>Resolves whichever of {ability, item} is currently armed to its shared TargetingSpec -- the one piece both kinds need for every targeting computation below, so callers stop caring which kind they're dealing with past this point.</summary>
+    /// <summary>Resolves whichever of {action, item} is currently armed to its shared TargetingSpec -- the one piece both kinds need for every targeting computation below, so callers stop caring which kind they're dealing with past this point.</summary>
     private bool TryGetArmedTargeting(out TargetingSpec targeting)
     {
-        if (mapViewState.ArmedAbilityId is { } abilityId && abilityCatalog.TryGet(abilityId, out var ability))
+        if (mapViewState.ArmedActionId is { } actionId && actionCatalog.TryGet(actionId, out var action))
         {
-            targeting = ability.Targeting;
+            targeting = action.Activator.Targeting;
             return true;
         }
 
-        if (mapViewState.ArmedItemDefinitionId is { } itemId && itemCatalog.TryGet(itemId, out var item) && item.Consumable is { } consumable)
+        if (mapViewState.ArmedItemDefinitionId is { } itemId && itemCatalog.TryGet(itemId, out var item) && item.Activator is { } activator)
         {
-            targeting = consumable.Targeting;
+            targeting = activator.Targeting;
             return true;
         }
 
@@ -468,7 +475,7 @@ public sealed class ActionTargetingController(
     }
 
     /// <summary>
-    /// Resolves and queues a full ability activation with no manual click-confirm at all -- the
+    /// Resolves and queues a full action activation with no manual click-confirm at all -- the
     /// double-tap path. Adjacent's footprint never depends on a target choice (it's always the
     /// caster's own tile plus its 8 surrounding neighbors), so it's queued immediately. Every other
     /// shape needs a target tile chosen first: ComputeTargetableTiles' reachable-area candidates
@@ -479,9 +486,9 @@ public sealed class ActionTargetingController(
     /// fallback for exactly that case, which is also what makes "closest to cursor" degenerate
     /// harmlessly into "closest to the caster" rather than picking an arbitrary target).
     /// </summary>
-    private void TryActivateWithAutoTarget(int entityId, Guid abilityId)
+    private void TryActivateWithAutoTarget(int entityId, Guid actionId)
     {
-        if (!abilityCatalog.TryGet(abilityId, out var ability) || !transformPool.TryGetReadonly(entityId, out var transform))
+        if (!actionCatalog.TryGet(actionId, out var action) || !transformPool.TryGetReadonly(entityId, out var transform))
         {
             return;
         }
@@ -489,11 +496,12 @@ public sealed class ActionTargetingController(
         var attackerPosition = transform.Position;
         var attackerSize = transform.Size;
         var mapSize = world.Map.Size;
+        var targeting = action.Activator.Targeting;
 
-        if (ability.Targeting.Shape == TargetShape.Adjacent)
+        if (targeting.Shape == TargetShape.Adjacent)
         {
-            ComputeTargetableTiles(attackerPosition, attackerSize, ability.Targeting, _candidateTilesBuffer);
-            QueueAbilityActivation(entityId, abilityId, _candidateTilesBuffer);
+            ComputeTargetableTiles(attackerPosition, attackerSize, targeting, _candidateTilesBuffer);
+            QueueActionActivation(entityId, actionId, _candidateTilesBuffer);
             return;
         }
 
@@ -501,13 +509,13 @@ public sealed class ActionTargetingController(
         // filter below would always exclude (it deliberately drops tiles occupied by the
         // caster itself, meant for every *other* shape) -- so Self needs its own direct
         // resolve/queue, the same as Adjacent above, rather than falling through into that filter.
-        if (ability.Targeting.Shape == TargetShape.Self)
+        if (targeting.Shape == TargetShape.Self)
         {
-            QueueAbilityActivation(entityId, abilityId, [attackerPosition]);
+            QueueActionActivation(entityId, actionId, [attackerPosition]);
             return;
         }
 
-        ComputeTargetableTiles(attackerPosition, attackerSize, ability.Targeting, _candidateTilesBuffer);
+        ComputeTargetableTiles(attackerPosition, attackerSize, targeting, _candidateTilesBuffer);
 
         _occupiedCandidateTilesBuffer.Clear();
         foreach (var tile in _candidateTilesBuffer)
@@ -525,11 +533,11 @@ public sealed class ActionTargetingController(
             return;
         }
 
-        TargetShapeResolver.Resolve(ability.Targeting.Shape, attackerPosition, attackerSize, chosenTile, ability.Targeting.Range, ability.Targeting.AreaSize, mapSize, _finalTargetTilesBuffer);
-        QueueAbilityActivation(entityId, abilityId, _finalTargetTilesBuffer);
+        TargetShapeResolver.Resolve(targeting.Shape, attackerPosition, attackerSize, chosenTile, targeting.Range, targeting.AreaSize, mapSize, _finalTargetTilesBuffer);
+        QueueActionActivation(entityId, actionId, _finalTargetTilesBuffer);
     }
 
-    /// <summary>The double-tap path for a Potion -- always the caster's own tile, no candidate search at all (contrast TryActivateWithAutoTarget's ability equivalent).</summary>
+    /// <summary>The double-tap path for a Potion -- always the caster's own tile, no candidate search at all (contrast TryActivateWithAutoTarget's action equivalent).</summary>
     private void TryActivateItemOnSelf(int entityId, Guid itemDefinitionId)
     {
         if (!transformPool.TryGetReadonly(entityId, out var transform))
@@ -540,18 +548,18 @@ public sealed class ActionTargetingController(
         QueueConsumableActivation(entityId, itemDefinitionId, [transform.Position]);
     }
 
-    /// <summary>Presentation only ever queues an activation request -- AbilityActivationSystem is the only thing that applies gameplay effects. Mirrors TryQueuePlayerMove's own queue-and-let-a-system-consume pattern for movement.</summary>
-    private void QueueAbilityActivation(int entityId, Guid abilityId, List<Vector3Int> targetTiles)
+    /// <summary>Presentation only ever queues an activation request -- ActionActivationSystem is the only thing that applies gameplay effects. Mirrors TryQueuePlayerMove's own queue-and-let-a-system-consume pattern for movement.</summary>
+    private void QueueActionActivation(int entityId, Guid actionId, List<Vector3Int> targetTiles)
     {
         if (targetTiles.Count == 0)
         {
             return;
         }
 
-        pendingActivations.Merge(entityId, new PendingAbilityActivationComponent(abilityId, targetTiles.ToArray()));
+        pendingActivations.Merge(entityId, new PendingActionActivationComponent(actionId, targetTiles.ToArray()));
     }
 
-    /// <summary>Item counterpart to QueueAbilityActivation -- ConsumableActivationSystem is the only thing that applies its gameplay effects.</summary>
+    /// <summary>Item counterpart to QueueActionActivation -- ConsumableActivationSystem is the only thing that applies its gameplay effects.</summary>
     private void QueueConsumableActivation(int entityId, Guid itemDefinitionId, List<Vector3Int> targetTiles)
     {
         if (targetTiles.Count == 0)
@@ -562,12 +570,12 @@ public sealed class ActionTargetingController(
         pendingConsumableActivations.Merge(entityId, new PendingConsumableActivationComponent(itemDefinitionId, targetTiles.ToArray()));
     }
 
-    /// <summary>Dispatches a confirmed click activation to whichever of {ability, item} MapViewState currently has armed -- see TryConfirmActivation, the only caller.</summary>
+    /// <summary>Dispatches a confirmed click activation to whichever of {action, item} MapViewState currently has armed -- see TryConfirmActivation, the only caller.</summary>
     private void QueueArmedActivation(int entityId, List<Vector3Int> targetTiles)
     {
-        if (mapViewState.ArmedAbilityId is { } abilityId)
+        if (mapViewState.ArmedActionId is { } actionId)
         {
-            QueueAbilityActivation(entityId, abilityId, targetTiles);
+            QueueActionActivation(entityId, actionId, targetTiles);
         }
         else if (mapViewState.ArmedItemDefinitionId is { } itemId)
         {

@@ -46,7 +46,7 @@ public interface IMapQuery
     /// <summary>
     /// Every non-Blocking entity occupying position -- does NOT include the (at most one)
     /// Blocking entity GetEntityIdAt already answers for the same position; a caller that needs
-    /// everyone at a tile combines both (see AbilityEffectResolver.Apply). Default-implemented
+    /// everyone at a tile combines both (see ActionEffectResolver.Apply). Default-implemented
     /// as empty so a fake IMapQuery with no non-Blocking entities of its own doesn't need to
     /// override this -- World overrides it to delegate to Map's own non-Blocking index.
     /// </summary>

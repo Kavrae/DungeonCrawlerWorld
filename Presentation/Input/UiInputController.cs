@@ -1,5 +1,5 @@
 using Engine.Utilities;
-using Game.Modules.Abilities;
+using Game.Modules.Actions;
 using Microsoft.Xna.Framework;
 using Microsoft.Xna.Framework.Input;
 using Presentation.UI;
@@ -281,10 +281,10 @@ public sealed class UiInputController
     /// <summary>
     /// Escape must stay unconditional too, the same reasoning as Tab above: broadcast to every
     /// Base/StaticHUD element (not just whichever holds focus) rather than routed only to the
-    /// focused one, since an armed ability's own window (MapWindow) shouldn't have to hold
+    /// focused one, since an armed action's own window (MapWindow) shouldn't have to hold
     /// keyboard focus for Escape to cancel it -- e.g. a StaticHUD panel could be focused while
-    /// the map still has an ability armed. No-op by default (Window.OnEscapeAction); MapWindow
-    /// is the only override today. This is scoped to ability-cancel only -- the separate "Escape
+    /// the map still has an action armed. No-op by default (Window.OnEscapeAction); MapWindow
+    /// is the only override today. This is scoped to action-cancel only -- the separate "Escape
     /// opens the options menu" TODO.md item isn't implemented here.
     ///
     /// A fresh press (the first held frame) also closes the frontmost closeable DynamicHUD

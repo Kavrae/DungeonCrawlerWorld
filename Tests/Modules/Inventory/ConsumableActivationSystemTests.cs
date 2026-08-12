@@ -1,10 +1,12 @@
-﻿using Engine.ECS.Components;
+using Engine.ECS.Components;
 using Engine.Events;
 using Engine.Math;
-using Game.Modules.Abilities;
-using Game.Modules.Abilities.Components;
 using Game.Modules.AbilityScores;
 using Game.Modules.AbilityScores.Components;
+using Game.Modules.Actions;
+using Game.Modules.Actions.Activators;
+using Game.Modules.Actions.Components;
+using Game.Modules.Actions.Effects;
 using Game.Modules.Core.Components;
 using Game.Modules.Death.Components;
 using Game.Modules.Health.Components;
@@ -65,19 +67,24 @@ public sealed class ConsumableActivationSystemTests
         componentManager.RegisterPackedPool<HotkeyExpansionUnlockComponent>(static (ref existing, incoming) => existing = incoming);
 
         var itemCatalog = new ItemCatalog();
+        var splashTargeting = new TargetingSpec(TargetShape.Burst, Range: 3, AreaSize: 1);
         itemCatalog.Register(new ItemDefinition(
             PotionId, "Test Potion", null, "p", Color.Green, Tags: [],
-            Consumable: new ConsumableEffect(ConsumableKind.Potion, HealFraction: 0.5f, Targeting: new TargetingSpec(TargetShape.Burst, Range: 3, AreaSize: 1), ActionLockFrames: 60)));
+            Effects: [new ActionEffect([new HealEffectEntry(0.5f)])],
+            Activator: new PotionActivator(splashTargeting, new ActionTiming(ActionTimingCategory.Immediate, 60, null))));
         itemCatalog.Register(new ItemDefinition(
             ManaPotionId, "Test Mana Potion", null, "m", Color.Blue, Tags: [],
-            Consumable: new ConsumableEffect(ConsumableKind.Potion, HealFraction: 0f, Targeting: new TargetingSpec(TargetShape.Burst, Range: 3, AreaSize: 1), ActionLockFrames: 60, ManaFraction: 1f)));
+            Effects: [new ActionEffect([new ManaRestoreEffectEntry(1f)])],
+            Activator: new PotionActivator(splashTargeting, new ActionTiming(ActionTimingCategory.Immediate, 60, null))));
         itemCatalog.Register(new ItemDefinition(
             HotkeyExpansionPotionId, "Test Hotkey Expansion Potion", null, "k", Color.Orange, Tags: [],
-            Consumable: new ConsumableEffect(ConsumableKind.Potion, HealFraction: 0f, Targeting: new TargetingSpec(TargetShape.Self, Range: 0, AreaSize: 0), ActionLockFrames: 60, HotkeySlotGrant: 5)));
-        itemCatalog.Register(new ItemDefinition(NonConsumableId, "Test Hammer", null, "h", Color.Gray, Tags: []));
+            Effects: [new ActionEffect([new HotkeySlotGrantEntry(5)])],
+            Activator: new PotionActivator(new TargetingSpec(TargetShape.Self, Range: 0, AreaSize: 0), new ActionTiming(ActionTimingCategory.Immediate, 60, null))));
+        itemCatalog.Register(new ItemDefinition(NonConsumableId, "Test Hammer", null, "h", Color.Gray, Tags: [], Effects: []));
 
         var mapQuery = new FakeMapQuery();
         var eventBus = new EventBus();
+        var mathUtility = new MathUtility();
 
         var system = new ConsumableActivationSystem(
             componentManager.GetPackedPool<PendingConsumableActivationComponent>(),
@@ -87,6 +94,7 @@ public sealed class ConsumableActivationSystemTests
             itemCatalog,
             mapQuery,
             eventBus,
+            mathUtility,
             componentManager,
             statModifiers: null,
             componentManager.GetPackedPool<DeadComponent>(),
@@ -114,12 +122,15 @@ public sealed class ConsumableActivationSystemTests
         componentManager.RegisterMultiPool<AbilityScoreComponent>();
 
         var itemCatalog = new ItemCatalog();
+        var splashTargeting = new TargetingSpec(TargetShape.Burst, Range: 3, AreaSize: 1);
         itemCatalog.Register(new ItemDefinition(
             PotionId, "Test Potion", null, "p", Color.Green, Tags: [],
-            Consumable: new ConsumableEffect(ConsumableKind.Potion, HealFraction: 0.5f, Targeting: new TargetingSpec(TargetShape.Burst, Range: 3, AreaSize: 1), ActionLockFrames: 60)));
+            Effects: [new ActionEffect([new HealEffectEntry(0.5f)])],
+            Activator: new PotionActivator(splashTargeting, new ActionTiming(ActionTimingCategory.Immediate, 60, null))));
 
         var mapQuery = new FakeMapQuery();
         var eventBus = new EventBus();
+        var mathUtility = new MathUtility();
 
         var system = new ConsumableActivationSystem(
             componentManager.GetPackedPool<PendingConsumableActivationComponent>(),
@@ -129,6 +140,7 @@ public sealed class ConsumableActivationSystemTests
             itemCatalog,
             mapQuery,
             eventBus,
+            mathUtility,
             componentManager,
             statModifiers: null,
             componentManager.GetPackedPool<DeadComponent>(),
@@ -177,10 +189,10 @@ public sealed class ConsumableActivationSystemTests
         system.Update(default, 0);
 
         Assert.AreEqual(10, ManaOf(componentManager, TargetEntityId), "ManaFraction 1f -- a full restore regardless of starting mana.");
-        Assert.AreEqual(20, HealthOf(componentManager, TargetEntityId), "HealFraction 0f on the Mana Potion -- health must be untouched.");
+        Assert.AreEqual(20, HealthOf(componentManager, TargetEntityId), "No HealEffectEntry on the Mana Potion -- health must be untouched.");
     }
 
-    /// <summary>An entity with Health but no ManaComponent (never gained a mana-costing ability) is still a legitimate potion target -- the potion is consumed and the target's cooldown still resets, it just has nothing to restore.</summary>
+    /// <summary>An entity with Health but no ManaComponent (never gained a mana-costing action) is still a legitimate potion target -- the potion is consumed and the target's cooldown still resets, it just has nothing to restore.</summary>
     [TestMethod]
     public void ManaPotion_TargetHasNoManaComponent_StillConsumesPotionAndSetsCooldownButRestoresNothing()
     {
@@ -326,7 +338,7 @@ public sealed class ConsumableActivationSystemTests
     }
 
     [TestMethod]
-    public void ItemWithNoConsumableEffect_DoesNothingButStillConsumesTheRequest()
+    public void ItemWithNoActivator_DoesNothingButStillConsumesTheRequest()
     {
         var (system, componentManager, _, _) = Build();
         InventoryActions.AddItem(componentManager, CasterEntityId, NonConsumableId, quantity: 1);

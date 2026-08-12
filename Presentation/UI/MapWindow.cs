@@ -2,8 +2,8 @@ using Engine.ECS.Components;
 using Engine.ECS.Components.Stores;
 using Engine.Math;
 using FontStashSharp;
-using Game.Modules.Abilities;
-using Game.Modules.Abilities.Components;
+using Game.Modules.Actions;
+using Game.Modules.Actions.Components;
 using Game.Modules.Core;
 using Game.Modules.Core.Components;
 using Game.Modules.Death.Components;
@@ -80,7 +80,7 @@ public sealed class MapWindow : Window
         World world,
         MapViewState mapViewState,
         ComponentManager componentManager,
-        AbilityCatalog abilityCatalog,
+        ActionCatalog actionCatalog,
         ItemCatalog itemCatalog,
         TileRenderer tileRenderer,
         GlyphRenderer glyphRenderer,
@@ -93,7 +93,7 @@ public sealed class MapWindow : Window
         ArgumentNullException.ThrowIfNull(world);
         ArgumentNullException.ThrowIfNull(mapViewState);
         ArgumentNullException.ThrowIfNull(componentManager);
-        ArgumentNullException.ThrowIfNull(abilityCatalog);
+        ArgumentNullException.ThrowIfNull(actionCatalog);
         ArgumentNullException.ThrowIfNull(itemCatalog);
         ArgumentNullException.ThrowIfNull(tileRenderer);
         ArgumentNullException.ThrowIfNull(glyphRenderer);
@@ -665,7 +665,7 @@ public sealed class MapWindow : Window
     /// </summary>
     protected override void OnContentClickAction(Point mousePosition)
     {
-        if (_mapViewState.ArmedAbilityId is not null || _mapViewState.ArmedItemDefinitionId is not null)
+        if (_mapViewState.ArmedActionId is not null || _mapViewState.ArmedItemDefinitionId is not null)
         {
             _actionTargeting.TryConfirmActivation(mousePosition, _contentState.AbsolutePosition);
             return;
