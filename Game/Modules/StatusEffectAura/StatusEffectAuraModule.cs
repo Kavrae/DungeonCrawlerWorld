@@ -54,6 +54,7 @@ public sealed class StatusEffectAuraModule : IGameModule
     {
         componentManager.RegisterMultiPool<StatusEffectAuraSourceComponent>();
         componentManager.RegisterMultiPool<StatusEffectAuraExposureComponent>();
+        componentManager.RegisterPackedPool<AuraSourceExpiryComponent>(static (ref existing, incoming) => existing = incoming);
     }
 
     public void RegisterSystems(SystemManager systemManager, ComponentManager componentManager)
@@ -74,5 +75,10 @@ public sealed class StatusEffectAuraModule : IGameModule
             componentManager.GetDirectPool<ProcessingTierComponent>(),
             _processingTierEvents,
             deadEntities));
+
+        systemManager.Register(new AuraSourceExpirySystem(
+            componentManager.GetPackedPool<AuraSourceExpiryComponent>(),
+            componentManager.GetMultiPool<StatusEffectAuraSourceComponent>(),
+            _eventBus));
     }
 }

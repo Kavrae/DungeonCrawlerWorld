@@ -9,7 +9,7 @@ namespace Game.Modules.Actions.Effects;
 /// maximums restores each by its own fraction. No-op for a target with no HealthComponent (see
 /// HealthHeal.Apply's own doc comment).
 /// </summary>
-public sealed record HealEffectEntry(float Fraction) : IActionEffectEntry
+public sealed record DirectHeal(float Fraction) : IActionEffectEntry
 {
     public void Apply(ActionEffectContext context)
     {

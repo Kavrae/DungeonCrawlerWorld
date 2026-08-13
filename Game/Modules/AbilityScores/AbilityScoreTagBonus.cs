@@ -8,7 +8,7 @@ namespace Game.Modules.AbilityScores;
 /// carries -- generic by design, not specific to any one activator: an ability tagged
 /// Tag.Strength and a future damaging consumable tagged the same way both get the identical
 /// bonus through this one path. Relocated from AbilityEffectResolver's private
-/// ComputeAbilityScoreBonus/MapTagToAbilityScore, now usable by any DamageEffectEntry regardless
+/// ComputeAbilityScoreBonus/MapTagToAbilityScore, now usable by any DirectDamage regardless
 /// of which activator kind carries it. No-op (returns 0) when abilityScores is null
 /// (AbilityScoresModule not registered in this build).
 /// </summary>

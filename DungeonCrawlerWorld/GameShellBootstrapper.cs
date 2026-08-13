@@ -1,5 +1,6 @@
 using Engine.Diagnostics;
 using Engine.ECS.Context;
+using Game.Modules.AbilityScores.Components;
 using Game.Modules.Actions;
 using Game.Modules.Actions.Components;
 using Game.Modules.Core.Components;
@@ -108,7 +109,8 @@ public static class GameShellBootstrapper
             componentManager.GetPackedPool<PendingConsumableActivationComponent>(),
             componentManager.GetPackedPool<PendingDelayedActionComponent>(),
             componentManager.GetPackedPool<ActionLockComponent>(),
-            componentManager.GetPackedPool<ManaComponent>());
+            componentManager.GetPackedPool<ManaComponent>(),
+            componentManager.GetMultiPool<AbilityScoreComponent>());
         var playerMovement = new PlayerMovementController(
             world,
             componentManager.GetDirectPool<TransformComponent>(),
@@ -262,7 +264,7 @@ public static class GameShellBootstrapper
         // player's currently-unlocked Expansion slot count, so it's constructed first and its own
         // Size read to size/position this window -- see HotbarContent.RefreshLayoutIfChanged for
         // how it keeps itself bottom-anchored/horizontally-centered as that Size changes later.
-        var hotbarContent = new HotbarContent(world, mapViewState, ecsContext.ComponentManager, actionCatalog, itemCatalog, presentation.FontService, presentation.SpriteSheetService, presentation.SpriteRenderer, screenSize);
+        var hotbarContent = new HotbarContent(world, mapViewState, ecsContext.ComponentManager, ecsContext.EventBus, actionCatalog, itemCatalog, presentation.FontService, presentation.SpriteSheetService, presentation.SpriteRenderer, screenSize);
         var hotbarSize = hotbarContent.Size;
         var hotbarWindow = presentation.ElementPoolService.CreateElement<Window>(null, new ElementOptions
         {

@@ -97,4 +97,55 @@ public sealed class AuraSourceEffectsTests
 
         Assert.IsFalse(published);
     }
+
+    [TestMethod]
+    public void Apply_AbsentType_AddsSource()
+    {
+        var sources = CreatePool();
+        var eventBus = new EventBus();
+
+        AuraSourceEffects.Apply(sources, eventBus, EntityId, StatusEffectType.Light, auraAndGlowStrength: 8, Color.White);
+
+        Assert.IsTrue(sources.Has(EntityId));
+    }
+
+    /// <summary>The behavioral difference from Toggle -- re-Applying an already-present type refreshes it (still present afterward) rather than flipping it off.</summary>
+    [TestMethod]
+    public void Apply_TypeAlreadyPresent_RefreshesRatherThanRemoving()
+    {
+        var sources = CreatePool();
+        var eventBus = new EventBus();
+        AuraSourceEffects.Apply(sources, eventBus, EntityId, StatusEffectType.Light, auraAndGlowStrength: 8, Color.White);
+
+        AuraSourceEffects.Apply(sources, eventBus, EntityId, StatusEffectType.Light, auraAndGlowStrength: 8, Color.White);
+
+        Assert.IsTrue(sources.Has(EntityId));
+        Assert.AreEqual(1, sources.CountForEntity(EntityId));
+    }
+
+    [TestMethod]
+    public void Revoke_TypePresent_RemovesOnlyThatType()
+    {
+        var sources = CreatePool();
+        var eventBus = new EventBus();
+        AuraSourceEffects.Apply(sources, eventBus, EntityId, StatusEffectType.Light, auraAndGlowStrength: 8, Color.White);
+        AuraSourceEffects.Toggle(sources, eventBus, EntityId, StatusEffectType.Poison, auraAndGlowStrength: 5, Color.Purple);
+
+        AuraSourceEffects.Revoke(sources, eventBus, EntityId, StatusEffectType.Light);
+
+        Assert.AreEqual(1, sources.CountForEntity(EntityId));
+    }
+
+    [TestMethod]
+    public void Revoke_TypeAbsent_DoesNotThrowOrPublish()
+    {
+        var sources = CreatePool();
+        var eventBus = new EventBus();
+        var published = false;
+        eventBus.Subscribe<AuraSourceRemovedEvent>(_ => published = true);
+
+        AuraSourceEffects.Revoke(sources, eventBus, EntityId, StatusEffectType.Light);
+
+        Assert.IsFalse(published);
+    }
 }

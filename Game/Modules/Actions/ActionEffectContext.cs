@@ -20,8 +20,11 @@ namespace Game.Modules.Actions;
 /// `context with { TargetEntityId = id }`. MathUtility is required -- unlike the feature-gated
 /// pools below, it's a base Engine utility always available at composition time, the same way
 /// Health/EventBus already are. ChainDepth defaults to 0 and is only ever incremented by
-/// ChainedEffectEntry, guarding against a proc that (directly or via a longer cycle) triggers
-/// itself.
+/// ChainedEffect, guarding against a proc that (directly or via a longer cycle) triggers
+/// itself. DurationScaleMultiplier defaults to 1.0 (no scaling); ConsumableActivationSystem sets
+/// it to a caster-Intelligence-derived value for a ScrollActivator activation (see
+/// ScrollScalingEffects) -- a duration-bearing entry (StatModifierGrant today) multiplies
+/// its own base duration by this rather than the System pre-computing an absolute frame count.
 /// </summary>
 public sealed record ActionEffectContext(
     int SourceEntityId,
@@ -41,4 +44,5 @@ public sealed record ActionEffectContext(
     MultiComponentPool<StatusEffectAuraSourceComponent>? AuraSources = null,
     IPlayerQuery? PlayerQuery = null,
     short? DamageOverride = null,
+    float DurationScaleMultiplier = 1.0f,
     int ChainDepth = 0);

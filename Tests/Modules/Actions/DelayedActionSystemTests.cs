@@ -61,7 +61,7 @@ public sealed class DelayedActionSystemTests
         var actionCatalog = new ActionCatalog();
         actionCatalog.Register(new ActionDefinition(
             ActionId, "Test Delayed Attack", null, "#", default, [],
-            Effects: [new ActionEffect([new DamageEffectEntry(MinAmount: 0, MaxAmount: 0)])],
+            Effects: [new ActionEffect([new DirectDamage(MinAmount: 0, MaxAmount: 0)])],
             Activator: new SpellActivator(new TargetingSpec(TargetShape.SingleTarget, Range: 10), new ActionTiming(ActionTimingCategory.Delayed, ActionLockFrames: 30, CooldownFrames: null))));
 
         var system = new DelayedActionSystem(

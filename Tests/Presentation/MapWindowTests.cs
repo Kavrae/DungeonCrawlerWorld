@@ -1048,14 +1048,14 @@ public sealed class MapWindowTests
     private static void RegisterTestPotion(ItemCatalog itemCatalog) =>
         itemCatalog.Register(new ItemDefinition(
             TestPotionId, "Test Potion", null, "p", Color.Green, Tags: [Tag.Self],
-            Effects: [new ActionEffect([new HealEffectEntry(0.5f)])],
+            Effects: [new ActionEffect([new DirectHeal(0.5f)])],
             Activator: new PotionActivator(new TargetingSpec(TargetShape.Burst, Range: 3, AreaSize: 1), new ActionTiming(ActionTimingCategory.Immediate, 60, null))));
 
     /// <summary>Same PotionActivator/Burst shape as RegisterTestPotion, but deliberately untagged Self -- covers the double-tap shortcut now being keyed off Tag.Self rather than any particular IActionActivator kind.</summary>
     private static void RegisterTestNonSelfPotion(ItemCatalog itemCatalog) =>
         itemCatalog.Register(new ItemDefinition(
             TestNonSelfPotionId, "Test Non-Self Potion", null, "p", Color.Green, Tags: [],
-            Effects: [new ActionEffect([new HealEffectEntry(0.5f)])],
+            Effects: [new ActionEffect([new DirectHeal(0.5f)])],
             Activator: new PotionActivator(new TargetingSpec(TargetShape.Burst, Range: 3, AreaSize: 1), new ActionTiming(ActionTimingCategory.Immediate, 60, null))));
 
     private static void RegisterTestNonConsumableItem(ItemCatalog itemCatalog) =>

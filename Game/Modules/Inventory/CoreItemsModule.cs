@@ -22,6 +22,8 @@ public sealed class CoreItemsModule : IGameModule
         DamagePotion.Build,
         ToxicPotion.Build,
         ToxicIdol.Build,
+        ScrollOfHealing.Build,
+        ScrollOfTorch.Build,
     ];
 
     public void Configure(GameModuleContext context)

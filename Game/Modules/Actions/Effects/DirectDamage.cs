@@ -22,7 +22,7 @@ namespace Game.Modules.Actions.Effects;
 /// call HealthDamage.Apply directly on their own tick timers, so DoT damage deliberately never
 /// rolls variance or crit.
 /// </summary>
-public sealed record DamageEffectEntry(short MinAmount, short MaxAmount) : IActionEffectEntry
+public sealed record DirectDamage(short MinAmount, short MaxAmount) : IActionEffectEntry
 {
     public void Apply(ActionEffectContext context)
     {

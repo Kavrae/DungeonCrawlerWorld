@@ -19,9 +19,22 @@ public enum TargetShape
     /// 
     /// TargetingSpec.AreaSize and Range are not valid for this shape.
     /// 
-    ///This is the melee default. 
+    ///This is the melee default.
     ///</remarks>
     Adjacent,
+
+    /// <summary>
+    /// The perimeter ring of tiles surrounding the caster's own footprint, plus the caster's own
+    /// footprint tiles themselves.
+    /// </summary>
+    /// <remarks>
+    /// Same ring as Adjacent (Chebyshev distance &lt;= 1 from any footprint tile), but does not
+    /// exclude the caster's own footprint -- for effects meant to be valid on the caster too, not
+    /// just whoever/whatever is standing next to them (e.g. a self-or-adjacent healing scroll).
+    ///
+    /// TargetingSpec.AreaSize and Range are not valid for this shape.
+    /// </remarks>
+    AdjacentWithSelf,
 
     /// <summary>
     /// A single tile at the cursor.

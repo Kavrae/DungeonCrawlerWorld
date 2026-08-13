@@ -31,7 +31,13 @@ namespace Game.Modules.Actions;
 /// Also owns PotionCooldownComponent/PotionCooldownSystem (Game.Modules.Actions.Activators/
 /// Systems) -- that bookkeeping is a property of a PotionActivator-kind activation happening, not
 /// of Inventory storage/stacking, so it lives with the rest of the activation machinery here
-/// rather than in InventoryModule.
+/// rather than in InventoryModule. ScrollMasteryComponent gets the same treatment for the same
+/// reason, one level up from PotionActivator specifically to ScrollActivator activations in
+/// general. Scroll of Torch's own map-coloring effect, by contrast, lives entirely in
+/// Game.Modules.StatusEffectAura (AuraSourceGrant/AuraSourceExpiryComponent/
+/// AuraSourceExpirySystem) -- it's a StatusEffectAuraSourceComponent grant like any other, not a
+/// bespoke Actions-owned component, specifically so MapWindow never needs ability-specific
+/// rendering knowledge (see MapTintGrid, which already renders any aura source generically).
 /// </summary>
 public sealed class ActionsModule : IGameModule
 {
@@ -68,6 +74,7 @@ public sealed class ActionsModule : IGameModule
         componentManager.RegisterMultiPool<ActionHotkeyBindingComponent>();
         componentManager.RegisterPackedPool<HotkeyExpansionUnlockComponent>(static (ref existing, incoming) => existing = incoming);
         componentManager.RegisterPackedPool<PotionCooldownComponent>(static (ref existing, incoming) => existing = incoming);
+        componentManager.RegisterMultiPool<ScrollMasteryComponent>();
     }
 
     public void RegisterSystems(SystemManager systemManager, ComponentManager componentManager)

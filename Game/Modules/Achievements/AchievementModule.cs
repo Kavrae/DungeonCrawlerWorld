@@ -5,6 +5,7 @@ using Engine.Events;
 using Game.Modules.Achievements.Components;
 using Game.Modules.Actions;
 using Game.Modules.Achievements.Definitions;
+using Game.Modules.Inventory;
 using Game.Notifications;
 using Game.World;
 
@@ -27,6 +28,7 @@ public sealed class AchievementModule : IGameModule
     public IReadOnlyList<Type> Dependencies { get; } = [];
 
     private static readonly IReadOnlyList<IAchievementDefinition> Definitions = [
+        new ArchivistAchievement(),
         new BigMusclesAchievement(),
         new DrinkingProblemAchievement(),
         new EarlyAdopterAchievement(),
@@ -37,6 +39,7 @@ public sealed class AchievementModule : IGameModule
         new KillerQueenAchievement(),
         new LonerAchievement(),
         new MinMaxerAchievement(),
+        new MostBoringLibrarianAchievement(),
         new RevengeOfTheNerdsAchievement(),
         new ShanghaiKidAchievement(),
         new SpellCasterAchievement(),
@@ -47,12 +50,14 @@ public sealed class AchievementModule : IGameModule
     private EventBus? _eventBus;
     private IPlayerQuery? _playerQuery;
     private ActionCatalog? _actionCatalog;
+    private ItemCatalog? _itemCatalog;
 
     public void Configure(GameModuleContext context)
     {
         _eventBus = context.EventBus;
         _playerQuery = context.PlayerQuery;
         _actionCatalog = context.Actions;
+        _itemCatalog = context.Items;
 
         foreach (var definition in Definitions)
         {
@@ -65,7 +70,7 @@ public sealed class AchievementModule : IGameModule
 
     public void RegisterSystems(SystemManager systemManager, ComponentManager componentManager)
     {
-        if (_eventBus is not { } eventBus || _actionCatalog is not { } actionCatalog)
+        if (_eventBus is not { } eventBus || _actionCatalog is not { } actionCatalog || _itemCatalog is not { } itemCatalog)
         {
             throw new InvalidOperationException("AchievementModule.Configure must run before RegisterSystems.");
         }
@@ -74,7 +79,7 @@ public sealed class AchievementModule : IGameModule
 
         foreach (var definition in Definitions)
         {
-            var triggerContext = new AchievementTriggerContext(eventBus, _playerQuery, componentManager, actionCatalog, entityId => Unlock(definition, entityId, unlockedAchievements, eventBus));
+            var triggerContext = new AchievementTriggerContext(eventBus, _playerQuery, componentManager, actionCatalog, itemCatalog, entityId => Unlock(definition, entityId, unlockedAchievements, eventBus));
             definition.RegisterTrigger(triggerContext);
         }
     }

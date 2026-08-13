@@ -1,7 +1,7 @@
 namespace Game.Modules.Actions;
 
 /// <summary>
-/// Global crit fallback used by DamageEffectEntry when no StatModifierComponent targets
+/// Global crit fallback used by DirectDamage when no StatModifierComponent targets
 /// CritChance/CritMultiplier for the caster (mirrors PotionCooldownEffects' constant-holding
 /// style). Design intent, stated explicitly rather than left implicit in a bare number: crits
 /// here should be rarer but hit harder than the ~15-25%-chance/~1.5-2x-multiplier norm common in

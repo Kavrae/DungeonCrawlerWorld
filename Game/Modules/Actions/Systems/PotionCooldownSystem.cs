@@ -8,50 +8,27 @@ namespace Game.Modules.Actions.Systems;
 /// Passively counts every PotionCooldownComponent's FramesRemaining down toward 0, removing it
 /// entirely once it reaches 0 -- mirrors ActionLockSystem's shape, but StripeCount 1 (not
 /// tiered): only entities that have actually consumed a potion carry this component at all, so
-/// the population visited is already small regardless of distance from the player.
+/// the population visited is already small regardless of distance from the player. Drives the
+/// decrement/remove loop through the shared CountdownTicker (see PotionCooldownComponent's own
+/// ITickCountdown bridge) rather than hand-rolling it -- the same utility BurningSystem/
+/// PoisonSystem/ParalysisSystem/ContactDamageSystem already share; onTick always returns true
+/// since PotionCooldownComponent carries no other cleanup on expiry, the same "no re-arm" shape
+/// TorchMarkExpirySystem uses.
 /// </summary>
 public sealed class PotionCooldownSystem : ISystem
 {
-    private const byte StripeCountValue = 1;
-
-    public byte StripeCount => StripeCountValue;
+    public byte StripeCount => 1;
 
     private readonly PackedComponentPool<PotionCooldownComponent> _cooldowns;
-
-    // Reused across calls, cleared each Update -- entities whose cooldown expired this frame
-    // can't be removed mid-scan (PackedComponentPool.Remove swaps the last entry into the
-    // removed slot, corrupting EntityIds' current enumeration -- see CountdownTicker's own doc
-    // comment for the same rule), so removal is collected here and applied only after the scan.
     private readonly List<int> _pendingRemovals = [];
+    private readonly Func<int, PotionCooldownComponent, bool> _tick;
 
     public PotionCooldownSystem(PackedComponentPool<PotionCooldownComponent> cooldowns)
     {
         _cooldowns = cooldowns;
+        _tick = static (_, _) => true;
     }
 
-    public void Update(EngineTime time, byte stripeIndex)
-    {
-        _pendingRemovals.Clear();
-
-        foreach (var entityId in _cooldowns.EntityIds)
-        {
-            var cooldown = _cooldowns.GetReadonly(entityId);
-
-            if (cooldown.FramesRemaining <= StripeCountValue)
-            {
-                _pendingRemovals.Add(entityId);
-                continue;
-            }
-
-            _cooldowns.TryUpdate(entityId, static (ref PotionCooldownComponent c) =>
-            {
-                c.FramesRemaining -= StripeCountValue;
-            });
-        }
-
-        foreach (var entityId in _pendingRemovals)
-        {
-            _cooldowns.Remove(entityId);
-        }
-    }
+    public void Update(EngineTime time, byte stripeIndex) =>
+        CountdownTicker.Tick(_cooldowns, _cooldowns.EntityIds, _pendingRemovals, _tick);
 }

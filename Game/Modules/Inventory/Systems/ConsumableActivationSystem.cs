@@ -27,17 +27,27 @@ namespace Game.Modules.Inventory.Systems;
 /// consumable activation sets the shared ActionLock on the *activating* entity, the same as an
 /// Immediate action (see PotionActivator.Timing's own doc comment) -- there's no Delayed/
 /// FreeCast equivalent for consumables today. The stack is ticked down
-/// (InventoryActions.ConsumeItem) before the effect applies, per spec order. Only
-/// item.Activator is PotionActivator exists today: PotionCooldownComponent -- and the punishment
-/// Poison stack/PotionCooldownAbusedEvent for activating it again too soon -- belongs to whoever
-/// actually receives the potion's effect (see ApplyPotionToTarget), not whoever drank/threw it.
-/// Drinking your own potion means those are the same entity; throwing one at a goblin means the
-/// goblin's own cooldown ticks, the thrower's does not. This stays this system's own kind-uniform
-/// logic rather than a composable IActionEffectEntry -- see PLAN-action-effect-activator.md's
-/// scoping decision for why: it doesn't vary per potion (Constitution, the only varying input, is
-/// caster-side), so every potion already gets it automatically, and making it an entry every
-/// item's Effects list must remember to include (including mod-defined potions) would
-/// turn a currently-impossible-to-forget mechanic into a silently-omittable one.
+/// (InventoryActions.ConsumeItem) before the effect applies, per spec order (see
+/// TryBeginActivation, shared by every activator kind below).
+///
+/// Dispatches on item.Activator's concrete type. PotionActivator: PotionCooldownComponent -- and
+/// the punishment Poison stack/PotionCooldownAbusedEvent for activating it again too soon --
+/// belongs to whoever actually receives the potion's effect (see ApplyPotionToTarget), not
+/// whoever drank/threw it. Drinking your own potion means those are the same entity; throwing one
+/// at a goblin means the goblin's own cooldown ticks, the thrower's does not. This stays this
+/// system's own kind-uniform logic rather than a composable IActionEffectEntry -- see
+/// PLAN-action-effect-activator.md's scoping decision for why: it doesn't vary per potion
+/// (Constitution, the only varying input, is caster-side), so every potion already gets it
+/// automatically, and making it an entry every item's Effects list must remember to include
+/// (including mod-defined potions) would turn a currently-impossible-to-forget mechanic into a
+/// silently-omittable one.
+///
+/// ScrollActivator: no cooldown-abuse mechanic (potion-specific, never mentioned for scrolls) and
+/// no hard HealthComponent requirement on the target (see ApplyScrollToTarget) -- instead scales
+/// Range/AreaSize (already resolved into request.TargetTiles by Presentation, see
+/// ScrollScalingEffects' own doc comment) and any duration the effect carries by the *caster's*
+/// Intelligence, then records the activation toward mastering the scroll's spell (see
+/// ScrollMasteryEffects).
 /// </summary>
 public sealed class ConsumableActivationSystem : ISystem
 {
@@ -51,6 +61,7 @@ public sealed class ConsumableActivationSystem : ISystem
     private readonly PackedComponentPool<HealthComponent> _health;
     private readonly MultiComponentPool<StatModifierComponent>? _statModifiers;
     private readonly ItemCatalog _itemCatalog;
+    private readonly ActionCatalog _actionCatalog;
     private readonly IMapQuery _mapQuery;
     private readonly EventBus _eventBus;
     private readonly MathUtility _mathUtility;
@@ -70,6 +81,7 @@ public sealed class ConsumableActivationSystem : ISystem
         PackedComponentPool<PotionCooldownComponent> potionCooldowns,
         PackedComponentPool<HealthComponent> health,
         ItemCatalog itemCatalog,
+        ActionCatalog actionCatalog,
         IMapQuery mapQuery,
         EventBus eventBus,
         MathUtility mathUtility,
@@ -88,6 +100,7 @@ public sealed class ConsumableActivationSystem : ISystem
         _potionCooldowns = potionCooldowns;
         _health = health;
         _itemCatalog = itemCatalog;
+        _actionCatalog = actionCatalog;
         _mapQuery = mapQuery;
         _eventBus = eventBus;
         _mathUtility = mathUtility;
@@ -124,27 +137,51 @@ public sealed class ConsumableActivationSystem : ISystem
             // so there's no outcome that should leave this request standing for a future visit.
             _pendingActivations.Remove(entityId);
 
-            if (!_itemCatalog.TryGet(request.ItemDefinitionId, out var item) || item.Activator is not PotionActivator potionActivator)
+            if (!_itemCatalog.TryGet(request.ItemDefinitionId, out var item))
             {
                 continue;
             }
 
-            if (!InventoryQueries.TryGetStack(_componentManager.GetMultiPool<InventoryItemStackComponent>(), entityId, request.ItemDefinitionId, out _))
+            switch (item.Activator)
             {
-                continue;
+                case PotionActivator potionActivator:
+                    if (!TryBeginActivation(entityId, item))
+                    {
+                        continue;
+                    }
+
+                    ActivatePotion(item, potionActivator, entityId, request.TargetTiles);
+                    ActionLockGate.Lock(_actionLocks, entityId, potionActivator.Timing.ActionLockFrames);
+                    break;
+
+                case ScrollActivator scrollActivator:
+                    if (!TryBeginActivation(entityId, item))
+                    {
+                        continue;
+                    }
+
+                    ActivateScroll(item, scrollActivator, entityId, request.TargetTiles);
+                    ActionLockGate.Lock(_actionLocks, entityId, scrollActivator.Timing.ActionLockFrames);
+                    break;
             }
-
-            if (ActionLockGate.IsBlocked(_actionLocks, entityId))
-            {
-                continue;
-            }
-
-            InventoryActions.ConsumeItem(_componentManager, entityId, request.ItemDefinitionId);
-
-            ActivatePotion(item, potionActivator, entityId, request.TargetTiles);
-
-            ActionLockGate.Lock(_actionLocks, entityId, potionActivator.Timing.ActionLockFrames);
         }
+    }
+
+    /// <summary>Shared pre-checks + stack consumption for any item activator kind -- still holds the stack, action lock isn't currently blocking, then consumes one unit (per spec order, before the effect applies). Returns false (nothing consumed) if either check fails.</summary>
+    private bool TryBeginActivation(int entityId, ItemDefinition item)
+    {
+        if (!InventoryQueries.TryGetStack(_componentManager.GetMultiPool<InventoryItemStackComponent>(), entityId, item.Id, out _))
+        {
+            return false;
+        }
+
+        if (ActionLockGate.IsBlocked(_actionLocks, entityId))
+        {
+            return false;
+        }
+
+        InventoryActions.ConsumeItem(_componentManager, entityId, item.Id);
+        return true;
     }
 
     private void ActivatePotion(ItemDefinition item, PotionActivator potionActivator, int sourceEntityId, Vector3Int[] targetTiles)
@@ -211,5 +248,61 @@ public sealed class ConsumableActivationSystem : ISystem
         ActionEffectSequence.Apply(item.Effects, context);
 
         PotionCooldownEffects.Reset(_componentManager, targetEntityId, durationFrames);
+    }
+
+    private void ActivateScroll(ItemDefinition item, ScrollActivator scrollActivator, int sourceEntityId, Vector3Int[] targetTiles)
+    {
+        var durationScaleMultiplier = ComputeScrollScaleMultiplier(sourceEntityId);
+
+        foreach (var tile in targetTiles)
+        {
+            foreach (var targetEntityId in TargetResolution.EnumerateTargets(tile, _mapQuery))
+            {
+                ApplyScrollToTarget(item, sourceEntityId, targetEntityId, durationScaleMultiplier);
+            }
+        }
+
+        ScrollMasteryEffects.RecordUsage(_componentManager, _eventBus, _actionCatalog, item, sourceEntityId, scrollActivator.SpellId);
+    }
+
+    private float ComputeScrollScaleMultiplier(int sourceEntityId) =>
+        _abilityScores is not null && AbilityScoreQueries.TryGetComponent(_abilityScores, sourceEntityId, AbilityScoreType.Intelligence, out var intelligence)
+            ? ScrollScalingEffects.ComputeScaleMultiplier(intelligence.Total)
+            : 1.0f;
+
+    /// <summary>
+    /// Unlike ApplyPotionToTarget, doesn't hard-require a HealthComponent on the target -- each
+    /// effect entry already no-ops gracefully when its required component/pool is missing (the
+    /// same "immortal but affectable" targeting melee already uses), and a scroll effect (e.g.
+    /// TorchMarkEffectEntry) may not need Health at all. Skipped only for a dead target.
+    /// </summary>
+    private void ApplyScrollToTarget(ItemDefinition item, int sourceEntityId, int targetEntityId, float durationScaleMultiplier)
+    {
+        if (_deadEntities?.Has(targetEntityId) == true)
+        {
+            return;
+        }
+
+        var context = new ActionEffectContext(
+            SourceEntityId: sourceEntityId,
+            TargetEntityId: targetEntityId,
+            Health: _health,
+            EventBus: _eventBus,
+            MathUtility: _mathUtility,
+            ComponentManager: _componentManager,
+            ActivatorName: item.Name,
+            ActivatorTags: item.Tags,
+            StatModifiers: _statModifiers,
+            AbilityScores: _abilityScores,
+            Mana: _mana,
+            HotkeyExpansionUnlocks: _hotkeyExpansionUnlocks,
+            StatusEffectAppliers: _statusEffectAppliers,
+            DeadEntities: _deadEntities,
+            AuraSources: _auraSources,
+            PlayerQuery: _playerQuery,
+            DamageOverride: null,
+            DurationScaleMultiplier: durationScaleMultiplier);
+
+        ActionEffectSequence.Apply(item.Effects, context);
     }
 }

@@ -81,6 +81,56 @@ public sealed class TargetShapeResolverTests
     }
 
     [TestMethod]
+    public void AdjacentWithSelf_SingleTile_IncludesOriginAndAllEightSurroundingNeighbors()
+    {
+        var origin = new Vector3Int(10, 10, 0);
+        var tiles = new List<Vector3Int>();
+
+        TargetShapeResolver.Resolve(TargetShape.AdjacentWithSelf, origin, SingleTile, cursorTile: origin, range: 0, areaSize: 0, MapSize, tiles);
+
+        Assert.HasCount(9, tiles);
+        CollectionAssert.Contains(tiles, origin);
+        CollectionAssert.Contains(tiles, new Vector3Int(9, 10, 0));
+        CollectionAssert.Contains(tiles, new Vector3Int(11, 10, 0));
+        CollectionAssert.Contains(tiles, new Vector3Int(10, 9, 0));
+        CollectionAssert.Contains(tiles, new Vector3Int(10, 11, 0));
+        CollectionAssert.Contains(tiles, new Vector3Int(9, 9, 0));
+        CollectionAssert.Contains(tiles, new Vector3Int(11, 9, 0));
+        CollectionAssert.Contains(tiles, new Vector3Int(9, 11, 0));
+        CollectionAssert.Contains(tiles, new Vector3Int(11, 11, 0));
+    }
+
+    [TestMethod]
+    public void AdjacentWithSelf_IgnoresRangeAndAreaSize_AlwaysFixedRadiusOne()
+    {
+        var origin = new Vector3Int(10, 10, 0);
+        var tiles = new List<Vector3Int>();
+
+        TargetShapeResolver.Resolve(TargetShape.AdjacentWithSelf, origin, SingleTile, cursorTile: origin, range: 99, areaSize: 99, MapSize, tiles);
+
+        Assert.HasCount(9, tiles);
+    }
+
+    [TestMethod]
+    public void AdjacentWithSelf_TwoByTwoFootprint_ResolvesPerimeterPlusOwnFootprint()
+    {
+        var origin = new Vector3Int(10, 10, 0);
+        var size = new Vector2Byte(2, 2);
+        var tiles = new List<Vector3Int>();
+
+        TargetShapeResolver.Resolve(TargetShape.AdjacentWithSelf, origin, size, cursorTile: origin, range: 0, areaSize: 0, MapSize, tiles);
+
+        // 12-tile perimeter (see the plain-Adjacent equivalent test) plus the 4-tile footprint.
+        Assert.HasCount(16, tiles);
+        CollectionAssert.Contains(tiles, new Vector3Int(10, 10, 0));
+        CollectionAssert.Contains(tiles, new Vector3Int(11, 10, 0));
+        CollectionAssert.Contains(tiles, new Vector3Int(10, 11, 0));
+        CollectionAssert.Contains(tiles, new Vector3Int(11, 11, 0));
+        CollectionAssert.Contains(tiles, new Vector3Int(9, 9, 0));
+        CollectionAssert.Contains(tiles, new Vector3Int(12, 12, 0));
+    }
+
+    [TestMethod]
     public void Resolve_ReusedResultsBuffer_IsClearedEachCall()
     {
         var origin = new Vector3Int(10, 10, 0);

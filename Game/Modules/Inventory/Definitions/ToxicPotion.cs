@@ -18,8 +18,8 @@ public static class ToxicPotion
         Id, "Toxic Flask", "HealthPotion", "x", Color.Purple,
         Tags: [Tag.Potion, Tag.Consumable],
         Effects: [new ActionEffect([
-            new StatusEffectGrantEntry(StatusEffectType.Poison, StackCount: 5),
-            new StatusEffectGrantEntry(StatusEffectType.Burning, StackCount: 3),
+            new StatusEffectGrant(StatusEffectType.Poison, StackCount: 5),
+            new StatusEffectGrant(StatusEffectType.Burning, StackCount: 3),
         ])],
         Description: "A sloshing flask of concentrated venom and embers. It doesn't hit hard on its own -- it hits long after you've stopped paying attention.",
         Summary: "Inflicts 5 stacks of Poison and 3 stacks of Burning.",

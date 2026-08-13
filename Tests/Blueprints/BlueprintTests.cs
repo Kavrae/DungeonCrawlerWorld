@@ -204,7 +204,7 @@ public sealed class BlueprintTests
 
         var abilityInstances = ecsContext.ComponentManager.GetMultiPool<ActionInstanceComponent>();
         // DamageAmount 0 -- no per-instance override, unlike every other race's Punch grant -- so the
-        // player's Punch rolls its catalog DamageEffectEntry's own MinAmount..MaxAmount range instead
+        // player's Punch rolls its catalog DirectDamage's own MinAmount..MaxAmount range instead
         // of a fixed number (see ActionEffectContext.DamageOverride's own doc comment).
         Assert.IsTrue(ActionInstanceQueries.TryGet(abilityInstances, entityId, PunchAction.Id, out var punch));
         Assert.AreEqual((short)0, punch.DamageAmount);
@@ -214,11 +214,12 @@ public sealed class BlueprintTests
         Assert.IsTrue(ActionInstanceQueries.TryGet(abilityInstances, entityId, ToxicStrikeAction.Id, out _));
 
         // Starting items: 5 Health Potions, 5 Mana Potions, 3 Hotkey Expansion Potions, 5 Volatile
-        // Concoctions (damage), 5 Toxic Flasks (Poison+Burning), 5 Toxic Idols (Poison aura toggle)
-        // -- see the ActionEffect/ActionActivator plan's concrete test content.
+        // Concoctions (damage), 5 Toxic Flasks (Poison+Burning), 5 Toxic Idols (Poison aura toggle),
+        // 5 Scrolls of Healing, 5 Scrolls of Torch -- see the ActionEffect/ActionActivator plan's
+        // concrete test content.
         var stacks = new List<InventoryItemStackComponent>();
         InventoryQueries.CopyStacksForEntity(ecsContext.ComponentManager.GetMultiPool<InventoryItemStackComponent>(), entityId, stacks);
-        Assert.HasCount(6, stacks);
+        Assert.HasCount(8, stacks);
 
         var healthPotionStack = stacks.Single(stack => stack.ItemDefinitionId == HealthPotion.Id);
         Assert.AreEqual(5, healthPotionStack.Quantity);
@@ -243,6 +244,14 @@ public sealed class BlueprintTests
         var toxicIdolStack = stacks.Single(stack => stack.ItemDefinitionId == ToxicIdol.Id);
         Assert.AreEqual(5, toxicIdolStack.Quantity);
         Assert.IsFalse(toxicIdolStack.IsDisabled);
+
+        var scrollOfHealingStack = stacks.Single(stack => stack.ItemDefinitionId == ScrollOfHealing.Id);
+        Assert.AreEqual(5, scrollOfHealingStack.Quantity);
+        Assert.IsFalse(scrollOfHealingStack.IsDisabled);
+
+        var scrollOfTorchStack = stacks.Single(stack => stack.ItemDefinitionId == ScrollOfTorch.Id);
+        Assert.AreEqual(5, scrollOfTorchStack.Quantity);
+        Assert.IsFalse(scrollOfTorchStack.IsDisabled);
 
         var hotkeyExpansionUnlock = ecsContext.ComponentManager.GetPackedPool<HotkeyExpansionUnlockComponent>().GetReadonly(entityId);
         Assert.AreEqual((short)5, hotkeyExpansionUnlock.UnlockedSlotCount);

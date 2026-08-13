@@ -1,4 +1,5 @@
 using Engine.ECS.Components;
+using Engine.Events;
 using Engine.Math;
 using Game.Modules.Actions;
 using Game.Modules.Actions.Activators;
@@ -73,7 +74,7 @@ public sealed class HotbarContentTests
         var windowService = new ElementPoolService(fontService, new GlyphRenderer());
 
         var hotbar = new HotbarContent(
-            world, new MapViewState(), componentManager, new ActionCatalog(), new ItemCatalog(),
+            world, new MapViewState(), componentManager, new EventBus(), new ActionCatalog(), new ItemCatalog(),
             fontService, new SpriteSheetService(null, "Spritesheets"), new SpriteRenderer(), ScreenSize);
 
         var hostWindow = windowService.CreateElement<Window>(null, new ElementOptions

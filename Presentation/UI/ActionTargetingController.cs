@@ -2,6 +2,8 @@ using Engine.ECS.Components.Stores;
 using Engine.Math;
 using Engine.Utilities;
 using Game.Modules;
+using Game.Modules.AbilityScores;
+using Game.Modules.AbilityScores.Components;
 using Game.Modules.Actions;
 using Game.Modules.Actions.Activators;
 using Game.Modules.Actions.Components;
@@ -17,7 +19,10 @@ using Presentation.Input;
 namespace Presentation.UI;
 
 /// <summary>
-/// Player's moment-to-moment action input -- arming/disarming/confirming/auto-targeting actions
+/// Player's moment-to-moment action input
+/// </summary>
+/// <remarks>
+/// Arming/disarming/confirming/auto-targeting actions
 /// and consumable items via their hotbar hotkeys. Items go through this same arm/target/confirm
 /// rhythm too -- matches ActionHotkeyBindingComponent's own umbrella-term reasoning (see its doc
 /// comment). Actions and items share that rhythm because both ultimately reduce to a
@@ -27,7 +32,7 @@ namespace Presentation.UI;
 /// pending-activation component for its own System to consume. Player movement is a separate
 /// concern handled by the sibling PlayerMovementController -- MapWindow.OnHotkeysAction calls both
 /// every frame, but the two share no state.
-/// </summary>
+/// </remarks>
 public sealed class ActionTargetingController(
     World world,
     MapViewState mapViewState,
@@ -43,7 +48,8 @@ public sealed class ActionTargetingController(
     PackedComponentPool<PendingConsumableActivationComponent> pendingConsumableActivations,
     PackedComponentPool<PendingDelayedActionComponent> pendingDelayedActions,
     PackedComponentPool<ActionLockComponent> actionLocks,
-    PackedComponentPool<ManaComponent>? manaPool = null)
+    PackedComponentPool<ManaComponent>? manaPool = null,
+    MultiComponentPool<AbilityScoreComponent>? abilityScores = null)
 {
     /// <summary>~300ms -- a second press of the same slot within this many frames of the first is a double-tap (auto-target the closest candidate, see HandleHotkeySlotPress), as opposed to a slower second press (confirm against the cursor, same as a click).</summary>
     private static readonly int DoubleTapWindowFrames = GameTiming.FramesForSeconds(0.3f);
@@ -338,7 +344,7 @@ public sealed class ActionTargetingController(
     /// </summary>
     private void HandleItemSlotPress(HotkeySlot slot, Guid itemDefinitionId, bool isDoubleTap)
     {
-        if (!itemCatalog.TryGet(itemDefinitionId, out var item) || item.Activator is not { } activator)
+        if (!itemCatalog.TryGet(itemDefinitionId, out var item) || item.Activator is null)
         {
             return;
         }
@@ -370,7 +376,7 @@ public sealed class ActionTargetingController(
             return;
         }
 
-        ArmItem(slot, itemDefinitionId, activator.Targeting);
+        ArmItem(slot, itemDefinitionId);
     }
 
     private void ArmAction(HotkeySlot slot, Guid actionId)
@@ -386,14 +392,15 @@ public sealed class ActionTargetingController(
         }
     }
 
-    private void ArmItem(HotkeySlot slot, Guid itemDefinitionId, TargetingSpec targeting)
+    /// <summary>Resolves targeting via TryGetArmedTargeting (not a parameter of its own) -- called after ArmedItemDefinitionId is already set above, so it reads back the correctly (Scroll-)scaled spec instead of a stale unscaled one, the same single-chokepoint reasoning as ArmAction re-fetching Activator.Targeting itself rather than taking it as a parameter.</summary>
+    private void ArmItem(HotkeySlot slot, Guid itemDefinitionId)
     {
         mapViewState.ArmedItemDefinitionId = itemDefinitionId;
         mapViewState.ArmedActionId = null;
         mapViewState.ArmedSlot = slot;
         _targetableTilesOrigin = null;
 
-        if (transformPool.TryGetReadonly(world.PlayerEntityId, out var transform))
+        if (TryGetArmedTargeting(out var targeting) && transformPool.TryGetReadonly(world.PlayerEntityId, out var transform))
         {
             RefreshTargetableTiles(targeting, transform.Position, transform.Size);
         }
@@ -425,7 +432,15 @@ public sealed class ActionTargetingController(
         return manaPool is not null && manaPool.TryGetReadonly(entityId, out var mana) && mana.CurrentMana >= manaCost;
     }
 
-    /// <summary>Resolves whichever of {action, item} is currently armed to its shared TargetingSpec -- the one piece both kinds need for every targeting computation below, so callers stop caring which kind they're dealing with past this point.</summary>
+    /// <summary>
+    /// Resolves whichever of {action, item} is currently armed to its shared TargetingSpec -- the
+    /// one piece both kinds need for every targeting computation below, so callers stop caring
+    /// which kind they're dealing with past this point. The single chokepoint every hover-preview/
+    /// arm-highlight/confirm-click path reads through (ArmItem calls this too, after setting
+    /// ArmedItemDefinitionId, rather than taking a targeting parameter of its own), so a
+    /// ScrollActivator item's Range/AreaSize scaling (see ScaleScrollTargeting) applies
+    /// consistently everywhere instead of only on some call sites.
+    /// </summary>
     private bool TryGetArmedTargeting(out TargetingSpec targeting)
     {
         if (mapViewState.ArmedActionId is { } actionId && actionCatalog.TryGet(actionId, out var action))
@@ -436,12 +451,23 @@ public sealed class ActionTargetingController(
 
         if (mapViewState.ArmedItemDefinitionId is { } itemId && itemCatalog.TryGet(itemId, out var item) && item.Activator is { } activator)
         {
-            targeting = activator.Targeting;
+            targeting = activator is ScrollActivator ? ScaleScrollTargeting(activator.Targeting) : activator.Targeting;
             return true;
         }
 
         targeting = null!;
         return false;
+    }
+
+    /// <summary>Scales baseTargeting's Range/AreaSize by the player's own Intelligence -- see ScrollScalingEffects's own doc comment. No-op (returns baseTargeting unchanged) when abilityScores isn't wired or the player has no Intelligence score, the same "1.0 multiplier" fallback ScrollScalingEffects.ComputeScaleMultiplier itself defaults to.</summary>
+    private TargetingSpec ScaleScrollTargeting(TargetingSpec baseTargeting)
+    {
+        if (abilityScores is null || !AbilityScoreQueries.TryGetComponent(abilityScores, world.PlayerEntityId, AbilityScoreType.Intelligence, out var intelligence))
+        {
+            return baseTargeting;
+        }
+
+        return ScrollScalingEffects.ScaleTargeting(baseTargeting, ScrollScalingEffects.ComputeScaleMultiplier(intelligence.Total));
     }
 
     /// <summary>
@@ -475,18 +501,22 @@ public sealed class ActionTargetingController(
 
     /// <summary>
     /// The full universe of tiles the given targeting could possibly be aimed at from
-    /// attackerPosition -- Adjacent's fixed perimeter-around-the-attacker's-footprint, or every
-    /// tile within Range for every cursor-directed shape (SingleTarget/Burst/Line/Cone) via a
-    /// Burst-shaped scatter, not the real Shape -- there's no single "aim direction" yet at arm
-    /// time, only a reachable area. Shared by Arm (for highlighting) and
-    /// TryActivateWithAutoTarget (for double-tap's candidate pool), so the two never drift out
-    /// of sync with each other.
+    /// attackerPosition -- Adjacent/AdjacentWithSelf's fixed perimeter-around-the-attacker's-
+    /// footprint (plus, for AdjacentWithSelf, the footprint itself -- see TargetShapeResolver's
+    /// own doc comment), or every tile within Range for every cursor-directed shape
+    /// (SingleTarget/Burst/Line/Cone) via a Burst-shaped scatter, not the real Shape -- there's no
+    /// single "aim direction" yet at arm time, only a reachable area. Shared by Arm (for
+    /// highlighting) and TryActivateWithAutoTarget (for double-tap's candidate pool), so the two
+    /// never drift out of sync with each other. Also what makes a manual click on the caster's own
+    /// tile resolve at all for an AdjacentWithSelf item (e.g. Scroll of Healing) -- TargetableTiles
+    /// has to actually contain that tile before TryConfirmActivationAtTile's Tag.Self special case
+    /// (or the general resolve path) is ever reached.
     /// </summary>
     private void ComputeTargetableTiles(Vector3Int attackerPosition, Vector2Byte attackerSize, TargetingSpec targeting, List<Vector3Int> buffer)
     {
-        if (targeting.Shape == TargetShape.Adjacent)
+        if (targeting.Shape is TargetShape.Adjacent or TargetShape.AdjacentWithSelf)
         {
-            TargetShapeResolver.Resolve(TargetShape.Adjacent, attackerPosition, attackerSize, attackerPosition, range: 0, areaSize: 0, world.Map.Size, buffer);
+            TargetShapeResolver.Resolve(targeting.Shape, attackerPosition, attackerSize, attackerPosition, range: 0, areaSize: 0, world.Map.Size, buffer);
             return;
         }
 
@@ -495,8 +525,9 @@ public sealed class ActionTargetingController(
 
     /// <summary>
     /// Resolves and queues a full action activation with no manual click-confirm at all -- the
-    /// double-tap path. Adjacent's footprint never depends on a target choice (it's always the
-    /// caster's own tile plus its 8 surrounding neighbors), so it's queued immediately. Every other
+    /// double-tap path. Adjacent/AdjacentWithSelf's footprint never depends on a target choice
+    /// (it's always the caster's own tile plus its 8 surrounding neighbors, for AdjacentWithSelf
+    /// including the caster's own tile in the resolved set), so it's queued immediately. Every other
     /// shape needs a target tile chosen first: ComputeTargetableTiles' reachable-area candidates
     /// are filtered down to occupied tiles and handed to TargetPriority.SelectAutoTarget, using
     /// MapViewState.HoveredTile as the cursor bias when one is already tracked (armed-and-then-
@@ -517,7 +548,7 @@ public sealed class ActionTargetingController(
         var mapSize = world.Map.Size;
         var targeting = action.Activator.Targeting;
 
-        if (targeting.Shape == TargetShape.Adjacent)
+        if (targeting.Shape is TargetShape.Adjacent or TargetShape.AdjacentWithSelf)
         {
             ComputeTargetableTiles(attackerPosition, attackerSize, targeting, _candidateTilesBuffer);
             QueueActionActivation(entityId, actionId, _candidateTilesBuffer);

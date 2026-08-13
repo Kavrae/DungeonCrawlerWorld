@@ -16,8 +16,8 @@ public static class ToxicStrikeAction
         Id, "Toxic Strike", null, "t", Color.Purple,
         Tags: [Tag.Ranged, Tag.Attack, Tag.Spell],
         Effects: [new ActionEffect([
-            new StatusEffectGrantEntry(StatusEffectType.Poison, StackCount: 10),
-            new StatusEffectGrantEntry(StatusEffectType.Burning, StackCount: 6),
+            new StatusEffectGrant(StatusEffectType.Poison, StackCount: 10),
+            new StatusEffectGrant(StatusEffectType.Burning, StackCount: 6),
         ])],
         Activator: new SpellActivator(
             new TargetingSpec(TargetShape.SingleTarget, Range: 15),

@@ -15,7 +15,7 @@ public static class HealAction
     public static ActionDefinition Build() => new(
         Id, "Heal", "Spell-Weak", "h", Color.Red,
         Tags: [Tag.Healing, Tag.Self, Tag.Spell],
-        Effects: [new ActionEffect([new HealEffectEntry(0.2f)])],
+        Effects: [new ActionEffect([new DirectHeal(0.2f)])],
         Activator: new SpellActivator(
             new TargetingSpec(TargetShape.Self, Range: 0),
             new ActionTiming(ActionTimingCategory.Immediate, ActionLockFrames: (short)GameTiming.FramesForSeconds(1f), CooldownFrames: null),

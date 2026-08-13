@@ -26,6 +26,7 @@ public sealed class InventoryModule : IGameModule
     public IReadOnlyList<Type> Dependencies { get; } = [typeof(ActionsModule)];
 
     private ItemCatalog _itemCatalog = null!;
+    private ActionCatalog _actionCatalog = null!;
     private IMapQuery _mapQuery = null!;
     private EventBus _eventBus = null!;
     private MathUtility _mathUtility = null!;
@@ -35,6 +36,7 @@ public sealed class InventoryModule : IGameModule
     public void Configure(GameModuleContext context)
     {
         _itemCatalog = context.Items;
+        _actionCatalog = context.Actions;
         _mapQuery = context.MapQuery;
         _eventBus = context.EventBus;
         _mathUtility = context.MathUtility;
@@ -83,6 +85,7 @@ public sealed class InventoryModule : IGameModule
             componentManager.GetPackedPool<PotionCooldownComponent>(),
             componentManager.GetPackedPool<HealthComponent>(),
             _itemCatalog,
+            _actionCatalog,
             _mapQuery,
             _eventBus,
             _mathUtility,

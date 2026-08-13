@@ -16,7 +16,7 @@ public static class HealthPotion
     public static ItemDefinition Build() => new(
         Id, "Health Potion", "HealthPotion", "h", Color.Green,
         Tags: [Tag.Potion, Tag.Consumable, Tag.Healing, Tag.Self],
-        Effects: [new ActionEffect([new HealEffectEntry(0.5f)])],
+        Effects: [new ActionEffect([new DirectHeal(0.5f)])],
         Description: "Increases your health by at least 50%. Doesn't cure poison or other health-seeping conditions such as succubus-inflicted gonorrhea. So remember to wrap it up, bucko.",
         Summary: "Heal target(s) by 50%.",
         MaxStackSize: MaximumStackSize,

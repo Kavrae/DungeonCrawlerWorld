@@ -70,15 +70,15 @@ public sealed class ConsumableActivationSystemTests
         var splashTargeting = new TargetingSpec(TargetShape.Burst, Range: 3, AreaSize: 1);
         itemCatalog.Register(new ItemDefinition(
             PotionId, "Test Potion", null, "p", Color.Green, Tags: [],
-            Effects: [new ActionEffect([new HealEffectEntry(0.5f)])],
+            Effects: [new ActionEffect([new DirectHeal(0.5f)])],
             Activator: new PotionActivator(splashTargeting, new ActionTiming(ActionTimingCategory.Immediate, 60, null))));
         itemCatalog.Register(new ItemDefinition(
             ManaPotionId, "Test Mana Potion", null, "m", Color.Blue, Tags: [],
-            Effects: [new ActionEffect([new ManaRestoreEffectEntry(1f)])],
+            Effects: [new ActionEffect([new DirectManaRestore(1f)])],
             Activator: new PotionActivator(splashTargeting, new ActionTiming(ActionTimingCategory.Immediate, 60, null))));
         itemCatalog.Register(new ItemDefinition(
             HotkeyExpansionPotionId, "Test Hotkey Expansion Potion", null, "k", Color.Orange, Tags: [],
-            Effects: [new ActionEffect([new HotkeySlotGrantEntry(5)])],
+            Effects: [new ActionEffect([new HotkeyExpansionGrant(5)])],
             Activator: new PotionActivator(new TargetingSpec(TargetShape.Self, Range: 0, AreaSize: 0), new ActionTiming(ActionTimingCategory.Immediate, 60, null))));
         itemCatalog.Register(new ItemDefinition(NonConsumableId, "Test Hammer", null, "h", Color.Gray, Tags: [], Effects: []));
 
@@ -92,6 +92,7 @@ public sealed class ConsumableActivationSystemTests
             componentManager.GetPackedPool<PotionCooldownComponent>(),
             componentManager.GetPackedPool<HealthComponent>(),
             itemCatalog,
+            new ActionCatalog(),
             mapQuery,
             eventBus,
             mathUtility,
@@ -125,7 +126,7 @@ public sealed class ConsumableActivationSystemTests
         var splashTargeting = new TargetingSpec(TargetShape.Burst, Range: 3, AreaSize: 1);
         itemCatalog.Register(new ItemDefinition(
             PotionId, "Test Potion", null, "p", Color.Green, Tags: [],
-            Effects: [new ActionEffect([new HealEffectEntry(0.5f)])],
+            Effects: [new ActionEffect([new DirectHeal(0.5f)])],
             Activator: new PotionActivator(splashTargeting, new ActionTiming(ActionTimingCategory.Immediate, 60, null))));
 
         var mapQuery = new FakeMapQuery();
@@ -138,6 +139,7 @@ public sealed class ConsumableActivationSystemTests
             componentManager.GetPackedPool<PotionCooldownComponent>(),
             componentManager.GetPackedPool<HealthComponent>(),
             itemCatalog,
+            new ActionCatalog(),
             mapQuery,
             eventBus,
             mathUtility,
@@ -189,7 +191,7 @@ public sealed class ConsumableActivationSystemTests
         system.Update(default, 0);
 
         Assert.AreEqual(10, ManaOf(componentManager, TargetEntityId), "ManaFraction 1f -- a full restore regardless of starting mana.");
-        Assert.AreEqual(20, HealthOf(componentManager, TargetEntityId), "No HealEffectEntry on the Mana Potion -- health must be untouched.");
+        Assert.AreEqual(20, HealthOf(componentManager, TargetEntityId), "No DirectHeal on the Mana Potion -- health must be untouched.");
     }
 
     /// <summary>An entity with Health but no ManaComponent (never gained a mana-costing action) is still a legitimate potion target -- the potion is consumed and the target's cooldown still resets, it just has nothing to restore.</summary>
@@ -411,6 +413,6 @@ public sealed class ConsumableActivationSystemTests
 
         system.Update(default, 0);
 
-        Assert.AreEqual(HotkeyExpansionEffects.MaxUnlockedSlots, componentManager.GetPackedPool<HotkeyExpansionUnlockComponent>().GetReadonly(TargetEntityId).UnlockedSlotCount);
+        Assert.AreEqual(HotkeyExpansion.MaxUnlockedSlots, componentManager.GetPackedPool<HotkeyExpansionUnlockComponent>().GetReadonly(TargetEntityId).UnlockedSlotCount);
     }
 }

@@ -8,9 +8,6 @@ using Game.Modules.Actions.Effects;
 using Game.Modules.Health.Components;
 using Game.Modules.StatModifiers;
 using Game.Modules.StatModifiers.Components;
-using Game.Modules.StatusEffectAura.Components;
-using Game.Modules.StatusEffects;
-using Microsoft.Xna.Framework;
 
 namespace Tests.Modules.Actions;
 
@@ -54,115 +51,117 @@ public sealed class ActionEffectTests
         new(SourceEntityId, TargetEntityId, health, eventBus, mathUtility, componentManager, "Test Action", ActivatorTags: [], StatModifiers: statModifiers, DamageOverride: damageOverride);
 
     [TestMethod]
-    public void DamageEffectEntry_RollsWithinMinMaxRange_WhenNoOverride()
+    public void DirectDamage_RollsWithinMinMaxRange_WhenNoOverride()
     {
         var (componentManager, health, eventBus) = Build();
         health.Add(TargetEntityId, new HealthComponent(100, 100));
         var mathUtility = new MathUtility(new NeverCritRandom());
 
-        new DamageEffectEntry(MinAmount: 10, MaxAmount: 10).Apply(Context(componentManager, health, eventBus, mathUtility));
+        new DirectDamage(MinAmount: 10, MaxAmount: 10).Apply(Context(componentManager, health, eventBus, mathUtility));
 
         Assert.AreEqual(90, health.GetReadonly(TargetEntityId).CurrentHealth);
     }
 
     [TestMethod]
-    public void DamageEffectEntry_DamageOverride_BypassesTheRoll()
+    public void DirectDamage_DamageOverride_BypassesTheRoll()
     {
         var (componentManager, health, eventBus) = Build();
         health.Add(TargetEntityId, new HealthComponent(100, 100));
         var mathUtility = new MathUtility(new NeverCritRandom());
 
-        new DamageEffectEntry(MinAmount: 999, MaxAmount: 999).Apply(Context(componentManager, health, eventBus, mathUtility, damageOverride: 10));
+        new DirectDamage(MinAmount: 999, MaxAmount: 999).Apply(Context(componentManager, health, eventBus, mathUtility, damageOverride: 10));
 
         Assert.AreEqual(90, health.GetReadonly(TargetEntityId).CurrentHealth, "The 999-999 catalog range must be ignored entirely once DamageOverride is set.");
     }
 
     [TestMethod]
-    public void DamageEffectEntry_CritRoll_MultipliesTheFullyScaledResult()
+    public void DirectDamage_CritRoll_MultipliesTheFullyScaledResult()
     {
         var (componentManager, health, eventBus) = Build();
         health.Add(TargetEntityId, new HealthComponent(100, 100));
         var mathUtility = new MathUtility(new AlwaysCritRandom());
 
-        new DamageEffectEntry(MinAmount: 10, MaxAmount: 10).Apply(Context(componentManager, health, eventBus, mathUtility));
+        new DirectDamage(MinAmount: 10, MaxAmount: 10).Apply(Context(componentManager, health, eventBus, mathUtility));
 
         // 10 base * CritMath.BaseCritMultiplier (3x) = 30.
         Assert.AreEqual(70, health.GetReadonly(TargetEntityId).CurrentHealth);
     }
 
     [TestMethod]
-    public void DamageEffectEntry_ZeroBaseAmount_DoesNothing()
+    public void DirectDamage_ZeroBaseAmount_DoesNothing()
     {
         var (componentManager, health, eventBus) = Build();
         health.Add(TargetEntityId, new HealthComponent(100, 100));
         var mathUtility = new MathUtility(new NeverCritRandom());
 
-        new DamageEffectEntry(MinAmount: 0, MaxAmount: 0).Apply(Context(componentManager, health, eventBus, mathUtility));
+        new DirectDamage(MinAmount: 0, MaxAmount: 0).Apply(Context(componentManager, health, eventBus, mathUtility));
 
         Assert.AreEqual(100, health.GetReadonly(TargetEntityId).CurrentHealth);
     }
 
     [TestMethod]
-    public void StatModifierGrantEntry_RecipientSource_LandsOnCasterNotResolvedTarget()
+    public void StatModifierGrant_LandsOnTargetEntityNotSourceEntity()
     {
         var (componentManager, health, eventBus) = Build();
         componentManager.RegisterMultiPool<StatModifierComponent>();
         var statModifiers = componentManager.GetMultiPool<StatModifierComponent>();
         var mathUtility = new MathUtility();
-        var entry = new StatModifierGrantEntry(StatModifierTarget.CritChance, StatModifierOperation.Additive, StatModifierPolarity.Buff, CanModify: true, Magnitude: 0.5f, DurationFrames: 60, Recipient: GrantRecipient.Source);
-
-        entry.Apply(Context(componentManager, health, eventBus, mathUtility, statModifiers));
-
-        Assert.AreEqual(0.5f, StatModifierMath.GetEffectiveValue(statModifiers, SourceEntityId, StatModifierTarget.CritChance, 0f), "The 'Double Tap' mechanism this field exists for depends on Recipient: Source landing on the attacker.");
-        Assert.AreEqual(0f, StatModifierMath.GetEffectiveValue(statModifiers, TargetEntityId, StatModifierTarget.CritChance, 0f));
-    }
-
-    [TestMethod]
-    public void StatModifierGrantEntry_RecipientTarget_LandsOnResolvedTarget()
-    {
-        var (componentManager, health, eventBus) = Build();
-        componentManager.RegisterMultiPool<StatModifierComponent>();
-        var statModifiers = componentManager.GetMultiPool<StatModifierComponent>();
-        var mathUtility = new MathUtility();
-        var entry = new StatModifierGrantEntry(StatModifierTarget.OutgoingDamage, StatModifierOperation.Additive, StatModifierPolarity.Buff, CanModify: true, Magnitude: 5f, DurationFrames: 60);
+        var entry = new StatModifierGrant(StatModifierTarget.OutgoingDamage, StatModifierOperation.Additive, StatModifierPolarity.Buff, CanModify: true, Magnitude: 5f, DurationFrames: 60);
 
         entry.Apply(Context(componentManager, health, eventBus, mathUtility, statModifiers));
 
         Assert.AreEqual(5f, StatModifierMath.GetEffectiveValue(statModifiers, TargetEntityId, StatModifierTarget.OutgoingDamage, 0f));
+        Assert.AreEqual(0f, StatModifierMath.GetEffectiveValue(statModifiers, SourceEntityId, StatModifierTarget.OutgoingDamage, 0f));
+    }
+
+    /// <summary>A caller that wants to buff the caster itself does so via a Self-shaped TargetingSpec, which resolves TargetEntityId to the caster -- not by anything StatModifierGrant itself does with SourceEntityId.</summary>
+    [TestMethod]
+    public void StatModifierGrant_SourceAndTargetAreSameEntity_LandsOnThatEntity()
+    {
+        var (componentManager, health, eventBus) = Build();
+        componentManager.RegisterMultiPool<StatModifierComponent>();
+        var statModifiers = componentManager.GetMultiPool<StatModifierComponent>();
+        var mathUtility = new MathUtility();
+        var entry = new StatModifierGrant(StatModifierTarget.CritChance, StatModifierOperation.Additive, StatModifierPolarity.Buff, CanModify: true, Magnitude: 0.5f, DurationFrames: 60);
+        var context = Context(componentManager, health, eventBus, mathUtility, statModifiers) with { TargetEntityId = SourceEntityId };
+
+        entry.Apply(context);
+
+        Assert.AreEqual(0.5f, StatModifierMath.GetEffectiveValue(statModifiers, SourceEntityId, StatModifierTarget.CritChance, 0f));
     }
 
     [TestMethod]
-    public void ChainedEffectEntry_TriggerRolled_AppliesAllTriggeredEffectsInOrder()
+    public void ChainedEffect_TriggerRolled_AppliesAllTriggeredEffectsInOrder()
     {
         var (componentManager, health, eventBus) = Build();
         health.Add(TargetEntityId, new HealthComponent(currentHealth: 10, maximumHealth: 100));
         var mathUtility = new MathUtility(new AlwaysCritRandom()); // NextDouble() -> 0.0, always below TriggerChance.
-        // HealEffectEntry, not DamageEffectEntry -- AlwaysCritRandom would also force every nested
+        // DirectHeal, not DirectDamage -- AlwaysCritRandom would also force every nested
         // damage roll to crit, coupling this test to crit math it isn't trying to exercise.
-        ActionEffect[] triggered = [new([new HealEffectEntry(0.1f)]), new([new HealEffectEntry(0.1f)])];
+        ActionEffect[] triggered = [new([new DirectHeal(0.1f)]), new([new DirectHeal(0.1f)])];
 
-        new ChainedEffectEntry(TriggerChance: 1f, TriggeredEffects: triggered).Apply(Context(componentManager, health, eventBus, mathUtility));
+        new ChainedEffect(TriggerChance: 1f, TriggeredEffects: triggered).Apply(Context(componentManager, health, eventBus, mathUtility));
 
         // Two 10%-of-100-max heals from CurrentHealth 10: 10 -> 20 -> 30.
         Assert.AreEqual(30, health.GetReadonly(TargetEntityId).CurrentHealth, "Both triggered ActionEffects must apply.");
     }
 
     [TestMethod]
-    public void ChainedEffectEntry_TriggerNotRolled_DoesNothing()
+    public void ChainedEffect_TriggerNotRolled_DoesNothing()
     {
         var (componentManager, health, eventBus) = Build();
         health.Add(TargetEntityId, new HealthComponent(100, 100));
         var mathUtility = new MathUtility(new NeverCritRandom());
-        ActionEffect[] triggered = [new([new DamageEffectEntry(5, 5)])];
+        ActionEffect[] triggered = [new([new DirectDamage(5, 5)])];
 
-        new ChainedEffectEntry(TriggerChance: 0.5f, TriggeredEffects: triggered).Apply(Context(componentManager, health, eventBus, mathUtility));
+        new ChainedEffect(TriggerChance: 0.5f, TriggeredEffects: triggered).Apply(Context(componentManager, health, eventBus, mathUtility));
 
         Assert.AreEqual(100, health.GetReadonly(TargetEntityId).CurrentHealth);
     }
 
     /// <summary>MaxChainDepth guards the same failure mode WoW/PoE explicitly design around: a proc that (directly or via a longer cycle) triggers itself.</summary>
     [TestMethod]
-    public void ChainedEffectEntry_SelfReferentialChain_TerminatesInsteadOfRecursingForever()
+    public void ChainedEffect_SelfReferentialChain_TerminatesInsteadOfRecursingForever()
     {
         var (componentManager, health, eventBus) = Build();
         health.Add(TargetEntityId, new HealthComponent(100, 100));
@@ -170,37 +169,10 @@ public sealed class ActionEffectTests
 
         List<IActionEffectEntry> entries = [];
         var selfEffect = new ActionEffect(entries);
-        var selfChain = new ChainedEffectEntry(TriggerChance: 1f, TriggeredEffects: [selfEffect]);
+        var selfChain = new ChainedEffect(TriggerChance: 1f, TriggeredEffects: [selfEffect]);
         entries.Add(selfChain);
 
         selfChain.Apply(Context(componentManager, health, eventBus, mathUtility));
-    }
-
-    [TestMethod]
-    public void AuraSourceToggleEntry_AbsentThenPresent_TogglesOnSourceEntityNotTarget()
-    {
-        var (componentManager, health, eventBus) = Build();
-        componentManager.RegisterMultiPool<StatusEffectAuraSourceComponent>();
-        var auraSources = componentManager.GetMultiPool<StatusEffectAuraSourceComponent>();
-        var mathUtility = new MathUtility();
-        var entry = new AuraSourceToggleEntry(StatusEffectType.Poison, AuraAndGlowStrength: 5, Color.Purple);
-        var context = Context(componentManager, health, eventBus, mathUtility) with { AuraSources = auraSources };
-
-        entry.Apply(context);
-        Assert.IsTrue(auraSources.Has(SourceEntityId));
-        Assert.IsFalse(auraSources.Has(TargetEntityId));
-
-        entry.Apply(context);
-        Assert.IsFalse(auraSources.Has(SourceEntityId));
-    }
-
-    [TestMethod]
-    public void AuraSourceToggleEntry_PoolNotWired_DoesNotThrow()
-    {
-        var (componentManager, health, eventBus) = Build();
-        var mathUtility = new MathUtility();
-
-        new AuraSourceToggleEntry(StatusEffectType.Poison, AuraAndGlowStrength: 5, Color.Purple).Apply(Context(componentManager, health, eventBus, mathUtility));
     }
 
     [TestMethod]
@@ -209,7 +181,7 @@ public sealed class ActionEffectTests
         var (componentManager, health, eventBus) = Build();
         health.Add(TargetEntityId, new HealthComponent(100, 100));
         var mathUtility = new MathUtility(new NeverCritRandom());
-        ActionEffect[] effects = [new([new DamageEffectEntry(5, 5)]), new([new DamageEffectEntry(5, 5)])];
+        ActionEffect[] effects = [new([new DirectDamage(5, 5)]), new([new DirectDamage(5, 5)])];
 
         ActionEffectSequence.Apply(effects, Context(componentManager, health, eventBus, mathUtility));
 

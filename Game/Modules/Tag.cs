@@ -13,6 +13,7 @@ public enum Tag
     Melee,
     Potion,
     Ranged,
+    Scroll,
     Self,
     Spell,
     Tool,

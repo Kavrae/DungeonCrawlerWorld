@@ -1,6 +1,7 @@
 using Engine.ECS.Components;
 using Engine.Events;
 using Game.Modules.Actions;
+using Game.Modules.Inventory;
 using Game.World;
 
 namespace Game.Modules.Achievements;
@@ -13,10 +14,11 @@ namespace Game.Modules.Achievements;
 /// that need to read a component's data rather than just an event's own fields -- e.g.
 /// EarlyAdopterAchievement reading CrawlerComponent off an event that carries no data itself),
 /// the ActionCatalog (for conditions that need to inspect the activated action's own data,
-/// e.g. SpellCasterAchievement checking ActionDefinition.Tags), and the unlock callback bound
-/// to this specific achievement's identity by AchievementModule.
+/// e.g. SpellCasterAchievement checking ActionDefinition.Tags), the ItemCatalog (same reasoning,
+/// for an item's own data -- e.g. ArchivistAchievement checking ItemDefinition.Tags), and the
+/// unlock callback bound to this specific achievement's identity by AchievementModule.
 /// </summary>
-public sealed class AchievementTriggerContext(EventBus eventBus, IPlayerQuery? playerQuery, ComponentManager componentManager, ActionCatalog actionCatalog, Action<int> unlock)
+public sealed class AchievementTriggerContext(EventBus eventBus, IPlayerQuery? playerQuery, ComponentManager componentManager, ActionCatalog actionCatalog, ItemCatalog itemCatalog, Action<int> unlock)
 {
     public EventBus EventBus { get; } = eventBus;
 
@@ -25,6 +27,8 @@ public sealed class AchievementTriggerContext(EventBus eventBus, IPlayerQuery? p
     public ComponentManager ComponentManager { get; } = componentManager;
 
     public ActionCatalog Actions { get; } = actionCatalog;
+
+    public ItemCatalog Items { get; } = itemCatalog;
 
     /// <summary>
     /// Subscribes a handler for TEvent that unlocks the achievement for the player -- the only

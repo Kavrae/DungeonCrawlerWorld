@@ -523,7 +523,6 @@ public sealed class MapWindow : Window
         }
     }
 
-    /// <summary>Skips the player entirely -- the top-right HUD health bar (see PlayerHealthBarContent) covers the player, so no per-tile icon here, now or for anything added to this method later, should duplicate it.</summary>
     private void DrawEntityIcons(SpriteBatch spriteBatch, Texture2D unitRectangle, int entityId, Vector2 footprintTopLeft, Vector2 footprintSize)
     {
         if (entityId == _world.PlayerEntityId)

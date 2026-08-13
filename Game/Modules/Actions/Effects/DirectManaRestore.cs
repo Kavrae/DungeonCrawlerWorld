@@ -3,8 +3,8 @@ using Game.Modules.StatModifiers;
 
 namespace Game.Modules.Actions.Effects;
 
-/// <summary>Mirrors HealEffectEntry exactly, against Mana instead of Health. No-op when context.Mana isn't wired, or the target has no ManaComponent (see ManaRestore.Apply's own doc comment).</summary>
-public sealed record ManaRestoreEffectEntry(float Fraction) : IActionEffectEntry
+/// <summary>Mirrors DirectHeal exactly, against Mana instead of Health. No-op when context.Mana isn't wired, or the target has no ManaComponent (see ManaRestore.Apply's own doc comment).</summary>
+public sealed record DirectManaRestore(float Fraction) : IActionEffectEntry
 {
     public void Apply(ActionEffectContext context)
     {

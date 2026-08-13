@@ -1,4 +1,5 @@
 ﻿using Engine.ECS.Components;
+using Engine.Events;
 using Engine.Math;
 using Game.Modules.Actions;
 using Game.Modules.Actions.Activators;
@@ -1885,7 +1886,7 @@ public sealed class UiInputControllerTests
         cell.Initialize();
 
         var hotbar = new HotbarContent(
-            world, new MapViewState(), componentManager, new ActionCatalog(), itemCatalog,
+            world, new MapViewState(), componentManager, new EventBus(), new ActionCatalog(), itemCatalog,
             fontService, new SpriteSheetService(null, "Spritesheets"), new SpriteRenderer(), new Vector2(1920, 1080));
         var hotbarWindow = windowService.CreateElement<Window>(null, new ElementOptions
         {

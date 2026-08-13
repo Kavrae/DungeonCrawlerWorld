@@ -3,7 +3,7 @@ namespace Game.Modules.Actions;
 /// <summary>
 /// Applies an ordered list of ActionEffect, in list order -- shared by IActionActivator
 /// orchestration (an activator can trigger more than one ActionEffect, see IActionActivator.
-/// Effects) and ChainedEffectEntry (a successful trigger can fire more than one ActionEffect too)
+/// Effects) and ChainedEffect (a successful trigger can fire more than one ActionEffect too)
 /// so both "trigger multiple ActionEffects" call sites share one implementation instead of each
 /// re-writing the same loop.
 /// </summary>

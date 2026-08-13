@@ -18,7 +18,7 @@ namespace Game.Modules.Actions;
 /// DelayedActionSystem (a Delayed action's windup completing) -- publishes ActionActivatedEvent,
 /// builds the source-fixed half of an ActionEffectContext (DamageOverride: instance.DamageAmount,
 /// the per-instance/per-race override -- see ActionInstanceComponent's own doc comment;
-/// ActivatorTags: action.Tags, for DamageEffectEntry's ability-score bonus), walks target tiles
+/// ActivatorTags: action.Tags, for DirectDamage's ability-score bonus), walks target tiles
 /// via TargetResolution, and calls ActionEffectSequence.Apply(action.Effects, ...) once per
 /// resolved target. Contains no per-effect-kind knowledge at all -- what an action's effects
 /// actually do lives entirely on the ActionEffect/IActionEffectEntry types themselves.

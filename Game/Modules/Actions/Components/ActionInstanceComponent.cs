@@ -12,7 +12,7 @@ namespace Game.Modules.Actions.Components;
 /// "Default Attack") can share one catalog ActionDefinition while each hitting for a different
 /// amount (Goblin 10, Fairy 3, Ghost 5 -- see the race blueprints' grants). A DamageAmount of 0
 /// (the default) means "no per-instance override" -- ActionEffectResolver passes null through
-/// as ActionEffectContext.DamageOverride in that case, so the granted DamageEffectEntry rolls its
+/// as ActionEffectContext.DamageOverride in that case, so the granted DirectDamage rolls its
 /// own MinAmount..MaxAmount range instead of a flat value (see PlayerBlueprint's Punch grant, the
 /// one race that opts into rolled variance rather than a fixed per-race number).
 /// CooldownFramesRemaining is meaningful for any action whose ActionTiming.CooldownFrames is

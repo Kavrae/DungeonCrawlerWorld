@@ -15,7 +15,7 @@ public static class MagicMissileAction
     public static ActionDefinition Build() => new(
         Id, "Magic Missile", "Magic Missile", "m", Color.Black,
         Tags: [Tag.Ranged, Tag.Attack, Tag.Spell],
-        Effects: [new ActionEffect([new DamageEffectEntry(MinAmount: 20, MaxAmount: 25)])],
+        Effects: [new ActionEffect([new DirectDamage(MinAmount: 20, MaxAmount: 25)])],
         Activator: new SpellActivator(
             new TargetingSpec(TargetShape.SingleTarget, Range: 20),
             new ActionTiming(ActionTimingCategory.Immediate, ActionLockFrames: (short)GameTiming.FramesForSeconds(1f), CooldownFrames: null),

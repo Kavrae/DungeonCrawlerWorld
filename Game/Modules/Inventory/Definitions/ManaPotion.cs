@@ -16,7 +16,7 @@ public static class ManaPotion
     public static ItemDefinition Build() => new(
         Id, "Regular Mana Potion", "HealthPotion", "m", Color.Blue,
         Tags: [Tag.Potion, Tag.Consumable, Tag.Self],
-        Effects: [new ActionEffect([new ManaRestoreEffectEntry(1f)])],
+        Effects: [new ActionEffect([new DirectManaRestore(1f)])],
         Description: "Fully restores the target(s) mana. Oddly tastes like TV static.",
         Summary: "Restore target's mana.",
         MaxStackSize: MaximumStackSize,

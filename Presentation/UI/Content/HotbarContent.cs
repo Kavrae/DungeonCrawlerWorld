@@ -1,5 +1,6 @@
 using Engine.ECS.Components;
 using Engine.ECS.Components.Stores;
+using Engine.Events;
 using FontStashSharp;
 using Game.Blueprints;
 using Game.Modules.Actions;
@@ -40,6 +41,7 @@ public sealed class HotbarContent(
     World world,
     MapViewState mapViewState,
     ComponentManager componentManager,
+    EventBus eventBus,
     ActionCatalog actionCatalog,
     ItemCatalog itemCatalog,
     FontService fontService,
@@ -202,7 +204,7 @@ public sealed class HotbarContent(
         return true;
     }
 
-    /// <summary>Unlocking more Expansion slots is rare and permanent (see HotkeyExpansionEffects.Grant), so this only actually resizes/repositions the host window on the frame the row/page count changes, not every frame -- centered horizontally and anchored to the same bottom margin as before, recomputed against the new Size so the bar grows upward as rows are added and rightward as page 2 appears (see GameShellBootstrapper, which sizes/positions the window identically at construction).</summary>
+    /// <summary>Unlocking more Expansion slots is rare and permanent (see HotkeyExpansion.Apply), so this only actually resizes/repositions the host window on the frame the row/page count changes, not every frame -- centered horizontally and anchored to the same bottom margin as before, recomputed against the new Size so the bar grows upward as rows are added and rightward as page 2 appears (see GameShellBootstrapper, which sizes/positions the window identically at construction).</summary>
     private void RefreshLayoutIfChanged()
     {
         var rowsVisible = GetExpansionRowsVisible(_unlockedExpansionSlots);
@@ -360,7 +362,9 @@ public sealed class HotbarContent(
     /// real assignment path, driven by UiInputController's content-drag drop resolution. A
     /// not-yet-unlocked Expansion slot silently refuses the binding -- it isn't a valid drop
     /// target (see this class's own doc comment on the disabled-alpha treatment) -- rather than
-    /// UiInputController needing its own separate lock-awareness.
+    /// UiInputController needing its own separate lock-awareness. Publishes ItemHotkeyBoundEvent
+    /// -- ArchivistAchievement's trigger -- deliberately not raised by PlayerBlueprint's own
+    /// hardcoded starting binds, which are spawn-time setup, not a player action.
     /// </summary>
     internal void BindItem(HotkeySlot slot, Guid itemDefinitionId)
     {
@@ -373,6 +377,7 @@ public sealed class HotbarContent(
         ActionHotkeyBindingQueries.Unbind(_actionHotkeyBindings, playerEntityId, slot);
         ItemHotkeyBindingQueries.Unbind(_itemHotkeyBindings, playerEntityId, slot);
         _itemHotkeyBindings.Add(playerEntityId, new ItemHotkeyBindingComponent(slot, itemDefinitionId));
+        eventBus.Publish(new ItemHotkeyBoundEvent(playerEntityId, slot, itemDefinitionId));
     }
 
     /// <summary>Removes slot's item binding, if any -- dragging a bound item off the hotbar entirely (see UiInputController's content-drag path).</summary>

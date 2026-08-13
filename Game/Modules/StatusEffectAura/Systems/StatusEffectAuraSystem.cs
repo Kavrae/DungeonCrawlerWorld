@@ -79,7 +79,7 @@ namespace Game.Modules.StatusEffectAura.Systems;
 ///   it only matters once a non-player moving source exists.
 ///
 /// A source can also now appear/disappear outside of blueprint-time population (see
-/// AuraSourceEffects.Toggle, used by AuraSourceToggleEntry -- an item like Toxic Idol, or a
+/// AuraSourceEffects.Toggle/Grant, used by AuraSourceGrant -- an item like Toxic Idol, or a
 /// future creature-cast action effect). OnSourceAdded/OnSourceRemoved react to
 /// AuraSourceAddedEvent/AuraSourceRemovedEvent the same way OnEntityMoved reacts to a move,
 /// splatting/unsplatting exactly that one source's own radius, and -- like the moving-source

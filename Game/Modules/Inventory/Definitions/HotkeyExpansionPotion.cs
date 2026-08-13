@@ -16,7 +16,7 @@ public static class HotkeyExpansionPotion
     public static ItemDefinition Build() => new(
         Id, "Hotkey Expansion Potion", "HealthPotion", "k", Color.Orange,
         Tags: [Tag.Consumable, Tag.Potion, Tag.Self],
-        Effects: [new ActionEffect([new HotkeySlotGrantEntry(5)])],
+        Effects: [new ActionEffect([new HotkeyExpansionGrant(5)])],
         Description: "Do you ever feel like you just don't have enough menus blocking your view? Well lets fix that! Lets add 5 more hotkey slots right in the middle of your screen. Note : Your hotkey list caps out at 20 slots.",
         Summary: "Adds 5 new hotkey slots.",
         MaxStackSize: MaximumStackSize,

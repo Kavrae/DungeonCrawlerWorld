@@ -4,11 +4,11 @@ namespace Game.Modules.Actions.Effects;
 /// Probability-gated trigger for one or more further ActionEffects, applied to the same
 /// source/target via the same ActionEffectSequence both IActionActivator orchestration and this
 /// entry share. MaxChainDepth guards the same failure mode WoW/PoE explicitly design around: a
-/// proc that (directly or via a longer cycle) triggers itself -- since a ChainedEffectEntry can
+/// proc that (directly or via a longer cycle) triggers itself -- since a ChainedEffect can
 /// itself appear inside one of its own TriggeredEffects, arbitrary-depth chaining falls out for
 /// free from ordinary composition, so the depth guard is the only extra safety needed.
 /// </summary>
-public sealed record ChainedEffectEntry(float TriggerChance, IReadOnlyList<ActionEffect> TriggeredEffects) : IActionEffectEntry
+public sealed record ChainedEffect(float TriggerChance, IReadOnlyList<ActionEffect> TriggeredEffects) : IActionEffectEntry
 {
     public const int MaxChainDepth = 5;
 

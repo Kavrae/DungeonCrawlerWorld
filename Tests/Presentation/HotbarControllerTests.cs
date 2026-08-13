@@ -1,4 +1,5 @@
 using Engine.ECS.Components;
+using Engine.Events;
 using Engine.Math;
 using Game.Modules.Actions;
 using Game.Modules.Actions.Activators;
@@ -87,7 +88,7 @@ public sealed class HotbarControllerTests
             componentManager.GetPackedPool<ManaComponent>());
 
         var fontService = new FontService("Fonts");
-        var hotbarContent = new HotbarContent(world, mapViewState, componentManager, actionCatalog, itemCatalog, fontService, new SpriteSheetService(null, "Spritesheets"), new SpriteRenderer(), new Vector2(1920, 1080));
+        var hotbarContent = new HotbarContent(world, mapViewState, componentManager, new EventBus(), actionCatalog, itemCatalog, fontService, new SpriteSheetService(null, "Spritesheets"), new SpriteRenderer(), new Vector2(1920, 1080));
         var hotbarController = new HotbarController(mapViewState, hotbarContent, actionTargeting);
 
         return (hotbarController, mapViewState, componentManager);

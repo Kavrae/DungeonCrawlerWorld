@@ -12,7 +12,7 @@ namespace Game.Modules.Actions.Effects;
 /// entirely -- a corpse doesn't receive newly-granted effects; an effect already active when an
 /// entity dies keeps ticking until it naturally expires, untouched here.
 /// </summary>
-public sealed record StatusEffectGrantEntry(StatusEffectType Type, int StackCount = 1) : IActionEffectEntry
+public sealed record StatusEffectGrant(StatusEffectType Type, int StackCount = 1) : IActionEffectEntry
 {
     public void Apply(ActionEffectContext context)
     {

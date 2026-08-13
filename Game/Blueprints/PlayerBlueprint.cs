@@ -55,7 +55,7 @@ public sealed class PlayerBlueprint(MathUtility mathUtility, UniqueNumberAllocat
         }
 
         ActionGrantEffects.Grant(componentManager, entityId, HealAction.Id, HealAction.ManaCost, damageAmount: 0, cooldownFramesRemaining: 0);
-        // damageAmount: 0 -- no per-instance override, so Punch rolls its catalog DamageEffectEntry's own
+        // damageAmount: 0 -- no per-instance override, so Punch rolls its catalog DirectDamage's own
         // MinAmount..MaxAmount range (18-22, roughly +-10% of the old flat 20) instead of a fixed number.
         ActionGrantEffects.Grant(componentManager, entityId, PunchAction.Id, manaCost: 0, damageAmount: 0, cooldownFramesRemaining: 0);
         ActionGrantEffects.Grant(componentManager, entityId, MagicMissileAction.Id, MagicMissileAction.ManaCost, damageAmount: MagicMissileDamage, cooldownFramesRemaining: 0);
@@ -77,6 +77,8 @@ public sealed class PlayerBlueprint(MathUtility mathUtility, UniqueNumberAllocat
         InventoryActions.AddItem(componentManager, entityId, DamagePotion.Id, quantity: 5);
         InventoryActions.AddItem(componentManager, entityId, ToxicPotion.Id, quantity: 5);
         InventoryActions.AddItem(componentManager, entityId, ToxicIdol.Id, quantity: 5);
+        InventoryActions.AddItem(componentManager, entityId, ScrollOfHealing.Id, quantity: 5);
+        InventoryActions.AddItem(componentManager, entityId, ScrollOfTorch.Id, quantity: 5);
 
         componentManager.Merge(entityId, new ItemHotkeyBindingComponent(HotkeySlot.Slot1, HealthPotion.Id));
         componentManager.Merge(entityId, new ItemHotkeyBindingComponent(HotkeySlot.Slot2, ManaPotion.Id));

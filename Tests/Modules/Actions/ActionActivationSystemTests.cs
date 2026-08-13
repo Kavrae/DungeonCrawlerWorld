@@ -67,7 +67,7 @@ public sealed class ActionActivationSystemTests
         var mapQuery = new FakeMapQuery();
         var eventBus = new EventBus();
         var mathUtility = new MathUtility(new NeverCritRandom());
-        var damageEffects = new ActionEffect[] { new([new DamageEffectEntry(MinAmount: 0, MaxAmount: 0)]) };
+        var damageEffects = new ActionEffect[] { new([new DirectDamage(MinAmount: 0, MaxAmount: 0)]) };
         var targeting = new TargetingSpec(TargetShape.SingleTarget, Range: 10);
 
         var actionCatalog = new ActionCatalog();
