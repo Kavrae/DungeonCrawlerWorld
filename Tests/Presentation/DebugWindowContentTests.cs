@@ -61,7 +61,7 @@ public sealed class DebugWindowContentTests
         var fontService = new FontService("Fonts");
         var windowService = new ElementPoolService(fontService, new GlyphRenderer());
         var hostWindow = windowService.CreateElement<Window>(null, new ElementOptions());
-        hostWindow.SetContent(new DebugWindowContent(fontService, ecsContext.EntityManager, ecsContext.ComponentManager, ecsContext.SystemManager));
+        hostWindow.SetContent(new DebugWindowContent(fontService, ecsContext.EntityManager, ecsContext.ComponentManager, diagnostics: null));
 
         hostWindow.Initialize();
         hostWindow.Update(new GameTime());
@@ -76,7 +76,7 @@ public sealed class DebugWindowContentTests
         var fontService = new FontService("Fonts");
         var windowService = new ElementPoolService(fontService, new GlyphRenderer());
         var hostWindow = windowService.CreateElement<Window>(null, new ElementOptions());
-        hostWindow.SetContent(new DebugWindowContent(fontService, ecsContext.EntityManager, ecsContext.ComponentManager, ecsContext.SystemManager));
+        hostWindow.SetContent(new DebugWindowContent(fontService, ecsContext.EntityManager, ecsContext.ComponentManager, diagnostics: null));
 
         hostWindow.Initialize();
         hostWindow.Update(new GameTime());

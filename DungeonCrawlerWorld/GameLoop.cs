@@ -2,7 +2,6 @@
 using Engine.ECS.Context;
 using Engine.ECS.Systems;
 using Engine.Math;
-using Engine.Utilities;
 using Game.Bootstrap;
 using Game.Diagnostics;
 using Game.Floors;
@@ -27,12 +26,6 @@ public sealed class GameLoop : Microsoft.Xna.Framework.Game
     private const int InitialEntityCapacity = 2_600_000;
     private const int InitialComponentCapacity = 220_000;
 
-    // ~5 seconds -- how often ReportTopPhases dumps the full per-phase ranking to the console.
-    // PhaseProfiler.TopPhases itself refreshes every real second regardless; this only paces how
-    // often that snapshot gets printed, so a gameplay demo's console log doesn't fill with a
-    // duplicate ranking every single frame.
-    private static readonly int ProfileReportIntervalFrames = GameTiming.FramesForSeconds(5f);
-
     // Floor 1 of (eventually) 18 -- floors are strictly sequential, no skipping or
     // backtracking. There's no advance trigger yet (that needs a win-condition system that
     // doesn't exist), so this stays a constant rather than tracked state until something
@@ -53,7 +46,7 @@ public sealed class GameLoop : Microsoft.Xna.Framework.Game
     private GameShellContext _shell = null!;
     private UiInputController _inputController = null!;
     private PlayerActivityLog _playerActivityLog = null!;
-    private PhaseProfiler _profiler = null!;
+    private readonly DiagnosticsEngine _diagnostics;
     private FrameEventBuffer<EntityMovedEvent> _movedEntities = null!;
     private UniqueNumberAllocator _crawlerNumberAllocator = null!;
     private bool _playerSpawned;
@@ -61,8 +54,16 @@ public sealed class GameLoop : Microsoft.Xna.Framework.Game
 
     private Texture2D _unitRectangle = null!;
 
-    public GameLoop()
+    /// <param name="diagnosticsFeatures">Which Diagnostics engine features to enable -- opt-in, defaults to None. See DiagnosticsFeaturesParser (Program.cs passes --diagnostics= here).</param>
+    public GameLoop(DiagnosticsFeatures diagnosticsFeatures = DiagnosticsFeatures.None)
     {
+        // Constructed here, not in Initialize(), so its FrameBudget/Startup trackers' clocks
+        // (and Startup's Phase("Module Load") wrap around GameBootstrapper.Build below) start as
+        // close to process start as this class can observe -- Initialize() itself is one of the
+        // things being timed. Memory/LeakDetection can't start this early (they need
+        // ComponentManager/EntityManager, which don't exist yet) -- see AttachEcsContext below.
+        _diagnostics = new DiagnosticsEngine(diagnosticsFeatures);
+
         _graphics = new GraphicsDeviceManager(this)
         {
             PreferredBackBufferWidth = 1600,
@@ -83,31 +84,48 @@ public sealed class GameLoop : Microsoft.Xna.Framework.Game
         // populate that world. World itself is session-long-lived, not rebuilt per floor --
         // see FloorBuilder -- so the IMapQuery every module captures here stays valid across
         // future floor transitions, which will replace world.Map rather than World itself.
-        _world = new Game.World.World(FloorBuilder.CreateMap(FloorNumber));
+        using (_diagnostics.StartupProfiler?.Phase("World/Map Build"))
+        {
+            _world = new Game.World.World(FloorBuilder.CreateMap(FloorNumber));
+        }
 
         var modsDirectory = Path.Combine(AppContext.BaseDirectory, "Mods");
-        var bootstrapResult = GameBootstrapper.Build(_world, _mathUtility, modsDirectory, InitialEntityCapacity, InitialComponentCapacity);
+        GameBootstrapResult bootstrapResult;
+        using (_diagnostics.StartupProfiler?.Phase("Module Load"))
+        {
+            bootstrapResult = GameBootstrapper.Build(_world, _mathUtility, modsDirectory, InitialEntityCapacity, InitialComponentCapacity, _diagnostics.StartupProfiler);
+        }
         _ecsContext = bootstrapResult.EcsContext;
         _movedEntities = bootstrapResult.MovedEntities;
 
-        _profiler = new PhaseProfiler();
-        _ecsContext.SystemManager.Profiler = _profiler;
-        _ecsContext.EventBus.Profiler = _profiler;
+        _diagnostics.AttachEcsContext(_ecsContext.ComponentManager, _ecsContext.EntityManager);
+        _ecsContext.SystemManager.Profiler = _diagnostics.FrameCostRecorder;
+        _ecsContext.EventBus.Profiler = _diagnostics.FrameCostRecorder;
 
         foreach (var failure in bootstrapResult.Failures)
         {
             Console.Error.WriteLine($"[ModuleLoad] {failure.Source}: {failure.Exception}");
         }
 
-        FloorBuilder.PopulateFloor(_world, _ecsContext, _mathUtility, _crawlerNumberAllocator, _movedEntities);
+        using (_diagnostics.StartupProfiler?.Phase("Entity Population"))
+        {
+            FloorBuilder.PopulateFloor(_world, _ecsContext, _mathUtility, _crawlerNumberAllocator, _movedEntities);
+        }
 
         var logFilePath = Path.Combine(FindProjectRoot(), "Log", "player-activity.log");
         _playerActivityLog = new PlayerActivityLog(_world, _ecsContext.ComponentManager, _ecsContext.EventBus, logFilePath);
         Console.WriteLine($"[PlayerActivityLog] Writing to {logFilePath}");
 
-        _presentation = PresentationBootstrapper.Build(GraphicsDevice, "Fonts", "Spritesheets");
+        using (_diagnostics.StartupProfiler?.Phase("Presentation Bootstrap"))
+        {
+            _presentation = PresentationBootstrapper.Build(GraphicsDevice, "Fonts", "Spritesheets");
+        }
+
         var screenSize = new Vector2(_graphics.PreferredBackBufferWidth, _graphics.PreferredBackBufferHeight);
-        _shell = GameShellBootstrapper.Build(_presentation, _world, _ecsContext, bootstrapResult.ActionCatalog, bootstrapResult.ItemCatalog, screenSize);
+        using (_diagnostics.StartupProfiler?.Phase("Window/Shell Setup"))
+        {
+            _shell = GameShellBootstrapper.Build(_presentation, _world, _ecsContext, bootstrapResult.ActionCatalog, bootstrapResult.ItemCatalog, screenSize, _diagnostics);
+        }
         _inputController = _shell.InputController;
 
         base.Initialize();
@@ -126,6 +144,7 @@ public sealed class GameLoop : Microsoft.Xna.Framework.Game
     protected override void Update(GameTime gameTime)
     {
         _inputController.Update(gameTime);
+        _diagnostics.Tick();
 
         _shell.NotificationCenter.Update(gameTime);
         _shell.Inventory.Update(gameTime);
@@ -150,17 +169,12 @@ public sealed class GameLoop : Microsoft.Xna.Framework.Game
 
             var ecsUpdateStart = Stopwatch.GetTimestamp();
             _ecsContext.Update(new EngineTime(gameTime.TotalGameTime, gameTime.ElapsedGameTime, gameTime.IsRunningSlowly, _frameCount));
-            _profiler.Record("EcsContext.Update (all systems)", Stopwatch.GetElapsedTime(ecsUpdateStart));
-
-            if (_frameCount % ProfileReportIntervalFrames == 0)
-            {
-                ReportTopPhases();
-            }
+            _diagnostics.RecordSimulationTick("GameLoop", "EcsContext.Update (all systems)", Stopwatch.GetElapsedTime(ecsUpdateStart));
         }
 
         var shellUpdateStart = Stopwatch.GetTimestamp();
-        _shell.Update(gameTime);
-        _profiler.Record("Shell.Update", Stopwatch.GetElapsedTime(shellUpdateStart));
+        _shell.Update(gameTime, _diagnostics.FrameCostRecorder);
+        _diagnostics.FrameCostRecorder?.Record(FrameCostCategory.Update, "GameLoop", "Shell.Update", Stopwatch.GetElapsedTime(shellUpdateStart));
 
         base.Update(gameTime);
     }
@@ -172,27 +186,12 @@ public sealed class GameLoop : Microsoft.Xna.Framework.Game
         var spriteBatch = _presentation.SpriteBatchRenderer.StartSpriteBatch();
 
         var shellDrawStart = Stopwatch.GetTimestamp();
-        _shell.Draw(gameTime, GraphicsDevice, spriteBatch, _unitRectangle);
-        _profiler.Record("Shell.Draw", Stopwatch.GetElapsedTime(shellDrawStart));
+        _shell.Draw(gameTime, GraphicsDevice, spriteBatch, _unitRectangle, _diagnostics.FrameCostRecorder);
+        _diagnostics.FrameCostRecorder?.Record(FrameCostCategory.Draw, "GameLoop", "Shell.Draw", Stopwatch.GetElapsedTime(shellDrawStart));
 
         _presentation.SpriteBatchRenderer.EndSpriteBatch();
 
         base.Draw(gameTime);
-    }
-
-    /// <summary>Dumps PhaseProfiler's full last-second ranking to the console every ProfileReportIntervalFrames -- a single on-screen "Top: X" readout (see DebugWindowContent) is enough to notice a hotspot while playing, but this keeps a fuller trail (the #2, #3, ... contributors too) for after the demo ends.</summary>
-    private void ReportTopPhases()
-    {
-        if (_profiler.TopPhases.Count == 0)
-        {
-            return;
-        }
-
-        Console.WriteLine("[PerformanceProfile] Top phases (ms spent in the last second):");
-        foreach (var (name, milliseconds) in _profiler.TopPhases)
-        {
-            Console.WriteLine($"[PerformanceProfile]   {name}: {milliseconds:N1}ms");
-        }
     }
 
     private static string FindProjectRoot()

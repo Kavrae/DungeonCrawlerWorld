@@ -1,32 +1,22 @@
 namespace Engine.ECS.Systems;
 
-/// <summary>
-/// Generalizes EntityStripeSet into N independently-striped tiers, each visited at its own
-/// cadence (tierDivisors[i] multiplies baseStripeCount for tier i), instead of striping the
-/// whole population uniformly and having each consumer skip entities that aren't "due" this
-/// visit. A skipped visit under uniform striping still pays for the skip check itself (a pool
-/// read + a branch) on every single stripe turn; a tiered entity that isn't due this cycle
-/// simply isn't in any bucket a caller visits this frame, so nothing is paid at all.
-///
-/// Deliberately generic over what a "tier" means -- this class never references any concrete
-/// tier concept (e.g. distance-from-player). The caller supplies tier count and per-tier
-/// divisors as plain data, and a currentTierIndexLookup delegate ("what tier index is this
-/// entity in right now") to resolve a newly-added member's starting bucket -- the same pattern
-/// CountdownTicker.Tick's shouldProcess parameter already uses to keep Engine ignorant of
-/// Game's tier concept.
-///
-/// Migration (an entity moving from one tier to another) is the cost this trades against the
-/// uniform-striping-plus-skip-check design: OnEntityTierChanged does two EntityStripeSet
-/// operations (remove from the old bucket, add to the new one), both O(1) swap-based, not a
-/// data copy -- cheap as long as tier changes are relatively rare events (e.g. spatial boundary
-/// crossings), not something that happens every visit.
-/// </summary>
+/// <summary> Generalizes EntityStripeSet into N independently-striped tiers, each visited at its own cadence. </summary>
+/// <remarks>
+/// Entities are divided into buckets by tier, and each tier's own bucket is striped independently of the others.
+/// Whenever an entity is added, removed, or has its tier changed, the appropriate tier's own EntityStripeSet is updated accordingly.
+/// </remarks>
+/// <cleanupVersion>1</cleanupVersion>
 public sealed class TieredEntityStripeSet
 {
     private readonly EntityStripeSet[] _tierBuckets;
     private readonly Func<int, byte> _currentTierIndexLookup;
     private readonly Dictionary<int, byte> _memberTierIndexByEntityId = [];
 
+    /// <summary>Initializes a new instance of the <see cref="TieredEntityStripeSet"/> class.</summary>
+    /// <param name="baseStripeCount">The base number of stripes for each tier.</param>
+    /// <param name="tierDivisors">Specifies how much less frequently each tier is visited compared to the base.</param>
+    /// <param name="existingEntityIds">The IDs to be added to the set on initialization.</param>
+    /// <param name="currentTierIndexLookup">The function to determine the current tier index for an entity.</param>
     public TieredEntityStripeSet(byte baseStripeCount, ReadOnlySpan<byte> tierDivisors, ReadOnlySpan<int> existingEntityIds, Func<int, byte> currentTierIndexLookup)
     {
         ArgumentNullException.ThrowIfNull(currentTierIndexLookup);
@@ -45,7 +35,7 @@ public sealed class TieredEntityStripeSet
         }
     }
 
-    /// <summary>Places a newly-added member into whichever tier currentTierIndexLookup reports right now -- not necessarily "just created" (see e.g. a system whose population is driven by an exposure component that can be granted to an entity that's had a real tier for a long time already).</summary>
+    /// <summary>Places a newly-added entity into their assigned tier and bucket.</summary>
     public void OnMemberAdded(int entityId)
     {
         var tierIndex = _currentTierIndexLookup(entityId);
@@ -53,6 +43,8 @@ public sealed class TieredEntityStripeSet
         _tierBuckets[tierIndex].OnEntityAdded(entityId);
     }
 
+    /// <summary>Removes an entity from their assigned tier and bucket.</summary>
+    /// <param name="entityId">The ID of the entity to remove.</param>
     public void OnMemberRemoved(int entityId)
     {
         if (_memberTierIndexByEntityId.Remove(entityId, out var tierIndex))
@@ -61,14 +53,9 @@ public sealed class TieredEntityStripeSet
         }
     }
 
-    /// <summary>
-    /// A tier-change source (e.g. a shared distance-from-player recompute) typically fans this
-    /// out to every entity it tracks, regardless of whether THIS particular
-    /// TieredEntityStripeSet's own population includes that entity -- the
-    /// _memberTierIndexByEntityId lookup makes that a no-op for anyone not currently a member
-    /// here, so a system's own population definition (driven entirely by its own OnMemberAdded/
-    /// OnMemberRemoved source) never silently grows to match some other, unrelated population.
-    /// </summary>
+    /// <summary>Updates the tier assignment for an entity that has moved to a different tier.</summary>
+    /// <param name="entityId">The ID of the entity to update.</param>
+    /// <param name="newTierIndex">The new tier index for the entity.</param>
     public void OnEntityTierChanged(int entityId, byte newTierIndex)
     {
         if (!_memberTierIndexByEntityId.TryGetValue(entityId, out var oldTierIndex) || oldTierIndex == newTierIndex)
@@ -81,30 +68,32 @@ public sealed class TieredEntityStripeSet
         _memberTierIndexByEntityId[entityId] = newTierIndex;
     }
 
-    /// <summary>The entities due for full processing this frame, chained across every tier's own current bucket. Do not mutate any source pool while enumerating this -- same rule as EntityStripeSet.GetBucket.</summary>
+    /// <summary>The entities due for full processing this frame, chained across every tier's own current bucket.</summary>
+    /// <remarks></remarks>Do not mutate any source pool while enumerating this.</remarks>
     public DueEntitiesEnumerable GetDueEntities(long frameCount) => new(_tierBuckets, frameCount);
 
-    /// <summary>How many tiers this set was constructed with -- for a caller that needs to visit each tier's own bucket individually (e.g. CountdownTicker.Tick, which needs a true ReadOnlySpan and each tier's own framesPerVisit, not the chained GetDueEntities sequence).</summary>
+    /// <summary>How many tiers this set was constructed with.</summary>
     public int TierCount => _tierBuckets.Length;
 
-    /// <summary>Tier tierIndex's own current bucket, as a true ReadOnlySpan (unlike GetDueEntities, which can only chain across tiers, not hand out one contiguous span per tier).</summary>
+    /// <summary>Gets the bucket to process for a specific tier at the given frame count.</summary>
+    /// <param name="tierIndex">The index of the tier.</param>
+    /// <param name="frameCount">The frame count.</param>
+    /// <returns>The bucket for the specified tier and frame count.</returns>
     public ReadOnlySpan<int> GetTierBucket(int tierIndex, long frameCount)
     {
         var bucket = _tierBuckets[tierIndex];
         return bucket.GetBucket((byte)(frameCount % bucket.StripeCount));
     }
 
-    /// <summary>Tier tierIndex's own internal stripe count -- the real-frame interval between consecutive visits to any given entity in that tier, i.e. the framesPerVisit a caller like CountdownTicker.Tick needs to pass for that tier's bucket.</summary>
+    /// <summary>Gets the number of frames between visits for a specific tier.</summary>
+    /// <param name="tierIndex">The index of the tier.</param>
+    /// <returns>The number of frames per visit for the specified tier.</returns>
     public byte GetTierFramesPerVisit(int tierIndex) => _tierBuckets[tierIndex].StripeCount;
 
-    /// <summary>
-    /// Allocation-free chained enumerator over every tier's current bucket -- a true
-    /// ReadOnlySpan can't span the tiers' separate backing arrays, so this walks each tier's
-    /// own EntityStripeSet.GetBucket span in turn instead of copying them into one contiguous
-    /// buffer. Doubles as its own enumerator (GetEnumerator returns a copy of itself) the same
-    /// way ReadOnlySpan&lt;T&gt;.Enumerator does, so `foreach` over GetDueEntities(...) allocates
-    /// nothing.
-    /// </summary>
+    /// <summary>Enumerates the entities due for processing this frame, chained across every tier's own current bucket.</summary>
+    /// <remarks>
+    /// Allocation-free chained enumerator over every tier's current bucket.
+    /// </remarks>
     public ref struct DueEntitiesEnumerable
     {
         private readonly EntityStripeSet[] _tierBuckets;
@@ -122,10 +111,16 @@ public sealed class TieredEntityStripeSet
             _indexInSpan = -1;
         }
 
+        /// <summary>Gets the enumerator for the due entities.</summary>
+        /// <returns>The enumerator for the due entities.</returns>
         public readonly DueEntitiesEnumerable GetEnumerator() => this;
 
+        /// <summary>Gets the current entity in the enumeration.</summary>
         public readonly int Current => _currentSpan[_indexInSpan];
 
+        /// <summary>Moves to the next entity in the enumeration.</summary>
+        /// <remarks>Walks each tier's current bucket in turn.</remarks>
+        /// <returns></returns>
         public bool MoveNext()
         {
             while (true)

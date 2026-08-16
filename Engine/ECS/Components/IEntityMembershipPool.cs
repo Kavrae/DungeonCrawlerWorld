@@ -1,17 +1,15 @@
 namespace Engine.ECS.Components;
 
-/// <summary>
-/// Pools whose entity membership can be tracked externally -- the current entity set plus
-/// add/remove notifications. Implemented by PackedComponentPool&lt;T&gt; and
-/// MultiComponentPool&lt;T&gt;; DirectComponentPool&lt;T&gt; is entity-indexed storage with no
-/// membership tracking, so it doesn't implement this. Lets a caller (e.g.
-/// Game.Modules.ProcessingTier.ProcessingTierWiring) wire an Engine.ECS.Systems.
-/// TieredEntityStripeSet against whichever concrete pool type actually drives a system's
-/// population, without that caller needing to know which one it is.
-/// </summary>
+/// <summary>Provides access to the set of entities that have components in the pool.</summary>
+/// <cleanupVersion>1</cleanupVersion>
 public interface IEntityMembershipPool : IComponentPool
 {
+    /// <summary>Gets the IDs of all entities that have components in the pool.</summary>
     ReadOnlySpan<int> EntityIds { get; }
+
+    /// <summary>Occurs when an entity is added to the pool.</summary>
     event Action<int>? EntityAdded;
+
+    /// <summary>Occurs when an entity is removed from the pool.</summary>
     event Action<int>? EntityRemoved;
 }

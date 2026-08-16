@@ -2,7 +2,6 @@ using Engine.Diagnostics;
 using Engine.ECS.Components;
 using Engine.ECS.Components.Stores;
 using Engine.ECS.Entities;
-using Engine.ECS.Systems;
 using FontStashSharp;
 using Game.Modules.Movement.Components;
 using Microsoft.Xna.Framework;
@@ -14,17 +13,17 @@ namespace Presentation.UI.Content;
 /// <summary>
 /// Admin-only entity-count/FPS-UPS debug readout. Rate counting is delegated to
 /// Engine/Diagnostics's PerformanceCounter rather than rolled inline, and entity/component
-/// counts are read live off EntityManager/ComponentManager. Also surfaces the single largest
-/// contributor from systemManager.Profiler (see GameLoop -- the same PhaseProfiler instance
-/// SystemManager times every registered system's Update against), if one has been wired in, so
-/// a hotspot is visible while actually playing rather than only in the console's periodic
-/// full-ranking dump.
+/// counts are read live off EntityManager/ComponentManager. Also surfaces
+/// diagnostics.TopFrameCostEntry (see GameLoop -- the DiagnosticsEngine instance
+/// SystemManager/EventBus record every Update against), if diagnostics is non-null and the
+/// FrameBudget feature is enabled, so a hotspot is visible while actually playing rather than
+/// only in the console's periodic full-ranking dump.
 /// </summary>
 public sealed class DebugWindowContent(
     FontService fontService,
     EntityManager entityManager,
     ComponentManager componentManager,
-    SystemManager systemManager) : IElementContent
+    DiagnosticsEngine? diagnostics) : IElementContent
 {
     private static readonly Vector2 DrawsPerSecondOffset = new(60, 0);
     private static readonly Vector2 EntityCountOffset = new(120, 0);
@@ -63,8 +62,8 @@ public sealed class DebugWindowContent(
         _entityCountText = $"Entities : {entityManager.LivingEntityCount:N0}";
         _movingEntityCountText = $"Moving Entities : {_movementPool.Count:N0}";
 
-        _topPhaseText = systemManager.Profiler?.TopPhases is { Count: > 0 } topPhases
-            ? $"Top: {topPhases[0].Name} {topPhases[0].MillisecondsPerSecond:N0}ms/s"
+        _topPhaseText = diagnostics?.TopFrameCostEntry is { } topEntry
+            ? $"Top: {topEntry.Name} {topEntry.MillisecondsPerSecond:N0}ms/s"
             : string.Empty;
     }
 

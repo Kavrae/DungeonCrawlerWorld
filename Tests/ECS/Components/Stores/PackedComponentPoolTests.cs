@@ -14,6 +14,22 @@ public sealed class PackedComponentPoolTests
         (ref existing, incoming) => existing.Value = (existing.Value + incoming.Value) / 2;
 
     [TestMethod]
+    public void EstimatedBytes_ScalesWithMaximumEntityCountAndDenseCapacity()
+    {
+        var pool = new PackedComponentPool<TestComponent>(maximumEntityCount: 10, initialCapacity: 2, AverageMerge);
+
+        // maximumEntityCount(10) * int(4) + denseCapacity(2) * (sizeof(TestComponent)=4 + entityId int=4 + version uint=4)
+        Assert.AreEqual(64, pool.EstimatedBytes);
+
+        pool.Add(0, new TestComponent { Value = 1 });
+        pool.Add(1, new TestComponent { Value = 2 });
+        pool.Add(2, new TestComponent { Value = 3 });
+
+        // Dense storage grew by initialCapacity(2) once full: denseCapacity is now 4.
+        Assert.AreEqual(10 * 4 + 4 * (4 + 4 + 4), pool.EstimatedBytes);
+    }
+
+    [TestMethod]
     public void Add_PacksIntoDenseStorageStartingAtZero()
     {
         var pool = new PackedComponentPool<TestComponent>(maximumEntityCount: 10, initialCapacity: 2, AverageMerge);

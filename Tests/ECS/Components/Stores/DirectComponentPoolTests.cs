@@ -27,6 +27,19 @@ public sealed class DirectComponentPoolTests
     }
 
     [TestMethod]
+    public void EstimatedBytes_ScalesWithCapacityNotCount()
+    {
+        var pool = new DirectComponentPool<TestComponent>(5, AverageMerge);
+
+        // Capacity(5) * (sizeof(TestComponent)=4 + present byte=1 + version uint=4)
+        Assert.AreEqual(45, pool.EstimatedBytes);
+
+        pool.Add(0, new TestComponent { Value = 1 });
+
+        Assert.AreEqual(45, pool.EstimatedBytes);
+    }
+
+    [TestMethod]
     public void Add_ThenGet_ReturnsStoredValue()
     {
         var pool = new DirectComponentPool<TestComponent>(5, AverageMerge);

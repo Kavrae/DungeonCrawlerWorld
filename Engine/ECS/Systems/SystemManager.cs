@@ -10,8 +10,8 @@ public sealed class SystemManager
     private readonly List<(ISystem System, byte CurrentStripe)> _systems = [];
     private readonly List<IFrameScoped> _frameScopedBuffers = [];
 
-    /// <summary>Opt-in per-system wall-clock cost tracking, keyed by each system's GetType().Name -- see PhaseProfiler's own doc comment. Null (the default) skips the Stopwatch calls entirely, so this costs nothing unless a caller (e.g. GameLoop, tracking down a gameplay demo's actual frame cost) wires one in.</summary>
-    public PhaseProfiler? Profiler { get; set; }
+    /// <summary>Opt-in per-system wall-clock cost tracking, recorded under FrameCostCategory.Update, group "SystemManager", item = each system's GetType().Name -- see FrameBudgetTracker's own doc comment. Null (the default) skips the Stopwatch calls entirely, so this costs nothing unless a caller (e.g. GameLoop, tracking down a gameplay demo's actual frame cost) wires one in.</summary>
+    public IFrameCostRecorder? Profiler { get; set; }
 
     /// <summary>Register a system to be updated each frame.</summary>
     /// <param name="system">The system to register.</param>
@@ -46,7 +46,7 @@ public sealed class SystemManager
             {
                 var start = Stopwatch.GetTimestamp();
                 system.Update(time, stripeIndex);
-                profiler.Record(system.GetType().Name, Stopwatch.GetElapsedTime(start));
+                profiler.Record(FrameCostCategory.Update, "SystemManager", system.GetType().Name, Stopwatch.GetElapsedTime(start));
             }
             else
             {

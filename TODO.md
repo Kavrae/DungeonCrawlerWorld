@@ -30,6 +30,12 @@ Do this alongside a cleanup pass over the rest of the event system, not in isola
 
 Engine-side equipment support (slots, equip/unequip mechanics). Companion to the Game-layer equipment rules and the Presentation-layer equipment menu below. Unblocked now that Inventory (above) exists -- equipping is expected to move an `InventoryItemStackComponent` stack into a slot rather than invent its own separate storage.
 
+#### Per-pool entity capacity for rare component types
+
+Every registered component pool is sized against `ComponentManager`'s single `initialEntityCapacity`/`initialComponentCapacity` pair, which `GameLoop` sets to `InitialEntityCapacity = 2_600_000` (world-scale, sized for `TestMapBuilder`'s full population -- see `GameLoop`'s own comment). That's the right size for near-universal components (`TransformComponent`, `SpriteComponent`), but a `PackedComponentPool<T>`/`MultiComponentPool<T>` for a component only a handful of entities will ever have still allocates its entity-indexed membership arrays (`_entityIdToDenseIndexMap`, or `_entityIdToFirstDenseIndexMap`/`_entityCounts`/`_entityVersions`) at that same 2.6M-entity scale. Confirmed via the new Diagnostics engine's memory feature (`Engine/Diagnostics/ComponentMemoryTracker.cs`, `IMemoryReportingComponentPool.EstimatedBytes`): `ClassComponent` (4 live instances) still carries ~41.76MB, `AchievementUnlockedComponent` (6 instances) ~40.00MB, `ForceBlockingComponent`/`ExpiringStatModifierComponent` (0 instances each) ~34.94MB apiece -- tens of MB of fixed index-array overhead per low-cardinality type, independent of how many instances actually exist.
+
+Would need `ComponentManager.RegisterPackedPool`/`RegisterMultiPool` (`Engine/ECS/Components/ComponentManager.cs`) to accept an optional per-call capacity override instead of always reading the manager's own fields, plus each module's `RegisterComponents` call site opting into a smaller value for its known-rare types. Not urgent -- current total footprint (~1.18GB across all 41 registered types, per a live `latest.json` snapshot) isn't causing a problem today -- but worth doing if memory pressure ever becomes real, rather than everything continuing to default to world scale by inertia.
+
 ## Game
 
 ### High Priority
@@ -114,7 +120,7 @@ Needs a new `IActionActivator` kind (e.g. `ToggleItemActivator`) alongside `Poti
 
 Once this lands, Toxic Idol should migrate from `PotionActivator` to it as the concrete proof/test case this item was already built to be.
 
-#### Dexterity (agility) scaling ActionLockComponent.StandardLockFrames
+#### Dexterity  scaling ActionLockComponent.StandardLockFrames
 
 `ActionLockComponent.StandardLockFrames` (`Game/Modules/Core/Components/ActionLockComponent.cs`) is currently a flat per-entity value set once at construction (Goblin 54, Fairy/Ghost 48, Player 20, Engineer's 10% class bonus on top -- see the race/class blueprints). This is the concrete instance of the Stats item's own "wire the concrete modifies behaviors" bullet for Dexterity -- an entity's own agility/speed should scale it directly: lerp from `ActionLockGate.StandardLockFrames` (1 second) at Dexterity 1 down to a quarter of that (0.25 seconds) at Dexterity 300, using `AbilityScoreComponent.Total` the same way `PotionCooldownEffects.ComputeDurationFrames` already lerps a duration off Constitution's total.
 
@@ -547,6 +553,10 @@ A dedicated pass over UI sizing, placement, and colors across the whole Presenta
 #### Investigate mask-based recoloring for shared sprites, using potions as the concrete case
 
 Every distinct potion today needs its own fully-authored sprite even though most differ only by liquid color (Health/Mana/etc. potions share the same bottle silhouette) -- `SpriteManifest`/`SpriteSheetService` (`Game/Blueprints/SpriteManifest.cs`, `Presentation/Rendering/SpriteSheetService.cs`) have no concept of tinting a shared base sprite. Worth investigating a mask-based recolor approach: a separate grayscale/alpha mask region (or a dedicated mask channel) marking which pixels of a base sprite are recolorable, with `SpriteRenderer.Draw` (or a new draw variant) tinting just those pixels per-instance (e.g. a `Color` field on `SpriteComponent` or the item definition) instead of shipping a full duplicate sprite per color variant. Potions are the concrete first case, but the same mechanism would generalize to anything else that's "one silhouette, many color variants" (dyed equipment, faction-colored banners).
+
+#### Investigate TextWindow draw cost
+
+A live `latest.json` snapshot (via the new Diagnostics engine's per-window Draw timing, `Engine/Diagnostics/FrameBudgetTracker.cs`) showed `DynamicHudWindows.TextWindow` (`Presentation/UI/TextWindow.cs`) costing ~11.6ms/s -- 11.5% of total Draw budget, second only to `MapWindow` (~79.6ms/s, expected given it's the whole map viewport) and disproportionate for what should be simple text rendering. Worth profiling `TextWindow.DrawContent` directly to find what's actually expensive -- candidates include per-frame string layout/measurement work that could be cached, or draw calls that aren't batching well. Re-check with the same tooling (`--diagnostics=frame`, `Log/diagnostics/latest.json`'s `frameBudget.draw.DynamicHudWindows` entries) once changed, to confirm the fix actually moved the number.
 
 ## Global
 

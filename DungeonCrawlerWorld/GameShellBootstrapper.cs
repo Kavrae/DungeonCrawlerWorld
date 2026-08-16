@@ -19,6 +19,7 @@ using Presentation.UI.AbilityScores;
 using Presentation.UI.Content;
 using Presentation.UI.Inventory;
 using Presentation.UI.Notifications;
+using System.Diagnostics;
 
 namespace DungeonCrawlerWorld;
 
@@ -40,8 +41,9 @@ public static class GameShellBootstrapper
     /// <param name="actionCatalog"></param>
     /// <param name="itemCatalog"></param>
     /// <param name="screenSize"></param>
+    /// <param name="diagnostics">Null when no diagnostics feature is enabled -- see DebugWindowContent's own doc comment.</param>
     /// <returns></returns>
-    public static GameShellContext Build(PresentationContext presentation, World world, EcsContext ecsContext, ActionCatalog actionCatalog, ItemCatalog itemCatalog, Vector2 screenSize)
+    public static GameShellContext Build(PresentationContext presentation, World world, EcsContext ecsContext, ActionCatalog actionCatalog, ItemCatalog itemCatalog, Vector2 screenSize, DiagnosticsEngine? diagnostics = null)
     {
         ArgumentNullException.ThrowIfNull(presentation);
         ArgumentNullException.ThrowIfNull(world);
@@ -49,7 +51,7 @@ public static class GameShellBootstrapper
         ArgumentNullException.ThrowIfNull(actionCatalog);
         ArgumentNullException.ThrowIfNull(itemCatalog);
 
-        var (baseWindows, mapWindow, mapViewState, mapSize, actionTargeting) = BuildBaseWindows(presentation, world, ecsContext, actionCatalog, itemCatalog, screenSize);
+        var (baseWindows, mapWindow, mapViewState, mapSize, actionTargeting) = BuildBaseWindows(presentation, world, ecsContext, actionCatalog, itemCatalog, screenSize, diagnostics);
         var (staticHudWindows, questTriggerWindow, hotbarContent) = BuildStaticHudWindows(presentation, world, ecsContext, actionCatalog, itemCatalog, screenSize, mapViewState, mapSize);
         var (dynamicHudWindows, notificationCenter, inventory) = BuildDynamicHudWindows(presentation, world, ecsContext, itemCatalog, mapWindow);
         var hotbarController = BuildHotbarController(presentation, mapViewState, hotbarContent, actionTargeting, dynamicHudWindows);
@@ -84,7 +86,7 @@ public static class GameShellBootstrapper
 
     /// <summary>Base tier: the map itself plus the debug stats footer directly beneath it -- see UiInputController's own doc comment for what each of the four tiers means. mapViewState/mapSize are returned for BuildStaticHudWindows, whose selection window needs both (mapViewState to scope the inspector, mapSize to dock against the map's actual bottom edge). actionTargeting is returned too, promoted here (rather than built privately inside MapWindow's own constructor) so BuildHotbarController can share the same instance instead of forwarding through MapWindow. playerMovement isn't returned -- nothing outside MapWindow's own factory closure needs it, unlike actionTargeting.</summary>
     private static (List<Element> BaseWindows, MapWindow MapWindow, MapViewState MapViewState, Vector2 MapSize, ActionTargetingController ActionTargeting) BuildBaseWindows(
-        PresentationContext presentation, World world, EcsContext ecsContext, ActionCatalog actionCatalog, ItemCatalog itemCatalog, Vector2 screenSize)
+        PresentationContext presentation, World world, EcsContext ecsContext, ActionCatalog actionCatalog, ItemCatalog itemCatalog, Vector2 screenSize, DiagnosticsEngine? diagnostics)
     {
         var baseWindows = new List<Element>();
 
@@ -170,7 +172,7 @@ public static class GameShellBootstrapper
             },
             Chrome = new ElementChromeOptions { ShowBorder = true, CanUserFocus = false },
         });
-        debugWindow.SetContent(new DebugWindowContent(presentation.FontService, ecsContext.EntityManager, ecsContext.ComponentManager, ecsContext.SystemManager));
+        debugWindow.SetContent(new DebugWindowContent(presentation.FontService, ecsContext.EntityManager, ecsContext.ComponentManager, diagnostics));
         debugWindow.Initialize();
         baseWindows.Add(debugWindow);
 
@@ -463,50 +465,57 @@ public sealed record GameShellContext(
         }
     }
 
-    public void Update(GameTime gameTime)
+    /// <param name="gameTime"></param>
+    /// <param name="frameCostRecorder">Null (the default) skips the per-window Stopwatch calls entirely -- see FrameBudgetTracker's own doc comment.</param>
+    public void Update(GameTime gameTime, IFrameCostRecorder? frameCostRecorder = null)
     {
-        foreach (var window in BaseWindows)
-        {
-            window.Update(gameTime);
-        }
-
-        foreach (var window in StaticHudWindows)
-        {
-            window.Update(gameTime);
-        }
-
-        foreach (var window in DynamicHudWindows)
-        {
-            window.Update(gameTime);
-        }
-
-        foreach (var window in UserWindows)
-        {
-            window.Update(gameTime);
-        }
+        UpdateWindowLayer(BaseWindows, "BaseWindows", gameTime, frameCostRecorder);
+        UpdateWindowLayer(StaticHudWindows, "StaticHudWindows", gameTime, frameCostRecorder);
+        UpdateWindowLayer(DynamicHudWindows, "DynamicHudWindows", gameTime, frameCostRecorder);
+        UpdateWindowLayer(UserWindows, "UserWindows", gameTime, frameCostRecorder);
     }
 
     /// <summary>Drawn bottom-to-top: Base, StaticHUD, DynamicHUD, User -- see UiInputController's own doc comment for what each tier holds. User last and unconditionally, so drag feedback is never occluded by whatever it's passing over on its way to a drop target.</summary>
-    public void Draw(GameTime gameTime, GraphicsDevice graphicsDevice, SpriteBatch spriteBatch, Texture2D unitRectangle)
+    /// <param name="frameCostRecorder">Null (the default) skips the per-window Stopwatch calls entirely -- see FrameBudgetTracker's own doc comment.</param>
+    public void Draw(GameTime gameTime, GraphicsDevice graphicsDevice, SpriteBatch spriteBatch, Texture2D unitRectangle, IFrameCostRecorder? frameCostRecorder = null)
     {
-        foreach (var window in BaseWindows)
-        {
-            window.Draw(gameTime, graphicsDevice, spriteBatch, unitRectangle);
-        }
+        DrawWindowLayer(BaseWindows, "BaseWindows", gameTime, graphicsDevice, spriteBatch, unitRectangle, frameCostRecorder);
+        DrawWindowLayer(StaticHudWindows, "StaticHudWindows", gameTime, graphicsDevice, spriteBatch, unitRectangle, frameCostRecorder);
+        DrawWindowLayer(DynamicHudWindows, "DynamicHudWindows", gameTime, graphicsDevice, spriteBatch, unitRectangle, frameCostRecorder);
+        DrawWindowLayer(UserWindows, "UserWindows", gameTime, graphicsDevice, spriteBatch, unitRectangle, frameCostRecorder);
+    }
 
-        foreach (var window in StaticHudWindows)
+    private static void UpdateWindowLayer(List<Element> windows, string tierName, GameTime gameTime, IFrameCostRecorder? frameCostRecorder)
+    {
+        foreach (var window in windows)
         {
-            window.Draw(gameTime, graphicsDevice, spriteBatch, unitRectangle);
+            if (frameCostRecorder is { } recorder)
+            {
+                var start = Stopwatch.GetTimestamp();
+                window.Update(gameTime);
+                recorder.Record(FrameCostCategory.Update, tierName, window.GetType().Name, Stopwatch.GetElapsedTime(start));
+            }
+            else
+            {
+                window.Update(gameTime);
+            }
         }
+    }
 
-        foreach (var window in DynamicHudWindows)
+    private static void DrawWindowLayer(List<Element> windows, string tierName, GameTime gameTime, GraphicsDevice graphicsDevice, SpriteBatch spriteBatch, Texture2D unitRectangle, IFrameCostRecorder? frameCostRecorder)
+    {
+        foreach (var window in windows)
         {
-            window.Draw(gameTime, graphicsDevice, spriteBatch, unitRectangle);
-        }
-
-        foreach (var window in UserWindows)
-        {
-            window.Draw(gameTime, graphicsDevice, spriteBatch, unitRectangle);
+            if (frameCostRecorder is { } recorder)
+            {
+                var start = Stopwatch.GetTimestamp();
+                window.Draw(gameTime, graphicsDevice, spriteBatch, unitRectangle);
+                recorder.Record(FrameCostCategory.Draw, tierName, window.GetType().Name, Stopwatch.GetElapsedTime(start));
+            }
+            else
+            {
+                window.Draw(gameTime, graphicsDevice, spriteBatch, unitRectangle);
+            }
         }
     }
 }

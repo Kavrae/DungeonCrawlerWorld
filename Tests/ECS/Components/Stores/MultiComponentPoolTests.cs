@@ -11,6 +11,16 @@ public sealed class MultiComponentPoolTests
     }
 
     [TestMethod]
+    public void EstimatedBytes_ScalesWithMaximumEntityCountAndDenseCapacity()
+    {
+        var pool = new MultiComponentPool<TestComponent>(maximumEntityCount: 10, initialCapacity: 4);
+
+        // denseCapacity(4) * (sizeof(TestComponent)=4 + entityId int=4 + version uint=4 + next int=4 + previous int=4)
+        // + maximumEntityCount(10) * (firstDenseIndex int=4 + count int=4 + version uint=4)
+        Assert.AreEqual(4 * (4 + 4 + 4 + 4 + 4) + 10 * (4 + 4 + 4), pool.EstimatedBytes);
+    }
+
+    [TestMethod]
     public void Add_MultipleForSameEntity_AllCountedUnderThatEntity()
     {
         var pool = new MultiComponentPool<TestComponent>(maximumEntityCount: 10, initialCapacity: 4);

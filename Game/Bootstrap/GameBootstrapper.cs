@@ -1,4 +1,5 @@
 using Engine.Bootstrap;
+using Engine.Diagnostics;
 using Engine.Events;
 using Engine.Math;
 using Engine.Modules;
@@ -44,7 +45,8 @@ public static class GameBootstrapper
         MathUtility mathUtility,
         string modsDirectory,
         int initialEntityCapacity,
-        int initialComponentCapacity)
+        int initialComponentCapacity,
+        StartupProfiler? startupProfiler = null)
     {
         IReadOnlyList<IModule> builtInModules =
         [
@@ -85,16 +87,24 @@ public static class GameBootstrapper
 
         var entityMoveSync = new WorldEventSync(world);
 
-        var loadResult = ModuleLoader.LoadFromDirectory(modsDirectory);
+        ModuleLoadResult loadResult;
+        using (startupProfiler?.Phase("ModuleLoader.LoadFromDirectory"))
+        {
+            loadResult = ModuleLoader.LoadFromDirectory(modsDirectory);
+        }
         failures.AddRange(loadResult.Failures);
 
-        var survivingMods = DryRunValidateMods(builtInModules, loadResult.Modules, mapQuery, world, mathUtility, entityMoveSync, failures);
+        List<IModule> survivingMods;
+        using (startupProfiler?.Phase("DryRunValidateMods"))
+        {
+            survivingMods = DryRunValidateMods(builtInModules, loadResult.Modules, mapQuery, world, mathUtility, entityMoveSync, failures);
+        }
 
         var modules = ModuleSet.Combine(builtInModules, survivingMods);
 
-        var context = ConfigureGameModules(modules, mapQuery, world, mathUtility, eventBus, entityMoveSync);
+        var context = ConfigureGameModules(modules, mapQuery, world, mathUtility, eventBus, entityMoveSync, startupProfiler);
 
-        var ecsContext = Bootstrapper.Build(modules, initialEntityCapacity, initialComponentCapacity, eventBus);
+        var ecsContext = Bootstrapper.Build(modules, initialEntityCapacity, initialComponentCapacity, eventBus, startupProfiler);
 
         // World is constructed before this method runs (its own doc comment on the World
         // parameter explains why -- MovementModule.Configure needs an IMapQuery before
@@ -151,7 +161,7 @@ public static class GameBootstrapper
         return survivors;
     }
 
-    private static GameModuleContext ConfigureGameModules(IReadOnlyList<IModule> modules, IMapQuery mapQuery, IPlayerQuery playerQuery, MathUtility mathUtility, EventBus eventBus, IEntityMoveSync entityMoveSync)
+    private static GameModuleContext ConfigureGameModules(IReadOnlyList<IModule> modules, IMapQuery mapQuery, IPlayerQuery playerQuery, MathUtility mathUtility, EventBus eventBus, IEntityMoveSync entityMoveSync, StartupProfiler? startupProfiler = null)
     {
         var context = new GameModuleContext(mapQuery, mathUtility, eventBus) { PlayerQuery = playerQuery, EntityMoveSync = entityMoveSync };
 
@@ -159,6 +169,7 @@ public static class GameBootstrapper
         {
             if (module is IGameModule gameModule)
             {
+                using var _ = startupProfiler?.Phase($"ConfigureGameModules:{module.Name}");
                 gameModule.Configure(context);
             }
         }

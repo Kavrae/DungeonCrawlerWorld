@@ -5,7 +5,7 @@ namespace Engine.ECS.Components.Stores;
 /// <summary> Entity-indexed component storage for near-universal components. </summary>
 /// <remarks> Storage index == entityId. Best for components present on most entities, where direct lookup beats sparse-set indirection. </remarks>
 /// <cleanupVersion>1</cleanupVersion>
-public sealed class DirectComponentPool<T> : IReadOnlyComponentPool<T>, IInspectableComponentPool where T : struct
+public sealed class DirectComponentPool<T> : IReadOnlyComponentPool<T>, IInspectableComponentPool, IMemoryReportingComponentPool where T : struct
 {
     private T[] _components;
     private byte[] _present;
@@ -21,6 +21,9 @@ public sealed class DirectComponentPool<T> : IReadOnlyComponentPool<T>, IInspect
 
     /// <summary> The number of components the pool can hold before resizing </summary>
     public int Capacity => _components.Length;
+
+    /// <summary> Estimated bytes across _components/_present/_versions, all entity-indexed at Capacity length. </summary>
+    public long EstimatedBytes => (long)Capacity * (Unsafe.SizeOf<T>() + sizeof(byte) + sizeof(uint));
 
     /// <summary> A read-only span of the components in the pool indexed by entityId. </summary>
     public ReadOnlySpan<T> Components => _components;

@@ -3,30 +3,11 @@ using Engine.Math;
 
 namespace Engine.ECS.Systems;
 
-/// <summary>
-/// Shared chain-walk-and-splat mechanics for reacting to a MultiComponentPool&lt;TSource&gt;
-/// entity's own lifecycle (initial bulk scatter, or an old-position/new-position move) into a
-/// derived per-cell accumulator -- the shape Game.Modules.StatusEffectAura.AuraGrid (via
-/// StatusEffectAuraSystem) and Presentation.UI.MapTintGrid each independently re-implement
-/// today, one accumulating an int stack total keyed by effect type, the other a weighted RGB
-/// blend. Owns only the chain-walk-and-splat mechanics -- never the accumulation itself, since
-/// an int sum and a weighted color sum have nothing in common numerically -- splat/unsplat stay
-/// fully caller-defined delegates.
-///
-/// Deliberately doesn't touch event subscription or position lookup: the events involved
-/// (AuraSourceAddedEvent/AuraSourceRemovedEvent) carry a Game-layer StatusEffectAuraSourceComponent,
-/// and position lookup needs a Game-layer TransformComponent pool, so Engine can't reference
-/// either directly (see DistanceFalloff's own doc comment on the same one-way-layering
-/// constraint) -- this class only ever receives already-resolved (entityId, position) data via
-/// caller-supplied delegates/values, the same way DistanceFalloff.ScatterManhattan takes a plain
-/// visitor instead of reaching into Game state itself.
-///
-/// Also deliberately doesn't own any ProcessingTier-based deferral -- StatusEffectAuraSystem's
-/// own tiered catch-up (see its ResyncSourceIfStale) is a gameplay-specific cost tradeoff
-/// MapTintGrid, a purely cosmetic overlay, has no matching need for; each caller decides for
-/// itself WHEN to call ResyncEntity, this type only guarantees it does the right thing once
-/// called.
-/// </summary>
+/// <summary>Shared chain-walk-and-splat mechanics for reacting to a MultiComponentPool&lt;TSource&gt;entity's own lifecycle</summary>
+/// <remarks>
+/// Deliberaly avoid specific implementation details of what "splat" actually does, so that this can be reused for different kinds of source splatting (e.g. light sources, sound sources, etc.)
+/// </remarks>
+/// <cleanupVersion>1</cleanupVersion>
 public static class SourceSplatting
 {
     /// <summary>Splats every currently-registered source once, if it's on the map.</summary>

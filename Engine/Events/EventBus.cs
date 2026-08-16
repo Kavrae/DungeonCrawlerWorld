@@ -15,27 +15,26 @@ public sealed class EventBus
     private readonly Dictionary<Type, object> _bufferedQueues = [];
 
     /// <summary>
-    /// TEMPORARY PROFILING
-    /// Cached "EventBus.Publish&lt;TypeName&gt;" phase-name string per event type, built once on
-    /// first profiled Publish rather than re-interpolated every call -- unlike the per-handler
-    /// breakdown this once had (reverted: on a hyper-frequent event like EntityMovedEvent, splitting
-    /// one timed region into several multiplied Stopwatch/PhaseProfiler.Record overhead enough
-    /// to become a measurable fraction of the reported cost itself), this cache only depends on
-    /// T, not on the current handler set, so Subscribe/Unsubscribe don't need to invalidate it.
+    /// Cached event type name per T, built once on first profiled Publish rather than
+    /// re-interpolated every call -- unlike a per-handler cost breakdown (reverted: on a
+    /// hyper-frequent event like EntityMovedEvent, splitting one timed region into several
+    /// multiplied Stopwatch/Record calls enough to become a measurable fraction of the reported
+    /// cost itself), this cache only depends on T, not on the current handler set, so
+    /// Subscribe/Unsubscribe don't need to invalidate it.
     /// </summary>
-    private readonly Dictionary<Type, string> _aggregatePhaseNames = [];
+    private readonly Dictionary<Type, string> _eventTypeNames = [];
 
     /// <summary>
-    /// /// TEMPORARY PROFILING
-    /// Opt-in dispatch-cost tracking, keyed by "EventBus.Publish&lt;TypeName&gt;" -- see
-    /// PhaseProfiler's own doc comment. Immediate (non-buffered) dispatch runs subscribers
-    /// synchronously in-line with whatever called Publish, so a system that publishes mid-
-    /// Update (e.g. MovementSystem publishing EntityMovedEvent) has every subscriber's cost nested
-    /// inside that system's own SystemManager.Profiler timing -- this records dispatch cost
-    /// separately, so the two can be told apart when tracking down a gameplay demo's actual
-    /// frame cost. Null (the default) skips the Stopwatch calls entirely.
+    /// Opt-in dispatch-cost tracking, recorded under FrameCostCategory.Update, group "EventBus",
+    /// item = the event's type name -- see FrameBudgetTracker's own doc comment. Immediate
+    /// (non-buffered) dispatch runs subscribers synchronously in-line with whatever called
+    /// Publish, so a system that publishes mid-Update (e.g. MovementSystem publishing
+    /// EntityMovedEvent) has every subscriber's cost nested inside that system's own
+    /// SystemManager.Profiler timing -- this records dispatch cost separately, so the two can be
+    /// told apart when tracking down a gameplay demo's actual frame cost. Null (the default)
+    /// skips the Stopwatch calls entirely.
     /// </summary>
-    public PhaseProfiler? Profiler { get; set; }
+    public IFrameCostRecorder? Profiler { get; set; }
 
     /// <summary>Subscribes to events of type T.</summary>
     /// <typeparam name="T">The type of the event.</typeparam>
@@ -110,18 +109,17 @@ public sealed class EventBus
             return;
         }
 
-        //TEMPORARY
         if (Profiler is { } profiler)
         {
-            if (!_aggregatePhaseNames.TryGetValue(typeof(T), out var phaseName))
+            if (!_eventTypeNames.TryGetValue(typeof(T), out var eventTypeName))
             {
-                phaseName = $"EventBus.Publish<{typeof(T).Name}>";
-                _aggregatePhaseNames[typeof(T)] = phaseName;
+                eventTypeName = typeof(T).Name;
+                _eventTypeNames[typeof(T)] = eventTypeName;
             }
 
             var start = Stopwatch.GetTimestamp();
             ((Action<T>)existing).Invoke(eventData);
-            profiler.Record(phaseName, Stopwatch.GetElapsedTime(start));
+            profiler.Record(FrameCostCategory.Update, "EventBus", eventTypeName, Stopwatch.GetElapsedTime(start));
         }
         else
         {

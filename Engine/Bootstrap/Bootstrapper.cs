@@ -1,3 +1,4 @@
+using Engine.Diagnostics;
 using Engine.ECS.Context;
 using Engine.Events;
 using Engine.Modules;
@@ -9,13 +10,13 @@ namespace Engine.Bootstrap;
 /// Validates and topologically sorts a set of modules by their declared dependencies,
 /// then registers all components before any systems (a system may need a component pool
 /// owned by a different module) and produces the finished <see cref="EcsContext"/>.
-/// 
+///
 /// Skips registering modules with missing or circular dependencies.
 /// </remarks>
 /// <cleanupVersion>1</cleanupVersion>
 public static class Bootstrapper
 {
-    public static EcsContext Build(IReadOnlyList<IModule> modules, int initialEntityCapacity, int initialComponentCapacity, EventBus? eventBus = null)
+    public static EcsContext Build(IReadOnlyList<IModule> modules, int initialEntityCapacity, int initialComponentCapacity, EventBus? eventBus = null, StartupProfiler? startupProfiler = null)
     {
         ArgumentNullException.ThrowIfNull(modules);
 
@@ -23,24 +24,26 @@ public static class Bootstrapper
 
         var builder = new EcsContextBuilder(initialEntityCapacity, initialComponentCapacity, eventBus);
 
-        RegisterAllComponents(sortedModules, builder);
-        RegisterAllSystems(sortedModules, builder);
+        RegisterAllComponents(sortedModules, builder, startupProfiler);
+        RegisterAllSystems(sortedModules, builder, startupProfiler);
 
         return builder.Build();
     }
 
-    private static void RegisterAllComponents(IReadOnlyList<IModule> sortedModules, EcsContextBuilder builder)
+    private static void RegisterAllComponents(IReadOnlyList<IModule> sortedModules, EcsContextBuilder builder, StartupProfiler? startupProfiler)
     {
         foreach (var module in sortedModules)
         {
+            using var _ = startupProfiler?.Phase($"RegisterComponents:{module.Name}");
             module.RegisterComponents(builder.ComponentManager);
         }
     }
 
-    private static void RegisterAllSystems(IReadOnlyList<IModule> sortedModules, EcsContextBuilder builder)
+    private static void RegisterAllSystems(IReadOnlyList<IModule> sortedModules, EcsContextBuilder builder, StartupProfiler? startupProfiler)
     {
         foreach (var module in sortedModules)
         {
+            using var _ = startupProfiler?.Phase($"RegisterSystems:{module.Name}");
             module.RegisterSystems(builder.SystemManager, builder.ComponentManager);
         }
     }

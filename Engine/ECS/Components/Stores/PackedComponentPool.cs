@@ -5,7 +5,7 @@ namespace Engine.ECS.Components.Stores;
 /// <summary> Sparse-set component storage for rare components, where a direct pool would waste index space. </summary>
 /// <remarks> Dense storage grows linearly to bound peak memory for components most entities never have. </remarks>
 /// <cleanupVersion>1</cleanupVersion>
-public sealed class PackedComponentPool<T> : IReadOnlyComponentPool<T>, IInspectableComponentPool, IEntityMembershipPool where T : struct
+public sealed class PackedComponentPool<T> : IReadOnlyComponentPool<T>, IInspectableComponentPool, IEntityMembershipPool, IMemoryReportingComponentPool where T : struct
 {
     private int _maxEntities;
     private int[] _entityIdToDenseIndexMap;
@@ -23,6 +23,11 @@ public sealed class PackedComponentPool<T> : IReadOnlyComponentPool<T>, IInspect
 
     /// <summary> The number of components in the pool. </summary>
     public int Count => _count;
+
+    /// <summary> Estimated bytes across the entity-indexed _entityIdToDenseIndexMap plus the dense _denseComponents/_denseIndexToEntityIdMap/_denseVersions arrays. </summary>
+    public long EstimatedBytes =>
+        (long)_entityIdToDenseIndexMap.Length * sizeof(int) +
+        (long)_denseComponents.Length * (Unsafe.SizeOf<T>() + sizeof(int) + sizeof(uint));
 
     /// <summary> A read-only span of the components in the pool, packed contiguously by dense index. </summary>
     public ReadOnlySpan<T> Components => new(_denseComponents, 0, _count);

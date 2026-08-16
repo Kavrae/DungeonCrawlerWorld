@@ -5,7 +5,7 @@ namespace Engine.ECS.Components.Stores;
 /// <summary> Packed multi-value component storage. </summary>
 /// <remarks> Allows an entity to own 0..N components of the same type while keeping dense global iteration, via an intrusive doubly-linked chain through the dense array per entity. </remarks>
 /// <cleanupVersion>1</cleanupVersion>
-public sealed class MultiComponentPool<T> : IReadOnlyMultiComponentPool<T>, IInspectableComponentPool, IEntityMembershipPool where T : struct
+public sealed class MultiComponentPool<T> : IReadOnlyMultiComponentPool<T>, IInspectableComponentPool, IEntityMembershipPool, IMemoryReportingComponentPool where T : struct
 {
     private int _maximumEntityCount;
 
@@ -31,6 +31,11 @@ public sealed class MultiComponentPool<T> : IReadOnlyMultiComponentPool<T>, IIns
 
     /// <summary> The number of components in the pool, across every entity. </summary>
     public int Count => _count;
+
+    /// <summary> Estimated bytes across the dense (_denseComponents/_denseIndexToEntityIdMap/_denseVersions/_denseNext/_densePrevious) and per-entity (_entityIdToFirstDenseIndexMap/_entityCounts/_entityVersions) arrays. </summary>
+    public long EstimatedBytes =>
+        (long)_denseComponents.Length * (Unsafe.SizeOf<T>() + sizeof(int) + sizeof(uint) + sizeof(int) + sizeof(int)) +
+        (long)_entityIdToFirstDenseIndexMap.Length * (sizeof(int) + sizeof(int) + sizeof(uint));
 
     /// <summary> A read-only span of the components in the pool, packed contiguously by dense index. </summary>
     public ReadOnlySpan<T> Components => new(_denseComponents, 0, _count);
