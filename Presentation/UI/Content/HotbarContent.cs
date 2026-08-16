@@ -390,8 +390,7 @@ public sealed class HotbarContent(
         }
 
         var playerEntityId = world.PlayerEntityId;
-        ActionHotkeyBindingQueries.Unbind(_actionHotkeyBindings, playerEntityId, slot);
-        ItemHotkeyBindingQueries.Unbind(_itemHotkeyBindings, playerEntityId, slot);
+        ClearSlotBinding(playerEntityId, slot);
         _itemHotkeyBindings.Add(playerEntityId, new ItemHotkeyBindingComponent(slot, itemDefinitionId));
         eventBus.Publish(new ItemHotkeyBoundEvent(playerEntityId, slot, itemDefinitionId));
     }
@@ -409,8 +408,7 @@ public sealed class HotbarContent(
         }
 
         var playerEntityId = world.PlayerEntityId;
-        ActionHotkeyBindingQueries.Unbind(_actionHotkeyBindings, playerEntityId, slot);
-        ItemHotkeyBindingQueries.Unbind(_itemHotkeyBindings, playerEntityId, slot);
+        ClearSlotBinding(playerEntityId, slot);
         _actionHotkeyBindings.Add(playerEntityId, new ActionHotkeyBindingComponent(slot, actionId));
         eventBus.Publish(new ActionHotkeyBoundEvent(playerEntityId, slot, actionId));
     }
@@ -419,33 +417,46 @@ public sealed class HotbarContent(
     internal void UnbindActionSlot(HotkeySlot slot) =>
         ActionHotkeyBindingQueries.Unbind(_actionHotkeyBindings, world.PlayerEntityId, slot);
 
+    /// <summary>Shared by BindItem/BindAction -- a slot binds to at most one of {action, item} at a time (see IHotkeySlotBinding's own doc comment), so writing a new binding of either kind always clears both pools for that slot first.</summary>
+    private void ClearSlotBinding(int playerEntityId, HotkeySlot slot)
+    {
+        ActionHotkeyBindingQueries.Unbind(_actionHotkeyBindings, playerEntityId, slot);
+        ItemHotkeyBindingQueries.Unbind(_itemHotkeyBindings, playerEntityId, slot);
+    }
+
     /// <summary>Delegates to HotkeySlotLayout.IsLocked -- shared with ActionTargetingController's own activation gate, so rendering and activation can't disagree about which slots are actually usable.</summary>
     private bool IsSlotLocked(HotkeySlot slot) => HotkeySlotLayout.IsLocked(slot, _unlockedExpansionSlots);
+
+    /// <summary>
+    /// The action/item-agnostic shape DrawSlot actually renders -- BuildActionVisual/
+    /// BuildItemVisual are the only two places that know how to turn a binding into one of these;
+    /// everything downstream (radial fill, badge, countdown) is drawn identically regardless of
+    /// which kind produced it. BadgeBottomLeft picks between an action's mana-cost badge
+    /// (bottom-left) and an item's stack-count badge (bottom-center) -- the two badges never
+    /// coexist since a slot binds to at most one of {action, item}.
+    /// </summary>
+    private readonly record struct SlotVisual(
+        string? SpriteName,
+        string Glyph,
+        Color GlyphColor,
+        float FillPercentage,
+        string? BadgeText,
+        bool BadgeBottomLeft,
+        int? CountdownSecondsAboveSlot);
 
     private void DrawSlot(SpriteBatch spriteBatch, Texture2D unitRectangle, int playerEntityId, HotkeySlot slot, Rectangle bounds)
     {
         var contentBounds = BorderThickness.Inset(bounds, SlotBorderThickness);
         var isActive = _slotActiveStates.GetValueOrDefault(slot, true);
         var alpha = AlphaFor(isActive);
-        string? manaCostText = null;
-        string? stackText = null;
 
         if (ActionHotkeyBindingQueries.TryGet(_actionHotkeyBindings, playerEntityId, slot, out var actionId) && actionCatalog.TryGet(actionId, out var action))
         {
-            DrawActionSlot(spriteBatch, unitRectangle, playerEntityId, action, contentBounds, isActive);
-            var manaCost = SpellActivator.ManaCostOf(action.Activator);
-            if (manaCost > 0)
-            {
-                manaCostText = manaCost.ToString();
-            }
+            DrawSlotVisual(spriteBatch, unitRectangle, bounds, contentBounds, BuildActionVisual(playerEntityId, action, isActive), alpha);
         }
         else if (ItemHotkeyBindingQueries.TryGet(_itemHotkeyBindings, playerEntityId, slot, out var itemDefinitionId) && itemCatalog.TryGet(itemDefinitionId, out var item))
         {
-            DrawItemSlot(spriteBatch, unitRectangle, playerEntityId, item, bounds, contentBounds, isActive, out var stackQuantity);
-            if (stackQuantity > 1)
-            {
-                stackText = $"x{stackQuantity}";
-            }
+            DrawSlotVisual(spriteBatch, unitRectangle, bounds, contentBounds, BuildItemVisual(playerEntityId, item, isActive), alpha);
         }
         else
         {
@@ -463,31 +474,23 @@ public sealed class HotbarContent(
         }
 
         DrawKeyLabel(spriteBatch, bounds, slot, alpha);
-
-        if (manaCostText is not null)
-        {
-            DrawBottomLeftText(spriteBatch, bounds, manaCostText, alpha);
-        }
-
-        if (stackText is not null)
-        {
-            DrawBottomCenterText(spriteBatch, bounds, stackText, alpha);
-        }
     }
 
     /// <summary>The one place isActive turns into an opacity -- every draw call in DrawSlot (border, icon, every text overlay) goes through this same mapping, rather than each piece deciding its own alpha.</summary>
     private static float AlphaFor(bool isActive) => isActive ? 1f : DisabledSlotAlpha;
 
     /// <summary>isActive (see RefreshSlotActiveStates -- an Update-time decision) drives both the icon's opacity and whether the cooldown/lock wedge shows at all: an inactive (unaffordable) action suppresses the radial fill entirely (0f) rather than showing a mask that would read as "almost ready" when it's actually just unaffordable.</summary>
-    private void DrawActionSlot(SpriteBatch spriteBatch, Texture2D unitRectangle, int playerEntityId, ActionDefinition action, Rectangle contentBounds, bool isActive)
+    private SlotVisual BuildActionVisual(int playerEntityId, ActionDefinition action, bool isActive)
     {
-        _radialFill.Sprite = action.SpriteName is not null && SpriteManifest.TryGet(action.SpriteName, out var sprite) ? sprite : null;
-        _radialFill.SpriteTint = Color.White;
-        _radialFill.Glyph = action.Glyph;
-        _radialFill.GlyphColor = action.GlyphColor;
-        _radialFill.BackgroundColor = BoundSlotBackgroundColor;
-        _radialFill.FillPercentage = isActive ? ComputeActionFillPercentage(playerEntityId, action) : 0f;
-        _radialFill.Draw(spriteBatch, unitRectangle, _font, contentBounds, AlphaFor(isActive));
+        var manaCost = SpellActivator.ManaCostOf(action.Activator);
+        return new SlotVisual(
+            SpriteName: action.SpriteName,
+            Glyph: action.Glyph,
+            GlyphColor: action.GlyphColor,
+            FillPercentage: isActive ? ComputeActionFillPercentage(playerEntityId, action) : 0f,
+            BadgeText: manaCost > 0 ? manaCost.ToString() : null,
+            BadgeBottomLeft: true,
+            CountdownSecondsAboveSlot: null);
     }
 
     /// <summary>Mirrors ActionActivationSystem/ActionTargetingController's own gate (see either's doc comment) -- a zero-cost action (e.g. Punch) always passes.</summary>
@@ -504,32 +507,59 @@ public sealed class HotbarContent(
     /// <summary>
     /// isActive (see RefreshSlotActiveStates -- an Update-time decision, via IsItemUsable) drives
     /// both the icon's opacity and whether the cooldown/lock wedge shows at all, the same as
-    /// DrawActionSlot. quantity is always returned (0 if no stack at all) so the caller can
-    /// decide whether to draw the "x{n}" overlay without a second inventory lookup.
+    /// BuildActionVisual. The potion-cooldown countdown is independent of isActive/stock -- the
+    /// cooldown is the consumer's own status, still meaningful even once this slot's item is out
+    /// of stock (e.g. right after using the last one while abusing the cooldown) -- see
+    /// DrawSlotVisual, which always draws it at full alpha regardless of the slot's own disabled
+    /// state (PotionCooldownEffects' own doc comment: the cooldown never blocks a second potion in
+    /// the first place).
     /// </summary>
-    private void DrawItemSlot(SpriteBatch spriteBatch, Texture2D unitRectangle, int playerEntityId, ItemDefinition item, Rectangle bounds, Rectangle contentBounds, bool isActive, out ushort quantity)
+    private SlotVisual BuildItemVisual(int playerEntityId, ItemDefinition item, bool isActive)
     {
         var hasStack = InventoryQueries.TryGetStack(_inventoryStacks, playerEntityId, item.Id, out var stack);
-        quantity = hasStack ? stack.Quantity : (ushort)0;
+        var quantity = hasStack ? stack.Quantity : (ushort)0;
 
-        _radialFill.Sprite = item.SpriteName is not null && SpriteManifest.TryGet(item.SpriteName, out var sprite) ? sprite : null;
+        var countdownSeconds = item.Activator is PotionActivator &&
+            _potionCooldowns.TryGetReadonly(playerEntityId, out var cooldown) && cooldown.FramesRemaining > 0
+                ? PotionCooldownEffects.RemainingSeconds(cooldown.FramesRemaining)
+                : (int?)null;
+
+        return new SlotVisual(
+            SpriteName: item.SpriteName,
+            Glyph: item.Glyph,
+            GlyphColor: BoundSlotGlyphColor,
+            FillPercentage: isActive ? ComputeItemFillPercentage(playerEntityId) : 0f,
+            BadgeText: quantity > 1 ? $"x{quantity}" : null,
+            BadgeBottomLeft: false,
+            CountdownSecondsAboveSlot: countdownSeconds);
+    }
+
+    /// <summary>The one place a SlotVisual actually gets drawn -- radial fill/icon, then its badge (mana cost bottom-left, or stack count bottom-center) and countdown, if any. Shared by both BuildActionVisual and BuildItemVisual outputs, regardless of which kind produced them.</summary>
+    private void DrawSlotVisual(SpriteBatch spriteBatch, Texture2D unitRectangle, Rectangle bounds, Rectangle contentBounds, SlotVisual visual, float alpha)
+    {
+        _radialFill.Sprite = visual.SpriteName is not null && SpriteManifest.TryGet(visual.SpriteName, out var sprite) ? sprite : null;
         _radialFill.SpriteTint = Color.White;
-        _radialFill.Glyph = item.Glyph;
-        _radialFill.GlyphColor = BoundSlotGlyphColor;
+        _radialFill.Glyph = visual.Glyph;
+        _radialFill.GlyphColor = visual.GlyphColor;
         _radialFill.BackgroundColor = BoundSlotBackgroundColor;
-        _radialFill.FillPercentage = isActive ? ComputeItemFillPercentage(playerEntityId) : 0f;
-        _radialFill.Draw(spriteBatch, unitRectangle, _font, contentBounds, AlphaFor(isActive));
+        _radialFill.FillPercentage = visual.FillPercentage;
+        _radialFill.Draw(spriteBatch, unitRectangle, _font, contentBounds, alpha);
 
-        // Independent of isActive/hasStack -- the cooldown is the consumer's own status, still
-        // meaningful (and still shown on the status bar regardless) even once this particular
-        // slot's item is out of stock, e.g. right after using the last one while abusing the
-        // cooldown. Always drawn at full alpha -- informational, not gated by this slot's own
-        // disabled state (see PotionCooldownEffects' own doc comment: the cooldown never blocks a
-        // second potion in the first place).
-        if (item.Activator is PotionActivator &&
-            _potionCooldowns.TryGetReadonly(playerEntityId, out var cooldown) && cooldown.FramesRemaining > 0)
+        if (visual.BadgeText is not null)
         {
-            DrawCountdownAboveSlot(spriteBatch, bounds, PotionCooldownEffects.RemainingSeconds(cooldown.FramesRemaining));
+            if (visual.BadgeBottomLeft)
+            {
+                DrawBottomLeftText(spriteBatch, bounds, visual.BadgeText, alpha);
+            }
+            else
+            {
+                DrawBottomCenterText(spriteBatch, bounds, visual.BadgeText, alpha);
+            }
+        }
+
+        if (visual.CountdownSecondsAboveSlot is { } seconds)
+        {
+            DrawCountdownAboveSlot(spriteBatch, bounds, seconds);
         }
     }
 
@@ -614,7 +644,7 @@ public sealed class HotbarContent(
     /// comment), so that's the only fill signal here. Deliberately not PotionCooldownComponent:
     /// that cooldown never blocks a second potion (see PotionCooldownEffects' own doc comment),
     /// so masking the slot as if it were on cooldown would be actively misleading -- it gets its
-    /// own separate, informational display instead (see DrawItemSlot's countdown text).
+    /// own separate, informational display instead (see BuildItemVisual's countdown text).
     /// </summary>
     private float ComputeItemFillPercentage(int playerEntityId)
     {

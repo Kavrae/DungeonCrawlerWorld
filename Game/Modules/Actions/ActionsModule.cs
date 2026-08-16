@@ -91,21 +91,11 @@ public sealed class ActionsModule : IGameModule
             return;
         }
 
-        var statModifiers = componentManager.IsRegistered<StatModifierComponent>()
-            ? componentManager.GetMultiPool<StatModifierComponent>()
-            : null;
-        var deadEntities = componentManager.IsRegistered<DeadComponent>()
-            ? componentManager.GetPackedPool<DeadComponent>()
-            : null;
-        var mana = componentManager.IsRegistered<ManaComponent>()
-            ? componentManager.GetPackedPool<ManaComponent>()
-            : null;
-        var abilityScores = componentManager.IsRegistered<AbilityScoreComponent>()
-            ? componentManager.GetMultiPool<AbilityScoreComponent>()
-            : null;
-        var auraSources = componentManager.IsRegistered<StatusEffectAuraSourceComponent>()
-            ? componentManager.GetMultiPool<StatusEffectAuraSourceComponent>()
-            : null;
+        var statModifiers = componentManager.GetOptionalMultiPool<StatModifierComponent>();
+        var deadEntities = componentManager.GetOptionalPackedPool<DeadComponent>();
+        var mana = componentManager.GetOptionalPackedPool<ManaComponent>();
+        var abilityScores = componentManager.GetOptionalMultiPool<AbilityScoreComponent>();
+        var auraSources = componentManager.GetOptionalMultiPool<StatusEffectAuraSourceComponent>();
         var hotkeyExpansionUnlocks = componentManager.GetPackedPool<HotkeyExpansionUnlockComponent>();
 
         systemManager.Register(new DelayedActionSystem(

@@ -226,26 +226,7 @@ public sealed class ConsumableActivationSystem : ISystem
             _eventBus.Publish(new PotionCooldownAbusedEvent(targetEntityId));
         }
 
-        var context = new ActionEffectContext(
-            SourceEntityId: sourceEntityId,
-            TargetEntityId: targetEntityId,
-            Health: _health,
-            EventBus: _eventBus,
-            MathUtility: _mathUtility,
-            ComponentManager: _componentManager,
-            ActivatorName: item.Name,
-            ActivatorTags: item.Tags,
-            StatModifiers: _statModifiers,
-            AbilityScores: _abilityScores,
-            Mana: _mana,
-            HotkeyExpansionUnlocks: _hotkeyExpansionUnlocks,
-            StatusEffectAppliers: _statusEffectAppliers,
-            DeadEntities: _deadEntities,
-            AuraSources: _auraSources,
-            PlayerQuery: _playerQuery,
-            DamageOverride: null);
-
-        ActionEffectSequence.Apply(item.Effects, context);
+        ActionEffectSequence.Apply(item.Effects, BuildContext(item, sourceEntityId, targetEntityId));
 
         PotionCooldownEffects.Reset(_componentManager, targetEntityId, durationFrames);
     }
@@ -283,7 +264,12 @@ public sealed class ConsumableActivationSystem : ISystem
             return;
         }
 
-        var context = new ActionEffectContext(
+        ActionEffectSequence.Apply(item.Effects, BuildContext(item, sourceEntityId, targetEntityId, durationScaleMultiplier));
+    }
+
+    /// <summary>Shared ActionEffectContext shape for both ApplyPotionToTarget and ApplyScrollToTarget -- identical field-for-field except DurationScaleMultiplier, which only a scroll activation ever sets away from its 1.0 default.</summary>
+    private ActionEffectContext BuildContext(ItemDefinition item, int sourceEntityId, int targetEntityId, float durationScaleMultiplier = 1.0f) =>
+        new(
             SourceEntityId: sourceEntityId,
             TargetEntityId: targetEntityId,
             Health: _health,
@@ -302,7 +288,4 @@ public sealed class ConsumableActivationSystem : ISystem
             PlayerQuery: _playerQuery,
             DamageOverride: null,
             DurationScaleMultiplier: durationScaleMultiplier);
-
-        ActionEffectSequence.Apply(item.Effects, context);
-    }
 }

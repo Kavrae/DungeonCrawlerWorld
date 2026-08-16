@@ -46,9 +46,14 @@ public enum HotkeySlot : byte
 /// PackedComponentPool/MultiComponentPool/DirectComponentPool), so C#'s no-struct-inheritance
 /// rule rules out a real base type -- an interface is the actual available equivalent. A slot
 /// binds to at most one of {action, item} at a time; whatever writes a new binding for a slot is
-/// responsible for clearing the other kind's entry for that same slot first.
+/// responsible for clearing the other kind's entry for that same slot first. BoundId is the
+/// bound ActionId/ItemDefinitionId under one shared name -- explicit interface implementation on
+/// each struct, so the concrete, better-named property (ActionId, ItemDefinitionId) stays the
+/// public-facing one and BoundId only surfaces to the generic HotkeySlotBindingQueries helpers.
 /// </summary>
 public interface IHotkeySlotBinding
 {
     HotkeySlot Slot { get; }
+
+    Guid BoundId { get; }
 }

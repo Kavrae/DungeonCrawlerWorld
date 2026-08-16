@@ -11,5 +11,7 @@ public struct ActionHotkeyBindingComponent(HotkeySlot slot, Guid actionId) : IHo
     public HotkeySlot Slot { get; } = slot;
     public Guid ActionId { get; set; } = actionId;
 
+    readonly Guid IHotkeySlotBinding.BoundId => ActionId;
+
     public override readonly string ToString() => $"Slot : {Slot}\nActionId : {ActionId}";
 }
