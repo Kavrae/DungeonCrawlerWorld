@@ -38,13 +38,14 @@ public sealed class World(Map map) : IMapQuery, IPlayerQuery
     {
         var size = transformComponent.Size;
         var newCube = new CubeInt(newPosition, new Vector3Int(size.X, size.Y, 1)); // A footprint never spans more than one MapLayer.
+        var isBlocking = IsBlocking(entityId);
 
-        if (!IsValidDestination(entityId, newCube, IsBlocking(entityId)))
+        if (!IsValidDestination(entityId, newCube, isBlocking))
         {
             return;
         }
 
-        MoveEntityUnchecked(entityId, newPosition, transformComponent);
+        MoveEntityUnchecked(entityId, newPosition, transformComponent, isBlocking);
     }
 
     /// <summary>
@@ -56,20 +57,29 @@ public sealed class World(Map map) : IMapQuery, IPlayerQuery
     /// checked this exact footprint). Any other caller -- a mod, a future spawner -- should use
     /// the public, defensive MoveEntity instead.
     /// </summary>
-    internal void MoveEntityUnchecked(int entityId, Vector3Int newPosition, TransformComponent transformComponent)
+    /// <remarks>
+    /// isBlocking is a caller-supplied parameter, not re-derived internally via IsBlocking(entityId)
+    /// -- both callers already computed it moments earlier for their own IsValidDestination check,
+    /// so re-querying here would just repeat the same MultiComponentPool lookups for the identical
+    /// answer. It also decides only which NEW footprint kind to register at newPosition; departure
+    /// from oldPosition goes through RemoveFootprint, which no longer needs to know or guess which
+    /// kind was actually registered there (see RemoveFootprint's own doc comment).
+    /// </remarks>
+    internal void MoveEntityUnchecked(int entityId, Vector3Int newPosition, TransformComponent transformComponent, bool isBlocking)
     {
         var size = transformComponent.Size;
         var oldPosition = transformComponent.Position;
 
-        if (!IsBlocking(entityId))
-        {
-            RemoveNonBlockingFootprint(entityId, oldPosition, size);
-            AddNonBlockingFootprint(entityId, newPosition, size);
-            return;
-        }
+        RemoveFootprint(entityId, oldPosition, size);
 
-        RemoveBlockingFootprint(entityId, oldPosition, size);
-        AddBlockingFootprint(entityId, newPosition, size);
+        if (isBlocking)
+        {
+            AddBlockingFootprint(entityId, newPosition, size);
+        }
+        else
+        {
+            AddNonBlockingFootprint(entityId, newPosition, size);
+        }
     }
 
     /// <summary>Whether newCube is a legal destination for entityId -- on the map, and (only when isBlocking) not occupied by a different Blocking entity.</summary>
@@ -126,14 +136,7 @@ public sealed class World(Map map) : IMapQuery, IPlayerQuery
     {
         if (IsOnMap(transformComponent.Position))
         {
-            if (IsBlocking(entityId))
-            {
-                RemoveBlockingFootprint(entityId, transformComponent.Position, transformComponent.Size);
-            }
-            else
-            {
-                RemoveNonBlockingFootprint(entityId, transformComponent.Position, transformComponent.Size);
-            }
+            RemoveFootprint(entityId, transformComponent.Position, transformComponent.Size);
         }
 
         transformComponent.Position = new Vector3Int();
@@ -147,7 +150,7 @@ public sealed class World(Map map) : IMapQuery, IPlayerQuery
             return;
         }
 
-        RemoveBlockingFootprint(entityId, transformComponent.Position, transformComponent.Size);
+        RemoveFootprint(entityId, transformComponent.Position, transformComponent.Size);
         AddNonBlockingFootprint(entityId, transformComponent.Position, transformComponent.Size);
     }
 
@@ -179,11 +182,13 @@ public sealed class World(Map map) : IMapQuery, IPlayerQuery
     }
 
     /// <summary>Shared footprint iteration for a Blocking entity's placement/arrival -- every cell of its X/Y extent at the given Z, with a single-cell fast path for a 1x1 footprint instead of entering the loop.</summary>
+    /// <remarks>Writes both the O(1) Blocking fast-path index and the occupant index -- a Blocking entity is discoverable both ways (see Map's class doc comment).</remarks>
     private void AddBlockingFootprint(int entityId, Vector3Int position, Vector2Byte size)
     {
         if (size == TransformSize1)
         {
             Map.SetBlockingEntityId(position, entityId);
+            Map.AddOccupantEntityId(position, entityId);
             return;
         }
 
@@ -192,17 +197,36 @@ public sealed class World(Map map) : IMapQuery, IPlayerQuery
         {
             for (var y = position.Y; y < position.Y + size.Y; y++)
             {
-                Map.SetBlockingEntityId(new Vector3Int(x, y, z), entityId);
+                var cell = new Vector3Int(x, y, z);
+                Map.SetBlockingEntityId(cell, entityId);
+                Map.AddOccupantEntityId(cell, entityId);
             }
         }
     }
 
-    /// <summary>Shared footprint iteration for a Blocking entity's departure -- see AddBlockingFootprint. Uses Map.ClearIfOccupiedBy, not a plain -1 write, so a cell some other entity has since claimed isn't clobbered.</summary>
-    private void RemoveBlockingFootprint(int entityId, Vector3Int position, Vector2Byte size)
+    /// <summary>
+    /// Shared footprint iteration for ANY entity's departure -- Blocking or not -- clearing
+    /// every index it might actually be registered in at position, rather than trusting the
+    /// entity's current IsBlocking() to say which single index applies.
+    /// </summary>
+    /// <remarks>
+    /// Unconditionally attempts both: Map.ClearBlockingIfOccupiedBy (a no-op if entityId isn't
+    /// the cell's recorded Blocking occupant -- e.g. it never held that slot to begin with) and
+    /// Map.RemoveOccupantEntityId (a no-op if it isn't recorded there either). This makes
+    /// removal correct based on what Map actually has stored, not on a live re-query of the
+    /// entity's current blocking status -- those two can only diverge if something changes an
+    /// entity's NonBlockingComponent/ForceBlockingComponent state without going through
+    /// ConvertToNonBlocking first, but there's no need to depend on that never happening: this
+    /// removal is safe either way. Previously named RemoveBlockingFootprint and called only when
+    /// IsBlocking(entityId) was still true; every caller (MoveEntityUnchecked, RemoveEntityFromMap,
+    /// ConvertToNonBlocking) now calls this same method regardless of current blocking status.
+    /// </remarks>
+    private void RemoveFootprint(int entityId, Vector3Int position, Vector2Byte size)
     {
         if (size == TransformSize1)
         {
             Map.ClearBlockingIfOccupiedBy(position, entityId);
+            Map.RemoveOccupantEntityId(position, entityId);
             return;
         }
 
@@ -211,12 +235,15 @@ public sealed class World(Map map) : IMapQuery, IPlayerQuery
         {
             for (var y = position.Y; y < position.Y + size.Y; y++)
             {
-                Map.ClearBlockingIfOccupiedBy(new Vector3Int(x, y, z), entityId);
+                var cell = new Vector3Int(x, y, z);
+                Map.ClearBlockingIfOccupiedBy(cell, entityId);
+                Map.RemoveOccupantEntityId(cell, entityId);
             }
         }
     }
 
     /// <summary>Shared footprint iteration for a non-Blocking entity's placement/arrival -- every cell of its X/Y extent at the given Z, matching how AddBlockingFootprint above loops over Size.X/Size.Y.</summary>
+    /// <remarks>Only writes the occupant index -- a non-Blocking entity never touches the Blocking fast-path array.</remarks>
     private void AddNonBlockingFootprint(int entityId, Vector3Int position, Vector2Byte size)
     {
         var z = position.Z;
@@ -224,20 +251,7 @@ public sealed class World(Map map) : IMapQuery, IPlayerQuery
         {
             for (var y = position.Y; y < position.Y + size.Y; y++)
             {
-                Map.AddNonBlockingEntityId(new Vector3Int(x, y, z), entityId);
-            }
-        }
-    }
-
-    /// <summary>Shared footprint iteration for a non-Blocking entity's departure -- see AddNonBlockingFootprint.</summary>
-    private void RemoveNonBlockingFootprint(int entityId, Vector3Int position, Vector2Byte size)
-    {
-        var z = position.Z;
-        for (var x = position.X; x < position.X + size.X; x++)
-        {
-            for (var y = position.Y; y < position.Y + size.Y; y++)
-            {
-                Map.RemoveNonBlockingEntityId(new Vector3Int(x, y, z), entityId);
+                Map.AddOccupantEntityId(new Vector3Int(x, y, z), entityId);
             }
         }
     }
@@ -308,11 +322,11 @@ public sealed class World(Map map) : IMapQuery, IPlayerQuery
     public int GetEntityIdAt(Vector3Int position) => Map.GetBlockingEntityId(position);
 
     /// <inheritdoc cref="IMapQuery"/>
-    public IReadOnlyList<int> GetNonBlockingEntityIdsAt(Vector3Int position) => Map.GetNonBlockingEntityIdsAt(position);
+    public IReadOnlyList<int> GetOccupantEntityIdsAt(Vector3Int position) => Map.GetOccupantEntityIdsAt(position);
 
     /// <inheritdoc cref="IMapQuery"/>
     /// <remarks>Explicitly implemented rather than left as IMapQuery's own default -- a default interface method is only callable through an IMapQuery-typed reference, not a concrete World one, and MapWindow (this method's first caller) holds World directly.</remarks>
-    public bool IsPositionOccupied(Vector3Int position) => Map.GetBlockingEntityId(position) != -1 || Map.GetNonBlockingEntityIdsAt(position).Count > 0;
+    public bool IsPositionOccupied(Vector3Int position) => Map.GetOccupantEntityIdsAt(position).Count > 0;
 
     /// <inheritdoc cref="IMapQuery"/>
     public int GetTerrainEntityIdAt(Vector3Int position) =>

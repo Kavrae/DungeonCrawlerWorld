@@ -431,7 +431,7 @@ public sealed class MapWindow : Window
                 }
 
                 var tileOrigin = TileOrigin(columnIndex, rowIndex);
-                var occupantsHere = _world.GetNonBlockingEntityIdsAt(new Vector3Int(mapNodeX, mapNodeY, currentMapLayer));
+                var occupantsHere = _world.GetOccupantEntityIdsAt(new Vector3Int(mapNodeX, mapNodeY, currentMapLayer));
 
                 DrawCorpses(spriteBatch, occupantsHere, mapNodeX, mapNodeY, tileOrigin);
                 DrawTinyGrid(spriteBatch, occupantsHere, tileOrigin);
@@ -472,7 +472,13 @@ public sealed class MapWindow : Window
         TryDrawEntityVisual(spriteBatch, terrainEntityId, _mediumFont, tileOrigin, footprintSize);
     }
 
-    /// <summary>Up to 9 Tiny entities in a 3x3 sub-grid, each &lt;= 1/3 tile size; extras beyond 9 are simply not drawn.</summary>
+    /// <summary>
+    /// Up to 9 Tiny entities in a 3x3 sub-grid, each &lt;= 1/3 tile size; extras beyond 9 are
+    /// simply not drawn. Skips a currently-Blocking entity even if it also carries a Tiny
+    /// NonBlockingComponent (a ForceBlockingComponent override, e.g. a Phasing Ghost forced
+    /// solid) -- occupants now includes the tile's Blocking occupant (see World's
+    /// GetOccupantEntityIdsAt), and DrawPrimaryOccupant already draws that entity at full size.
+    /// </summary>
     private void DrawTinyGrid(SpriteBatch spriteBatch, IReadOnlyList<int> occupants, Vector2 tileOrigin)
     {
         var subCellSize = new Point(_camera.CurrentTileSize.X / TinyGridDimension, _camera.CurrentTileSize.Y / TinyGridDimension);
@@ -485,7 +491,7 @@ public sealed class MapWindow : Window
                 break;
             }
 
-            if ((NonBlockingQueries.CombinedKind(_nonBlockingPool, entityId) & NonBlockingKind.Tiny) == 0)
+            if (_world.IsBlocking(entityId) || (NonBlockingQueries.CombinedKind(_nonBlockingPool, entityId) & NonBlockingKind.Tiny) == 0)
             {
                 continue;
             }
@@ -612,12 +618,17 @@ public sealed class MapWindow : Window
         _ => _hugeFont,
     };
 
-    /// <summary>Every Phasing entity here draws at 50% alpha, stacked -- SpriteBatchRenderer already begins with BlendState.AlphaBlend.</summary>
+    /// <summary>
+    /// Every Phasing entity here draws at 50% alpha, stacked -- SpriteBatchRenderer already
+    /// begins with BlendState.AlphaBlend. Skips a currently-Blocking entity for the same
+    /// ForceBlockingComponent-override reason DrawTinyGrid does.
+    /// </summary>
     private void DrawPhasingGlyphs(SpriteBatch spriteBatch, IReadOnlyList<int> occupants, Vector2 tileOrigin)
     {
         foreach (var entityId in occupants)
         {
-            if ((NonBlockingQueries.CombinedKind(_nonBlockingPool, entityId) & NonBlockingKind.Phasing) == 0 ||
+            if (_world.IsBlocking(entityId) ||
+                (NonBlockingQueries.CombinedKind(_nonBlockingPool, entityId) & NonBlockingKind.Phasing) == 0 ||
                 !_transformPool.TryGetReadonly(entityId, out var transformComponent))
             {
                 continue;

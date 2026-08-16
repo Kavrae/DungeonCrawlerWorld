@@ -49,7 +49,12 @@ public sealed class MovementSystemTests
     private sealed class RecordingEntityMoveSync : IEntityMoveSync
     {
         public EntityMovedEvent? LastSynced { get; private set; }
-        public void SyncMove(EntityMovedEvent moved) => LastSynced = moved;
+        public bool? LastSyncedIsBlocking { get; private set; }
+        public void SyncMove(EntityMovedEvent moved, bool isBlocking)
+        {
+            LastSynced = moved;
+            LastSyncedIsBlocking = isBlocking;
+        }
         public void ConvertToNonBlocking(int entityId, ref TransformComponent transform) { }
     }
 

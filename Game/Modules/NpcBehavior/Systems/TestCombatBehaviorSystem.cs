@@ -188,23 +188,17 @@ public sealed class TestCombatBehaviorSystem : ISystem
     }
 
     /// <summary>
-    /// Checks both the Blocking occupant and every non-Blocking occupant of each tile (see
-    /// ActionEffectResolver.Apply's own dual loop) -- melee is not restricted to Blocking
-    /// targets only, so a non-Blocking Fairy/player sharing an adjacent tile still counts.
+    /// Checks every occupant of each tile, Blocking or not -- melee is not restricted to
+    /// Blocking targets only, so a non-Blocking Fairy/player sharing an adjacent tile still
+    /// counts.
     /// </summary>
     private bool HasAttackableNeighbor(List<Vector3Int> adjacentTiles)
     {
         foreach (var tile in adjacentTiles)
         {
-            var blockingEntityId = _mapQuery.GetEntityIdAt(tile);
-            if (blockingEntityId != -1 && IsAttackable(blockingEntityId))
+            foreach (var occupantEntityId in _mapQuery.GetOccupantEntityIdsAt(tile))
             {
-                return true;
-            }
-
-            foreach (var nonBlockingEntityId in _mapQuery.GetNonBlockingEntityIdsAt(tile))
-            {
-                if (IsAttackable(nonBlockingEntityId))
+                if (IsAttackable(occupantEntityId))
                 {
                     return true;
                 }

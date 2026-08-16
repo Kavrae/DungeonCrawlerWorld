@@ -292,24 +292,34 @@ public sealed class StatusEffectAuraSystem : ISystem
     /// correctly via TotalStacksExcludingSelf (see SourceDoesNotIgniteItself), so the source
     /// entity itself showing up in this same scan is harmless.
     /// </summary>
+    /// <remarks>Walks IMapQuery.GetOccupantEntityIdsAt per cell rather than the Blocking-only GetEntityIdsInBox, so Tiny/Phasing occupants are evaluated for exposure too -- they used to be silently skipped.</remarks>
     private void GrantToOccupantsNear(Vector3Int center)
     {
         var boxWidth = _maxScanRadius * 2 + 1;
-        var box = new CubeInt(
-            new Vector3Int(center.X - _maxScanRadius, center.Y - _maxScanRadius, center.Z),
-            new Vector3Int(boxWidth, boxWidth, 1));
+        var minX = center.X - _maxScanRadius;
+        var minY = center.Y - _maxScanRadius;
+        var z = center.Z;
 
-        Span<int> occupantIds = stackalloc int[boxWidth * boxWidth];
-        _mapQuery.GetEntityIdsInBox(box, occupantIds);
-
-        foreach (var occupantId in occupantIds)
+        for (var y = minY; y < minY + boxWidth; y++)
         {
-            if (occupantId == -1 || !_transforms.TryGetReadonly(occupantId, out var occupantTransform))
+            for (var x = minX; x < minX + boxWidth; x++)
             {
-                continue;
-            }
+                var position = new Vector3Int(x, y, z);
+                if (!_mapQuery.IsOnMap(position))
+                {
+                    continue;
+                }
 
-            TryGrantApplicableStacks(occupantId, occupantTransform.Position);
+                foreach (var occupantId in _mapQuery.GetOccupantEntityIdsAt(position))
+                {
+                    if (!_transforms.TryGetReadonly(occupantId, out var occupantTransform))
+                    {
+                        continue;
+                    }
+
+                    TryGrantApplicableStacks(occupantId, occupantTransform.Position);
+                }
+            }
         }
     }
 
@@ -485,39 +495,49 @@ public sealed class StatusEffectAuraSystem : ISystem
     /// have kept ticking (harmlessly, since GrantStacks re-tops-off to zero to nothing there)
     /// until its own next scheduled visit, rather than being cleaned up immediately here.
     /// </summary>
+    /// <remarks>See GrantToOccupantsNear's own remark -- same GetOccupantEntityIdsAt-per-cell walk, so a Tiny/Phasing occupant's exposure is correctly dropped when it (or the source) moves out of range, not just granted.</remarks>
     private void ReEvaluateExposuresNear(Vector3Int center)
     {
         var boxWidth = _maxScanRadius * 2 + 1;
-        var box = new CubeInt(
-            new Vector3Int(center.X - _maxScanRadius, center.Y - _maxScanRadius, center.Z),
-            new Vector3Int(boxWidth, boxWidth, 1));
+        var minX = center.X - _maxScanRadius;
+        var minY = center.Y - _maxScanRadius;
+        var z = center.Z;
 
-        Span<int> occupantIds = stackalloc int[boxWidth * boxWidth];
-        _mapQuery.GetEntityIdsInBox(box, occupantIds);
-
-        foreach (var occupantId in occupantIds)
+        for (var y = minY; y < minY + boxWidth; y++)
         {
-            if (occupantId == -1 || !_transforms.TryGetReadonly(occupantId, out var occupantTransform))
+            for (var x = minX; x < minX + boxWidth; x++)
             {
-                continue;
-            }
-
-            // Snapshot which of the occupant's current exposure types are now out of range
-            // before removing any of them -- MultiComponentPool.RemoveFirst reorders the dense
-            // chain, so removing mid-walk of that same chain would skip or revisit entries.
-            _staleExposureTypesScratch.Clear();
-            for (var denseIndex = _exposures.GetFirstDenseIndex(occupantId); denseIndex != -1; denseIndex = _exposures.GetNextDenseIndex(denseIndex))
-            {
-                var exposure = _exposures.GetReadonlyByDenseIndex(denseIndex);
-                if (TotalStacksExcludingSelf(occupantId, occupantTransform.Position, exposure.EffectType) <= 0)
+                var position = new Vector3Int(x, y, z);
+                if (!_mapQuery.IsOnMap(position))
                 {
-                    _staleExposureTypesScratch.Add(exposure.EffectType);
+                    continue;
                 }
-            }
 
-            foreach (var staleType in _staleExposureTypesScratch)
-            {
-                _exposures.RemoveFirst(occupantId, staleType, static (ref readonly StatusEffectAuraExposureComponent e, StatusEffectType type) => e.EffectType == type);
+                foreach (var occupantId in _mapQuery.GetOccupantEntityIdsAt(position))
+                {
+                    if (!_transforms.TryGetReadonly(occupantId, out var occupantTransform))
+                    {
+                        continue;
+                    }
+
+                    // Snapshot which of the occupant's current exposure types are now out of range
+                    // before removing any of them -- MultiComponentPool.RemoveFirst reorders the dense
+                    // chain, so removing mid-walk of that same chain would skip or revisit entries.
+                    _staleExposureTypesScratch.Clear();
+                    for (var denseIndex = _exposures.GetFirstDenseIndex(occupantId); denseIndex != -1; denseIndex = _exposures.GetNextDenseIndex(denseIndex))
+                    {
+                        var exposure = _exposures.GetReadonlyByDenseIndex(denseIndex);
+                        if (TotalStacksExcludingSelf(occupantId, occupantTransform.Position, exposure.EffectType) <= 0)
+                        {
+                            _staleExposureTypesScratch.Add(exposure.EffectType);
+                        }
+                    }
+
+                    foreach (var staleType in _staleExposureTypesScratch)
+                    {
+                        _exposures.RemoveFirst(occupantId, staleType, static (ref readonly StatusEffectAuraExposureComponent e, StatusEffectType type) => e.EffectType == type);
+                    }
+                }
             }
         }
     }

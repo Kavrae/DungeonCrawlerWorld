@@ -188,7 +188,7 @@ public sealed class ConsumableActivationSystem : ISystem
     {
         foreach (var tile in targetTiles)
         {
-            foreach (var targetEntityId in TargetResolution.EnumerateTargets(tile, _mapQuery))
+            foreach (var targetEntityId in _mapQuery.GetOccupantEntityIdsAt(tile))
             {
                 ApplyPotionToTarget(item, sourceEntityId, targetEntityId);
             }
@@ -256,7 +256,7 @@ public sealed class ConsumableActivationSystem : ISystem
 
         foreach (var tile in targetTiles)
         {
-            foreach (var targetEntityId in TargetResolution.EnumerateTargets(tile, _mapQuery))
+            foreach (var targetEntityId in _mapQuery.GetOccupantEntityIdsAt(tile))
             {
                 ApplyScrollToTarget(item, sourceEntityId, targetEntityId, durationScaleMultiplier);
             }

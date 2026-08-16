@@ -5,9 +5,13 @@ namespace Game.World;
 
 /// <summary> The in-memory map grid.</summary>
 /// <remarks>
-/// Three independent flat stores: 
-///     Blocking creature occupancy (one Blocking entity per (x,y,MapLayer) ) 
-///     Non-Blocking creature occupancy (any number of non-Blocking entities per (x,y,MapLayer) )
+/// Three independent flat stores:
+///     Blocking creature occupancy (one Blocking entity per (x,y,MapLayer) ) -- an O(1)
+///         fast-path index doubling as the movement-collision "is this cell blocked, and by
+///         whom" answer, kept even though every Blocking entity is also in the occupant store
+///         below, precisely because that O(1) read matters on the movement hot path.
+///     Occupant creature index (any number of entities per (x,y,MapLayer), Blocking entities
+///         included) -- the "who is actually standing here" answer.
 ///     Terrain (the floor beneath UnderGround/Ground -- Flying has none).
 /// </remarks>
 /// <cleanupVersion>1</cleanupVersion>
@@ -20,15 +24,15 @@ public sealed class Map
 
     private readonly int[] _blockingEntityIds;
     private readonly int[] _terrainEntityIds;
-    private readonly Dictionary<int, List<int>> _nonBlockingEntityIdsByPosition = [];
+    private readonly Dictionary<int, List<int>> _occupantEntityIdsByPosition = [];
 
     /// <summary>
-    /// Lists emptied out by RemoveNonBlockingEntityId, kept here instead of left for the GC --
-    /// a wandering non-Blocking population (e.g. Ghosts, now that they're genuinely exempt from
-    /// collision) moves every cell it visits through exactly this empty-then-repopulate cycle,
-    /// so without recycling, nearly every move both abandons one List (plus its backing array)
-    /// and allocates a fresh one, entirely avoidable garbage at a population/move-rate where it
-    /// adds up. AddNonBlockingEntityId draws from here before allocating; List.Clear() (called
+    /// Lists emptied out by RemoveOccupantEntityId, kept here instead of left for the GC --
+    /// a wandering population (e.g. Ghosts, now that they're genuinely exempt from collision)
+    /// moves every cell it visits through exactly this empty-then-repopulate cycle, so without
+    /// recycling, nearly every move both abandons one List (plus its backing array) and
+    /// allocates a fresh one, entirely avoidable garbage at a population/move-rate where it
+    /// adds up. AddOccupantEntityId draws from here before allocating; List.Clear() (called
     /// before a list re-enters the pool) keeps its backing array's Capacity, so a recycled list
     /// need not reallocate on its first reuse either.
     /// </summary>
@@ -65,35 +69,35 @@ public sealed class Map
         return true;
     }
 
-    /// <summary>Every non-Blocking entity occupying position -- empty if none. </summary>
-    /// <remarks>Does NOT include the (at most one) Blocking entity GetEntityId already answers for the same position; callers that need everyone at a tile combine both (see ActionEffectResolver.Apply).</remarks>
+    /// <summary>Every entity occupying position, Blocking or not -- empty if none. </summary>
+    /// <remarks>Includes the (at most one) Blocking entity GetBlockingEntityId also answers for the same position -- this is the "who is actually standing here" answer, GetBlockingEntityId is the O(1) fast-path "is this cell blocked" one.</remarks>
     /// <param name="position">The position to query.</param>
-    public IReadOnlyList<int> GetNonBlockingEntityIdsAt(Vector3Int position) =>
-        _nonBlockingEntityIdsByPosition.TryGetValue(position.FlatIndex(Size), out var entityIds) ? entityIds : EmptyEntityIds;
+    public IReadOnlyList<int> GetOccupantEntityIdsAt(Vector3Int position) =>
+        _occupantEntityIdsByPosition.TryGetValue(position.FlatIndex(Size), out var entityIds) ? entityIds : EmptyEntityIds;
 
-    /// <summary>Adds a non-Blocking entity to the specified position.</summary>
+    /// <summary>Adds an entity to the occupant index at the specified position.</summary>
     /// <param name="position">The position to add the entity to.</param>
     /// <param name="entityId">The ID of the entity to add.</param>
-    public void AddNonBlockingEntityId(Vector3Int position, int entityId)
+    public void AddOccupantEntityId(Vector3Int position, int entityId)
     {
         var key = position.FlatIndex(Size);
-        if (!_nonBlockingEntityIdsByPosition.TryGetValue(key, out var entityIds))
+        if (!_occupantEntityIdsByPosition.TryGetValue(key, out var entityIds))
         {
             entityIds = _recycledEntityIdLists.Count > 0 ? _recycledEntityIdLists.Pop() : [];
-            _nonBlockingEntityIdsByPosition[key] = entityIds;
+            _occupantEntityIdsByPosition[key] = entityIds;
         }
 
         entityIds.Add(entityId);
     }
 
-    /// <summary>Removes a non-Blocking entity from the specified position.</summary>
+    /// <summary>Removes an entity from the occupant index at the specified position.</summary>
     /// <remarks>No-ops if entityId isn't actually recorded at position -- mirrors ClearIfOccupiedBy's own tolerance.</remarks>
     /// <param name="position">The position from which to remove the entity.</param>
     /// <param name="entityId">The ID of the entity to remove.</param>
-    public void RemoveNonBlockingEntityId(Vector3Int position, int entityId)
+    public void RemoveOccupantEntityId(Vector3Int position, int entityId)
     {
         var key = position.FlatIndex(Size);
-        if (!_nonBlockingEntityIdsByPosition.TryGetValue(key, out var entityIds))
+        if (!_occupantEntityIdsByPosition.TryGetValue(key, out var entityIds))
         {
             return;
         }
@@ -101,7 +105,7 @@ public sealed class Map
         entityIds.Remove(entityId);
         if (entityIds.Count == 0)
         {
-            _nonBlockingEntityIdsByPosition.Remove(key);
+            _occupantEntityIdsByPosition.Remove(key);
             entityIds.Clear(); // No-op today (already empty), defends against Remove(entityId) above ever leaving stale entries once this is pooled rather than discarded.
             _recycledEntityIdLists.Push(entityIds);
         }

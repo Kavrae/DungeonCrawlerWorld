@@ -31,11 +31,11 @@ public sealed class TestCombatBehaviorSystemTests
     private static readonly Vector3Int AdjacentTile = new(6, 5, 0); // due east of the goblin -- part of Adjacent's 8-neighbor footprint.
     private static readonly Vector2Byte SingleTile = new(1, 1);
 
-    /// <summary>Minimal IMapQuery test double with a configurable Blocking/non-Blocking occupant index -- same shape as ActionEffectResolverTests' own fake.</summary>
+    /// <summary>Minimal IMapQuery test double with a configurable Blocking/occupant index -- same shape as ActionEffectResolverTests' own fake.</summary>
     private sealed class FakeMapQuery : IMapQuery
     {
         private readonly Dictionary<Vector3Int, int> _blockingByPosition = [];
-        private readonly Dictionary<Vector3Int, List<int>> _nonBlockingByPosition = [];
+        private readonly Dictionary<Vector3Int, List<int>> _occupantsByPosition = [];
         private readonly HashSet<int> _nonBlockingEntities = [];
 
         public Vector3Int MapSize { get; } = new(20, 20, 1);
@@ -44,23 +44,32 @@ public sealed class TestCombatBehaviorSystemTests
         public int GetTerrainEntityIdAt(Vector3Int position) => -1;
         public void GetEntityIdsInBox(CubeInt box, Span<int> entityIds) { }
 
-        public void SetBlockingOccupant(Vector3Int position, int entityId) => _blockingByPosition[position] = entityId;
+        public void SetBlockingOccupant(Vector3Int position, int entityId)
+        {
+            _blockingByPosition[position] = entityId;
+            AddOccupant(position, entityId);
+        }
 
         public void AddNonBlockingOccupant(Vector3Int position, int entityId)
         {
             _nonBlockingEntities.Add(entityId);
-            if (!_nonBlockingByPosition.TryGetValue(position, out var entityIds))
+            AddOccupant(position, entityId);
+        }
+
+        private void AddOccupant(Vector3Int position, int entityId)
+        {
+            if (!_occupantsByPosition.TryGetValue(position, out var entityIds))
             {
                 entityIds = [];
-                _nonBlockingByPosition[position] = entityIds;
+                _occupantsByPosition[position] = entityIds;
             }
             entityIds.Add(entityId);
         }
 
         public int GetEntityIdAt(Vector3Int position) => _blockingByPosition.TryGetValue(position, out var id) ? id : -1;
 
-        public IReadOnlyList<int> GetNonBlockingEntityIdsAt(Vector3Int position) =>
-            _nonBlockingByPosition.TryGetValue(position, out var entityIds) ? entityIds : [];
+        public IReadOnlyList<int> GetOccupantEntityIdsAt(Vector3Int position) =>
+            _occupantsByPosition.TryGetValue(position, out var entityIds) ? entityIds : [];
     }
 
     private sealed class FakePlayerQuery(int playerEntityId) : IPlayerQuery
@@ -232,7 +241,7 @@ public sealed class TestCombatBehaviorSystemTests
 
     private sealed class RecordingEntityMoveSync : IEntityMoveSync
     {
-        public void SyncMove(EntityMovedEvent moved) { }
+        public void SyncMove(EntityMovedEvent moved, bool isBlocking) { }
         public void ConvertToNonBlocking(int entityId, ref TransformComponent transform) { }
     }
 }

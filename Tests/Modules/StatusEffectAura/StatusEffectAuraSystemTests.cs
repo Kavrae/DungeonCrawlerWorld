@@ -29,10 +29,20 @@ public sealed class StatusEffectAuraSystemTests
     private static readonly Vector3Int SourcePosition = new(10, 10, 0);
     private static readonly Vector2Byte UnitSize = new(1, 1);
 
-    /// <summary>Minimal IMapQuery test double backing GetEntityIdsInBox with a real per-cell dictionary -- only used by StatusEffectAuraSystem's rare "a source moved" re-check path now that per-mover detection is an O(1) AuraGrid lookup, not a live scan.</summary>
+    /// <summary>
+    /// Minimal IMapQuery test double with a real per-cell occupant dictionary -- backs
+    /// StatusEffectAuraSystem's rare "a source moved" re-check path (GrantToOccupantsNear/
+    /// ReEvaluateExposuresNear), now a GetOccupantEntityIdsAt-per-cell walk rather than a
+    /// GetEntityIdsInBox scan, now that per-mover detection is an O(1) AuraGrid lookup, not a
+    /// live scan. Keeps the Blocking slot (SetOccupant/GetEntityIdAt/GetEntityIdsInBox) and the
+    /// non-Blocking index (SetNonBlockingOccupant) as genuinely separate stores, mirroring
+    /// Map's own split, so a test can prove GetOccupantEntityIdsAt -- and only that -- sees a
+    /// non-Blocking occupant.
+    /// </summary>
     private sealed class FakeMapQuery : IMapQuery
     {
         private readonly Dictionary<(int X, int Y, int Z), int> _occupantByPosition = [];
+        private readonly Dictionary<(int X, int Y, int Z), List<int>> _nonBlockingOccupantsByPosition = [];
 
         public Vector3Int MapSize { get; } = new(1000, 1000, 3);
         public bool IsOnMap(Vector3Int position) => true;
@@ -41,8 +51,35 @@ public sealed class StatusEffectAuraSystemTests
         public void SetOccupant(Vector3Int position, int entityId) => _occupantByPosition[(position.X, position.Y, position.Z)] = entityId;
         public void ClearOccupant(Vector3Int position) => _occupantByPosition.Remove((position.X, position.Y, position.Z));
 
+        public void SetNonBlockingOccupant(Vector3Int position, int entityId)
+        {
+            var key = (position.X, position.Y, position.Z);
+            if (!_nonBlockingOccupantsByPosition.TryGetValue(key, out var entityIds))
+            {
+                entityIds = [];
+                _nonBlockingOccupantsByPosition[key] = entityIds;
+            }
+            entityIds.Add(entityId);
+        }
+
         public int GetEntityIdAt(Vector3Int position) => _occupantByPosition.TryGetValue((position.X, position.Y, position.Z), out var id) ? id : -1;
         public int GetTerrainEntityIdAt(Vector3Int position) => -1;
+
+        public IReadOnlyList<int> GetOccupantEntityIdsAt(Vector3Int position)
+        {
+            var result = new List<int>();
+            if (GetEntityIdAt(position) is var blockingId && blockingId != -1)
+            {
+                result.Add(blockingId);
+            }
+
+            if (_nonBlockingOccupantsByPosition.TryGetValue((position.X, position.Y, position.Z), out var nonBlockingIds))
+            {
+                result.AddRange(nonBlockingIds);
+            }
+
+            return result;
+        }
 
         public void GetEntityIdsInBox(CubeInt box, Span<int> entityIds) => Fill(box, entityIds, GetEntityIdAt);
 
@@ -657,6 +694,35 @@ public sealed class StatusEffectAuraSystemTests
         AuraSourceEffects.Toggle(sourcePool, eventBus, SourceEntityId, StatusEffectType.Burning, auraAndGlowStrength: 8, Color.Orange);
 
         Assert.AreEqual(8, StackCountOf(componentManager, ObserverEntityId), "A stationary target already in range must be granted the moment the aura toggles on.");
+        Assert.IsTrue(HasExposure(componentManager, ObserverEntityId, StatusEffectType.Burning));
+    }
+
+    /// <summary>
+    /// Regression test for the fix: GrantToOccupantsNear/ReEvaluateExposuresNear used to scan
+    /// IMapQuery.GetEntityIdsInBox, which only ever reports the Blocking occupant of a cell --
+    /// a Tiny/Phasing (non-Blocking) occupant sharing that cell was silently invisible to
+    /// auras. ObserverEntityId here is registered ONLY via SetNonBlockingOccupant (FakeMapQuery's
+    /// non-Blocking index), never via SetOccupant/GetEntityIdAt, so this fails against the old
+    /// GetEntityIdsInBox-based scan and passes only once the scan goes through
+    /// GetOccupantEntityIdsAt instead.
+    /// </summary>
+    [TestMethod]
+    public void SourceAddedViaToggle_StationaryNonBlockingOccupantAlreadyInRange_GrantsImmediately()
+    {
+        var (system, componentManager, mapQuery, movedEntities, eventBus) = Build();
+
+        // Forces EnsureGrid to run once with no sources present -- the grid is "already built" by the time the toggle below happens, same setup as the sync-bug regression tests above.
+        system.Update(new EngineTime(default, default, false, FrameCount: 0), 0);
+        movedEntities.ClearFrame();
+
+        componentManager.Merge(ObserverEntityId, new TransformComponent(SourcePosition, UnitSize));
+        mapQuery.SetNonBlockingOccupant(SourcePosition, ObserverEntityId);
+
+        componentManager.Merge(SourceEntityId, new TransformComponent(SourcePosition, UnitSize));
+        var sourcePool = componentManager.GetMultiPool<StatusEffectAuraSourceComponent>();
+        AuraSourceEffects.Toggle(sourcePool, eventBus, SourceEntityId, StatusEffectType.Burning, auraAndGlowStrength: 8, Color.Orange);
+
+        Assert.AreEqual(8, StackCountOf(componentManager, ObserverEntityId), "A stationary non-Blocking (e.g. Tiny/Phasing) occupant already in range must be granted too, not just Blocking ones.");
         Assert.IsTrue(HasExposure(componentManager, ObserverEntityId, StatusEffectType.Burning));
     }
 

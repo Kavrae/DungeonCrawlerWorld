@@ -179,7 +179,7 @@ public sealed class MovementSystem : ISystem
             ActionLockGate.Lock(_actionLocks, entityId, lockFrames);
 
             var entityMovedEvent = new EntityMovedEvent(entityId, oldPosition, newPosition, transformComponent.Size);
-            _entityMoveSync.SyncMove(entityMovedEvent);
+            _entityMoveSync.SyncMove(entityMovedEvent, isBlocking);
             _movedEntitiesEventBuffer.Record(entityMovedEvent);
 
             if (entityId == _playerQuery?.PlayerEntityId || _auraSources?.Has(entityId) == true)

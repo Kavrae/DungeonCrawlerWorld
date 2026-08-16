@@ -35,13 +35,14 @@ public interface IMapQuery
         return IsOnMap(new Vector3Int(position.X + size.X - 1, position.Y + size.Y - 1, position.Z));
     }
 
-    /// <summary>The entity occupying position, or -1 if empty.</summary>
+    /// <summary>The exclusive Blocking entity occupying position, or -1 if none.</summary>
+    /// <remarks>Never a non-Blocking entity, even if one occupies position -- callers wanting every occupant (Blocking or not) should use GetOccupantEntityIdsAt instead.</remarks>
     int GetEntityIdAt(Vector3Int position);
 
-    /// <summary>Gets the IDs of all non-blocking entities at a position.</summary>
+    /// <summary>Gets the IDs of every entity occupying a position, Blocking or not.</summary>
     /// <param name="position">The position to check.</param>
     /// <returns>A list of entity IDs at the position.</returns>
-    IReadOnlyList<int> GetNonBlockingEntityIdsAt(Vector3Int position) => [];
+    IReadOnlyList<int> GetOccupantEntityIdsAt(Vector3Int position) => [];
 
     /// <summary>Checks if an entity is blocking.</summary>
     /// <param name="entityId">The ID of the entity to check.</param>
@@ -59,5 +60,6 @@ public interface IMapQuery
     void GetEntityIdsInBox(CubeInt box, Span<int> entityIds);
 
     /// <summary>Whether any entity -- Blocking or non-Blocking -- currently occupies position.</summary>
-    bool IsPositionOccupied(Vector3Int position) => GetEntityIdAt(position) != -1 || GetNonBlockingEntityIdsAt(position).Count > 0;
+    /// <remarks>GetOccupantEntityIdsAt's own contract already includes the Blocking occupant, if any (see its own doc comment) -- so checking GetEntityIdAt too would just repeat that same answer, not add coverage for a case GetOccupantEntityIdsAt could miss.</remarks>
+    bool IsPositionOccupied(Vector3Int position) => GetOccupantEntityIdsAt(position).Count > 0;
 }

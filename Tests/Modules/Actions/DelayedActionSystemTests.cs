@@ -42,6 +42,9 @@ public sealed class DelayedActionSystemTests
         public int GetEntityIdAt(Vector3Int position) =>
             _occupantByPosition.TryGetValue((position.X, position.Y, position.Z), out var id) ? id : -1;
 
+        public IReadOnlyList<int> GetOccupantEntityIdsAt(Vector3Int position) =>
+            GetEntityIdAt(position) is var entityId && entityId != -1 ? [entityId] : [];
+
         public void GetEntityIdsInBox(CubeInt box, Span<int> entityIds) { }
     }
 

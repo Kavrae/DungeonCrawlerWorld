@@ -16,7 +16,14 @@ namespace Game.World;
 /// </summary>
 public interface IEntityMoveSync
 {
-    void SyncMove(EntityMovedEvent moved);
+    /// <param name="moved">The confirmed move to sync into Map's index.</param>
+    /// <param name="isBlocking">
+    /// The mover's current IsBlocking() status, already computed by the caller (MovementSystem)
+    /// for its own CanOccupy check moments earlier -- passed through here rather than re-derived,
+    /// so the same MultiComponentPool lookups aren't repeated for an answer that can't have
+    /// changed in between.
+    /// </param>
+    void SyncMove(EntityMovedEvent moved, bool isBlocking);
 
     void ConvertToNonBlocking(int entityId, ref TransformComponent transform);
 }

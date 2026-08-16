@@ -47,11 +47,11 @@ public sealed class ActionEffectResolverTests
         public override double NextDouble() => 1.0;
     }
 
-    /// <summary>Minimal IMapQuery test double supporting both the Blocking slot and the non-Blocking index -- everything else is unused by ActionEffectResolver.Apply.</summary>
+    /// <summary>Minimal IMapQuery test double supporting both the Blocking slot and the general occupant index -- everything else is unused by ActionEffectResolver.Apply.</summary>
     private sealed class FakeMapQuery : IMapQuery
     {
         private readonly Dictionary<Vector3Int, int> _blockingByPosition = [];
-        private readonly Dictionary<Vector3Int, List<int>> _nonBlockingByPosition = [];
+        private readonly Dictionary<Vector3Int, List<int>> _occupantsByPosition = [];
 
         public Vector3Int MapSize { get; } = new(100, 100, 1);
         public bool IsOnMap(Vector3Int position) => true;
@@ -59,14 +59,20 @@ public sealed class ActionEffectResolverTests
         public int GetTerrainEntityIdAt(Vector3Int position) => -1;
         public void GetEntityIdsInBox(CubeInt box, Span<int> entityIds) { }
 
-        public void SetBlockingOccupant(Vector3Int position, int entityId) => _blockingByPosition[position] = entityId;
-
-        public void AddNonBlockingOccupant(Vector3Int position, int entityId)
+        public void SetBlockingOccupant(Vector3Int position, int entityId)
         {
-            if (!_nonBlockingByPosition.TryGetValue(position, out var entityIds))
+            _blockingByPosition[position] = entityId;
+            AddOccupant(position, entityId);
+        }
+
+        public void AddNonBlockingOccupant(Vector3Int position, int entityId) => AddOccupant(position, entityId);
+
+        private void AddOccupant(Vector3Int position, int entityId)
+        {
+            if (!_occupantsByPosition.TryGetValue(position, out var entityIds))
             {
                 entityIds = [];
-                _nonBlockingByPosition[position] = entityIds;
+                _occupantsByPosition[position] = entityIds;
             }
 
             entityIds.Add(entityId);
@@ -74,8 +80,8 @@ public sealed class ActionEffectResolverTests
 
         public int GetEntityIdAt(Vector3Int position) => _blockingByPosition.TryGetValue(position, out var id) ? id : -1;
 
-        public IReadOnlyList<int> GetNonBlockingEntityIdsAt(Vector3Int position) =>
-            _nonBlockingByPosition.TryGetValue(position, out var entityIds) ? entityIds : [];
+        public IReadOnlyList<int> GetOccupantEntityIdsAt(Vector3Int position) =>
+            _occupantsByPosition.TryGetValue(position, out var entityIds) ? entityIds : [];
     }
 
     private static (FakeMapQuery MapQuery, PackedComponentPool<HealthComponent> Health, EventBus EventBus, MathUtility MathUtility, StatusEffectAuraApplierRegistry StatusEffectAppliers, ComponentManager ComponentManager) Build()

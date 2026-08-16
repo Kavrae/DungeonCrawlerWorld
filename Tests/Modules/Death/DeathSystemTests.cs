@@ -19,7 +19,7 @@ public sealed class DeathSystemTests
     {
         public int? LastConvertedEntityId { get; private set; }
         public int ConvertToNonBlockingCallCount { get; private set; }
-        public void SyncMove(EntityMovedEvent moved) { }
+        public void SyncMove(EntityMovedEvent moved, bool isBlocking) { }
         public void ConvertToNonBlocking(int entityId, ref TransformComponent transform)
         {
             LastConvertedEntityId = entityId;

@@ -362,7 +362,20 @@ public sealed class WorldTests
 
         world.PlaceEntityOnMap(1, new Vector3Int(3, 3, 1), ref transform);
 
-        Assert.IsTrue(world.Map.GetNonBlockingEntityIdsAt(new Vector3Int(3, 3, 1)).Contains(1));
+        Assert.IsTrue(world.Map.GetOccupantEntityIdsAt(new Vector3Int(3, 3, 1)).Contains(1));
+    }
+
+    /// <summary>A Blocking entity is discoverable both ways: Map.GetBlockingEntityId (the O(1) fast-path) and the general occupant index -- see Map's own class doc comment.</summary>
+    [TestMethod]
+    public void PlaceEntityOnMap_BlockingEntity_AlsoAddsToOccupantIndex()
+    {
+        var world = CreateWorld();
+        var transform = new TransformComponent(new Vector3Int(), new Vector2Byte(1, 1));
+
+        world.PlaceEntityOnMap(1, new Vector3Int(3, 3, 1), ref transform);
+
+        Assert.AreEqual(1, world.Map.GetBlockingEntityId(new Vector3Int(3, 3, 1)));
+        Assert.IsTrue(world.Map.GetOccupantEntityIdsAt(new Vector3Int(3, 3, 1)).Contains(1));
     }
 
     [TestMethod]
@@ -376,10 +389,10 @@ public sealed class WorldTests
 
         world.PlaceEntityOnMap(1, new Vector3Int(2, 2, 1), ref transform);
 
-        Assert.IsTrue(world.Map.GetNonBlockingEntityIdsAt(new Vector3Int(2, 2, 1)).Contains(1));
-        Assert.IsTrue(world.Map.GetNonBlockingEntityIdsAt(new Vector3Int(3, 2, 1)).Contains(1));
-        Assert.IsTrue(world.Map.GetNonBlockingEntityIdsAt(new Vector3Int(2, 3, 1)).Contains(1));
-        Assert.IsTrue(world.Map.GetNonBlockingEntityIdsAt(new Vector3Int(3, 3, 1)).Contains(1));
+        Assert.IsTrue(world.Map.GetOccupantEntityIdsAt(new Vector3Int(2, 2, 1)).Contains(1));
+        Assert.IsTrue(world.Map.GetOccupantEntityIdsAt(new Vector3Int(3, 2, 1)).Contains(1));
+        Assert.IsTrue(world.Map.GetOccupantEntityIdsAt(new Vector3Int(2, 3, 1)).Contains(1));
+        Assert.IsTrue(world.Map.GetOccupantEntityIdsAt(new Vector3Int(3, 3, 1)).Contains(1));
     }
 
     /// <summary>Any number of non-Blocking entities can share a cell -- unlike Map's single-occupant Blocking slot, the index must retain every one of them, not just the most recent.</summary>
@@ -397,7 +410,7 @@ public sealed class WorldTests
         var secondTransform = new TransformComponent(new Vector3Int(), new Vector2Byte(1, 1));
         world.PlaceEntityOnMap(2, new Vector3Int(3, 3, 1), ref secondTransform);
 
-        var occupants = world.Map.GetNonBlockingEntityIdsAt(new Vector3Int(3, 3, 1));
+        var occupants = world.Map.GetOccupantEntityIdsAt(new Vector3Int(3, 3, 1));
         Assert.IsTrue(occupants.Contains(1));
         Assert.IsTrue(occupants.Contains(2));
     }
@@ -414,8 +427,8 @@ public sealed class WorldTests
 
         world.MoveEntity(1, new Vector3Int(4, 3, 1), transform);
 
-        Assert.IsFalse(world.Map.GetNonBlockingEntityIdsAt(new Vector3Int(3, 3, 1)).Contains(1));
-        Assert.IsTrue(world.Map.GetNonBlockingEntityIdsAt(new Vector3Int(4, 3, 1)).Contains(1));
+        Assert.IsFalse(world.Map.GetOccupantEntityIdsAt(new Vector3Int(3, 3, 1)).Contains(1));
+        Assert.IsTrue(world.Map.GetOccupantEntityIdsAt(new Vector3Int(4, 3, 1)).Contains(1));
     }
 
     [TestMethod]
@@ -439,7 +452,7 @@ public sealed class WorldTests
 
         world.ConvertToNonBlocking(9, ref transform);
 
-        Assert.IsTrue(world.Map.GetNonBlockingEntityIdsAt(new Vector3Int(4, 4, 1)).Contains(9));
+        Assert.IsTrue(world.Map.GetOccupantEntityIdsAt(new Vector3Int(4, 4, 1)).Contains(9));
     }
 
     /// <summary>Unlike RemoveEntityFromMap, ConvertToNonBlocking must leave the corpse findable/renderable at its own death position -- Position must never reset to (0,0,0).</summary>
@@ -468,10 +481,10 @@ public sealed class WorldTests
         Assert.AreEqual(-1, world.Map.GetBlockingEntityId(new Vector3Int(3, 2, 1)));
         Assert.AreEqual(-1, world.Map.GetBlockingEntityId(new Vector3Int(2, 3, 1)));
         Assert.AreEqual(-1, world.Map.GetBlockingEntityId(new Vector3Int(3, 3, 1)));
-        Assert.IsTrue(world.Map.GetNonBlockingEntityIdsAt(new Vector3Int(2, 2, 1)).Contains(9));
-        Assert.IsTrue(world.Map.GetNonBlockingEntityIdsAt(new Vector3Int(3, 2, 1)).Contains(9));
-        Assert.IsTrue(world.Map.GetNonBlockingEntityIdsAt(new Vector3Int(2, 3, 1)).Contains(9));
-        Assert.IsTrue(world.Map.GetNonBlockingEntityIdsAt(new Vector3Int(3, 3, 1)).Contains(9));
+        Assert.IsTrue(world.Map.GetOccupantEntityIdsAt(new Vector3Int(2, 2, 1)).Contains(9));
+        Assert.IsTrue(world.Map.GetOccupantEntityIdsAt(new Vector3Int(3, 2, 1)).Contains(9));
+        Assert.IsTrue(world.Map.GetOccupantEntityIdsAt(new Vector3Int(2, 3, 1)).Contains(9));
+        Assert.IsTrue(world.Map.GetOccupantEntityIdsAt(new Vector3Int(3, 3, 1)).Contains(9));
     }
 
     /// <summary>End-to-end round-trip through World.IsBlocking itself, not just Map's raw index -- the same predicate MovementSystem.CanMove and DrawPrimaryOccupant actually consult.</summary>
@@ -502,6 +515,6 @@ public sealed class WorldTests
 
         world.RemoveEntityFromMap(1, ref transform);
 
-        Assert.IsFalse(world.Map.GetNonBlockingEntityIdsAt(new Vector3Int(3, 3, 1)).Contains(1));
+        Assert.IsFalse(world.Map.GetOccupantEntityIdsAt(new Vector3Int(3, 3, 1)).Contains(1));
     }
 }

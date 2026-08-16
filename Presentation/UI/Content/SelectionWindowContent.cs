@@ -151,16 +151,10 @@ public sealed class SelectionWindowContent(
         // instead of entities on layers currently hidden from view.
         var currentMapLayer = mapViewState.CurrentMapLayer;
 
-        var blockingEntityId = world.Map.GetBlockingEntityId(new Engine.Math.Vector3Int(selected.X, selected.Y, currentMapLayer));
-        if (blockingEntityId != -1)
-        {
-            _selectedEntityIds.Add(blockingEntityId);
-        }
-
         // The terrain beneath the current layer (Flying has none) -- terrain is never a
         // Blocking creature-occupancy entity (see World.PlaceTerrainOnMap), so it lives in
-        // Map's separate terrain store and has to be looked up independently of the Map slot
-        // above.
+        // Map's separate terrain store and has to be looked up independently of the occupant
+        // index below.
         if (Map.TerrainLayerFor(currentMapLayer) is { } terrainLayer)
         {
             var terrainEntityId = world.Map.GetTerrainEntityId(selected.X, selected.Y, terrainLayer);
@@ -170,11 +164,9 @@ public sealed class SelectionWindowContent(
             }
         }
 
-        // Tiny/Phasing entities never occupy Map's Blocking slot (see World.IsBlocking), so
-        // the check above alone would silently drop them from the debug panel -- the
-        // position-keyed non-Blocking index (World.GetNonBlockingEntityIdsAt) answers exactly
-        // that in O(entities actually here) instead of a full-population scan.
-        foreach (var entityId in world.GetNonBlockingEntityIdsAt(new Engine.Math.Vector3Int(selected.X, selected.Y, currentMapLayer)))
+        // Every creature occupant of the tile, Blocking or not (World.GetOccupantEntityIdsAt),
+        // in O(entities actually here) instead of a full-population scan.
+        foreach (var entityId in world.GetOccupantEntityIdsAt(new Engine.Math.Vector3Int(selected.X, selected.Y, currentMapLayer)))
         {
             _selectedEntityIds.Add(entityId);
         }

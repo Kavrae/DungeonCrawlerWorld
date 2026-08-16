@@ -25,7 +25,7 @@ public sealed class WorldEventSyncTests
         var transform = new TransformComponent(oldPosition, new Vector2Byte(1, 1));
         world.PlaceEntityOnMap(entityId: 7, oldPosition, ref transform);
 
-        worldEventSync.SyncMove(new EntityMovedEvent(7, oldPosition, newPosition, new Vector2Byte(1, 1)));
+        worldEventSync.SyncMove(new EntityMovedEvent(7, oldPosition, newPosition, new Vector2Byte(1, 1)), isBlocking: true);
 
         Assert.AreEqual(-1, world.Map.GetBlockingEntityId(oldPosition));
         Assert.AreEqual(7, world.Map.GetBlockingEntityId(newPosition));
@@ -43,7 +43,7 @@ public sealed class WorldEventSyncTests
         var transform = new TransformComponent(oldPosition, size);
         world.PlaceEntityOnMap(entityId: 3, oldPosition, ref transform);
 
-        worldEventSync.SyncMove(new EntityMovedEvent(3, oldPosition, newPosition, size));
+        worldEventSync.SyncMove(new EntityMovedEvent(3, oldPosition, newPosition, size), isBlocking: true);
 
         Assert.AreEqual(-1, world.Map.GetBlockingEntityId(new Vector3Int(0, 0, 0)));
         Assert.AreEqual(3, world.Map.GetBlockingEntityId(new Vector3Int(1, 0, 0)));
@@ -65,10 +65,10 @@ public sealed class WorldEventSyncTests
         var transform = new TransformComponent(oldPosition, new Vector2Byte(1, 1));
         world.PlaceEntityOnMap(entityId: 7, oldPosition, ref transform);
 
-        worldEventSync.SyncMove(new EntityMovedEvent(7, oldPosition, newPosition, new Vector2Byte(1, 1)));
+        worldEventSync.SyncMove(new EntityMovedEvent(7, oldPosition, newPosition, new Vector2Byte(1, 1)), isBlocking: false);
 
         Assert.AreEqual(-1, world.Map.GetBlockingEntityId(newPosition), "Non-Blocking movers never touch Map's Blocking array.");
-        Assert.IsFalse(world.Map.GetNonBlockingEntityIdsAt(oldPosition).Contains(7));
-        Assert.IsTrue(world.Map.GetNonBlockingEntityIdsAt(newPosition).Contains(7));
+        Assert.IsFalse(world.Map.GetOccupantEntityIdsAt(oldPosition).Contains(7));
+        Assert.IsTrue(world.Map.GetOccupantEntityIdsAt(newPosition).Contains(7));
     }
 }
