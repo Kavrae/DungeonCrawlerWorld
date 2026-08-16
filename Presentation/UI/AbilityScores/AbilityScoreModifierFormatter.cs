@@ -1,10 +1,9 @@
 using Engine.ECS.Components;
 using Game.Modules.AbilityScores;
 using Game.Modules.AbilityScores.Components;
-using Game.Modules.Core.Components;
 using Game.Modules.StatModifiers;
 using Game.Modules.StatModifiers.Components;
-using Game.World;
+using Presentation.UI;
 
 namespace Presentation.UI.AbilityScores;
 
@@ -18,9 +17,9 @@ namespace Presentation.UI.AbilityScores;
 /// </summary>
 public static class AbilityScoreModifierFormatter
 {
-    public static IReadOnlyList<string> GetOrderedLines(ComponentManager componentManager, int entityId, AbilityScoreType type)
+    public static IReadOnlyList<ModifierDisplayLine> GetOrderedLines(ComponentManager componentManager, int entityId, AbilityScoreType type)
     {
-        var lines = new List<string> { $"Base : {GetBaseValue(componentManager, entityId, type)}" };
+        var lines = new List<ModifierDisplayLine> { new($"Base : {GetBaseValue(componentManager, entityId, type)}", Source: null, RemainingDurationFrames: null) };
 
         if (!componentManager.IsRegistered<StatModifierComponent>())
         {
@@ -59,27 +58,15 @@ public static class AbilityScoreModifierFormatter
             ? component.BaseValue
             : throw new InvalidOperationException($"No AbilityScoreComponent of type {type} for entity {entityId}.");
 
-    private static string FormatModifierLine(ComponentManager componentManager, StatModifierComponent modifier)
+    private static ModifierDisplayLine FormatModifierLine(ComponentManager componentManager, StatModifierComponent modifier)
     {
-        var sourceName = DescribeSource(componentManager, modifier.Source);
-        return modifier.Operation == StatModifierOperation.Additive
-            ? $"{sourceName} : {FormatSigned((int)MathF.Round(modifier.Magnitude))}"
-            : $"{sourceName} : {FormatSigned((int)MathF.Round(modifier.Magnitude * 100))}%";
+        var sourceName = ModifierDisplayFormatting.DescribeSource(componentManager, modifier.Source);
+        var modifierText = modifier.Operation == StatModifierOperation.Additive
+            ? FormatSigned((int)MathF.Round(modifier.Magnitude))
+            : $"{FormatSigned((int)MathF.Round(modifier.Magnitude * 100))}%";
+
+        return new ModifierDisplayLine($"{sourceName} : {modifierText}", modifier.Source, modifier.RemainingDurationFrames, modifierText, modifier.Operation);
     }
 
     private static string FormatSigned(int value) => value >= 0 ? $"+{value}" : value.ToString();
-
-    /// <summary>Admin/AI have no entity to name (StatusEffectSource.ToString() already covers them); an Entity source resolves DisplayTextComponent.Name if present, else falls back to a numeric label -- same fallback shape as Game/Diagnostics/PlayerActivityLog.cs's DescribeSource/DescribeEntity, replicated here rather than shared since that's a private method on an unrelated diagnostics class.</summary>
-    private static string DescribeSource(ComponentManager componentManager, StatusEffectSource source)
-    {
-        if (source.Kind != StatusEffectSourceKind.Entity)
-        {
-            return source.ToString();
-        }
-
-        return componentManager.IsRegistered<DisplayTextComponent>()
-            && componentManager.GetDirectPool<DisplayTextComponent>().TryGetReadonly(source.EntityId, out var displayText)
-            ? displayText.Name
-            : $"Entity#{source.EntityId}";
-    }
 }

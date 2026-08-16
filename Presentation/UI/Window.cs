@@ -71,7 +71,7 @@ public class Window : Element
     public Window(FontService fontService, ElementPoolService windowService, GlyphRenderer glyphRenderer)
         : base(fontService, windowService, glyphRenderer)
     {
-        TitleFont = fontService.GetFont(8);
+        TitleFont = fontService.GetFont(12);
     }
 
     public override void Build(Element? parent, ElementOptions options)

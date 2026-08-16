@@ -32,7 +32,7 @@ public sealed class AbilityScoreModifierFormatterTests
 
         var lines = AbilityScoreModifierFormatter.GetOrderedLines(manager, 0, AbilityScoreType.Strength);
 
-        CollectionAssert.AreEqual(new[] { "Base : 6" }, lines.ToArray());
+        CollectionAssert.AreEqual(new[] { "Base : 6" }, lines.Select(static line => line.Text).ToArray());
     }
 
     [TestMethod]
@@ -45,9 +45,9 @@ public sealed class AbilityScoreModifierFormatterTests
 
         var lines = AbilityScoreModifierFormatter.GetOrderedLines(manager, 0, AbilityScoreType.Strength);
 
-        Assert.AreEqual("Base : 5", lines[0]);
-        Assert.AreEqual("AI : +2", lines[1]);
-        Assert.AreEqual("Admin : +50%", lines[2]);
+        Assert.AreEqual("Base : 5", lines[0].Text);
+        Assert.AreEqual("AI : +2", lines[1].Text);
+        Assert.AreEqual("Admin : +50%", lines[2].Text);
     }
 
     [TestMethod]
@@ -60,8 +60,8 @@ public sealed class AbilityScoreModifierFormatterTests
 
         var lines = AbilityScoreModifierFormatter.GetOrderedLines(manager, 0, AbilityScoreType.Strength);
 
-        Assert.AreEqual("Admin : +3", lines[1]);
-        Assert.AreEqual("AI : -1", lines[2]);
+        Assert.AreEqual("Admin : +3", lines[1].Text);
+        Assert.AreEqual("AI : -1", lines[2].Text);
     }
 
     [TestMethod]
@@ -76,7 +76,7 @@ public sealed class AbilityScoreModifierFormatterTests
 
         var lines = AbilityScoreModifierFormatter.GetOrderedLines(manager, 0, AbilityScoreType.Strength);
 
-        CollectionAssert.AreEqual(new[] { "Base : 5", "Admin : +2", "AI : -1", "Admin : +25%", "Admin : -10%" }, lines.ToArray());
+        CollectionAssert.AreEqual(new[] { "Base : 5", "Admin : +2", "AI : -1", "Admin : +25%", "Admin : -10%" }, lines.Select(static line => line.Text).ToArray());
     }
 
     [TestMethod]
@@ -88,7 +88,7 @@ public sealed class AbilityScoreModifierFormatterTests
 
         var lines = AbilityScoreModifierFormatter.GetOrderedLines(manager, 0, AbilityScoreType.Strength);
 
-        Assert.AreEqual("Admin : +3", lines[1]);
+        Assert.AreEqual("Admin : +3", lines[1].Text);
     }
 
     [TestMethod]
@@ -100,7 +100,7 @@ public sealed class AbilityScoreModifierFormatterTests
 
         var lines = AbilityScoreModifierFormatter.GetOrderedLines(manager, 0, AbilityScoreType.Strength);
 
-        Assert.AreEqual("Admin : -10%", lines[1]);
+        Assert.AreEqual("Admin : -10%", lines[1].Text);
     }
 
     [TestMethod]
@@ -113,7 +113,7 @@ public sealed class AbilityScoreModifierFormatterTests
 
         var lines = AbilityScoreModifierFormatter.GetOrderedLines(manager, 0, AbilityScoreType.Strength);
 
-        Assert.AreEqual("Iron Ring : +1", lines[1]);
+        Assert.AreEqual("Iron Ring : +1", lines[1].Text);
     }
 
     [TestMethod]
@@ -125,7 +125,7 @@ public sealed class AbilityScoreModifierFormatterTests
 
         var lines = AbilityScoreModifierFormatter.GetOrderedLines(manager, 0, AbilityScoreType.Strength);
 
-        Assert.AreEqual("Entity#7 : +1", lines[1]);
+        Assert.AreEqual("Entity#7 : +1", lines[1].Text);
     }
 
     [TestMethod]
@@ -138,6 +138,6 @@ public sealed class AbilityScoreModifierFormatterTests
 
         var lines = AbilityScoreModifierFormatter.GetOrderedLines(manager, 0, AbilityScoreType.Strength);
 
-        CollectionAssert.AreEqual(new[] { "Base : 5" }, lines.ToArray());
+        CollectionAssert.AreEqual(new[] { "Base : 5" }, lines.Select(static line => line.Text).ToArray());
     }
 }

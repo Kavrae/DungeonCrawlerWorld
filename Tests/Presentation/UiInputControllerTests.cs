@@ -2032,4 +2032,85 @@ public sealed class UiInputControllerTests
         controller.Update(NoKeys, MouseAt(1000, 1000, ButtonState.Released));
         Assert.IsFalse(hotbar.IsAcceptingDrag);
     }
+
+    /// <summary>Actions must be draggable between hotbar slots the same way items already are -- mirrors Drag_FromABoundHotbarSlotToADifferentSlot_MovesTheBinding for the action-bound-slot source instead of an item one.</summary>
+    [TestMethod]
+    public void Drag_FromABoundActionHotbarSlotToADifferentSlot_MovesTheBinding()
+    {
+        var (hotbarWindow, hotbar, componentManager, actionId) = BuildActionDragAndDropHarness();
+        hotbar.BindAction(HotkeySlot.Base1, actionId);
+        var controller = new UiInputController([], [hotbarWindow], [], [], LargeScreenSize);
+
+        // Base is vertically centered against Expansion's current height, not flush at the top --
+        // the window's own vertical center always falls inside Base1's row.
+        var baseRowY = (int)hotbarWindow.ContentAbsolutePosition.Y + (int)(hotbar.Size.Y / 2f);
+        var pressPoint = new Point((int)hotbarWindow.ContentAbsolutePosition.X + 1, baseRowY);
+        controller.Update(NoKeys, MouseAt(pressPoint.X, pressPoint.Y, ButtonState.Released));
+        controller.Update(NoKeys, MouseAt(pressPoint.X, pressPoint.Y, ButtonState.Pressed));
+
+        // Far enough along the hotbar's own width to land in a different slot -- exact slot
+        // doesn't matter, only that it's not Base1.
+        var dropPoint = new Point((int)hotbarWindow.ContentAbsolutePosition.X + (int)(hotbar.Size.X - HotbarContent.SlotSize.X / 2f), (int)hotbarWindow.ContentAbsolutePosition.Y + 1);
+        controller.Update(NoKeys, MouseAt(dropPoint.X, dropPoint.Y, ButtonState.Released));
+
+        Assert.IsFalse(ActionHotkeyBindingQueries.TryGet(componentManager.GetMultiPool<ActionHotkeyBindingComponent>(), 1, HotkeySlot.Base1, out _), "The origin slot must no longer be bound once the action has moved elsewhere.");
+        Assert.IsTrue(hotbar.TryGetSlotAt(dropPoint, out var dropSlot));
+        Assert.IsTrue(ActionHotkeyBindingQueries.TryGet(componentManager.GetMultiPool<ActionHotkeyBindingComponent>(), 1, dropSlot, out var boundActionId));
+        Assert.AreEqual(actionId, boundActionId);
+    }
+
+    [TestMethod]
+    public void Drag_FromABoundActionHotbarSlotToAwayFromTheHotbar_UnbindsIt()
+    {
+        var (hotbarWindow, hotbar, componentManager, actionId) = BuildActionDragAndDropHarness();
+        hotbar.BindAction(HotkeySlot.Base1, actionId);
+        var controller = new UiInputController([], [hotbarWindow], [], [], LargeScreenSize);
+
+        var pressPoint = new Point((int)hotbarWindow.ContentAbsolutePosition.X + 1, (int)hotbarWindow.ContentAbsolutePosition.Y + (int)(hotbar.Size.Y / 2f));
+        controller.Update(NoKeys, MouseAt(pressPoint.X, pressPoint.Y, ButtonState.Released));
+        controller.Update(NoKeys, MouseAt(pressPoint.X, pressPoint.Y, ButtonState.Pressed));
+
+        controller.Update(NoKeys, MouseAt(1000, 1000, ButtonState.Released));
+
+        Assert.IsFalse(ActionHotkeyBindingQueries.TryGet(componentManager.GetMultiPool<ActionHotkeyBindingComponent>(), 1, HotkeySlot.Base1, out _));
+    }
+
+    /// <summary>Hotbar-only counterpart to BuildDragAndDropHarness -- no InventoryItemStackCell needed, but the hotbar's own ActionCatalog needs a real registered action to bind/drag.</summary>
+    private static (Window HotbarWindow, HotbarContent Hotbar, ComponentManager ComponentManager, Guid ActionId) BuildActionDragAndDropHarness()
+    {
+        const int playerEntityId = 1;
+
+        var componentManager = new ComponentManager(initialEntityCapacity: 20, initialComponentCapacity: 10);
+        componentManager.RegisterMultiPool<ActionHotkeyBindingComponent>();
+        componentManager.RegisterMultiPool<ItemHotkeyBindingComponent>();
+        componentManager.RegisterMultiPool<ActionInstanceComponent>();
+        componentManager.RegisterMultiPool<InventoryItemStackComponent>();
+        componentManager.RegisterPackedPool<InventoryComponent>(static (ref existing, incoming) => existing = incoming);
+        componentManager.RegisterPackedPool<ActionLockComponent>(static (ref existing, incoming) => existing = incoming);
+        componentManager.RegisterPackedPool<PotionCooldownComponent>(static (ref existing, incoming) => existing = incoming);
+        componentManager.RegisterPackedPool<ManaComponent>(static (ref existing, incoming) => existing = incoming);
+        componentManager.RegisterPackedPool<HotkeyExpansionUnlockComponent>(static (ref existing, incoming) => existing = incoming);
+
+        var world = new Game.World.World(new Game.World.Map(new Vector3Int(10, 10, 1))) { PlayerEntityId = playerEntityId };
+        var actionId = Guid.NewGuid();
+        var actionCatalog = new ActionCatalog();
+        actionCatalog.Register(new ActionDefinition(actionId, "Test Action", null, "t", Color.White, [], Effects: [ActionEffect.None],
+            Activator: new DirectAction(new TargetingSpec(TargetShape.SingleTarget, Range: 1), new ActionTiming(ActionTimingCategory.Immediate, ActionLockFrames: 30, CooldownFrames: null))));
+
+        var fontService = new FontService("Fonts");
+        var glyphRenderer = new GlyphRenderer();
+        var windowService = new ElementPoolService(fontService, glyphRenderer);
+
+        var hotbar = new HotbarContent(
+            world, new MapViewState(), componentManager, new EventBus(), actionCatalog, new ItemCatalog(),
+            fontService, new SpriteSheetService(null, "Spritesheets"), new SpriteRenderer(), new Vector2(1920, 1080));
+        var hotbarWindow = windowService.CreateElement<Window>(null, new ElementOptions
+        {
+            Layout = new ElementLayoutOptions { RelativePosition = new Vector2(500, 0), Size = hotbar.Size, DisplayMode = ElementDisplayMode.Fixed },
+        });
+        hotbarWindow.SetContent(hotbar);
+        hotbarWindow.Initialize();
+
+        return (hotbarWindow, hotbar, componentManager, actionId);
+    }
 }

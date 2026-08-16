@@ -121,6 +121,18 @@ public sealed class HotbarContent(
     /// <summary>The bar's current total bounding size -- depends on how many Expansion rows/pages are currently revealed, so unlike most HUD content's Size this is an instance property, not a static constant.</summary>
     public Vector2 Size => ComputeSize(GetExpansionRowsVisible(_unlockedExpansionSlots), GetExpansionPagesVisible(_unlockedExpansionSlots));
 
+    /// <summary>
+    /// The largest the bar can ever grow to (both Expansion pages, both rows) -- GameShellBootstrapper
+    /// gives the host Window this as its Layout.MaximumSize (rather than leaving it unset, which
+    /// falls back to the initial Size -- see Element.Build) specifically so RefreshLayoutIfChanged's
+    /// later SetBounds calls, as more slots unlock, aren't clamped straight back down to whatever
+    /// page/row count happened to be visible at construction time. Confirmed bug: a player starting
+    /// with exactly the DefaultUnlockedExpansionSlots fallback (page 1 only) baked that width in as
+    /// a hard cap, so page 2's slots -- drawn fine by DrawContent/EnumerateSlotBounds, which don't
+    /// go through the clamped Rectangle -- were never actually clickable/droppable once revealed.
+    /// </summary>
+    public static readonly Vector2 MaximumSize = ComputeSize(MaxExpansionRows, MaxExpansionPages);
+
     private static Vector2 ComputeSize(int rowsVisible, int pagesVisible)
     {
         var baseWidth = BaseSlotCount * SlotSize.X + (BaseSlotCount - 1) * SlotGap;
@@ -309,6 +321,10 @@ public sealed class HotbarContent(
     internal bool TryGetBoundItemId(HotkeySlot slot, out Guid itemDefinitionId) =>
         ItemHotkeyBindingQueries.TryGet(_itemHotkeyBindings, world.PlayerEntityId, slot, out itemDefinitionId);
 
+    /// <summary>The action (if any) currently bound to slot -- same drag-payload-capture role as TryGetBoundItemId, for a drag starting on an already-bound action slot.</summary>
+    internal bool TryGetBoundActionId(HotkeySlot slot, out Guid actionId) =>
+        ActionHotkeyBindingQueries.TryGet(_actionHotkeyBindings, world.PlayerEntityId, slot, out actionId);
+
     /// <summary>slot's bound action/item resolved to a title+summary pair, for the Armed Hotkey
     /// Summary window -- false if the slot has no binding. Summary, not Description: a short,
     /// concrete statement of exact effect meant to be read at a glance in this small window (see
@@ -383,6 +399,25 @@ public sealed class HotbarContent(
     /// <summary>Removes slot's item binding, if any -- dragging a bound item off the hotbar entirely (see UiInputController's content-drag path).</summary>
     internal void UnbindItemSlot(HotkeySlot slot) =>
         ItemHotkeyBindingQueries.Unbind(_itemHotkeyBindings, world.PlayerEntityId, slot);
+
+    /// <summary>Writes (or overwrites) slot's action binding -- mirrors BindItem exactly (clears any existing binding of either kind first, refuses a locked slot, publishes ActionHotkeyBoundEvent), for the same click-and-drag path now covering actions too.</summary>
+    internal void BindAction(HotkeySlot slot, Guid actionId)
+    {
+        if (IsSlotLocked(slot))
+        {
+            return;
+        }
+
+        var playerEntityId = world.PlayerEntityId;
+        ActionHotkeyBindingQueries.Unbind(_actionHotkeyBindings, playerEntityId, slot);
+        ItemHotkeyBindingQueries.Unbind(_itemHotkeyBindings, playerEntityId, slot);
+        _actionHotkeyBindings.Add(playerEntityId, new ActionHotkeyBindingComponent(slot, actionId));
+        eventBus.Publish(new ActionHotkeyBoundEvent(playerEntityId, slot, actionId));
+    }
+
+    /// <summary>Removes slot's action binding, if any -- mirrors UnbindItemSlot for a bound action dragged off the hotbar entirely.</summary>
+    internal void UnbindActionSlot(HotkeySlot slot) =>
+        ActionHotkeyBindingQueries.Unbind(_actionHotkeyBindings, world.PlayerEntityId, slot);
 
     /// <summary>Delegates to HotkeySlotLayout.IsLocked -- shared with ActionTargetingController's own activation gate, so rendering and activation can't disagree about which slots are actually usable.</summary>
     private bool IsSlotLocked(HotkeySlot slot) => HotkeySlotLayout.IsLocked(slot, _unlockedExpansionSlots);

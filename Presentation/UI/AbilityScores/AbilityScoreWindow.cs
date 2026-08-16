@@ -1,8 +1,10 @@
 using Engine.ECS.Components;
 using Game.Modules.AbilityScores;
 using Game.Modules.AbilityScores.Components;
+using Game.Modules.StatModifiers;
 using Game.Modules.StatModifiers.Components;
 using Microsoft.Xna.Framework;
+using Microsoft.Xna.Framework.Input;
 using Presentation.Fonts;
 using Presentation.Rendering;
 using Presentation.UI.ColorPalettes;
@@ -16,7 +18,10 @@ namespace Presentation.UI.AbilityScores;
 /// IElementContent/TabbedContent needed, since there's nothing to tab between (mirrors how
 /// Folder.Initialize builds its own tiles directly). Created fresh by InventoryFolderController
 /// each time it's opened and returned to ElementPoolService's pool on close, same lifecycle as
-/// InventoryManagementWindow.
+/// InventoryManagementWindow. Also self-polls Mouse.GetState() every Update (see UpdateHover),
+/// the same idiom MapWindow uses for its own tile hover, to drive a header/modifier-row hover
+/// popup -- kept self-contained here rather than routed through UiInputController since nothing
+/// else needs to know about it.
 /// </summary>
 public sealed class AbilityScoreWindow(FontService fontService, ElementPoolService elementPoolService, GlyphRenderer glyphRenderer, ComponentManager componentManager)
     : Window(fontService, elementPoolService, glyphRenderer)
@@ -30,6 +35,12 @@ public sealed class AbilityScoreWindow(FontService fontService, ElementPoolServi
 
     /// <summary>Between the outermost columns and this window's own content edges (all four sides).</summary>
     private const float Padding = 3f;
+
+    /// <summary>See SeparatorBar -- the divider itself is drawn at 75% width; this is just the element's own full-width, 1px-tall footprint in the vertical tile chain.</summary>
+    private const float SeparatorHeight = 1f;
+
+    /// <summary>Popup sits just to the right of whatever's hovered, vertically centered against it -- see PopupPositioning.GetPosition(East).</summary>
+    private static readonly Vector2 PopupGap = new(1, 1);
 
     /// <summary>Shared with InventoryManagementWindow's own background -- see WindowPalette.</summary>
     public static readonly Color BackgroundColor = WindowPalette.PanelBackgroundColor;
@@ -48,9 +59,17 @@ public sealed class AbilityScoreWindow(FontService fontService, ElementPoolServi
     private readonly VersionWatcher _statModifierVersionWatcher = new();
 
     private int _entityId;
+    private HoverPopupWindow _hoverPopup = null!;
 
-    /// <summary>Just records entityId -- must be called after CreateElement but before Initialize, same contract as InventoryManagementWindow.Configure. Column-building itself waits for Initialize (see its own doc comment for why).</summary>
-    public void Configure(int entityId) => _entityId = entityId;
+    private Element? _hoveredCandidate;
+    private int _hoveredFrames;
+
+    /// <summary>Just records entityId/the shared popup -- must be called after CreateElement but before Initialize, same contract as InventoryManagementWindow.Configure. Column-building itself waits for Initialize (see its own doc comment for why). hoverPopup is owned by InventoryFolderController (created once, top-level, shared across opens) rather than a child of this window -- see HoverPopupWindow's own doc comment for why a nested child can't work here.</summary>
+    public void Configure(int entityId, HoverPopupWindow hoverPopup)
+    {
+        _entityId = entityId;
+        _hoverPopup = hoverPopup;
+    }
 
     /// <summary>
     /// Columns are built here, not in Configure, because ContentSize/ContentAbsolutePosition
@@ -76,6 +95,8 @@ public sealed class AbilityScoreWindow(FontService fontService, ElementPoolServi
     {
         base.Update(gameTime);
 
+        UpdateHover(Mouse.GetState());
+
         // Both watchers must be checked every call (not short-circuited) so each stays in sync
         // with its own version source regardless of whether the other one changed this time.
         var abilityScoreChanged = _abilityScoreVersionWatcher.HasChanged(GetAbilityScoreVersion());
@@ -86,6 +107,99 @@ public sealed class AbilityScoreWindow(FontService fontService, ElementPoolServi
         }
 
         RefreshAllColumns();
+    }
+
+    /// <summary>
+    /// Header highlight is immediate (instant visual feedback); the popup itself is delay-gated
+    /// the same way HotbarController.UpdateHover gates ArmedHotkeySummaryWindow, against the same
+    /// shared HudMetrics.HoverTooltipDelayFrames -- but hides immediately on candidate change/
+    /// loss (no delay on hiding, only on showing, same convention MapViewState.HoverSlot uses).
+    /// Known, accepted gap: unlike HandleHotbarHover, this doesn't suppress itself during an
+    /// active drag of this window's own title bar -- not worth the extra plumbing unless it
+    /// turns out to actually be noticeable.
+    /// </summary>
+    private void UpdateHover(MouseState mouseState)
+    {
+        var mousePosition = new Point(mouseState.X, mouseState.Y);
+        var candidate = FindHoverCandidate(mousePosition);
+
+        foreach (var header in _columnHeaders)
+        {
+            header.IsHovered = header is not null && ReferenceEquals(header, candidate);
+        }
+
+        foreach (var listWindow in _columnListWindows)
+        {
+            if (listWindow is null)
+            {
+                continue;
+            }
+
+            foreach (var child in listWindow.ChildElements)
+            {
+                if (child is AbilityScoreModifierRow row)
+                {
+                    row.IsHovered = ReferenceEquals(row, candidate);
+                }
+            }
+        }
+
+        if (candidate == _hoveredCandidate)
+        {
+            _hoveredFrames++;
+        }
+        else
+        {
+            _hoveredCandidate = candidate;
+            _hoveredFrames = candidate is null ? 0 : 1;
+        }
+
+        if (candidate is null || _hoveredFrames < HudMetrics.HoverTooltipDelayFrames)
+        {
+            _hoverPopup.Hide();
+            return;
+        }
+
+        if (candidate is AbilityScoreColumnHeader header2)
+        {
+            _hoverPopup.ShowNear(header2.Rectangle, PopupAnchor.East, PopupGap, AbilityScoreDescriptions.Get(header2.Type));
+        }
+        else if (candidate is AbilityScoreModifierRow row)
+        {
+            var title = ModifierDisplayFormatting.DescribeSource(componentManager, row.Source!.Value);
+            var body = $"{row.ModifierText}\n{ModifierDisplayFormatting.FormatDuration(row.RemainingDurationFrames)}";
+            _hoverPopup.ShowNear(row.Rectangle, PopupAnchor.East, PopupGap, body, title);
+        }
+    }
+
+    /// <summary>Headers first, then modifier rows (Base rows excluded -- Source is null, nothing to pop up) across every column's list-window. Whichever the mouse point falls inside wins; null if it's over neither.</summary>
+    private Element? FindHoverCandidate(Point mousePosition)
+    {
+        foreach (var header in _columnHeaders)
+        {
+            if (header is not null && header.Rectangle.Contains(mousePosition))
+            {
+                return header;
+            }
+        }
+
+        foreach (var listWindow in _columnListWindows)
+        {
+            if (listWindow is null)
+            {
+                continue;
+            }
+
+            foreach (var child in listWindow.ChildElements)
+            {
+                if (child is AbilityScoreModifierRow { Source: not null } row && row.Rectangle.Contains(mousePosition))
+                {
+                    return row;
+                }
+            }
+        }
+
+        return null;
     }
 
     private void BuildColumns()
@@ -157,19 +271,54 @@ public sealed class AbilityScoreWindow(FontService fontService, ElementPoolServi
 
         elementPoolService.CloseAllChildren(listWindow);
 
-        _columnHeaders[index].Configure(type.ToString(), GetTotal(type), new Vector2(listWindow.CurrentSize.X, HeaderHeight));
+        _columnHeaders[index].Configure(type, GetTotal(type), new Vector2(listWindow.CurrentSize.X, HeaderHeight));
 
-        foreach (var line in AbilityScoreModifierFormatter.GetOrderedLines(componentManager, _entityId, type))
+        var lines = AbilityScoreModifierFormatter.GetOrderedLines(componentManager, _entityId, type);
+        for (var lineIndex = 0; lineIndex < lines.Count; lineIndex++)
         {
+            if (NeedsSeparatorBefore(lines, lineIndex))
+            {
+                var separator = elementPoolService.CreateElement<SeparatorBar>(listWindow, new ElementOptions
+                {
+                    Layout = new ElementLayoutOptions { Size = new Vector2(listWindow.ContentSize.X, SeparatorHeight), DisplayMode = ElementDisplayMode.Fixed },
+                    Chrome = new ElementChromeOptions { ShowBorder = false, ShowTitle = false, CanUserFocus = false },
+                    Content = new ElementContentOptions { ContentColor = ColumnColor },
+                });
+                separator.Configure(BackgroundColor);
+                listWindow.AddChild(separator);
+            }
+
             var row = elementPoolService.CreateElement<AbilityScoreModifierRow>(listWindow, new ElementOptions
             {
                 Layout = new ElementLayoutOptions { Size = new Vector2(listWindow.ContentSize.X, RowHeight), DisplayMode = ElementDisplayMode.Fixed },
                 Chrome = new ElementChromeOptions { ShowBorder = false, ShowTitle = false, CanUserFocus = false },
                 Content = new ElementContentOptions { ContentColor = ColumnColor },
             });
-            row.Configure(line, RowHeight);
+            row.Configure(lines[lineIndex], RowHeight);
             listWindow.AddChild(row);
         }
+    }
+
+    /// <summary>
+    /// True right before the first Additive line (separating it from Base), and right before the
+    /// first Multiplicative line (separating it from the Additive group) -- both only when the
+    /// group being entered is actually non-empty on both sides of the boundary, per
+    /// AbilityScoreModifierFormatter's own Base-then-Additive-then-Multiplicative ordering. A
+    /// column with only Multiplicative modifiers (no Additive ones) gets no separator at all --
+    /// there's no Additive group for either boundary to sit next to.
+    /// </summary>
+    private static bool NeedsSeparatorBefore(IReadOnlyList<ModifierDisplayLine> lines, int index)
+    {
+        if (index == 0)
+        {
+            return false;
+        }
+
+        var previousOperation = lines[index - 1].Operation;
+        var currentOperation = lines[index].Operation;
+
+        return (previousOperation is null && currentOperation == StatModifierOperation.Additive)
+            || (previousOperation == StatModifierOperation.Additive && currentOperation == StatModifierOperation.Multiplicative);
     }
 
     private ushort GetTotal(AbilityScoreType type) =>

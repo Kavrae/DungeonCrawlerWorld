@@ -142,6 +142,10 @@ Game-side logic for descending/ascending a level. See the matching Presentation 
 
 #### Random map generation v1
 
+No procedural generation exists yet -- `FloorBuilder.CreateMap`/`PopulateFloor` (`Game/Floors/FloorBuilder.cs`) currently populate the fixed `TestMapBuilder` layout every run. Whatever lands here should take a randomizer seed as an explicit input rather than always constructing an unseeded `MathUtility` the way `GameLoop.Initialize` does today (`new MathUtility()`, no seed passed) -- `MathUtility`'s constructor already accepts an optional `Random? randomizer` (`Engine/Math/MathUtility.cs`, currently only exercised by tests wanting determinism), so the seed just needs to actually reach it from a real game session instead of only from test code.
+
+Two player-facing requirements once real generation exists: let a player supply their own seed at floor-start (so a specific layout can be deliberately reproduced), and display whatever seed was used -- player-supplied or randomly generated -- somewhere visible in the UI, so it can be read off and shared (the Minecraft precedent: a seed alone is enough for someone else to regenerate an identical map). Needs a concrete numeric/string seed representation `MathUtility`/`Random` can be constructed from, an input surface (title screen or a floor-start prompt) for a player to type one in, and a HUD/menu readout for the active seed -- none of which exist today since generation itself doesn't yet.
+
 #### Equipment
 
 Game-side equipment rules (what can go in which slot, stat effects of equipping). Companion to the Engine-layer equipment item above and the Presentation-layer equipment menu below. Unblocked now that Inventory exists (see the Engine-layer Inventory system item).

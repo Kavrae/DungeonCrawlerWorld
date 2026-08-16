@@ -79,7 +79,7 @@ public static class GameShellBootstrapper
         // not Base/StaticHUD.
         questTriggerWindow.Clicked += _ => inputController.FocusElement(OpenQuestComposer(presentation.ElementPoolService, notificationCenter, dynamicHudWindows));
 
-        BuildUserWindows(presentation, inputController, itemCatalog, userWindows);
+        BuildUserWindows(presentation, inputController, actionCatalog, itemCatalog, userWindows);
 
         return new GameShellContext(mapWindow, notificationCenter, inventory, baseWindows, staticHudWindows, dynamicHudWindows, userWindows, inputController);
     }
@@ -277,6 +277,7 @@ public static class GameShellBootstrapper
             {
                 RelativePosition = HotbarContent.ComputeBottomCenteredPosition(hotbarSize, screenSize),
                 Size = hotbarSize,
+                MaximumSize = HotbarContent.MaximumSize,
                 DisplayMode = ElementDisplayMode.Fixed,
                 IsTransparent = true,
             },
@@ -332,6 +333,10 @@ public static class GameShellBootstrapper
             presentation.FontService, presentation.ElementPoolService, presentation.GlyphRenderer));
         presentation.ElementPoolService.RegisterFactory<AbilityScoreModifierRow>(() => new AbilityScoreModifierRow(
             presentation.FontService, presentation.ElementPoolService, presentation.GlyphRenderer));
+        presentation.ElementPoolService.RegisterFactory<SeparatorBar>(() => new SeparatorBar(
+            presentation.FontService, presentation.ElementPoolService, presentation.GlyphRenderer));
+        presentation.ElementPoolService.RegisterFactory<HoverPopupWindow>(() => new HoverPopupWindow(
+            presentation.FontService, presentation.ElementPoolService, presentation.GlyphRenderer, dynamicHudWindows));
 
         var inventory = new InventoryFolderController(
             presentation.ElementPoolService, world, ecsContext.ComponentManager, presentation.FontService, presentation.GlyphRenderer,
@@ -351,7 +356,7 @@ public static class GameShellBootstrapper
     }
 
     /// <summary>User tier: today, just DragGhostContent's host window -- see UiInputController's own doc comment for what this tier is for. Split out from the other three Build* methods since it needs a real UiInputController reference (see Build), which doesn't exist yet while those run.</summary>
-    private static void BuildUserWindows(PresentationContext presentation, UiInputController inputController, ItemCatalog itemCatalog, List<Element> userWindows)
+    private static void BuildUserWindows(PresentationContext presentation, UiInputController inputController, ActionCatalog actionCatalog, ItemCatalog itemCatalog, List<Element> userWindows)
     {
         // Zero-size and fully transparent -- DragGhostContent draws directly at the live mouse
         // position (see its own doc comment), not relative to this window's own bounds, so the
@@ -362,7 +367,7 @@ public static class GameShellBootstrapper
             Chrome = new ElementChromeOptions { ShowBorder = false, ShowTitle = false, CanUserFocus = false },
         });
         dragGhostWindow.SetContent(new DragGhostContent(
-            inputController, itemCatalog, presentation.FontService, presentation.SpriteSheetService, presentation.SpriteRenderer, presentation.GlyphRenderer));
+            inputController, actionCatalog, itemCatalog, presentation.FontService, presentation.SpriteSheetService, presentation.SpriteRenderer, presentation.GlyphRenderer));
         dragGhostWindow.Initialize();
         userWindows.Add(dragGhostWindow);
     }
@@ -487,7 +492,7 @@ public sealed record GameShellContext(
 
     private static void UpdateWindowLayer(List<Element> windows, string tierName, GameTime gameTime, IFrameCostRecorder? frameCostRecorder)
     {
-        foreach (var window in windows)
+        foreach (var window in windows.ToArray())
         {
             if (frameCostRecorder is { } recorder)
             {

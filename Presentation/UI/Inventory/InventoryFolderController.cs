@@ -49,6 +49,9 @@ public sealed class InventoryFolderController(
 
     private static readonly Vector2 WindowPosition = new(300, 150);
 
+    /// <summary>Fixed width cap for the Ability Score hover popup; height auto-grows with content -- see HoverPopupWindow.</summary>
+    private static readonly Vector2 AbilityScoreHoverPopupMaximumSize = new(220, 10000f);
+
     /// <summary>Height 30% taller than the original 350 (455) -- more room for the grid now that cells are smaller (see InventoryGridContent.CellSize). Width is no longer fixed -- see WindowWidthFraction.</summary>
     private const float WindowHeight = 455f;
 
@@ -64,6 +67,7 @@ public sealed class InventoryFolderController(
     private WindowSlot<InventoryManagementWindow> _inventorySlot = null!;
     private WindowSlot<AbilityScoreWindow> _abilityScoreSlot = null!;
     private List<Element> _dynamicHudElements = null!;
+    private HoverPopupWindow _abilityScoreHoverPopup = null!;
 
     public bool IsAnyWindowOpen => _inventorySlot.Window is not null || _abilityScoreSlot.Window is not null;
 
@@ -72,6 +76,20 @@ public sealed class InventoryFolderController(
         _dynamicHudElements = dynamicHudElements;
         _inventorySlot = new WindowSlot<InventoryManagementWindow>(CreateInventoryWindow, IsInventoryDisabled, dynamicHudElements, MinimizeFolderIfNothingOpen);
         _abilityScoreSlot = new WindowSlot<AbilityScoreWindow>(CreateAbilityScoreWindow, IsInventoryDisabled, dynamicHudElements, MinimizeFolderIfNothingOpen);
+
+        // Created once and shared across every open/close of the Ability Score window -- same
+        // "persistent, toggled via IsVisible" lifecycle as HotbarController's own
+        // ArmedHotkeySummaryWindow. Top-level (parent null, see HoverPopupWindow's own doc
+        // comment) -- its own ShowNear call re-raises it to the end of dynamicHudElements each
+        // time it's shown, so it always draws above AbilityScoreWindow regardless of which was
+        // added to this list first.
+        _abilityScoreHoverPopup = elementPoolService.CreateElement<HoverPopupWindow>(null, new ElementOptions
+        {
+            Layout = new ElementLayoutOptions { RelativePosition = Vector2.Zero, MaximumSize = AbilityScoreHoverPopupMaximumSize, DisplayMode = ElementDisplayMode.WrapContent, IsVisible = false },
+            Chrome = new ElementChromeOptions { ShowBorder = true, ShowTitle = true, CanUserFocus = false, CanUserClose = false },
+        });
+        _abilityScoreHoverPopup.Initialize();
+        dynamicHudElements.Add(_abilityScoreHoverPopup);
 
         _folder = elementPoolService.CreateElement<Folder>(null, new ElementOptions
         {
@@ -158,7 +176,8 @@ public sealed class InventoryFolderController(
             },
             Content = new ElementContentOptions { ContentColor = AbilityScoreWindow.BackgroundColor },
         });
-        window.Configure(world.PlayerEntityId);
+        window.Configure(world.PlayerEntityId, _abilityScoreHoverPopup);
+        window.Closed += _ => _abilityScoreHoverPopup.Hide(); // Closing the Stats window mid-hover shouldn't leave the popup stranded.
         return window;
     }
 

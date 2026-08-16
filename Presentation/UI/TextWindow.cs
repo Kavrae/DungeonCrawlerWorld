@@ -12,7 +12,7 @@ public class TextWindow(FontService fontService, ElementPoolService elementPoolS
 {
     public string OriginalText { get; set; } = string.Empty;
     public DisplayText DisplayText { get; set; }
-    public SpriteFontBase ContentFont { get; set; } = fontService.GetFont(8);
+    public SpriteFontBase ContentFont { get; set; } = fontService.GetFont(12);
     public Color TextColor { get; set; }
     protected const int LinePadding = 3;
 

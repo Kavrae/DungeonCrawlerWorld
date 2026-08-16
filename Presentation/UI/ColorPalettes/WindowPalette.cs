@@ -39,4 +39,7 @@ internal static class WindowPalette
 
     /// <summary>Default flat border color. Outset/Inset's raised/pressed bevel look (see BorderRenderer) is a separate two-color light/dark shading effect, not a single overridable color, so it stays independent of this.</summary>
     public static readonly Color BorderColor = Color.Black;
+
+    /// <summary>Translucent hover-highlight overlay, drawn under content that's currently under the cursor (e.g. AbilityScoreColumnHeader) -- alpha kept low enough that whatever it's drawn over still reads through it.</summary>
+    public static readonly Color HighlightColor = Color.Gold * 0.5f;
 }

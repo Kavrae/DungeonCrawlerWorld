@@ -63,21 +63,25 @@ public sealed class UiInputController
 
     /// <summary>
     /// Left-button content-drag state: an inventory item stack cell (InventoryItemStackCell) or
-    /// an already-bound hotbar slot (HotbarContent) picked up on press, carried as a plain
-    /// ItemDefinitionId payload, and resolved against whatever's under the cursor on release --
-    /// see HandleMousePress/ResolveContentDrag. Deliberately narrow (item-cell &lt;-&gt; hotbar-slot
-    /// only), not a generic Element-level drag-and-drop framework the way Move/Resize is: a
-    /// future Equipment menu drop target would add its own resolution branch here rather than
-    /// this becoming a virtual-hook mechanism every Element opts into. Independent of
-    /// _activeInteraction.Kind (which stays None for a plain content click on either source) --
-    /// this is tracked entirely by its own fields instead.
+    /// an already-bound hotbar slot (HotbarContent, item or action) picked up on press, carried
+    /// as a plain ItemDefinitionId or ActionId payload (mutually exclusive -- see
+    /// _contentDragActionId), and resolved against whatever's under the cursor on release -- see
+    /// HandleMousePress/ResolveContentDrag. Deliberately narrow (item-cell/bound-slot &lt;-&gt;
+    /// hotbar-slot only), not a generic Element-level drag-and-drop framework the way
+    /// Move/Resize is: a future Equipment menu drop target would add its own resolution branch
+    /// here rather than this becoming a virtual-hook mechanism every Element opts into.
+    /// Independent of _activeInteraction.Kind (which stays None for a plain content click on
+    /// either source) -- this is tracked entirely by its own fields instead.
     /// </summary>
     private Guid? _contentDragItemDefinitionId;
+
+    /// <summary>Same role as _contentDragItemDefinitionId, for a drag that started on an already-bound action slot -- never both set at once (a slot binds to at most one of {action, item}, see IHotkeySlotBinding). There's no action-cell drag source today (no spellbook/action-list UI exists), so this is only ever populated via a bound hotbar slot, unlike the item payload which can also come from InventoryItemStackCell.</summary>
+    private Guid? _contentDragActionId;
 
     /// <summary>The dragged source's own on-screen size at the moment the drag started -- InventoryItemStackCell.CurrentSize for an inventory cell, HotbarContent.SlotSize for a hotbar slot (the slot, not the whole hotbar window). DragGhostContent draws the ghost at this size rather than one fixed size for every drag, so it doesn't visibly jump in scale relative to wherever it was actually picked up from.</summary>
     private Vector2 _contentDragSourceSize;
 
-    /// <summary>Set alongside _contentDragItemDefinitionId only when the drag started on an already-bound hotbar slot -- that slot's binding is removed on release regardless of where the drag ends (see ResolveContentDrag), so dragging an item off the hotbar entirely un-assigns it.</summary>
+    /// <summary>Set alongside _contentDragItemDefinitionId/_contentDragActionId only when the drag started on an already-bound hotbar slot -- that slot's binding is removed on release regardless of where the drag ends (see ResolveContentDrag), so dragging an item/action off the hotbar entirely un-assigns it.</summary>
     private HotbarContent? _contentDragOriginHotbar;
     private HotkeySlot? _contentDragOriginSlot;
 
@@ -86,6 +90,11 @@ public sealed class UiInputController
 
     /// <summary>Same reasoning/value as RightClickTapThresholdPixels -- small enough to absorb ordinary click jitter, comfortably smaller than an intentional drag.</summary>
     private const float ContentDragTapThresholdPixels = 4f;
+
+    /// <summary>Frames since the current content-drag payload was captured (see TryStartContentDrag) -- reset there, incremented once per Update while a payload is held. Gates ContentDragGhostVisible below.</summary>
+    private int _contentDragHeldFrames;
+
+    private static readonly int ContentDragGhostDelayFrames = GameTiming.FramesForSeconds(0.15f);
 
     /// <summary>Owns the Armed Hotkey Summary window's arm/preview/hover state machine -- see its own doc comment. Null in test setups that don't build one (e.g. UiInputControllerTests' own harness), in which case hotbar-slot press/release/hover handling is simply skipped.</summary>
     private readonly HotbarController? _hotbarController;
@@ -199,6 +208,13 @@ public sealed class UiInputController
     /// <summary>The item currently being content-dragged, if any -- see _contentDragItemDefinitionId's own doc comment. Read by DragGhostContent (same assembly, User tier) every DrawContent.</summary>
     internal Guid? ContentDragItemDefinitionId => _contentDragItemDefinitionId;
 
+    /// <summary>The action currently being content-dragged, if any -- see _contentDragActionId's own doc comment. Read by DragGhostContent alongside ContentDragItemDefinitionId (mutually exclusive with it).</summary>
+    internal Guid? ContentDragActionId => _contentDragActionId;
+
+    /// <summary>Whether DragGhostContent should actually draw the ghost right now -- true once a content-drag payload has been held for ContentDragGhostDelayFrames. See that constant's own doc comment for why this delay exists.</summary>
+    internal bool ContentDragGhostVisible =>
+        (_contentDragItemDefinitionId is not null || _contentDragActionId is not null) && _contentDragHeldFrames >= ContentDragGhostDelayFrames;
+
     /// <summary>See _contentDragSourceSize's own doc comment.</summary>
     internal Vector2 ContentDragSourceSize => _contentDragSourceSize;
 
@@ -251,6 +267,11 @@ public sealed class UiInputController
         UpdateMouseWheelScroll(mouseState);
         UpdateCursor(mouseState);
         HandleHotbarHover(mouseState);
+
+        if (_contentDragItemDefinitionId is not null || _contentDragActionId is not null)
+        {
+            _contentDragHeldFrames++;
+        }
 
         _previousKeyboardState = keyboardState;
         _previousMouseState = mouseState;
@@ -431,17 +452,19 @@ public sealed class UiInputController
     /// <summary>
     /// Captures a content-drag payload if the press landed on a drag source -- an
     /// InventoryItemStackCell (its own ItemDefinitionId and CurrentSize), or a HotbarContent slot
-    /// that already has an item bound (that item's id, HotbarContent.SlotSize, and which
-    /// slot/HotbarContent to unbind from on release -- see _contentDragOriginHotbar's own doc
-    /// comment). Independent of _activeInteraction.Kind: a plain content click on either source
-    /// resolves to Kind None, so this runs unconditionally on every press rather than being
-    /// folded into the Kind-gated branch above.
+    /// that already has an item or action bound (that item's/action's id, HotbarContent.SlotSize,
+    /// and which slot/HotbarContent to unbind from on release -- see _contentDragOriginHotbar's
+    /// own doc comment). Independent of _activeInteraction.Kind: a plain content click on either
+    /// source resolves to Kind None, so this runs unconditionally on every press rather than
+    /// being folded into the Kind-gated branch above.
     /// </summary>
     private void TryStartContentDrag(Point clickPosition)
     {
         _contentDragItemDefinitionId = null;
+        _contentDragActionId = null;
         _contentDragOriginHotbar = null;
         _contentDragOriginSlot = null;
+        _contentDragHeldFrames = 0;
 
         if (_activeInteraction.Element is InventoryItemStackCell cell)
         {
@@ -450,17 +473,27 @@ public sealed class UiInputController
             _contentDragStartMousePosition = new Vector2(clickPosition.X, clickPosition.Y);
         }
         else if (_activeInteraction.Element is Window { Content: HotbarContent hotbarContent } &&
-            hotbarContent.TryGetSlotAt(clickPosition, out var pressedSlot) &&
-            hotbarContent.TryGetBoundItemId(pressedSlot, out var boundItemId))
+            hotbarContent.TryGetSlotAt(clickPosition, out var pressedSlot))
         {
-            _contentDragItemDefinitionId = boundItemId;
-            _contentDragSourceSize = HotbarContent.SlotSize;
-            _contentDragOriginHotbar = hotbarContent;
-            _contentDragOriginSlot = pressedSlot;
-            _contentDragStartMousePosition = new Vector2(clickPosition.X, clickPosition.Y);
+            if (hotbarContent.TryGetBoundItemId(pressedSlot, out var boundItemId))
+            {
+                _contentDragItemDefinitionId = boundItemId;
+                _contentDragSourceSize = HotbarContent.SlotSize;
+                _contentDragOriginHotbar = hotbarContent;
+                _contentDragOriginSlot = pressedSlot;
+                _contentDragStartMousePosition = new Vector2(clickPosition.X, clickPosition.Y);
+            }
+            else if (hotbarContent.TryGetBoundActionId(pressedSlot, out var boundActionId))
+            {
+                _contentDragActionId = boundActionId;
+                _contentDragSourceSize = HotbarContent.SlotSize;
+                _contentDragOriginHotbar = hotbarContent;
+                _contentDragOriginSlot = pressedSlot;
+                _contentDragStartMousePosition = new Vector2(clickPosition.X, clickPosition.Y);
+            }
         }
 
-        if (_contentDragItemDefinitionId is not null)
+        if (_contentDragItemDefinitionId is not null || _contentDragActionId is not null)
         {
             SetHotbarDragHighlight(true);
         }
@@ -537,19 +570,19 @@ public sealed class UiInputController
     }
 
     /// <summary>
-    /// Resolves an in-progress content-drag (see _contentDragItemDefinitionId's own doc comment)
-    /// against the release position -- a no-op if the mouse never actually moved past
-    /// ContentDragTapThresholdPixels (a plain click on a cell/slot must not spuriously unbind-
-    /// then-rebind it). Unbinding the drag's origin slot (if any) always happens first, then
-    /// binding the drop target (if the release landed on a hotbar slot) second -- dropping back
-    /// onto the same slot it came from is therefore a harmless unbind-then-immediately-rebind,
-    /// not a special case. Always clears the drag-highlight/state at the end, drop accepted or
-    /// not, so a cancelled/missed drag never leaves the hotbar glowing or a stale payload behind
-    /// for the next press to accidentally inherit.
+    /// Resolves an in-progress content-drag (see _contentDragItemDefinitionId/_contentDragActionId's
+    /// own doc comments) against the release position -- a no-op if the mouse never actually
+    /// moved past ContentDragTapThresholdPixels (a plain click on a cell/slot must not
+    /// spuriously unbind-then-rebind it). Unbinding the drag's origin slot (if any) always
+    /// happens first, then binding the drop target (if the release landed on a hotbar slot)
+    /// second -- dropping back onto the same slot it came from is therefore a harmless
+    /// unbind-then-immediately-rebind, not a special case. Always clears the drag-highlight/state
+    /// at the end, drop accepted or not, so a cancelled/missed drag never leaves the hotbar
+    /// glowing or a stale payload behind for the next press to accidentally inherit.
     /// </summary>
     private void ResolveContentDrag(Point releasePosition)
     {
-        if (_contentDragItemDefinitionId is not { } itemDefinitionId)
+        if (_contentDragItemDefinitionId is null && _contentDragActionId is null)
         {
             return;
         }
@@ -562,23 +595,41 @@ public sealed class UiInputController
                 return;
             }
 
+            var isActionDrag = _contentDragActionId is not null;
+
             if (_contentDragOriginHotbar is { } originHotbar && _contentDragOriginSlot is { } originSlot)
             {
-                originHotbar.UnbindItemSlot(originSlot);
+                if (isActionDrag)
+                {
+                    originHotbar.UnbindActionSlot(originSlot);
+                }
+                else
+                {
+                    originHotbar.UnbindItemSlot(originSlot);
+                }
             }
 
             var dropInteraction = TryHitTestInteraction(releasePosition);
             if (dropInteraction.Element is Window { Content: HotbarContent dropHotbar } &&
                 dropHotbar.TryGetSlotAt(releasePosition, out var dropSlot))
             {
-                dropHotbar.BindItem(dropSlot, itemDefinitionId);
+                if (isActionDrag)
+                {
+                    dropHotbar.BindAction(dropSlot, _contentDragActionId!.Value);
+                }
+                else
+                {
+                    dropHotbar.BindItem(dropSlot, _contentDragItemDefinitionId!.Value);
+                }
             }
         }
         finally
         {
             _contentDragItemDefinitionId = null;
+            _contentDragActionId = null;
             _contentDragOriginHotbar = null;
             _contentDragOriginSlot = null;
+            _contentDragHeldFrames = 0;
             SetHotbarDragHighlight(false);
         }
     }

@@ -37,9 +37,11 @@ public sealed class NotificationCenter(ElementPoolService elementPoolService, Ev
     /// hotbar/health-bar-style content elsewhere). Also drives the Folder's own width, both
     /// expanded (RecalculateWrapContentWindowSize fits its title/content to the widest child)
     /// and collapsed (Folder.RecalculateMinimizedWindowSize matches that same width instead of
-    /// shrinking to just its icon).
+    /// shrinking to just its icon). Width is 117 (78 * 1.5) to keep pace with TextWindow.
+    /// ContentFont's own 8 -> 12 (50%) increase -- otherwise the widest label ("Achievement: 0")
+    /// would overflow the tile at the larger font.
     /// </summary>
-    private static readonly Vector2 SummaryEntrySize = new(78, HudMetrics.EntrySize.Y);
+    private static readonly Vector2 SummaryEntrySize = new(117, HudMetrics.EntrySize.Y);
 
     private static readonly Vector2 ActiveNotificationBasePosition = new(200, 200);
     private static readonly Vector2 ActiveNotificationMaximumSize = new(640, 176);
