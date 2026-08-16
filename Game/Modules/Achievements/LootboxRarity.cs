@@ -1,6 +1,9 @@
 namespace Game.Modules.Achievements;
 
-public enum LootboxRarity
+/// <summary>Represents the rarity of a lootbox.</summary>
+/// <remarks>Reward value scales with lootbox rarity</remarks>
+/// <cleanupVersion>1</cleanupVersion>
+public enum LootboxRarity : byte
 {
     Bronze,
     Silver,

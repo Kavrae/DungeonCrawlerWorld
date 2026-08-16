@@ -1,5 +1,4 @@
 using Engine.Math;
-using Engine.Utilities;
 using Game.Modules.Actions.Activators;
 using Game.Modules.Actions.Effects;
 using Game.Modules.StatusEffects;
@@ -21,7 +20,7 @@ public static class ToxicStrikeAction
         ])],
         Activator: new SpellActivator(
             new TargetingSpec(TargetShape.SingleTarget, Range: 15),
-            new ActionTiming(ActionTimingCategory.Immediate, ActionLockFrames: (short)GameTiming.FramesForSeconds(1f), CooldownFrames: null)),
+            new ActionTiming(ActionTimingCategory.Immediate, CooldownFrames: null)),
         Description: "A single target ranged attack that deals no direct damage of its own, instead drenching the target in a toxic, smoldering residue -- 10 stacks of Poison and 6 stacks of Burning, left to tick on their own.",
         Summary: "Inflicts 10 stacks of Poison and 6 stacks of Burning.");
 }

@@ -8,8 +8,8 @@ namespace Game.Modules.Actions.Components;
 /// simply stops mattering once ScrollMasteryEffects.MasteryThreshold is reached and the spell has
 /// been granted -- re-activating the same scroll afterward just keeps incrementing harmlessly).
 /// </summary>
-public struct ScrollMasteryComponent(Guid spellId, int usageCount)
+public struct ScrollMasteryComponent(Guid spellId, ushort usageCount)
 {
     public Guid SpellId { get; } = spellId;
-    public int UsageCount { get; set; } = usageCount;
+    public ushort UsageCount { get; set; } = usageCount;
 }

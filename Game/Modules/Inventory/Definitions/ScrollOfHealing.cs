@@ -1,5 +1,4 @@
 using Engine.Math;
-using Engine.Utilities;
 using Game.Modules.Actions;
 using Game.Modules.Actions.Activators;
 using Game.Modules.Actions.Definitions.Spells;
@@ -29,6 +28,6 @@ public static class ScrollOfHealing
         MaxStackSize: MaximumStackSize,
         Activator: new ScrollActivator(
             new TargetingSpec(Shape: TargetShape.AdjacentWithSelf, Range: 0),
-            new ActionTiming(ActionTimingCategory.Immediate, (short)GameTiming.FramesForSeconds(1f), CooldownFrames: null),
+            new ActionTiming(ActionTimingCategory.Immediate, CooldownFrames: null),
             SpellId: HealAction.Id));
 }

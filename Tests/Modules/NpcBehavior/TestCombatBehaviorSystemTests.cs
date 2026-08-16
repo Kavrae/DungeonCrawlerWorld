@@ -106,8 +106,8 @@ public sealed class TestCombatBehaviorSystemTests
     private static void PlaceGoblin(Fixture fixture, int entityId, short currentHealth = 200, short maximumHealth = 200, bool grantPunch = true)
     {
         fixture.TransformPool.Add(entityId, new TransformComponent(GoblinPosition, SingleTile));
-        fixture.MovementPool.Add(entityId, new MovementComponent(MovementMode.Random, 10, null, null));
-        fixture.ActionLockPool.Add(entityId, new ActionLockComponent(totalLockFrames: 0, lockFramesRemaining: 0));
+        fixture.MovementPool.Add(entityId, new MovementComponent(MovementMode.Random, null, null));
+        fixture.ActionLockPool.Add(entityId, new ActionLockComponent(standardLockFrames: 10, currentLockTotalFrames: 0, currentLockFramesRemaining: 0));
         fixture.HealthPool.Add(entityId, new HealthComponent(currentHealth, maximumHealth));
         if (grantPunch)
         {
@@ -196,8 +196,8 @@ public sealed class TestCombatBehaviorSystemTests
     {
         var fixture = Build();
         fixture.TransformPool.Add(GoblinEntityId, new TransformComponent(GoblinPosition, SingleTile));
-        fixture.MovementPool.Add(GoblinEntityId, new MovementComponent(MovementMode.Random, 10, null, null));
-        fixture.ActionLockPool.Add(GoblinEntityId, new ActionLockComponent(totalLockFrames: 30, lockFramesRemaining: 30));
+        fixture.MovementPool.Add(GoblinEntityId, new MovementComponent(MovementMode.Random, null, null));
+        fixture.ActionLockPool.Add(GoblinEntityId, new ActionLockComponent(standardLockFrames: ActionLockGate.StandardLockFrames, currentLockTotalFrames: 30, currentLockFramesRemaining: 30));
         // Deliberately no HealthComponent/InventoryItemStackComponent/ActionInstanceComponent
         // registered for this entity -- if the system tried to read any of them before checking
         // the action lock, this would throw or behave unexpectedly instead of just skipping.

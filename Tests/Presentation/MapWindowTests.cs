@@ -89,7 +89,7 @@ public sealed class MapWindowTests
         if (playerPosition is { } position)
         {
             componentManager.Merge(PlayerEntityId, new TransformComponent(position, new Vector2Byte(1, 1)));
-            componentManager.Merge(PlayerEntityId, new MovementComponent(MovementMode.PlayerControlled, 0, null, null));
+            componentManager.Merge(PlayerEntityId, new MovementComponent(MovementMode.PlayerControlled, null, null));
             // Fully unlocked -- these tests are about arm/target/confirm behavior, not the Expansion lock itself, so default to every slot being usable rather than incidentally locking out whichever slot a given test happens to bind to.
             componentManager.Merge(PlayerEntityId, new HotkeyExpansionUnlockComponent(unlockedSlotCount: 20));
             world.PlayerEntityId = PlayerEntityId;
@@ -118,7 +118,7 @@ public sealed class MapWindowTests
             componentManager.GetDirectPool<TransformComponent>(),
             componentManager.GetPackedPool<MovementComponent>());
 
-        windowService.RegisterFactory<MapWindow>((_, _) => new MapWindow(
+        windowService.RegisterFactory<MapWindow>(() => new MapWindow(
             fontService, windowService, world, mapViewState, componentManager, new EventBus(), resolvedActionCatalog, resolvedItemCatalog, new TileRenderer(), new GlyphRenderer(),
             new SpriteSheetService(null, "Spritesheets"), new SpriteRenderer(), camera, actionTargeting, playerMovement));
 
@@ -652,7 +652,7 @@ public sealed class MapWindowTests
         Assert.IsNull(mapViewState.ArmedActionId, "The first press of the pair armed this slot -- once the double-tap fires, it shouldn't be left stale-armed.");
     }
 
-    /// <summary>SingleTarget abilities have no fixed footprint -- double-tap must pick an actual occupied tile within range via TargetPriority, not just fire at the caster's own position.</summary>
+    /// <summary>SingleTarget abilities have no fixed footprint -- double-tap must pick an actual occupied tile within range via ClosestPointSelector, not just fire at the caster's own position.</summary>
     [TestMethod]
     public void HandleHotkeys_DoubleTapSingleTargetAction_AutoTargetsTheOccupiedTileInRange()
     {
@@ -1009,12 +1009,12 @@ public sealed class MapWindowTests
     {
         var (_, _, mapWindow, componentManager, _) = BuildMapWindowWithPlayerAndActions(300, 300, 1, new Vector3Int(100, 100, 0));
         componentManager.Merge(PlayerEntityId, new PendingDelayedActionComponent(Guid.NewGuid(), [new Vector3Int(101, 100, 0)]));
-        componentManager.Merge(PlayerEntityId, new ActionLockComponent(totalLockFrames: 60, lockFramesRemaining: 45));
+        componentManager.Merge(PlayerEntityId, new ActionLockComponent(standardLockFrames: ActionLockGate.StandardLockFrames, currentLockTotalFrames: 60, currentLockFramesRemaining: 45));
 
         mapWindow.HandleRightClickTap();
 
         Assert.IsFalse(componentManager.GetPackedPool<PendingDelayedActionComponent>().Has(PlayerEntityId));
-        Assert.AreEqual((short)0, componentManager.GetPackedPool<ActionLockComponent>().GetReadonly(PlayerEntityId).LockFramesRemaining);
+        Assert.AreEqual((ushort?)0, componentManager.GetPackedPool<ActionLockComponent>().GetReadonly(PlayerEntityId).CurrentLockFramesRemaining);
     }
 
     [TestMethod]
@@ -1022,12 +1022,12 @@ public sealed class MapWindowTests
     {
         var (_, _, mapWindow, componentManager, _) = BuildMapWindowWithPlayerAndActions(300, 300, 1, new Vector3Int(100, 100, 0));
         componentManager.Merge(PlayerEntityId, new PendingDelayedActionComponent(Guid.NewGuid(), [new Vector3Int(101, 100, 0)]));
-        componentManager.Merge(PlayerEntityId, new ActionLockComponent(totalLockFrames: 60, lockFramesRemaining: 45));
+        componentManager.Merge(PlayerEntityId, new ActionLockComponent(standardLockFrames: ActionLockGate.StandardLockFrames, currentLockTotalFrames: 60, currentLockFramesRemaining: 45));
 
         mapWindow.HandleEscape();
 
         Assert.IsFalse(componentManager.GetPackedPool<PendingDelayedActionComponent>().Has(PlayerEntityId));
-        Assert.AreEqual((short)0, componentManager.GetPackedPool<ActionLockComponent>().GetReadonly(PlayerEntityId).LockFramesRemaining);
+        Assert.AreEqual((ushort?)0, componentManager.GetPackedPool<ActionLockComponent>().GetReadonly(PlayerEntityId).CurrentLockFramesRemaining);
     }
 
     [TestMethod]

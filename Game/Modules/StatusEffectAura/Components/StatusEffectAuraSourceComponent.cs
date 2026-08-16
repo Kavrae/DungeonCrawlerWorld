@@ -14,10 +14,10 @@ namespace Game.Modules.StatusEffectAura.Components;
 /// meant to be the same shape -- splitting them risked exactly the kind of visual/mechanical
 /// mismatch a single Strength value here rules out by construction.
 /// </summary>
-public struct StatusEffectAuraSourceComponent(StatusEffectType effectType, int auraAndGlowStrength, Color glowColor)
+public struct StatusEffectAuraSourceComponent(StatusEffectType effectType, byte auraAndGlowStrength, Color glowColor)
 {
     public StatusEffectType EffectType { get; set; } = effectType;
-    public int AuraAndGlowStrength { get; set; } = auraAndGlowStrength;
+    public byte AuraAndGlowStrength { get; set; } = auraAndGlowStrength;
     public Color GlowColor { get; set; } = glowColor;
 
     public override readonly string ToString() => $"EffectType : {EffectType}\nAuraAndGlowStrength : {AuraAndGlowStrength}\nGlowColor : {GlowColor}";

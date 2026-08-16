@@ -7,7 +7,7 @@ namespace Presentation.UI;
 /// which edges get which shade. FlatContrast is a fixed 2px black-outer/light-grey-inner ring,
 /// for legibility against any background (hotkey slots) -- see BorderRenderer for the split.
 /// </summary>
-public enum BorderStyle
+public enum BorderStyle : byte
 {
     Flat,
     FlatContrast,

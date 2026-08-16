@@ -116,7 +116,7 @@ public sealed class StatusEffectAuraSystemTests
     }
 
     /// <summary>AuraGrid only finds a source by scanning its TransformComponent (see StatusEffectAuraSystem.EnsureGrid) -- a source needs one set at its real position for any of these tests to see it, exactly as PlaceTerrainOnMap/PlaceEntityOnMap would set it for real in-game.</summary>
-    private static void AddSource(ComponentManager componentManager, int entityId, Vector3Int position, StatusEffectType effectType, int strength)
+    private static void AddSource(ComponentManager componentManager, int entityId, Vector3Int position, StatusEffectType effectType, byte strength)
     {
         componentManager.GetMultiPool<StatusEffectAuraSourceComponent>().Add(entityId, new StatusEffectAuraSourceComponent(effectType, strength, Color.Orange));
         componentManager.Merge(entityId, new TransformComponent(position, UnitSize));
@@ -238,6 +238,7 @@ public sealed class StatusEffectAuraSystemTests
         for (var frame = 0; frame < AuraEffects.TickIntervalFrames; frame++)
         {
             system.Update(new EngineTime(default, default, false, FrameCount: frame), (byte)(frame % system.StripeCount));
+            movedEntities.ClearFrame();
         }
 
         Assert.AreEqual(8, StackCountOf(componentManager, ObserverEntityId));
@@ -261,6 +262,7 @@ public sealed class StatusEffectAuraSystemTests
         for (var frame = 0; frame < AuraEffects.TickIntervalFrames; frame++)
         {
             system.Update(new EngineTime(default, default, false, FrameCount: frame), (byte)(frame % system.StripeCount));
+            movedEntities.ClearFrame();
         }
 
         Assert.AreEqual(8, StackCountOf(componentManager, ObserverEntityId), "Topped back up to the target (8), not added on top of the decayed value (5 + 8 = 13).");
@@ -304,6 +306,7 @@ public sealed class StatusEffectAuraSystemTests
         for (var frame = 0; frame < AuraEffects.TickIntervalFrames; frame++)
         {
             system.Update(new EngineTime(default, default, false, FrameCount: frame), (byte)(frame % system.StripeCount));
+            movedEntities.ClearFrame();
         }
 
         Assert.IsFalse(HasExposure(componentManager, ObserverEntityId, StatusEffectType.Burning));
@@ -331,6 +334,7 @@ public sealed class StatusEffectAuraSystemTests
         for (var frame = 0; frame < 30; frame++)
         {
             system.Update(new EngineTime(default, default, false, FrameCount: frame), (byte)(frame % system.StripeCount));
+            movedEntities.ClearFrame();
         }
 
         Assert.AreEqual(30, FramesUntilNextTickOf(componentManager, ObserverEntityId, StatusEffectType.Burning));
@@ -348,6 +352,7 @@ public sealed class StatusEffectAuraSystemTests
         for (var frame = 0; frame < 30; frame++)
         {
             system.Update(new EngineTime(default, default, false, FrameCount: frame), (byte)(frame % system.StripeCount));
+            movedEntities.ClearFrame();
         }
 
         Assert.AreEqual(8, StackCountOf(componentManager, ObserverEntityId), "The original timer reaching 0 re-evaluates based on the entity's current (in-range) position, topping off to the target rather than adding to it again.");
@@ -525,6 +530,7 @@ public sealed class StatusEffectAuraSystemTests
         // Forces EnsureGrid to run once with no sources present -- the grid is "already built"
         // by the time the toggle below happens.
         system.Update(new EngineTime(default, default, false, FrameCount: 0), 0);
+        movedEntities.ClearFrame();
 
         componentManager.Merge(SourceEntityId, new TransformComponent(SourcePosition, UnitSize));
         var sourcePool = componentManager.GetMultiPool<StatusEffectAuraSourceComponent>();
@@ -607,6 +613,7 @@ public sealed class StatusEffectAuraSystemTests
         for (var frame = 0; frame < AuraEffects.TickIntervalFrames; frame++)
         {
             system.Update(new EngineTime(default, default, false, FrameCount: frame), (byte)(frame % system.StripeCount));
+            movedEntities.ClearFrame();
         }
 
         Assert.AreEqual(8, StackCountOf(componentManager, ObserverEntityId), "Burning contribution from the moved dual-typed source must register in the grid.");
@@ -640,6 +647,7 @@ public sealed class StatusEffectAuraSystemTests
 
         // Forces EnsureGrid to run once with no sources present -- the grid is "already built" by the time the toggle below happens, same setup as the sync-bug regression tests above.
         system.Update(new EngineTime(default, default, false, FrameCount: 0), 0);
+        movedEntities.ClearFrame();
 
         componentManager.Merge(ObserverEntityId, new TransformComponent(SourcePosition, UnitSize));
         mapQuery.SetOccupant(SourcePosition, ObserverEntityId);
@@ -692,6 +700,7 @@ public sealed class StatusEffectAuraSystemTests
         componentManager.Merge(SourceEntityId, new TransformComponent(farAwayStart, UnitSize));
         var sourcePool = componentManager.GetMultiPool<StatusEffectAuraSourceComponent>();
         system.Update(new EngineTime(default, default, false, FrameCount: 0), 0);
+        movedEntities.ClearFrame();
         AuraSourceEffects.Toggle(sourcePool, eventBus, SourceEntityId, StatusEffectType.Burning, auraAndGlowStrength: 8, Color.Orange);
 
         // A stationary occupant standing where the source is about to walk to -- never itself moves.
@@ -723,6 +732,7 @@ public sealed class StatusEffectAuraSystemTests
         componentManager.Merge(SourceEntityId, new TransformComponent(farAwayStart, UnitSize));
         var sourcePool = componentManager.GetMultiPool<StatusEffectAuraSourceComponent>();
         system.Update(new EngineTime(default, default, false, FrameCount: 0), 0);
+        movedEntities.ClearFrame();
         AuraSourceEffects.Toggle(sourcePool, eventBus, SourceEntityId, StatusEffectType.Burning, auraAndGlowStrength: 8, Color.Orange);
 
         componentManager.Merge(ObserverEntityId, new TransformComponent(SourcePosition, UnitSize));
@@ -745,6 +755,7 @@ public sealed class StatusEffectAuraSystemTests
         componentManager.Merge(SourceEntityId, new TransformComponent(farAwayStart, UnitSize));
         var sourcePool = componentManager.GetMultiPool<StatusEffectAuraSourceComponent>();
         system.Update(new EngineTime(default, default, false, FrameCount: 0), 0);
+        movedEntities.ClearFrame();
         AuraSourceEffects.Toggle(sourcePool, eventBus, SourceEntityId, StatusEffectType.Burning, auraAndGlowStrength: 8, Color.Orange);
 
         componentManager.Merge(ObserverEntityId, new TransformComponent(SourcePosition, UnitSize));
@@ -757,6 +768,7 @@ public sealed class StatusEffectAuraSystemTests
         for (var frame = 0; frame < GenerousCatchUpFrameCount(system); frame++)
         {
             system.Update(new EngineTime(default, default, false, FrameCount: frame), (byte)(frame % system.StripeCount));
+            movedEntities.ClearFrame();
         }
 
         Assert.AreEqual(8, StackCountOf(componentManager, ObserverEntityId), "The periodic catch-up pass must eventually resync a non-Local source's stale grid contribution and grant the stationary occupant.");

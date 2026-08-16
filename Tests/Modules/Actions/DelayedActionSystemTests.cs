@@ -92,7 +92,7 @@ public sealed class DelayedActionSystemTests
         mapQuery.SetOccupant(TargetTile, TargetEntityId);
         componentManager.Merge(TargetEntityId, new HealthComponent(100, 100));
         componentManager.Merge(CasterEntityId, new ActionInstanceComponent(ActionId, damageAmount: 15, cooldownFramesRemaining: 0));
-        componentManager.Merge(CasterEntityId, new ActionLockComponent(totalLockFrames: 30, lockFramesRemaining: 10));
+        componentManager.Merge(CasterEntityId, new ActionLockComponent(standardLockFrames: ActionLockGate.StandardLockFrames, currentLockTotalFrames: 30, currentLockFramesRemaining: 10));
         componentManager.Merge(CasterEntityId, new PendingDelayedActionComponent(ActionId, [TargetTile]));
 
         system.Update(default, 0);
@@ -108,7 +108,7 @@ public sealed class DelayedActionSystemTests
         mapQuery.SetOccupant(TargetTile, TargetEntityId);
         componentManager.Merge(TargetEntityId, new HealthComponent(100, 100));
         componentManager.Merge(CasterEntityId, new ActionInstanceComponent(ActionId, damageAmount: 15, cooldownFramesRemaining: 0));
-        componentManager.Merge(CasterEntityId, new ActionLockComponent(totalLockFrames: 30, lockFramesRemaining: 0));
+        componentManager.Merge(CasterEntityId, new ActionLockComponent(standardLockFrames: ActionLockGate.StandardLockFrames, currentLockTotalFrames: 30, currentLockFramesRemaining: 0));
         componentManager.Merge(CasterEntityId, new PendingDelayedActionComponent(ActionId, [TargetTile]));
 
         system.Update(default, 0);
@@ -124,7 +124,7 @@ public sealed class DelayedActionSystemTests
         mapQuery.SetOccupant(TargetTile, TargetEntityId);
         componentManager.Merge(TargetEntityId, new HealthComponent(100, 100));
         componentManager.Merge(CasterEntityId, new ActionInstanceComponent(ActionId, damageAmount: 15, cooldownFramesRemaining: 0));
-        componentManager.Merge(CasterEntityId, new ActionLockComponent(totalLockFrames: 30, lockFramesRemaining: 0));
+        componentManager.Merge(CasterEntityId, new ActionLockComponent(standardLockFrames: ActionLockGate.StandardLockFrames, currentLockTotalFrames: 30, currentLockFramesRemaining: 0));
         componentManager.Merge(CasterEntityId, new PendingDelayedActionComponent(ActionId, [TargetTile]));
         componentManager.GetPackedPool<DeadComponent>().Add(CasterEntityId, new DeadComponent(KilledByEntityId: null));
 

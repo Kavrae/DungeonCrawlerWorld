@@ -22,5 +22,5 @@ public static class HotkeyExpansionPotion
         MaxStackSize: MaximumStackSize,
         Activator: new PotionActivator(
             new TargetingSpec(Shape: TargetShape.Self, Range: 0, AreaSize: 0),
-            new ActionTiming(ActionTimingCategory.Immediate, (short)GameTiming.FramesForSeconds(5f), CooldownFrames: null)));
+            new ActionTiming(ActionTimingCategory.Immediate, GameTiming.FramesForSeconds(5f), CooldownFrames: null)));
 }

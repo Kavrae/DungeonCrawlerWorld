@@ -13,21 +13,15 @@ using Microsoft.Xna.Framework;
 
 namespace Game.Modules.Mana.Systems;
 
-/// <summary>
-/// Mirrors HealthRegenSystem exactly (see its own doc comment for the full rationale, including
-/// why StripeCount is a full second's worth of frames and why the per-visit amount is added to
-/// CurrentMana as an exact float with no rounding at all -- Mana is in fact the case that made
-/// float storage necessary: MaximumMana is typically only 2-12 for a starting roll, where even a
-/// well-designed rounding scheme either stalls regen entirely (plain rounding) or produces
-/// visible multi-tick dry streaks (stochastic rounding) -- see ManaComponent's own doc comment),
-/// with Intelligence in place of Constitution and ManaComponent/StatModifierTarget.ManaRegen in
-/// place of their Health equivalents. Only ever processes entities that already have a
-/// ManaComponent -- ManaGrant.EnsureManaComponentExists is what grants one in the first place (on
-/// an entity's first mana-costing ability), this system never grants one itself.
-/// </summary>
+
+/// <summary>Regenerates entity current and maximum mana, adjusting for ability scores, modifiers, and processing tier.</summary>
+/// <cleanupVersion>1</cleanupVersion>
 public sealed class ManaRegenSystem : ISystem
 {
     public byte StripeCount => (byte)GameTiming.FramesPerSecond;
+
+    private const float MinManaRegenPerSecond = 0.1f;
+    private const float MaxManaRegenPerSecond = 0.3f;
 
     private readonly PackedComponentPool<ManaComponent> _manaComponents;
     private readonly DirectComponentPool<ProcessingTierComponent> _processingTiers;
@@ -55,6 +49,11 @@ public sealed class ManaRegenSystem : ISystem
 
     public void Update(EngineTime time, byte stripeIndex)
     {
+        // Reused across every due entity in this Update call, not re-stackalloc'd per entity --
+        // each iteration overwrites both entries before reading them.
+        Span<(StatModifierTarget Target, float BaseValue)> pairs = stackalloc (StatModifierTarget, float)[2];
+        Span<float> effectiveValues = stackalloc float[2];
+
         foreach (var entityId in _tieredStripeSet.GetDueEntities(time.FrameCount))
         {
             if (!_manaComponents.TryGetReadonly(entityId, out var currentManaComponent))
@@ -72,15 +71,19 @@ public sealed class ManaRegenSystem : ISystem
                 continue;
             }
 
-            var effectiveMaximumMana = StatModifierMath.GetEffectiveValue(_statModifiers, entityId, StatModifierTarget.MaximumMana, currentManaComponent.MaximumMana);
-
             var tier = _processingTiers.TryGetReadonly(entityId, out var processingTier) ? processingTier.Tier : ProcessingTierLevel.Local;
             var framesPerVisit = StripeCount * ProcessingTierDivisors.ByTierIndex[(int)tier];
             var secondsPerVisit = framesPerVisit / (float)GameTiming.FramesPerSecond;
 
-            var percentPerSecond = AbilityScoreRegenMath.ComputePercentPerSecond(intelligence.Total);
-            var rawAmount = percentPerSecond / 100f * effectiveMaximumMana * secondsPerVisit;
-            var effectiveRegen = StatModifierMath.GetEffectiveValue(_statModifiers, entityId, StatModifierTarget.ManaRegen, rawAmount);
+            var amountPerSecond = AbilityScoreMath.Lerp(intelligence.Total, MinManaRegenPerSecond, MaxManaRegenPerSecond);
+            var rawAmount = amountPerSecond * secondsPerVisit;
+
+            pairs[0] = (StatModifierTarget.MaximumMana, currentManaComponent.MaximumMana);
+            pairs[1] = (StatModifierTarget.ManaRegen, rawAmount);
+            StatModifierMath.GetEffectiveValues(_statModifiers, entityId, pairs, effectiveValues);
+            var effectiveMaximumMana = effectiveValues[0];
+            var effectiveRegen = effectiveValues[1];
+
             if (effectiveRegen == 0f)
             {
                 continue;

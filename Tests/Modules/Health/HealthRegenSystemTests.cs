@@ -24,7 +24,7 @@ public sealed class HealthRegenSystemTests
         new(initialCapacity: 10,
             static (ref existing, incoming) => existing = incoming);
 
-    /// <summary>Constitution total 300 -- AbilityScoreRegenMath's top rate, 6%/sec -- so a 200-max entity regens a clean 12/visit at Local tier (StripeCount is a full second's worth of frames: 0.06 * 200 * 60/60 = 12), or 24/visit at Neighborhood (120-frame/2-second cadence: 0.06 * 200 * 120/60 = 24).</summary>
+    /// <summary>Constitution total 300 -- HealthRegenSystem's MaxHealthRegenPerSecond, a flat 6 HP/sec -- so any entity regens a clean 6/visit at Local tier (StripeCount is a full second's worth of frames), or 12/visit at Neighborhood (120-frame/2-second cadence: 6 * 120/60 = 12).</summary>
     private static MultiComponentPool<AbilityScoreComponent> CreateAbilityScoresPoolWithMaxConstitution(int entityId)
     {
         var pool = new MultiComponentPool<AbilityScoreComponent>(maximumEntityCount: 10, initialCapacity: 4);
@@ -41,7 +41,7 @@ public sealed class HealthRegenSystemTests
 
         system.Update(default, 0);
 
-        Assert.AreEqual(62, pool.GetReadonly(0).CurrentHealth);
+        Assert.AreEqual(56, pool.GetReadonly(0).CurrentHealth);
     }
 
     [TestMethod]
@@ -111,7 +111,7 @@ public sealed class HealthRegenSystemTests
         abilityScores.Add(0, new AbilityScoreComponent(AbilityScoreType.Constitution, baseValue: 1, total: 1));
         var statModifiers = new MultiComponentPool<StatModifierComponent>(maximumEntityCount: 10, initialCapacity: 4);
         statModifiers.Add(0, new StatModifierComponent(StatModifierTarget.HealthRegen, StatModifierOperation.Additive, StatModifierPolarity.Debuff,
-            canModify: false, magnitude: -100000f, remainingDurationFrames: StatModifierComponent.Permanent, StatusEffectSource.Admin));
+            canModify: false, magnitude: -100000f, remainingDurationFrames: null, StatusEffectSource.Admin));
         var system = new HealthRegenSystem(pool, CreateTiersPool(), new ProcessingTierEvents(), statModifiers: statModifiers, abilityScores: abilityScores);
 
         system.Update(default, 0);
@@ -144,10 +144,10 @@ public sealed class HealthRegenSystemTests
         var system = new HealthRegenSystem(pool, tiers, new ProcessingTierEvents(), abilityScores: CreateAbilityScoresPoolWithMaxConstitution(0));
 
         // Neighborhood cadence is twice Local's (120 frames/2 seconds vs 60 frames/1 second), so
-        // the per-visit amount is proportionally larger too: 0.06 * 200 * 120/60 = 24, not the
-        // 12 a Local-tier visit gets.
+        // the per-visit amount is proportionally larger too: 6 * 120/60 = 12, not the 6 a
+        // Local-tier visit gets.
         system.Update(new EngineTime(default, default, false, FrameCount: 0), 0);
 
-        Assert.AreEqual(74, pool.GetReadonly(0).CurrentHealth);
+        Assert.AreEqual(62, pool.GetReadonly(0).CurrentHealth);
     }
 }

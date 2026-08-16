@@ -15,7 +15,7 @@ namespace Game.Modules.Actions;
 /// </summary>
 public static class ActionGrantEffects
 {
-    public static void Grant(ComponentManager componentManager, int entityId, Guid actionId, short manaCost, short damageAmount, short cooldownFramesRemaining)
+    public static void Grant(ComponentManager componentManager, int entityId, Guid actionId, ushort manaCost, ushort damageAmount, ushort cooldownFramesRemaining)
     {
         componentManager.Merge(entityId, new ActionInstanceComponent(actionId, damageAmount, cooldownFramesRemaining));
 

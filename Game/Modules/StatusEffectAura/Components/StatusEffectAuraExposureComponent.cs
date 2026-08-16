@@ -15,10 +15,10 @@ namespace Game.Modules.StatusEffectAura.Components;
 /// rather than trusting a stale snapshot -- this component exists purely to drive each type's
 /// own tick countdown.
 /// </summary>
-public struct StatusEffectAuraExposureComponent(StatusEffectType effectType, int framesUntilNextTick) : ITickCountdown
+public struct StatusEffectAuraExposureComponent(StatusEffectType effectType, ushort framesUntilNextTick) : ITickCountdown
 {
     public StatusEffectType EffectType { get; set; } = effectType;
-    public int FramesUntilNextTick { get; set; } = framesUntilNextTick;
+    public ushort FramesUntilNextTick { get; set; } = framesUntilNextTick;
 
     public override readonly string ToString() => $"EffectType : {EffectType}\nFramesUntilNextTick : {FramesUntilNextTick}";
 }

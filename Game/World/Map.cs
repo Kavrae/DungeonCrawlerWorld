@@ -3,33 +3,23 @@ using Game.Modules.Core.Components;
 
 namespace Game.World;
 
-/// <summary>
-/// The in-memory map grid. Two independent flat stores: creature occupancy (one Blocking
-/// entity per (x,y,MapLayer) cell -- see World.IsBlocking for why Tiny/Phasing entities never
-/// occupy this) and terrain (the floor beneath UnderGround/Ground -- Flying has none). Kept
-/// separate so a wall and the floor it stands on don't compete for the same slot. A third
-/// store, _nonBlockingEntityIdsByPosition, indexes every non-Blocking entity by position --
-/// see its own doc comment.
-/// </summary>
+/// <summary> The in-memory map grid.</summary>
+/// <remarks>
+/// Three independent flat stores: 
+///     Blocking creature occupancy (one Blocking entity per (x,y,MapLayer) ) 
+///     Non-Blocking creature occupancy (any number of non-Blocking entities per (x,y,MapLayer) )
+///     Terrain (the floor beneath UnderGround/Ground -- Flying has none).
+/// </remarks>
+/// <cleanupVersion>1</cleanupVersion>
 public sealed class Map
 {
-    private const int TerrainLayerCount = 2;
+    private static readonly int TerrainLayerCount = Enum.GetValues<TerrainLayer>().Length;
 
+    /// <summary>The size of the map.</summary>
     public Vector3Int Size { get; }
 
-    private readonly int[] _occupantEntityIds;
+    private readonly int[] _blockingEntityIds;
     private readonly int[] _terrainEntityIds;
-
-    /// <summary>
-    /// Position-keyed index of non-Blocking entities -- unlike _occupantEntityIds (one Blocking
-    /// entity per cell, a flat array), any number of non-Blocking entities can share a cell
-    /// (stacking, or overlapping a Blocking entity), and the population is expected to be a
-    /// small fraction of the map, so a sparse Dictionary is used instead of a second flat array.
-    /// Kept incrementally in sync by World's placement/move/removal methods, mirroring how
-    /// _occupantEntityIds already is for Blocking entities -- see TODO.md's now-resolved
-    /// "Occupancy rendering/selection scans assume a small Tiny/Phasing population" entry for
-    /// why a real index replaced the full-pool-scan this used to require.
-    /// </summary>
     private readonly Dictionary<int, List<int>> _nonBlockingEntityIdsByPosition = [];
 
     /// <summary>
@@ -50,22 +40,22 @@ public sealed class Map
     {
         Size = size;
 
-        _occupantEntityIds = new int[size.Volume];
-        Array.Fill(_occupantEntityIds, -1);
+        _blockingEntityIds = new int[size.Volume];
+        Array.Fill(_blockingEntityIds, -1);
 
         _terrainEntityIds = new int[size.X * size.Y * TerrainLayerCount];
         Array.Fill(_terrainEntityIds, -1);
     }
 
     /// <summary>(0,0,0) is drawn to the top-left of the map window.</summary>
-    public int GetEntityId(Vector3Int coordinates) => _occupantEntityIds[coordinates.FlatIndex(Size)];
+    public int GetBlockingEntityId(Vector3Int coordinates) => _blockingEntityIds[coordinates.FlatIndex(Size)];
 
-    public void SetEntityId(Vector3Int position, int entityId) => _occupantEntityIds[position.FlatIndex(Size)] = entityId;
+    public void SetBlockingEntityId(Vector3Int position, int entityId) => _blockingEntityIds[position.FlatIndex(Size)] = entityId;
 
     /// <summary>Clears the cell only if it still records entityId. Returns whether it cleared anything.</summary>
-    public bool ClearIfOccupiedBy(Vector3Int position, int entityId)
+    public bool ClearBlockingIfOccupiedBy(Vector3Int position, int entityId)
     {
-        ref var occupantEntityId = ref _occupantEntityIds[position.FlatIndex(Size)];
+        ref var occupantEntityId = ref _blockingEntityIds[position.FlatIndex(Size)];
         if (occupantEntityId != entityId)
         {
             return false;
@@ -75,10 +65,15 @@ public sealed class Map
         return true;
     }
 
-    /// <summary>Every non-Blocking entity occupying position -- empty if none. Does NOT include the (at most one) Blocking entity GetEntityId already answers for the same position; callers that need everyone at a tile combine both (see ActionEffectResolver.Apply).</summary>
+    /// <summary>Every non-Blocking entity occupying position -- empty if none. </summary>
+    /// <remarks>Does NOT include the (at most one) Blocking entity GetEntityId already answers for the same position; callers that need everyone at a tile combine both (see ActionEffectResolver.Apply).</remarks>
+    /// <param name="position">The position to query.</param>
     public IReadOnlyList<int> GetNonBlockingEntityIdsAt(Vector3Int position) =>
         _nonBlockingEntityIdsByPosition.TryGetValue(position.FlatIndex(Size), out var entityIds) ? entityIds : EmptyEntityIds;
 
+    /// <summary>Adds a non-Blocking entity to the specified position.</summary>
+    /// <param name="position">The position to add the entity to.</param>
+    /// <param name="entityId">The ID of the entity to add.</param>
     public void AddNonBlockingEntityId(Vector3Int position, int entityId)
     {
         var key = position.FlatIndex(Size);
@@ -91,7 +86,10 @@ public sealed class Map
         entityIds.Add(entityId);
     }
 
-    /// <summary>No-ops if entityId isn't actually recorded at position -- mirrors ClearIfOccupiedBy's own tolerance.</summary>
+    /// <summary>Removes a non-Blocking entity from the specified position.</summary>
+    /// <remarks>No-ops if entityId isn't actually recorded at position -- mirrors ClearIfOccupiedBy's own tolerance.</remarks>
+    /// <param name="position">The position from which to remove the entity.</param>
+    /// <param name="entityId">The ID of the entity to remove.</param>
     public void RemoveNonBlockingEntityId(Vector3Int position, int entityId)
     {
         var key = position.FlatIndex(Size);
@@ -109,16 +107,22 @@ public sealed class Map
         }
     }
 
+    /// <summary>Gets the ID of the terrain entity at the specified position and terrain layer.</summary>
+    /// <param name="x">The x-coordinate of the position.</param>
+    /// <param name="y">The y-coordinate of the position.</param>
+    /// <param name="terrainLayer">The terrain layer.</param>
+    /// <returns>The ID of the terrain entity, or -1 if none exists.</returns>
     public int GetTerrainEntityId(int x, int y, TerrainLayer terrainLayer) => _terrainEntityIds[TerrainIndex(x, y, terrainLayer)];
 
+    /// <summary>Sets the ID of the terrain entity at the specified position and terrain layer.</summary>
+    /// <param name="x">The x-coordinate of the position.</param>
+    /// <param name="y">The y-coordinate of the position.</param>
+    /// <param name="terrainLayer">The terrain layer.</param>
+    /// <param name="entityId">The ID of the entity to set.</param>
     public void SetTerrainEntityId(int x, int y, TerrainLayer terrainLayer, int entityId) => _terrainEntityIds[TerrainIndex(x, y, terrainLayer)] = entityId;
 
-    /// <summary>
-    /// Ground and UnderGround each have a terrain floor beneath them; Flying is open air with
-    /// none. The single source of truth for this mapping -- MapWindow (what to render) and
-    /// SelectionWindowContent (what to inspect) both call this rather than each keeping their
-    /// own copy.
-    /// </summary>
+    /// <summary>Maps a MapLayer to its corresponding TerrainLayer, if any.</summary>
+    /// <remarks> Ground and UnderGround each have a terrain floor beneath them; Flying is open air with none. </remarks>
     public static TerrainLayer? TerrainLayerFor(int mapLayer) => mapLayer switch
     {
         (int)MapLayer.UnderGround => TerrainLayer.UnderGround,
@@ -126,5 +130,10 @@ public sealed class Map
         _ => null,
     };
 
+    /// <summary>Calculates the index of the terrain entity at the specified position and terrain layer.</summary>
+    /// <param name="x">The x-coordinate of the position.</param>
+    /// <param name="y">The y-coordinate of the position.</param>
+    /// <param name="terrainLayer">The terrain layer.</param>
+    /// <returns>The index of the terrain entity.</returns>
     private int TerrainIndex(int x, int y, TerrainLayer terrainLayer) => new Vector3Int(x, y, (int)terrainLayer).FlatIndex(Size);
 }

@@ -1,5 +1,4 @@
 using Engine.Math;
-using Engine.Utilities;
 using Game.Modules.Actions;
 using Game.Modules.Actions.Activators;
 using Game.Modules.Actions.Effects;
@@ -26,5 +25,5 @@ public static class ToxicPotion
         MaxStackSize: MaximumStackSize,
         Activator: new PotionActivator(
             new TargetingSpec(Shape: TargetShape.Burst, Range: 3, AreaSize: 1),
-            new ActionTiming(ActionTimingCategory.Immediate, (short)GameTiming.FramesForSeconds(1f), CooldownFrames: null)));
+            new ActionTiming(ActionTimingCategory.Immediate, CooldownFrames: null)));
 }

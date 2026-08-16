@@ -3,10 +3,8 @@ using System.Text;
 
 namespace Engine.Utilities;
 
-/// <summary>
-/// Formatting and manipulation for strings displayed in the UI. Performance-sensitive --
-/// called frequently during UI rendering.
-/// </summary>
+/// <summary> Formatting and manipulation for strings displayed in the UI. </summary>
+/// <cleanupVersion>1</cleanupVersion>
 public static class StringUtility
 {
     /// <summary>Words shorter than this are pushed to the next line instead of being hyphenated.</summary>
@@ -75,12 +73,12 @@ public static class StringUtility
     {
         if (string.IsNullOrWhiteSpace(criteria.OriginalText))
         {
-            return new DisplayText(string.Empty, string.Empty, 0);
+            return new DisplayText(string.Empty, 0);
         }
 
         if (criteria.TextWidth <= criteria.MaximumPixelWidth)
         {
-            return new DisplayText(criteria.OriginalText, criteria.OriginalText, CountNewlineCharacters(criteria.OriginalText));
+            return new DisplayText(criteria.OriginalText, CountNewlineCharacters(criteria.OriginalText));
         }
 
         return criteria.FormatTextMode == FormatTextMode.Wordwrap
@@ -105,7 +103,7 @@ public static class StringUtility
             0,
             criteria.OriginalText.Length);
 
-        return new DisplayText(criteria.OriginalText, criteria.OriginalText[..substringLength], 1);
+        return new DisplayText(criteria.OriginalText[..substringLength], 1);
     }
 
     /// <summary>Small text boxes don't have room for hyphenation and use a simpler word wrap.</summary>
@@ -124,7 +122,7 @@ public static class StringUtility
         // Minimum 1: a window narrower than one character would otherwise divide by (or chunk by) zero.
         var lineLength = System.Math.Max(1, (int)(criteria.MaximumPixelWidth / criteria.CharacterWidth));
         var formattedText = InsertLineBreakEveryNCharacters(criteria.OriginalText, lineLength);
-        return new DisplayText(criteria.OriginalText, formattedText, CountNewlineCharacters(formattedText));
+        return new DisplayText(formattedText, CountNewlineCharacters(formattedText));
     }
 
     /// <summary>
@@ -272,7 +270,7 @@ public static class StringUtility
         }
 
         var formattedText = stringBuilder.ToString();
-        return new DisplayText(criteria.OriginalText, formattedText, CountNewlineCharacters(formattedText));
+        return new DisplayText(formattedText, CountNewlineCharacters(formattedText));
     }
 
     /// <summary>

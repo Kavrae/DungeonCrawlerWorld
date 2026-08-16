@@ -1,9 +1,10 @@
 namespace Engine.ECS.Components;
 
+/// <summary>Represents a pool for managing components of a specific type.</summary>
+/// <cleanupVersion>1</cleanupVersion>
 public interface IComponentPool
 {
     Type ComponentType { get; }
-    ComponentPoolType ComponentPoolType { get; }
 
     bool Has(int entityId);
 

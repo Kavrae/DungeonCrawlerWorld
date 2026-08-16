@@ -21,7 +21,7 @@ public sealed class StatModifierEffectsTests
         var manager = CreateRegisteredManager();
 
         StatModifierEffects.Apply(manager, 0, StatModifierTarget.IncomingDamage, StatModifierOperation.Additive, StatModifierPolarity.Buff,
-            canModify: true, magnitude: -1f, durationFrames: StatModifierComponent.Permanent, StatusEffectSource.Admin);
+            canModify: true, magnitude: -1f, durationFrames: null, StatusEffectSource.Admin);
 
         Assert.IsFalse(manager.GetMultiPool<ExpiringStatModifierComponent>().Has(0));
         Assert.IsTrue(manager.GetMultiPool<StatModifierComponent>().Has(0));
@@ -44,7 +44,7 @@ public sealed class StatModifierEffectsTests
         var manager = CreateRegisteredManager();
 
         StatModifierEffects.Apply(manager, 0, StatModifierTarget.IncomingDamage, StatModifierOperation.Additive, StatModifierPolarity.Buff,
-            canModify: true, magnitude: -1f, durationFrames: StatModifierComponent.Permanent, StatusEffectSource.Admin);
+            canModify: true, magnitude: -1f, durationFrames: null, StatusEffectSource.Admin);
         StatModifierEffects.Apply(manager, 0, StatModifierTarget.OutgoingDamage, StatModifierOperation.Additive, StatModifierPolarity.Buff,
             canModify: true, magnitude: 2f, durationFrames: 10, StatusEffectSource.Admin);
 

@@ -4,7 +4,6 @@ using Engine.Events;
 using Engine.Math;
 using FontStashSharp;
 using Game.Modules.Actions;
-using Game.Modules.Actions.Components;
 using Game.Modules.Core;
 using Game.Modules.Core.Components;
 using Game.Modules.Death.Components;
@@ -22,9 +21,16 @@ using Presentation.UI.ColorPalettes;
 
 namespace Presentation.UI;
 
-/// <summary>
-/// Displays a scrollable/zoomable viewport onto a single MapLayer of the game map at a time.
-/// </summary>
+/// <summary>Displays a scrollable/zoomable viewport onto a single MapLayer of the game map at a time.</summary>
+/// <remarks>
+/// The map-rendering composition root: owns the draw order (background, glyphs/sprites, glow,
+/// targeting/selection highlights) and routes its own input hooks (hotkeys, clicks, right-drag)
+/// to whichever collaborator actually owns that concern -- MapCamera (pan/zoom), MapBackgroundCache
+/// (per-tile background color), MapTintGrid (aura glow), ActionTargetingController (arm/target/
+/// confirm), PlayerMovementController (WASD movement). MapWindow itself should stay thin glue
+/// over those, not accumulate gameplay logic of its own.
+/// </remarks>
+/// <cleanupVersion>1</cleanupVersion>
 public sealed class MapWindow : Window
 {
     private const int MaxTinyEntitiesDrawn = 9;
@@ -49,10 +55,6 @@ public sealed class MapWindow : Window
     private readonly PackedComponentPool<HealthComponent> _healthPool;
     private readonly MultiComponentPool<StatModifierComponent>? _statModifiers;
     private readonly PackedComponentPool<DeadComponent>? _deadPool;
-    private readonly PackedComponentPool<PendingDelayedActionComponent> _pendingDelayedActions;
-
-    /// <summary>The player's own pending Delayed action's already-resolved target tiles, refreshed once per Update -- null when there is none. See DrawTargetingHighlights' own doc comment for why this is the fallback highlight once TargetableTiles itself is cleared.</summary>
-    private Vector3Int[]? _pendingDelayedActionTargetTiles;
 
     private readonly TileRenderer _tileRenderer;
     private readonly GlyphRenderer _glyphRenderer;
@@ -76,9 +78,17 @@ public sealed class MapWindow : Window
 
     private readonly int _tileDepth;
 
-    /// <summary>True while the simulation is paused (Space, while this window holds focus -- see OnHotkeysAction). GameLoop.Update gates EcsContext.Update on this.</summary>
+    /// <summary>Whether the simulation is currently paused.</summary>
+    /// <remarks>Toggled by Space while this window holds focus (see OnHotkeysAction). GameLoop.Update gates EcsContext.Update on this flag -- see the "Pause modality" TODO item for why this is one of several independent, not-yet-generalized pause sources GameLoop currently OR's together.</remarks>
     public bool IsPaused { get; private set; }
 
+    /// <summary>Constructs the map viewport, wired to the world/camera/targeting/movement collaborators it renders and delegates input to.</summary>
+    /// <remarks>
+    /// MapTintGrid and MapBackgroundCache are constructed here, not injected, unlike every other
+    /// dependency -- both are MapWindow-private derived state (a per-cell glow index, a per-cell
+    /// background-color cache) with no other consumer, so there's nothing to gain from resolving
+    /// them through GameShellBootstrapper the way the shared services above are.
+    /// </remarks>
     public MapWindow(
         FontService fontService,
         ElementPoolService elementPoolService,
@@ -123,7 +133,6 @@ public sealed class MapWindow : Window
         _deadPool = componentManager.IsRegistered<DeadComponent>()
             ? componentManager.GetPackedPool<DeadComponent>()
             : null;
-        _pendingDelayedActions = componentManager.GetPackedPool<PendingDelayedActionComponent>();
         _tileRenderer = tileRenderer;
         _glyphRenderer = glyphRenderer;
         _spriteSheetService = spriteSheetService;
@@ -142,6 +151,8 @@ public sealed class MapWindow : Window
         _tileDepth = _world.Map.Size.Z;
     }
 
+    /// <summary>One-time setup once this window's own content size is known -- font loading, camera/background-cache sizing, and the initial camera position.</summary>
+    /// <remarks>Snaps the camera to the player's spawn position if it already exists at this point, otherwise resets the background cache to its empty state instead -- Initialize can run before FloorBuilder.CreatePlayer has actually placed the player (see GameLoop's own "TEMPORARY Once, on this class's first live tick -- not during Initialize()" doc comment), so this has to tolerate the player not existing yet.</remarks>
     public override void Initialize()
     {
         base.Initialize();
@@ -155,7 +166,7 @@ public sealed class MapWindow : Window
         _camera.Initialize(ContentSize);
         _backgroundCache.Resize();
 
-        SetCameraMapLayer(_mapViewState.CurrentMapLayer);
+        SetCurrentMapLayer(_mapViewState.CurrentMapLayer);
 
         if (_transformPool.TryGetReadonly(_world.PlayerEntityId, out var playerTransform))
         {
@@ -168,6 +179,13 @@ public sealed class MapWindow : Window
         }
     }
 
+    /// <summary>Per-frame camera-follow and hover-tracking.</summary>
+    /// <remarks>
+    /// Re-centers the camera only when the player's own position actually changed since last
+    /// frame (not unconditionally every frame) and only while MapCamera.FollowsPlayer is true --
+    /// a right-mouse drag decouples the camera until Home recouples it (see MapCamera's own doc
+    /// comment).
+    /// </remarks>
     public override void Update(GameTime gameTime)
     {
         base.Update(gameTime);
@@ -186,8 +204,6 @@ public sealed class MapWindow : Window
 
         var mouseState = Mouse.GetState();
         UpdateHoveredTile(new Point(mouseState.X, mouseState.Y));
-
-        _pendingDelayedActionTargetTiles = _pendingDelayedActions.TryGetReadonly(_world.PlayerEntityId, out var pending) ? pending.TargetTiles : null;
     }
 
     /// <summary>
@@ -202,16 +218,18 @@ public sealed class MapWindow : Window
 
     private void SnapCameraToPlayer(Vector3Int position)
     {
-        SetCameraMapLayer(position.Z);
+        SetCurrentMapLayer(position.Z);
         CenterCameraOn(position);
     }
 
     /// <summary>The single place [0, _tileDepth - 1] clamping happens for MapViewState.CurrentMapLayer -- shared by ChangeLayer, SnapToPlayer, and Initialize's own re-clamp against whatever depth this particular Map turns out to have.</summary>
-    private void SetCameraMapLayer(int layer)
+    private void SetCurrentMapLayer(int layer)
     {
         _mapViewState.CurrentMapLayer = MathUtility.ClampInt(layer, 0, _tileDepth - 1);
     }
 
+    /// <summary>Draws one frame of the map viewport: background, tile backgrounds, glyphs/sprites, glow overlay, then targeting/selection highlights, in that order.</summary>
+    /// <remarks>Draw order is significant, not incidental -- each pass lands on top of the previous one with no depth buffer (SpriteSortMode.Deferred submits in call order), so highlights/glow have to come after the glyphs/sprites they're meant to sit on top of, and the flat background wash has to come first so everything else has something to draw over.</remarks>
     public override void DrawContent(GameTime gameTime, SpriteBatch spriteBatch, Texture2D unitRectangle)
     {
         spriteBatch.Draw(unitRectangle, new Rectangle(0, 0, _camera.TileColumns * _camera.CurrentTileSize.X, _camera.TileRows * _camera.CurrentTileSize.Y), MapBackgroundColor);
@@ -269,11 +287,25 @@ public sealed class MapWindow : Window
     /// targeting vs. the inspector's click-to-select), even though both now share the same
     /// border-plus-mask technique (see DrawMaskedTileHighlight).
     ///
+    /// A second pass then draws whatever's left of HoveredFootprint that TargetableTiles didn't
+    /// already cover -- needed for Burst: TargetableTiles is capped strictly at the action's own
+    /// Range (ActionTargetingController.ComputeTargetableTiles' reachable-area scatter), but
+    /// TargetShapeResolver.ResolveBurst's actual hit footprint is AreaSize-radius around the
+    /// anchor tile once that anchor passes the Range check -- i.e. the real splash can (and
+    /// often does) reach past Range even though the anchor itself never could. Without this pass
+    /// the highlight understated what the ability actually hits (confirmed in-game: entities
+    /// outside the drawn splat still took the effect). Safe to always run: ResolveBurst (and
+    /// every other shape) only ever populates HoveredFootprint from an in-range anchor to begin
+    /// with, so this never draws a tile that wouldn't actually be hit; it also naturally no-ops
+    /// for every shape whose own footprint can't exceed Range in the first place (SingleTarget/
+    /// Line/Cone), since TargetableTiles already covers all of those.
+    ///
     /// Once a Delayed ability is actually queued, Disarm already clears TargetableTiles (there's
     /// nothing left to aim), but the player benefits from still seeing exactly which tiles are
-    /// about to be hit once the windup ends -- so this falls back to highlighting the player's
-    /// PendingDelayedActionComponent.TargetTiles (the already-resolved, locked-in footprint) in
-    /// the same red used for a confirmed hover target, for as long as that pending action exists.
+    /// about to be hit once the windup ends -- so this falls back to highlighting
+    /// ActionTargetingController.PendingDelayedActionTargetTiles (the already-resolved,
+    /// locked-in footprint) in the same red used for a confirmed hover target, for as long as
+    /// that pending action exists.
     /// </summary>
     private void DrawTargetingHighlights(SpriteBatch spriteBatch, Texture2D unitRectangle)
     {
@@ -284,10 +316,19 @@ public sealed class MapWindow : Window
                 var borderColor = _actionTargeting.HoveredFootprintContains(tile) ? HoveredTargetTileBorderColor : TargetableTileBorderColor;
                 DrawMaskedTileHighlight(spriteBatch, unitRectangle, tile.X, tile.Y, borderColor);
             }
+
+            foreach (var tile in _actionTargeting.HoveredFootprint)
+            {
+                if (!targetableTiles.Contains(tile))
+                {
+                    DrawMaskedTileHighlight(spriteBatch, unitRectangle, tile.X, tile.Y, HoveredTargetTileBorderColor);
+                }
+            }
+
             return;
         }
 
-        if (_pendingDelayedActionTargetTiles is { } pendingTargetTiles)
+        if (_actionTargeting.PendingDelayedActionTargetTiles is { } pendingTargetTiles)
         {
             foreach (var tile in pendingTargetTiles)
             {
@@ -331,16 +372,17 @@ public sealed class MapWindow : Window
         spriteBatch.Draw(unitRectangle, tileRectangle, borderColor * TargetSelectionMaskAlpha);
     }
 
-    /// <summary>
-    /// Switches the single MapLayer this window renders (Page Up/Down -- see OnHotkeysAction),
-    /// stored on MapViewState rather than locally so SelectionWindowContent
-    /// can scope the inspector to the same layer this window is actually showing. Background
-    /// depends on the current layer's terrain (see MapBackgroundCache), so the cache must
-    /// be rebuilt on every change, the same as a zoom-level change.
-    /// </summary>
+    /// <summary>Switches the single MapLayer this window renders, by delta layers.</summary>
+    /// <remarks>
+    /// Stored on MapViewState.CurrentMapLayer, not locally, so SelectionWindowContent can scope
+    /// the inspector to the same layer this window is actually showing. Background depends on
+    /// the current layer's terrain (see MapBackgroundCache), so the cache must be rebuilt on
+    /// every change, the same as a zoom-level change. Called from OnHotkeysAction (Page Up/Down).
+    /// </remarks>
+    /// <param name="delta">Layers to move by -- positive moves up, negative moves down (clamped to the map's own depth by SetCurrentMapLayer).</param>
     public void ChangeLayer(int delta)
     {
-        SetCameraMapLayer(_mapViewState.CurrentMapLayer + delta);
+        SetCurrentMapLayer(_mapViewState.CurrentMapLayer + delta);
         _backgroundCache.Reset();
     }
 
@@ -461,7 +503,7 @@ public sealed class MapWindow : Window
 
     private void DrawPrimaryOccupant(SpriteBatch spriteBatch, Texture2D unitRectangle, int currentMapLayer, int mapNodeX, int mapNodeY, int columnIndex, int rowIndex)
     {
-        var entityId = _world.Map.GetEntityId(new Vector3Int(mapNodeX, mapNodeY, currentMapLayer));
+        var entityId = _world.Map.GetBlockingEntityId(new Vector3Int(mapNodeX, mapNodeY, currentMapLayer));
         if (entityId == -1)
         {
             return;
@@ -598,7 +640,7 @@ public sealed class MapWindow : Window
         var hasHigherLayer = false;
         for (var layer = currentMapLayer + 1; layer < _tileDepth; layer++)
         {
-            if (IsLayerOccupied(mapNodeX, mapNodeY, layer))
+            if (_world.IsPositionOccupied(new Vector3Int(mapNodeX, mapNodeY, layer)))
             {
                 hasHigherLayer = true;
                 break;
@@ -608,7 +650,7 @@ public sealed class MapWindow : Window
         var hasLowerLayer = false;
         for (var layer = currentMapLayer - 1; layer >= 0; layer--)
         {
-            if (IsLayerOccupied(mapNodeX, mapNodeY, layer))
+            if (_world.IsPositionOccupied(new Vector3Int(mapNodeX, mapNodeY, layer)))
             {
                 hasLowerLayer = true;
                 break;
@@ -628,13 +670,9 @@ public sealed class MapWindow : Window
         }
     }
 
-    /// <summary>"Occupied" counts a Blocking entity in Map's slot exactly the same as a non-Blocking entity found via the position-keyed index.</summary>
-    private bool IsLayerOccupied(int mapNodeX, int mapNodeY, int layer)
-    {
-        var position = new Vector3Int(mapNodeX, mapNodeY, layer);
-        return _world.Map.GetEntityId(position) != -1 || _world.GetNonBlockingEntityIdsAt(position).Count > 0;
-    }
-
+    /// <summary>Sets the camera to a specific zoom level directly, as opposed to CycleZoom's relative +/-1 step.</summary>
+    /// <remarks>Resizes and resets the background cache afterward -- the visible tile count changes with zoom, so the cache's own buffer size and cached colors are both stale until rebuilt, the same cache-invalidation reasoning ChangeLayer/CenterCameraOn/CycleZoom each apply for their own trigger. No production caller yet (only MapWindowTests exercises this today) -- a candidate hook for a future zoom UI control (see the Minimap TODO item).</remarks>
+    /// <param name="newZoomLevel">The zoom level to switch to.</param>
     public void UpdateZoomLevel(ZoomLevel newZoomLevel)
     {
         _camera.UpdateZoomLevel(newZoomLevel, ContentSize);
@@ -649,12 +687,18 @@ public sealed class MapWindow : Window
         _backgroundCache.Reset();
     }
 
+    /// <summary>Scrolls the camera by scrollChange tiles, keeping the background cache in sync.</summary>
+    /// <remarks>MapCamera.UpdateScrollPosition clamps against the map edge and returns how much of the requested delta was actually applied -- _backgroundCache.ApplyScroll shifts the cache's existing colors by exactly that applied amount rather than rebuilding wholesale, so a clamped scroll (e.g. dragging past the map edge) doesn't shift the cache further than the camera itself actually moved.</remarks>
+    /// <param name="scrollChange">The requested scroll delta, in tiles.</param>
     public void UpdateScrollPosition(Point scrollChange)
     {
         var appliedDelta = _camera.UpdateScrollPosition(scrollChange);
         _backgroundCache.ApplyScroll(appliedDelta.X, appliedDelta.Y);
     }
 
+    /// <summary>Sets MapViewState.SelectedMapNodePosition to whatever map tile mousePosition resolves to, if any.</summary>
+    /// <remarks>A miss (cursor off the map) is a no-op -- the previous selection, if any, stays selected rather than being cleared by clicking empty space. This is the ordinary inspector click-select path; see OnContentClickAction for why an armed ability/item's click-to-confirm takes over first when something is armed.</remarks>
+    /// <param name="mousePosition">The raw mouse position (e.g. from Mouse.GetState()), not pre-translated to this window's content area -- resolved against _contentState.AbsolutePosition internally, the same as UpdateHoveredTile/TryConfirmActivation.</param>
     public void SelectMapNodes(Point mousePosition)
     {
         if (_camera.TryGetHoveredMapPosition(mousePosition, _contentState.AbsolutePosition, out var mapPosition))

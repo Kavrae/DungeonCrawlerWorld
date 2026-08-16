@@ -121,7 +121,7 @@ public sealed class MapTintGrid
     /// <summary>Scatters (sign: 1) or unscatters (sign: -1) source's own falloff-weighted contribution through DistanceFalloff.ScatterManhattan -- the same falloff shape StatusEffectAuraSystem/AuraGrid use on the gameplay side, defined in exactly one place, so glow always visually matches actual aura reach (both read the same AuraAndGlowStrength).</summary>
     private void Splat(Vector3Int sourcePosition, StatusEffectAuraSourceComponent source, int sign)
     {
-        DistanceFalloff.ScatterManhattan(sourcePosition, source.AuraAndGlowStrength, _mapSize, (cellPosition, weight) =>
+        DistanceFalloff.ScatterManhattan(sourcePosition, DistanceFalloff.MaxRadius(source.AuraAndGlowStrength), source.AuraAndGlowStrength, FalloffShape.Fading, _mapSize, (cellPosition, weight) =>
         {
             var index = cellPosition.FlatIndex(_mapSize);
             _weightedSumsByCellIndex.TryGetValue(index, out var accumulated);

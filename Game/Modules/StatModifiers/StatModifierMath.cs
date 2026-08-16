@@ -3,18 +3,17 @@ using Game.Modules.StatModifiers.Components;
 
 namespace Game.Modules.StatModifiers;
 
-/// <summary>
-/// Combines a stat's base value with whichever StatModifierComponents currently target it --
-/// recomputed fresh on every call from the stat's own untouched base, never cached (see
-/// StatModifierComponent's own doc comment for why). Formula: (base + sum of additive
-/// magnitudes) * (1 + sum of multiplicative magnitudes) -- additive first, then multiplicative,
-/// per TODO.md's documented order. A multiplicative magnitude is the decimal delta from 1.0
-/// (e.g. +100% = 1.0, -100% = -1.0), and multiple multiplicative modifiers on the same target
-/// sum their deltas before the single (1 + sum) is applied once, rather than compounding.
-/// </summary>
+/// <summary>Provides mathematical operations for calculating effective stat values with modifiers.</summary>
+/// <cleanupVersion>1</cleanupVersion>
 public static class StatModifierMath
 {
-    /// <summary>pool may be null -- callers that build a module set without StatModifiersModule (common across smaller, isolated tests) still work, just with no possible active modifiers, so this returns baseValue unchanged rather than requiring every such caller to special-case a missing pool itself.</summary>
+    /// <summary>Calculates the effective value of a stat with the given modifiers.</summary>
+    /// <remarks>Additive modifiers are all applied before multiplicative modifiers.</remarks>
+    /// <param name="pool">The pool of stat modifiers.</param>
+    /// <param name="entityId">The ID of the entity.</param>
+    /// <param name="target">The target stat.</param>
+    /// <param name="baseValue">The base value of the stat.</param>
+    /// <returns>The effective value of the stat.</returns>
     public static float GetEffectiveValue(MultiComponentPool<StatModifierComponent>? pool, int entityId, StatModifierTarget target, float baseValue)
     {
         if (pool is null)
@@ -43,52 +42,69 @@ public static class StatModifierMath
             }
         }
 
-        return (baseValue + additiveSum) * (1f + multiplicativeSum);
+        return CalculateTotal(baseValue, additiveSum, multiplicativeSum);
     }
 
-    /// <summary>Same as GetEffectiveValue, but for two targets in a single walk of the entity's modifier chain -- for callers (e.g. HealthRegenSystem, needing both HealthRegen and MaximumHealth) that would otherwise walk the same chain twice per entity per cycle.</summary>
-    public static (float First, float Second) GetEffectiveValues(MultiComponentPool<StatModifierComponent>? pool, int entityId, StatModifierTarget firstTarget, float firstBaseValue, StatModifierTarget secondTarget, float secondBaseValue)
+    /// <summary>Same as GetEffectiveValue, but for any number of targets in a single walk of the entity's modifier chain -- for callers (e.g. HealthRegenSystem, needing both HealthRegen and MaximumHealth) that would otherwise walk the same chain once per target per cycle.</summary>
+    /// <remarks>
+    /// destination receives each pairs entry's effective value at the same index -- a
+    /// caller-owned buffer rather than an allocated return array, matching this codebase's
+    /// convention for a hot per-entity per-frame path (see
+    /// MultiComponentPool.CopyAll/StatusEffectQueries.GetActiveEffectTypes). pairs and
+    /// destination must be the same length.
+    /// </remarks>
+    /// <param name="pool">The pool of stat modifiers.</param>
+    /// <param name="entityId">The ID of the entity.</param>
+    /// <param name="pairs">Each target stat and its base value.</param>
+    /// <param name="destination">Receives each pairs entry's effective value, at the same index.</param>
+    public static void GetEffectiveValues(MultiComponentPool<StatModifierComponent>? pool, int entityId, ReadOnlySpan<(StatModifierTarget Target, float BaseValue)> pairs, Span<float> destination)
     {
+        ArgumentOutOfRangeException.ThrowIfNotEqual(pairs.Length, destination.Length);
+
         if (pool is null)
         {
-            return (firstBaseValue, secondBaseValue);
+            for (var i = 0; i < pairs.Length; i++)
+            {
+                destination[i] = pairs[i].BaseValue;
+            }
+
+            return;
         }
 
-        var firstAdditiveSum = 0f;
-        var firstMultiplicativeSum = 0f;
-        var secondAdditiveSum = 0f;
-        var secondMultiplicativeSum = 0f;
+        Span<float> additiveSums = stackalloc float[pairs.Length];
+        Span<float> multiplicativeSums = stackalloc float[pairs.Length];
 
         for (var denseIndex = pool.GetFirstDenseIndex(entityId); denseIndex != -1; denseIndex = pool.GetNextDenseIndex(denseIndex))
         {
             ref readonly var modifier = ref pool.GetReadonlyByDenseIndex(denseIndex);
 
-            if (modifier.Target == firstTarget)
+            for (var i = 0; i < pairs.Length; i++)
             {
+                if (modifier.Target != pairs[i].Target)
+                {
+                    continue;
+                }
+
                 if (modifier.Operation == StatModifierOperation.Additive)
                 {
-                    firstAdditiveSum += modifier.Magnitude;
+                    additiveSums[i] += modifier.Magnitude;
                 }
                 else
                 {
-                    firstMultiplicativeSum += modifier.Magnitude;
+                    multiplicativeSums[i] += modifier.Magnitude;
                 }
-            }
-            else if (modifier.Target == secondTarget)
-            {
-                if (modifier.Operation == StatModifierOperation.Additive)
-                {
-                    secondAdditiveSum += modifier.Magnitude;
-                }
-                else
-                {
-                    secondMultiplicativeSum += modifier.Magnitude;
-                }
+
+                break;
             }
         }
 
-        return (
-            (firstBaseValue + firstAdditiveSum) * (1f + firstMultiplicativeSum),
-            (secondBaseValue + secondAdditiveSum) * (1f + secondMultiplicativeSum));
+        for (var i = 0; i < pairs.Length; i++)
+        {
+            destination[i] = CalculateTotal(pairs[i].BaseValue, additiveSums[i], multiplicativeSums[i]);
+        }
     }
+
+    /// <summary>Applies a base value's accumulated additive and multiplicative modifier sums.</summary>
+    /// <remarks>Additive first, then multiplicative, per TODO.md's documented order -- see this class's own doc comment for the full formula rationale.</remarks>
+    private static float CalculateTotal(float baseValue, float additiveSum, float multiplicativeSum) => (baseValue + additiveSum) * (1f + multiplicativeSum);
 }

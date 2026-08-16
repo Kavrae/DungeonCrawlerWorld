@@ -28,8 +28,8 @@ public sealed class HealthModuleTests
     /// <summary>
     /// Regression test: merging in a component with a negative MaximumHealth used to leave
     /// the averaged MaximumHealth negative too, so the CurrentHealth clamp right after it
-    /// called ClampShort(current, 0, negativeMax) -- min > max, which throws now that
-    /// ClampShort's inverted-bounds guard exists. MaximumHealth must floor at 0 instead.
+    /// called ClampUShort(current, 0, negativeMax) -- min > max, which throws now that
+    /// ClampUShort's inverted-bounds guard exists. MaximumHealth must floor at 0 instead.
     /// </summary>
     [TestMethod]
     public void Merge_NegativeIncomingMaximumHealth_FloorsAveragedMaximumAtZero_DoesNotThrow()

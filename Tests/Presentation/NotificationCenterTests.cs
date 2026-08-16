@@ -31,7 +31,7 @@ public sealed class NotificationCenterTests
         var fontService = new FontService("Fonts");
         var glyphRenderer = new GlyphRenderer();
         var windowService = new ElementPoolService(fontService, glyphRenderer);
-        windowService.RegisterFactory<Folder>((_, _) => new Folder(
+        windowService.RegisterFactory<Folder>(() => new Folder(
             fontService, windowService, glyphRenderer, new SpriteSheetService(null, "Spritesheets"), new SpriteRenderer()));
         return windowService;
     }
@@ -130,7 +130,7 @@ public sealed class NotificationCenterTests
         var glyphRenderer = new GlyphRenderer();
         var windowService = new ElementPoolService(fontService, glyphRenderer);
         Folder? capturedFolder = null;
-        windowService.RegisterFactory<Folder>((_, _) =>
+        windowService.RegisterFactory<Folder>(() =>
         {
             capturedFolder = new Folder(fontService, windowService, glyphRenderer, new SpriteSheetService(null, "Spritesheets"), new SpriteRenderer());
             return capturedFolder;
@@ -318,7 +318,7 @@ public sealed class NotificationCenterTests
         var fontService = new FontService("Fonts");
         var glyphRenderer = new GlyphRenderer();
         var windowService = new ElementPoolService(fontService, glyphRenderer);
-        windowService.RegisterFactory<Folder>((_, _) => new Folder(
+        windowService.RegisterFactory<Folder>(() => new Folder(
             fontService, windowService, glyphRenderer, new SpriteSheetService(null, "Spritesheets"), new SpriteRenderer()));
         var capturedPopups = new List<TextWindow>();
 
@@ -327,7 +327,7 @@ public sealed class NotificationCenterTests
         // way to get real Button/ButtonRectangle references (needed to click precisely,
         // since a WrapContent popup's exact size depends on font metrics) without duplicating
         // Window's internal layout math in the test.
-        windowService.RegisterFactory<TextWindow>((_, _) =>
+        windowService.RegisterFactory<TextWindow>(() =>
         {
             var window = new TextWindow(fontService, windowService, new GlyphRenderer());
             capturedPopups.Add(window);
@@ -365,10 +365,10 @@ public sealed class NotificationCenterTests
         var fontService = new FontService("Fonts");
         var glyphRenderer = new GlyphRenderer();
         var windowService = new ElementPoolService(fontService, glyphRenderer);
-        windowService.RegisterFactory<Folder>((_, _) => new Folder(
+        windowService.RegisterFactory<Folder>(() => new Folder(
             fontService, windowService, glyphRenderer, new SpriteSheetService(null, "Spritesheets"), new SpriteRenderer()));
         var capturedPopups = new List<TextWindow>();
-        windowService.RegisterFactory<TextWindow>((_, _) =>
+        windowService.RegisterFactory<TextWindow>(() =>
         {
             var window = new TextWindow(fontService, windowService, new GlyphRenderer());
             capturedPopups.Add(window);

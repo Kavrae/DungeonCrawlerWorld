@@ -10,4 +10,4 @@ namespace Game.Modules.AbilityScores;
 /// milestone achievements (Game/Modules/Achievements/Definitions/) already subscribe to this so
 /// they start working the moment either feature lands.
 /// </summary>
-public readonly record struct AbilityScoreBaseValueChangedEvent(int EntityId, AbilityScoreType Type, short NewBaseValue);
+public readonly record struct AbilityScoreBaseValueChangedEvent(int EntityId, AbilityScoreType Type, ushort NewBaseValue);

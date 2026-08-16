@@ -6,6 +6,7 @@ using Engine.Events;
 namespace Engine.ECS.Context;
 
 /// <summary>Composition root bundling the three ECS managers plus the shared EventBus for a running game.</summary>
+/// <cleanupVersion>1</cleanupVersion>
 public sealed class EcsContext(EntityManager entityManager, ComponentManager componentManager, SystemManager systemManager, EventBus eventBus)
 {
     public EntityManager EntityManager { get; } = entityManager ?? throw new ArgumentNullException(nameof(entityManager));
@@ -13,5 +14,7 @@ public sealed class EcsContext(EntityManager entityManager, ComponentManager com
     public SystemManager SystemManager { get; } = systemManager ?? throw new ArgumentNullException(nameof(systemManager));
     public EventBus EventBus { get; } = eventBus ?? throw new ArgumentNullException(nameof(eventBus));
 
+    /// <summary>Updates the ECS context via the system manager.</summary>
+    /// <param name="time">The current engine time.</param>
     public void Update(EngineTime time) => SystemManager.Update(time);
 }

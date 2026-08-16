@@ -151,7 +151,7 @@ public sealed class SelectionWindowContent(
         // instead of entities on layers currently hidden from view.
         var currentMapLayer = mapViewState.CurrentMapLayer;
 
-        var blockingEntityId = world.Map.GetEntityId(new Engine.Math.Vector3Int(selected.X, selected.Y, currentMapLayer));
+        var blockingEntityId = world.Map.GetBlockingEntityId(new Engine.Math.Vector3Int(selected.X, selected.Y, currentMapLayer));
         if (blockingEntityId != -1)
         {
             _selectedEntityIds.Add(blockingEntityId);

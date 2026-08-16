@@ -1,15 +1,14 @@
 namespace Game.Modules.StatModifiers;
 
-/// <summary>
-/// Which stat a StatModifierComponent affects. Extensible the same way StatusEffectType is --
-/// new stats add new members here as something needs to modify them.
-/// </summary>
-public enum StatModifierTarget
+/// <summary> Which stat a StatModifierComponent affects. </summary>
+/// <remarks>Extensible the same way StatusEffectType is -- new stats add new members here as something needs to modify them. </remarks>
+/// <cleanupVersion>1</cleanupVersion>
+public enum StatModifierTarget : byte
 {
     OutgoingDamage,
     MaximumHealth,
 
-    /// <summary>Layers on top of HealthRegenSystem's live-computed (Constitution-derived) base regen amount -- see AbilityScoreRegenMath. Not a stored base value of its own; there's nothing left to modify in place, StatModifierMath.GetEffectiveValue is applied to the freshly-computed amount each visit.</summary>
+    /// <summary>Layers on top of HealthRegenSystem's live-computed (Constitution-derived) base regen amount. Not a stored base value of its own; there's nothing left to modify in place, StatModifierMath.GetEffectiveValues is applied to the freshly-computed amount each visit.</summary>
     HealthRegen,
 
     MaximumMana,

@@ -34,7 +34,7 @@ public sealed class AuraGrid
 
     private void Splat(Vector3Int sourcePosition, int strength, StatusEffectType effectType, int sign)
     {
-        DistanceFalloff.ScatterManhattan(sourcePosition, strength, _mapSize, (cellPosition, contribution) =>
+        DistanceFalloff.ScatterManhattan(sourcePosition, DistanceFalloff.MaxRadius(strength), strength, FalloffShape.Fading, _mapSize, (cellPosition, contribution) =>
         {
             var key = (cellPosition.FlatIndex(_mapSize), effectType);
             var newTotal = _totalStacksByCellAndEffectType.GetValueOrDefault(key) + sign * contribution;

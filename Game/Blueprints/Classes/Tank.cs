@@ -4,7 +4,6 @@ using Game.Modules.Class.Components;
 using Game.Modules.Core.Components;
 using Game.Modules.Health.Components;
 using Game.Modules.StatModifiers;
-using Game.Modules.StatModifiers.Components;
 using Game.World;
 
 namespace Game.Blueprints.Classes;
@@ -45,7 +44,7 @@ public sealed class Tank(MathUtility mathUtility) : IBlueprint
         }
 
         StatModifierEffects.Apply(componentManager, entityId, StatModifierTarget.HealthRegen, StatModifierOperation.Multiplicative, StatModifierPolarity.Buff,
-            canModify: true, magnitude: HealthRegenBonusMultiplier, durationFrames: StatModifierComponent.Permanent, StatusEffectSource.FromEntity(entityId));
+            canModify: true, magnitude: HealthRegenBonusMultiplier, durationFrames: null, StatusEffectSource.FromEntity(entityId));
 
         componentManager.Merge(entityId, new DisplayTextComponent(ClassName, "Tank class"));
     }

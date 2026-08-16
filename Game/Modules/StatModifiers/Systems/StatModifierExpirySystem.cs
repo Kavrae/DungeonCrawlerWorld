@@ -9,7 +9,7 @@ namespace Game.Modules.StatModifiers.Systems;
 
 /// <summary>
 /// Ticks every active StatModifierComponent's RemainingDurationFrames down toward 0 and removes
-/// it once it gets there -- a permanent modifier (RemainingDurationFrames == Permanent, -1)
+/// it once it gets there -- a permanent modifier (RemainingDurationFrames == null)
 /// never enters the decrement branch and never equals 0, so it's untouched forever. Because of
 /// that, this system's TieredEntityStripeSet is driven off ExpiringStatModifierComponent
 /// membership, not StatModifierComponent membership directly -- an entity holding only permanent
@@ -94,7 +94,7 @@ public sealed class StatModifierExpirySystem : ISystem
 
             // One marker per modifier that just expired -- _pendingExpirations was collected
             // above from RemainingDurationFrames == 1 entries only, which are exactly the
-            // non-permanent ones the while loop just removed (a permanent modifier's -1 never
+            // non-permanent ones the while loop just removed (a permanent modifier's null never
             // satisfies either condition), so the counts line up 1:1.
             for (var i = 0; i < _pendingExpirations.Count; i++)
             {

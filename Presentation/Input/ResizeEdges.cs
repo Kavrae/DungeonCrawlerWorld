@@ -6,7 +6,7 @@ namespace Presentation.Input;
 /// Window.GetResizeEdgesAt for how a screen position maps to these.
 /// </summary>
 [Flags]
-internal enum ResizeEdges
+internal enum ResizeEdges : byte
 {
     None = 0,
     Left = 1,

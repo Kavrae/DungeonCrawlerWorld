@@ -1,11 +1,7 @@
 namespace Game.Modules.Race.Components;
 
-/// <summary>
-/// The racial details of an entity -- primarily display/narrative properties today, but
-/// frequently consulted by future systems. Stored in a MultiComponentPool (not Direct or
-/// Packed) since an entity can legitimately carry more than one -- e.g. a race change
-/// keeping the prior race on record rather than overwriting it.
-/// </summary>
+/// <summary> The racial details of an entity </summary>
+/// <cleanupVersion>1</cleanupVersion>
 public struct RaceComponent(Guid id, string name, string description)
 {
     public Guid Id { get; } = id;

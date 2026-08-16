@@ -14,34 +14,15 @@ using Game.World;
 
 namespace Game.Modules.Movement.Systems;
 
-/// <summary>
-/// Executes whatever move an entity's MovementComponent.NextMapPosition already asks for --
-/// purely reactive, not a decision-maker. Player-controlled moves are queued externally
-/// (Presentation input); Random-mode wandering is now decided upstream by
-/// TestCombatBehaviorSystem (Game.Modules.NpcBehavior), which runs before this system every
-/// frame (see GameBootstrapper's module order) -- this system only ever executes a destination,
-/// never picks one (see MovementCandidates for the position-candidate math both still share).
-/// Depends on IMapQuery, not the concrete World, for collision/bounds reads. A confirmed move is
-/// delivered three ways, matched to each consumer's actual need (see a gameplay-demo profiling
-/// investigation that found the old single EventBus.Publish -- fanning out to every subscriber,
-/// synchronously, per move, across a striped ~150k-entity population -- was a measured hotspot):
-/// - entityMoveSync.SyncMove: direct call, not the bus. Map-occupancy bookkeeping is
-///   mandatory, not an optional module reaction, so it doesn't belong on EventBus at all (see
-///   IEntityMoveSync's own doc comment).
-/// - movedEntities.Record: a per-frame buffer ContactDamageSystem/StatusEffectAuraSystem drain
-///   during their own Update, instead of each subscribing to a per-move event (see
-///   FrameEventBuffer's own doc comment).
-/// - eventBus.Publish(EntityMovedEvent), for the player's own move, and (soft-wired, see
-///   auraSources below) for any mover that itself carries a StatusEffectAuraSourceComponent:
-///   PlayerActivityLog still subscribes to this on the bus exactly as before, and
-///   Presentation.UI.MapTintGrid (the only other current subscriber) needs an aura-carrying
-///   mover's own move published too, or its glow desyncs from wherever the source has actually
-///   moved to (StatusEffectAuraSystem itself never needed this -- it drains movedEntities
-///   directly). Both gates are cheap, bounded checks (an equality compare, an optional sparse
-///   pool lookup) paid only on an already-happening move, not a new per-frame population scan --
-///   still nowhere near the old "publish for the whole population" hotspot this redesign removed,
-///   since both the player and aura-carrying movers are rare relative to the full population.
-/// </summary>
+/// <summary>Manages the movement of entities within the game world.</summary>
+/// <remarks>
+/// Movement uses an immediate eventbus dispatch model rather than the typical deferred event model to avoid race conditions that can occur with entity map placement.
+/// 
+/// Movement is divided into two phases : determining the next map tile and executing that movement.
+/// 
+/// Player movement is queued externally (Presentation input) while NPC wandering is decided upstream by TestCombatBehaviorSystem, which runs before this system each frame. This system only handles the actual movement and action lock timing.
+/// </remarks>
+/// <cleanupVersion>1</cleanupVersion>
 public sealed class MovementSystem : ISystem
 {
     private const byte StripeCountValue = 15;
@@ -57,7 +38,7 @@ public sealed class MovementSystem : ISystem
     private readonly IMapQuery _mapQuery;
     private readonly EventBus _eventBus;
     private readonly IEntityMoveSync _entityMoveSync;
-    private readonly FrameEventBuffer<EntityMovedEvent> _movedEntities;
+    private readonly FrameEventBuffer<EntityMovedEvent> _movedEntitiesEventBuffer;
     private readonly IPlayerQuery? _playerQuery;
     private readonly PackedComponentPool<DeadComponent>? _deadEntities;
     private readonly PackedComponentPool<PendingActionActivationComponent>? _pendingActionActivations;
@@ -87,7 +68,7 @@ public sealed class MovementSystem : ISystem
         _mapQuery = mapQuery;
         _eventBus = eventBus;
         _entityMoveSync = entityMoveSync;
-        _movedEntities = movedEntities;
+        _movedEntitiesEventBuffer = movedEntities;
         _playerQuery = playerQuery;
         _deadEntities = deadEntities;
         _pendingActionActivations = pendingActionActivations;
@@ -97,6 +78,15 @@ public sealed class MovementSystem : ISystem
         _tieredStripeSet = ProcessingTierWiring.CreateAndWire(StripeCount, movementComponents, processingTiers, processingTierEvents);
     }
 
+    /// <summary>Decrements an entity's movement frames to wait or attempts to execute the movement if a destination is set</summary>
+    /// <remarks>
+    /// All movement is gated by the ActionLock. Random movement is further gated by the FramesToWait to account for a small waiting period 
+    /// when a move fails due to a lack of available tiles.
+    /// 
+    /// Entities that are currently off the map cannot move and must instead be placed on the map by another system or event.
+    /// </remarks>
+    /// <param name="time">The engine time.</param>
+    /// <param name="stripeIndex">The index of the entity stripe to update.</param>
     public void Update(EngineTime time, byte stripeIndex)
     {
         foreach (var entityId in _tieredStripeSet.GetDueEntities(time.FrameCount))
@@ -112,7 +102,7 @@ public sealed class MovementSystem : ISystem
             {
                 _movementComponents.TryUpdate(entityId, static (ref MovementComponent movementComponent) =>
                 {
-                    movementComponent.FramesToWait = (short)Math.Max(0, movementComponent.FramesToWait - StripeCountValue);
+                    movementComponent.FramesToWait = MathUtility.DecrementClamped(movementComponent.FramesToWait, StripeCountValue);
                 });
                 continue;
             }
@@ -132,6 +122,7 @@ public sealed class MovementSystem : ISystem
             // this frame via a queued action/consumable activation -- don't also try to move
             // it. Requires TestCombatBehaviorSystem to run earlier in the frame (see
             // GameBootstrapper's module order) so this check sees the same-frame request.
+            //TEMPORARY replace with a more generic mechanics
             if (_pendingActionActivations?.Has(entityId) == true || _pendingConsumableActivations?.Has(entityId) == true)
             {
                 continue;
@@ -150,37 +141,26 @@ public sealed class MovementSystem : ISystem
         }
     }
 
-    /// <summary>
-    /// Reaching here means the entity has arrived at NextMapPosition (or never had one) with
-    /// nothing new queued upstream this frame -- see this method's only caller. Nothing in this
-    /// system auto-picks a new destination for any mode anymore: Player-controlled moves are
-    /// queued externally (Presentation input), and Random-mode wandering is decided upstream by
-    /// TestCombatBehaviorSystem, which runs before this system each frame. So NextMapPosition
-    /// just needs clearing here -- otherwise it stays set to the position the entity is already
-    /// standing on, and the very next Update call where the action lock allows it would re-run
-    /// TryMoveToNextMapPosition against that same value: a same-position "move" that sets the
-    /// action lock and publishes a spurious EntityMovedEvent(old == new) every cycle, repeating
-    /// forever instead of the entity staying put until a real move is queued.
-    /// </summary>
+    /// <summary>Clears the movement destination.</summary>
+    /// <remarks>This is generally used for idle entities.</remarks>
+    /// <param name="entityId">The ID of the entity.</param>
     private void ClearArrivedDestinationIfIdle(int entityId) =>
         _movementComponents.TryUpdate(entityId, static (ref MovementComponent m) => m.NextMapPosition = null);
 
-    /// <summary>
-    /// Attempts to move toward the selected node. MovementCandidates.CanOccupy is always
-    /// re-checked here in case another entity has moved into the space since NextMapPosition was
-    /// chosen -- whether that choice happened this same frame (TestCombatBehaviorSystem's wander
-    /// decision) or was carried over from an earlier one (Player-controlled's externally-queued
-    /// moves); either way, time -- and other entities' moves -- may have passed since it was
-    /// picked. The action lock is set on the move itself, not during path selection.
-    /// </summary>
+    /// <summary>Attempts to move the entity to its next map position.</summary>
+    /// <remarks>Blocking entities are gated by occupancy checks.</remarks>
+    /// <param name="entityId">The ID of the entity.</param>
+    /// <param name="movementComponent">The movement component of the entity.</param>
+    /// <param name="transformComponent">The transform component of the entity.</param>
     private void TryMoveToNextMapPosition(int entityId, MovementComponent movementComponent, TransformComponent transformComponent)
     {
         var newPosition = movementComponent.NextMapPosition!.Value;
         var oldPosition = transformComponent.Position;
         var isBlocking = _mapQuery.IsBlocking(entityId);
+        var isDiagonal = newPosition.X != oldPosition.X && newPosition.Y != oldPosition.Y;
 
         if (!MovementCandidates.CanOccupy(_mapQuery, newPosition, transformComponent.Size, entityId, isBlocking) ||
-            !MovementCandidates.IsDiagonalMoveClear(_mapQuery, oldPosition, newPosition, transformComponent.Size, entityId, isBlocking))
+            (isDiagonal && !MovementCandidates.IsDiagonalMoveClear(_mapQuery, oldPosition, newPosition, transformComponent.Size, entityId, isBlocking)))
         {
             _movementComponents.TryUpdate(entityId, static (ref MovementComponent m) => m.NextMapPosition = null);
             return;
@@ -191,20 +171,20 @@ public sealed class MovementSystem : ISystem
             transformComponent.Position = newPosition;
         }))
         {
-            var isDiagonal = newPosition.X != oldPosition.X && newPosition.Y != oldPosition.Y;
+            var standardLockFrames = _actionLocks.GetReadonly(entityId).StandardLockFrames;
             var lockFrames = isDiagonal
-                ? (short)MathF.Round(movementComponent.ActionCooldownFrames * DiagonalActionLockMultiplier)
-                : movementComponent.ActionCooldownFrames;
+                ? (ushort)MathF.Round(standardLockFrames * DiagonalActionLockMultiplier)
+                : standardLockFrames;
 
             ActionLockGate.Lock(_actionLocks, entityId, lockFrames);
 
-            var moved = new EntityMovedEvent(entityId, oldPosition, newPosition, transformComponent.Size);
-            _entityMoveSync.SyncMove(moved);
-            _movedEntities.Record(moved);
+            var entityMovedEvent = new EntityMovedEvent(entityId, oldPosition, newPosition, transformComponent.Size);
+            _entityMoveSync.SyncMove(entityMovedEvent);
+            _movedEntitiesEventBuffer.Record(entityMovedEvent);
 
             if (entityId == _playerQuery?.PlayerEntityId || _auraSources?.Has(entityId) == true)
             {
-                _eventBus.Publish(moved);
+                _eventBus.Publish(entityMovedEvent);
             }
         }
     }

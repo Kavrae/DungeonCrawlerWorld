@@ -18,31 +18,8 @@ using Game.World;
 
 namespace Game.Modules.Actions.Systems;
 
-/// <summary>
-/// Consumes a PendingActionActivationComponent (queued by Presentation) and dispatches by the action's ActionTimingCategory:
-/// </summary>
-/// <remarks>
-/// Immediate applies its effect immediately then sets the shared ActionLock; 
-/// 
-/// Delayed sets the
-/// lock first and hands off to DelayedActionSystem via PendingDelayedActionComponent; 
-/// 
-/// FreeCast bypasses the shared lock entirely. 
-/// 
-/// The cooldown gate is checked once, uniformly, before dispatching to any
-/// of the three -- an Immediate or Delayed action can end up gated by both the shared
-/// ActionLock and a longer-lived cooldown of its own, not just one or the other. The request is
-/// removed the same frame regardless of outcome -- a blocked/on-cooldown activation is simply
-/// dropped, not queued to retry, since Presentation is expected to have already checked
-/// targeting validity before ever writing the request; this system's own gate checks are
-/// defense-in-depth against state changing between that check and this system's next visit.
-///
-/// All three dispatch paths also gate on SpellActivator.ManaCostOf(action.Activator) via
-/// HasEnoughMana/SpendManaIfAny -- a non-SpellActivator (e.g. DirectAction, always 0) always
-/// passes for free, so this is a no-op for every action that doesn't opt into a cost. Mana is
-/// spent only on a successful activation (after the lock/effect, mirroring where ActionLock
-/// itself gets set), never speculatively.
-/// </remarks>
+/// <summary> Consumes a PendingActionActivationComponent (queued by Presentation) and dispatches by the action's ActionTimingCategory </summary>
+/// <cleanupVersion>1</cleanupVersion>
 public sealed class ActionActivationSystem : ISystem
 {
     private const byte StripeCountValue = 1;
@@ -113,6 +90,17 @@ public sealed class ActionActivationSystem : ISystem
         pendingActivations.EntityRemoved += _stripeSet.OnEntityRemoved;
     }
 
+    /// <summary>Activate the pending actions for the entities in the specified entity stripe</summary>
+    /// <remarks>
+    /// Routes actions between the Immediate, Delayed, and QuickCast categories.
+    /// Costs and cooldowns are not triggered unless the action is successful.
+    /// 
+    /// Immediate actions are gated by the action lock, applied immediately, and the action lock is applied.
+    /// Delayed actions are gated by the action lock, the action lock is applied, and the action is queued to activate at the end of the action lock.
+    /// QuickCast ignore the action lock and are are activated immediately.
+    /// </remarks>
+    /// <param name="time"></param>
+    /// <param name="stripeIndex"></param>
     public void Update(EngineTime time, byte stripeIndex)
     {
         foreach (var entityId in _stripeSet.GetBucket(stripeIndex))
@@ -201,7 +189,7 @@ public sealed class ActionActivationSystem : ISystem
     }
 
     /// <summary>A ManaCost &lt;= 0 (the default) always passes, even with no ManaComponent pool registered at all -- most actions (e.g. Punch) never touch mana.</summary>
-    private bool HasEnoughMana(int entityId, short manaCost)
+    private bool HasEnoughMana(int entityId, ushort manaCost)
     {
         if (manaCost <= 0)
         {
@@ -211,7 +199,7 @@ public sealed class ActionActivationSystem : ISystem
         return _mana is not null && _mana.TryGetReadonly(entityId, out var mana) && mana.CurrentMana >= manaCost;
     }
 
-    private void SpendManaIfAny(int entityId, short manaCost)
+    private void SpendManaIfAny(int entityId, ushort manaCost)
     {
         if (manaCost > 0)
         {

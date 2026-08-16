@@ -13,7 +13,7 @@ using Game.World;
 
 namespace Tests.Modules.Mana;
 
-/// <summary>Mirrors HealthRegenSystemTests exactly (same numbers even), with Intelligence in place of Constitution -- see ManaRegenSystem's own doc comment for why it's built off HealthRegenSystem's exact shape.</summary>
+/// <summary>Mirrors HealthRegenSystemTests exactly in shape, with Intelligence in place of Constitution and Mana's own much smaller flat regen range in place of Health's -- see ManaRegenSystem's own doc comment for why it's built off HealthRegenSystem's exact shape.</summary>
 [TestClass]
 public sealed class ManaRegenSystemTests
 {
@@ -25,7 +25,7 @@ public sealed class ManaRegenSystemTests
         new(initialCapacity: 10,
             static (ref existing, incoming) => existing = incoming);
 
-    /// <summary>Intelligence total 300 -- AbilityScoreRegenMath's top rate, 6%/sec -- so a 200-max entity regens a clean 12/visit at Local tier (StripeCount is a full second's worth of frames: 0.06 * 200 * 60/60 = 12), or 24/visit at Neighborhood (120-frame/2-second cadence: 0.06 * 200 * 120/60 = 24).</summary>
+    /// <summary>Intelligence total 300 -- ManaRegenSystem's MaxManaRegenPerSecond, a flat 0.3 MP/sec -- so any entity regens a clean 0.3/visit at Local tier (StripeCount is a full second's worth of frames), or 0.6/visit at Neighborhood (120-frame/2-second cadence: 0.3 * 120/60 = 0.6).</summary>
     private static MultiComponentPool<AbilityScoreComponent> CreateAbilityScoresPoolWithMaxIntelligence(int entityId)
     {
         var pool = new MultiComponentPool<AbilityScoreComponent>(maximumEntityCount: 10, initialCapacity: 4);
@@ -42,14 +42,15 @@ public sealed class ManaRegenSystemTests
 
         system.Update(default, 0);
 
-        Assert.AreEqual(62, pool.GetReadonly(0).CurrentMana);
+        Assert.AreEqual(50.3f, pool.GetReadonly(0).CurrentMana, 0.0001f);
     }
 
+    /// <summary>Starts already at the cap, so any positive regen (however small) must clamp back down to it -- robust against the exact flat regen amount, unlike relying on a specific amount to just barely cross a gap below the cap.</summary>
     [TestMethod]
     public void Update_ClampsAtMaximumMana()
     {
         var pool = CreatePool();
-        pool.Add(0, new ManaComponent(currentMana: 199, maximumMana: 200));
+        pool.Add(0, new ManaComponent(currentMana: 200, maximumMana: 200));
         var system = new ManaRegenSystem(pool, CreateTiersPool(), new ProcessingTierEvents(), abilityScores: CreateAbilityScoresPoolWithMaxIntelligence(0));
 
         system.Update(default, 0);
@@ -105,7 +106,7 @@ public sealed class ManaRegenSystemTests
         abilityScores.Add(0, new AbilityScoreComponent(AbilityScoreType.Intelligence, baseValue: 1, total: 1));
         var statModifiers = new MultiComponentPool<StatModifierComponent>(maximumEntityCount: 10, initialCapacity: 4);
         statModifiers.Add(0, new StatModifierComponent(StatModifierTarget.ManaRegen, StatModifierOperation.Additive, StatModifierPolarity.Debuff,
-            canModify: false, magnitude: -100000f, remainingDurationFrames: StatModifierComponent.Permanent, StatusEffectSource.Admin));
+            canModify: false, magnitude: -100000f, remainingDurationFrames: null, StatusEffectSource.Admin));
         var system = new ManaRegenSystem(pool, CreateTiersPool(), new ProcessingTierEvents(), statModifiers: statModifiers, abilityScores: abilityScores);
 
         system.Update(default, 0);
@@ -114,17 +115,18 @@ public sealed class ManaRegenSystemTests
     }
 
     /// <summary>
-    /// Regression test for the actual reported bug: a starting player's MaximumMana equals
-    /// Intelligence's Total, typically just 2-12 for a 2d6 roll -- Intelligence 6 here gives
-    /// ~2.07%/sec, and 2.07% of a MaximumMana of 6 is ~0.124/visit. Rounding that to a whole
-    /// point (first plainly, then via dithered/stochastic rounding once plain rounding was found
-    /// to floor this to 0 forever) either stalled regen entirely or produced visible multi-tick
-    /// dry streaks -- see ManaComponent's own doc comment. Storing CurrentMana as float
-    /// sidesteps both: a single visit's fractional contribution lands exactly and immediately,
-    /// no rounding and no luck involved.
+    /// Regression test for the actual reported bug: MaximumMana no longer factors into the regen
+    /// amount at all now that regen is flat, but a low Intelligence total against
+    /// ManaRegenSystem's own narrow MinManaRegenPerSecond-to-MaxManaRegenPerSecond range still
+    /// produces a genuinely fractional per-visit amount. Rounding that to a whole point (first
+    /// plainly, then via dithered/stochastic rounding once plain rounding was found to floor a low regen rate to 0
+    /// forever) either stalled regen entirely or produced visible multi-tick dry streaks -- see
+    /// ManaComponent's own doc comment. Storing CurrentMana as float sidesteps both: a single
+    /// visit's fractional contribution lands exactly and immediately, no rounding and no luck
+    /// involved.
     /// </summary>
     [TestMethod]
-    public void Update_LowFractionalRateAgainstSmallMaximumMana_AddsExactFractionalAmountImmediately()
+    public void Update_LowFractionalRate_AddsExactFractionalAmountImmediately()
     {
         var pool = CreatePool();
         pool.Add(0, new ManaComponent(currentMana: 0, maximumMana: 6));
@@ -134,9 +136,9 @@ public sealed class ManaRegenSystemTests
 
         system.Update(default, 0);
 
-        // percentPerSecond(6) = 2 + (6-1)/299*4 ~= 2.0669%; 2.0669% of 6 over a 1-second Local
-        // tick ~= 0.12401 -- the exact amount lands on the very first visit, not "eventually".
-        Assert.AreEqual(0.1240134f, pool.GetReadonly(0).CurrentMana, 0.0001f);
+        // amountPerSecond(6) = 0.1 + (6-1)/299*0.2 ~= 0.10334; a 1-second Local tick adds that
+        // exact fractional amount on the very first visit, not "eventually".
+        Assert.AreEqual(0.1033445f, pool.GetReadonly(0).CurrentMana, 0.0001f);
     }
 
     [TestMethod]
@@ -164,6 +166,6 @@ public sealed class ManaRegenSystemTests
 
         system.Update(new EngineTime(default, default, false, FrameCount: 0), 0);
 
-        Assert.AreEqual(74, pool.GetReadonly(0).CurrentMana);
+        Assert.AreEqual(50.6f, pool.GetReadonly(0).CurrentMana, 0.0001f);
     }
 }

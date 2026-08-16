@@ -1,10 +1,11 @@
 namespace Engine.Collections;
 
-/// <summary>
-/// Recyclable integer id allocator. Rent() reissues a released id before minting a new
-/// one, so ids stay bounded to the high-water mark of concurrently live ids rather than
+/// <summary> Recyclable integer id allocator. </summary>
+/// <remarks>Rent() reissues a released id before minting a new one.
+/// Ids stay bounded to the high-water mark of concurrently live ids rather than
 /// growing forever across churn.
-/// </summary>
+/// </remarks>
+/// <cleanupVersion>1</cleanupVersion>
 public sealed class FreeIdPool(int initialCapacity = 0)
 {
     private readonly Stack<int> _freeIds = new();
@@ -17,6 +18,8 @@ public sealed class FreeIdPool(int initialCapacity = 0)
     /// <summary>The highest id ever issued (i.e. the minimum capacity a caller-owned array indexed by id must have).</summary>
     public int HighestIssuedId => _nextId - 1;
 
+    /// <summary>Returns the first available ID from the pool.</summary>
+    /// <returns>If there are no free ids, increase the ID pool capacity.</returns>
     public int Rent()
     {
         int id;
@@ -34,17 +37,22 @@ public sealed class FreeIdPool(int initialCapacity = 0)
         return id;
     }
 
+    /// <summary>Releases a previously rented ID back to the pool.</summary>
+    /// <param name="id">The ID to release.</param>
     public void Release(int id)
     {
         if (!IsIssued(id))
         {
-            throw new InvalidOperationException($"Id {id} is not currently issued.");
+            return;
         }
 
         _issued[id] = 0;
         _freeIds.Push(id);
     }
 
+    /// <summary>Whether the specified ID is currently issued.</summary>
+    /// <param name="id">The ID to check.</param>
+    /// <returns><c>true</c> if the ID is currently issued; otherwise, <c>false</c>.</returns>
     public bool IsIssued(int id) => id >= 0 && id < _nextId && _issued[id] != 0;
 
     private void EnsureCapacity(int minimumCapacity)

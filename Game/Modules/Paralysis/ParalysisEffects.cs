@@ -23,7 +23,7 @@ namespace Game.Modules.Paralysis;
 /// </summary>
 public static class ParalysisEffects
 {
-    public static readonly short DurationFrames = (short)GameTiming.FramesForSeconds(5f);
+    public static readonly ushort DurationFrames = GameTiming.FramesForSeconds(5f);
 
     /// <summary>⚡ (U+26A1, "high voltage"). Requires Symbola-Emoji.ttf loaded as a fallback font (see FontService).</summary>
     public const string Glyph = "⚡";

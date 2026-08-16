@@ -38,7 +38,7 @@ public sealed class ProcessingTierSystemTests
 
         transforms.Add(OtherEntityId, new TransformComponent(otherPosition, new Vector2Byte(1, 1)));
         transforms.Add(PlayerEntityId, new TransformComponent(playerPosition, new Vector2Byte(1, 1)));
-        movementComponents.Add(OtherEntityId, new MovementComponent(MovementMode.Random, 10, null, null));
+        movementComponents.Add(OtherEntityId, new MovementComponent(MovementMode.Random, null, null));
 
         var system = new Game.Modules.ProcessingTier.Systems.ProcessingTierSystem(transforms, movementComponents, tiers, new FakePlayerQuery(PlayerEntityId), events);
         return (system, transforms, tiers, events);
@@ -51,7 +51,7 @@ public sealed class ProcessingTierSystemTests
         var movementComponents = CreateMovementPool();
         var tiers = CreateTiersPool();
         transforms.Add(OtherEntityId, new TransformComponent(new Vector3Int(2, 2, 0), new Vector2Byte(1, 1)));
-        movementComponents.Add(OtherEntityId, new MovementComponent(MovementMode.Random, 10, null, null));
+        movementComponents.Add(OtherEntityId, new MovementComponent(MovementMode.Random, null, null));
 
         var system = new Game.Modules.ProcessingTier.Systems.ProcessingTierSystem(transforms, movementComponents, tiers, playerQuery: null, new ProcessingTierEvents());
         system.Update(default, 0);
@@ -66,7 +66,7 @@ public sealed class ProcessingTierSystemTests
         var movementComponents = CreateMovementPool();
         var tiers = CreateTiersPool();
         transforms.Add(OtherEntityId, new TransformComponent(new Vector3Int(2, 2, 0), new Vector2Byte(1, 1)));
-        movementComponents.Add(OtherEntityId, new MovementComponent(MovementMode.Random, 10, null, null));
+        movementComponents.Add(OtherEntityId, new MovementComponent(MovementMode.Random, null, null));
         // Player entity has no TransformComponent yet -- pre-spawn.
 
         var system = new Game.Modules.ProcessingTier.Systems.ProcessingTierSystem(transforms, movementComponents, tiers, new FakePlayerQuery(PlayerEntityId), new ProcessingTierEvents());

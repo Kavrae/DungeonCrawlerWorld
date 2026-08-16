@@ -22,18 +22,17 @@ public struct StatModifierComponent(
     StatModifierPolarity polarity,
     bool canModify,
     float magnitude,
-    int remainingDurationFrames,
+    ushort? remainingDurationFrames,
     StatusEffectSource source)
 {
-    /// <summary>Sentinel meaning "never expires" -- StatModifierExpirySystem skips ticking/removing a modifier at this value.</summary>
-    public const int Permanent = -1;
-
     public StatModifierTarget Target { get; } = target;
     public StatModifierOperation Operation { get; } = operation;
     public StatModifierPolarity Polarity { get; } = polarity;
     public bool CanModify { get; } = canModify;
     public float Magnitude { get; } = magnitude;
-    public int RemainingDurationFrames { get; set; } = remainingDurationFrames;
+
+    /// <summary>null means "never expires" -- StatModifierExpirySystem skips ticking/removing a modifier at this value.</summary>
+    public ushort? RemainingDurationFrames { get; set; } = remainingDurationFrames;
     public StatusEffectSource Source { get; } = source;
 
     public override readonly string ToString() => $"Target : {Target}\nOperation : {Operation}\nPolarity : {Polarity}\nCanModify : {CanModify}\nMagnitude : {Magnitude}\nRemainingDurationFrames : {RemainingDurationFrames}\nSource : {Source}";

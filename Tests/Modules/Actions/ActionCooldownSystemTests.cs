@@ -38,7 +38,7 @@ public sealed class ActionCooldownSystemTests
         return (system, componentManager, tiers);
     }
 
-    private static short CooldownOf(ComponentManager componentManager, int entityId, Guid actionId)
+    private static ushort? CooldownOf(ComponentManager componentManager, int entityId, Guid actionId)
     {
         var instances = componentManager.GetMultiPool<ActionInstanceComponent>();
         for (var i = instances.GetFirstDenseIndex(entityId); i != -1; i = instances.GetNextDenseIndex(i))
@@ -50,7 +50,7 @@ public sealed class ActionCooldownSystemTests
             }
         }
 
-        return -1;
+        return null;
     }
 
     // Entity 1, Local-tiered (no ProcessingTierComponent, base StripeCount 10 * divisor 1 = 10), lands in bucket 1 -- due only when FrameCount % 10 == 1. stripeIndex no longer drives iteration (TieredEntityStripeSet derives "due" purely from FrameCount), so it's passed as 0 throughout.
@@ -62,7 +62,7 @@ public sealed class ActionCooldownSystemTests
 
         system.Update(new EngineTime(default, default, false, FrameCount: 1), 0);
 
-        Assert.AreEqual(15, CooldownOf(componentManager, EntityId, FirstActionId));
+        Assert.AreEqual((ushort?)15, CooldownOf(componentManager, EntityId, FirstActionId));
     }
 
     [TestMethod]
@@ -73,7 +73,7 @@ public sealed class ActionCooldownSystemTests
 
         system.Update(new EngineTime(default, default, false, FrameCount: 1), 0);
 
-        Assert.AreEqual(0, CooldownOf(componentManager, EntityId, FirstActionId));
+        Assert.AreEqual((ushort?)0, CooldownOf(componentManager, EntityId, FirstActionId));
     }
 
     [TestMethod]
@@ -85,8 +85,8 @@ public sealed class ActionCooldownSystemTests
 
         system.Update(new EngineTime(default, default, false, FrameCount: 1), 0);
 
-        Assert.AreEqual(15, CooldownOf(componentManager, EntityId, FirstActionId));
-        Assert.AreEqual(0, CooldownOf(componentManager, EntityId, SecondActionId));
+        Assert.AreEqual((ushort?)15, CooldownOf(componentManager, EntityId, FirstActionId));
+        Assert.AreEqual((ushort?)0, CooldownOf(componentManager, EntityId, SecondActionId));
     }
 
     [TestMethod]
@@ -98,7 +98,7 @@ public sealed class ActionCooldownSystemTests
         // FrameCount 0 % 10 == 0, not entity 1's due bucket (1).
         system.Update(new EngineTime(default, default, false, FrameCount: 0), 0);
 
-        Assert.AreEqual(25, CooldownOf(componentManager, EntityId, FirstActionId));
+        Assert.AreEqual((ushort?)25, CooldownOf(componentManager, EntityId, FirstActionId));
     }
 
     /// <summary>
@@ -117,7 +117,7 @@ public sealed class ActionCooldownSystemTests
 
         system.Update(new EngineTime(default, default, false, FrameCount: 0), (byte)(EntityId % 10));
 
-        Assert.AreEqual(25, CooldownOf(componentManager, EntityId, FirstActionId));
+        Assert.AreEqual((ushort?)25, CooldownOf(componentManager, EntityId, FirstActionId));
     }
 
     [TestMethod]
@@ -129,6 +129,6 @@ public sealed class ActionCooldownSystemTests
 
         system.Update(new EngineTime(default, default, false, FrameCount: 1), (byte)(EntityId % 10));
 
-        Assert.AreEqual(15, CooldownOf(componentManager, EntityId, FirstActionId));
+        Assert.AreEqual((ushort?)15, CooldownOf(componentManager, EntityId, FirstActionId));
     }
 }

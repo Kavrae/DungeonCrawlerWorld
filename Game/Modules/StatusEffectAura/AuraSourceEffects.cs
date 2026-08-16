@@ -23,7 +23,7 @@ public static class AuraSourceEffects
     /// can carry more than one simultaneous aura type (MultiComponentPool), so toggling Burning
     /// off must not also clear an unrelated Poison source the same entity happens to carry.
     /// </summary>
-    public static void Toggle(MultiComponentPool<StatusEffectAuraSourceComponent> sources, EventBus eventBus, int entityId, StatusEffectType type, int auraAndGlowStrength, Color glowColor)
+    public static void Toggle(MultiComponentPool<StatusEffectAuraSourceComponent> sources, EventBus eventBus, int entityId, StatusEffectType type, byte auraAndGlowStrength, Color glowColor)
     {
         for (var denseIndex = sources.GetFirstDenseIndex(entityId); denseIndex != -1; denseIndex = sources.GetNextDenseIndex(denseIndex))
         {
@@ -52,7 +52,7 @@ public static class AuraSourceEffects
     /// AuraSourceGrant's own name -- the entry is a noun (a grant), this is the verb performed on
     /// it, the same split every other *Effects write-surface uses (see StatModifierEffects.Apply).
     /// </summary>
-    public static void Apply(MultiComponentPool<StatusEffectAuraSourceComponent> sources, EventBus eventBus, int entityId, StatusEffectType type, int auraAndGlowStrength, Color glowColor)
+    public static void Apply(MultiComponentPool<StatusEffectAuraSourceComponent> sources, EventBus eventBus, int entityId, StatusEffectType type, byte auraAndGlowStrength, Color glowColor)
     {
         Revoke(sources, eventBus, entityId, type);
 

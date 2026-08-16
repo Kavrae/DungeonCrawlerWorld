@@ -152,7 +152,7 @@ public sealed class MapBackgroundCache(
 
         var currentMapLayer = mapViewState.CurrentMapLayer;
 
-        var occupantEntityId = world.Map.GetEntityId(new Vector3Int(mapNodeX, mapNodeY, currentMapLayer));
+        var occupantEntityId = world.Map.GetBlockingEntityId(new Vector3Int(mapNodeX, mapNodeY, currentMapLayer));
         if (occupantEntityId != -1 && backgroundPool.TryGetReadonly(occupantEntityId, out var occupantBackground))
         {
             return occupantBackground.BackgroundColor;

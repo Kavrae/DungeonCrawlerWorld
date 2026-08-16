@@ -12,7 +12,7 @@ public static class ManaSpend
     public static void Apply(
         PackedComponentPool<ManaComponent> mana,
         int entityId,
-        short amount,
+        ushort amount,
         MultiComponentPool<StatModifierComponent>? statModifiers = null)
     {
         if (!mana.Has(entityId))
@@ -20,7 +20,7 @@ public static class ManaSpend
             return;
         }
 
-        mana.TryUpdate(entityId, (statModifiers, entityId, amount), static (ref ManaComponent manaComponent, (MultiComponentPool<StatModifierComponent>? StatModifiers, int EntityId, short Amount) state) =>
+        mana.TryUpdate(entityId, (statModifiers, entityId, amount), static (ref ManaComponent manaComponent, (MultiComponentPool<StatModifierComponent>? StatModifiers, int EntityId, ushort Amount) state) =>
         {
             var effectiveMaximumMana = StatModifierMath.GetEffectiveValue(state.StatModifiers, state.EntityId, StatModifierTarget.MaximumMana, manaComponent.MaximumMana);
             manaComponent.CurrentMana = MathHelper.Clamp(manaComponent.CurrentMana - state.Amount, 0f, effectiveMaximumMana);

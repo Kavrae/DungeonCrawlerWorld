@@ -104,6 +104,7 @@ public static class GameBootstrapper
         // entity to Blocking (see World.IsBlocking).
         world.NonBlockingComponents = ecsContext.ComponentManager.GetMultiPool<NonBlockingComponent>();
         world.ForceBlockingComponents = ecsContext.ComponentManager.GetMultiPool<ForceBlockingComponent>();
+        world.EntityManager = ecsContext.EntityManager;
 
         return new GameBootstrapResult(ecsContext, failures, context.Actions, context.MovedEntities, context.Items);
     }

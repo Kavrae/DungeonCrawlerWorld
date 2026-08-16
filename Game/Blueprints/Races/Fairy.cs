@@ -23,13 +23,13 @@ public sealed class Fairy(MathUtility mathUtility) : IBlueprint
 
     private static readonly string[] DisplayNames = DisplayNameCache.BuildDisplayNames(PersonalNameOptions, RaceName);
 
-    private const short MaximumHealth = 100;
+    private const ushort MaximumHealth = 100;
 
     /// <summary>Hardcoded stopgap until the Additive/Multiplicative bonuses system exists -- see TODO.md.</summary>
-    private const short PunchDamage = 3;
+    private const ushort PunchDamage = 3;
 
     /// <summary>Flat default for every NPC race, adjustable in a later balance pass -- see TODO.md's Stats entry.</summary>
-    private const short DefaultAbilityScoreBaseValue = 5;
+    private const ushort DefaultAbilityScoreBaseValue = 5;
 
     public void Build(ComponentManager componentManager, int entityId)
     {
@@ -38,9 +38,9 @@ public sealed class Fairy(MathUtility mathUtility) : IBlueprint
         componentManager.Merge(entityId, new DisplayTextComponent(DisplayNames[mathUtility.Next(0, DisplayNames.Length)], Description));
 
         componentManager.Merge(entityId, new GlyphComponent("f", Color.DeepPink));
-        componentManager.Merge(entityId, new HealthComponent((short)mathUtility.Next(1, MaximumHealth + 1), MaximumHealth));
-        componentManager.Merge(entityId, new MovementComponent(MovementMode.Random, 48, null, null));
-        componentManager.Merge(entityId, new ActionLockComponent(totalLockFrames: 0, lockFramesRemaining: 0));
+        componentManager.Merge(entityId, new HealthComponent((ushort)mathUtility.Next(1, MaximumHealth + 1), MaximumHealth));
+        componentManager.Merge(entityId, new MovementComponent(MovementMode.Random, null, null));
+        componentManager.Merge(entityId, new ActionLockComponent(standardLockFrames: 48, currentLockTotalFrames: 0, currentLockFramesRemaining: 0));
 
         componentManager.Merge(entityId, new TransformComponent(
             new Vector3Int(0, 0, (int)MapLayer.Flying), new Vector2Byte(1, 1)));

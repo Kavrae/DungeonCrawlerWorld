@@ -1,6 +1,5 @@
 using Engine.ECS.Components;
 using Engine.Math;
-using Game.Blueprints;
 using Game.Modules.AbilityScores;
 using Game.Modules.Actions.Components;
 using Game.Modules.Actions.Definitions.DirectActions;
@@ -11,7 +10,6 @@ using Game.Modules.Inventory.Definitions;
 using Game.Modules.Movement.Components;
 using Game.Modules.Race.Components;
 using Game.Modules.StatModifiers;
-using Game.Modules.StatModifiers.Components;
 using Game.World;
 using Microsoft.Xna.Framework;
 
@@ -32,13 +30,13 @@ public sealed class Goblin(MathUtility mathUtility) : IBlueprint
 
     private static readonly string[] DisplayNames = DisplayNameCache.BuildDisplayNames(PersonalNameOptions, RaceName);
 
-    private const short MaximumHealth = 200;
+    private const ushort MaximumHealth = 200;
 
     /// <summary>Flat default for every NPC race, adjustable in a later balance pass -- see TODO.md's Stats entry.</summary>
-    private const short DefaultAbilityScoreBaseValue = 5;
+    private const ushort DefaultAbilityScoreBaseValue = 5;
 
     /// <summary>Hardcoded stopgap until the Additive/Multiplicative bonuses system exists -- see TODO.md.</summary>
-    private const short PunchDamage = 10;
+    private const ushort PunchDamage = 10;
 
     /// <summary>Permanent racial toughness -- reduces all damage this goblin takes by 1, regardless of source (melee, ranged, status effects, contact hazards -- see HealthDamage.Apply, the single chokepoint IncomingDamage is consumed at).</summary>
     private const float DamageReductionAmount = -1f;
@@ -55,15 +53,15 @@ public sealed class Goblin(MathUtility mathUtility) : IBlueprint
             componentManager.Merge(entityId, sprite);
         }
         componentManager.Merge(entityId, new HealthComponent((short)mathUtility.Next(1, MaximumHealth + 1), MaximumHealth));
-        componentManager.Merge(entityId, new MovementComponent(MovementMode.Random, 54, null, null));
-        componentManager.Merge(entityId, new ActionLockComponent(totalLockFrames: 0, lockFramesRemaining: 0));
+        componentManager.Merge(entityId, new MovementComponent(MovementMode.Random, null, null));
+        componentManager.Merge(entityId, new ActionLockComponent(standardLockFrames: 54, currentLockTotalFrames: 0, currentLockFramesRemaining: 0));
 
         componentManager.Merge(entityId, new TransformComponent(
             new Vector3Int(-1, -1, (int)MapLayer.Ground), new Vector2Byte(1, 1)));
 
         componentManager.Merge(entityId, new ActionInstanceComponent(PunchAction.Id, damageAmount: PunchDamage, cooldownFramesRemaining: 0));
 
-        var potionCount = mathUtility.Next(0, 3); // [0, 2] inclusive.
+        var potionCount = (ushort)mathUtility.Next(0, 3); // [0, 2] inclusive.
         if (potionCount > 0)
         {
             InventoryActions.AddItem(componentManager, entityId, HealthPotion.Id, quantity: potionCount);
@@ -72,6 +70,6 @@ public sealed class Goblin(MathUtility mathUtility) : IBlueprint
         AbilityScoreEffects.GrantDefaults(componentManager, entityId, DefaultAbilityScoreBaseValue);
 
         StatModifierEffects.Apply(componentManager, entityId, StatModifierTarget.IncomingDamage, StatModifierOperation.Additive, StatModifierPolarity.Buff,
-            canModify: true, magnitude: DamageReductionAmount, durationFrames: StatModifierComponent.Permanent, StatusEffectSource.Admin);
+            canModify: true, magnitude: DamageReductionAmount, durationFrames: null, StatusEffectSource.Admin);
     }
 }

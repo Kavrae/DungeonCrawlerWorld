@@ -1,6 +1,6 @@
 namespace Game.Modules.StatModifiers;
 
-public enum StatModifierOperation
+public enum StatModifierOperation : byte
 {
     Additive,
     Multiplicative,

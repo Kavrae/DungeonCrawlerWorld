@@ -2,7 +2,6 @@ using Engine.ECS.Components;
 using Engine.ECS.Components.Stores;
 using Engine.Events;
 using Engine.Math;
-using Game.Modules;
 using Game.Modules.Actions;
 using Game.Modules.Actions.Effects;
 using Game.Modules.Health.Components;
@@ -47,7 +46,7 @@ public sealed class ActionEffectTests
         EventBus eventBus,
         MathUtility mathUtility,
         MultiComponentPool<StatModifierComponent>? statModifiers = null,
-        short? damageOverride = null) =>
+        ushort? damageOverride = null) =>
         new(SourceEntityId, TargetEntityId, health, eventBus, mathUtility, componentManager, "Test Action", ActivatorTags: [], StatModifiers: statModifiers, DamageOverride: damageOverride);
 
     [TestMethod]

@@ -52,7 +52,7 @@ public sealed class PlayerStatusEffectsContent(World world, ComponentManager com
     private readonly Dictionary<StatusEffectType, int> _stackCountsByType = [];
 
     private bool _hasPotionCooldown;
-    private short _potionCooldownFramesRemaining;
+    private ushort _potionCooldownFramesRemaining;
 
     private Window _hostWindow = null!;
     private SpriteFontBase _font = null!;
@@ -89,7 +89,7 @@ public sealed class PlayerStatusEffectsContent(World world, ComponentManager com
         }
 
         _hasPotionCooldown = _potionCooldowns.TryGetReadonly(playerEntityId, out var potionCooldown) && potionCooldown.FramesRemaining > 0;
-        _potionCooldownFramesRemaining = _hasPotionCooldown ? potionCooldown.FramesRemaining : (short)0;
+        _potionCooldownFramesRemaining = _hasPotionCooldown ? potionCooldown.FramesRemaining : (ushort)0;
     }
 
     public void DrawContent(GameTime gameTime, SpriteBatch spriteBatch, Texture2D unitRectangle)
@@ -127,7 +127,7 @@ public sealed class PlayerStatusEffectsContent(World world, ComponentManager com
         }
     }
 
-    private void DrawPotionCooldownIcon(SpriteBatch spriteBatch, Texture2D unitRectangle, Vector2 origin, Vector2 size, short framesRemaining)
+    private void DrawPotionCooldownIcon(SpriteBatch spriteBatch, Texture2D unitRectangle, Vector2 origin, Vector2 size, ushort framesRemaining)
     {
         DrawIconBackground(spriteBatch, unitRectangle, origin, size);
 

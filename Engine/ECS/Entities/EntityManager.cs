@@ -3,16 +3,13 @@ using Engine.ECS.Components;
 
 namespace Engine.ECS.Entities;
 
-/// <summary>
-/// Owns entity id lifecycle. Ids are recycled via <see cref="FreeIdPool"/> so component
-/// pool arrays stay bounded to the high-water mark of concurrently living entities rather
-/// than growing forever across churn, and growing the id space transparently resizes every
-/// registered component pool.
-/// </summary>
+/// <summary>Manages the lifecycle of entities.</summary>
+/// <remarks>Entity ids are recycled via <see cref="FreeIdPool"/>.</remarks>
+/// <cleanupVersion>1</cleanupVersion>
 public sealed class EntityManager
 {
     private readonly ComponentManager _componentManager;
-    private readonly FreeIdPool _freeIds;
+    private readonly FreeIdPool _entityIdPool;
     private int _capacity;
 
     public EntityManager(ComponentManager componentManager, int initialCapacity)
@@ -22,17 +19,19 @@ public sealed class EntityManager
 
         _componentManager = componentManager;
         _capacity = initialCapacity;
-        _freeIds = new FreeIdPool(initialCapacity);
+        _entityIdPool = new FreeIdPool(initialCapacity);
     }
 
     public int Capacity => _capacity;
 
-    /// <summary>Number of entities currently alive (created and not yet destroyed).</summary>
-    public int LivingEntityCount => _freeIds.Count;
+    /// <summary>Number of entities in the game.</summary>
+    public int LivingEntityCount => _entityIdPool.Count;
 
+    /// <summary>Creates a new entity id via pool rental.</summary>
+    /// <returns>The id of the created entity.</returns>
     public int CreateEntity()
     {
-        var entityId = _freeIds.Rent();
+        var entityId = _entityIdPool.Rent();
 
         if (entityId >= _capacity)
         {
@@ -49,11 +48,16 @@ public sealed class EntityManager
         return entityId;
     }
 
+    /// <summary>Removes all components from the specified entity and then releases its id.</summary>
+    /// <param name="entityId">The id of the entity to destroy.</param>
     public void DestroyEntity(int entityId)
     {
         _componentManager.RemoveAllComponents(entityId);
-        _freeIds.Release(entityId);
+        _entityIdPool.Release(entityId);
     }
 
-    public bool IsAlive(int entityId) => _freeIds.IsIssued(entityId);
+    /// <summary>Checks if the specified entity exists by id.</summary>
+    /// <param name="entityId">The id of the entity to check.</param>
+    /// <returns><c>true</c> if the entity exists; otherwise, <c>false</c>.</returns>
+    public bool EntityExists(int entityId) => _entityIdPool.IsIssued(entityId);
 }

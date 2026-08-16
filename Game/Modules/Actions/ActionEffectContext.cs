@@ -2,8 +2,8 @@ using Engine.ECS.Components;
 using Engine.ECS.Components.Stores;
 using Engine.Events;
 using Engine.Math;
-using Game.Modules.Actions.Components;
 using Game.Modules.AbilityScores.Components;
+using Game.Modules.Actions.Components;
 using Game.Modules.Death.Components;
 using Game.Modules.Health.Components;
 using Game.Modules.Mana.Components;
@@ -43,6 +43,6 @@ public sealed record ActionEffectContext(
     PackedComponentPool<DeadComponent>? DeadEntities = null,
     MultiComponentPool<StatusEffectAuraSourceComponent>? AuraSources = null,
     IPlayerQuery? PlayerQuery = null,
-    short? DamageOverride = null,
+    ushort? DamageOverride = null,
     float DurationScaleMultiplier = 1.0f,
-    int ChainDepth = 0);
+    byte ChainDepth = 0);

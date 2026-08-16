@@ -15,13 +15,13 @@ public static class StatModifierEffects
         StatModifierPolarity polarity,
         bool canModify,
         float magnitude,
-        int durationFrames,
+        ushort? durationFrames,
         StatusEffectSource source)
     {
         componentManager.GetMultiPool<StatModifierComponent>().Add(entityId, new StatModifierComponent(
             target, operation, polarity, canModify, magnitude, durationFrames, source));
 
-        if (durationFrames != StatModifierComponent.Permanent)
+        if (durationFrames != null)
         {
             componentManager.GetMultiPool<ExpiringStatModifierComponent>().Add(entityId, new ExpiringStatModifierComponent());
         }

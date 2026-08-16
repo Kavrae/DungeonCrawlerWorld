@@ -153,7 +153,7 @@ public sealed class TextBox(FontService fontService, ElementPoolService elementP
             totalLineCount += System.Math.Max(1, segmentDisplayText.LineCount);
         }
 
-        DisplayText = new DisplayText(OriginalText, string.Join('\n', wrappedSegments), totalLineCount);
+        DisplayText = new DisplayText(string.Join('\n', wrappedSegments), totalLineCount);
     }
 
     public override void Draw(GameTime gameTime, GraphicsDevice graphicsDevice, SpriteBatch spriteBatch, Texture2D unitRectangle)

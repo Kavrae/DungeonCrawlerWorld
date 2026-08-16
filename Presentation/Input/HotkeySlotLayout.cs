@@ -4,7 +4,7 @@ using Microsoft.Xna.Framework.Input;
 namespace Presentation.Input;
 
 /// <summary>Which of the FF14-style hotbar's three groups a slot belongs to -- see HotkeySlotLayout's own doc comment for the groups' physical-key/growth rules.</summary>
-public enum HotkeyCategory
+public enum HotkeyCategory : byte
 {
     Base,
     DefaultAttack,

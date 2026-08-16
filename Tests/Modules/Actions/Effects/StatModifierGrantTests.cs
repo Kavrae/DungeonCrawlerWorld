@@ -51,7 +51,7 @@ public sealed class StatModifierGrantTests
 
         entry.Apply(BuildContext(componentManager, durationScaleMultiplier: 4.0f));
 
-        Assert.AreEqual(400, GetGrantedModifier(componentManager).RemainingDurationFrames);
+        Assert.AreEqual((ushort?)400, GetGrantedModifier(componentManager).RemainingDurationFrames);
     }
 
     [TestMethod]
@@ -62,17 +62,17 @@ public sealed class StatModifierGrantTests
 
         entry.Apply(BuildContext(componentManager, durationScaleMultiplier: 1.0f));
 
-        Assert.AreEqual(100, GetGrantedModifier(componentManager).RemainingDurationFrames);
+        Assert.AreEqual((ushort?)100, GetGrantedModifier(componentManager).RemainingDurationFrames);
     }
 
     [TestMethod]
     public void Apply_PermanentDuration_IsNeverScaled()
     {
         var componentManager = Build();
-        var entry = new StatModifierGrant(StatModifierTarget.OutgoingDamage, StatModifierOperation.Additive, StatModifierPolarity.Buff, CanModify: true, Magnitude: 1f, DurationFrames: StatModifierComponent.Permanent);
+        var entry = new StatModifierGrant(StatModifierTarget.OutgoingDamage, StatModifierOperation.Additive, StatModifierPolarity.Buff, CanModify: true, Magnitude: 1f, DurationFrames: null);
 
         entry.Apply(BuildContext(componentManager, durationScaleMultiplier: 4.0f));
 
-        Assert.AreEqual(StatModifierComponent.Permanent, GetGrantedModifier(componentManager).RemainingDurationFrames);
+        Assert.IsNull(GetGrantedModifier(componentManager).RemainingDurationFrames);
     }
 }

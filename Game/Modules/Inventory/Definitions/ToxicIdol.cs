@@ -1,5 +1,4 @@
 using Engine.Math;
-using Engine.Utilities;
 using Game.Modules.Actions;
 using Game.Modules.Actions.Activators;
 using Game.Modules.Actions.Effects;
@@ -34,5 +33,5 @@ public static class ToxicIdol
         MaxStackSize: MaximumStackSize,
         Activator: new PotionActivator(
             new TargetingSpec(Shape: TargetShape.Self, Range: 0, AreaSize: 0),
-            new ActionTiming(ActionTimingCategory.Immediate, (short)GameTiming.FramesForSeconds(1f), CooldownFrames: null)));
+            new ActionTiming(ActionTimingCategory.Immediate, CooldownFrames: null)));
 }

@@ -18,11 +18,11 @@ namespace Game.Modules.Actions.Components;
 /// CooldownFramesRemaining is meaningful for any action whose ActionTiming.CooldownFrames is
 /// set, regardless of ActionTimingCategory -- ticked by ActionCooldownSystem.
 /// </remarks>
-public struct ActionInstanceComponent(Guid actionId, short damageAmount, short cooldownFramesRemaining)
+public struct ActionInstanceComponent(Guid actionId, ushort damageAmount, ushort cooldownFramesRemaining)
 {
     public Guid ActionId { get; } = actionId;
-    public short DamageAmount { get; set; } = damageAmount;
-    public short CooldownFramesRemaining { get; set; } = cooldownFramesRemaining;
+    public ushort DamageAmount { get; set; } = damageAmount;
+    public ushort CooldownFramesRemaining { get; set; } = cooldownFramesRemaining;
 
     public override readonly string ToString() => $"ActionId : {ActionId}\nDamageAmount : {DamageAmount}\nCooldownFramesRemaining : {CooldownFramesRemaining}";
 }

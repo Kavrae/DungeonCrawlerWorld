@@ -14,14 +14,14 @@ namespace Game.Modules.AbilityScores;
 /// </summary>
 public static class AbilityScoreTagBonus
 {
-    public static short Compute(int sourceEntityId, IReadOnlyList<Tag> tags, MultiComponentPool<AbilityScoreComponent>? abilityScores)
+    public static ushort Compute(int sourceEntityId, IReadOnlyList<Tag> tags, MultiComponentPool<AbilityScoreComponent>? abilityScores)
     {
         if (abilityScores is null)
         {
             return 0;
         }
 
-        short bonus = 0;
+        ushort bonus = 0;
         foreach (var tag in tags)
         {
             if (MapTagToAbilityScore(tag) is { } scoreType &&

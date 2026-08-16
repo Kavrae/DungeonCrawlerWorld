@@ -18,21 +18,12 @@ using Presentation.Input;
 
 namespace Presentation.UI;
 
-/// <summary>
-/// Player's moment-to-moment action input
-/// </summary>
+/// <summary>  Player's moment-to-moment action input </summary>
 /// <remarks>
-/// Arming/disarming/confirming/auto-targeting actions
-/// and consumable items via their hotbar hotkeys. Items go through this same arm/target/confirm
-/// rhythm too -- matches ActionHotkeyBindingComponent's own umbrella-term reasoning (see its doc
-/// comment). Actions and items share that rhythm because both ultimately reduce to a
-/// TargetingSpec (see Engine.Math.TargetingSpec's own doc comment for why that type is shared
-/// rather than duplicated), but only one of {action, item} is ever armed at once
-/// (MapViewState.ArmedActionId/ArmedItemDefinitionId) and each queues into its own
-/// pending-activation component for its own System to consume. Player movement is a separate
-/// concern handled by the sibling PlayerMovementController -- MapWindow.OnHotkeysAction calls both
-/// every frame, but the two share no state.
+/// Arming/disarming/confirming/auto-targeting actions and consumable items via their hotbar hotkeys.
+/// Player movement is a separate concern handled by the sibling PlayerMovementController.
 /// </remarks>
+/// <cleanupVersion>1</cleanupVersion>
 public sealed class ActionTargetingController(
     World world,
     MapViewState mapViewState,
@@ -79,11 +70,32 @@ public sealed class ActionTargetingController(
     /// <summary>The armed action/item's actual hit-footprint at the current hover position, recomputed every Update (see UpdateHoveredTile).</summary>
     private readonly List<Vector3Int> _hoveredFootprintBuffer = [];
 
+    /// <summary>
+    /// Companion to _hoveredFootprintBuffer for O(1) membership checks (see
+    /// HoveredFootprintContains) -- rebuilt from the buffer in lockstep every UpdateHoveredTile
+    /// call, the same "list for order/indexing, parallel set for membership" split
+    /// _targetableTilesSet already uses relative to _candidateTilesBuffer.
+    /// </summary>
+    private readonly HashSet<Vector3Int> _hoveredFootprintSet = [];
+
     /// <summary>Read-only view of _hoveredFootprintBuffer for tests -- same internal-for-test-visibility pattern as UiInputController.CurrentCursor/DragDelta.</summary>
     internal IReadOnlyList<Vector3Int> HoveredFootprint => _hoveredFootprintBuffer;
 
-    /// <summary>Avoids exposing List&lt;T&gt;.Contains through the IReadOnlyList&lt;T&gt; above via a LINQ extension -- MapWindow's targeting-highlight draw calls this once per visible targetable tile, every frame something is armed.</summary>
-    internal bool HoveredFootprintContains(Vector3Int tile) => _hoveredFootprintBuffer.Contains(tile);
+    /// <summary>O(1) via _hoveredFootprintSet -- MapWindow's targeting-highlight draw calls this once per visible targetable tile, every frame something is armed, so a linear List.Contains here would cost O(TargetableTiles.Count * HoveredFootprint.Count) per frame instead.</summary>
+    internal bool HoveredFootprintContains(Vector3Int tile) => _hoveredFootprintSet.Contains(tile);
+
+    /// <summary>The player's own pending Delayed action's already-resolved target tiles, or null if there is none.</summary>
+    /// <remarks>
+    /// A live pool lookup, not a cached/refreshed-per-Update field -- unlike TargetableTiles
+    /// (an actual scatter computation worth skipping on unchanged frames), this is a single
+    /// TryGetReadonly, cheap enough to just recompute on every read. See MapWindow.
+    /// DrawTargetingHighlights' own doc comment for why this is the fallback highlight once
+    /// TargetableTiles/HoveredFootprint themselves are cleared: once a Delayed ability is
+    /// actually queued, Disarm already clears both (there's nothing left to aim), but the player
+    /// benefits from still seeing exactly which tiles are about to be hit once the windup ends.
+    /// </remarks>
+    internal Vector3Int[]? PendingDelayedActionTargetTiles =>
+        pendingDelayedActions.TryGetReadonly(world.PlayerEntityId, out var pending) ? pending.TargetTiles : null;
 
     /// <summary>Advances the double-tap frame clock -- called once per MapWindow.Update, before anything else this class does that frame.</summary>
     public void Tick() => _frameCounter++;
@@ -104,6 +116,7 @@ public sealed class ActionTargetingController(
     public void UpdateHoveredTile(Point mousePosition, Vector2 contentAbsolutePosition)
     {
         _hoveredFootprintBuffer.Clear();
+        _hoveredFootprintSet.Clear();
 
         if (!TryGetArmedTargeting(out var targeting) || !transformPool.TryGetReadonly(world.PlayerEntityId, out var playerTransform))
         {
@@ -123,6 +136,10 @@ public sealed class ActionTargetingController(
         mapViewState.HoveredTile = hoveredTile;
 
         TargetShapeResolver.Resolve(targeting.Shape, playerTransform.Position, playerTransform.Size, hoveredTile, targeting.Range, targeting.AreaSize, world.Map.Size, _hoveredFootprintBuffer);
+        foreach (var tile in _hoveredFootprintBuffer)
+        {
+            _hoveredFootprintSet.Add(tile);
+        }
     }
 
     /// <summary>
@@ -529,7 +546,8 @@ public sealed class ActionTargetingController(
     /// (it's always the caster's own tile plus its 8 surrounding neighbors, for AdjacentWithSelf
     /// including the caster's own tile in the resolved set), so it's queued immediately. Every other
     /// shape needs a target tile chosen first: ComputeTargetableTiles' reachable-area candidates
-    /// are filtered down to occupied tiles and handed to TargetPriority.SelectAutoTarget, using
+    /// are filtered down to occupied tiles and handed to ClosestPointSelector.SelectClosest (cursor
+    /// as the primary point, attacker as the tiebreaker), using
     /// MapViewState.HoveredTile as the cursor bias when one is already tracked (armed-and-then-
     /// double-tapped in one motion means Update hasn't run with the arm in effect yet, so
     /// HoveredTile can still be stale/null on the very first pair -- attackerPosition is the
@@ -578,7 +596,7 @@ public sealed class ActionTargetingController(
         }
 
         var cursorTile = mapViewState.HoveredTile ?? attackerPosition;
-        if (TargetPriority.SelectAutoTarget(attackerPosition, cursorTile, _occupiedCandidateTilesBuffer) is not { } chosenTile)
+        if (ClosestPointSelector.SelectClosest(cursorTile, attackerPosition, _occupiedCandidateTilesBuffer) is not { } chosenTile)
         {
             return;
         }

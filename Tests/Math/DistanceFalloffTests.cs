@@ -38,48 +38,12 @@ public sealed class DistanceFalloffTests
     }
 
     [TestMethod]
-    public void ChebyshevDistance_DiagonalCountsAsOneTile()
-    {
-        var a = new Vector3Int(5, 5, 0);
-        var b = new Vector3Int(6, 6, 0);
-
-        Assert.AreEqual(1, DistanceFalloff.ChebyshevDistance(a, b));
-    }
-
-    [TestMethod]
-    public void ChebyshevDistance_UsesTheLargerAxisDelta()
-    {
-        var a = new Vector3Int(0, 0, 0);
-        var b = new Vector3Int(2, 5, 0);
-
-        Assert.AreEqual(5, DistanceFalloff.ChebyshevDistance(a, b));
-    }
-
-    [TestMethod]
-    public void ManhattanDistance_DiagonalCostsTwoTiles()
-    {
-        var a = new Vector3Int(5, 5, 0);
-        var b = new Vector3Int(6, 6, 0);
-
-        Assert.AreEqual(2, DistanceFalloff.ManhattanDistance(a, b));
-    }
-
-    [TestMethod]
-    public void ManhattanDistance_SumsBothAxisDeltas()
-    {
-        var a = new Vector3Int(0, 0, 0);
-        var b = new Vector3Int(2, 5, 0);
-
-        Assert.AreEqual(7, DistanceFalloff.ManhattanDistance(a, b));
-    }
-
-    [TestMethod]
-    public void ScatterManhattan_StrengthEight_VisitsExactlyTheDiamondWithCorrectContributions()
+    public void ScatterManhattan_FadingShape_StrengthEight_VisitsExactlyTheDiamondWithCorrectContributions()
     {
         var visited = new Dictionary<Vector3Int, int>();
         var source = new Vector3Int(10, 10, 0);
 
-        DistanceFalloff.ScatterManhattan(source, strength: 8, mapSize: new Vector3Int(1000, 1000, 1), visit: (cellPosition, contribution) =>
+        DistanceFalloff.ScatterManhattan(source, DistanceFalloff.MaxRadius(8), strength: 8, FalloffShape.Fading, mapSize: new Vector3Int(1000, 1000, 1), visit: (cellPosition, contribution) =>
         {
             visited[cellPosition] = contribution;
         });
@@ -95,23 +59,64 @@ public sealed class DistanceFalloffTests
     }
 
     [TestMethod]
+    public void ScatterManhattan_FadingShape_RadiusSmallerThanMaxRadiusOfStrength_ClipsEarly()
+    {
+        var visited = new Dictionary<Vector3Int, int>();
+        var source = new Vector3Int(10, 10, 0);
+
+        // Strength 8's own MaxRadius is 3, but an explicit radius of 1 now clips the scatter to
+        // just the centre and its four orthogonal neighbors -- radius is no longer derived from
+        // strength, so a caller can bound it independently.
+        DistanceFalloff.ScatterManhattan(source, radius: 1, strength: 8, FalloffShape.Fading, mapSize: new Vector3Int(1000, 1000, 1), visit: (cellPosition, contribution) =>
+        {
+            visited[cellPosition] = contribution;
+        });
+
+        Assert.HasCount(5, visited);
+        Assert.AreEqual(8, visited[source]);
+        Assert.AreEqual(4, visited[new Vector3Int(11, 10, 0)]);
+        Assert.IsFalse(visited.ContainsKey(new Vector3Int(12, 10, 0)), "Distance 2 is within strength 8's own natural falloff radius (3), but must not be visited once radius is explicitly clipped to 1.");
+    }
+
+    [TestMethod]
+    public void ScatterManhattan_FlatShape_VisitsEveryCellInRadiusAtFullStrength()
+    {
+        var visited = new Dictionary<Vector3Int, int>();
+        var source = new Vector3Int(10, 10, 0);
+
+        // A radius unrelated to strength's own falloff extent -- Flat has no notion of
+        // MaxRadius(strength) at all, radius alone decides what's visited.
+        DistanceFalloff.ScatterManhattan(source, radius: 2, strength: 8, FalloffShape.Flat, mapSize: new Vector3Int(1000, 1000, 1), visit: (cellPosition, contribution) =>
+        {
+            visited[cellPosition] = contribution;
+        });
+
+        // Radius 2 diamond: 2*2^2 + 2*2 + 1 = 13 cells.
+        Assert.HasCount(13, visited);
+        Assert.IsTrue(visited.Values.All(contribution => contribution == 8), "Every visited cell must get the full, undecayed strength under FalloffShape.Flat, regardless of distance from the source.");
+    }
+
+    [TestMethod]
     public void ScatterManhattan_ClampsToMapBounds()
     {
         var visitedCount = 0;
         var source = new Vector3Int(0, 0, 0);
 
-        DistanceFalloff.ScatterManhattan(source, strength: 8, mapSize: new Vector3Int(2, 2, 1), visit: (_, _) => visitedCount++);
+        DistanceFalloff.ScatterManhattan(source, DistanceFalloff.MaxRadius(8), strength: 8, FalloffShape.Fading, mapSize: new Vector3Int(2, 2, 1), visit: (_, _) => visitedCount++);
 
         // Only the 2x2 map's own cells can ever be visited, regardless of the strength-8 diamond's full extent.
         Assert.IsLessThanOrEqualTo(4, visitedCount);
     }
 
     [TestMethod]
-    public void ScatterManhattan_NonPositiveStrength_VisitsNothing()
+    public void ScatterManhattan_NegativeRadius_VisitsNothing()
     {
         var visitedCount = 0;
 
-        DistanceFalloff.ScatterManhattan(new Vector3Int(5, 5, 0), strength: 0, mapSize: new Vector3Int(1000, 1000, 1), visit: (_, _) => visitedCount++);
+        // The real-world case this guards: a caller (e.g. AuraGrid.Splat) deriving radius from
+        // MaxRadius(strength) for a non-positive strength gets -1 back, which must still mean
+        // "nothing to scatter" now that radius, not strength, is what the loop bounds on.
+        DistanceFalloff.ScatterManhattan(new Vector3Int(5, 5, 0), radius: DistanceFalloff.MaxRadius(0), strength: 0, FalloffShape.Fading, mapSize: new Vector3Int(1000, 1000, 1), visit: (_, _) => visitedCount++);
 
         Assert.AreEqual(0, visitedCount);
     }

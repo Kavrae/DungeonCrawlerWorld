@@ -3,15 +3,19 @@ using System.Runtime.Loader;
 
 namespace Engine.Modules;
 
-/// <summary>
-/// Discovers and constructs IModule types from .dll files in a directory, for runtime
-/// (modding) loading rather than the compile-time list built-in modules use. Every failure
+/// <summary>Discovers and constructs IModule types from .dll files in a directory.</summary>
+/// <remarks>
+/// For runtime (modding) loading rather than the compile-time list built-in modules use. Every failure
 /// (an assembly that won't load, a type that won't construct) is caught and reported via
 /// ModuleLoadResult.Failures rather than thrown -- one broken mod DLL must never prevent the
 /// rest of the folder from loading, or the game from starting at all.
-/// </summary>
+/// </remarks>
+/// <cleanupVersion>1</cleanupVersion>
 public static class ModuleLoader
 {
+    /// <summary>Loads modules from the specified directory.</summary>
+    /// <param name="modsDirectory">The directory containing the module DLLs.</param>
+    /// <returns>The result of the loading operation.</returns>
     public static ModuleLoadResult LoadFromDirectory(string modsDirectory)
     {
         var modules = new List<IModule>();

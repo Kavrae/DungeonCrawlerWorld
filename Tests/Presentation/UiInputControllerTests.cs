@@ -61,7 +61,7 @@ public sealed class UiInputControllerTests
 
     private static RightDragSpyWindow CreateRightDragSpyWindow(ElementPoolService windowService, FontService fontService, Vector2 relativePosition)
     {
-        windowService.RegisterFactory<RightDragSpyWindow>((_, _) => new RightDragSpyWindow(fontService, windowService, new GlyphRenderer()));
+        windowService.RegisterFactory<RightDragSpyWindow>(() => new RightDragSpyWindow(fontService, windowService, new GlyphRenderer()));
         var window = windowService.CreateElement<RightDragSpyWindow>(null, new ElementOptions
         {
             Layout = new ElementLayoutOptions { RelativePosition = relativePosition, Size = new Vector2(200, 100), DisplayMode = ElementDisplayMode.Fixed },
@@ -1873,7 +1873,7 @@ public sealed class UiInputControllerTests
         var fontService = new FontService("Fonts");
         var glyphRenderer = new GlyphRenderer();
         var windowService = new ElementPoolService(fontService, glyphRenderer);
-        windowService.RegisterFactory<InventoryItemStackCell>((_, _) => new InventoryItemStackCell(
+        windowService.RegisterFactory<InventoryItemStackCell>(() => new InventoryItemStackCell(
             fontService, windowService, glyphRenderer, new SpriteSheetService(null, "Spritesheets"), new SpriteRenderer()));
 
         var cell = windowService.CreateElement<InventoryItemStackCell>(null, new ElementOptions

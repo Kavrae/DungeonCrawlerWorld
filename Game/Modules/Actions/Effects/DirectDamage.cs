@@ -26,7 +26,7 @@ public sealed record DirectDamage(short MinAmount, short MaxAmount) : IActionEff
 {
     public void Apply(ActionEffectContext context)
     {
-        var baseAmount = context.DamageOverride ?? (short)context.MathUtility.Next(MinAmount, MaxAmount + 1);
+        var baseAmount = context.DamageOverride ?? (ushort)context.MathUtility.Next(MinAmount, MaxAmount + 1);
         if (baseAmount <= 0)
         {
             return;
@@ -41,6 +41,6 @@ public sealed record DirectDamage(short MinAmount, short MaxAmount) : IActionEff
             scaled *= StatModifierMath.GetEffectiveValue(context.StatModifiers, context.SourceEntityId, StatModifierTarget.CritMultiplier, CritMath.BaseCritMultiplier);
         }
 
-        HealthDamage.Apply(context.Health, context.EventBus, context.TargetEntityId, (short)scaled, StatusEffectSource.FromEntity(context.SourceEntityId), context.PlayerQuery, context.ActivatorName, context.StatModifiers);
+        HealthDamage.Apply(context.Health, context.EventBus, context.TargetEntityId, (ushort)scaled, StatusEffectSource.FromEntity(context.SourceEntityId), context.PlayerQuery, context.ActivatorName, context.StatModifiers);
     }
 }

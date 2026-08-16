@@ -21,7 +21,7 @@ public sealed class StatModifierExpirySystemTests
         new(initialCapacity: 10,
             static (ref existing, incoming) => existing = incoming);
 
-    private static StatModifierComponent Modifier(int remainingDurationFrames) =>
+    private static StatModifierComponent Modifier(ushort? remainingDurationFrames) =>
         new(StatModifierTarget.HealthRegen, StatModifierOperation.Additive, StatModifierPolarity.Buff, canModify: false, magnitude: 1f, remainingDurationFrames, StatusEffectSource.Admin);
 
     [TestMethod]
@@ -35,7 +35,7 @@ public sealed class StatModifierExpirySystemTests
 
         system.Update(default, 0);
 
-        Assert.AreEqual(4, pool.GetReadonlyByDenseIndex(pool.GetFirstDenseIndex(0)).RemainingDurationFrames);
+        Assert.AreEqual((ushort?)4, pool.GetReadonlyByDenseIndex(pool.GetFirstDenseIndex(0)).RemainingDurationFrames);
     }
 
     [TestMethod]
@@ -65,7 +65,7 @@ public sealed class StatModifierExpirySystemTests
 
         system.Update(new EngineTime(default, default, false, FrameCount: 1), 0);
 
-        Assert.AreEqual(5, pool.GetReadonlyByDenseIndex(pool.GetFirstDenseIndex(0)).RemainingDurationFrames);
+        Assert.AreEqual((ushort?)5, pool.GetReadonlyByDenseIndex(pool.GetFirstDenseIndex(0)).RemainingDurationFrames);
     }
 
     [TestMethod]
@@ -81,7 +81,7 @@ public sealed class StatModifierExpirySystemTests
 
         system.Update(new EngineTime(default, default, false, FrameCount: 2), 0);
 
-        Assert.AreEqual(4, pool.GetReadonlyByDenseIndex(pool.GetFirstDenseIndex(0)).RemainingDurationFrames);
+        Assert.AreEqual((ushort?)4, pool.GetReadonlyByDenseIndex(pool.GetFirstDenseIndex(0)).RemainingDurationFrames);
     }
 
     [TestMethod]
@@ -144,7 +144,7 @@ public sealed class StatModifierExpirySystemTests
 
         system.Update(new EngineTime(default, default, false, FrameCount: 1), 0);
 
-        Assert.AreEqual(1, pool.GetReadonlyByDenseIndex(pool.GetFirstDenseIndex(0)).RemainingDurationFrames);
+        Assert.AreEqual((ushort?)1, pool.GetReadonlyByDenseIndex(pool.GetFirstDenseIndex(0)).RemainingDurationFrames);
         Assert.AreEqual(0, publishedCount);
     }
 }

@@ -3,7 +3,6 @@ using Game.Modules.AbilityScores;
 using Game.Modules.Core;
 using Game.Modules.Core.Components;
 using Game.Modules.StatModifiers;
-using Game.Modules.StatModifiers.Components;
 using Game.World;
 using Presentation.UI.AbilityScores;
 
@@ -23,7 +22,7 @@ public sealed class AbilityScoreModifierFormatterTests
 
     private static void GrantModifier(ComponentManager manager, int entityId, AbilityScoreType type, StatModifierOperation operation, float magnitude, StatusEffectSource source) =>
         AbilityScoreEffects.GrantModifier(manager, entityId, type, operation, StatModifierPolarity.Buff,
-            canModify: true, magnitude, durationFrames: StatModifierComponent.Permanent, source);
+            canModify: true, magnitude, durationFrames: null, source);
 
     [TestMethod]
     public void GetOrderedLines_NoModifiers_ReturnsOnlyUnsignedBaseLine()

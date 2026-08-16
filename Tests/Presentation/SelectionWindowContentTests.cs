@@ -209,7 +209,7 @@ public sealed class SelectionWindowContentTests
 
         // Confirms the Tiny entity really isn't in Map's slot -- if this ever fails, the
         // test below would pass for the wrong reason.
-        Assert.AreEqual(-1, world.Map.GetEntityId(new Vector3Int(2, 2, (int)MapLayer.Ground)));
+        Assert.AreEqual(-1, world.Map.GetBlockingEntityId(new Vector3Int(2, 2, (int)MapLayer.Ground)));
 
         var fontService = new FontService("Fonts");
         var windowService = new ElementPoolService(fontService, new GlyphRenderer());

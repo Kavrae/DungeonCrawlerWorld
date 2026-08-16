@@ -26,7 +26,7 @@ public sealed class MathUtilityTests
     [TestMethod]
     public void ClampShort_ValueAboveMax_ReturnsMax()
     {
-        Assert.AreEqual((short)100, MathUtility.ClampShort(200, 0, 100));
+        Assert.AreEqual((ushort)100, MathUtility.ClampUShort(200, 0, 100));
     }
 
     [TestMethod]
@@ -38,7 +38,7 @@ public sealed class MathUtilityTests
     [TestMethod]
     public void ClampShort_MinGreaterThanMax_Throws()
     {
-        Assert.ThrowsExactly<ArgumentException>(() => MathUtility.ClampShort(5, 10, 0));
+        Assert.ThrowsExactly<ArgumentException>(() => MathUtility.ClampUShort(5, 10, 0));
     }
 
     [TestMethod]

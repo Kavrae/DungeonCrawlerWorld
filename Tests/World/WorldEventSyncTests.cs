@@ -27,8 +27,8 @@ public sealed class WorldEventSyncTests
 
         worldEventSync.SyncMove(new EntityMovedEvent(7, oldPosition, newPosition, new Vector2Byte(1, 1)));
 
-        Assert.AreEqual(-1, world.Map.GetEntityId(oldPosition));
-        Assert.AreEqual(7, world.Map.GetEntityId(newPosition));
+        Assert.AreEqual(-1, world.Map.GetBlockingEntityId(oldPosition));
+        Assert.AreEqual(7, world.Map.GetBlockingEntityId(newPosition));
     }
 
     [TestMethod]
@@ -45,9 +45,9 @@ public sealed class WorldEventSyncTests
 
         worldEventSync.SyncMove(new EntityMovedEvent(3, oldPosition, newPosition, size));
 
-        Assert.AreEqual(-1, world.Map.GetEntityId(new Vector3Int(0, 0, 0)));
-        Assert.AreEqual(3, world.Map.GetEntityId(new Vector3Int(1, 0, 0)));
-        Assert.AreEqual(3, world.Map.GetEntityId(new Vector3Int(2, 0, 0)));
+        Assert.AreEqual(-1, world.Map.GetBlockingEntityId(new Vector3Int(0, 0, 0)));
+        Assert.AreEqual(3, world.Map.GetBlockingEntityId(new Vector3Int(1, 0, 0)));
+        Assert.AreEqual(3, world.Map.GetBlockingEntityId(new Vector3Int(2, 0, 0)));
     }
 
     /// <summary>SyncMove reaches World.MoveEntityUnchecked, which must update the non-Blocking index (not Map's Blocking array) for a non-Blocking mover -- the same real path a wandering Ghost/Fairy takes every move.</summary>
@@ -67,7 +67,7 @@ public sealed class WorldEventSyncTests
 
         worldEventSync.SyncMove(new EntityMovedEvent(7, oldPosition, newPosition, new Vector2Byte(1, 1)));
 
-        Assert.AreEqual(-1, world.Map.GetEntityId(newPosition), "Non-Blocking movers never touch Map's Blocking array.");
+        Assert.AreEqual(-1, world.Map.GetBlockingEntityId(newPosition), "Non-Blocking movers never touch Map's Blocking array.");
         Assert.IsFalse(world.Map.GetNonBlockingEntityIdsAt(oldPosition).Contains(7));
         Assert.IsTrue(world.Map.GetNonBlockingEntityIdsAt(newPosition).Contains(7));
     }

@@ -15,11 +15,8 @@ using Game.World;
 
 namespace Game.Modules.Movement;
 
-/// <summary>
-/// Parameterless (required for runtime discovery -- see decision #1/#2 in the modding plan)
-/// with its runtime dependencies (IMapQuery, EventBus) supplied via IGameModule.Configure
-/// instead of the constructor.
-/// </summary>
+/// <summary>The movement module for handling entity movement logic.</summary>
+/// <cleanupVersion>1</cleanupVersion>
 public sealed class MovementModule : IGameModule
 {
     public Guid Id { get; } = new("d9f6a1c4-8b2e-4f3a-9c1d-000000000004");
@@ -47,9 +44,8 @@ public sealed class MovementModule : IGameModule
     {
         componentManager.RegisterPackedPool<MovementComponent>(static (ref existing, incoming) =>
         {
-            existing.MovementMode = (MovementMode)System.Math.Max((byte)existing.MovementMode, (byte)incoming.MovementMode);
-            existing.ActionCooldownFrames = (short)((existing.ActionCooldownFrames + incoming.ActionCooldownFrames) / 2);
-            existing.FramesToWait = (short)((existing.FramesToWait + incoming.FramesToWait) / 2);
+            existing.MovementMode = (MovementMode)Math.Max((byte)existing.MovementMode, (byte)incoming.MovementMode);
+            existing.FramesToWait = (ushort)((existing.FramesToWait + incoming.FramesToWait) / 2);
             existing.NextMapPosition = incoming.NextMapPosition;
             existing.TargetMapPosition = incoming.TargetMapPosition;
         });

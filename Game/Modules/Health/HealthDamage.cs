@@ -15,7 +15,7 @@ public static class HealthDamage
         PackedComponentPool<HealthComponent> health,
         EventBus eventBus,
         int entityId,
-        short amount,
+        ushort amount,
         StatusEffectSource source,
         IPlayerQuery? playerQuery,
         string damageType,
@@ -32,16 +32,16 @@ public static class HealthDamage
         // buff) before anything else -- clamped at 0 so a large enough reduction can't turn
         // damage into healing. Computed once up front (not per-call-site) since both the health
         // clamp below and the EntityDamagedEvent need the same, already-reduced amount.
-        var effectiveAmount = MathUtility.ClampShort(
-            (short)StatModifierMath.GetEffectiveValue(statModifiers, entityId, StatModifierTarget.IncomingDamage, amount),
+        var effectiveAmount = MathUtility.ClampUShort(
+            StatModifierMath.GetEffectiveValue(statModifiers, entityId, StatModifierTarget.IncomingDamage, amount),
             0,
-            short.MaxValue);
+            ushort.MaxValue);
 
         // Clamped against the effective (modifier-adjusted) max, not the raw stored field, so a
         // permanent +max-HP buff actually raises the ceiling damage is clamped against -- see
         // StatModifierMath's own doc comment for why this is recomputed here rather than baked
         // into HealthComponent.MaximumHealth itself.
-        health.TryUpdate(entityId, (statModifiers, entityId, effectiveAmount), static (ref HealthComponent healthComponent, (MultiComponentPool<StatModifierComponent>? StatModifiers, int EntityId, short Amount) state) =>
+        health.TryUpdate(entityId, (statModifiers, entityId, effectiveAmount), static (ref HealthComponent healthComponent, (MultiComponentPool<StatModifierComponent>? StatModifiers, int EntityId, ushort Amount) state) =>
         {
             var effectiveMaximumHealth = StatModifierMath.GetEffectiveValue(state.StatModifiers, state.EntityId, StatModifierTarget.MaximumHealth, healthComponent.MaximumHealth);
             healthComponent.CurrentHealth = MathHelper.Clamp(healthComponent.CurrentHealth - state.Amount, 0f, effectiveMaximumHealth);
@@ -76,7 +76,7 @@ public static class HealthDamage
         // its own doc comment), not simulation state, so it truncates the same way HealthComponent.
         // ToString() does rather than widening its contract to float for a fractional value
         // nothing reading this event needs.
-        var effectiveMaximumHealthForEvent = (short)StatModifierMath.GetEffectiveValue(statModifiers, entityId, StatModifierTarget.MaximumHealth, updatedHealth.MaximumHealth);
-        eventBus.Publish(new EntityDamagedEvent(entityId, effectiveAmount, source, (short)updatedHealth.CurrentHealth, effectiveMaximumHealthForEvent, damageType));
+        var effectiveMaximumHealthForEvent = MathUtility.ClampUShort(StatModifierMath.GetEffectiveValue(statModifiers, entityId, StatModifierTarget.MaximumHealth, updatedHealth.MaximumHealth), 0, ushort.MaxValue);
+        eventBus.Publish(new EntityDamagedEvent(entityId, effectiveAmount, source, (ushort)updatedHealth.CurrentHealth, effectiveMaximumHealthForEvent, damageType));
     }
 }

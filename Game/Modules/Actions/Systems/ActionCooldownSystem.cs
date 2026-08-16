@@ -1,16 +1,14 @@
 using Engine.ECS.Components.Stores;
 using Engine.ECS.Systems;
+using Engine.Math;
 using Game.Modules.Actions.Components;
 using Game.Modules.ProcessingTier;
 using Game.Modules.ProcessingTier.Components;
 
 namespace Game.Modules.Actions.Systems;
 
-/// <summary>
-/// Passively counts every ActionInstanceComponent's CooldownFramesRemaining down toward 0,
-/// independent of the shared ActionLock (see ActionLockSystem for that one) -- applies to any
-/// action with a cooldown regardless of ActionTimingCategory.
-/// </summary>
+/// <summary>Manages the active cooldowns for each entity's actions.</summary>
+/// <cleanupVersion>1</cleanupVersion>
 public sealed class ActionCooldownSystem : ISystem
 {
     private const byte StripeCountValue = 10;
@@ -27,6 +25,10 @@ public sealed class ActionCooldownSystem : ISystem
         _tieredStripeSet = ProcessingTierWiring.CreateAndWire(StripeCount, actionInstances, processingTiers, processingTierEvents);
     }
 
+    /// <summary>Updates the cooldowns for the entities in the specified entity stripe</summary>
+    /// <remarks>Cooldowns are reduced by the stripeCountValue to account for the number of ticks between updates for the updated entity stripe.</remarks>
+    /// <param name="time"></param>
+    /// <param name="stripeIndex"></param>
     public void Update(EngineTime time, byte stripeIndex)
     {
         foreach (var entityId in _tieredStripeSet.GetDueEntities(time.FrameCount))
@@ -37,7 +39,7 @@ public sealed class ActionCooldownSystem : ISystem
                 {
                     _actionInstances.UpdateByDenseIndex(denseIndex, static (ref ActionInstanceComponent instance) =>
                     {
-                        instance.CooldownFramesRemaining = (short)Math.Max(0, instance.CooldownFramesRemaining - StripeCountValue);
+                        instance.CooldownFramesRemaining = MathUtility.DecrementClamped(instance.CooldownFramesRemaining, StripeCountValue);
                     });
                 }
             }

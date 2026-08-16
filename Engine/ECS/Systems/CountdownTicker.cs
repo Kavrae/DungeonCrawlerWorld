@@ -3,48 +3,24 @@ using Engine.ECS.Components.Stores;
 
 namespace Engine.ECS.Systems;
 
-/// <summary>
-/// Shared "decrement a per-entity countdown once per real frame; once it reaches 0, tick"
-/// loop -- the exact shape BurningSystem, PoisonSystem, ContactDamageSystem, and
-/// StatusEffectAuraSystem all independently re-implemented before this existed. Deliberately
-/// does NOT own entity-id source selection (an EntityStripeSet bucket or a pool's own
-/// EntityIds are both a plain ReadOnlySpan&lt;int&gt;, and StripeCount=1 makes them
-/// interchangeable -- see those systems' own doc comments for why StripeCount=1 matters here)
-/// or what "ticking" actually does (fully game- and effect-specific) -- only the
-/// decrement-or-fire mechanics and the safety rule every caller needs regardless: an entity
-/// whose T should be removed can't be removed mid-scan (PackedComponentPool.Remove swaps the
-/// last entry into the removed slot, which would corrupt whichever bucket/span is currently
-/// being enumerated), so removal is deferred until the whole scan completes.
-/// </summary>
+/// <summary> Shared "decrement a per-entity countdown once per real frame; once it reaches 0, tick" loop</summary>
+/// <cleanupVersion>1</cleanupVersion>
 public static class CountdownTicker
 {
-    /// <summary>
-    /// For each entityId in entityIds with a T in pool: decrements FramesUntilNextTick by
-    /// framesPerVisit while it's still &gt; framesPerVisit, otherwise calls onTick(entityId,
-    /// component). onTick returning true means "remove this entity's T entirely" (collected
-    /// into pendingRemovals and applied only after the full scan below completes); false means
-    /// onTick already reset FramesUntilNextTick (and whatever else it owns) itself, so the
-    /// component stays as-is. pendingRemovals is caller-owned and reused across calls (cleared
-    /// here) purely to avoid a fresh List allocation every frame -- pass a field, not a local.
-    ///
-    /// framesPerVisit defaults to 1 for an unstriped caller (StripeCount 1: entityIds is
-    /// visited every real frame, so decrementing by 1 per visit keeps FramesUntilNextTick in
-    /// real-frame units). A striped caller (see BurningSystem/StatusEffectAuraSystem) only
-    /// visits a given entity once every StripeCount real frames, so it must pass StripeCount
-    /// here too -- otherwise decrementing by 1 per visit would stretch every tick interval out
-    /// to TickIntervalFrames * StripeCount real frames instead of TickIntervalFrames, exactly
-    /// the cadence bug a striped countdown has to avoid. The same technique MovementSystem's
-    /// own FramesToWait already uses (decrementing by its StripeCount per visit, not by 1). A
-    /// caller throttling far-from-player entities (see TieredEntityStripeSet) achieves the same
-    /// effect by simply not including a not-due entity in entityIds for this call at all, rather
-    /// than this method filtering one out itself.
-    /// </summary>
+    /// <summary>Ticks all entities in the given span with the specified pool.</summary>
+    /// <remarks>Once an entity's countdown reaches 0, its <see cref="ITickCountdown"/> component is updated via its custom updater</remarks>
+    /// <typeparam name="T">The type of the countdown component.</typeparam>
+    /// <param name="pool">The component pool containing the entities to tick.</param>
+    /// <param name="entityIds">The IDs of the entities to tick.</param>
+    /// <param name="pendingRemovals">A list to collect entities that need to be removed.</param>
+    /// <param name="onTick">A function to call when an entity's countdown reaches 0.</param>
+    /// <param name="framesPerVisit">The number of frames to decrement the countdown by, to account for entity striping.</param>
     public static void Tick<T>(
         PackedComponentPool<T> pool,
         ReadOnlySpan<int> entityIds,
         List<int> pendingRemovals,
         Func<int, T, bool> onTick,
-        int framesPerVisit = 1)
+        uint framesPerVisit = 1)
         where T : struct, ITickCountdown
     {
         pendingRemovals.Clear();
@@ -56,9 +32,9 @@ public static class CountdownTicker
                 continue;
             }
 
-            if (component.FramesUntilNextTick > framesPerVisit)
+            if ((uint)component.FramesUntilNextTick > framesPerVisit)
             {
-                pool.TryUpdate(entityId, framesPerVisit, static (ref T c, int frames) => c.FramesUntilNextTick -= frames);
+                pool.TryUpdate(entityId, framesPerVisit, static (ref T c, uint frames) => c.FramesUntilNextTick -= (ushort)frames);
                 continue;
             }
 

@@ -12,10 +12,10 @@ public static class PoisonEffects
 {
     // No explicit cap was specified for Poison -- mirrors Burning's cap as a reasonable default
     // (every stacking effect needs *some* limit; see the original stacking-status-effects spec).
-    public const int MaxStacks = 20;
+    public const byte MaxStacks = byte.MaxValue;
 
     /// <summary>Once per second -- literally GameTiming.FramesPerSecond, not a converted duration.</summary>
-    public const int TickIntervalFrames = GameTiming.FramesPerSecond;
+    public const ushort TickIntervalFrames = GameTiming.FramesPerSecond;
 
     /// <summary>☠ (U+2620, "skull and crossbones"). Requires Symbola-Emoji.ttf loaded as a fallback font (see FontService).</summary>
     public const string Glyph = "☠";
@@ -27,7 +27,7 @@ public static class PoisonEffects
     /// (never additive), so reapplying a long duration repeatedly keeps refreshing it, while a
     /// short reapplication after a longer one already landed does nothing to the timer.
     /// </summary>
-    public static void ApplyStack(ComponentManager componentManager, int entityId, StatusEffectSource source, int durationInTicks)
+    public static void ApplyStack(ComponentManager componentManager, int entityId, StatusEffectSource source, ushort durationInTicks)
     {
         var timers = componentManager.GetPackedPool<PoisonTimerComponent>();
 
@@ -40,7 +40,7 @@ public static class PoisonEffects
 
         if (timers.Has(entityId))
         {
-            timers.TryUpdate(entityId, durationInTicks, static (ref PoisonTimerComponent t, int newDuration) =>
+            timers.TryUpdate(entityId, durationInTicks, static (ref PoisonTimerComponent t, ushort newDuration) =>
             {
                 t.StackCount++;
                 t.RemainingDurationTicks = Math.Max(t.RemainingDurationTicks, newDuration);

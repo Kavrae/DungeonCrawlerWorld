@@ -10,7 +10,7 @@ namespace Game.Modules.Actions;
 /// HotkeyExpansionUnlockComponent, not by this enum itself. 20 is the current cap; see
 /// HotkeyExpansionUnlockComponent's own doc comment for why.
 /// </summary>
-public enum HotkeySlot
+public enum HotkeySlot : byte
 {
     Base1,
     Base2,

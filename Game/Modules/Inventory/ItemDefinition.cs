@@ -1,23 +1,21 @@
-using Game.Modules;
 using Game.Modules.Actions;
 using Microsoft.Xna.Framework;
 
 namespace Game.Modules.Inventory;
 
-/// <summary>
-/// Shared, catalog-level item data -- looked up by Id from ItemCatalog. Same abstraction level as
-/// Game.Modules.Actions.ActionDefinition (both derive from ActivatableDefinition) except for
-/// MaxStackSize/Activator's nullability -- an Equipment/Tool item legitimately has neither.
-///
-/// MaxStackSize null means unbounded (every item predating this field). Not yet enforced by
-/// InventoryActions.AddItem -- nothing grants more than a handful of any one item today, so
-/// there's no real call site to wire the clamp through yet (see TODO.md's Inventory system note
-/// on not designing storage-divergence machinery before something actually needs it). Activator
-/// is null for anything that isn't usable (e.g. an Equipment/Tool item) -- typed IActionActivator
-/// rather than a Potion-specific type so a future ScrollActivator/WandActivator slots into this
-/// same field with zero ItemDefinition changes; ConsumableActivationSystem is what actually
-/// interprets a Game.Modules.Actions.Activators.PotionActivator specifically today.
-/// </summary>
+/// <summary>Represents the definition of an item in the game.</summary>
+/// <param name="Id">The unique identifier for the item.</param>
+/// <param name="Name">The name of the item.</param>
+/// <param name="SpriteName">The name of the sprite representing the item. Falls back to the Glyph if not provided.</param>
+/// <param name="Glyph">The fallback character used to represent the item in the UI.</param>
+/// <param name="GlyphColor">The color of the item's glyph.</param>
+/// <param name="Tags">An optional list of tags associated with the item.</param>
+/// <param name="Effects">An optional list of effects triggered by the item.</param>
+/// <param name="Description">The full description of the item.</param>
+/// <param name="Summary">A brief summary of the item.</param>
+/// <param name="MaxStackSize">The maximum stack size for the item in a single inventory or hotkey slot.</param>
+/// <param name="Activator">The optional activator type for the item that determines how the effects are activated, if any.</param>
+/// <cleanupVersion>1</cleanupVersion>
 public sealed record ItemDefinition(
     Guid Id,
     string Name,

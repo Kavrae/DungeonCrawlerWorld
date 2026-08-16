@@ -1,11 +1,7 @@
 namespace Engine.Diagnostics;
 
-/// <summary>
-/// Generic rolling once-per-second rate counter. Call Tick() once per occurrence (e.g. once
-/// per Draw for FPS, once per Update for UPS) and read RatePerSecond; one instance per metric
-/// tracked, so drawing/update rates -- or any other per-second count -- don't duplicate the
-/// tick-window bookkeeping.
-/// </summary>
+/// <summary>Generic rolling once-per-second rate counter.</summary>
+/// <cleanupVersion>1</cleanupVersion>
 public sealed class PerformanceCounter
 {
     private static readonly long TicksBetweenSamples = TimeSpan.TicksPerSecond;
@@ -20,6 +16,7 @@ public sealed class PerformanceCounter
 
     public double RatePerSecond { get; private set; }
 
+    /// <summary>Updates the performance counter since the last sample</summary>
     public void Tick()
     {
         _countSinceLastSample++;

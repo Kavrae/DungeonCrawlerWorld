@@ -3,10 +3,24 @@ using Game.Modules.Core.Components;
 
 namespace Game.Modules.Core;
 
-/// <summary>Shared read helper for NonBlockingComponent's MultiComponentPool -- same shape as ActionInstanceQueries/ActionHotkeyBindingQueries, walking the dense per-entity chain.</summary>
+/// <summary>Shared read helper for NonBlockingComponent's MultiComponentPool.</summary>
+/// <remarks>
+/// MultiComponentPool has no built-in way to combine every instance an entity owns into one
+/// answer -- an entity may hold several NonBlockingComponent sources at once (e.g. overlapping
+/// Tiny and Phasing grants), and the pool only exposes a generic dense-chain walk
+/// (GetFirstDenseIndex/GetNextDenseIndex), deliberately blind to what NonBlockingKind values
+/// mean. This class owns the OR-combine rule in one place (same shape as
+/// ActionInstanceQueries/ActionHotkeyBindingQueries) instead of every caller re-walking the
+/// chain itself.
+/// </remarks>
+/// <cleanupVersion>1</cleanupVersion>
 public static class NonBlockingQueries
 {
-    /// <summary>Every active source's Kind, OR-combined -- an entity with two overlapping sources (one Tiny, one Phasing) renders as both, the same "any active source" inclusive-OR philosophy IsBlocking itself already uses for the exemption fact.</summary>
+    /// <summary>Combines the kinds of all active non-blocking components for the specified entity.</summary>
+    /// <remarks>Combines multiple non-blocking component types into a single NonBlockingKind flag.</remarks>
+    /// <param name="nonBlockingComponents">The multi-component pool containing non-blocking components.</param>
+    /// <param name="entityId">The ID of the entity for which to combine component kinds.</param>
+    /// <returns>The combined non-blocking kind.</returns>
     public static NonBlockingKind CombinedKind(MultiComponentPool<NonBlockingComponent> nonBlockingComponents, int entityId)
     {
         var combined = NonBlockingKind.None;

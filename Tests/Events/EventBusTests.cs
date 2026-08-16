@@ -138,6 +138,73 @@ public sealed class EventBusTests
         CollectionAssert.AreEqual(new[] { 1 }, received);
     }
 
+    [TestMethod]
+    public void SubscribeOnce_NoCondition_FiresOnFirstPublish()
+    {
+        var bus = new EventBus();
+        var received = -1;
+        bus.SubscribeOnce<TestEvent>(e => received = e.Value);
+
+        bus.Publish(new TestEvent(1));
+
+        Assert.AreEqual(1, received);
+    }
+
+    [TestMethod]
+    public void SubscribeOnce_NoCondition_DoesNotFireAgainOnSecondPublish()
+    {
+        var bus = new EventBus();
+        var count = 0;
+        bus.SubscribeOnce<TestEvent>(_ => count++);
+
+        bus.Publish(new TestEvent(1));
+        bus.Publish(new TestEvent(2));
+
+        Assert.AreEqual(1, count);
+    }
+
+    [TestMethod]
+    public void SubscribeOnce_WithCondition_IgnoresNonMatchingPublishes()
+    {
+        var bus = new EventBus();
+        var received = -1;
+        bus.SubscribeOnce<TestEvent>(e => received = e.Value, condition: e => e.Value > 10);
+
+        bus.Publish(new TestEvent(1));
+
+        Assert.AreEqual(-1, received);
+    }
+
+    [TestMethod]
+    public void SubscribeOnce_WithCondition_FiresOnFirstMatchThenStops()
+    {
+        var bus = new EventBus();
+        var receivedValues = new List<int>();
+        bus.SubscribeOnce<TestEvent>(e => receivedValues.Add(e.Value), condition: e => e.Value > 10);
+
+        bus.Publish(new TestEvent(1));
+        bus.Publish(new TestEvent(20));
+        bus.Publish(new TestEvent(30));
+
+        CollectionAssert.AreEqual(new[] { 20 }, receivedValues);
+    }
+
+    [TestMethod]
+    public void SubscribeOnce_OtherSubscribersOfSameType_StillReceiveEveryPublish()
+    {
+        var bus = new EventBus();
+        var onceCount = 0;
+        var everyCount = 0;
+        bus.SubscribeOnce<TestEvent>(_ => onceCount++);
+        bus.Subscribe<TestEvent>(_ => everyCount++);
+
+        bus.Publish(new TestEvent(1));
+        bus.Publish(new TestEvent(2));
+
+        Assert.AreEqual(1, onceCount);
+        Assert.AreEqual(2, everyCount);
+    }
+
     // Profiler-enabled dispatch is a separate code path from the default -- these cover its
     // functional correctness (still dispatches to the right handlers) rather than its timing
     // output, the same reason PerformanceCounter/PhaseProfiler themselves have no direct tests:

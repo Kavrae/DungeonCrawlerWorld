@@ -17,7 +17,7 @@ public sealed class ParalysisEffectsTests
         componentManager.RegisterMultiPool<StatusEffectStack>();
         componentManager.RegisterPackedPool<ParalysisTimerComponent>(static (ref existing, incoming) => { });
         componentManager.RegisterPackedPool<ActionLockComponent>(static (ref existing, incoming) => existing = incoming);
-        componentManager.GetPackedPool<ActionLockComponent>().Add(0, new ActionLockComponent(totalLockFrames: 0, lockFramesRemaining: 0));
+        componentManager.GetPackedPool<ActionLockComponent>().Add(0, new ActionLockComponent(standardLockFrames: ActionLockGate.StandardLockFrames, currentLockTotalFrames: 0, currentLockFramesRemaining: 0));
         return componentManager;
     }
 
@@ -50,7 +50,7 @@ public sealed class ParalysisEffectsTests
         ParalysisEffects.Apply(componentManager, 0, StatusEffectSource.Admin);
 
         var actionLock = componentManager.GetPackedPool<ActionLockComponent>().GetReadonly(0);
-        Assert.AreEqual(ParalysisEffects.DurationFrames, actionLock.LockFramesRemaining);
+        Assert.AreEqual(ParalysisEffects.DurationFrames, actionLock.CurrentLockFramesRemaining);
     }
 
     [TestMethod]
@@ -82,10 +82,10 @@ public sealed class ParalysisEffectsTests
     {
         var componentManager = CreateComponentManager();
         ParalysisEffects.Apply(componentManager, 0, StatusEffectSource.Admin);
-        componentManager.GetPackedPool<ActionLockComponent>().TryUpdate(0, static (ref ActionLockComponent a) => a.LockFramesRemaining = 5);
+        componentManager.GetPackedPool<ActionLockComponent>().TryUpdate(0, static (ref ActionLockComponent a) => a.CurrentLockFramesRemaining = 5);
 
         ParalysisEffects.Apply(componentManager, 0, StatusEffectSource.Admin);
 
-        Assert.AreEqual(ParalysisEffects.DurationFrames, componentManager.GetPackedPool<ActionLockComponent>().GetReadonly(0).LockFramesRemaining);
+        Assert.AreEqual(ParalysisEffects.DurationFrames, componentManager.GetPackedPool<ActionLockComponent>().GetReadonly(0).CurrentLockFramesRemaining);
     }
 }

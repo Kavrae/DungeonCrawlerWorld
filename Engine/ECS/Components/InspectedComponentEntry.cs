@@ -1,14 +1,12 @@
 namespace Engine.ECS.Components;
 
-/// <summary>
-/// Value is a pre-formatted string, not the raw component -- every current caller
-/// (SelectionWindowContent) only ever displays it, and capturing it as T.ToString() at the
-/// pool (T : struct) dispatches through a constrained virtual call rather than boxing the
-/// component into an object first.
-/// </summary>
+/// <summary>Represents an entry for inspecting a component.</summary>
+/// <param name="ComponentType">The type of the component.</param>
+/// <param name="Value">The pre-formatted string representing the component's value.</param>
+/// <param name="Version">The update version of the component.</param>
+/// <cleanupVersion>1</cleanupVersion>
 public readonly record struct InspectedComponentEntry(
     Type ComponentType,
-    ComponentPoolType ComponentPoolType,
     string Value,
     uint Version
 );

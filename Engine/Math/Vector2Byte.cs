@@ -1,9 +1,9 @@
 namespace Engine.Math;
 
-/// <summary>
-/// A 2D byte vector, used for entity footprint sizes (X/Y tile extent -- entity footprints
-/// rarely exceed 255 tiles per axis, and never span more than one MapLayer, so there's no Z).
-/// </summary>
+/// <summary> A 2D byte vector</summary>
+/// <remarks>Used for entity footprint sizes and other small values.
+/// </remarks>
+/// <cleanupVersion>1</cleanupVersion>
 public struct Vector2Byte : IEquatable<Vector2Byte>
 {
     public byte X;

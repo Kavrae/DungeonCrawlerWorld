@@ -1,32 +1,28 @@
 namespace Game.Modules.Achievements;
 
-/// <summary>
-/// Static content plus trigger wiring for one achievement -- mirrors ActionDefinition's role
-/// as a small self-contained content record, except an achievement also owns behavior
-/// (RegisterTrigger) since "when is this earned" varies per achievement rather than being data
-/// a shared system can interpret uniformly.
-/// </summary>
+/// <summary>Represents the definition of an achievement, including its core properties and trigger logic.</summary>
+/// <cleanupVersion>1</cleanupVersion>
 public interface IAchievementDefinition
 {
+    /// <summary>The unique identifier for the achievement.</summary>
     Guid Id { get; }
 
+    /// <summary>The name of the achievement.</summary>
     string Name { get; }
 
-    /// <summary>The specific requirement that was fulfilled -- shown in the notification alongside Name/Description.</summary>
-    string RequirementText { get; }
-
+    /// <summary>The description of the achievement.</summary>
     string Description { get; }
 
-    /// <summary>Null when this achievement carries no lootbox -- an achievement always comes with 0 or 1, never more.</summary>
-    LootboxReward? Lootbox { get; }
+    /// <summary>The requirement that was fulfilled.</summary>
+    string RequirementText { get; }
 
+    /// <summary>Null when this achievement carries no lootbox -- an achievement always comes with 0 or 1, never more.</summary>
+    Lootbox? Lootbox { get; }
+
+    /// <summary>The text describing the reward for earning the achievement.</summary>
     string RewardText { get; }
 
-    /// <summary>
-    /// Subscribes whatever EventBus handler(s) this achievement needs to detect its own
-    /// condition. Implementations should use AchievementTriggerContext.SubscribeUntilUnlockedForPlayer
-    /// rather than subscribing directly, so the achievement stops listening the moment it's
-    /// earned instead of staying subscribed for the rest of the session.
-    /// </summary>
+    /// <summary>Registers the trigger for the achievement with the EventBus.</summary>
+    /// <param name="context">The achievement trigger context.</param>
     void RegisterTrigger(AchievementTriggerContext context);
 }

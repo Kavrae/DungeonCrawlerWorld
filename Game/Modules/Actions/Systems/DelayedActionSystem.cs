@@ -15,14 +15,8 @@ using Game.World;
 
 namespace Game.Modules.Actions.Systems;
 
-/// <summary>
-/// Finishes a Delayed-category action once its shared ActionLock windup ends: an entity with a
-/// PendingDelayedActionComponent whose ActionLockComponent.LockFramesRemaining has reached 0
-/// gets its effect resolved here, then the pending component is cleared so it isn't resolved
-/// again next visit. Cancelling (right-click tap / Escape, Presentation layer) removes the
-/// pending component directly and zeroes the lock -- this system never sees a cancelled action
-/// at all, since there's nothing left for it to find once cancelled.
-/// </summary>
+/// <summary>Consumes pending delayed actions and resolves their effects when the action lock is released.</summary>
+/// <cleanupVersion>1</cleanupVersion>
 public sealed class DelayedActionSystem : ISystem
 {
     private const byte StripeCountValue = 1;
@@ -87,6 +81,13 @@ public sealed class DelayedActionSystem : ISystem
         pendingActions.EntityRemoved += _stripeSet.OnEntityRemoved;
     }
 
+    /// <summary>Updates the delayed actions for the entities in the specified entity stripe</summary>
+    /// <remarks>
+    /// Delayed actions are resolved when the action lock is released.
+    /// Each delayed action sets its own action lock duration.
+    /// </remarks>
+    /// <param name="time">The current engine time</param>
+    /// <param name="stripeIndex">The index of the entity stripe to update</param>
     public void Update(EngineTime time, byte stripeIndex)
     {
         foreach (var entityId in _stripeSet.GetBucket(stripeIndex))
@@ -99,7 +100,7 @@ public sealed class DelayedActionSystem : ISystem
 
             if (!_pendingActions.TryGetReadonly(entityId, out var pending) ||
                 !_actionLocks.TryGetReadonly(entityId, out var actionLock) ||
-                actionLock.LockFramesRemaining > 0)
+                actionLock.CurrentLockFramesRemaining > 0)
             {
                 continue;
             }

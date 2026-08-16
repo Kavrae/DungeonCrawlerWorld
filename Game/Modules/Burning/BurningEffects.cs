@@ -10,10 +10,10 @@ namespace Game.Modules.Burning;
 /// <summary>Burning's own rules: how many stacks it can hold, how often it ticks, and how a stack gets applied.</summary>
 public static class BurningEffects
 {
-    public const int MaxStacks = 20;
+    public const byte MaxStacks = 20;
 
     /// <summary>Once per second -- literally GameTiming.FramesPerSecond, not a converted duration.</summary>
-    public const int TickIntervalFrames = GameTiming.FramesPerSecond;
+    public const ushort TickIntervalFrames = GameTiming.FramesPerSecond;
 
     /// <summary>🔥 (U+1F525, "fire"). Requires Symbola-Emoji.ttf loaded as a fallback font (see FontService).</summary>
     public const string Glyph = "🔥";

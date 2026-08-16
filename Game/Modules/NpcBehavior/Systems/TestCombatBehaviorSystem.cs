@@ -122,7 +122,7 @@ public sealed class TestCombatBehaviorSystem : ISystem
 
             if (movement.FramesToWait > 0)
             {
-                _movementPool.TryUpdate(entityId, static (ref MovementComponent m) => m.FramesToWait = (short)Math.Max(0, m.FramesToWait - 1));
+                _movementPool.TryUpdate(entityId, static (ref MovementComponent m) => m.FramesToWait = MathUtility.DecrementClamped(m.FramesToWait, 1));
                 continue;
             }
 

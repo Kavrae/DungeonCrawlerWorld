@@ -3,22 +3,15 @@ using Engine.Math;
 namespace Game.Modules.Movement.Components;
 
 /// <summary>An entity's ability to move through the map.</summary>
-public struct MovementComponent(MovementMode movementMode, short actionCooldownFrames, Vector3Int? targetMapPosition, Vector3Int? nextMapPosition)
+/// <cleanupVersion>1</cleanupVersion>
+public struct MovementComponent(MovementMode movementMode, Vector3Int? targetMapPosition, Vector3Int? nextMapPosition)
 {
+    /// <summary>The movement or pathfinding mode of the entity</summary>
     public MovementMode MovementMode { get; set; } = movementMode;
 
-    /// <summary>
-    /// How many real game frames the shared ActionLockComponent is set to on a successful move
-    /// </summary>
-    public short ActionCooldownFrames { get; set; } = actionCooldownFrames;
-
-    /// <summary>
-    /// Movement's own private retry backoff, in real game frames -- distinct from the shared
-    /// ActionLockComponent. Set (to MovementSystem.FramesToWaitIfNoOptions) when a
-    /// MovementMode.Random entity finds every direction blocked, so it doesn't re-run the same
-    /// failed search every time it's otherwise eligible to act.
-    /// </summary>
-    public short FramesToWait { get; set; } = 0;
+    /// <summary>Movement's own private retry backoff. </summary>
+    /// <remarks>Set when MovementMode.Random entity finds every direction blocked, so it doesn't re-run the same failed search every activation.</remarks>
+    public ushort FramesToWait { get; set; } = 0;
 
     /// <summary>The 3D position the entity is pathing toward.</summary>
     public Vector3Int? TargetMapPosition { get; set; } = targetMapPosition;
@@ -26,5 +19,5 @@ public struct MovementComponent(MovementMode movementMode, short actionCooldownF
     /// <summary>The map node to attempt to move to next, as a step toward TargetMapPosition -- separated out to allow delayed/recalculated movement.</summary>
     public Vector3Int? NextMapPosition { get; set; } = nextMapPosition;
 
-    public override readonly string ToString() => $"Mode : {MovementMode}\nActionCooldownFrames : {ActionCooldownFrames}\nFramesToWait : {FramesToWait}\nTargetMapPosition : {TargetMapPosition}\nNextMapPosition : {NextMapPosition}";
+    public override readonly string ToString() => $"Mode : {MovementMode}\nFramesToWait : {FramesToWait}\nTargetMapPosition : {TargetMapPosition}\nNextMapPosition : {NextMapPosition}";
 }

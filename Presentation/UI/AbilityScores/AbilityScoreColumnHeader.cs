@@ -25,7 +25,7 @@ public sealed class AbilityScoreColumnHeader(FontService fontService, ElementPoo
     private SpriteFontBase _nameFont = null!;
     private SpriteFontBase _totalFont = null!;
 
-    public void Configure(string name, short total, Vector2 headerSize)
+    public void Configure(string name, ushort total, Vector2 headerSize)
     {
         _name = name;
         _totalText = total.ToString();

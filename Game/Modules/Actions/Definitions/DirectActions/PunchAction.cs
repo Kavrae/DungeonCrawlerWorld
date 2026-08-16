@@ -1,5 +1,4 @@
 using Engine.Math;
-using Engine.Utilities;
 using Game.Modules.Actions.Activators;
 using Game.Modules.Actions.Effects;
 using Microsoft.Xna.Framework;
@@ -17,7 +16,7 @@ public static class PunchAction
         Effects: [new ActionEffect([new DirectDamage(MinAmount: 18, MaxAmount: 22)])],
         Activator: new DirectAction(
             new TargetingSpec(TargetShape.Adjacent, Range: 0),
-            new ActionTiming(ActionTimingCategory.Immediate, ActionLockFrames: (short)GameTiming.FramesForSeconds(1f), CooldownFrames: null)),
+            new ActionTiming(ActionTimingCategory.Immediate, CooldownFrames: null)),
         Description: "It doesn't get any more simple than this. Just keep hitting the target with your bare fists until they stop moving. This action is primarily modified by the Bare Knuckle skill.",
         Summary: "Basic melee attack");
 }

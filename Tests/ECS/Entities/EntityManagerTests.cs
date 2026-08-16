@@ -20,7 +20,7 @@ public sealed class EntityManagerTests
         var entityId = entityManager.CreateEntity();
 
         Assert.AreEqual(0, entityId);
-        Assert.IsTrue(entityManager.IsAlive(0));
+        Assert.IsTrue(entityManager.EntityExists(0));
         Assert.AreEqual(1, entityManager.LivingEntityCount);
     }
 
@@ -35,7 +35,7 @@ public sealed class EntityManagerTests
 
         entityManager.DestroyEntity(entityId);
 
-        Assert.IsFalse(entityManager.IsAlive(entityId));
+        Assert.IsFalse(entityManager.EntityExists(entityId));
         Assert.IsFalse(componentManager.GetDirectPool<TestComponent>().Has(entityId));
     }
 

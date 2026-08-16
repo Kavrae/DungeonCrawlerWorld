@@ -34,9 +34,9 @@ namespace Game.Modules.Actions.Effects;
 /// </summary>
 public sealed record AuraSourceGrant(
     StatusEffectType StatusEffectType,
-    int AuraAndGlowStrength,
+    byte AuraAndGlowStrength,
     Color GlowColor,
-    int? DurationFrames = null) : IActionEffectEntry
+    ushort? DurationFrames = null) : IActionEffectEntry
 {
     public void Apply(ActionEffectContext context)
     {
@@ -51,7 +51,7 @@ public sealed record AuraSourceGrant(
             return;
         }
 
-        var scaledDurationFrames = (int)Math.Round(durationFrames * context.DurationScaleMultiplier);
+        var scaledDurationFrames = (ushort)Math.Round(durationFrames * context.DurationScaleMultiplier);
 
         AuraSourceEffects.Apply(context.AuraSources, context.EventBus, context.TargetEntityId, StatusEffectType, AuraAndGlowStrength, GlowColor);
         context.ComponentManager.Merge(context.TargetEntityId, new AuraSourceExpiryComponent(StatusEffectType, scaledDurationFrames));

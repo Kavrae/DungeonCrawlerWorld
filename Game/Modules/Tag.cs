@@ -4,7 +4,7 @@ namespace Game.Modules;
 /// or item can carry several at once (e.g. Punch is Melee+Unarmed+Attack), so these drive
 /// filtering/querying (see the "Dynamic per-tag inventory tabs" TODO) rather than which module a
 /// definition lives in.</summary>
-public enum Tag
+public enum Tag : byte
 {
     Attack,
     Consumable,

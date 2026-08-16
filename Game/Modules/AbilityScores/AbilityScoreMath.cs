@@ -5,42 +5,43 @@ using Game.Modules.StatModifiers.Components;
 
 namespace Game.Modules.AbilityScores;
 
-/// <summary>
-/// Clamping and effective-value computation for ability scores. Total is precomputed by
-/// AbilityScoreEffects at grant/change time (see its own doc comment for why this is eager
-/// rather than the lazy-on-read convention StatModifierMath uses for every other stat) --
-/// this class supplies the math both that eager write path and unit tests need, it doesn't
-/// itself cache anything.
-/// </summary>
+/// <summary>Provides mathematical operations for handling ability scores.</summary>
+/// <cleanupVersion>1</cleanupVersion>
 public static class AbilityScoreMath
 {
-    public const short MinimumBaseValue = 1;
-    public const short MaximumBaseValue = 300;
+    /// <summary>The minimum allowed base value for an ability score.</summary>
+    public const ushort MinimumBaseValue = 1;
+
+    /// <summary>The maximum allowed base value for an ability score.</summary>
+    public const ushort MaximumBaseValue = 300;
 
     // Precomputed once rather than divided out on every Lerp call -- Lerp runs on hot paths
     // (per-visit regen ticks, per-target potion cooldown resets), and a multiply by a cached
     // reciprocal is cheaper than a float divide repeated across every one of those calls.
     private static readonly float InverseBaseValueRange = 1f / (MaximumBaseValue - MinimumBaseValue);
 
-    public static short ClampBaseValue(short baseValue) => MathUtility.ClampShort(baseValue, MinimumBaseValue, MaximumBaseValue);
+    /// <summary>Clamps a base value for an ability score between the minimum and maximum allowed values.</summary>
+    /// <param name="baseValue">The base value to clamp.</param>
+    /// <returns>The clamped base value.</returns>
+    public static ushort ClampBaseValue(ushort baseValue) => MathUtility.ClampUShort(baseValue, MinimumBaseValue, MaximumBaseValue);
 
-    /// <summary>
-    /// Linear ramp from atMin (at ability score total MinimumBaseValue) to atMax (at
-    /// MaximumBaseValue) -- abilityScoreTotal is clamped into that range first via
-    /// ClampBaseValue. Shared by every "output scales smoothly across an ability score's full
-    /// range" formula (AbilityScoreRegenMath, PotionCooldownEffects.ComputeDurationFrames, ...)
-    /// so they don't each duplicate the same normalize-then-lerp arithmetic. atMin may be
-    /// greater than atMax -- callers whose output should shrink as the score rises (e.g. a
-    /// cooldown) just pass their endpoints in that order.
-    /// </summary>
-    public static float Lerp(short abilityScoreTotal, float atMin, float atMax)
+    /// <summary>Linearly interpolates between two values based on an ability score total.</summary>
+    /// <remarks>Values are normalized between 1 and 300.</remarks>
+    /// <param name="abilityScoreTotal">The ability score total to interpolate against.</param>
+    /// <param name="atMin">The value at the minimum base value.</param>
+    /// <param name="atMax">The value at the maximum base value.</param>
+    /// <returns>The interpolated value.</returns>
+    public static float Lerp(ushort abilityScoreTotal, float atMin, float atMax)
     {
         var clampedTotal = ClampBaseValue(abilityScoreTotal);
         var normalized = (clampedTotal - MinimumBaseValue) * InverseBaseValueRange;
-        return atMin + normalized * (atMax - atMin);
+        return MathUtility.Lerp(normalized, atMin, atMax);
     }
 
-    /// <summary>Which StatModifierTarget a given AbilityScoreType's modifiers are filed under -- the two enums are deliberately kept 1:1 (see StatModifierTarget's own comment).</summary>
+    /// <summary>Converts an ability score type to its corresponding stat modifier target.</summary>
+    /// <param name="type">The ability score type to convert.</param>
+    /// <returns>The corresponding stat modifier target.</returns>
+    /// <exception cref="ArgumentOutOfRangeException">If the ability score type is not recognized.</exception>
     public static StatModifierTarget ToStatModifierTarget(AbilityScoreType type) => type switch
     {
         AbilityScoreType.Strength => StatModifierTarget.Strength,
@@ -53,7 +54,9 @@ public static class AbilityScoreMath
         _ => throw new ArgumentOutOfRangeException(nameof(type), type, null),
     };
 
-    /// <summary>Reverse of ToStatModifierTarget -- null for any StatModifierTarget that isn't an ability score (e.g. MaximumHealth), the signal AbilityScoreEffects uses to no-op a StatModifierComponent change it doesn't need to react to.</summary>
+    /// <summary>Converts a stat modifier target to its corresponding ability score type.</summary>
+    /// <param name="target">The stat modifier target to convert.</param>
+    /// <returns>The corresponding ability score type, or null if not recognized.</returns>
     public static AbilityScoreType? FromStatModifierTarget(StatModifierTarget target) => target switch
     {
         StatModifierTarget.Strength => AbilityScoreType.Strength,
@@ -66,16 +69,15 @@ public static class AbilityScoreMath
         _ => null,
     };
 
-    /// <summary>
-    /// pool may be null -- same reasoning as StatModifierMath.GetEffectiveValue: callers
-    /// building a module set without StatModifiersModule still work, just with no possible
-    /// active modifiers. Clamps in the int domain before casting to short (see MathUtility.ClampByte
-    /// for the same reasoning) -- a float far outside short's range would otherwise produce an
-    /// unspecified value on cast rather than a clean clamp.
-    /// </summary>
-    public static short ComputeTotal(MultiComponentPool<StatModifierComponent>? statModifiers, int entityId, AbilityScoreType type, short baseValue)
+    /// <summary>Computes the total value for an ability score based on its base value and active stat modifiers.</summary>
+    /// <param name="statModifiers">The pool of active stat modifiers.</param>
+    /// <param name="entityId">The ID of the entity for which to compute the total.</param>
+    /// <param name="type">The ability score type.</param>
+    /// <param name="baseValue">The base value for the ability score.</param>
+    /// <returns>The computed total value.</returns>
+    public static ushort ComputeTotal(MultiComponentPool<StatModifierComponent>? statModifiers, int entityId, AbilityScoreType type, ushort baseValue)
     {
         var effectiveValue = StatModifierMath.GetEffectiveValue(statModifiers, entityId, ToStatModifierTarget(type), baseValue);
-        return (short)MathUtility.ClampInt((int)effectiveValue, 0, short.MaxValue);
+        return MathUtility.ClampUShort(effectiveValue, 0, ushort.MaxValue);
     }
 }

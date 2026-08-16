@@ -56,7 +56,7 @@ public sealed class DebugWindowContentTests
     {
         var ecsContext = BuildEcsContext();
         var entityId = ecsContext.EntityManager.CreateEntity();
-        ecsContext.ComponentManager.GetPackedPool<MovementComponent>().Add(entityId, new MovementComponent(MovementMode.Random, 10, null, null));
+        ecsContext.ComponentManager.GetPackedPool<MovementComponent>().Add(entityId, new MovementComponent(MovementMode.Random, null, null));
 
         var fontService = new FontService("Fonts");
         var windowService = new ElementPoolService(fontService, new GlyphRenderer());

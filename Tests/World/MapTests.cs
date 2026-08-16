@@ -12,7 +12,7 @@ public sealed class MapTests
     {
         var map = new Map(new Vector3Int(3, 3, 3));
 
-        Assert.AreEqual(-1, map.GetEntityId(new Vector3Int(1, 1, 1)));
+        Assert.AreEqual(-1, map.GetBlockingEntityId(new Vector3Int(1, 1, 1)));
     }
 
     [TestMethod]
@@ -20,21 +20,21 @@ public sealed class MapTests
     {
         var map = new Map(new Vector3Int(3, 3, 3));
 
-        map.SetEntityId(new Vector3Int(1, 2, 0), 7);
+        map.SetBlockingEntityId(new Vector3Int(1, 2, 0), 7);
 
-        Assert.AreEqual(7, map.GetEntityId(new Vector3Int(1, 2, 0)));
+        Assert.AreEqual(7, map.GetBlockingEntityId(new Vector3Int(1, 2, 0)));
     }
 
     [TestMethod]
     public void ClearIfOccupiedBy_MatchingEntityId_ClearsAndReturnsTrue()
     {
         var map = new Map(new Vector3Int(3, 3, 3));
-        map.SetEntityId(new Vector3Int(1, 1, 1), 5);
+        map.SetBlockingEntityId(new Vector3Int(1, 1, 1), 5);
 
-        var cleared = map.ClearIfOccupiedBy(new Vector3Int(1, 1, 1), 5);
+        var cleared = map.ClearBlockingIfOccupiedBy(new Vector3Int(1, 1, 1), 5);
 
         Assert.IsTrue(cleared);
-        Assert.AreEqual(-1, map.GetEntityId(new Vector3Int(1, 1, 1)));
+        Assert.AreEqual(-1, map.GetBlockingEntityId(new Vector3Int(1, 1, 1)));
     }
 
     /// <summary>
@@ -45,12 +45,12 @@ public sealed class MapTests
     public void ClearIfOccupiedBy_DifferentEntityId_DoesNotClearAndReturnsFalse()
     {
         var map = new Map(new Vector3Int(3, 3, 3));
-        map.SetEntityId(new Vector3Int(1, 1, 1), 5);
+        map.SetBlockingEntityId(new Vector3Int(1, 1, 1), 5);
 
-        var cleared = map.ClearIfOccupiedBy(new Vector3Int(1, 1, 1), 6);
+        var cleared = map.ClearBlockingIfOccupiedBy(new Vector3Int(1, 1, 1), 6);
 
         Assert.IsFalse(cleared);
-        Assert.AreEqual(5, map.GetEntityId(new Vector3Int(1, 1, 1)));
+        Assert.AreEqual(5, map.GetBlockingEntityId(new Vector3Int(1, 1, 1)));
     }
 
     [TestMethod]
@@ -83,10 +83,10 @@ public sealed class MapTests
         var map = new Map(new Vector3Int(3, 3, 3));
 
         map.SetTerrainEntityId(1, 1, TerrainLayer.Ground, 4); // e.g. StoneFloor.
-        map.SetEntityId(new Vector3Int(1, 1, (int)MapLayer.Ground), 9); // e.g. Wall.
+        map.SetBlockingEntityId(new Vector3Int(1, 1, (int)MapLayer.Ground), 9); // e.g. Wall.
 
         Assert.AreEqual(4, map.GetTerrainEntityId(1, 1, TerrainLayer.Ground));
-        Assert.AreEqual(9, map.GetEntityId(new Vector3Int(1, 1, (int)MapLayer.Ground)));
+        Assert.AreEqual(9, map.GetBlockingEntityId(new Vector3Int(1, 1, (int)MapLayer.Ground)));
     }
 
     [TestMethod]

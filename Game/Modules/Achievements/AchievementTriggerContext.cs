@@ -6,18 +6,14 @@ using Game.World;
 
 namespace Game.Modules.Achievements;
 
-/// <summary>
-/// What an IAchievementDefinition's RegisterTrigger needs: the EventBus to subscribe against,
-/// a live IPlayerQuery reference (nullable, same reasoning as GameModuleContext.PlayerQuery --
-/// read PlayerEntityId at event-fire time, not capture it here, since the player entity
-/// doesn't exist yet while modules are being configured), the ComponentManager (for conditions
-/// that need to read a component's data rather than just an event's own fields -- e.g.
-/// EarlyAdopterAchievement reading CrawlerComponent off an event that carries no data itself),
-/// the ActionCatalog (for conditions that need to inspect the activated action's own data,
-/// e.g. SpellCasterAchievement checking ActionDefinition.Tags), the ItemCatalog (same reasoning,
-/// for an item's own data -- e.g. ArchivistAchievement checking ItemDefinition.Tags), and the
-/// unlock callback bound to this specific achievement's identity by AchievementModule.
-/// </summary>
+/// <summary>Provides context for triggering achievement unlock conditions.</summary>
+/// <param name="eventBus">The event bus to subscribe to.</param>
+/// <param name="playerQuery">The query for retrieving player information.</param>
+/// <param name="componentManager">The component manager.</param>
+/// <param name="actionCatalog">The action catalog.</param>
+/// <param name="itemCatalog">The item catalog.</param>
+/// <param name="unlock">The unlock callback.</param>
+/// <cleanupVersion>1</cleanupVersion>
 public sealed class AchievementTriggerContext(EventBus eventBus, IPlayerQuery? playerQuery, ComponentManager componentManager, ActionCatalog actionCatalog, ItemCatalog itemCatalog, Action<int> unlock)
 {
     public EventBus EventBus { get; } = eventBus;
@@ -30,21 +26,24 @@ public sealed class AchievementTriggerContext(EventBus eventBus, IPlayerQuery? p
 
     public ItemCatalog Items { get; } = itemCatalog;
 
-    /// <summary>
-    /// Subscribes a handler for TEvent that unlocks the achievement for the player -- the only
-    /// entity an achievement can ever be earned by -- the first time condition (if given)
-    /// returns true, then unsubscribes itself, so the achievement is earned exactly once and
-    /// stops costing anything to evaluate afterward. Omitting condition means "unlock
-    /// unconditionally the moment TEvent fires" (e.g. LonerAchievement, UnarmedCombatAchievement);
-    /// InflictedDamageAchievement is the one definition that needs it, to check the event's own
-    /// data (who dealt/received the damage) before unlocking. A cumulative achievement (e.g. a
-    /// future kill counter) can still track state across calls inside its own condition closure,
-    /// only returning true once its threshold is reached.
-    ///
-    /// Never subscribes at all when PlayerQuery is null -- there's no player to unlock this
-    /// for -- rather than subscribing a handler that would just no-op forever.
-    /// </summary>
+    /// <summary>Subscribes to unlock the achievement for the player the first time condition (if given) matches TEvent.</summary>
+    /// <remarks>Backed by EventBus.SubscribeOnce, which stays subscribed across repeated firings of TEvent until condition passes -- correct for an event that can fire many times over a session (most achievement triggers), where a failed check now doesn't rule out success later. For an event guaranteed to fire at most once per session, use SubscribeUntilTriggered instead.</remarks>
+    /// <typeparam name="TEvent"> The type of event to subscribe to.</typeparam>
+    /// <param name="condition">The optional condition to check before unlocking the achievement.</param>
     public void SubscribeUntilUnlocked<TEvent>(Func<TEvent, bool>? condition = null)
+    {
+        if (PlayerQuery is not { } playerQuery)
+        {
+            return;
+        }
+
+        EventBus.SubscribeOnce<TEvent>(_ => unlock(playerQuery.PlayerEntityId), condition);
+    }
+
+    /// <summary>Subscribes to unlock the achievement for the player the first time condition (if given) matches TEvent. Always unsubscribes on the first trigger.</summary>
+    /// <typeparam name="TEvent">The type of event to subscribe to.</typeparam>
+    /// <param name="condition">The optional condition to check when the event fires.</param>
+    public void SubscribeUntilTriggered<TEvent>(Func<TEvent, bool>? condition = null)
     {
         if (PlayerQuery is not { } playerQuery)
         {
@@ -54,13 +53,12 @@ public sealed class AchievementTriggerContext(EventBus eventBus, IPlayerQuery? p
         Action<TEvent>? handler = null;
         handler = eventData =>
         {
-            if (condition is not null && !condition(eventData))
-            {
-                return;
-            }
-
             EventBus.Unsubscribe(handler!);
-            unlock(playerQuery.PlayerEntityId);
+
+            if (condition is null || condition(eventData))
+            {
+                unlock(playerQuery.PlayerEntityId);
+            }
         };
 
         EventBus.Subscribe(handler);

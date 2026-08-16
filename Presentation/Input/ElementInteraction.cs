@@ -3,7 +3,7 @@ using Presentation.UI;
 namespace Presentation.Input;
 
 /// <summary>What kind of drag interaction (if any) a press on an element starts -- see ElementInteraction.</summary>
-internal enum ElementDragInteractionKind
+internal enum ElementDragInteractionKind : byte
 {
     None,
     Move,

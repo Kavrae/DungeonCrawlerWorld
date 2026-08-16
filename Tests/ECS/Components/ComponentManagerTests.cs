@@ -28,7 +28,6 @@ public sealed class ComponentManagerTests
         manager.RegisterDirectPool<DirectTestComponent>((ref existing, incoming) => existing = incoming);
 
         Assert.IsTrue(manager.IsRegistered<DirectTestComponent>());
-        Assert.AreEqual(ComponentPoolType.Direct, manager.GetPoolType<DirectTestComponent>());
 
         var pool = manager.GetDirectPool<DirectTestComponent>();
         pool.Add(0, new DirectTestComponent { Value = 5 });

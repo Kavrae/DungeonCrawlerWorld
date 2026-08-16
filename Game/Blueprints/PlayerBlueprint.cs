@@ -13,7 +13,6 @@ using Game.Modules.Inventory.Components;
 using Game.Modules.Inventory.Definitions;
 using Game.Modules.Movement.Components;
 using Game.Modules.StatModifiers;
-using Game.Modules.StatModifiers.Components;
 using Game.World;
 using Microsoft.Xna.Framework;
 
@@ -26,12 +25,12 @@ namespace Game.Blueprints;
 /// </summary>
 public sealed class PlayerBlueprint(MathUtility mathUtility, UniqueNumberAllocator crawlerNumberAllocator) : IBlueprint
 {
-    private const short MaximumHealth = 100;
+    private const ushort MaximumHealth = 100;
 
-    private const short MagicMissileDamage = 5;
+    private const ushort MagicMissileDamage = 5;
 
     /// <summary>Matches the Expansion group's old fixed slot count -- nobody loses hotkey access just because Expansion now grows past 10. See HotkeyExpansionUnlockComponent's own doc comment.</summary>
-    private const short DefaultUnlockedExpansionSlots = 5;
+    private const byte DefaultUnlockedExpansionSlots = 5;
 
     /// <summary>PermanentHybridBuffTest -- exercises a permanent modifier granting both a flat and a percentage bonus at once. See StatModifierComponent's own doc comment for why this never mutates HealthComponent/ActionInstanceComponent directly.</summary>
     private const float PermanentOutgoingDamageBonus = 2f;
@@ -45,8 +44,8 @@ public sealed class PlayerBlueprint(MathUtility mathUtility, UniqueNumberAllocat
             componentManager.Merge(entityId, sprite);
         }
         componentManager.Merge(entityId, new HealthComponent((short)mathUtility.Next(1, MaximumHealth + 1), MaximumHealth));
-        componentManager.Merge(entityId, new MovementComponent(MovementMode.PlayerControlled, 20, null, null));
-        componentManager.Merge(entityId, new ActionLockComponent(totalLockFrames: 0, lockFramesRemaining: 0));
+        componentManager.Merge(entityId, new MovementComponent(MovementMode.PlayerControlled, null, null));
+        componentManager.Merge(entityId, new ActionLockComponent(standardLockFrames: 30, currentLockTotalFrames: 0, currentLockFramesRemaining: 0));
         componentManager.Merge(entityId, new TransformComponent(new Vector3Int(-1, -1, (int)MapLayer.Ground), new Vector2Byte(1, 1)));
 
         foreach (var abilityScoreType in Enum.GetValues<AbilityScoreType>())
@@ -88,11 +87,11 @@ public sealed class PlayerBlueprint(MathUtility mathUtility, UniqueNumberAllocat
         componentManager.Merge(entityId, new ItemHotkeyBindingComponent(HotkeySlot.Slot6, ToxicIdol.Id));
 
         StatModifierEffects.Apply(componentManager, entityId, StatModifierTarget.OutgoingDamage, StatModifierOperation.Additive, StatModifierPolarity.Buff,
-            canModify: true, magnitude: PermanentOutgoingDamageBonus, durationFrames: StatModifierComponent.Permanent, StatusEffectSource.Admin);
+            canModify: true, magnitude: PermanentOutgoingDamageBonus, durationFrames: null, StatusEffectSource.Admin);
         StatModifierEffects.Apply(componentManager, entityId, StatModifierTarget.MaximumHealth, StatModifierOperation.Multiplicative, StatModifierPolarity.Buff,
-            canModify: true, magnitude: PermanentMaximumHealthMultiplierBonus, durationFrames: StatModifierComponent.Permanent, StatusEffectSource.Admin);
+            canModify: true, magnitude: PermanentMaximumHealthMultiplierBonus, durationFrames: null, StatusEffectSource.Admin);
     }
 
     /// <summary>Two Next(1,6) rolls summed -- range [2,10] per the spec, clustering around the middle rather than uniform across the whole range. Exact shape isn't load-bearing since level-up moves these later.</summary>
-    private short RollAbilityScoreBaseValue() => (short)(mathUtility.Next(1, 6) + mathUtility.Next(1, 6));
+    private ushort RollAbilityScoreBaseValue() => (ushort)(mathUtility.Next(1, 6) + mathUtility.Next(1, 6));
 }

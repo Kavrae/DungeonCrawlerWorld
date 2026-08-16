@@ -10,11 +10,11 @@ namespace Game.Modules.Paralysis.Components;
 /// through, so CountdownTicker.Tick's onTick fires exactly once, at expiry, and always returns
 /// true (remove).
 /// </summary>
-public struct ParalysisTimerComponent(int framesUntilNextTick) : ITickCountdown, IStatusEffectStackCount
+public struct ParalysisTimerComponent(ushort framesUntilNextTick) : ITickCountdown, IStatusEffectStackCount
 {
-    public int FramesUntilNextTick { get; set; } = framesUntilNextTick;
+    public ushort FramesUntilNextTick { get; set; } = framesUntilNextTick;
 
-    public readonly int StackCount => 1;
+    public readonly byte StackCount => 1;
 
     public override readonly string ToString() => $"FramesUntilNextTick : {FramesUntilNextTick}\nStackCount : {StackCount}";
 }

@@ -381,20 +381,20 @@ public sealed class TestMapBuilder(EntityManager entityManager, ComponentManager
         }
     }
 
-    private static readonly short MaximumStaggerFrames = (short)GameTiming.FramesForSeconds(1f);
+    private static readonly ushort MaximumStaggerFrames = GameTiming.FramesForSeconds(1f);
 
     /// <summary>
     /// Randomizes a freshly-built goblin/fairy's starting action lock to a value between 0 and
     /// MaximumStaggerFrames, instead of the 0 every race blueprint merges by default -- without
     /// this, an entire periodic population spawns ready to act on the same handful of frames
     /// and visibly moves in lockstep bursts rather than spreading out over time. The exact
-    /// upper bound doesn't need to track any entity's real ActionCooldownFrames -- this only
+    /// upper bound doesn't need to track any entity's real StandardLockFrames -- this only
     /// matters for the initial stagger, and gets fully overwritten the first time the entity
     /// actually moves (ActionLockGate.Lock sets both fields together at that point).
     /// </summary>
     private void StaggerActionLock(int entityId)
     {
-        var framesToWait = (short)mathUtility.Next(0, MaximumStaggerFrames + 1);
+        var framesToWait = (ushort)mathUtility.Next(0, MaximumStaggerFrames + 1);
 
         ActionLockGate.Lock(_actionLocks, entityId, framesToWait);
     }

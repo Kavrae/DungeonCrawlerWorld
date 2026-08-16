@@ -6,7 +6,7 @@ namespace Game.Modules.StatModifiers;
 /// that shortens debuff durations). No consumer reads this yet; see StatModifierComponent's
 /// own doc comment.
 /// </summary>
-public enum StatModifierPolarity
+public enum StatModifierPolarity : byte
 {
     Buff,
     Debuff,

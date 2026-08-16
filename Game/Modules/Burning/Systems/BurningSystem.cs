@@ -93,18 +93,18 @@ public sealed class BurningSystem : ISystem
             }
         }
 
-        HealthDamage.Apply(_health, _eventBus, entityId, (short)stackCount, source, _playerQuery, StatusEffectDamageType.Describe(StatusEffectType.Burning), _statModifiers);
+        HealthDamage.Apply(_health, _eventBus, entityId, stackCount, source, _playerQuery, StatusEffectDamageType.Describe(StatusEffectType.Burning), _statModifiers);
         _stacks.RemoveByDenseIndex(foundDenseIndex);
 
-        var remainingStacks = stackCount - 1;
+        var remainingStacks = (byte)(stackCount - 1);
         if (remainingStacks == 0)
         {
             return true;
         }
 
-        _timers.TryUpdate(entityId, remainingStacks, static (ref BurningTimerComponent t, int remaining) =>
+        _timers.TryUpdate(entityId, remainingStacks, static (ref BurningTimerComponent t, byte remainingStacks) =>
         {
-            t.StackCount = remaining;
+            t.StackCount = remainingStacks;
             t.FramesUntilNextTick = BurningEffects.TickIntervalFrames;
         });
 

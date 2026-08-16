@@ -1,22 +1,21 @@
-﻿using System.Diagnostics;
-using Engine.Diagnostics;
+﻿using Engine.Diagnostics;
+using System.Diagnostics;
 
 namespace Engine.Events;
 
-/// <summary>
-/// Lightweight typed pub/sub, letting modules react to each other (e.g. a future
-/// death/respawn module reacting to health reaching zero) without referencing each other
-/// directly. Supports two dispatch modes, selected by the event type itself (see
-/// <see cref="IBufferedEvent"/>): immediate, where Publish invokes subscribers synchronously
-/// in-line (the default, unchanged from before buffering existed), and buffered, where
-/// Publish enqueues and delivery waits for an explicit DispatchBuffered&lt;T&gt;() call.
-/// </summary>
+/// <summary> Lightweight typed pub/sub, letting modules react to each other without direct reference </summary>
+/// <remarks> Supports two dispatch modes, selected by the event type : 
+/// Immediate, where Publish invokes subscribers synchronously in-line (the default)
+/// Buffered, where Publish enqueues and delivery waits for an explicit DispatchBuffered&lt;T&gt;() call.
+/// </remarks>
+/// <cleanupVersion>1</cleanupVersion>
 public sealed class EventBus
 {
     private readonly Dictionary<Type, Delegate> _subscribers = [];
     private readonly Dictionary<Type, object> _bufferedQueues = [];
 
     /// <summary>
+    /// TEMPORARY PROFILING
     /// Cached "EventBus.Publish&lt;TypeName&gt;" phase-name string per event type, built once on
     /// first profiled Publish rather than re-interpolated every call -- unlike the per-handler
     /// breakdown this once had (reverted: on a hyper-frequent event like EntityMovedEvent, splitting
@@ -27,6 +26,7 @@ public sealed class EventBus
     private readonly Dictionary<Type, string> _aggregatePhaseNames = [];
 
     /// <summary>
+    /// /// TEMPORARY PROFILING
     /// Opt-in dispatch-cost tracking, keyed by "EventBus.Publish&lt;TypeName&gt;" -- see
     /// PhaseProfiler's own doc comment. Immediate (non-buffered) dispatch runs subscribers
     /// synchronously in-line with whatever called Publish, so a system that publishes mid-
@@ -37,6 +37,9 @@ public sealed class EventBus
     /// </summary>
     public PhaseProfiler? Profiler { get; set; }
 
+    /// <summary>Subscribes to events of type T.</summary>
+    /// <typeparam name="T">The type of the event.</typeparam>
+    /// <param name="handler">The handler to invoke when an event of type T is published.</param>
     public void Subscribe<T>(Action<T> handler)
     {
         ArgumentNullException.ThrowIfNull(handler);
@@ -46,6 +49,30 @@ public sealed class EventBus
             : handler;
     }
 
+    /// <summary>Subscribes handler for exactly one T matching condition, then unsubscribes itself.</summary>
+    /// <remarks>Omitting condition means "fire on the first T published, unconditionally." handler runs after the internal wrapper has already unsubscribed, so handler is free to Publish/Subscribe more of T itself without re-triggering this same one-shot.</remarks>
+    public void SubscribeOnce<T>(Action<T> handler, Func<T, bool>? condition = null)
+    {
+        ArgumentNullException.ThrowIfNull(handler);
+
+        Action<T>? wrapper = null;
+        wrapper = eventData =>
+        {
+            if (condition is not null && !condition(eventData))
+            {
+                return;
+            }
+
+            Unsubscribe(wrapper!);
+            handler(eventData);
+        };
+
+        Subscribe(wrapper);
+    }
+
+    /// <summary>Unsubscribes the specified handler from events of type T.</summary>
+    /// <typeparam name="T">The type of the event.</typeparam>
+    /// <param name="handler">The handler to unsubscribe.</param>
     public void Unsubscribe<T>(Action<T> handler)
     {
         ArgumentNullException.ThrowIfNull(handler);
@@ -66,11 +93,10 @@ public sealed class EventBus
         }
     }
 
-    /// <summary>
-    /// Dispatches immediately if T is not an <see cref="IBufferedEvent"/> (unchanged
-    /// behavior); otherwise enqueues eventData for the next DispatchBuffered&lt;T&gt;() call
-    /// instead of invoking subscribers here.
-    /// </summary>
+    /// <summary>Publishes an event of type T.</summary>
+    /// <remarks>Events of type <see cref="IBufferedEvent"/> are queued for later dispatch, while other events are dispatched immediately.</remarks>
+    /// <typeparam name="T">The type of the event.</typeparam>
+    /// <param name="eventData">The event data to publish.</param>
     public void Publish<T>(T eventData)
     {
         if (eventData is IBufferedEvent)
@@ -84,6 +110,7 @@ public sealed class EventBus
             return;
         }
 
+        //TEMPORARY
         if (Profiler is { } profiler)
         {
             if (!_aggregatePhaseNames.TryGetValue(typeof(T), out var phaseName))
@@ -102,12 +129,9 @@ public sealed class EventBus
         }
     }
 
-    /// <summary>
-    /// Invokes every current subscriber against everything queued for T since the last call,
-    /// then clears the queue. A no-op if nothing was queued (including if T was never
-    /// published at all). Only meaningful for T implementing <see cref="IBufferedEvent"/> --
-    /// nothing is ever queued for an immediate-dispatch type, so this is always a no-op there.
-    /// </summary>
+    /// <summary>Dispatches all buffered events of type T.</summary>
+    /// <remarks>This allows systems to control when their own buffered events are processed to avoid data corruption and take advantage of bulk processing.</remarks>
+    /// <typeparam name="T">The type of the event.</typeparam>
     public void DispatchBuffered<T>()
     {
         if (!_bufferedQueues.TryGetValue(typeof(T), out var queueObject))

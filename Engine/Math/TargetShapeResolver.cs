@@ -1,8 +1,6 @@
 namespace Engine.Math;
 
-/// <summary>
-/// Resolves a TargetShape into the actual set of map tiles it hits based on the caster and cursor positions.
-/// </summary>
+/// <summary> Resolves a TargetShape into the actual set of map tiles it hits based on the caster and cursor positions. </summary>
 /// <remarks>
 /// Pure grid math (no IMapQuery/ComponentManager dependency)
 /// 
@@ -15,6 +13,7 @@ namespace Engine.Math;
 /// own one List&lt;Vector3Int&gt; and reuse it call over call; Resolve clears it every call, so
 /// the list's capacity stabilizes after the first few frames instead of reallocating.
 /// </remarks>
+/// <cleanupVersion>1</cleanupVersion>
 public static class TargetShapeResolver
 {
     /// <summary>Half-width of a Cone's angular spread, in degrees, on either side of the caster-to-cursor direction. The dot-product test in ResolveCone assumes this stays &lt;= 90 -- see that method's own note.</summary>
@@ -63,12 +62,6 @@ public static class TargetShapeResolver
     /// <summary>
     /// Radius-based diamond scatter.
     /// </summary>
-    /// <remarks>
-    /// ScatterManhattan always visits its anchor cell (distance 0) before any neighbor.
-    /// Radius converts to the strength ScatterManhattan expects via strength = 1 &lt;&lt; radius, since MaxRadius(strength) ==
-    /// floor(log2(strength)); 
-    /// Rhe visited-cell falloff magnitude is ignored here.
-    /// </remarks>
     private static void ResolveManhattanBurst(Vector3Int anchor, int radius, Vector3Int mapSize, List<Vector3Int> results)
     {
         if (radius < 0)
@@ -76,7 +69,7 @@ public static class TargetShapeResolver
             return;
         }
 
-        DistanceFalloff.ScatterManhattan(anchor, 1 << radius, mapSize, results, static (cellPosition, _, resultsList) => resultsList.Add(cellPosition));
+        DistanceFalloff.ScatterManhattan(anchor, radius, strength: 1, FalloffShape.Flat, mapSize, results, static (cellPosition, _, resultsList) => resultsList.Add(cellPosition));
     }
 
     /// <summary>The caster's own WxH footprint size, as a single point
@@ -178,7 +171,7 @@ public static class TargetShapeResolver
     /// <summary>Exactly cursorTile when it's within range of the caster</summary>
     private static void ResolveSingleTarget(Vector3Int origin, Vector3Int cursorTile, int range, List<Vector3Int> results)
     {
-        if (DistanceFalloff.ManhattanDistance(origin, cursorTile) <= range)
+        if (GridDistance.ManhattanDistance(origin, cursorTile) <= range)
         {
             results.Add(cursorTile);
         }
@@ -187,7 +180,7 @@ public static class TargetShapeResolver
     /// <summary>Manhattan-distance star shape centered on cursorTile</summary>
     private static void ResolveBurst(Vector3Int origin, Vector3Int cursorTile, int range, int areaSize, Vector3Int mapSize, List<Vector3Int> results)
     {
-        if (DistanceFalloff.ManhattanDistance(origin, cursorTile) > range)
+        if (GridDistance.ManhattanDistance(origin, cursorTile) > range)
         {
             return;
         }

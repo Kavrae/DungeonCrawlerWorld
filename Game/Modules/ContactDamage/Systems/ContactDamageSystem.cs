@@ -102,7 +102,7 @@ public sealed class ContactDamageSystem : ISystem
 
             if (_exposures.Has(moved.EntityId))
             {
-                _exposures.TryUpdate(moved.EntityId, (hazard.TickIntervalFrames, terrainEntityId), static (ref ContactDamageExposureComponent exposure, (int TickIntervalFrames, int SourceEntityId) state) =>
+                _exposures.TryUpdate(moved.EntityId, (hazard.TickIntervalFrames, terrainEntityId), static (ref ContactDamageExposureComponent exposure, (ushort TickIntervalFrames, int SourceEntityId) state) =>
                 {
                     exposure.FramesUntilNextTick = state.TickIntervalFrames;
                     exposure.SourceEntityId = state.SourceEntityId;
@@ -156,7 +156,7 @@ public sealed class ContactDamageSystem : ISystem
 
         HealthDamage.Apply(_health, _eventBus, entityId, hazard.DamagePerTick, StatusEffectSource.FromEntity(exposure.SourceEntityId), _playerQuery, "Contact", _statModifiers);
 
-        _exposures.TryUpdate(entityId, hazard.TickIntervalFrames, static (ref ContactDamageExposureComponent e, int tickIntervalFrames) => e.FramesUntilNextTick = tickIntervalFrames);
+        _exposures.TryUpdate(entityId, hazard.TickIntervalFrames, static (ref ContactDamageExposureComponent e, ushort tickIntervalFrames) => e.FramesUntilNextTick = tickIntervalFrames);
 
         return false;
     }

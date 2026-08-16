@@ -14,7 +14,7 @@ public static class InventoryActions
     /// -- every caller gets the "gains an inventory on first item" behavior for free, the player
     /// included, with no per-call-site handling needed.
     /// </summary>
-    public static void AddItem(ComponentManager componentManager, int entityId, Guid itemDefinitionId, int quantity)
+    public static void AddItem(ComponentManager componentManager, int entityId, Guid itemDefinitionId, ushort quantity)
     {
         InventoryGrant.EnsureInventoryComponentExists(componentManager, entityId);
 

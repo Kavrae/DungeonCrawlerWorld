@@ -22,13 +22,8 @@ using Presentation.UI.Notifications;
 
 namespace DungeonCrawlerWorld;
 
-/// <summary>
-/// Builds the app's specific screen on top of the services PresentationBootstrapper already constructed.
-/// Wires up input focus for those screens.
-/// Kept separate from PresentationBootstrapper (which only
-/// builds reusable Presentation services and knows nothing about what windows this particular
-/// game has) the same way GameBootstrapper is kept separate from Engine's Bootstrapper.
-/// </summary>
+/// <summary>Builds the app's specific screen on top of the services PresentationBootstrapper already constructed.</summary>
+/// <cleanupVersion>1</cleanupVersion>>
 public static class GameShellBootstrapper
 {
     private const float ScreenMargin = 12f;
@@ -38,6 +33,14 @@ public static class GameShellBootstrapper
     private const float ActionLockGap = 8f;
     private const float ManaBarGap = 3f;
 
+    /// <summary>Builds the game shell context.</summary>
+    /// <param name="presentation"></param>
+    /// <param name="world"></param>
+    /// <param name="ecsContext"></param>
+    /// <param name="actionCatalog"></param>
+    /// <param name="itemCatalog"></param>
+    /// <param name="screenSize"></param>
+    /// <returns></returns>
     public static GameShellContext Build(PresentationContext presentation, World world, EcsContext ecsContext, ActionCatalog actionCatalog, ItemCatalog itemCatalog, Vector2 screenSize)
     {
         ArgumentNullException.ThrowIfNull(presentation);
@@ -120,7 +123,7 @@ public static class GameShellBootstrapper
         // and Presentation both, so it can't be registered inside WindowService's own
         // constructor the way Window/TextWindow are -- this is exactly what
         // WindowService.RegisterFactory exists for.
-        presentation.ElementPoolService.RegisterFactory<MapWindow>((_, _) => new MapWindow(
+        presentation.ElementPoolService.RegisterFactory<MapWindow>(() => new MapWindow(
             presentation.FontService,
             presentation.ElementPoolService,
             world,
@@ -309,23 +312,23 @@ public static class GameShellBootstrapper
         // same way MapWindow's do (see BuildBaseWindows) -- registered here, not inside
         // WindowService's own constructor, so window types that don't render sprites
         // (Window/TextWindow/TextBox) don't have to thread those dependencies through too.
-        presentation.ElementPoolService.RegisterFactory<Folder>((_, _) => new Folder(
+        presentation.ElementPoolService.RegisterFactory<Folder>(() => new Folder(
             presentation.FontService, presentation.ElementPoolService, presentation.GlyphRenderer, presentation.SpriteSheetService, presentation.SpriteRenderer));
 
         var notificationCenter = new NotificationCenter(presentation.ElementPoolService, ecsContext.EventBus, dynamicHudWindows);
         notificationCenter.Initialize();
 
-        presentation.ElementPoolService.RegisterFactory<InventoryManagementWindow>((_, _) => new InventoryManagementWindow(
+        presentation.ElementPoolService.RegisterFactory<InventoryManagementWindow>(() => new InventoryManagementWindow(
             presentation.FontService, presentation.ElementPoolService, presentation.GlyphRenderer, presentation.SpriteSheetService, presentation.SpriteRenderer,
             ecsContext.ComponentManager, itemCatalog));
-        presentation.ElementPoolService.RegisterFactory<InventoryItemStackCell>((_, _) => new InventoryItemStackCell(
+        presentation.ElementPoolService.RegisterFactory<InventoryItemStackCell>(() => new InventoryItemStackCell(
             presentation.FontService, presentation.ElementPoolService, presentation.GlyphRenderer, presentation.SpriteSheetService, presentation.SpriteRenderer));
 
-        presentation.ElementPoolService.RegisterFactory<AbilityScoreWindow>((_, _) => new AbilityScoreWindow(
+        presentation.ElementPoolService.RegisterFactory<AbilityScoreWindow>(() => new AbilityScoreWindow(
             presentation.FontService, presentation.ElementPoolService, presentation.GlyphRenderer, ecsContext.ComponentManager));
-        presentation.ElementPoolService.RegisterFactory<AbilityScoreColumnHeader>((_, _) => new AbilityScoreColumnHeader(
+        presentation.ElementPoolService.RegisterFactory<AbilityScoreColumnHeader>(() => new AbilityScoreColumnHeader(
             presentation.FontService, presentation.ElementPoolService, presentation.GlyphRenderer));
-        presentation.ElementPoolService.RegisterFactory<AbilityScoreModifierRow>((_, _) => new AbilityScoreModifierRow(
+        presentation.ElementPoolService.RegisterFactory<AbilityScoreModifierRow>(() => new AbilityScoreModifierRow(
             presentation.FontService, presentation.ElementPoolService, presentation.GlyphRenderer));
 
         var inventory = new InventoryFolderController(

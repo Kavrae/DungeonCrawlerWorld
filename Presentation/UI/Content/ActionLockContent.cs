@@ -48,8 +48,8 @@ public sealed class ActionLockContent(World world, ComponentManager componentMan
         _hasActionLock = true;
         _glyph = glyphComponent.Glyph;
         _glyphColor = glyphComponent.GlyphColor;
-        _fillPercentage = actionLock.TotalLockFrames > 0
-            ? (float)actionLock.LockFramesRemaining / actionLock.TotalLockFrames
+        _fillPercentage = actionLock.CurrentLockTotalFrames > 0
+            ? (float)actionLock.CurrentLockFramesRemaining / actionLock.CurrentLockTotalFrames
             : 0f;
     }
 

@@ -472,10 +472,10 @@ public sealed class HotbarContent(
     /// DrawActionSlot. quantity is always returned (0 if no stack at all) so the caller can
     /// decide whether to draw the "x{n}" overlay without a second inventory lookup.
     /// </summary>
-    private void DrawItemSlot(SpriteBatch spriteBatch, Texture2D unitRectangle, int playerEntityId, ItemDefinition item, Rectangle bounds, Rectangle contentBounds, bool isActive, out int quantity)
+    private void DrawItemSlot(SpriteBatch spriteBatch, Texture2D unitRectangle, int playerEntityId, ItemDefinition item, Rectangle bounds, Rectangle contentBounds, bool isActive, out ushort quantity)
     {
         var hasStack = InventoryQueries.TryGetStack(_inventoryStacks, playerEntityId, item.Id, out var stack);
-        quantity = hasStack ? stack.Quantity : 0;
+        quantity = hasStack ? stack.Quantity : (ushort)0;
 
         _radialFill.Sprite = item.SpriteName is not null && SpriteManifest.TryGet(item.SpriteName, out var sprite) ? sprite : null;
         _radialFill.SpriteTint = Color.White;
@@ -565,9 +565,9 @@ public sealed class HotbarContent(
 
         if (action.Activator.Timing.Category != ActionTimingCategory.FreeCast &&
             _actionLocks.TryGetReadonly(playerEntityId, out var actionLock) &&
-            actionLock.TotalLockFrames > 0)
+            actionLock.CurrentLockTotalFrames > 0)
         {
-            return (float)actionLock.LockFramesRemaining / actionLock.TotalLockFrames;
+            return (float)actionLock.CurrentLockFramesRemaining / actionLock.CurrentLockTotalFrames;
         }
 
         return 0f;
@@ -583,9 +583,9 @@ public sealed class HotbarContent(
     /// </summary>
     private float ComputeItemFillPercentage(int playerEntityId)
     {
-        if (_actionLocks.TryGetReadonly(playerEntityId, out var actionLock) && actionLock.TotalLockFrames > 0)
+        if (_actionLocks.TryGetReadonly(playerEntityId, out var actionLock) && actionLock.CurrentLockTotalFrames > 0)
         {
-            return (float)actionLock.LockFramesRemaining / actionLock.TotalLockFrames;
+            return (float)actionLock.CurrentLockFramesRemaining / actionLock.CurrentLockTotalFrames;
         }
 
         return 0f;

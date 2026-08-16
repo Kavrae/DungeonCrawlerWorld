@@ -126,7 +126,7 @@ public sealed class FloorBuilderTests
         FloorBuilder.PopulateFloor(world, ecsContext, mathUtility, crawlerNumberAllocator, new FrameEventBuffer<EntityMovedEvent>());
         world.PlayerEntityId = FloorBuilder.CreatePlayer(world, ecsContext, mathUtility, new FrameEventBuffer<EntityMovedEvent>(), crawlerNumberAllocator);
 
-        Assert.IsTrue(ecsContext.EntityManager.IsAlive(world.PlayerEntityId));
+        Assert.IsTrue(ecsContext.EntityManager.EntityExists(world.PlayerEntityId));
 
         var transform = ecsContext.ComponentManager.GetDirectPool<TransformComponent>().GetReadonly(world.PlayerEntityId);
         Assert.IsTrue(world.IsOnMap(transform.Position));

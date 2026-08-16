@@ -10,7 +10,6 @@ using Game.Modules.Core;
 using Game.Modules.Movement;
 using Game.Modules.ProcessingTier;
 using Game.Modules.StatModifiers;
-using Game.Modules.StatModifiers.Components;
 using Game.World;
 
 namespace Tests.Modules.AbilityScores;
@@ -24,7 +23,7 @@ namespace Tests.Modules.AbilityScores;
 [TestClass]
 public sealed class AbilityScoresModuleTests
 {
-    private static (EcsContext EcsContext, int EntityId) BuildAndGrantStrength(short baseValue)
+    private static (EcsContext EcsContext, int EntityId) BuildAndGrantStrength(ushort baseValue)
     {
         var world = new Game.World.World(new Map(new Vector3Int(5, 5, 1)));
         var mathUtility = new MathUtility();
@@ -103,7 +102,7 @@ public sealed class AbilityScoresModuleTests
 
         AbilityScoreEffects.GrantModifier(ecsContext.ComponentManager, entityId, AbilityScoreType.Strength, StatModifierOperation.Additive, StatModifierPolarity.Buff,
             canModify: true, magnitude: 3f, durationFrames: 1, StatusEffectSource.Admin);
-        Assert.AreEqual((short)8, GetStrength(ecsContext, entityId).Total);
+        Assert.AreEqual((ushort)8, GetStrength(ecsContext, entityId).Total);
 
         // StatModifierExpirySystem has StripeCount 1 (visits every entity every real frame), so
         // one Update call ticks the 1-frame modifier to 0 and removes it, publishing
@@ -111,6 +110,6 @@ public sealed class AbilityScoresModuleTests
         // by recomputing Total back down.
         ecsContext.Update(default);
 
-        Assert.AreEqual((short)5, GetStrength(ecsContext, entityId).Total);
+        Assert.AreEqual((ushort)5, GetStrength(ecsContext, entityId).Total);
     }
 }

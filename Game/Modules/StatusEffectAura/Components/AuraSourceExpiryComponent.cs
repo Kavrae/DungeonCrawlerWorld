@@ -13,8 +13,8 @@ namespace Game.Modules.StatusEffectAura.Components;
 /// promoted to a Multi pool (mirroring ScrollMasteryComponent's own (entityId, key)-keyed shape),
 /// not supported yet since nothing needs it.
 /// </summary>
-public struct AuraSourceExpiryComponent(StatusEffectType type, int framesUntilNextTick) : ITickCountdown
+public struct AuraSourceExpiryComponent(StatusEffectType type, ushort framesUntilNextTick) : ITickCountdown
 {
     public StatusEffectType Type { get; set; } = type;
-    public int FramesUntilNextTick { get; set; } = framesUntilNextTick;
+    public ushort FramesUntilNextTick { get; set; } = framesUntilNextTick;
 }

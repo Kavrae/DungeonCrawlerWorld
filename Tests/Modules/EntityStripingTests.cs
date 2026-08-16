@@ -50,9 +50,9 @@ public sealed class EntityStripingTests
         for (var entityId = 0; entityId < entityCount; entityId++)
         {
             pool.Add(entityId, new HealthComponent(currentHealth: 0, maximumHealth: 1000));
-            // Constitution total 300 -- AbilityScoreRegenMath's top rate -- so every visit
-            // actually changes CurrentHealth (a nonzero, easily-detected "touch"), same role
-            // the old flat healthRegen:1 constructor argument used to play.
+            // Constitution total 300 -- HealthRegenSystem's MaxHealthRegenPerSecond -- so every
+            // visit actually changes CurrentHealth (a nonzero, easily-detected "touch"), same
+            // role the old flat healthRegen:1 constructor argument used to play.
             abilityScores.Add(entityId, new AbilityScoreComponent(AbilityScoreType.Constitution, baseValue: 300, total: 300));
             // Pinned to Local -- this test is about striping/cycle-coverage correctness
             // (StripeCount frames == one full cycle), not tier throttling, so it shouldn't

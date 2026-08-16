@@ -7,5 +7,10 @@ namespace Game.Modules.Actions;
 /// always constructs Immediate with CooldownFrames: null today -- reusing this shared shape rather
 /// than inventing its own flat ActionLockFrames field, the same way TargetingSpec is already
 /// reused verbatim across both domains.
+///
+/// ActionLockFrames defaults to null, meaning "use the acting entity's own ActionLockComponent.
+/// StandardLockFrames" -- omit it entirely unless this action/item genuinely needs a different
+/// lock duration regardless of who casts it (see HotkeyExpansionPotion for the one current
+/// override).
 /// </summary>
-public sealed record ActionTiming(ActionTimingCategory Category, short ActionLockFrames, short? CooldownFrames);
+public sealed record ActionTiming(ActionTimingCategory Category, ushort? ActionLockFrames = null, ushort? CooldownFrames = null);

@@ -1,10 +1,12 @@
 namespace Engine.Math;
 
-/// <summary>
+/// <summary>Allocates unique integers within a specified range.</summary>
+/// <remarks>
 /// Hands out unique integers within [minValue, maxValue] via rejection sampling over
 /// MathUtility.Next -- reusable anywhere a caller needs random-but-collision-free identifiers
-/// (e.g. CrawlerComponent's CrawlerNumber) without coordinating through EntityId.
-/// </summary>
+/// (e.g. CrawlerComponent's CrawlerNumber).
+/// </remarks>
+/// <cleanupVersion>1</cleanupVersion>
 public sealed class UniqueNumberAllocator
 {
     private readonly MathUtility _mathUtility;

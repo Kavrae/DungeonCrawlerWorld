@@ -78,7 +78,7 @@ public sealed class WorldTests
 
         world.PlaceEntityOnMap(42, new Vector3Int(3, 4, 1), ref transform);
 
-        Assert.AreEqual(42, world.Map.GetEntityId(new Vector3Int(3, 4, 1)));
+        Assert.AreEqual(42, world.Map.GetBlockingEntityId(new Vector3Int(3, 4, 1)));
         Assert.AreEqual(new Vector3Int(3, 4, 1), transform.Position);
     }
 
@@ -90,10 +90,10 @@ public sealed class WorldTests
 
         world.PlaceEntityOnMap(7, new Vector3Int(2, 2, 1), ref transform);
 
-        Assert.AreEqual(7, world.Map.GetEntityId(new Vector3Int(2, 2, 1)));
-        Assert.AreEqual(7, world.Map.GetEntityId(new Vector3Int(3, 2, 1)));
-        Assert.AreEqual(7, world.Map.GetEntityId(new Vector3Int(2, 3, 1)));
-        Assert.AreEqual(7, world.Map.GetEntityId(new Vector3Int(3, 3, 1)));
+        Assert.AreEqual(7, world.Map.GetBlockingEntityId(new Vector3Int(2, 2, 1)));
+        Assert.AreEqual(7, world.Map.GetBlockingEntityId(new Vector3Int(3, 2, 1)));
+        Assert.AreEqual(7, world.Map.GetBlockingEntityId(new Vector3Int(2, 3, 1)));
+        Assert.AreEqual(7, world.Map.GetBlockingEntityId(new Vector3Int(3, 3, 1)));
     }
 
     [TestMethod]
@@ -125,7 +125,7 @@ public sealed class WorldTests
         world.PlaceEntityOnMap(1, new Vector3Int(8, 8, 0), ref transform);
 
         Assert.AreEqual(new Vector3Int(1, 1, 1), transform.Position);
-        Assert.AreEqual(-1, world.Map.GetEntityId(new Vector3Int(8, 8, 0)));
+        Assert.AreEqual(-1, world.Map.GetBlockingEntityId(new Vector3Int(8, 8, 0)));
     }
 
     [TestMethod]
@@ -137,8 +137,8 @@ public sealed class WorldTests
 
         world.MoveEntity(5, new Vector3Int(3, 2, 1), transform);
 
-        Assert.AreEqual(-1, world.Map.GetEntityId(new Vector3Int(2, 2, 1)));
-        Assert.AreEqual(5, world.Map.GetEntityId(new Vector3Int(3, 2, 1)));
+        Assert.AreEqual(-1, world.Map.GetBlockingEntityId(new Vector3Int(2, 2, 1)));
+        Assert.AreEqual(5, world.Map.GetBlockingEntityId(new Vector3Int(3, 2, 1)));
     }
 
     [TestMethod]
@@ -150,12 +150,12 @@ public sealed class WorldTests
 
         world.MoveEntity(5, new Vector3Int(3, 2, 1), transform);
 
-        Assert.AreEqual(-1, world.Map.GetEntityId(new Vector3Int(2, 2, 1)));
-        Assert.AreEqual(-1, world.Map.GetEntityId(new Vector3Int(2, 3, 1)));
-        Assert.AreEqual(5, world.Map.GetEntityId(new Vector3Int(3, 2, 1)));
-        Assert.AreEqual(5, world.Map.GetEntityId(new Vector3Int(4, 2, 1)));
-        Assert.AreEqual(5, world.Map.GetEntityId(new Vector3Int(3, 3, 1)));
-        Assert.AreEqual(5, world.Map.GetEntityId(new Vector3Int(4, 3, 1)));
+        Assert.AreEqual(-1, world.Map.GetBlockingEntityId(new Vector3Int(2, 2, 1)));
+        Assert.AreEqual(-1, world.Map.GetBlockingEntityId(new Vector3Int(2, 3, 1)));
+        Assert.AreEqual(5, world.Map.GetBlockingEntityId(new Vector3Int(3, 2, 1)));
+        Assert.AreEqual(5, world.Map.GetBlockingEntityId(new Vector3Int(4, 2, 1)));
+        Assert.AreEqual(5, world.Map.GetBlockingEntityId(new Vector3Int(3, 3, 1)));
+        Assert.AreEqual(5, world.Map.GetBlockingEntityId(new Vector3Int(4, 3, 1)));
     }
 
     /// <summary>
@@ -174,7 +174,7 @@ public sealed class WorldTests
 
         world.MoveEntity(5, new Vector3Int(50, 50, 1), transform);
 
-        Assert.AreEqual(5, world.Map.GetEntityId(new Vector3Int(2, 2, 1)));
+        Assert.AreEqual(5, world.Map.GetBlockingEntityId(new Vector3Int(2, 2, 1)));
     }
 
     /// <summary>
@@ -194,8 +194,8 @@ public sealed class WorldTests
 
         world.MoveEntity(5, new Vector3Int(3, 2, 1), mover);
 
-        Assert.AreEqual(5, world.Map.GetEntityId(new Vector3Int(2, 2, 1)));
-        Assert.AreEqual(6, world.Map.GetEntityId(new Vector3Int(3, 2, 1)));
+        Assert.AreEqual(5, world.Map.GetBlockingEntityId(new Vector3Int(2, 2, 1)));
+        Assert.AreEqual(6, world.Map.GetBlockingEntityId(new Vector3Int(3, 2, 1)));
     }
 
     /// <summary>
@@ -215,8 +215,8 @@ public sealed class WorldTests
 
         world.MoveEntity(5, new Vector3Int(3, 2, 1), staleTransform);
 
-        Assert.AreEqual(6, world.Map.GetEntityId(new Vector3Int(2, 2, 1)));
-        Assert.AreEqual(5, world.Map.GetEntityId(new Vector3Int(3, 2, 1)));
+        Assert.AreEqual(6, world.Map.GetBlockingEntityId(new Vector3Int(2, 2, 1)));
+        Assert.AreEqual(5, world.Map.GetBlockingEntityId(new Vector3Int(3, 2, 1)));
     }
 
     [TestMethod]
@@ -228,7 +228,7 @@ public sealed class WorldTests
 
         world.RemoveEntityFromMap(9, ref transform);
 
-        Assert.AreEqual(-1, world.Map.GetEntityId(new Vector3Int(4, 4, 1)));
+        Assert.AreEqual(-1, world.Map.GetBlockingEntityId(new Vector3Int(4, 4, 1)));
     }
 
     [TestMethod]
@@ -243,7 +243,7 @@ public sealed class WorldTests
         world.PlaceEntityOnMap(1, new Vector3Int(3, 3, 1), ref transform);
 
         Assert.AreEqual(new Vector3Int(3, 3, 1), transform.Position);
-        Assert.AreEqual(-1, world.Map.GetEntityId(new Vector3Int(3, 3, 1)));
+        Assert.AreEqual(-1, world.Map.GetBlockingEntityId(new Vector3Int(3, 3, 1)));
     }
 
     /// <summary>
@@ -265,7 +265,7 @@ public sealed class WorldTests
         world.PlaceEntityOnMap(2, new Vector3Int(3, 3, 1), ref nonBlockingTransform);
 
         Assert.AreEqual(new Vector3Int(3, 3, 1), nonBlockingTransform.Position);
-        Assert.AreEqual(1, world.Map.GetEntityId(new Vector3Int(3, 3, 1)));
+        Assert.AreEqual(1, world.Map.GetBlockingEntityId(new Vector3Int(3, 3, 1)));
     }
 
     /// <summary>
@@ -289,7 +289,7 @@ public sealed class WorldTests
 
         world.MoveEntity(2, new Vector3Int(4, 4, 1), nonBlockingTransform);
 
-        Assert.AreEqual(1, world.Map.GetEntityId(new Vector3Int(4, 4, 1)));
+        Assert.AreEqual(1, world.Map.GetBlockingEntityId(new Vector3Int(4, 4, 1)));
     }
 
     [TestMethod]
@@ -427,7 +427,7 @@ public sealed class WorldTests
 
         world.ConvertToNonBlocking(9, ref transform);
 
-        Assert.AreEqual(-1, world.Map.GetEntityId(new Vector3Int(4, 4, 1)));
+        Assert.AreEqual(-1, world.Map.GetBlockingEntityId(new Vector3Int(4, 4, 1)));
     }
 
     [TestMethod]
@@ -464,10 +464,10 @@ public sealed class WorldTests
 
         world.ConvertToNonBlocking(9, ref transform);
 
-        Assert.AreEqual(-1, world.Map.GetEntityId(new Vector3Int(2, 2, 1)));
-        Assert.AreEqual(-1, world.Map.GetEntityId(new Vector3Int(3, 2, 1)));
-        Assert.AreEqual(-1, world.Map.GetEntityId(new Vector3Int(2, 3, 1)));
-        Assert.AreEqual(-1, world.Map.GetEntityId(new Vector3Int(3, 3, 1)));
+        Assert.AreEqual(-1, world.Map.GetBlockingEntityId(new Vector3Int(2, 2, 1)));
+        Assert.AreEqual(-1, world.Map.GetBlockingEntityId(new Vector3Int(3, 2, 1)));
+        Assert.AreEqual(-1, world.Map.GetBlockingEntityId(new Vector3Int(2, 3, 1)));
+        Assert.AreEqual(-1, world.Map.GetBlockingEntityId(new Vector3Int(3, 3, 1)));
         Assert.IsTrue(world.Map.GetNonBlockingEntityIdsAt(new Vector3Int(2, 2, 1)).Contains(9));
         Assert.IsTrue(world.Map.GetNonBlockingEntityIdsAt(new Vector3Int(3, 2, 1)).Contains(9));
         Assert.IsTrue(world.Map.GetNonBlockingEntityIdsAt(new Vector3Int(2, 3, 1)).Contains(9));

@@ -18,7 +18,6 @@ using Game.Modules.Core.Components;
 using Game.Modules.Health;
 using Game.Modules.Inventory;
 using Game.Modules.Movement;
-using Game.Modules.Movement.Components;
 using Game.Modules.ProcessingTier;
 using Game.Modules.Race;
 using Game.Modules.Race.Components;
@@ -94,11 +93,11 @@ public sealed class CompositeBlueprintTests
         Assert.IsTrue(ecsContext.ComponentManager.GetMultiPool<RaceComponent>().Has(entityId));
         Assert.IsTrue(ecsContext.ComponentManager.GetMultiPool<ClassComponent>().Has(entityId));
 
-        // Goblin's fixed ActionCooldownFrames (54) with Engineer's own 10% cooldown reduction
+        // Goblin's fixed StandardLockFrames (54) with Engineer's own 10% cooldown reduction
         // on top -- same composition CompositeBlueprint is meant to replace
         // GoblinEngineerBlueprint's hand-written "goblin.Build then engineer.Build" with.
-        var movement = ecsContext.ComponentManager.GetPackedPool<MovementComponent>().GetReadonly(entityId);
-        Assert.AreEqual((short)(54 * 0.9m), movement.ActionCooldownFrames);
+        var actionLock = ecsContext.ComponentManager.GetPackedPool<ActionLockComponent>().GetReadonly(entityId);
+        Assert.AreEqual((ushort)(54 * 0.9m), actionLock.StandardLockFrames);
     }
 
     [TestMethod]

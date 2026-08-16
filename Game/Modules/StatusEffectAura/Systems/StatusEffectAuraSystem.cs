@@ -106,8 +106,13 @@ public sealed class StatusEffectAuraSystem : ISystem
     private readonly TieredEntityStripeSet _tieredStripeSet;
     private readonly TieredEntityStripeSet _sourceTieredStripeSet;
 
-    private readonly List<(int EntityId, StatusEffectType EffectType)> _pendingExposureRemovals = [];
+    private readonly List<(int EntityId, StatusEffectAuraExposureComponent Component)> _pendingExposureRemovals = [];
     private readonly List<StatusEffectType> _staleExposureTypesScratch = [];
+
+    // Cached once instead of passing the Tick method group at the MultiCountdownTicker.Tick call
+    // site every visit -- see ContactDamageSystem's own field for why this matters (an instance
+    // method group conversion allocates a fresh delegate every evaluation).
+    private readonly Func<int, StatusEffectAuraExposureComponent, bool> _tick;
 
     private readonly AuraGrid _auraGrid;
     private readonly HashSet<StatusEffectType> _effectTypesInUse = [];
@@ -148,6 +153,8 @@ public sealed class StatusEffectAuraSystem : ISystem
 
         _tieredStripeSet = ProcessingTierWiring.CreateAndWire(StripeCount, exposures, processingTiers, processingTierEvents);
         _sourceTieredStripeSet = ProcessingTierWiring.CreateAndWire(StripeCount, sources, processingTiers, processingTierEvents);
+
+        _tick = Tick;
     }
 
     /// <summary>
@@ -339,43 +346,26 @@ public sealed class StatusEffectAuraSystem : ISystem
         }
     }
 
-    /// <summary>Per-tier decrement-or-tick pass over _exposures, mirroring Engine.ECS.Systems.CountdownTicker.Tick's shape but walking a MultiComponentPool's own per-entity dense chain (one or more instances per due entity, one per currently-exposed EffectType) instead of a single PackedComponentPool value. Deferred removals are keyed by (entityId, EffectType) identity, not a raw dense index -- MultiComponentPool.RemoveByDenseIndex swaps the last dense entry into a removed slot, so a batch of removals recorded by index could invalidate each other; MultiComponentPool.RemoveFirst re-resolves by identity at removal time instead.</summary>
-    private void TickExposures(ReadOnlySpan<int> dueEntityIds, int framesPerVisit)
+    /// <summary>Per-tier decrement-or-tick pass over _exposures.</summary>
+    /// <remarks>Delegates to the shared MultiCountdownTicker (see its own doc comment for the dense-chain-walk/deferred-removal mechanics) -- Tick below is the only per-effect-specific piece.</remarks>
+    private void TickExposures(ReadOnlySpan<int> dueEntityIds, uint framesPerVisit) =>
+        MultiCountdownTicker.Tick(_exposures, dueEntityIds, _pendingExposureRemovals, _tick, framesPerVisit);
+
+    /// <summary>Returns whether this specific (entity, EffectType) exposure entry should be removed entirely.</summary>
+    /// <remarks>True when no longer in range of this type, or the entity's own position can't be found. False re-arms the exposure's own countdown itself (via TryUpdateFirst, matched by EffectType) rather than leaving that to the caller -- see MultiCountdownTicker.Tick's onTick contract.</remarks>
+    private bool Tick(int entityId, StatusEffectAuraExposureComponent exposure)
     {
-        _pendingExposureRemovals.Clear();
-
-        foreach (var entityId in dueEntityIds)
+        if (!_transforms.TryGetReadonly(entityId, out var transform) || !TryGrantSingleType(entityId, transform.Position, exposure.EffectType))
         {
-            for (var denseIndex = _exposures.GetFirstDenseIndex(entityId); denseIndex != -1; denseIndex = _exposures.GetNextDenseIndex(denseIndex))
-            {
-                var exposure = _exposures.GetReadonlyByDenseIndex(denseIndex);
-
-                if (exposure.FramesUntilNextTick > framesPerVisit)
-                {
-                    _exposures.UpdateByDenseIndex(denseIndex, framesPerVisit, static (ref StatusEffectAuraExposureComponent e, int frames) => e.FramesUntilNextTick -= frames);
-                    continue;
-                }
-
-                if (Tick(entityId, exposure))
-                {
-                    _pendingExposureRemovals.Add((entityId, exposure.EffectType));
-                }
-                else
-                {
-                    _exposures.UpdateByDenseIndex(denseIndex, static (ref StatusEffectAuraExposureComponent e) => e.FramesUntilNextTick = AuraEffects.TickIntervalFrames);
-                }
-            }
+            return true;
         }
 
-        foreach (var (entityId, effectType) in _pendingExposureRemovals)
-        {
-            _exposures.RemoveFirst(entityId, effectType, static (ref readonly StatusEffectAuraExposureComponent e, StatusEffectType type) => e.EffectType == type);
-        }
+        _exposures.TryUpdateFirst(entityId, exposure.EffectType,
+            static (ref readonly StatusEffectAuraExposureComponent e, StatusEffectType type) => e.EffectType == type,
+            static (ref StatusEffectAuraExposureComponent e, StatusEffectType type) => e.FramesUntilNextTick = AuraEffects.TickIntervalFrames);
+
+        return false;
     }
-
-    /// <summary>Returns whether this specific (entity, EffectType) exposure entry should be removed entirely (no longer in range of this type, or the entity's own position can't be found) -- see TickExposures' own contract.</summary>
-    private bool Tick(int entityId, StatusEffectAuraExposureComponent exposure) =>
-        !_transforms.TryGetReadonly(entityId, out var transform) || !TryGrantSingleType(entityId, transform.Position, exposure.EffectType);
 
     /// <summary>Grants stacks from every effect type actually in use that's applicable at position (each topped off via GrantStacks -- see its own doc comment), creating a fresh exposure entry for any type that's newly applicable and doesn't already have one. Shared by OnEntityMoved's fresh-entry path and GrantToOccupantsNear's reactive scan, which otherwise duplicated this exact loop.</summary>
     private void TryGrantApplicableStacks(int entityId, Vector3Int position)

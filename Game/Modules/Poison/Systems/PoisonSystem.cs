@@ -59,16 +59,22 @@ public sealed class PoisonSystem : ISystem
     /// <summary>Returns whether the timer should be removed entirely (duration expired) -- see CountdownTicker.Tick's own doc comment for the contract. Drains every Poison stack itself before reporting removal, since that's a separate pool CountdownTicker knows nothing about (contrast BurningSystem, which only ever removes a single stack per tick, so it doesn't need this).</summary>
     private bool Tick(int entityId, PoisonTimerComponent timer)
     {
-        HealthDamage.Apply(_health, _eventBus, entityId, (short)timer.StackCount, timer.Source, _playerQuery, StatusEffectDamageType.Describe(StatusEffectType.Poison), _statModifiers);
-
-        var remainingDuration = timer.RemainingDurationTicks - 1;
-        if (remainingDuration <= 0)
+        if (timer.RemainingDurationTicks == 0)
         {
             RemoveAllStacks(entityId);
             return true;
         }
 
-        _timers.TryUpdate(entityId, remainingDuration, static (ref PoisonTimerComponent t, int remaining) =>
+        HealthDamage.Apply(_health, _eventBus, entityId, timer.StackCount, timer.Source, _playerQuery, StatusEffectDamageType.Describe(StatusEffectType.Poison), _statModifiers);
+
+        var remainingDuration = (ushort)(timer.RemainingDurationTicks - 1);
+        if (remainingDuration == 0)
+        {
+            RemoveAllStacks(entityId);
+            return true;
+        }
+
+        _timers.TryUpdate(entityId, remainingDuration, static (ref PoisonTimerComponent t, ushort remaining) =>
         {
             t.RemainingDurationTicks = remaining;
             t.FramesUntilNextTick = PoisonEffects.TickIntervalFrames;

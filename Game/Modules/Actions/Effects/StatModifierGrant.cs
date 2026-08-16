@@ -21,7 +21,7 @@ public sealed record StatModifierGrant(
     StatModifierPolarity Polarity,
     bool CanModify,
     float Magnitude,
-    int DurationFrames) : IActionEffectEntry
+    ushort? DurationFrames) : IActionEffectEntry
 {
     public void Apply(ActionEffectContext context)
     {
@@ -30,8 +30,8 @@ public sealed record StatModifierGrant(
             return;
         }
 
-        var durationFrames = DurationFrames > 0
-            ? (int)Math.Round(DurationFrames * context.DurationScaleMultiplier)
+        var durationFrames = DurationFrames != null && DurationFrames > 0
+            ? (ushort?)Math.Round(DurationFrames.Value * context.DurationScaleMultiplier)
             : DurationFrames;
 
         context.StatModifiers.Add(context.TargetEntityId, new StatModifierComponent(

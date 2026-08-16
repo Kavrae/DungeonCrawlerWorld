@@ -7,10 +7,10 @@ namespace Game.Modules.ContactDamage.Components;
 /// lava-specific -- so a future hazard (spikes, acid) can reuse ContactDamageSystem with its
 /// own numbers instead of a bespoke system.
 /// </summary>
-public struct DamageOnContactComponent(short damagePerTick, int tickIntervalFrames)
+public struct DamageOnContactComponent(ushort damagePerTick, ushort tickIntervalFrames)
 {
-    public short DamagePerTick { get; set; } = damagePerTick;
-    public int TickIntervalFrames { get; set; } = tickIntervalFrames;
+    public ushort DamagePerTick { get; set; } = damagePerTick;
+    public ushort TickIntervalFrames { get; set; } = tickIntervalFrames;
 
     public override readonly string ToString() => $"DamagePerTick : {DamagePerTick}\nTickIntervalFrames : {TickIntervalFrames}";
 }

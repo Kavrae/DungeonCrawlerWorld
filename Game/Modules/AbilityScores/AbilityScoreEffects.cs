@@ -21,7 +21,7 @@ namespace Game.Modules.AbilityScores;
 /// </summary>
 public static class AbilityScoreEffects
 {
-    public static void Grant(ComponentManager componentManager, int entityId, AbilityScoreType type, short baseValue)
+    public static void Grant(ComponentManager componentManager, int entityId, AbilityScoreType type, ushort baseValue)
     {
         var clampedBase = AbilityScoreMath.ClampBaseValue(baseValue);
         var statModifiers = componentManager.IsRegistered<StatModifierComponent>()
@@ -32,7 +32,7 @@ public static class AbilityScoreEffects
         componentManager.GetMultiPool<AbilityScoreComponent>().Add(entityId, new AbilityScoreComponent(type, clampedBase, total));
     }
 
-    public static void GrantDefaults(ComponentManager componentManager, int entityId, short baseValue)
+    public static void GrantDefaults(ComponentManager componentManager, int entityId, ushort baseValue)
     {
         foreach (var type in Enum.GetValues<AbilityScoreType>())
         {
@@ -57,7 +57,7 @@ public static class AbilityScoreEffects
         StatModifierPolarity polarity,
         bool canModify,
         float magnitude,
-        int durationFrames,
+        ushort? durationFrames,
         StatusEffectSource source)
     {
         StatModifierEffects.Apply(componentManager, entityId, AbilityScoreMath.ToStatModifierTarget(type), operation, polarity, canModify, magnitude, durationFrames, source);
@@ -73,7 +73,7 @@ public static class AbilityScoreEffects
     /// entity's ability scores every frame. No-ops if the entity has no AbilityScoreComponent of
     /// type.
     /// </summary>
-    public static void SetBaseValue(ComponentManager componentManager, EventBus eventBus, int entityId, AbilityScoreType type, short newBaseValue)
+    public static void SetBaseValue(ComponentManager componentManager, EventBus eventBus, int entityId, AbilityScoreType type, ushort newBaseValue)
     {
         var clampedBase = AbilityScoreMath.ClampBaseValue(newBaseValue);
         var abilityScores = componentManager.GetMultiPool<AbilityScoreComponent>();
@@ -90,7 +90,7 @@ public static class AbilityScoreEffects
             }
 
             var newTotal = AbilityScoreMath.ComputeTotal(statModifiers, entityId, type, clampedBase);
-            abilityScores.UpdateByDenseIndex(denseIndex, (clampedBase, newTotal), static (ref AbilityScoreComponent component, (short Base, short Total) values) =>
+            abilityScores.UpdateByDenseIndex(denseIndex, (clampedBase, newTotal), static (ref AbilityScoreComponent component, (ushort Base, ushort Total) values) =>
             {
                 component.BaseValue = values.Base;
                 component.Total = values.Total;
@@ -143,7 +143,7 @@ public static class AbilityScoreEffects
             }
 
             var newTotal = AbilityScoreMath.ComputeTotal(statModifiers, entityId, type, abilityScore.BaseValue);
-            abilityScores.UpdateByDenseIndex(denseIndex, newTotal, static (ref AbilityScoreComponent component, short total) => component.Total = total);
+            abilityScores.UpdateByDenseIndex(denseIndex, newTotal, static (ref AbilityScoreComponent component, ushort total) => component.Total = total);
             return;
         }
     }

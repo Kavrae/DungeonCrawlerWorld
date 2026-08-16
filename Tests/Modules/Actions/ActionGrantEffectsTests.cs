@@ -1,7 +1,7 @@
 using Engine.ECS.Components;
+using Game.Modules.AbilityScores;
 using Game.Modules.Actions;
 using Game.Modules.Actions.Components;
-using Game.Modules.AbilityScores;
 using Game.Modules.Mana;
 using Game.Modules.Mana.Components;
 using Game.Modules.StatModifiers;
@@ -31,7 +31,7 @@ public sealed class ActionGrantEffectsTests
         ActionGrantEffects.Grant(manager, 0, ActionId, manaCost: 0, damageAmount: 7, cooldownFramesRemaining: 0);
 
         Assert.IsTrue(ActionInstanceQueries.TryGet(manager.GetMultiPool<ActionInstanceComponent>(), 0, ActionId, out var instance));
-        Assert.AreEqual((short)7, instance.DamageAmount);
+        Assert.AreEqual((ushort)7, instance.DamageAmount);
     }
 
     [TestMethod]

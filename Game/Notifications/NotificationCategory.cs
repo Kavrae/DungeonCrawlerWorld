@@ -7,7 +7,7 @@
 /// NotificationCenter uses this directly instead of maintaining a parallel Presentation-side
 /// enum with a translation step.
 /// </summary>
-public enum NotificationCategory
+public enum NotificationCategory : byte
 {
     /// <summary>A system event or update. Cannot be minimized, and pauses the game while active.</summary>
     System,

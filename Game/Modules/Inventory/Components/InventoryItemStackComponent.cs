@@ -10,11 +10,11 @@ namespace Game.Modules.Inventory.Components;
 /// Quantity == 1 stack once that system exists, rather than something this component predicts
 /// the shape of today.
 /// </summary>
-public struct InventoryItemStackComponent(Guid itemDefinitionId, int quantity, bool isDisabled = false)
+public struct InventoryItemStackComponent(Guid itemDefinitionId, ushort quantity, bool isDisabled = false)
 {
     public Guid ItemDefinitionId { get; } = itemDefinitionId;
 
-    public int Quantity { get; set; } = quantity;
+    public ushort Quantity { get; set; } = quantity;
 
     public bool IsDisabled { get; set; } = isDisabled;
 

@@ -3,7 +3,7 @@ namespace Game.Modules.StatModifiers.Components;
 /// <summary>
 /// Fieldless marker, one instance per currently-active non-permanent StatModifierComponent an
 /// entity holds -- StatModifierEffects.Apply adds one alongside any grant whose duration isn't
-/// StatModifierComponent.Permanent, and StatModifierExpirySystem removes exactly one whenever it
+/// null, and StatModifierExpirySystem removes exactly one whenever it
 /// removes an actually-expired modifier. Its own MultiComponentPool -- not a field on
 /// StatModifierComponent itself -- exists purely so StatModifierExpirySystem can drive its
 /// TieredEntityStripeSet off "has a modifier that can ever expire" instead of "has any modifier

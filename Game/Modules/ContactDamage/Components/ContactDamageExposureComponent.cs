@@ -10,9 +10,9 @@ namespace Game.Modules.ContactDamage.Components;
 /// when needed rather than duplicated here, since terrain never moves and never changes once
 /// placed, so there's nothing to protect against by copying its values out.
 /// </summary>
-public struct ContactDamageExposureComponent(int framesUntilNextTick, int sourceEntityId) : ITickCountdown
+public struct ContactDamageExposureComponent(ushort framesUntilNextTick, int sourceEntityId) : ITickCountdown
 {
-    public int FramesUntilNextTick { get; set; } = framesUntilNextTick;
+    public ushort FramesUntilNextTick { get; set; } = framesUntilNextTick;
     public int SourceEntityId { get; set; } = sourceEntityId;
 
     public override readonly string ToString() => $"FramesUntilNextTick : {FramesUntilNextTick}\nSourceEntityId : {SourceEntityId}";

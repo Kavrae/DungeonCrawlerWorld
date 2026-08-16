@@ -12,24 +12,24 @@ public sealed class AbilityScoreMathTests
     private static MultiComponentPool<StatModifierComponent> CreatePool() => new(maximumEntityCount: 10, initialCapacity: 4);
 
     private static StatModifierComponent Modifier(StatModifierTarget target, StatModifierOperation operation, float magnitude) =>
-        new(target, operation, StatModifierPolarity.Buff, canModify: false, magnitude, StatModifierComponent.Permanent, StatusEffectSource.Admin);
+        new(target, operation, StatModifierPolarity.Buff, canModify: false, magnitude, null, StatusEffectSource.Admin);
 
     [TestMethod]
     public void ClampBaseValue_BelowMinimum_ClampsToOne()
     {
-        Assert.AreEqual((short)1, AbilityScoreMath.ClampBaseValue(0));
+        Assert.AreEqual((ushort)1, AbilityScoreMath.ClampBaseValue(0));
     }
 
     [TestMethod]
     public void ClampBaseValue_AboveMaximum_ClampsToThreeHundred()
     {
-        Assert.AreEqual((short)300, AbilityScoreMath.ClampBaseValue(301));
+        Assert.AreEqual((ushort)300, AbilityScoreMath.ClampBaseValue(301));
     }
 
     [TestMethod]
     public void ClampBaseValue_WithinRange_Unchanged()
     {
-        Assert.AreEqual((short)5, AbilityScoreMath.ClampBaseValue(5));
+        Assert.AreEqual((ushort)5, AbilityScoreMath.ClampBaseValue(5));
     }
 
     [TestMethod]
@@ -37,7 +37,7 @@ public sealed class AbilityScoreMathTests
     {
         var total = AbilityScoreMath.ComputeTotal(null, 0, AbilityScoreType.Strength, 5);
 
-        Assert.AreEqual((short)5, total);
+        Assert.AreEqual((ushort)5, total);
     }
 
     [TestMethod]
@@ -48,7 +48,7 @@ public sealed class AbilityScoreMathTests
 
         var total = AbilityScoreMath.ComputeTotal(pool, 0, AbilityScoreType.Strength, 5);
 
-        Assert.AreEqual((short)8, total);
+        Assert.AreEqual((ushort)8, total);
     }
 
     [TestMethod]
@@ -59,7 +59,7 @@ public sealed class AbilityScoreMathTests
 
         var total = AbilityScoreMath.ComputeTotal(pool, 0, AbilityScoreType.Strength, 5);
 
-        Assert.AreEqual((short)10, total);
+        Assert.AreEqual((ushort)10, total);
     }
 
     [TestMethod]
@@ -70,7 +70,7 @@ public sealed class AbilityScoreMathTests
 
         var total = AbilityScoreMath.ComputeTotal(pool, 0, AbilityScoreType.Strength, 5);
 
-        Assert.AreEqual((short)5, total);
+        Assert.AreEqual((ushort)5, total);
     }
 
     [TestMethod]
@@ -81,7 +81,7 @@ public sealed class AbilityScoreMathTests
 
         var total = AbilityScoreMath.ComputeTotal(pool, 0, AbilityScoreType.Strength, 5);
 
-        Assert.AreEqual((short)0, total);
+        Assert.AreEqual((ushort)0, total);
     }
 
     [TestMethod]
@@ -92,7 +92,7 @@ public sealed class AbilityScoreMathTests
 
         var total = AbilityScoreMath.ComputeTotal(pool, 0, AbilityScoreType.Strength, 5);
 
-        Assert.AreEqual(short.MaxValue, total);
+        Assert.AreEqual(ushort.MaxValue, total);
     }
 
     [TestMethod]

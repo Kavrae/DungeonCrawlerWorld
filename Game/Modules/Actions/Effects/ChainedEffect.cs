@@ -10,7 +10,7 @@ namespace Game.Modules.Actions.Effects;
 /// </summary>
 public sealed record ChainedEffect(float TriggerChance, IReadOnlyList<ActionEffect> TriggeredEffects) : IActionEffectEntry
 {
-    public const int MaxChainDepth = 5;
+    public const byte MaxChainDepth = 5;
 
     public void Apply(ActionEffectContext context)
     {
@@ -19,6 +19,6 @@ public sealed record ChainedEffect(float TriggerChance, IReadOnlyList<ActionEffe
             return;
         }
 
-        ActionEffectSequence.Apply(TriggeredEffects, context with { ChainDepth = context.ChainDepth + 1 });
+        ActionEffectSequence.Apply(TriggeredEffects, context with { ChainDepth = (byte)(context.ChainDepth + 1) });
     }
 }

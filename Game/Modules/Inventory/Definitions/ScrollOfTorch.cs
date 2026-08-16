@@ -44,6 +44,6 @@ public static class ScrollOfTorch
         MaxStackSize: MaximumStackSize,
         Activator: new ScrollActivator(
             new TargetingSpec(Shape: TargetShape.Burst, Range: 5, AreaSize: 3),
-            new ActionTiming(ActionTimingCategory.Immediate, (short)GameTiming.FramesForSeconds(1f), CooldownFrames: null),
+            new ActionTiming(ActionTimingCategory.Immediate, CooldownFrames: null),
             SpellId));
 }

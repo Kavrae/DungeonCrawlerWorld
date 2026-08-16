@@ -4,20 +4,17 @@ using Engine.Modules;
 
 namespace Engine.Bootstrap;
 
-/// <summary>
+/// <summary> Registers built-in and modded modules by their components and systems. </summary>
+/// <remarks>
 /// Validates and topologically sorts a set of modules by their declared dependencies,
 /// then registers all components before any systems (a system may need a component pool
 /// owned by a different module) and produces the finished <see cref="EcsContext"/>.
-/// </summary>
+/// 
+/// Skips registering modules with missing or circular dependencies.
+/// </remarks>
+/// <cleanupVersion>1</cleanupVersion>
 public static class Bootstrapper
 {
-    /// <param name="eventBus">
-    /// Shared EventBus for the built EcsContext to expose. Optional and defaults to
-    /// constructing a private one, exactly as this method already does internally for
-    /// ComponentManager/SystemManager -- only a caller that needs the same EventBus instance
-    /// available before this call returns (e.g. to run a module's Configure step first) needs
-    /// to pass one explicitly. Passing null changes nothing for any existing caller.
-    /// </param>
     public static EcsContext Build(IReadOnlyList<IModule> modules, int initialEntityCapacity, int initialComponentCapacity, EventBus? eventBus = null)
     {
         ArgumentNullException.ThrowIfNull(modules);

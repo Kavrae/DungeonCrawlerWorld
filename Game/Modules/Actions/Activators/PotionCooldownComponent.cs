@@ -2,26 +2,19 @@ using Engine.ECS.Components;
 
 namespace Game.Modules.Actions.Activators;
 
-/// <summary>
-/// Shared "am I still cooling down from my last potion" state, one per consumer (not per item --
-/// see PotionCooldownEffects' own doc comment). Present on an entity only while FramesRemaining
-/// is still counting down; removed once it reaches 0 by PotionCooldownSystem (via CountdownTicker
-/// -- see ITickCountdown below), the same "no instance means the empty/inactive state" convention
-/// ActionLockComponent's sibling systems use elsewhere. TotalFrames stays fixed at whatever Reset
-/// last set it to, for consumers (the status-effect bar, the hotbar countdown) that need "how
-/// much of the cooldown is left" as something other than raw frames. ITickCountdown is bridged
-/// explicitly (not via the public FramesRemaining property directly) so every existing consumer
-/// of the FramesRemaining/short name keeps working unchanged.
-/// </summary>
-public struct PotionCooldownComponent(short totalFrames, short framesRemaining) : ITickCountdown
+/// <summary>Represents the cooldown state for a potion.</summary>
+/// <param name="totalFrames">The total number of frames before it's safe to drink another potion.</param>
+/// <param name="framesRemaining">The number of frames remaining in the cooldown.</param>
+/// <cleanupVersion>1</cleanupVersion>
+public struct PotionCooldownComponent(ushort totalFrames, ushort framesRemaining) : ITickCountdown
 {
-    public short TotalFrames { get; set; } = totalFrames;
-    public short FramesRemaining { get; set; } = framesRemaining;
+    public ushort TotalFrames { get; set; } = totalFrames;
+    public ushort FramesRemaining { get; set; } = framesRemaining;
 
-    int ITickCountdown.FramesUntilNextTick
+    ushort ITickCountdown.FramesUntilNextTick
     {
         get => FramesRemaining;
-        set => FramesRemaining = (short)value;
+        set => FramesRemaining = value;
     }
 
     public override readonly string ToString() => $"TotalFrames : {TotalFrames}\nFramesRemaining : {FramesRemaining}";

@@ -1,10 +1,8 @@
 using Engine.ECS.Components;
 using Engine.Math;
-using Game.Blueprints;
 using Game.Blueprints.Classes;
 using Game.Blueprints.Races;
 using Game.Modules.Core.Components;
-using Game.Modules.Movement.Components;
 
 namespace Game.Blueprints.NPCs.Generic;
 
@@ -31,9 +29,9 @@ public sealed class GoblinEngineerBlueprint(Goblin goblin, Engineer engineer) : 
         {
             componentManager.Merge(entityId, new DisplayTextComponent(DisplayName, Description));
 
-            componentManager.TryUpdate(entityId, static (ref MovementComponent movementComponent) =>
+            componentManager.TryUpdate(entityId, static (ref ActionLockComponent actionLock) =>
             {
-                movementComponent.ActionCooldownFrames = MathUtility.ClampShort((short)(movementComponent.ActionCooldownFrames * 0.9m), 1, short.MaxValue);
+                actionLock.StandardLockFrames = MathUtility.ClampUShort((ushort)(actionLock.StandardLockFrames * 0.9m), 1, ushort.MaxValue);
             });
         });
 

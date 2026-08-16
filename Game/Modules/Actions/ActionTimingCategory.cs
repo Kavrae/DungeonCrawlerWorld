@@ -7,7 +7,7 @@ namespace Game.Modules.Actions;
 /// by every IActionActivator kind, since a PotionActivator also needs a timing category (always
 /// Immediate today).
 /// </summary>
-public enum ActionTimingCategory
+public enum ActionTimingCategory : byte
 {
     Immediate,
     Delayed,

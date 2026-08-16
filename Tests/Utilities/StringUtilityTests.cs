@@ -175,10 +175,9 @@ public sealed class StringUtilityTests
     [TestMethod]
     public void DisplayText_TrimsTrailingNewlineFromFormattedText()
     {
-        var displayText = new DisplayText("original", "formatted\r\n", 2);
+        var displayText = new DisplayText("formatted\r\n", 2);
 
         Assert.AreEqual("formatted", displayText.FormattedText);
-        Assert.AreEqual("original", displayText.OriginalText);
         Assert.AreEqual(2, displayText.LineCount);
     }
 

@@ -2,18 +2,15 @@ using Engine.ECS.Components;
 
 namespace Engine.Diagnostics;
 
-/// <summary>
-/// Structured entity inspection, wrapping every registered pool's
-/// <see cref="IInspectableComponentPool"/>. Reads data the pools already track for their own
-/// bookkeeping rather than reflecting over component fields at inspection time, so dumping
-/// an entity's components (e.g. for a debug/selection UI) costs no reflection and no boxing --
-/// <see cref="InspectedComponentEntry.Value"/> is captured via a constrained ToString() call
-/// on the component itself, not by boxing it into an object.
-/// </summary>
+/// <summary>Enabled the debug inspection of component data</summary>
+/// <cleanupVersion>1</cleanupVersion>
 public sealed class ComponentInspector(ComponentManager componentManager)
 {
     private readonly ComponentManager _componentManager = componentManager ?? throw new ArgumentNullException(nameof(componentManager));
 
+    /// <summary>Copies the inspection data for all components of the specified entity.</summary>
+    /// <param name="entityId">The ID of the entity for which to copy inspection data.</param>
+    /// <param name="destination">The list to which to add the inspection data.</param>
     public void CopyInspectionDataForEntity(int entityId, List<InspectedComponentEntry> destination)
     {
         ArgumentNullException.ThrowIfNull(destination);

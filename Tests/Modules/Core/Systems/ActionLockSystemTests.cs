@@ -22,61 +22,61 @@ public sealed class ActionLockSystemTests
     public void Update_DecrementsLockFramesRemainingByStripeCount()
     {
         var pool = CreatePool();
-        pool.Add(0, new ActionLockComponent(totalLockFrames: 25, lockFramesRemaining: 25));
+        pool.Add(0, new ActionLockComponent(standardLockFrames: ActionLockGate.StandardLockFrames, currentLockTotalFrames: 25, currentLockFramesRemaining: 25));
         var system = new ActionLockSystem(pool, CreateTiersPool(), new ProcessingTierEvents());
 
         system.Update(default, 0);
 
-        Assert.AreEqual(15, pool.GetReadonly(0).LockFramesRemaining);
+        Assert.AreEqual(15, pool.GetReadonly(0).CurrentLockFramesRemaining);
     }
 
     [TestMethod]
     public void Update_AtExactlyStripeCount_DecrementsToZero()
     {
         var pool = CreatePool();
-        pool.Add(0, new ActionLockComponent(totalLockFrames: 10, lockFramesRemaining: 10));
+        pool.Add(0, new ActionLockComponent(standardLockFrames: ActionLockGate.StandardLockFrames, currentLockTotalFrames: 10, currentLockFramesRemaining: 10));
         var system = new ActionLockSystem(pool, CreateTiersPool(), new ProcessingTierEvents());
 
         system.Update(default, 0);
 
-        Assert.AreEqual(0, pool.GetReadonly(0).LockFramesRemaining);
+        Assert.AreEqual(0, pool.GetReadonly(0).CurrentLockFramesRemaining);
     }
 
     [TestMethod]
     public void Update_BelowStripeCount_ClampsToZeroInsteadOfGoingNegative()
     {
         var pool = CreatePool();
-        pool.Add(0, new ActionLockComponent(totalLockFrames: 4, lockFramesRemaining: 4));
+        pool.Add(0, new ActionLockComponent(standardLockFrames: ActionLockGate.StandardLockFrames, currentLockTotalFrames: 4, currentLockFramesRemaining: 4));
         var system = new ActionLockSystem(pool, CreateTiersPool(), new ProcessingTierEvents());
 
         system.Update(default, 0);
 
-        Assert.AreEqual(0, pool.GetReadonly(0).LockFramesRemaining);
+        Assert.AreEqual(0, pool.GetReadonly(0).CurrentLockFramesRemaining);
     }
 
     [TestMethod]
     public void Update_AtZero_LeavesUnchanged()
     {
         var pool = CreatePool();
-        pool.Add(0, new ActionLockComponent(totalLockFrames: 0, lockFramesRemaining: 0));
+        pool.Add(0, new ActionLockComponent(standardLockFrames: ActionLockGate.StandardLockFrames, currentLockTotalFrames: 0, currentLockFramesRemaining: 0));
         var system = new ActionLockSystem(pool, CreateTiersPool(), new ProcessingTierEvents());
 
         system.Update(default, 0);
 
-        Assert.AreEqual(0, pool.GetReadonly(0).LockFramesRemaining);
+        Assert.AreEqual(0, pool.GetReadonly(0).CurrentLockFramesRemaining);
     }
 
-    /// <summary>Regression guard: Update must never touch TotalLockFrames -- only ActionLockGate.Lock resets it, on the next real action.</summary>
+    /// <summary>Regression guard: Update must never touch CurrentLockTotalFrames -- only ActionLockGate.Lock resets it, on the next real action.</summary>
     [TestMethod]
     public void Update_DoesNotChangeTotalLockFrames()
     {
         var pool = CreatePool();
-        pool.Add(0, new ActionLockComponent(totalLockFrames: 25, lockFramesRemaining: 25));
+        pool.Add(0, new ActionLockComponent(standardLockFrames: ActionLockGate.StandardLockFrames, currentLockTotalFrames: 25, currentLockFramesRemaining: 25));
         var system = new ActionLockSystem(pool, CreateTiersPool(), new ProcessingTierEvents());
 
         system.Update(default, 0);
 
-        Assert.AreEqual(25, pool.GetReadonly(0).TotalLockFrames);
+        Assert.AreEqual(25, pool.GetReadonly(0).CurrentLockTotalFrames);
     }
 
     /// <summary>
@@ -88,7 +88,7 @@ public sealed class ActionLockSystemTests
     public void Update_AtZero_DoesNotBumpVersion()
     {
         var pool = CreatePool();
-        pool.Add(0, new ActionLockComponent(totalLockFrames: 0, lockFramesRemaining: 0));
+        pool.Add(0, new ActionLockComponent(standardLockFrames: ActionLockGate.StandardLockFrames, currentLockTotalFrames: 0, currentLockFramesRemaining: 0));
         var system = new ActionLockSystem(pool, CreateTiersPool(), new ProcessingTierEvents());
         var versionBeforeUpdate = pool.GetVersion(0);
 
@@ -108,13 +108,13 @@ public sealed class ActionLockSystemTests
     {
         var pool = CreatePool();
         var tiers = CreateTiersPool();
-        pool.Add(0, new ActionLockComponent(totalLockFrames: 25, lockFramesRemaining: 25));
+        pool.Add(0, new ActionLockComponent(standardLockFrames: ActionLockGate.StandardLockFrames, currentLockTotalFrames: 25, currentLockFramesRemaining: 25));
         tiers.Add(0, new ProcessingTierComponent(ProcessingTierLevel.Neighborhood));
         var system = new ActionLockSystem(pool, tiers, new ProcessingTierEvents());
 
         system.Update(new EngineTime(default, default, false, FrameCount: 1), 0);
 
-        Assert.AreEqual(25, pool.GetReadonly(0).LockFramesRemaining);
+        Assert.AreEqual(25, pool.GetReadonly(0).CurrentLockFramesRemaining);
     }
 
     [TestMethod]
@@ -122,12 +122,12 @@ public sealed class ActionLockSystemTests
     {
         var pool = CreatePool();
         var tiers = CreateTiersPool();
-        pool.Add(0, new ActionLockComponent(totalLockFrames: 25, lockFramesRemaining: 25));
+        pool.Add(0, new ActionLockComponent(standardLockFrames: ActionLockGate.StandardLockFrames, currentLockTotalFrames: 25, currentLockFramesRemaining: 25));
         tiers.Add(0, new ProcessingTierComponent(ProcessingTierLevel.Neighborhood));
         var system = new ActionLockSystem(pool, tiers, new ProcessingTierEvents());
 
         system.Update(new EngineTime(default, default, false, FrameCount: 20), 0);
 
-        Assert.AreEqual(15, pool.GetReadonly(0).LockFramesRemaining);
+        Assert.AreEqual(15, pool.GetReadonly(0).CurrentLockFramesRemaining);
     }
 }

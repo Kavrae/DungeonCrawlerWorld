@@ -1,10 +1,11 @@
 namespace Engine.Math;
 
-/// <summary>
-/// A 3D integer vector, used for positioning entities within the game world grid
+/// <summary>A 3D integer vector</summary>
+/// <remarks>used for positioning entities within the game world grid
 /// (XNA/FNA's Vector3 is float-only). Z is an int rather than an enum to avoid boxing
 /// when used as a dictionary key or array index.
-/// </summary>
+/// </remarks>
+/// <cleanupVersion>1</cleanupVersion>
 public struct Vector3Int : IEquatable<Vector3Int>
 {
     public int X;
@@ -48,11 +49,7 @@ public struct Vector3Int : IEquatable<Vector3Int>
 
     public override readonly int GetHashCode() => HashCode.Combine(X, Y, Z);
 
-    /// <summary>
-    /// This position's index into a flat row-major array shaped like a size.X x size.Y x size.Z
-    /// grid (X fastest-varying, then Y, then Z). The single formula behind indexing any
-    /// flat array backing a 3D-grid-shaped store -- call this instead of re-deriving it.
-    /// </summary>
+    /// <summary> This position's index into a flat row-major array</summary>
     public readonly int FlatIndex(Vector3Int size) => X + Y * size.X + Z * size.X * size.Y;
 
     /// <summary>Treating this instance as a size (X x Y x Z), the total number of cells -- the length a flat array backed by FlatIndex needs.</summary>

@@ -171,7 +171,7 @@ public sealed class BlueprintTests
         Assert.IsTrue(ecsContext.ComponentManager.GetDirectPool<TransformComponent>().Has(entityId));
 
         Assert.IsTrue(ActionInstanceQueries.TryGet(ecsContext.ComponentManager.GetMultiPool<ActionInstanceComponent>(), entityId, PunchAction.Id, out var punch));
-        Assert.AreEqual((short)10, punch.DamageAmount);
+        Assert.AreEqual((ushort)10, punch.DamageAmount);
     }
 
     [TestMethod]
@@ -207,9 +207,9 @@ public sealed class BlueprintTests
         // player's Punch rolls its catalog DirectDamage's own MinAmount..MaxAmount range instead
         // of a fixed number (see ActionEffectContext.DamageOverride's own doc comment).
         Assert.IsTrue(ActionInstanceQueries.TryGet(abilityInstances, entityId, PunchAction.Id, out var punch));
-        Assert.AreEqual((short)0, punch.DamageAmount);
+        Assert.AreEqual((ushort)0, punch.DamageAmount);
         Assert.IsTrue(ActionInstanceQueries.TryGet(abilityInstances, entityId, MagicMissileAction.Id, out var magicMissile));
-        Assert.AreEqual((short)5, magicMissile.DamageAmount);
+        Assert.AreEqual((ushort)5, magicMissile.DamageAmount);
         Assert.IsTrue(ActionInstanceQueries.TryGet(abilityInstances, entityId, HealAction.Id, out _));
         Assert.IsTrue(ActionInstanceQueries.TryGet(abilityInstances, entityId, ToxicStrikeAction.Id, out _));
 
@@ -273,7 +273,7 @@ public sealed class BlueprintTests
         Assert.IsTrue(ecsContext.ComponentManager.GetDirectPool<TransformComponent>().Has(entityId));
 
         Assert.IsTrue(ActionInstanceQueries.TryGet(ecsContext.ComponentManager.GetMultiPool<ActionInstanceComponent>(), entityId, PunchAction.Id, out var punch));
-        Assert.AreEqual((short)5, punch.DamageAmount);
+        Assert.AreEqual((ushort)5, punch.DamageAmount);
     }
 
     [TestMethod]
@@ -281,12 +281,13 @@ public sealed class BlueprintTests
     {
         var ecsContext = BuildEcsContext();
         var entityId = ecsContext.EntityManager.CreateEntity();
-        ecsContext.ComponentManager.GetPackedPool<MovementComponent>().Add(entityId, new MovementComponent(MovementMode.Random, 15, null, null));
+        ecsContext.ComponentManager.GetPackedPool<MovementComponent>().Add(entityId, new MovementComponent(MovementMode.Random, null, null));
+        ecsContext.ComponentManager.GetPackedPool<ActionLockComponent>().Add(entityId, new ActionLockComponent(standardLockFrames: 15, currentLockTotalFrames: 0, currentLockFramesRemaining: 0));
 
         new Engineer().Build(ecsContext.ComponentManager, entityId);
 
-        var movement = ecsContext.ComponentManager.GetPackedPool<MovementComponent>().GetReadonly(entityId);
-        Assert.AreEqual((short)13, movement.ActionCooldownFrames); // 15 * 0.9m rounds down to 13.
+        var actionLock = ecsContext.ComponentManager.GetPackedPool<ActionLockComponent>().GetReadonly(entityId);
+        Assert.AreEqual((ushort)13, actionLock.StandardLockFrames); // 15 * 0.9m rounds down to 13.
         Assert.IsTrue(ecsContext.ComponentManager.GetMultiPool<ClassComponent>().Has(entityId));
     }
 
@@ -300,10 +301,9 @@ public sealed class BlueprintTests
 
         // No race ran first, so Engineer merges its own baseline instead of silently doing
         // nothing -- the class still functions when composed (or used) without a race.
-        var movement = ecsContext.ComponentManager.GetPackedPool<MovementComponent>().GetReadonly(entityId);
-        Assert.AreEqual((short)60, movement.ActionCooldownFrames);
         var actionLock = ecsContext.ComponentManager.GetPackedPool<ActionLockComponent>().GetReadonly(entityId);
-        Assert.AreEqual((short)0, actionLock.LockFramesRemaining);
+        Assert.AreEqual((ushort)60, actionLock.StandardLockFrames);
+        Assert.AreEqual((ushort)0, actionLock.CurrentLockFramesRemaining);
         Assert.IsTrue(ecsContext.ComponentManager.GetMultiPool<ClassComponent>().Has(entityId));
     }
 
@@ -318,7 +318,7 @@ public sealed class BlueprintTests
         // No race ran first, so Tank merges its own baseline instead of silently doing
         // nothing -- the class still functions when composed (or used) without a race.
         var health = ecsContext.ComponentManager.GetPackedPool<HealthComponent>().GetReadonly(entityId);
-        Assert.AreEqual((short)100, health.MaximumHealth);
+        Assert.AreEqual((ushort)100, health.MaximumHealth);
         Assert.IsTrue(health.CurrentHealth >= 1 && health.CurrentHealth <= health.MaximumHealth);
         Assert.IsTrue(ecsContext.ComponentManager.GetMultiPool<ClassComponent>().Has(entityId));
         AssertHasHealthRegenBonusModifier(ecsContext.ComponentManager, entityId);
@@ -423,12 +423,12 @@ public sealed class BlueprintTests
 
         new GoblinEngineerBlueprint(new Goblin(mathUtility), new Engineer()).Build(ecsContext.ComponentManager, entityId);
 
-        var movement = ecsContext.ComponentManager.GetPackedPool<MovementComponent>().GetReadonly(entityId);
-        // Goblin sets a fixed ActionCooldownFrames of 54; Engineer applies *0.9 and casts to
+        var actionLock = ecsContext.ComponentManager.GetPackedPool<ActionLockComponent>().GetReadonly(entityId);
+        // Goblin sets a fixed StandardLockFrames of 54; Engineer applies *0.9 and casts to
         // short (54 * 0.9m = 48.6 -> 48), then GoblinEngineerBlueprint applies its own *0.9 to
         // that already-truncated value and casts again (48 * 0.9m = 43.2 -> 43) -- each stage
         // rounds down independently, not one combined multiplication.
-        Assert.AreEqual((short)43, movement.ActionCooldownFrames);
+        Assert.AreEqual((ushort)43, actionLock.StandardLockFrames);
     }
 
     [TestMethod]
@@ -436,9 +436,11 @@ public sealed class BlueprintTests
     {
         var ecsContext = BuildEcsContext();
 
+        // GetMultiPool<T> itself throws unless the registered pool is actually a
+        // MultiComponentPool<T> -- reaching the assertions below is the proof.
         Assert.IsTrue(ecsContext.ComponentManager.IsRegistered<RaceComponent>());
-        Assert.AreEqual(ComponentPoolType.Multi, ecsContext.ComponentManager.GetPoolType<RaceComponent>());
+        Assert.IsNotNull(ecsContext.ComponentManager.GetMultiPool<RaceComponent>());
         Assert.IsTrue(ecsContext.ComponentManager.IsRegistered<ClassComponent>());
-        Assert.AreEqual(ComponentPoolType.Multi, ecsContext.ComponentManager.GetPoolType<ClassComponent>());
+        Assert.IsNotNull(ecsContext.ComponentManager.GetMultiPool<ClassComponent>());
     }
 }

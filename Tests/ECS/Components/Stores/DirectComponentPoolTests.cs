@@ -140,6 +140,6 @@ public sealed class DirectComponentPoolTests
 
         Assert.AreEqual(1, copied);
         Assert.HasCount(1, destination);
-        Assert.AreEqual(ComponentPoolType.Direct, destination[0].ComponentPoolType);
+        Assert.AreEqual(typeof(TestComponent), destination[0].ComponentType);
     }
 }

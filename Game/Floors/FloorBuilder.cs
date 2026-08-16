@@ -6,7 +6,6 @@ using Game.Modules.AbilityScores;
 using Game.Modules.Core.Components;
 using Game.Modules.Poison;
 using Game.Modules.StatModifiers;
-using Game.Modules.StatModifiers.Components;
 using Game.World;
 
 namespace Game.Floors;
@@ -67,13 +66,13 @@ public static class FloorBuilder
         foreach (var seed in TestAbilityScoreModifierSeeds)
         {
             AbilityScoreEffects.GrantModifier(ecsContext.ComponentManager, entityId, seed.Type, StatModifierOperation.Additive, StatModifierPolarity.Buff,
-                canModify: true, seed.PositiveFlat, durationFrames: StatModifierComponent.Permanent, StatusEffectSource.Admin);
+                canModify: true, seed.PositiveFlat, durationFrames: null, StatusEffectSource.Admin);
             AbilityScoreEffects.GrantModifier(ecsContext.ComponentManager, entityId, seed.Type, StatModifierOperation.Additive, StatModifierPolarity.Debuff,
-                canModify: true, seed.NegativeFlat, durationFrames: StatModifierComponent.Permanent, StatusEffectSource.AI);
+                canModify: true, seed.NegativeFlat, durationFrames: null, StatusEffectSource.AI);
             AbilityScoreEffects.GrantModifier(ecsContext.ComponentManager, entityId, seed.Type, StatModifierOperation.Multiplicative, StatModifierPolarity.Buff,
-                canModify: true, seed.PositiveMultiplier, durationFrames: StatModifierComponent.Permanent, StatusEffectSource.FromEntity(entityId));
+                canModify: true, seed.PositiveMultiplier, durationFrames: null, StatusEffectSource.FromEntity(entityId));
             AbilityScoreEffects.GrantModifier(ecsContext.ComponentManager, entityId, seed.Type, StatModifierOperation.Multiplicative, StatModifierPolarity.Debuff,
-                canModify: true, seed.NegativeMultiplier, durationFrames: StatModifierComponent.Permanent, StatusEffectSource.Admin);
+                canModify: true, seed.NegativeMultiplier, durationFrames: null, StatusEffectSource.Admin);
         }
 
         // TEMPORARY: spawn beside TestMapBuilder's column-16 wall corridor (a fixed column
@@ -131,7 +130,7 @@ public static class FloorBuilder
                     var candidate = new Vector3Int(origin.X + deltaX, origin.Y + deltaY, origin.Z);
 
                     // Ring only -- interior offsets were already checked at a smaller radius.
-                    if (DistanceFalloff.ChebyshevDistance(origin, candidate) != radius)
+                    if (GridDistance.ChebyshevDistance(origin, candidate) != radius)
                     {
                         continue;
                     }

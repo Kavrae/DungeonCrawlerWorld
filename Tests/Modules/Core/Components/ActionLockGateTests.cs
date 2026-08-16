@@ -22,7 +22,7 @@ public sealed class ActionLockGateTests
     public void IsBlocked_LockFramesRemainingPositive_ReturnsTrue()
     {
         var pool = CreatePool();
-        pool.Add(0, new ActionLockComponent(totalLockFrames: 5, lockFramesRemaining: 5));
+        pool.Add(0, new ActionLockComponent(standardLockFrames: ActionLockGate.StandardLockFrames, currentLockTotalFrames: 5, currentLockFramesRemaining: 5));
 
         Assert.IsTrue(ActionLockGate.IsBlocked(pool, 0));
     }
@@ -31,7 +31,7 @@ public sealed class ActionLockGateTests
     public void IsBlocked_LockFramesRemainingZero_ReturnsFalse()
     {
         var pool = CreatePool();
-        pool.Add(0, new ActionLockComponent(totalLockFrames: 5, lockFramesRemaining: 0));
+        pool.Add(0, new ActionLockComponent(standardLockFrames: ActionLockGate.StandardLockFrames, currentLockTotalFrames: 5, currentLockFramesRemaining: 0));
 
         Assert.IsFalse(ActionLockGate.IsBlocked(pool, 0));
     }
@@ -40,11 +40,11 @@ public sealed class ActionLockGateTests
     public void Lock_ExistingComponent_SetsLockFramesRemaining()
     {
         var pool = CreatePool();
-        pool.Add(0, new ActionLockComponent(totalLockFrames: 0, lockFramesRemaining: 0));
+        pool.Add(0, new ActionLockComponent(standardLockFrames: ActionLockGate.StandardLockFrames, currentLockTotalFrames: 0, currentLockFramesRemaining: 0));
 
         ActionLockGate.Lock(pool, 0, 42);
 
-        Assert.AreEqual(42, pool.GetReadonly(0).LockFramesRemaining);
+        Assert.AreEqual(42, pool.GetReadonly(0).CurrentLockFramesRemaining);
     }
 
     /// <summary>Lock sets both fields to the same value -- a fresh action always resets the "how much of the lock is left, as a fraction of the whole" denominator too, not just the countdown.</summary>
@@ -52,11 +52,11 @@ public sealed class ActionLockGateTests
     public void Lock_ExistingComponent_AlsoSetsTotalLockFrames()
     {
         var pool = CreatePool();
-        pool.Add(0, new ActionLockComponent(totalLockFrames: 10, lockFramesRemaining: 0));
+        pool.Add(0, new ActionLockComponent(standardLockFrames: ActionLockGate.StandardLockFrames, currentLockTotalFrames: 10, currentLockFramesRemaining: 0));
 
         ActionLockGate.Lock(pool, 0, 42);
 
-        Assert.AreEqual(42, pool.GetReadonly(0).TotalLockFrames);
+        Assert.AreEqual(42, pool.GetReadonly(0).CurrentLockTotalFrames);
     }
 
     [TestMethod]

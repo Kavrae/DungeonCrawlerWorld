@@ -9,7 +9,6 @@ using Game.Modules.Actions.Systems;
 using Game.Modules.Core.Components;
 using Game.Modules.Death.Components;
 using Game.Modules.Health.Components;
-using Game.Modules.Mana;
 using Game.Modules.Mana.Components;
 using Game.Modules.StatusEffects;
 using Game.World;
@@ -119,7 +118,7 @@ public sealed class ActionActivationSystemTests
     private static float HealthOf(ComponentManager componentManager, int entityId) =>
         componentManager.GetPackedPool<HealthComponent>().TryGetReadonly(entityId, out var health) ? health.CurrentHealth : -1f;
 
-    private static short CooldownOf(ComponentManager componentManager, int entityId, Guid actionId)
+    private static ushort? CooldownOf(ComponentManager componentManager, int entityId, Guid actionId)
     {
         var instances = componentManager.GetMultiPool<ActionInstanceComponent>();
         for (var i = instances.GetFirstDenseIndex(entityId); i != -1; i = instances.GetNextDenseIndex(i))
@@ -131,7 +130,7 @@ public sealed class ActionActivationSystemTests
             }
         }
 
-        return -1;
+        return null;
     }
 
     [TestMethod]
@@ -141,13 +140,13 @@ public sealed class ActionActivationSystemTests
         mapQuery.SetOccupant(TargetTile, TargetEntityId);
         componentManager.Merge(TargetEntityId, new HealthComponent(100, 100));
         componentManager.Merge(CasterEntityId, new ActionInstanceComponent(ImmediateActionId, damageAmount: 15, cooldownFramesRemaining: 0));
-        componentManager.Merge(CasterEntityId, new ActionLockComponent(totalLockFrames: 0, lockFramesRemaining: 0));
+        componentManager.Merge(CasterEntityId, new ActionLockComponent(standardLockFrames: ActionLockGate.StandardLockFrames, currentLockTotalFrames: 0, currentLockFramesRemaining: 0));
         componentManager.Merge(CasterEntityId, new PendingActionActivationComponent(ImmediateActionId, [TargetTile]));
 
         system.Update(default, 0);
 
         Assert.AreEqual(85, HealthOf(componentManager, TargetEntityId));
-        Assert.AreEqual(30, componentManager.GetPackedPool<ActionLockComponent>().GetReadonly(CasterEntityId).LockFramesRemaining);
+        Assert.AreEqual(30, componentManager.GetPackedPool<ActionLockComponent>().GetReadonly(CasterEntityId).CurrentLockFramesRemaining);
         Assert.IsFalse(componentManager.GetPackedPool<PendingActionActivationComponent>().Has(CasterEntityId));
     }
 
@@ -158,7 +157,7 @@ public sealed class ActionActivationSystemTests
         mapQuery.SetOccupant(TargetTile, TargetEntityId);
         componentManager.Merge(TargetEntityId, new HealthComponent(100, 100));
         componentManager.Merge(CasterEntityId, new ActionInstanceComponent(ImmediateActionId, damageAmount: 15, cooldownFramesRemaining: 0));
-        componentManager.Merge(CasterEntityId, new ActionLockComponent(totalLockFrames: 0, lockFramesRemaining: 0));
+        componentManager.Merge(CasterEntityId, new ActionLockComponent(standardLockFrames: ActionLockGate.StandardLockFrames, currentLockTotalFrames: 0, currentLockFramesRemaining: 0));
         componentManager.Merge(CasterEntityId, new PendingActionActivationComponent(ImmediateActionId, [TargetTile]));
         componentManager.GetPackedPool<DeadComponent>().Add(CasterEntityId, new DeadComponent(KilledByEntityId: null));
 
@@ -175,7 +174,7 @@ public sealed class ActionActivationSystemTests
         mapQuery.SetOccupant(TargetTile, TargetEntityId);
         componentManager.Merge(TargetEntityId, new HealthComponent(100, 100));
         componentManager.Merge(CasterEntityId, new ActionInstanceComponent(ImmediateActionId, damageAmount: 15, cooldownFramesRemaining: 0));
-        componentManager.Merge(CasterEntityId, new ActionLockComponent(totalLockFrames: 30, lockFramesRemaining: 10));
+        componentManager.Merge(CasterEntityId, new ActionLockComponent(standardLockFrames: ActionLockGate.StandardLockFrames, currentLockTotalFrames: 30, currentLockFramesRemaining: 10));
         componentManager.Merge(CasterEntityId, new PendingActionActivationComponent(ImmediateActionId, [TargetTile]));
 
         system.Update(default, 0);
@@ -191,13 +190,13 @@ public sealed class ActionActivationSystemTests
         mapQuery.SetOccupant(TargetTile, TargetEntityId);
         componentManager.Merge(TargetEntityId, new HealthComponent(100, 100));
         componentManager.Merge(CasterEntityId, new ActionInstanceComponent(ImmediateWithCooldownActionId, damageAmount: 15, cooldownFramesRemaining: 50));
-        componentManager.Merge(CasterEntityId, new ActionLockComponent(totalLockFrames: 0, lockFramesRemaining: 0));
+        componentManager.Merge(CasterEntityId, new ActionLockComponent(standardLockFrames: ActionLockGate.StandardLockFrames, currentLockTotalFrames: 0, currentLockFramesRemaining: 0));
         componentManager.Merge(CasterEntityId, new PendingActionActivationComponent(ImmediateWithCooldownActionId, [TargetTile]));
 
         system.Update(default, 0);
 
         Assert.AreEqual(100, HealthOf(componentManager, TargetEntityId), "The shared ActionLock is clear, but the action's own longer cooldown must still gate it.");
-        Assert.AreEqual(50, CooldownOf(componentManager, CasterEntityId, ImmediateWithCooldownActionId), "A rejected activation must not restart or otherwise touch the existing cooldown.");
+        Assert.AreEqual((ushort?)50, CooldownOf(componentManager, CasterEntityId, ImmediateWithCooldownActionId), "A rejected activation must not restart or otherwise touch the existing cooldown.");
         Assert.IsFalse(componentManager.GetPackedPool<PendingActionActivationComponent>().Has(CasterEntityId));
     }
 
@@ -208,14 +207,14 @@ public sealed class ActionActivationSystemTests
         mapQuery.SetOccupant(TargetTile, TargetEntityId);
         componentManager.Merge(TargetEntityId, new HealthComponent(100, 100));
         componentManager.Merge(CasterEntityId, new ActionInstanceComponent(ImmediateWithCooldownActionId, damageAmount: 15, cooldownFramesRemaining: 0));
-        componentManager.Merge(CasterEntityId, new ActionLockComponent(totalLockFrames: 0, lockFramesRemaining: 0));
+        componentManager.Merge(CasterEntityId, new ActionLockComponent(standardLockFrames: ActionLockGate.StandardLockFrames, currentLockTotalFrames: 0, currentLockFramesRemaining: 0));
         componentManager.Merge(CasterEntityId, new PendingActionActivationComponent(ImmediateWithCooldownActionId, [TargetTile]));
 
         system.Update(default, 0);
 
         Assert.AreEqual(85, HealthOf(componentManager, TargetEntityId));
-        Assert.AreEqual(10, componentManager.GetPackedPool<ActionLockComponent>().GetReadonly(CasterEntityId).LockFramesRemaining, "The short shared ActionLock.");
-        Assert.AreEqual(200, CooldownOf(componentManager, CasterEntityId, ImmediateWithCooldownActionId), "The action's own, much longer cooldown -- outlives the shared lock.");
+        Assert.AreEqual(10, componentManager.GetPackedPool<ActionLockComponent>().GetReadonly(CasterEntityId).CurrentLockFramesRemaining, "The short shared ActionLock.");
+        Assert.AreEqual((ushort?)200, CooldownOf(componentManager, CasterEntityId, ImmediateWithCooldownActionId), "The action's own, much longer cooldown -- outlives the shared lock.");
     }
 
     [TestMethod]
@@ -225,13 +224,13 @@ public sealed class ActionActivationSystemTests
         mapQuery.SetOccupant(TargetTile, TargetEntityId);
         componentManager.Merge(TargetEntityId, new HealthComponent(100, 100));
         componentManager.Merge(CasterEntityId, new ActionInstanceComponent(DelayedActionId, damageAmount: 15, cooldownFramesRemaining: 0));
-        componentManager.Merge(CasterEntityId, new ActionLockComponent(totalLockFrames: 0, lockFramesRemaining: 0));
+        componentManager.Merge(CasterEntityId, new ActionLockComponent(standardLockFrames: ActionLockGate.StandardLockFrames, currentLockTotalFrames: 0, currentLockFramesRemaining: 0));
         componentManager.Merge(CasterEntityId, new PendingActionActivationComponent(DelayedActionId, [TargetTile]));
 
         system.Update(default, 0);
 
         Assert.AreEqual(100, HealthOf(componentManager, TargetEntityId), "Delayed -- effect must not fire yet.");
-        Assert.AreEqual(30, componentManager.GetPackedPool<ActionLockComponent>().GetReadonly(CasterEntityId).LockFramesRemaining, "The windup lock is set immediately, not deferred.");
+        Assert.AreEqual(30, componentManager.GetPackedPool<ActionLockComponent>().GetReadonly(CasterEntityId).CurrentLockFramesRemaining, "The windup lock is set immediately, not deferred.");
         Assert.IsTrue(componentManager.GetPackedPool<PendingDelayedActionComponent>().Has(CasterEntityId), "Handed off to DelayedActionSystem via PendingDelayedActionComponent.");
     }
 
@@ -242,14 +241,14 @@ public sealed class ActionActivationSystemTests
         mapQuery.SetOccupant(TargetTile, TargetEntityId);
         componentManager.Merge(TargetEntityId, new HealthComponent(100, 100));
         componentManager.Merge(CasterEntityId, new ActionInstanceComponent(DelayedWithCooldownActionId, damageAmount: 15, cooldownFramesRemaining: 0));
-        componentManager.Merge(CasterEntityId, new ActionLockComponent(totalLockFrames: 0, lockFramesRemaining: 0));
+        componentManager.Merge(CasterEntityId, new ActionLockComponent(standardLockFrames: ActionLockGate.StandardLockFrames, currentLockTotalFrames: 0, currentLockFramesRemaining: 0));
         componentManager.Merge(CasterEntityId, new PendingActionActivationComponent(DelayedWithCooldownActionId, [TargetTile]));
 
         system.Update(default, 0);
 
         Assert.AreEqual(100, HealthOf(componentManager, TargetEntityId), "Delayed -- effect must not fire yet.");
-        Assert.AreEqual(30, componentManager.GetPackedPool<ActionLockComponent>().GetReadonly(CasterEntityId).LockFramesRemaining);
-        Assert.AreEqual(150, CooldownOf(componentManager, CasterEntityId, DelayedWithCooldownActionId), "The cooldown starts at activation, the same moment as the windup lock -- not deferred to when the effect eventually resolves.");
+        Assert.AreEqual(30, componentManager.GetPackedPool<ActionLockComponent>().GetReadonly(CasterEntityId).CurrentLockFramesRemaining);
+        Assert.AreEqual((ushort?)150, CooldownOf(componentManager, CasterEntityId, DelayedWithCooldownActionId), "The cooldown starts at activation, the same moment as the windup lock -- not deferred to when the effect eventually resolves.");
     }
 
     [TestMethod]
@@ -259,13 +258,13 @@ public sealed class ActionActivationSystemTests
         mapQuery.SetOccupant(TargetTile, TargetEntityId);
         componentManager.Merge(TargetEntityId, new HealthComponent(100, 100));
         componentManager.Merge(CasterEntityId, new ActionInstanceComponent(DelayedWithCooldownActionId, damageAmount: 15, cooldownFramesRemaining: 60));
-        componentManager.Merge(CasterEntityId, new ActionLockComponent(totalLockFrames: 0, lockFramesRemaining: 0));
+        componentManager.Merge(CasterEntityId, new ActionLockComponent(standardLockFrames: ActionLockGate.StandardLockFrames, currentLockTotalFrames: 0, currentLockFramesRemaining: 0));
         componentManager.Merge(CasterEntityId, new PendingActionActivationComponent(DelayedWithCooldownActionId, [TargetTile]));
 
         system.Update(default, 0);
 
         Assert.IsFalse(componentManager.GetPackedPool<PendingDelayedActionComponent>().Has(CasterEntityId), "Gated by its own cooldown before ever setting a windup.");
-        Assert.AreEqual(0, componentManager.GetPackedPool<ActionLockComponent>().GetReadonly(CasterEntityId).LockFramesRemaining, "Must not set the shared lock for a rejected activation.");
+        Assert.AreEqual(0, componentManager.GetPackedPool<ActionLockComponent>().GetReadonly(CasterEntityId).CurrentLockFramesRemaining, "Must not set the shared lock for a rejected activation.");
     }
 
     [TestMethod]
@@ -275,14 +274,14 @@ public sealed class ActionActivationSystemTests
         mapQuery.SetOccupant(TargetTile, TargetEntityId);
         componentManager.Merge(TargetEntityId, new HealthComponent(100, 100));
         componentManager.Merge(CasterEntityId, new ActionInstanceComponent(FreeCastActionId, damageAmount: 20, cooldownFramesRemaining: 0));
-        componentManager.Merge(CasterEntityId, new ActionLockComponent(totalLockFrames: 30, lockFramesRemaining: 30));
+        componentManager.Merge(CasterEntityId, new ActionLockComponent(standardLockFrames: ActionLockGate.StandardLockFrames, currentLockTotalFrames: 30, currentLockFramesRemaining: 30));
         componentManager.Merge(CasterEntityId, new PendingActionActivationComponent(FreeCastActionId, [TargetTile]));
 
         system.Update(default, 0);
 
         Assert.AreEqual(80, HealthOf(componentManager, TargetEntityId), "FreeCast must fire even though the shared ActionLock is still counting down.");
-        Assert.AreEqual(30, componentManager.GetPackedPool<ActionLockComponent>().GetReadonly(CasterEntityId).LockFramesRemaining, "FreeCast must not touch the shared lock at all.");
-        Assert.AreEqual(40, CooldownOf(componentManager, CasterEntityId, FreeCastActionId));
+        Assert.AreEqual(30, componentManager.GetPackedPool<ActionLockComponent>().GetReadonly(CasterEntityId).CurrentLockFramesRemaining, "FreeCast must not touch the shared lock at all.");
+        Assert.AreEqual((ushort?)40, CooldownOf(componentManager, CasterEntityId, FreeCastActionId));
     }
 
     [TestMethod]
@@ -292,13 +291,13 @@ public sealed class ActionActivationSystemTests
         mapQuery.SetOccupant(TargetTile, TargetEntityId);
         componentManager.Merge(TargetEntityId, new HealthComponent(100, 100));
         componentManager.Merge(CasterEntityId, new ActionInstanceComponent(FreeCastActionId, damageAmount: 20, cooldownFramesRemaining: 5));
-        componentManager.Merge(CasterEntityId, new ActionLockComponent(totalLockFrames: 0, lockFramesRemaining: 0));
+        componentManager.Merge(CasterEntityId, new ActionLockComponent(standardLockFrames: ActionLockGate.StandardLockFrames, currentLockTotalFrames: 0, currentLockFramesRemaining: 0));
         componentManager.Merge(CasterEntityId, new PendingActionActivationComponent(FreeCastActionId, [TargetTile]));
 
         system.Update(default, 0);
 
         Assert.AreEqual(100, HealthOf(componentManager, TargetEntityId));
-        Assert.AreEqual(5, CooldownOf(componentManager, CasterEntityId, FreeCastActionId), "Cooldown must be left untouched, not restarted, by a rejected activation.");
+        Assert.AreEqual((ushort?)5, CooldownOf(componentManager, CasterEntityId, FreeCastActionId), "Cooldown must be left untouched, not restarted, by a rejected activation.");
     }
 
     [TestMethod]
@@ -309,14 +308,14 @@ public sealed class ActionActivationSystemTests
         componentManager.Merge(TargetEntityId, new HealthComponent(100, 100));
         componentManager.Merge(CasterEntityId, new ManaComponent(currentMana: 4, maximumMana: 100));
         componentManager.Merge(CasterEntityId, new ActionInstanceComponent(ImmediateWithManaCostActionId, damageAmount: 15, cooldownFramesRemaining: 0));
-        componentManager.Merge(CasterEntityId, new ActionLockComponent(totalLockFrames: 0, lockFramesRemaining: 0));
+        componentManager.Merge(CasterEntityId, new ActionLockComponent(standardLockFrames: ActionLockGate.StandardLockFrames, currentLockTotalFrames: 0, currentLockFramesRemaining: 0));
         componentManager.Merge(CasterEntityId, new PendingActionActivationComponent(ImmediateWithManaCostActionId, [TargetTile]));
 
         system.Update(default, 0);
 
         Assert.AreEqual(100, HealthOf(componentManager, TargetEntityId), "1 mana short of the cost -- blocked, no effect.");
         Assert.AreEqual(4, ManaOf(componentManager, CasterEntityId), "A blocked activation must not spend mana.");
-        Assert.AreEqual(0, componentManager.GetPackedPool<ActionLockComponent>().GetReadonly(CasterEntityId).LockFramesRemaining, "A blocked activation must not set the lock either.");
+        Assert.AreEqual(0, componentManager.GetPackedPool<ActionLockComponent>().GetReadonly(CasterEntityId).CurrentLockFramesRemaining, "A blocked activation must not set the lock either.");
     }
 
     [TestMethod]
@@ -327,14 +326,14 @@ public sealed class ActionActivationSystemTests
         componentManager.Merge(TargetEntityId, new HealthComponent(100, 100));
         componentManager.Merge(CasterEntityId, new ManaComponent(currentMana: 5, maximumMana: 100));
         componentManager.Merge(CasterEntityId, new ActionInstanceComponent(ImmediateWithManaCostActionId, damageAmount: 15, cooldownFramesRemaining: 0));
-        componentManager.Merge(CasterEntityId, new ActionLockComponent(totalLockFrames: 0, lockFramesRemaining: 0));
+        componentManager.Merge(CasterEntityId, new ActionLockComponent(standardLockFrames: ActionLockGate.StandardLockFrames, currentLockTotalFrames: 0, currentLockFramesRemaining: 0));
         componentManager.Merge(CasterEntityId, new PendingActionActivationComponent(ImmediateWithManaCostActionId, [TargetTile]));
 
         system.Update(default, 0);
 
         Assert.AreEqual(85, HealthOf(componentManager, TargetEntityId));
         Assert.AreEqual(0, ManaOf(componentManager, CasterEntityId), "Exactly enough -- spent down to 0.");
-        Assert.AreEqual(30, componentManager.GetPackedPool<ActionLockComponent>().GetReadonly(CasterEntityId).LockFramesRemaining);
+        Assert.AreEqual(30, componentManager.GetPackedPool<ActionLockComponent>().GetReadonly(CasterEntityId).CurrentLockFramesRemaining);
     }
 
     [TestMethod]
@@ -344,7 +343,7 @@ public sealed class ActionActivationSystemTests
         mapQuery.SetOccupant(TargetTile, TargetEntityId);
         componentManager.Merge(TargetEntityId, new HealthComponent(100, 100));
         componentManager.Merge(CasterEntityId, new ActionInstanceComponent(ImmediateWithManaCostActionId, damageAmount: 15, cooldownFramesRemaining: 0));
-        componentManager.Merge(CasterEntityId, new ActionLockComponent(totalLockFrames: 0, lockFramesRemaining: 0));
+        componentManager.Merge(CasterEntityId, new ActionLockComponent(standardLockFrames: ActionLockGate.StandardLockFrames, currentLockTotalFrames: 0, currentLockFramesRemaining: 0));
         componentManager.Merge(CasterEntityId, new PendingActionActivationComponent(ImmediateWithManaCostActionId, [TargetTile]));
 
         system.Update(default, 0);
@@ -359,7 +358,7 @@ public sealed class ActionActivationSystemTests
         mapQuery.SetOccupant(TargetTile, TargetEntityId);
         componentManager.Merge(TargetEntityId, new HealthComponent(100, 100));
         componentManager.Merge(CasterEntityId, new ActionInstanceComponent(ImmediateActionId, damageAmount: 15, cooldownFramesRemaining: 0));
-        componentManager.Merge(CasterEntityId, new ActionLockComponent(totalLockFrames: 0, lockFramesRemaining: 0));
+        componentManager.Merge(CasterEntityId, new ActionLockComponent(standardLockFrames: ActionLockGate.StandardLockFrames, currentLockTotalFrames: 0, currentLockFramesRemaining: 0));
         componentManager.Merge(CasterEntityId, new PendingActionActivationComponent(ImmediateActionId, [TargetTile]));
 
         system.Update(default, 0);
@@ -375,7 +374,7 @@ public sealed class ActionActivationSystemTests
         componentManager.Merge(TargetEntityId, new HealthComponent(100, 100));
         componentManager.Merge(CasterEntityId, new ManaComponent(currentMana: 4, maximumMana: 100));
         componentManager.Merge(CasterEntityId, new ActionInstanceComponent(FreeCastWithManaCostActionId, damageAmount: 20, cooldownFramesRemaining: 0));
-        componentManager.Merge(CasterEntityId, new ActionLockComponent(totalLockFrames: 0, lockFramesRemaining: 0));
+        componentManager.Merge(CasterEntityId, new ActionLockComponent(standardLockFrames: ActionLockGate.StandardLockFrames, currentLockTotalFrames: 0, currentLockFramesRemaining: 0));
         componentManager.Merge(CasterEntityId, new PendingActionActivationComponent(FreeCastWithManaCostActionId, [TargetTile]));
 
         system.Update(default, 0);
@@ -388,7 +387,7 @@ public sealed class ActionActivationSystemTests
     public void UnknownActionId_DoesNothing_AndConsumesRequest()
     {
         var (system, componentManager, _, _) = Build();
-        componentManager.Merge(CasterEntityId, new ActionLockComponent(totalLockFrames: 0, lockFramesRemaining: 0));
+        componentManager.Merge(CasterEntityId, new ActionLockComponent(standardLockFrames: ActionLockGate.StandardLockFrames, currentLockTotalFrames: 0, currentLockFramesRemaining: 0));
         componentManager.Merge(CasterEntityId, new PendingActionActivationComponent(Guid.NewGuid(), [TargetTile]));
 
         system.Update(default, 0);

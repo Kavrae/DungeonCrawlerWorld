@@ -54,7 +54,7 @@ public static class AbilityScoreModifierFormatter
         return lines;
     }
 
-    private static short GetBaseValue(ComponentManager componentManager, int entityId, AbilityScoreType type) =>
+    private static ushort GetBaseValue(ComponentManager componentManager, int entityId, AbilityScoreType type) =>
         AbilityScoreQueries.TryGetComponent(componentManager.GetMultiPool<AbilityScoreComponent>(), entityId, type, out var component)
             ? component.BaseValue
             : throw new InvalidOperationException($"No AbilityScoreComponent of type {type} for entity {entityId}.");

@@ -2,8 +2,8 @@ using Engine.Math;
 
 namespace Game.Modules.Actions.Activators;
 
-/// <summary>
-/// The simplest activator: no mana, no special mechanic -- applies its ActionDefinition's Effects
-/// exactly as defined, with no modifications. Punch is a DirectAction using a DirectDamage.
-/// </summary>
+/// <summary>Represents a direct action that applies its effects immediately with no modification.</summary>
+/// <param name="Targeting">The targeting specification for the action.</param>
+/// <param name="Timing">The timing specification for the action.</param>
+/// <cleanupVersion>1</cleanupVersion>
 public sealed record DirectAction(TargetingSpec Targeting, ActionTiming Timing) : IActionActivator;
