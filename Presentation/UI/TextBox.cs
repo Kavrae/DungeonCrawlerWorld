@@ -1,4 +1,5 @@
 using Engine.Utilities;
+using FontStashSharp;
 using Microsoft.Xna.Framework;
 using Microsoft.Xna.Framework.Graphics;
 using Microsoft.Xna.Framework.Input;
@@ -27,6 +28,11 @@ public sealed class TextBox(FontService fontService, ElementPoolService elementP
 
     /// <summary>Raised when Enter (or Shift+Enter on a non-multiline box) submits the current text.</summary>
     public event Action<string>? TextSubmitted;
+
+    /// <summary>Placeholder text shown whenever the box is both empty and unfocused (see DrawContent) -- null (the default) draws nothing, so every existing TextBox usage is unaffected.</summary>
+    public string? GhostText { get; set; }
+
+    public Color GhostTextColor { get; set; } = Color.LightGray;
 
     public override void Build(Element? parent, ElementOptions options)
     {
@@ -90,6 +96,19 @@ public sealed class TextBox(FontService fontService, ElementPoolService elementP
     {
         UpdateText(newText);
         AutoSizeToContent();
+    }
+
+    /// <summary>Ghost text hides the moment the box has real content OR gains focus (not just once something's typed) -- e.g. Inventory tab search's box: click it and the placeholder is gone immediately, even before the first keystroke.</summary>
+    public override void DrawContent(GameTime gameTime, SpriteBatch spriteBatch, Texture2D unitRectangle)
+    {
+        if (!string.IsNullOrEmpty(OriginalText) || IsFocused || string.IsNullOrEmpty(GhostText))
+        {
+            base.DrawContent(gameTime, spriteBatch, unitRectangle);
+            return;
+        }
+
+        var origin = RequiresContentViewport ? Vector2.Zero : ContentAbsolutePosition;
+        spriteBatch.DrawString(ContentFont, GhostText, origin + new Vector2(LinePadding, LinePadding), GhostTextColor);
     }
 
     /// <summary>

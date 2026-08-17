@@ -470,12 +470,46 @@ public class Element
                 DrawContent(gameTime, spriteBatch, unitRectangle);
             }
 
-            foreach (var childElement in _children)
+            if (RequiresContentViewport)
             {
-                childElement.Draw(gameTime, graphicsDevice, spriteBatch, unitRectangle);
+                // Unlike the viewport swap above (which only ever wraps this element's own
+                // DrawContent), children draw in absolute screen coordinates, not local ones, so
+                // they need an actual scissor clip rather than a viewport/transform remap -- a
+                // child scrolled toward negative local space (see ScrollBy's own doc comment: it
+                // only ever folds ScrollOffset into children's position math, nothing clips their
+                // drawing) would otherwise render in full whichever screen position that puts it
+                // at, however far outside this element's own bounds that is. Confirmed bug: the
+                // Inventory tab strip's tiles rendered past the window's left border while
+                // scrolling instead of disappearing off the edge. Intersected with whatever
+                // scissor is already active (harmless today -- nothing nests scrollable elements
+                // yet -- but correct if that ever changes) rather than overwritten outright.
+                spriteBatch.End();
+
+                var previousScissorRectangle = graphicsDevice.ScissorRectangle;
+                graphicsDevice.ScissorRectangle = Rectangle.Intersect(previousScissorRectangle, _contentState.Rectangle);
+                spriteBatch.Begin(SpriteSortMode.Deferred, BlendState.AlphaBlend, null, null, ScissorClipRasterizerState);
+
+                foreach (var childElement in _children)
+                {
+                    childElement.Draw(gameTime, graphicsDevice, spriteBatch, unitRectangle);
+                }
+
+                spriteBatch.End();
+                graphicsDevice.ScissorRectangle = previousScissorRectangle;
+                spriteBatch.Begin(SpriteSortMode.Deferred, BlendState.AlphaBlend);
+            }
+            else
+            {
+                foreach (var childElement in _children)
+                {
+                    childElement.Draw(gameTime, graphicsDevice, spriteBatch, unitRectangle);
+                }
             }
         }
     }
+
+    /// <summary>Shared by every scrollable element's own children-clip pass in Draw -- ScissorTestEnable is off by default on every other RasterizerState this codebase uses, so this needs to be its own instance rather than a tweaked copy of an existing one.</summary>
+    private static readonly RasterizerState ScissorClipRasterizerState = new() { ScissorTestEnable = true };
 
     /// <summary>No-op by default; TextWindow/MapWindow override this directly, Window overrides it to host IElementContent.</summary>
     public virtual void DrawContent(GameTime gameTime, SpriteBatch spriteBatch, Texture2D unitRectangle) { }

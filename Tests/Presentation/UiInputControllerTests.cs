@@ -1119,9 +1119,9 @@ public sealed class UiInputControllerTests
         Assert.IsFalse(windowA.IsFocused);
     }
 
-    /// <summary>Pressing where nothing is hit (see the mouse-press branch's own Window-is-null guard) must leave whatever was already focused alone, not clear it.</summary>
+    /// <summary>Pressing where nothing is hit (see the mouse-press branch's own Window-is-null guard) must blur whatever was previously focused -- SetFocus(null) falls back to _defaultFocusElement, unset here, so FocusedElement goes all the way to null. Confirmed bug this covers: a focused TextBox (e.g. the Inventory tab search box) stayed focused/selected forever once clicked, since nothing ever cleared it on a later click elsewhere.</summary>
     [TestMethod]
-    public void ClickingEmptySpace_LeavesFocusUnchanged()
+    public void ClickingEmptySpace_ClearsFocus()
     {
         var windowService = CreateWindowService();
         var window = CreateRootWindowWithCloseButton(windowService, new Vector2(0, 0));
@@ -1135,8 +1135,8 @@ public sealed class UiInputControllerTests
         controller.Update(NoKeys, MouseAt(1900, 1900, ButtonState.Released));
         controller.Update(NoKeys, MouseAt(1900, 1900, ButtonState.Pressed));
 
-        Assert.AreSame(window, controller.FocusedElement);
-        Assert.IsTrue(window.IsFocused);
+        Assert.IsNull(controller.FocusedElement);
+        Assert.IsFalse(window.IsFocused);
     }
 
     /// <summary>
@@ -1287,9 +1287,9 @@ public sealed class UiInputControllerTests
     }
 
     /// <summary>
-    /// A window with a focusable TextBox child is never itself the terminal focus target --
-    /// focusing it (a click, here) redirects into its first TextBox instead, per
-    /// UiInputController.SetFocus's NextTextBoxAfter redirect.
+    /// A window with a focusable TextBox child is never itself the terminal focus target for a
+    /// plain (non-drag) click -- focusing it redirects into its first TextBox instead, per
+    /// UiInputController.SetFocus's NextFocusableDescendant redirect.
     /// </summary>
     [TestMethod]
     public void ClickingAWindowWithATextBoxChild_FocusesTheTextBoxInstead()
@@ -1309,14 +1309,53 @@ public sealed class UiInputControllerTests
         container.AddChild(textBox);
         var controller = new UiInputController([container], [], [], [], LargeScreenSize);
 
-        // Click the container's title bar -- content-agnostic, so it can't be mistaken for
-        // directly clicking the TextBox child itself.
+        // Click the container's own content area, below/outside the TextBox child's own
+        // Rectangle (180x50 at the top) -- content-agnostic (falls through to
+        // ElementInteraction.Click(container), Kind.None), so it can't be mistaken for directly
+        // clicking the TextBox child itself, nor for a Move/Resize drag -- see the next test for
+        // why Move specifically no longer triggers this redirect.
+        var contentPoint = new Point((int)container.ContentRectangle.Right - 5, (int)container.ContentRectangle.Bottom - 5);
+        controller.Update(NoKeys, MouseAt(contentPoint.X, contentPoint.Y, ButtonState.Released));
+        controller.Update(NoKeys, MouseAt(contentPoint.X, contentPoint.Y, ButtonState.Pressed));
+
+        Assert.AreSame(textBox, controller.FocusedElement);
+        Assert.IsTrue(textBox.IsFocused);
+        Assert.IsFalse(container.IsFocused);
+    }
+
+    /// <summary>
+    /// Dragging a window by its title bar (a Move interaction, not a plain click) deliberately
+    /// does NOT redirect focus into a TextBox child -- withdrawn from HandleMousePress's focus
+    /// resolution in favor of a real, explicit control-selection feature later (see the medium
+    /// priority Presentation TODO on a comprehensive control-selection feature). Confirmed bug
+    /// this covers: dragging the Inventory window by its title bar silently stole keyboard focus
+    /// into its search box, the same way a resize drag did (see the sibling Resize-focused test
+    /// coverage this mirrors).
+    /// </summary>
+    [TestMethod]
+    public void DraggingAWindowsTitleBar_DoesNotFocusItsTextBoxChild()
+    {
+        var windowService = CreateWindowService();
+        var container = windowService.CreateElement<Window>(null, new ElementOptions
+        {
+            Hierarchy = new ElementHierarchyOptions { CanContainChildren = true },
+            Layout = new ElementLayoutOptions { RelativePosition = new Vector2(0, 0), Size = new Vector2(200, 100), DisplayMode = ElementDisplayMode.Fixed },
+            Chrome = new ElementChromeOptions { ShowTitle = true, TitleText = "Form", CanUserMove = true },
+        });
+        container.Initialize();
+        var textBox = windowService.CreateElement<TextBox>(container, new ElementOptions
+        {
+            Layout = new ElementLayoutOptions { RelativePosition = new Vector2(0, 0), Size = new Vector2(180, 50), DisplayMode = ElementDisplayMode.Fixed },
+        });
+        container.AddChild(textBox);
+        var controller = new UiInputController([container], [], [], [], LargeScreenSize);
+
         var titlePoint = container.TitleRectangle.Center;
         controller.Update(NoKeys, MouseAt(titlePoint.X, titlePoint.Y, ButtonState.Released));
         controller.Update(NoKeys, MouseAt(titlePoint.X, titlePoint.Y, ButtonState.Pressed));
 
-        Assert.AreSame(textBox, controller.FocusedElement);
-        Assert.IsTrue(textBox.IsFocused);
+        Assert.IsNull(controller.FocusedElement);
+        Assert.IsFalse(textBox.IsFocused);
         Assert.IsFalse(container.IsFocused);
     }
 
@@ -1440,9 +1479,9 @@ public sealed class UiInputControllerTests
         CollectionAssert.AreEqual(new[] { windowC, windowB, windowA, windowC, windowB, windowA }, visited);
     }
 
-    /// <summary>A window with CanUserFocus = false (e.g. the debug stats window) is a concrete opt-out: clicking it must not change focus at all.</summary>
+    /// <summary>A window with CanUserFocus = false (e.g. the debug stats window) is a concrete opt-out: it never becomes the focused element itself, but clicking it still blurs whatever *was* focused (SetFocus(null) falls back to _defaultFocusElement, unset here) -- "click away to blur" applies to any non-focusable target, not just empty space. See ClickingEmptySpace_ClearsFocus for the same behavior with no target at all.</summary>
     [TestMethod]
-    public void ClickingANonFocusableWindow_DoesNotChangeFocus()
+    public void ClickingANonFocusableWindow_ClearsFocus()
     {
         var windowService = CreateWindowService();
         var focusable = CreateRootWindowWithCloseButton(windowService, new Vector2(0, 0));
@@ -1463,7 +1502,8 @@ public sealed class UiInputControllerTests
         controller.Update(NoKeys, MouseAt(pressPointNonFocusable.X, pressPointNonFocusable.Y, ButtonState.Released));
         controller.Update(NoKeys, MouseAt(pressPointNonFocusable.X, pressPointNonFocusable.Y, ButtonState.Pressed));
 
-        Assert.AreSame(focusable, controller.FocusedElement);
+        Assert.IsNull(controller.FocusedElement);
+        Assert.IsFalse(focusable.IsFocused);
         Assert.IsFalse(nonFocusable.IsFocused);
     }
 

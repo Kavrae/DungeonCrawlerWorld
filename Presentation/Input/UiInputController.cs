@@ -402,17 +402,20 @@ public sealed class UiInputController
         {
             RaiseToFront(_activeInteraction.Element);
 
-            if (_activeInteraction.Element.CanUserFocus)
+            if (_activeInteraction.Kind == ElementDragInteractionKind.None)
             {
-                SetFocus(_activeInteraction.Element);
+                SetFocus(_activeInteraction.Element.CanUserFocus ? _activeInteraction.Element : null);
             }
-
-            if (_activeInteraction.Kind != ElementDragInteractionKind.None)
+            else
             {
                 _dragStartMousePosition = new Vector2(mouseState.X, mouseState.Y);
                 _dragStartRelativePosition = _activeInteraction.Element.RelativePosition;
                 _dragStartSize = _activeInteraction.Element.CurrentSize;
             }
+        }
+        else
+        {
+            SetFocus(null);
         }
 
         TryStartContentDrag(clickPosition);

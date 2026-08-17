@@ -148,7 +148,14 @@ public sealed class InventoryFolderController(
         var window = elementPoolService.CreateElement<InventoryManagementWindow>(null, new ElementOptions
         {
             Hierarchy = new ElementHierarchyOptions { CanContainChildren = true },
-            Layout = new ElementLayoutOptions { RelativePosition = WindowPosition, Size = new Vector2(WindowWidth, WindowHeight), DisplayMode = ElementDisplayMode.Fixed },
+            Layout = new ElementLayoutOptions
+            {
+                RelativePosition = WindowPosition,
+                Size = new Vector2(WindowWidth, WindowHeight),
+                MinimumSize = new Vector2(WindowWidth, WindowHeight),
+                MaximumSize = mapWindow.CurrentSize,
+                DisplayMode = ElementDisplayMode.Fixed,
+            },
             Chrome = new ElementChromeOptions
             {
                 ShowTitle = true,
