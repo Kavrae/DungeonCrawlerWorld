@@ -5,6 +5,7 @@ using Microsoft.Xna.Framework;
 using Microsoft.Xna.Framework.Graphics;
 using Presentation.Fonts;
 using Presentation.Rendering;
+using Presentation.UI.ColorPalettes;
 
 namespace Presentation.UI.Content;
 
@@ -33,6 +34,9 @@ public sealed class InventoryItemStackCell(FontService fontService, ElementPoolS
 
     public Guid ItemDefinitionId { get; private set; }
 
+    /// <summary>Drives a translucent highlight overlay -- see InventoryGridContent's own hover polling. Mirrors AbilityScoreColumnHeader.IsHovered.</summary>
+    public bool IsHovered { get; set; }
+
     /// <summary>cellSize is the caller's known fixed cell size (see InventoryGridContent), not ContentSize -- Configure runs immediately after CreateElement, before this cell's own layout has necessarily settled.</summary>
     public void Configure(Guid itemDefinitionId, string? spriteName, string glyph, Color glyphColor, int quantity, bool isDisabled, Vector2 cellSize)
     {
@@ -48,6 +52,11 @@ public sealed class InventoryItemStackCell(FontService fontService, ElementPoolS
 
     public override void DrawContent(GameTime gameTime, SpriteBatch spriteBatch, Texture2D unitRectangle)
     {
+        if (IsHovered)
+        {
+            spriteBatch.Draw(unitRectangle, new Rectangle((int)ContentAbsolutePosition.X, (int)ContentAbsolutePosition.Y, (int)ContentSize.X, (int)ContentSize.Y), WindowPalette.HighlightColor);
+        }
+
         SpriteComponent? sprite = _spriteName is not null && SpriteManifest.TryGet(_spriteName, out var spriteComponent) ? spriteComponent : null;
         var spriteTint = _isDisabled ? Color.Gray : Color.White;
         var glyphColor = _isDisabled ? Color.Gray : _glyphColor;

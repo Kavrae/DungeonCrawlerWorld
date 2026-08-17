@@ -312,19 +312,35 @@ Not a measured problem today -- no Delayed action currently has a windup long en
 
 #### Inventory management
 
-The read-only view landed: `Presentation/UI/Inventory/InventoryManagementWindow.cs` behind a new Inventory HUD folder (`InventoryFolderController`), tabbed (`Presentation/UI/Content/TabbedContent.cs`, one static "All" tab today) over a scrolling icon grid (`InventoryGridContent`/`InventoryItemStackCell`) -- pause-while-open included. Remaining scope is interaction: searching, auto-sorting, click-and-drag organization, click-to-inspect (see Item inspection popup below). Depends on the Standard widget set item below for any of that which needs controls beyond what already exists.
+The read-only view landed: `Presentation/UI/Inventory/InventoryManagementWindow.cs` behind a new Inventory HUD folder (`InventoryFolderController`), tabbed (`Presentation/UI/Content/TabbedContent.cs`, a horizontally-scrollable dynamic per-tag strip -- see the Dynamic per-tag inventory tabs item below) over a scrolling icon grid (`InventoryGridContent`/`InventoryItemStackCell`) -- pause-while-open included. Remaining scope is interaction: click-and-drag organization, click-to-inspect (see Item details window below). Depends on the Standard widget set item below for any of that which needs controls beyond what already exists.
 
 #### Item inspection popup
 
-Click an inventory item cell (`InventoryItemStackCell`, `Presentation/UI/Content/InventoryItemStackCell.cs`) to see its full detail -- name, description, and whatever properties land alongside it (tags are already on `ItemDefinition`, just not surfaced in the grid yet, which only shows sprite/glyph + quantity). Depends on Inventory management above for the grid to click into.
+Click an inventory item cell (`InventoryItemStackCell`, `Presentation/UI/Content/InventoryItemStackCell.cs`) to see its full detail -- name, description, and whatever properties land alongside it (tags are already on `ItemDefinition`, surfaced today only as the per-tag tabs, not per-cell). Depends on Inventory management above for the grid to click into. See also the newer "Item details window" entry below -- the two describe the same feature and should be consolidated when either is picked up.
 
-#### Inventory item hover summary
+#### Inventory item hover summary (landed)
 
-Hovering an inventory item cell (`InventoryItemStackCell`, `Presentation/UI/Content/InventoryItemStackCell.cs`) shows nothing today -- no hover handling exists there at all. The hotbar already has exactly this for its own slots: `ArmedHotkeySummaryWindow` shows a slot's Name/Summary (`ActivatableDefinition.Summary`, the short "read at a glance" field -- see its own doc comment) for whichever slot is currently armed *or hovered* (`MapViewState.HoverSlot`/`HotbarContent.TryGetSlotSummary`). A lighter-weight companion to the click-to-inspect popup above, not a replacement -- hover shows the same short Summary text the hotbar already surfaces, click still opens the full Description/properties detail.
+Hovering an inventory item cell (`InventoryItemStackCell`, `Presentation/UI/Content/InventoryItemStackCell.cs`) highlights it and, after a brief delay, shows a popup with its Name/Summary (`ActivatableDefinition.Summary`, the short "read at a glance" field), anchored East with a 1px gap -- the same self-polled-mouse, delay-gated `HoverPopupWindow` pattern `AbilityScoreWindow` already used for its own hover popup (see `InventoryGridContent.UpdateHover`). A lighter-weight companion to the click-to-inspect popup above, not a replacement -- hover shows the short Summary text, click (once built) still opens the full Description/properties detail.
 
-#### Dynamic per-tag inventory tabs
+#### Dynamic per-tag inventory tabs (landed)
 
-Each unique tag across the player's inventory (`ItemDefinition.Tags`, e.g. `Tag.Potion`/`Tag.Consumable`/`Tag.Healing` on the Health Potion) auto-creates an inventory tab, default-sorted by how many unique items in the inventory carry that tag, user-reorderable (overrides the default sort). Clicking a tab filters the grid to items with that tag. A trailing "+" tab lets the player create custom tags. First real second consumer of `TabbedContent` (`Presentation/UI/Content/TabbedContent.cs`) beyond the single static "All" tab it ships with today -- `TabbedContent.SwitchTab` already supports swapping to an arbitrary tab list, so this is additive, not a redesign.
+Every tag carried by at least one of the entity's current item stacks (`ItemDefinition.Tags`) gets an auto-generated tab, sorted left-to-right by distinct-stack count descending, ties broken alphabetically (`Game/Modules/Inventory/InventoryTagQueries.cs`); a tag no current stack carries gets no tab. A leading "All" tab shows everything; every tab's grid is sorted alphabetically by item name (`InventoryGridContent`). `TabbedContent` (`Presentation/UI/Content/TabbedContent.cs`) now supports a horizontally-scrollable, runtime-rebuildable tab list (`SetTabs`, called whenever the entity's inventory version changes) with real child-Element tab tiles (Outset border when selected, Inset otherwise) instead of the flat-color, fixed-list, non-scrolling hand-drawn strip it shipped with originally. Deliberately left open, since the tab count can get large fast: user-reordering the default sort, and a trailing "+" tab for custom user-created tags -- both still open, see the Item sorting/filtering/searching and Tab search with ghost text items below, expected to ease exactly that "large number of tabs" case.
+
+#### Inventory item sorting, filtering, and searching
+
+`InventoryGridContent` sorts alphabetically by item name today, unconditionally -- no other sort order, no filtering beyond the per-tag tab selection, and no search. Add real controls for all three (sort order picker, filter beyond tag, a text search box) scoped to whichever tab is active. See the Tab Stats row item below, which is where these controls are expected to live once built.
+
+#### Tab search with ghost text
+
+A search box for the tab strip itself (`Presentation/UI/Content/TabbedContent.cs`), to the right of the scrollable tab tiles and fixed in place -- it does not scroll with them. Ghost/placeholder text when empty. Exists specifically to make a large tag-tab list navigable without scrolling through all of it by hand (see the Dynamic per-tag inventory tabs item above).
+
+#### Tab Stats row
+
+A row of data between the tab strip and the inventory grid, scoped to whichever tab is currently active: number of items, total weight (blocked on the Item weight and carry capacity scaling with Strength item below -- no `ItemDefinition`/`InventoryItemStackComponent` carries a weight field yet), plus the sort/filter/search controls from the Inventory item sorting, filtering, and searching item above.
+
+#### Item details window
+
+Click an inventory item to open a window with its full details -- name, description, tags, and whatever else lands alongside it, beyond the grid's own sprite/glyph + quantity and the hover popup's short summary. Same feature the older "Item inspection popup" entry above already describes; consolidate the two when either is picked up.
 
 #### Game over screen on player 0 HP
 

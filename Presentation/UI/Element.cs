@@ -202,7 +202,7 @@ public class Element
     public Rectangle BorderBottomRectangle => _border.BottomRectangle;
     public Rectangle BorderLeftRectangle => _border.LeftRectangle;
     public Rectangle BorderRightRectangle => _border.RightRectangle;
-    public BorderStyle BorderStyle => _border.Style;
+    public BorderStyle BorderStyle { get => _border.Style; set => _border.Style = value; }
     public Color BorderColor => _border.Color;
 
     /*========Content========*/

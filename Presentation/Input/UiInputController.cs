@@ -757,11 +757,9 @@ public sealed class UiInputController
             return;
         }
 
-        // Scrolling forward (wheelDelta > 0) moves content up (offset decreases) -- the
-        // universal convention -- hence the negation. Vertical only: shift+wheel-for-horizontal
-        // is a reasonable future addition, but nothing today needs it (see TextWindow, whose
-        // wrapped text can only ever overflow horizontally by a single unbreakable word).
-        scrollableElement.ScrollBy(new Vector2(0, -wheelDelta / WheelNotchValue * ScrollPixelsPerNotch));
+        var scrollDelta = -wheelDelta / WheelNotchValue * ScrollPixelsPerNotch;
+        var isHorizontalOnly = scrollableElement.CanUserScrollHorizontal && !scrollableElement.CanUserScrollVertical;
+        scrollableElement.ScrollBy(isHorizontalOnly ? new Vector2(scrollDelta, 0) : new Vector2(0, scrollDelta));
     }
 
     /// <summary>Starts at element itself (so an already-scrollable hit is unchanged) and walks ParentElement upward, returning the first element that opts into CanUserScrollVertical/Horizontal, or null if nothing in the chain does.</summary>

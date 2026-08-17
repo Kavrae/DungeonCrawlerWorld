@@ -52,6 +52,9 @@ public sealed class InventoryFolderController(
     /// <summary>Fixed width cap for the Ability Score hover popup; height auto-grows with content -- see HoverPopupWindow.</summary>
     private static readonly Vector2 AbilityScoreHoverPopupMaximumSize = new(220, 10000f);
 
+    /// <summary>Fixed width cap for the Inventory item hover popup; height auto-grows with content -- see HoverPopupWindow.</summary>
+    private static readonly Vector2 InventoryHoverPopupMaximumSize = new(220, 10000f);
+
     /// <summary>Height 30% taller than the original 350 (455) -- more room for the grid now that cells are smaller (see InventoryGridContent.CellSize). Width is no longer fixed -- see WindowWidthFraction.</summary>
     private const float WindowHeight = 455f;
 
@@ -68,6 +71,7 @@ public sealed class InventoryFolderController(
     private WindowSlot<AbilityScoreWindow> _abilityScoreSlot = null!;
     private List<Element> _dynamicHudElements = null!;
     private HoverPopupWindow _abilityScoreHoverPopup = null!;
+    private HoverPopupWindow _inventoryHoverPopup = null!;
 
     public bool IsAnyWindowOpen => _inventorySlot.Window is not null || _abilityScoreSlot.Window is not null;
 
@@ -90,6 +94,17 @@ public sealed class InventoryFolderController(
         });
         _abilityScoreHoverPopup.Initialize();
         dynamicHudElements.Add(_abilityScoreHoverPopup);
+
+        // A separate instance from _abilityScoreHoverPopup -- both windows self-poll the mouse
+        // independently every frame, and sharing one popup would let whichever window updates
+        // second stomp the other's ShowNear/Hide call when both windows are open side by side.
+        _inventoryHoverPopup = elementPoolService.CreateElement<HoverPopupWindow>(null, new ElementOptions
+        {
+            Layout = new ElementLayoutOptions { RelativePosition = Vector2.Zero, MaximumSize = InventoryHoverPopupMaximumSize, DisplayMode = ElementDisplayMode.WrapContent, IsVisible = false },
+            Chrome = new ElementChromeOptions { ShowBorder = true, ShowTitle = true, CanUserFocus = false, CanUserClose = false },
+        });
+        _inventoryHoverPopup.Initialize();
+        dynamicHudElements.Add(_inventoryHoverPopup);
 
         _folder = elementPoolService.CreateElement<Folder>(null, new ElementOptions
         {
@@ -147,7 +162,8 @@ public sealed class InventoryFolderController(
             },
             Content = new ElementContentOptions { ContentColor = InventoryManagementWindow.BackgroundColor },
         });
-        window.Configure(world.PlayerEntityId);
+        window.Configure(world.PlayerEntityId, _inventoryHoverPopup);
+        window.Closed += _ => _inventoryHoverPopup.Hide(); // Closing the Inventory window mid-hover shouldn't leave the popup stranded.
         return window;
     }
 
