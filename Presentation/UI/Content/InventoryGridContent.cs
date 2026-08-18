@@ -14,13 +14,17 @@ namespace Presentation.UI.Content;
 /// <summary>
 /// Grid of item-stack icons for one entity's inventory, optionally filtered to stacks whose item
 /// carries filterTag (null shows every stack -- the "All" tab) -- one InventoryItemStackCell per
-/// stack, no empty filler cells, sorted alphabetically by item name, wraps to hostWindow's width
-/// and scrolls vertically without limit (the host tab body window already has
-/// CanUserScrollVertical -- see TabbedContent). Rebuilds (destroy-all, recreate-all -- cheap,
-/// since this only fires on an actual inventory mutation, not every frame) whenever the pool's
-/// per-entity version changes. Also self-polls Mouse.GetState() every Update (see UpdateHover),
-/// the same idiom AbilityScoreWindow uses for its own hover popup -- kept self-contained here
-/// rather than routed through UiInputController since nothing else needs to know about it.
+/// stack, no empty filler cells, wraps to hostWindow's width and scrolls vertically without limit
+/// (the host tab body window already has CanUserScrollVertical -- see TabbedContent). Sorted
+/// alphabetically by item name by default (SortOrder), further narrowed by NameFilter (a
+/// case-insensitive Name.Contains match) and HideDisabled -- all three are settable properties
+/// driven by GridControl via InventoryTabContent, this class has no idea either of those exist.
+/// Rebuilds (destroy-all, recreate-all -- cheap, since this only fires on an actual inventory
+/// mutation or a property change, not every frame) whenever the pool's per-entity version
+/// changes, or SortOrder/NameFilter/HideDisabled actually changes. Also self-polls
+/// Mouse.GetState() every Update (see UpdateHover), the same idiom AbilityScoreWindow uses for
+/// its own hover popup -- kept self-contained here rather than routed through UiInputController
+/// since nothing else needs to know about it.
 /// </summary>
 public sealed class InventoryGridContent(
     ComponentManager componentManager,
@@ -53,6 +57,71 @@ public sealed class InventoryGridContent(
 
     private InventoryItemStackCell? _hoveredCell;
     private int _hoveredFrames;
+
+    private InventorySortOrder _sortOrder = InventorySortOrder.NameAscending;
+    private string _nameFilter = string.Empty;
+    private bool _hideDisabled;
+
+    /// <summary>Defaults to NameAscending, reproducing this class's original always-alphabetical behavior exactly. Setting to the same value is a no-op -- doesn't force a rebuild.</summary>
+    public InventorySortOrder SortOrder
+    {
+        get => _sortOrder;
+        set
+        {
+            if (_sortOrder == value)
+            {
+                return;
+            }
+
+            _sortOrder = value;
+            RebuildIfInitialized();
+        }
+    }
+
+    /// <summary>Case-insensitive contains-match against each visible item's Name. Empty (the default) matches everything.</summary>
+    public string NameFilter
+    {
+        get => _nameFilter;
+        set
+        {
+            value ??= string.Empty;
+            if (_nameFilter == value)
+            {
+                return;
+            }
+
+            _nameFilter = value;
+            RebuildIfInitialized();
+        }
+    }
+
+    /// <summary>False (the default) shows disabled stacks the same as always -- grayed via DisabledCellColor, per this class's existing behavior. True hides them entirely instead.</summary>
+    public bool HideDisabled
+    {
+        get => _hideDisabled;
+        set
+        {
+            if (_hideDisabled == value)
+            {
+                return;
+            }
+
+            _hideDisabled = value;
+            RebuildIfInitialized();
+        }
+    }
+
+    /// <summary>How many cells the last rebuild actually produced, after tag/name/disabled filtering -- GridControl's item-count display reads this (see InventoryTabContent).</summary>
+    public int VisibleItemCount { get; private set; }
+
+    /// <summary>Property setters above can fire before Initialize (e.g. InventoryTabContent wiring GridControl's events right after CreateElement) -- RebuildCells needs _hostWindow, so skip until Initialize's own unconditional rebuild has run at least once.</summary>
+    private void RebuildIfInitialized()
+    {
+        if (_hostWindow is not null)
+        {
+            RebuildCells();
+        }
+    }
 
     /// <summary>
     /// Rebuilds unconditionally, not gated behind the version watcher -- TabbedContent reuses the
@@ -172,10 +241,21 @@ public sealed class InventoryGridContent(
                 continue;
             }
 
+            if (_hideDisabled && stack.IsDisabled)
+            {
+                continue;
+            }
+
+            if (_nameFilter.Length > 0 && !definition.Name.Contains(_nameFilter, StringComparison.OrdinalIgnoreCase))
+            {
+                continue;
+            }
+
             _reusableVisibleEntries.Add((stack, definition));
         }
 
-        _reusableVisibleEntries.Sort(static (a, b) => string.CompareOrdinal(a.Definition.Name, b.Definition.Name));
+        SortVisibleEntries();
+        VisibleItemCount = _reusableVisibleEntries.Count;
 
         var columns = ComputeColumnCount();
 
@@ -202,4 +282,23 @@ public sealed class InventoryGridContent(
 
     private int ComputeColumnCount() =>
         System.Math.Max(1, (int)((_hostWindow.ContentSize.X + CellGap) / (CellSize.X + CellGap)));
+
+    private void SortVisibleEntries()
+    {
+        switch (_sortOrder)
+        {
+            case InventorySortOrder.NameDescending:
+                _reusableVisibleEntries.Sort(static (a, b) => string.CompareOrdinal(b.Definition.Name, a.Definition.Name));
+                break;
+            case InventorySortOrder.QuantityDescending:
+                _reusableVisibleEntries.Sort(static (a, b) => b.Stack.Quantity.CompareTo(a.Stack.Quantity));
+                break;
+            case InventorySortOrder.QuantityAscending:
+                _reusableVisibleEntries.Sort(static (a, b) => a.Stack.Quantity.CompareTo(b.Stack.Quantity));
+                break;
+            default:
+                _reusableVisibleEntries.Sort(static (a, b) => string.CompareOrdinal(a.Definition.Name, b.Definition.Name));
+                break;
+        }
+    }
 }

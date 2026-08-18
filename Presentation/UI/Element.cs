@@ -815,6 +815,19 @@ public class Element
         }
     }
 
+    /// <summary>
+    /// Attaches newChild to this element and initializes it (via RetileChildrenFrom, at the
+    /// bottom of this method) -- callers must NOT also call newChild.Initialize() themselves
+    /// afterward. Confirmed bug, found via a live-testing stack trace rather than code review:
+    /// several call sites (TabbedContent/InventoryTabContent/GridControl building their own child
+    /// windows) called AddChild followed by an explicit Initialize(), running it twice on the
+    /// same instance -- harmless for most elements (idempotent geometry recompute), but
+    /// catastrophic for a Window subclass whose own Initialize() itself calls AddChild for its
+    /// own children (GridControl): the second pass created a second, orphaned set of count/sort/
+    /// toggle/search-box elements alongside the first, invisible where the two happened to
+    /// overlap exactly (left-aligned tiles) but visibly duplicated wherever they didn't (the
+    /// search box, right-aligned against a value that could differ by the second pass).
+    /// </summary>
     public void AddChild(Element newChild, int? insertIndex = null)
     {
         ArgumentNullException.ThrowIfNull(newChild);
@@ -831,7 +844,10 @@ public class Element
 
         // Retiles from the insertion point onward, not just newChildWindow itself -- inserting
         // anywhere but the end shifts every sibling after it one slot down the tiling axis too.
-        RetileChildrenFrom(clampedInsertIndex);
+        // initializeChildren: true -- newChild (and, in the every-call-site-appends-at-the-end
+        // case this codebase always uses, only newChild) needs its first Initialize() here; see
+        // RetileChildrenFrom's own doc comment for why RemoveChild passes false instead.
+        RetileChildrenFrom(clampedInsertIndex, initializeChildren: true);
 
         // A WrapContent parent's own size depends on its children's -- re-fit around the
         // newly added child. Gated to WrapContent only: for Fixed/Fill/Minimized parents the
@@ -866,7 +882,13 @@ public class Element
 
         var removedChild = _children[childElementIndex];
         _children.RemoveAt(childElementIndex);
-        RetileChildrenFrom(childElementIndex);
+
+        // initializeChildren: false -- every remaining sibling from childElementIndex onward is
+        // already live and fully initialized; only its position (Horizontal/Vertical modes) may
+        // need recomputing to close the gap. See RetileChildrenFrom's own doc comment for the
+        // bug this avoids re-triggering (a closed sibling's removal spuriously re-initializing,
+        // and thereby duplicating the content of, every later sibling still attached).
+        RetileChildrenFrom(childElementIndex, initializeChildren: false);
 
         // See the matching comment in AddChildWindow -- a WrapContent parent needs to shrink
         // to fit around the removed child; other modes don't depend on children for sizing.
@@ -907,13 +929,28 @@ public class Element
     /// <summary>
     /// Recomputes RelativePosition for every child from startIndex onward against
     /// _childWindowTileMode -- Horizontal/Vertical chain each child off the previous sibling's
-    /// now-current position+size (in that order: Initialize below re-measures a child's
-    /// CurrentSize, which the *next* iteration's chaining depends on), Floating leaves position
-    /// alone entirely (the creator owns it). Shared by AddChildWindow (inserting anywhere but
-    /// the end shifts every later sibling down the tiling axis) and RemoveChildWindow (closing
-    /// the gap the removed window leaves behind) rather than each hand-rolling the same chain.
+    /// current position+size, Floating leaves position alone entirely (the creator owns it).
+    /// Shared by AddChildWindow (inserting anywhere but the end shifts every later sibling down
+    /// the tiling axis) and RemoveChildWindow (closing the gap the removed window leaves behind)
+    /// rather than each hand-rolling the same chain.
+    ///
+    /// initializeChildren controls whether each visited child also gets Initialize() called --
+    /// true only for AddChild's own newly-inserted child, which genuinely needs its first
+    /// Initialize(); RemoveChild passes false, since every remaining sibling here is already
+    /// live and fully initialized, merely being repositioned to close the gap. Confirmed bug,
+    /// found via a live-testing stack trace: this used to call Initialize() unconditionally on
+    /// every visited child regardless of caller, so closing one child of a multi-child Floating-
+    /// mode parent (e.g. the Inventory window's root: tab header strip, tab search box, tab body)
+    /// re-ran Initialize() on every LATER sibling still in _children -- for a Window whose
+    /// IElementContent was already set (OnChildrenInitialized calls _content?.Initialize(this)
+    /// again), this re-triggered a full rebuild of that content's own children on top of the
+    /// ones already there, never clearing the old set first. Closing the Inventory window (whose
+    /// root has 3 Floating children) spuriously re-initialized its own tab body up to twice more
+    /// per close, tripling its GridControl/cell count instead of leaving it untouched -- and
+    /// left the close operation itself doing dramatically more work (and creating far more
+    /// pooled elements to track) than intended, compounding into the reported multi-second closes.
     /// </summary>
-    private void RetileChildrenFrom(int startIndex)
+    private void RetileChildrenFrom(int startIndex, bool initializeChildren)
     {
         for (var index = startIndex; index < _children.Count; index++)
         {
@@ -944,7 +981,10 @@ public class Element
                 }
             }
 
-            childElement.Initialize();
+            if (initializeChildren)
+            {
+                childElement.Initialize();
+            }
         }
     }
 

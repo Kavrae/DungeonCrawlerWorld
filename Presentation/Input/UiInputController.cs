@@ -681,7 +681,7 @@ public sealed class UiInputController
         {
             var element = _activeInteraction.Element;
             var (relativePosition, size) = ComputeResize(element, _activeInteraction.Edges, _dragStartRelativePosition, _dragStartSize, DragDelta);
-            (relativePosition, size) = ClampResizeToBounds(relativePosition, size, GetPositionBounds(element));
+            (relativePosition, size) = ClampResizeToBounds(relativePosition, size, GetPositionBounds(element), element.MinimumSize);
             element.SetBounds(relativePosition, size);
         }
     }
@@ -1162,8 +1162,21 @@ public sealed class UiInputController
     /// growing further rather than sliding the whole element back on-screen. The right/bottom
     /// edges never move on their own (see ComputeResize), so overflow there is always a pure
     /// size reduction with no position change.
+    ///
+    /// minimumSize is re-applied as a floor after the overflow reductions above, not folded into
+    /// them -- ComputeResize already clamps size to [MinimumSize, MaximumSize] against the drag
+    /// delta alone, but this method's own overflow correction runs afterward and previously had
+    /// no floor of its own: dragging a window's left/top edge far enough past the screen's own
+    /// edge (position going negative) shrank size by the overflow amount unconditionally, able to
+    /// drive it to zero or negative with nothing to stop it. Confirmed bug, found via live
+    /// testing: the Inventory window's item grid went blank after being resized this way -- cells
+    /// were still being created correctly (see InventoryGridContent.RebuildCells), just inside a
+    /// window whose own committed size had collapsed to zero height. Clamping size up to
+    /// minimumSize here can leave the right/bottom edge slightly past bounds in the same drag --
+    /// an acceptable tradeoff, since a window that must be at least minimumSize can't always also
+    /// fit entirely on screen while pinned at a corner.
     /// </summary>
-    private static (Vector2 RelativePosition, Vector2 Size) ClampResizeToBounds(Vector2 relativePosition, Vector2 size, Vector2 bounds)
+    private static (Vector2 RelativePosition, Vector2 Size) ClampResizeToBounds(Vector2 relativePosition, Vector2 size, Vector2 bounds, Vector2 minimumSize)
     {
         if (relativePosition.X < 0)
         {
@@ -1187,6 +1200,9 @@ public sealed class UiInputController
         {
             size.Y -= bottomOverflow;
         }
+
+        size.X = MathHelper.Max(size.X, minimumSize.X);
+        size.Y = MathHelper.Max(size.Y, minimumSize.Y);
 
         return (relativePosition, size);
     }

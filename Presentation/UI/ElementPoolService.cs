@@ -1,3 +1,4 @@
+using System.Reflection;
 using Engine.Collections;
 using Presentation.Fonts;
 using Presentation.Rendering;
@@ -9,6 +10,24 @@ namespace Presentation.UI;
 public sealed class ElementPoolService
 {
     private readonly Dictionary<Type, ObjectPool<Element>> _elementPoolsByType = [];
+
+    /// <summary>Per-Type cache of every event's backing field across the whole Element/Window/... hierarchy for that Type -- see ClearEventSubscriptions.</summary>
+    private readonly Dictionary<Type, FieldInfo[]> _eventBackingFieldsByType = [];
+
+    /// <summary>
+    /// Elements currently sitting in a pool, not yet rented back out -- see CloseElement's own
+    /// guard. ObjectPool&lt;T&gt;.Return pushes unconditionally with no duplicate-return
+    /// protection, and every Window-typed element (tab header strip, tab body, GridControl's own
+    /// host window, ...) rents from the SAME shared Stack&lt;Element&gt;. If CloseElement were
+    /// ever invoked twice on the same instance within one close cascade, that instance would land
+    /// in the stack twice, and two subsequent CreateElement&lt;Window&gt; calls could then hand
+    /// out the identical object to two different logical windows -- the second Build() overwrites
+    /// the first's geometry, AddChild collapses onto the same child slot, and SetContent on the
+    /// shared instance immediately closes whatever the first one had just added as children.
+    /// Reference equality (Element has no custom Equals) is exactly what's wanted here: same
+    /// instance, not same content.
+    /// </summary>
+    private readonly HashSet<Element> _pooledElements = [];
 
     public ElementPoolService(FontService fontService, GlyphRenderer glyphRenderer)
     {
@@ -47,15 +66,38 @@ public sealed class ElementPoolService
         }
 
         var element = (TElement)pool.Rent();
+        _pooledElements.Remove(element);
         element.Build(parent, options);
         return element;
     }
 
-    /// <summary>Closes the specified element and returns it to its type pool.</summary>
+    /// <summary>
+    /// Closes the specified element -- recursively closing its own children first (see
+    /// CloseAllChildren, mutually recursive with this method) -- and returns it to its type pool.
+    /// Recursive so closing any element tears down and pool-returns its entire subtree, not just
+    /// itself: without this, a control that owns pooled children of its own (GridControl's count/
+    /// sort/toggle/search-box children, not just its own Window-level events) would leave those
+    /// grandchildren orphaned -- still attached in the tree, never returned to their own pools --
+    /// whenever whatever closed it only reached the direct child level (confirmed bug: the
+    /// Inventory item search box duplicating itself, old orphaned copy still rendering behind a
+    /// freshly-created one once GridControl got rented again for another tab).
+    ///
+    /// Guarded by _pooledElements against being invoked twice on the same instance -- see that
+    /// field's own doc comment for why an unguarded double-close is dangerous (shared-pool
+    /// corruption), not merely wasteful.
+    /// </summary>
     /// <param name="element">The element to close.</param>
     public void CloseElement(Element element)
     {
         ArgumentNullException.ThrowIfNull(element);
+
+        if (!_pooledElements.Add(element))
+        {
+            return;
+        }
+
+        CloseAllChildren(element);
+        ClearEventSubscriptions(element);
 
         if (_elementPoolsByType.TryGetValue(element.GetType(), out var pool))
         {
@@ -63,6 +105,71 @@ public sealed class ElementPoolService
         }
 
         element.ParentElement?.RemoveChild(element.ElementId);
+    }
+
+    /// <summary>
+    /// Nulls out every event field declared anywhere in element's own type hierarchy --
+    /// Element's own Opened/Closed/Resized/Moved/Clicked/DisplayModeChanged/FocusRequested/
+    /// FocusChanged, plus whatever additional events a subclass declares (GridControl's
+    /// SortOptionCycled/ToggleChanged/SearchFilterChanged, TextBox's TextSubmitted, ...) --
+    /// before it goes back into its type pool.
+    ///
+    /// Closing an element used to never clear its subscriptions at all, which made every pooled
+    /// Element/Window individually responsible for remembering to unsubscribe from its own
+    /// children's events before closing them -- easy to get right once (TabbedContent's tab
+    /// tiles) and then forget the exact same pattern on the next control built the same way
+    /// (GridControl's sort/toggle buttons: confirmed bug, clicks cross-wired between Inventory
+    /// tabs once enough TextWindow instances had cycled through the shared pool with stale
+    /// handlers still attached). Doing this once, centrally, here, makes the whole bug class
+    /// structurally impossible for every current and future pooled Element, rather than a
+    /// convention each new widget has to remember to reapply by hand -- an element entering the
+    /// pool is, by definition, about to potentially become a completely different logical widget
+    /// the next time it's rented, so nothing should still be listening to what it does past this
+    /// point regardless.
+    ///
+    /// Reflection-based rather than a virtual "ClearOwnEvents" override every subclass would have
+    /// to remember to implement (and call base on) -- the same "easy to forget" failure mode this
+    /// exists to eliminate. Every event in this codebase today is a plain auto-implemented
+    /// `event Action? Foo` with no custom add/remove, which the C# compiler backs with a private
+    /// field of the same name -- GetEvents(DeclaredOnly) walked up the type hierarchy, paired
+    /// with GetField(NonPublic | Instance) at each level, finds them all. A future event declared
+    /// with explicit custom add/remove accessors wouldn't have a same-named backing field to find
+    /// this way -- GetField returning null for it is a silent no-op, not a crash, so this
+    /// degrades safely rather than blowing up, but such an event's subscriptions wouldn't
+    /// actually get cleared. Cached per Type (the reflection walk only runs once per distinct
+    /// pooled Element type, not once per instance) so this stays cheap on the CloseElement path.
+    /// </summary>
+    private void ClearEventSubscriptions(Element element)
+    {
+        foreach (var field in GetEventBackingFields(element.GetType()))
+        {
+            field.SetValue(element, null);
+        }
+    }
+
+    private FieldInfo[] GetEventBackingFields(Type type)
+    {
+        if (_eventBackingFieldsByType.TryGetValue(type, out var cached))
+        {
+            return cached;
+        }
+
+        var fields = new List<FieldInfo>();
+        for (var current = type; current is not null && current != typeof(object); current = current.BaseType)
+        {
+            foreach (var eventInfo in current.GetEvents(BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance | BindingFlags.DeclaredOnly))
+            {
+                var backingField = current.GetField(eventInfo.Name, BindingFlags.NonPublic | BindingFlags.Instance);
+                if (backingField is not null)
+                {
+                    fields.Add(backingField);
+                }
+            }
+        }
+
+        var result = fields.ToArray();
+        _eventBackingFieldsByType[type] = result;
+        return result;
     }
 
     /// <summary>Closes all child elements of the specified parent element.</summary>

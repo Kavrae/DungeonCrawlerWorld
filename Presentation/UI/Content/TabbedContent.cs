@@ -65,7 +65,7 @@ public sealed class TabbedContent(IReadOnlyList<TabbedContent.TabDefinition> tab
     /// is rebuilt fresh alongside the tiles and never reordered afterward, so TabIndex is always
     /// the one true source for "which tab does this tile activate."
     /// </summary>
-    private readonly List<(int TabIndex, TextWindow Tile, Action<Element> ClickHandler)> _headerTiles = [];
+    private readonly List<(int TabIndex, TextWindow Tile)> _headerTiles = [];
 
     private Window _hostWindow = null!;
     private Window _tabHeaderWindow = null!;
@@ -74,14 +74,24 @@ public sealed class TabbedContent(IReadOnlyList<TabbedContent.TabDefinition> tab
     private SpriteFontBase _font = null!;
     private int _activeTabIndex = -1;
 
-    private string _lastSeenSearchText = string.Empty;
-    private int _searchDebounceFrames;
-    private string _appliedSearchFilter = string.Empty;
+    private readonly DebouncedTextFilter _searchFilter = new(SearchDebounceFrames);
 
+    /// <summary>
+    /// hostWindow's own children are already guaranteed empty by the time this runs --
+    /// Window.SetContent (which always precedes Initialize, see its own doc comment) clears them
+    /// defensively as the single choke point for that; hostWindow here is InventoryManagementWindow
+    /// itself, pooled/reused across opens of the Inventory folder, whose Configure calls SetContent
+    /// with a brand new TabbedContent every open. Only the Resized subscription needs its own
+    /// defensive unsubscribe here, since closing hostWindow (which would otherwise clear it, see
+    /// ElementPoolService.CloseElement) isn't guaranteed to have happened before this -- Configure's
+    /// own Detach() only unsubscribes Resized for the *previous* TabbedContent instance, not this one.
+    /// </summary>
     public void Initialize(Window hostWindow)
     {
         _hostWindow = hostWindow;
         _font = fontService.GetFont((int)(TabHeaderHeight * 0.6f));
+
+        hostWindow.Resized -= OnHostWindowResized;
 
         _tabHeaderWindow = elementPoolService.CreateElement<Window>(hostWindow, new ElementOptions
         {
@@ -90,7 +100,6 @@ public sealed class TabbedContent(IReadOnlyList<TabbedContent.TabDefinition> tab
             Chrome = new ElementChromeOptions { ShowBorder = false, ShowTitle = false, CanUserScrollHorizontal = true, CanUserFocus = false },
         });
         hostWindow.AddChild(_tabHeaderWindow);
-        _tabHeaderWindow.Initialize();
 
         _searchBox = elementPoolService.CreateElement<TextBox>(hostWindow, new ElementOptions
         {
@@ -104,7 +113,6 @@ public sealed class TabbedContent(IReadOnlyList<TabbedContent.TabDefinition> tab
         _searchBox.GhostText = SearchGhostText;
         _searchBox.GhostTextColor = Color.LightGray;
         hostWindow.AddChild(_searchBox);
-        _searchBox.Initialize();
 
         _bodyWindow = elementPoolService.CreateElement<Window>(hostWindow, new ElementOptions
         {
@@ -119,7 +127,6 @@ public sealed class TabbedContent(IReadOnlyList<TabbedContent.TabDefinition> tab
             Content = new ElementContentOptions { ContentColor = bodyBackgroundColor ?? Color.White },
         });
         hostWindow.AddChild(_bodyWindow);
-        _bodyWindow.Initialize();
 
         hostWindow.Resized += OnHostWindowResized;
 
@@ -212,7 +219,7 @@ public sealed class TabbedContent(IReadOnlyList<TabbedContent.TabDefinition> tab
 
     private void UpdateHeaderSelectionVisuals()
     {
-        foreach (var (tabIndex, tile, _) in _headerTiles)
+        foreach (var (tabIndex, tile) in _headerTiles)
         {
             tile.BorderStyle = tabIndex == _activeTabIndex ? BorderStyle.Outset : BorderStyle.Inset;
         }
@@ -222,36 +229,19 @@ public sealed class TabbedContent(IReadOnlyList<TabbedContent.TabDefinition> tab
     /// Polls the search box's own text once per frame rather than reacting to a text-changed
     /// event -- TextBox has no such event (it mutates OriginalText directly from
     /// OnTextInputAction/OnKeyPressAction), and polling is cheap/simple enough here that adding
-    /// one wasn't worth it. Resets the debounce counter on any change; once the text has sat
-    /// still for SearchDebounceFrames and isn't already the applied filter, applies it exactly
-    /// once (the _lastSeenSearchText == _appliedSearchFilter check is what stops this from
-    /// re-applying every frame after that).
+    /// one wasn't worth it. Debounce timing/state itself lives in DebouncedTextFilter now (see
+    /// its own doc comment) -- this just reacts once it reports a newly-applied value.
     /// </summary>
     private void UpdateSearchFilterDebounce()
     {
-        var currentText = _searchBox.OriginalText;
-        if (currentText != _lastSeenSearchText)
+        if (_searchFilter.Update(_searchBox.OriginalText))
         {
-            _lastSeenSearchText = currentText;
-            _searchDebounceFrames = 0;
-            return;
-        }
-
-        if (currentText == _appliedSearchFilter)
-        {
-            return;
-        }
-
-        _searchDebounceFrames++;
-        if (_searchDebounceFrames >= SearchDebounceFrames)
-        {
-            ApplySearchFilter(currentText);
+            ApplySearchFilter();
         }
     }
 
-    private void ApplySearchFilter(string filterText)
+    private void ApplySearchFilter()
     {
-        _appliedSearchFilter = filterText;
         RebuildHeaderTiles();
         UpdateHeaderSelectionVisuals();
     }
@@ -269,17 +259,15 @@ public sealed class TabbedContent(IReadOnlyList<TabbedContent.TabDefinition> tab
 
     /// <summary>
     /// Tab 0 ("All") is exempt from the filter and always gets a tile -- every other tab only
-    /// gets one when _appliedSearchFilter is empty (no active search) or its Label contains it
-    /// (case-insensitive). Filtering only changes which tiles exist here; it never touches _tabs
-    /// itself, _bodyWindow's content, or _activeTabIndex -- see this class's own doc comment.
+    /// gets one when _searchFilter.AppliedText is empty (no active search) or its Label contains
+    /// it (case-insensitive). Filtering only changes which tiles exist here; it never touches
+    /// _tabs itself, _bodyWindow's content, or _activeTabIndex -- see this class's own doc comment.
+    /// CloseAllChildren below also clears each old tile's own Clicked subscription as a side
+    /// effect (see ElementPoolService.CloseElement's own doc comment) -- no manual unsubscribe
+    /// needed here anymore.
     /// </summary>
     private void RebuildHeaderTiles()
     {
-        foreach (var (_, tile, clickHandler) in _headerTiles)
-        {
-            tile.Clicked -= clickHandler;
-        }
-
         elementPoolService.CloseAllChildren(_tabHeaderWindow);
         _headerTiles.Clear();
 
@@ -287,7 +275,7 @@ public sealed class TabbedContent(IReadOnlyList<TabbedContent.TabDefinition> tab
         for (var tabIndex = 0; tabIndex < _tabs.Count; tabIndex++)
         {
             var tab = _tabs[tabIndex];
-            if (tabIndex != 0 && _appliedSearchFilter.Length > 0 && !tab.Label.Contains(_appliedSearchFilter, StringComparison.OrdinalIgnoreCase))
+            if (tabIndex != 0 && _searchFilter.AppliedText.Length > 0 && !tab.Label.Contains(_searchFilter.AppliedText, StringComparison.OrdinalIgnoreCase))
             {
                 continue;
             }
@@ -307,10 +295,9 @@ public sealed class TabbedContent(IReadOnlyList<TabbedContent.TabDefinition> tab
             _tabHeaderWindow.AddChild(tile);
 
             var capturedIndex = tabIndex;
-            Action<Element> clickHandler = _ => SwitchTab(capturedIndex);
-            tile.Clicked += clickHandler;
+            tile.Clicked += _ => SwitchTab(capturedIndex);
 
-            _headerTiles.Add((tabIndex, tile, clickHandler));
+            _headerTiles.Add((tabIndex, tile));
 
             x += width;
         }

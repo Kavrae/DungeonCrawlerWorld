@@ -139,11 +139,23 @@ public class Window : Element
     /// Attaches what this window draws in its content area (see IElementContent), instead of
     /// subclassing Window and overriding DrawContent. Must be called before Initialize --
     /// content's own Initialize(this) runs as part of Window.Initialize() (see OnChildrenInitialized).
+    ///
+    /// Defensively clears this window's own children first -- the true, single choke point every
+    /// IElementContent.Initialize(hostWindow) call is preceded by, whether the very first
+    /// attachment (InventoryManagementWindow.Configure calling this before its own Initialize
+    /// ever runs) or a content swap on an already-long-lived window that never gets rebuilt
+    /// through the pool again (TabbedContent.SwitchTab calling this on the same _bodyWindow every
+    /// tab activation). A no-op in the ordinary case (children already properly closed by
+    /// whatever ran before this), but a hard structural guarantee against two contents' children
+    /// ever coexisting regardless of what upstream sequence produced the call -- the same
+    /// "generalize the fix to the shared choke point, not per-widget" reasoning
+    /// ElementPoolService.CloseElement's own event-clearing follows for pool returns.
     /// </summary>
     public void SetContent(IElementContent content)
     {
         ArgumentNullException.ThrowIfNull(content);
 
+        ElementPoolService.CloseAllChildren(this);
         _content = content;
     }
 

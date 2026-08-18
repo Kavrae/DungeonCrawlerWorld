@@ -11,8 +11,9 @@ using Presentation.UI.Content;
 namespace Presentation.UI.Inventory;
 
 /// <summary>
-/// The player-facing inventory view: a TabbedContent showing InventoryGridContent, one tab per
-/// tag currently carried by the entity's inventory (plus a leading "All" tab) -- see
+/// The player-facing inventory view: a TabbedContent showing InventoryTabContent (GridControl's
+/// count/sort/hide-disabled/search row above an InventoryGridContent), one tab per tag currently
+/// carried by the entity's inventory (plus a leading "All" tab) -- see
 /// InventoryTagQueries.GetTagCounts. Re-derives the tab list whenever the entity's inventory
 /// version changes (item picked up/consumed/etc.), not just once at Configure -- a tag gaining
 /// or losing its last carrier should add/remove its tab live while the window is open. Close-only
@@ -77,17 +78,20 @@ public sealed class InventoryManagementWindow(
     {
         var definitions = new List<TabbedContent.TabDefinition>(tagCounts.Count + 1)
         {
-            new("All", CreateGridContent(null)),
+            new("All", CreateTabContent(null)),
         };
 
         foreach (var (tag, _) in tagCounts)
         {
-            definitions.Add(new TabbedContent.TabDefinition(tag.ToString(), CreateGridContent(tag)));
+            definitions.Add(new TabbedContent.TabDefinition(tag.ToString(), CreateTabContent(tag)));
         }
 
         return definitions;
     }
 
-    private InventoryGridContent CreateGridContent(Tag? filterTag) =>
-        new(componentManager, itemCatalog, elementPoolService, fontService, glyphRenderer, spriteSheetService, spriteRenderer, _entityId, filterTag, _hoverPopup);
+    private InventoryTabContent CreateTabContent(Tag? filterTag)
+    {
+        var gridContent = new InventoryGridContent(componentManager, itemCatalog, elementPoolService, fontService, glyphRenderer, spriteSheetService, spriteRenderer, _entityId, filterTag, _hoverPopup);
+        return new InventoryTabContent(elementPoolService, fontService, glyphRenderer, gridContent);
+    }
 }

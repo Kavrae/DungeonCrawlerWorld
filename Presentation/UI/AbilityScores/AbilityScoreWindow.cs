@@ -240,17 +240,9 @@ public sealed class AbilityScoreWindow(FontService fontService, ElementPoolServi
         }
     }
 
-    /// <summary>Rows first (one level down, inside each list-window), then the headers/list-windows themselves (this window's own direct children) -- CloseAllChildren only closes one level, not recursively.</summary>
+    /// <summary>CloseAllChildren recursively closes an element's entire subtree (see ElementPoolService.CloseElement), so closing this window's own direct children (headers, list-windows) already reaches each list-window's rows/separators too.</summary>
     private void ClearColumns()
     {
-        foreach (var listWindow in _columnListWindows)
-        {
-            if (listWindow is not null)
-            {
-                elementPoolService.CloseAllChildren(listWindow);
-            }
-        }
-
         elementPoolService.CloseAllChildren(this);
         Array.Clear(_columnListWindows);
         Array.Clear(_columnHeaders);

@@ -326,6 +326,8 @@ public static class GameShellBootstrapper
             ecsContext.ComponentManager, itemCatalog));
         presentation.ElementPoolService.RegisterFactory<InventoryItemStackCell>(() => new InventoryItemStackCell(
             presentation.FontService, presentation.ElementPoolService, presentation.GlyphRenderer, presentation.SpriteSheetService, presentation.SpriteRenderer));
+        presentation.ElementPoolService.RegisterFactory<GridControl>(() => new GridControl(
+            presentation.FontService, presentation.ElementPoolService, presentation.GlyphRenderer));
 
         presentation.ElementPoolService.RegisterFactory<AbilityScoreWindow>(() => new AbilityScoreWindow(
             presentation.FontService, presentation.ElementPoolService, presentation.GlyphRenderer, ecsContext.ComponentManager));
