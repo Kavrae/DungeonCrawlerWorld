@@ -9,14 +9,10 @@ namespace Presentation.Input;
 
 /// <summary>
 /// Translates raw keyboard/mouse state into the app's UI-level interactions. Elements live in
-/// four draw-order tiers, bottom to top: Base (map/debug/selection -- fixed, distinct panels),
-/// StaticHUD (health bar/hotbar/action lock/status effects -- persistent, not generally changed
-/// by the player), DynamicHUD (notifications, inventory management, the quest composer -- popups
-/// the player actually opens/closes/interacts with), and User (cursor-following drag feedback and
-/// other transient user-driven visual effects -- see DragGhostContent -- deliberately excluded
-/// from hit-testing priority mattering in practice, since nothing placed there today is itself
-/// interactive). A higher tier always wins hit-testing over a lower one, regardless of screen
-/// position.
+/// UiLayer tiers (see its own doc comment for what each one holds); a higher tier always wins
+/// hit-testing over a lower one, regardless of screen position -- User (drag feedback) is
+/// deliberately excluded from that priority mattering in practice, since nothing placed there
+/// today is itself interactive.
 /// </summary>
 public sealed class UiInputController
 {
@@ -32,13 +28,10 @@ public sealed class UiInputController
     /// <summary>Consecutive frames Escape has been held down, 0 while it's up -- HandleEscape's own edge/hold distinction (1 == a fresh press).</summary>
     private int _escapeHeldFrames;
 
-    /// <summary>Guards CloseAllClosableDynamicHudWindows to firing once per hold, not every frame past EscapeHoldCloseAllFrames -- reset the moment Escape is released.</summary>
+    /// <summary>Guards CloseAllClosableWindows to firing once per hold, not every frame past EscapeHoldCloseAllFrames -- reset the moment Escape is released.</summary>
     private bool _escapeHoldCloseAllFired;
 
-    private readonly List<Element> _baseElements;
-    private readonly List<Element> _staticHudElements;
-    private readonly List<Element> _dynamicHudElements;
-    private readonly List<Element> _userElements;
+    private readonly UiLayerStack _layers;
     private readonly Vector2 _screenSize;
 
     private KeyboardState _previousKeyboardState;
@@ -112,7 +105,7 @@ public sealed class UiInputController
     /// then (e.g. NotificationCenter.OnActiveNotificationClosed), depending on event
     /// subscription order.
     /// </summary>
-    private List<Element>? _focusedElementSiblings;
+    private IReadOnlyList<Element>? _focusedElementSiblings;
 
     /// <summary>The fallback focus target whenever a close/minimize redirect (see RedirectFocusAwayFrom) finds no sibling to move to -- e.g. dismissing the last active notification, or closing the quest composer popup. Set once via SetDefaultFocusElement, the same composition-root role FocusElement already plays for initial focus.</summary>
     private Element? _defaultFocusElement;
@@ -156,12 +149,9 @@ public sealed class UiInputController
     /// window to this same list afterward. Passing the list itself (not a snapshot/copy) is what
     /// makes that work -- this class only ever reads through the reference, never replaces it.
     /// </summary>
-    public UiInputController(List<Element> baseElements, List<Element> staticHudElements, List<Element> dynamicHudElements, List<Element> userElements, Vector2 screenSize, HotbarController? hotbarController = null)
+    public UiInputController(UiLayerStack layers, Vector2 screenSize, HotbarController? hotbarController = null)
     {
-        _baseElements = baseElements;
-        _staticHudElements = staticHudElements;
-        _dynamicHudElements = dynamicHudElements;
-        _userElements = userElements;
+        _layers = layers;
         _screenSize = screenSize;
         _hotbarController = hotbarController;
 
@@ -300,21 +290,53 @@ public sealed class UiInputController
     }
 
     /// <summary>
+    /// Per-UiLayer Escape-key behavior (see HandleEscape below and GetEscapeBehavior) -- kept as
+    /// an explicit switch over every named UiLayer member, with a throwing default arm (same
+    /// convention as Element.Measure's DisplayMode switch) rather than an implicit "unlisted
+    /// layer does nothing," specifically so adding a new UiLayer member without updating this one
+    /// fails loudly instead of silently opting that layer out of Escape entirely. [Flags] since
+    /// nothing rules out a future layer wanting more than one behavior, even though today's five
+    /// each use at most one.
+    /// </summary>
+    [Flags]
+    private enum EscapeBehavior
+    {
+        /// <summary>Does nothing on Escape -- Tooltip (auto-hides on its own hover-tracking, was never "opened" the way a window is) and User (drag feedback, not a dismissible window at all) both use this.</summary>
+        None = 0,
+
+        /// <summary>Element.HandleEscape() (see Element.OnEscapeAction) is called on every element in this layer, unconditionally -- for layers whose own elements need to react to Escape themselves regardless of focus (e.g. MapWindow canceling an armed ability/item).</summary>
+        BroadcastToElements = 1 << 0,
+
+        /// <summary>A tap closes the topmost (drawn-on-top) CanUserClose window in this layer; a held Escape closes every CanUserClose window in this layer at once -- for layers of dismissible popup windows.</summary>
+        CloseableWindows = 1 << 1,
+    }
+
+    private static EscapeBehavior GetEscapeBehavior(UiLayer layer) => layer switch
+    {
+        UiLayer.Base => EscapeBehavior.BroadcastToElements,
+        UiLayer.StaticHud => EscapeBehavior.BroadcastToElements,
+        UiLayer.DynamicHud => EscapeBehavior.CloseableWindows,
+        UiLayer.Tooltip => EscapeBehavior.None,
+        UiLayer.User => EscapeBehavior.None,
+        _ => throw new NotImplementedException($"No Escape behavior defined for UiLayer.{layer}."),
+    };
+
+    /// <summary>
     /// Escape must stay unconditional too, the same reasoning as Tab above: broadcast to every
-    /// Base/StaticHUD element (not just whichever holds focus) rather than routed only to the
-    /// focused one, since an armed action's own window (MapWindow) shouldn't have to hold
+    /// BroadcastToElements-layer element (not just whichever holds focus) rather than routed only
+    /// to the focused one, since an armed action's own window (MapWindow) shouldn't have to hold
     /// keyboard focus for Escape to cancel it -- e.g. a StaticHUD panel could be focused while
     /// the map still has an action armed. No-op by default (Window.OnEscapeAction); MapWindow
     /// is the only override today. This is scoped to action-cancel only -- the separate "Escape
     /// opens the options menu" TODO.md item isn't implemented here.
     ///
-    /// A fresh press (the first held frame) also closes the frontmost closeable DynamicHUD
-    /// window, if any -- notification popups, the Inventory/Ability Score windows, the quest
-    /// composer, anything else that tier ever grows -- one at a time, same as clicking its own
-    /// close button would (see CloseTopmostClosableDynamicHudWindow). Continuing to hold Escape
-    /// past EscapeHoldCloseAllFrames instead sweeps every closeable DynamicHUD window closed at
-    /// once (see CloseAllClosableDynamicHudWindows), so a player buried under several popups can
-    /// clear them all without repeated presses.
+    /// A fresh press (the first held frame) also closes the frontmost closeable window across
+    /// every CloseableWindows-layer -- notification popups, the Inventory/Ability Score windows,
+    /// the quest composer, anything else those layers ever grow -- one at a time, same as
+    /// clicking its own close button would (see CloseTopmostClosableWindow). Continuing to hold
+    /// Escape past EscapeHoldCloseAllFrames instead sweeps every closeable window closed at once
+    /// (see CloseAllClosableWindows), so a player buried under several popups can clear them all
+    /// without repeated presses.
     /// </summary>
     private void HandleEscape(KeyboardState keyboardState)
     {
@@ -329,62 +351,83 @@ public sealed class UiInputController
 
         if (_escapeHeldFrames == 1)
         {
-            foreach (var element in _baseElements)
+            foreach (var layer in UiLayerStack.LayersAscending())
             {
-                element.HandleEscape();
+                if ((GetEscapeBehavior(layer) & EscapeBehavior.BroadcastToElements) == 0)
+                {
+                    continue;
+                }
+
+                foreach (var element in _layers[layer])
+                {
+                    element.HandleEscape();
+                }
             }
 
-            foreach (var element in _staticHudElements)
-            {
-                element.HandleEscape();
-            }
-
-            CloseTopmostClosableDynamicHudWindow();
+            CloseTopmostClosableWindow();
             return;
         }
 
         if (!_escapeHoldCloseAllFired && _escapeHeldFrames >= EscapeHoldCloseAllFrames)
         {
             _escapeHoldCloseAllFired = true;
-            CloseAllClosableDynamicHudWindows();
+            CloseAllClosableWindows();
         }
     }
 
     /// <summary>
-    /// Closes just the frontmost (last-raised, drawn-on-top) closeable DynamicHUD window -- a
-    /// Window with CanUserClose true. Deliberately excludes non-Window elements (the Notification/
-    /// Inventory Folder icons, plain Element subclasses) and Windows with CanUserClose false (the
-    /// Armed Hotkey Summary) -- neither is something a player "closes," they're persistent HUD
-    /// chrome. A no-op if nothing closeable is currently open.
+    /// Closes just the frontmost (highest CloseableWindows layer, then last-raised/drawn-on-top
+    /// within it) closeable window -- a Window with CanUserClose true. Deliberately excludes
+    /// non-Window elements (the Notification/Inventory Folder icons, plain Element subclasses)
+    /// and Windows with CanUserClose false (the Armed Hotkey Summary) -- neither is something a
+    /// player "closes," they're persistent HUD chrome. A no-op if nothing closeable is currently
+    /// open anywhere.
     /// </summary>
-    private void CloseTopmostClosableDynamicHudWindow()
+    private void CloseTopmostClosableWindow()
     {
-        for (var index = _dynamicHudElements.Count - 1; index >= 0; index--)
+        foreach (var layer in UiLayerStack.LayersDescending())
         {
-            if (_dynamicHudElements[index] is Window { CanUserClose: true } window)
+            if ((GetEscapeBehavior(layer) & EscapeBehavior.CloseableWindows) == 0)
             {
-                window.Close();
-                return;
+                continue;
+            }
+
+            var elements = _layers[layer];
+            for (var index = elements.Count - 1; index >= 0; index--)
+            {
+                if (elements[index] is Window { CanUserClose: true } window)
+                {
+                    window.Close();
+                    return;
+                }
             }
         }
     }
 
     /// <summary>
-    /// Same eligibility as CloseTopmostClosableDynamicHudWindow, but closes every match, topmost
-    /// first. Snapshotted into an array before iterating: Window.Close() removes itself from
-    /// _dynamicHudElements via its own Closed handler (see NotificationCenter.
-    /// OnActiveNotificationClosed / InventoryFolderController.WindowSlot.HandleClosed), which
-    /// would otherwise corrupt an in-progress enumeration of that same live list -- the same
-    /// snapshot-first reasoning ElementPoolService.CloseAllChildren already uses.
+    /// Same eligibility as CloseTopmostClosableWindow, but closes every match across every
+    /// CloseableWindows layer, topmost first. Each layer's list is snapshotted into an array
+    /// before iterating: Window.Close() removes itself from its layer via its own Closed handler
+    /// (see NotificationCenter.OnActiveNotificationClosed / InventoryFolderController.WindowSlot.
+    /// HandleClosed), which would otherwise corrupt an in-progress enumeration of that same live
+    /// list -- the same snapshot-first reasoning ElementPoolService.CloseAllChildren already uses.
     /// </summary>
-    private void CloseAllClosableDynamicHudWindows()
+    private void CloseAllClosableWindows()
     {
-        var snapshot = _dynamicHudElements.ToArray();
-        for (var index = snapshot.Length - 1; index >= 0; index--)
+        foreach (var layer in UiLayerStack.LayersDescending())
         {
-            if (snapshot[index] is Window { CanUserClose: true } window)
+            if ((GetEscapeBehavior(layer) & EscapeBehavior.CloseableWindows) == 0)
             {
-                window.Close();
+                continue;
+            }
+
+            var snapshot = _layers[layer].ToArray();
+            for (var index = snapshot.Length - 1; index >= 0; index--)
+            {
+                if (snapshot[index] is Window { CanUserClose: true } window)
+                {
+                    window.Close();
+                }
             }
         }
     }
@@ -505,7 +548,7 @@ public sealed class UiInputController
     /// <summary>Turns HotbarContent's drop-target glow (see its own IsAcceptingDrag doc comment) on/off -- the hotbar itself may or may not exist in every scene (e.g. a test harness with no StaticHUD at all), so this is a no-op if none of staticHudElements hosts one.</summary>
     private void SetHotbarDragHighlight(bool isAccepting)
     {
-        foreach (var element in _staticHudElements)
+        foreach (var element in _layers[UiLayer.StaticHud])
         {
             if (element is Window { Content: HotbarContent hotbarContent })
             {
@@ -536,7 +579,7 @@ public sealed class UiInputController
         if (_activeInteraction.Kind == ElementDragInteractionKind.None)
         {
             var mousePosition = new Point(mouseState.X, mouseState.Y);
-            foreach (var element in _staticHudElements)
+            foreach (var element in _layers[UiLayer.StaticHud])
             {
                 if (element is Window { Content: HotbarContent hotbarContent } &&
                     hotbarContent.TryGetSlotAt(mousePosition, out var slot) &&
@@ -576,12 +619,16 @@ public sealed class UiInputController
     /// Resolves an in-progress content-drag (see _contentDragItemDefinitionId/_contentDragActionId's
     /// own doc comments) against the release position -- a no-op if the mouse never actually
     /// moved past ContentDragTapThresholdPixels (a plain click on a cell/slot must not
-    /// spuriously unbind-then-rebind it). Unbinding the drag's origin slot (if any) always
-    /// happens first, then binding the drop target (if the release landed on a hotbar slot)
-    /// second -- dropping back onto the same slot it came from is therefore a harmless
-    /// unbind-then-immediately-rebind, not a special case. Always clears the drag-highlight/state
-    /// at the end, drop accepted or not, so a cancelled/missed drag never leaves the hotbar
-    /// glowing or a stale payload behind for the next press to accidentally inherit.
+    /// spuriously unbind-then-rebind it). This method's own job is gesture recognition and
+    /// resolving the drop target -- what actually happens to the origin/destination slots (the
+    /// unbind-then-bind sequencing rule) is HotbarContent.ResolveDroppedBinding's job, since it
+    /// belongs next to that class's own binding rules, not here (see its own doc comment).
+    /// receivingHotbar prefers the origin (set if the drag started on an already-bound hotbar
+    /// slot) and falls back to the drop target -- both ultimately mean "the hotbar this drag
+    /// touches," and today there's only ever one HotbarContent instance for either to resolve to.
+    /// Always clears the drag-highlight/state at the end, drop accepted or not, so a cancelled/
+    /// missed drag never leaves the hotbar glowing or a stale payload behind for the next press
+    /// to accidentally inherit.
     /// </summary>
     private void ResolveContentDrag(Point releasePosition)
     {
@@ -599,32 +646,20 @@ public sealed class UiInputController
             }
 
             var isActionDrag = _contentDragActionId is not null;
+            var payloadId = isActionDrag ? _contentDragActionId!.Value : _contentDragItemDefinitionId!.Value;
 
-            if (_contentDragOriginHotbar is { } originHotbar && _contentDragOriginSlot is { } originSlot)
-            {
-                if (isActionDrag)
-                {
-                    originHotbar.UnbindActionSlot(originSlot);
-                }
-                else
-                {
-                    originHotbar.UnbindItemSlot(originSlot);
-                }
-            }
+            var receivingHotbar = _contentDragOriginHotbar;
+            HotkeySlot? destinationSlot = null;
 
             var dropInteraction = TryHitTestInteraction(releasePosition);
             if (dropInteraction.Element is Window { Content: HotbarContent dropHotbar } &&
                 dropHotbar.TryGetSlotAt(releasePosition, out var dropSlot))
             {
-                if (isActionDrag)
-                {
-                    dropHotbar.BindAction(dropSlot, _contentDragActionId!.Value);
-                }
-                else
-                {
-                    dropHotbar.BindItem(dropSlot, _contentDragItemDefinitionId!.Value);
-                }
+                receivingHotbar ??= dropHotbar;
+                destinationSlot = dropSlot;
             }
+
+            receivingHotbar?.ResolveDroppedBinding(_contentDragOriginSlot, destinationSlot, isActionDrag, payloadId);
         }
         finally
         {
@@ -782,28 +817,19 @@ public sealed class UiInputController
     /// <summary>User tier first, then DynamicHUD, then StaticHUD, then Base -- a higher tier can never lose to a lower one. Each tier topmost (last-raised) first. User is checked first purely for consistency (see the class's own doc comment) -- nothing placed there today is ever actually hit, since DragGhostContent's host window has no clickable content.</summary>
     private ElementInteraction TryHitTestInteraction(Point position)
     {
-        var interaction = TryHitTestInList(_userElements, position);
-        if (interaction.Element is not null)
+        foreach (var layer in UiLayerStack.LayersDescending())
         {
-            return interaction;
+            var interaction = TryHitTestInList(_layers[layer], position);
+            if (interaction.Element is not null)
+            {
+                return interaction;
+            }
         }
 
-        interaction = TryHitTestInList(_dynamicHudElements, position);
-        if (interaction.Element is not null)
-        {
-            return interaction;
-        }
-
-        interaction = TryHitTestInList(_staticHudElements, position);
-        if (interaction.Element is not null)
-        {
-            return interaction;
-        }
-
-        return TryHitTestInList(_baseElements, position);
+        return ElementInteraction.NotHit;
     }
 
-    private static ElementInteraction TryHitTestInList(List<Element> elements, Point position)
+    private static ElementInteraction TryHitTestInList(IReadOnlyList<Element> elements, Point position)
     {
         for (var index = elements.Count - 1; index >= 0; index--)
         {
@@ -827,24 +853,7 @@ public sealed class UiInputController
     {
         element.RaiseToFront();
 
-        var rootAncestor = GetRootAncestor(element);
-
-        if (_baseElements.Remove(rootAncestor))
-        {
-            _baseElements.Add(rootAncestor);
-        }
-        else if (_staticHudElements.Remove(rootAncestor))
-        {
-            _staticHudElements.Add(rootAncestor);
-        }
-        else if (_dynamicHudElements.Remove(rootAncestor))
-        {
-            _dynamicHudElements.Add(rootAncestor);
-        }
-        else if (_userElements.Remove(rootAncestor))
-        {
-            _userElements.Add(rootAncestor);
-        }
+        _layers.RaiseToFront(GetRootAncestor(element));
     }
 
     /// <summary>Walks up ParentElement to the top-level ancestor -- shared by RaiseToFront and CycleFocus, both of which operate on whichever tier-root element a given element belongs to, not the element itself.</summary>
@@ -870,9 +879,10 @@ public sealed class UiInputController
     /// </summary>
     /// <remarks>
     /// Redirects into newElement.NextFocusableDescendant(null) first, if it has any focusable
-    /// TextBox children -- an element with TextBox children is never itself the terminal focus
-    /// target, its first TextBox is. For every element without TextBox children (everything that
-    /// existed before TextBox did) this resolves to newElement itself, unchanged. Falls back to
+    /// (CanUserFocus) children -- a container with a focusable child is never itself the
+    /// terminal focus target, its first focusable child is. For every element without a
+    /// focusable child (every plain window/tile, which all explicitly opt out via
+    /// CanUserFocus = false) this resolves to newElement itself, unchanged. Falls back to
     /// _defaultFocusElement when that still leaves no target at all (newElement itself null, e.g.
     /// RedirectFocusAwayFrom finding no sibling to move to).
     /// </remarks>
@@ -995,7 +1005,7 @@ public sealed class UiInputController
         {
             foreach (var candidate in _focusedElementSiblings)
             {
-                if (candidate != closingElement && candidate.CanUserFocus)
+                if (candidate != closingElement && candidate.IsVisible && candidate.CanUserFocus)
                 {
                     nextSibling = candidate;
                 }
@@ -1008,9 +1018,9 @@ public sealed class UiInputController
     }
 
     /// <summary>See RedirectFocusAwayFrom for why this deliberately excludes the Base tier.</summary>
-    private List<Element>? GetSiblingContainer(Element element) =>
+    private IReadOnlyList<Element>? GetSiblingContainer(Element element) =>
         element.ParentElement?.ChildElements
-        ?? (_dynamicHudElements.Contains(element) ? _dynamicHudElements : null);
+        ?? (_layers.LayerOf(element) == UiLayer.DynamicHud ? _layers[UiLayer.DynamicHud] : null);
 
     /// <summary>
     /// Advances focus to the next (direction 1) or previous (direction -1) focusable Base/
@@ -1024,17 +1034,17 @@ public sealed class UiInputController
     private void CycleFocus(int direction)
     {
         var focusableElements = new List<Element>();
-        foreach (var element in _baseElements)
+        foreach (var element in _layers[UiLayer.Base])
         {
-            if (element.CanUserFocus)
+            if (element.IsVisible && element.CanUserFocus)
             {
                 focusableElements.Add(element);
             }
         }
 
-        foreach (var element in _staticHudElements)
+        foreach (var element in _layers[UiLayer.StaticHud])
         {
-            if (element.CanUserFocus)
+            if (element.IsVisible && element.CanUserFocus)
             {
                 focusableElements.Add(element);
             }

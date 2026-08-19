@@ -104,19 +104,30 @@ public sealed class FolderTests
         Assert.AreEqual(ElementDisplayMode.Minimized, folder.DisplayMode);
     }
 
-    /// <summary>Collapsed width must match the expanded content width -- only the height collapses.</summary>
+    /// <summary>
+    /// Regression guard: collapsing a Folder that's been expanded must shrink it back to its
+    /// icon size in both dimensions, not just height. Confirmed bug: RecalculateMinimizedSize
+    /// used to derive width from the children's own already-measured CurrentSize, so a Folder
+    /// stayed as wide as whatever it last expanded to on every subsequent close -- only its
+    /// height ever actually collapsed.
+    /// </summary>
     [TestMethod]
-    public void CollapsedWidth_MatchesExpandedContentWidth()
+    public void Collapsing_AfterHavingBeenExpanded_ShrinksBackToIconSize()
     {
         var windowService = CreateWindowService();
         var folder = CreateFolder(windowService);
         AddBadge(windowService, folder, "Quest: 0");
         folder.Initialize();
-        var collapsedWidth = folder.CurrentSize.X;
+        var iconSize = folder.CurrentSize;
+        var headerPoint = new Point((int)FolderPosition.X + 5, (int)FolderPosition.Y + 5);
 
-        folder.HandleClick(new Point((int)FolderPosition.X + 5, (int)FolderPosition.Y + 5));
-
+        folder.HandleClick(headerPoint);
         Assert.AreEqual(ElementDisplayMode.WrapContent, folder.DisplayMode);
-        Assert.AreEqual(collapsedWidth, folder.CurrentSize.X);
+        Assert.IsGreaterThan(iconSize.X, folder.CurrentSize.X);
+
+        folder.HandleClick(headerPoint);
+
+        Assert.AreEqual(ElementDisplayMode.Minimized, folder.DisplayMode);
+        Assert.AreEqual(iconSize, folder.CurrentSize);
     }
 }

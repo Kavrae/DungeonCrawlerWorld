@@ -75,9 +75,17 @@ public sealed class GridControl(FontService fontService, ElementPoolService elem
         _searchGhostText = searchGhostText;
     }
 
-    public override void Initialize()
+    /// <summary>
+    /// Builds this control's own count/sort/toggle/search children here, not in an Initialize
+    /// override that calls base first -- OnChildrenInitialized is the one point in Element's
+    /// Initialize sequence that is both after MeasureAndArrange (ContentSize is real) and before
+    /// Opened fires, so Opened still means "fully set up" for anyone who subscribes to it later.
+    /// The same hook Window itself uses to mount IElementContent (see Window.OnChildrenInitialized)
+    /// and AbilityScoreWindow now uses for its own self-built columns.
+    /// </summary>
+    protected override void OnChildrenInitialized()
     {
-        base.Initialize();
+        base.OnChildrenInitialized();
 
         _font = fontService.GetFont((int)(RowHeight * 0.6f));
 

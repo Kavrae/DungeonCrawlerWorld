@@ -78,31 +78,19 @@ public sealed class Folder : Element
     }
 
     /// <summary>
-    /// Width matches the expanded (WrapContent) content width rather than shrinking to just
-    /// the icon -- only the height collapses. Computed from the children's own already-measured
-    /// CurrentSize, which is still valid here: Measure() calls this before MeasureChildren, so
-    /// children's sizes still reflect the last time they were actually measured (the last
-    /// WrapContent pass), not yet zeroed for this one.
+    /// Always collapses to exactly _iconSize, in both dimensions, regardless of how wide the
+    /// folder had expanded to fit its children -- a minimized Folder should read as "collapsed to
+    /// its smallest footprint" unconditionally, the same shape it has before it's ever been
+    /// opened for the first time, not "collapsed height only, still as wide as whatever it last
+    /// expanded to." Confirmed bug when this instead derived width from the children's own
+    /// already-measured CurrentSize: the folder visibly stayed at its expanded width every time
+    /// it was closed after having been opened once, only its height ever actually collapsed.
     /// </summary>
     protected override void RecalculateMinimizedSize()
     {
-        var width = _children.Count > 0 ? ContentWidthFromChildren() : _iconSize.X;
-
-        _headerState.Size = new Vector2(width, _iconSize.Y);
+        _headerState.Size = _iconSize;
         _contentState.Size = Vector2.Zero;
-        _geometry.CurrentSize = new Vector2(width, _iconSize.Y) + BorderInsetDoubled;
-    }
-
-    /// <summary>Mirrors RecalculateWrapContentWindowSize's own maxRight+ContentPadding.X computation, so the collapsed and expanded widths match exactly.</summary>
-    private float ContentWidthFromChildren()
-    {
-        var maxRight = 0f;
-        foreach (var child in _children)
-        {
-            maxRight = System.Math.Max(maxRight, child.RelativePosition.X + child.CurrentSize.X);
-        }
-
-        return maxRight + ContentPadding.X;
+        _geometry.CurrentSize = _iconSize + BorderInsetDoubled;
     }
 
     /// <summary>

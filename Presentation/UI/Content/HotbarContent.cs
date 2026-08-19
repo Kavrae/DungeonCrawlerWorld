@@ -77,9 +77,9 @@ public sealed class HotbarContent(
     private static readonly Color ArmedGlowColor = Color.Gold;
     private static readonly Color DragDropTargetGlowColor = Color.Gold;
 
-    /// <summary>Width for the Armed Hotkey Summary window: 3 slots plus the 2 inter-slot gaps
-    /// between them (see ArmedHotkeySummaryWindow, which centers this over whichever single slot
-    /// it's currently showing).</summary>
+    /// <summary>Width for the Armed Hotkey Summary popup: 3 slots plus the 2 inter-slot gaps
+    /// between them (see HotbarController.UpdateSummary, which centers this over whichever single
+    /// slot it's currently showing).</summary>
     internal const int SummarySlotSpan = 3;
     internal static readonly float SummaryWidth = SummarySlotSpan * SlotSize.X + (SummarySlotSpan - 1) * SlotGap;
 
@@ -416,6 +416,51 @@ public sealed class HotbarContent(
     /// <summary>Removes slot's action binding, if any -- mirrors UnbindItemSlot for a bound action dragged off the hotbar entirely.</summary>
     internal void UnbindActionSlot(HotkeySlot slot) =>
         ActionHotkeyBindingQueries.Unbind(_actionHotkeyBindings, world.PlayerEntityId, slot);
+
+    /// <summary>
+    /// Resolves a completed content-drag drop in one call -- unbinds originSlot first (if the
+    /// drag started on an already-bound hotbar slot), then binds destinationSlot (if the release
+    /// landed on a valid one) to payloadId. Dropping back onto the same slot it came from is
+    /// therefore a harmless unbind-then-immediately-rebind, not a special case. Either
+    /// originSlot or destinationSlot may be absent on their own (never both -- the caller has
+    /// nothing to do at all in that case and doesn't call this): a drag that started on an
+    /// inventory cell, not a hotbar slot, has no origin to unbind; a drop that missed every
+    /// hotbar slot has no destination to bind.
+    ///
+    /// This is the one place the unbind-then-bind sequencing rule lives, next to the rest of
+    /// this class's own binding rules (locked slots, mutual exclusivity -- see BindItem/BindAction),
+    /// rather than in UiInputController's drag-resolution code. UiInputController still owns
+    /// gesture recognition (tap-vs-drag threshold, hit-testing the release position) -- only it
+    /// has visibility across the whole press-to-release gesture, which can start on a different
+    /// source Element entirely (e.g. InventoryItemStackCell); this method only knows the
+    /// hotbar-slot half of that, handed to it already resolved.
+    /// </summary>
+    internal void ResolveDroppedBinding(HotkeySlot? originSlot, HotkeySlot? destinationSlot, bool isActionDrag, Guid payloadId)
+    {
+        if (originSlot is { } slot)
+        {
+            if (isActionDrag)
+            {
+                UnbindActionSlot(slot);
+            }
+            else
+            {
+                UnbindItemSlot(slot);
+            }
+        }
+
+        if (destinationSlot is { } destination)
+        {
+            if (isActionDrag)
+            {
+                BindAction(destination, payloadId);
+            }
+            else
+            {
+                BindItem(destination, payloadId);
+            }
+        }
+    }
 
     /// <summary>Shared by BindItem/BindAction -- a slot binds to at most one of {action, item} at a time (see IHotkeySlotBinding's own doc comment), so writing a new binding of either kind always clears both pools for that slot first.</summary>
     private void ClearSlotBinding(int playerEntityId, HotkeySlot slot)

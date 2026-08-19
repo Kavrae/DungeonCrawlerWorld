@@ -39,16 +39,12 @@ public sealed class InventoryManagementWindow(
     private TabbedContent _tabbedContent = null!;
 
     private int _entityId;
-    private HoverPopupWindow _hoverPopup = null!;
+    private Tooltip _hoverPopup = null!;
     private readonly VersionWatcher _tagVersionWatcher = new();
 
-    /// <summary>Builds this window's content for entityId's inventory. Must be called after CreateElement but before Initialize (see Window.SetContent's own doc comment) -- a fresh TabbedContent per open, since entityId varies across opens of a pooled/reused window instance. hoverPopup is owned by InventoryFolderController (created once, top-level, shared across opens) rather than a child of this window -- see HoverPopupWindow's own doc comment for why a nested child can't work here.</summary>
-    public void Configure(int entityId, HoverPopupWindow hoverPopup)
+    /// <summary>Builds this window's content for entityId's inventory. Must be called after CreateElement but before Initialize (see Window.SetContent's own doc comment) -- a fresh TabbedContent per open, since entityId varies across opens of a pooled/reused window instance. hoverPopup is owned by InventoryFolderController (created once, top-level, shared across opens) rather than a child of this window -- see Tooltip's own doc comment for why a nested child can't work here.</summary>
+    public void Configure(int entityId, Tooltip hoverPopup)
     {
-        // Detach the previous open's TabbedContent (if this window instance is being reused from
-        // the pool) before discarding it -- see TabbedContent.Detach's own doc comment.
-        _tabbedContent?.Detach();
-
         _entityId = entityId;
         _hoverPopup = hoverPopup;
 

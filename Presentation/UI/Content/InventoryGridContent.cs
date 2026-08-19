@@ -36,7 +36,7 @@ public sealed class InventoryGridContent(
     SpriteRenderer spriteRenderer,
     int entityId,
     Tag? filterTag,
-    HoverPopupWindow hoverPopup) : IElementContent
+    Tooltip hoverPopup) : IElementContent
 {
     public static readonly Vector2 CellSize = new(24, 24);
     private const float CellGap = 1f;

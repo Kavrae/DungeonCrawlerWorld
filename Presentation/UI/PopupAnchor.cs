@@ -2,7 +2,7 @@ using Microsoft.Xna.Framework;
 
 namespace Presentation.UI;
 
-/// <summary>Which side/corner of a target rectangle a HoverPopupWindow attaches to.</summary>
+/// <summary>Which side/corner of a target rectangle a Tooltip attaches to.</summary>
 public enum PopupAnchor
 {
     North,
@@ -16,8 +16,8 @@ public enum PopupAnchor
 }
 
 /// <summary>
-/// Positioning math shared by every anchored hover popup (see HoverPopupWindow) -- kept separate
-/// from HoverPopupWindow itself since it's pure geometry, easily unit-testable without any
+/// Positioning math shared by every anchored hover popup (see Tooltip) -- kept separate
+/// from Tooltip itself since it's pure geometry, easily unit-testable without any
 /// Element/GraphicsDevice machinery.
 /// </summary>
 public static class PopupPositioning

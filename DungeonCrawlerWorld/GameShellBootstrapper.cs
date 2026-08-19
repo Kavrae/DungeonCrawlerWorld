@@ -51,18 +51,17 @@ public static class GameShellBootstrapper
         ArgumentNullException.ThrowIfNull(actionCatalog);
         ArgumentNullException.ThrowIfNull(itemCatalog);
 
-        var (baseWindows, mapWindow, mapViewState, mapSize, actionTargeting) = BuildBaseWindows(presentation, world, ecsContext, actionCatalog, itemCatalog, screenSize, diagnostics);
-        var (staticHudWindows, questTriggerWindow, hotbarContent) = BuildStaticHudWindows(presentation, world, ecsContext, actionCatalog, itemCatalog, screenSize, mapViewState, mapSize);
-        var (dynamicHudWindows, notificationCenter, inventory) = BuildDynamicHudWindows(presentation, world, ecsContext, itemCatalog, mapWindow);
-        var hotbarController = BuildHotbarController(presentation, mapViewState, hotbarContent, actionTargeting, dynamicHudWindows);
+        var layers = new UiLayerStack();
 
-        // Empty list for BuildUserWindows to populate
-        var userWindows = new List<Element>();
+        var (mapWindow, mapViewState, mapSize, actionTargeting) = BuildBaseWindows(presentation, world, ecsContext, actionCatalog, itemCatalog, screenSize, diagnostics, layers);
+        var (questTriggerWindow, hotbarContent) = BuildStaticHudWindows(presentation, world, ecsContext, actionCatalog, itemCatalog, screenSize, mapViewState, mapSize, layers);
+        var (notificationCenter, inventory) = BuildDynamicHudWindows(presentation, world, ecsContext, itemCatalog, mapWindow, layers);
+        var hotbarController = BuildHotbarController(presentation, mapViewState, hotbarContent, actionTargeting, layers);
 
         // Constructed after every other tier's windows exist, but before User's own content is
         // built -- DragGhostContent (User tier) needs a real UiInputController reference,
         // which can't exist before this point.
-        var inputController = new UiInputController(baseWindows, staticHudWindows, dynamicHudWindows, userWindows, screenSize, hotbarController);
+        var inputController = new UiInputController(layers, screenSize, hotbarController);
         inputController.SetDefaultFocusElement(mapWindow);
         inputController.FocusElement(mapWindow);
 
@@ -77,19 +76,17 @@ public static class GameShellBootstrapper
         // always-visible StaticHUD panels) isn't guaranteed to stay above a map click while it's
         // open -- DynamicHUD tier, the same tier NotificationCenter's own popups already use,
         // not Base/StaticHUD.
-        questTriggerWindow.Clicked += _ => inputController.FocusElement(OpenQuestComposer(presentation.ElementPoolService, notificationCenter, dynamicHudWindows));
+        questTriggerWindow.Clicked += _ => inputController.FocusElement(OpenQuestComposer(presentation.ElementPoolService, notificationCenter, layers));
 
-        BuildUserWindows(presentation, inputController, actionCatalog, itemCatalog, userWindows);
+        BuildUserWindows(presentation, inputController, actionCatalog, itemCatalog, layers);
 
-        return new GameShellContext(mapWindow, notificationCenter, inventory, baseWindows, staticHudWindows, dynamicHudWindows, userWindows, inputController);
+        return new GameShellContext(mapWindow, notificationCenter, inventory, layers, inputController);
     }
 
     /// <summary>Base tier: the map itself plus the debug stats footer directly beneath it -- see UiInputController's own doc comment for what each of the four tiers means. mapViewState/mapSize are returned for BuildStaticHudWindows, whose selection window needs both (mapViewState to scope the inspector, mapSize to dock against the map's actual bottom edge). actionTargeting is returned too, promoted here (rather than built privately inside MapWindow's own constructor) so BuildHotbarController can share the same instance instead of forwarding through MapWindow. playerMovement isn't returned -- nothing outside MapWindow's own factory closure needs it, unlike actionTargeting.</summary>
-    private static (List<Element> BaseWindows, MapWindow MapWindow, MapViewState MapViewState, Vector2 MapSize, ActionTargetingController ActionTargeting) BuildBaseWindows(
-        PresentationContext presentation, World world, EcsContext ecsContext, ActionCatalog actionCatalog, ItemCatalog itemCatalog, Vector2 screenSize, DiagnosticsEngine? diagnostics)
+    private static (MapWindow MapWindow, MapViewState MapViewState, Vector2 MapSize, ActionTargetingController ActionTargeting) BuildBaseWindows(
+        PresentationContext presentation, World world, EcsContext ecsContext, ActionCatalog actionCatalog, ItemCatalog itemCatalog, Vector2 screenSize, DiagnosticsEngine? diagnostics, UiLayerStack layers)
     {
-        var baseWindows = new List<Element>();
-
         var mapSize = new Vector2(screenSize.X - ScreenMargin * 2, screenSize.Y - ScreenMargin * 3 - DebugWindowHeight);
 
         // Single MapViewState instance for the session shared between
@@ -160,7 +157,7 @@ public static class GameShellBootstrapper
             },
         });
         mapWindow.Initialize();
-        baseWindows.Add(mapWindow);
+        layers.Add(UiLayer.Base, mapWindow);
 
         var debugWindow = presentation.ElementPoolService.CreateElement<Window>(null, new ElementOptions
         {
@@ -174,17 +171,15 @@ public static class GameShellBootstrapper
         });
         debugWindow.SetContent(new DebugWindowContent(presentation.FontService, ecsContext.EntityManager, ecsContext.ComponentManager, diagnostics));
         debugWindow.Initialize();
-        baseWindows.Add(debugWindow);
+        layers.Add(UiLayer.Base, debugWindow);
 
-        return (baseWindows, mapWindow, mapViewState, mapSize, actionTargeting);
+        return (mapWindow, mapViewState, mapSize, actionTargeting);
     }
 
     /// <summary>StaticHUD tier: the selection/inspector panel, the player health bar, action lock, status effects, the hotbar, and the quest trigger -- see UiInputController's own doc comment for what each of the four tiers means. questTriggerWindow is returned for Build, which wires its Clicked event once the DynamicHUD tier (needed by OpenQuestComposer) also exists. hotbarContent is returned too, for BuildHotbarController.</summary>
-    private static (List<Element> StaticHudWindows, TextWindow QuestTriggerWindow, HotbarContent HotbarContent) BuildStaticHudWindows(
-        PresentationContext presentation, World world, EcsContext ecsContext, ActionCatalog actionCatalog, ItemCatalog itemCatalog, Vector2 screenSize, MapViewState mapViewState, Vector2 mapSize)
+    private static (TextWindow QuestTriggerWindow, HotbarContent HotbarContent) BuildStaticHudWindows(
+        PresentationContext presentation, World world, EcsContext ecsContext, ActionCatalog actionCatalog, ItemCatalog itemCatalog, Vector2 screenSize, MapViewState mapViewState, Vector2 mapSize, UiLayerStack layers)
     {
-        var staticHudWindows = new List<Element>();
-
         var componentInspector = new ComponentInspector(ecsContext.ComponentManager);
         var selectionWindowHeight = screenSize.Y * 0.75f;
         var selectionWindow = presentation.ElementPoolService.CreateElement<Window>(null, new ElementOptions
@@ -201,7 +196,7 @@ public static class GameShellBootstrapper
         });
         selectionWindow.SetContent(new SelectionWindowContent(world, mapViewState, ecsContext.ComponentManager, componentInspector, presentation.ElementPoolService));
         selectionWindow.Initialize();
-        staticHudWindows.Add(selectionWindow);
+        layers.Add(UiLayer.StaticHud, selectionWindow);
 
         var playerHealthBarWindow = presentation.ElementPoolService.CreateElement<Window>(null, new ElementOptions
         {
@@ -217,7 +212,7 @@ public static class GameShellBootstrapper
         });
         playerHealthBarWindow.SetContent(new PlayerHealthBarContent(world, ecsContext.ComponentManager));
         playerHealthBarWindow.Initialize();
-        staticHudWindows.Add(playerHealthBarWindow);
+        layers.Add(UiLayer.StaticHud, playerHealthBarWindow);
 
         var playerManaBarWindow = presentation.ElementPoolService.CreateElement<Window>(null, new ElementOptions
         {
@@ -232,7 +227,7 @@ public static class GameShellBootstrapper
         });
         playerManaBarWindow.SetContent(new PlayerManaBarContent(world, ecsContext.ComponentManager));
         playerManaBarWindow.Initialize();
-        staticHudWindows.Add(playerManaBarWindow);
+        layers.Add(UiLayer.StaticHud, playerManaBarWindow);
 
         var actionLockWindow = presentation.ElementPoolService.CreateElement<Window>(null, new ElementOptions
         {
@@ -247,7 +242,7 @@ public static class GameShellBootstrapper
         });
         actionLockWindow.SetContent(new ActionLockContent(world, ecsContext.ComponentManager, presentation.FontService));
         actionLockWindow.Initialize();
-        staticHudWindows.Add(actionLockWindow);
+        layers.Add(UiLayer.StaticHud, actionLockWindow);
 
         var playerStatusEffectsWindow = presentation.ElementPoolService.CreateElement<Window>(null, new ElementOptions
         {
@@ -262,7 +257,7 @@ public static class GameShellBootstrapper
         });
         playerStatusEffectsWindow.SetContent(new PlayerStatusEffectsContent(world, ecsContext.ComponentManager, itemCatalog, presentation.FontService));
         playerStatusEffectsWindow.Initialize();
-        staticHudWindows.Add(playerStatusEffectsWindow);
+        layers.Add(UiLayer.StaticHud, playerStatusEffectsWindow);
 
         // Bottom-center, overlaying the map -- StaticHUD tier draws over Base, the same way
         // selectionWindow/playerHealthBarWindow already do. HotbarContent's Size depends on the
@@ -285,7 +280,7 @@ public static class GameShellBootstrapper
         });
         hotbarWindow.SetContent(hotbarContent);
         hotbarWindow.Initialize();
-        staticHudWindows.Add(hotbarWindow);
+        layers.Add(UiLayer.StaticHud, hotbarWindow);
 
         // TEMPORARY First concrete TextBox consumer (see the Text input TODO) -- a multiline TextBox in
         // a closeable popup that submits into a new Quest notification. "New Quest" is a
@@ -301,16 +296,14 @@ public static class GameShellBootstrapper
             Text = new TextOptions { Text = "New Quest" },
         });
         questTriggerWindow.Initialize();
-        staticHudWindows.Add(questTriggerWindow);
+        layers.Add(UiLayer.StaticHud, questTriggerWindow);
 
-        return (staticHudWindows, questTriggerWindow, hotbarContent);
+        return (questTriggerWindow, hotbarContent);
     }
 
-    /// <summary>DynamicHUD tier: NotificationCenter owns/populates this list itself (summary bar + popups), and InventoryFolderController does the same for its own folder+window -- see UiInputController's own doc comment for what each of the four tiers means. Build also passes this same list into OpenQuestComposer later, since that popup belongs in this tier too.</summary>
-    private static (List<Element> DynamicHudWindows, NotificationCenter NotificationCenter, InventoryFolderController Inventory) BuildDynamicHudWindows(PresentationContext presentation, World world, EcsContext ecsContext, ItemCatalog itemCatalog, MapWindow mapWindow)
+    /// <summary>DynamicHUD tier: NotificationCenter owns/populates its own folder+popups, and InventoryFolderController does the same for its own folder+window (both add to UiLayer.DynamicHud specifically; their two Tooltip-family hover popups go to UiLayer.Tooltip instead) -- see UiLayer's own doc comment for what each tier means. Build also passes the same layer stack into OpenQuestComposer later, since that popup belongs in DynamicHud too.</summary>
+    private static (NotificationCenter NotificationCenter, InventoryFolderController Inventory) BuildDynamicHudWindows(PresentationContext presentation, World world, EcsContext ecsContext, ItemCatalog itemCatalog, MapWindow mapWindow, UiLayerStack layers)
     {
-        var dynamicHudWindows = new List<Element>();
-
         // Folder's dependencies (SpriteSheetService/SpriteRenderer) come from Presentation the
         // same way MapWindow's do (see BuildBaseWindows) -- registered here, not inside
         // WindowService's own constructor, so window types that don't render sprites
@@ -318,7 +311,7 @@ public static class GameShellBootstrapper
         presentation.ElementPoolService.RegisterFactory<Folder>(() => new Folder(
             presentation.FontService, presentation.ElementPoolService, presentation.GlyphRenderer, presentation.SpriteSheetService, presentation.SpriteRenderer));
 
-        var notificationCenter = new NotificationCenter(presentation.ElementPoolService, ecsContext.EventBus, dynamicHudWindows);
+        var notificationCenter = new NotificationCenter(presentation.ElementPoolService, ecsContext.EventBus, layers);
         notificationCenter.Initialize();
 
         presentation.ElementPoolService.RegisterFactory<InventoryManagementWindow>(() => new InventoryManagementWindow(
@@ -337,28 +330,28 @@ public static class GameShellBootstrapper
             presentation.FontService, presentation.ElementPoolService, presentation.GlyphRenderer));
         presentation.ElementPoolService.RegisterFactory<SeparatorBar>(() => new SeparatorBar(
             presentation.FontService, presentation.ElementPoolService, presentation.GlyphRenderer));
-        presentation.ElementPoolService.RegisterFactory<HoverPopupWindow>(() => new HoverPopupWindow(
-            presentation.FontService, presentation.ElementPoolService, presentation.GlyphRenderer, dynamicHudWindows));
+        presentation.ElementPoolService.RegisterFactory<Tooltip>(() => new Tooltip(
+            presentation.FontService, presentation.ElementPoolService, presentation.GlyphRenderer));
 
         var inventory = new InventoryFolderController(
             presentation.ElementPoolService, world, ecsContext.ComponentManager, presentation.FontService, presentation.GlyphRenderer,
             presentation.SpriteSheetService, presentation.SpriteRenderer, itemCatalog, mapWindow);
-        inventory.Initialize(dynamicHudWindows);
+        inventory.Initialize(layers);
 
-        return (dynamicHudWindows, notificationCenter, inventory);
+        return (notificationCenter, inventory);
     }
 
-    /// <summary>Constructs HotbarController and lets it add the Armed Hotkey Summary window into the DynamicHUD tier -- mirrors NotificationCenter/InventoryFolderController's own Initialize(dynamicHudWindows) call shape above. Needs mapViewState/hotbarContent (from BuildBaseWindows/BuildStaticHudWindows) and actionTargeting (from BuildBaseWindows, promoted there rather than built privately inside MapWindow so this can share the same instance).</summary>
+    /// <summary>Constructs HotbarController and lets it add the Armed Hotkey Summary window into UiLayer.Tooltip -- mirrors NotificationCenter/InventoryFolderController's own Initialize(layers) call shape above. Needs mapViewState/hotbarContent (from BuildBaseWindows/BuildStaticHudWindows) and actionTargeting (from BuildBaseWindows, promoted there rather than built privately inside MapWindow so this can share the same instance).</summary>
     private static HotbarController BuildHotbarController(
-        PresentationContext presentation, MapViewState mapViewState, HotbarContent hotbarContent, ActionTargetingController actionTargeting, List<Element> dynamicHudWindows)
+        PresentationContext presentation, MapViewState mapViewState, HotbarContent hotbarContent, ActionTargetingController actionTargeting, UiLayerStack layers)
     {
         var hotbarController = new HotbarController(mapViewState, hotbarContent, actionTargeting);
-        hotbarController.Initialize(presentation.ElementPoolService, presentation.FontService, presentation.GlyphRenderer, dynamicHudWindows);
+        hotbarController.Initialize(presentation.ElementPoolService, layers);
         return hotbarController;
     }
 
-    /// <summary>User tier: today, just DragGhostContent's host window -- see UiInputController's own doc comment for what this tier is for. Split out from the other three Build* methods since it needs a real UiInputController reference (see Build), which doesn't exist yet while those run.</summary>
-    private static void BuildUserWindows(PresentationContext presentation, UiInputController inputController, ActionCatalog actionCatalog, ItemCatalog itemCatalog, List<Element> userWindows)
+    /// <summary>User tier: today, just DragGhostContent's host window -- see UiLayer's own doc comment for what this tier is for. Split out from the other three Build* methods since it needs a real UiInputController reference (see Build), which doesn't exist yet while those run.</summary>
+    private static void BuildUserWindows(PresentationContext presentation, UiInputController inputController, ActionCatalog actionCatalog, ItemCatalog itemCatalog, UiLayerStack layers)
     {
         // Zero-size and fully transparent -- DragGhostContent draws directly at the live mouse
         // position (see its own doc comment), not relative to this window's own bounds, so the
@@ -371,11 +364,11 @@ public static class GameShellBootstrapper
         dragGhostWindow.SetContent(new DragGhostContent(
             inputController, actionCatalog, itemCatalog, presentation.FontService, presentation.SpriteSheetService, presentation.SpriteRenderer, presentation.GlyphRenderer));
         dragGhostWindow.Initialize();
-        userWindows.Add(dragGhostWindow);
+        layers.Add(UiLayer.User, dragGhostWindow);
     }
 
     /// <summary>TEMPORARYOpens a fresh closeable popup with one multiline TextBox; submitting posts a Quest notification and closes the popup. Returns the popup so the caller can focus it.</summary>
-    private static Window OpenQuestComposer(ElementPoolService windowService, NotificationCenter notificationCenter, List<Element> dynamicHudWindows)
+    private static Window OpenQuestComposer(ElementPoolService windowService, NotificationCenter notificationCenter, UiLayerStack layers)
     {
         // Deliberately Fixed, not WrapContent: a WrapContent parent's ContentSize starts at
         // ~(0,0) before it's ever measured a child, and Window.Measure overwrites a child's own
@@ -398,17 +391,17 @@ public static class GameShellBootstrapper
             Chrome = new ElementChromeOptions { ShowBorder = true, ShowTitle = true, TitleText = "New Quest (Enter to submit)", CanUserClose = true, CanUserMove = true },
         });
         popup.Initialize();
-        dynamicHudWindows.Add(popup);
+        layers.Add(UiLayer.DynamicHud, popup);
 
         // Pooled and reused for the next "New Quest" click (see WindowService) -- must detach
-        // itself and remove the closed instance from dynamicHudWindows, the same cleanup
+        // itself and remove the closed instance from layers, the same cleanup
         // NotificationCenter.OnActiveNotificationClosed already does for its own popups, or a
         // reopened composer would eventually add the same recycled instance to
-        // dynamicHudWindows twice.
+        // UiLayer.DynamicHud twice.
         void onClosed(Element closedWindow)
         {
             closedWindow.Closed -= onClosed;
-            dynamicHudWindows.Remove(closedWindow);
+            layers.Remove(UiLayer.DynamicHud, closedWindow);
         }
 
         popup.Closed += onClosed;
@@ -443,32 +436,17 @@ public sealed record GameShellContext(
     MapWindow MapWindow,
     NotificationCenter NotificationCenter,
     InventoryFolderController Inventory,
-    List<Element> BaseWindows,
-    List<Element> StaticHudWindows,
-    List<Element> DynamicHudWindows,
-    List<Element> UserWindows,
+    UiLayerStack Layers,
     UiInputController InputController)
 {
     public void LoadContent()
     {
-        foreach (var window in BaseWindows)
+        foreach (var layer in UiLayerStack.LayersAscending())
         {
-            window.LoadContent();
-        }
-
-        foreach (var window in StaticHudWindows)
-        {
-            window.LoadContent();
-        }
-
-        foreach (var window in DynamicHudWindows)
-        {
-            window.LoadContent();
-        }
-
-        foreach (var window in UserWindows)
-        {
-            window.LoadContent();
+            foreach (var window in Layers[layer])
+            {
+                window.LoadContent();
+            }
         }
     }
 
@@ -476,23 +454,23 @@ public sealed record GameShellContext(
     /// <param name="frameCostRecorder">Null (the default) skips the per-window Stopwatch calls entirely -- see FrameBudgetTracker's own doc comment.</param>
     public void Update(GameTime gameTime, IFrameCostRecorder? frameCostRecorder = null)
     {
-        UpdateWindowLayer(BaseWindows, "BaseWindows", gameTime, frameCostRecorder);
-        UpdateWindowLayer(StaticHudWindows, "StaticHudWindows", gameTime, frameCostRecorder);
-        UpdateWindowLayer(DynamicHudWindows, "DynamicHudWindows", gameTime, frameCostRecorder);
-        UpdateWindowLayer(UserWindows, "UserWindows", gameTime, frameCostRecorder);
+        foreach (var layer in UiLayerStack.LayersAscending())
+        {
+            UpdateWindowLayer(Layers[layer], layer.ToString(), gameTime, frameCostRecorder);
+        }
     }
 
-    /// <summary>Drawn bottom-to-top: Base, StaticHUD, DynamicHUD, User -- see UiInputController's own doc comment for what each tier holds. User last and unconditionally, so drag feedback is never occluded by whatever it's passing over on its way to a drop target.</summary>
+    /// <summary>Drawn bottom-to-top, UiLayer's own declaration order -- see its doc comment for what each tier holds. User (topmost) draws last and unconditionally, so drag feedback is never occluded by whatever it's passing over on its way to a drop target.</summary>
     /// <param name="frameCostRecorder">Null (the default) skips the per-window Stopwatch calls entirely -- see FrameBudgetTracker's own doc comment.</param>
     public void Draw(GameTime gameTime, GraphicsDevice graphicsDevice, SpriteBatch spriteBatch, Texture2D unitRectangle, IFrameCostRecorder? frameCostRecorder = null)
     {
-        DrawWindowLayer(BaseWindows, "BaseWindows", gameTime, graphicsDevice, spriteBatch, unitRectangle, frameCostRecorder);
-        DrawWindowLayer(StaticHudWindows, "StaticHudWindows", gameTime, graphicsDevice, spriteBatch, unitRectangle, frameCostRecorder);
-        DrawWindowLayer(DynamicHudWindows, "DynamicHudWindows", gameTime, graphicsDevice, spriteBatch, unitRectangle, frameCostRecorder);
-        DrawWindowLayer(UserWindows, "UserWindows", gameTime, graphicsDevice, spriteBatch, unitRectangle, frameCostRecorder);
+        foreach (var layer in UiLayerStack.LayersAscending())
+        {
+            DrawWindowLayer(Layers[layer], layer.ToString(), gameTime, graphicsDevice, spriteBatch, unitRectangle, frameCostRecorder);
+        }
     }
 
-    private static void UpdateWindowLayer(List<Element> windows, string tierName, GameTime gameTime, IFrameCostRecorder? frameCostRecorder)
+    private static void UpdateWindowLayer(IReadOnlyList<Element> windows, string tierName, GameTime gameTime, IFrameCostRecorder? frameCostRecorder)
     {
         foreach (var window in windows.ToArray())
         {
@@ -509,7 +487,7 @@ public sealed record GameShellContext(
         }
     }
 
-    private static void DrawWindowLayer(List<Element> windows, string tierName, GameTime gameTime, GraphicsDevice graphicsDevice, SpriteBatch spriteBatch, Texture2D unitRectangle, IFrameCostRecorder? frameCostRecorder)
+    private static void DrawWindowLayer(IReadOnlyList<Element> windows, string tierName, GameTime gameTime, GraphicsDevice graphicsDevice, SpriteBatch spriteBatch, Texture2D unitRectangle, IFrameCostRecorder? frameCostRecorder)
     {
         foreach (var window in windows)
         {

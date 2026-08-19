@@ -15,11 +15,11 @@ namespace Tests.Presentation;
 /// clickable (its Window has actually been detached from the active list, not just hidden).
 ///
 /// Click routing/hit-testing is no longer NotificationCenter's job (Window Chrome Phase A1)
-/// -- production code (UiInputController) hit-tests the shared dynamicHudWindows list
-/// directly. ClickDynamicHud below mirrors that exact topmost-first
-/// TryHitTestInteraction-then-HandleClick sequence, against the same list this
-/// NotificationCenter was constructed with, so these tests still exercise real click-to-
-/// window routing rather than only NotificationCenter's own bookkeeping.
+/// -- production code (UiInputController) hit-tests UiLayer.DynamicHud directly. ClickDynamicHud
+/// below mirrors that exact topmost-first TryHitTestInteraction-then-HandleClick sequence,
+/// against the same UiLayerStack this NotificationCenter was constructed with, so these tests
+/// still exercise real click-to-window routing rather than only NotificationCenter's own
+/// bookkeeping.
 /// </summary>
 [TestClass]
 public sealed class NotificationCenterTests
@@ -36,15 +36,16 @@ public sealed class NotificationCenterTests
         return windowService;
     }
 
-    private static NotificationCenter CreateNotificationCenter(ElementPoolService windowService, List<Element> dynamicHudWindows)
+    private static NotificationCenter CreateNotificationCenter(ElementPoolService windowService, UiLayerStack layers)
     {
-        var notificationCenter = new NotificationCenter(windowService, new EventBus(), dynamicHudWindows);
+        var notificationCenter = new NotificationCenter(windowService, new EventBus(), layers);
         notificationCenter.Initialize();
         return notificationCenter;
     }
 
-    private static bool ClickDynamicHud(List<Element> dynamicHudWindows, Point position)
+    private static bool ClickDynamicHud(UiLayerStack layers, Point position)
     {
+        var dynamicHudWindows = layers[UiLayer.DynamicHud];
         for (var index = dynamicHudWindows.Count - 1; index >= 0; index--)
         {
             var interaction = dynamicHudWindows[index].TryHitTestInteraction(position);
@@ -61,35 +62,35 @@ public sealed class NotificationCenterTests
     [TestMethod]
     public void AddNotification_ShowImmediately_CreatesAClickableActiveWindow()
     {
-        var dynamicHudWindows = new List<Element>();
-        var notificationCenter = CreateNotificationCenter(CreateWindowService(), dynamicHudWindows);
+        var layers = new UiLayerStack();
+        var notificationCenter = CreateNotificationCenter(CreateWindowService(), layers);
 
         notificationCenter.AddNotification(NotificationCategory.Quest, "Hello", showImmediately: true);
 
-        Assert.IsTrue(ClickDynamicHud(dynamicHudWindows, FirstActiveNotificationTopLeft));
+        Assert.IsTrue(ClickDynamicHud(layers, FirstActiveNotificationTopLeft));
     }
 
     /// <summary>Feature: opening a notification (fresh, via showImmediately: true) should let a caller (UiInputController, in production) focus the new popup -- see ActiveNotificationOpened.</summary>
     [TestMethod]
     public void AddNotification_ShowImmediately_RaisesActiveNotificationOpenedWithTheNewWindow()
     {
-        var dynamicHudWindows = new List<Element>();
-        var notificationCenter = CreateNotificationCenter(CreateWindowService(), dynamicHudWindows);
+        var layers = new UiLayerStack();
+        var notificationCenter = CreateNotificationCenter(CreateWindowService(), layers);
         Window? openedWindow = null;
         notificationCenter.ActiveNotificationOpened += window => openedWindow = window;
 
         notificationCenter.AddNotification(NotificationCategory.Quest, "Hello", showImmediately: true);
 
         Assert.IsNotNull(openedWindow);
-        Assert.Contains(openedWindow, dynamicHudWindows);
+        Assert.Contains(openedWindow, layers[UiLayer.DynamicHud]);
     }
 
     /// <summary>Same event, via the other path a popup can appear through -- promoting a queued/unread notification back to active.</summary>
     [TestMethod]
     public void OpenNextNotification_RaisesActiveNotificationOpenedWithThePromotedWindow()
     {
-        var dynamicHudWindows = new List<Element>();
-        var notificationCenter = CreateNotificationCenter(CreateWindowService(), dynamicHudWindows);
+        var layers = new UiLayerStack();
+        var notificationCenter = CreateNotificationCenter(CreateWindowService(), layers);
         notificationCenter.AddNotification(NotificationCategory.Quest, "Hello", showImmediately: false);
         Window? openedWindow = null;
         notificationCenter.ActiveNotificationOpened += window => openedWindow = window;
@@ -97,31 +98,31 @@ public sealed class NotificationCenterTests
         notificationCenter.OpenNextNotification(NotificationCategory.Quest);
 
         Assert.IsNotNull(openedWindow);
-        Assert.Contains(openedWindow, dynamicHudWindows);
+        Assert.Contains(openedWindow, layers[UiLayer.DynamicHud]);
     }
 
     [TestMethod]
     public void AddNotification_NotShownImmediately_CreatesNoActiveWindow()
     {
-        var dynamicHudWindows = new List<Element>();
-        var notificationCenter = CreateNotificationCenter(CreateWindowService(), dynamicHudWindows);
+        var layers = new UiLayerStack();
+        var notificationCenter = CreateNotificationCenter(CreateWindowService(), layers);
 
         notificationCenter.AddNotification(NotificationCategory.Quest, "Hello", showImmediately: false);
 
-        Assert.IsFalse(ClickDynamicHud(dynamicHudWindows, FirstActiveNotificationTopLeft));
+        Assert.IsFalse(ClickDynamicHud(layers, FirstActiveNotificationTopLeft));
     }
 
     [TestMethod]
     public void CloseNotification_ActiveNotification_RemovesItFromActiveList()
     {
-        var dynamicHudWindows = new List<Element>();
-        var notificationCenter = CreateNotificationCenter(CreateWindowService(), dynamicHudWindows);
+        var layers = new UiLayerStack();
+        var notificationCenter = CreateNotificationCenter(CreateWindowService(), layers);
         var notificationId = notificationCenter.AddNotification(NotificationCategory.Quest, "Hello", showImmediately: true);
 
         var closed = notificationCenter.CloseNotification(notificationId);
 
         Assert.IsTrue(closed);
-        Assert.IsFalse(ClickDynamicHud(dynamicHudWindows, FirstActiveNotificationTopLeft));
+        Assert.IsFalse(ClickDynamicHud(layers, FirstActiveNotificationTopLeft));
     }
 
     private static (ElementPoolService WindowService, Func<Folder> GetFolder) CreateWindowServiceCapturingFolder()
@@ -143,7 +144,7 @@ public sealed class NotificationCenterTests
     public void CloseNotification_WithNoUnreadNotificationsRemaining_MinimizesTheFolder()
     {
         var (windowService, getFolder) = CreateWindowServiceCapturingFolder();
-        var notificationCenter = CreateNotificationCenter(windowService, []);
+        var notificationCenter = CreateNotificationCenter(windowService, new UiLayerStack());
         var notificationId = notificationCenter.AddNotification(NotificationCategory.Quest, "Hello", showImmediately: true);
         var folder = getFolder();
 
@@ -161,7 +162,7 @@ public sealed class NotificationCenterTests
     public void CloseNotification_WithUnreadNotificationsStillQueued_DoesNotMinimizeTheFolder()
     {
         var (windowService, getFolder) = CreateWindowServiceCapturingFolder();
-        var notificationCenter = CreateNotificationCenter(windowService, []);
+        var notificationCenter = CreateNotificationCenter(windowService, new UiLayerStack());
         var activeId = notificationCenter.AddNotification(NotificationCategory.Quest, "Active", showImmediately: true);
         notificationCenter.AddNotification(NotificationCategory.Achievement, "Queued", showImmediately: false);
         var folder = getFolder();
@@ -175,7 +176,7 @@ public sealed class NotificationCenterTests
     [TestMethod]
     public void CloseNotification_UnknownId_ReturnsFalse()
     {
-        var notificationCenter = CreateNotificationCenter(CreateWindowService(), []);
+        var notificationCenter = CreateNotificationCenter(CreateWindowService(), new UiLayerStack());
 
         Assert.IsFalse(notificationCenter.CloseNotification(Guid.NewGuid()));
     }
@@ -183,24 +184,24 @@ public sealed class NotificationCenterTests
     [TestMethod]
     public void OpenNextNotification_WithUnreadNotification_PromotesItToActive()
     {
-        var dynamicHudWindows = new List<Element>();
-        var notificationCenter = CreateNotificationCenter(CreateWindowService(), dynamicHudWindows);
+        var layers = new UiLayerStack();
+        var notificationCenter = CreateNotificationCenter(CreateWindowService(), layers);
         notificationCenter.AddNotification(NotificationCategory.Quest, "Hello", showImmediately: false);
 
         notificationCenter.OpenNextNotification(NotificationCategory.Quest);
 
-        Assert.IsTrue(ClickDynamicHud(dynamicHudWindows, FirstActiveNotificationTopLeft));
+        Assert.IsTrue(ClickDynamicHud(layers, FirstActiveNotificationTopLeft));
     }
 
     [TestMethod]
     public void OpenNextNotification_WithNoUnreadNotifications_DoesNothing()
     {
-        var dynamicHudWindows = new List<Element>();
-        var notificationCenter = CreateNotificationCenter(CreateWindowService(), dynamicHudWindows);
+        var layers = new UiLayerStack();
+        var notificationCenter = CreateNotificationCenter(CreateWindowService(), layers);
 
         notificationCenter.OpenNextNotification(NotificationCategory.Quest);
 
-        Assert.IsFalse(ClickDynamicHud(dynamicHudWindows, FirstActiveNotificationTopLeft));
+        Assert.IsFalse(ClickDynamicHud(layers, FirstActiveNotificationTopLeft));
     }
 
     /// <summary>
@@ -212,7 +213,7 @@ public sealed class NotificationCenterTests
     [TestMethod]
     public void CloseNotification_TwiceAcrossPooledWindowReuse_DoesNotThrow()
     {
-        var notificationCenter = CreateNotificationCenter(CreateWindowService(), []);
+        var notificationCenter = CreateNotificationCenter(CreateWindowService(), new UiLayerStack());
 
         var firstId = notificationCenter.AddNotification(NotificationCategory.Quest, "First", showImmediately: true);
         notificationCenter.CloseNotification(firstId);
@@ -238,8 +239,8 @@ public sealed class NotificationCenterTests
     public void ClickingSummaryBadge_WithUnreadNotification_OpensItAsActive()
     {
         var (windowService, capturedBadges) = CreateWindowServiceCapturingTextWindows();
-        var dynamicHudWindows = new List<Element>();
-        var notificationCenter = CreateNotificationCenter(windowService, dynamicHudWindows);
+        var layers = new UiLayerStack();
+        var notificationCenter = CreateNotificationCenter(windowService, layers);
         notificationCenter.AddNotification(NotificationCategory.Quest, "Explore the dungeon.", showImmediately: false);
 
         // The Folder starts collapsed (see Folder.Initialize) -- clicking anywhere within its
@@ -247,33 +248,33 @@ public sealed class NotificationCenterTests
         // category badges vertically beneath. Only then does Quest's badge have a real,
         // clickable on-screen position -- read via WindowRectangle (its exact layout depends
         // on border/title-icon sizing) rather than hand-derived pixel math.
-        Assert.IsTrue(ClickDynamicHud(dynamicHudWindows, new Point(30 + 5, 30 + 5)));
+        Assert.IsTrue(ClickDynamicHud(layers, new Point(30 + 5, 30 + 5)));
 
         var questBadge = capturedBadges.Single(badge => badge.OriginalText == "Quest: 1");
-        var handled = ClickDynamicHud(dynamicHudWindows, questBadge.Rectangle.Center);
+        var handled = ClickDynamicHud(layers, questBadge.Rectangle.Center);
 
         Assert.IsTrue(handled);
-        Assert.IsTrue(ClickDynamicHud(dynamicHudWindows, FirstActiveNotificationTopLeft));
+        Assert.IsTrue(ClickDynamicHud(layers, FirstActiveNotificationTopLeft));
     }
 
     [TestMethod]
     public void ClickingSummaryBadge_WithNoUnreadNotifications_DoesNotOpenAnything()
     {
         var (windowService, capturedBadges) = CreateWindowServiceCapturingTextWindows();
-        var dynamicHudWindows = new List<Element>();
-        _ = CreateNotificationCenter(windowService, dynamicHudWindows);
+        var layers = new UiLayerStack();
+        _ = CreateNotificationCenter(windowService, layers);
 
-        Assert.IsTrue(ClickDynamicHud(dynamicHudWindows, new Point(30 + 5, 30 + 5))); // expand the Folder
+        Assert.IsTrue(ClickDynamicHud(layers, new Point(30 + 5, 30 + 5))); // expand the Folder
         var questBadge = capturedBadges.Single(badge => badge.OriginalText == "Quest: 0");
-        ClickDynamicHud(dynamicHudWindows, questBadge.Rectangle.Center);
+        ClickDynamicHud(layers, questBadge.Rectangle.Center);
 
-        Assert.IsFalse(ClickDynamicHud(dynamicHudWindows, FirstActiveNotificationTopLeft));
+        Assert.IsFalse(ClickDynamicHud(layers, FirstActiveNotificationTopLeft));
     }
 
     [TestMethod]
     public void HasBlockingNotification_SystemNotificationActive_IsTrue()
     {
-        var notificationCenter = CreateNotificationCenter(CreateWindowService(), []);
+        var notificationCenter = CreateNotificationCenter(CreateWindowService(), new UiLayerStack());
 
         notificationCenter.AddNotification(NotificationCategory.System, "You have entered the dungeon", showImmediately: true);
 
@@ -283,7 +284,7 @@ public sealed class NotificationCenterTests
     [TestMethod]
     public void HasBlockingNotification_OnlyQuestNotificationActive_IsFalse()
     {
-        var notificationCenter = CreateNotificationCenter(CreateWindowService(), []);
+        var notificationCenter = CreateNotificationCenter(CreateWindowService(), new UiLayerStack());
 
         notificationCenter.AddNotification(NotificationCategory.Quest, "Take your first steps!", showImmediately: true);
 
@@ -293,7 +294,7 @@ public sealed class NotificationCenterTests
     [TestMethod]
     public void HasBlockingNotification_AfterClosingTheSystemNotification_IsFalseAgain()
     {
-        var notificationCenter = CreateNotificationCenter(CreateWindowService(), []);
+        var notificationCenter = CreateNotificationCenter(CreateWindowService(), new UiLayerStack());
         var notificationId = notificationCenter.AddNotification(NotificationCategory.System, "You have entered the dungeon", showImmediately: true);
 
         notificationCenter.CloseNotification(notificationId);
@@ -334,8 +335,8 @@ public sealed class NotificationCenterTests
             return window;
         });
 
-        var dynamicHudWindows = new List<Element>();
-        var notificationCenter = CreateNotificationCenter(windowService, dynamicHudWindows);
+        var layers = new UiLayerStack();
+        var notificationCenter = CreateNotificationCenter(windowService, layers);
 
         var firstId = notificationCenter.AddNotification(NotificationCategory.Quest, "First", showImmediately: true);
         var secondId = notificationCenter.AddNotification(NotificationCategory.Quest, "Second", showImmediately: true);
@@ -349,7 +350,7 @@ public sealed class NotificationCenterTests
         var secondPopup = activePopups[1]; // second AddNotification call -- stacked on top, see ActiveNotificationStackOffset
         var closeButton = secondPopup.TitleButtons[0]; // Close attaches first, see Window.Initialize
 
-        var handled = ClickDynamicHud(dynamicHudWindows, closeButton.Rectangle.Center);
+        var handled = ClickDynamicHud(layers, closeButton.Rectangle.Center);
 
         Assert.IsTrue(handled);
         // Already closed by the click above -- CloseNotification returns false for an id no
@@ -381,7 +382,7 @@ public sealed class NotificationCenterTests
     public void AddNotification_WithCustomTitle_UsesItInsteadOfTheCategoryName()
     {
         var (windowService, capturedPopups) = CreateWindowServiceCapturingTextWindows();
-        var notificationCenter = CreateNotificationCenter(windowService, []);
+        var notificationCenter = CreateNotificationCenter(windowService, new UiLayerStack());
 
         notificationCenter.AddNotification(NotificationCategory.Quest, "Explore the dungeon.", showImmediately: true, title: "New Quest");
 
@@ -393,7 +394,7 @@ public sealed class NotificationCenterTests
     public void AddNotification_WithoutCustomTitle_FallsBackToTheCategoryName()
     {
         var (windowService, capturedPopups) = CreateWindowServiceCapturingTextWindows();
-        var notificationCenter = CreateNotificationCenter(windowService, []);
+        var notificationCenter = CreateNotificationCenter(windowService, new UiLayerStack());
 
         notificationCenter.AddNotification(NotificationCategory.Quest, "Explore the dungeon.", showImmediately: true);
 
@@ -406,7 +407,7 @@ public sealed class NotificationCenterTests
     public void AddNotification_MinimizedWithCustomTitle_ShowsTheTitleWhenLaterOpened()
     {
         var (windowService, capturedPopups) = CreateWindowServiceCapturingTextWindows();
-        var notificationCenter = CreateNotificationCenter(windowService, []);
+        var notificationCenter = CreateNotificationCenter(windowService, new UiLayerStack());
         notificationCenter.AddNotification(NotificationCategory.Quest, "Explore the dungeon.", showImmediately: false, title: "New Quest");
 
         notificationCenter.OpenNextNotification(NotificationCategory.Quest);
@@ -419,20 +420,20 @@ public sealed class NotificationCenterTests
     public void PublishingNotificationRequested_ThenUpdate_ProducesSameResultAsDirectAddNotification()
     {
         var eventBus = new EventBus();
-        var dynamicHudWindows = new List<Element>();
-        var notificationCenter = new NotificationCenter(CreateWindowService(), eventBus, dynamicHudWindows);
+        var layers = new UiLayerStack();
+        var notificationCenter = new NotificationCenter(CreateWindowService(), eventBus, layers);
         notificationCenter.Initialize();
 
         eventBus.Publish(new NotificationRequestedEvent(NotificationCategory.System, "You have entered the dungeon", ShowImmediately: true));
 
         // Not dispatched yet -- Publish on a buffered event only enqueues.
         Assert.IsFalse(notificationCenter.HasBlockingNotification);
-        Assert.IsFalse(ClickDynamicHud(dynamicHudWindows, FirstActiveNotificationTopLeft));
+        Assert.IsFalse(ClickDynamicHud(layers, FirstActiveNotificationTopLeft));
 
         notificationCenter.Update(new GameTime());
 
         Assert.IsTrue(notificationCenter.HasBlockingNotification);
-        Assert.IsTrue(ClickDynamicHud(dynamicHudWindows, FirstActiveNotificationTopLeft));
+        Assert.IsTrue(ClickDynamicHud(layers, FirstActiveNotificationTopLeft));
     }
 
     /// <summary>
@@ -445,7 +446,7 @@ public sealed class NotificationCenterTests
     public void AddNotification_WithAchievementDetails_IncludesEveryFieldInTheDisplayedText()
     {
         var (windowService, capturedPopups) = CreateWindowServiceCapturingTextWindows();
-        var notificationCenter = CreateNotificationCenter(windowService, []);
+        var notificationCenter = CreateNotificationCenter(windowService, new UiLayerStack());
         var achievement = new AchievementNotificationDetails(
             RequirementText: "Entered the dungeon without a human companion.",
             LootboxLabel: "Bronze Adventurer Box",
@@ -470,7 +471,7 @@ public sealed class NotificationCenterTests
     public void AddNotification_WithAchievementDetailsButNoLootbox_ShowsNoneForLootbox()
     {
         var (windowService, capturedPopups) = CreateWindowServiceCapturingTextWindows();
-        var notificationCenter = CreateNotificationCenter(windowService, []);
+        var notificationCenter = CreateNotificationCenter(windowService, new UiLayerStack());
         var achievement = new AchievementNotificationDetails(
             RequirementText: "Entered the dungeon without a human companion.",
             LootboxLabel: null,

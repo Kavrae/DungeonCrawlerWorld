@@ -16,7 +16,7 @@ namespace Presentation.UI.Notifications;
 /// NotificationRequestedEvent, so a Game-layer caller (which can't reference this
 /// Presentation-layer type at all) can request a notification without a direct reference.
 /// </summary>
-public sealed class NotificationCenter(ElementPoolService elementPoolService, EventBus eventBus, List<Element> dynamicHudElements)
+public sealed class NotificationCenter(ElementPoolService elementPoolService, EventBus eventBus, UiLayerStack layers)
 {
     private static readonly Vector2 FolderPosition = HudMetrics.Margin;
 
@@ -93,38 +93,45 @@ public sealed class NotificationCenter(ElementPoolService elementPoolService, Ev
             Folder = new FolderOptions { SpriteName = "AchievementCenter", FallbackGlyph = "★" },
         });
 
-        foreach (var category in Enum.GetValues<NotificationCategory>())
-        {
-            var countWindow = elementPoolService.CreateElement<TextWindow>(_folder, new ElementOptions
-            {
-                Hierarchy = new ElementHierarchyOptions { CanContainChildren = false },
-                Layout = new ElementLayoutOptions { DisplayMode = ElementDisplayMode.Fixed, Size = SummaryEntrySize, IsTransparent = false },
-                Chrome = new ElementChromeOptions { ShowBorder = true, ShowTitle = false },
-                Content = new ElementContentOptions { ContentColor = Color.LightGray },
-                Text = new TextOptions { Text = $"{category}: 0" },
-            });
-
-            _unreadByCategory.Add((category, countWindow, []));
-            _folder.AddChild(countWindow);
-
-            // Summary count windows are created once here and never pooled/reused (unlike
-            // active notification windows), so this subscription lives for the game's
-            // lifetime -- no unsubscribe-on-fire needed, unlike OnActiveNotificationClosed.
-            countWindow.Clicked += _ => OpenNextNotification(category);
-        }
-
-        // Initialized last -- see the WrapContent comment above for why this must run only
-        // after every child is already correctly tiled.
+        // Initialized before any count window is added -- Element.Initialize/Measure/Arrange now
+        // tolerate a child being added at any point relative to its parent's own Initialize and
+        // DisplayMode (see Element.Measure's and Element.Initialize's own Minimized guards), so
+        // there's no ordering constraint here anymore; this order was chosen to match the rest
+        // of the codebase's convention of a control's own Initialize running before its children
+        // are attached (see Window.OnChildrenInitialized/GridControl/AbilityScoreWindow).
         _folder.Initialize();
-        dynamicHudElements.Add(_folder);
+        layers.Add(UiLayer.DynamicHud, _folder);
+
+        using (_folder.BeginLayoutBatch())
+        {
+            foreach (var category in Enum.GetValues<NotificationCategory>())
+            {
+                var countWindow = elementPoolService.CreateElement<TextWindow>(_folder, new ElementOptions
+                {
+                    Hierarchy = new ElementHierarchyOptions { CanContainChildren = false },
+                    Layout = new ElementLayoutOptions { DisplayMode = ElementDisplayMode.Fixed, Size = SummaryEntrySize, IsTransparent = false },
+                    Chrome = new ElementChromeOptions { ShowBorder = true, ShowTitle = false },
+                    Content = new ElementContentOptions { ContentColor = Color.LightGray },
+                    Text = new TextOptions { Text = $"{category}: 0" },
+                });
+
+                _unreadByCategory.Add((category, countWindow, []));
+                _folder.AddChild(countWindow);
+
+                // Summary count windows are created once here and never pooled/reused (unlike
+                // active notification windows), so this subscription lives for the game's
+                // lifetime -- no unsubscribe-on-fire needed, unlike OnActiveNotificationClosed.
+                countWindow.Clicked += _ => OpenNextNotification(category);
+            }
+        }
 
         eventBus.Subscribe<NotificationRequestedEvent>(OnNotificationRequested);
     }
 
     /// <summary>
     /// Notifications update even while the game is paused (see GameLoop) -- true today because
-    /// GameShellContext's own per-tier Update loop over DynamicHudWindows is unconditional,
-    /// the same way it already is for BaseWindows, not because of anything here. This method
+    /// GameShellContext's own per-layer Update loop over UiLayer.DynamicHud is unconditional,
+    /// the same way it already is for UiLayer.Base, not because of anything here. This method
     /// only does the notification-domain part: dispatching buffered NotificationRequestedEvent
     /// events, which must run before GameLoop's pause check reads HasBlockingNotification (a
     /// notification published this same frame needs to be reflected before that check).
@@ -217,7 +224,7 @@ public sealed class NotificationCenter(ElementPoolService elementPoolService, Ev
         notificationWindow.Closed += OnActiveNotificationClosed;
         _activeNotifications.Add((notificationWindow, notification));
         notificationWindow.Initialize();
-        dynamicHudElements.Add(notificationWindow);
+        layers.Add(UiLayer.DynamicHud, notificationWindow);
         ActiveNotificationOpened?.Invoke(notificationWindow);
 
         // Attached after Initialize() (which already attached WindowCloseBehavior, since
@@ -246,19 +253,13 @@ public sealed class NotificationCenter(ElementPoolService elementPoolService, Ev
 
     private void OnActiveNotificationClosed(Element closedWindow)
     {
-        // Pooled windows get reused for unrelated future notifications, so this handler must
-        // detach itself -- otherwise it stays subscribed and keeps firing (against a stale
-        // _activeNotifications lookup that will no longer find a match) every time the same
-        // underlying Window instance is closed again for a later notification.
-        closedWindow.Closed -= OnActiveNotificationClosed;
-
         var index = _activeNotifications.FindIndex(entry => entry.ActiveWindow == closedWindow);
         if (index >= 0)
         {
             _activeNotifications.RemoveAt(index);
         }
 
-        dynamicHudElements.Remove(closedWindow);
+        layers.Remove(UiLayer.DynamicHud, closedWindow);
 
         // Closing the last unread notification auto-tidies the HUD back down -- SetWindowDisplayMode
         // no-ops if the Folder is already Minimized, so this is safe to call unconditionally.

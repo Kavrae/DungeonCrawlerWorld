@@ -49,10 +49,10 @@ public sealed class InventoryFolderController(
 
     private static readonly Vector2 WindowPosition = new(300, 150);
 
-    /// <summary>Fixed width cap for the Ability Score hover popup; height auto-grows with content -- see HoverPopupWindow.</summary>
+    /// <summary>Fixed width cap for the Ability Score hover popup; height auto-grows with content -- see Tooltip.</summary>
     private static readonly Vector2 AbilityScoreHoverPopupMaximumSize = new(220, 10000f);
 
-    /// <summary>Fixed width cap for the Inventory item hover popup; height auto-grows with content -- see HoverPopupWindow.</summary>
+    /// <summary>Fixed width cap for the Inventory item hover popup; height auto-grows with content -- see Tooltip.</summary>
     private static readonly Vector2 InventoryHoverPopupMaximumSize = new(220, 10000f);
 
     /// <summary>Height 30% taller than the original 350 (455) -- more room for the grid now that cells are smaller (see InventoryGridContent.CellSize). Width is no longer fixed -- see WindowWidthFraction.</summary>
@@ -69,42 +69,39 @@ public sealed class InventoryFolderController(
     private Folder _folder = null!;
     private WindowSlot<InventoryManagementWindow> _inventorySlot = null!;
     private WindowSlot<AbilityScoreWindow> _abilityScoreSlot = null!;
-    private List<Element> _dynamicHudElements = null!;
-    private HoverPopupWindow _abilityScoreHoverPopup = null!;
-    private HoverPopupWindow _inventoryHoverPopup = null!;
+    private Tooltip _abilityScoreHoverPopup = null!;
+    private Tooltip _inventoryHoverPopup = null!;
 
     public bool IsAnyWindowOpen => _inventorySlot.Window is not null || _abilityScoreSlot.Window is not null;
 
-    public void Initialize(List<Element> dynamicHudElements)
+    public void Initialize(UiLayerStack layers)
     {
-        _dynamicHudElements = dynamicHudElements;
-        _inventorySlot = new WindowSlot<InventoryManagementWindow>(CreateInventoryWindow, IsInventoryDisabled, dynamicHudElements, MinimizeFolderIfNothingOpen);
-        _abilityScoreSlot = new WindowSlot<AbilityScoreWindow>(CreateAbilityScoreWindow, IsInventoryDisabled, dynamicHudElements, MinimizeFolderIfNothingOpen);
+        _inventorySlot = new WindowSlot<InventoryManagementWindow>(CreateInventoryWindow, IsInventoryDisabled, layers, MinimizeFolderIfNothingOpen);
+        _abilityScoreSlot = new WindowSlot<AbilityScoreWindow>(CreateAbilityScoreWindow, IsInventoryDisabled, layers, MinimizeFolderIfNothingOpen);
 
         // Created once and shared across every open/close of the Ability Score window -- same
-        // "persistent, toggled via IsVisible" lifecycle as HotbarController's own
-        // ArmedHotkeySummaryWindow. Top-level (parent null, see HoverPopupWindow's own doc
-        // comment) -- its own ShowNear call re-raises it to the end of dynamicHudElements each
-        // time it's shown, so it always draws above AbilityScoreWindow regardless of which was
-        // added to this list first.
-        _abilityScoreHoverPopup = elementPoolService.CreateElement<HoverPopupWindow>(null, new ElementOptions
+        // "persistent, toggled via IsVisible" lifecycle as HotbarController's own Armed Hotkey
+        // Summary popup. Top-level (parent null, see Tooltip's own doc comment) -- added to
+        // UiLayer.Tooltip, which sits structurally above UiLayer.DynamicHud (where AbilityScoreWindow
+        // itself lives), so it always draws above it with no re-raising needed.
+        _abilityScoreHoverPopup = elementPoolService.CreateElement<Tooltip>(null, new ElementOptions
         {
             Layout = new ElementLayoutOptions { RelativePosition = Vector2.Zero, MaximumSize = AbilityScoreHoverPopupMaximumSize, DisplayMode = ElementDisplayMode.WrapContent, IsVisible = false },
             Chrome = new ElementChromeOptions { ShowBorder = true, ShowTitle = true, CanUserFocus = false, CanUserClose = false },
         });
         _abilityScoreHoverPopup.Initialize();
-        dynamicHudElements.Add(_abilityScoreHoverPopup);
+        layers.Add(UiLayer.Tooltip, _abilityScoreHoverPopup);
 
         // A separate instance from _abilityScoreHoverPopup -- both windows self-poll the mouse
         // independently every frame, and sharing one popup would let whichever window updates
         // second stomp the other's ShowNear/Hide call when both windows are open side by side.
-        _inventoryHoverPopup = elementPoolService.CreateElement<HoverPopupWindow>(null, new ElementOptions
+        _inventoryHoverPopup = elementPoolService.CreateElement<Tooltip>(null, new ElementOptions
         {
             Layout = new ElementLayoutOptions { RelativePosition = Vector2.Zero, MaximumSize = InventoryHoverPopupMaximumSize, DisplayMode = ElementDisplayMode.WrapContent, IsVisible = false },
             Chrome = new ElementChromeOptions { ShowBorder = true, ShowTitle = true, CanUserFocus = false, CanUserClose = false },
         });
         _inventoryHoverPopup.Initialize();
-        dynamicHudElements.Add(_inventoryHoverPopup);
+        layers.Add(UiLayer.Tooltip, _inventoryHoverPopup);
 
         _folder = elementPoolService.CreateElement<Folder>(null, new ElementOptions
         {
@@ -113,11 +110,20 @@ public sealed class InventoryFolderController(
             Folder = new FolderOptions { FallbackGlyph = "I", SpriteName = "Inventory" },
         });
 
-        CreateTile("Inventory", _inventorySlot.Toggle);
-        CreateTile("Stats", _abilityScoreSlot.Toggle);
-
+        // Initialized before either tile is added -- Element.Initialize/Measure/Arrange now
+        // tolerate a child being added at any point relative to its parent's own Initialize and
+        // DisplayMode (see Element.Measure's and Element.Initialize's own Minimized guards), so
+        // there's no ordering constraint here anymore; this order was chosen to match the rest
+        // of the codebase's convention of a control's own Initialize running before its children
+        // are attached (see Window.OnChildrenInitialized/GridControl/AbilityScoreWindow).
         _folder.Initialize();
-        dynamicHudElements.Add(_folder);
+        layers.Add(UiLayer.DynamicHud, _folder);
+
+        using (_folder.BeginLayoutBatch())
+        {
+            CreateTile("Inventory", _inventorySlot.Toggle);
+            CreateTile("Stats", _abilityScoreSlot.Toggle);
+        }
 
         _folder.DisplayModeChanged += OnFolderDisplayModeChanged;
     }
@@ -232,12 +238,11 @@ public sealed class InventoryFolderController(
     /// Generic "one pooled window this controller can open/close/toggle" slot -- shared shape
     /// behind InventoryManagementWindow and AbilityScoreWindow, which otherwise differ only in
     /// their own ElementOptions (createAndConfigure) and disabled predicate. Pooled and reused
-    /// for a future open (see ElementPoolService) -- HandleClosed must detach itself, or it stays
-    /// subscribed and keeps firing (against a stale Window reference) every time the same
-    /// recycled instance is closed again for a later open. Same reasoning as
-    /// NotificationCenter.OnActiveNotificationClosed.
+    /// for a future open (see ElementPoolService) -- ElementPoolService.CloseElement clears
+    /// every event on a pooled Element (Closed included) before it goes back into its pool, so
+    /// HandleClosed's own subscription can't outlive the reuse cycle without detaching itself.
     /// </summary>
-    private sealed class WindowSlot<TWindow>(Func<TWindow> createAndConfigure, Func<bool> isDisabled, List<Element> dynamicHudElements, Action onClosed)
+    private sealed class WindowSlot<TWindow>(Func<TWindow> createAndConfigure, Func<bool> isDisabled, UiLayerStack layers, Action onClosed)
         where TWindow : Element
     {
         public TWindow? Window { get; private set; }
@@ -252,7 +257,7 @@ public sealed class InventoryFolderController(
             var window = createAndConfigure();
             window.Closed += HandleClosed;
             window.Initialize();
-            dynamicHudElements.Add(window);
+            layers.Add(UiLayer.DynamicHud, window);
             Window = window;
         }
 
@@ -272,8 +277,7 @@ public sealed class InventoryFolderController(
 
         private void HandleClosed(Element closedWindow)
         {
-            closedWindow.Closed -= HandleClosed;
-            dynamicHudElements.Remove(closedWindow);
+            layers.Remove(UiLayer.DynamicHud, closedWindow);
             Window = null;
             onClosed();
         }

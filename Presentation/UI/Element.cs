@@ -321,7 +321,17 @@ public class Element
 
     public virtual void Initialize()
     {
-        MeasureAndArrange();
+        // Skipped when the parent is currently Minimized (collapsed, deliberately zero content
+        // area, see RecalculateMinimizedSize) -- there is nothing real to measure against yet.
+        // This element just keeps its Build-time CurrentSize/RelativePosition until the parent's
+        // own next real (non-Minimized) Measure/Arrange pass reaches it -- see Measure's own
+        // matching Minimized guard, which is what actually performs that later remeasure once
+        // the parent expands. Root elements (no parent) are unaffected -- MeasureAndArrange's
+        // own root branch never depends on a parent's state.
+        if (_parent is null || _parent.DisplayMode != ElementDisplayMode.Minimized)
+        {
+            MeasureAndArrange();
+        }
 
         RecalculateCameraTransform(); // TODO zoom/rotation, if ever needed -- see RecalculateCameraTransform.
 
@@ -416,6 +426,30 @@ public class Element
 
         foreach (var childElement in _children)
         {
+            // Gated here, at the caller, rather than inside Update() itself -- several
+            // subclasses (Window, AbilityScoreWindow, MapWindow) call base.Update() and then do
+            // their own additional work afterward, which an early-return guard at the top of
+            // this base method couldn't prevent. Skipping the call entirely, before it's ever
+            // made, is airtight regardless of what an override's own Update body does.
+            //
+            // Root elements are deliberately NOT covered by this -- see
+            // GameShellContext.UpdateWindowLayer, which still calls Update on every root window
+            // regardless of IsVisible. This codebase's persistent Tooltip popups (AbilityScoreWindow's,
+            // InventoryFolderController's, HotbarController's Armed Hotkey Summary) are toggled
+            // via IsVisible while remaining in UiLayer.Tooltip's root list, but are driven
+            // entirely externally now (whatever owns the hover state calls ShowNear/Hide
+            // directly) -- their own Update is a harmless no-op regardless of visibility, not a
+            // reason root elements need to keep ticking while hidden. The exclusion is kept
+            // anyway as the conservative default: a genuine parent/child relationship (this loop)
+            // never has a self-polling shape (a hidden child is driven by whatever explicitly
+            // toggled it), so excluding it from Update is safe there specifically; a root
+            // element's own Update contract isn't guaranteed the same way, so this doesn't assume
+            // every current or future root element is equally safe to skip.
+            if (!childElement.IsVisible)
+            {
+                continue;
+            }
+
             childElement.Update(gameTime);
         }
     }
@@ -600,11 +634,16 @@ public class Element
     protected virtual void OnTextInputAction(char character) { }
 
     /// <summary>
-    /// Finds the next focusable TextBox among this window's direct children, starting right
-    /// after `after` and wrapping around (after: null means "the first one"). Shared by
-    /// TextBox's own Enter-to-advance and UiInputController.SetFocus's auto-redirect into a
-    /// container's first TextBox -- both are "find the next TextBox sibling," the second just
-    /// with after: null.
+    /// Finds the next focusable (CanUserFocus) element among this window's direct children,
+    /// starting right after `after` and wrapping around (after: null means "the first one").
+    /// Shared by TextBox's own Enter-to-advance and UiInputController.SetFocus's auto-redirect
+    /// into a container's first focusable child -- both are "find the next focusable sibling,"
+    /// the second just with after: null. Generic over CanUserFocus rather than hardcoded to
+    /// TextBox specifically -- TextBox is the only focusable leaf type that exists today, but
+    /// CanUserFocus is already how every current call site opts a non-focusable child out (every
+    /// GridControl/TabbedContent/AbilityScoreWindow tile, button, and non-editable window
+    /// explicitly sets CanUserFocus = false), so any future focusable widget (e.g. a dropdown or
+    /// list selector) is picked up automatically without this method needing to know its type.
     /// </summary>
     internal Element? NextFocusableDescendant(Element? after)
     {
@@ -612,8 +651,8 @@ public class Element
         // never matches the candidate == after break check below, since _childElements never
         // contains a null entry -- the scan just runs to completion in order, i.e. "the first
         // one." after: some child starts right after it and wraps around, stopping once the
-        // scan loops all the way back to after itself (a lone TextBox must not "advance" to
-        // itself) rather than re-checking it as index Count.
+        // scan loops all the way back to after itself (a lone focusable child must not "advance"
+        // to itself) rather than re-checking it as index Count.
         var startOffset = after is null
             ? 0
             : _children.IndexOf(after) + 1;
@@ -625,7 +664,7 @@ public class Element
             {
                 break;
             }
-            if (candidate is TextBox { CanUserFocus: true })
+            if (candidate.IsVisible && candidate.CanUserFocus)
             {
                 return candidate;
             }
@@ -736,7 +775,11 @@ public class Element
 
     internal ElementInteraction TryHitTestInteraction(Point position)
     {
-        if (!_geometry.Rectangle.Contains(position))
+        // An invisible element (and, since this recurses, its whole subtree) is never a valid
+        // interaction target -- matching WPF's Visibility.Hidden/Collapsed, both of which stop
+        // hit-testing, unlike this codebase's previous behavior where hiding something only
+        // stopped it from being drawn, not from being clicked/dragged/dropped onto.
+        if (!_isVisible || !_geometry.Rectangle.Contains(position))
         {
             return ElementInteraction.NotHit;
         }
@@ -804,29 +847,39 @@ public class Element
         Clicked?.Invoke(this);
     }
 
+    /// <summary>
+    /// Routes a content click to the topmost child whose Rectangle contains it, then stops --
+    /// the same topmost-first, single-target philosophy TryHitTestInteraction already uses for
+    /// drags, now applied to plain clicks too (and, like TryHitTestInteraction, skipping
+    /// invisible children). Previously looped every overlapping child in list (not z-) order
+    /// with no way to stop -- harmless for the common non-overlapping-sibling case, but wrong
+    /// the moment two children's Rectangles genuinely overlapped a point (e.g. Floating mode),
+    /// which fired HandleClick on every one of them instead of just the topmost one the user
+    /// actually sees and clicked -- the same "who owns this point" bug TryHitTestInteraction was
+    /// already written to avoid for drags.
+    /// </summary>
     protected virtual void OnContentClickAction(Point mousePosition)
     {
-        foreach (var childElement in _children)
+        for (var index = _children.Count - 1; index >= 0; index--)
         {
-            if (childElement.Rectangle.Contains(mousePosition))
+            var childElement = _children[index];
+            if (childElement.IsVisible && childElement.Rectangle.Contains(mousePosition))
             {
                 childElement.HandleClick(mousePosition);
+                return;
             }
         }
     }
 
     /// <summary>
-    /// Attaches newChild to this element and initializes it (via RetileChildrenFrom, at the
-    /// bottom of this method) -- callers must NOT also call newChild.Initialize() themselves
-    /// afterward. Confirmed bug, found via a live-testing stack trace rather than code review:
-    /// several call sites (TabbedContent/InventoryTabContent/GridControl building their own child
-    /// windows) called AddChild followed by an explicit Initialize(), running it twice on the
-    /// same instance -- harmless for most elements (idempotent geometry recompute), but
-    /// catastrophic for a Window subclass whose own Initialize() itself calls AddChild for its
-    /// own children (GridControl): the second pass created a second, orphaned set of count/sort/
-    /// toggle/search-box elements alongside the first, invisible where the two happened to
-    /// overlap exactly (left-aligned tiles) but visibly duplicated wherever they didn't (the
-    /// search box, right-aligned against a value that could differ by the second pass).
+    /// Attaches newChild to this element and initializes it -- callers must NOT also call
+    /// newChild.Initialize() themselves afterward (confirmed bug, found via a live-testing stack
+    /// trace: several call sites called AddChild followed by an explicit Initialize(), running it
+    /// twice on the same instance -- catastrophic for a Window subclass whose own Initialize()
+    /// itself calls AddChild for its own children, since the second pass created a second,
+    /// orphaned set of them). Positioning is handled separately, by Arrange (see RetileChildren)
+    /// rather than here, so it's correct regardless of when in this element's lifecycle newChild
+    /// was added -- see RetileChildren's own doc comment for why that split matters.
     /// </summary>
     public void AddChild(Element newChild, int? insertIndex = null)
     {
@@ -842,21 +895,24 @@ public class Element
 
         _children.Insert(clampedInsertIndex, newChild);
 
-        // Retiles from the insertion point onward, not just newChildWindow itself -- inserting
-        // anywhere but the end shifts every sibling after it one slot down the tiling axis too.
-        // initializeChildren: true -- newChild (and, in the every-call-site-appends-at-the-end
-        // case this codebase always uses, only newChild) needs its first Initialize() here; see
-        // RetileChildrenFrom's own doc comment for why RemoveChild passes false instead.
-        RetileChildrenFrom(clampedInsertIndex, initializeChildren: true);
+        newChild.Initialize();
+
+        // Repositions every Horizontal/Vertical-tiled child (not just newChild) from their
+        // current, now-final CurrentSize -- see RetileChildren's own doc comment. Cheap: no
+        // remeasuring, just the same position-chaining arithmetic Arrange already does on every
+        // layout pass.
+        Arrange();
 
         // A WrapContent parent's own size depends on its children's -- re-fit around the
         // newly added child. Gated to WrapContent only: for Fixed/Fill/Minimized parents the
-        // loop above already fully re-measures+re-arranges every affected child, and the
-        // parent's own size never depends on children in those modes, so an unconditional
-        // call here would just re-walk the entire existing sibling list for no effect.
+        // Arrange call above already repositions every affected child, and the parent's own
+        // size never depends on children in those modes, so an unconditional call here would
+        // just re-walk the entire existing sibling list for no effect. Deferred to the end of
+        // the batch (see BeginLayoutBatch) if one is open, rather than re-fitting after every
+        // single AddChild in a loop that's about to add several more.
         if (_geometry.DisplayMode == ElementDisplayMode.WrapContent)
         {
-            MeasureAndArrange();
+            RefitWrapContentSizeNowOrDeferToLayoutBatch();
         }
 
         // A scrollable parent's own MaxScrollOffset depends on its children's total extent the
@@ -871,7 +927,7 @@ public class Element
         }
     }
 
-    /// <summary>Removes the child, then retiles everything after it so later siblings close the gap instead of keeping the removed window's slot as dead space.</summary>
+    /// <summary>Removes the child, then retiles the remaining ones so later siblings close the gap instead of keeping the removed window's slot as dead space.</summary>
     public void RemoveChild(Guid elementId)
     {
         var childElementIndex = _children.FindIndex(childElement => childElement.ElementId == elementId);
@@ -883,24 +939,86 @@ public class Element
         var removedChild = _children[childElementIndex];
         _children.RemoveAt(childElementIndex);
 
-        // initializeChildren: false -- every remaining sibling from childElementIndex onward is
-        // already live and fully initialized; only its position (Horizontal/Vertical modes) may
-        // need recomputing to close the gap. See RetileChildrenFrom's own doc comment for the
-        // bug this avoids re-triggering (a closed sibling's removal spuriously re-initializing,
-        // and thereby duplicating the content of, every later sibling still attached).
-        RetileChildrenFrom(childElementIndex, initializeChildren: false);
+        // Repositions every remaining Horizontal/Vertical-tiled child to close the gap -- see
+        // RetileChildren's own doc comment. Never touches Initialize -- every remaining sibling
+        // here is already live; only its position may need recomputing.
+        Arrange();
 
-        // See the matching comment in AddChildWindow -- a WrapContent parent needs to shrink
-        // to fit around the removed child; other modes don't depend on children for sizing.
+        // See the matching comment in AddChild -- a WrapContent parent needs to shrink to fit
+        // around the removed child; other modes don't depend on children for sizing.
         if (_geometry.DisplayMode == ElementDisplayMode.WrapContent)
         {
-            MeasureAndArrange();
+            RefitWrapContentSizeNowOrDeferToLayoutBatch();
         }
 
         if (CanUserScrollVertical || CanUserScrollHorizontal)
         {
             removedChild.Resized -= OnChildElementResizedForScrollBounds;
             RecalculateScrollBoundsFromChildren();
+        }
+    }
+
+    /// <summary>Depth of nested BeginLayoutBatch scopes currently open on this element -- 0 means none.</summary>
+    private int _layoutBatchDepth;
+
+    /// <summary>Set by AddChild/RemoveChild when a WrapContent re-fit was suppressed because a layout batch was open -- tells the outermost scope's Dispose to actually perform the deferred MeasureAndArrange once, rather than unconditionally running one even when nothing was actually added/removed inside the batch.</summary>
+    private bool _layoutBatchNeedsMeasureAndArrange;
+
+    private void RefitWrapContentSizeNowOrDeferToLayoutBatch()
+    {
+        if (_layoutBatchDepth > 0)
+        {
+            _layoutBatchNeedsMeasureAndArrange = true;
+        }
+        else
+        {
+            MeasureAndArrange();
+        }
+    }
+
+    /// <summary>
+    /// Suppresses the per-AddChild/RemoveChild WrapContent re-fit while multiple children are
+    /// added or removed in a loop, coalescing what would otherwise be one full subtree Measure/
+    /// Arrange pass per call into a single pass when the returned scope is disposed -- the same
+    /// problem SetBounds already solves for the narrower SetSize+SetRelativePosition case,
+    /// generalized to any number of AddChild/RemoveChild calls (e.g. NotificationCenter building
+    /// one count window per category, InventoryFolderController building its tiles). Reentrant:
+    /// nested batches on the same element collapse into the outermost one, so a helper method
+    /// that opens its own batch still composes correctly when called from within a caller's
+    /// batch. Opt-in rather than automatic -- every AddChild/RemoveChild call outside a batch
+    /// behaves exactly as before, so nothing that currently reads geometry synchronously right
+    /// after a mutation is affected unless it explicitly opts into batching.
+    ///
+    /// Does not defer the position-only Arrange in AddChild/RemoveChild (see RetileChildren) --
+    /// that's cheap (no remeasuring) and keeping it immediate means a child's own position is
+    /// always correct immediately after AddChild returns, batch or not; only the WrapContent
+    /// size refit (the actually expensive full remeasure) is deferred.
+    /// </summary>
+    public IDisposable BeginLayoutBatch()
+    {
+        _layoutBatchDepth++;
+        return new LayoutBatchScope(this);
+    }
+
+    private sealed class LayoutBatchScope(Element element) : IDisposable
+    {
+        private bool _disposed;
+
+        public void Dispose()
+        {
+            if (_disposed)
+            {
+                return;
+            }
+
+            _disposed = true;
+            element._layoutBatchDepth--;
+
+            if (element._layoutBatchDepth == 0 && element._layoutBatchNeedsMeasureAndArrange)
+            {
+                element._layoutBatchNeedsMeasureAndArrange = false;
+                element.MeasureAndArrange();
+            }
         }
     }
 
@@ -919,73 +1037,16 @@ public class Element
 
         foreach (var childElement in _children)
         {
+            if (!childElement.IsVisible)
+            {
+                continue;
+            }
+
             maxRight = System.Math.Max(maxRight, childElement.RelativePosition.X + childElement.CurrentSize.X);
             maxBottom = System.Math.Max(maxBottom, childElement.RelativePosition.Y + childElement.CurrentSize.Y);
         }
 
         SetMaxScrollOffset(new Vector2(maxRight - _contentState.Size.X, maxBottom - _contentState.Size.Y));
-    }
-
-    /// <summary>
-    /// Recomputes RelativePosition for every child from startIndex onward against
-    /// _childWindowTileMode -- Horizontal/Vertical chain each child off the previous sibling's
-    /// current position+size, Floating leaves position alone entirely (the creator owns it).
-    /// Shared by AddChildWindow (inserting anywhere but the end shifts every later sibling down
-    /// the tiling axis) and RemoveChildWindow (closing the gap the removed window leaves behind)
-    /// rather than each hand-rolling the same chain.
-    ///
-    /// initializeChildren controls whether each visited child also gets Initialize() called --
-    /// true only for AddChild's own newly-inserted child, which genuinely needs its first
-    /// Initialize(); RemoveChild passes false, since every remaining sibling here is already
-    /// live and fully initialized, merely being repositioned to close the gap. Confirmed bug,
-    /// found via a live-testing stack trace: this used to call Initialize() unconditionally on
-    /// every visited child regardless of caller, so closing one child of a multi-child Floating-
-    /// mode parent (e.g. the Inventory window's root: tab header strip, tab search box, tab body)
-    /// re-ran Initialize() on every LATER sibling still in _children -- for a Window whose
-    /// IElementContent was already set (OnChildrenInitialized calls _content?.Initialize(this)
-    /// again), this re-triggered a full rebuild of that content's own children on top of the
-    /// ones already there, never clearing the old set first. Closing the Inventory window (whose
-    /// root has 3 Floating children) spuriously re-initialized its own tab body up to twice more
-    /// per close, tripling its GridControl/cell count instead of leaving it untouched -- and
-    /// left the close operation itself doing dramatically more work (and creating far more
-    /// pooled elements to track) than intended, compounding into the reported multi-second closes.
-    /// </summary>
-    private void RetileChildrenFrom(int startIndex, bool initializeChildren)
-    {
-        for (var index = startIndex; index < _children.Count; index++)
-        {
-            var childElement = _children[index];
-
-            if (_childrenTileMode == ChildElementTileMode.Floating)
-            {
-                // Let the window's creator determine its relative position and draw order.
-            }
-            else if (index == 0)
-            {
-                childElement._geometry.RelativePosition = new Vector2(0, 0);
-            }
-            else
-            {
-                var previousChildElement = _children[index - 1];
-                if (_childrenTileMode == ChildElementTileMode.Horizontal)
-                {
-                    childElement._geometry.RelativePosition = new Vector2(
-                        previousChildElement._geometry.RelativePosition.X + previousChildElement._geometry.CurrentSize.X,
-                        previousChildElement._geometry.RelativePosition.Y);
-                }
-                else if (_childrenTileMode == ChildElementTileMode.Vertical)
-                {
-                    childElement._geometry.RelativePosition = new Vector2(
-                        previousChildElement._geometry.RelativePosition.X,
-                        previousChildElement._geometry.RelativePosition.Y + previousChildElement._geometry.CurrentSize.Y);
-                }
-            }
-
-            if (initializeChildren)
-            {
-                childElement.Initialize();
-            }
-        }
     }
 
     /// <summary>
@@ -1056,13 +1117,24 @@ public class Element
             MeasureChildren(availableSize);
             RecalculateWrapContentSize();
         }
+        else if (_geometry.DisplayMode == ElementDisplayMode.Minimized)
+        {
+            // No MeasureChildren here -- a collapsed element has no real content area to
+            // measure children against (RecalculateMinimizedSize deliberately zeroes
+            // ContentSize), and re-measuring them against that zero region would clamp a
+            // Fixed-mode child down to nothing, permanently corrupting it and, via
+            // RetileChildren's position chaining, every later Vertical/Horizontal sibling too
+            // (confirmed by a live regression when this guard was missing). Children simply
+            // keep whatever size/position they already had -- Element.Initialize's own matching
+            // guard means a child added while its parent is Minimized never had a real
+            // measurement in the first place, so it just keeps its Build-time OriginalSize until
+            // this element's next real (non-Minimized) Measure/Arrange pass reaches it.
+            RecalculateMinimizedSize();
+        }
         else
         {
             switch (_geometry.DisplayMode)
             {
-                case ElementDisplayMode.Minimized:
-                    RecalculateMinimizedSize();
-                    break;
                 case ElementDisplayMode.Fixed:
                     RecalculateFixedSize();
                     break;
@@ -1086,6 +1158,16 @@ public class Element
     {
         foreach (var childElement in _children)
         {
+            // An invisible child is excluded from measurement entirely -- the same
+            // Visibility.Collapsed/View.GONE treatment RecalculateWrapContentSize and
+            // RetileChildren give it, not just skipped when sizing this element around its
+            // children. Becoming visible again re-triggers a full MeasureAndArrange via
+            // SetIsVisible, so nothing is permanently stale once it reappears.
+            if (!childElement.IsVisible)
+            {
+                continue;
+            }
+
             childElement.Measure(availableContentSize - childElement.RelativePosition);
         }
     }
@@ -1101,9 +1183,72 @@ public class Element
         RecalculateRectangles();
         RecalculateHeaderExtras();
 
+        RetileChildren();
+
         foreach (var childElement in _children)
         {
+            if (!childElement.IsVisible)
+            {
+                continue;
+            }
+
             childElement.Arrange();
+        }
+    }
+
+    /// <summary>
+    /// Recomputes RelativePosition for every child from ChildElementTileMode, purely from each
+    /// child's current CurrentSize -- Horizontal/Vertical chain each child off the previous
+    /// sibling's already-Measured position+size; Floating leaves position alone entirely (the
+    /// creator owns it). Run on every Arrange pass rather than only when a child is added or
+    /// removed -- the same way a real layout engine's stack/linear panel (WPF's StackPanel,
+    /// Android's LinearLayout) recomputes every child's offset on every layout pass instead of
+    /// baking positions in once at insertion time.
+    ///
+    /// This replaces the old RetileChildrenFrom, which ran only from AddChild/RemoveChild and
+    /// only from the mutated index onward -- baking each child's position in once, from whatever
+    /// CurrentSize its siblings happened to have at that exact moment. That broke the moment a
+    /// child was added to a Vertical/Horizontal-tiled parent (e.g. Folder) while the parent was
+    /// Minimized: Measure's own Minimized guard leaves a not-yet-measured child at its Build-time
+    /// OriginalSize, but nothing ever re-chained positions once the parent later expanded and
+    /// remeasured children for real -- every sibling positioned during that degenerate window
+    /// stayed corrupted forever. Recomputing fully, every Arrange pass, from whatever CurrentSize
+    /// each child currently holds (always correct by the time Arrange runs, since Measure always
+    /// precedes Arrange in MeasureAndArrange) makes this immune to when in an element's lifecycle
+    /// a child was added -- before this element's own first Initialize, after it while collapsed,
+    /// or after it while expanded all converge on the same correct layout.
+    /// </summary>
+    private void RetileChildren()
+    {
+        if (_childrenTileMode == ChildElementTileMode.Floating)
+        {
+            return;
+        }
+
+        // An invisible child neither occupies tiling space nor advances the layout cursor for
+        // later siblings -- the same "collapsed elements are skipped by layout" semantics WPF's
+        // Visibility.Collapsed and Android's View.GONE use, chained off the last VISIBLE sibling
+        // instead of strictly the previous index.
+        Element? previousVisibleChild = null;
+
+        foreach (var childElement in _children)
+        {
+            if (!childElement.IsVisible)
+            {
+                continue;
+            }
+
+            childElement._geometry.RelativePosition = previousVisibleChild is null
+                ? new Vector2(0, 0)
+                : _childrenTileMode == ChildElementTileMode.Horizontal
+                    ? new Vector2(
+                        previousVisibleChild._geometry.RelativePosition.X + previousVisibleChild._geometry.CurrentSize.X,
+                        previousVisibleChild._geometry.RelativePosition.Y)
+                    : new Vector2(
+                        previousVisibleChild._geometry.RelativePosition.X,
+                        previousVisibleChild._geometry.RelativePosition.Y + previousVisibleChild._geometry.CurrentSize.Y);
+
+            previousVisibleChild = childElement;
         }
     }
 
@@ -1197,6 +1342,11 @@ public class Element
             var maxBottom = 0f;
             foreach (var child in _children)
             {
+                if (!child.IsVisible)
+                {
+                    continue;
+                }
+
                 maxRight = System.Math.Max(maxRight, child.RelativePosition.X + child.CurrentSize.X);
                 maxBottom = System.Math.Max(maxBottom, child.RelativePosition.Y + child.CurrentSize.Y);
             }

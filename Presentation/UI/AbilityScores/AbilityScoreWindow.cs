@@ -59,13 +59,13 @@ public sealed class AbilityScoreWindow(FontService fontService, ElementPoolServi
     private readonly VersionWatcher _statModifierVersionWatcher = new();
 
     private int _entityId;
-    private HoverPopupWindow _hoverPopup = null!;
+    private Tooltip _hoverPopup = null!;
 
     private Element? _hoveredCandidate;
     private int _hoveredFrames;
 
-    /// <summary>Just records entityId/the shared popup -- must be called after CreateElement but before Initialize, same contract as InventoryManagementWindow.Configure. Column-building itself waits for Initialize (see its own doc comment for why). hoverPopup is owned by InventoryFolderController (created once, top-level, shared across opens) rather than a child of this window -- see HoverPopupWindow's own doc comment for why a nested child can't work here.</summary>
-    public void Configure(int entityId, HoverPopupWindow hoverPopup)
+    /// <summary>Just records entityId/the shared popup -- must be called after CreateElement but before Initialize, same contract as InventoryManagementWindow.Configure. Column-building itself waits for Initialize (see its own doc comment for why). hoverPopup is owned by InventoryFolderController (created once, top-level, shared across opens) rather than a child of this window -- see Tooltip's own doc comment for why a nested child can't work here.</summary>
+    public void Configure(int entityId, Tooltip hoverPopup)
     {
         _entityId = entityId;
         _hoverPopup = hoverPopup;
@@ -76,14 +76,23 @@ public sealed class AbilityScoreWindow(FontService fontService, ElementPoolServi
     /// aren't real yet at Configure time -- Element.Build only sets raw geometry fields (Layout's
     /// requested Size/RelativePosition), and MeasureAndArrange (which resolves the actual
     /// content-area size/position this window's Fixed DisplayMode settles into, net of border/
-    /// header insets) doesn't run until base.Initialize() below. Building columns any earlier
-    /// reads a stale/zeroed ContentSize -- exactly the bug this fixes (columns clustered at the
-    /// window's stale/default position, sized from a leftover width instead of the real one).
-    /// Same reasoning TabbedContent.Initialize follows for its own body window's ContentSize.
+    /// header insets) doesn't run until Element.Initialize, before OnChildrenInitialized below.
+    /// Building columns any earlier reads a stale/zeroed ContentSize -- exactly the bug this
+    /// fixes (columns clustered at the window's stale/default position, sized from a leftover
+    /// width instead of the real one). Same reasoning TabbedContent.Initialize follows for its
+    /// own body window's ContentSize.
+    ///
+    /// OnChildrenInitialized, not an Initialize override calling base first -- the same hook
+    /// Window itself uses to mount IElementContent (see Window.OnChildrenInitialized), and the
+    /// only point in Element's Initialize sequence that is both after MeasureAndArrange and
+    /// before Opened fires. An Initialize override runs base.Initialize() (which already raises
+    /// this window's own Opened) before it can build anything, so the columns AddChild builds
+    /// below would exist only after Opened had already signaled "fully set up" -- misleading for
+    /// any future Opened subscriber, and inconsistent with GridControl using the same hook now.
     /// </summary>
-    public override void Initialize()
+    protected override void OnChildrenInitialized()
     {
-        base.Initialize();
+        base.OnChildrenInitialized();
 
         BuildColumns();
         RefreshAllColumns();
@@ -111,8 +120,8 @@ public sealed class AbilityScoreWindow(FontService fontService, ElementPoolServi
 
     /// <summary>
     /// Header highlight is immediate (instant visual feedback); the popup itself is delay-gated
-    /// the same way HotbarController.UpdateHover gates ArmedHotkeySummaryWindow, against the same
-    /// shared HudMetrics.HoverTooltipDelayFrames -- but hides immediately on candidate change/
+    /// the same way HotbarController.UpdateHover gates its own Armed Hotkey Summary popup,
+    /// against the same shared HudMetrics.HoverTooltipDelayFrames -- but hides immediately on candidate change/
     /// loss (no delay on hiding, only on showing, same convention MapViewState.HoverSlot uses).
     /// Known, accepted gap: unlike HandleHotbarHover, this doesn't suppress itself during an
     /// active drag of this window's own title bar -- not worth the extra plumbing unless it

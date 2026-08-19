@@ -1,7 +1,7 @@
-using System.Reflection;
 using Engine.Collections;
 using Presentation.Fonts;
 using Presentation.Rendering;
+using System.Reflection;
 
 namespace Presentation.UI;
 
@@ -20,7 +20,8 @@ public sealed class ElementPoolService
     /// protection, and every Window-typed element (tab header strip, tab body, GridControl's own
     /// host window, ...) rents from the SAME shared Stack&lt;Element&gt;. If CloseElement were
     /// ever invoked twice on the same instance within one close cascade, that instance would land
-    /// in the stack twice, and two subsequent CreateElement&lt;Window&gt; calls could then hand
+    /// in the stack twice, and two subsequen
+    /// t CreateElement&lt;Window&gt; calls could then hand
     /// out the identical object to two different logical windows -- the second Build() overwrites
     /// the first's geometry, AddChild collapses onto the same child slot, and SetContent on the
     /// shared instance immediately closes whatever the first one had just added as children.

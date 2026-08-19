@@ -17,14 +17,20 @@ namespace Presentation.UI;
 /// the parent's edge that the remaining space ran out). Being top-level sidesteps that entirely
 /// -- RelativePosition is already the absolute screen position, and MaximumSize behaves as the
 /// stable, position-independent cap it was configured with (see Element.Measure's root branch:
-/// availableSize is read from, then written straight back to, MaximumSize -- a no-op). The
-/// tradeoff is the caller owns raising it above whatever else is on screen -- see
-/// containerElements.
+/// availableSize is read from, then written straight back to, MaximumSize -- a no-op).
+///
+/// Added to UiLayer.Tooltip, not DynamicHud -- Tooltip sits structurally above DynamicHud and
+/// below User (see UiLayer's own doc comment), so this always draws over whatever window it's
+/// describing without needing to reorder itself against that window's own tier. Before the
+/// Tooltip tier existed, every Tooltip-family instance lived in DynamicHud alongside ordinary
+/// floating windows and had to re-append itself to the end of that shared list on every ShowNear
+/// call just to keep winning draw order against them -- that's gone now; the tier itself
+/// guarantees it.
 /// </summary>
-public class HoverPopupWindow(FontService fontService, ElementPoolService elementPoolService, GlyphRenderer glyphRenderer, List<Element>? containerElements = null)
+public sealed class Tooltip(FontService fontService, ElementPoolService elementPoolService, GlyphRenderer glyphRenderer)
     : TextWindow(fontService, elementPoolService, glyphRenderer)
 {
-    /// <summary>Repositions and shows this popup next to target -- a title bar only if title is supplied (toggled dynamically since one shared instance may be used both with and without a title across calls, e.g. AbilityScoreWindow's score-description vs. modifier-source popups). Also re-appends this window to the end of containerElements, if one was supplied at construction, so it draws on top of everything else already in that tier (e.g. AbilityScoreWindow, added to the same DynamicHUD list earlier) -- a no-op for a popup like ArmedHotkeySummaryWindow that doesn't need this (Hotbar's own StaticHUD tier already draws before DynamicHUD). Call every frame the same thing should stay hovered -- cheap no-op churn, same as ArmedHotkeySummaryWindow's own prior per-frame Update.</summary>
+    /// <summary>Repositions and shows this popup next to target -- a title bar only if title is supplied (toggled dynamically since one shared instance may be used both with and without a title across calls, e.g. AbilityScoreWindow's score-description vs. modifier-source popups). Call every frame the same thing should stay hovered -- cheap no-op churn, the same idiom every current caller (AbilityScoreWindow, InventoryGridContent, HotbarController) already uses for its own hover-driven popup.</summary>
     public void ShowNear(Rectangle target, PopupAnchor anchor, Vector2 gap, string body, string? title = null)
     {
         _headerState.ShowHeader = title is not null;
@@ -33,19 +39,21 @@ public class HoverPopupWindow(FontService fontService, ElementPoolService elemen
         UpdateText(body); // Resizes CurrentSize to the new content first -- PopupPositioning below needs the real, post-resize size.
         SetRelativePosition(PopupPositioning.GetPosition(target, CurrentSize, anchor, gap)); // Always top-level, so RelativePosition == absolute screen position.
 
-        if (containerElements is not null)
-        {
-            containerElements.Remove(this);
-            containerElements.Add(this);
-        }
-
         IsVisible = true;
     }
 
     public void Hide() => IsVisible = false;
 
-    /// <summary>True for a popup with a fixed width and only auto-growing height -- ArmedHotkeySummaryWindow's own requirement, since it's pinned to HotbarContent.SummaryWidth. False (the default) lets width shrink to content like a normal WrapContent TextWindow, bounded by MaximumSize.</summary>
-    protected virtual bool UseFixedWidth => false;
+    /// <summary>
+    /// True pins width to MaximumSize.X, only height auto-grows -- HotbarController's Armed
+    /// Hotkey Summary popup sets this, since it's pinned to HotbarContent.SummaryWidth. False
+    /// (the default) lets width shrink to content like a normal WrapContent TextWindow, bounded
+    /// by MaximumSize. A settable property, not a subclass override -- every Tooltip use so far
+    /// (this one included) is a plain instance driven externally by whatever owns its hover
+    /// state (see ShowNear's own doc comment); there's nothing else about the Armed Hotkey
+    /// Summary popup that needs a dedicated type.
+    /// </summary>
+    public bool UseFixedWidth { get; set; }
 
     protected override void RecalculateWrapContentSize()
     {

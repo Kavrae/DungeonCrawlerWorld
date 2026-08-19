@@ -45,6 +45,38 @@ public sealed class UiInputControllerTests
 
     private static ElementPoolService CreateWindowService() => new(new FontService("Fonts"), new GlyphRenderer());
 
+    /// <summary>
+    /// Test-only convenience matching UiInputController's old four-list constructor shape --
+    /// builds a fresh UiLayerStack from the four tier lists (copying each element in, not
+    /// wrapping the lists themselves) since production code now only ever constructs
+    /// UiInputController from a real UiLayerStack (see GameShellBootstrapper). Kept here, not as
+    /// a shim on UiLayerStack/UiInputController themselves, so test convenience shapes this test
+    /// file, not production API surface.
+    /// </summary>
+    private static UiInputController CreateController(
+        IReadOnlyList<Element> baseElements, IReadOnlyList<Element> staticHudElements, IReadOnlyList<Element> dynamicHudElements, IReadOnlyList<Element> userElements,
+        Vector2 screenSize, HotbarController? hotbarController = null)
+    {
+        var layers = new UiLayerStack();
+        foreach (var element in baseElements)
+        {
+            layers.Add(UiLayer.Base, element);
+        }
+        foreach (var element in staticHudElements)
+        {
+            layers.Add(UiLayer.StaticHud, element);
+        }
+        foreach (var element in dynamicHudElements)
+        {
+            layers.Add(UiLayer.DynamicHud, element);
+        }
+        foreach (var element in userElements)
+        {
+            layers.Add(UiLayer.User, element);
+        }
+        return new UiInputController(layers, screenSize, hotbarController);
+    }
+
     /// <summary>Records HandleRightDragStart/HandleRightDrag calls, so UiInputController's right-button wiring (hit-test on press, total-delta-since-start on every held frame) can be verified end-to-end without a real MapWindow.</summary>
     private sealed class RightDragSpyWindow(FontService fontService, ElementPoolService windowService, GlyphRenderer glyphRenderer) : Window(fontService, windowService, glyphRenderer)
     {
@@ -174,7 +206,7 @@ public sealed class UiInputControllerTests
         var windowService = CreateWindowService();
         var window = CreateRootWindowWithCloseButton(windowService, new Vector2(0, 0));
         var closeButton = window.TitleButtons[0];
-        var controller = new UiInputController([window], [], [], [], LargeScreenSize);
+        var controller = CreateController([window], [], [], [], LargeScreenSize);
 
         var pressPoint = closeButton.Rectangle.Center;
         controller.Update(NoKeys, MouseAt(pressPoint.X, pressPoint.Y, ButtonState.Released));
@@ -189,7 +221,7 @@ public sealed class UiInputControllerTests
         var windowService = CreateWindowService();
         var window = CreateRootWindowWithCloseButton(windowService, new Vector2(0, 0));
         var closeButton = window.TitleButtons[0];
-        var controller = new UiInputController([window], [], [], [], LargeScreenSize);
+        var controller = CreateController([window], [], [], [], LargeScreenSize);
 
         var pressPoint = closeButton.Rectangle.Center;
         controller.Update(NoKeys, MouseAt(pressPoint.X, pressPoint.Y, ButtonState.Released));
@@ -208,7 +240,7 @@ public sealed class UiInputControllerTests
         var windowService = CreateWindowService();
         var window = CreateRootWindowWithCloseButton(windowService, new Vector2(0, 0));
         var closeButton = window.TitleButtons[0];
-        var controller = new UiInputController([window], [], [], [], LargeScreenSize);
+        var controller = CreateController([window], [], [], [], LargeScreenSize);
 
         var pressPoint = closeButton.Rectangle.Center;
         controller.Update(NoKeys, MouseAt(pressPoint.X, pressPoint.Y, ButtonState.Released));
@@ -223,7 +255,7 @@ public sealed class UiInputControllerTests
         var windowService = CreateWindowService();
         var window = CreateRootWindowWithCloseButton(windowService, new Vector2(0, 0));
         var closeButton = window.TitleButtons[0];
-        var controller = new UiInputController([window], [], [], [], LargeScreenSize);
+        var controller = CreateController([window], [], [], [], LargeScreenSize);
 
         var pressPoint = closeButton.Rectangle.Center;
         controller.Update(NoKeys, MouseAt(pressPoint.X, pressPoint.Y, ButtonState.Released));
@@ -240,7 +272,7 @@ public sealed class UiInputControllerTests
     {
         var windowService = CreateWindowService();
         var window = CreateRootWindowWithCloseButton(windowService, new Vector2(0, 0));
-        var controller = new UiInputController([window], [], [], [], LargeScreenSize);
+        var controller = CreateController([window], [], [], [], LargeScreenSize);
 
         // Well inside the window's content area, nowhere near its title/close button.
         var contentPoint = window.ContentRectangle.Center;
@@ -264,7 +296,7 @@ public sealed class UiInputControllerTests
         var closeButton = window.TitleButtons[0];
         var closed = false;
         window.Closed += _ => closed = true;
-        var controller = new UiInputController([window], [], [], [], LargeScreenSize);
+        var controller = CreateController([window], [], [], [], LargeScreenSize);
 
         var pressPoint = closeButton.Rectangle.Center;
         controller.Update(NoKeys, MouseAt(pressPoint.X, pressPoint.Y, ButtonState.Released));
@@ -289,7 +321,7 @@ public sealed class UiInputControllerTests
         var closeButton = window.TitleButtons[0];
         var closed = false;
         window.Closed += _ => closed = true;
-        var controller = new UiInputController([window], [], [], [], LargeScreenSize);
+        var controller = CreateController([window], [], [], [], LargeScreenSize);
 
         var pressPoint = closeButton.Rectangle.Center;
         controller.Update(NoKeys, MouseAt(pressPoint.X, pressPoint.Y, ButtonState.Released));
@@ -311,14 +343,16 @@ public sealed class UiInputControllerTests
         var windowService = CreateWindowService();
         var windowA = CreateRootWindowWithCloseButton(windowService, new Vector2(0, 0));
         var windowB = CreateRootWindowWithCloseButton(windowService, new Vector2(400, 400));
-        var rootWindows = new List<Element> { windowA, windowB };
-        var controller = new UiInputController(rootWindows, [], [], [], LargeScreenSize);
+        var layers = new UiLayerStack();
+        layers.Add(UiLayer.Base, windowA);
+        layers.Add(UiLayer.Base, windowB);
+        var controller = new UiInputController(layers, LargeScreenSize);
 
         var pressPoint = windowA.ContentRectangle.Center;
         controller.Update(NoKeys, MouseAt(pressPoint.X, pressPoint.Y, ButtonState.Released));
         controller.Update(NoKeys, MouseAt(pressPoint.X, pressPoint.Y, ButtonState.Pressed));
 
-        CollectionAssert.AreEqual(new[] { windowB, windowA }, rootWindows);
+        CollectionAssert.AreEqual(new[] { windowB, windowA }, layers[UiLayer.Base].ToArray());
     }
 
     /// <summary>
@@ -336,7 +370,7 @@ public sealed class UiInputControllerTests
         var frontClosed = false;
         back.Closed += _ => backClosed = true;
         front.Closed += _ => frontClosed = true;
-        var controller = new UiInputController([back, front], [], [], [], LargeScreenSize);
+        var controller = CreateController([back, front], [], [], [], LargeScreenSize);
 
         var pressPoint = front.TitleButtons[0].Rectangle.Center;
         controller.Update(NoKeys, MouseAt(pressPoint.X, pressPoint.Y, ButtonState.Released));
@@ -362,7 +396,7 @@ public sealed class UiInputControllerTests
         var dynamicHudClosed = false;
         baseWindow.Closed += _ => baseClosed = true;
         dynamicHudWindow.Closed += _ => dynamicHudClosed = true;
-        var controller = new UiInputController([baseWindow], [], [dynamicHudWindow], [], LargeScreenSize);
+        var controller = CreateController([baseWindow], [], [dynamicHudWindow], [], LargeScreenSize);
 
         var pressPoint = dynamicHudWindow.TitleButtons[0].Rectangle.Center;
         controller.Update(NoKeys, MouseAt(pressPoint.X, pressPoint.Y, ButtonState.Released));
@@ -379,7 +413,7 @@ public sealed class UiInputControllerTests
     {
         var windowService = CreateWindowService();
         var window = CreateMovableWindow(windowService, new Vector2(50, 60));
-        var controller = new UiInputController([window], [], [], [], LargeScreenSize);
+        var controller = CreateController([window], [], [], [], LargeScreenSize);
 
         var pressPoint = window.TitleRectangle.Center;
         controller.Update(NoKeys, MouseAt(pressPoint.X, pressPoint.Y, ButtonState.Released));
@@ -397,7 +431,7 @@ public sealed class UiInputControllerTests
     {
         var windowService = CreateWindowService();
         var window = CreateMovableWindow(windowService, new Vector2(50, 60));
-        var controller = new UiInputController([window], [], [], [], LargeScreenSize);
+        var controller = CreateController([window], [], [], [], LargeScreenSize);
 
         var pressPoint = window.TitleRectangle.Center;
         controller.Update(NoKeys, MouseAt(pressPoint.X, pressPoint.Y, ButtonState.Released));
@@ -414,7 +448,7 @@ public sealed class UiInputControllerTests
     {
         var windowService = CreateWindowService();
         var window = CreateMovableWindow(windowService, new Vector2(50, 60));
-        var controller = new UiInputController([window], [], [], [], LargeScreenSize);
+        var controller = CreateController([window], [], [], [], LargeScreenSize);
 
         var pressPoint = window.TitleRectangle.Center;
         controller.Update(NoKeys, MouseAt(pressPoint.X, pressPoint.Y, ButtonState.Released));
@@ -448,7 +482,7 @@ public sealed class UiInputControllerTests
             Chrome = new ElementChromeOptions { ShowTitle = true, TitleText = "Tiled", CanUserMove = true },
         });
         parent.AddChild(child);
-        var controller = new UiInputController([parent], [], [], [], LargeScreenSize);
+        var controller = CreateController([parent], [], [], [], LargeScreenSize);
 
         var pressPoint = child.TitleRectangle.Center;
         controller.Update(NoKeys, MouseAt(pressPoint.X, pressPoint.Y, ButtonState.Released));
@@ -463,7 +497,7 @@ public sealed class UiInputControllerTests
     {
         var windowService = CreateWindowService();
         var window = CreateMovableWindow(windowService, new Vector2(50, 60));
-        var controller = new UiInputController([window], [], [], [], LargeScreenSize);
+        var controller = CreateController([window], [], [], [], LargeScreenSize);
 
         var pressPoint = window.TitleRectangle.Center;
         controller.Update(NoKeys, MouseAt(pressPoint.X, pressPoint.Y, ButtonState.Released));
@@ -481,7 +515,7 @@ public sealed class UiInputControllerTests
     {
         var windowService = CreateWindowService();
         var window = CreateResizableWindow(windowService, new Vector2(50, 60));
-        var controller = new UiInputController([window], [], [], [], LargeScreenSize);
+        var controller = CreateController([window], [], [], [], LargeScreenSize);
 
         var pressPoint = window.BorderRightRectangle.Center;
         controller.Update(NoKeys, MouseAt(pressPoint.X, pressPoint.Y, ButtonState.Released));
@@ -497,7 +531,7 @@ public sealed class UiInputControllerTests
     {
         var windowService = CreateWindowService();
         var window = CreateResizableWindow(windowService, new Vector2(50, 60));
-        var controller = new UiInputController([window], [], [], [], LargeScreenSize);
+        var controller = CreateController([window], [], [], [], LargeScreenSize);
 
         var pressPoint = window.BorderRightRectangle.Center;
         controller.Update(NoKeys, MouseAt(pressPoint.X, pressPoint.Y, ButtonState.Released));
@@ -520,7 +554,7 @@ public sealed class UiInputControllerTests
     {
         var windowService = CreateWindowService();
         var window = CreateResizableWindow(windowService, new Vector2(50, 60));
-        var controller = new UiInputController([window], [], [], [], LargeScreenSize);
+        var controller = CreateController([window], [], [], [], LargeScreenSize);
         var rightEdgeBeforeDrag = window.RelativePosition.X + window.CurrentSize.X;
 
         var pressPoint = window.BorderLeftRectangle.Center;
@@ -544,7 +578,7 @@ public sealed class UiInputControllerTests
     {
         var windowService = CreateWindowService();
         var window = CreateResizableWindow(windowService, new Vector2(50, 60), maximumSize: new Vector2(250, 500));
-        var controller = new UiInputController([window], [], [], [], LargeScreenSize);
+        var controller = CreateController([window], [], [], [], LargeScreenSize);
         var rightEdgeBeforeDrag = window.RelativePosition.X + window.CurrentSize.X;
 
         var pressPoint = window.BorderLeftRectangle.Center;
@@ -564,7 +598,7 @@ public sealed class UiInputControllerTests
     {
         var windowService = CreateWindowService();
         var window = CreateResizableWindow(windowService, new Vector2(50, 60));
-        var controller = new UiInputController([window], [], [], [], LargeScreenSize);
+        var controller = CreateController([window], [], [], [], LargeScreenSize);
 
         var pressPoint = new Point(window.Rectangle.Right - 2, window.Rectangle.Bottom - 2);
         controller.Update(NoKeys, MouseAt(pressPoint.X, pressPoint.Y, ButtonState.Released));
@@ -588,7 +622,7 @@ public sealed class UiInputControllerTests
             Text = new TextOptions { Text = "Hello" },
         });
         window.Initialize();
-        var controller = new UiInputController([window], [], [], [], LargeScreenSize);
+        var controller = CreateController([window], [], [], [], LargeScreenSize);
 
         var pressPoint = window.BorderRightRectangle.Center;
         controller.Update(NoKeys, MouseAt(pressPoint.X, pressPoint.Y, ButtonState.Released));
@@ -615,7 +649,7 @@ public sealed class UiInputControllerTests
             Chrome = new ElementChromeOptions { ShowBorder = true, CanUserResize = true },
         });
         parent.AddChild(child);
-        var controller = new UiInputController([parent], [], [], [], LargeScreenSize);
+        var controller = CreateController([parent], [], [], [], LargeScreenSize);
 
         var pressPoint = child.BorderRightRectangle.Center;
         controller.Update(NoKeys, MouseAt(pressPoint.X, pressPoint.Y, ButtonState.Released));
@@ -631,7 +665,7 @@ public sealed class UiInputControllerTests
         var windowService = CreateWindowService();
         var window = CreateMovableWindow(windowService, new Vector2(50, 60));
         var smallScreen = new Vector2(300, 200);
-        var controller = new UiInputController([window], [], [], [], smallScreen);
+        var controller = CreateController([window], [], [], [], smallScreen);
 
         var pressPoint = window.TitleRectangle.Center;
         controller.Update(NoKeys, MouseAt(pressPoint.X, pressPoint.Y, ButtonState.Released));
@@ -649,7 +683,7 @@ public sealed class UiInputControllerTests
     {
         var windowService = CreateWindowService();
         var window = CreateMovableWindow(windowService, new Vector2(50, 60));
-        var controller = new UiInputController([window], [], [], [], LargeScreenSize);
+        var controller = CreateController([window], [], [], [], LargeScreenSize);
 
         var pressPoint = window.TitleRectangle.Center;
         controller.Update(NoKeys, MouseAt(pressPoint.X, pressPoint.Y, ButtonState.Released));
@@ -680,7 +714,7 @@ public sealed class UiInputControllerTests
             Chrome = new ElementChromeOptions { ShowTitle = true, TitleText = "Child", CanUserMove = true },
         });
         parent.AddChild(child);
-        var controller = new UiInputController([parent], [], [], [], LargeScreenSize);
+        var controller = CreateController([parent], [], [], [], LargeScreenSize);
 
         var pressPoint = child.TitleRectangle.Center;
         controller.Update(NoKeys, MouseAt(pressPoint.X, pressPoint.Y, ButtonState.Released));
@@ -703,7 +737,7 @@ public sealed class UiInputControllerTests
         var windowService = CreateWindowService();
         var window = CreateResizableWindow(windowService, new Vector2(50, 60), maximumSize: new Vector2(1000, 1000));
         var smallScreen = new Vector2(300, 200);
-        var controller = new UiInputController([window], [], [], [], smallScreen);
+        var controller = CreateController([window], [], [], [], smallScreen);
         var rightEdgeBeforeDrag = window.RelativePosition.X + window.CurrentSize.X;
 
         var pressPoint = window.BorderLeftRectangle.Center;
@@ -723,7 +757,7 @@ public sealed class UiInputControllerTests
         var windowService = CreateWindowService();
         var window = CreateResizableWindow(windowService, new Vector2(50, 60), maximumSize: new Vector2(1000, 1000));
         var smallScreen = new Vector2(300, 200);
-        var controller = new UiInputController([window], [], [], [], smallScreen);
+        var controller = CreateController([window], [], [], [], smallScreen);
 
         var pressPoint = window.BorderRightRectangle.Center;
         controller.Update(NoKeys, MouseAt(pressPoint.X, pressPoint.Y, ButtonState.Released));
@@ -744,7 +778,7 @@ public sealed class UiInputControllerTests
     {
         var windowService = CreateWindowService();
         var window = CreateResizableWindow(windowService, new Vector2(50, 60));
-        var controller = new UiInputController([window], [], [], [], LargeScreenSize);
+        var controller = CreateController([window], [], [], [], LargeScreenSize);
 
         // 5px in from the right edge, vertically centered (well clear of the corner zones).
         var pressPoint = new Point(window.Rectangle.Right - 5, window.Rectangle.Y + (int)(window.CurrentSize.Y / 2));
@@ -761,7 +795,7 @@ public sealed class UiInputControllerTests
     {
         var windowService = CreateWindowService();
         var window = CreateResizableWindow(windowService, new Vector2(50, 60));
-        var controller = new UiInputController([window], [], [], [], LargeScreenSize);
+        var controller = CreateController([window], [], [], [], LargeScreenSize);
 
         var hoverPoint = window.BorderRightRectangle.Center;
         controller.Update(NoKeys, MouseAt(hoverPoint.X, hoverPoint.Y, ButtonState.Released));
@@ -774,7 +808,7 @@ public sealed class UiInputControllerTests
     {
         var windowService = CreateWindowService();
         var window = CreateResizableWindow(windowService, new Vector2(50, 60));
-        var controller = new UiInputController([window], [], [], [], LargeScreenSize);
+        var controller = CreateController([window], [], [], [], LargeScreenSize);
 
         var hoverPoint = window.BorderTopRectangle.Center;
         controller.Update(NoKeys, MouseAt(hoverPoint.X, hoverPoint.Y, ButtonState.Released));
@@ -787,7 +821,7 @@ public sealed class UiInputControllerTests
     {
         var windowService = CreateWindowService();
         var window = CreateResizableWindow(windowService, new Vector2(50, 60));
-        var controller = new UiInputController([window], [], [], [], LargeScreenSize);
+        var controller = CreateController([window], [], [], [], LargeScreenSize);
 
         var hoverPoint = new Point(window.Rectangle.X + 2, window.Rectangle.Y + 2);
         controller.Update(NoKeys, MouseAt(hoverPoint.X, hoverPoint.Y, ButtonState.Released));
@@ -800,7 +834,7 @@ public sealed class UiInputControllerTests
     {
         var windowService = CreateWindowService();
         var window = CreateResizableWindow(windowService, new Vector2(50, 60));
-        var controller = new UiInputController([window], [], [], [], LargeScreenSize);
+        var controller = CreateController([window], [], [], [], LargeScreenSize);
 
         var hoverPoint = new Point(window.Rectangle.Right - 2, window.Rectangle.Y + 2);
         controller.Update(NoKeys, MouseAt(hoverPoint.X, hoverPoint.Y, ButtonState.Released));
@@ -813,7 +847,7 @@ public sealed class UiInputControllerTests
     {
         var windowService = CreateWindowService();
         var window = CreateMovableWindow(windowService, new Vector2(50, 60));
-        var controller = new UiInputController([window], [], [], [], LargeScreenSize);
+        var controller = CreateController([window], [], [], [], LargeScreenSize);
 
         var hoverPoint = window.TitleRectangle.Center;
         controller.Update(NoKeys, MouseAt(hoverPoint.X, hoverPoint.Y, ButtonState.Released));
@@ -826,7 +860,7 @@ public sealed class UiInputControllerTests
     {
         var windowService = CreateWindowService();
         var window = CreateRootWindowWithCloseButton(windowService, new Vector2(50, 60));
-        var controller = new UiInputController([window], [], [], [], LargeScreenSize);
+        var controller = CreateController([window], [], [], [], LargeScreenSize);
 
         var hoverPoint = window.ContentRectangle.Center;
         controller.Update(NoKeys, MouseAt(hoverPoint.X, hoverPoint.Y, ButtonState.Released));
@@ -852,7 +886,7 @@ public sealed class UiInputControllerTests
         // sitting right under the mouse, since the edge tracks it 1:1 -- that would make the
         // two behaviors indistinguishable).
         var window = CreateResizableWindow(windowService, new Vector2(50, 60), maximumSize: new Vector2(250, 500));
-        var controller = new UiInputController([window], [], [], [], LargeScreenSize);
+        var controller = CreateController([window], [], [], [], LargeScreenSize);
 
         var pressPoint = window.BorderRightRectangle.Center;
         controller.Update(NoKeys, MouseAt(pressPoint.X, pressPoint.Y, ButtonState.Released));
@@ -869,7 +903,7 @@ public sealed class UiInputControllerTests
     {
         var windowService = CreateWindowService();
         var window = CreateScrollableTextWindow(windowService, new Vector2(50, 60));
-        var controller = new UiInputController([window], [], [], [], LargeScreenSize);
+        var controller = CreateController([window], [], [], [], LargeScreenSize);
 
         var hoverPoint = window.ContentRectangle.Center;
         // -120 = one notch "down" (the FNA/XNA convention -- see UiInputController.UpdateMouseWheelScroll), which should scroll forward into the content (ScrollOffset increases), matching every other app's convention.
@@ -884,7 +918,7 @@ public sealed class UiInputControllerTests
     {
         var windowService = CreateWindowService();
         var window = CreateMovableWindow(windowService, new Vector2(50, 60));
-        var controller = new UiInputController([window], [], [], [], LargeScreenSize);
+        var controller = CreateController([window], [], [], [], LargeScreenSize);
 
         var hoverPoint = window.ContentRectangle.Center;
         controller.Update(NoKeys, MouseAtWithScroll(hoverPoint.X, hoverPoint.Y, -120));
@@ -923,7 +957,7 @@ public sealed class UiInputControllerTests
         var firstChild = (TextWindow)parent.ChildElements[0];
         Assert.IsFalse(firstChild.CanUserScrollVertical || firstChild.CanUserScrollHorizontal, "Sanity check: the child itself must not be scrollable -- that's the whole point of this test.");
 
-        var controller = new UiInputController([parent], [], [], [], LargeScreenSize);
+        var controller = CreateController([parent], [], [], [], LargeScreenSize);
         var hoverPoint = firstChild.ContentRectangle.Center;
         controller.Update(NoKeys, MouseAtWithScroll(hoverPoint.X, hoverPoint.Y, -120));
 
@@ -944,7 +978,7 @@ public sealed class UiInputControllerTests
         var fontService = new FontService("Fonts");
         var windowService = new ElementPoolService(fontService, new GlyphRenderer());
         var window = CreateRightDragSpyWindow(windowService, fontService, new Vector2(0, 0));
-        var controller = new UiInputController([window], [], [], [], LargeScreenSize);
+        var controller = CreateController([window], [], [], [], LargeScreenSize);
 
         var pressPoint = window.ContentRectangle.Center;
         controller.Update(NoKeys, MouseAtWithRightButton(pressPoint.X, pressPoint.Y, ButtonState.Released));
@@ -967,7 +1001,7 @@ public sealed class UiInputControllerTests
         var fontService = new FontService("Fonts");
         var windowService = new ElementPoolService(fontService, new GlyphRenderer());
         var window = CreateRightDragSpyWindow(windowService, fontService, new Vector2(0, 0));
-        var controller = new UiInputController([window], [], [], [], LargeScreenSize);
+        var controller = CreateController([window], [], [], [], LargeScreenSize);
 
         var pressPoint = window.ContentRectangle.Center;
         controller.Update(NoKeys, MouseAtWithRightButton(pressPoint.X, pressPoint.Y, ButtonState.Released));
@@ -991,7 +1025,7 @@ public sealed class UiInputControllerTests
         var fontService = new FontService("Fonts");
         var windowService = new ElementPoolService(fontService, new GlyphRenderer());
         var window = CreateRightDragSpyWindow(windowService, fontService, new Vector2(0, 0));
-        var controller = new UiInputController([window], [], [], [], LargeScreenSize);
+        var controller = CreateController([window], [], [], [], LargeScreenSize);
 
         var pressPoint = window.ContentRectangle.Center;
         controller.Update(NoKeys, MouseAtWithRightButton(pressPoint.X, pressPoint.Y, ButtonState.Released));
@@ -1011,7 +1045,7 @@ public sealed class UiInputControllerTests
         var fontService = new FontService("Fonts");
         var windowService = new ElementPoolService(fontService, new GlyphRenderer());
         var window = CreateRightDragSpyWindow(windowService, fontService, new Vector2(0, 0));
-        var controller = new UiInputController([window], [], [], [], LargeScreenSize);
+        var controller = CreateController([window], [], [], [], LargeScreenSize);
 
         var pressPoint = window.ContentRectangle.Center;
         controller.Update(NoKeys, MouseAtWithRightButton(pressPoint.X, pressPoint.Y, ButtonState.Released));
@@ -1029,7 +1063,7 @@ public sealed class UiInputControllerTests
         var fontService = new FontService("Fonts");
         var windowService = new ElementPoolService(fontService, new GlyphRenderer());
         var window = CreateRightDragSpyWindow(windowService, fontService, new Vector2(0, 0));
-        var controller = new UiInputController([window], [], [], [], LargeScreenSize);
+        var controller = CreateController([window], [], [], [], LargeScreenSize);
 
         var pressPoint = window.ContentRectangle.Center;
         controller.Update(NoKeys, MouseAtWithRightButton(pressPoint.X, pressPoint.Y, ButtonState.Released));
@@ -1048,7 +1082,7 @@ public sealed class UiInputControllerTests
         var fontService = new FontService("Fonts");
         var windowService = new ElementPoolService(fontService, new GlyphRenderer());
         var window = CreateRightDragSpyWindow(windowService, fontService, new Vector2(0, 0));
-        var controller = new UiInputController([window], [], [], [], LargeScreenSize);
+        var controller = CreateController([window], [], [], [], LargeScreenSize);
 
         var pressPoint = window.ContentRectangle.Center;
         controller.Update(NoKeys, MouseAtWithRightButton(pressPoint.X, pressPoint.Y, ButtonState.Released));
@@ -1067,7 +1101,7 @@ public sealed class UiInputControllerTests
         var fontService = new FontService("Fonts");
         var windowService = new ElementPoolService(fontService, new GlyphRenderer());
         var window = CreateRightDragSpyWindow(windowService, fontService, new Vector2(0, 0));
-        var controller = new UiInputController([window], [], [], [], LargeScreenSize);
+        var controller = CreateController([window], [], [], [], LargeScreenSize);
 
         var pressPoint = window.ContentRectangle.Center;
         controller.Update(NoKeys, MouseAtWithRightButton(pressPoint.X, pressPoint.Y, ButtonState.Released));
@@ -1086,7 +1120,7 @@ public sealed class UiInputControllerTests
     {
         var windowService = CreateWindowService();
         var window = CreateRootWindowWithCloseButton(windowService, new Vector2(0, 0));
-        var controller = new UiInputController([window], [], [], [], LargeScreenSize);
+        var controller = CreateController([window], [], [], [], LargeScreenSize);
 
         controller.Update(NoKeys, MouseAtWithRightButton(1900, 1900, ButtonState.Released));
         controller.Update(NoKeys, MouseAtWithRightButton(1900, 1900, ButtonState.Pressed));
@@ -1100,7 +1134,7 @@ public sealed class UiInputControllerTests
         var windowService = CreateWindowService();
         var windowA = CreateRootWindowWithCloseButton(windowService, new Vector2(0, 0));
         var windowB = CreateRootWindowWithCloseButton(windowService, new Vector2(400, 400));
-        var controller = new UiInputController([windowA, windowB], [], [], [], LargeScreenSize);
+        var controller = CreateController([windowA, windowB], [], [], [], LargeScreenSize);
 
         var pressPointA = windowA.ContentRectangle.Center;
         controller.Update(NoKeys, MouseAt(pressPointA.X, pressPointA.Y, ButtonState.Released));
@@ -1125,7 +1159,7 @@ public sealed class UiInputControllerTests
     {
         var windowService = CreateWindowService();
         var window = CreateRootWindowWithCloseButton(windowService, new Vector2(0, 0));
-        var controller = new UiInputController([window], [], [], [], LargeScreenSize);
+        var controller = CreateController([window], [], [], [], LargeScreenSize);
 
         var pressPoint = window.ContentRectangle.Center;
         controller.Update(NoKeys, MouseAt(pressPoint.X, pressPoint.Y, ButtonState.Released));
@@ -1150,7 +1184,7 @@ public sealed class UiInputControllerTests
     {
         var windowService = CreateWindowService();
         var window = CreateRootWindowWithCloseButton(windowService, new Vector2(0, 0));
-        var controller = new UiInputController([window], [], [], [], LargeScreenSize);
+        var controller = CreateController([window], [], [], [], LargeScreenSize);
 
         var pressPoint = window.ContentRectangle.Center;
         controller.Update(NoKeys, MouseAt(pressPoint.X, pressPoint.Y, ButtonState.Released));
@@ -1169,7 +1203,7 @@ public sealed class UiInputControllerTests
         var windowService = CreateWindowService();
         var (focused, focusedContent) = CreateFocusableWindowWithContent(windowService, new Vector2(0, 0));
         var (other, otherContent) = CreateFocusableWindowWithContent(windowService, new Vector2(400, 400));
-        var controller = new UiInputController([focused, other], [], [], [], LargeScreenSize);
+        var controller = CreateController([focused, other], [], [], [], LargeScreenSize);
 
         var pressPoint = focused.ContentRectangle.Center;
         controller.Update(NoKeys, MouseAt(pressPoint.X, pressPoint.Y, ButtonState.Released));
@@ -1194,7 +1228,7 @@ public sealed class UiInputControllerTests
     {
         var windowService = CreateWindowService();
         var (focused, focusedContent) = CreateFocusableWindowWithContent(windowService, new Vector2(0, 0));
-        var controller = new UiInputController([focused], [], [], [], LargeScreenSize);
+        var controller = CreateController([focused], [], [], [], LargeScreenSize);
 
         var pressPoint = focused.ContentRectangle.Center;
         controller.Update(NoKeys, MouseAt(pressPoint.X, pressPoint.Y, ButtonState.Released));
@@ -1218,7 +1252,7 @@ public sealed class UiInputControllerTests
         var windowService = CreateWindowService();
         var (focused, focusedContent) = CreateFocusableWindowWithContent(windowService, new Vector2(0, 0));
         var (other, otherContent) = CreateFocusableWindowWithContent(windowService, new Vector2(400, 400));
-        var controller = new UiInputController([focused, other], [], [], [], LargeScreenSize);
+        var controller = CreateController([focused, other], [], [], [], LargeScreenSize);
 
         var pressPoint = focused.ContentRectangle.Center;
         controller.Update(NoKeys, MouseAt(pressPoint.X, pressPoint.Y, ButtonState.Released));
@@ -1237,7 +1271,7 @@ public sealed class UiInputControllerTests
     {
         var windowService = CreateWindowService();
         var (window, content) = CreateFocusableWindowWithContent(windowService, new Vector2(0, 0));
-        var controller = new UiInputController([window], [], [], [], LargeScreenSize);
+        var controller = CreateController([window], [], [], [], LargeScreenSize);
 
         controller.Update(NoKeys, MouseAt(0, 0, ButtonState.Released));
 
@@ -1256,7 +1290,7 @@ public sealed class UiInputControllerTests
         var windowService = CreateWindowService();
         var (focused, focusedContent) = CreateFocusableWindowWithContent(windowService, new Vector2(0, 0));
         var (other, otherContent) = CreateFocusableWindowWithContent(windowService, new Vector2(400, 400));
-        var controller = new UiInputController([focused, other], [], [], [], LargeScreenSize);
+        var controller = CreateController([focused, other], [], [], [], LargeScreenSize);
 
         var pressPoint = focused.ContentRectangle.Center;
         controller.Update(NoKeys, MouseAt(pressPoint.X, pressPoint.Y, ButtonState.Released));
@@ -1276,7 +1310,7 @@ public sealed class UiInputControllerTests
     {
         var windowService = CreateWindowService();
         var (focused, focusedContent) = CreateFocusableWindowWithContent(windowService, new Vector2(0, 0));
-        var controller = new UiInputController([focused], [], [], [], LargeScreenSize);
+        var controller = CreateController([focused], [], [], [], LargeScreenSize);
         controller.FocusElement(focused);
 
         controller.OnTextInput('h');
@@ -1307,7 +1341,7 @@ public sealed class UiInputControllerTests
             Layout = new ElementLayoutOptions { RelativePosition = new Vector2(0, 0), Size = new Vector2(180, 50), DisplayMode = ElementDisplayMode.Fixed },
         });
         container.AddChild(textBox);
-        var controller = new UiInputController([container], [], [], [], LargeScreenSize);
+        var controller = CreateController([container], [], [], [], LargeScreenSize);
 
         // Click the container's own content area, below/outside the TextBox child's own
         // Rectangle (180x50 at the top) -- content-agnostic (falls through to
@@ -1348,7 +1382,7 @@ public sealed class UiInputControllerTests
             Layout = new ElementLayoutOptions { RelativePosition = new Vector2(0, 0), Size = new Vector2(180, 50), DisplayMode = ElementDisplayMode.Fixed },
         });
         container.AddChild(textBox);
-        var controller = new UiInputController([container], [], [], [], LargeScreenSize);
+        var controller = CreateController([container], [], [], [], LargeScreenSize);
 
         var titlePoint = container.TitleRectangle.Center;
         controller.Update(NoKeys, MouseAt(titlePoint.X, titlePoint.Y, ButtonState.Released));
@@ -1380,7 +1414,7 @@ public sealed class UiInputControllerTests
             Layout = new ElementLayoutOptions { RelativePosition = new Vector2(0, 60), Size = new Vector2(180, 50), DisplayMode = ElementDisplayMode.Fixed },
         });
         container.AddChild(secondTextBox);
-        var controller = new UiInputController([container], [], [], [], LargeScreenSize);
+        var controller = CreateController([container], [], [], [], LargeScreenSize);
         controller.FocusElement(firstTextBox);
 
         controller.Update(new KeyboardState(Keys.Enter), MouseAt(0, 0, ButtonState.Released));
@@ -1396,7 +1430,7 @@ public sealed class UiInputControllerTests
         var windowA = CreateRootWindowWithCloseButton(windowService, new Vector2(0, 0));
         var windowB = CreateRootWindowWithCloseButton(windowService, new Vector2(400, 400));
         var rootWindows = new List<Element> { windowA, windowB };
-        var controller = new UiInputController(rootWindows, [], [], [], LargeScreenSize);
+        var controller = CreateController(rootWindows, [], [], [], LargeScreenSize);
 
         controller.Update(NoKeys, MouseAt(0, 0, ButtonState.Released));
         controller.Update(new KeyboardState(Keys.Tab), MouseAt(0, 0, ButtonState.Released));
@@ -1423,13 +1457,15 @@ public sealed class UiInputControllerTests
         var windowService = CreateWindowService();
         var windowA = CreateRootWindowWithCloseButton(windowService, new Vector2(0, 0));
         var windowB = CreateRootWindowWithCloseButton(windowService, new Vector2(400, 400));
-        var rootWindows = new List<Element> { windowA, windowB };
-        var controller = new UiInputController(rootWindows, [], [], [], LargeScreenSize);
+        var layers = new UiLayerStack();
+        layers.Add(UiLayer.Base, windowA);
+        layers.Add(UiLayer.Base, windowB);
+        var controller = new UiInputController(layers, LargeScreenSize);
 
         controller.Update(NoKeys, MouseAt(0, 0, ButtonState.Released));
         controller.Update(new KeyboardState(Keys.Tab), MouseAt(0, 0, ButtonState.Released));
 
-        CollectionAssert.AreEqual(new[] { windowA, windowB }, rootWindows);
+        CollectionAssert.AreEqual(new[] { windowA, windowB }, layers[UiLayer.Base].ToArray());
     }
 
     /// <summary>Shift+Tab cycles the other direction.</summary>
@@ -1440,7 +1476,7 @@ public sealed class UiInputControllerTests
         var windowA = CreateRootWindowWithCloseButton(windowService, new Vector2(0, 0));
         var windowB = CreateRootWindowWithCloseButton(windowService, new Vector2(400, 400));
         var rootWindows = new List<Element> { windowA, windowB };
-        var controller = new UiInputController(rootWindows, [], [], [], LargeScreenSize);
+        var controller = CreateController(rootWindows, [], [], [], LargeScreenSize);
 
         controller.Update(NoKeys, MouseAt(0, 0, ButtonState.Released));
         controller.Update(new KeyboardState(Keys.Tab, Keys.LeftShift), MouseAt(0, 0, ButtonState.Released));
@@ -1464,7 +1500,7 @@ public sealed class UiInputControllerTests
         var windowB = CreateRootWindowWithCloseButton(windowService, new Vector2(400, 0));
         var windowC = CreateRootWindowWithCloseButton(windowService, new Vector2(0, 400));
         var rootWindows = new List<Element> { windowA, windowB, windowC };
-        var controller = new UiInputController(rootWindows, [], [], [], LargeScreenSize);
+        var controller = CreateController(rootWindows, [], [], [], LargeScreenSize);
 
         var visited = new List<Element>();
         for (var i = 0; i < 6; i++)
@@ -1491,7 +1527,7 @@ public sealed class UiInputControllerTests
             Chrome = new ElementChromeOptions { CanUserFocus = false },
         });
         nonFocusable.Initialize();
-        var controller = new UiInputController([focusable, nonFocusable], [], [], [], LargeScreenSize);
+        var controller = CreateController([focusable, nonFocusable], [], [], [], LargeScreenSize);
 
         var pressPointFocusable = focusable.ContentRectangle.Center;
         controller.Update(NoKeys, MouseAt(pressPointFocusable.X, pressPointFocusable.Y, ButtonState.Released));
@@ -1521,7 +1557,7 @@ public sealed class UiInputControllerTests
         nonFocusable.Initialize();
         var windowB = CreateRootWindowWithCloseButton(windowService, new Vector2(0, 400));
         var rootWindows = new List<Element> { windowA, nonFocusable, windowB };
-        var controller = new UiInputController(rootWindows, [], [], [], LargeScreenSize);
+        var controller = CreateController(rootWindows, [], [], [], LargeScreenSize);
 
         controller.Update(NoKeys, MouseAt(0, 0, ButtonState.Released));
         controller.Update(new KeyboardState(Keys.Tab), MouseAt(0, 0, ButtonState.Released));
@@ -1572,7 +1608,7 @@ public sealed class UiInputControllerTests
         var windowService = CreateWindowService();
         var notificationA = CreateRootWindowWithCloseButton(windowService, new Vector2(0, 0));
         var notificationB = CreateRootWindowWithCloseButton(windowService, new Vector2(300, 0));
-        var controller = new UiInputController([], [], [notificationA, notificationB], [], LargeScreenSize);
+        var controller = CreateController([], [], [notificationA, notificationB], [], LargeScreenSize);
 
         var pressPoint = notificationA.ContentRectangle.Center;
         controller.Update(NoKeys, MouseAt(pressPoint.X, pressPoint.Y, ButtonState.Released));
@@ -1591,7 +1627,7 @@ public sealed class UiInputControllerTests
         var windowService = CreateWindowService();
         var back = CreateRootWindowWithCloseButton(windowService, new Vector2(0, 0));
         var front = CreateRootWindowWithCloseButton(windowService, new Vector2(300, 0));
-        var controller = new UiInputController([], [], [back, front], [], LargeScreenSize);
+        var controller = CreateController([], [], [back, front], [], LargeScreenSize);
 
         controller.Update(new KeyboardState(Keys.Escape), MouseAt(0, 0, ButtonState.Released));
 
@@ -1606,7 +1642,7 @@ public sealed class UiInputControllerTests
         var windowService = CreateWindowService();
         var closeable = CreateRootWindowWithCloseButton(windowService, new Vector2(0, 0));
         var chrome = CreateMovableWindow(windowService, new Vector2(300, 0)); // CanUserClose defaults false.
-        var controller = new UiInputController([], [], [closeable, chrome], [], LargeScreenSize);
+        var controller = CreateController([], [], [closeable, chrome], [], LargeScreenSize);
 
         controller.Update(new KeyboardState(Keys.Escape), MouseAt(0, 0, ButtonState.Released));
 
@@ -1621,7 +1657,7 @@ public sealed class UiInputControllerTests
         var windowService = CreateWindowService();
         var back = CreateRootWindowWithCloseButton(windowService, new Vector2(0, 0));
         var front = CreateRootWindowWithCloseButton(windowService, new Vector2(300, 0));
-        var controller = new UiInputController([], [], [back, front], [], LargeScreenSize);
+        var controller = CreateController([], [], [back, front], [], LargeScreenSize);
 
         // 40 frames (~0.67s at 60fps) is comfortably past the 0.5s hold threshold.
         for (var frame = 0; frame < 40; frame++)
@@ -1667,7 +1703,7 @@ public sealed class UiInputControllerTests
         var windowService = CreateWindowService();
         var (popup, child) = CreatePopupWithFocusableChild(windowService, new Vector2(0, 0));
         var mapWindowStandIn = CreateRootWindowWithCloseButton(windowService, new Vector2(400, 0));
-        var controller = new UiInputController([popup, mapWindowStandIn], [], [], [], LargeScreenSize);
+        var controller = CreateController([popup, mapWindowStandIn], [], [], [], LargeScreenSize);
         controller.SetDefaultFocusElement(mapWindowStandIn);
 
         var pressPoint = child.ContentRectangle.Center;
@@ -1686,7 +1722,7 @@ public sealed class UiInputControllerTests
     {
         var windowService = CreateWindowService();
         var (parent, childA, childB) = CreateParentWithTwoCloseableChildren(windowService);
-        var controller = new UiInputController([parent], [], [], [], LargeScreenSize);
+        var controller = CreateController([parent], [], [], [], LargeScreenSize);
 
         var pressPoint = childA.ContentRectangle.Center;
         controller.Update(NoKeys, MouseAt(pressPoint.X, pressPoint.Y, ButtonState.Released));
@@ -1705,7 +1741,7 @@ public sealed class UiInputControllerTests
         var windowService = CreateWindowService();
         var notificationA = CreateRootWindowWithCloseButton(windowService, new Vector2(0, 0));
         var notificationB = CreateRootWindowWithCloseButton(windowService, new Vector2(300, 0));
-        var controller = new UiInputController([], [], [notificationA, notificationB], [], LargeScreenSize);
+        var controller = CreateController([], [], [notificationA, notificationB], [], LargeScreenSize);
 
         var pressPoint = notificationA.ContentRectangle.Center;
         controller.Update(NoKeys, MouseAt(pressPoint.X, pressPoint.Y, ButtonState.Released));
@@ -1723,7 +1759,7 @@ public sealed class UiInputControllerTests
     {
         var windowService = CreateWindowService();
         var window = CreateRootWindowWithCloseButton(windowService, new Vector2(0, 0));
-        var controller = new UiInputController([window], [], [], [], LargeScreenSize);
+        var controller = CreateController([window], [], [], [], LargeScreenSize);
 
         var pressPoint = window.ContentRectangle.Center;
         controller.Update(NoKeys, MouseAt(pressPoint.X, pressPoint.Y, ButtonState.Released));
@@ -1749,7 +1785,7 @@ public sealed class UiInputControllerTests
         var popup = CreateRootWindowWithCloseButton(windowService, new Vector2(0, 0));
         var unrelatedRootWindow = CreateRootWindowWithCloseButton(windowService, new Vector2(300, 0));
         var mapWindowStandIn = CreateRootWindowWithCloseButton(windowService, new Vector2(0, 300));
-        var controller = new UiInputController([popup, unrelatedRootWindow, mapWindowStandIn], [], [], [], LargeScreenSize);
+        var controller = CreateController([popup, unrelatedRootWindow, mapWindowStandIn], [], [], [], LargeScreenSize);
         controller.SetDefaultFocusElement(mapWindowStandIn);
 
         var pressPoint = popup.ContentRectangle.Center;
@@ -1768,7 +1804,7 @@ public sealed class UiInputControllerTests
     {
         var windowService = CreateWindowService();
         var window = CreateRootWindowWithCloseButton(windowService, new Vector2(0, 0));
-        var controller = new UiInputController([window], [], [], [], LargeScreenSize);
+        var controller = CreateController([window], [], [], [], LargeScreenSize);
 
         var pressPoint = window.ContentRectangle.Center;
         controller.Update(NoKeys, MouseAt(pressPoint.X, pressPoint.Y, ButtonState.Released));
@@ -1799,7 +1835,7 @@ public sealed class UiInputControllerTests
         summaryBarStandIn.Initialize();
         var notification = CreateRootWindowWithCloseButton(windowService, new Vector2(0, 0));
         var mapWindowStandIn = CreateRootWindowWithCloseButton(windowService, new Vector2(0, 400));
-        var controller = new UiInputController([], [], [summaryBarStandIn, notification], [], LargeScreenSize);
+        var controller = CreateController([], [], [summaryBarStandIn, notification], [], LargeScreenSize);
         controller.SetDefaultFocusElement(mapWindowStandIn);
 
         var pressPoint = notification.ContentRectangle.Center;
@@ -1837,7 +1873,7 @@ public sealed class UiInputControllerTests
         var windowService = CreateWindowService();
         var textBox = CreateFocusableTextBox(windowService, new Vector2(0, 0));
         var plainWindow = CreateRootWindowWithCloseButton(windowService, new Vector2(400, 0));
-        var controller = new UiInputController([textBox, plainWindow], [], [], [], LargeScreenSize);
+        var controller = CreateController([textBox, plainWindow], [], [], [], LargeScreenSize);
         var startCount = 0;
         var stopCount = 0;
         controller.StartTextInput = () => startCount++;
@@ -1865,7 +1901,7 @@ public sealed class UiInputControllerTests
         var windowService = CreateWindowService();
         var windowA = CreateRootWindowWithCloseButton(windowService, new Vector2(0, 0));
         var windowB = CreateRootWindowWithCloseButton(windowService, new Vector2(400, 0));
-        var controller = new UiInputController([windowA, windowB], [], [], [], LargeScreenSize);
+        var controller = CreateController([windowA, windowB], [], [], [], LargeScreenSize);
         var startCount = 0;
         var stopCount = 0;
         controller.StartTextInput = () => startCount++;
@@ -1942,7 +1978,7 @@ public sealed class UiInputControllerTests
     public void Drag_FromInventoryCellToHotbarSlot_BindsTheItem()
     {
         var (cell, hotbarWindow, hotbar, componentManager, itemId) = BuildDragAndDropHarness();
-        var controller = new UiInputController([cell], [hotbarWindow], [], [], LargeScreenSize);
+        var controller = CreateController([cell], [hotbarWindow], [], [], LargeScreenSize);
 
         var pressPoint = cell.ContentRectangle.Center;
         controller.Update(NoKeys, MouseAt(pressPoint.X, pressPoint.Y, ButtonState.Released));
@@ -1962,7 +1998,7 @@ public sealed class UiInputControllerTests
     public void Drag_FromInventoryCellToHotbarSlot_DoesNotRemoveTheItemFromInventory()
     {
         var (cell, hotbarWindow, hotbar, componentManager, itemId) = BuildDragAndDropHarness();
-        var controller = new UiInputController([cell], [hotbarWindow], [], [], LargeScreenSize);
+        var controller = CreateController([cell], [hotbarWindow], [], [], LargeScreenSize);
 
         var pressPoint = cell.ContentRectangle.Center;
         controller.Update(NoKeys, MouseAt(pressPoint.X, pressPoint.Y, ButtonState.Released));
@@ -1978,7 +2014,7 @@ public sealed class UiInputControllerTests
     public void Drag_FromInventoryCellReleasedAwayFromTheHotbar_BindsNothing()
     {
         var (cell, hotbarWindow, _, componentManager, _) = BuildDragAndDropHarness();
-        var controller = new UiInputController([cell], [hotbarWindow], [], [], LargeScreenSize);
+        var controller = CreateController([cell], [hotbarWindow], [], [], LargeScreenSize);
 
         var pressPoint = cell.ContentRectangle.Center;
         controller.Update(NoKeys, MouseAt(pressPoint.X, pressPoint.Y, ButtonState.Released));
@@ -1994,7 +2030,7 @@ public sealed class UiInputControllerTests
     {
         var (_, hotbarWindow, hotbar, componentManager, itemId) = BuildDragAndDropHarness();
         hotbar.BindItem(HotkeySlot.Base1, itemId);
-        var controller = new UiInputController([], [hotbarWindow], [], [], LargeScreenSize);
+        var controller = CreateController([], [hotbarWindow], [], [], LargeScreenSize);
 
         // Base is vertically centered against Expansion's current height, not flush at the top --
         // the window's own vertical center always falls inside Base1's row.
@@ -2013,7 +2049,7 @@ public sealed class UiInputControllerTests
     {
         var (_, hotbarWindow, hotbar, componentManager, itemId) = BuildDragAndDropHarness();
         hotbar.BindItem(HotkeySlot.Base1, itemId);
-        var controller = new UiInputController([], [hotbarWindow], [], [], LargeScreenSize);
+        var controller = CreateController([], [hotbarWindow], [], [], LargeScreenSize);
 
         // Base is vertically centered against Expansion's current height, not flush at the top --
         // the window's own vertical center always falls inside Base1's row.
@@ -2044,7 +2080,7 @@ public sealed class UiInputControllerTests
     {
         var (_, hotbarWindow, hotbar, componentManager, itemId) = BuildDragAndDropHarness();
         hotbar.BindItem(HotkeySlot.Base1, itemId);
-        var controller = new UiInputController([], [hotbarWindow], [], [], LargeScreenSize);
+        var controller = CreateController([], [hotbarWindow], [], [], LargeScreenSize);
 
         // Base is vertically centered against Expansion's current height, not flush at the top --
         // the window's own vertical center always falls inside Base1's row.
@@ -2061,7 +2097,7 @@ public sealed class UiInputControllerTests
     public void Drag_FromInventoryCell_TurnsOnHotbarDragHighlight_UntilReleased()
     {
         var (cell, hotbarWindow, hotbar, _, _) = BuildDragAndDropHarness();
-        var controller = new UiInputController([cell], [hotbarWindow], [], [], LargeScreenSize);
+        var controller = CreateController([cell], [hotbarWindow], [], [], LargeScreenSize);
         Assert.IsFalse(hotbar.IsAcceptingDrag);
 
         var pressPoint = cell.ContentRectangle.Center;
@@ -2079,7 +2115,7 @@ public sealed class UiInputControllerTests
     {
         var (hotbarWindow, hotbar, componentManager, actionId) = BuildActionDragAndDropHarness();
         hotbar.BindAction(HotkeySlot.Base1, actionId);
-        var controller = new UiInputController([], [hotbarWindow], [], [], LargeScreenSize);
+        var controller = CreateController([], [hotbarWindow], [], [], LargeScreenSize);
 
         // Base is vertically centered against Expansion's current height, not flush at the top --
         // the window's own vertical center always falls inside Base1's row.
@@ -2104,7 +2140,7 @@ public sealed class UiInputControllerTests
     {
         var (hotbarWindow, hotbar, componentManager, actionId) = BuildActionDragAndDropHarness();
         hotbar.BindAction(HotkeySlot.Base1, actionId);
-        var controller = new UiInputController([], [hotbarWindow], [], [], LargeScreenSize);
+        var controller = CreateController([], [hotbarWindow], [], [], LargeScreenSize);
 
         var pressPoint = new Point((int)hotbarWindow.ContentAbsolutePosition.X + 1, (int)hotbarWindow.ContentAbsolutePosition.Y + (int)(hotbar.Size.Y / 2f));
         controller.Update(NoKeys, MouseAt(pressPoint.X, pressPoint.Y, ButtonState.Released));

@@ -81,17 +81,16 @@ public sealed class TabbedContent(IReadOnlyList<TabbedContent.TabDefinition> tab
     /// Window.SetContent (which always precedes Initialize, see its own doc comment) clears them
     /// defensively as the single choke point for that; hostWindow here is InventoryManagementWindow
     /// itself, pooled/reused across opens of the Inventory folder, whose Configure calls SetContent
-    /// with a brand new TabbedContent every open. Only the Resized subscription needs its own
-    /// defensive unsubscribe here, since closing hostWindow (which would otherwise clear it, see
-    /// ElementPoolService.CloseElement) isn't guaranteed to have happened before this -- Configure's
-    /// own Detach() only unsubscribes Resized for the *previous* TabbedContent instance, not this one.
+    /// with a brand new TabbedContent every open. No defensive unsubscribe needed for the Resized
+    /// subscription below either -- ElementPoolService.CloseElement clears every event on hostWindow
+    /// (Resized included) when it's closed at the end of the previous open, and a new open never
+    /// reaches Initialize without going through Close first (see WindowSlot.Open in
+    /// InventoryFolderController).
     /// </summary>
     public void Initialize(Window hostWindow)
     {
         _hostWindow = hostWindow;
         _font = fontService.GetFont((int)(TabHeaderHeight * 0.6f));
-
-        hostWindow.Resized -= OnHostWindowResized;
 
         _tabHeaderWindow = elementPoolService.CreateElement<Window>(hostWindow, new ElementOptions
         {
@@ -133,17 +132,6 @@ public sealed class TabbedContent(IReadOnlyList<TabbedContent.TabDefinition> tab
         RebuildHeaderTiles();
         SwitchTab(0);
     }
-
-    /// <summary>
-    /// Unsubscribes from the host window's events -- needed because ElementPoolService never
-    /// clears event subscriptions on pool reuse (see NotificationCenter.OnActiveNotificationClosed
-    /// for the same reasoning applied to Window.Closed): InventoryManagementWindow is a pooled,
-    /// reused Window, and Configure builds a brand new TabbedContent on every open, so without
-    /// this the previous open's now-discarded instance would keep reacting to Resized
-    /// alongside the current one. Call before replacing/discarding a TabbedContent bound to a
-    /// window instance that might be reused later.
-    /// </summary>
-    public void Detach() => _hostWindow.Resized -= OnHostWindowResized;
 
     public void Update(GameTime gameTime)
     {
