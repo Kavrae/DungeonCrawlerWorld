@@ -7,9 +7,12 @@ using Presentation.UI;
 namespace Tests.Presentation;
 
 /// <summary>
-/// TextBox's own behavior in isolation, via its internal HandleTextInput/HandleKeyPress/
-/// HandleHotkeys hooks directly (see Window's InternalsVisibleTo) -- independent of
-/// UiInputController's routing, which has its own coverage in UiInputControllerTests.
+/// TextBox's own behavior in isolation, via its internal HandleTextInput/HandleHotkeys hooks
+/// directly (see Window's InternalsVisibleTo) -- independent of UiInputController's routing,
+/// which has its own coverage in UiInputControllerTests. Backspace/Delete/Left/Right/Up/Down
+/// all route through HandleHotkeys now, not HandleKeyPress, since they need the full
+/// KeyboardState for held-key repeat (see TextBox.ShouldFire) -- a single HandleHotkeys call
+/// with the key held fires exactly once, the same as the old edge-triggered HandleKeyPress did.
 /// </summary>
 [TestClass]
 public sealed class TextBoxTests
@@ -70,7 +73,7 @@ public sealed class TextBoxTests
         textBox.HandleTextInput('h');
         textBox.HandleTextInput('i');
 
-        textBox.HandleKeyPress(Keys.Back);
+        textBox.HandleHotkeys(new KeyboardState(Keys.Back), new KeyboardState());
 
         Assert.AreEqual("h", textBox.OriginalText);
     }
@@ -80,7 +83,7 @@ public sealed class TextBoxTests
     {
         var textBox = CreateTextBox(CreateWindowService());
 
-        textBox.HandleKeyPress(Keys.Back);
+        textBox.HandleHotkeys(new KeyboardState(Keys.Back), new KeyboardState());
 
         Assert.AreEqual(string.Empty, textBox.OriginalText);
     }

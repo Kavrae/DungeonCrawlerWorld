@@ -2,6 +2,7 @@ using Microsoft.Xna.Framework;
 using Microsoft.Xna.Framework.Graphics;
 using Presentation.Fonts;
 using Presentation.Rendering;
+using Presentation.UI.ColorPalettes;
 
 namespace Presentation.UI.Content;
 
@@ -45,6 +46,7 @@ public sealed class InventoryTabContent(ElementPoolService elementPoolService, F
             Hierarchy = new ElementHierarchyOptions { CanContainChildren = true },
             Layout = new ElementLayoutOptions { RelativePosition = Vector2.Zero, Size = new Vector2(hostWindow.ContentSize.X, GridControl.RowHeight), DisplayMode = ElementDisplayMode.Fixed },
             Chrome = new ElementChromeOptions { ShowBorder = false, ShowTitle = false, CanUserFocus = false },
+            Content = new ElementContentOptions { ContentColor = WindowPalette.PanelContentColor },
         });
         _gridControl.Configure(SortOptionLabels, ToggleLabel, SearchGhostText);
         hostWindow.AddChild(_gridControl); // Already initializes _gridControl -- see AddChild's own doc comment.
@@ -63,6 +65,7 @@ public sealed class InventoryTabContent(ElementPoolService elementPoolService, F
                 DisplayMode = ElementDisplayMode.Fixed,
             },
             Chrome = new ElementChromeOptions { ShowBorder = false, ShowTitle = false, CanUserScrollVertical = true, CanUserFocus = false },
+            Content = new ElementContentOptions { ContentColor = WindowPalette.PanelContentColor },
         });
         hostWindow.AddChild(_gridWindow); // Already initializes _gridWindow -- see AddChild's own doc comment.
 

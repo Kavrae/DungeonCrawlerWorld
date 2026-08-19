@@ -82,6 +82,17 @@ public sealed class MapWindow : Window
     /// <remarks>Toggled by Space while this window holds focus (see OnHotkeysAction). GameLoop.Update gates EcsContext.Update on this flag -- see the "Pause modality" TODO item for why this is one of several independent, not-yet-generalized pause sources GameLoop currently OR's together.</remarks>
     public bool IsPaused { get; private set; }
 
+    /// <summary>
+    /// Lets Space's pause toggle (see OnHotkeysAction) check whether a TextBox is currently
+    /// focused elsewhere and skip if so -- e.g. typing a space into a search box or the Quest
+    /// Composer must never also pause the game. Settable rather than a constructor dependency
+    /// since UiInputController (the actual source of truth for "what's focused") is built after
+    /// MapWindow -- see GameShellBootstrapper.Build's own ordering notes. Null (before that
+    /// wiring runs, and in tests that construct a MapWindow directly) means "assume nothing else
+    /// is focused," matching today's unconditional behavior.
+    /// </summary>
+    public Func<bool>? IsTextInputFocused { get; set; }
+
     /// <summary>Constructs the map viewport, wired to the world/camera/targeting/movement collaborators it renders and delegates input to.</summary>
     /// <remarks>
     /// MapTintGrid and MapBackgroundCache are constructed here, not injected, unlike every other
@@ -742,7 +753,7 @@ public sealed class MapWindow : Window
     /// <summary>The map's own hotkeys -- only invoked while this window holds focus (see UiInputController.RouteHotkeysToFocusedWindow).</summary>
     protected override void OnHotkeysAction(KeyboardState keyboardState, KeyboardState previousKeyboardState)
     {
-        if (WasKeyPressed(keyboardState, previousKeyboardState, Keys.Space))
+        if (WasKeyPressed(keyboardState, previousKeyboardState, Keys.Space) && !(IsTextInputFocused?.Invoke() ?? false))
         {
             IsPaused = !IsPaused;
         }

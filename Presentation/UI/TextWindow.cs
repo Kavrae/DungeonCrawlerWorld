@@ -186,6 +186,5 @@ public class TextWindow(FontService fontService, ElementPoolService elementPoolS
 
     protected override void OnContentClickAction(Point mousePosition)
     {
-        // TODO copy text to clipboard
     }
 }

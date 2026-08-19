@@ -55,6 +55,24 @@ public sealed class UiInputController
     private bool _rightDragExceededTapThreshold;
 
     /// <summary>
+    /// The TextBox a left-button press landed on with Kind None, if any -- drives click-drag text
+    /// selection (HandleTextSelectionDrag). Mirrors the right-drag pattern above
+    /// (_rightDragElement/HandleRightDragStart/HandleRightDrag) rather than Move/Resize's
+    /// ElementDragInteractionKind or the item/hotbar content-drag mechanism: neither of those
+    /// fits a text-selection gesture, and a click-drag on a TextBox always resolves to Kind None
+    /// (it's a plain content click, not a window-chrome drag).
+    /// </summary>
+    private TextBox? _textSelectionDragBox;
+
+    private Vector2 _textSelectionDragStartMousePosition;
+
+    /// <summary>Same reasoning/value as RightClickTapThresholdPixels/ContentDragTapThresholdPixels -- small enough to absorb ordinary click jitter, comfortably smaller than an intentional drag-select.</summary>
+    private const float TextSelectionDragTapThresholdPixels = 4f;
+
+    /// <summary>Set once the current text-selection drag has moved past TextSelectionDragTapThresholdPixels -- gates both when BeginSelectionDrag actually fires (so a plain click never touches selection state through this path) and, on release, whether the ordinary content-click (which would otherwise collapse the selection right back down) is skipped -- see HandleMouseRelease.</summary>
+    private bool _textSelectionDragExceededTapThreshold;
+
+    /// <summary>
     /// Left-button content-drag state: an inventory item stack cell (InventoryItemStackCell) or
     /// an already-bound hotbar slot (HotbarContent, item or action) picked up on press, carried
     /// as a plain ItemDefinitionId or ActionId payload (mutually exclusive -- see
@@ -177,6 +195,14 @@ public sealed class UiInputController
     /// <summary>The element currently holding keyboard focus, if any -- see SetFocus/RouteKeyPressesToFocusedElement/CycleFocus.</summary>
     internal Element? FocusedElement => _focusedElement;
 
+    /// <summary>
+    /// Whether a TextBox currently holds keyboard focus -- public (unlike FocusedElement) so
+    /// consumers in other assemblies (e.g. GameShellBootstrapper wiring MapWindow.IsTextInputFocused,
+    /// so Space doesn't pause the game while typing) can check without needing the actual
+    /// focused-element reference.
+    /// </summary>
+    public bool IsTextBoxFocused => _focusedElement is TextBox;
+
     /// <summary>Focuses an element from outside -- GameLoop calls this once at startup to default-focus the map window, since an element's own hotkeys (see RouteHotkeysToFocusedElement) only fire while it holds focus.</summary>
     public void FocusElement(Element element) => SetFocus(element);
 
@@ -239,6 +265,10 @@ public sealed class UiInputController
         else if (mouseState.LeftButton == ButtonState.Pressed && _activeInteraction.Kind != ElementDragInteractionKind.None)
         {
             HandleMouseDrag(mouseState);
+        }
+        else if (mouseState.LeftButton == ButtonState.Pressed && _textSelectionDragBox is not null)
+        {
+            HandleTextSelectionDrag(mouseState);
         }
 
         if (mouseState.RightButton == ButtonState.Pressed && _previousMouseState.RightButton == ButtonState.Released)
@@ -441,6 +471,10 @@ public sealed class UiInputController
         PressedButton?.SetPressed(true);
         DragDelta = Vector2.Zero;
 
+        _textSelectionDragBox = _activeInteraction.Kind == ElementDragInteractionKind.None ? _activeInteraction.Element as TextBox : null;
+        _textSelectionDragStartMousePosition = new Vector2(mouseState.X, mouseState.Y);
+        _textSelectionDragExceededTapThreshold = false;
+
         if (_activeInteraction.Element is not null)
         {
             RaiseToFront(_activeInteraction.Element);
@@ -604,7 +638,13 @@ public sealed class UiInputController
     /// </summary>
     private void HandleMouseRelease(MouseState mouseState)
     {
-        _activeInteraction.Element?.HandleClick(new Point(mouseState.X, mouseState.Y));
+        // A completed text-selection drag (see HandleTextSelectionDrag) skips the ordinary
+        // content-click -- OnContentClickAction's plain-click branch would otherwise collapse the
+        // selection the drag just made right back down to a bare caret at the release position.
+        if (!_textSelectionDragExceededTapThreshold)
+        {
+            _activeInteraction.Element?.HandleClick(new Point(mouseState.X, mouseState.Y));
+        }
 
         ResolveContentDrag(new Point(mouseState.X, mouseState.Y));
         ResolveHotbarSlotClick(new Point(mouseState.X, mouseState.Y));
@@ -613,6 +653,8 @@ public sealed class UiInputController
         PressedButton = null;
         _activeInteraction = ElementInteraction.NotHit;
         DragDelta = Vector2.Zero;
+        _textSelectionDragBox = null;
+        _textSelectionDragExceededTapThreshold = false;
     }
 
     /// <summary>
@@ -719,6 +761,33 @@ public sealed class UiInputController
             (relativePosition, size) = ClampResizeToBounds(relativePosition, size, GetPositionBounds(element), element.MinimumSize);
             element.SetBounds(relativePosition, size);
         }
+    }
+
+    /// <summary>
+    /// Extends a TextBox's selection while a left-button press on it is held and dragged --
+    /// mirrors HandleRightDrag's own tap-vs-drag distinction (RightClickTapThresholdPixels), just
+    /// gating BeginSelectionDrag instead of forwarding every frame from the start: a plain click
+    /// (never exceeding the threshold) never touches selection state through this path at all,
+    /// only via the ordinary OnContentClickAction at release. BeginSelectionDrag fires exactly
+    /// once, the frame the threshold is first exceeded, anchoring the selection at the original
+    /// press position rather than wherever the drag happened to cross the threshold.
+    /// </summary>
+    private void HandleTextSelectionDrag(MouseState mouseState)
+    {
+        var currentPosition = new Vector2(mouseState.X, mouseState.Y);
+
+        if (!_textSelectionDragExceededTapThreshold)
+        {
+            if (Vector2.Distance(_textSelectionDragStartMousePosition, currentPosition) < TextSelectionDragTapThresholdPixels)
+            {
+                return;
+            }
+
+            _textSelectionDragExceededTapThreshold = true;
+            _textSelectionDragBox?.BeginSelectionDrag(new Point((int)_textSelectionDragStartMousePosition.X, (int)_textSelectionDragStartMousePosition.Y));
+        }
+
+        _textSelectionDragBox?.ExtendSelectionDrag(new Point((int)currentPosition.X, (int)currentPosition.Y));
     }
 
     /// <summary>
@@ -1259,6 +1328,7 @@ public sealed class UiInputController
         {
             ElementDragInteractionKind.Resize => GetResizeCursor(interaction.Edges),
             ElementDragInteractionKind.Move => MouseCursor.SizeAll,
+            ElementDragInteractionKind.None when interaction.Element is TextBox => MouseCursor.IBeam,
             _ => MouseCursor.Arrow,
         };
     }

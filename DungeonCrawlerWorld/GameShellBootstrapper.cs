@@ -65,6 +65,11 @@ public static class GameShellBootstrapper
         inputController.SetDefaultFocusElement(mapWindow);
         inputController.FocusElement(mapWindow);
 
+        // See MapWindow.IsTextInputFocused's own doc comment -- Space must not pause the game
+        // while a TextBox (search box, Quest Composer, ...) is focused and receiving the space
+        // character as ordinary typed text.
+        mapWindow.IsTextInputFocused = () => inputController.IsTextBoxFocused;
+
         // A notification popping up (fresh, or promoted from the unread queue) takes focus --
         // see NotificationCenter.ActiveNotificationOpened.
         notificationCenter.ActiveNotificationOpened += notificationWindow => inputController.FocusElement(notificationWindow);
@@ -78,7 +83,11 @@ public static class GameShellBootstrapper
         // not Base/StaticHUD.
         questTriggerWindow.Clicked += _ => inputController.FocusElement(OpenQuestComposer(presentation.ElementPoolService, notificationCenter, layers));
 
-        BuildUserWindows(presentation, inputController, actionCatalog, itemCatalog, layers);
+        var cursorTextContent = new CursorTextContent(inputController, presentation.FontService, presentation.GlyphRenderer);
+        presentation.ElementPoolService.RegisterFactory<TextBox>(() => new TextBox(
+            presentation.FontService, presentation.ElementPoolService, presentation.GlyphRenderer, cursorTextContent));
+
+        BuildUserWindows(presentation, inputController, cursorTextContent, actionCatalog, itemCatalog, layers);
 
         return new GameShellContext(mapWindow, notificationCenter, inventory, layers, inputController);
     }
@@ -350,8 +359,8 @@ public static class GameShellBootstrapper
         return hotbarController;
     }
 
-    /// <summary>User tier: today, just DragGhostContent's host window -- see UiLayer's own doc comment for what this tier is for. Split out from the other three Build* methods since it needs a real UiInputController reference (see Build), which doesn't exist yet while those run.</summary>
-    private static void BuildUserWindows(PresentationContext presentation, UiInputController inputController, ActionCatalog actionCatalog, ItemCatalog itemCatalog, UiLayerStack layers)
+    /// <summary>User tier: DragGhostContent's host window, plus CursorTextContent's -- see UiLayer's own doc comment for what this tier is for. Split out from the other three Build* methods since it needs a real UiInputController reference (see Build), which doesn't exist yet while those run. Takes cursorTextContent rather than building it, since Build needs the same reference for TextBox's own factory re-registration -- see that call site's own comment.</summary>
+    private static void BuildUserWindows(PresentationContext presentation, UiInputController inputController, CursorTextContent cursorTextContent, ActionCatalog actionCatalog, ItemCatalog itemCatalog, UiLayerStack layers)
     {
         // Zero-size and fully transparent -- DragGhostContent draws directly at the live mouse
         // position (see its own doc comment), not relative to this window's own bounds, so the
@@ -365,6 +374,17 @@ public static class GameShellBootstrapper
             inputController, actionCatalog, itemCatalog, presentation.FontService, presentation.SpriteSheetService, presentation.SpriteRenderer, presentation.GlyphRenderer));
         dragGhostWindow.Initialize();
         layers.Add(UiLayer.User, dragGhostWindow);
+
+        // Same hosting shape as dragGhostWindow above -- see CursorTextContent's own doc comment
+        // for why it's built the same way DragGhostContent is.
+        var cursorTextWindow = presentation.ElementPoolService.CreateElement<Window>(null, new ElementOptions
+        {
+            Layout = new ElementLayoutOptions { RelativePosition = Vector2.Zero, Size = Vector2.Zero, DisplayMode = ElementDisplayMode.Fixed },
+            Chrome = new ElementChromeOptions { ShowBorder = false, ShowTitle = false, CanUserFocus = false },
+        });
+        cursorTextWindow.SetContent(cursorTextContent);
+        cursorTextWindow.Initialize();
+        layers.Add(UiLayer.User, cursorTextWindow);
     }
 
     /// <summary>TEMPORARYOpens a fresh closeable popup with one multiline TextBox; submitting posts a Quest notification and closes the popup. Returns the popup so the caller can focus it.</summary>

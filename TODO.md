@@ -306,14 +306,6 @@ Not a measured problem today -- no Delayed action currently has a windup long en
 
 ### High Priority
 
-#### UI element lifecycle audit -- Initialize/teardown across ElementPoolService
-
-Three genuinely distinct pooled-Element lifecycle bugs were found and fixed in the same short span while landing Inventory item filtering (see the Inventory item sorting, filtering, and searching item below): (1) `ElementPoolService.CloseElement` had no protection against being invoked twice on the same instance, letting the same object land in a shared type pool's stack twice and get rented out to two different logical windows simultaneously; (2) several call sites (`TabbedContent.Initialize`, `InventoryTabContent.Initialize`, `GridControl.Initialize`) called `.Initialize()` explicitly right after `AddChild(...)`, not realizing `AddChild` (via `Element.RetileChildrenFrom`) already initializes a newly-added child automatically -- harmless for most elements, but a control whose own `Initialize()` builds and `AddChild`s its own children (`GridControl`) ended up creating a second, orphaned set of them; (3) `RetileChildrenFrom` itself, shared by `AddChild` and `RemoveChild`, unconditionally called `.Initialize()` on every remaining sibling from the removal point onward when closing a child -- for a `Window` whose `IElementContent` was already set, this re-triggered a full rebuild of that content's own children on top of the ones already there (never clearing the old set first), for every later sibling still attached, compounding into duplicated UI state and an increasingly expensive close the more siblings a parent had.
-
-All three are now fixed at their respective root causes (see `Presentation/UI/ElementPoolService.cs`/`Element.cs` history), but each was found reactively, one at a time, via live-testing symptoms (a duplicated search box, then a slow/crashing close) rather than from understanding the lifecycle contract up front. Worth a deliberate pass over `Element`/`Window`/`ElementPoolService` (`Presentation/UI/`) specifically asking: what is `Initialize()` actually supposed to mean for a pooled, potentially-reused element (first-time setup? every-rent setup? safe to call more than once?), and does every current call site -- `AddChild`'s auto-init, `Window.OnChildrenInitialized`'s `IElementContent.Initialize` forwarding, every explicit `.Initialize()` call across `Presentation/UI/Content/` -- actually agree with that contract, rather than continuing to find the next divergence only once it surfaces as a visible bug.
-
-As part of that pass: verify whether closing/tearing down a subtree (recursively removing children, clearing event subscriptions -- currently `ElementPoolService.CloseElement`/`CloseAllChildren`/`ClearEventSubscriptions`) actually belongs on `ElementPoolService`, or whether it's `Element`'s own responsibility instead. Today `ElementPoolService` reaches into `Element`'s children (`ChildElements`) and reflects over its event backing fields from the outside, while `Element` itself owns the adjacent structural mutations (`AddChild`/`RemoveChild`/`RetileChildrenFrom`) that a close has to interact with correctly (see the `RetileChildrenFrom` bug above, which lived on `Element` but was only found while debugging `ElementPoolService.CloseElement`'s behavior) -- worth deciding deliberately whether that split is the right one, or whether teardown should be an `Element` instance method (`Close()`-adjacent, alongside the existing `Element.Close()`) that `ElementPoolService` merely triggers and then pools the result of, rather than performing itself from outside.
-
 #### Component ToString coverage for the selection inspector
 
 `SelectionWindowContent`'s inspector (`Presentation/UI/Content/SelectionWindowContent.cs`, via `ComponentInspector`) displays whatever `ToString()` a selected entity's components return -- most component structs still fall back to the default `ToString()` (the type name only, no field values), so the inspector shows little beyond "this entity has a HealthComponent" without the actual numbers. `HealthComponent` is the one existing example of a component with a real, informative `ToString()` (a percentage bar plus current/max, see its own doc comment on why it degrades gracefully for an invalid MaximumHealth rather than throwing). Worth a pass giving every component struct (or at least the ones a player/dev would actually want to inspect -- `ManaComponent`, `AbilityScoreComponent`, `StatModifierComponent`, `InventoryItemStackComponent`, etc.) an equivalent field-dump `ToString()`, so the inspector actually earns its name instead of just confirming presence/absence.
@@ -532,18 +524,26 @@ Exists side-by-side with inventory for easy click-and-drag equipping. Collapsibl
 
 No way to view a player's ability scores exists today -- add one alongside the inventory window (same `Folder` + pooled-`Window` pattern as `InventoryFolderController`/`InventoryManagementWindow`, `Presentation/UI/Inventory/`). Display the 5 Core scores' `Total` (Hidden scores stay invisible by design) and total buffs/debuffs, with an explanation popup showing the origin of each -- filterable straight out of `MultiComponentPool<StatModifierComponent>` by `Target` (`Game/Modules/StatModifiers/`). Lets the player assign stat points to increase stats once level-up exists. See the matching Game stats item above.
 
-#### Text Input Enhanced Features
+#### Text Input Enhanced Features (landed)
 
-Follow-on to Text input above, once a TextBox actually needs more than "type to append, Backspace to remove from the end" -- deliberately deferred out of that item's first pass rather than gold-plating a control before anything exercises the basics:
+Follow-on to Text input above, once a TextBox actually needed more than "type to append, Backspace to remove from the end" -- driven by the upcoming Journal feature needing something close to a standard desktop text editor. Landed in `Presentation/UI/TextBox.cs` across five phases:
 
-- Cursor-addressable editing: insert/delete at an arbitrary position within the string, not just the end.
-- Arrow-key navigation (Left/Right, and Up/Down for multiline) to move the cursor without the mouse.
-- Click-to-position-cursor: clicking within a TextBox's text sets the cursor to that character position.
-- A blinking visual caret at the current cursor position -- today's `TextBox` has no cursor indicator of any kind, only the whole-box focus border (`FocusIndicatorColor`, see Text input above); needs its own on/off blink timer, the same delay-gated-toggle idiom `GameTiming.FramesForSeconds` already provides elsewhere (e.g. `HudMetrics.HoverTooltipDelayFrames`).
-- Selection (Shift+arrow or click-drag), plus explicit keyboard shortcuts once selection exists: Ctrl+A (select all), Ctrl+C (copy the current selection), Ctrl+V (paste at the cursor, replacing any selection) -- building on the clipboard mechanism from the Text copy to clipboard item below. All three need `OnHotkeysAction`'s whole-`KeyboardState` hook (already used for Enter/Shift+Enter, see Text input above), not `HandleKeyPress`, since they're Ctrl-modified combos.
-- Key-repeat on a held Backspace/Delete -- `Window.HandleKeyPress` is edge-triggered (fires once per press, not while held), so this needs either a per-window repeat timer or a second, repeat-aware routing path. Typed characters don't have this gap: OS-level `TextInputEXT` text input already auto-repeats while a printable key is held.
+- Cursor-addressable editing (`_caretIndex`, insert/delete at an arbitrary position -- typing, Backspace, Delete, and Shift+Enter's newline all operate at the caret now, not just the end).
+- Arrow-key navigation (Left/Right; Ctrl+Left/Right word-jump via `FindPreviousWordBoundary`/`FindNextWordBoundary`; Up/Down for multiline, preserving desired pixel X across consecutive moves; Home/End/Ctrl+Home/Ctrl+End).
+- Click-to-position-cursor (`OnContentClickAction` override, `HitTestCaretIndex`), double-click-selects-word, triple-click-selects-line, Shift+click extends selection -- all sharing the same hit-test.
+- A blinking visual caret (`CaretBlinkIntervalFrames`, the same `GameTiming.FramesForSeconds` delay-gated idiom used elsewhere), reset to solid-visible on every edit/navigation.
+- Full selection: Shift+arrow/Home/End/Ctrl+Home/Ctrl+End, click-drag (new `UiInputController` plumbing -- `_textSelectionDragBox`/`HandleTextSelectionDrag`, mirroring the existing right-drag tap/drag distinction), Ctrl+A, Ctrl+Backspace/Ctrl+Delete word-deletion, and typing/Backspace/Delete/Shift+Enter replacing an active selection first (`TryDeleteSelection`).
+- Ctrl+C/Ctrl+X/Ctrl+V clipboard support -- see the Text copy to clipboard item below, landed together with this.
+- Key-repeat on held Backspace/Delete/Left/Right/Up/Down (`ShouldFire`, one shared initial-delay-then-interval timer) -- Backspace/Delete moved from the edge-triggered `HandleKeyPress` hook into the same per-frame `OnHotkeysAction` hook the arrows already used, so all six share one repeat mechanism instead of two different ones.
+- I-beam cursor on hover (`UiInputController.GetHoverCursor`), and single-line boxes clip/scroll horizontally to keep the caret visible (`_visibleStartIndex`/`EnsureCaretVisible`/`GetVisibleWindowText`) instead of wrapping or overflowing.
 
-Affected: `Presentation/UI/TextBox.cs` (once it exists, see Text input above).
+Not landed: word-jump/double-click-select existed as stretch goals when first scoped and both landed; undo/redo did not -- see its own dedicated TODO item below. No context-menu (Cut/Copy/Paste/Select All) either -- still blocked on the separate "Context menu / mouse button coverage" item.
+
+Affected: `Presentation/UI/TextBox.cs`, `Presentation/UI/TextWindow.cs`, `Presentation/UI/Content/CursorTextContent.cs` (new), `Presentation/Input/UiInputController.cs`, `DungeonCrawlerWorld/GameShellBootstrapper.cs`.
+
+#### Text input undo/redo (Ctrl+Z/Ctrl+Y)
+
+Deliberately left out of the Text Input Enhanced Features pass that added cursor editing/selection/clipboard support to `TextBox` -- undo/redo needs a real edit-history design (a stack of applied edits or snapshots, coalescing rules for "was this keystroke part of the same undo step as the last," a cap on history depth), not a small addition on top of the existing caret/selection work. Also not yet clear whether that history should live on `TextBox` itself or on some shared primitive a future second editable control (see the Standard widget set item's still-missing list) would also want -- worth a dedicated design pass once a second editable control actually exists, rather than guessing the shared shape from `TextBox` alone.
 
 #### WrapContent parent sizing collapses when a child resizes itself after being attached
 
@@ -557,9 +557,9 @@ A real fix likely means `Measure` shouldn't blindly overwrite a child's `Maximum
 
 Affected: `Presentation/UI/Window.cs` (`Measure`, `MeasureAndArrange`, `RecalculateWrapContentWindowSize`).
 
-#### Text copy to clipboard
+#### Text copy to clipboard (landed, superseded -- not click-to-copy)
 
-`TextWindow.OnContentClickAction` has a standing `// TODO copy text to clipboard`. Lower effort than full text input, and doesn't need focus/keyboard routing first -- click-to-copy, not type-to-edit.
+Resolved as part of Text Input Enhanced Features' Ctrl+C/Ctrl+X, not the click-to-copy this item originally proposed -- click-to-copy was deliberately rejected (too easy to trigger by accident, and `TextWindow.OnContentClickAction` fires before the public `Clicked` event on every `Element`, which would have silently copied text on every existing click-to-open `TextWindow`, e.g. the Quest trigger and a notification's count window). A deliberate, per-feature copy *icon* affordance remains a real option later, wherever a specific feature actually wants click-to-copy -- not a blanket behavior on every `TextWindow`.
 
 #### Scrollbars
 
