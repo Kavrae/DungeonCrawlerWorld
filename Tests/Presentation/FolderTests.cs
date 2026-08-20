@@ -16,7 +16,7 @@ public sealed class FolderTests
     {
         var fontService = new FontService("Fonts");
         var glyphRenderer = new GlyphRenderer();
-        var windowService = new ElementPoolService(fontService, glyphRenderer);
+        var windowService = TestElementPoolServiceFactory.Create(fontService, glyphRenderer);
         windowService.RegisterFactory<Folder>(() => new Folder(
             fontService, windowService, glyphRenderer, new SpriteSheetService(null, "Spritesheets"), new SpriteRenderer()));
         return windowService;

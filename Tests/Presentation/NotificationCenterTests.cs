@@ -30,7 +30,7 @@ public sealed class NotificationCenterTests
     {
         var fontService = new FontService("Fonts");
         var glyphRenderer = new GlyphRenderer();
-        var windowService = new ElementPoolService(fontService, glyphRenderer);
+        var windowService = TestElementPoolServiceFactory.Create(fontService, glyphRenderer);
         windowService.RegisterFactory<Folder>(() => new Folder(
             fontService, windowService, glyphRenderer, new SpriteSheetService(null, "Spritesheets"), new SpriteRenderer()));
         return windowService;
@@ -129,7 +129,7 @@ public sealed class NotificationCenterTests
     {
         var fontService = new FontService("Fonts");
         var glyphRenderer = new GlyphRenderer();
-        var windowService = new ElementPoolService(fontService, glyphRenderer);
+        var windowService = TestElementPoolServiceFactory.Create(fontService, glyphRenderer);
         Folder? capturedFolder = null;
         windowService.RegisterFactory<Folder>(() =>
         {
@@ -318,7 +318,7 @@ public sealed class NotificationCenterTests
     {
         var fontService = new FontService("Fonts");
         var glyphRenderer = new GlyphRenderer();
-        var windowService = new ElementPoolService(fontService, glyphRenderer);
+        var windowService = TestElementPoolServiceFactory.Create(fontService, glyphRenderer);
         windowService.RegisterFactory<Folder>(() => new Folder(
             fontService, windowService, glyphRenderer, new SpriteSheetService(null, "Spritesheets"), new SpriteRenderer()));
         var capturedPopups = new List<TextWindow>();
@@ -365,7 +365,7 @@ public sealed class NotificationCenterTests
     {
         var fontService = new FontService("Fonts");
         var glyphRenderer = new GlyphRenderer();
-        var windowService = new ElementPoolService(fontService, glyphRenderer);
+        var windowService = TestElementPoolServiceFactory.Create(fontService, glyphRenderer);
         windowService.RegisterFactory<Folder>(() => new Folder(
             fontService, windowService, glyphRenderer, new SpriteSheetService(null, "Spritesheets"), new SpriteRenderer()));
         var capturedPopups = new List<TextWindow>();

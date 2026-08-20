@@ -16,7 +16,7 @@ namespace Tests.Presentation;
 [TestClass]
 public sealed class TextWindowSizingTests
 {
-    private static ElementPoolService CreateWindowService() => new(new FontService("Fonts"), new GlyphRenderer());
+    private static ElementPoolService CreateWindowService() => TestElementPoolServiceFactory.Create(new FontService("Fonts"), new GlyphRenderer());
 
     private static TextWindow CreateWrapContentTextWindow(ElementPoolService windowService, string text, Vector2 maximumSize)
     {
@@ -72,7 +72,7 @@ public sealed class TextWindowSizingTests
 
     /// <summary>
     /// Regression test for the reported bug: SelectionWindowContent tiles one TextWindow per
-    /// component vertically under a Fixed-height parent (see GameShellBootstrapper's
+    /// component vertically under a Fixed-height parent (see ShellBootstrapper's
     /// selectionWindow), each child's own MaximumSize set to the *whole* parent content size
     /// (not "whatever's left"), per RecalculateWrapContentWindowSize's own
     /// maximumContentHeight = MaximumSize.Y - RelativePosition.Y. Enough long-text siblings in

@@ -1,5 +1,4 @@
 using Microsoft.Xna.Framework;
-using Microsoft.Xna.Framework.Graphics;
 using Microsoft.Xna.Framework.Input;
 
 namespace Presentation.UI;
@@ -21,7 +20,8 @@ public interface IElementContent
 
     void Update(GameTime gameTime);
 
-    void DrawContent(GameTime gameTime, SpriteBatch spriteBatch, Texture2D unitRectangle);
+    /// <summary>Implementations needing SpriteBatch/Texture2D read them off the host window passed to Initialize -- hostWindow.ElementPoolService.SpriteBatch/UnitRectangle (see ElementPoolService's own doc comment for why they're sourced this way instead of taken as parameters).</summary>
+    void DrawContent(GameTime gameTime);
 
     /// <summary>Default-implemented as a no-op so existing content types don't need to change.</summary>
     void HandleKeyPress(Keys key) { }

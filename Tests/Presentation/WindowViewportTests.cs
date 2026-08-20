@@ -18,7 +18,7 @@ namespace Tests.Presentation;
 [TestClass]
 public sealed class WindowViewportTests
 {
-    private static ElementPoolService CreateWindowService() => new(new FontService("Fonts"), new GlyphRenderer());
+    private static ElementPoolService CreateWindowService() => TestElementPoolServiceFactory.Create(new FontService("Fonts"), new GlyphRenderer());
 
     [TestMethod]
     public void SetRelativePosition_UpdatesWindowViewportToMatchContentRectangle()

@@ -17,7 +17,7 @@ namespace Tests.Presentation;
 [TestClass]
 public sealed class TextBoxTests
 {
-    private static ElementPoolService CreateWindowService() => new(new FontService("Fonts"), new GlyphRenderer());
+    private static ElementPoolService CreateWindowService() => TestElementPoolServiceFactory.Create(new FontService("Fonts"), new GlyphRenderer());
 
     private static TextBox CreateTextBox(ElementPoolService windowService, bool multiline = false)
     {
@@ -211,7 +211,7 @@ public sealed class TextBoxTests
     }
 
     /// <summary>
-    /// Regression test for the reported bug, using the same pattern GameShellBootstrapper's
+    /// Regression test for the reported bug, using the same pattern ShellBootstrapper's
     /// quest-composer popup does: a Fixed (not WrapContent) parent explicitly resizing itself
     /// off the TextBox's own Resized event, using a chrome-overhead constant computed once up
     /// front. A WrapContent parent was tried first and rejected -- see AutoSizeToContent's own

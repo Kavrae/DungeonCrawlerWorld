@@ -50,8 +50,11 @@ public sealed class InventoryItemStackCell(FontService fontService, ElementPoolS
         _quantityFont = fontService.GetFont((int)(cellSize.Y * QuantityFontFraction));
     }
 
-    public override void DrawContent(GameTime gameTime, SpriteBatch spriteBatch, Texture2D unitRectangle)
+    public override void DrawContent(GameTime gameTime)
     {
+        var spriteBatch = ElementPoolService.SpriteBatch;
+        var unitRectangle = ElementPoolService.UnitRectangle;
+
         if (IsHovered)
         {
             spriteBatch.Draw(unitRectangle, new Rectangle((int)ContentAbsolutePosition.X, (int)ContentAbsolutePosition.Y, (int)ContentSize.X, (int)ContentSize.Y), WindowPalette.HighlightColor);

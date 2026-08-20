@@ -12,7 +12,7 @@ namespace Presentation.UI.Content;
 
 /// <summary>
 /// Mirrors PlayerHealthBarContent exactly (see its own doc comment for the full rationale) --
-/// a permanent top-right HUD readout, hosted below the health bar (see GameShellBootstrapper),
+/// a permanent top-right HUD readout, hosted below the health bar (see ShellBootstrapper),
 /// that always renders rather than hiding at full mana. Light grey full-width fill when the
 /// player has no ManaComponent at all -- not an error state, just "hasn't gained a mana-costing
 /// ability yet" (see ManaGrant.EnsureManaComponentExists), the same fallback treatment
@@ -59,10 +59,13 @@ public sealed class PlayerManaBarContent(World world, ComponentManager component
             : 1f;
     }
 
-    public void DrawContent(GameTime gameTime, SpriteBatch spriteBatch, Texture2D unitRectangle)
+    public void DrawContent(GameTime gameTime)
     {
+        var spriteBatch = _hostWindow.ElementPoolService.SpriteBatch;
+        var unitRectangle = _hostWindow.ElementPoolService.UnitRectangle;
+
         // ContentSize, not the static Size -- Size is the window's outer bounds (used by
-        // GameShellBootstrapper to position/size the host window itself); the actual drawable
+        // ShellBootstrapper to position/size the host window itself); the actual drawable
         // area is whatever's left after its border insets that, so the bar has to size itself
         // off ContentSize to fit inside the border rather than drawing over it.
         var origin = _hostWindow.ContentAbsolutePosition;

@@ -106,8 +106,11 @@ public sealed class Folder : Element
     }
 
     /// <summary>Background fill, then sprite-else-glyph icon via the shared SpriteOrGlyphRenderer -- IsDisabled gray-tints either form, mirroring MapWindow's dead-entity tint.</summary>
-    protected override void DrawHeader(GameTime gameTime, SpriteBatch spriteBatch, Texture2D unitRectangle)
+    protected override void DrawHeader(GameTime gameTime)
     {
+        var spriteBatch = ElementPoolService.SpriteBatch;
+        var unitRectangle = ElementPoolService.UnitRectangle;
+
         if (!IsTransparent)
         {
             spriteBatch.Draw(unitRectangle, HeaderRectangle, _backgroundColor);

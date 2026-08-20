@@ -27,13 +27,13 @@ public sealed class WindowContentTests
 
         public void Initialize(Window hostWindow) => InitializedWith = hostWindow;
         public void Update(GameTime gameTime) => UpdateCount++;
-        public void DrawContent(GameTime gameTime, SpriteBatch spriteBatch, Texture2D unitRectangle) => DrawContentCount++;
+        public void DrawContent(GameTime gameTime) => DrawContentCount++;
         public void HandleKeyPress(Keys key) => PressedKeys.Add(key);
         public void HandleHotkeys(KeyboardState keyboardState, KeyboardState previousKeyboardState) => HandleHotkeysCount++;
         public void HandleTextInput(char character) => TypedCharacters.Add(character);
     }
 
-    private static ElementPoolService CreateWindowService() => new(new FontService("Fonts"), new GlyphRenderer());
+    private static ElementPoolService CreateWindowService() => TestElementPoolServiceFactory.Create(new FontService("Fonts"), new GlyphRenderer());
 
     [TestMethod]
     public void Initialize_ContentAttached_ReceivesHostWindow()
@@ -72,7 +72,7 @@ public sealed class WindowContentTests
         window.SetContent(content);
         window.Initialize();
 
-        window.DrawContent(new GameTime(), null!, null!);
+        window.DrawContent(new GameTime());
 
         Assert.AreEqual(1, content.DrawContentCount);
     }
@@ -156,6 +156,6 @@ public sealed class WindowContentTests
         var window = windowService.CreateElement<Window>(null, new ElementOptions());
         window.Initialize();
 
-        window.DrawContent(new GameTime(), null!, null!);
+        window.DrawContent(new GameTime());
     }
 }

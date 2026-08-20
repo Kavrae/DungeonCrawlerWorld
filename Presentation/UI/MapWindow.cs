@@ -87,7 +87,7 @@ public sealed class MapWindow : Window
     /// focused elsewhere and skip if so -- e.g. typing a space into a search box or the Quest
     /// Composer must never also pause the game. Settable rather than a constructor dependency
     /// since UiInputController (the actual source of truth for "what's focused") is built after
-    /// MapWindow -- see GameShellBootstrapper.Build's own ordering notes. Null (before that
+    /// MapWindow -- see ShellBootstrapper.Build's own ordering notes. Null (before that
     /// wiring runs, and in tests that construct a MapWindow directly) means "assume nothing else
     /// is focused," matching today's unconditional behavior.
     /// </summary>
@@ -98,7 +98,7 @@ public sealed class MapWindow : Window
     /// MapTintGrid and MapBackgroundCache are constructed here, not injected, unlike every other
     /// dependency -- both are MapWindow-private derived state (a per-cell glow index, a per-cell
     /// background-color cache) with no other consumer, so there's nothing to gain from resolving
-    /// them through GameShellBootstrapper the way the shared services above are.
+    /// them through ShellBootstrapper the way the shared services above are.
     /// </remarks>
     public MapWindow(
         FontService fontService,
@@ -163,7 +163,7 @@ public sealed class MapWindow : Window
     }
 
     /// <summary>One-time setup once this window's own content size is known -- font loading, camera/background-cache sizing, and the initial camera position.</summary>
-    /// <remarks>Snaps the camera to the player's spawn position if it already exists at this point, otherwise resets the background cache to its empty state instead -- Initialize can run before FloorBuilder.CreatePlayer has actually placed the player (see GameLoop's own "TEMPORARY Once, on this class's first live tick -- not during Initialize()" doc comment), so this has to tolerate the player not existing yet.</remarks>
+    /// <remarks>Snaps the camera to the player's spawn position if it already exists at this point, otherwise resets the background cache to its empty state instead. In real gameplay the player already exists by the time this ever runs -- WorldSessionBootstrapper.Build spawns it before ShellBootstrapper.Build ever constructs a MapWindow -- but this still has to tolerate the player not existing, for a MapWindow built directly (e.g. tests) without going through that same sequence.</remarks>
     public override void Initialize()
     {
         base.Initialize();
@@ -241,8 +241,11 @@ public sealed class MapWindow : Window
 
     /// <summary>Draws one frame of the map viewport: background, tile backgrounds, glyphs/sprites, glow overlay, then targeting/selection highlights, in that order.</summary>
     /// <remarks>Draw order is significant, not incidental -- each pass lands on top of the previous one with no depth buffer (SpriteSortMode.Deferred submits in call order), so highlights/glow have to come after the glyphs/sprites they're meant to sit on top of, and the flat background wash has to come first so everything else has something to draw over.</remarks>
-    public override void DrawContent(GameTime gameTime, SpriteBatch spriteBatch, Texture2D unitRectangle)
+    public override void DrawContent(GameTime gameTime)
     {
+        var spriteBatch = ElementPoolService.SpriteBatch;
+        var unitRectangle = ElementPoolService.UnitRectangle;
+
         spriteBatch.Draw(unitRectangle, new Rectangle(0, 0, _camera.TileColumns * _camera.CurrentTileSize.X, _camera.TileRows * _camera.CurrentTileSize.Y), MapBackgroundColor);
 
         _tileRenderer.DrawBackgrounds(spriteBatch, unitRectangle, _backgroundCache.Colors, _camera.TileColumns, _camera.TileRows, _camera.CurrentTileSize, _camera.RenderPixelOffset);
@@ -785,8 +788,11 @@ public sealed class MapWindow : Window
             ChangeLayer(-1);
         }
 
-        _playerMovement.HandleInput(keyboardState);
-        _actionTargeting.HandleHotbarHotkeys(keyboardState, previousKeyboardState);
+        if (!IsPaused)
+        {
+            _playerMovement.HandleInput(keyboardState);
+            _actionTargeting.HandleHotbarHotkeys(keyboardState, previousKeyboardState);
+        }
     }
 
     private void CenterCameraOn(Vector3Int position)

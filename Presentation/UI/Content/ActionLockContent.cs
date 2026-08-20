@@ -53,12 +53,15 @@ public sealed class ActionLockContent(World world, ComponentManager componentMan
             : 0f;
     }
 
-    public void DrawContent(GameTime gameTime, SpriteBatch spriteBatch, Texture2D unitRectangle)
+    public void DrawContent(GameTime gameTime)
     {
         if (!_hasActionLock)
         {
             return;
         }
+
+        var spriteBatch = _hostWindow.ElementPoolService.SpriteBatch;
+        var unitRectangle = _hostWindow.ElementPoolService.UnitRectangle;
 
         _radialFill.Glyph = _glyph;
         _radialFill.GlyphColor = _glyphColor;

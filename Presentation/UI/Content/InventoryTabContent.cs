@@ -90,7 +90,7 @@ public sealed class InventoryTabContent(ElementPoolService elementPoolService, F
     }
 
     /// <summary>Nothing to draw directly -- GridControl and the grid window both draw themselves through the normal child-element pass.</summary>
-    public void DrawContent(GameTime gameTime, SpriteBatch spriteBatch, Texture2D unitRectangle)
+    public void DrawContent(GameTime gameTime)
     {
     }
 

@@ -3,7 +3,6 @@ using FontStashSharp;
 using Microsoft.Xna.Framework;
 using Microsoft.Xna.Framework.Graphics;
 using Presentation.Fonts;
-using Presentation.Input;
 using Presentation.Rendering;
 
 namespace Presentation.UI.Content;
@@ -14,12 +13,19 @@ namespace Presentation.UI.Content;
 /// copy-only special case -- the first caller is TextBox showing "Copied" after a successful
 /// Ctrl+C/Ctrl+X, but any future feature wanting the same brief, non-blocking confirmation can
 /// call Show directly. Hosted the same way DragGhostContent is (zero-size, fully transparent,
-/// User-tier window -- see GameShellBootstrapper.BuildUserWindows): both draw directly at the
+/// User-tier window -- see ShellBootstrapper.BuildUserWindows): both draw directly at the
 /// live mouse position rather than relative to any window's own bounds, and User is the topmost
 /// tier, so this always renders above whatever it's reporting on.
 /// </summary>
-public sealed class CursorTextContent(UiInputController inputController, FontService fontService, GlyphRenderer glyphRenderer) : IElementContent
+public sealed class CursorTextContent(FontService fontService, GlyphRenderer glyphRenderer) : IElementContent
 {
+    /// <summary>
+    /// How DrawContent finds the live cursor position -- assigned once ShellBootstrapper.Build
+    /// has constructed a real UiInputController, which happens after this class does (see that
+    /// method's own comment on why). Defaults to a no-op origin so an unwired instance (e.g. in a
+    /// test) never null-refs.
+    /// </summary>
+    public Func<Point> GetCursorPosition { get; set; } = static () => Point.Zero;
     /// <summary>Total time a message stays visible, including the fade -- roughly a standard toast duration.</summary>
     private static readonly int DisplayFrames = GameTiming.FramesForSeconds(1.0f);
 
@@ -33,6 +39,8 @@ public sealed class CursorTextContent(UiInputController inputController, FontSer
 
     private readonly SpriteFontBase _font = fontService.GetFont(14);
 
+    private Window _hostWindow = null!;
+
     private string _text = string.Empty;
     private int _remainingFrames;
 
@@ -43,9 +51,7 @@ public sealed class CursorTextContent(UiInputController inputController, FontSer
         _remainingFrames = DisplayFrames;
     }
 
-    public void Initialize(Window hostWindow)
-    {
-    }
+    public void Initialize(Window hostWindow) => _hostWindow = hostWindow;
 
     public void Update(GameTime gameTime)
     {
@@ -55,7 +61,7 @@ public sealed class CursorTextContent(UiInputController inputController, FontSer
         }
     }
 
-    public void DrawContent(GameTime gameTime, SpriteBatch spriteBatch, Texture2D unitRectangle)
+    public void DrawContent(GameTime gameTime)
     {
         if (_remainingFrames <= 0)
         {
@@ -63,9 +69,9 @@ public sealed class CursorTextContent(UiInputController inputController, FontSer
         }
 
         var alpha = _remainingFrames < FadeFrames ? (float)_remainingFrames / FadeFrames : 1f;
-        var mousePosition = inputController.CurrentMousePosition;
+        var mousePosition = GetCursorPosition();
         var position = new Vector2(mousePosition.X, mousePosition.Y) + CursorOffset;
 
-        glyphRenderer.Draw(spriteBatch, _font, _text, position, TextColor * alpha);
+        glyphRenderer.Draw(_hostWindow.ElementPoolService.SpriteBatch, _font, _text, position, TextColor * alpha);
     }
 }

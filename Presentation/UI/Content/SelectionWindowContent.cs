@@ -123,7 +123,7 @@ public sealed class SelectionWindowContent(
         }
     }
 
-    public void DrawContent(GameTime gameTime, SpriteBatch spriteBatch, Texture2D unitRectangle)
+    public void DrawContent(GameTime gameTime)
     {
         // Nothing to draw directly -- everything is child TextWindows, which Window already
         // draws as part of its own child-window loop.
@@ -188,7 +188,7 @@ public sealed class SelectionWindowContent(
                 Hierarchy = new ElementHierarchyOptions { CanContainChildren = false },
                 // Height uncapped (a generous, effectively-unlimited sentinel, not
                 // _hostWindow.ContentSize.Y) -- selectionWindow itself is the thing that
-                // scrolls now (CanUserScrollVertical, see GameShellBootstrapper), so each
+                // scrolls now (CanUserScrollVertical, see ShellBootstrapper), so each
                 // component window should always render its full natural height rather than
                 // getting clamped for "running out of room" the moment it's tiled past
                 // selectionWindow's own fixed, one-screen-tall content size. Width still capped

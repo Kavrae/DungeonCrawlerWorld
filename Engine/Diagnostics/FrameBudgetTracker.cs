@@ -13,7 +13,7 @@ namespace Engine.Diagnostics;
 /// overall contributor.
 ///
 /// Intended as an opt-in diagnostic (see SystemManager.Profiler, EventBus.Profiler,
-/// GameShellContext, and DiagnosticsEngine) for tracking frame budgets. Supersedes the old
+/// ShellContext, and DiagnosticsEngine) for tracking frame budgets. Supersedes the old
 /// PhaseProfiler, whose flat string-keyed phases couldn't distinguish Update from Draw or say
 /// which system/window a phase belonged to.
 /// </remarks>

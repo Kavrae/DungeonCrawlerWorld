@@ -9,7 +9,7 @@ namespace Tests.Presentation;
 [TestClass]
 public sealed class WindowGlowTests
 {
-    private static ElementPoolService CreateWindowService() => new(new FontService("Fonts"), new GlyphRenderer());
+    private static ElementPoolService CreateWindowService() => TestElementPoolServiceFactory.Create(new FontService("Fonts"), new GlyphRenderer());
 
     private static Window CreateWindow(ElementPoolService windowService)
     {

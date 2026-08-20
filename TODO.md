@@ -302,6 +302,12 @@ Not a measured problem today -- no Delayed action currently has a windup long en
 
 `World.MoveEntity`/`World.PlaceEntityOnMap` (`Game/World/World.cs`) both no-op outright when a Blocking entity's destination footprint is already occupied by a different Blocking entity (`IsFootprintFreeFor`) -- correct for ordinary movement, but too blunt for a forced-displacement effect (knockback, forced pull/push, a summon shoved into an occupied cell). No such effect exists yet. Once one does, it needs its own resolution for the "destination is occupied" case instead of silently failing to move -- e.g. dealing collision damage to the displaced entity (and/or whatever occupies the destination) in lieu of completing the move, or redirecting to the nearest free cell along the displacement path. Depends on a forced-movement ActionEffect existing first (see the Actions/ActionEffects work already landed in `Game/Modules/Actions/`) to have a real caller to design against.
 
+#### Dungeon Anarchist's Cookbook
+
+A rare item granted to the player on the third floor -- takes many different forms, each dedicated to one specialization (class/race/playstyle), containing recipes, hints, and secrets for that specialization to encourage replay under a different one next run. Depends on floor-specific guaranteed item drops not existing yet (today's fixed `TestMapBuilder` layout has no per-floor loot table -- see the Random map generation v1 item above) and, for the "many different forms" part, some notion of which specialization a given run's copy should target.
+
+Each form's pages should let the player add their own notes, as multi-line text boxes -- a real second consumer of `TextBox`'s `Multiline` support (see the Text Input Enhanced Features item above) beyond the TEMPORARY quest-composer demo in `GameShellBootstrapper.cs`, and a natural fit for the upcoming Journal-shaped UI already anticipated there.
+
 ## Presentation
 
 ### High Priority
@@ -560,6 +566,14 @@ Affected: `Presentation/UI/Window.cs` (`Measure`, `MeasureAndArrange`, `Recalcul
 #### Text copy to clipboard (landed, superseded -- not click-to-copy)
 
 Resolved as part of Text Input Enhanced Features' Ctrl+C/Ctrl+X, not the click-to-copy this item originally proposed -- click-to-copy was deliberately rejected (too easy to trigger by accident, and `TextWindow.OnContentClickAction` fires before the public `Clicked` event on every `Element`, which would have silently copied text on every existing click-to-open `TextWindow`, e.g. the Quest trigger and a notification's count window). A deliberate, per-feature copy *icon* affordance remains a real option later, wherever a specific feature actually wants click-to-copy -- not a blanket behavior on every `TextWindow`.
+
+#### Selectable/copyable read-only text (move selection out of TextBox and into TextWindow)
+
+`TextBox`'s selection machinery -- `_lineSpans`, click-to-position hit-testing (`HitTestCaretIndex`/`FindColumnForPixelX`/`FindLineIndexFor`), double/triple-click word/line select, click-drag (`UiInputController`'s `_textSelectionDragBox`/`HandleTextSelectionDrag`), Ctrl+A, selection rendering (`DrawSelectionIfAny`), and Ctrl+C -- is all built against `TextWindow`'s own `DisplayText`/word-wrap, not anything editing-specific. None of it needs a caret, typing, or Backspace/Delete to make sense; a plain read-only `TextWindow` (a notification body, a tooltip, a quest log entry, `SelectionWindowContent`'s inspector text) could support "click-drag to select, Ctrl+C to copy" the same way, without ever becoming editable. Worth moving the selection/hit-test/copy half of `TextBox`'s logic up onto `TextWindow` itself (leaving only caret/editing -- typing, Backspace/Delete, the blinking caret, Ctrl+X/Ctrl+V -- as what actually makes `TextBox` a `TextBox`), gated so a plain `TextWindow` never shows a caret and never accepts typed input, just selection + copy. `TextBox` would then extend that base selection support rather than duplicating it.
+
+Investigated whether the same could easily extend to a `Window`'s title bar text: no -- `Window.TitleText` (`Presentation/UI/Window.cs`) is a separate, simpler mechanism, not built on `TextWindow`/`DisplayText` at all. It's a single raw string (`_titleText`) drawn with one direct `spriteBatch.DrawString` call in `DrawHeader`, with no word-wrap, no `_lineSpans`-equivalent, and no per-character measurement -- and `OnHeaderClickAction` only hit-tests title *buttons* today, not the title text itself. Reusing the selection logic above would need `TitleText` to be rebuilt on top of the same `DisplayText`/line-span infrastructure first, which is a much bigger change touching every `Window` in the game (title bars are universal, unlike `TextWindow`, which only some windows use) for comparatively low value -- most titles are short, static labels ("Inventory", "New Quest (Enter to submit)") nobody would want to copy. Worth revisiting only if a real need for copyable title text shows up; not bundled with the read-only-`TextWindow` selection work above.
+
+Affected: `Presentation/UI/TextWindow.cs`, `Presentation/UI/TextBox.cs`, `Presentation/Input/UiInputController.cs`.
 
 #### Scrollbars
 

@@ -47,7 +47,7 @@ public sealed class DiagnosticsEngine
 
     public DiagnosticsFeatures Features { get; }
 
-    /// <summary>Null unless DiagnosticsFeatures.FrameBudget is enabled -- wire into SystemManager.Profiler/EventBus.Profiler/GameShellContext when non-null.</summary>
+    /// <summary>Null unless DiagnosticsFeatures.FrameBudget is enabled -- wire into SystemManager.Profiler/EventBus.Profiler/ShellContext when non-null.</summary>
     public IFrameCostRecorder? FrameCostRecorder => _frameBudgetTracker;
 
     /// <summary>Null unless DiagnosticsFeatures.Startup is enabled -- wrap the composition root's own early steps with `using var _ = diagnostics.StartupProfiler?.Phase("...")`, and thread it into Bootstrapper.Build/GameBootstrapper.Build for their own per-module phases.</summary>

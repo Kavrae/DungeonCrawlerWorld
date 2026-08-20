@@ -61,7 +61,7 @@ public sealed class InventoryFolderController(
     /// <summary>Both windows take up this fraction of the map window's own width, side by side.</summary>
     private const float WindowWidthFraction = 0.33f;
 
-    /// <summary>Fixed HUD-style gap between the two windows, in the same spirit as GameShellBootstrapper.ActionLockGap -- not tied to map tile size, which changes with zoom.</summary>
+    /// <summary>Fixed HUD-style gap between the two windows, in the same spirit as ShellBootstrapper.ActionLockGap -- not tied to map tile size, which changes with zoom.</summary>
     private const float Gap = 12f;
 
     private readonly DirectComponentPool<InventoryDisabledComponent> _disabledPool = componentManager.GetDirectPool<InventoryDisabledComponent>();
@@ -118,6 +118,12 @@ public sealed class InventoryFolderController(
         // are attached (see Window.OnChildrenInitialized/GridControl/AbilityScoreWindow).
         _folder.Initialize();
         layers.Add(UiLayer.DynamicHud, _folder);
+
+        // Opening the other window (e.g. Stats while Inventory is already open) from the folder
+        // is a normal part of the menu-mode workflow (see UiLayerStack.MarkMenuModeExempt's own
+        // doc comment) -- not something an already-open Inventory/Ability Score window should
+        // itself block.
+        layers.MarkMenuModeExempt(_folder);
 
         using (_folder.BeginLayoutBatch())
         {
@@ -258,6 +264,7 @@ public sealed class InventoryFolderController(
             window.Closed += HandleClosed;
             window.Initialize();
             layers.Add(UiLayer.DynamicHud, window);
+            layers.OpenMenuWindow(window); // Both Inventory and Ability Scores are menu windows -- see UiLayerStack.OpenMenuWindow/GameLoop's pause check.
             Window = window;
         }
 
@@ -278,6 +285,7 @@ public sealed class InventoryFolderController(
         private void HandleClosed(Element closedWindow)
         {
             layers.Remove(UiLayer.DynamicHud, closedWindow);
+            layers.CloseMenuWindow(closedWindow);
             Window = null;
             onClosed();
         }

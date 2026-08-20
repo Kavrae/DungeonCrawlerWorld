@@ -64,7 +64,7 @@ public sealed class MapWindowTests
         var world = new Game.World.World(new Game.World.Map(new Vector3Int(mapSizeX, mapSizeY, mapSizeZ)));
         var mapViewState = new MapViewState();
         var fontService = new FontService("Fonts");
-        var windowService = new ElementPoolService(fontService, new GlyphRenderer());
+        var windowService = TestElementPoolServiceFactory.Create(fontService, new GlyphRenderer());
 
         var componentManager = new ComponentManager(100, 50);
         componentManager.RegisterDirectPool<TransformComponent>(static (ref existing, incoming) => existing = incoming);

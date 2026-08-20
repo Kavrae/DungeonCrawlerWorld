@@ -22,8 +22,13 @@ public class Window : Element
     /// </summary>
     private IElementContent? _content;
 
-    /// <summary>Internal, not public -- UiInputController's content-drag path (see its own doc comment) needs to check whether a hit window hosts a specific IElementContent (e.g. HotbarContent), the same "concrete type check on a generic hit-test result" UiInputController already does for InventoryItemStackCell.</summary>
-    internal IElementContent? Content => _content;
+    /// <summary>
+    /// Public so a hit-test/draw result can be checked for a specific IElementContent (e.g.
+    /// HotbarContent) -- UiInputController's content-drag path does this within the same
+    /// assembly; ShellContext.Draw (a different assembly) needs the identical check to find
+    /// the hotbar's own host window (see its own FindHotbarWindow).
+    /// </summary>
+    public IElementContent? Content => _content;
 
     /// <summary>
     /// Internal, not protected: chrome behaviors (see IWindowChromeBehavior) live outside
@@ -127,7 +132,7 @@ public class Window : Element
         _content?.Update(gameTime);
     }
 
-    public override void DrawContent(GameTime gameTime, SpriteBatch spriteBatch, Texture2D unitRectangle) => _content?.DrawContent(gameTime, spriteBatch, unitRectangle);
+    public override void DrawContent(GameTime gameTime) => _content?.DrawContent(gameTime);
 
     protected override void OnKeyPressAction(Keys key) => _content?.HandleKeyPress(key);
 
@@ -183,8 +188,11 @@ public class Window : Element
         }
     }
 
-    protected override void DrawHeader(GameTime gameTime, SpriteBatch spriteBatch, Texture2D unitRectangle)
+    protected override void DrawHeader(GameTime gameTime)
     {
+        var spriteBatch = ElementPoolService.SpriteBatch;
+        var unitRectangle = ElementPoolService.UnitRectangle;
+
         if (!_isTransparent)
         {
             var titleBackgroundColor = _isFocused
@@ -196,7 +204,7 @@ public class Window : Element
 
         foreach (var button in _titleButtons)
         {
-            button.Draw(gameTime, spriteBatch, unitRectangle);
+            button.Draw(gameTime);
         }
     }
 

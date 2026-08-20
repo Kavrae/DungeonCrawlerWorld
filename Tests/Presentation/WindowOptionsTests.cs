@@ -16,7 +16,7 @@ namespace Tests.Presentation;
 [TestClass]
 public sealed class WindowOptionsTests
 {
-    private static ElementPoolService CreateWindowService() => new(new FontService("Fonts"), new GlyphRenderer());
+    private static ElementPoolService CreateWindowService() => TestElementPoolServiceFactory.Create(new FontService("Fonts"), new GlyphRenderer());
 
     [TestMethod]
     public void CreateWindow_AllGroupsUnset_FallsBackToDefaults()
@@ -35,7 +35,7 @@ public sealed class WindowOptionsTests
         Assert.IsTrue(window.CanUserFocus);
     }
 
-    /// <summary>The one concrete opt-out case today: the debug stats window (see GameShellBootstrapper) has nothing that needs keyboard input and shouldn't be a stop in the Tab sequence.</summary>
+    /// <summary>The one concrete opt-out case today: the debug stats window (see ShellBootstrapper) has nothing that needs keyboard input and shouldn't be a stop in the Tab sequence.</summary>
     [TestMethod]
     public void CreateWindow_ChromeGroup_CanUserFocusFalse_OptsOutOfFocus()
     {

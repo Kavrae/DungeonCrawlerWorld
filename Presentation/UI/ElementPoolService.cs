@@ -1,6 +1,5 @@
 using Engine.Collections;
-using Presentation.Fonts;
-using Presentation.Rendering;
+using Microsoft.Xna.Framework.Graphics;
 using System.Reflection;
 
 namespace Presentation.UI;
@@ -10,6 +9,36 @@ namespace Presentation.UI;
 public sealed class ElementPoolService
 {
     private readonly Dictionary<Type, ObjectPool<Element>> _elementPoolsByType = [];
+
+    /// <summary>
+    /// The render services every Element's Draw/DrawContent/DrawHeader needs -- set once (see
+    /// Initialize) and read through this shared, already-constructed service by every Element,
+    /// pooled or freshly created, at any point in the session. Unlike ShellContext (one
+    /// long-lived instance with a real one-time LoadContent hook), Element instances are
+    /// constantly created/pooled/reused throughout the session -- most are never LoadContent'd
+    /// individually (Element.LoadContent is only ever invoked, once, on the fixed set of root
+    /// windows ShellContext.LoadContent walks at startup; nothing calls it again for a
+    /// window opened later, e.g. Inventory) -- so caching these directly on Element itself,
+    /// the same way ShellContext caches its own copies, would leave every dynamically
+    /// created window's fields unset. Routing through the one ElementPoolService reference every
+    /// Element already holds from construction (see Element's own constructor) sidesteps that:
+    /// it doesn't matter when an Element was constructed relative to Initialize below, only that
+    /// Initialize has run by the time anything is ever drawn, which the real GameLoop lifecycle
+    /// (Initialize/LoadContent before the first Update/Draw) already guarantees.
+    /// </summary>
+    public GraphicsDevice GraphicsDevice { get; private set; } = null!;
+
+    public SpriteBatch SpriteBatch { get; private set; } = null!;
+
+    public Texture2D UnitRectangle { get; private set; } = null!;
+
+    /// <summary>Captures the render services above -- called once, from GameLoop.LoadContent, after all three actually exist.</summary>
+    public void Initialize(GraphicsDevice graphicsDevice, SpriteBatch spriteBatch, Texture2D unitRectangle)
+    {
+        GraphicsDevice = graphicsDevice;
+        SpriteBatch = spriteBatch;
+        UnitRectangle = unitRectangle;
+    }
 
     /// <summary>Per-Type cache of every event's backing field across the whole Element/Window/... hierarchy for that Type -- see ClearEventSubscriptions.</summary>
     private readonly Dictionary<Type, FieldInfo[]> _eventBackingFieldsByType = [];
@@ -29,16 +58,6 @@ public sealed class ElementPoolService
     /// instance, not same content.
     /// </summary>
     private readonly HashSet<Element> _pooledElements = [];
-
-    public ElementPoolService(FontService fontService, GlyphRenderer glyphRenderer)
-    {
-        ArgumentNullException.ThrowIfNull(fontService);
-        ArgumentNullException.ThrowIfNull(glyphRenderer);
-
-        RegisterFactory<Window>(() => new Window(fontService, this, glyphRenderer));
-        RegisterFactory<TextWindow>(() => new TextWindow(fontService, this, glyphRenderer));
-        RegisterFactory<TextBox>(() => new TextBox(fontService, this, glyphRenderer));
-    }
 
     /// <summary>Registers a factory for creating instances of a specific element type. </summary>
     /// <typeparam name="TElement">The type of the element to create a factory for  .</typeparam>

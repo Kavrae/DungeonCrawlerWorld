@@ -25,14 +25,14 @@ public class TextWindow(FontService fontService, ElementPoolService elementPoolS
         _canContainChildren = false;
     }
 
-    public override void DrawContent(GameTime gameTime, SpriteBatch spriteBatch, Texture2D unitRectangle)
+    public override void DrawContent(GameTime gameTime)
     {
         if (!string.IsNullOrWhiteSpace(DisplayText.FormattedText))
         {
             var origin = RequiresContentViewport
                 ? Vector2.Zero
                 : ContentAbsolutePosition;
-            spriteBatch.DrawString(ContentFont, DisplayText.FormattedText, origin + new Vector2(LinePadding, LinePadding), TextColor);
+            ElementPoolService.SpriteBatch.DrawString(ContentFont, DisplayText.FormattedText, origin + new Vector2(LinePadding, LinePadding), TextColor);
         }
     }
 

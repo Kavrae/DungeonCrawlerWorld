@@ -161,7 +161,7 @@ public sealed class UiInputController
     internal Action StopTextInput = TextInputEXT.StopTextInput;
 
     /// <summary>
-    /// userElements is typically still empty at construction time -- GameShellBootstrapper.Build
+    /// userElements is typically still empty at construction time -- ShellBootstrapper.Build
     /// constructs UiInputController before it can build DragGhostContent (which needs a real
     /// UiInputController reference to read the drag state from), then appends the ghost's host
     /// window to this same list afterward. Passing the list itself (not a snapshot/copy) is what
@@ -197,7 +197,7 @@ public sealed class UiInputController
 
     /// <summary>
     /// Whether a TextBox currently holds keyboard focus -- public (unlike FocusedElement) so
-    /// consumers in other assemblies (e.g. GameShellBootstrapper wiring MapWindow.IsTextInputFocused,
+    /// consumers in other assemblies (e.g. ShellBootstrapper wiring MapWindow.IsTextInputFocused,
     /// so Space doesn't pause the game while typing) can check without needing the actual
     /// focused-element reference.
     /// </summary>
@@ -221,21 +221,21 @@ public sealed class UiInputController
     /// <summary>The last cursor UpdateCursor set (or the initial Arrow default, if it's never had reason to change) -- lets tests assert on cursor selection without depending on real OS cursor state.</summary>
     internal MouseCursor CurrentCursor { get; private set; } = MouseCursor.Arrow;
 
-    /// <summary>The item currently being content-dragged, if any -- see _contentDragItemDefinitionId's own doc comment. Read by DragGhostContent (same assembly, User tier) every DrawContent.</summary>
-    internal Guid? ContentDragItemDefinitionId => _contentDragItemDefinitionId;
+    /// <summary>The item currently being content-dragged, if any -- see _contentDragItemDefinitionId's own doc comment. Public (unlike most of this class's internals) so ShellBootstrapper -- a different assembly -- can wire it into DragGhostContent.GetState, the same reasoning IsTextBoxFocused's own doc comment gives.</summary>
+    public Guid? ContentDragItemDefinitionId => _contentDragItemDefinitionId;
 
-    /// <summary>The action currently being content-dragged, if any -- see _contentDragActionId's own doc comment. Read by DragGhostContent alongside ContentDragItemDefinitionId (mutually exclusive with it).</summary>
-    internal Guid? ContentDragActionId => _contentDragActionId;
+    /// <summary>The action currently being content-dragged, if any -- see _contentDragActionId's own doc comment. Public for the same reason as ContentDragItemDefinitionId above.</summary>
+    public Guid? ContentDragActionId => _contentDragActionId;
 
-    /// <summary>Whether DragGhostContent should actually draw the ghost right now -- true once a content-drag payload has been held for ContentDragGhostDelayFrames. See that constant's own doc comment for why this delay exists.</summary>
-    internal bool ContentDragGhostVisible =>
+    /// <summary>Whether DragGhostContent should actually draw the ghost right now -- true once a content-drag payload has been held for ContentDragGhostDelayFrames. See that constant's own doc comment for why this delay exists. Public for the same reason as ContentDragItemDefinitionId above.</summary>
+    public bool ContentDragGhostVisible =>
         (_contentDragItemDefinitionId is not null || _contentDragActionId is not null) && _contentDragHeldFrames >= ContentDragGhostDelayFrames;
 
-    /// <summary>See _contentDragSourceSize's own doc comment.</summary>
-    internal Vector2 ContentDragSourceSize => _contentDragSourceSize;
+    /// <summary>See _contentDragSourceSize's own doc comment. Public for the same reason as ContentDragItemDefinitionId above.</summary>
+    public Vector2 ContentDragSourceSize => _contentDragSourceSize;
 
-    /// <summary>Current mouse screen position, refreshed at the top of every Update call -- paired with ContentDragItemDefinitionId for the same ghost-sprite use.</summary>
-    internal Point CurrentMousePosition { get; private set; }
+    /// <summary>Current mouse screen position, refreshed at the top of every Update call -- paired with ContentDragItemDefinitionId for the same ghost-sprite use, and with CursorTextContent.GetCursorPosition. Public for the same reason as ContentDragItemDefinitionId above.</summary>
+    public Point CurrentMousePosition { get; private set; }
 
     public void Update(GameTime gameTime) => Update(Keyboard.GetState(), Mouse.GetState());
 
@@ -299,11 +299,38 @@ public sealed class UiInputController
 
     /// <summary>
     /// Routes the whole keyboard state to whichever element is focused, once per frame (see
-    /// Window.HandleHotkeys) -- e.g. MapWindow's WASD/zoom/PageUp/PageDown/Space, or a future
-    /// inventory window's own navigation keys. UiInputController itself knows nothing about
-    /// what any element's hotkeys are; it only knows which element is focused.
+    /// Window.HandleHotkeys) -- e.g. MapWindow's WASD/zoom/PageUp/PageDown/Space, or a TextBox's
+    /// arrow-key/Backspace/copy-paste handling (see TextBox.OnHotkeysAction's own doc comment --
+    /// those route through HandleHotkeys, not the discrete key-press path, for held-key repeat).
+    /// UiInputController itself knows nothing about what any element's hotkeys are; it only
+    /// knows which element is focused. While menu mode is active, this is scoped by
+    /// IsReachableDuringMenuMode the same way TryHitTestInteraction already scopes mouse
+    /// hit-testing -- routed if the focused element is actually part of what's currently
+    /// interactive (e.g. a TextBox inside an open Inventory window), skipped otherwise (e.g.
+    /// MapWindow itself, still focused from before a menu window opened, must not have its own
+    /// WASD/arm-hotkeys or Space-pause reach the blocked, dimmed world underneath).
     /// </summary>
-    private void RouteHotkeysToFocusedElement(KeyboardState keyboardState) => _focusedElement?.HandleHotkeys(keyboardState, _previousKeyboardState);
+    private void RouteHotkeysToFocusedElement(KeyboardState keyboardState)
+    {
+        if (_focusedElement is not { } focused)
+        {
+            return;
+        }
+
+        if (_layers.IsMenuModeActive && !IsReachableDuringMenuMode(focused))
+        {
+            return;
+        }
+
+        focused.HandleHotkeys(keyboardState, _previousKeyboardState);
+    }
+
+    /// <summary>Whether element -- via its root ancestor, the granularity UiLayerStack's own menu-window/exempt registries track -- is part of what's currently interactive while menu mode is active: an open menu window, a menu-mode-exempt element, or already in the always-reachable Tooltip/User tier. Shared by TryHitTestInteraction (mouse) and RouteHotkeysToFocusedElement (keyboard) so the two can't drift out of sync about what "reachable during menu mode" means.</summary>
+    private bool IsReachableDuringMenuMode(Element element)
+    {
+        var root = GetRootAncestor(element);
+        return _layers.IsMenuWindow(root) || _layers.IsMenuModeExempt(root) || _layers.LayerOf(root) is UiLayer.Tooltip or UiLayer.User;
+    }
 
     /// <summary>Tab itself must stay unconditional -- it's how focus moves in the first place, so it can never be gated behind already holding focus.</summary>
     private void HandleFocusCycling(KeyboardState keyboardState)
@@ -381,16 +408,24 @@ public sealed class UiInputController
 
         if (_escapeHeldFrames == 1)
         {
-            foreach (var layer in UiLayerStack.LayersAscending())
+            // While menu mode is active, Escape must not reach through it to Base/StaticHud
+            // elements behind it (e.g. MapWindow canceling an armed ability) -- that's exactly
+            // the input TryHitTestInteraction already refuses to route to those elements while
+            // menu mode is active, and broadcasting Escape to them here would be the same leak
+            // through a different door.
+            if (!_layers.IsMenuModeActive)
             {
-                if ((GetEscapeBehavior(layer) & EscapeBehavior.BroadcastToElements) == 0)
+                foreach (var layer in UiLayerStack.LayersAscending())
                 {
-                    continue;
-                }
+                    if ((GetEscapeBehavior(layer) & EscapeBehavior.BroadcastToElements) == 0)
+                    {
+                        continue;
+                    }
 
-                foreach (var element in _layers[layer])
-                {
-                    element.HandleEscape();
+                    foreach (var element in _layers[layer])
+                    {
+                        element.HandleEscape();
+                    }
                 }
             }
 
@@ -415,6 +450,19 @@ public sealed class UiInputController
     /// </summary>
     private void CloseTopmostClosableWindow()
     {
+        // While menu mode is active, Escape can only ever dismiss the frontmost menu window --
+        // never reach past it to some other, unrelated closeable window sitting behind it in the
+        // same tier.
+        if (_layers.TopmostMenuWindow is { } menuWindow)
+        {
+            if (menuWindow is Window { CanUserClose: true } closeableMenuWindow)
+            {
+                closeableMenuWindow.Close();
+            }
+
+            return;
+        }
+
         foreach (var layer in UiLayerStack.LayersDescending())
         {
             if ((GetEscapeBehavior(layer) & EscapeBehavior.CloseableWindows) == 0)
@@ -444,6 +492,19 @@ public sealed class UiInputController
     /// </summary>
     private void CloseAllClosableWindows()
     {
+        // Same menu-mode exclusivity reasoning as CloseTopmostClosableWindow above -- a held
+        // Escape while menu mode is active still only dismisses the frontmost menu window, not
+        // every closeable window.
+        if (_layers.TopmostMenuWindow is { } menuWindow)
+        {
+            if (menuWindow is Window { CanUserClose: true } closeableMenuWindow)
+            {
+                closeableMenuWindow.Close();
+            }
+
+            return;
+        }
+
         foreach (var layer in UiLayerStack.LayersDescending())
         {
             if ((GetEscapeBehavior(layer) & EscapeBehavior.CloseableWindows) == 0)
@@ -883,15 +944,62 @@ public sealed class UiInputController
         return null;
     }
 
+    /// <summary>Tooltip/User both sit structurally above DynamicHud, where every menu window lives today -- see the menu-mode branch of TryHitTestInteraction for why hit-testing still reaches them while menu mode is active.</summary>
+    private static readonly UiLayer[] LayersAboveMenuMode = [UiLayer.User, UiLayer.Tooltip];
+
     /// <summary>User tier first, then DynamicHUD, then StaticHUD, then Base -- a higher tier can never lose to a lower one. Each tier topmost (last-raised) first. User is checked first purely for consistency (see the class's own doc comment) -- nothing placed there today is ever actually hit, since DragGhostContent's host window has no clickable content.</summary>
     private ElementInteraction TryHitTestInteraction(Point position)
     {
+        if (_layers.IsMenuModeActive)
+        {
+            var menuInteraction = TryHitTestWhere(position, _layers.IsMenuWindow);
+            if (menuInteraction.Element is not null)
+            {
+                return menuInteraction;
+            }
+
+            foreach (var layer in LayersAboveMenuMode)
+            {
+                var interaction = TryHitTestInList(_layers[layer], position);
+                if (interaction.Element is not null)
+                {
+                    return interaction;
+                }
+            }
+
+            return TryHitTestWhere(position, _layers.IsMenuModeExempt);
+        }
+
         foreach (var layer in UiLayerStack.LayersDescending())
         {
             var interaction = TryHitTestInList(_layers[layer], position);
             if (interaction.Element is not null)
             {
                 return interaction;
+            }
+        }
+
+        return ElementInteraction.NotHit;
+    }
+
+    /// <summary>Hit-tests every layer descending, topmost-drawn-first within each, but only elements matching predicate -- a non-matching sibling sharing the same layer (e.g. the Notification folder sitting alongside an open notification popup, both DynamicHud) is skipped entirely, never even hit-tested into its own children. Shared by TryHitTestInteraction's two menu-mode cases: UiLayerStack.IsMenuWindow (the open menu-window set) and UiLayerStack.IsMenuModeExempt (everything opted out of menu mode's blocking without itself being a menu window).</summary>
+    private ElementInteraction TryHitTestWhere(Point position, Func<Element, bool> predicate)
+    {
+        foreach (var layer in UiLayerStack.LayersDescending())
+        {
+            var elements = _layers[layer];
+            for (var index = elements.Count - 1; index >= 0; index--)
+            {
+                if (!predicate(elements[index]))
+                {
+                    continue;
+                }
+
+                var interaction = elements[index].TryHitTestInteraction(position);
+                if (interaction.Element is not null)
+                {
+                    return interaction;
+                }
             }
         }
 
@@ -1094,7 +1202,7 @@ public sealed class UiInputController
     /// <summary>
     /// Advances focus to the next (direction 1) or previous (direction -1) focusable Base/
     /// StaticHUD element (Element.CanUserFocus -- e.g. the debug stats window opts out, see
-    /// GameShellBootstrapper), wrapping past either end. baseElements+staticHudElements only
+    /// ShellBootstrapper), wrapping past either end. baseElements+staticHudElements only
     /// (map/debug/selection/health bar/quest trigger -- "fixed, distinct panels"), not
     /// dynamicHudElements or userElements: notifications are a separate tier dismissed via their
     /// own close/minimize button, not something a user tabs to, and User holds nothing

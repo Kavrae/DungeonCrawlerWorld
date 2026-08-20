@@ -43,13 +43,13 @@ public sealed class UiInputControllerTests
     private static MouseState MouseAtWithRightButton(int x, int y, ButtonState rightButton) =>
         new(x, y, 0, ButtonState.Released, ButtonState.Released, rightButton, ButtonState.Released, ButtonState.Released);
 
-    private static ElementPoolService CreateWindowService() => new(new FontService("Fonts"), new GlyphRenderer());
+    private static ElementPoolService CreateWindowService() => TestElementPoolServiceFactory.Create(new FontService("Fonts"), new GlyphRenderer());
 
     /// <summary>
     /// Test-only convenience matching UiInputController's old four-list constructor shape --
     /// builds a fresh UiLayerStack from the four tier lists (copying each element in, not
     /// wrapping the lists themselves) since production code now only ever constructs
-    /// UiInputController from a real UiLayerStack (see GameShellBootstrapper). Kept here, not as
+    /// UiInputController from a real UiLayerStack (see ShellBootstrapper). Kept here, not as
     /// a shim on UiLayerStack/UiInputController themselves, so test convenience shapes this test
     /// file, not production API surface.
     /// </summary>
@@ -177,7 +177,7 @@ public sealed class UiInputControllerTests
         {
         }
 
-        public void DrawContent(GameTime gameTime, SpriteBatch spriteBatch, Texture2D unitRectangle)
+        public void DrawContent(GameTime gameTime)
         {
         }
 
@@ -976,7 +976,7 @@ public sealed class UiInputControllerTests
     public void RightMouseDrag_ReportsTotalDeltaSinceStart_ToTheWindowUnderTheCursor()
     {
         var fontService = new FontService("Fonts");
-        var windowService = new ElementPoolService(fontService, new GlyphRenderer());
+        var windowService = TestElementPoolServiceFactory.Create(fontService, new GlyphRenderer());
         var window = CreateRightDragSpyWindow(windowService, fontService, new Vector2(0, 0));
         var controller = CreateController([window], [], [], [], LargeScreenSize);
 
@@ -999,7 +999,7 @@ public sealed class UiInputControllerTests
     public void RightMouseDrag_ReleasingThenPressingAgain_StartsAFreshDrag()
     {
         var fontService = new FontService("Fonts");
-        var windowService = new ElementPoolService(fontService, new GlyphRenderer());
+        var windowService = TestElementPoolServiceFactory.Create(fontService, new GlyphRenderer());
         var window = CreateRightDragSpyWindow(windowService, fontService, new Vector2(0, 0));
         var controller = CreateController([window], [], [], [], LargeScreenSize);
 
@@ -1023,7 +1023,7 @@ public sealed class UiInputControllerTests
     public void RightMouseDrag_Releasing_FiresDragEndOnce()
     {
         var fontService = new FontService("Fonts");
-        var windowService = new ElementPoolService(fontService, new GlyphRenderer());
+        var windowService = TestElementPoolServiceFactory.Create(fontService, new GlyphRenderer());
         var window = CreateRightDragSpyWindow(windowService, fontService, new Vector2(0, 0));
         var controller = CreateController([window], [], [], [], LargeScreenSize);
 
@@ -1043,7 +1043,7 @@ public sealed class UiInputControllerTests
     public void RightMouseClick_NoMovement_FiresRightClickTapInsteadOfDragEnd()
     {
         var fontService = new FontService("Fonts");
-        var windowService = new ElementPoolService(fontService, new GlyphRenderer());
+        var windowService = TestElementPoolServiceFactory.Create(fontService, new GlyphRenderer());
         var window = CreateRightDragSpyWindow(windowService, fontService, new Vector2(0, 0));
         var controller = CreateController([window], [], [], [], LargeScreenSize);
 
@@ -1061,7 +1061,7 @@ public sealed class UiInputControllerTests
     public void RightMouseClick_MovementBelowTapThreshold_StillFiresRightClickTap()
     {
         var fontService = new FontService("Fonts");
-        var windowService = new ElementPoolService(fontService, new GlyphRenderer());
+        var windowService = TestElementPoolServiceFactory.Create(fontService, new GlyphRenderer());
         var window = CreateRightDragSpyWindow(windowService, fontService, new Vector2(0, 0));
         var controller = CreateController([window], [], [], [], LargeScreenSize);
 
@@ -1080,7 +1080,7 @@ public sealed class UiInputControllerTests
     public void RightMouseDrag_MovementPastTapThreshold_FiresDragEndNotRightClickTap()
     {
         var fontService = new FontService("Fonts");
-        var windowService = new ElementPoolService(fontService, new GlyphRenderer());
+        var windowService = TestElementPoolServiceFactory.Create(fontService, new GlyphRenderer());
         var window = CreateRightDragSpyWindow(windowService, fontService, new Vector2(0, 0));
         var controller = CreateController([window], [], [], [], LargeScreenSize);
 
@@ -1099,7 +1099,7 @@ public sealed class UiInputControllerTests
     public void RightMouseDrag_WandersPastThresholdThenBackToStart_StillFiresDragEndNotRightClickTap()
     {
         var fontService = new FontService("Fonts");
-        var windowService = new ElementPoolService(fontService, new GlyphRenderer());
+        var windowService = TestElementPoolServiceFactory.Create(fontService, new GlyphRenderer());
         var window = CreateRightDragSpyWindow(windowService, fontService, new Vector2(0, 0));
         var controller = CreateController([window], [], [], [], LargeScreenSize);
 
@@ -1948,7 +1948,7 @@ public sealed class UiInputControllerTests
 
         var fontService = new FontService("Fonts");
         var glyphRenderer = new GlyphRenderer();
-        var windowService = new ElementPoolService(fontService, glyphRenderer);
+        var windowService = TestElementPoolServiceFactory.Create(fontService, glyphRenderer);
         windowService.RegisterFactory<InventoryItemStackCell>(() => new InventoryItemStackCell(
             fontService, windowService, glyphRenderer, new SpriteSheetService(null, "Spritesheets"), new SpriteRenderer()));
 
@@ -2175,7 +2175,7 @@ public sealed class UiInputControllerTests
 
         var fontService = new FontService("Fonts");
         var glyphRenderer = new GlyphRenderer();
-        var windowService = new ElementPoolService(fontService, glyphRenderer);
+        var windowService = TestElementPoolServiceFactory.Create(fontService, glyphRenderer);
 
         var hotbar = new HotbarContent(
             world, new MapViewState(), componentManager, new EventBus(), actionCatalog, new ItemCatalog(),

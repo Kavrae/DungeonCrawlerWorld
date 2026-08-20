@@ -53,10 +53,12 @@ public sealed class NotificationCenter(ElementPoolService elementPoolService, Ev
     private Folder _folder = null!;
 
     /// <summary>
-    /// True while a System-category notification is active -- GameLoop gates the game's own
-    /// Update on this, so it's evaluated every frame; a plain loop over the concrete List&lt;&gt;
-    /// avoids both the per-frame closure and the boxed enumerator Enumerable.Any() would
-    /// otherwise cost through IEnumerable&lt;&gt; dispatch.
+    /// True while a System-category notification is active. GameLoop's own pause check now reads
+    /// UiLayerStack.IsMenuModeActive instead (see ShowActive's OpenMenuWindow call) -- this
+    /// property is no longer what drives that, but stays as an independently useful, tested
+    /// query of the same underlying state. A plain loop over the concrete List&lt;&gt; avoids both
+    /// the per-frame closure and the boxed enumerator Enumerable.Any() would otherwise cost
+    /// through IEnumerable&lt;&gt; dispatch.
     /// </summary>
     public bool HasBlockingNotification
     {
@@ -78,7 +80,7 @@ public sealed class NotificationCenter(ElementPoolService elementPoolService, Ev
     /// Raised whenever a notification popup actually shows on screen (a fresh one via
     /// AddNotification(showImmediately: true), or a queued one via OpenNextNotification) -- see
     /// ShowActive. GameLoop subscribes once it has a UiInputController (which doesn't exist
-    /// yet while GameShellBootstrapper.Build, and so NotificationCenter.Initialize, are still
+    /// yet while ShellBootstrapper.Build, and so NotificationCenter.Initialize, are still
     /// running) and focuses the new popup, the same composition-root role its existing
     /// QuestComposerOpened subscription plays for the quest-composer popup.
     /// </summary>
@@ -101,6 +103,11 @@ public sealed class NotificationCenter(ElementPoolService elementPoolService, Ev
         // are attached (see Window.OnChildrenInitialized/GridControl/AbilityScoreWindow).
         _folder.Initialize();
         layers.Add(UiLayer.DynamicHud, _folder);
+
+        // Opening another category's notification (or re-opening this one) from the summary
+        // folder is a normal part of the menu-mode workflow (see UiLayerStack.MarkMenuModeExempt's
+        // own doc comment) -- not something a blocking System notification should itself block.
+        layers.MarkMenuModeExempt(_folder);
 
         using (_folder.BeginLayoutBatch())
         {
@@ -130,11 +137,12 @@ public sealed class NotificationCenter(ElementPoolService elementPoolService, Ev
 
     /// <summary>
     /// Notifications update even while the game is paused (see GameLoop) -- true today because
-    /// GameShellContext's own per-layer Update loop over UiLayer.DynamicHud is unconditional,
+    /// ShellContext's own per-layer Update loop over UiLayer.DynamicHud is unconditional,
     /// the same way it already is for UiLayer.Base, not because of anything here. This method
     /// only does the notification-domain part: dispatching buffered NotificationRequestedEvent
-    /// events, which must run before GameLoop's pause check reads HasBlockingNotification (a
-    /// notification published this same frame needs to be reflected before that check).
+    /// events, which must run before GameLoop's pause check reads UiLayerStack.IsMenuModeActive
+    /// (a System notification published this same frame needs to have already called
+    /// OpenMenuWindow, in ShowActive, before that check).
     /// </summary>
     public void Update(GameTime gameTime) => eventBus.DispatchBuffered<NotificationRequestedEvent>();
 
@@ -194,8 +202,9 @@ public sealed class NotificationCenter(ElementPoolService elementPoolService, Ev
     {
         var offset = _activeNotifications.Count * ActiveNotificationStackOffset;
         // System notifications are uncloseable-except-by-resolution (closing IS the
-        // resolution) and pause the game (see GameLoop, which checks HasBlockingNotification);
-        // Quest notifications can be dismissed (see NotificationMinimizeBehavior) freely.
+        // resolution), open as a menu window (see below), and pause the game as a result (see
+        // GameLoop, which checks UiLayerStack.IsMenuModeActive); Quest notifications can be
+        // dismissed (see NotificationMinimizeBehavior) freely.
         var canMinimize = notification.Category != NotificationCategory.System;
 
         var notificationWindow = elementPoolService.CreateElement<TextWindow>(null, new ElementOptions
@@ -225,6 +234,15 @@ public sealed class NotificationCenter(ElementPoolService elementPoolService, Ev
         _activeNotifications.Add((notificationWindow, notification));
         notificationWindow.Initialize();
         layers.Add(UiLayer.DynamicHud, notificationWindow);
+
+        // A System notification is the menu-window case -- see
+        // UiLayerStack.OpenMenuWindow/GameLoop's pause check. Quest/Achievement notifications
+        // stay ordinary DynamicHud popups.
+        if (notification.Category == NotificationCategory.System)
+        {
+            layers.OpenMenuWindow(notificationWindow);
+        }
+
         ActiveNotificationOpened?.Invoke(notificationWindow);
 
         // Attached after Initialize() (which already attached WindowCloseBehavior, since
@@ -260,6 +278,7 @@ public sealed class NotificationCenter(ElementPoolService elementPoolService, Ev
         }
 
         layers.Remove(UiLayer.DynamicHud, closedWindow);
+        layers.CloseMenuWindow(closedWindow); // No-op for a non-System notification, which was never opened as a menu window.
 
         // Closing the last unread notification auto-tidies the HUD back down -- SetWindowDisplayMode
         // no-ops if the Folder is already Minimized, so this is safe to call unconditionally.

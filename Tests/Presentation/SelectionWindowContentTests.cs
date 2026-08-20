@@ -120,7 +120,7 @@ public sealed class SelectionWindowContentTests
     {
         var (ecsContext, world, mapViewState) = BuildEcsContextAndWorld();
         var fontService = new FontService("Fonts");
-        var windowService = new ElementPoolService(fontService, new GlyphRenderer());
+        var windowService = TestElementPoolServiceFactory.Create(fontService, new GlyphRenderer());
         var componentInspector = new ComponentInspector(ecsContext.ComponentManager);
         var hostWindow = CreateHostWindow(windowService, new SelectionWindowContent(world, mapViewState, ecsContext.ComponentManager, componentInspector, windowService));
 
@@ -137,7 +137,7 @@ public sealed class SelectionWindowContentTests
         CreateWallEntityAt(ecsContext, world, 2, 2);
 
         var fontService = new FontService("Fonts");
-        var windowService = new ElementPoolService(fontService, new GlyphRenderer());
+        var windowService = TestElementPoolServiceFactory.Create(fontService, new GlyphRenderer());
         var componentInspector = new ComponentInspector(ecsContext.ComponentManager);
         var hostWindow = CreateHostWindow(windowService, new SelectionWindowContent(world, mapViewState, ecsContext.ComponentManager, componentInspector, windowService));
 
@@ -157,7 +157,7 @@ public sealed class SelectionWindowContentTests
         CreateWallEntityAt(ecsContext, world, 2, 2);
 
         var fontService = new FontService("Fonts");
-        var windowService = new ElementPoolService(fontService, new GlyphRenderer());
+        var windowService = TestElementPoolServiceFactory.Create(fontService, new GlyphRenderer());
         var componentInspector = new ComponentInspector(ecsContext.ComponentManager);
         var hostWindow = CreateHostWindow(windowService, new SelectionWindowContent(world, mapViewState, ecsContext.ComponentManager, componentInspector, windowService));
 
@@ -184,7 +184,7 @@ public sealed class SelectionWindowContentTests
     {
         var (ecsContext, world, mapViewState) = BuildEcsContextAndWorld();
         var fontService = new FontService("Fonts");
-        var windowService = new ElementPoolService(fontService, new GlyphRenderer());
+        var windowService = TestElementPoolServiceFactory.Create(fontService, new GlyphRenderer());
         var componentInspector = new ComponentInspector(ecsContext.ComponentManager);
         var hostWindow = CreateHostWindow(windowService, new SelectionWindowContent(world, mapViewState, ecsContext.ComponentManager, componentInspector, windowService));
 
@@ -212,7 +212,7 @@ public sealed class SelectionWindowContentTests
         Assert.AreEqual(-1, world.Map.GetBlockingEntityId(new Vector3Int(2, 2, (int)MapLayer.Ground)));
 
         var fontService = new FontService("Fonts");
-        var windowService = new ElementPoolService(fontService, new GlyphRenderer());
+        var windowService = TestElementPoolServiceFactory.Create(fontService, new GlyphRenderer());
         var componentInspector = new ComponentInspector(ecsContext.ComponentManager);
         var hostWindow = CreateHostWindow(windowService, new SelectionWindowContent(world, mapViewState, ecsContext.ComponentManager, componentInspector, windowService));
 
@@ -241,7 +241,7 @@ public sealed class SelectionWindowContentTests
         world.PlaceTerrainOnMap(terrainId, 2, 2, TerrainLayer.Ground, ref terrainTransform);
 
         var fontService = new FontService("Fonts");
-        var windowService = new ElementPoolService(fontService, new GlyphRenderer());
+        var windowService = TestElementPoolServiceFactory.Create(fontService, new GlyphRenderer());
         var componentInspector = new ComponentInspector(ecsContext.ComponentManager);
         var hostWindow = CreateHostWindow(windowService, new SelectionWindowContent(world, mapViewState, ecsContext.ComponentManager, componentInspector, windowService));
 
@@ -267,7 +267,7 @@ public sealed class SelectionWindowContentTests
         CreateWallEntityAtLayer(ecsContext, world, 2, 2, MapLayer.Flying);
 
         var fontService = new FontService("Fonts");
-        var windowService = new ElementPoolService(fontService, new GlyphRenderer());
+        var windowService = TestElementPoolServiceFactory.Create(fontService, new GlyphRenderer());
         var componentInspector = new ComponentInspector(ecsContext.ComponentManager);
         var hostWindow = CreateHostWindow(windowService, new SelectionWindowContent(world, mapViewState, ecsContext.ComponentManager, componentInspector, windowService));
 
@@ -293,7 +293,7 @@ public sealed class SelectionWindowContentTests
     /// make this go further and overlap the *next* child too). The fix is at the parent level,
     /// not per-child: children now render their full, unclamped natural height (see
     /// SelectionWindowContent's UnboundedChildHeight), and hostWindow itself becomes the
-    /// scrollable one -- CanUserScrollVertical on hostWindow (see GameShellBootstrapper's
+    /// scrollable one -- CanUserScrollVertical on hostWindow (see ShellBootstrapper's
     /// selectionWindow) turns the overflow into a real, positive MaxScrollOffset on hostWindow
     /// instead of clipping/overlapping individual children.
     /// </summary>
@@ -304,7 +304,7 @@ public sealed class SelectionWindowContentTests
         CreateWallEntityAt(ecsContext, world, 2, 2);
 
         var fontService = new FontService("Fonts");
-        var windowService = new ElementPoolService(fontService, new GlyphRenderer());
+        var windowService = TestElementPoolServiceFactory.Create(fontService, new GlyphRenderer());
         var componentInspector = new ComponentInspector(ecsContext.ComponentManager);
         // Deliberately much shorter than CreateHostWindow's usual 700px -- forces the 5
         // component windows to exceed the host's own height, the same way a goblin engineer's

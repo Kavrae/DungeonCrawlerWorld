@@ -140,7 +140,7 @@ public sealed class TabbedContent(IReadOnlyList<TabbedContent.TabDefinition> tab
     }
 
     /// <summary>Nothing to draw directly -- the tab strip is real child TextWindow tiles now (drawn through the normal child-element pass), and the active tab's own content renders the same way through _bodyWindow.</summary>
-    public void DrawContent(GameTime gameTime, SpriteBatch spriteBatch, Texture2D unitRectangle)
+    public void DrawContent(GameTime gameTime)
     {
     }
 

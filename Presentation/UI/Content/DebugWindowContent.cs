@@ -67,8 +67,9 @@ public sealed class DebugWindowContent(
             : string.Empty;
     }
 
-    public void DrawContent(GameTime gameTime, SpriteBatch spriteBatch, Texture2D unitRectangle)
+    public void DrawContent(GameTime gameTime)
     {
+        var spriteBatch = _hostWindow.ElementPoolService.SpriteBatch;
         _drawCounter.Tick();
         _drawsPerSecondText = $"{_drawCounter.RatePerSecond:N1} fps";
 

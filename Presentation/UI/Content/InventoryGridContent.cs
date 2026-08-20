@@ -203,7 +203,7 @@ public sealed class InventoryGridContent(
         return null;
     }
 
-    public void DrawContent(GameTime gameTime, SpriteBatch spriteBatch, Texture2D unitRectangle)
+    public void DrawContent(GameTime gameTime)
     {
         // Nothing to draw directly -- every stack is its own child InventoryItemStackCell,
         // which Window already draws as part of its own child-element loop.

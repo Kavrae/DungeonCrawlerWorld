@@ -92,13 +92,15 @@ public sealed class PlayerStatusEffectsContent(World world, ComponentManager com
         _potionCooldownFramesRemaining = _hasPotionCooldown ? potionCooldown.FramesRemaining : (ushort)0;
     }
 
-    public void DrawContent(GameTime gameTime, SpriteBatch spriteBatch, Texture2D unitRectangle)
+    public void DrawContent(GameTime gameTime)
     {
         if (_activeEffectTypes.Count == 0 && !_hasPotionCooldown)
         {
             return;
         }
 
+        var spriteBatch = _hostWindow.ElementPoolService.SpriteBatch;
+        var unitRectangle = _hostWindow.ElementPoolService.UnitRectangle;
         var origin = _hostWindow.ContentAbsolutePosition;
         var iconSize = new Vector2(_hostWindow.ContentSize.Y, _hostWindow.ContentSize.Y);
 

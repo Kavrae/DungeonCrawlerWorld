@@ -163,8 +163,8 @@ public class Element
     /// <summary>Natural width the header needs for its own content, independent of the element's own content area -- e.g. Window measures its title text plus buttons; a header-less Element (or Folder, whose icon never needs more width than its content already provides) keeps the default of zero.</summary>
     protected virtual float MinimumHeaderWidth() => 0f;
 
-    /// <summary>Draws this element's header region -- Window's title bar (background/text/buttons) and Folder's icon are both just their own override of this, called from Draw whenever the header is shown (see the ShowHeader/ShowHeaderWhenMinimized gate there). No-op by default.</summary>
-    protected virtual void DrawHeader(GameTime gameTime, SpriteBatch spriteBatch, Texture2D unitRectangle) { }
+    /// <summary>Draws this element's header region -- Window's title bar (background/text/buttons) and Folder's icon are both just their own override of this, called from Draw whenever the header is shown (see the ShowHeader/ShowHeaderWhenMinimized gate there). No-op by default. Overrides needing SpriteBatch/Texture2D read them from ElementPoolService (see its own doc comment) rather than taking them as parameters.</summary>
+    protected virtual void DrawHeader(GameTime gameTime) { }
 
     /// <summary>Extra per-frame Initialize work the header needs -- Window initializes its title buttons here. No-op by default.</summary>
     protected virtual void InitializeHeaderExtras() { }
@@ -433,7 +433,7 @@ public class Element
             // made, is airtight regardless of what an override's own Update body does.
             //
             // Root elements are deliberately NOT covered by this -- see
-            // GameShellContext.UpdateWindowLayer, which still calls Update on every root window
+            // ShellContext.UpdateWindowLayer, which still calls Update on every root window
             // regardless of IsVisible. This codebase's persistent Tooltip popups (AbilityScoreWindow's,
             // InventoryFolderController's, HotbarController's Armed Hotkey Summary) are toggled
             // via IsVisible while remaining in UiLayer.Tooltip's root list, but are driven
@@ -454,12 +454,17 @@ public class Element
         }
     }
 
-    public virtual void Draw(GameTime gameTime, GraphicsDevice graphicsDevice, SpriteBatch spriteBatch, Texture2D unitRectangle)
+    /// <summary>Reads GraphicsDevice/SpriteBatch/UnitRectangle from ElementPoolService (see its own doc comment for why this Element doesn't cache its own copies) rather than taking them as parameters -- every override, and every recursive child Draw call below, does the same.</summary>
+    public virtual void Draw(GameTime gameTime)
     {
         if (!_isVisible)
         {
             return;
         }
+
+        var graphicsDevice = _elementPoolService.GraphicsDevice;
+        var spriteBatch = _elementPoolService.SpriteBatch;
+        var unitRectangle = _elementPoolService.UnitRectangle;
 
         if (_border.Show)
         {
@@ -473,7 +478,7 @@ public class Element
 
         if ((_geometry.DisplayMode != ElementDisplayMode.Minimized && _headerState.ShowHeader) || (_geometry.DisplayMode == ElementDisplayMode.Minimized && _headerState.ShowHeaderWhenMinimized))
         {
-            DrawHeader(gameTime, spriteBatch, unitRectangle);
+            DrawHeader(gameTime);
         }
 
         if (_geometry.DisplayMode != ElementDisplayMode.Minimized)
@@ -493,7 +498,7 @@ public class Element
                 graphicsDevice.Viewport = Viewport;
                 spriteBatch.Begin(SpriteSortMode.Deferred, BlendState.AlphaBlend, null, null, null, null, CameraTransform);
 
-                DrawContent(gameTime, spriteBatch, unitRectangle);
+                DrawContent(gameTime);
 
                 spriteBatch.End();
                 graphicsDevice.Viewport = previousViewport;
@@ -501,7 +506,7 @@ public class Element
             }
             else
             {
-                DrawContent(gameTime, spriteBatch, unitRectangle);
+                DrawContent(gameTime);
             }
 
             if (RequiresContentViewport)
@@ -525,7 +530,7 @@ public class Element
 
                 foreach (var childElement in _children)
                 {
-                    childElement.Draw(gameTime, graphicsDevice, spriteBatch, unitRectangle);
+                    childElement.Draw(gameTime);
                 }
 
                 spriteBatch.End();
@@ -536,7 +541,7 @@ public class Element
             {
                 foreach (var childElement in _children)
                 {
-                    childElement.Draw(gameTime, graphicsDevice, spriteBatch, unitRectangle);
+                    childElement.Draw(gameTime);
                 }
             }
         }
@@ -545,8 +550,8 @@ public class Element
     /// <summary>Shared by every scrollable element's own children-clip pass in Draw -- ScissorTestEnable is off by default on every other RasterizerState this codebase uses, so this needs to be its own instance rather than a tweaked copy of an existing one.</summary>
     private static readonly RasterizerState ScissorClipRasterizerState = new() { ScissorTestEnable = true };
 
-    /// <summary>No-op by default; TextWindow/MapWindow override this directly, Window overrides it to host IElementContent.</summary>
-    public virtual void DrawContent(GameTime gameTime, SpriteBatch spriteBatch, Texture2D unitRectangle) { }
+    /// <summary>No-op by default; TextWindow/MapWindow override this directly, Window overrides it to host IElementContent. Overrides needing SpriteBatch/Texture2D read them from ElementPoolService (see its own doc comment) rather than taking them as parameters.</summary>
+    public virtual void DrawContent(GameTime gameTime) { }
 
     /// <summary>Routes a key newly pressed this frame to this window while it holds focus -- see UiInputController.RouteKeyPressesToFocusedWindow.</summary>
     internal void HandleKeyPress(Keys key) => OnKeyPressAction(key);

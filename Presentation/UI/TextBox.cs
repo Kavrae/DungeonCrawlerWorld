@@ -800,8 +800,11 @@ public sealed class TextBox(FontService fontService, ElementPoolService elementP
     /// there's nothing horizontal left to clip) -- only the single-line windowed-substring path
     /// here is new.
     /// </remarks>
-    public override void DrawContent(GameTime gameTime, SpriteBatch spriteBatch, Texture2D unitRectangle)
+    public override void DrawContent(GameTime gameTime)
     {
+        var spriteBatch = ElementPoolService.SpriteBatch;
+        var unitRectangle = ElementPoolService.UnitRectangle;
+
         if (string.IsNullOrEmpty(OriginalText) && !IsFocused && !string.IsNullOrEmpty(GhostText))
         {
             // Multiline still uses the local-coordinate Viewport (RequiresContentViewport, via
@@ -818,7 +821,7 @@ public sealed class TextBox(FontService fontService, ElementPoolService elementP
 
         if (_multiline || string.IsNullOrEmpty(DisplayText.FormattedText))
         {
-            base.DrawContent(gameTime, spriteBatch, unitRectangle);
+            base.DrawContent(gameTime);
         }
         else
         {
@@ -1168,14 +1171,17 @@ public sealed class TextBox(FontService fontService, ElementPoolService elementP
         return low;
     }
 
-    public override void Draw(GameTime gameTime, GraphicsDevice graphicsDevice, SpriteBatch spriteBatch, Texture2D unitRectangle)
+    public override void Draw(GameTime gameTime)
     {
-        base.Draw(gameTime, graphicsDevice, spriteBatch, unitRectangle);
+        base.Draw(gameTime);
 
         if (!IsFocused)
         {
             return;
         }
+
+        var spriteBatch = ElementPoolService.SpriteBatch;
+        var unitRectangle = ElementPoolService.UnitRectangle;
 
         var (top, bottom, left, right) = BorderThickness.GetEdgeRectangles(Rectangle, FocusIndicatorThickness);
         spriteBatch.Draw(unitRectangle, top, FocusIndicatorColor);

@@ -14,7 +14,7 @@ namespace Tests.Presentation;
 [TestClass]
 public sealed class TextWindowScrollingTests
 {
-    private static ElementPoolService CreateWindowService() => new(new FontService("Fonts"), new GlyphRenderer());
+    private static ElementPoolService CreateWindowService() => TestElementPoolServiceFactory.Create(new FontService("Fonts"), new GlyphRenderer());
 
     private static TextWindow CreateFixedTextWindow(ElementPoolService windowService, string text, Vector2 size, bool canUserScrollVertical)
     {

@@ -112,7 +112,7 @@ public sealed class HotbarContent(
     /// <summary>Whether each slot is currently active (usable) -- refreshed once per Update (see RefreshSlotActiveStates), not recomputed during Draw. Deciding *whether* a slot is disabled (locked, unaffordable, out of stock) is state/game logic; Draw only ever asks "is this slot active" and independently decides how that reads visually (see AlphaFor) -- the two are deliberately kept separate rather than DrawActionSlot/DrawItemSlot each computing and returning their own alpha for the rest of DrawSlot to reuse.</summary>
     private readonly Dictionary<HotkeySlot, bool> _slotActiveStates = [];
 
-    /// <summary>Read directly from the pool at construction (not deferred to Initialize/Update) specifically so GameShellBootstrapper can read a correct Size immediately after `new HotbarContent(...)`, before the host Window -- which needs that Size to construct itself -- exists at all. Field initializers can't reference another instance field (only the primary constructor's own parameters), hence re-resolving the pool from componentManager here rather than reusing _hotkeyExpansionUnlocks.</summary>
+    /// <summary>Read directly from the pool at construction (not deferred to Initialize/Update) specifically so ShellBootstrapper can read a correct Size immediately after `new HotbarContent(...)`, before the host Window -- which needs that Size to construct itself -- exists at all. Field initializers can't reference another instance field (only the primary constructor's own parameters), hence re-resolving the pool from componentManager here rather than reusing _hotkeyExpansionUnlocks.</summary>
     private short _unlockedExpansionSlots = GetUnlockedExpansionSlots(componentManager.GetPackedPool<HotkeyExpansionUnlockComponent>(), world.PlayerEntityId);
 
     private int _lastLayoutRowsVisible = GetExpansionRowsVisible(GetUnlockedExpansionSlots(componentManager.GetPackedPool<HotkeyExpansionUnlockComponent>(), world.PlayerEntityId));
@@ -122,7 +122,7 @@ public sealed class HotbarContent(
     public Vector2 Size => ComputeSize(GetExpansionRowsVisible(_unlockedExpansionSlots), GetExpansionPagesVisible(_unlockedExpansionSlots));
 
     /// <summary>
-    /// The largest the bar can ever grow to (both Expansion pages, both rows) -- GameShellBootstrapper
+    /// The largest the bar can ever grow to (both Expansion pages, both rows) -- ShellBootstrapper
     /// gives the host Window this as its Layout.MaximumSize (rather than leaving it unset, which
     /// falls back to the initial Size -- see Element.Build) specifically so RefreshLayoutIfChanged's
     /// later SetBounds calls, as more slots unlock, aren't clamped straight back down to whatever
@@ -153,7 +153,7 @@ public sealed class HotbarContent(
     private static int GetExpansionPagesVisible(short unlockedSlots) =>
         unlockedSlots > SlotsPerExpansionPage ? MaxExpansionPages : 1;
 
-    /// <summary>playerEntityId can still be World's unset sentinel (-1) here -- GameShellBootstrapper constructs this class (and reads its Size) before GameLoop's first Update actually spawns the player (see FloorBuilder.CreatePlayer), so a negative id must fall back the same as "no component" rather than indexing the pool with it.</summary>
+    /// <summary>playerEntityId can still be World's unset sentinel (-1) here -- ShellBootstrapper constructs this class (and reads its Size) before GameLoop's first Update actually spawns the player (see FloorBuilder.CreatePlayer), so a negative id must fall back the same as "no component" rather than indexing the pool with it.</summary>
     private static short GetUnlockedExpansionSlots(PackedComponentPool<HotkeyExpansionUnlockComponent> hotkeyExpansionUnlocks, int playerEntityId) =>
         playerEntityId >= 0 && hotkeyExpansionUnlocks.TryGetReadonly(playerEntityId, out var unlock) ? unlock.UnlockedSlotCount : DefaultUnlockedExpansionSlots;
 
@@ -216,7 +216,7 @@ public sealed class HotbarContent(
         return true;
     }
 
-    /// <summary>Unlocking more Expansion slots is rare and permanent (see HotkeyExpansion.Apply), so this only actually resizes/repositions the host window on the frame the row/page count changes, not every frame -- centered horizontally and anchored to the same bottom margin as before, recomputed against the new Size so the bar grows upward as rows are added and rightward as page 2 appears (see GameShellBootstrapper, which sizes/positions the window identically at construction).</summary>
+    /// <summary>Unlocking more Expansion slots is rare and permanent (see HotkeyExpansion.Apply), so this only actually resizes/repositions the host window on the frame the row/page count changes, not every frame -- centered horizontally and anchored to the same bottom margin as before, recomputed against the new Size so the bar grows upward as rows are added and rightward as page 2 appears (see ShellBootstrapper, which sizes/positions the window identically at construction).</summary>
     private void RefreshLayoutIfChanged()
     {
         var rowsVisible = GetExpansionRowsVisible(_unlockedExpansionSlots);
@@ -233,12 +233,14 @@ public sealed class HotbarContent(
         _hostWindow.SetBounds(newPosition, newSize);
     }
 
-    /// <summary>Shared by GameShellBootstrapper (initial placement) and RefreshLayoutIfChanged (every subsequent resize) so the two can never drift into disagreeing formulas.</summary>
+    /// <summary>Shared by ShellBootstrapper (initial placement) and RefreshLayoutIfChanged (every subsequent resize) so the two can never drift into disagreeing formulas.</summary>
     public static Vector2 ComputeBottomCenteredPosition(Vector2 size, Vector2 screenSize) =>
         new((screenSize.X - size.X) / 2f, screenSize.Y - size.Y - HudMetrics.Margin.Y * 1.5f);
 
-    public void DrawContent(GameTime gameTime, SpriteBatch spriteBatch, Texture2D unitRectangle)
+    public void DrawContent(GameTime gameTime)
     {
+        var spriteBatch = _hostWindow.ElementPoolService.SpriteBatch;
+        var unitRectangle = _hostWindow.ElementPoolService.UnitRectangle;
         var playerEntityId = world.PlayerEntityId;
 
         foreach (var (slot, bounds) in EnumerateSlotBounds())

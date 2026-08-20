@@ -14,7 +14,7 @@ namespace Presentation.UI.Content;
 /// Permanent top-right HUD readout for the player's health -- unlike MapWindow's per-entity
 /// tile bars (which hide at full health), this always renders since it's a persistent HUD
 /// element, not a transient overlay. Hosted via IWindowContent/SetContent (see
-/// GameShellBootstrapper), the same pattern DebugWindowContent uses, rather than living inside
+/// ShellBootstrapper), the same pattern DebugWindowContent uses, rather than living inside
 /// MapWindow -- it belongs to the HUD tier (screen-absolute coordinates), not the map's own
 /// local content-viewport space. Light grey full-width fill when the player has no
 /// HealthComponent at all -- reserved for a future temporarily/permanently-immortal player
@@ -61,10 +61,13 @@ public sealed class PlayerHealthBarContent(World world, ComponentManager compone
             : 1f;
     }
 
-    public void DrawContent(GameTime gameTime, SpriteBatch spriteBatch, Texture2D unitRectangle)
+    public void DrawContent(GameTime gameTime)
     {
+        var spriteBatch = _hostWindow.ElementPoolService.SpriteBatch;
+        var unitRectangle = _hostWindow.ElementPoolService.UnitRectangle;
+
         // ContentSize, not the static Size -- Size is the window's outer bounds (used by
-        // GameShellBootstrapper to position/size the host window itself); the actual drawable
+        // ShellBootstrapper to position/size the host window itself); the actual drawable
         // area is whatever's left after its border insets that, so the bar has to size itself
         // off ContentSize to fit inside the border rather than drawing over it.
         var origin = _hostWindow.ContentAbsolutePosition;

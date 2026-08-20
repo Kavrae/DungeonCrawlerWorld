@@ -81,8 +81,11 @@ public class Button : Element
     {
     }
 
-    public void Draw(GameTime gameTime, SpriteBatch spriteBatch, Texture2D unitRectangle)
+    public void Draw(GameTime gameTime)
     {
+        var spriteBatch = ElementPoolService.SpriteBatch;
+        var unitRectangle = ElementPoolService.UnitRectangle;
+
         if (ShowBorder)
         {
             BorderRenderer.Draw(spriteBatch, unitRectangle, EffectiveBorderStyle, BorderColor, BorderTopRectangle, BorderBottomRectangle, BorderLeftRectangle, BorderRightRectangle);

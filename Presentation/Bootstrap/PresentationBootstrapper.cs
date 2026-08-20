@@ -26,7 +26,7 @@ public static class PresentationBootstrapper
         var tileRenderer = new TileRenderer();
         var spriteSheetService = new SpriteSheetService(graphicsDevice, spritesheetsDirectory);
         var spriteRenderer = new SpriteRenderer();
-        var elementPoolService = new ElementPoolService(fontService, glyphRenderer);
+        var elementPoolService = new ElementPoolService();
 
         return new PresentationContext(fontService, spriteBatchRenderer, glyphRenderer, tileRenderer, spriteSheetService, spriteRenderer, elementPoolService);
     }
