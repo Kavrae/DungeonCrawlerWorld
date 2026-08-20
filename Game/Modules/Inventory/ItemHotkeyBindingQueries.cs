@@ -14,8 +14,8 @@ namespace Game.Modules.Inventory;
 /// <cleanupVersion>1</cleanupVersion>
 public static class ItemHotkeyBindingQueries
 {
-    public static bool TryGet(MultiComponentPool<ItemHotkeyBindingComponent> bindings, int entityId, HotkeySlot slot, out Guid itemDefinitionId) =>
-        HotkeySlotBindingQueries.TryGet(bindings, entityId, slot, out itemDefinitionId);
+    public static bool TryGet(MultiComponentPool<ItemHotkeyBindingComponent> bindings, int entityId, HotkeySlot slot, out Guid stackInstanceId) =>
+        HotkeySlotBindingQueries.TryGet(bindings, entityId, slot, out stackInstanceId);
 
     /// <summary>Unbinds the item from the specified hotkey slot, if it is bound.</summary>
     /// <param name="bindings">The pool of item hotkey bindings.</param>

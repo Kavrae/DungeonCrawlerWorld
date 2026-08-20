@@ -76,8 +76,9 @@ public static class ShellBootstrapper
             componentManager.GetDirectPool<TransformComponent>(),
             componentManager.GetPackedPool<MovementComponent>());
 
+        //TODO look at pulling these contents into a new context if it continues to grow.
         var cursorTextContent = new CursorTextContent(presentation.FontService, presentation.GlyphRenderer);
-        var dragGhostContent = new DragGhostContent(actionCatalog, itemCatalog, presentation.FontService, presentation.SpriteSheetService, presentation.SpriteRenderer, presentation.GlyphRenderer);
+        var dragGhostContent = new DragGhostContent(world, actionCatalog, itemCatalog, componentManager.GetMultiPool<InventoryItemStackComponent>(), presentation.FontService, presentation.SpriteSheetService, presentation.SpriteRenderer, presentation.GlyphRenderer);
 
         ElementFactoryRegistry.RegisterAll(presentation, ecsContext, actionCatalog, itemCatalog, world, mapViewState, camera, actionTargeting, playerMovement, cursorTextContent);
 
@@ -102,7 +103,8 @@ public static class ShellBootstrapper
         cursorTextContent.GetCursorPosition = () => inputController.CurrentMousePosition;
         dragGhostContent.GetState = () => new DragGhostState(
             inputController.ContentDragGhostVisible,
-            inputController.ContentDragItemDefinitionId,
+            inputController.ContentDragItemStackInstanceId,
+            inputController.ContentDragMergedItemDefinitionId,
             inputController.ContentDragActionId,
             inputController.ContentDragSourceSize,
             inputController.CurrentMousePosition);

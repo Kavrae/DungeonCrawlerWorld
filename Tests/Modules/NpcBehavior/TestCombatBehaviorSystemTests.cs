@@ -136,7 +136,9 @@ public sealed class TestCombatBehaviorSystemTests
 
         Assert.IsTrue(fixture.PendingConsumableActivations.Has(GoblinEntityId));
         var pending = fixture.PendingConsumableActivations.GetReadonly(GoblinEntityId);
-        Assert.AreEqual(HealthPotion.Id, pending.ItemDefinitionId);
+        var pool = fixture.InventoryStacks;
+        Assert.IsTrue(InventoryQueries.TryFindByStackInstanceId(pool, GoblinEntityId, pending.StackInstanceId, out var boundStack));
+        Assert.AreEqual(HealthPotion.Id, boundStack.ItemDefinitionId);
         Assert.HasCount(1, pending.TargetTiles);
         Assert.AreEqual(GoblinPosition, pending.TargetTiles[0]);
         Assert.IsFalse(fixture.PendingActivations.Has(GoblinEntityId), "Healing takes priority over attacking -- both should never fire the same tick.");

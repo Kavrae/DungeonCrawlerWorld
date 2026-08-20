@@ -158,7 +158,7 @@ public sealed class TestCombatBehaviorSystem : ISystem
             return false;
         }
 
-        _pendingConsumableActivations.Merge(entityId, new PendingConsumableActivationComponent(HealthPotion.Id, [transform.Position]));
+        _pendingConsumableActivations.Merge(entityId, new PendingConsumableActivationComponent(potionStack.StackInstanceId, [transform.Position]));
         return true;
     }
 

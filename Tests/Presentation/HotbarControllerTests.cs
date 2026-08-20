@@ -144,7 +144,7 @@ public sealed class HotbarControllerTests
         controller.OnSlotTapped(HotkeySlot.Slot2);
 
         Assert.IsNull(mapViewState.ArmedActionId);
-        Assert.IsNull(mapViewState.ArmedItemDefinitionId);
+        Assert.IsNull(mapViewState.ArmedItemStackInstanceId);
     }
 
     /// <summary>

@@ -1,12 +1,70 @@
 using Engine.ECS.Components.Stores;
 using Game.Modules.Inventory;
 using Game.Modules.Inventory.Components;
+using Microsoft.Xna.Framework;
 
 namespace Tests.Modules.Inventory;
 
 [TestClass]
 public sealed class InventoryQueriesTests
 {
+    private static ItemDefinition CreateDefinition(Guid id, string name = "Test Item") =>
+        new(id, name, SpriteName: null, Glyph: "?", Color.White, Tags: [], Effects: []);
+
+    [TestMethod]
+    public void TryResolveEffectiveItem_StackHasNoOverride_FallsThroughToCatalog()
+    {
+        var itemId = Guid.NewGuid();
+        var catalog = new ItemCatalog();
+        catalog.Register(CreateDefinition(itemId, "Health Potion"));
+        var stack = new InventoryItemStackComponent(itemId, quantity: 1);
+
+        Assert.IsTrue(InventoryQueries.TryResolveEffectiveItem(catalog, in stack, out var definition));
+        Assert.AreEqual("Health Potion", definition.Name);
+    }
+
+    [TestMethod]
+    public void TryResolveEffectiveItem_StackHasOverride_ReturnsTheOverrideInsteadOfTheCatalogEntry()
+    {
+        var itemId = Guid.NewGuid();
+        var catalog = new ItemCatalog();
+        catalog.Register(CreateDefinition(itemId, "Wand of Fireball"));
+        var stack = new InventoryItemStackComponent(itemId, quantity: 1, overrideDefinition: CreateDefinition(itemId, "Wand of Fireball (5 charges)"));
+
+        Assert.IsTrue(InventoryQueries.TryResolveEffectiveItem(catalog, in stack, out var definition));
+        Assert.AreEqual("Wand of Fireball (5 charges)", definition.Name);
+    }
+
+    [TestMethod]
+    public void TryResolveEffectiveItem_NoOverrideAndNotInCatalog_ReturnsFalse()
+    {
+        var catalog = new ItemCatalog();
+        var stack = new InventoryItemStackComponent(Guid.NewGuid(), quantity: 1);
+
+        Assert.IsFalse(InventoryQueries.TryResolveEffectiveItem(catalog, in stack, out _));
+    }
+
+    [TestMethod]
+    public void TryFindByStackInstanceId_MatchingStack_ReturnsTrueWithTheStack()
+    {
+        var pool = new MultiComponentPool<InventoryItemStackComponent>(maximumEntityCount: 10, initialCapacity: 4);
+        var target = new InventoryItemStackComponent(Guid.NewGuid(), quantity: 3);
+        pool.Add(0, new InventoryItemStackComponent(Guid.NewGuid(), quantity: 1)); // a decoy stack, must not match.
+        pool.Add(0, target);
+
+        Assert.IsTrue(InventoryQueries.TryFindByStackInstanceId(pool, 0, target.StackInstanceId, out var found));
+        Assert.AreEqual(3, found.Quantity);
+    }
+
+    [TestMethod]
+    public void TryFindByStackInstanceId_NoMatchingStack_ReturnsFalse()
+    {
+        var pool = new MultiComponentPool<InventoryItemStackComponent>(maximumEntityCount: 10, initialCapacity: 4);
+        pool.Add(0, new InventoryItemStackComponent(Guid.NewGuid(), quantity: 1));
+
+        Assert.IsFalse(InventoryQueries.TryFindByStackInstanceId(pool, 0, Guid.NewGuid(), out _));
+    }
+
     [TestMethod]
     public void CopyStacksForEntity_ReturnsExactlyTheStacksAdded()
     {

@@ -8,11 +8,13 @@ namespace Game.Modules.Inventory.Components;
 /// this request, ConsumableActivationSystem is the only thing that actually applies gameplay
 /// effects. Consumed (removed) the same frame ConsumableActivationSystem processes it, whether or
 /// not the activation actually goes through -- a one-shot request, not a standing intent to retry.
+/// References the exact stack being activated by StackInstanceId, not ItemDefinitionId -- the
+/// same per-slot item divergence reasoning ItemHotkeyBindingComponent's own doc comment gives.
 /// </summary>
-public struct PendingConsumableActivationComponent(Guid itemDefinitionId, Vector3Int[] targetTiles)
+public struct PendingConsumableActivationComponent(Guid stackInstanceId, Vector3Int[] targetTiles)
 {
-    public Guid ItemDefinitionId { get; set; } = itemDefinitionId;
+    public Guid StackInstanceId { get; set; } = stackInstanceId;
     public Vector3Int[] TargetTiles { get; set; } = targetTiles;
 
-    public override readonly string ToString() => $"ItemDefinitionId : {ItemDefinitionId}\nTargetTiles : [{string.Join(", ", TargetTiles)}]";
+    public override readonly string ToString() => $"StackInstanceId : {StackInstanceId}\nTargetTiles : [{string.Join(", ", TargetTiles)}]";
 }

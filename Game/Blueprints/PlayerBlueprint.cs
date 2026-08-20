@@ -1,7 +1,9 @@
 using Engine.ECS.Components;
 using Engine.Math;
 using Game.Modules.AbilityScores;
+using Game.Modules.AbilityScores.Components;
 using Game.Modules.Actions;
+using Game.Modules.Actions.Activators;
 using Game.Modules.Actions.Components;
 using Game.Modules.Actions.Definitions.DirectActions;
 using Game.Modules.Actions.Definitions.Spells;
@@ -29,6 +31,11 @@ public sealed class PlayerBlueprint(MathUtility mathUtility, UniqueNumberAllocat
 
     private const ushort MagicMissileDamage = 5;
 
+    private const ushort WandOfFireballStartingQuantity = 10;
+
+    /// <summary>Charge count for the TEMPORARY Adjacent-targeting test wand below -- arbitrary, just needs to be a few shots' worth.</summary>
+    private const ushort TestAdjacentWandCharges = 5;
+
     /// <summary>Matches the Expansion group's old fixed slot count -- nobody loses hotkey access just because Expansion now grows past 10. See HotkeyExpansionUnlockComponent's own doc comment.</summary>
     private const byte DefaultUnlockedExpansionSlots = 5;
 
@@ -53,6 +60,20 @@ public sealed class PlayerBlueprint(MathUtility mathUtility, UniqueNumberAllocat
             AbilityScoreEffects.Grant(componentManager, entityId, abilityScoreType, RollAbilityScoreBaseValue());
         }
 
+        WandGrantEffects.Grant(componentManager, componentManager.GetMultiPool<AbilityScoreComponent>(), entityId, WandOfFireball.Build(), quantity: WandOfFireballStartingQuantity);
+
+        // TEMPORARY -- exercises divergence in a field other than charges (see the per-slot item
+        // divergence work): a single Wand of Fireball with Adjacent targeting instead of the
+        // normal Burst, built directly via AddDivergentItem rather than WandGrantEffects.Grant
+        // since this is a synthetic, already-divergent single unit, not a fresh batch. Remove once
+        // a real, player-driven way to diverge a non-charge field exists.
+        var baseWand = WandOfFireball.Build();
+        var adjacentTargetingWand = baseWand with
+        {
+            Activator = ((WandActivator)baseWand.Activator!) with { Targeting = new TargetingSpec(TargetShape.Adjacent, Range: 0), Charges = TestAdjacentWandCharges, MaxCharges = TestAdjacentWandCharges },
+        };
+        InventoryActions.AddDivergentItem(componentManager, entityId, adjacentTargetingWand);
+
         ActionGrantEffects.Grant(componentManager, entityId, HealAction.Id, HealAction.ManaCost, damageAmount: 0, cooldownFramesRemaining: 0);
         // damageAmount: 0 -- no per-instance override, so Punch rolls its catalog DirectDamage's own
         // MinAmount..MaxAmount range (18-22, roughly +-10% of the old flat 20) instead of a fixed number.
@@ -70,21 +91,24 @@ public sealed class PlayerBlueprint(MathUtility mathUtility, UniqueNumberAllocat
 
         componentManager.Merge(entityId, new DisplayTextComponent("Player1", "This is you. What else did you expect?"));
 
-        InventoryActions.AddItem(componentManager, entityId, HealthPotion.Id, quantity: 5);
-        InventoryActions.AddItem(componentManager, entityId, ManaPotion.Id, quantity: 5);
-        InventoryActions.AddItem(componentManager, entityId, HotkeyExpansionPotion.Id, quantity: 3);
-        InventoryActions.AddItem(componentManager, entityId, DamagePotion.Id, quantity: 5);
-        InventoryActions.AddItem(componentManager, entityId, ToxicPotion.Id, quantity: 5);
-        InventoryActions.AddItem(componentManager, entityId, ToxicIdol.Id, quantity: 5);
+        // ItemHotkeyBindingComponent binds by StackInstanceId, not ItemDefinitionId (see its own
+        // doc comment) -- AddItem's return value is the exact stack each of these starting grants
+        // landed in, which is what gets bound below.
+        var healthPotionStackId = InventoryActions.AddItem(componentManager, entityId, HealthPotion.Id, quantity: 5);
+        var manaPotionStackId = InventoryActions.AddItem(componentManager, entityId, ManaPotion.Id, quantity: 5);
+        var hotkeyExpansionPotionStackId = InventoryActions.AddItem(componentManager, entityId, HotkeyExpansionPotion.Id, quantity: 3);
+        var damagePotionStackId = InventoryActions.AddItem(componentManager, entityId, DamagePotion.Id, quantity: 5);
+        var toxicPotionStackId = InventoryActions.AddItem(componentManager, entityId, ToxicPotion.Id, quantity: 5);
+        var toxicIdolStackId = InventoryActions.AddItem(componentManager, entityId, ToxicIdol.Id, quantity: 5);
         InventoryActions.AddItem(componentManager, entityId, ScrollOfHealing.Id, quantity: 5);
         InventoryActions.AddItem(componentManager, entityId, ScrollOfTorch.Id, quantity: 5);
 
-        componentManager.Merge(entityId, new ItemHotkeyBindingComponent(HotkeySlot.Slot1, HealthPotion.Id));
-        componentManager.Merge(entityId, new ItemHotkeyBindingComponent(HotkeySlot.Slot2, ManaPotion.Id));
-        componentManager.Merge(entityId, new ItemHotkeyBindingComponent(HotkeySlot.Slot3, HotkeyExpansionPotion.Id));
-        componentManager.Merge(entityId, new ItemHotkeyBindingComponent(HotkeySlot.Slot4, DamagePotion.Id));
-        componentManager.Merge(entityId, new ItemHotkeyBindingComponent(HotkeySlot.Slot5, ToxicPotion.Id));
-        componentManager.Merge(entityId, new ItemHotkeyBindingComponent(HotkeySlot.Slot6, ToxicIdol.Id));
+        componentManager.Merge(entityId, new ItemHotkeyBindingComponent(HotkeySlot.Slot1, healthPotionStackId));
+        componentManager.Merge(entityId, new ItemHotkeyBindingComponent(HotkeySlot.Slot2, manaPotionStackId));
+        componentManager.Merge(entityId, new ItemHotkeyBindingComponent(HotkeySlot.Slot3, hotkeyExpansionPotionStackId));
+        componentManager.Merge(entityId, new ItemHotkeyBindingComponent(HotkeySlot.Slot4, damagePotionStackId));
+        componentManager.Merge(entityId, new ItemHotkeyBindingComponent(HotkeySlot.Slot5, toxicPotionStackId));
+        componentManager.Merge(entityId, new ItemHotkeyBindingComponent(HotkeySlot.Slot6, toxicIdolStackId));
 
         StatModifierEffects.Apply(componentManager, entityId, StatModifierTarget.OutgoingDamage, StatModifierOperation.Additive, StatModifierPolarity.Buff,
             canModify: true, magnitude: PermanentOutgoingDamageBonus, durationFrames: null, StatusEffectSource.Admin);

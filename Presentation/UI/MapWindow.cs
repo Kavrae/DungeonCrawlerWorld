@@ -740,7 +740,7 @@ public sealed class MapWindow : Window
     /// </summary>
     protected override void OnContentClickAction(Point mousePosition)
     {
-        if (_mapViewState.ArmedActionId is not null || _mapViewState.ArmedItemDefinitionId is not null)
+        if (_mapViewState.ArmedActionId is not null || _mapViewState.ArmedItemStackInstanceId is not null)
         {
             _actionTargeting.TryConfirmActivation(mousePosition, _contentState.AbsolutePosition);
             return;

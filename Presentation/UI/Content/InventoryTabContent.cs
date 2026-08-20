@@ -20,7 +20,17 @@ namespace Presentation.UI.Content;
 public sealed class InventoryTabContent(ElementPoolService elementPoolService, FontService fontService, GlyphRenderer glyphRenderer, InventoryGridContent gridContent) : IElementContent
 {
     private static readonly IReadOnlyList<string> SortOptionLabels = ["A-Z", "Z-A", "Qty Hi", "Qty Lo"];
-    private const string ToggleLabel = "Hide Disabled";
+
+    /// <summary>Index into ToggleDefinitions -- GridControl.ToggleChanged fires with this same index, so OnToggleChanged dispatches by it rather than by comparing labels.</summary>
+    private const int HideDisabledToggleIndex = 0;
+    private const int StackDivergedToggleIndex = 1;
+
+    private static readonly IReadOnlyList<(string Label, bool DefaultOn)> ToggleDefinitions =
+    [
+        ("Hide Disabled", false),
+        ("Stack Diverged", true),
+    ];
+
     private const string SearchGhostText = "Search Items";
 
     private Window _hostWindow = null!;
@@ -48,7 +58,7 @@ public sealed class InventoryTabContent(ElementPoolService elementPoolService, F
             Chrome = new ElementChromeOptions { ShowBorder = false, ShowTitle = false, CanUserFocus = false },
             Content = new ElementContentOptions { ContentColor = WindowPalette.PanelContentColor },
         });
-        _gridControl.Configure(SortOptionLabels, ToggleLabel, SearchGhostText);
+        _gridControl.Configure(SortOptionLabels, ToggleDefinitions, SearchGhostText);
         hostWindow.AddChild(_gridControl); // Already initializes _gridControl -- see AddChild's own doc comment.
 
         _gridControl.SortOptionCycled += OnSortOptionCycled;
@@ -113,7 +123,18 @@ public sealed class InventoryTabContent(ElementPoolService elementPoolService, F
 
     private void OnSortOptionCycled(int index) => gridContent.SortOrder = (InventorySortOrder)index;
 
-    private void OnToggleChanged(bool isOn) => gridContent.HideDisabled = isOn;
+    private void OnToggleChanged(int toggleIndex, bool isOn)
+    {
+        switch (toggleIndex)
+        {
+            case HideDisabledToggleIndex:
+                gridContent.HideDisabled = isOn;
+                break;
+            case StackDivergedToggleIndex:
+                gridContent.GroupDivergedStacks = isOn;
+                break;
+        }
+    }
 
     private void OnSearchFilterChanged(string text) => gridContent.NameFilter = text;
 

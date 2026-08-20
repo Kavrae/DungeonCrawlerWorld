@@ -66,6 +66,7 @@ public sealed class InventoryModule : IGameModule
         var hotkeyExpansionUnlocks = componentManager.GetOptionalPackedPool<HotkeyExpansionUnlockComponent>();
         var abilityScores = componentManager.GetOptionalMultiPool<AbilityScoreComponent>();
         var auraSources = componentManager.GetOptionalMultiPool<StatusEffectAuraSourceComponent>();
+        var itemHotkeyBindings = componentManager.GetOptionalMultiPool<ItemHotkeyBindingComponent>();
 
         systemManager.Register(new ConsumableActivationSystem(
             componentManager.GetPackedPool<PendingConsumableActivationComponent>(),
@@ -85,6 +86,7 @@ public sealed class InventoryModule : IGameModule
             abilityScores,
             _statusEffectAppliers,
             _playerQuery,
-            auraSources));
+            auraSources,
+            itemHotkeyBindings));
     }
 }

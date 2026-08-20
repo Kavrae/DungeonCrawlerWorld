@@ -1,9 +1,11 @@
+using Engine.ECS.Components.Stores;
 using Game.Blueprints;
 using Game.Modules.Actions;
 using Game.Modules.Core.Components;
 using Game.Modules.Inventory;
+using Game.Modules.Inventory.Components;
+using Game.World;
 using Microsoft.Xna.Framework;
-using Microsoft.Xna.Framework.Graphics;
 using Presentation.Fonts;
 using Presentation.Rendering;
 
@@ -12,11 +14,14 @@ namespace Presentation.UI.Content;
 /// <summary>
 /// The live content-drag state DragGhostContent needs to draw a frame -- see DragGhostContent.GetState.
 /// Bundles what UiInputController's own content-drag fields expose (ContentDragGhostVisible,
-/// ContentDragItemDefinitionId, ContentDragActionId, ContentDragSourceSize, CurrentMousePosition)
-/// into one snapshot instead of DragGhostContent holding a live UiInputController reference just
-/// to pull five unrelated properties off it every frame.
+/// ContentDragItemStackInstanceId, ContentDragMergedItemDefinitionId, ContentDragActionId,
+/// ContentDragSourceSize, CurrentMousePosition) into one snapshot instead of DragGhostContent
+/// holding a live UiInputController reference just to pull six unrelated properties off it every
+/// frame. MergedItemDefinitionId is the icon fallback for a Merged Stack drag (see
+/// InventoryItemStackCell's own doc comment for the Base/Diverging/Merged vocabulary) -- it has
+/// no single StackInstanceId to resolve an icon through, only its own shared ItemDefinitionId.
 /// </summary>
-public readonly record struct DragGhostState(bool Visible, Guid? ItemDefinitionId, Guid? ActionId, Vector2 SourceSize, Point CursorPosition);
+public readonly record struct DragGhostState(bool Visible, Guid? ItemStackInstanceId, Guid? MergedItemDefinitionId, Guid? ActionId, Vector2 SourceSize, Point CursorPosition);
 
 /// <summary>
 /// A cursor-following copy of a dragged item's or action's icon while UiInputController's
@@ -29,8 +34,10 @@ public readonly record struct DragGhostState(bool Visible, Guid? ItemDefinitionI
 /// mouse position, not relative to any window's own bounds.
 /// </summary>
 public sealed class DragGhostContent(
+    World world,
     ActionCatalog actionCatalog,
     ItemCatalog itemCatalog,
+    MultiComponentPool<InventoryItemStackComponent> inventoryStacks,
     FontService fontService,
     SpriteSheetService spriteSheetService,
     SpriteRenderer spriteRenderer,
@@ -64,9 +71,15 @@ public sealed class DragGhostContent(
         string glyph;
         Color glyphColor;
 
-        if (state.ItemDefinitionId is { } itemDefinitionId && itemCatalog.TryGet(itemDefinitionId, out var item))
+        if (state.ItemStackInstanceId is { } stackInstanceId &&
+            InventoryQueries.TryFindByStackInstanceId(inventoryStacks, world.PlayerEntityId, stackInstanceId, out var stack) &&
+            InventoryQueries.TryResolveEffectiveItem(itemCatalog, in stack, out var item))
         {
             (spriteName, glyph, glyphColor) = (item.SpriteName, item.Glyph, item.GlyphColor);
+        }
+        else if (state.MergedItemDefinitionId is { } mergedItemDefinitionId && itemCatalog.TryGet(mergedItemDefinitionId, out var mergedItem))
+        {
+            (spriteName, glyph, glyphColor) = (mergedItem.SpriteName, mergedItem.Glyph, mergedItem.GlyphColor);
         }
         else if (state.ActionId is { } actionId && actionCatalog.TryGet(actionId, out var action))
         {

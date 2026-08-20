@@ -75,9 +75,11 @@ Two follow-ups the Scrolls landing above deliberately left open:
 
 Worth designing as one shared "attachment mode" concept reusable by any future aura-granting effect, not just Torch.
 
-#### Move inventory items to the hotbar
+#### Move inventory items to the hotbar (landed)
 
-`ItemHotkeyBindingComponent` (`Game/Modules/Inventory/Components/`) plus `ConsumableActivationSystem`/`ActionTargetingController`'s item-arm/target/confirm/double-tap path have landed -- a slot can reference an item and activate it (splash-throw or double-tap-self for potions), separately from `ActionHotkeyBindingComponent` (renamed from `HotkeyBindingComponent`, the ability-only original). `Presentation/UI/Content/HotbarContent.cs` still only *renders* ability slots though (Phase 4), and the only way to actually bind an item to a slot today is `PlayerBlueprint`'s TEMPORARY hardcoded grant -- real click-and-drag assignment (Phase 5) still depends on the Standard widget set item below.
+`ItemHotkeyBindingComponent` (`Game/Modules/Inventory/Components/`) plus `ConsumableActivationSystem`/`ActionTargetingController`'s item-arm/target/confirm/double-tap path have landed -- a slot can reference an item and activate it (splash-throw or double-tap-self for potions), separately from `ActionHotkeyBindingComponent` (renamed from `HotkeyBindingComponent`, the ability-only original). Real click-and-drag assignment from the inventory grid has since landed too (`UiInputController`'s content-drag path, `HotbarContent.BindItem`/`ResolveDroppedBinding`) -- `PlayerBlueprint`'s hardcoded starting binds are the only thing still assigned programmatically, which is expected (spawn-time setup, not a player action).
+
+Binding is now keyed by `StackInstanceId`, not `ItemDefinitionId` (see the per-slot item divergence work) -- a slot references one exact physical stack, so a wand's own remaining charges keep depleting through the same bound slot as it fires, and dragging a still-collapsed Merged Stack or a bare divergent-without-context cell onto a slot is refused outright (disabled cursor) rather than binding something ambiguous. See the new "ItemBindingRule for hotkey-bound consumables" entry below for the one piece of that intentionally left unbuilt: what happens once the exact bound stack runs out.
 
 #### Shops and storage containers
 
@@ -150,9 +152,50 @@ Two player-facing requirements once real generation exists: let a player supply 
 
 Game-side equipment rules (what can go in which slot, stat effects of equipping). Companion to the Engine-layer equipment item above and the Presentation-layer equipment menu below. Unblocked now that Inventory exists (see the Engine-layer Inventory system item).
 
-#### Wands
+#### Wands (landed, without the original Equipment gate)
 
-A Wand is an Equipment item (see above) that must be equipped to activate, unlike a potion or scroll which activates straight from a hotbar slot. It carries a limited number of charges, spends one per activation via its own ActionActivator (see the Scrolls item above), and is destroyed once its charges run out. Depends on both ActionEffects/ActionActivators and Equipment landing first -- a wand's activator needs the ActionActivator split to express "spend a charge instead of mana or a one-time use," and equip/unequip mechanics to gate activation on actually being equipped.
+`WandActivator` (`Game/Modules/Actions/Activators/`) landed as the concrete proof case for **per-slot item
+divergence** (see the Inventory system item above): each physical wand carries its own remaining
+`Charges`/`MaxCharges`, fixed once at grant time off the recipient's Intelligence (`WandGrantEffects`, 3
+casts at Intelligence 1 up to 30 at 300) and ticking down per-instance via
+`InventoryActions.PeelOneIntoDivergentStack` as it's actually fired -- the first item ever granted as a
+diverged stack rather than a plain interchangeable one. `Game/Modules/Inventory/Definitions/WandOfFireball.cs`
+is the concrete item: 10-range Burst, 25-35 direct damage, 5 stacks of Burning. Deliberately landed *without*
+the originally-planned Equipment gate this entry used to describe -- a wand activates straight from a hotbar
+slot exactly like a potion or scroll, no equip/unequip step, since Equipment itself still doesn't exist and
+gating on it would have meant Wands couldn't land at all. Revisit whether an equip requirement is still wanted
+once Equipment (see above) actually exists -- not designed in from the start this time.
+
+Item hotkey binding had to move from `ItemDefinitionId` to `StackInstanceId` to make this work at all (see
+`ItemHotkeyBindingComponent`'s own doc comment) -- once two stacks of the same item can legitimately differ,
+"bind this slot to Wand of Fireball" is ambiguous; it has to mean one specific physical wand. The inventory
+grid's own display followed: `InventoryGridContent`/`InventoryItemStackCell` merge same-item stacks into one
+badged cell by default (a "Stack Diverged" toggle in `GridControl`, on by default), expandable back into the
+individual stacks a click at a time.
+
+#### Enchantment
+
+Permanently modifies an item's stats -- the next real consumer of `InventoryActions.AddDivergentItem` (see
+the per-slot item divergence work above), which was already built generic for exactly this: an enchant effect
+builds a modified `ItemDefinition` `Override` (e.g. a `StatModifierGrant` added to `Effects`, or an existing
+one's magnitude increased) the same way Wand of Fireball's charge-depleted state does, and calls the same
+split-into-a-new-stack primitive. No design yet for what an enchant recipe/application UI looks like, what
+materials it consumes, or where it's performed (a Safe Room mechanic, an NPC service, a consumable "scroll of
+enchanting" item, etc.).
+
+**Provenance tracking**: nothing records *why* or *how* a stack diverged today -- only its resulting state.
+Once Enchantment is real, a diverged item's `Override` (or a small sidecar field) should probably carry
+something like "enchanted with Ruby of Flame" for tooltip/flavor purposes, the way MMO item tooltips commonly
+show an enchant's origin. Not needed for Wands (there's nothing to attribute -- charge depletion isn't an
+event worth narrating), so left for whenever Enchantment itself is picked up.
+
+#### ItemBindingRule for hotkey-bound consumables
+
+Item hotkeys bind to one exact `StackInstanceId` (see the Wands item above) -- once that stack is depleted,
+its slot just goes empty; there's no fallback to another stack of the same item id. A future `ItemBindingRule`
+concept would let a hotkey instead bind to an item id with a user-selected rule for which divergent/plain
+stack to prefer (e.g. lowest charges first, highest charges first, plain batch first), re-resolved each time
+the currently-selected stack runs out instead of requiring the player to manually rebind.
 
 #### Stats (infrastructure landed -- consumers still TODO)
 
@@ -308,6 +351,11 @@ A rare item granted to the player on the third floor -- takes many different for
 
 Each form's pages should let the player add their own notes, as multi-line text boxes -- a real second consumer of `TextBox`'s `Multiline` support (see the Text Input Enhanced Features item above) beyond the TEMPORARY quest-composer demo in `GameShellBootstrapper.cs`, and a natural fit for the upcoming Journal-shaped UI already anticipated there.
 
+**Meta-progression across runs (two possible directions, neither designed yet):**
+
+- Possibly grant permanent, tiny boosts to future runs' starting Ability Scores (`Game/Modules/AbilityScores/`) and Skills (see the Skills item above), derived from whichever ability scores and skills the just-ended run actually leaned on. Skills should carry over far more rarely than Ability Scores -- a skill's own effect (modifying actions with static bonuses and granting new effects outright, per the Skills item) is already a bigger swing than a single ability score point, so an equivalent permanent carryover needs to be correspondingly rarer to avoid stacking runaway power across repeated runs. Nothing today records "what this run's build actually was," and nothing about a new run's blueprint construction (`PlayerBlueprint`) reads from a prior run at all -- this needs its own persistent, save-file-level meta-progression store, distinct from anything in a single `EcsContext`.
+- Possibly let each run's end contribute one unique action to a shared New Game Action Pool -- the run banks a single action (player-chosen, or picked by some "most used"/"most impactful" rule, not decided), and a fresh game start offers the player a choice of one out of X randomly-drawn actions from the accumulated pool as a starting bonus. Depends on the same persistent meta-progression store as the ability score/skill idea above, plus a rule for what qualifies a run's action as bankable in the first place.
+
 ## Presentation
 
 ### High Priority
@@ -318,11 +366,17 @@ Each form's pages should let the player add their own notes, as multi-line text 
 
 #### Inventory management
 
-The read-only view landed: `Presentation/UI/Inventory/InventoryManagementWindow.cs` behind a new Inventory HUD folder (`InventoryFolderController`), tabbed (`Presentation/UI/Content/TabbedContent.cs`, a horizontally-scrollable dynamic per-tag strip -- see the Dynamic per-tag inventory tabs item below) over a scrolling icon grid (`InventoryGridContent`/`InventoryItemStackCell`) -- pause-while-open included. Remaining scope is interaction: click-and-drag organization, click-to-inspect (see Item details window below). Depends on the Standard widget set item below for any of that which needs controls beyond what already exists.
+The read-only view landed: `Presentation/UI/Inventory/InventoryManagementWindow.cs` behind a new Inventory HUD folder (`InventoryFolderController`), tabbed (`Presentation/UI/Content/TabbedContent.cs`, a horizontally-scrollable dynamic per-tag strip -- see the Dynamic per-tag inventory tabs item below) over a scrolling icon grid (`InventoryGridContent`/`InventoryItemStackCell`) -- pause-while-open included. Click-and-drag organization has since landed too, for the one destination that exists today (dragging a stack onto a hotbar slot -- see the Move inventory items to the hotbar item under Game, and per-slot item divergence's own Merged/Diverging Stack drag rules); dragging one grid cell onto another to reorder, and click-to-inspect (see the new "Selected item details window..." entry below), are still open, and remain blocked on the Standard widget set item below for whatever controls they end up needing.
 
-#### Item inspection popup
+#### Manual stack splitting and merging
 
-Click an inventory item cell (`InventoryItemStackCell`, `Presentation/UI/Content/InventoryItemStackCell.cs`) to see its full detail -- name, description, and whatever properties land alongside it (tags are already on `ItemDefinition`, surfaced today only as the per-tag tabs, not per-cell). Depends on Inventory management above for the grid to click into. See also the newer "Item details window" entry below -- the two describe the same feature and should be consolidated when either is picked up.
+Player-initiated stack manipulation -- shift-drag (or similar) to peel an arbitrary chosen quantity off a stack into a new one, and drag one stack onto a compatible one to merge them back together. Distinct from the automatic splitting/merging the per-slot item divergence work already does (that's system-triggered, by exact-state equality, with no player choice involved) -- this is a manual, player-facing gesture on top of it. Blocked on the click-and-drag organization work "Inventory management" above still has as open scope (the drag gesture itself needs to exist first) and on "Context menu / mouse button coverage" (a likely UI for choosing how much to split off, e.g. a quantity prompt) both landing first.
+
+#### Selected item details window, generic stat-diff highlighting, and equipped-item comparison
+
+Consolidates the old "Item inspection popup"/"Item details window" entries (click an inventory cell, see its full name/description/tags/properties) into something more thorough: a persistent details pane that shows whatever item is currently *selected* (not just a click-to-open popup that closes again) -- name, description, tags, and every stat, mirroring how `SelectionWindowContent` already shows whatever *entity* is currently selected on the map.
+
+Once per-slot item divergence exists (it does now -- see the Inventory system item above), this is also the natural home for **generic stat-diff highlighting**: a diverged item's stats should read differently from its plain baseline at a glance (a wand showing fewer charges than a fresh one, a future enchanted weapon showing its bonus), not just via an ad hoc field or two hand-picked into a hover popup (today's stopgap -- see `InventoryGridContent.UpdateHover`'s "Target:"/"Charges:" lines). The underlying mechanism should be one generic "diff two `ItemDefinition`s, report which fields differ" utility -- not diverged-item-specific -- because the exact same operation is what a WoW-style **equipped-item comparison** tooltip needs (hovering an unequipped item while something is already equipped in that slot, showing the stat delta between them). Design the diff utility once, consumed by both: diverged-vs-baseline (compare `stack.Override` against `itemCatalog.TryGet(stack.ItemDefinitionId)`) and hovered-vs-equipped (compare the hovered item's effective definition against whatever's resolved for the matching equipment slot) are the same "compare two `ItemDefinition`s field-by-field" operation with a different pair of inputs. The equipped-comparison half is blocked on the Equipment item existing at all (Game and Presentation both) -- the details-window/diff-highlighting half is not, and can land first.
 
 #### Inventory item hover summary (landed)
 
@@ -344,15 +398,13 @@ A search box shares the tab strip's own row (`Presentation/UI/Content/TabbedCont
 
 #### Tab Stats row (landed, as `GridControl`)
 
-Despite the old name, this landed as `GridControl` (`Presentation/UI/GridControl.cs`) -- a reusable, fully generic row of grid-scoped controls (item count, click-to-cycle sort button, click-to-toggle filter button, a `DebouncedTextFilter`-backed search box), not an Inventory-specific "stats" widget. Sits between the tab strip and the grid via `InventoryTabContent` (`Presentation/UI/Content/InventoryTabContent.cs`), which composes one `GridControl` per tab above an `InventoryGridContent` and is the only piece that knows either is about items -- `GridControl` itself never references items, tags, or `InventoryGridContent`, so a future Magic Menu (see that item below) can reuse it directly. Item count only -- total weight still blocked on the Item weight and carry capacity scaling with Strength item below (no `ItemDefinition`/`InventoryItemStackComponent` carries a weight field yet). See `PLAN-inventory-item-filtering-and-tab-stats.md` for the full design, including why `InventoryGridContent` itself was deliberately *not* genericized into a reusable `Grid` primitive this pass.
-
-#### Item details window
-
-Click an inventory item to open a window with its full details -- name, description, tags, and whatever else lands alongside it, beyond the grid's own sprite/glyph + quantity and the hover popup's short summary. Same feature the older "Item inspection popup" entry above already describes; consolidate the two when either is picked up.
+Despite the old name, this landed as `GridControl` (`Presentation/UI/GridControl.cs`) -- a reusable, fully generic row of grid-scoped controls (item count, click-to-cycle sort button, a `DebouncedTextFilter`-backed search box, and now a *list* of click-to-toggle filter buttons rather than just one -- see the per-slot item divergence work's own "Stack Diverged" toggle alongside the original "Hide Disabled"), not an Inventory-specific "stats" widget. Sits between the tab strip and the grid via `InventoryTabContent` (`Presentation/UI/Content/InventoryTabContent.cs`), which composes one `GridControl` per tab above an `InventoryGridContent` and is the only piece that knows either is about items -- `GridControl` itself never references items, tags, or `InventoryGridContent`, so a future Magic Menu (see that item below) can reuse it directly. Item count only -- total weight still blocked on the Item weight and carry capacity scaling with Strength item below (no `ItemDefinition`/`InventoryItemStackComponent` carries a weight field yet). See `PLAN-inventory-item-filtering-and-tab-stats.md` for the full design, including why `InventoryGridContent` itself was deliberately *not* genericized into a reusable `Grid` primitive this pass.
 
 #### Advanced sort control -- icon that expands into a context-menu of sort options
 
 The Tab Stats row's sort control (see the Tab Stats row item above) ships as a plain click-to-cycle button first (Name A-Z/Z-A, Quantity High-Low/Low-High) -- cycling blind through a fixed order instead of picking one directly. Replace it with a small sort icon that expands into a context menu listing every sort option by name, so the user picks the one they want in one click instead of cycling to it. Depends on the Context menu / mouse button coverage item below (`UiInputController` has no right-click/menu-popup primitive yet) -- or, if a context menu ends up being left-click-triggered instead, at least depends on some generalized "popup a list of choices near a control" primitive not existing yet either way.
+
+Should also cover **sorting by a stat** (e.g. a wand's remaining charges, or a future item's power/roll quality) once per-slot item divergence gives items stats worth sorting by -- not just Name/Quantity. Note that which stats are even available to sort by varies per item type, so the option list this control's own context menu shows may need to be built dynamically per tab/selection rather than the fixed list this entry otherwise assumes -- worth confirming the context-menu mechanism this entry already depends on ("Context menu / mouse button coverage") actually supports a dynamic option set before assuming it does.
 
 #### Search icon that expands into a search bar
 
@@ -467,6 +519,23 @@ Needs a real, explicit design for how a user selects a specific interactive cont
 #### UI visual overhaul
 
 Every window today draws through the same small set of shared primitives (`BorderRenderer`'s Flat/Outset/Inset/FlatContrast styles, `GlowRenderer`'s outward glow, `WindowPalette`'s dark grey background/content colors) but nothing about the overall *look* has had a deliberate visual design pass -- it's whatever each feature landed with. Target direction: Elden Ring-style menus (dark, minimalist, understated chrome -- `WindowPalette`'s existing dark-grey-on-dark-grey palette is already pointed this way, just not pushed further) combined with FFXIV-style hotkey/action-bar presentation (`HotbarContent`, `Presentation/UI/Content/HotbarContent.cs` -- today's flat-bordered slot grid is the concrete thing an FFXIV-style pass would redo). Also: `GlowRenderer.Draw` (already used by `HotbarContent`'s armed-slot glow, `NotificationCenter`'s unread-glow, `Folder`) currently only draws an *outward* ring glow around a rectangle's border (`GlowRingCount` concentric 1px rings expanding outside `bounds`, `MaximumAlpha` 0.7) -- the element's own interior never highlights at all. Wanted instead: a highlight that covers the *whole* element (interior included, not just an outward-facing ring), and noticeably lighter/more subtle than today's 0.7 max alpha -- a restrained highlight, not a strong one. No concrete spec yet -- this is a direction to design against, not a worked-out visual language; a real pass would need mockups/reference images before touching `BorderRenderer`/`GlowRenderer`/`WindowPalette` themselves, since those three are shared by every window in the game.
+
+#### Inventory grid item badge clarity
+
+`InventoryItemStackCell` (`Presentation/UI/Content/InventoryItemStackCell.cs`) has accumulated several small
+overlay badges -- a bottom-right quantity-or-charges number (`ItemIconRenderer.DrawQuantityBadge`, either
+"x5" or "5/6", see its own doc comment for why the two never show together), a top-right "+" (`MergedStackBadgeVisible`,
+meaning "this is a collapsed Merged Stack, click to expand" -- see the class's own Base/Diverging/Merged
+Stack doc comment), and the black group-perimeter border an *expanded* Merged Stack's own member cells draw
+instead of their normal one -- each landed incrementally, addressing its own immediate need, with no
+deliberate pass over how they all read together at a glance. Confirmed source of real ambiguity already:
+the bottom-right number silently changes *meaning* (how many I have, vs. how many uses this one specific
+item has left) with zero visual distinction between the two -- directly at odds with `CLAUDE.md`'s own
+"remove ambiguity" Presentation design principle. `HotbarContent`'s matching badge slot (`BuildItemVisual`) has
+the identical quantity-vs-charges ambiguity and should be covered by the same pass, not fixed separately.
+No concrete redesign specified here -- worth a deliberate look (icon instead of a bare "+", a visual tell
+distinguishing "count" from "uses remaining," etc.) once there's room to design against rather than adding
+more badges piecemeal.
 
 ### Low Priority
 

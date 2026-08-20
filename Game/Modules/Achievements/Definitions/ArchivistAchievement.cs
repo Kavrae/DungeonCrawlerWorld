@@ -1,3 +1,4 @@
+using Game.Modules.Inventory;
 using Game.Modules.Inventory.Components;
 using Game.World;
 
@@ -32,15 +33,17 @@ public sealed class ArchivistAchievement : IAchievementDefinition
     private static int CountDistinctBoundScrolls(AchievementTriggerContext context)
     {
         var bindings = context.ComponentManager.GetMultiPool<ItemHotkeyBindingComponent>();
+        var stacks = context.ComponentManager.GetMultiPool<InventoryItemStackComponent>();
         var playerEntityId = context.PlayerQuery!.PlayerEntityId;
         var distinctScrollIds = new HashSet<Guid>();
 
         for (var denseIndex = bindings.GetFirstDenseIndex(playerEntityId); denseIndex != -1; denseIndex = bindings.GetNextDenseIndex(denseIndex))
         {
             var binding = bindings.GetReadonlyByDenseIndex(denseIndex);
-            if (context.Items.TryGet(binding.ItemDefinitionId, out var item) && item.Tags.Contains(Tag.Scroll))
+            if (InventoryQueries.TryFindByStackInstanceId(stacks, playerEntityId, binding.StackInstanceId, out var stack) &&
+                context.Items.TryGet(stack.ItemDefinitionId, out var item) && item.Tags.Contains(Tag.Scroll))
             {
-                distinctScrollIds.Add(binding.ItemDefinitionId);
+                distinctScrollIds.Add(stack.ItemDefinitionId);
             }
         }
 

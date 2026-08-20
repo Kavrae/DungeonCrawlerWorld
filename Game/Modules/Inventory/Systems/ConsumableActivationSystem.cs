@@ -26,13 +26,18 @@ namespace Game.Modules.Inventory.Systems;
 /// -- mirrors ActionActivationSystem/PendingActionActivationComponent exactly). Every
 /// consumable activation sets the shared ActionLock on the *activating* entity, the same as an
 /// Immediate action (see PotionActivator.Timing's own doc comment) -- there's no Delayed/
-/// FreeCast equivalent for consumables today. The stack is ticked down
-/// (InventoryActions.ConsumeItem) before the effect applies, per spec order (see
-/// TryBeginActivation, shared by every activator kind below).
+/// FreeCast equivalent for consumables today. Every request now names the exact stack being
+/// activated (StackInstanceId, not ItemDefinitionId -- see PendingConsumableActivationComponent's
+/// own doc comment); its effective ItemDefinition (its own Override if diverged, else the plain
+/// catalog lookup -- see InventoryQueries.TryResolveEffectiveItem) is what actually gets applied,
+/// so a diverged stack's own current state (a wand's remaining charges) is never bypassed by
+/// accidentally reading the catalog original instead.
 ///
-/// Dispatches on item.Activator's concrete type. PotionActivator: PotionCooldownComponent -- and
-/// the punishment Poison stack/PotionCooldownAbusedEvent for activating it again too soon --
-/// belongs to whoever actually receives the potion's effect (see ApplyPotionToTarget), not
+/// Dispatches on item.Activator's concrete type. PotionActivator/ScrollActivator: the stack is
+/// ticked down (InventoryActions.ConsumeItemByStackInstanceId) before the effect applies, per
+/// spec order (see TryBeginActivation, shared by both). PotionActivator: PotionCooldownComponent
+/// -- and the punishment Poison stack/PotionCooldownAbusedEvent for activating it again too soon
+/// -- belongs to whoever actually receives the potion's effect (see ApplyPotionToTarget), not
 /// whoever drank/threw it. Drinking your own potion means those are the same entity; throwing one
 /// at a goblin means the goblin's own cooldown ticks, the thrower's does not. This stays this
 /// system's own kind-uniform logic rather than a composable IActionEffectEntry -- see
@@ -48,6 +53,15 @@ namespace Game.Modules.Inventory.Systems;
 /// ScrollScalingEffects' own doc comment) and any duration the effect carries by the *caster's*
 /// Intelligence, then records the activation toward mastering the scroll's spell (see
 /// ScrollMasteryEffects).
+///
+/// WandActivator: not consumed from a shared stack at all -- each wand has its own remaining
+/// Charges, decremented via InventoryActions.PeelOneIntoDivergentStack (see PeelWandCharge) rather
+/// than InventoryActions.ConsumeItemByStackInstanceId, and (unlike Potion/Scroll) the peeled stack
+/// gets a *new* StackInstanceId once it's actually diverged -- so this slot's own
+/// ItemHotkeyBindingComponent is repointed to it afterward (see RepointItemHotkeyBinding), the one
+/// piece of bookkeeping neither Potion nor Scroll ever needs. No mana cost, no cooldown-abuse
+/// mechanic, no Intelligence duration-scaling (that's scroll-specific) -- charges were already
+/// fixed once, at grant time (see Game.Modules.Inventory.WandGrantEffects).
 /// </summary>
 public sealed class ConsumableActivationSystem : ISystem
 {
@@ -73,6 +87,7 @@ public sealed class ConsumableActivationSystem : ISystem
     private readonly StatusEffectAuraApplierRegistry? _statusEffectAppliers;
     private readonly IPlayerQuery? _playerQuery;
     private readonly MultiComponentPool<StatusEffectAuraSourceComponent>? _auraSources;
+    private readonly MultiComponentPool<ItemHotkeyBindingComponent>? _itemHotkeyBindings;
     private readonly EntityStripeSet _stripeSet;
 
     public ConsumableActivationSystem(
@@ -93,7 +108,8 @@ public sealed class ConsumableActivationSystem : ISystem
         MultiComponentPool<AbilityScoreComponent>? abilityScores = null,
         StatusEffectAuraApplierRegistry? statusEffectAppliers = null,
         IPlayerQuery? playerQuery = null,
-        MultiComponentPool<StatusEffectAuraSourceComponent>? auraSources = null)
+        MultiComponentPool<StatusEffectAuraSourceComponent>? auraSources = null,
+        MultiComponentPool<ItemHotkeyBindingComponent>? itemHotkeyBindings = null)
     {
         _pendingActivations = pendingActivations;
         _actionLocks = actionLocks;
@@ -113,6 +129,7 @@ public sealed class ConsumableActivationSystem : ISystem
         _statusEffectAppliers = statusEffectAppliers;
         _playerQuery = playerQuery;
         _auraSources = auraSources;
+        _itemHotkeyBindings = itemHotkeyBindings;
 
         _stripeSet = new EntityStripeSet(StripeCount, pendingActivations.EntityIds);
         pendingActivations.EntityAdded += _stripeSet.OnEntityAdded;
@@ -137,7 +154,8 @@ public sealed class ConsumableActivationSystem : ISystem
             // so there's no outcome that should leave this request standing for a future visit.
             _pendingActivations.Remove(entityId);
 
-            if (!_itemCatalog.TryGet(request.ItemDefinitionId, out var item))
+            if (!InventoryQueries.TryFindByStackInstanceId(_componentManager.GetMultiPool<InventoryItemStackComponent>(), entityId, request.StackInstanceId, out var stack) ||
+                !InventoryQueries.TryResolveEffectiveItem(_itemCatalog, in stack, out var item))
             {
                 continue;
             }
@@ -145,7 +163,7 @@ public sealed class ConsumableActivationSystem : ISystem
             switch (item.Activator)
             {
                 case PotionActivator potionActivator:
-                    if (!TryBeginActivation(entityId, item))
+                    if (!TryBeginActivation(entityId, request.StackInstanceId))
                     {
                         continue;
                     }
@@ -155,7 +173,7 @@ public sealed class ConsumableActivationSystem : ISystem
                     break;
 
                 case ScrollActivator scrollActivator:
-                    if (!TryBeginActivation(entityId, item))
+                    if (!TryBeginActivation(entityId, request.StackInstanceId))
                     {
                         continue;
                     }
@@ -163,14 +181,25 @@ public sealed class ConsumableActivationSystem : ISystem
                     ActivateScroll(item, scrollActivator, entityId, request.TargetTiles);
                     ActionLockGate.Lock(_actionLocks, entityId, scrollActivator.Timing.ActionLockFrames);
                     break;
+
+                case WandActivator wandActivator:
+                    if (!TryBeginWandActivation(entityId, wandActivator.Charges))
+                    {
+                        continue;
+                    }
+
+                    PeelWandCharge(entityId, stack, item, wandActivator);
+                    ActivateWand(item, entityId, request.TargetTiles);
+                    ActionLockGate.Lock(_actionLocks, entityId, wandActivator.Timing.ActionLockFrames);
+                    break;
             }
         }
     }
 
-    /// <summary>Shared pre-checks + stack consumption for any item activator kind -- still holds the stack, action lock isn't currently blocking, then consumes one unit (per spec order, before the effect applies). Returns false (nothing consumed) if either check fails.</summary>
-    private bool TryBeginActivation(int entityId, ItemDefinition item)
+    /// <summary>Shared pre-checks + stack consumption for Potion/Scroll -- still holds the stack, action lock isn't currently blocking, then consumes one unit (per spec order, before the effect applies). Returns false (nothing consumed) if either check fails.</summary>
+    private bool TryBeginActivation(int entityId, Guid stackInstanceId)
     {
-        if (!InventoryQueries.TryGetStack(_componentManager.GetMultiPool<InventoryItemStackComponent>(), entityId, item.Id, out _))
+        if (!InventoryQueries.TryFindByStackInstanceId(_componentManager.GetMultiPool<InventoryItemStackComponent>(), entityId, stackInstanceId, out _))
         {
             return false;
         }
@@ -180,9 +209,13 @@ public sealed class ConsumableActivationSystem : ISystem
             return false;
         }
 
-        InventoryActions.ConsumeItem(_componentManager, entityId, item.Id);
+        InventoryActions.ConsumeItemByStackInstanceId(_componentManager, entityId, stackInstanceId);
         return true;
     }
+
+    /// <summary>Wand counterpart to TryBeginActivation -- no stack to consume yet (see PeelWandCharge, called separately once this passes), just the two gates: charges remaining, and the shared ActionLock isn't currently blocking.</summary>
+    private bool TryBeginWandActivation(int entityId, ushort charges) =>
+        charges > 0 && !ActionLockGate.IsBlocked(_actionLocks, entityId);
 
     private void ActivatePotion(ItemDefinition item, PotionActivator potionActivator, int sourceEntityId, Vector3Int[] targetTiles)
     {
@@ -266,6 +299,70 @@ public sealed class ConsumableActivationSystem : ISystem
 
         ActionEffectSequence.Apply(item.Effects, BuildContext(item, sourceEntityId, targetEntityId, durationScaleMultiplier));
     }
+
+    private void ActivateWand(ItemDefinition item, int sourceEntityId, Vector3Int[] targetTiles)
+    {
+        foreach (var tile in targetTiles)
+        {
+            foreach (var targetEntityId in _mapQuery.GetOccupantEntityIdsAt(tile))
+            {
+                ApplyWandToTarget(item, sourceEntityId, targetEntityId);
+            }
+        }
+    }
+
+    /// <summary>Same "immortal but affectable" treatment as ApplyScrollToTarget -- no hard HealthComponent requirement, each effect entry no-ops gracefully on its own missing pool. Skipped only for a dead target.</summary>
+    private void ApplyWandToTarget(ItemDefinition item, int sourceEntityId, int targetEntityId)
+    {
+        if (_deadEntities?.Has(targetEntityId) == true)
+        {
+            return;
+        }
+
+        ActionEffectSequence.Apply(item.Effects, BuildContext(item, sourceEntityId, targetEntityId));
+    }
+
+    /// <summary>
+    /// Decrements this specific wand's own Charges by one, uniformly whether it's the first shot
+    /// off a fresh plain batch or the Nth shot depleting an already-divergent instance -- no
+    /// plain-vs-divergent branch (see this class's own doc comment for why that uniformity is
+    /// what keeps "equal states share one stack" true at every step, not just at creation). At 0
+    /// remaining charges the wand is simply destroyed (InventoryActions.ConsumeItemByStackInstanceId
+    /// decrements-and-removes the source stack directly) rather than adding a permanent 0-charge
+    /// husk back via AddDivergentItem. Otherwise peels the depleted state into its own divergent
+    /// stack (InventoryActions.PeelOneIntoDivergentStack) and repoints this slot's own hotkey
+    /// binding to wherever that state actually landed (new stack, or merged into an existing one
+    /// at the same charge count) -- without this repoint, every subsequent press would peel a
+    /// fresh wand off the original stack instead of depleting the one already in the slot.
+    /// </summary>
+    private void PeelWandCharge(int entityId, InventoryItemStackComponent stack, ItemDefinition item, WandActivator wandActivator)
+    {
+        var newCharges = (ushort)(wandActivator.Charges - 1);
+
+        if (newCharges == 0)
+        {
+            InventoryActions.ConsumeItemByStackInstanceId(_componentManager, entityId, stack.StackInstanceId);
+            return;
+        }
+
+        var newOverride = item with { Activator = wandActivator with { Charges = newCharges } };
+        var newStackInstanceId = InventoryActions.PeelOneIntoDivergentStack(_componentManager, entityId, stack.StackInstanceId, newOverride);
+        RepointItemHotkeyBinding(entityId, stack.StackInstanceId, newStackInstanceId);
+    }
+
+    /// <summary>
+    /// Repoints whichever hotkey slot referenced oldStackInstanceId (if any -- the wand may have
+    /// been activated some other way, though today the hotbar is the only path) to
+    /// newStackInstanceId instead. A no-op if _itemHotkeyBindings wasn't wired in (a test harness
+    /// exercising activation without the full hotbar module) or nothing was actually bound to the
+    /// old id.
+    /// </summary>
+    private void RepointItemHotkeyBinding(int entityId, Guid oldStackInstanceId, Guid newStackInstanceId) =>
+        _itemHotkeyBindings?.TryUpdateFirst(
+            entityId,
+            (oldStackInstanceId, newStackInstanceId),
+            static (ref readonly ItemHotkeyBindingComponent binding, (Guid Old, Guid New) state) => binding.StackInstanceId == state.Old,
+            static (ref ItemHotkeyBindingComponent binding, (Guid Old, Guid New) state) => binding.StackInstanceId = state.New);
 
     /// <summary>Shared ActionEffectContext shape for both ApplyPotionToTarget and ApplyScrollToTarget -- identical field-for-field except DurationScaleMultiplier, which only a scroll activation ever sets away from its 1.0 default.</summary>
     private ActionEffectContext BuildContext(ItemDefinition item, int sourceEntityId, int targetEntityId, float durationScaleMultiplier = 1.0f) =>

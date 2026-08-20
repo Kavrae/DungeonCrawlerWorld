@@ -24,6 +24,7 @@ public sealed class CoreItemsModule : IGameModule
         ToxicIdol.Build,
         ScrollOfHealing.Build,
         ScrollOfTorch.Build,
+        WandOfFireball.Build,
     ];
 
     public void Configure(GameModuleContext context)

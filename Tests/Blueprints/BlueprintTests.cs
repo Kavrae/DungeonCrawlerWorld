@@ -13,6 +13,7 @@ using Game.Blueprints.Terrain;
 using Game.Modules;
 using Game.Modules.AbilityScores;
 using Game.Modules.Actions;
+using Game.Modules.Actions.Activators;
 using Game.Modules.Actions.Components;
 using Game.Modules.Actions.Definitions;
 using Game.Modules.Actions.Definitions.DirectActions;
@@ -216,10 +217,12 @@ public sealed class BlueprintTests
         // Starting items: 5 Health Potions, 5 Mana Potions, 3 Hotkey Expansion Potions, 5 Volatile
         // Concoctions (damage), 5 Toxic Flasks (Poison+Burning), 5 Toxic Idols (Poison aura toggle),
         // 5 Scrolls of Healing, 5 Scrolls of Torch -- see the ActionEffect/ActionActivator plan's
-        // concrete test content.
+        // concrete test content. Plus a batch of 10 Wands of Fireball and one TEMPORARY divergent
+        // Adjacent-targeting test wand -- two separate stacks sharing WandOfFireball.Id, since the
+        // divergent one carries its own Override -- see the per-slot item divergence work.
         var stacks = new List<InventoryItemStackComponent>();
         InventoryQueries.CopyStacksForEntity(ecsContext.ComponentManager.GetMultiPool<InventoryItemStackComponent>(), entityId, stacks);
-        Assert.HasCount(8, stacks);
+        Assert.HasCount(10, stacks);
 
         var healthPotionStack = stacks.Single(stack => stack.ItemDefinitionId == HealthPotion.Id);
         Assert.AreEqual(5, healthPotionStack.Quantity);
@@ -252,6 +255,20 @@ public sealed class BlueprintTests
         var scrollOfTorchStack = stacks.Single(stack => stack.ItemDefinitionId == ScrollOfTorch.Id);
         Assert.AreEqual(5, scrollOfTorchStack.Quantity);
         Assert.IsFalse(scrollOfTorchStack.IsDisabled);
+
+        var wandOfFireballStacks = stacks.Where(stack => stack.ItemDefinitionId == WandOfFireball.Id).ToList();
+        Assert.HasCount(2, wandOfFireballStacks);
+
+        var plainWandStack = wandOfFireballStacks.Single(stack => !stack.IsDivergent);
+        Assert.AreEqual(10, plainWandStack.Quantity);
+        Assert.IsFalse(plainWandStack.IsDisabled);
+        Assert.IsNotNull(plainWandStack.Override);
+        Assert.IsInstanceOfType<WandActivator>(plainWandStack.Override!.Activator);
+
+        var divergentWandStack = wandOfFireballStacks.Single(stack => stack.IsDivergent);
+        Assert.AreEqual(1, divergentWandStack.Quantity);
+        var divergentWandActivator = (WandActivator)divergentWandStack.Override!.Activator!;
+        Assert.AreEqual(TargetShape.Adjacent, divergentWandActivator.Targeting.Shape);
 
         var hotkeyExpansionUnlock = ecsContext.ComponentManager.GetPackedPool<HotkeyExpansionUnlockComponent>().GetReadonly(entityId);
         Assert.AreEqual((short)5, hotkeyExpansionUnlock.UnlockedSlotCount);

@@ -116,7 +116,7 @@ public sealed class HotbarContentTests
 
         hotbar.BindItem(HotkeySlot.Slot3, itemId);
 
-        Assert.IsTrue(hotbar.TryGetBoundItemId(HotkeySlot.Slot3, out var boundItemId));
+        Assert.IsTrue(hotbar.TryGetBoundItemStackInstanceId(HotkeySlot.Slot3, out var boundItemId));
         Assert.AreEqual(itemId, boundItemId);
     }
 
@@ -142,7 +142,7 @@ public sealed class HotbarContentTests
         hotbar.BindItem(HotkeySlot.Slot3, firstItemId);
         hotbar.BindItem(HotkeySlot.Slot3, secondItemId);
 
-        Assert.IsTrue(hotbar.TryGetBoundItemId(HotkeySlot.Slot3, out var boundItemId));
+        Assert.IsTrue(hotbar.TryGetBoundItemStackInstanceId(HotkeySlot.Slot3, out var boundItemId));
         Assert.AreEqual(secondItemId, boundItemId);
         Assert.AreEqual(1, componentManager.GetMultiPool<ItemHotkeyBindingComponent>().CountForEntity(PlayerEntityId));
     }
@@ -156,7 +156,7 @@ public sealed class HotbarContentTests
 
         hotbar.UnbindItemSlot(HotkeySlot.Slot3);
 
-        Assert.IsFalse(hotbar.TryGetBoundItemId(HotkeySlot.Slot3, out _));
+        Assert.IsFalse(hotbar.TryGetBoundItemStackInstanceId(HotkeySlot.Slot3, out _));
     }
 
     [TestMethod]
@@ -168,10 +168,10 @@ public sealed class HotbarContentTests
     }
 
     [TestMethod]
-    public void TryGetBoundItemId_NoBindingOnThatSlot_ReturnsFalse()
+    public void TryGetBoundItemStackInstanceId_NoBindingOnThatSlot_ReturnsFalse()
     {
         var (hotbar, _) = Build();
 
-        Assert.IsFalse(hotbar.TryGetBoundItemId(HotkeySlot.Slot1, out _));
+        Assert.IsFalse(hotbar.TryGetBoundItemStackInstanceId(HotkeySlot.Slot1, out _));
     }
 }

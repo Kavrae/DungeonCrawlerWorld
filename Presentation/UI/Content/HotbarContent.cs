@@ -207,9 +207,9 @@ public sealed class HotbarContent(
             return HasEnoughMana(playerEntityId, action);
         }
 
-        if (ItemHotkeyBindingQueries.TryGet(_itemHotkeyBindings, playerEntityId, slot, out var itemDefinitionId) && itemCatalog.TryGet(itemDefinitionId, out var item))
+        if (ItemHotkeyBindingQueries.TryGet(_itemHotkeyBindings, playerEntityId, slot, out var stackInstanceId) && TryResolveBoundItem(playerEntityId, stackInstanceId, out var item, out _))
         {
-            return IsItemUsable(playerEntityId, item);
+            return item.Activator is not null;
         }
 
         // Unbound but unlocked -- empty, not disabled (nothing to fade).
@@ -319,9 +319,9 @@ public sealed class HotbarContent(
         return false;
     }
 
-    /// <summary>The item (if any) currently bound to slot -- UiInputController's content-drag path reads this at press time to capture the payload of a drag starting on an already-bound hotbar slot.</summary>
-    internal bool TryGetBoundItemId(HotkeySlot slot, out Guid itemDefinitionId) =>
-        ItemHotkeyBindingQueries.TryGet(_itemHotkeyBindings, world.PlayerEntityId, slot, out itemDefinitionId);
+    /// <summary>The item stack (if any) currently bound to slot -- UiInputController's content-drag path reads this at press time to capture the payload of a drag starting on an already-bound hotbar slot.</summary>
+    internal bool TryGetBoundItemStackInstanceId(HotkeySlot slot, out Guid stackInstanceId) =>
+        ItemHotkeyBindingQueries.TryGet(_itemHotkeyBindings, world.PlayerEntityId, slot, out stackInstanceId);
 
     /// <summary>The action (if any) currently bound to slot -- same drag-payload-capture role as TryGetBoundItemId, for a drag starting on an already-bound action slot.</summary>
     internal bool TryGetBoundActionId(HotkeySlot slot, out Guid actionId) =>
@@ -344,8 +344,8 @@ public sealed class HotbarContent(
             return true;
         }
 
-        if (ItemHotkeyBindingQueries.TryGet(_itemHotkeyBindings, playerEntityId, slot, out var itemDefinitionId) &&
-            itemCatalog.TryGet(itemDefinitionId, out var item))
+        if (ItemHotkeyBindingQueries.TryGet(_itemHotkeyBindings, playerEntityId, slot, out var stackInstanceId) &&
+            TryResolveBoundItem(playerEntityId, stackInstanceId, out var item, out _))
         {
             title = item.Name;
             summary = item.Summary;
@@ -384,7 +384,7 @@ public sealed class HotbarContent(
     /// -- ArchivistAchievement's trigger -- deliberately not raised by PlayerBlueprint's own
     /// hardcoded starting binds, which are spawn-time setup, not a player action.
     /// </summary>
-    internal void BindItem(HotkeySlot slot, Guid itemDefinitionId)
+    internal void BindItem(HotkeySlot slot, Guid stackInstanceId)
     {
         if (IsSlotLocked(slot))
         {
@@ -393,8 +393,12 @@ public sealed class HotbarContent(
 
         var playerEntityId = world.PlayerEntityId;
         ClearSlotBinding(playerEntityId, slot);
-        _itemHotkeyBindings.Add(playerEntityId, new ItemHotkeyBindingComponent(slot, itemDefinitionId));
-        eventBus.Publish(new ItemHotkeyBoundEvent(playerEntityId, slot, itemDefinitionId));
+        _itemHotkeyBindings.Add(playerEntityId, new ItemHotkeyBindingComponent(slot, stackInstanceId));
+
+        if (InventoryQueries.TryFindByStackInstanceId(_inventoryStacks, playerEntityId, stackInstanceId, out var stack))
+        {
+            eventBus.Publish(new ItemHotkeyBoundEvent(playerEntityId, slot, stack.ItemDefinitionId));
+        }
     }
 
     /// <summary>Removes slot's item binding, if any -- dragging a bound item off the hotbar entirely (see UiInputController's content-drag path).</summary>
@@ -501,9 +505,9 @@ public sealed class HotbarContent(
         {
             DrawSlotVisual(spriteBatch, unitRectangle, bounds, contentBounds, BuildActionVisual(playerEntityId, action, isActive), alpha);
         }
-        else if (ItemHotkeyBindingQueries.TryGet(_itemHotkeyBindings, playerEntityId, slot, out var itemDefinitionId) && itemCatalog.TryGet(itemDefinitionId, out var item))
+        else if (ItemHotkeyBindingQueries.TryGet(_itemHotkeyBindings, playerEntityId, slot, out var stackInstanceId) && TryResolveBoundItem(playerEntityId, stackInstanceId, out var item, out var stack))
         {
-            DrawSlotVisual(spriteBatch, unitRectangle, bounds, contentBounds, BuildItemVisual(playerEntityId, item, isActive), alpha);
+            DrawSlotVisual(spriteBatch, unitRectangle, bounds, contentBounds, BuildItemVisual(playerEntityId, item, stack, isActive), alpha);
         }
         else
         {
@@ -547,24 +551,41 @@ public sealed class HotbarContent(
         return manaCost <= 0 || (_mana.TryGetReadonly(playerEntityId, out var mana) && mana.CurrentMana >= manaCost);
     }
 
-    /// <summary>Requires both an Activator (e.g. excludes an Equipment/Tool item with no activated action yet) and actual remaining stock -- InventoryActions.ConsumeItem removes the InventoryItemStackComponent entirely once Quantity hits 0 (see its own doc comment), so "no stack found" here means "used the last one."</summary>
-    private bool IsItemUsable(int playerEntityId, ItemDefinition item) =>
-        item.Activator is not null && InventoryQueries.TryGetStack(_inventoryStacks, playerEntityId, item.Id, out var stack) && stack.Quantity > 0;
+    /// <summary>
+    /// Resolves the stack bound to a hotkey slot (by StackInstanceId, see ItemHotkeyBindingComponent's
+    /// own doc comment) to both its effective ItemDefinition (its own Override if diverged, else the
+    /// plain catalog lookup) and the underlying stack itself -- callers need the stack directly
+    /// (e.g. BuildItemVisual's quantity/charges) rather than re-resolving it a second time by item
+    /// id, which could find the *wrong* stack once more than one diverged stack of the same
+    /// ItemDefinitionId can exist side by side.
+    /// </summary>
+    private bool TryResolveBoundItem(int playerEntityId, Guid stackInstanceId, out ItemDefinition item, out InventoryItemStackComponent stack)
+    {
+        if (!InventoryQueries.TryFindByStackInstanceId(_inventoryStacks, playerEntityId, stackInstanceId, out stack))
+        {
+            item = null!;
+            return false;
+        }
+
+        return InventoryQueries.TryResolveEffectiveItem(itemCatalog, in stack, out item);
+    }
 
     /// <summary>
-    /// isActive (see RefreshSlotActiveStates -- an Update-time decision, via IsItemUsable) drives
-    /// both the icon's opacity and whether the cooldown/lock wedge shows at all, the same as
-    /// BuildActionVisual. The potion-cooldown countdown is independent of isActive/stock -- the
-    /// cooldown is the consumer's own status, still meaningful even once this slot's item is out
-    /// of stock (e.g. right after using the last one while abusing the cooldown) -- see
-    /// DrawSlotVisual, which always draws it at full alpha regardless of the slot's own disabled
-    /// state (PotionCooldownEffects' own doc comment: the cooldown never blocks a second potion in
-    /// the first place).
+    /// isActive (see RefreshSlotActiveStates -- an Update-time decision) drives both the icon's
+    /// opacity and whether the cooldown/lock wedge shows at all, the same as BuildActionVisual.
+    /// The potion-cooldown countdown is independent of isActive/stock -- the cooldown is the
+    /// consumer's own status, still meaningful even once this slot's item is out of stock (e.g.
+    /// right after using the last one while abusing the cooldown) -- see DrawSlotVisual, which
+    /// always draws it at full alpha regardless of the slot's own disabled state
+    /// (PotionCooldownEffects' own doc comment: the cooldown never blocks a second potion in the
+    /// first place). Takes the already-resolved stack directly (see TryResolveBoundItem) rather
+    /// than re-looking it up by item id, so a slot bound to one specific divergent stack (e.g. a
+    /// wand) always shows *that* stack's own Quantity/charges, not whichever stack of the same
+    /// item id a fresh lookup happened to find first.
     /// </summary>
-    private SlotVisual BuildItemVisual(int playerEntityId, ItemDefinition item, bool isActive)
+    private SlotVisual BuildItemVisual(int playerEntityId, ItemDefinition item, InventoryItemStackComponent stack, bool isActive)
     {
-        var hasStack = InventoryQueries.TryGetStack(_inventoryStacks, playerEntityId, item.Id, out var stack);
-        var quantity = hasStack ? stack.Quantity : (ushort)0;
+        var quantity = stack.Quantity;
 
         var countdownSeconds = item.Activator is PotionActivator &&
             _potionCooldowns.TryGetReadonly(playerEntityId, out var cooldown) && cooldown.FramesRemaining > 0
@@ -576,7 +597,11 @@ public sealed class HotbarContent(
             Glyph: item.Glyph,
             GlyphColor: BoundSlotGlyphColor,
             FillPercentage: isActive ? ComputeItemFillPercentage(playerEntityId) : 0f,
-            BadgeText: quantity > 1 ? $"x{quantity}" : null,
+            BadgeText: item.Activator is WandActivator wandActivator
+                ? $"{wandActivator.Charges}/{wandActivator.MaxCharges}"
+                : quantity > 1
+                    ? $"x{quantity}"
+                    : null,
             BadgeBottomLeft: false,
             CountdownSecondsAboveSlot: countdownSeconds);
     }

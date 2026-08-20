@@ -12,15 +12,22 @@ public static class ItemIconRenderer
     private static readonly Vector2 QuantityShadowOffset = new(-1, -1);
     private static readonly Vector2 QuantityTextPadding = new(0, 0);
 
-    /// <summary>No-ops for quantity &lt;= 1 -- a lone item doesn't need a count badge.</summary>
-    public static void DrawQuantityBadge(SpriteBatch spriteBatch, SpriteFontBase quantityFont, int quantity, Vector2 contentPosition, Vector2 contentSize)
+    /// <summary>
+    /// chargeText, when non-null, replaces the plain quantity number outright (e.g. "5/6" for a
+    /// wand's remaining/max charges) rather than showing alongside it -- see this parameter's own
+    /// callers for why: the moment an item's first charge is ever consumed, its Quantity stops
+    /// meaning "how many I have" for that specific stack (a wand's own charge count is what
+    /// actually matters once it's diverged), so showing both at once would read as contradictory.
+    /// No-ops when there's nothing to show at all: no chargeText and quantity &lt;= 1.
+    /// </summary>
+    public static void DrawQuantityBadge(SpriteBatch spriteBatch, SpriteFontBase quantityFont, int quantity, string? chargeText, Vector2 contentPosition, Vector2 contentSize)
     {
-        if (quantity <= 1)
+        var text = chargeText ?? (quantity > 1 ? quantity.ToString() : null);
+        if (text is null)
         {
             return;
         }
 
-        var text = quantity.ToString();
         var textSize = quantityFont.MeasureString(text);
         var textPosition = contentPosition + contentSize - textSize - QuantityTextPadding;
         spriteBatch.DrawString(quantityFont, text, textPosition, QuantityShadowColor);

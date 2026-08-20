@@ -27,13 +27,13 @@ public sealed class MapViewState
     /// </summary>
     public int CurrentMapLayer = (int)MapLayer.Ground;
 
-    /// <summary>The action currently armed (a hotkey pressed once, awaiting a target), if any -- paired with ArmedSlot so the Hotbar UI (a later phase) can highlight which slot it came from. Cleared on disarm (pressing the same slot again) or, once built, on cancel/activation. Mutually exclusive with ArmedItemDefinitionId -- only one of {action, item} is ever armed at once.</summary>
+    /// <summary>The action currently armed (a hotkey pressed once, awaiting a target), if any -- paired with ArmedSlot so the Hotbar UI (a later phase) can highlight which slot it came from. Cleared on disarm (pressing the same slot again) or, once built, on cancel/activation. Mutually exclusive with ArmedItemStackInstanceId -- only one of {action, item} is ever armed at once.</summary>
     public Guid? ArmedActionId;
 
-    /// <summary>The consumable item currently armed, if any -- see ArmedActionId, which this mirrors exactly for the item-hotkey path (Game.Modules.Inventory.Components.ItemHotkeyBindingComponent) instead of the action one.</summary>
-    public Guid? ArmedItemDefinitionId;
+    /// <summary>The consumable item stack currently armed, if any -- see ArmedActionId, which this mirrors exactly for the item-hotkey path (Game.Modules.Inventory.Components.ItemHotkeyBindingComponent) instead of the action one. By StackInstanceId, not ItemDefinitionId -- see that component's own doc comment for why.</summary>
+    public Guid? ArmedItemStackInstanceId;
 
-    /// <summary>See ArmedActionId/ArmedItemDefinitionId -- shared regardless of which of the two is actually armed.</summary>
+    /// <summary>See ArmedActionId/ArmedItemStackInstanceId -- shared regardless of which of the two is actually armed.</summary>
     public HotkeySlot? ArmedSlot;
 
     /// <summary>The hotbar slot currently under the cursor, once HotbarController's hover tracking

@@ -190,11 +190,12 @@ public sealed class ActionTargetingController(
         }
 
         if (targetTile == transform.Position &&
-            mapViewState.ArmedItemDefinitionId is { } itemId &&
-            itemCatalog.TryGet(itemId, out var item) &&
+            mapViewState.ArmedItemStackInstanceId is { } armedStackInstanceId &&
+            InventoryQueries.TryFindByStackInstanceId(inventoryStacks, world.PlayerEntityId, armedStackInstanceId, out var armedStack) &&
+            InventoryQueries.TryResolveEffectiveItem(itemCatalog, in armedStack, out var item) &&
             item.Tags.Contains(Tag.Self))
         {
-            TryActivateItemOnSelf(world.PlayerEntityId, itemId);
+            TryActivateItemOnSelf(world.PlayerEntityId, armedStackInstanceId);
             Disarm();
             return;
         }
@@ -213,7 +214,7 @@ public sealed class ActionTargetingController(
     /// </summary>
     public void CancelArmedOrPendingAction()
     {
-        if (mapViewState.ArmedActionId is not null || mapViewState.ArmedItemDefinitionId is not null)
+        if (mapViewState.ArmedActionId is not null || mapViewState.ArmedItemStackInstanceId is not null)
         {
             Disarm();
             return;
@@ -278,9 +279,9 @@ public sealed class ActionTargetingController(
             return;
         }
 
-        if (ItemHotkeyBindingQueries.TryGet(itemHotkeyBindings, world.PlayerEntityId, slot, out var itemDefinitionId))
+        if (ItemHotkeyBindingQueries.TryGet(itemHotkeyBindings, world.PlayerEntityId, slot, out var stackInstanceId))
         {
-            HandleItemSlotPress(slot, itemDefinitionId, isDoubleTap);
+            HandleItemSlotPress(slot, stackInstanceId, isDoubleTap);
         }
     }
 
@@ -359,21 +360,18 @@ public sealed class ActionTargetingController(
     /// instead (see TryConfirmActivationAtTile) -- same rhythm as HandleActionSlotPress,
     /// cancelling is right-click/Escape's job now.
     /// </summary>
-    private void HandleItemSlotPress(HotkeySlot slot, Guid itemDefinitionId, bool isDoubleTap)
+    private void HandleItemSlotPress(HotkeySlot slot, Guid stackInstanceId, bool isDoubleTap)
     {
-        if (!itemCatalog.TryGet(itemDefinitionId, out var item) || item.Activator is null)
-        {
-            return;
-        }
-
-        if (!InventoryQueries.TryGetStack(inventoryStacks, world.PlayerEntityId, itemDefinitionId, out var stack) || stack.Quantity <= 0)
+        if (!InventoryQueries.TryFindByStackInstanceId(inventoryStacks, world.PlayerEntityId, stackInstanceId, out var stack) ||
+            !InventoryQueries.TryResolveEffectiveItem(itemCatalog, in stack, out var item) ||
+            item.Activator is null)
         {
             return;
         }
 
         if (isDoubleTap && item.Tags.Contains(Tag.Self))
         {
-            TryActivateItemOnSelf(world.PlayerEntityId, itemDefinitionId);
+            TryActivateItemOnSelf(world.PlayerEntityId, stackInstanceId);
 
             if (mapViewState.ArmedSlot == slot)
             {
@@ -393,13 +391,13 @@ public sealed class ActionTargetingController(
             return;
         }
 
-        ArmItem(slot, itemDefinitionId);
+        ArmItem(slot, stackInstanceId);
     }
 
     private void ArmAction(HotkeySlot slot, Guid actionId)
     {
         mapViewState.ArmedActionId = actionId;
-        mapViewState.ArmedItemDefinitionId = null;
+        mapViewState.ArmedItemStackInstanceId = null;
         mapViewState.ArmedSlot = slot;
         _targetableTilesOrigin = null; // Forces RefreshTargetableTiles below to (re)compute regardless of any stale origin left over from a previous arm.
 
@@ -409,10 +407,10 @@ public sealed class ActionTargetingController(
         }
     }
 
-    /// <summary>Resolves targeting via TryGetArmedTargeting (not a parameter of its own) -- called after ArmedItemDefinitionId is already set above, so it reads back the correctly (Scroll-)scaled spec instead of a stale unscaled one, the same single-chokepoint reasoning as ArmAction re-fetching Activator.Targeting itself rather than taking it as a parameter.</summary>
-    private void ArmItem(HotkeySlot slot, Guid itemDefinitionId)
+    /// <summary>Resolves targeting via TryGetArmedTargeting (not a parameter of its own) -- called after ArmedItemStackInstanceId is already set above, so it reads back the correctly (Scroll-)scaled spec instead of a stale unscaled one, the same single-chokepoint reasoning as ArmAction re-fetching Activator.Targeting itself rather than taking it as a parameter. Also, critically, what makes a diverged stack's own Override targeting (e.g. a wand with non-default Targeting) actually apply -- TryGetArmedTargeting resolves through the bound stack itself, not a bare catalog lookup by item id.</summary>
+    private void ArmItem(HotkeySlot slot, Guid stackInstanceId)
     {
-        mapViewState.ArmedItemDefinitionId = itemDefinitionId;
+        mapViewState.ArmedItemStackInstanceId = stackInstanceId;
         mapViewState.ArmedActionId = null;
         mapViewState.ArmedSlot = slot;
         _targetableTilesOrigin = null;
@@ -426,7 +424,7 @@ public sealed class ActionTargetingController(
     private void Disarm()
     {
         mapViewState.ArmedActionId = null;
-        mapViewState.ArmedItemDefinitionId = null;
+        mapViewState.ArmedItemStackInstanceId = null;
         mapViewState.ArmedSlot = null;
         mapViewState.TargetableTiles = null;
         _targetableTilesOrigin = null;
@@ -454,9 +452,12 @@ public sealed class ActionTargetingController(
     /// one piece both kinds need for every targeting computation below, so callers stop caring
     /// which kind they're dealing with past this point. The single chokepoint every hover-preview/
     /// arm-highlight/confirm-click path reads through (ArmItem calls this too, after setting
-    /// ArmedItemDefinitionId, rather than taking a targeting parameter of its own), so a
+    /// ArmedItemStackInstanceId, rather than taking a targeting parameter of its own), so a
     /// ScrollActivator item's Range/AreaSize scaling (see ScaleScrollTargeting) applies
-    /// consistently everywhere instead of only on some call sites.
+    /// consistently everywhere instead of only on some call sites. Resolves the armed item through
+    /// its bound *stack* (InventoryQueries.TryResolveEffectiveItem), not a bare catalog lookup by
+    /// item id -- a diverged stack's own Override (e.g. a wand carrying non-default Targeting) is
+    /// what actually gets read, not always the catalog original.
     /// </summary>
     private bool TryGetArmedTargeting(out TargetingSpec targeting)
     {
@@ -466,7 +467,10 @@ public sealed class ActionTargetingController(
             return true;
         }
 
-        if (mapViewState.ArmedItemDefinitionId is { } itemId && itemCatalog.TryGet(itemId, out var item) && item.Activator is { } activator)
+        if (mapViewState.ArmedItemStackInstanceId is { } stackInstanceId &&
+            InventoryQueries.TryFindByStackInstanceId(inventoryStacks, world.PlayerEntityId, stackInstanceId, out var stack) &&
+            InventoryQueries.TryResolveEffectiveItem(itemCatalog, in stack, out var item) &&
+            item.Activator is { } activator)
         {
             targeting = activator is ScrollActivator ? ScaleScrollTargeting(activator.Targeting) : activator.Targeting;
             return true;
@@ -606,14 +610,14 @@ public sealed class ActionTargetingController(
     }
 
     /// <summary>The double-tap path for a Potion -- always the caster's own tile, no candidate search at all (contrast TryActivateWithAutoTarget's action equivalent).</summary>
-    private void TryActivateItemOnSelf(int entityId, Guid itemDefinitionId)
+    private void TryActivateItemOnSelf(int entityId, Guid stackInstanceId)
     {
         if (!transformPool.TryGetReadonly(entityId, out var transform))
         {
             return;
         }
 
-        QueueConsumableActivation(entityId, itemDefinitionId, [transform.Position]);
+        QueueConsumableActivation(entityId, stackInstanceId, [transform.Position]);
     }
 
     /// <summary>Presentation only ever queues an activation request -- ActionActivationSystem is the only thing that applies gameplay effects. Mirrors TryQueuePlayerMove's own queue-and-let-a-system-consume pattern for movement.</summary>
@@ -628,14 +632,14 @@ public sealed class ActionTargetingController(
     }
 
     /// <summary>Item counterpart to QueueActionActivation -- ConsumableActivationSystem is the only thing that applies its gameplay effects.</summary>
-    private void QueueConsumableActivation(int entityId, Guid itemDefinitionId, List<Vector3Int> targetTiles)
+    private void QueueConsumableActivation(int entityId, Guid stackInstanceId, List<Vector3Int> targetTiles)
     {
         if (targetTiles.Count == 0)
         {
             return;
         }
 
-        pendingConsumableActivations.Merge(entityId, new PendingConsumableActivationComponent(itemDefinitionId, targetTiles.ToArray()));
+        pendingConsumableActivations.Merge(entityId, new PendingConsumableActivationComponent(stackInstanceId, targetTiles.ToArray()));
     }
 
     /// <summary>Dispatches a confirmed click activation to whichever of {action, item} MapViewState currently has armed -- see TryConfirmActivation, the only caller.</summary>
@@ -645,9 +649,9 @@ public sealed class ActionTargetingController(
         {
             QueueActionActivation(entityId, actionId, targetTiles);
         }
-        else if (mapViewState.ArmedItemDefinitionId is { } itemId)
+        else if (mapViewState.ArmedItemStackInstanceId is { } stackInstanceId)
         {
-            QueueConsumableActivation(entityId, itemId, targetTiles);
+            QueueConsumableActivation(entityId, stackInstanceId, targetTiles);
         }
     }
 

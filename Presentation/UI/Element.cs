@@ -215,6 +215,9 @@ public class Element
     public Vector2 ContentPadding { get; set; } = new(5, 5);
     public Color ContentColor => _contentState.BackgroundColor;
 
+    /// <summary>Changes the content background color after creation -- ElementContentOptions.ContentColor only ever sets it once, at CreateElement time; this is for a control that needs its own background to react to later state changes (e.g. GridControl's toggle buttons tinting differently once on).</summary>
+    public void SetContentColor(Color color) => _contentState.BackgroundColor = color;
+
     /*========Viewport========*/
     private Viewport _viewport;
     public Viewport Viewport => _viewport;

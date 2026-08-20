@@ -19,6 +19,8 @@ public enum Tag : byte
     Tool,
     Unarmed,
     Weapon,
+    Wand,
+    Fire,
 
     // AbilityScoreType's 7 members, mirrored 1:1 -- lets an ability tagged with one of these get
     // a damage bonus from the matching ability score (see ActionEffectResolver.

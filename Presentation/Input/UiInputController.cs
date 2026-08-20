@@ -75,7 +75,7 @@ public sealed class UiInputController
     /// <summary>
     /// Left-button content-drag state: an inventory item stack cell (InventoryItemStackCell) or
     /// an already-bound hotbar slot (HotbarContent, item or action) picked up on press, carried
-    /// as a plain ItemDefinitionId or ActionId payload (mutually exclusive -- see
+    /// as a plain StackInstanceId or ActionId payload (mutually exclusive -- see
     /// _contentDragActionId), and resolved against whatever's under the cursor on release -- see
     /// HandleMousePress/ResolveContentDrag. Deliberately narrow (item-cell/bound-slot &lt;-&gt;
     /// hotbar-slot only), not a generic Element-level drag-and-drop framework the way
@@ -84,15 +84,31 @@ public sealed class UiInputController
     /// Independent of _activeInteraction.Kind (which stays None for a plain content click on
     /// either source) -- this is tracked entirely by its own fields instead.
     /// </summary>
-    private Guid? _contentDragItemDefinitionId;
+    private Guid? _contentDragItemStackInstanceId;
 
-    /// <summary>Same role as _contentDragItemDefinitionId, for a drag that started on an already-bound action slot -- never both set at once (a slot binds to at most one of {action, item}, see IHotkeySlotBinding). There's no action-cell drag source today (no spellbook/action-list UI exists), so this is only ever populated via a bound hotbar slot, unlike the item payload which can also come from InventoryItemStackCell.</summary>
+    /// <summary>
+    /// Set specifically while dragging a Merged Stack cell -- one with no single StackInstanceId
+    /// (see InventoryItemStackCell.CanBindToHotbar's own doc comment for the Base/Diverging/Merged
+    /// vocabulary) -- to that cell's own ItemDefinitionId, the representative item every member
+    /// shares. Its non-null-ness is itself the "dragging a Merged Stack" signal (never set at the
+    /// same time as _contentDragItemStackInstanceId -- a given drag is either a resolved single
+    /// stack or an unresolved merge, never both); its value exists purely so DragGhostContent has
+    /// something to resolve an icon from (see ContentDragMergedItemDefinitionId) -- there's no
+    /// StackInstanceId to look up an icon through for a merge. Still a real, tracked drag
+    /// otherwise -- ghost, hotbar highlight, everything _contentDragItemStackInstanceId would
+    /// otherwise drive -- so a future manual-sort gesture has something to build on; it's refused
+    /// only at the actual moment of dropping onto a hotbar slot (see ResolveContentDrag), with a
+    /// MouseCursor.No shown the whole time it hovers one (see IsContentDragBlockedAt).
+    /// </summary>
+    private Guid? _contentDragMergedItemDefinitionId;
+
+    /// <summary>Same role as _contentDragItemStackInstanceId, for a drag that started on an already-bound action slot -- never both set at once (a slot binds to at most one of {action, item}, see IHotkeySlotBinding). There's no action-cell drag source today (no spellbook/action-list UI exists), so this is only ever populated via a bound hotbar slot, unlike the item payload which can also come from InventoryItemStackCell.</summary>
     private Guid? _contentDragActionId;
 
     /// <summary>The dragged source's own on-screen size at the moment the drag started -- InventoryItemStackCell.CurrentSize for an inventory cell, HotbarContent.SlotSize for a hotbar slot (the slot, not the whole hotbar window). DragGhostContent draws the ghost at this size rather than one fixed size for every drag, so it doesn't visibly jump in scale relative to wherever it was actually picked up from.</summary>
     private Vector2 _contentDragSourceSize;
 
-    /// <summary>Set alongside _contentDragItemDefinitionId/_contentDragActionId only when the drag started on an already-bound hotbar slot -- that slot's binding is removed on release regardless of where the drag ends (see ResolveContentDrag), so dragging an item/action off the hotbar entirely un-assigns it.</summary>
+    /// <summary>Set alongside _contentDragItemStackInstanceId/_contentDragActionId only when the drag started on an already-bound hotbar slot -- that slot's binding is removed on release regardless of where the drag ends (see ResolveContentDrag), so dragging an item/action off the hotbar entirely un-assigns it.</summary>
     private HotbarContent? _contentDragOriginHotbar;
     private HotkeySlot? _contentDragOriginSlot;
 
@@ -221,20 +237,23 @@ public sealed class UiInputController
     /// <summary>The last cursor UpdateCursor set (or the initial Arrow default, if it's never had reason to change) -- lets tests assert on cursor selection without depending on real OS cursor state.</summary>
     internal MouseCursor CurrentCursor { get; private set; } = MouseCursor.Arrow;
 
-    /// <summary>The item currently being content-dragged, if any -- see _contentDragItemDefinitionId's own doc comment. Public (unlike most of this class's internals) so ShellBootstrapper -- a different assembly -- can wire it into DragGhostContent.GetState, the same reasoning IsTextBoxFocused's own doc comment gives.</summary>
-    public Guid? ContentDragItemDefinitionId => _contentDragItemDefinitionId;
+    /// <summary>The item currently being content-dragged, if any -- see _contentDragItemStackInstanceId's own doc comment. Public (unlike most of this class's internals) so ShellBootstrapper -- a different assembly -- can wire it into DragGhostContent.GetState, the same reasoning IsTextBoxFocused's own doc comment gives.</summary>
+    public Guid? ContentDragItemStackInstanceId => _contentDragItemStackInstanceId;
 
-    /// <summary>The action currently being content-dragged, if any -- see _contentDragActionId's own doc comment. Public for the same reason as ContentDragItemDefinitionId above.</summary>
+    /// <summary>The Merged Stack cell's own ItemDefinitionId currently being content-dragged, if any -- see _contentDragMergedItemDefinitionId's own doc comment. Public for the same reason as ContentDragItemStackInstanceId above.</summary>
+    public Guid? ContentDragMergedItemDefinitionId => _contentDragMergedItemDefinitionId;
+
+    /// <summary>The action currently being content-dragged, if any -- see _contentDragActionId's own doc comment. Public for the same reason as ContentDragItemStackInstanceId above.</summary>
     public Guid? ContentDragActionId => _contentDragActionId;
 
-    /// <summary>Whether DragGhostContent should actually draw the ghost right now -- true once a content-drag payload has been held for ContentDragGhostDelayFrames. See that constant's own doc comment for why this delay exists. Public for the same reason as ContentDragItemDefinitionId above.</summary>
+    /// <summary>Whether DragGhostContent should actually draw the ghost right now -- true once a content-drag payload has been held for ContentDragGhostDelayFrames. See that constant's own doc comment for why this delay exists. Public for the same reason as ContentDragItemStackInstanceId above.</summary>
     public bool ContentDragGhostVisible =>
-        (_contentDragItemDefinitionId is not null || _contentDragActionId is not null) && _contentDragHeldFrames >= ContentDragGhostDelayFrames;
+        (_contentDragItemStackInstanceId is not null || _contentDragMergedItemDefinitionId is not null || _contentDragActionId is not null) && _contentDragHeldFrames >= ContentDragGhostDelayFrames;
 
-    /// <summary>See _contentDragSourceSize's own doc comment. Public for the same reason as ContentDragItemDefinitionId above.</summary>
+    /// <summary>See _contentDragSourceSize's own doc comment. Public for the same reason as ContentDragItemStackInstanceId above.</summary>
     public Vector2 ContentDragSourceSize => _contentDragSourceSize;
 
-    /// <summary>Current mouse screen position, refreshed at the top of every Update call -- paired with ContentDragItemDefinitionId for the same ghost-sprite use, and with CursorTextContent.GetCursorPosition. Public for the same reason as ContentDragItemDefinitionId above.</summary>
+    /// <summary>Current mouse screen position, refreshed at the top of every Update call -- paired with ContentDragItemStackInstanceId for the same ghost-sprite use, and with CursorTextContent.GetCursorPosition. Public for the same reason as ContentDragItemStackInstanceId above.</summary>
     public Point CurrentMousePosition { get; private set; }
 
     public void Update(GameTime gameTime) => Update(Keyboard.GetState(), Mouse.GetState());
@@ -288,7 +307,7 @@ public sealed class UiInputController
         UpdateCursor(mouseState);
         HandleHotbarHover(mouseState);
 
-        if (_contentDragItemDefinitionId is not null || _contentDragActionId is not null)
+        if (_contentDragItemStackInstanceId is not null || _contentDragMergedItemDefinitionId is not null || _contentDragActionId is not null)
         {
             _contentDragHeldFrames++;
         }
@@ -601,24 +620,39 @@ public sealed class UiInputController
     /// </summary>
     private void TryStartContentDrag(Point clickPosition)
     {
-        _contentDragItemDefinitionId = null;
+        _contentDragItemStackInstanceId = null;
+        _contentDragMergedItemDefinitionId = null;
         _contentDragActionId = null;
         _contentDragOriginHotbar = null;
         _contentDragOriginSlot = null;
         _contentDragHeldFrames = 0;
 
+        // Every InventoryItemStackCell is a real drag source, Merged Stack included (see
+        // CanBindToHotbar's own doc comment for the Base/Diverging/Merged vocabulary) -- a merged
+        // cell just carries no StackInstanceId to bind with, tracked instead via
+        // _contentDragMergedItemDefinitionId (its own ItemDefinitionId, for DragGhostContent's
+        // icon) so ResolveContentDrag/IsContentDragBlockedAt can refuse the bind specifically,
+        // without refusing the drag itself.
         if (_activeInteraction.Element is InventoryItemStackCell cell)
         {
-            _contentDragItemDefinitionId = cell.ItemDefinitionId;
+            if (cell.StackInstanceId is { } cellStackInstanceId)
+            {
+                _contentDragItemStackInstanceId = cellStackInstanceId;
+            }
+            else
+            {
+                _contentDragMergedItemDefinitionId = cell.ItemDefinitionId;
+            }
+
             _contentDragSourceSize = cell.CurrentSize;
             _contentDragStartMousePosition = new Vector2(clickPosition.X, clickPosition.Y);
         }
         else if (_activeInteraction.Element is Window { Content: HotbarContent hotbarContent } &&
             hotbarContent.TryGetSlotAt(clickPosition, out var pressedSlot))
         {
-            if (hotbarContent.TryGetBoundItemId(pressedSlot, out var boundItemId))
+            if (hotbarContent.TryGetBoundItemStackInstanceId(pressedSlot, out var boundStackInstanceId))
             {
-                _contentDragItemDefinitionId = boundItemId;
+                _contentDragItemStackInstanceId = boundStackInstanceId;
                 _contentDragSourceSize = HotbarContent.SlotSize;
                 _contentDragOriginHotbar = hotbarContent;
                 _contentDragOriginSlot = pressedSlot;
@@ -634,7 +668,7 @@ public sealed class UiInputController
             }
         }
 
-        if (_contentDragItemDefinitionId is not null || _contentDragActionId is not null)
+        if (_contentDragItemStackInstanceId is not null || _contentDragMergedItemDefinitionId is not null || _contentDragActionId is not null)
         {
             SetHotbarDragHighlight(true);
         }
@@ -719,7 +753,7 @@ public sealed class UiInputController
     }
 
     /// <summary>
-    /// Resolves an in-progress content-drag (see _contentDragItemDefinitionId/_contentDragActionId's
+    /// Resolves an in-progress content-drag (see _contentDragItemStackInstanceId/_contentDragActionId's
     /// own doc comments) against the release position -- a no-op if the mouse never actually
     /// moved past ContentDragTapThresholdPixels (a plain click on a cell/slot must not
     /// spuriously unbind-then-rebind it). This method's own job is gesture recognition and
@@ -735,7 +769,7 @@ public sealed class UiInputController
     /// </summary>
     private void ResolveContentDrag(Point releasePosition)
     {
-        if (_contentDragItemDefinitionId is null && _contentDragActionId is null)
+        if (_contentDragItemStackInstanceId is null && _contentDragActionId is null && _contentDragMergedItemDefinitionId is null)
         {
             return;
         }
@@ -748,8 +782,17 @@ public sealed class UiInputController
                 return;
             }
 
+            // A Merged Stack's drag never binds -- there is no single stack a drop could mean
+            // (see InventoryItemStackCell.CanBindToHotbar's own doc comment). IsContentDragBlockedAt
+            // already showed MouseCursor.No the whole time it hovered a hotbar slot; the drag
+            // just ends here with no binding change, cleanup happens in finally either way.
+            if (_contentDragMergedItemDefinitionId is not null)
+            {
+                return;
+            }
+
             var isActionDrag = _contentDragActionId is not null;
-            var payloadId = isActionDrag ? _contentDragActionId!.Value : _contentDragItemDefinitionId!.Value;
+            var payloadId = isActionDrag ? _contentDragActionId!.Value : _contentDragItemStackInstanceId!.Value;
 
             var receivingHotbar = _contentDragOriginHotbar;
             HotkeySlot? destinationSlot = null;
@@ -766,7 +809,8 @@ public sealed class UiInputController
         }
         finally
         {
-            _contentDragItemDefinitionId = null;
+            _contentDragItemStackInstanceId = null;
+            _contentDragMergedItemDefinitionId = null;
             _contentDragActionId = null;
             _contentDragOriginHotbar = null;
             _contentDragOriginSlot = null;
@@ -1418,6 +1462,7 @@ public sealed class UiInputController
         {
             ElementDragInteractionKind.Resize => GetResizeCursor(_activeInteraction.Edges),
             ElementDragInteractionKind.Move => MouseCursor.SizeAll,
+            _ when IsContentDragBlockedAt(position) => MouseCursor.No,
             _ when position == previousPosition => CurrentCursor,
             _ => GetHoverCursor(position),
         };
@@ -1427,6 +1472,25 @@ public sealed class UiInputController
             MouseCursorEXT.SetCursor(cursor);
             CurrentCursor = cursor;
         }
+    }
+
+    /// <summary>True while dragging a Merged Stack cell (see _contentDragMergedItemDefinitionId's own doc comment) and position is currently over a hotbar slot -- the one concrete case that drag can never bind to. Checked ahead of the position == previousPosition shortcut so the cursor reads correctly for every frame of a stationary hover, not just the one it first arrived on.</summary>
+    private bool IsContentDragBlockedAt(Point position)
+    {
+        if (_contentDragMergedItemDefinitionId is null)
+        {
+            return false;
+        }
+
+        foreach (var element in _layers[UiLayer.StaticHud])
+        {
+            if (element is Window { Content: HotbarContent hotbarContent } && hotbarContent.TryGetSlotAt(position, out _))
+            {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     private MouseCursor GetHoverCursor(Point position)

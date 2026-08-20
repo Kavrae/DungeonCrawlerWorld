@@ -1944,7 +1944,7 @@ public sealed class UiInputControllerTests
         var itemId = Guid.NewGuid();
         var itemCatalog = new ItemCatalog();
         itemCatalog.Register(new ItemDefinition(itemId, "Test Item", null, "t", Color.White, Tags: [], Effects: []));
-        InventoryActions.AddItem(componentManager, playerEntityId, itemId, quantity: 1);
+        var stackInstanceId = InventoryActions.AddItem(componentManager, playerEntityId, itemId, quantity: 1);
 
         var fontService = new FontService("Fonts");
         var glyphRenderer = new GlyphRenderer();
@@ -1958,7 +1958,7 @@ public sealed class UiInputControllerTests
             Layout = new ElementLayoutOptions { RelativePosition = new Vector2(0, 0), Size = new Vector2(24, 24), DisplayMode = ElementDisplayMode.Fixed },
             Chrome = new ElementChromeOptions { ShowBorder = true, CanUserFocus = false },
         });
-        cell.Configure(itemId, null, "t", Color.White, quantity: 1, isDisabled: false, cellSize: new Vector2(24, 24));
+        cell.Configure(itemId, stackInstanceId, null, "t", Color.White, quantity: 1, chargeText: null, isDisabled: false, isDivergent: false, mergedStackBadgeVisible: false, cellSize: new Vector2(24, 24));
         cell.Initialize();
 
         var hotbar = new HotbarContent(
@@ -1989,8 +1989,9 @@ public sealed class UiInputControllerTests
         var dropPoint = new Point((int)hotbarWindow.ContentAbsolutePosition.X + 1, (int)hotbarWindow.ContentAbsolutePosition.Y + (int)(hotbar.Size.Y / 2f));
         controller.Update(NoKeys, MouseAt(dropPoint.X, dropPoint.Y, ButtonState.Released));
 
-        Assert.IsTrue(ItemHotkeyBindingQueries.TryGet(componentManager.GetMultiPool<ItemHotkeyBindingComponent>(), 1, HotkeySlot.Base1, out var boundItemId));
-        Assert.AreEqual(itemId, boundItemId);
+        Assert.IsTrue(InventoryQueries.TryGetStack(componentManager.GetMultiPool<InventoryItemStackComponent>(), 1, itemId, out var stack));
+        Assert.IsTrue(ItemHotkeyBindingQueries.TryGet(componentManager.GetMultiPool<ItemHotkeyBindingComponent>(), 1, HotkeySlot.Base1, out var boundStackInstanceId));
+        Assert.AreEqual(stack.StackInstanceId, boundStackInstanceId);
     }
 
     /// <summary>Binding is a reference, not a transfer -- InventoryItemStackComponent's own Quantity must be untouched by the drag.</summary>
