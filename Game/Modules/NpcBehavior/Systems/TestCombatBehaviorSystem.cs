@@ -100,9 +100,7 @@ public sealed class TestCombatBehaviorSystem : ISystem
         _playerQuery = playerQuery;
         _deadEntities = deadEntities;
 
-        _stripeSet = new EntityStripeSet(StripeCount, movementPool.EntityIds);
-        movementPool.EntityAdded += _stripeSet.OnEntityAdded;
-        movementPool.EntityRemoved += _stripeSet.OnEntityRemoved;
+        _stripeSet = EntityStripeSet.CreateAndWire(StripeCount, movementPool);
     }
 
     public void Update(EngineTime time, byte stripeIndex)

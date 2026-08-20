@@ -76,9 +76,7 @@ public sealed class DelayedActionSystem : ISystem
         _auraSources = auraSources;
         _hotkeyExpansionUnlocks = hotkeyExpansionUnlocks;
 
-        _stripeSet = new EntityStripeSet(StripeCount, pendingActions.EntityIds);
-        pendingActions.EntityAdded += _stripeSet.OnEntityAdded;
-        pendingActions.EntityRemoved += _stripeSet.OnEntityRemoved;
+        _stripeSet = EntityStripeSet.CreateAndWire(StripeCount, pendingActions);
     }
 
     /// <summary>Updates the delayed actions for the entities in the specified entity stripe</summary>

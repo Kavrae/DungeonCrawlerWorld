@@ -85,9 +85,7 @@ public sealed class ActionActivationSystem : ISystem
         _auraSources = auraSources;
         _hotkeyExpansionUnlocks = hotkeyExpansionUnlocks;
 
-        _stripeSet = new EntityStripeSet(StripeCount, pendingActivations.EntityIds);
-        pendingActivations.EntityAdded += _stripeSet.OnEntityAdded;
-        pendingActivations.EntityRemoved += _stripeSet.OnEntityRemoved;
+        _stripeSet = EntityStripeSet.CreateAndWire(StripeCount, pendingActivations);
     }
 
     /// <summary>Activate the pending actions for the entities in the specified entity stripe</summary>

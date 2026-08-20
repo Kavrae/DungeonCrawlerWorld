@@ -1,4 +1,5 @@
 using System.Runtime.InteropServices;
+using Engine.ECS.Components;
 
 namespace Engine.ECS.Systems;
 
@@ -28,6 +29,17 @@ public sealed class EntityStripeSet
         {
             OnEntityAdded(entityId);
         }
+    }
+
+    /// <summary>Builds an EntityStripeSet already wired to drivingPool's EntityAdded/EntityRemoved membership events -- the construct-then-subscribe dance every non-tiered EntityStripeSet consumer's constructor would otherwise repeat by hand.</summary>
+    /// <param name="stripeCount">The number of stripes to divide entities across.</param>
+    /// <param name="drivingPool">The pool whose membership the stripe set should track.</param>
+    public static EntityStripeSet CreateAndWire(byte stripeCount, IEntityMembershipPool drivingPool)
+    {
+        var stripeSet = new EntityStripeSet(stripeCount, drivingPool.EntityIds);
+        drivingPool.EntityAdded += stripeSet.OnEntityAdded;
+        drivingPool.EntityRemoved += stripeSet.OnEntityRemoved;
+        return stripeSet;
     }
 
     /// <summary>Gets the entities assigned to the given stripe.</summary>

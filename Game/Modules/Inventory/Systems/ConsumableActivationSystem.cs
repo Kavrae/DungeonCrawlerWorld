@@ -131,9 +131,7 @@ public sealed class ConsumableActivationSystem : ISystem
         _auraSources = auraSources;
         _itemHotkeyBindings = itemHotkeyBindings;
 
-        _stripeSet = new EntityStripeSet(StripeCount, pendingActivations.EntityIds);
-        pendingActivations.EntityAdded += _stripeSet.OnEntityAdded;
-        pendingActivations.EntityRemoved += _stripeSet.OnEntityRemoved;
+        _stripeSet = EntityStripeSet.CreateAndWire(StripeCount, pendingActivations);
     }
 
     public void Update(EngineTime time, byte stripeIndex)
