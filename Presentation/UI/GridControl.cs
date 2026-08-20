@@ -8,16 +8,21 @@ namespace Presentation.UI;
 
 /// <summary>
 /// A reusable row of grid-scoped controls -- an item count display, a click-to-cycle sort
-/// button, zero or more click-to-toggle filter buttons, and a debounced search box -- entirely
-/// generic: no reference to items, tags, or any specific grid content anywhere in this class. A
-/// caller supplies the sort option labels and toggle definitions at Configure time and reacts to
-/// SortOptionCycled/ToggleChanged/SearchFilterChanged; GridControl itself never knows what any of
-/// those mean (see InventoryTabContent for the Inventory-specific translation, the first real
-/// consumer). A Window subclass, the same "subclass warranted" reasoning as
-/// MapWindow/AbilityScoreWindow: it composes several children and owns its own event/update
-/// logic. Controls are click-to-cycle/click-to-toggle only -- a context-menu-driven sort picker
-/// and a checkbox in place of a toggle button are both deliberately deferred, see TODO.md's
-/// "Advanced sort control" and "Checkbox widget to replace the Hide Disabled toggle button".
+/// button, zero or more Toggle checkboxes, and a debounced search box -- entirely generic: no
+/// reference to items, tags, or any specific grid content anywhere in this class. A caller
+/// supplies the sort option labels and toggle definitions (each with its own onToggled delegate)
+/// at Configure time and reacts to SortOptionCycled/SearchFilterChanged; GridControl itself never
+/// knows what a toggle *does* -- see InventoryTabContent for the Inventory-specific wiring, the
+/// first real consumer. Each Toggle owns its own on/off state and visual entirely (see that
+/// class's own doc comment) -- GridControl used to track a parallel List&lt;bool&gt; alongside the
+/// button list and route flips back out through a generic index-keyed ToggleChanged event, the
+/// exact ambiguity-by-indirection CLAUDE.md's Presentation design principle warns about (a caller
+/// had to know "index 1 means Stack Diverged" rather than the toggle carrying that association
+/// directly); Toggle's own onToggled delegate removes the index entirely. A Window subclass, the
+/// same "subclass warranted" reasoning as MapWindow/AbilityScoreWindow: it composes several
+/// children and owns its own event/update logic. The sort control itself is still click-to-cycle
+/// only -- a context-menu-driven picker is deliberately deferred, see TODO.md's "Advanced sort
+/// control".
 /// </summary>
 public sealed class GridControl(FontService fontService, ElementPoolService elementPoolService, GlyphRenderer glyphRenderer)
     : Window(fontService, elementPoolService, glyphRenderer)
@@ -41,28 +46,23 @@ public sealed class GridControl(FontService fontService, ElementPoolService elem
     /// <summary>Fires with the newly-selected option's index into the labels Configure was given -- GridControl never knows what any index means.</summary>
     public event Action<int>? SortOptionCycled;
 
-    /// <summary>Fires with the toggle's index into the list Configure was given, and its new on/off state.</summary>
-    public event Action<int, bool>? ToggleChanged;
-
     /// <summary>Fires with the debounced, applied search text -- see DebouncedTextFilter.</summary>
     public event Action<string>? SearchFilterChanged;
 
     private readonly DebouncedTextFilter _searchFilter = new(SearchDebounceFrames);
 
     private IReadOnlyList<string> _sortOptionLabels = [];
-    private IReadOnlyList<(string Label, bool DefaultOn)> _toggleDefinitions = [];
+    private IReadOnlyList<(string Label, bool DefaultOn, Action<bool> OnToggled)> _toggleDefinitions = [];
     private string _searchGhostText = string.Empty;
     private int _sortOptionIndex;
-    private readonly List<bool> _toggleStates = [];
 
     private SpriteFontBase _font = null!;
     private TextWindow _countLabel = null!;
     private TextWindow _sortButton = null!;
-    private readonly List<TextWindow> _toggleButtons = [];
     private TextBox _searchBox = null!;
 
-    /// <summary>Must be called after CreateElement but before Initialize (same contract as InventoryManagementWindow.Configure/AbilityScoreWindow.Configure) -- sortOptionLabels must be non-empty, since the sort button always shows whichever one is currently selected. toggles may be empty (no toggle buttons at all).</summary>
-    public void Configure(IReadOnlyList<string> sortOptionLabels, IReadOnlyList<(string Label, bool DefaultOn)> toggles, string searchGhostText)
+    /// <summary>Must be called after CreateElement but before Initialize (same contract as InventoryManagementWindow.Configure/AbilityScoreWindow.Configure) -- sortOptionLabels must be non-empty, since the sort button always shows whichever one is currently selected. toggles may be empty (no toggles at all).</summary>
+    public void Configure(IReadOnlyList<string> sortOptionLabels, IReadOnlyList<(string Label, bool DefaultOn, Action<bool> OnToggled)> toggles, string searchGhostText)
     {
         if (sortOptionLabels.Count == 0)
         {
@@ -72,12 +72,6 @@ public sealed class GridControl(FontService fontService, ElementPoolService elem
         _sortOptionLabels = sortOptionLabels;
         _sortOptionIndex = 0;
         _toggleDefinitions = toggles;
-        _toggleStates.Clear();
-        foreach (var toggle in toggles)
-        {
-            _toggleStates.Add(toggle.DefaultOn);
-        }
-
         _searchGhostText = searchGhostText;
     }
 
@@ -107,17 +101,19 @@ public sealed class GridControl(FontService fontService, ElementPoolService elem
         AddChild(_sortButton);
         x += _sortButton.CurrentSize.X + ControlGap;
 
-        _toggleButtons.Clear();
-        for (var toggleIndex = 0; toggleIndex < _toggleDefinitions.Count; toggleIndex++)
+        foreach (var (label, defaultOn, onToggled) in _toggleDefinitions)
         {
-            var (label, _) = _toggleDefinitions[toggleIndex];
-            var toggleButton = CreateTile(label, MeasureTileWidth(label), x, showBorder: true);
-            ApplyToggleVisual(toggleButton, _toggleStates[toggleIndex]);
-            var capturedIndex = toggleIndex;
-            toggleButton.Clicked += _ => ToggleOnOff(capturedIndex);
-            AddChild(toggleButton);
-            _toggleButtons.Add(toggleButton);
-            x += toggleButton.CurrentSize.X + ControlGap;
+            var toggleWidth = Toggle.CheckboxSize + Toggle.LabelGap + _font.MeasureString(label).X;
+            var toggle = elementPoolService.CreateElement<Toggle>(this, new ElementOptions
+            {
+                Hierarchy = new ElementHierarchyOptions { CanContainChildren = false },
+                Layout = new ElementLayoutOptions { RelativePosition = new Vector2(x, 0), Size = new Vector2(toggleWidth, RowHeight), DisplayMode = ElementDisplayMode.Fixed },
+                Chrome = new ElementChromeOptions { ShowBorder = false, CanUserFocus = false },
+                Content = new ElementContentOptions { ContentColor = Color.Transparent },
+            });
+            toggle.Configure(label, LabelPosition.East, defaultOn, ToggleOnColor, ControlColor, LabelColor, _font, onToggled);
+            AddChild(toggle);
+            x += toggleWidth + ControlGap;
         }
 
         _searchBox = elementPoolService.CreateElement<TextBox>(this, new ElementOptions
@@ -163,21 +159,6 @@ public sealed class GridControl(FontService fontService, ElementPoolService elem
         _sortOptionIndex = (_sortOptionIndex + 1) % _sortOptionLabels.Count;
         _sortButton.UpdateText(_sortOptionLabels[_sortOptionIndex]);
         SortOptionCycled?.Invoke(_sortOptionIndex);
-    }
-
-    private void ToggleOnOff(int toggleIndex)
-    {
-        var isOn = !_toggleStates[toggleIndex];
-        _toggleStates[toggleIndex] = isOn;
-        ApplyToggleVisual(_toggleButtons[toggleIndex], isOn);
-        ToggleChanged?.Invoke(toggleIndex, isOn);
-    }
-
-    /// <summary>On reads as pressed-in (Inset) with a warm tint; off reads as a plain raised (Outset) button -- the reverse of this control's original Outset-when-on mapping, which read backwards (a toggle "on" should look pushed in, not popped out).</summary>
-    private static void ApplyToggleVisual(TextWindow toggleButton, bool isOn)
-    {
-        toggleButton.BorderStyle = isOn ? BorderStyle.Inset : BorderStyle.Outset;
-        toggleButton.SetContentColor(isOn ? ToggleOnColor : ControlColor);
     }
 
     /// <summary>Widest of a set of labels, in the same units MeasureTileWidth returns -- used to size the sort button once for its widest possible label, so cycling through shorter/longer labels never resizes it (see CreateTile's own MinimumSize == MaximumSize pinning).</summary>

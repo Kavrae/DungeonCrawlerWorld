@@ -67,6 +67,7 @@ public static class ElementFactoryRegistry
             componentManager, itemCatalog));
         Register<InventoryItemStackCell>((font, elements, glyph) => new InventoryItemStackCell(font, elements, glyph, presentation.SpriteSheetService, presentation.SpriteRenderer));
         Register<GridControl>((font, elements, glyph) => new GridControl(font, elements, glyph));
+        Register<Toggle>((font, elements, glyph) => new Toggle(font, elements, glyph));
 
         pool.RegisterFactory<AbilityScoreWindow>(() => new AbilityScoreWindow(
             presentation.FontService, pool, presentation.GlyphRenderer, componentManager));

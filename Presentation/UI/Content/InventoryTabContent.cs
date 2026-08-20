@@ -1,5 +1,4 @@
 using Microsoft.Xna.Framework;
-using Microsoft.Xna.Framework.Graphics;
 using Presentation.Fonts;
 using Presentation.Rendering;
 using Presentation.UI.ColorPalettes;
@@ -7,11 +6,13 @@ using Presentation.UI.ColorPalettes;
 namespace Presentation.UI.Content;
 
 /// <summary>
-/// Composes one GridControl above an InventoryGridContent for a single Inventory tab --
-/// translates GridControl's generic events into InventoryGridContent's own SortOrder/
-/// HideDisabled/NameFilter properties, and pushes VisibleItemCount back into GridControl's count
-/// display every Update. GridControl itself has no idea any of this is about items -- see its
-/// own doc comment. Mirrors InventoryGridContent's own reuse lifecycle: TabbedContent holds one
+/// Composes one GridControl above an InventoryGridContent for a single Inventory tab -- wires
+/// each Toggle's own onToggled delegate straight to InventoryGridContent's HideDisabled/
+/// GroupDivergedStacks properties at Configure time, translates GridControl's still-generic
+/// SortOptionCycled/SearchFilterChanged events into SortOrder/NameFilter, and pushes
+/// VisibleItemCount back into GridControl's count display every Update. GridControl itself has no
+/// idea any of this is about items -- see its own doc comment. Mirrors InventoryGridContent's own
+/// reuse lifecycle: TabbedContent holds one
 /// instance per tab and cycles it through repeated Deactivate/Initialize as the player switches
 /// tabs back and forth, so Deactivate must fully tear down (and unsubscribe from) whatever
 /// Initialize built, the same discipline InventoryGridContent/TabbedContent's own tab tiles
@@ -20,16 +21,6 @@ namespace Presentation.UI.Content;
 public sealed class InventoryTabContent(ElementPoolService elementPoolService, FontService fontService, GlyphRenderer glyphRenderer, InventoryGridContent gridContent) : IElementContent
 {
     private static readonly IReadOnlyList<string> SortOptionLabels = ["A-Z", "Z-A", "Qty Hi", "Qty Lo"];
-
-    /// <summary>Index into ToggleDefinitions -- GridControl.ToggleChanged fires with this same index, so OnToggleChanged dispatches by it rather than by comparing labels.</summary>
-    private const int HideDisabledToggleIndex = 0;
-    private const int StackDivergedToggleIndex = 1;
-
-    private static readonly IReadOnlyList<(string Label, bool DefaultOn)> ToggleDefinitions =
-    [
-        ("Hide Disabled", false),
-        ("Stack Diverged", true),
-    ];
 
     private const string SearchGhostText = "Search Items";
 
@@ -58,11 +49,16 @@ public sealed class InventoryTabContent(ElementPoolService elementPoolService, F
             Chrome = new ElementChromeOptions { ShowBorder = false, ShowTitle = false, CanUserFocus = false },
             Content = new ElementContentOptions { ContentColor = WindowPalette.PanelContentColor },
         });
-        _gridControl.Configure(SortOptionLabels, ToggleDefinitions, SearchGhostText);
+        _gridControl.Configure(
+            SortOptionLabels,
+            [
+                ("Hide Disabled", true, isOn => gridContent.HideDisabled = isOn),
+                ("Stack Diverged", true, isOn => gridContent.GroupDivergedStacks = isOn),
+            ],
+            SearchGhostText);
         hostWindow.AddChild(_gridControl); // Already initializes _gridControl -- see AddChild's own doc comment.
 
         _gridControl.SortOptionCycled += OnSortOptionCycled;
-        _gridControl.ToggleChanged += OnToggleChanged;
         _gridControl.SearchFilterChanged += OnSearchFilterChanged;
 
         _gridWindow = elementPoolService.CreateElement<Window>(hostWindow, new ElementOptions
@@ -122,19 +118,6 @@ public sealed class InventoryTabContent(ElementPoolService elementPoolService, F
     }
 
     private void OnSortOptionCycled(int index) => gridContent.SortOrder = (InventorySortOrder)index;
-
-    private void OnToggleChanged(int toggleIndex, bool isOn)
-    {
-        switch (toggleIndex)
-        {
-            case HideDisabledToggleIndex:
-                gridContent.HideDisabled = isOn;
-                break;
-            case StackDivergedToggleIndex:
-                gridContent.GroupDivergedStacks = isOn;
-                break;
-        }
-    }
 
     private void OnSearchFilterChanged(string text) => gridContent.NameFilter = text;
 
