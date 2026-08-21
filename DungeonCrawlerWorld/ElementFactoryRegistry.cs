@@ -27,7 +27,8 @@ public static class ElementFactoryRegistry
         MapCamera camera,
         ActionTargetingController actionTargeting,
         PlayerMovementController playerMovement,
-        CursorTextContent cursorTextContent)
+        CursorTextContent cursorTextContent,
+        ContextMenuController contextMenuController)
     {
         var pool = presentation.ElementPoolService;
         var componentManager = ecsContext.ComponentManager;
@@ -40,8 +41,9 @@ public static class ElementFactoryRegistry
 
         Register<Window>((font, elements, glyph) => new Window(font, elements, glyph));
         Register<Button>((font, elements, glyph) => new Button(font, elements, glyph));
+        Register<ContextMenu>((font, elements, glyph) => new ContextMenu(font, elements, glyph));
         Register<TextWindow>((font, elements, glyph) => new TextWindow(font, elements, glyph));
-        Register<TextBox>((font, elements, glyph) => new TextBox(font, elements, glyph, cursorTextContent));
+        Register<TextBox>((font, elements, glyph) => new TextBox(font, elements, glyph, cursorTextContent, contextMenuController));
 
         // MapWindow's dependencies (World/ComponentManager/renderers) come from Engine/Game and
         // Presentation both, plus the map-specific services built alongside it -- too many
@@ -61,7 +63,8 @@ public static class ElementFactoryRegistry
             presentation.SpriteRenderer,
             camera,
             actionTargeting,
-            playerMovement));
+            playerMovement,
+            contextMenuController));
 
         Register<Folder>((font, elements, glyph) => new Folder(font, elements, glyph, presentation.SpriteSheetService, presentation.SpriteRenderer));
 

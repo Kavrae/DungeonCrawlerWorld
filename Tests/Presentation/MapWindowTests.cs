@@ -7,6 +7,7 @@ using Game.Modules.Actions.Activators;
 using Game.Modules.Actions.Components;
 using Game.Modules.Actions.Effects;
 using Game.Modules.Core.Components;
+using Game.Modules.Death.Components;
 using Game.Modules.Health.Components;
 using Game.Modules.Inventory;
 using Game.Modules.Inventory.Components;
@@ -85,6 +86,7 @@ public sealed class MapWindowTests
         componentManager.RegisterPackedPool<PendingConsumableActivationComponent>(static (ref existing, incoming) => existing = incoming);
         componentManager.RegisterPackedPool<PendingDelayedActionComponent>(static (ref existing, incoming) => existing = incoming);
         componentManager.RegisterPackedPool<ActionLockComponent>(static (ref existing, incoming) => existing = incoming);
+        componentManager.RegisterPackedPool<DeadComponent>(static (ref existing, incoming) => existing = incoming);
 
         if (playerPosition is { } position)
         {
@@ -118,9 +120,12 @@ public sealed class MapWindowTests
             componentManager.GetDirectPool<TransformComponent>(),
             componentManager.GetPackedPool<MovementComponent>());
 
+        var contextMenuController = new ContextMenuController(windowService);
+        contextMenuController.Initialize(new UiLayerStack());
+
         windowService.RegisterFactory<MapWindow>(() => new MapWindow(
             fontService, windowService, world, mapViewState, componentManager, new EventBus(), resolvedActionCatalog, resolvedItemCatalog, new TileRenderer(), new GlyphRenderer(),
-            new SpriteSheetService(null, "Spritesheets"), new SpriteRenderer(), camera, actionTargeting, playerMovement));
+            new SpriteSheetService(null, "Spritesheets"), new SpriteRenderer(), camera, actionTargeting, playerMovement, contextMenuController));
 
         var mapWindow = windowService.CreateElement<MapWindow>(null, new ElementOptions
         {
@@ -824,7 +829,7 @@ public sealed class MapWindowTests
         mapWindow.HandleHotkeys(new KeyboardState(Keys.D4), new KeyboardState());
         Assert.IsNotNull(mapViewState.TargetableTiles);
 
-        mapWindow.HandleRightClickTap();
+        mapWindow.HandleRightClickTap(new Point(0, 0));
 
         Assert.IsNull(mapViewState.TargetableTiles);
     }
@@ -981,7 +986,7 @@ public sealed class MapWindowTests
         componentManager.Merge(PlayerEntityId, new ActionHotkeyBindingComponent(HotkeySlot.Slot4, TestActionId));
         mapWindow.HandleHotkeys(new KeyboardState(Keys.D4), new KeyboardState());
 
-        mapWindow.HandleRightClickTap();
+        mapWindow.HandleRightClickTap(new Point(0, 0));
 
         Assert.IsNull(mapViewState.ArmedActionId);
         Assert.IsNull(mapViewState.ArmedSlot);
@@ -1011,7 +1016,7 @@ public sealed class MapWindowTests
         componentManager.Merge(PlayerEntityId, new PendingDelayedActionComponent(Guid.NewGuid(), [new Vector3Int(101, 100, 0)]));
         componentManager.Merge(PlayerEntityId, new ActionLockComponent(standardLockFrames: ActionLockGate.StandardLockFrames, currentLockTotalFrames: 60, currentLockFramesRemaining: 45));
 
-        mapWindow.HandleRightClickTap();
+        mapWindow.HandleRightClickTap(new Point(0, 0));
 
         Assert.IsFalse(componentManager.GetPackedPool<PendingDelayedActionComponent>().Has(PlayerEntityId));
         Assert.AreEqual((ushort?)0, componentManager.GetPackedPool<ActionLockComponent>().GetReadonly(PlayerEntityId).CurrentLockFramesRemaining);
@@ -1035,10 +1040,82 @@ public sealed class MapWindowTests
     {
         var (_, mapViewState, mapWindow, _, _) = BuildMapWindowWithPlayerAndActions(300, 300, 1, new Vector3Int(100, 100, 0));
 
-        mapWindow.HandleRightClickTap();
+        mapWindow.HandleRightClickTap(new Point(0, 0));
         mapWindow.HandleEscape();
 
         Assert.IsNull(mapViewState.ArmedActionId);
+    }
+
+    private const int CorpseEntityId = 2;
+
+    private static void PlaceCorpse(Game.World.World world, ComponentManager componentManager, Vector3Int position)
+    {
+        var transform = new TransformComponent(position, new Vector2Byte(1, 1));
+        componentManager.Merge(CorpseEntityId, transform);
+        world.PlaceEntityOnMap(CorpseEntityId, position, ref transform);
+        componentManager.Merge(CorpseEntityId, new DeadComponent(KilledByEntityId: null, DiedAtFrame: 0));
+    }
+
+    [TestMethod]
+    public void TryOpenCorpseContextMenuAt_AdjacentCorpse_OpensMenuWithLootEnabled()
+    {
+        var (world, mapViewState, mapWindow, componentManager) = BuildMapWindowWithPlayer(300, 300, 1, new Vector3Int(100, 100, 0));
+        mapWindow.OnCorpseClicked = _ => { };
+        var corpsePosition = new Vector3Int(101, 100, 0);
+        PlaceCorpse(world, componentManager, corpsePosition);
+
+        mapWindow.TryOpenCorpseContextMenuAt(ComputeScreenPositionForMapPosition(mapWindow, mapViewState, corpsePosition));
+
+        Assert.IsTrue(mapWindow.ContextMenuController.IsOpen);
+        var rows = mapWindow.ContextMenuController.Menu.ChildElements;
+        Assert.HasCount(1, rows);
+        var lootButton = (Button)rows[0];
+        Assert.AreEqual("Loot", lootButton.LeftText);
+        Assert.IsTrue(lootButton.Enabled);
+    }
+
+    [TestMethod]
+    public void TryOpenCorpseContextMenuAt_NonAdjacentCorpse_OpensMenuWithLootDisabled()
+    {
+        var (world, mapViewState, mapWindow, componentManager) = BuildMapWindowWithPlayer(300, 300, 1, new Vector3Int(100, 100, 0));
+        mapWindow.OnCorpseClicked = _ => { };
+        var corpsePosition = new Vector3Int(110, 100, 0);
+        PlaceCorpse(world, componentManager, corpsePosition);
+
+        mapWindow.TryOpenCorpseContextMenuAt(ComputeScreenPositionForMapPosition(mapWindow, mapViewState, corpsePosition));
+
+        Assert.IsTrue(mapWindow.ContextMenuController.IsOpen, "Still shown -- just disabled -- so the player sees why nothing happens rather than the menu silently omitting it.");
+        var lootButton = (Button)mapWindow.ContextMenuController.Menu.ChildElements[0];
+        Assert.IsFalse(lootButton.Enabled);
+    }
+
+    [TestMethod]
+    public void TryOpenCorpseContextMenuAt_NoCorpseOnTile_OpensNothing()
+    {
+        var (_, mapViewState, mapWindow, _) = BuildMapWindowWithPlayer(300, 300, 1, new Vector3Int(100, 100, 0));
+        mapWindow.OnCorpseClicked = _ => { };
+
+        mapWindow.TryOpenCorpseContextMenuAt(ComputeScreenPositionForMapPosition(mapWindow, mapViewState, new Vector3Int(105, 100, 0)));
+
+        Assert.IsFalse(mapWindow.ContextMenuController.IsOpen);
+    }
+
+    [TestMethod]
+    public void ContextMenuLootOption_Selected_InvokesOnCorpseClickedAndClosesMenu()
+    {
+        var (world, mapViewState, mapWindow, componentManager) = BuildMapWindowWithPlayer(300, 300, 1, new Vector3Int(100, 100, 0));
+        var invokedEntityId = -1;
+        mapWindow.OnCorpseClicked = entityId => invokedEntityId = entityId;
+        var corpsePosition = new Vector3Int(101, 100, 0);
+        PlaceCorpse(world, componentManager, corpsePosition);
+
+        mapWindow.TryOpenCorpseContextMenuAt(ComputeScreenPositionForMapPosition(mapWindow, mapViewState, corpsePosition));
+        var menu = mapWindow.ContextMenuController.Menu;
+        var lootButton = (Button)menu.ChildElements[0];
+        menu.HandleClick(lootButton.Rectangle.Center);
+
+        Assert.AreEqual(CorpseEntityId, invokedEntityId);
+        Assert.IsFalse(mapWindow.ContextMenuController.IsOpen);
     }
 
     private static readonly Guid TestPotionId = new("66666666-6666-6666-6666-666666666666");
@@ -1252,7 +1329,7 @@ public sealed class MapWindowTests
         componentManager.Merge(PlayerEntityId, new ItemHotkeyBindingComponent(HotkeySlot.Slot1, stackInstanceId));
         mapWindow.HandleHotkeys(new KeyboardState(Keys.D1), new KeyboardState());
 
-        mapWindow.HandleRightClickTap();
+        mapWindow.HandleRightClickTap(new Point(0, 0));
 
         Assert.IsNull(mapViewState.ArmedItemStackInstanceId);
         Assert.IsNull(mapViewState.ArmedSlot);

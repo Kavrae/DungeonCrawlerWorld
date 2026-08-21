@@ -307,13 +307,13 @@ Achievements can name a `Lootbox` (rarity + box type, `Game/Modules/Achievements
 
 #### Corpse looting (landed)
 
-Clicking an adjacent corpse opens the player's own `InventoryManagementWindow` alongside a new `CorpseInventoryWindow` (`Presentation/UI/Looting/`), both Menu Mode windows -- a fixed summary (entity icon/glyph, name, killer, death tick) above a plain, non-tabbed item grid (always at least a 2x5 minimum so items dragged in later don't force scrolling), sized once at open time and pinned there via the new `Element.SetMinimumSize` so it can't be user-shrunk below its own content. `SecondaryInventoryWindowController` (deliberately not folded into `InventoryFolderController`, which is itself slated for a split -- see the entry under Presentation below) owns the open/close/replace-on-new-target lifecycle and is written generically ("open a second inventory window for some other entity") so a future chest/shop can reuse it directly rather than growing its own controller. A corpse carrying unlooted items shows the `LootBag-Red` badge (top-right of its actual footprint, not just its origin tile, for a multi-tile corpse); the badge tints grey once the corpse's loot window has been opened at least once (`CorpseLootedComponent`).
+Selecting "Loot" from a corpse's right-click context menu (disabled when the player isn't adjacent -- see the Context menu item below) opens the player's own `InventoryManagementWindow` alongside a new `CorpseInventoryWindow` (`Presentation/UI/Looting/`), both Menu Mode windows -- a fixed summary (entity icon/glyph, name, killer, death tick) above a plain, non-tabbed item grid (always at least a 2x5 minimum so items dragged in later don't force scrolling), sized once at open time and pinned there via the new `Element.SetMinimumSize` so it can't be user-shrunk below its own content. `SecondaryInventoryWindowController` (deliberately not folded into `InventoryFolderController`, which is itself slated for a split -- see the entry under Presentation below) owns the open/close/replace-on-new-target lifecycle and is written generically ("open a second inventory window for some other entity") so a future chest/shop can reuse it directly rather than growing its own controller. A corpse carrying unlooted items shows the `LootBag-Red` badge (top-right of its actual footprint, not just its origin tile, for a multi-tile corpse); the badge tints grey once the corpse's loot window has been opened at least once (`CorpseLootedComponent`).
 
 Items drag freely between any two entities' grids in either direction (`InventoryActions.TryTransferStack`/`TryTransferAllStacksOfItem` -- no auto-merge into a matching stack on the destination, a same-entity no-op guard, and a same-window drop is a safe no-op) via `UiInputController` locating the drop target's grid through the new `Element.Tag` property, not `Window.Content` -- `InventoryTabContent`'s own hosting pattern (the player's real inventory) never assigns `InventoryGridContent` as its host window's Content at all, driving it manually instead, which `Window.Content`-based matching silently missed entirely (confirmed by live testing: corpse-to-player transfers failed while player-to-corpse worked, since only the corpse's own simpler window happened to use `SetContent`). An item dragged from a non-player entity's own inventory never binds to, or even highlights, the hotbar. Non-player inventories are capped at 20 distinct stacks (`InventoryCapacity.MaxNonPlayerStackCount`) -- unlimited for the player.
 
 No real loot table exists yet -- Goblins/Fairies/Ghosts get a **temporary** random 0-20-stack starting inventory instead (`Game/Blueprints/NPCs/TemporaryNpcLootGrant.cs`), to replace once a real one lands. Ties to the achievement backlog's "Loot a corpse for the first time" bullet below.
 
-Deliberately out of scope for this pass, left for follow-ups of their own: stack splitting/merging (a transferred stack keeps its own identity rather than merging into a matching one on the destination), context-menu-based looting to replace today's temporary click-to-loot (see the Context menu item below), damage-based loot rights, and mobs looting corpses themselves (both new Medium Priority items above).
+Deliberately out of scope for this pass, left for follow-ups of their own: stack splitting/merging (a transferred stack keeps its own identity rather than merging into a matching one on the destination), damage-based loot rights, and mobs looting corpses themselves (both new Medium Priority items above).
 
 #### NPC component
 
@@ -478,9 +478,24 @@ Companion to the Item weight and carry capacity scaling with Strength item above
 
 #### Context menu / mouse button coverage
 
-Right-click dropdown of options. `UiInputController` today only ever reads `MouseState.LeftButton` -- no right-click, middle-click, or double-click detection exists anywhere, so building this needs that mouse-button coverage added first (also enables incidental wins like double-click-title-bar-to-maximize).
+Right-click tap/drag mouse coverage landed (`UiInputController.HandleRightDragStart/Drag/DragEnd`, `Element.HandleRightClickTap`/`OnRightClickTapAction`) -- MapWindow's own right-click-tap already used it to cancel an armed/pending action before any context menu existed. Middle-click/double-click still have no coverage (so double-click-title-bar-to-maximize remains a future incidental win, not something this unlocked).
 
-First concrete consumer once this lands: replace corpse looting's temporary click-to-loot (`MapWindow.OnCorpseClicked`, see the Corpse looting item under Game) with a real "Loot" context-menu action.
+The context menu mechanism itself has landed too: `ContextMenu`/`ContextMenuController` (`Presentation/UI/`) -- a single shared popup any right-click source can open with its own list of `ContextMenuOption`s (label, optional right-aligned hotkey text, enabled state, an action), positioned at the cursor via the same `PopupPositioning` math `Tooltip` uses. See those types' own doc comments for the "shared mechanics, distributed content" split: the popup/positioning/dismissal machinery is centralized, but each right-click source decides its own option list. First consumer: a corpse's right-click menu offers "Loot" (disabled, not omitted, when the player isn't adjacent) -- replaces the old click-to-loot (`MapWindow.TryOpenCorpseContextMenuAt`, see the Corpse looting item under Game).
+
+Second consumer, not yet done: TextBox's Cut/Copy/Paste/Select All (see the Text input item above) are still keyboard-only -- exposing them via this same context-menu mechanism is the natural next use of it.
+
+See also AdvancedMapContextMenu below -- a fuller tile-level menu (stacking every entity's and the terrain's own options, with dividers) that surfaced while scoping this, deliberately deferred until a real need for it (and for a possible `IContextMenuProvider` abstraction) actually exists.
+
+#### AdvancedMapContextMenu
+
+Right-clicking a map tile today only ever looks for a corpse (see the Context menu item above). A fuller version would stack context-menu contributions from *everything* on that tile -- every entity present, plus the terrain -- separated by dividers, each contributor deciding its own (possibly conditional) options:
+- Entity -> Inspect: replaces today's click-to-inspect, which follows and displays only that entity.
+- Terrain -> Inspect: same idea, but follows and shows only the terrain, not any entity on it.
+- Window -> Close: right-clicking a window offers Close.
+- Inventory item -> Give/Take..., Bind To...: Give/Take is conditional -- only present (and its exact label/target) depends on whether a secondary inventory window is currently open, and which of the two inventories holds the clicked item.
+- NotificationSummary -> Open, Open All.
+
+Deliberately not built now, and no `IContextMenuProvider` interface either -- `ContextMenuController.Open` already just takes a flat option list, so a tile's menu can be built by concatenating each present entity's/terrain's/subsystem's own option list (same idiom as TextBox's own option-building method) with no interface needed; conditional inclusion is just "the caller doesn't add that option." The one piece not yet designed is dividers between each contributor's group -- add a divider sentinel to the option type once this is actually scoped, rather than guessing its shape now.
 
 #### Player stats v1
 
@@ -660,7 +675,7 @@ Follow-on to Text input above, once a TextBox actually needed more than "type to
 - Key-repeat on held Backspace/Delete/Left/Right/Up/Down (`ShouldFire`, one shared initial-delay-then-interval timer) -- Backspace/Delete moved from the edge-triggered `HandleKeyPress` hook into the same per-frame `OnHotkeysAction` hook the arrows already used, so all six share one repeat mechanism instead of two different ones.
 - I-beam cursor on hover (`UiInputController.GetHoverCursor`), and single-line boxes clip/scroll horizontally to keep the caret visible (`_visibleStartIndex`/`EnsureCaretVisible`/`GetVisibleWindowText`) instead of wrapping or overflowing.
 
-Not landed: word-jump/double-click-select existed as stretch goals when first scoped and both landed; undo/redo did not -- see its own dedicated TODO item below. No context-menu (Cut/Copy/Paste/Select All) either -- still blocked on the separate "Context menu / mouse button coverage" item.
+Not landed: word-jump/double-click-select existed as stretch goals when first scoped and both landed; undo/redo did not -- see its own dedicated TODO item below. No context-menu (Cut/Copy/Paste/Select All) either -- no longer blocked (see the "Context menu / mouse button coverage" item, which now has a working ContextMenu mechanism), just not yet wired up to TextBox specifically.
 
 Affected: `Presentation/UI/TextBox.cs`, `Presentation/UI/TextWindow.cs`, `Presentation/UI/Content/CursorTextContent.cs` (new), `Presentation/Input/UiInputController.cs`, `DungeonCrawlerWorld/GameShellBootstrapper.cs`.
 

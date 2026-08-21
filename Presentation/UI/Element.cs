@@ -631,12 +631,14 @@ public class Element
     /// Fires instead of HandleRightDragEnd when a right-button press/release never moved the
     /// mouse past UiInputController's small tap-vs-drag pixel threshold -- a right-click
     /// "tap," distinct from the drag-to-pan gesture the same button also drives. No-op by
-    /// default; MapWindow uses this to cancel an armed ability, since a genuine right-drag
-    /// (panning the camera) must keep behaving exactly as it already does.
+    /// default; MapWindow uses this to cancel an armed ability (and, if nothing was armed, open
+    /// a corpse's context menu), TextBox to open its own Cut/Copy/Paste/Select All menu -- both
+    /// take position rather than self-polling Mouse.GetState(), since UiInputController already
+    /// has the authoritative release position that decided this was a tap in the first place.
     /// </summary>
-    internal void HandleRightClickTap() => OnRightClickTapAction();
+    internal void HandleRightClickTap(Point position) => OnRightClickTapAction(position);
 
-    protected virtual void OnRightClickTapAction() { }
+    protected virtual void OnRightClickTapAction(Point position) { }
 
     /// <summary>
     /// Fires on every root/HUD window when Escape is pressed -- see

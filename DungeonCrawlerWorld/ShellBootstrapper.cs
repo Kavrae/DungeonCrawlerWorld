@@ -80,8 +80,11 @@ public static class ShellBootstrapper
         //TODO look at pulling these contents into a new context if it continues to grow.
         var cursorTextContent = new CursorTextContent(presentation.FontService, presentation.GlyphRenderer);
         var dragGhostContent = new DragGhostContent(world, actionCatalog, itemCatalog, componentManager.GetMultiPool<InventoryItemStackComponent>(), presentation.FontService, presentation.SpriteSheetService, presentation.SpriteRenderer, presentation.GlyphRenderer);
+        var contextMenuController = new ContextMenuController(presentation.ElementPoolService);
 
-        ElementFactoryRegistry.RegisterAll(presentation, ecsContext, actionCatalog, itemCatalog, world, mapViewState, camera, actionTargeting, playerMovement, cursorTextContent);
+        ElementFactoryRegistry.RegisterAll(presentation, ecsContext, actionCatalog, itemCatalog, world, mapViewState, camera, actionTargeting, playerMovement, cursorTextContent, contextMenuController);
+
+        contextMenuController.Initialize(layers);
 
         var (mapWindow, mapSize) = BuildBaseWindows(presentation, ecsContext, screenSize, diagnostics, mapViewState, layers);
         var (questTriggerWindow, hotbarContent) = BuildStaticHudWindows(presentation, world, ecsContext, actionCatalog, itemCatalog, screenSize, mapViewState, mapSize, layers);
@@ -92,7 +95,7 @@ public static class ShellBootstrapper
         var secondaryInventory = BuildSecondaryInventoryWindowController(presentation, ecsContext, inventory, layers);
         mapWindow.OnCorpseClicked = secondaryInventory.OpenLoot;
 
-        var inputController = new UiInputController(layers, screenSize, hotbarController, componentManager, world);
+        var inputController = new UiInputController(layers, screenSize, hotbarController, componentManager, world, contextMenuController);
         inputController.SetDefaultFocusElement(mapWindow);
         inputController.FocusElement(mapWindow);
 

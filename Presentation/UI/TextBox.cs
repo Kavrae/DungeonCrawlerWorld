@@ -24,7 +24,7 @@ namespace Presentation.UI;
 /// instead (replacing any active selection first), but only when Multiline -- a
 /// single-line box treats Shift+Enter the same as a plain Enter.
 /// </summary>
-public sealed class TextBox(FontService fontService, ElementPoolService elementPoolService, GlyphRenderer glyphRenderer, CursorTextContent? cursorTextContent = null) : TextWindow(fontService, elementPoolService, glyphRenderer)
+public sealed class TextBox(FontService fontService, ElementPoolService elementPoolService, GlyphRenderer glyphRenderer, CursorTextContent? cursorTextContent = null, ContextMenuController? contextMenuController = null) : TextWindow(fontService, elementPoolService, glyphRenderer)
 {
     private static readonly Color FocusIndicatorColor = Color.Gold;
     private static readonly BorderThickness FocusIndicatorThickness = BorderThickness.Uniform(new Vector2(2, 2));
@@ -410,6 +410,45 @@ public sealed class TextBox(FontService fontService, ElementPoolService elementP
         var insertedText = filtered.ToString();
         SetTextAndAutoSize(OriginalText[..insertIndex] + insertedText + OriginalText[insertIndex..]);
         MoveCaretTo(insertIndex + insertedText.Length);
+    }
+
+    /// <summary>Opens a Cut/Copy/Paste/Select All context menu at mousePosition -- see BuildContextMenuOptions for the actual option list. No-op if no ContextMenuController was wired (test setups that don't build one, matching cursorTextContent's own optional-dependency convention above).</summary>
+    protected override void OnRightClickTapAction(Point mousePosition)
+    {
+        contextMenuController?.Open(new Vector2(mousePosition.X, mousePosition.Y), BuildContextMenuOptions());
+    }
+
+    /// <summary>
+    /// Cut/Copy/Paste/Select All, with the same standard Windows hotkey text shown alongside
+    /// each label -- internal, not private, so tests can inspect the exact option list/enabled
+    /// state without a live ContextMenuController. Each OnSelect calls the exact same private
+    /// method its own Ctrl+X/C/V/A handler in OnHotkeysAction already does -- this is a second
+    /// trigger for existing behavior, not a second implementation of it. Cut/Copy are enabled
+    /// only with an active selection (the same check TryDeleteSelection/CopySelectionToClipboard
+    /// already gate on), Paste only when the clipboard actually has text, and Select All whenever
+    /// there's anything to select.
+    /// </summary>
+    internal IReadOnlyList<ContextMenuOption> BuildContextMenuOptions()
+    {
+        var hasSelection = _selectionAnchor is { } anchor && anchor != _caretIndex;
+
+        return
+        [
+            new ContextMenuOption("Cut", "Ctrl+X", hasSelection, () =>
+            {
+                if (CopySelectionToClipboard())
+                {
+                    TryDeleteSelection();
+                }
+            }),
+            new ContextMenuOption("Copy", "Ctrl+C", hasSelection, () => CopySelectionToClipboard()),
+            new ContextMenuOption("Paste", "Ctrl+V", SDL.SDL_HasClipboardText(), PasteFromClipboard),
+            new ContextMenuOption("Select All", "Ctrl+A", OriginalText.Length > 0, () =>
+            {
+                MoveCaretTo(OriginalText.Length);
+                _selectionAnchor = 0;
+            }),
+        ];
     }
 
     /// <summary>

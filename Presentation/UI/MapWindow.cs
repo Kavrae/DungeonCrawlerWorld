@@ -52,6 +52,7 @@ public sealed class MapWindow : Window
     private readonly MapCamera _camera;
     private readonly ActionTargetingController _actionTargeting;
     private readonly PlayerMovementController _playerMovement;
+    private readonly ContextMenuController _contextMenuController;
     private readonly MapBackgroundCache _backgroundCache;
     private readonly MapTintGrid _tintGrid;
     private readonly DirectComponentPool<TransformComponent> _transformPool;
@@ -102,16 +103,18 @@ public sealed class MapWindow : Window
     public Func<bool>? IsTextInputFocused { get; set; }
 
     /// <summary>
-    /// Temporary click-to-loot hook (see TODO.md's Context menu entry for the intended eventual
-    /// replacement -- a "Loot" context-menu action) -- invoked with a corpse's entity id when the
-    /// player clicks its tile, instead of the ordinary select path (see OnContentClickAction).
-    /// Settable rather than a constructor dependency for the same reason IsTextInputFocused above
-    /// is: the real listener (SecondaryInventoryWindowController) is built after MapWindow -- see
-    /// ShellBootstrapper.Build's own ordering notes. Null (before that wiring runs, and in tests
-    /// that construct a MapWindow directly) means "clicking a corpse just selects it, like any
-    /// other tile," matching this window's behavior before this feature existed.
+    /// Invoked with a corpse's entity id when the player selects "Loot" from its right-click
+    /// context menu (see TryOpenCorpseContextMenuAt). Settable rather than a constructor
+    /// dependency for the same reason IsTextInputFocused above is: the real listener
+    /// (SecondaryInventoryWindowController) is built after MapWindow -- see ShellBootstrapper.
+    /// Build's own ordering notes. Null (before that wiring runs, and in tests that construct a
+    /// MapWindow directly) means right-clicking a corpse opens no context menu at all, rather
+    /// than one with a "Loot" option that does nothing.
     /// </summary>
     public Action<int>? OnCorpseClicked { get; set; }
+
+    /// <summary>Internal, not private, so tests can inspect an opened corpse context menu (its option list, an option's Enabled state) without needing to also thread one through every existing MapWindow test helper's return tuple.</summary>
+    internal ContextMenuController ContextMenuController => _contextMenuController;
 
     /// <summary>Constructs the map viewport, wired to the world/camera/targeting/movement collaborators it renders and delegates input to.</summary>
     /// <remarks>
@@ -135,7 +138,8 @@ public sealed class MapWindow : Window
         SpriteRenderer spriteRenderer,
         MapCamera camera,
         ActionTargetingController actionTargeting,
-        PlayerMovementController playerMovement) : base(fontService, elementPoolService, glyphRenderer)
+        PlayerMovementController playerMovement,
+        ContextMenuController contextMenuController) : base(fontService, elementPoolService, glyphRenderer)
     {
         ArgumentNullException.ThrowIfNull(world);
         ArgumentNullException.ThrowIfNull(mapViewState);
@@ -150,6 +154,7 @@ public sealed class MapWindow : Window
         ArgumentNullException.ThrowIfNull(camera);
         ArgumentNullException.ThrowIfNull(actionTargeting);
         ArgumentNullException.ThrowIfNull(playerMovement);
+        ArgumentNullException.ThrowIfNull(contextMenuController);
 
         _world = world;
         _mapViewState = mapViewState;
@@ -178,6 +183,7 @@ public sealed class MapWindow : Window
         _camera = camera;
         _actionTargeting = actionTargeting;
         _playerMovement = playerMovement;
+        _contextMenuController = contextMenuController;
         _tintGrid = new MapTintGrid(componentManager, world.Map.Size, eventBus);
         _backgroundCache = new MapBackgroundCache(
             world,
@@ -806,27 +812,49 @@ public sealed class MapWindow : Window
             return;
         }
 
-        if (TryLootCorpseAt(mousePosition))
+        SelectMapNodes(mousePosition);
+    }
+
+    /// <summary>A player can only loot a corpse they're standing on or next to -- 8-directional (Chebyshev) distance of at most 1 from the corpse's own origin tile, the same adjacency shape TargetShape.Adjacent's ring uses elsewhere, just inclusive of the caster's own tile too (unlike melee's ring, which excludes it -- standing on a corpse to loot it is expected, unlike punching yourself).</summary>
+    private bool IsAdjacentToPlayer(int entityId) =>
+        _transformPool.TryGetReadonly(entityId, out var corpseTransform) &&
+        _transformPool.TryGetReadonly(_world.PlayerEntityId, out var playerTransform) &&
+        GridDistance.ChebyshevDistance(corpseTransform.Position, playerTransform.Position) <= 1;
+
+    /// <summary>
+    /// A right-click-tap first tries to cancel an armed/pending action (see
+    /// CancelArmedOrPendingAction's own doc comment); only when that was a no-op -- nothing to
+    /// cancel -- does it fall through to opening a corpse's context menu, the same "cancel wins
+    /// if there's anything to cancel" precedence a left-click's own OnContentClickAction already
+    /// gives TryConfirmActivation over SelectMapNodes.
+    /// </summary>
+    protected override void OnRightClickTapAction(Point mousePosition)
+    {
+        if (_actionTargeting.CancelArmedOrPendingAction())
         {
             return;
         }
 
-        SelectMapNodes(mousePosition);
+        TryOpenCorpseContextMenuAt(mousePosition);
     }
 
     /// <summary>
-    /// Temporary click-to-loot -- see OnCorpseClicked's own doc comment. A miss (off-map, no
-    /// corpse on the clicked tile, or nothing wired to OnCorpseClicked) falls through to the
-    /// ordinary select path in OnContentClickAction, unchanged. Clicking a corpse the player
-    /// isn't adjacent to (see IsAdjacentToPlayer) still consumes the click -- it just doesn't
-    /// invoke OnCorpseClicked -- rather than falling through to select the tile instead, which
-    /// would be a confusing mix of "nothing opened, but the selection also changed."
+    /// Opens a one-item "Loot" context menu for the corpse under mousePosition, if any --
+    /// replaces the old click-to-loot (see OnCorpseClicked's own doc comment). Internal, not
+    /// private, so tests can simulate a right-click-tap at a specific screen position directly.
+    /// A miss (off-map, no corpse on the hovered tile, or nothing wired to OnCorpseClicked)
+    /// simply opens nothing -- OnRightClickTapAction's only other job, cancelling an armed/
+    /// pending action, already ran and found nothing to cancel either, so a right-click over
+    /// empty space is correctly a total no-op, matching this codebase's "remove unexpected
+    /// actions" principle. "Loot" itself is enabled only when the player is adjacent (see
+    /// IsAdjacentToPlayer) -- otherwise still shown, just disabled, so the player sees why
+    /// nothing happens rather than the menu silently omitting it.
     /// </summary>
-    private bool TryLootCorpseAt(Point mousePosition)
+    internal void TryOpenCorpseContextMenuAt(Point mousePosition)
     {
         if (OnCorpseClicked is null || _deadPool is null || !_camera.TryGetHoveredMapPosition(mousePosition, _contentState.AbsolutePosition, out var mapPosition))
         {
-            return false;
+            return;
         }
 
         foreach (var entityId in _world.GetOccupantEntityIdsAt(new Vector3Int(mapPosition.X, mapPosition.Y, _mapViewState.CurrentMapLayer)))
@@ -836,24 +864,13 @@ public sealed class MapWindow : Window
                 continue;
             }
 
-            if (IsAdjacentToPlayer(entityId))
-            {
-                OnCorpseClicked.Invoke(entityId);
-            }
-
-            return true;
+            var onCorpseClicked = OnCorpseClicked;
+            _contextMenuController.Open(new Vector2(mousePosition.X, mousePosition.Y), [
+                new ContextMenuOption("Loot", null, IsAdjacentToPlayer(entityId), () => onCorpseClicked.Invoke(entityId)),
+            ]);
+            return;
         }
-
-        return false;
     }
-
-    /// <summary>A player can only loot a corpse they're standing on or next to -- 8-directional (Chebyshev) distance of at most 1 from the corpse's own origin tile, the same adjacency shape TargetShape.Adjacent's ring uses elsewhere, just inclusive of the caster's own tile too (unlike melee's ring, which excludes it -- standing on a corpse to loot it is expected, unlike punching yourself).</summary>
-    private bool IsAdjacentToPlayer(int entityId) =>
-        _transformPool.TryGetReadonly(entityId, out var corpseTransform) &&
-        _transformPool.TryGetReadonly(_world.PlayerEntityId, out var playerTransform) &&
-        GridDistance.ChebyshevDistance(corpseTransform.Position, playerTransform.Position) <= 1;
-
-    protected override void OnRightClickTapAction() => _actionTargeting.CancelArmedOrPendingAction();
 
     protected override void OnEscapeAction() => _actionTargeting.CancelArmedOrPendingAction();
 

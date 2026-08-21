@@ -30,6 +30,9 @@ public enum UiLayer
     /// <summary>Hover-triggered informational popups (see Tooltip) -- always above DynamicHud (so a tooltip renders over the window it's describing) and below User (so an active drag's own feedback is never obscured by an unrelated tooltip).</summary>
     Tooltip = 3000,
 
-    /// <summary>Cursor-following drag feedback and other transient user-driven visual effects -- always topmost, unconditionally.</summary>
+    /// <summary>Cursor-following drag feedback and other transient user-driven visual effects.</summary>
     User = 4000,
+
+    /// <summary>A single open right-click ContextMenu (see ContextMenuController) -- always the true topmost tier, above even User: an open context menu is the player's active focus and must never be obscured, including by drag feedback. Also reachable during menu mode (see UiInputController.LayersAboveMenuMode) -- e.g. right-clicking the Inventory window's own search box while Inventory itself is a menu window still needs its context menu to work.</summary>
+    ContextMenu = 5000,
 }

@@ -85,12 +85,17 @@ public sealed class UiInputControllerTests
         public int DragStartCallCount { get; private set; }
         public int DragEndCallCount { get; private set; }
         public int RightClickTapCallCount { get; private set; }
+        public Point LastRightClickTapPosition { get; private set; }
         public List<Vector2> DragDeltas { get; } = [];
 
         protected override void OnRightDragStartAction() => DragStartCallCount++;
         protected override void OnRightDragAction(Vector2 totalPixelDeltaSinceStart) => DragDeltas.Add(totalPixelDeltaSinceStart);
         protected override void OnRightDragEndAction() => DragEndCallCount++;
-        protected override void OnRightClickTapAction() => RightClickTapCallCount++;
+        protected override void OnRightClickTapAction(Point position)
+        {
+            RightClickTapCallCount++;
+            LastRightClickTapPosition = position;
+        }
     }
 
     private static RightDragSpyWindow CreateRightDragSpyWindow(ElementPoolService windowService, FontService fontService, Vector2 relativePosition)
@@ -1056,6 +1061,114 @@ public sealed class UiInputControllerTests
 
         Assert.AreEqual(1, window.RightClickTapCallCount);
         Assert.AreEqual(0, window.DragEndCallCount, "A tap must not also fire the drag-end hook.");
+    }
+
+    [TestMethod]
+    public void RightClickTextBoxThenClickContextMenuOption_InvokesTheOption()
+    {
+        var fontService = new FontService("Fonts");
+        var glyphRenderer = new GlyphRenderer();
+        var windowService = TestElementPoolServiceFactory.Create(fontService, glyphRenderer);
+        var layers = new UiLayerStack();
+
+        var contextMenuController = new ContextMenuController(windowService);
+        contextMenuController.Initialize(layers);
+
+        windowService.RegisterFactory<TextBox>(() => new TextBox(fontService, windowService, glyphRenderer, null, contextMenuController));
+        var textBox = windowService.CreateElement<TextBox>(null, new ElementOptions
+        {
+            Layout = new ElementLayoutOptions { RelativePosition = new Vector2(50, 50), Size = new Vector2(200, 30), DisplayMode = ElementDisplayMode.Fixed },
+            Chrome = new ElementChromeOptions { ShowBorder = true },
+        });
+        textBox.Initialize();
+        layers.Add(UiLayer.DynamicHud, textBox);
+
+        var controller = new UiInputController(layers, LargeScreenSize, contextMenuController: contextMenuController);
+
+        var textBoxCenter = textBox.Rectangle.Center;
+        controller.Update(NoKeys, MouseAt(textBoxCenter.X, textBoxCenter.Y, ButtonState.Released));
+        controller.Update(NoKeys, MouseAt(textBoxCenter.X, textBoxCenter.Y, ButtonState.Pressed));
+        controller.Update(NoKeys, MouseAt(textBoxCenter.X, textBoxCenter.Y, ButtonState.Released));
+
+        // Selection made after focusing (a left-click, like MoveCaretTo generally, always
+        // collapses any existing selection) -- matches the real order of events.
+        textBox.HandleTextInput('h');
+        textBox.HandleTextInput('i');
+        textBox.HandleHotkeys(new KeyboardState(Keys.LeftControl, Keys.A), new KeyboardState());
+
+        controller.Update(NoKeys, MouseAtWithRightButton(textBoxCenter.X, textBoxCenter.Y, ButtonState.Released));
+        controller.Update(NoKeys, MouseAtWithRightButton(textBoxCenter.X, textBoxCenter.Y, ButtonState.Pressed));
+        controller.Update(NoKeys, MouseAtWithRightButton(textBoxCenter.X, textBoxCenter.Y, ButtonState.Released));
+
+        Assert.IsTrue(contextMenuController.IsOpen, "Right-click-tap over a focused TextBox should open its Cut/Copy/Paste/Select All menu.");
+
+        var cutButton = (Button)contextMenuController.Menu.ChildElements[0];
+        Assert.IsTrue(cutButton.Enabled, "Cut -- selection was made via Ctrl+A above.");
+        var buttonCenter = cutButton.Rectangle.Center;
+
+        controller.Update(NoKeys, MouseAt(buttonCenter.X, buttonCenter.Y, ButtonState.Released));
+        controller.Update(NoKeys, MouseAt(buttonCenter.X, buttonCenter.Y, ButtonState.Pressed));
+        controller.Update(NoKeys, MouseAt(buttonCenter.X, buttonCenter.Y, ButtonState.Released));
+
+        Assert.AreEqual(string.Empty, textBox.OriginalText, "Cut should have removed the selected \"hi\".");
+        Assert.IsFalse(contextMenuController.IsOpen, "Selecting an option should close the menu.");
+    }
+
+    /// <summary>Same as above, but the TextBox lives inside an open menu window (e.g. the Inventory folder's own search box) -- the exact scenario TODO.md's Context menu entry calls out as the second consumer.</summary>
+    [TestMethod]
+    public void RightClickTextBoxInsideMenuWindowThenClickContextMenuOption_InvokesTheOption()
+    {
+        var fontService = new FontService("Fonts");
+        var glyphRenderer = new GlyphRenderer();
+        var windowService = TestElementPoolServiceFactory.Create(fontService, glyphRenderer);
+        var layers = new UiLayerStack();
+
+        var contextMenuController = new ContextMenuController(windowService);
+        contextMenuController.Initialize(layers);
+
+        var parentWindow = windowService.CreateElement<Window>(null, new ElementOptions
+        {
+            Hierarchy = new ElementHierarchyOptions { CanContainChildren = true },
+            Layout = new ElementLayoutOptions { RelativePosition = new Vector2(0, 0), Size = new Vector2(400, 300), DisplayMode = ElementDisplayMode.Fixed },
+        });
+        parentWindow.Initialize();
+        layers.Add(UiLayer.DynamicHud, parentWindow);
+        layers.OpenMenuWindow(parentWindow); // Simulates Inventory's own "same Menu Mode" wiring.
+
+        windowService.RegisterFactory<TextBox>(() => new TextBox(fontService, windowService, glyphRenderer, null, contextMenuController));
+        var textBox = windowService.CreateElement<TextBox>(parentWindow, new ElementOptions
+        {
+            Layout = new ElementLayoutOptions { RelativePosition = new Vector2(50, 50), Size = new Vector2(200, 30), DisplayMode = ElementDisplayMode.Fixed },
+            Chrome = new ElementChromeOptions { ShowBorder = true },
+        });
+        parentWindow.AddChild(textBox);
+
+        var controller = new UiInputController(layers, LargeScreenSize, contextMenuController: contextMenuController);
+
+        var textBoxCenter = textBox.Rectangle.Center;
+        controller.Update(NoKeys, MouseAt(textBoxCenter.X, textBoxCenter.Y, ButtonState.Released));
+        controller.Update(NoKeys, MouseAt(textBoxCenter.X, textBoxCenter.Y, ButtonState.Pressed));
+        controller.Update(NoKeys, MouseAt(textBoxCenter.X, textBoxCenter.Y, ButtonState.Released));
+
+        textBox.HandleTextInput('h');
+        textBox.HandleTextInput('i');
+        textBox.HandleHotkeys(new KeyboardState(Keys.LeftControl, Keys.A), new KeyboardState());
+
+        controller.Update(NoKeys, MouseAtWithRightButton(textBoxCenter.X, textBoxCenter.Y, ButtonState.Released));
+        controller.Update(NoKeys, MouseAtWithRightButton(textBoxCenter.X, textBoxCenter.Y, ButtonState.Pressed));
+        controller.Update(NoKeys, MouseAtWithRightButton(textBoxCenter.X, textBoxCenter.Y, ButtonState.Released));
+
+        Assert.IsTrue(contextMenuController.IsOpen, "Right-click-tap over a focused TextBox inside an open menu window should still open its context menu.");
+
+        var cutButton = (Button)contextMenuController.Menu.ChildElements[0];
+        Assert.IsTrue(cutButton.Enabled);
+        var buttonCenter = cutButton.Rectangle.Center;
+
+        controller.Update(NoKeys, MouseAt(buttonCenter.X, buttonCenter.Y, ButtonState.Released));
+        controller.Update(NoKeys, MouseAt(buttonCenter.X, buttonCenter.Y, ButtonState.Pressed));
+        controller.Update(NoKeys, MouseAt(buttonCenter.X, buttonCenter.Y, ButtonState.Released));
+
+        Assert.AreEqual(string.Empty, textBox.OriginalText, "Cut should have removed the selected \"hi\" even with menu mode active.");
     }
 
     /// <summary>A release after only jitter-sized movement (below the tap-vs-drag pixel threshold) still reads as a tap, not a drag -- ordinary click imprecision shouldn't cancel an armed ability's own drag-pan behavior, nor should it be mistaken for an intentional pan.</summary>

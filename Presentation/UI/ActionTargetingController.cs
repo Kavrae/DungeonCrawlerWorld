@@ -210,21 +210,27 @@ public sealed class ActionTargetingController(
     /// cancels a Delayed action's in-progress windup instead: clears PendingDelayedActionComponent
     /// and zeroes the shared ActionLock directly (via ActionLockGate.Lock(..., 0)) so cancelling
     /// frees the entity immediately rather than still waiting out the full wind-up with no
-    /// effect at the end -- see PendingDelayedActionComponent's own doc comment.
+    /// effect at the end -- see PendingDelayedActionComponent's own doc comment. Returns whether
+    /// there was actually anything to cancel -- MapWindow's own right-click-tap handler uses this
+    /// to decide whether a corpse context menu should open instead (a no-op cancel means the
+    /// right-click wasn't "cancel," so it falls through to whatever else is under the cursor).
     /// </summary>
-    public void CancelArmedOrPendingAction()
+    public bool CancelArmedOrPendingAction()
     {
         if (mapViewState.ArmedActionId is not null || mapViewState.ArmedItemStackInstanceId is not null)
         {
             Disarm();
-            return;
+            return true;
         }
 
         var playerEntityId = world.PlayerEntityId;
         if (pendingDelayedActions.Remove(playerEntityId))
         {
             ActionLockGate.Lock(actionLocks, playerEntityId, framesToWait: 0);
+            return true;
         }
+
+        return false;
     }
 
     /// <summary>

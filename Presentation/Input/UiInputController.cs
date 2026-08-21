@@ -138,6 +138,9 @@ public sealed class UiInputController
     /// <summary>See _componentManager -- passed straight through to InventoryActions' capacity check for a non-player transfer destination.</summary>
     private readonly IPlayerQuery? _playerQuery;
 
+    /// <summary>Owns the single shared ContextMenu popup -- null in test setups that don't build one, in which case right-click context menus simply never open and an already-open one (there can't be, without this) never needs dismissing.</summary>
+    private readonly ContextMenuController? _contextMenuController;
+
     /// <summary>Mouse position when the current hotbar-slot press started -- ResolveHotbarSlotClick only treats the release as a tap if it's within ContentDragTapThresholdPixels of this, the same tap-vs-drag distinction ResolveContentDrag already makes for content-drags.</summary>
     private Vector2 _hotbarPressMousePosition;
 
@@ -195,13 +198,14 @@ public sealed class UiInputController
     /// window to this same list afterward. Passing the list itself (not a snapshot/copy) is what
     /// makes that work -- this class only ever reads through the reference, never replaces it.
     /// </summary>
-    public UiInputController(UiLayerStack layers, Vector2 screenSize, HotbarController? hotbarController = null, ComponentManager? componentManager = null, IPlayerQuery? playerQuery = null)
+    public UiInputController(UiLayerStack layers, Vector2 screenSize, HotbarController? hotbarController = null, ComponentManager? componentManager = null, IPlayerQuery? playerQuery = null, ContextMenuController? contextMenuController = null)
     {
         _layers = layers;
         _screenSize = screenSize;
         _hotbarController = hotbarController;
         _componentManager = componentManager;
         _playerQuery = playerQuery;
+        _contextMenuController = contextMenuController;
 
         // Subscribing is safe to do unconditionally and permanently -- SDL simply never raises
         // SDL_TEXTINPUT while text input is stopped (see SetFocus's Start/StopTextInput calls
@@ -342,7 +346,7 @@ public sealed class UiInputController
         }
         else if (mouseState.RightButton == ButtonState.Released && _previousMouseState.RightButton == ButtonState.Pressed)
         {
-            HandleRightDragEnd();
+            HandleRightDragEnd(new Point(mouseState.X, mouseState.Y));
         }
         else if (mouseState.RightButton == ButtonState.Pressed && _rightDragElement is not null)
         {
@@ -440,6 +444,11 @@ public sealed class UiInputController
         UiLayer.DynamicHud => EscapeBehavior.CloseableWindows,
         UiLayer.Tooltip => EscapeBehavior.None,
         UiLayer.User => EscapeBehavior.None,
+        // Dismissed by its own dedicated check at the very top of HandleEscape instead, not this
+        // generic per-layer mechanism -- it must take priority over an already-open menu window's
+        // own TopmostMenuWindow short-circuit (see HandleEscape), which CloseableWindows here
+        // would never actually reach past.
+        UiLayer.ContextMenu => EscapeBehavior.None,
         _ => throw new NotImplementedException($"No Escape behavior defined for UiLayer.{layer}."),
     };
 
@@ -473,6 +482,17 @@ public sealed class UiInputController
 
         if (_escapeHeldFrames == 1)
         {
+            // An open context menu absorbs Escape entirely, before anything else below -- it
+            // must take priority even over an already-open menu window's own TopmostMenuWindow
+            // short-circuit (CloseTopmostClosableWindow), which would otherwise close e.g. the
+            // whole Inventory window instead of just dismissing a context menu opened from
+            // something inside it.
+            if (_contextMenuController is { IsOpen: true } contextMenuController)
+            {
+                contextMenuController.Close();
+                return;
+            }
+
             // While menu mode is active, Escape must not reach through it to Base/StaticHud
             // elements behind it (e.g. MapWindow canceling an armed ability) -- that's exactly
             // the input TryHitTestInteraction already refuses to route to those elements while
@@ -591,6 +611,18 @@ public sealed class UiInputController
     private void HandleMousePress(MouseState mouseState)
     {
         var clickPosition = new Point(mouseState.X, mouseState.Y);
+
+        // An open context menu absorbs a click that lands outside it entirely -- same "one input
+        // consumed by the cancel" spirit as ActionTargetingController.CancelArmedOrPendingAction --
+        // rather than also raising/focusing/pressing whatever happens to be underneath. A click
+        // that lands ON the menu (e.g. a row Button) falls through to the ordinary hit-test below
+        // exactly as normal, since Contains is false only for a genuinely outside click.
+        if (_contextMenuController is { IsOpen: true } contextMenuController && !contextMenuController.Menu.Rectangle.Contains(clickPosition))
+        {
+            contextMenuController.Close();
+            _activeInteraction = ElementInteraction.NotHit;
+            return;
+        }
 
         _activeInteraction = TryHitTestInteraction(clickPosition);
         PressedButton = _activeInteraction.Button;
@@ -1021,6 +1053,14 @@ public sealed class UiInputController
     private void HandleRightDragStart(MouseState mouseState)
     {
         var position = new Point(mouseState.X, mouseState.Y);
+
+        // Every right-press dismisses an already-open context menu unconditionally, whether or
+        // not this gesture goes on to open a fresh one -- MapWindow.OnRightClickTapAction (fired
+        // later, on release, if this turns out to be a tap rather than a drag) reopens one fresh
+        // if the release lands on a lootable corpse; a right-click on empty space or anything
+        // else correctly leaves it closed.
+        _contextMenuController?.Close();
+
         _rightDragElement = TryHitTestInteraction(position).Element;
         _rightDragStartMousePosition = new Vector2(mouseState.X, mouseState.Y);
         _rightDragExceededTapThreshold = false;
@@ -1041,7 +1081,7 @@ public sealed class UiInputController
     }
 
     /// <summary>A gesture that never exceeded the tap threshold reads as a right-click tap (e.g. ability-cancel) instead of a drag-end -- a real drag's own end-of-gesture handling (e.g. MapWindow settling its smooth scroll onto the tile grid) has nothing to do for a tap anyway, since it never moved.</summary>
-    private void HandleRightDragEnd()
+    private void HandleRightDragEnd(Point releasePosition)
     {
         if (_rightDragExceededTapThreshold)
         {
@@ -1049,7 +1089,7 @@ public sealed class UiInputController
         }
         else
         {
-            _rightDragElement?.HandleRightClickTap();
+            _rightDragElement?.HandleRightClickTap(releasePosition);
         }
 
         _rightDragElement = null;
@@ -1103,7 +1143,7 @@ public sealed class UiInputController
         return null;
     }
 
-    /// <summary>Tooltip/User both sit structurally above DynamicHud, where every menu window lives today -- see the menu-mode branch of TryHitTestInteraction for why hit-testing still reaches them while menu mode is active.</summary>
+    /// <summary>Tooltip/User both sit structurally above DynamicHud, where every menu window lives today -- see the menu-mode branch of TryHitTestInteraction for why hit-testing still reaches them while menu mode is active. ContextMenu is deliberately not in this array -- see TryHitTestInteraction's own doc comment for why it needs checking even earlier than this.</summary>
     private static readonly UiLayer[] LayersAboveMenuMode = [UiLayer.User, UiLayer.Tooltip];
 
     /// <summary>User tier first, then DynamicHUD, then StaticHUD, then Base -- a higher tier can never lose to a lower one. Each tier topmost (last-raised) first. User is checked first purely for consistency (see the class's own doc comment) -- nothing placed there today is ever actually hit, since DragGhostContent's host window has no clickable content.</summary>
@@ -1111,6 +1151,20 @@ public sealed class UiInputController
     {
         if (_layers.IsMenuModeActive)
         {
+            // ContextMenu is checked before even IsMenuWindow -- it's always the true topmost
+            // tier (see UiLayer.ContextMenu's own doc comment), but a menu opened from something
+            // inside a menu window (e.g. the Inventory folder's own search box) commonly renders
+            // overlapping that same menu window's own bounds. TryHitTestWhere(IsMenuWindow) below
+            // would otherwise resolve a click there to the menu window's own content underneath,
+            // never reaching the context menu actually drawn on top of it -- confirmed bug: a
+            // TextBox context menu opened from inside the Inventory window was entirely
+            // unclickable, every option silently absorbed by Inventory's own hit-test first.
+            var contextMenuInteraction = TryHitTestInList(_layers[UiLayer.ContextMenu], position);
+            if (contextMenuInteraction.Element is not null)
+            {
+                return contextMenuInteraction;
+            }
+
             var menuInteraction = TryHitTestWhere(position, _layers.IsMenuWindow);
             if (menuInteraction.Element is not null)
             {

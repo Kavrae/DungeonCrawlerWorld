@@ -48,8 +48,8 @@ public sealed class SecondaryInventoryWindowController(
     }
 
     /// <summary>
-    /// Click-to-loot's entry point -- temporary, until a context menu's "Loot" replaces it (see
-    /// TODO.md's Context menu entry). Toggles closed if targetEntityId is already the open target;
+    /// Invoked from a corpse's right-click context menu "Loot" option (see MapWindow.
+    /// TryOpenCorpseContextMenuAt). Toggles closed if targetEntityId is already the open target;
     /// otherwise opens the player's own inventory window (idempotent) alongside a fresh
     /// CorpseInventoryWindow for targetEntityId -- replacing whichever target was previously open,
     /// if any -- and marks it looted.

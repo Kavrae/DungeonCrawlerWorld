@@ -258,4 +258,68 @@ public sealed class TextBoxTests
 
         Assert.IsGreaterThan(shrunkParentHeight, parent.CurrentSize.Y);
     }
+
+    [TestMethod]
+    public void BuildContextMenuOptions_NoSelectionEmptyText_CutCopyAndSelectAllDisabled()
+    {
+        var textBox = CreateTextBox(CreateWindowService());
+
+        var options = textBox.BuildContextMenuOptions();
+
+        Assert.HasCount(4, options);
+        Assert.AreEqual("Cut", options[0].Label);
+        Assert.AreEqual("Ctrl+X", options[0].HotkeyText);
+        Assert.IsFalse(options[0].Enabled);
+        Assert.AreEqual("Copy", options[1].Label);
+        Assert.AreEqual("Ctrl+C", options[1].HotkeyText);
+        Assert.IsFalse(options[1].Enabled);
+        Assert.AreEqual("Paste", options[2].Label);
+        Assert.AreEqual("Ctrl+V", options[2].HotkeyText);
+        // Paste's Enabled deliberately not asserted here -- it reads the real OS clipboard
+        // (SDL_HasClipboardText), which this test has no business overwriting or depending on.
+        Assert.AreEqual("Select All", options[3].Label);
+        Assert.AreEqual("Ctrl+A", options[3].HotkeyText);
+        Assert.IsFalse(options[3].Enabled, "Nothing to select in an empty box.");
+    }
+
+    [TestMethod]
+    public void BuildContextMenuOptions_WithSelection_CutAndCopyEnabled()
+    {
+        var textBox = CreateTextBox(CreateWindowService());
+        textBox.HandleTextInput('h');
+        textBox.HandleTextInput('i');
+        textBox.HandleHotkeys(new KeyboardState(Keys.LeftControl, Keys.A), new KeyboardState());
+
+        var options = textBox.BuildContextMenuOptions();
+
+        Assert.IsTrue(options[0].Enabled, "Cut");
+        Assert.IsTrue(options[1].Enabled, "Copy");
+        Assert.IsTrue(options[3].Enabled, "Select All -- non-empty text.");
+    }
+
+    [TestMethod]
+    public void BuildContextMenuOptions_CutOption_DeletesTheSelection()
+    {
+        var textBox = CreateTextBox(CreateWindowService());
+        textBox.HandleTextInput('h');
+        textBox.HandleTextInput('i');
+        textBox.HandleHotkeys(new KeyboardState(Keys.LeftControl, Keys.A), new KeyboardState());
+
+        textBox.BuildContextMenuOptions()[0].OnSelect();
+
+        Assert.AreEqual(string.Empty, textBox.OriginalText);
+    }
+
+    [TestMethod]
+    public void BuildContextMenuOptions_SelectAllOption_SelectsEntireTextSoCutRemovesAllOfIt()
+    {
+        var textBox = CreateTextBox(CreateWindowService());
+        textBox.HandleTextInput('h');
+        textBox.HandleTextInput('i');
+
+        textBox.BuildContextMenuOptions()[3].OnSelect(); // Select All
+        textBox.BuildContextMenuOptions()[0].OnSelect(); // Cut -- only removes everything if Select All actually selected the whole text.
+
+        Assert.AreEqual(string.Empty, textBox.OriginalText);
+    }
 }

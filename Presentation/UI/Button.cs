@@ -105,6 +105,16 @@ public sealed class Button(FontService fontService, ElementPoolService elementPo
     /// <summary>Translucent dark overlay for the hover highlight -- darkens whatever ContentColor this button actually has (LightGray by default) rather than a fixed replacement color, so it still reads correctly if a caller ever sets a custom ContentColor. Deliberately not WindowPalette.HighlightColor (a gold tint meant for content rows sitting on a light background) -- a button's own resting look is already a mid-gray raised bevel, where a gold tint reads oddly; a straightforward darkening matches how a pressed/hovered physical button looks.</summary>
     private static readonly Color HoverOverlayColor = Color.Black * 0.15f;
 
+    /// <summary>
+    /// Horizontal breathing room around LeftText/RightText when both are present -- DrawLeftAligned/
+    /// DrawRightAligned otherwise sit flush against the row's own edges, fine for a single
+    /// ink-centered glyph (see the RightText-empty branch below) but visibly cramped for a
+    /// two-column context-menu row. Internal, not private: ContextMenu.MeasureWidth sizes its
+    /// rows off this same constant, rather than guessing its own separate padding value that
+    /// could silently drift out of sync with what actually gets drawn.
+    /// </summary>
+    internal const float HorizontalTextInset = 4f;
+
     public override void DrawContent(GameTime gameTime)
     {
         var spriteBatch = ElementPoolService.SpriteBatch;
@@ -131,13 +141,17 @@ public sealed class Button(FontService fontService, ElementPoolService elementPo
         }
         else
         {
-            // A hotkey column is present (context-menu option row) -- left/right split instead.
+            // A hotkey column is present (context-menu option row) -- left/right split instead,
+            // inset by HorizontalTextInset so neither column sits flush against the row's edges.
+            var textFootprintPosition = ContentAbsolutePosition + new Vector2(HorizontalTextInset, 0);
+            var textFootprintSize = ContentSize - new Vector2(HorizontalTextInset * 2, 0);
+
             if (!string.IsNullOrEmpty(LeftText))
             {
-                GlyphRenderer.DrawLeftAligned(spriteBatch, ContentFont, LeftText, ContentAbsolutePosition, ContentSize, textColor);
+                GlyphRenderer.DrawLeftAligned(spriteBatch, ContentFont, LeftText, textFootprintPosition, textFootprintSize, textColor);
             }
 
-            GlyphRenderer.DrawRightAligned(spriteBatch, ContentFont, RightText, ContentAbsolutePosition, ContentSize, textColor);
+            GlyphRenderer.DrawRightAligned(spriteBatch, ContentFont, RightText, textFootprintPosition, textFootprintSize, textColor);
         }
     }
 }
