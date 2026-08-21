@@ -73,7 +73,7 @@ public sealed class WindowChromeButtonTests
         var window = CreateWindowWithCloseAndMinimize(CreateWindowService());
 
         var minimizeRestoreButton = window.TitleButtons[1];
-        Assert.AreEqual("_", minimizeRestoreButton.Text);
+        Assert.AreEqual("_", minimizeRestoreButton.LeftText);
     }
 
     /// <summary>
@@ -94,13 +94,13 @@ public sealed class WindowChromeButtonTests
         window.HandleClick(minimizeRestoreButton.Rectangle.Center);
 
         Assert.AreEqual(ElementDisplayMode.Minimized, window.DisplayMode);
-        Assert.AreEqual("O", minimizeRestoreButton.Text);
+        Assert.AreEqual("O", minimizeRestoreButton.LeftText);
         Assert.HasCount(2, window.TitleButtons);
 
         window.HandleClick(minimizeRestoreButton.Rectangle.Center);
 
         Assert.AreEqual(ElementDisplayMode.Fixed, window.DisplayMode);
-        Assert.AreEqual("_", minimizeRestoreButton.Text);
+        Assert.AreEqual("_", minimizeRestoreButton.LeftText);
     }
 
     /// <summary>
@@ -172,7 +172,7 @@ public sealed class WindowChromeButtonTests
             var minimizeRestoreButton = window.TitleButtons[1];
 
             window.SetDisplayMode(ElementDisplayMode.Minimized);
-            Assert.AreEqual("O", minimizeRestoreButton.Text);
+            Assert.AreEqual("O", minimizeRestoreButton.LeftText);
 
             window.Close();
         }
@@ -182,6 +182,6 @@ public sealed class WindowChromeButtonTests
 
         finalWindow.SetDisplayMode(ElementDisplayMode.Minimized);
 
-        Assert.AreEqual("O", finalButton.Text);
+        Assert.AreEqual("O", finalButton.LeftText);
     }
 }

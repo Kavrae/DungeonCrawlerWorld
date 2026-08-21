@@ -46,7 +46,7 @@ public sealed class ElementPoolService
     /// <summary>
     /// Elements currently sitting in a pool, not yet rented back out -- see CloseElement's own
     /// guard. ObjectPool&lt;T&gt;.Return pushes unconditionally with no duplicate-return
-    /// protection, and every Window-typed element (tab header strip, tab body, GridControl's own
+    /// protection, and every Window-typed parent (tab header strip, tab body, GridControl's own
     /// host window, ...) rents from the SAME shared Stack&lt;Element&gt;. If CloseElement were
     /// ever invoked twice on the same instance within one close cascade, that instance would land
     /// in the stack twice, and two subsequen
@@ -59,9 +59,9 @@ public sealed class ElementPoolService
     /// </summary>
     private readonly HashSet<Element> _pooledElements = [];
 
-    /// <summary>Registers a factory for creating instances of a specific element type. </summary>
-    /// <typeparam name="TElement">The type of the element to create a factory for  .</typeparam>
-    /// <param name="factory">The factory function to use for creating instances of the element type.</param>
+    /// <summary>Registers a factory for creating instances of a specific parent type. </summary>
+    /// <typeparam name="TElement">The type of the parent to create a factory for  .</typeparam>
+    /// <param name="factory">The factory function to use for creating instances of the parent type.</param>
     public void RegisterFactory<TElement>(Func<TElement> factory)
         where TElement : Element
     {
@@ -70,19 +70,19 @@ public sealed class ElementPoolService
         _elementPoolsByType[typeof(TElement)] = new ObjectPool<Element>(() => factory(), static element => element.IsVisible = false);
     }
 
-    /// <summary>Creates an instance of the specified element type.</summary>
+    /// <summary>Creates an instance of the specified parent type.</summary>
     /// <remarks>Rents an instance from the pool and then builds it.</remarks>
-    /// <typeparam name="TElement">The type of the element to create.</typeparam>
-    /// <param name="parent">The parent element.</param>
-    /// <param name="options">The options for the element.</param>
-    /// <returns>The created element.</returns>
-    /// <exception cref="InvalidOperationException">Thrown when no factory is registered for the element type.</exception>
+    /// <typeparam name="TElement">The type of the parent to create.</typeparam>
+    /// <param name="parent">The parent parent.</param>
+    /// <param name="options">The options for the parent.</param>
+    /// <returns>The created parent.</returns>
+    /// <exception cref="InvalidOperationException">Thrown when no factory is registered for the parent type.</exception>
     public TElement CreateElement<TElement>(Element? parent, ElementOptions options)
         where TElement : Element
     {
         if (!_elementPoolsByType.TryGetValue(typeof(TElement), out var pool))
         {
-            throw new InvalidOperationException($"No factory registered for element type {typeof(TElement).Name}. Call RegisterFactory first.");
+            throw new InvalidOperationException($"No factory registered for parent type {typeof(TElement).Name}. Call RegisterFactory first.");
         }
 
         var element = (TElement)pool.Rent();
@@ -92,9 +92,9 @@ public sealed class ElementPoolService
     }
 
     /// <summary>
-    /// Closes the specified element -- recursively closing its own children first (see
+    /// Closes the specified parent -- recursively closing its own children first (see
     /// CloseAllChildren, mutually recursive with this method) -- and returns it to its type pool.
-    /// Recursive so closing any element tears down and pool-returns its entire subtree, not just
+    /// Recursive so closing any parent tears down and pool-returns its entire subtree, not just
     /// itself: without this, a control that owns pooled children of its own (GridControl's count/
     /// sort/toggle/search-box children, not just its own Window-level events) would leave those
     /// grandchildren orphaned -- still attached in the tree, never returned to their own pools --
@@ -106,7 +106,7 @@ public sealed class ElementPoolService
     /// field's own doc comment for why an unguarded double-close is dangerous (shared-pool
     /// corruption), not merely wasteful.
     /// </summary>
-    /// <param name="element">The element to close.</param>
+    /// <param name="element">The parent to close.</param>
     public void CloseElement(Element element)
     {
         ArgumentNullException.ThrowIfNull(element);
@@ -116,6 +116,7 @@ public sealed class ElementPoolService
             return;
         }
 
+        CloseAllTitleButtons(element);
         CloseAllChildren(element);
         ClearEventSubscriptions(element);
 
@@ -128,13 +129,13 @@ public sealed class ElementPoolService
     }
 
     /// <summary>
-    /// Nulls out every event field declared anywhere in element's own type hierarchy --
+    /// Nulls out every event field declared anywhere in parent's own type hierarchy --
     /// Element's own Opened/Closed/Resized/Moved/Clicked/DisplayModeChanged/FocusRequested/
     /// FocusChanged, plus whatever additional events a subclass declares (GridControl's
     /// SortOptionCycled/ToggleChanged/SearchFilterChanged, TextBox's TextSubmitted, ...) --
     /// before it goes back into its type pool.
     ///
-    /// Closing an element used to never clear its subscriptions at all, which made every pooled
+    /// Closing an parent used to never clear its subscriptions at all, which made every pooled
     /// Element/Window individually responsible for remembering to unsubscribe from its own
     /// children's events before closing them -- easy to get right once (TabbedContent's tab
     /// tiles) and then forget the exact same pattern on the next control built the same way
@@ -142,7 +143,7 @@ public sealed class ElementPoolService
     /// tabs once enough TextWindow instances had cycled through the shared pool with stale
     /// handlers still attached). Doing this once, centrally, here, makes the whole bug class
     /// structurally impossible for every current and future pooled Element, rather than a
-    /// convention each new widget has to remember to reapply by hand -- an element entering the
+    /// convention each new widget has to remember to reapply by hand -- an parent entering the
     /// pool is, by definition, about to potentially become a completely different logical widget
     /// the next time it's rented, so nothing should still be listening to what it does past this
     /// point regardless.
@@ -191,10 +192,30 @@ public sealed class ElementPoolService
         _eventBackingFieldsByType[type] = result;
         return result;
     }
+    // Title buttons live in Window's own _titleButtons list, not _children (see
+    // Window.AddTitleButton's own doc comment for why) -- CloseAllChildren below only ever
+    // walks _children, so without this a window's title buttons would never be returned to
+    // Button's pool when the window closes, now that Button is itself pooled. Deliberately
+    // does NOT also clear window.TitleButtons here -- this often runs while a title button's
+    // own Clicked handler (e.g. the close button) is still unwinding up the call stack,
+    // inside Window.OnHeaderClickAction's own (non-snapshotted) foreach over that exact list;
+    // mutating it here would corrupt that still-active enumeration. Window.Build already
+    // resets _titleButtons to a fresh list the next time this window is rented, so the stale
+    // reference is harmless in the meantime.
+    public void CloseAllTitleButtons(Element parent)
+    {
+        if (parent is Window window)
+        {
+            foreach (var titleButton in window.TitleButtons.ToArray())
+            {
+                CloseElement(titleButton);
+            }
+        }
+    }
 
-    /// <summary>Closes all child elements of the specified parent element.</summary>
-    /// <remarks>Each child element is returned to its own type pool.</remarks>
-    /// <param name="parent">The parent element.</param>
+    /// <summary>Closes all child elements of the specified parent parent.</summary>
+    /// <remarks>Each child parent is returned to its own type pool.</remarks>
+    /// <param name="parent">The parent parent.</param>
     public void CloseAllChildren(Element parent)
     {
         ArgumentNullException.ThrowIfNull(parent);

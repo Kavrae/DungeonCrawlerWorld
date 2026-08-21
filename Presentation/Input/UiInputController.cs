@@ -213,11 +213,40 @@ public sealed class UiInputController
     internal void OnTextInput(char character) => _pendingTextInput.Add(character);
 
     /// <summary>
-    /// The title button currently held down by the mouse, if any -- null the rest of the
-    /// time, including once the matching release fires (regardless of where the mouse ends
-    /// up). Window Chrome Phase B reads this to switch the held button to an Inset look.
+    /// The Button (title bar or content area) currently held down by the mouse, if any -- null
+    /// the rest of the time, including once the matching release fires (regardless of where the
+    /// mouse ends up). Drives Button's own pressed-bevel look via SetPressed.
     /// </summary>
     internal Button? PressedButton { get; private set; }
+
+    /// <summary>
+    /// The Button (title bar or content area) currently under the cursor, if any -- updated from
+    /// the same per-frame hover hit-test UpdateCursor already performs for the OS cursor icon, so
+    /// this doesn't cost a second tree walk. Drives Button's own IsHovered highlight; every Button
+    /// anywhere gets this for free rather than each owner self-polling Mouse.GetState() the way
+    /// AbilityScoreWindow/AbilityScoreModifierRow do for their own unrelated hover popups.
+    /// </summary>
+    private Button? _hoveredButton;
+
+    private void SetHoveredButton(Button? button)
+    {
+        if (ReferenceEquals(button, _hoveredButton))
+        {
+            return;
+        }
+
+        if (_hoveredButton is not null)
+        {
+            _hoveredButton.IsHovered = false;
+        }
+
+        _hoveredButton = button;
+
+        if (_hoveredButton is not null)
+        {
+            _hoveredButton.IsHovered = true;
+        }
+    }
 
     /// <summary>The drag/resize interaction currently in progress (or ElementInteraction.NotHit if none). Move is wired to SetRelativePosition and Resize to SetBounds, both each held frame -- see ComputeResize for the resize math.</summary>
     internal ElementInteraction ActiveInteraction => _activeInteraction;
@@ -578,7 +607,19 @@ public sealed class UiInputController
 
             if (_activeInteraction.Kind == ElementDragInteractionKind.None)
             {
-                SetFocus(_activeInteraction.Element.CanUserFocus ? _activeInteraction.Element : null);
+                // A button click is a momentary trigger, never a focus target (see Button's own
+                // CanUserFocus -- always false) -- skip SetFocus entirely rather than falling
+                // through to _activeInteraction.Element, which for a header button is the owning
+                // window (so RaiseToFront above still raises it), not the button. SetFocus on
+                // that window would otherwise redirect via NextFocusableDescendant into whatever
+                // unrelated child happens to be focusable -- confirmed bug: clicking a window's
+                // Close button was landing focus on its tab search box (or, with no such
+                // descendant, just highlighting the title bar as focused) purely because the
+                // window itself is focusable, with nothing to do with what was actually clicked.
+                if (_activeInteraction.Button is null)
+                {
+                    SetFocus(_activeInteraction.Element.CanUserFocus ? _activeInteraction.Element : null);
+                }
             }
             else
             {
@@ -1532,14 +1573,34 @@ public sealed class UiInputController
         var position = new Point(mouseState.X, mouseState.Y);
         var previousPosition = new Point(_previousMouseState.X, _previousMouseState.Y);
 
-        var cursor = _activeInteraction.Kind switch
+        MouseCursor cursor;
+        if (_activeInteraction.Kind == ElementDragInteractionKind.Resize)
         {
-            ElementDragInteractionKind.Resize => GetResizeCursor(_activeInteraction.Edges),
-            ElementDragInteractionKind.Move => MouseCursor.SizeAll,
-            _ when IsContentDragBlockedAt(position) => MouseCursor.No,
-            _ when position == previousPosition => CurrentCursor,
-            _ => GetHoverCursor(position),
-        };
+            cursor = GetResizeCursor(_activeInteraction.Edges);
+            SetHoveredButton(null); // No hover feedback while a drag is actually in progress.
+        }
+        else if (_activeInteraction.Kind == ElementDragInteractionKind.Move)
+        {
+            cursor = MouseCursor.SizeAll;
+            SetHoveredButton(null);
+        }
+        else if (IsContentDragBlockedAt(position))
+        {
+            cursor = MouseCursor.No;
+            SetHoveredButton(null);
+        }
+        else if (position == previousPosition)
+        {
+            // Mouse hasn't moved -- reuse whatever cursor/hover state is already current rather
+            // than re-walking the whole tree (see this method's own doc comment).
+            cursor = CurrentCursor;
+        }
+        else
+        {
+            var interaction = TryHitTestInteraction(position);
+            cursor = GetHoverCursor(interaction);
+            SetHoveredButton(interaction.Button);
+        }
 
         if (cursor != CurrentCursor)
         {
@@ -1579,17 +1640,13 @@ public sealed class UiInputController
         return false;
     }
 
-    private MouseCursor GetHoverCursor(Point position)
+    private static MouseCursor GetHoverCursor(ElementInteraction interaction) => interaction.Kind switch
     {
-        var interaction = TryHitTestInteraction(position);
-        return interaction.Kind switch
-        {
-            ElementDragInteractionKind.Resize => GetResizeCursor(interaction.Edges),
-            ElementDragInteractionKind.Move => MouseCursor.SizeAll,
-            ElementDragInteractionKind.None when interaction.Element is TextBox => MouseCursor.IBeam,
-            _ => MouseCursor.Arrow,
-        };
-    }
+        ElementDragInteractionKind.Resize => GetResizeCursor(interaction.Edges),
+        ElementDragInteractionKind.Move => MouseCursor.SizeAll,
+        ElementDragInteractionKind.None when interaction.Element is TextBox => MouseCursor.IBeam,
+        _ => MouseCursor.Arrow,
+    };
 
     /// <summary>Diagonal corners get the diagonal resize cursor matching that corner's axis (Top+Left/Bottom+Right = NW-SE, Top+Right/Bottom+Left = NE-SW); a single edge gets the matching straight cursor.</summary>
     private static MouseCursor GetResizeCursor(ResizeEdges edges)

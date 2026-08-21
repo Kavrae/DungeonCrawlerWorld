@@ -1,167 +1,143 @@
 using FontStashSharp;
 using Microsoft.Xna.Framework;
-using Microsoft.Xna.Framework.Graphics;
+using Presentation.Fonts;
 using Presentation.Rendering;
+using Presentation.UI.ColorPalettes;
 
 namespace Presentation.UI;
 
 /// <summary>
-/// A clickable, bordered box with centered text -- an Element in its own right (not a Window
-/// subclass), so it doesn't carry any of Window's title/content/hierarchy/chrome-behavior
-/// baggage. Reuses Element's own geometry/border/content state directly (RelativePosition/
-/// Size/ContentRectangle/ShowBorder/BorderStyle/BorderTopRectangle etc. are all the inherited
-/// Element properties, just populated by CalculateButtonPositionAndRectangle instead of
-/// Element's Measure/Arrange pipeline, which a simple one-rectangle control like this has no
-/// use for) rather than hand-rolling a second, parallel copy of the same rectangle/border math.
+/// A clickable, hoverable rectangle with left- and (optionally) right-aligned text -- e.g. a
+/// context-menu option's "Copy    Ctrl+C", or a title-bar chrome button. A plain pooled Element,
+/// attached either as a normal child (AddChild, for content-area use -- the ordinary Measure/
+/// Arrange pipeline positions it exactly like any other child) or via Window.AddTitleButton (for
+/// title-bar use -- constructed with parent: null and repositioned via PositionInHeader instead;
+/// see AddTitleButton's and PositionInHeader's own doc comments for why title buttons need that
+/// separate path). Both the hover highlight and the Outset/Inset press-bevel always apply,
+/// everywhere -- there is no per-instance toggle for either; IsHovered/IsPressed are both driven
+/// externally by UiInputController (see PressedButton/HoveredButton there), not self-polled.
 /// </summary>
-public class Button : Element
+public sealed class Button(FontService fontService, ElementPoolService elementPoolService, GlyphRenderer glyphRenderer)
+    : Element(fontService, elementPoolService, glyphRenderer)
 {
-    public Guid ButtonId { get; } = Guid.NewGuid();
+    public SpriteFontBase ContentFont { get; set; } = fontService.GetFont(12);
 
-    /// <summary>The window whose title bar hosts this button -- distinct from Element's own ParentElement (the ChildElements hierarchy), which a title button never participates in.</summary>
-    // TODO if buttons are ever attached to non-Window elements (e.g. a header button on
-    // Folder), HostWindow needs to widen to Element and DefaultTitleButtonSize below needs a
-    // non-Window-specific default size, since it currently derives from OriginalTitleSize (a
-    // Window-only text-title-bar concept Folder's icon header has no equivalent of).
-    public Window HostWindow { get; }
+    public string LeftText { get; set; } = string.Empty;
 
-    public Color ButtonColor { get; }
+    public string? RightText { get; set; }
 
-    public string Text { get; private set; }
+    public bool Enabled { get; set; } = true;
 
-    /// <summary>True while the mouse is held down over this button -- Draw() swaps Outset/Inset while true, giving the pressed-in look. See UiInputController, which calls SetPressed on press/release.</summary>
+    /// <summary>Defaults to WindowPalette.BodyTextColor (black) -- overridable via Text.TextColor, e.g. GridControl's sort tile needs white text against its own dark ContentColor.</summary>
+    public Color TextColor { get; set; }
+
+    public bool IsHovered { get; set; }
+
+    /// <summary>True while the mouse is held down over this button -- DrawContent swaps Outset/Inset while true, giving the pressed-in look. Set by UiInputController on press/release (see PressedButton).</summary>
     public bool IsPressed { get; private set; }
 
-    protected SpriteFontBase? Font { get; }
+    /// <summary>A disabled button is excluded from hit-testing entirely -- never hovered, pressed, or clicked -- rather than every caller having to remember to check Enabled itself.</summary>
+    protected override bool IsHitTestable => base.IsHitTestable && Enabled;
 
-    private readonly GlyphRenderer _glyphRenderer;
-    private static readonly BorderThickness DefaultBorderThickness = BorderThickness.Uniform(Vector2.One);
+    private BorderStyle _restingBorderStyle;
 
-    /// <summary>Raised when the button is clicked.</summary>
-    public event Action? Clicked;
-
-    /// <summary>Inset from the title bar's own height each title button's default square size shrinks by, leaving a small margin above/below it.</summary>
-    private const float DefaultSizeTitleInset = 4;
-
-    public Button(Window parentWindow, ButtonOptions buttonOptions)
-        : base((parentWindow ?? throw new ArgumentNullException(nameof(parentWindow))).FontService, parentWindow.ElementPoolService, parentWindow.GlyphRenderer)
+    public override void Build(Element? parent, ElementOptions options)
     {
-        ArgumentNullException.ThrowIfNull(buttonOptions);
+        base.Build(parent, options);
 
-        HostWindow = parentWindow;
+        CanUserFocus = false;
 
-        Text = buttonOptions.Text ?? string.Empty;
+        _border.Show = options.Chrome?.ShowBorder ?? true;
 
-        Font = buttonOptions.Font ?? parentWindow.TitleFont;
-        _glyphRenderer = parentWindow.GlyphRenderer;
+        _contentState.BackgroundColor = options.Content?.ContentColor ?? Color.LightGray;
 
-        _geometry.RelativePosition = buttonOptions.RelativePosition ?? Vector2.Zero;
-        _geometry.CurrentSize = buttonOptions.Size ?? DefaultTitleButtonSize(parentWindow);
+        LeftText = options.Text?.Text ?? string.Empty;
+        RightText = null;
+        TextColor = options.Text?.TextColor ?? WindowPalette.BodyTextColor;
+        Enabled = true;
+        IsHovered = false;
+        IsPressed = false;
 
-        _border.Show = buttonOptions.ShowBorder ?? true;
-        // Defaults to Outset -- unlike Window (which defaults to Flat), every title button gets the raised bevel look unless a caller opts out.
-        _border.Style = buttonOptions.BorderStyle ?? BorderStyle.Outset;
-        _border.Thickness = DefaultBorderThickness;
-
-        ButtonColor = buttonOptions.Color ?? Color.LightGray;
+        _restingBorderStyle = options.Chrome?.BorderStyle ?? BorderStyle.Outset;
+        BorderStyle = _restingBorderStyle;
     }
 
-    private static Vector2 DefaultTitleButtonSize(Window window)
+    /// <summary>
+    /// Always shows Inset (sunken) while pressed, restoring the resting style on release --
+    /// Element.Draw reads BorderStyle directly for its border pass, so this is the only hook
+    /// needed for the pressed-in look without Button overriding Draw itself. Pressed always
+    /// means Inset specifically, not "whatever the resting style isn't": a raised (Outset)
+    /// button pressing inward to Inset is the standard convention, but a button whose resting
+    /// style is already Inset (e.g. GridControl's sort tile, sunken like the row's other
+    /// tiles) must stay Inset while held too -- swapping it to Outset would read as popping
+    /// up/releasing at exactly the moment it's being pressed down, backwards from what the
+    /// gesture means.
+    /// </summary>
+    public void SetPressed(bool isPressed)
     {
-        var side = window.OriginalTitleSize.Y - DefaultSizeTitleInset;
-        return new Vector2(side, side);
+        IsPressed = isPressed;
+        BorderStyle = isPressed ? BorderStyle.Inset : _restingBorderStyle;
     }
 
-    public override void Initialize()
+    /// <summary>
+    /// Positions this button relative to a header host's own AbsolutePosition rather than the
+    /// generic parent-content-relative Arrange formula -- the header-relative equivalent of what
+    /// SetRelativePosition/MeasureAndArrange do for an ordinary parented child (see
+    /// Window.AddTitleButton's own doc comment for why title buttons need this separate path).
+    /// The only caller is Window.RepositionTitleButtons; a content-area button (added via
+    /// AddChild) is positioned by the ordinary pipeline instead and never calls this. Only the
+    /// AbsolutePosition source genuinely differs from the generic path (a header host position
+    /// instead of a parent) -- everything downstream of that (content size, every Rectangle) is
+    /// identical work, so it's delegated to the same RecalculateFixedSize/RecalculateRectangles
+    /// the generic Measure/Arrange pipeline itself uses, rather than re-deriving that math here.
+    /// </summary>
+    internal void PositionInHeader(Vector2 relativePosition, Vector2 headerHostAbsolutePosition)
     {
-        CalculateButtonPositionAndRectangle();
+        _geometry.RelativePosition = relativePosition;
+        RecalculateFixedSize(); // Keeps CurrentSize/ContentSize current -- idempotent, since a title button's own OriginalSize never changes after Build.
+
+        _geometry.AbsolutePosition = headerHostAbsolutePosition + relativePosition;
+        _contentState.AbsolutePosition = _geometry.AbsolutePosition + BorderInset; // No header of its own (HeaderInsetHeight is 0), unlike RecalculateAbsolutePositions' general case.
+
+        RecalculateRectangles();
     }
 
-    public override void Update(GameTime gameTime)
-    {
-    }
+    /// <summary>Translucent dark overlay for the hover highlight -- darkens whatever ContentColor this button actually has (LightGray by default) rather than a fixed replacement color, so it still reads correctly if a caller ever sets a custom ContentColor. Deliberately not WindowPalette.HighlightColor (a gold tint meant for content rows sitting on a light background) -- a button's own resting look is already a mid-gray raised bevel, where a gold tint reads oddly; a straightforward darkening matches how a pressed/hovered physical button looks.</summary>
+    private static readonly Color HoverOverlayColor = Color.Black * 0.15f;
 
-    public void Draw(GameTime gameTime)
+    public override void DrawContent(GameTime gameTime)
     {
         var spriteBatch = ElementPoolService.SpriteBatch;
         var unitRectangle = ElementPoolService.UnitRectangle;
 
-        if (ShowBorder)
+        if (IsHovered)
         {
-            BorderRenderer.Draw(spriteBatch, unitRectangle, EffectiveBorderStyle, BorderColor, BorderTopRectangle, BorderBottomRectangle, BorderLeftRectangle, BorderRightRectangle);
+            spriteBatch.Draw(unitRectangle, ContentRectangle, HoverOverlayColor);
         }
 
-        spriteBatch.Draw(unitRectangle, ContentRectangle, ButtonColor);
+        var textColor = Enabled ? TextColor : Color.Gray;
 
-        if (!string.IsNullOrWhiteSpace(Text) && Font is not null)
+        if (string.IsNullOrEmpty(RightText))
         {
-            // Same ink-centering GlyphRenderer uses for map tile glyphs -- centers on the
-            // string's actual rendered ink within ContentRectangle, rather than a manually
-            // tuned per-glyph pixel offset that has to be re-eyeballed for every new label.
-            _glyphRenderer.DrawCentered(
-                spriteBatch,
-                Font,
-                Text,
-                new Vector2(ContentRectangle.X, ContentRectangle.Y),
-                new Vector2(ContentRectangle.Width, ContentRectangle.Height),
-                Color.Black);
-        }
-    }
-
-    /// <summary>Outset<->Inset while IsPressed (the raised bevel briefly reads as pushed in); Flat is unaffected, since it has no bevel direction to swap.</summary>
-    private BorderStyle EffectiveBorderStyle => IsPressed
-        ? BorderStyle switch
-        {
-            BorderStyle.Outset => BorderStyle.Inset,
-            BorderStyle.Inset => BorderStyle.Outset,
-            _ => BorderStyle,
-        }
-        : BorderStyle;
-
-    public void SetPressed(bool isPressed)
-    {
-        IsPressed = isPressed;
-    }
-
-    public void ChangeRelativePosition(Vector2 newPosition)
-    {
-        _geometry.RelativePosition = newPosition;
-        CalculateButtonPositionAndRectangle();
-    }
-
-    /// <summary>Changes the button's label in place, e.g. a minimize/restore toggle button swapping its glyph to match the window's current state.</summary>
-    public void SetText(string text)
-    {
-        Text = text ?? string.Empty;
-    }
-
-    public void CalculateButtonPositionAndRectangle()
-    {
-        _geometry.AbsolutePosition = _geometry.RelativePosition + HostWindow.AbsolutePosition;
-        _geometry.Rectangle = new Rectangle((int)_geometry.AbsolutePosition.X, (int)_geometry.AbsolutePosition.Y, (int)_geometry.CurrentSize.X, (int)_geometry.CurrentSize.Y);
-
-        if (ShowBorder)
-        {
-            _contentState.Rectangle = BorderThickness.Inset(_geometry.Rectangle, DefaultBorderThickness);
-            var (top, bottom, left, right) = BorderThickness.GetEdgeRectangles(_geometry.Rectangle, DefaultBorderThickness);
-            _border.TopRectangle = top;
-            _border.BottomRectangle = bottom;
-            _border.LeftRectangle = left;
-            _border.RightRectangle = right;
+            // No hotkey column -- ink-centered (not left-aligned), the same look every title
+            // button ("X", "_", "O") has always had. DrawLeftAligned's box-based (not
+            // ink-based) vertical centering reads visibly low for a single short glyph in a
+            // small square button -- see GlyphRenderer's own doc comment on why MeasureString's
+            // line box is a poor stand-in for a glyph's actual rendered ink.
+            if (!string.IsNullOrEmpty(LeftText))
+            {
+                GlyphRenderer.DrawCentered(spriteBatch, ContentFont, LeftText, ContentAbsolutePosition, ContentSize, textColor);
+            }
         }
         else
         {
-            _contentState.Rectangle = _geometry.Rectangle;
+            // A hotkey column is present (context-menu option row) -- left/right split instead.
+            if (!string.IsNullOrEmpty(LeftText))
+            {
+                GlyphRenderer.DrawLeftAligned(spriteBatch, ContentFont, LeftText, ContentAbsolutePosition, ContentSize, textColor);
+            }
+
+            GlyphRenderer.DrawRightAligned(spriteBatch, ContentFont, RightText, ContentAbsolutePosition, ContentSize, textColor);
         }
-    }
-
-    public new void HandleClick(Point mousePosition)
-    {
-        OnClickAction(mousePosition);
-    }
-
-    protected virtual void OnClickAction(Point mousePosition)
-    {
-        Clicked?.Invoke();
     }
 }

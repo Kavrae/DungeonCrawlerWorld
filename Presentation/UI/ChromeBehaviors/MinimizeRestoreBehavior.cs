@@ -16,10 +16,10 @@ public sealed class MinimizeRestoreBehavior : IChromeBehavior
     {
         ArgumentNullException.ThrowIfNull(window);
 
-        var button = new Button(window, new ButtonOptions());
+        var button = Window.BuildTitleButton(window);
         UpdateButtonLabel(window, button);
 
-        button.Clicked += () => window.SetDisplayMode(
+        button.Clicked += _ => window.SetDisplayMode(
             window.DisplayMode == ElementDisplayMode.Minimized
                 ? window.PreviousDisplay
                 : ElementDisplayMode.Minimized);
@@ -35,9 +35,8 @@ public sealed class MinimizeRestoreBehavior : IChromeBehavior
     private static void UpdateButtonLabel(Window window, Button button)
     {
         var isMinimized = window.DisplayMode == ElementDisplayMode.Minimized;
-        button.SetText(
-            isMinimized
-                ? "O"
-                : "_");
+        button.LeftText = isMinimized
+            ? "O"
+            : "_";
     }
 }

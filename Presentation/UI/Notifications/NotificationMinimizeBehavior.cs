@@ -15,9 +15,9 @@ public sealed class NotificationMinimizeBehavior(Action onMinimize) : IChromeBeh
     {
         ArgumentNullException.ThrowIfNull(window);
 
-        var button = new Button(window, new ButtonOptions { Text = "_" });
+        var button = Window.BuildTitleButton(window, "_");
 
-        button.Clicked += onMinimize;
+        button.Clicked += _ => onMinimize();
         window.AddTitleButton(button);
     }
 }

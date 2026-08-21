@@ -39,6 +39,7 @@ public static class ElementFactoryRegistry
             => pool.RegisterFactory(() => factory(presentation.FontService, pool, presentation.GlyphRenderer));
 
         Register<Window>((font, elements, glyph) => new Window(font, elements, glyph));
+        Register<Button>((font, elements, glyph) => new Button(font, elements, glyph));
         Register<TextWindow>((font, elements, glyph) => new TextWindow(font, elements, glyph));
         Register<TextBox>((font, elements, glyph) => new TextBox(font, elements, glyph, cursorTextContent));
 

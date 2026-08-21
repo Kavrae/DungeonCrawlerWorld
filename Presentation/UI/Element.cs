@@ -29,7 +29,7 @@ public class Element
 {
     public Guid ElementId { get; } = Guid.NewGuid();
 
-    /// <summary>Internal, not protected: Button still needs its host window's FontService/WindowService to satisfy this same base constructor -- see Button's own constructor.</summary>
+    /// <summary>Internal, not protected: chrome behaviors (see IChromeBehavior) live outside the Element/Window hierarchy but still need a host window's FontService/ElementPoolService to build a title Button through the normal pooled ElementPoolService.CreateElement path.</summary>
     internal FontService FontService { get; }
 
     private readonly ElementPoolService _elementPoolService;
@@ -111,6 +111,9 @@ public class Element
 
     protected bool _isVisible = true;
     public bool IsVisible { get => _isVisible; set => _isVisible = value; }
+
+    /// <summary>Whether this element can be found by hit-testing (FindTopmostHit/TryHitTestInteraction) at all -- defaults to just IsVisible; Button overrides this to also require Enabled, so a disabled button is never hovered, pressed, or clicked, rather than every caller having to remember to check Enabled itself.</summary>
+    protected virtual bool IsHitTestable => _isVisible;
 
     /// <summary>
     /// Free-form consumer-defined association, the same role WPF's FrameworkElement.Tag or
@@ -725,6 +728,28 @@ public class Element
     /// </summary>
     protected virtual Button? FindHeaderButtonAt(Point position) => null;
 
+    /// <summary>
+    /// Topmost (last-added first) hit-testable member of container whose Rectangle contains
+    /// position, or null. The one hit-test algorithm shared by both the header zone (Window's
+    /// FindHeaderButtonAt, scoped to _titleButtons) and the content zone (OnContentClickAction's
+    /// own default below, scoped to _children) -- those two zones are a real, load-bearing split
+    /// (header always wins a click over starting a drag, see TryHitTestInteraction), but there's
+    /// no reason the code that walks either one should be written twice.
+    /// </summary>
+    private protected static Element? FindTopmostHit(IReadOnlyList<Element> container, Point position)
+    {
+        for (var index = container.Count - 1; index >= 0; index--)
+        {
+            var candidate = container[index];
+            if (candidate.IsHitTestable && candidate.Rectangle.Contains(position))
+            {
+                return candidate;
+            }
+        }
+
+        return null;
+    }
+
     /// <summary>How close (in pixels) to a corner of WindowRectangle counts as grabbing that corner for a two-axis resize, rather than just one edge.</summary>
     /// <summary>
     /// How close (in pixels) to WindowRectangle's edge counts as grabbing it for resize --
@@ -802,7 +827,7 @@ public class Element
         // interaction target -- matching WPF's Visibility.Hidden/Collapsed, both of which stop
         // hit-testing, unlike this codebase's previous behavior where hiding something only
         // stopped it from being drawn, not from being clicked/dragged/dropped onto.
-        if (!_isVisible || !_geometry.Rectangle.Contains(position))
+        if (!IsHitTestable || !_geometry.Rectangle.Contains(position))
         {
             return ElementInteraction.NotHit;
         }
@@ -842,7 +867,13 @@ public class Element
             }
         }
 
-        return ElementInteraction.Click(this);
+        // A content-area Button is reached here (as a leaf, via the children loop just above
+        // recursing into its own TryHitTestInteraction) rather than through FindHeaderButtonAt --
+        // still needs the same ButtonClick shape a header button gets, so UiInputController's
+        // PressedButton/HoveredButton tracking covers a button anywhere, not just the title bar.
+        return this is Button self
+            ? ElementInteraction.ButtonClick(this, self)
+            : ElementInteraction.Click(this);
     }
 
     /// <summary>
@@ -874,25 +905,14 @@ public class Element
     /// Routes a content click to the topmost child whose Rectangle contains it, then stops --
     /// the same topmost-first, single-target philosophy TryHitTestInteraction already uses for
     /// drags, now applied to plain clicks too (and, like TryHitTestInteraction, skipping
-    /// invisible children). Previously looped every overlapping child in list (not z-) order
+    /// non-hit-testable children -- see FindTopmostHit). Previously looped every overlapping child in list (not z-) order
     /// with no way to stop -- harmless for the common non-overlapping-sibling case, but wrong
     /// the moment two children's Rectangles genuinely overlapped a point (e.g. Floating mode),
     /// which fired HandleClick on every one of them instead of just the topmost one the user
     /// actually sees and clicked -- the same "who owns this point" bug TryHitTestInteraction was
     /// already written to avoid for drags.
     /// </summary>
-    protected virtual void OnContentClickAction(Point mousePosition)
-    {
-        for (var index = _children.Count - 1; index >= 0; index--)
-        {
-            var childElement = _children[index];
-            if (childElement.IsVisible && childElement.Rectangle.Contains(mousePosition))
-            {
-                childElement.HandleClick(mousePosition);
-                return;
-            }
-        }
-    }
+    protected virtual void OnContentClickAction(Point mousePosition) => FindTopmostHit(_children, mousePosition)?.HandleClick(mousePosition);
 
     /// <summary>
     /// Attaches newChild to this element and initializes it -- callers must NOT also call
@@ -1399,7 +1419,17 @@ public class Element
     }
 
     /// <summary>Recalculates draw rectangles from the current absolute positions/sizes.</summary>
-    private void RecalculateRectangles()
+    /// <summary>
+    /// Derives every Rectangle (this element's own, its header's, its content's, its border
+    /// edges) purely from whatever AbsolutePosition/CurrentSize/header-and-content Size are
+    /// already sitting in _geometry/_headerState/_contentState -- pure geometry, agnostic to how
+    /// those absolute positions were arrived at. Private protected (not private) so Button's own
+    /// PositionInHeader can reuse it too: a title button's AbsolutePosition comes from an
+    /// explicitly-supplied header host position rather than a parent (see PositionInHeader's own
+    /// doc comment for why), but once that's set, deriving its Rectangles is identical work --
+    /// no reason to duplicate this math a second time for that one case.
+    /// </summary>
+    private protected void RecalculateRectangles()
     {
         _geometry.Rectangle = new Rectangle((int)_geometry.AbsolutePosition.X, (int)_geometry.AbsolutePosition.Y, (int)_geometry.CurrentSize.X, (int)_geometry.CurrentSize.Y);
         _headerState.Rectangle = new Rectangle((int)_headerState.AbsolutePosition.X, (int)_headerState.AbsolutePosition.Y, (int)_headerState.Size.X, (int)_headerState.Size.Y);

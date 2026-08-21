@@ -175,7 +175,11 @@ public sealed class TextWindowSizingTests
         });
         window.Initialize();
 
-        var extraButton = new Button(window, new ButtonOptions { Text = "_" });
+        var extraButton = windowService.CreateElement<Button>(null, new ElementOptions
+        {
+            Layout = new ElementLayoutOptions { Size = Window.DefaultTitleButtonSize(window) },
+            Text = new TextOptions { Text = "_" },
+        });
         window.AddTitleButton(extraButton);
 
         var titleTextWidth = window.TitleFont.MeasureString(window.TitleText).X;

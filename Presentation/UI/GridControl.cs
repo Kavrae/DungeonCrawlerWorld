@@ -58,7 +58,7 @@ public sealed class GridControl(FontService fontService, ElementPoolService elem
 
     private SpriteFontBase _font = null!;
     private TextWindow _countLabel = null!;
-    private TextWindow _sortButton = null!;
+    private Button _sortButton = null!;
     private TextBox _searchBox = null!;
 
     /// <summary>Must be called after CreateElement but before Initialize (same contract as InventoryManagementWindow.Configure/AbilityScoreWindow.Configure) -- sortOptionLabels must be non-empty, since the sort button always shows whichever one is currently selected. toggles may be empty (no toggles at all).</summary>
@@ -95,8 +95,23 @@ public sealed class GridControl(FontService fontService, ElementPoolService elem
         AddChild(_countLabel);
         x += _countLabel.CurrentSize.X + ControlGap;
 
-        var sortButtonWidth = MeasureWidest(_sortOptionLabels);
-        _sortButton = CreateTile(_sortOptionLabels[_sortOptionIndex], sortButtonWidth, x, showBorder: true);
+        var sortButtonSize = new Vector2(MeasureWidest(_sortOptionLabels), RowHeight);
+        _sortButton = elementPoolService.CreateElement<Button>(this, new ElementOptions
+        {
+            Hierarchy = new ElementHierarchyOptions { CanContainChildren = false },
+            // Same MinimumSize == MaximumSize pinning CreateTile's own doc comment explains --
+            // cycling through shorter/longer labels must never resize the button.
+            Layout = new ElementLayoutOptions { RelativePosition = new Vector2(x, 0), Size = sortButtonSize, MinimumSize = sortButtonSize, MaximumSize = sortButtonSize, DisplayMode = ElementDisplayMode.Fixed },
+            // BorderStyle left unset -- Button's own default (raised Outset, sinking to Inset
+            // while actually pressed) is the right convention for a clickable control. The
+            // count label beside this one is a static, non-interactive TextWindow tile and
+            // keeps its own separate Inset (sunken) look via CreateTile -- that choice doesn't
+            // carry over to an actual button, which needs a rest/pressed distinction to show.
+            Chrome = new ElementChromeOptions { ShowBorder = true },
+            Content = new ElementContentOptions { ContentColor = ControlColor },
+            Text = new TextOptions { Text = _sortOptionLabels[_sortOptionIndex], TextColor = LabelColor },
+        });
+        _sortButton.ContentFont = _font; // Must match the font width was measured with, or the label can wrap/clip against the tile's own fixed width.
         _sortButton.Clicked += _ => CycleSortOption();
         AddChild(_sortButton);
         x += _sortButton.CurrentSize.X + ControlGap;
@@ -157,7 +172,7 @@ public sealed class GridControl(FontService fontService, ElementPoolService elem
     private void CycleSortOption()
     {
         _sortOptionIndex = (_sortOptionIndex + 1) % _sortOptionLabels.Count;
-        _sortButton.UpdateText(_sortOptionLabels[_sortOptionIndex]);
+        _sortButton.LeftText = _sortOptionLabels[_sortOptionIndex];
         SortOptionCycled?.Invoke(_sortOptionIndex);
     }
 

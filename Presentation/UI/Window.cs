@@ -172,18 +172,32 @@ public class Window : Element
         behavior.Attach(this);
     }
 
-    protected override void InitializeHeaderExtras()
-    {
-        foreach (var button in _titleButtons)
-        {
-            button.Initialize();
-        }
-    }
+    // No InitializeHeaderExtras override: title buttons are attached by a chrome behavior's own
+    // AddChromeBehavior call, always after base.Initialize() (which is what invokes
+    // InitializeHeaderExtras, before this override's own continuation ever runs) -- so
+    // _titleButtons is provably always empty by the time it would fire, for every current call
+    // site (CloseBehavior/MinimizeRestoreBehavior attached from within this override's own body,
+    // NotificationMinimizeBehavior attached even later, well after Initialize returns entirely).
+    // Deliberately not "harmless dead code left in for symmetry" either: Button's own Initialize()
+    // is inherited, unmodified Element.Initialize(), which would call MeasureAndArrange() and
+    // (since a title button's _parent is null, see PositionInHeader's own doc comment) reset its
+    // AbsolutePosition straight to its own RelativePosition -- actively wrong for a header-relative
+    // button, undoing whatever PositionInHeader already established. A title button's real
+    // initialization is PositionInHeader, called synchronously from AddTitleButton/
+    // RepositionTitleButtons -- Initialize was never it, even before this refactor.
 
     protected override void UpdateHeaderExtras(GameTime gameTime)
     {
         foreach (var button in _titleButtons)
         {
+            // Same "a hidden element doesn't keep ticking" gate Element.Update already applies to
+            // ordinary _children -- title buttons only lacked it because this loop predates Button
+            // having any meaningful per-frame Update work to skip.
+            if (!button.IsVisible)
+            {
+                continue;
+            }
+
             button.Update(gameTime);
         }
     }
@@ -208,35 +222,57 @@ public class Window : Element
         }
     }
 
-    protected override void OnHeaderClickAction(Point mousePosition)
+    // Uses the shared hit-test helper (see FindTopmostHit's own doc comment) rather than a
+    // manual foreach -- also sidesteps a reentrancy hazard a manual foreach here would have: a
+    // title button's own Clicked handler can close its window (e.g. the close button) before
+    // this method returns, and ElementPoolService.CloseElement pool-returns every title button
+    // on close, so an in-progress plain `foreach (var button in _titleButtons)` over that same
+    // list would throw. FindTopmostHit finishes reading the list before HandleClick ever runs,
+    // so there's nothing left to corrupt by the time a click handler mutates anything.
+    protected override void OnHeaderClickAction(Point mousePosition) => FindTopmostHit(_titleButtons, mousePosition)?.HandleClick(mousePosition);
+
+    protected override Button? FindHeaderButtonAt(Point position) => ShowHeader ? FindTopmostHit(_titleButtons, position) as Button : null;
+
+    /// <summary>Inset from the title bar's own height a title button's default square size shrinks by, leaving a small margin above/below it -- shared by every chrome behavior (Close/MinimizeRestore/NotificationMinimize) that builds a standard-looking title button.</summary>
+    private const float DefaultTitleButtonSizeInset = 4;
+
+    /// <summary>Default square size for a title button, derived from this window's own title bar height -- see DefaultTitleButtonSizeInset.</summary>
+    internal static Vector2 DefaultTitleButtonSize(Window window)
     {
-        foreach (var button in _titleButtons)
-        {
-            if (button.Rectangle.Contains(mousePosition))
-            {
-                button.HandleClick(mousePosition);
-            }
-        }
+        var side = window.OriginalTitleSize.Y - DefaultTitleButtonSizeInset;
+        return new Vector2(side, side);
     }
 
-    protected override Button? FindHeaderButtonAt(Point position)
+    /// <summary>
+    /// Builds a standard-sized/fonted title button, not yet attached (the caller still calls
+    /// AddTitleButton itself, after wiring whatever Clicked/label logic is actually its own) --
+    /// shared by every IChromeBehavior that builds one (CloseBehavior/MinimizeRestoreBehavior/
+    /// NotificationMinimizeBehavior), since construction/sizing/font are identical across all
+    /// three and only the click handler (and, for MinimizeRestoreBehavior, the label-sync
+    /// subscription) actually differ between them.
+    /// </summary>
+    internal static Button BuildTitleButton(Window window, string? text = null)
     {
-        if (!ShowHeader)
+        var button = window.ElementPoolService.CreateElement<Button>(null, new ElementOptions
         {
-            return null;
-        }
-
-        foreach (var button in _titleButtons)
-        {
-            if (button.Rectangle.Contains(position))
-            {
-                return button;
-            }
-        }
-
-        return null;
+            Layout = new ElementLayoutOptions { Size = DefaultTitleButtonSize(window) },
+            Text = text is null ? null : new TextOptions { Text = text },
+        });
+        button.ContentFont = window.TitleFont;
+        return button;
     }
 
+    /// <summary>
+    /// Attaches a Button to this window's title bar -- a title button is constructed with
+    /// parent: null (see the 3 IChromeBehavior implementations, the only callers) and never
+    /// added to _children: it lives in the header zone, not the content zone (see
+    /// Element.HandleClick/TryHitTestInteraction's own doc comments for why those two zones are
+    /// resolved by different code paths), so the ordinary parent-relative Measure/Arrange
+    /// pipeline -- which positions everything relative to a parent's *content* area -- would
+    /// place it wrong. RepositionTitleButtons instead calls Button.PositionInHeader directly with
+    /// this window's own AbsolutePosition, the header-relative equivalent of what
+    /// SetRelativePosition/MeasureAndArrange do for an ordinary parented child.
+    /// </summary>
     public void AddTitleButton(Button newButton, int? insertIndex = null)
     {
         ArgumentNullException.ThrowIfNull(newButton);
@@ -274,14 +310,14 @@ public class Window : Element
             var button = _titleButtons[index];
             if (index == 0)
             {
-                button.ChangeRelativePosition(new Vector2(TitleSize.X - button.CurrentSize.X - 3, 3));
+                button.PositionInHeader(new Vector2(TitleSize.X - button.CurrentSize.X - 3, 3), AbsolutePosition);
             }
             else
             {
                 var previousButton = _titleButtons[index - 1];
-                button.ChangeRelativePosition(new Vector2(
+                button.PositionInHeader(new Vector2(
                     previousButton.RelativePosition.X - previousButton.CurrentSize.X - 3,
-                    previousButton.RelativePosition.Y));
+                    previousButton.RelativePosition.Y), AbsolutePosition);
             }
         }
     }
