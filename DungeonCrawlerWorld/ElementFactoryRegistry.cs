@@ -1,5 +1,6 @@
 using Engine.ECS.Context;
 using Game.Modules.Actions;
+using Game.Modules.Core.Components;
 using Game.Modules.Inventory;
 using Game.World;
 using Presentation.Bootstrap;
@@ -9,6 +10,7 @@ using Presentation.UI;
 using Presentation.UI.AbilityScores;
 using Presentation.UI.Content;
 using Presentation.UI.Inventory;
+using Presentation.UI.Looting;
 
 namespace DungeonCrawlerWorld;
 
@@ -75,5 +77,12 @@ public static class ElementFactoryRegistry
         Register<AbilityScoreModifierRow>((font, elements, glyph) => new AbilityScoreModifierRow(font, elements, glyph));
         Register<SeparatorBar>((font, elements, glyph) => new SeparatorBar(font, elements, glyph));
         Register<Tooltip>((font, elements, glyph) => new Tooltip(font, elements, glyph));
+
+        pool.RegisterFactory<CorpseInventoryWindow>(() => new CorpseInventoryWindow(
+            presentation.FontService, pool, presentation.GlyphRenderer, componentManager,
+            presentation.SpriteSheetService, presentation.SpriteRenderer, itemCatalog));
+        Register<EntityIconElement>((font, elements, glyph) => new EntityIconElement(
+            font, elements, glyph, presentation.SpriteSheetService, presentation.SpriteRenderer,
+            componentManager.GetDirectPool<SpriteComponent>(), componentManager.GetDirectPool<GlyphComponent>()));
     }
 }

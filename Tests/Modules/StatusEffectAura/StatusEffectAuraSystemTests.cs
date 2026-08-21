@@ -499,7 +499,7 @@ public sealed class StatusEffectAuraSystemTests
     {
         var (system, componentManager, _, movedEntities, _) = Build();
         AddSource(componentManager, SourceEntityId, SourcePosition, StatusEffectType.Burning, strength: 8);
-        componentManager.GetPackedPool<DeadComponent>().Add(ObserverEntityId, new DeadComponent(KilledByEntityId: null));
+        componentManager.GetPackedPool<DeadComponent>().Add(ObserverEntityId, new DeadComponent(KilledByEntityId: null, DiedAtFrame: 0));
 
         MoveObserverTo(system, movedEntities, new Vector3Int(0, 0, 0), SourcePosition);
 

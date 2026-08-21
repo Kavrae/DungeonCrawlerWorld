@@ -48,7 +48,14 @@ public sealed class DeathSystem : ISystem
         eventBus.Subscribe<EntityDiedEvent>(OnEntityDied);
     }
 
-    public void Update(EngineTime time, byte stripeIndex) => _eventBus.DispatchBuffered<EntityDiedEvent>();
+    private long _currentFrame;
+
+    /// <summary>Stashes the frame this cycle's dispatch is running at -- DispatchBuffered invokes OnEntityDied synchronously within this same call, and OnEntityDied itself has no EngineTime of its own (EventBus.Subscribe only ever passes the event payload).</summary>
+    public void Update(EngineTime time, byte stripeIndex)
+    {
+        _currentFrame = time.FrameCount;
+        _eventBus.DispatchBuffered<EntityDiedEvent>();
+    }
 
     /// <summary>Defensive against a duplicate EntityDiedEvent for the same entity -- HealthDamage.Apply's own wasAlive transition guard should already make this unreachable, but a corpse should never be double-processed if it somehow happens.</summary>
     private void OnEntityDied(EntityDiedEvent died)
@@ -74,7 +81,7 @@ public sealed class DeathSystem : ISystem
         var killedBy = died.Source.Kind == StatusEffectSourceKind.Entity
             ? died.Source.EntityId
             : (int?)null;
-        _deadEntities.Add(died.EntityId, new DeadComponent(killedBy));
+        _deadEntities.Add(died.EntityId, new DeadComponent(killedBy, _currentFrame));
 
         if (_auraSources is not null)
         {

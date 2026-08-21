@@ -1,5 +1,6 @@
 using Engine.ECS.Components;
 using Engine.Math;
+using Game.Blueprints.NPCs;
 using Game.Modules.AbilityScores;
 using Game.Modules.Actions.Components;
 using Game.Modules.Actions.Definitions.DirectActions;
@@ -48,6 +49,8 @@ public sealed class Ghost(MathUtility mathUtility) : IBlueprint
 
         componentManager.Merge(entityId, new NonBlockingComponent(NonBlockingKind.Phasing));
         componentManager.Merge(entityId, new ActionInstanceComponent(PunchAction.Id, damageAmount: PunchDamage, cooldownFramesRemaining: 0));
+
+        TemporaryNpcLootGrant.GrantRandomStartingLoot(componentManager, entityId, mathUtility);
 
         AbilityScoreEffects.GrantDefaults(componentManager, entityId, DefaultAbilityScoreBaseValue);
     }

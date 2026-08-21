@@ -4,9 +4,8 @@ using Game.Modules.AbilityScores;
 using Game.Modules.Actions.Components;
 using Game.Modules.Actions.Definitions.DirectActions;
 using Game.Modules.Core.Components;
+using Game.Blueprints.NPCs;
 using Game.Modules.Health.Components;
-using Game.Modules.Inventory;
-using Game.Modules.Inventory.Definitions;
 using Game.Modules.Movement.Components;
 using Game.Modules.Race.Components;
 using Game.Modules.StatModifiers;
@@ -61,11 +60,7 @@ public sealed class Goblin(MathUtility mathUtility) : IBlueprint
 
         componentManager.Merge(entityId, new ActionInstanceComponent(PunchAction.Id, damageAmount: PunchDamage, cooldownFramesRemaining: 0));
 
-        var potionCount = (ushort)mathUtility.Next(0, 3); // [0, 2] inclusive.
-        if (potionCount > 0)
-        {
-            InventoryActions.AddItem(componentManager, entityId, HealthPotion.Id, quantity: potionCount);
-        }
+        TemporaryNpcLootGrant.GrantRandomStartingLoot(componentManager, entityId, mathUtility);
 
         AbilityScoreEffects.GrantDefaults(componentManager, entityId, DefaultAbilityScoreBaseValue);
 

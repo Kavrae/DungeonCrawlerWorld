@@ -74,6 +74,12 @@ public sealed class InventoryFolderController(
 
     public bool IsAnyWindowOpen => _inventorySlot.Window is not null || _abilityScoreSlot.Window is not null;
 
+    /// <summary>The player's own currently-open InventoryManagementWindow, if any -- lets SecondaryInventoryWindowController position a corpse/container window relative to it without owning a second instance of its own.</summary>
+    public InventoryManagementWindow? PlayerInventoryWindow => _inventorySlot.Window;
+
+    /// <summary>Opens the player's own Inventory window if it isn't already -- idempotent, same as WindowSlot.Open itself. Lets a non-folder trigger (e.g. clicking a corpse to loot it) reuse this window instead of the folder tile being the only way to open it.</summary>
+    public void OpenInventoryWindow() => _inventorySlot.Open();
+
     public void Initialize(UiLayerStack layers)
     {
         _inventorySlot = new WindowSlot<InventoryManagementWindow>(CreateInventoryWindow, IsInventoryDisabled, layers, MinimizeFolderIfNothingOpen);

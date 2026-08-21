@@ -31,8 +31,11 @@ public sealed class DeathModule : IGameModule
         _entityMoveSync = context.EntityMoveSync;
     }
 
-    public void RegisterComponents(ComponentManager componentManager) =>
+    public void RegisterComponents(ComponentManager componentManager)
+    {
         componentManager.RegisterPackedPool<DeadComponent>(static (ref existing, incoming) => existing = incoming);
+        componentManager.RegisterPackedPool<CorpseLootedComponent>(static (ref existing, incoming) => existing = incoming);
+    }
 
     public void RegisterSystems(SystemManager systemManager, ComponentManager componentManager)
     {

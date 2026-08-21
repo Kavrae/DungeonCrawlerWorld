@@ -14,15 +14,22 @@ namespace Presentation.UI.Inventory;
 /// The player-facing inventory view: a TabbedContent showing InventoryTabContent (GridControl's
 /// count/sort/hide-disabled/search row above an InventoryGridContent), one tab per tag currently
 /// carried by the entity's inventory (plus a leading "All" tab) -- see
-/// InventoryTagQueries.GetTagCounts. Re-derives the tab list whenever the entity's inventory
-/// version changes (item picked up/consumed/etc.), not just once at Configure -- a tag gaining
-/// or losing its last carrier should add/remove its tab live while the window is open. Close-only
-/// (no minimize) -- created fresh by InventoryFolderController each time the Inventory folder is
-/// opened and returned to ElementPoolService's pool on close, mirroring NotificationCenter's
-/// active-notification-popup lifecycle rather than staying a permanently-existing hidden window.
-/// A dedicated Window subclass (rather than a plain Window hosting TabbedContent via SetContent)
-/// purely so Configure/Update have somewhere to live -- the codebase's own convention for when a
-/// Window subclass is warranted (MapWindow, TextWindow).
+/// InventoryTagQueries.GetTagCounts. Re-derives the tab list whenever the *set* of tags
+/// represented changes (a tag gaining or losing its last carrier), not on every inventory version
+/// bump -- GetTagCounts sorts by count descending, so a version bump that only changes a stack's
+/// Quantity (no tag gained/lost) can still reorder tagCounts, and TabbedContent.SetTabs always
+/// rebuilds every tab's InventoryTabContent/InventoryGridContent/GridControl from scratch even
+/// when it preserves the active tab's own selection by label -- discarding that tab's sort order/
+/// hide-disabled/search state for no reason (confirmed by live testing: dragging a single item
+/// in or out reset the active tab's toggles every time). Each tab's own InventoryGridContent
+/// already refreshes its displayed stacks independently via its own version watcher regardless of
+/// whether SetTabs runs, so skipping it here only skips the tab *list* rebuild, never the grid
+/// contents. Close-only (no minimize) -- created fresh by InventoryFolderController each time the
+/// Inventory folder is opened and returned to ElementPoolService's pool on close, mirroring
+/// NotificationCenter's active-notification-popup lifecycle rather than staying a permanently-
+/// existing hidden window. A dedicated Window subclass (rather than a plain Window hosting
+/// TabbedContent via SetContent) purely so Configure/Update have somewhere to live -- the
+/// codebase's own convention for when a Window subclass is warranted (MapWindow, TextWindow).
 /// </summary>
 public sealed class InventoryManagementWindow(
     FontService fontService,
@@ -41,6 +48,7 @@ public sealed class InventoryManagementWindow(
     private int _entityId;
     private Tooltip _hoverPopup = null!;
     private readonly VersionWatcher _tagVersionWatcher = new();
+    private HashSet<Tag> _currentTags = [];
 
     /// <summary>Builds this window's content for entityId's inventory. Must be called after CreateElement but before Initialize (see Window.SetContent's own doc comment) -- a fresh TabbedContent per open, since entityId varies across opens of a pooled/reused window instance. hoverPopup is owned by InventoryFolderController (created once, top-level, shared across opens) rather than a child of this window -- see Tooltip's own doc comment for why a nested child can't work here.</summary>
     public void Configure(int entityId, Tooltip hoverPopup)
@@ -49,6 +57,7 @@ public sealed class InventoryManagementWindow(
         _hoverPopup = hoverPopup;
 
         var tagCounts = InventoryTagQueries.GetTagCounts(componentManager, itemCatalog, entityId);
+        _currentTags = ToTagSet(tagCounts);
         _tabbedContent = new TabbedContent(BuildTabDefinitions(tagCounts), elementPoolService, fontService, glyphRenderer, BackgroundColor);
         SetContent(_tabbedContent);
 
@@ -65,7 +74,25 @@ public sealed class InventoryManagementWindow(
         }
 
         var tagCounts = InventoryTagQueries.GetTagCounts(componentManager, itemCatalog, _entityId);
+        var newTags = ToTagSet(tagCounts);
+        if (newTags.SetEquals(_currentTags))
+        {
+            return;
+        }
+
+        _currentTags = newTags;
         _tabbedContent.SetTabs(BuildTabDefinitions(tagCounts));
+    }
+
+    private static HashSet<Tag> ToTagSet(List<(Tag Tag, int Count)> tagCounts)
+    {
+        var tags = new HashSet<Tag>(tagCounts.Count);
+        foreach (var (tag, _) in tagCounts)
+        {
+            tags.Add(tag);
+        }
+
+        return tags;
     }
 
     private uint CurrentInventoryVersion() => componentManager.GetMultiPool<InventoryItemStackComponent>().GetEntityVersion(_entityId);

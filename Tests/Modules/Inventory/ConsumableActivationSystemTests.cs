@@ -401,7 +401,7 @@ public sealed class ConsumableActivationSystemTests
         componentManager.Merge(TargetEntityId, new HealthComponent(currentHealth: 20, maximumHealth: 100));
         var stackInstanceId = InventoryActions.AddItem(componentManager, CasterEntityId, PotionId, quantity: 1);
         componentManager.Merge(CasterEntityId, new PendingConsumableActivationComponent(stackInstanceId, [TargetTile]));
-        componentManager.GetPackedPool<DeadComponent>().Add(CasterEntityId, new DeadComponent(KilledByEntityId: null));
+        componentManager.GetPackedPool<DeadComponent>().Add(CasterEntityId, new DeadComponent(KilledByEntityId: null, DiedAtFrame: 0));
 
         system.Update(default, 0);
 

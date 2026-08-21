@@ -1,6 +1,7 @@
 using Engine.ECS.Components;
 using Game.Modules.Inventory;
 using Game.Modules.Inventory.Components;
+using Game.World;
 using Microsoft.Xna.Framework;
 
 namespace Tests.Modules.Inventory;
@@ -8,6 +9,14 @@ namespace Tests.Modules.Inventory;
 [TestClass]
 public sealed class InventoryActionsTests
 {
+    /// <summary>A fixed player id well outside the small entity ids these tests use for source/destination, so "is this entity the player" reads as false for every entity under test unless a test explicitly aliases one to it.</summary>
+    private sealed class FakePlayerQuery(int playerEntityId) : IPlayerQuery
+    {
+        public int PlayerEntityId { get; } = playerEntityId;
+    }
+
+    private static readonly FakePlayerQuery NoEntityIsThePlayer = new(playerEntityId: -1);
+
     private static ComponentManager CreateRegisteredManager()
     {
         var manager = new ComponentManager(initialEntityCapacity: 10, initialComponentCapacity: 4);
@@ -250,5 +259,145 @@ public sealed class InventoryActionsTests
 
         InventoryActions.SetInventoryDisabled(manager, entityId: 0, disabled: false);
         Assert.IsFalse(InventoryQueries.IsInventoryDisabled(manager.GetDirectPool<InventoryDisabledComponent>(), 0));
+    }
+
+    [TestMethod]
+    public void TryTransferStack_SameSourceAndDestination_ReturnsFalseAndDoesNotModify()
+    {
+        var manager = CreateRegisteredManager();
+        var itemId = Guid.NewGuid();
+        var stackInstanceId = InventoryActions.AddItem(manager, entityId: 0, itemId, quantity: 1);
+
+        var result = InventoryActions.TryTransferStack(manager, sourceEntityId: 0, destinationEntityId: 0, stackInstanceId, NoEntityIsThePlayer);
+
+        Assert.IsFalse(result);
+        Assert.AreEqual(1, manager.GetMultiPool<InventoryItemStackComponent>().CountForEntity(0));
+    }
+
+    [TestMethod]
+    public void TryTransferStack_UnknownStackInstanceId_ReturnsFalse()
+    {
+        var manager = CreateRegisteredManager();
+
+        var result = InventoryActions.TryTransferStack(manager, sourceEntityId: 0, destinationEntityId: 1, Guid.NewGuid(), NoEntityIsThePlayer);
+
+        Assert.IsFalse(result);
+    }
+
+    [TestMethod]
+    public void TryTransferStack_MovesStackPreservingIdentityAndDoesNotMergeWithExistingDestinationStack()
+    {
+        var manager = CreateRegisteredManager();
+        var itemId = Guid.NewGuid();
+
+        // Destination already owns a stack of the same item -- the transferred stack must land as
+        // its own distinct entry, not merge into this one (stack splitting/merging is a separate,
+        // not-yet-built feature).
+        InventoryActions.AddItem(manager, entityId: 1, itemId, quantity: 2);
+
+        InventoryActions.AddItemWithOverride(manager, entityId: 0, CreateDefinition(itemId, charges: 7), quantity: 3);
+        var pool = manager.GetMultiPool<InventoryItemStackComponent>();
+        var sourceStack = pool.GetReadonlyByDenseIndex(pool.GetFirstDenseIndex(0));
+        InventoryActions.SetStackDisabled(manager, entityId: 0, itemId, disabled: true);
+
+        var result = InventoryActions.TryTransferStack(manager, sourceEntityId: 0, destinationEntityId: 1, sourceStack.StackInstanceId, NoEntityIsThePlayer);
+
+        Assert.IsTrue(result);
+        Assert.AreEqual(0, pool.CountForEntity(0));
+        Assert.AreEqual(2, pool.CountForEntity(1));
+
+        Assert.IsTrue(InventoryQueries.TryFindByStackInstanceId(pool, 1, sourceStack.StackInstanceId, out var movedStack));
+        Assert.AreEqual(sourceStack.Quantity, movedStack.Quantity);
+        Assert.IsTrue(movedStack.IsDisabled);
+        Assert.AreEqual(sourceStack.Override, movedStack.Override);
+    }
+
+    [TestMethod]
+    public void TryTransferStack_DestinationNonPlayerAtCap_ReturnsFalseAndDoesNotModify()
+    {
+        var manager = CreateRegisteredManager();
+        for (var i = 0; i < InventoryCapacity.MaxNonPlayerStackCount; i++)
+        {
+            InventoryActions.AddItem(manager, entityId: 1, Guid.NewGuid(), quantity: 1);
+        }
+
+        var sourceItemId = Guid.NewGuid();
+        var stackInstanceId = InventoryActions.AddItem(manager, entityId: 0, sourceItemId, quantity: 1);
+
+        var result = InventoryActions.TryTransferStack(manager, sourceEntityId: 0, destinationEntityId: 1, stackInstanceId, NoEntityIsThePlayer);
+
+        Assert.IsFalse(result);
+        var pool = manager.GetMultiPool<InventoryItemStackComponent>();
+        Assert.AreEqual(1, pool.CountForEntity(0));
+        Assert.AreEqual(InventoryCapacity.MaxNonPlayerStackCount, pool.CountForEntity(1));
+    }
+
+    [TestMethod]
+    public void TryTransferStack_DestinationIsThePlayerAtWhatWouldOtherwiseBeTheCap_StillSucceeds()
+    {
+        var manager = CreateRegisteredManager();
+        var playerQuery = new FakePlayerQuery(playerEntityId: 1);
+        for (var i = 0; i < InventoryCapacity.MaxNonPlayerStackCount; i++)
+        {
+            InventoryActions.AddItem(manager, entityId: 1, Guid.NewGuid(), quantity: 1);
+        }
+
+        var stackInstanceId = InventoryActions.AddItem(manager, entityId: 0, Guid.NewGuid(), quantity: 1);
+
+        var result = InventoryActions.TryTransferStack(manager, sourceEntityId: 0, destinationEntityId: 1, stackInstanceId, playerQuery);
+
+        Assert.IsTrue(result);
+        Assert.AreEqual(InventoryCapacity.MaxNonPlayerStackCount + 1, manager.GetMultiPool<InventoryItemStackComponent>().CountForEntity(1));
+    }
+
+    [TestMethod]
+    public void TryTransferAllStacksOfItem_SameSourceAndDestination_ReturnsFalseAndDoesNotModify()
+    {
+        var manager = CreateRegisteredManager();
+        var itemId = Guid.NewGuid();
+        InventoryActions.AddDivergentItem(manager, entityId: 0, CreateDefinition(itemId, charges: 5));
+
+        var result = InventoryActions.TryTransferAllStacksOfItem(manager, sourceEntityId: 0, destinationEntityId: 0, itemId, NoEntityIsThePlayer);
+
+        Assert.IsFalse(result);
+        Assert.AreEqual(1, manager.GetMultiPool<InventoryItemStackComponent>().CountForEntity(0));
+    }
+
+    [TestMethod]
+    public void TryTransferAllStacksOfItem_MergedDivergentStacks_MovesEveryUnderlyingStack()
+    {
+        var manager = CreateRegisteredManager();
+        var itemId = Guid.NewGuid();
+        InventoryActions.AddDivergentItem(manager, entityId: 0, CreateDefinition(itemId, charges: 5));
+        InventoryActions.AddDivergentItem(manager, entityId: 0, CreateDefinition(itemId, charges: 4));
+        InventoryActions.AddDivergentItem(manager, entityId: 0, CreateDefinition(itemId, charges: 3));
+
+        var result = InventoryActions.TryTransferAllStacksOfItem(manager, sourceEntityId: 0, destinationEntityId: 1, itemId, NoEntityIsThePlayer);
+
+        Assert.IsTrue(result);
+        var pool = manager.GetMultiPool<InventoryItemStackComponent>();
+        Assert.AreEqual(0, pool.CountForEntity(0));
+        Assert.AreEqual(3, pool.CountForEntity(1));
+    }
+
+    [TestMethod]
+    public void TryTransferAllStacksOfItem_DestinationLacksRoomForWholeBatch_RefusesEntireBatch()
+    {
+        var manager = CreateRegisteredManager();
+        for (var i = 0; i < InventoryCapacity.MaxNonPlayerStackCount - 1; i++)
+        {
+            InventoryActions.AddItem(manager, entityId: 1, Guid.NewGuid(), quantity: 1);
+        }
+
+        var itemId = Guid.NewGuid();
+        InventoryActions.AddDivergentItem(manager, entityId: 0, CreateDefinition(itemId, charges: 5));
+        InventoryActions.AddDivergentItem(manager, entityId: 0, CreateDefinition(itemId, charges: 4));
+
+        var result = InventoryActions.TryTransferAllStacksOfItem(manager, sourceEntityId: 0, destinationEntityId: 1, itemId, NoEntityIsThePlayer);
+
+        Assert.IsFalse(result);
+        var pool = manager.GetMultiPool<InventoryItemStackComponent>();
+        Assert.AreEqual(2, pool.CountForEntity(0));
+        Assert.AreEqual(InventoryCapacity.MaxNonPlayerStackCount - 1, pool.CountForEntity(1));
     }
 }

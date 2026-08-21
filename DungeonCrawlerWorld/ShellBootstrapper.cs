@@ -17,6 +17,7 @@ using Presentation.Input;
 using Presentation.UI;
 using Presentation.UI.Content;
 using Presentation.UI.Inventory;
+using Presentation.UI.Looting;
 using Presentation.UI.Notifications;
 using System.Diagnostics;
 
@@ -88,7 +89,10 @@ public static class ShellBootstrapper
         var hotbarController = BuildHotbarController(presentation, mapViewState, hotbarContent, actionTargeting, layers);
         BuildUserWindows(presentation, cursorTextContent, dragGhostContent, layers);
 
-        var inputController = new UiInputController(layers, screenSize, hotbarController);
+        var secondaryInventory = BuildSecondaryInventoryWindowController(presentation, ecsContext, inventory, layers);
+        mapWindow.OnCorpseClicked = secondaryInventory.OpenLoot;
+
+        var inputController = new UiInputController(layers, screenSize, hotbarController, componentManager, world);
         inputController.SetDefaultFocusElement(mapWindow);
         inputController.FocusElement(mapWindow);
 
@@ -106,6 +110,7 @@ public static class ShellBootstrapper
             inputController.ContentDragItemStackInstanceId,
             inputController.ContentDragMergedItemDefinitionId,
             inputController.ContentDragActionId,
+            inputController.ContentDragOriginEntityId,
             inputController.ContentDragSourceSize,
             inputController.CurrentMousePosition);
 
@@ -315,6 +320,15 @@ public static class ShellBootstrapper
         var hotbarController = new HotbarController(mapViewState, hotbarContent, actionTargeting);
         hotbarController.Initialize(presentation.ElementPoolService, layers);
         return hotbarController;
+    }
+
+    /// <summary>Built after InventoryFolderController (which it reuses the player's own inventory window through, see PlayerInventoryWindow/OpenInventoryWindow) and after MapWindow exists (whose OnCorpseClicked Build wires to this controller's OpenLoot right after this call returns).</summary>
+    private static SecondaryInventoryWindowController BuildSecondaryInventoryWindowController(
+        PresentationContext presentation, EcsContext ecsContext, InventoryFolderController inventory, UiLayerStack layers)
+    {
+        var controller = new SecondaryInventoryWindowController(presentation.ElementPoolService, ecsContext.ComponentManager, inventory);
+        controller.Initialize(layers);
+        return controller;
     }
 
     /// <summary>User tier: hosts cursorTextContent/dragGhostContent (built at the top of Build, before UiInputController exists -- see Build's own comment) -- see UiLayer's own doc comment for what this tier is for.</summary>

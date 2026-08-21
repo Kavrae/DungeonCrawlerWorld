@@ -64,7 +64,7 @@ public sealed class ManaRegenSystemTests
         var pool = CreatePool();
         pool.Add(0, new ManaComponent(currentMana: 0, maximumMana: 200));
         var deadEntities = new PackedComponentPool<DeadComponent>(10, 10, static (ref existing, incoming) => existing = incoming);
-        deadEntities.Add(0, new DeadComponent(KilledByEntityId: null));
+        deadEntities.Add(0, new DeadComponent(KilledByEntityId: null, DiedAtFrame: 0));
         var system = new ManaRegenSystem(pool, CreateTiersPool(), new ProcessingTierEvents(), statModifiers: null, deadEntities: deadEntities, abilityScores: CreateAbilityScoresPoolWithMaxIntelligence(0));
 
         system.Update(default, 0);

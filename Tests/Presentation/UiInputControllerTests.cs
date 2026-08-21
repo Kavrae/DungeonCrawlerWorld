@@ -8,6 +8,7 @@ using Game.Modules.Core.Components;
 using Game.Modules.Inventory;
 using Game.Modules.Inventory.Components;
 using Game.Modules.Mana.Components;
+using Game.World;
 using Microsoft.Xna.Framework;
 using Microsoft.Xna.Framework.Graphics;
 using Microsoft.Xna.Framework.Input;
@@ -16,6 +17,7 @@ using Presentation.Input;
 using Presentation.Rendering;
 using Presentation.UI;
 using Presentation.UI.Content;
+using Presentation.UI.Inventory;
 
 namespace Tests.Presentation;
 
@@ -55,7 +57,7 @@ public sealed class UiInputControllerTests
     /// </summary>
     private static UiInputController CreateController(
         IReadOnlyList<Element> baseElements, IReadOnlyList<Element> staticHudElements, IReadOnlyList<Element> dynamicHudElements, IReadOnlyList<Element> userElements,
-        Vector2 screenSize, HotbarController? hotbarController = null)
+        Vector2 screenSize, HotbarController? hotbarController = null, ComponentManager? componentManager = null, IPlayerQuery? playerQuery = null)
     {
         var layers = new UiLayerStack();
         foreach (var element in baseElements)
@@ -74,7 +76,7 @@ public sealed class UiInputControllerTests
         {
             layers.Add(UiLayer.User, element);
         }
-        return new UiInputController(layers, screenSize, hotbarController);
+        return new UiInputController(layers, screenSize, hotbarController, componentManager, playerQuery);
     }
 
     /// <summary>Records HandleRightDragStart/HandleRightDrag calls, so UiInputController's right-button wiring (hit-test on press, total-delta-since-start on every held frame) can be verified end-to-end without a real MapWindow.</summary>
@@ -1958,7 +1960,7 @@ public sealed class UiInputControllerTests
             Layout = new ElementLayoutOptions { RelativePosition = new Vector2(0, 0), Size = new Vector2(24, 24), DisplayMode = ElementDisplayMode.Fixed },
             Chrome = new ElementChromeOptions { ShowBorder = true, CanUserFocus = false },
         });
-        cell.Configure(itemId, stackInstanceId, null, "t", Color.White, quantity: 1, chargeText: null, isDisabled: false, isDivergent: false, mergedStackBadgeVisible: false, cellSize: new Vector2(24, 24));
+        cell.Configure(playerEntityId, itemId, stackInstanceId, null, "t", Color.White, quantity: 1, chargeText: null, isDisabled: false, isDivergent: false, mergedStackBadgeVisible: false, cellSize: new Vector2(24, 24));
         cell.Initialize();
 
         var hotbar = new HotbarContent(
@@ -1972,6 +1974,86 @@ public sealed class UiInputControllerTests
         hotbarWindow.Initialize();
 
         return (cell, hotbarWindow, hotbar, componentManager, itemId);
+    }
+
+    /// <summary>Same shape as BuildDragAndDropHarness, but the item stack (and the cell dragging it) belongs to a second, non-player entity -- for asserting that a hotbar bind is refused when the drag didn't originate from the player's own inventory.</summary>
+    private static (InventoryItemStackCell Cell, Window HotbarWindow, HotbarContent Hotbar, ComponentManager ComponentManager, Game.World.World World, Guid ItemId) BuildNonPlayerOriginDragToHotbarHarness()
+    {
+        const int playerEntityId = 1;
+        const int corpseEntityId = 2;
+
+        var componentManager = new ComponentManager(initialEntityCapacity: 20, initialComponentCapacity: 10);
+        componentManager.RegisterMultiPool<ActionHotkeyBindingComponent>();
+        componentManager.RegisterMultiPool<ItemHotkeyBindingComponent>();
+        componentManager.RegisterMultiPool<ActionInstanceComponent>();
+        componentManager.RegisterMultiPool<InventoryItemStackComponent>();
+        componentManager.RegisterPackedPool<InventoryComponent>(static (ref existing, incoming) => existing = incoming);
+        componentManager.RegisterPackedPool<ActionLockComponent>(static (ref existing, incoming) => existing = incoming);
+        componentManager.RegisterPackedPool<PotionCooldownComponent>(static (ref existing, incoming) => existing = incoming);
+        componentManager.RegisterPackedPool<ManaComponent>(static (ref existing, incoming) => existing = incoming);
+        componentManager.RegisterPackedPool<HotkeyExpansionUnlockComponent>(static (ref existing, incoming) => existing = incoming);
+
+        var world = new Game.World.World(new Game.World.Map(new Vector3Int(10, 10, 1))) { PlayerEntityId = playerEntityId };
+        var itemId = Guid.NewGuid();
+        var itemCatalog = new ItemCatalog();
+        itemCatalog.Register(new ItemDefinition(itemId, "Test Item", null, "t", Color.White, Tags: [], Effects: []));
+        var stackInstanceId = InventoryActions.AddItem(componentManager, corpseEntityId, itemId, quantity: 1);
+
+        var fontService = new FontService("Fonts");
+        var glyphRenderer = new GlyphRenderer();
+        var windowService = TestElementPoolServiceFactory.Create(fontService, glyphRenderer);
+        windowService.RegisterFactory<InventoryItemStackCell>(() => new InventoryItemStackCell(
+            fontService, windowService, glyphRenderer, new SpriteSheetService(null, "Spritesheets"), new SpriteRenderer()));
+
+        var cell = windowService.CreateElement<InventoryItemStackCell>(null, new ElementOptions
+        {
+            Hierarchy = new ElementHierarchyOptions { CanContainChildren = false },
+            Layout = new ElementLayoutOptions { RelativePosition = new Vector2(0, 0), Size = new Vector2(24, 24), DisplayMode = ElementDisplayMode.Fixed },
+            Chrome = new ElementChromeOptions { ShowBorder = true, CanUserFocus = false },
+        });
+        cell.Configure(corpseEntityId, itemId, stackInstanceId, null, "t", Color.White, quantity: 1, chargeText: null, isDisabled: false, isDivergent: false, mergedStackBadgeVisible: false, cellSize: new Vector2(24, 24));
+        cell.Initialize();
+
+        var hotbar = new HotbarContent(
+            world, new MapViewState(), componentManager, new EventBus(), new ActionCatalog(), itemCatalog,
+            fontService, new SpriteSheetService(null, "Spritesheets"), new SpriteRenderer(), new Vector2(1920, 1080));
+        var hotbarWindow = windowService.CreateElement<Window>(null, new ElementOptions
+        {
+            Layout = new ElementLayoutOptions { RelativePosition = new Vector2(500, 0), Size = hotbar.Size, DisplayMode = ElementDisplayMode.Fixed },
+        });
+        hotbarWindow.SetContent(hotbar);
+        hotbarWindow.Initialize();
+
+        return (cell, hotbarWindow, hotbar, componentManager, world, itemId);
+    }
+
+    [TestMethod]
+    public void Drag_FromNonPlayerEntitysInventoryCellToHotbarSlot_DoesNotBindTheItem()
+    {
+        var (cell, hotbarWindow, hotbar, componentManager, world, _) = BuildNonPlayerOriginDragToHotbarHarness();
+        var controller = CreateController([cell], [hotbarWindow], [], [], LargeScreenSize, componentManager: componentManager, playerQuery: world);
+
+        var pressPoint = cell.ContentRectangle.Center;
+        controller.Update(NoKeys, MouseAt(pressPoint.X, pressPoint.Y, ButtonState.Released));
+        controller.Update(NoKeys, MouseAt(pressPoint.X, pressPoint.Y, ButtonState.Pressed));
+
+        var dropPoint = new Point((int)hotbarWindow.ContentAbsolutePosition.X + 1, (int)hotbarWindow.ContentAbsolutePosition.Y + (int)(hotbar.Size.Y / 2f));
+        controller.Update(NoKeys, MouseAt(dropPoint.X, dropPoint.Y, ButtonState.Released));
+
+        Assert.IsFalse(ItemHotkeyBindingQueries.TryGet(componentManager.GetMultiPool<ItemHotkeyBindingComponent>(), world.PlayerEntityId, HotkeySlot.Base1, out _));
+    }
+
+    [TestMethod]
+    public void Drag_FromNonPlayerEntitysInventoryCell_NeverTurnsOnHotbarDragHighlight()
+    {
+        var (cell, hotbarWindow, hotbar, componentManager, world, _) = BuildNonPlayerOriginDragToHotbarHarness();
+        var controller = CreateController([cell], [hotbarWindow], [], [], LargeScreenSize, componentManager: componentManager, playerQuery: world);
+
+        var pressPoint = cell.ContentRectangle.Center;
+        controller.Update(NoKeys, MouseAt(pressPoint.X, pressPoint.Y, ButtonState.Released));
+        controller.Update(NoKeys, MouseAt(pressPoint.X, pressPoint.Y, ButtonState.Pressed));
+
+        Assert.IsFalse(hotbar.IsAcceptingDrag);
     }
 
     [TestMethod]
@@ -2108,6 +2190,173 @@ public sealed class UiInputControllerTests
 
         controller.Update(NoKeys, MouseAt(1000, 1000, ButtonState.Released));
         Assert.IsFalse(hotbar.IsAcceptingDrag);
+    }
+
+    /// <summary>
+    /// Builds two real InventoryGridContent-hosting windows (not a hand-built standalone cell,
+    /// like BuildDragAndDropHarness's hotbar harness above -- this needs InventoryItemStackCell's
+    /// own EntityId, which only InventoryGridContent.RebuildCells actually sets) for two distinct
+    /// entities, one item stack granted to SourceEntityId, positioned far enough apart that any
+    /// press-then-release pair between them exceeds ContentDragTapThresholdPixels.
+    /// </summary>
+    private static (Window SourceGridWindow, Window DestinationGridWindow, InventoryItemStackCell Cell, ComponentManager ComponentManager, Guid ItemId, int SourceEntityId, int DestinationEntityId) BuildInventoryToInventoryDragHarness()
+    {
+        const int sourceEntityId = 1;
+        const int destinationEntityId = 2;
+
+        var componentManager = new ComponentManager(initialEntityCapacity: 20, initialComponentCapacity: 10);
+        componentManager.RegisterMultiPool<InventoryItemStackComponent>();
+        componentManager.RegisterPackedPool<InventoryComponent>(static (ref existing, incoming) => existing = incoming);
+
+        var itemId = Guid.NewGuid();
+        var itemCatalog = new ItemCatalog();
+        itemCatalog.Register(new ItemDefinition(itemId, "Test Item", null, "t", Color.White, Tags: [], Effects: []));
+        InventoryActions.AddItem(componentManager, sourceEntityId, itemId, quantity: 1);
+
+        var fontService = new FontService("Fonts");
+        var glyphRenderer = new GlyphRenderer();
+        var windowService = TestElementPoolServiceFactory.Create(fontService, glyphRenderer);
+        var spriteSheetService = new SpriteSheetService(null, "Spritesheets");
+        var spriteRenderer = new SpriteRenderer();
+        windowService.RegisterFactory<InventoryItemStackCell>(() => new InventoryItemStackCell(fontService, windowService, glyphRenderer, spriteSheetService, spriteRenderer));
+        windowService.RegisterFactory<Tooltip>(() => new Tooltip(fontService, windowService, glyphRenderer));
+        var hoverPopup = windowService.CreateElement<Tooltip>(null, new ElementOptions
+        {
+            Layout = new ElementLayoutOptions { RelativePosition = Vector2.Zero, MaximumSize = new Vector2(220, 220), DisplayMode = ElementDisplayMode.WrapContent, IsVisible = false },
+            Chrome = new ElementChromeOptions { ShowBorder = true, ShowTitle = true, CanUserFocus = false, CanUserClose = false },
+        });
+        hoverPopup.Initialize();
+
+        Window BuildGridWindow(int entityId, Vector2 position)
+        {
+            var window = windowService.CreateElement<Window>(null, new ElementOptions
+            {
+                Hierarchy = new ElementHierarchyOptions { CanContainChildren = true },
+                Layout = new ElementLayoutOptions { RelativePosition = position, Size = new Vector2(200, 200), DisplayMode = ElementDisplayMode.Fixed },
+                Chrome = new ElementChromeOptions { ShowBorder = true, CanUserFocus = false },
+            });
+            window.SetContent(new InventoryGridContent(componentManager, itemCatalog, windowService, fontService, glyphRenderer, spriteSheetService, spriteRenderer, entityId, filterTag: null, hoverPopup));
+            window.Initialize();
+            return window;
+        }
+
+        var sourceGridWindow = BuildGridWindow(sourceEntityId, new Vector2(0, 0));
+        var destinationGridWindow = BuildGridWindow(destinationEntityId, new Vector2(500, 0));
+        var cell = sourceGridWindow.ChildElements.OfType<InventoryItemStackCell>().Single();
+
+        return (sourceGridWindow, destinationGridWindow, cell, componentManager, itemId, sourceEntityId, destinationEntityId);
+    }
+
+    [TestMethod]
+    public void Drag_FromInventoryCellToAnotherEntitysGrid_TransfersTheStack()
+    {
+        var (sourceGridWindow, destinationGridWindow, cell, componentManager, itemId, sourceEntityId, destinationEntityId) = BuildInventoryToInventoryDragHarness();
+        var controller = CreateController([sourceGridWindow, destinationGridWindow], [], [], [], LargeScreenSize, componentManager: componentManager, playerQuery: null);
+
+        var pressPoint = cell.ContentRectangle.Center;
+        controller.Update(NoKeys, MouseAt(pressPoint.X, pressPoint.Y, ButtonState.Released));
+        controller.Update(NoKeys, MouseAt(pressPoint.X, pressPoint.Y, ButtonState.Pressed));
+
+        var dropPoint = destinationGridWindow.ContentRectangle.Center;
+        controller.Update(NoKeys, MouseAt(dropPoint.X, dropPoint.Y, ButtonState.Released));
+
+        var stacks = componentManager.GetMultiPool<InventoryItemStackComponent>();
+        Assert.AreEqual(0, stacks.CountForEntity(sourceEntityId));
+        Assert.IsTrue(InventoryQueries.TryGetStack(stacks, destinationEntityId, itemId, out _));
+    }
+
+    [TestMethod]
+    public void Drag_FromInventoryCellBackOntoItsOwnGrid_LeavesTheStackWhereItWas()
+    {
+        var (sourceGridWindow, _, cell, componentManager, itemId, sourceEntityId, _) = BuildInventoryToInventoryDragHarness();
+        var controller = CreateController([sourceGridWindow], [], [], [], LargeScreenSize, componentManager: componentManager, playerQuery: null);
+
+        var pressPoint = cell.ContentRectangle.Center;
+        controller.Update(NoKeys, MouseAt(pressPoint.X, pressPoint.Y, ButtonState.Released));
+        controller.Update(NoKeys, MouseAt(pressPoint.X, pressPoint.Y, ButtonState.Pressed));
+
+        // Still within the same source grid window, far enough from the press point to exceed
+        // ContentDragTapThresholdPixels and actually resolve as a drag, not a plain click.
+        var dropPoint = new Point((int)sourceGridWindow.ContentAbsolutePosition.X + 150, (int)sourceGridWindow.ContentAbsolutePosition.Y + 150);
+        controller.Update(NoKeys, MouseAt(dropPoint.X, dropPoint.Y, ButtonState.Released));
+
+        var stacks = componentManager.GetMultiPool<InventoryItemStackComponent>();
+        Assert.AreEqual(1, stacks.CountForEntity(sourceEntityId));
+        Assert.IsTrue(InventoryQueries.TryGetStack(stacks, sourceEntityId, itemId, out _));
+    }
+
+    /// <summary>
+    /// Same transfer as Drag_FromInventoryCellToAnotherEntitysGrid_TransfersTheStack, but the
+    /// destination is a real InventoryManagementWindow (TabbedContent -> per-tab body window ->
+    /// InventoryTabContent -> its own nested grid window) instead of a bare Window hosting
+    /// InventoryGridContent directly -- reproducing the actual player-inventory structure, in case
+    /// FindHostingGrid's ParentElement walk behaves differently against that deeper nesting.
+    /// </summary>
+    [TestMethod]
+    public void Drag_FromNonPlayerEntitysGridToRealInventoryManagementWindow_TransfersTheStack()
+    {
+        const int sourceEntityId = 2;
+        const int destinationEntityId = 1;
+
+        var componentManager = new ComponentManager(initialEntityCapacity: 20, initialComponentCapacity: 10);
+        componentManager.RegisterMultiPool<InventoryItemStackComponent>();
+        componentManager.RegisterPackedPool<InventoryComponent>(static (ref existing, incoming) => existing = incoming);
+
+        var itemId = Guid.NewGuid();
+        var itemCatalog = new ItemCatalog();
+        itemCatalog.Register(new ItemDefinition(itemId, "Test Item", null, "t", Color.White, Tags: [], Effects: []));
+        InventoryActions.AddItem(componentManager, sourceEntityId, itemId, quantity: 1);
+
+        var fontService = new FontService("Fonts");
+        var glyphRenderer = new GlyphRenderer();
+        var windowService = TestElementPoolServiceFactory.Create(fontService, glyphRenderer);
+        var spriteSheetService = new SpriteSheetService(null, "Spritesheets");
+        var spriteRenderer = new SpriteRenderer();
+        windowService.RegisterFactory<InventoryItemStackCell>(() => new InventoryItemStackCell(fontService, windowService, glyphRenderer, spriteSheetService, spriteRenderer));
+        windowService.RegisterFactory<GridControl>(() => new GridControl(fontService, windowService, glyphRenderer));
+        windowService.RegisterFactory<Toggle>(() => new Toggle(fontService, windowService, glyphRenderer));
+        windowService.RegisterFactory<Tooltip>(() => new Tooltip(fontService, windowService, glyphRenderer));
+        windowService.RegisterFactory<InventoryManagementWindow>(() => new InventoryManagementWindow(
+            fontService, windowService, glyphRenderer, spriteSheetService, spriteRenderer, componentManager, itemCatalog));
+
+        var hoverPopup = windowService.CreateElement<Tooltip>(null, new ElementOptions
+        {
+            Layout = new ElementLayoutOptions { RelativePosition = Vector2.Zero, MaximumSize = new Vector2(220, 220), DisplayMode = ElementDisplayMode.WrapContent, IsVisible = false },
+            Chrome = new ElementChromeOptions { ShowBorder = true, ShowTitle = true, CanUserFocus = false, CanUserClose = false },
+        });
+        hoverPopup.Initialize();
+
+        var sourceGridWindow = windowService.CreateElement<Window>(null, new ElementOptions
+        {
+            Hierarchy = new ElementHierarchyOptions { CanContainChildren = true },
+            Layout = new ElementLayoutOptions { RelativePosition = new Vector2(0, 0), Size = new Vector2(200, 200), DisplayMode = ElementDisplayMode.Fixed },
+            Chrome = new ElementChromeOptions { ShowBorder = true, CanUserFocus = false },
+        });
+        sourceGridWindow.SetContent(new InventoryGridContent(componentManager, itemCatalog, windowService, fontService, glyphRenderer, spriteSheetService, spriteRenderer, sourceEntityId, filterTag: null, hoverPopup));
+        sourceGridWindow.Initialize();
+        var cell = sourceGridWindow.ChildElements.OfType<InventoryItemStackCell>().Single();
+
+        var destinationWindow = windowService.CreateElement<InventoryManagementWindow>(null, new ElementOptions
+        {
+            Hierarchy = new ElementHierarchyOptions { CanContainChildren = true },
+            Layout = new ElementLayoutOptions { RelativePosition = new Vector2(500, 0), Size = new Vector2(300, 300), DisplayMode = ElementDisplayMode.Fixed },
+            Chrome = new ElementChromeOptions { ShowBorder = true, ShowTitle = true, CanUserFocus = false },
+        });
+        destinationWindow.Configure(destinationEntityId, hoverPopup);
+        destinationWindow.Initialize();
+
+        var controller = CreateController([], [], [sourceGridWindow, destinationWindow], [], LargeScreenSize, componentManager: componentManager, playerQuery: null);
+
+        var pressPoint = cell.ContentRectangle.Center;
+        controller.Update(NoKeys, MouseAt(pressPoint.X, pressPoint.Y, ButtonState.Released));
+        controller.Update(NoKeys, MouseAt(pressPoint.X, pressPoint.Y, ButtonState.Pressed));
+
+        var dropPoint = destinationWindow.ContentRectangle.Center;
+        controller.Update(NoKeys, MouseAt(dropPoint.X, dropPoint.Y, ButtonState.Released));
+
+        var stacks = componentManager.GetMultiPool<InventoryItemStackComponent>();
+        Assert.AreEqual(0, stacks.CountForEntity(sourceEntityId));
+        Assert.IsTrue(InventoryQueries.TryGetStack(stacks, destinationEntityId, itemId, out _));
     }
 
     /// <summary>Actions must be draggable between hotbar slots the same way items already are -- mirrors Drag_FromABoundHotbarSlotToADifferentSlot_MovesTheBinding for the action-bound-slot source instead of an item one.</summary>

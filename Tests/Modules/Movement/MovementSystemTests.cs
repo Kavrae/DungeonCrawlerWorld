@@ -126,7 +126,7 @@ public sealed class MovementSystemTests
         world.PlaceEntityOnMap(0, transform.Position, ref transform);
         actionLockPool.Add(0, new ActionLockComponent(standardLockFrames: 10, currentLockTotalFrames: 0, currentLockFramesRemaining: 0));
         movementPool.Add(0, new MovementComponent(MovementMode.Random, null, new Vector3Int(3, 2, 0)));
-        deadEntities.Add(0, new DeadComponent(KilledByEntityId: null));
+        deadEntities.Add(0, new DeadComponent(KilledByEntityId: null, DiedAtFrame: 0));
 
         var system = new MovementSystem(transformPool, actionLockPool, movementPool, world, new EventBus(), new WorldEventSync(world), new FrameEventBuffer<EntityMovedEvent>(), null, CreateProcessingTierPool(), new ProcessingTierEvents(), deadEntities);
         system.Update(default, 0);

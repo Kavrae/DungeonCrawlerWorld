@@ -3,12 +3,14 @@ using Engine.ECS.Components.Stores;
 using Engine.Events;
 using Engine.Math;
 using FontStashSharp;
+using Game.Blueprints;
 using Game.Modules.Actions;
 using Game.Modules.Core;
 using Game.Modules.Core.Components;
 using Game.Modules.Death.Components;
 using Game.Modules.Health.Components;
 using Game.Modules.Inventory;
+using Game.Modules.Inventory.Components;
 using Game.Modules.StatModifiers;
 using Game.Modules.StatModifiers.Components;
 using Game.World;
@@ -41,6 +43,10 @@ public sealed class MapWindow : Window
     private const float HealthBarWidthFraction = 0.9f;
     private const int HealthBarHeightPixels = 4;
 
+    /// <summary>Fraction of a single tile's own size (not the corpse's own possibly-multi-tile footprint) -- anchored to the tile's top-right corner the same way DrawLayerBadges' up/down arrows are.</summary>
+    private const float LootBagBadgeSizeFraction = 0.4f;
+    private const string LootBagSpriteName = "LootBag-Red";
+
     private readonly World _world;
     private readonly MapViewState _mapViewState;
     private readonly MapCamera _camera;
@@ -55,6 +61,8 @@ public sealed class MapWindow : Window
     private readonly PackedComponentPool<HealthComponent> _healthPool;
     private readonly MultiComponentPool<StatModifierComponent>? _statModifiers;
     private readonly PackedComponentPool<DeadComponent>? _deadPool;
+    private readonly MultiComponentPool<InventoryItemStackComponent>? _inventoryStacks;
+    private readonly PackedComponentPool<CorpseLootedComponent>? _corpseLootedPool;
 
     private readonly TileRenderer _tileRenderer;
     private readonly GlyphRenderer _glyphRenderer;
@@ -92,6 +100,18 @@ public sealed class MapWindow : Window
     /// is focused," matching today's unconditional behavior.
     /// </summary>
     public Func<bool>? IsTextInputFocused { get; set; }
+
+    /// <summary>
+    /// Temporary click-to-loot hook (see TODO.md's Context menu entry for the intended eventual
+    /// replacement -- a "Loot" context-menu action) -- invoked with a corpse's entity id when the
+    /// player clicks its tile, instead of the ordinary select path (see OnContentClickAction).
+    /// Settable rather than a constructor dependency for the same reason IsTextInputFocused above
+    /// is: the real listener (SecondaryInventoryWindowController) is built after MapWindow -- see
+    /// ShellBootstrapper.Build's own ordering notes. Null (before that wiring runs, and in tests
+    /// that construct a MapWindow directly) means "clicking a corpse just selects it, like any
+    /// other tile," matching this window's behavior before this feature existed.
+    /// </summary>
+    public Action<int>? OnCorpseClicked { get; set; }
 
     /// <summary>Constructs the map viewport, wired to the world/camera/targeting/movement collaborators it renders and delegates input to.</summary>
     /// <remarks>
@@ -143,6 +163,12 @@ public sealed class MapWindow : Window
             : null;
         _deadPool = componentManager.IsRegistered<DeadComponent>()
             ? componentManager.GetPackedPool<DeadComponent>()
+            : null;
+        _inventoryStacks = componentManager.IsRegistered<InventoryItemStackComponent>()
+            ? componentManager.GetMultiPool<InventoryItemStackComponent>()
+            : null;
+        _corpseLootedPool = componentManager.IsRegistered<CorpseLootedComponent>()
+            ? componentManager.GetPackedPool<CorpseLootedComponent>()
             : null;
         _tileRenderer = tileRenderer;
         _glyphRenderer = glyphRenderer;
@@ -559,6 +585,13 @@ public sealed class MapWindow : Window
     /// that was already non-Blocking when it died (e.g. a Phasing Ghost) is drawn by whichever
     /// existing path already handles its Kind (DrawTinyGrid/DrawPhasingGlyphs), not here --
     /// this only covers the "no NonBlockingKind flag" case those two paths don't draw at all.
+    ///
+    /// A corpse carrying one or more items draws the LootBag-Red badge after (on top of) the
+    /// corpse's own grey-tinted draw call, at full color if its loot window has never been
+    /// opened, or grey-tinted itself once it has -- the same "already looted, no need to check
+    /// again" cue, just an explicit tint rather than a draw-order trick (an earlier before/after-
+    /// draw-order version was too easily fully hidden by the corpse's own opaque sprite instead
+    /// of reading as dimmed).
     /// </summary>
     private void DrawCorpses(SpriteBatch spriteBatch, IReadOnlyList<int> occupants, int mapNodeX, int mapNodeY, Vector2 tileOrigin)
     {
@@ -581,8 +614,35 @@ public sealed class MapWindow : Window
             }
 
             var footprintSize = new Vector2(transformComponent.Size.X * _camera.CurrentTileSize.X, transformComponent.Size.Y * _camera.CurrentTileSize.Y);
+
             TryDrawEntityVisual(spriteBatch, entityId, FontForSize(transformComponent.Size.X), tileOrigin, footprintSize);
+
+            if (_inventoryStacks?.CountForEntity(entityId) > 0)
+            {
+                var alreadyLooted = _corpseLootedPool?.Has(entityId) == true;
+                DrawLootBagBadge(spriteBatch, tileOrigin, footprintSize, alreadyLooted ? Color.Gray : Color.White);
+            }
         }
+    }
+
+    /// <summary>
+    /// Small, single-tile-sized badge anchored to the top-right corner of the entity's own full
+    /// footprint -- footprintTopLeft/footprintSize, not just the origin tile's own tileOrigin, so
+    /// a multi-tile (Huge) corpse gets its badge on its actual top-right tile rather than the
+    /// top-right corner of just its first (origin) tile. tint is Color.White (unlooted) or
+    /// Color.Gray (already looted) -- see DrawCorpses' own doc comment.
+    /// </summary>
+    private void DrawLootBagBadge(SpriteBatch spriteBatch, Vector2 footprintTopLeft, Vector2 footprintSize, Color tint)
+    {
+        if (!SpriteManifest.TryGet(LootBagSpriteName, out var lootBagSprite))
+        {
+            return;
+        }
+
+        var badgeSize = new Vector2(_camera.CurrentTileSize.X, _camera.CurrentTileSize.Y) * LootBagBadgeSizeFraction;
+        var badgePosition = new Vector2(footprintTopLeft.X + footprintSize.X - badgeSize.X, footprintTopLeft.Y);
+
+        SpriteOrGlyphRenderer.Draw(spriteBatch, _spriteSheetService, _spriteRenderer, _glyphRenderer, lootBagSprite, _badgeFont, string.Empty, tint, badgePosition, badgeSize, tint);
     }
 
     private void DrawEntityIcons(SpriteBatch spriteBatch, Texture2D unitRectangle, int entityId, Vector2 footprintTopLeft, Vector2 footprintSize)
@@ -746,8 +806,52 @@ public sealed class MapWindow : Window
             return;
         }
 
+        if (TryLootCorpseAt(mousePosition))
+        {
+            return;
+        }
+
         SelectMapNodes(mousePosition);
     }
+
+    /// <summary>
+    /// Temporary click-to-loot -- see OnCorpseClicked's own doc comment. A miss (off-map, no
+    /// corpse on the clicked tile, or nothing wired to OnCorpseClicked) falls through to the
+    /// ordinary select path in OnContentClickAction, unchanged. Clicking a corpse the player
+    /// isn't adjacent to (see IsAdjacentToPlayer) still consumes the click -- it just doesn't
+    /// invoke OnCorpseClicked -- rather than falling through to select the tile instead, which
+    /// would be a confusing mix of "nothing opened, but the selection also changed."
+    /// </summary>
+    private bool TryLootCorpseAt(Point mousePosition)
+    {
+        if (OnCorpseClicked is null || _deadPool is null || !_camera.TryGetHoveredMapPosition(mousePosition, _contentState.AbsolutePosition, out var mapPosition))
+        {
+            return false;
+        }
+
+        foreach (var entityId in _world.GetOccupantEntityIdsAt(new Vector3Int(mapPosition.X, mapPosition.Y, _mapViewState.CurrentMapLayer)))
+        {
+            if (!_deadPool.Has(entityId))
+            {
+                continue;
+            }
+
+            if (IsAdjacentToPlayer(entityId))
+            {
+                OnCorpseClicked.Invoke(entityId);
+            }
+
+            return true;
+        }
+
+        return false;
+    }
+
+    /// <summary>A player can only loot a corpse they're standing on or next to -- 8-directional (Chebyshev) distance of at most 1 from the corpse's own origin tile, the same adjacency shape TargetShape.Adjacent's ring uses elsewhere, just inclusive of the caster's own tile too (unlike melee's ring, which excludes it -- standing on a corpse to loot it is expected, unlike punching yourself).</summary>
+    private bool IsAdjacentToPlayer(int entityId) =>
+        _transformPool.TryGetReadonly(entityId, out var corpseTransform) &&
+        _transformPool.TryGetReadonly(_world.PlayerEntityId, out var playerTransform) &&
+        GridDistance.ChebyshevDistance(corpseTransform.Position, playerTransform.Position) <= 1;
 
     protected override void OnRightClickTapAction() => _actionTargeting.CancelArmedOrPendingAction();
 

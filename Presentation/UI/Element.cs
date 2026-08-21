@@ -112,6 +112,17 @@ public class Element
     protected bool _isVisible = true;
     public bool IsVisible { get => _isVisible; set => _isVisible = value; }
 
+    /// <summary>
+    /// Free-form consumer-defined association, the same role WPF's FrameworkElement.Tag or
+    /// WinForms' Control.Tag plays -- lets a caller mark "this element belongs to/represents X"
+    /// without X needing to be this element's own IElementContent (see InventoryGridContent's own
+    /// doc comment for the concrete motivating case: a host window whose InventoryGridContent is
+    /// driven manually, never assigned via SetContent, so Window.Content alone can't identify it).
+    /// Reset to null on Build (see its own doc comment on pooled reuse) so a reused instance never
+    /// inherits a stale reference from whatever it was last used for.
+    /// </summary>
+    public object? Tag { get; set; }
+
     protected bool _isTransparent;
     public bool IsTransparent => _isTransparent;
 
@@ -267,6 +278,10 @@ public class Element
         _canContainChildren = hierarchy?.CanContainChildren ?? false;
         _childrenTileMode = hierarchy?.ChildrenTileMode ?? ChildElementTileMode.Floating;
         _children = [];
+
+        // Pooled elements must not inherit a stale Tag reference from whatever they were last
+        // used for -- see Tag's own doc comment.
+        Tag = null;
 
         /*========Display========*/
         _geometry.DisplayMode = layout?.DisplayMode ?? ElementDisplayMode.Fixed;
@@ -1455,6 +1470,15 @@ public class Element
         _geometry.OriginalSize = size;
         MeasureAndArrange();
     }
+
+    /// <summary>
+    /// Sets MinimumSize after construction -- Build only ever sets it once, from
+    /// ElementOptions.Layout.MinimumSize (see its own doc comment), which doesn't work for a
+    /// Fixed-mode window computing its own natural (content-driven) size at runtime rather than
+    /// knowing it upfront at CreateElement time. Does not itself trigger a re-measure -- call
+    /// SetSize afterward if the current size also needs to move up to the new floor.
+    /// </summary>
+    public void SetMinimumSize(Vector2 minimumSize) => _geometry.MinimumSize = minimumSize;
 
     /// <summary>
     /// Sets relative position and Fixed-mode size together in one MeasureAndArrange pass --

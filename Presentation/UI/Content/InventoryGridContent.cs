@@ -41,6 +41,9 @@ public sealed class InventoryGridContent(
     public static readonly Vector2 CellSize = new(24, 24);
     private const float CellGap = 1f;
 
+    /// <summary>The entity whose inventory this grid displays -- what UiInputController's content-drag path reads to identify a drop target's owning entity (see InventoryActions.TryTransferStack).</summary>
+    public int EntityId => entityId;
+
     /// <summary>Popup sits just to the right of whatever's hovered, vertically centered against it -- see PopupPositioning.GetPosition(East).</summary>
     private static readonly Vector2 PopupGap = new(1, 1);
 
@@ -182,6 +185,13 @@ public sealed class InventoryGridContent(
     {
         _hostWindow = hostWindow;
         hostWindow.Resized += OnHostWindowResized;
+
+        // Never assigned via hostWindow.SetContent (see this class's other consumer,
+        // InventoryTabContent, whose own doc comment explains why: this instance's own Update is
+        // driven manually, not through hostWindow.Content) -- Tag is what lets a caller (e.g.
+        // UiInputController's content-drag drop resolution) still identify "this window hosts
+        // entityId's inventory grid" regardless of which of the two hosting patterns built it.
+        hostWindow.Tag = this;
 
         RebuildCells();
         _versionWatcher.HasChanged(_stacks.GetEntityVersion(entityId));
@@ -382,7 +392,7 @@ public sealed class InventoryGridContent(
                 Chrome = new ElementChromeOptions { ShowBorder = !isExpandedMember, CanUserFocus = false },
                 Content = new ElementContentOptions { ContentColor = Color.Transparent },
             });
-            cell.Configure(entry.Definition.Id, entry.StackInstanceId, entry.Definition.SpriteName, entry.Definition.Glyph, entry.Definition.GlyphColor, entry.Quantity, entry.ChargeText, entry.IsDisabled, entry.IsDivergent, entry.MergedStackBadgeVisible, CellSize);
+            cell.Configure(entityId, entry.Definition.Id, entry.StackInstanceId, entry.Definition.SpriteName, entry.Definition.Glyph, entry.Definition.GlyphColor, entry.Quantity, entry.ChargeText, entry.IsDisabled, entry.IsDivergent, entry.MergedStackBadgeVisible, CellSize);
             cell.Clicked += OnCellClicked;
             _hostWindow.AddChild(cell);
             _cells.Add(cell);

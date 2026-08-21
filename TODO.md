@@ -132,6 +132,14 @@ Needs to compose with, not replace, the existing per-race/per-class baseline and
 
 Spells level up following the same rules as Skills above (level 0, normal cap 15, unlockable cap 20, XP gained with use, never decreases) -- worth landing after Skills specifically so both can share one leveling primitive (XP-to-next-level curve, level-up event, cap/unlock check) instead of two independently-built, likely-to-drift copies of the same math. A spell's own level would then modify its `ActionEffect` entries' magnitude/duration the same general way Skills modify a plain action -- e.g. a higher-level Heal restoring more, or a higher-level Magic Missile costing less mana -- though the exact "what does a spell's level actually change" design is still open.
 
+#### Corpse looting rights based on damage dealt
+
+Once multiple entities can plausibly have contributed to a kill, corpse looting shouldn't be a free-for-all -- rights should scale with damage dealt (see the Corpse looting item below for the looting mechanism itself, landed without this restriction: anyone adjacent can loot any corpse today). Needs per-entity damage-dealt tracking against a given target and a decision on when that tracking resets -- on death (simplest, but loses the record before looting even starts unless kept alongside `DeadComponent`), or on a timeout since the last hit (so a target that regenerates back to full between separate encounters doesn't keep crediting an attacker from an old, unrelated fight forever)? Open design question, not decided here.
+
+#### Mobs looting corpses
+
+V1: a mob loots a nearby corpse's inventory into its own, stopping once its own inventory is full (`InventoryCapacity.MaxNonPlayerStackCount`, see the Corpse looting item below) -- no preference among available items, just fills up. V2: preference based on the mob's own combat style and the item's rarity, once either concept exists.
+
 ### Low Priority
 
 #### Show runner race
@@ -188,6 +196,14 @@ Once Enchantment is real, a diverged item's `Override` (or a small sidecar field
 something like "enchanted with Ruby of Flame" for tooltip/flavor purposes, the way MMO item tooltips commonly
 show an enchant's origin. Not needed for Wands (there's nothing to attribute -- charge depletion isn't an
 event worth narrating), so left for whenever Enchantment itself is picked up.
+
+**Acquisition provenance** (a separate, broader concept from the divergence provenance above): no
+item stack tracks *where it came from* at all today -- a loot box, a specific corpse looted (see
+the Corpse looting item under Game), a shop purchase, crafting, etc. Same open design question as
+above (a field directly on `InventoryItemStackComponent` vs. a sparse side component), but scoped
+to acquisition source rather than divergence cause -- and should record the *name*, not the id, of
+the entity a stack was taken from, since entity ids get recycled once destroyed (corpses aside,
+which never are -- see the Corpse decay/destruction item under Game).
 
 #### ItemBindingRule for hotkey-bound consumables
 
@@ -289,9 +305,23 @@ Achievements can name a `Lootbox` (rarity + box type, `Game/Modules/Achievements
 
 `Lootbox`/`LootboxRarity` currently live in, and are named for, the Achievements module -- `IAchievementDefinition.Lootbox` is the only place a `Lootbox` is produced today, and every achievement definition (`Game/Modules/Achievements/Definitions/`) references the type directly. But a lootbox reward isn't conceptually achievement-specific -- quests, loot drops, level-up, and other future systems should be able to award one too, the same way `InventoryActions.AddItem` already isn't tied to any one caller. Worth moving `Lootbox`/`LootboxRarity` (and the eventual opening mechanic) into their own module once a second real awarder exists, with `AchievementModule` becoming just one caller of that module's own grant API (`IAchievementDefinition.Lootbox` would still describe *which* lootbox an achievement grants, but the granting/opening mechanics themselves wouldn't live under `Game/Modules/Achievements/` anymore).
 
-#### Corpse looting
+#### Corpse looting (landed)
 
-Opening the player's inventory and a dead entity's inventory side-by-side. The corpse stays a real, fully-populated entity after death specifically so this works (see the Corpse decay/destruction item above) -- once it has its own `InventoryItemStackComponent` stacks, this is a second `InventoryManagementWindow`-shaped view (`Presentation/UI/Inventory/`) targeting the corpse's entity id, opened alongside the player's own. Ties to the achievement backlog's "Loot a corpse for the first time" bullet below.
+Clicking an adjacent corpse opens the player's own `InventoryManagementWindow` alongside a new `CorpseInventoryWindow` (`Presentation/UI/Looting/`), both Menu Mode windows -- a fixed summary (entity icon/glyph, name, killer, death tick) above a plain, non-tabbed item grid (always at least a 2x5 minimum so items dragged in later don't force scrolling), sized once at open time and pinned there via the new `Element.SetMinimumSize` so it can't be user-shrunk below its own content. `SecondaryInventoryWindowController` (deliberately not folded into `InventoryFolderController`, which is itself slated for a split -- see the entry under Presentation below) owns the open/close/replace-on-new-target lifecycle and is written generically ("open a second inventory window for some other entity") so a future chest/shop can reuse it directly rather than growing its own controller. A corpse carrying unlooted items shows the `LootBag-Red` badge (top-right of its actual footprint, not just its origin tile, for a multi-tile corpse); the badge tints grey once the corpse's loot window has been opened at least once (`CorpseLootedComponent`).
+
+Items drag freely between any two entities' grids in either direction (`InventoryActions.TryTransferStack`/`TryTransferAllStacksOfItem` -- no auto-merge into a matching stack on the destination, a same-entity no-op guard, and a same-window drop is a safe no-op) via `UiInputController` locating the drop target's grid through the new `Element.Tag` property, not `Window.Content` -- `InventoryTabContent`'s own hosting pattern (the player's real inventory) never assigns `InventoryGridContent` as its host window's Content at all, driving it manually instead, which `Window.Content`-based matching silently missed entirely (confirmed by live testing: corpse-to-player transfers failed while player-to-corpse worked, since only the corpse's own simpler window happened to use `SetContent`). An item dragged from a non-player entity's own inventory never binds to, or even highlights, the hotbar. Non-player inventories are capped at 20 distinct stacks (`InventoryCapacity.MaxNonPlayerStackCount`) -- unlimited for the player.
+
+No real loot table exists yet -- Goblins/Fairies/Ghosts get a **temporary** random 0-20-stack starting inventory instead (`Game/Blueprints/NPCs/TemporaryNpcLootGrant.cs`), to replace once a real one lands. Ties to the achievement backlog's "Loot a corpse for the first time" bullet below.
+
+Deliberately out of scope for this pass, left for follow-ups of their own: stack splitting/merging (a transferred stack keeps its own identity rather than merging into a matching one on the destination), context-menu-based looting to replace today's temporary click-to-loot (see the Context menu item below), damage-based loot rights, and mobs looting corpses themselves (both new Medium Priority items above).
+
+#### NPC component
+
+A quick, direct way to identify "is this entity an NPC" -- today it's only ever inferred indirectly (excluding `IPlayerQuery.PlayerEntityId`, or a specific race check like `TestCombatBehaviorSystem.IsFairy`), with no single marker component. Raised by the Corpse looting item's own temporary random-loot grant (`TemporaryNpcLootGrant`), which currently has to target Goblin/Fairy/Ghost's blueprints individually rather than "every NPC."
+
+#### In-game day/time tracking
+
+`DeadComponent.DiedAtFrame` (see the Corpse looting item above) currently only shows a raw `EngineTime.FrameCount` tick in the corpse summary -- a real in-game calendar/clock (day/night, a date) would let that, and anything else wanting a timestamp, show something human-readable instead.
 
 #### Achievement content backlog
 
@@ -363,6 +393,12 @@ Each form's pages should let the player add their own notes, as multi-line text 
 #### Component ToString coverage for the selection inspector
 
 `SelectionWindowContent`'s inspector (`Presentation/UI/Content/SelectionWindowContent.cs`, via `ComponentInspector`) displays whatever `ToString()` a selected entity's components return -- most component structs still fall back to the default `ToString()` (the type name only, no field values), so the inspector shows little beyond "this entity has a HealthComponent" without the actual numbers. `HealthComponent` is the one existing example of a component with a real, informative `ToString()` (a percentage bar plus current/max, see its own doc comment on why it degrades gracefully for an invalid MaximumHealth rather than throwing). Worth a pass giving every component struct (or at least the ones a player/dev would actually want to inspect -- `ManaComponent`, `AbilityScoreComponent`, `StatModifierComponent`, `InventoryItemStackComponent`, etc.) an equivalent field-dump `ToString()`, so the inspector actually earns its name instead of just confirming presence/absence.
+
+#### Split InventoryFolderController into InventoryController, FolderController, and AbilityScoreController
+
+`InventoryFolderController` (`Presentation/UI/Inventory/InventoryFolderController.cs`) currently owns three responsibilities at once: the folder/tile shell itself, opening/closing the player's own `InventoryManagementWindow`, and opening/closing `AbilityScoreWindow`. Split into three cooperating classes -- `FolderController` (the folder/tile shell, renamed away from "Inventory Folder" since it houses more than inventory; exact new name still open), `InventoryController` (the player's `InventoryManagementWindow` open/close/toggle), and `AbilityScoreController` (`AbilityScoreWindow`'s own). `SecondaryInventoryWindowController` (see the Corpse looting item below) depends on two small accessors this split moves: `OpenInventoryWindow()`/`PlayerInventoryWindow` land on the new `InventoryController` instead, updating that one call site.
+
+Alongside the split, change the folder's own interaction model: today expanding/collapsing the folder (a click) is what opens/closes its windows (`InventoryFolderController.OnFolderDisplayModeChanged`). Instead, hovering the folder should open it, and a click should pin it open (survive the mouse leaving) rather than being the only way in.
 
 #### Inventory management
 
@@ -443,6 +479,8 @@ Companion to the Item weight and carry capacity scaling with Strength item above
 #### Context menu / mouse button coverage
 
 Right-click dropdown of options. `UiInputController` today only ever reads `MouseState.LeftButton` -- no right-click, middle-click, or double-click detection exists anywhere, so building this needs that mouse-button coverage added first (also enables incidental wins like double-click-title-bar-to-maximize).
+
+First concrete consumer once this lands: replace corpse looting's temporary click-to-loot (`MapWindow.OnCorpseClicked`, see the Corpse looting item under Game) with a real "Loot" context-menu action.
 
 #### Player stats v1
 

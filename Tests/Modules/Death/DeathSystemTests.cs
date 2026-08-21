@@ -1,4 +1,5 @@
 ﻿using Engine.ECS.Components.Stores;
+using Engine.ECS.Systems;
 using Engine.Events;
 using Engine.Math;
 using Game.Modules.Core.Components;
@@ -160,6 +161,18 @@ public sealed class DeathSystemTests
         system.Update(default, 0);
 
         Assert.IsTrue(deadEntities.Has(0));
+    }
+
+    [TestMethod]
+    public void Update_StampsDeadComponentWithCurrentFrameCount()
+    {
+        var (system, deadEntities, _, _, mapQuery, eventBus) = Build();
+        mapQuery.SetBlocking(0);
+
+        eventBus.Publish(new EntityDiedEvent(0, StatusEffectSource.FromEntity(1)));
+        system.Update(new EngineTime(TimeSpan.Zero, TimeSpan.Zero, false, FrameCount: 12345), 0);
+
+        Assert.AreEqual(12345, deadEntities.GetReadonly(0).DiedAtFrame);
     }
 
     /// <summary>The corpse-radiates-forever gap this AuraSourceEffects.RemoveAll wiring closes -- a corpse persists indefinitely (see this class's own doc comments above), so a source active at death time must be explicitly retracted here, not left for something else to eventually notice.</summary>

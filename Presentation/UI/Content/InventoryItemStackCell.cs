@@ -61,6 +61,9 @@ public sealed class InventoryItemStackCell(FontService fontService, ElementPoolS
 
     public Guid ItemDefinitionId { get; private set; }
 
+    /// <summary>The entity whose inventory this cell belongs to -- what UiInputController's content-drag path reads as a transfer's origin entity when dropped onto a different entity's own grid (see InventoryActions.TryTransferStack). Every inventory grid has exactly one owning entity, so this is the same value for every cell InventoryGridContent builds.</summary>
+    public int EntityId { get; private set; }
+
     /// <summary>The exact stack this cell represents -- what UiInputController's content-drag path reads to bind a hotbar slot to one specific physical stack, not just "some stack of this item id" (see ItemHotkeyBindingComponent's own doc comment). Null for a merged group cell (see this class's own doc comment) -- there is no single stack to bind.</summary>
     public Guid? StackInstanceId { get; private set; }
 
@@ -95,8 +98,9 @@ public sealed class InventoryItemStackCell(FontService fontService, ElementPoolS
     /// this way). SetGroupBorderEdges, called separately afterward, is the only thing that turns
     /// any of them back on for this Configure's cell.
     /// </summary>
-    public void Configure(Guid itemDefinitionId, Guid? stackInstanceId, string? spriteName, string glyph, Color glyphColor, int quantity, string? chargeText, bool isDisabled, bool isDivergent, bool mergedStackBadgeVisible, Vector2 cellSize)
+    public void Configure(int entityId, Guid itemDefinitionId, Guid? stackInstanceId, string? spriteName, string glyph, Color glyphColor, int quantity, string? chargeText, bool isDisabled, bool isDivergent, bool mergedStackBadgeVisible, Vector2 cellSize)
     {
+        EntityId = entityId;
         ItemDefinitionId = itemDefinitionId;
         StackInstanceId = stackInstanceId;
         IsDivergent = isDivergent;

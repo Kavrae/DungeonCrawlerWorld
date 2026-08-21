@@ -310,7 +310,7 @@ public sealed class ActionEffectResolverTests
         statusEffectAppliers.Register(applier);
         mapQuery.SetBlockingOccupant(TargetTile, BlockingTargetEntityId);
         componentManager.RegisterPackedPool<DeadComponent>(static (ref existing, incoming) => existing = incoming);
-        componentManager.GetPackedPool<DeadComponent>().Add(BlockingTargetEntityId, new DeadComponent(KilledByEntityId: null));
+        componentManager.GetPackedPool<DeadComponent>().Add(BlockingTargetEntityId, new DeadComponent(KilledByEntityId: null, DiedAtFrame: 0));
 
         ActionEffectResolver.Apply(ActionWithStatusEffect, StatusEffectInstance, SourceEntityId, [TargetTile], mapQuery, health, eventBus, mathUtility, playerQuery: null, statusEffectAppliers, componentManager, statModifiers: null, componentManager.GetPackedPool<DeadComponent>());
 

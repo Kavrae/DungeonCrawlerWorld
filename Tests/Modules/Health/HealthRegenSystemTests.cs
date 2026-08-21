@@ -62,7 +62,7 @@ public sealed class HealthRegenSystemTests
         var pool = CreatePool();
         pool.Add(0, new HealthComponent(currentHealth: 0, maximumHealth: 200));
         var deadEntities = new PackedComponentPool<DeadComponent>(10, 10, static (ref existing, incoming) => existing = incoming);
-        deadEntities.Add(0, new DeadComponent(KilledByEntityId: null));
+        deadEntities.Add(0, new DeadComponent(KilledByEntityId: null, DiedAtFrame: 0));
         var system = new HealthRegenSystem(pool, CreateTiersPool(), new ProcessingTierEvents(), statModifiers: null, deadEntities: deadEntities, abilityScores: CreateAbilityScoresPoolWithMaxConstitution(0));
 
         system.Update(default, 0);

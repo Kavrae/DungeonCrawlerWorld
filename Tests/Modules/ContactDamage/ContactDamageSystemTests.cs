@@ -190,7 +190,7 @@ public sealed class ContactDamageSystemTests
         var (system, _, _, health, _, movedEntities, deadEntities, _) = Build();
         movedEntities.Record(new EntityMovedEvent(MoverEntityId, new Vector3Int(4, 5, 0), new Vector3Int(5, 5, 0), new Vector2Byte(1, 1)));
         SimulateFrame(system, movedEntities); // Onto the hazard: exposure added, immediate 10 damage -> 90.
-        deadEntities.Add(MoverEntityId, new DeadComponent(KilledByEntityId: null));
+        deadEntities.Add(MoverEntityId, new DeadComponent(KilledByEntityId: null, DiedAtFrame: 0));
 
         for (var frame = 0; frame < 60; frame++)
         {

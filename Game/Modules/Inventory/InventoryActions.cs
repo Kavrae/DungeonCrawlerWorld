@@ -1,6 +1,7 @@
 using Engine.ECS.Components;
 using Engine.ECS.Components.Stores;
 using Game.Modules.Inventory.Components;
+using Game.World;
 
 namespace Game.Modules.Inventory;
 
@@ -245,4 +246,70 @@ public static class InventoryActions
     /// <summary>Disables/enables an entity's whole inventory -- items still exist and can still be granted while disabled, but the management window can't be opened (see InventoryFolderController).</summary>
     public static void SetInventoryDisabled(ComponentManager componentManager, int entityId, bool disabled) =>
         componentManager.Merge(entityId, new InventoryDisabledComponent(disabled));
+
+    /// <summary>
+    /// Moves one exact stack from sourceEntityId to destinationEntityId, preserving its exact
+    /// identity (StackInstanceId, Override, IsDisabled, IsDivergent) -- never merges into an
+    /// existing stack on the destination, even one matching the same item id (stack splitting/
+    /// merging is a separate, not-yet-built TODO item; duplicate stacks of the same item on one
+    /// entity are accepted for now). Refuses (returns false, no state changed) if source and
+    /// destination are the same entity -- a drop back onto the grid it came from should never
+    /// remove-then-re-add a stack it's already looking at -- or if the stack isn't found, or if the
+    /// destination is a non-player entity already at its stack cap (see InventoryCapacity).
+    /// </summary>
+    public static bool TryTransferStack(ComponentManager componentManager, int sourceEntityId, int destinationEntityId, Guid stackInstanceId, IPlayerQuery? playerQuery)
+    {
+        if (sourceEntityId == destinationEntityId)
+        {
+            return false;
+        }
+
+        var stacks = componentManager.GetMultiPool<InventoryItemStackComponent>();
+
+        var sourceDenseIndex = FindMatchingDenseIndex(stacks, sourceEntityId, stack => stack.StackInstanceId == stackInstanceId);
+        if (sourceDenseIndex == -1 || !InventoryCapacity.HasRoomForNewStack(componentManager, destinationEntityId, playerQuery))
+        {
+            return false;
+        }
+
+        var snapshot = stacks.GetReadonlyByDenseIndex(sourceDenseIndex);
+        stacks.RemoveByDenseIndex(sourceDenseIndex);
+
+        InventoryGrant.EnsureInventoryComponentExists(componentManager, destinationEntityId);
+        stacks.Add(destinationEntityId, snapshot);
+        return true;
+    }
+
+    /// <summary>
+    /// The "Merged Stack" drag case: moves every stack sharing itemDefinitionId on sourceEntityId
+    /// to destinationEntityId in one go, each keeping its own identity (see TryTransferStack
+    /// above) -- all or nothing, refusing the whole batch (no state changed) if the destination
+    /// doesn't have room for every one of them, rather than transferring some and leaving the rest
+    /// behind.
+    /// </summary>
+    public static bool TryTransferAllStacksOfItem(ComponentManager componentManager, int sourceEntityId, int destinationEntityId, Guid itemDefinitionId, IPlayerQuery? playerQuery)
+    {
+        if (sourceEntityId == destinationEntityId)
+        {
+            return false;
+        }
+
+        var stacks = componentManager.GetMultiPool<InventoryItemStackComponent>();
+
+        var matches = new List<InventoryItemStackComponent>();
+        InventoryQueries.CopyStacksForEntity(stacks, sourceEntityId, matches);
+        matches.RemoveAll(stack => stack.ItemDefinitionId != itemDefinitionId);
+
+        if (matches.Count == 0 || !InventoryCapacity.HasRoomForNewStacks(componentManager, destinationEntityId, playerQuery, matches.Count))
+        {
+            return false;
+        }
+
+        foreach (var stack in matches)
+        {
+            TryTransferStack(componentManager, sourceEntityId, destinationEntityId, stack.StackInstanceId, playerQuery);
+        }
+
+        return true;
+    }
 }

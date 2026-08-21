@@ -243,5 +243,17 @@
         "CellHeight": 16
       }
     ]
+  },
+  {
+    "Name": "LootBag-Red",
+    "Cells": [
+      {
+        "SheetPath": "Pixel Crawler - Free Pack/Environment/Props/Static/Farm.png",
+        "Column": 0,
+        "Row": 3,
+        "CellWidth": 16,
+        "CellHeight": 16
+      }
+    ]
   }
 ]

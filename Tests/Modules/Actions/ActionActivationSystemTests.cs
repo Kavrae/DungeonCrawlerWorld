@@ -162,7 +162,7 @@ public sealed class ActionActivationSystemTests
         componentManager.Merge(CasterEntityId, new ActionInstanceComponent(ImmediateActionId, damageAmount: 15, cooldownFramesRemaining: 0));
         componentManager.Merge(CasterEntityId, new ActionLockComponent(standardLockFrames: ActionLockGate.StandardLockFrames, currentLockTotalFrames: 0, currentLockFramesRemaining: 0));
         componentManager.Merge(CasterEntityId, new PendingActionActivationComponent(ImmediateActionId, [TargetTile]));
-        componentManager.GetPackedPool<DeadComponent>().Add(CasterEntityId, new DeadComponent(KilledByEntityId: null));
+        componentManager.GetPackedPool<DeadComponent>().Add(CasterEntityId, new DeadComponent(KilledByEntityId: null, DiedAtFrame: 0));
 
         system.Update(default, 0);
 

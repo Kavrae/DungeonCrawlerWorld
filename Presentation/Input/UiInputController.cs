@@ -1,5 +1,8 @@
+using Engine.ECS.Components;
 using Engine.Utilities;
 using Game.Modules.Actions;
+using Game.Modules.Inventory;
+using Game.World;
 using Microsoft.Xna.Framework;
 using Microsoft.Xna.Framework.Input;
 using Presentation.UI;
@@ -112,6 +115,9 @@ public sealed class UiInputController
     private HotbarContent? _contentDragOriginHotbar;
     private HotkeySlot? _contentDragOriginSlot;
 
+    /// <summary>The entity whose inventory grid the drag started from -- set only when the drag started on an InventoryItemStackCell (see InventoryItemStackCell.EntityId), never for a hotbar-origin drag. Read by ResolveContentDrag to detect an inventory-to-inventory transfer: dropped onto a different entity's own grid, not this one.</summary>
+    private int? _contentDragOriginEntityId;
+
     /// <summary>Mouse position when the current content-drag started -- ResolveContentDrag only actually resolves a drop if the release is at least ContentDragTapThresholdPixels away, so a plain click on a cell/slot (no real drag) doesn't spuriously unbind-then-rebind it.</summary>
     private Vector2 _contentDragStartMousePosition;
 
@@ -125,6 +131,12 @@ public sealed class UiInputController
 
     /// <summary>Owns the Armed Hotkey Summary window's arm/preview/hover state machine -- see its own doc comment. Null in test setups that don't build one (e.g. UiInputControllerTests' own harness), in which case hotbar-slot press/release/hover handling is simply skipped.</summary>
     private readonly HotbarController? _hotbarController;
+
+    /// <summary>Needed only for the inventory-to-inventory drag-transfer branch of ResolveContentDrag (InventoryActions.TryTransferStack/TryTransferAllStacksOfItem) -- null in test setups that don't wire one, in which case that branch is simply skipped and a content-drag can still resolve against a hotbar slot as before.</summary>
+    private readonly ComponentManager? _componentManager;
+
+    /// <summary>See _componentManager -- passed straight through to InventoryActions' capacity check for a non-player transfer destination.</summary>
+    private readonly IPlayerQuery? _playerQuery;
 
     /// <summary>Mouse position when the current hotbar-slot press started -- ResolveHotbarSlotClick only treats the release as a tap if it's within ContentDragTapThresholdPixels of this, the same tap-vs-drag distinction ResolveContentDrag already makes for content-drags.</summary>
     private Vector2 _hotbarPressMousePosition;
@@ -183,11 +195,13 @@ public sealed class UiInputController
     /// window to this same list afterward. Passing the list itself (not a snapshot/copy) is what
     /// makes that work -- this class only ever reads through the reference, never replaces it.
     /// </summary>
-    public UiInputController(UiLayerStack layers, Vector2 screenSize, HotbarController? hotbarController = null)
+    public UiInputController(UiLayerStack layers, Vector2 screenSize, HotbarController? hotbarController = null, ComponentManager? componentManager = null, IPlayerQuery? playerQuery = null)
     {
         _layers = layers;
         _screenSize = screenSize;
         _hotbarController = hotbarController;
+        _componentManager = componentManager;
+        _playerQuery = playerQuery;
 
         // Subscribing is safe to do unconditionally and permanently -- SDL simply never raises
         // SDL_TEXTINPUT while text input is stopped (see SetFocus's Start/StopTextInput calls
@@ -245,6 +259,9 @@ public sealed class UiInputController
 
     /// <summary>The action currently being content-dragged, if any -- see _contentDragActionId's own doc comment. Public for the same reason as ContentDragItemStackInstanceId above.</summary>
     public Guid? ContentDragActionId => _contentDragActionId;
+
+    /// <summary>The entity ContentDragItemStackInstanceId/ContentDragMergedItemDefinitionId's stack actually belongs to, if the drag started on an InventoryItemStackCell -- see _contentDragOriginEntityId's own doc comment. Public for the same reason as ContentDragItemStackInstanceId above -- DragGhostContent needs this to resolve a corpse-originated drag's icon, not just the player's own inventory.</summary>
+    public int? ContentDragOriginEntityId => _contentDragOriginEntityId;
 
     /// <summary>Whether DragGhostContent should actually draw the ghost right now -- true once a content-drag payload has been held for ContentDragGhostDelayFrames. See that constant's own doc comment for why this delay exists. Public for the same reason as ContentDragItemStackInstanceId above.</summary>
     public bool ContentDragGhostVisible =>
@@ -625,6 +642,7 @@ public sealed class UiInputController
         _contentDragActionId = null;
         _contentDragOriginHotbar = null;
         _contentDragOriginSlot = null;
+        _contentDragOriginEntityId = null;
         _contentDragHeldFrames = 0;
 
         // Every InventoryItemStackCell is a real drag source, Merged Stack included (see
@@ -644,6 +662,7 @@ public sealed class UiInputController
                 _contentDragMergedItemDefinitionId = cell.ItemDefinitionId;
             }
 
+            _contentDragOriginEntityId = cell.EntityId;
             _contentDragSourceSize = cell.CurrentSize;
             _contentDragStartMousePosition = new Vector2(clickPosition.X, clickPosition.Y);
         }
@@ -668,7 +687,8 @@ public sealed class UiInputController
             }
         }
 
-        if (_contentDragItemStackInstanceId is not null || _contentDragMergedItemDefinitionId is not null || _contentDragActionId is not null)
+        if ((_contentDragItemStackInstanceId is not null || _contentDragMergedItemDefinitionId is not null || _contentDragActionId is not null) &&
+            !IsDragFromNonPlayerInventory)
         {
             SetHotbarDragHighlight(true);
         }
@@ -782,10 +802,34 @@ public sealed class UiInputController
                 return;
             }
 
-            // A Merged Stack's drag never binds -- there is no single stack a drop could mean
-            // (see InventoryItemStackCell.CanBindToHotbar's own doc comment). IsContentDragBlockedAt
-            // already showed MouseCursor.No the whole time it hovered a hotbar slot; the drag
-            // just ends here with no binding change, cleanup happens in finally either way.
+            var dropInteraction = TryHitTestInteraction(releasePosition);
+
+            // Inventory-to-inventory transfer: the drop landed inside another entity's own grid
+            // window. Checked before the Merged-Stack-never-binds early return just below, since
+            // (unlike hotbar binding) a Merged Stack CAN move as a whole batch between grids --
+            // see InventoryActions.TryTransferAllStacksOfItem. The same-entity guard already lives
+            // in InventoryActions itself (defense in depth) -- dropping back onto the origin
+            // entity's own grid is a safe no-op either way, so it isn't special-cased here too.
+            if (_componentManager is { } componentManager && _contentDragOriginEntityId is { } originEntityId &&
+                FindHostingGrid(dropInteraction.Element) is { } dropGrid)
+            {
+                if (_contentDragItemStackInstanceId is { } stackInstanceId)
+                {
+                    InventoryActions.TryTransferStack(componentManager, originEntityId, dropGrid.EntityId, stackInstanceId, _playerQuery);
+                }
+                else if (_contentDragMergedItemDefinitionId is { } itemDefinitionId)
+                {
+                    InventoryActions.TryTransferAllStacksOfItem(componentManager, originEntityId, dropGrid.EntityId, itemDefinitionId, _playerQuery);
+                }
+
+                return;
+            }
+
+            // A Merged Stack's drag never binds to a hotbar slot -- there is no single stack a
+            // drop there could mean (see InventoryItemStackCell.CanBindToHotbar's own doc
+            // comment). IsContentDragBlockedAt already showed MouseCursor.No the whole time it
+            // hovered a hotbar slot; the drag just ends here with no binding change, cleanup
+            // happens in finally either way.
             if (_contentDragMergedItemDefinitionId is not null)
             {
                 return;
@@ -797,8 +841,12 @@ public sealed class UiInputController
             var receivingHotbar = _contentDragOriginHotbar;
             HotkeySlot? destinationSlot = null;
 
-            var dropInteraction = TryHitTestInteraction(releasePosition);
-            if (dropInteraction.Element is Window { Content: HotbarContent dropHotbar } &&
+            // An item dragged from another entity's own inventory (a corpse, say) can never bind
+            // to the player's hotbar -- see IsDragFromNonPlayerInventory's own doc comment for why
+            // (the bound stack wouldn't even belong to the player). Hotbar-origin drags (moving/
+            // unbinding an already-bound slot) are unaffected -- ContentDragOriginEntityId is only
+            // ever set for an InventoryItemStackCell-origin drag, never a hotbar one.
+            if (!IsDragFromNonPlayerInventory && dropInteraction.Element is Window { Content: HotbarContent dropHotbar } &&
                 dropHotbar.TryGetSlotAt(releasePosition, out var dropSlot))
             {
                 receivingHotbar ??= dropHotbar;
@@ -814,9 +862,35 @@ public sealed class UiInputController
             _contentDragActionId = null;
             _contentDragOriginHotbar = null;
             _contentDragOriginSlot = null;
+            _contentDragOriginEntityId = null;
             _contentDragHeldFrames = 0;
             SetHotbarDragHighlight(false);
         }
+    }
+
+    /// <summary>
+    /// Walks up from element through ParentElement looking for the nearest ancestor Window hosting
+    /// an InventoryGridContent -- handles the drop landing on a specific InventoryItemStackCell or
+    /// on empty grid space alike, matching "drop location is anywhere on the receiving entity's
+    /// item grid." Checked via Window.Tag, not Window.Content -- InventoryGridContent isn't always
+    /// assigned as its host window's Content (see InventoryGridContent.Initialize's own doc
+    /// comment: InventoryTabContent's own hosting pattern drives it manually and never calls
+    /// SetContent at all, unlike CorpseInventoryWindow's), so Tag is the one thing both hosting
+    /// patterns reliably set (confirmed via a live-testing repro against the real, TabbedContent-
+    /// nested InventoryManagementWindow structure -- Content-based matching silently found nothing
+    /// there, even though it worked against a simpler hand-built test harness).
+    /// </summary>
+    private static InventoryGridContent? FindHostingGrid(Element? element)
+    {
+        for (var candidate = element; candidate is not null; candidate = candidate.ParentElement)
+        {
+            if (candidate is Window { Tag: InventoryGridContent grid })
+            {
+                return grid;
+            }
+        }
+
+        return null;
     }
 
     /// <summary>
@@ -1474,10 +1548,22 @@ public sealed class UiInputController
         }
     }
 
-    /// <summary>True while dragging a Merged Stack cell (see _contentDragMergedItemDefinitionId's own doc comment) and position is currently over a hotbar slot -- the one concrete case that drag can never bind to. Checked ahead of the position == previousPosition shortcut so the cursor reads correctly for every frame of a stationary hover, not just the one it first arrived on.</summary>
+    /// <summary>
+    /// True while the current content-drag's item belongs to some other entity's inventory (a
+    /// corpse, say), not the player's own -- ResolveContentDrag refuses to bind it to a hotbar
+    /// slot in that case, since a hotbar slot's whole premise is referencing one of the player's
+    /// own stacks. False (permissive) whenever _playerQuery wasn't wired at all (e.g. a test
+    /// harness with no IPlayerQuery) -- "unknown" is treated as "assume it's fine," the same
+    /// convention IsTextInputFocused's own doc comment uses, rather than blocking every drag
+    /// outright just because there's nothing to compare against.
+    /// </summary>
+    private bool IsDragFromNonPlayerInventory =>
+        _playerQuery is not null && _contentDragOriginEntityId is { } originEntityId && originEntityId != _playerQuery.PlayerEntityId;
+
+    /// <summary>True while dragging something that can never bind to a hotbar slot -- a Merged Stack cell (see _contentDragMergedItemDefinitionId's own doc comment) or an item from another entity's own inventory (see IsDragFromNonPlayerInventory) -- and position is currently over one. Checked ahead of the position == previousPosition shortcut so the cursor reads correctly for every frame of a stationary hover, not just the one it first arrived on.</summary>
     private bool IsContentDragBlockedAt(Point position)
     {
-        if (_contentDragMergedItemDefinitionId is null)
+        if (_contentDragMergedItemDefinitionId is null && !IsDragFromNonPlayerInventory)
         {
             return false;
         }

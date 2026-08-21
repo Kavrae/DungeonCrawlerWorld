@@ -15,13 +15,16 @@ namespace Presentation.UI.Content;
 /// The live content-drag state DragGhostContent needs to draw a frame -- see DragGhostContent.GetState.
 /// Bundles what UiInputController's own content-drag fields expose (ContentDragGhostVisible,
 /// ContentDragItemStackInstanceId, ContentDragMergedItemDefinitionId, ContentDragActionId,
-/// ContentDragSourceSize, CurrentMousePosition) into one snapshot instead of DragGhostContent
-/// holding a live UiInputController reference just to pull six unrelated properties off it every
-/// frame. MergedItemDefinitionId is the icon fallback for a Merged Stack drag (see
-/// InventoryItemStackCell's own doc comment for the Base/Diverging/Merged vocabulary) -- it has
-/// no single StackInstanceId to resolve an icon through, only its own shared ItemDefinitionId.
+/// ContentDragOriginEntityId, ContentDragSourceSize, CurrentMousePosition) into one snapshot
+/// instead of DragGhostContent holding a live UiInputController reference just to pull seven
+/// unrelated properties off it every frame. MergedItemDefinitionId is the icon fallback for a
+/// Merged Stack drag (see InventoryItemStackCell's own doc comment for the Base/Diverging/Merged
+/// vocabulary) -- it has no single StackInstanceId to resolve an icon through, only its own
+/// shared ItemDefinitionId. OriginEntityId is null for a hotbar-origin drag (always the player's
+/// own item/action either way) -- only an InventoryItemStackCell-origin drag sets it, and it may
+/// belong to any entity's own inventory, not just the player's.
 /// </summary>
-public readonly record struct DragGhostState(bool Visible, Guid? ItemStackInstanceId, Guid? MergedItemDefinitionId, Guid? ActionId, Vector2 SourceSize, Point CursorPosition);
+public readonly record struct DragGhostState(bool Visible, Guid? ItemStackInstanceId, Guid? MergedItemDefinitionId, Guid? ActionId, int? OriginEntityId, Vector2 SourceSize, Point CursorPosition);
 
 /// <summary>
 /// A cursor-following copy of a dragged item's or action's icon while UiInputController's
@@ -72,7 +75,7 @@ public sealed class DragGhostContent(
         Color glyphColor;
 
         if (state.ItemStackInstanceId is { } stackInstanceId &&
-            InventoryQueries.TryFindByStackInstanceId(inventoryStacks, world.PlayerEntityId, stackInstanceId, out var stack) &&
+            InventoryQueries.TryFindByStackInstanceId(inventoryStacks, state.OriginEntityId ?? world.PlayerEntityId, stackInstanceId, out var stack) &&
             InventoryQueries.TryResolveEffectiveItem(itemCatalog, in stack, out var item))
         {
             (spriteName, glyph, glyphColor) = (item.SpriteName, item.Glyph, item.GlyphColor);
