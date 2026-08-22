@@ -3,6 +3,7 @@ using Engine.Math;
 using Game.Modules;
 using Game.Modules.Inventory;
 using Game.Modules.Inventory.Components;
+using Game.World;
 using Microsoft.Xna.Framework;
 using Presentation.Fonts;
 using Presentation.Rendering;
@@ -48,8 +49,13 @@ public sealed class InventoryManagementWindowTests
         windowService.RegisterFactory<GridControl>(() => new GridControl(fontService, windowService, glyphRenderer));
         windowService.RegisterFactory<Toggle>(() => new Toggle(fontService, windowService, glyphRenderer));
         windowService.RegisterFactory<Tooltip>(() => new Tooltip(fontService, windowService, glyphRenderer));
+
+        var world = new Game.World.World(new Game.World.Map(new Vector3Int(10, 10, 1)));
+        var contextMenuController = new ContextMenuController(windowService);
+        contextMenuController.Initialize(new UiLayerStack());
+
         windowService.RegisterFactory<InventoryManagementWindow>(() => new InventoryManagementWindow(
-            fontService, windowService, glyphRenderer, spriteSheetService, spriteRenderer, componentManager, itemCatalog));
+            fontService, windowService, glyphRenderer, spriteSheetService, spriteRenderer, componentManager, itemCatalog, world, contextMenuController));
 
         var hoverPopup = windowService.CreateElement<Tooltip>(null, new ElementOptions
         {
@@ -64,7 +70,7 @@ public sealed class InventoryManagementWindowTests
             Layout = new ElementLayoutOptions { RelativePosition = new Vector2(0, 0), Size = new Vector2(300, 300), DisplayMode = ElementDisplayMode.Fixed },
             Chrome = new ElementChromeOptions { ShowBorder = true, ShowTitle = true, CanUserFocus = false },
         });
-        window.Configure(EntityId, hoverPopup);
+        window.Configure(EntityId, hoverPopup, static () => null);
         window.Initialize();
 
         return (window, componentManager, firstItemId, secondItemId, scrollItemId);

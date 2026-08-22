@@ -36,7 +36,8 @@ public sealed class InventoryFolderController(
     SpriteSheetService spriteSheetService,
     SpriteRenderer spriteRenderer,
     ItemCatalog itemCatalog,
-    MapWindow mapWindow)
+    MapWindow mapWindow,
+    ContextMenuController contextMenuController)
 {
     /// <summary>Beneath the Notification folder, with enough clearance that NotificationCenter's own folder never overlaps this one even fully expanded (NotificationCenter.FolderMaximumSize).</summary>
     private static readonly Vector2 FolderGap = new(0, 20);
@@ -71,17 +72,32 @@ public sealed class InventoryFolderController(
     private WindowSlot<AbilityScoreWindow> _abilityScoreSlot = null!;
     private Tooltip _abilityScoreHoverPopup = null!;
     private Tooltip _inventoryHoverPopup = null!;
+    private UiLayerStack _layers = null!;
 
     public bool IsAnyWindowOpen => _inventorySlot.Window is not null || _abilityScoreSlot.Window is not null;
 
     /// <summary>The player's own currently-open InventoryManagementWindow, if any -- lets SecondaryInventoryWindowController position a corpse/container window relative to it without owning a second instance of its own.</summary>
     public InventoryManagementWindow? PlayerInventoryWindow => _inventorySlot.Window;
 
+    /// <summary>
+    /// Settable late-bound query for "is a secondary/corpse inventory window currently open, and
+    /// for which entity" -- wired by ShellBootstrapper to SecondaryInventoryWindowController.
+    /// OpenTargetEntityId once that controller exists (it's built after this one, and itself
+    /// depends on this controller, so the two can't reference each other via constructor
+    /// injection -- the same settable-delegate shape MapWindow.OnCorpseClicked/OnInspectionOpened
+    /// already use to break an identical ordering cycle). Threaded down to the player's own
+    /// InventoryManagementWindow via CreateInventoryWindow's Configure call, and from there to
+    /// every tab's own InventoryGridContent, whose Give/Take menu calls it fresh on every
+    /// right-click rather than caching a stale answer.
+    /// </summary>
+    public Func<int?>? GetSecondaryTargetEntityId { get; set; }
+
     /// <summary>Opens the player's own Inventory window if it isn't already -- idempotent, same as WindowSlot.Open itself. Lets a non-folder trigger (e.g. clicking a corpse to loot it) reuse this window instead of the folder tile being the only way to open it.</summary>
     public void OpenInventoryWindow() => _inventorySlot.Open();
 
     public void Initialize(UiLayerStack layers)
     {
+        _layers = layers;
         _inventorySlot = new WindowSlot<InventoryManagementWindow>(CreateInventoryWindow, IsInventoryDisabled, layers, MinimizeFolderIfNothingOpen);
         _abilityScoreSlot = new WindowSlot<AbilityScoreWindow>(CreateAbilityScoreWindow, IsInventoryDisabled, layers, MinimizeFolderIfNothingOpen);
 
@@ -187,8 +203,9 @@ public sealed class InventoryFolderController(
             },
             Content = new ElementContentOptions { ContentColor = InventoryManagementWindow.BackgroundColor },
         });
-        window.Configure(world.PlayerEntityId, _inventoryHoverPopup);
+        window.Configure(world.PlayerEntityId, _inventoryHoverPopup, () => GetSecondaryTargetEntityId?.Invoke());
         window.Closed += _ => _inventoryHoverPopup.Hide(); // Closing the Inventory window mid-hover shouldn't leave the popup stranded.
+        window.OnRightClicked = position => contextMenuController.Open(new Vector2(position.X, position.Y), DynamicHudContextMenus.BuildCloseMenu(window, _layers));
         return window;
     }
 
@@ -219,6 +236,7 @@ public sealed class InventoryFolderController(
         });
         window.Configure(world.PlayerEntityId, _abilityScoreHoverPopup);
         window.Closed += _ => _abilityScoreHoverPopup.Hide(); // Closing the Stats window mid-hover shouldn't leave the popup stranded.
+        window.OnRightClicked = position => contextMenuController.Open(new Vector2(position.X, position.Y), DynamicHudContextMenus.BuildCloseMenu(window, _layers));
         return window;
     }
 

@@ -72,6 +72,7 @@ public sealed class MapWindowTests
         componentManager.RegisterDirectPool<GlyphComponent>(static (ref existing, incoming) => existing = incoming);
         componentManager.RegisterDirectPool<SpriteComponent>(static (ref existing, incoming) => existing = incoming);
         componentManager.RegisterDirectPool<BackgroundComponent>(static (ref existing, incoming) => existing = incoming);
+        componentManager.RegisterDirectPool<DisplayTextComponent>(static (ref existing, incoming) => existing = incoming);
         componentManager.RegisterMultiPool<NonBlockingComponent>();
         componentManager.RegisterPackedPool<MovementComponent>(static (ref existing, incoming) => existing = incoming);
         componentManager.RegisterPackedPool<HealthComponent>(static (ref existing, incoming) => existing = incoming);
@@ -1069,11 +1070,13 @@ public sealed class MapWindowTests
 
         Assert.IsTrue(mapWindow.ContextMenuController.IsOpen);
         var rows = mapWindow.ContextMenuController.Menu.ChildElements;
-        // 2, not 1 -- PlaceCorpse merges DeadComponent directly rather than going through
-        // DeathSystem.ConvertToNonBlocking, so the corpse stays Blocking here, and "Inspect"
-        // (see TryOpenEntityContextMenuAt) now always accompanies "Loot" for a Blocking corpse.
-        Assert.HasCount(2, rows);
-        var lootButton = (Button)rows[0];
+        // 3, not 1 -- a read-only name header always leads each entity's own group (see
+        // TryOpenEntityContextMenuAt/ContextMenuOption.Header), and PlaceCorpse merges
+        // DeadComponent directly rather than going through DeathSystem.ConvertToNonBlocking, so
+        // the corpse stays Blocking here, and "Inspect" now always accompanies "Loot" for a
+        // Blocking corpse.
+        Assert.HasCount(3, rows);
+        var lootButton = (Button)rows[1];
         Assert.AreEqual("Loot", lootButton.LeftText);
         Assert.IsTrue(lootButton.Enabled);
     }
@@ -1089,7 +1092,7 @@ public sealed class MapWindowTests
         mapWindow.TryOpenEntityContextMenuAt(ComputeScreenPositionForMapPosition(mapWindow, mapViewState, corpsePosition));
 
         Assert.IsTrue(mapWindow.ContextMenuController.IsOpen, "Still shown -- just disabled -- so the player sees why nothing happens rather than the menu silently omitting it.");
-        var lootButton = (Button)mapWindow.ContextMenuController.Menu.ChildElements[0];
+        var lootButton = (Button)mapWindow.ContextMenuController.Menu.ChildElements[1]; // [0] is the entity's own name header.
         Assert.IsFalse(lootButton.Enabled);
     }
 
@@ -1115,7 +1118,7 @@ public sealed class MapWindowTests
 
         mapWindow.TryOpenEntityContextMenuAt(ComputeScreenPositionForMapPosition(mapWindow, mapViewState, corpsePosition));
         var menu = mapWindow.ContextMenuController.Menu;
-        var lootButton = (Button)menu.ChildElements[0];
+        var lootButton = (Button)menu.ChildElements[1]; // [0] is the entity's own name header.
         menu.HandleClick(lootButton.Rectangle.Center);
 
         Assert.AreEqual(CorpseEntityId, invokedEntityId);
@@ -1142,8 +1145,8 @@ public sealed class MapWindowTests
 
         Assert.IsTrue(mapWindow.ContextMenuController.IsOpen);
         var rows = mapWindow.ContextMenuController.Menu.ChildElements;
-        Assert.HasCount(2, rows);
-        var inspectButton = (Button)rows[1];
+        Assert.HasCount(3, rows); // [0] header, [1] Loot, [2] Inspect.
+        var inspectButton = (Button)rows[2];
         Assert.AreEqual("Inspect", inspectButton.LeftText);
     }
 
@@ -1160,8 +1163,8 @@ public sealed class MapWindowTests
 
         Assert.IsTrue(mapWindow.ContextMenuController.IsOpen);
         var rows = mapWindow.ContextMenuController.Menu.ChildElements;
-        Assert.HasCount(1, rows);
-        var inspectButton = (Button)rows[0];
+        Assert.HasCount(2, rows); // [0] header, [1] Inspect.
+        var inspectButton = (Button)rows[1];
         Assert.AreEqual("Inspect", inspectButton.LeftText);
         // Disabled -- ActionLockGate.IsBlocked treats "no ActionLockComponent at all" (this
         // test never merges one for the player) the same as "locked," matching every other
@@ -1181,7 +1184,7 @@ public sealed class MapWindowTests
 
         mapWindow.TryOpenEntityContextMenuAt(ComputeScreenPositionForMapPosition(mapWindow, mapViewState, targetPosition));
         var menu = mapWindow.ContextMenuController.Menu;
-        var inspectButton = (Button)menu.ChildElements[0];
+        var inspectButton = (Button)menu.ChildElements[1]; // [0] is the entity's own name header.
         menu.HandleClick(inspectButton.Rectangle.Center);
 
         Assert.AreEqual(InspectionMode.Detail, mapViewState.InspectionMode);

@@ -38,7 +38,10 @@ public sealed class NotificationCenterTests
 
     private static NotificationCenter CreateNotificationCenter(ElementPoolService windowService, UiLayerStack layers)
     {
-        var notificationCenter = new NotificationCenter(windowService, new EventBus(), layers);
+        var contextMenuController = new ContextMenuController(windowService);
+        contextMenuController.Initialize(layers);
+
+        var notificationCenter = new NotificationCenter(windowService, new EventBus(), layers, contextMenuController);
         notificationCenter.Initialize();
         return notificationCenter;
     }
@@ -421,7 +424,10 @@ public sealed class NotificationCenterTests
     {
         var eventBus = new EventBus();
         var layers = new UiLayerStack();
-        var notificationCenter = new NotificationCenter(CreateWindowService(), eventBus, layers);
+        var windowService = CreateWindowService();
+        var contextMenuController = new ContextMenuController(windowService);
+        contextMenuController.Initialize(layers);
+        var notificationCenter = new NotificationCenter(windowService, eventBus, layers, contextMenuController);
         notificationCenter.Initialize();
 
         eventBus.Publish(new NotificationRequestedEvent(NotificationCategory.System, "You have entered the dungeon", ShowImmediately: true));

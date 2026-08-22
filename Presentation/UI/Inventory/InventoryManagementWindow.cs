@@ -2,6 +2,7 @@ using Engine.ECS.Components;
 using Game.Modules;
 using Game.Modules.Inventory;
 using Game.Modules.Inventory.Components;
+using Game.World;
 using Microsoft.Xna.Framework;
 using Presentation.Fonts;
 using Presentation.Rendering;
@@ -38,7 +39,9 @@ public sealed class InventoryManagementWindow(
     SpriteSheetService spriteSheetService,
     SpriteRenderer spriteRenderer,
     ComponentManager componentManager,
-    ItemCatalog itemCatalog) : Window(fontService, elementPoolService, glyphRenderer)
+    ItemCatalog itemCatalog,
+    World world,
+    ContextMenuController contextMenuController) : Window(fontService, elementPoolService, glyphRenderer)
 {
     /// <summary>Dark grey background for both this window's own content area and TabbedContent's body window (see Configure) -- individual grid cells stay white-with-a-black-border (InventoryItemStackCell) so they read as distinct squares against it. Shared with AbilityScoreWindow's own background -- see WindowPalette.</summary>
     public static readonly Color BackgroundColor = WindowPalette.PanelBackgroundColor;
@@ -47,14 +50,16 @@ public sealed class InventoryManagementWindow(
 
     private int _entityId;
     private Tooltip _hoverPopup = null!;
+    private Func<int?> _getSecondaryTargetEntityId = static () => null;
     private readonly VersionWatcher _tagVersionWatcher = new();
     private HashSet<Tag> _currentTags = [];
 
-    /// <summary>Builds this window's content for entityId's inventory. Must be called after CreateElement but before Initialize (see Window.SetContent's own doc comment) -- a fresh TabbedContent per open, since entityId varies across opens of a pooled/reused window instance. hoverPopup is owned by InventoryFolderController (created once, top-level, shared across opens) rather than a child of this window -- see Tooltip's own doc comment for why a nested child can't work here.</summary>
-    public void Configure(int entityId, Tooltip hoverPopup)
+    /// <summary>Builds this window's content for entityId's inventory. Must be called after CreateElement but before Initialize (see Window.SetContent's own doc comment) -- a fresh TabbedContent per open, since entityId varies across opens of a pooled/reused window instance. hoverPopup is owned by InventoryFolderController (created once, top-level, shared across opens) rather than a child of this window -- see Tooltip's own doc comment for why a nested child can't work here. getSecondaryTargetEntityId lets each grid's own Give/Take menu (see InventoryGridContent.BuildGiveTakeMenu) ask "is a secondary/corpse window currently open, and for whom" without this window needing a direct SecondaryInventoryWindowController reference -- see InventoryFolderController.GetSecondaryTargetEntityId, the actual settable source this is expected to be wired to.</summary>
+    public void Configure(int entityId, Tooltip hoverPopup, Func<int?> getSecondaryTargetEntityId)
     {
         _entityId = entityId;
         _hoverPopup = hoverPopup;
+        _getSecondaryTargetEntityId = getSecondaryTargetEntityId;
 
         var tagCounts = InventoryTagQueries.GetTagCounts(componentManager, itemCatalog, entityId);
         _currentTags = ToTagSet(tagCounts);
@@ -114,7 +119,7 @@ public sealed class InventoryManagementWindow(
 
     private InventoryTabContent CreateTabContent(Tag? filterTag)
     {
-        var gridContent = new InventoryGridContent(componentManager, itemCatalog, elementPoolService, fontService, glyphRenderer, spriteSheetService, spriteRenderer, _entityId, filterTag, _hoverPopup);
+        var gridContent = new InventoryGridContent(world, componentManager, itemCatalog, elementPoolService, fontService, glyphRenderer, spriteSheetService, spriteRenderer, contextMenuController, _entityId, filterTag, _hoverPopup, _getSecondaryTargetEntityId);
         return new InventoryTabContent(elementPoolService, fontService, glyphRenderer, gridContent);
     }
 }

@@ -16,7 +16,7 @@ namespace Presentation.UI.Notifications;
 /// NotificationRequestedEvent, so a Game-layer caller (which can't reference this
 /// Presentation-layer type at all) can request a notification without a direct reference.
 /// </summary>
-public sealed class NotificationCenter(ElementPoolService elementPoolService, EventBus eventBus, UiLayerStack layers)
+public sealed class NotificationCenter(ElementPoolService elementPoolService, EventBus eventBus, UiLayerStack layers, ContextMenuController contextMenuController)
 {
     private static readonly Vector2 FolderPosition = HudMetrics.Margin;
 
@@ -129,6 +129,15 @@ public sealed class NotificationCenter(ElementPoolService elementPoolService, Ev
                 // active notification windows), so this subscription lives for the game's
                 // lifetime -- no unsubscribe-on-fire needed, unlike OnActiveNotificationClosed.
                 countWindow.Clicked += _ => OpenNextNotification(category);
+                countWindow.OnRightClicked = position =>
+                {
+                    var hasUnread = UnreadListFor(category).Count > 0;
+                    contextMenuController.Open(new Vector2(position.X, position.Y),
+                    [
+                        new ContextMenuOption("Open", null, hasUnread, () => OpenNextNotification(category)),
+                        new ContextMenuOption("Open All", null, hasUnread, () => OpenAllNotifications(category)),
+                    ]);
+                };
             }
         }
 
@@ -176,6 +185,15 @@ public sealed class NotificationCenter(ElementPoolService elementPoolService, Ev
         RefreshUnreadSummary(category);
 
         ShowActive(notification);
+    }
+
+    /// <summary>Opens every currently-unread notification in category, one popup per call (see OpenNextNotification) -- each stacks visually via ActiveNotificationStackOffset, the same as opening them one at a time by hand. Scoped to this one category only, not every category -- the summary badge being right-clicked is itself category-specific.</summary>
+    public void OpenAllNotifications(NotificationCategory category)
+    {
+        while (UnreadListFor(category).Count > 0)
+        {
+            OpenNextNotification(category);
+        }
     }
 
     /// <summary>
@@ -251,6 +269,47 @@ public sealed class NotificationCenter(ElementPoolService elementPoolService, Ev
         if (canMinimize)
         {
             notificationWindow.AddChromeBehavior(new NotificationMinimizeBehavior(() => MinimizeNotification(notification)));
+        }
+
+        notificationWindow.OnRightClicked = position => contextMenuController.Open(new Vector2(position.X, position.Y), BuildRightClickMenu(notification, canMinimize));
+    }
+
+    /// <summary>Close/Close All always (mirrors what every popup's own Close button already permits -- CanUserClose is unconditionally true for every category, see ShowActive); Minimize/Minimize All only for a non-System notification, the same canMinimize gate ShowActive already computes for the dedicated minimize button.</summary>
+    private List<ContextMenuOption> BuildRightClickMenu(Notification notification, bool canMinimize)
+    {
+        List<ContextMenuOption> options =
+        [
+            new ContextMenuOption("Close", null, Enabled: true, () => CloseNotification(notification.Id)),
+            new ContextMenuOption("Close All", null, Enabled: true, CloseAllNotifications),
+        ];
+
+        if (canMinimize)
+        {
+            options.Add(new ContextMenuOption("Minimize", null, Enabled: true, () => MinimizeNotification(notification)));
+            options.Add(new ContextMenuOption("Minimize All", null, Enabled: true, MinimizeAllNotifications));
+        }
+
+        return options;
+    }
+
+    /// <summary>Closes every active notification popup -- no more permissive than what each one's own Close button already does today (CanUserClose is unconditionally true for every category, System included, see ShowActive).</summary>
+    public void CloseAllNotifications()
+    {
+        foreach (var entry in _activeNotifications.ToArray())
+        {
+            entry.ActiveWindow.Close();
+        }
+    }
+
+    /// <summary>Minimizes (see MinimizeNotification) every active *non-System* notification -- System notifications are uncloseable-except-by-resolution (see ShowActive's own canMinimize computation) and are deliberately skipped here entirely, not merely left without their own Minimize button.</summary>
+    public void MinimizeAllNotifications()
+    {
+        foreach (var entry in _activeNotifications.ToArray())
+        {
+            if (entry.Notification.Category != NotificationCategory.System)
+            {
+                MinimizeNotification(entry.Notification);
+            }
         }
     }
 

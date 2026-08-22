@@ -14,6 +14,10 @@ public class TextWindow(FontService fontService, ElementPoolService elementPoolS
     public DisplayText DisplayText { get; set; }
     public SpriteFontBase ContentFont { get; set; } = fontService.GetFont(12);
     public Color TextColor { get; set; }
+
+    /// <summary>No bold font asset exists in this codebase (see FontService -- DroidSans regular only), so Bold renders as a cheap 1px-offset double-draw instead of a real bold weight -- close enough for a UI label (e.g. ContextMenu's own header rows) without needing a second font file.</summary>
+    public bool Bold { get; set; }
+
     protected const int LinePadding = 3;
 
     public override void Build(Element? parent, ElementOptions options)
@@ -22,18 +26,25 @@ public class TextWindow(FontService fontService, ElementPoolService elementPoolS
 
         OriginalText = options.Text?.Text ?? string.Empty;
         TextColor = options.Text?.TextColor ?? WindowPalette.BodyTextColor;
+        Bold = options.Text?.Bold ?? false;
         _canContainChildren = false;
     }
 
     public override void DrawContent(GameTime gameTime)
     {
-        if (!string.IsNullOrWhiteSpace(DisplayText.FormattedText))
+        if (string.IsNullOrWhiteSpace(DisplayText.FormattedText))
         {
-            var origin = RequiresContentViewport
-                ? Vector2.Zero
-                : ContentAbsolutePosition;
-            ElementPoolService.SpriteBatch.DrawString(ContentFont, DisplayText.FormattedText, origin + new Vector2(LinePadding, LinePadding), TextColor);
+            return;
         }
+
+        var origin = (RequiresContentViewport ? Vector2.Zero : ContentAbsolutePosition) + new Vector2(LinePadding, LinePadding);
+
+        if (Bold)
+        {
+            ElementPoolService.SpriteBatch.DrawString(ContentFont, DisplayText.FormattedText, origin + new Vector2(1, 0), TextColor);
+        }
+
+        ElementPoolService.SpriteBatch.DrawString(ContentFont, DisplayText.FormattedText, origin, TextColor);
     }
 
     protected override void RecalculateFixedSize()

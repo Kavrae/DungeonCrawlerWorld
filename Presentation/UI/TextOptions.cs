@@ -17,4 +17,7 @@ public sealed class TextOptions
 
     /// <summary>TextBox only -- whether Shift+Enter inserts a newline (true) or is treated the same as a plain Enter (false, the default). See TextBox.OnHotkeysAction.</summary>
     public bool? Multiline { get; set; }
+
+    /// <summary>TextWindow only -- see TextWindow.Bold's own doc comment for how this renders without a real bold font asset.</summary>
+    public bool? Bold { get; set; }
 }

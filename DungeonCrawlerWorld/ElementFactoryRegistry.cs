@@ -73,7 +73,7 @@ public static class ElementFactoryRegistry
 
         pool.RegisterFactory<InventoryManagementWindow>(() => new InventoryManagementWindow(
             presentation.FontService, pool, presentation.GlyphRenderer, presentation.SpriteSheetService, presentation.SpriteRenderer,
-            componentManager, itemCatalog));
+            componentManager, itemCatalog, world, contextMenuController));
         Register<InventoryItemStackCell>((font, elements, glyph) => new InventoryItemStackCell(font, elements, glyph, presentation.SpriteSheetService, presentation.SpriteRenderer));
         Register<GridControl>((font, elements, glyph) => new GridControl(font, elements, glyph));
         Register<Toggle>((font, elements, glyph) => new Toggle(font, elements, glyph));
@@ -87,7 +87,7 @@ public static class ElementFactoryRegistry
 
         pool.RegisterFactory<CorpseInventoryWindow>(() => new CorpseInventoryWindow(
             presentation.FontService, pool, presentation.GlyphRenderer, componentManager,
-            presentation.SpriteSheetService, presentation.SpriteRenderer, itemCatalog));
+            presentation.SpriteSheetService, presentation.SpriteRenderer, itemCatalog, world, contextMenuController));
         Register<EntityIconElement>((font, elements, glyph) => new EntityIconElement(
             font, elements, glyph, presentation.SpriteSheetService, presentation.SpriteRenderer,
             componentManager.GetDirectPool<SpriteComponent>(), componentManager.GetDirectPool<GlyphComponent>()));

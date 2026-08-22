@@ -31,6 +31,16 @@ public sealed class Button(FontService fontService, ElementPoolService elementPo
     /// <summary>Defaults to WindowPalette.BodyTextColor (black) -- overridable via Text.TextColor, e.g. GridControl's sort tile needs white text against its own dark ContentColor.</summary>
     public Color TextColor { get; set; }
 
+    /// <summary>
+    /// Forces left alignment even when RightText is empty -- ContextMenu's own option rows set
+    /// this so they always read as a native left-aligned menu command, regardless of whether a
+    /// hotkey column happens to be present, rather than falling into the single-glyph
+    /// ink-centered look DrawContent otherwise uses for a title button ("X", "_", "O") when
+    /// RightText is empty. False by default (that ink-centered look), reset on every Build since
+    /// pooled Buttons are shared across both title-button and context-menu uses.
+    /// </summary>
+    public bool LeftAlign { get; set; }
+
     public bool IsHovered { get; set; }
 
     /// <summary>True while the mouse is held down over this button -- DrawContent swaps Outset/Inset while true, giving the pressed-in look. Set by UiInputController on press/release (see PressedButton).</summary>
@@ -57,6 +67,7 @@ public sealed class Button(FontService fontService, ElementPoolService elementPo
         Enabled = true;
         IsHovered = false;
         IsPressed = false;
+        LeftAlign = false;
 
         _restingBorderStyle = options.Chrome?.BorderStyle ?? BorderStyle.Outset;
         BorderStyle = _restingBorderStyle;
@@ -127,13 +138,13 @@ public sealed class Button(FontService fontService, ElementPoolService elementPo
 
         var textColor = Enabled ? TextColor : Color.Gray;
 
-        if (string.IsNullOrEmpty(RightText))
+        if (string.IsNullOrEmpty(RightText) && !LeftAlign)
         {
-            // No hotkey column -- ink-centered (not left-aligned), the same look every title
-            // button ("X", "_", "O") has always had. DrawLeftAligned's box-based (not
-            // ink-based) vertical centering reads visibly low for a single short glyph in a
-            // small square button -- see GlyphRenderer's own doc comment on why MeasureString's
-            // line box is a poor stand-in for a glyph's actual rendered ink.
+            // No hotkey column and no explicit left-align request -- ink-centered, the same
+            // look every title button ("X", "_", "O") has always had. DrawLeftAligned's
+            // box-based (not ink-based) vertical centering reads visibly low for a single short
+            // glyph in a small square button -- see GlyphRenderer's own doc comment on why
+            // MeasureString's line box is a poor stand-in for a glyph's actual rendered ink.
             if (!string.IsNullOrEmpty(LeftText))
             {
                 GlyphRenderer.DrawCentered(spriteBatch, ContentFont, LeftText, ContentAbsolutePosition, ContentSize, textColor);
@@ -141,8 +152,9 @@ public sealed class Button(FontService fontService, ElementPoolService elementPo
         }
         else
         {
-            // A hotkey column is present (context-menu option row) -- left/right split instead,
-            // inset by HorizontalTextInset so neither column sits flush against the row's edges.
+            // A hotkey column is present, or LeftAlign was explicitly requested (a context-menu
+            // option row) -- left/right split instead, inset by HorizontalTextInset so neither
+            // column sits flush against the row's edges.
             var textFootprintPosition = ContentAbsolutePosition + new Vector2(HorizontalTextInset, 0);
             var textFootprintSize = ContentSize - new Vector2(HorizontalTextInset * 2, 0);
 
@@ -151,7 +163,10 @@ public sealed class Button(FontService fontService, ElementPoolService elementPo
                 GlyphRenderer.DrawLeftAligned(spriteBatch, ContentFont, LeftText, textFootprintPosition, textFootprintSize, textColor);
             }
 
-            GlyphRenderer.DrawRightAligned(spriteBatch, ContentFont, RightText, textFootprintPosition, textFootprintSize, textColor);
+            if (!string.IsNullOrEmpty(RightText))
+            {
+                GlyphRenderer.DrawRightAligned(spriteBatch, ContentFont, RightText, textFootprintPosition, textFootprintSize, textColor);
+            }
         }
     }
 }

@@ -2340,6 +2340,10 @@ public sealed class UiInputControllerTests
         });
         hoverPopup.Initialize();
 
+        var world = new Game.World.World(new Game.World.Map(new Vector3Int(10, 10, 1)));
+        var contextMenuController = new ContextMenuController(windowService);
+        contextMenuController.Initialize(new UiLayerStack());
+
         Window BuildGridWindow(int entityId, Vector2 position)
         {
             var window = windowService.CreateElement<Window>(null, new ElementOptions
@@ -2348,7 +2352,7 @@ public sealed class UiInputControllerTests
                 Layout = new ElementLayoutOptions { RelativePosition = position, Size = new Vector2(200, 200), DisplayMode = ElementDisplayMode.Fixed },
                 Chrome = new ElementChromeOptions { ShowBorder = true, CanUserFocus = false },
             });
-            window.SetContent(new InventoryGridContent(componentManager, itemCatalog, windowService, fontService, glyphRenderer, spriteSheetService, spriteRenderer, entityId, filterTag: null, hoverPopup));
+            window.SetContent(new InventoryGridContent(world, componentManager, itemCatalog, windowService, fontService, glyphRenderer, spriteSheetService, spriteRenderer, contextMenuController, entityId, filterTag: null, hoverPopup, static () => null));
             window.Initialize();
             return window;
         }
@@ -2429,8 +2433,13 @@ public sealed class UiInputControllerTests
         windowService.RegisterFactory<GridControl>(() => new GridControl(fontService, windowService, glyphRenderer));
         windowService.RegisterFactory<Toggle>(() => new Toggle(fontService, windowService, glyphRenderer));
         windowService.RegisterFactory<Tooltip>(() => new Tooltip(fontService, windowService, glyphRenderer));
+
+        var world = new Game.World.World(new Game.World.Map(new Vector3Int(10, 10, 1)));
+        var contextMenuController = new ContextMenuController(windowService);
+        contextMenuController.Initialize(new UiLayerStack());
+
         windowService.RegisterFactory<InventoryManagementWindow>(() => new InventoryManagementWindow(
-            fontService, windowService, glyphRenderer, spriteSheetService, spriteRenderer, componentManager, itemCatalog));
+            fontService, windowService, glyphRenderer, spriteSheetService, spriteRenderer, componentManager, itemCatalog, world, contextMenuController));
 
         var hoverPopup = windowService.CreateElement<Tooltip>(null, new ElementOptions
         {
@@ -2445,7 +2454,7 @@ public sealed class UiInputControllerTests
             Layout = new ElementLayoutOptions { RelativePosition = new Vector2(0, 0), Size = new Vector2(200, 200), DisplayMode = ElementDisplayMode.Fixed },
             Chrome = new ElementChromeOptions { ShowBorder = true, CanUserFocus = false },
         });
-        sourceGridWindow.SetContent(new InventoryGridContent(componentManager, itemCatalog, windowService, fontService, glyphRenderer, spriteSheetService, spriteRenderer, sourceEntityId, filterTag: null, hoverPopup));
+        sourceGridWindow.SetContent(new InventoryGridContent(world, componentManager, itemCatalog, windowService, fontService, glyphRenderer, spriteSheetService, spriteRenderer, contextMenuController, sourceEntityId, filterTag: null, hoverPopup, static () => null));
         sourceGridWindow.Initialize();
         var cell = sourceGridWindow.ChildElements.OfType<InventoryItemStackCell>().Single();
 
@@ -2455,7 +2464,7 @@ public sealed class UiInputControllerTests
             Layout = new ElementLayoutOptions { RelativePosition = new Vector2(500, 0), Size = new Vector2(300, 300), DisplayMode = ElementDisplayMode.Fixed },
             Chrome = new ElementChromeOptions { ShowBorder = true, ShowTitle = true, CanUserFocus = false },
         });
-        destinationWindow.Configure(destinationEntityId, hoverPopup);
+        destinationWindow.Configure(destinationEntityId, hoverPopup, static () => null);
         destinationWindow.Initialize();
 
         var controller = CreateController([], [], [sourceGridWindow, destinationWindow], [], LargeScreenSize, componentManager: componentManager, playerQuery: null);

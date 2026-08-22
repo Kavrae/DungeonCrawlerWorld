@@ -19,7 +19,8 @@ namespace Presentation.UI.Looting;
 public sealed class SecondaryInventoryWindowController(
     ElementPoolService elementPoolService,
     ComponentManager componentManager,
-    InventoryFolderController inventoryFolderController)
+    InventoryFolderController inventoryFolderController,
+    ContextMenuController contextMenuController)
 {
     /// <summary>Fixed HUD-style gap to the right of the player's own inventory window -- same spirit as InventoryFolderController.Gap.</summary>
     private const float Gap = 12f;
@@ -31,6 +32,9 @@ public sealed class SecondaryInventoryWindowController(
     private Tooltip _hoverPopup = null!;
     private CorpseInventoryWindow? _window;
     private int _currentTargetEntityId = -1;
+
+    /// <summary>The currently-open secondary/corpse window's own target entity id, if any -- lets InventoryFolderController's own GetSecondaryTargetEntityId (wired by ShellBootstrapper) answer "is a secondary window open, and for whom" for the player's own inventory grid's Give/Take menu, without that grid needing a direct reference to this controller.</summary>
+    public int? OpenTargetEntityId => _window is null ? null : _currentTargetEntityId;
 
     public void Initialize(UiLayerStack layers)
     {
@@ -98,6 +102,7 @@ public sealed class SecondaryInventoryWindowController(
         });
         window.Configure(targetEntityId, _hoverPopup);
         window.Closed += HandleClosed;
+        window.OnRightClicked = position => contextMenuController.Open(new Vector2(position.X, position.Y), DynamicHudContextMenus.BuildCloseMenu(window, _layers));
         window.Initialize();
         _layers.Add(UiLayer.DynamicHud, window);
         _layers.OpenMenuWindow(window); // A corpse window is Menu Mode, same as the player's own Inventory window.

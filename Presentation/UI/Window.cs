@@ -35,9 +35,14 @@ public class Window : Element
     /// reasoning and the confirmed bug (a closed Inventory window's tab-body Window recycled into
     /// InspectionWindowContent's manual row containers, still silently driving its old
     /// InventoryTabContent every frame) this closes off generically for every Window, not just
-    /// that one call site.
+    /// that one call site. Calls base.OnClosed() first so Element's own OnRightClicked clearing
+    /// still happens for every Window too, not just plain Elements.
     /// </summary>
-    protected internal override void OnClosed() => _content = null;
+    protected internal override void OnClosed()
+    {
+        base.OnClosed();
+        _content = null;
+    }
 
     /// <summary>
     /// Internal, not protected: chrome behaviors (see IWindowChromeBehavior) live outside

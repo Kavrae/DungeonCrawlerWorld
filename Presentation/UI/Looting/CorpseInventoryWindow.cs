@@ -4,6 +4,7 @@ using Game.Modules.Core.Components;
 using Game.Modules.Death.Components;
 using Game.Modules.Inventory;
 using Game.Modules.Inventory.Components;
+using Game.World;
 using Microsoft.Xna.Framework;
 using Presentation.Fonts;
 using Presentation.Rendering;
@@ -38,7 +39,9 @@ public sealed class CorpseInventoryWindow(
     ComponentManager componentManager,
     SpriteSheetService spriteSheetService,
     SpriteRenderer spriteRenderer,
-    ItemCatalog itemCatalog)
+    ItemCatalog itemCatalog,
+    World world,
+    ContextMenuController contextMenuController)
     : Window(fontService, elementPoolService, glyphRenderer)
 {
     private static readonly Vector2 IconSize = new(48, 48);
@@ -158,7 +161,13 @@ public sealed class CorpseInventoryWindow(
             Content = new ElementContentOptions { ContentColor = WindowPalette.PanelContentColor },
         });
 
-        gridWindow.SetContent(new InventoryGridContent(componentManager, itemCatalog, ElementPoolService, FontService, GlyphRenderer, spriteSheetService, spriteRenderer, _entityId, filterTag: null, _hoverPopup));
+        // getSecondaryTargetEntityId always returns this corpse's own _entityId -- this window
+        // *is* the currently-open secondary target for as long as it exists (see
+        // SecondaryInventoryWindowController.OpenLoot, which never has more than one open at
+        // once), so its own grid's Give/Take menu only ever needs to offer "Take," never query
+        // anything external (contrast InventoryManagementWindow's own callback, which has to ask
+        // whether a secondary window is open at all).
+        gridWindow.SetContent(new InventoryGridContent(world, componentManager, itemCatalog, ElementPoolService, FontService, GlyphRenderer, spriteSheetService, spriteRenderer, contextMenuController, _entityId, filterTag: null, _hoverPopup, () => _entityId));
         AddChild(gridWindow); // Initializes gridWindow, which in turn Initializes (and builds the cells of) its InventoryGridContent -- see Window.OnChildrenInitialized/AddChild's own doc comment on why Initialize is never called explicitly here.
     }
 

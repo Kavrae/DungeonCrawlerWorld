@@ -89,12 +89,13 @@ public static class ShellBootstrapper
 
         var mapWindow = BuildBaseWindows(presentation, ecsContext, screenSize, diagnostics, mapViewState, layers);
         var (questTriggerWindow, hotbarContent, inspectionWindow) = BuildStaticHudWindows(presentation, world, ecsContext, actionCatalog, itemCatalog, screenSize, mapViewState, layers);
-        var (notificationCenter, inventory) = BuildDynamicHudWindows(presentation, world, ecsContext, itemCatalog, mapWindow, layers);
+        var (notificationCenter, inventory) = BuildDynamicHudWindows(presentation, world, ecsContext, itemCatalog, mapWindow, contextMenuController, layers);
         var hotbarController = BuildHotbarController(presentation, mapViewState, hotbarContent, actionTargeting, layers);
         BuildUserWindows(presentation, cursorTextContent, dragGhostContent, layers);
 
-        var secondaryInventory = BuildSecondaryInventoryWindowController(presentation, ecsContext, inventory, layers);
+        var secondaryInventory = BuildSecondaryInventoryWindowController(presentation, ecsContext, inventory, contextMenuController, layers);
         mapWindow.OnCorpseClicked = secondaryInventory.OpenLoot;
+        inventory.GetSecondaryTargetEntityId = () => secondaryInventory.OpenTargetEntityId;
         mapWindow.OnInspectionOpened = () => inspectionWindow.SetDisplayMode(ElementDisplayMode.Fixed);
 
         var inputController = new UiInputController(layers, screenSize, hotbarController, componentManager, world, contextMenuController);
@@ -318,14 +319,14 @@ public static class ShellBootstrapper
     }
 
     /// <summary>DynamicHUD tier: NotificationCenter owns/populates its own folder+popups, and InventoryFolderController does the same for its own folder+window (both add to UiLayer.DynamicHud specifically; their two Tooltip-family hover popups go to UiLayer.Tooltip instead) -- see UiLayer's own doc comment for what each tier means. Build also passes the same layer stack into OpenQuestComposer later, since that popup belongs in DynamicHud too. Every pooled type either of these creates is already registered by the time this runs -- see Build's ElementFactoryRegistry.RegisterAll call.</summary>
-    private static (NotificationCenter NotificationCenter, InventoryFolderController Inventory) BuildDynamicHudWindows(PresentationContext presentation, World world, EcsContext ecsContext, ItemCatalog itemCatalog, MapWindow mapWindow, UiLayerStack layers)
+    private static (NotificationCenter NotificationCenter, InventoryFolderController Inventory) BuildDynamicHudWindows(PresentationContext presentation, World world, EcsContext ecsContext, ItemCatalog itemCatalog, MapWindow mapWindow, ContextMenuController contextMenuController, UiLayerStack layers)
     {
-        var notificationCenter = new NotificationCenter(presentation.ElementPoolService, ecsContext.EventBus, layers);
+        var notificationCenter = new NotificationCenter(presentation.ElementPoolService, ecsContext.EventBus, layers, contextMenuController);
         notificationCenter.Initialize();
 
         var inventory = new InventoryFolderController(
             presentation.ElementPoolService, world, ecsContext.ComponentManager, presentation.FontService, presentation.GlyphRenderer,
-            presentation.SpriteSheetService, presentation.SpriteRenderer, itemCatalog, mapWindow);
+            presentation.SpriteSheetService, presentation.SpriteRenderer, itemCatalog, mapWindow, contextMenuController);
         inventory.Initialize(layers);
 
         return (notificationCenter, inventory);
@@ -342,9 +343,9 @@ public static class ShellBootstrapper
 
     /// <summary>Built after InventoryFolderController (which it reuses the player's own inventory window through, see PlayerInventoryWindow/OpenInventoryWindow) and after MapWindow exists (whose OnCorpseClicked Build wires to this controller's OpenLoot right after this call returns).</summary>
     private static SecondaryInventoryWindowController BuildSecondaryInventoryWindowController(
-        PresentationContext presentation, EcsContext ecsContext, InventoryFolderController inventory, UiLayerStack layers)
+        PresentationContext presentation, EcsContext ecsContext, InventoryFolderController inventory, ContextMenuController contextMenuController, UiLayerStack layers)
     {
-        var controller = new SecondaryInventoryWindowController(presentation.ElementPoolService, ecsContext.ComponentManager, inventory);
+        var controller = new SecondaryInventoryWindowController(presentation.ElementPoolService, ecsContext.ComponentManager, inventory, contextMenuController);
         controller.Initialize(layers);
         return controller;
     }

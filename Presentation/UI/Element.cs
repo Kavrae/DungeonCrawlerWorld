@@ -638,7 +638,19 @@ public class Element
     /// </summary>
     internal void HandleRightClickTap(Point position) => OnRightClickTapAction(position);
 
-    protected virtual void OnRightClickTapAction(Point position) { }
+    /// <summary>
+    /// Settable per-instance right-click handler -- lets any Element opt into a right-click
+    /// context menu without its own OnRightClickTapAction override, the same settable-delegate
+    /// shape MapWindow.OnCorpseClicked/IsTextInputFocused already use for late-bound, externally-
+    /// wired behavior (the owning controller, not this Element itself, usually knows what the
+    /// menu should contain -- e.g. DynamicHudContextMenus' Close/Close All for a window,
+    /// InventoryGridContent's Give/Take for a cell). The base OnRightClickTapAction below just
+    /// invokes this; a subclass with genuinely custom right-click logic (MapWindow, TextBox)
+    /// still overrides OnRightClickTapAction directly instead and never touches this field.
+    /// </summary>
+    public Action<Point>? OnRightClicked { get; set; }
+
+    protected virtual void OnRightClickTapAction(Point position) => OnRightClicked?.Invoke(position);
 
     /// <summary>
     /// Fires on every root/HUD window when Escape is pressed -- see
@@ -1546,9 +1558,17 @@ public class Element
     /// pool-return kept driving its previous life's content (a closed Inventory window's tab-body
     /// Window recycled into InspectionWindowContent's own manual row containers, still silently
     /// updating/rebuilding the old InventoryTabContent every frame) -- see Window's own override.
+    ///
+    /// Base Element implementation clears OnRightClicked itself -- it's a plain settable
+    /// property, not a C# event, so ClearEventSubscriptions' reflection sweep (which only finds
+    /// real `event` backing fields) never touches it; left uncleared, a pooled Element reused for
+    /// an unrelated purpose would keep invoking whatever handler the *previous* owner wired.
+    /// A subclass override must call base.OnClosed() to keep this, the same convention any
+    /// override of a hook with real base behavior follows.
     /// </summary>
     protected internal virtual void OnClosed()
     {
+        OnRightClicked = null;
     }
 
     public void Close()

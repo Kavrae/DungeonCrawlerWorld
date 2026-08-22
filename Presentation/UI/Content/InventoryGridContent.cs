@@ -4,6 +4,7 @@ using Game.Modules;
 using Game.Modules.Actions.Activators;
 using Game.Modules.Inventory;
 using Game.Modules.Inventory.Components;
+using Game.World;
 using Microsoft.Xna.Framework;
 using Microsoft.Xna.Framework.Input;
 using Presentation.Fonts;
@@ -27,6 +28,7 @@ namespace Presentation.UI.Content;
 /// since nothing else needs to know about it.
 /// </summary>
 public sealed class InventoryGridContent(
+    World world,
     ComponentManager componentManager,
     ItemCatalog itemCatalog,
     ElementPoolService elementPoolService,
@@ -34,9 +36,11 @@ public sealed class InventoryGridContent(
     GlyphRenderer glyphRenderer,
     SpriteSheetService spriteSheetService,
     SpriteRenderer spriteRenderer,
+    ContextMenuController contextMenuController,
     int entityId,
     Tag? filterTag,
-    Tooltip hoverPopup) : IElementContent
+    Tooltip hoverPopup,
+    Func<int?> getSecondaryTargetEntityId) : IElementContent
 {
     public static readonly Vector2 CellSize = new(24, 24);
     private const float CellGap = 1f;
@@ -334,6 +338,41 @@ public sealed class InventoryGridContent(
         RebuildCells();
     }
 
+    /// <summary>
+    /// "Give" (this grid's own entity -> the currently-open secondary target) or "Take" (the
+    /// currently-open secondary target -> this grid's own entity) -- never both, and neither if
+    /// no secondary window is currently open (getSecondaryTargetEntityId returns null) or the
+    /// clicked cell is a Merged Stack (no single StackInstanceId to transfer, the same restriction
+    /// InventoryItemStackCell.CanBindToHotbar already enforces for drag-binding). For
+    /// CorpseInventoryWindow's own grid, getSecondaryTargetEntityId always returns that corpse's
+    /// own entityId (it *is* the secondary target for as long as it exists), so its cells only
+    /// ever offer "Take"; for the player's own grid, it queries whatever's actually open right
+    /// now (see InventoryFolderController.GetSecondaryTargetEntityId), so "Give" only appears
+    /// while a secondary window is open.
+    /// </summary>
+    private List<ContextMenuOption> BuildGiveTakeMenu(InventoryItemStackCell cell)
+    {
+        List<ContextMenuOption> options = [];
+
+        if (cell.StackInstanceId is not { } stackInstanceId || getSecondaryTargetEntityId() is not { } secondaryTargetEntityId)
+        {
+            return options;
+        }
+
+        if (cell.EntityId == world.PlayerEntityId && secondaryTargetEntityId != world.PlayerEntityId)
+        {
+            options.Add(new ContextMenuOption("Give", null, Enabled: true,
+                () => InventoryActions.TryTransferStack(componentManager, cell.EntityId, secondaryTargetEntityId, stackInstanceId, world)));
+        }
+        else if (cell.EntityId == secondaryTargetEntityId && secondaryTargetEntityId != world.PlayerEntityId)
+        {
+            options.Add(new ContextMenuOption("Take", null, Enabled: true,
+                () => InventoryActions.TryTransferStack(componentManager, cell.EntityId, world.PlayerEntityId, stackInstanceId, world)));
+        }
+
+        return options;
+    }
+
     private void RebuildCells()
     {
         elementPoolService.CloseAllChildren(_hostWindow);
@@ -394,6 +433,14 @@ public sealed class InventoryGridContent(
             });
             cell.Configure(entityId, entry.Definition.Id, entry.StackInstanceId, entry.Definition.SpriteName, entry.Definition.Glyph, entry.Definition.GlyphColor, entry.Quantity, entry.ChargeText, entry.IsDisabled, entry.IsDivergent, entry.MergedStackBadgeVisible, CellSize);
             cell.Clicked += OnCellClicked;
+            cell.OnRightClicked = position =>
+            {
+                var options = BuildGiveTakeMenu(cell);
+                if (options.Count > 0)
+                {
+                    contextMenuController.Open(new Vector2(position.X, position.Y), options);
+                }
+            };
             _hostWindow.AddChild(cell);
             _cells.Add(cell);
 

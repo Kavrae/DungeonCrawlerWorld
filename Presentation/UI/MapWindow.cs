@@ -65,6 +65,7 @@ public sealed class MapWindow : Window
     private readonly MultiComponentPool<InventoryItemStackComponent>? _inventoryStacks;
     private readonly PackedComponentPool<CorpseLootedComponent>? _corpseLootedPool;
     private readonly PackedComponentPool<ActionLockComponent> _actionLockPool;
+    private readonly DirectComponentPool<DisplayTextComponent> _displayTextPool;
 
     private readonly TileRenderer _tileRenderer;
     private readonly GlyphRenderer _glyphRenderer;
@@ -187,6 +188,7 @@ public sealed class MapWindow : Window
             ? componentManager.GetPackedPool<CorpseLootedComponent>()
             : null;
         _actionLockPool = actionLockPool;
+        _displayTextPool = componentManager.GetDirectPool<DisplayTextComponent>();
         _tileRenderer = tileRenderer;
         _glyphRenderer = glyphRenderer;
         _spriteSheetService = spriteSheetService;
@@ -891,19 +893,20 @@ public sealed class MapWindow : Window
     }
 
     /// <summary>
-    /// Opens a context menu for whatever's on the tile under mousePosition, if anything --
-    /// "Loot" for a corpse there (replaces the old click-to-loot, see OnCorpseClicked's own doc
-    /// comment), "Inspect" for the tile's Blocking entity (Details/Admin inspection -- see
-    /// MapViewState.InspectionMode's own doc comment on why Admin isn't a separate option yet;
-    /// AdvancedMapContextMenu will later generalize this to every entity/terrain on the tile,
-    /// not just the Blocking one). Internal, not private, so tests can simulate a right-click-tap
-    /// at a specific screen position directly. A miss (off-map, nothing to loot/inspect) simply
-    /// opens nothing -- OnRightClickTapAction's only other job, cancelling an armed/pending
-    /// action, already ran and found nothing to cancel either, so a right-click over empty space
-    /// is correctly a total no-op, matching this codebase's "remove unexpected actions"
-    /// principle. Each option is disabled rather than omitted when it can't currently be taken
-    /// ("Loot" when the player isn't adjacent, "Inspect" while the global cooldown is active) so
-    /// the player sees why, rather than the menu silently missing an option.
+    /// Opens a stacked context menu for everything on the tile under mousePosition -- every
+    /// occupant (world.GetOccupantEntityIdsAt, Blocking or not) plus the terrain, each its own
+    /// group: a read-only name header (see ContextMenuOption.Header -- also the visual separator
+    /// from the next group, no blank divider needed), "Loot" first if that entity is a corpse
+    /// (replaces the old click-to-loot, see OnCorpseClicked's own doc comment), then always
+    /// "Inspect" (Details/Admin inspection -- see MapViewState.InspectionMode's own doc comment
+    /// on why Admin isn't a separate option yet). Internal, not private, so tests can simulate a
+    /// right-click-tap at a specific screen position directly. A miss (off-map, nothing on the
+    /// tile at all) simply opens nothing -- OnRightClickTapAction's only other job, cancelling an
+    /// armed/pending action, already ran and found nothing to cancel either, so a right-click
+    /// over empty space is correctly a total no-op, matching this codebase's "remove unexpected
+    /// actions" principle. Each option is disabled rather than omitted when it can't currently be
+    /// taken ("Loot" when the player isn't adjacent, "Inspect" while the global cooldown is
+    /// active) so the player sees why, rather than the menu silently missing an option.
     /// </summary>
     internal void TryOpenEntityContextMenuAt(Point mousePosition)
     {
@@ -916,37 +919,18 @@ public sealed class MapWindow : Window
 
         List<ContextMenuOption> options = [];
 
-        var corpseEntityId = -1;
-        if (_deadPool is not null)
+        foreach (var entityId in _world.GetOccupantEntityIdsAt(tilePosition))
         {
-            foreach (var entityId in _world.GetOccupantEntityIdsAt(tilePosition))
+            AddEntityGroup(options, entityId);
+        }
+
+        if (Map.TerrainLayerFor(_mapViewState.CurrentMapLayer) is { } terrainLayer)
+        {
+            var terrainEntityId = _world.Map.GetTerrainEntityId(mapPosition.X, mapPosition.Y, terrainLayer);
+            if (terrainEntityId != -1)
             {
-                if (_deadPool.Has(entityId))
-                {
-                    corpseEntityId = entityId;
-                    break;
-                }
+                AddEntityGroup(options, terrainEntityId);
             }
-        }
-
-        if (OnCorpseClicked is { } onCorpseClicked && corpseEntityId != -1)
-        {
-            options.Add(new ContextMenuOption("Loot", null, IsAdjacentToPlayer(corpseEntityId), () => onCorpseClicked.Invoke(corpseEntityId)));
-        }
-
-        // Prefer the tile's Blocking entity for Inspect; fall back to a corpse there, since
-        // dying (DeathSystem.ConvertToNonBlocking) removes an entity from the Blocking slot --
-        // without this fallback, a corpse alone on a tile (the common case) never offered
-        // Inspect at all.
-        var inspectEntityId = _world.Map.GetBlockingEntityId(tilePosition);
-        if (inspectEntityId == -1)
-        {
-            inspectEntityId = corpseEntityId;
-        }
-
-        if (inspectEntityId != -1)
-        {
-            options.Add(new ContextMenuOption("Inspect", null, !ActionLockGate.IsBlocked(_actionLockPool, _world.PlayerEntityId), () => InspectEntity(inspectEntityId)));
         }
 
         if (options.Count > 0)
@@ -954,6 +938,21 @@ public sealed class MapWindow : Window
             _contextMenuController.Open(new Vector2(mousePosition.X, mousePosition.Y), options);
         }
     }
+
+    /// <summary>Appends one contributor's own group to the tile's stacked menu -- a read-only name header, then whatever options it offers. Works identically for a creature occupant or the terrain entity itself, since both are just an entityId with a DisplayTextComponent -- terrain simply never has a DeadComponent, so it never picks up "Loot".</summary>
+    private void AddEntityGroup(List<ContextMenuOption> options, int entityId)
+    {
+        options.Add(ContextMenuOption.Header(ResolveName(entityId)));
+
+        if (_deadPool?.Has(entityId) == true && OnCorpseClicked is { } onCorpseClicked)
+        {
+            options.Add(new ContextMenuOption("Loot", null, IsAdjacentToPlayer(entityId), () => onCorpseClicked.Invoke(entityId)));
+        }
+
+        options.Add(new ContextMenuOption("Inspect", null, !ActionLockGate.IsBlocked(_actionLockPool, _world.PlayerEntityId), () => InspectEntity(entityId)));
+    }
+
+    private string ResolveName(int entityId) => _displayTextPool.TryGetReadonly(entityId, out var displayText) ? displayText.Name : "Unknown";
 
     /// <summary>Details/Admin inspection's actual activation -- sets Detail mode on the shared entityId (see MapViewState.InspectedEntityId), starts the global cooldown (the same shared ActionLockComponent lock movement/melee/consumables already use), and un-minimizes InspectionWindow. Only ever reached via the "Inspect" ContextMenuOption above, which already gates on the cooldown being clear -- no redundant re-check here, matching how "Loot" above trusts its own Enabled gate instead of re-checking adjacency.</summary>
     private void InspectEntity(int entityId)

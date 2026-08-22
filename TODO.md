@@ -484,18 +484,19 @@ The context menu mechanism itself has landed too: `ContextMenu`/`ContextMenuCont
 
 Second consumer, not yet done: TextBox's Cut/Copy/Paste/Select All (see the Text input item above) are still keyboard-only -- exposing them via this same context-menu mechanism is the natural next use of it.
 
-See also AdvancedMapContextMenu below -- a fuller tile-level menu (stacking every entity's and the terrain's own options, with dividers) that surfaced while scoping this, deliberately deferred until a real need for it (and for a possible `IContextMenuProvider` abstraction) actually exists.
+See also AdvancedMapContextMenu below, which has since landed and generalized this same mechanism to four more right-click menus beyond the map tile.
 
-#### AdvancedMapContextMenu
+#### AdvancedMapContextMenu (landed)
 
-Right-clicking a map tile today only ever looks for a corpse (see the Context menu item above). A fuller version would stack context-menu contributions from *everything* on that tile -- every entity present, plus the terrain -- separated by dividers, each contributor deciding its own (possibly conditional) options:
-- Entity -> Inspect: replaces today's click-to-inspect, which follows and displays only that entity.
-- Terrain -> Inspect: same idea, but follows and shows only the terrain, not any entity on it.
-- Window -> Close: right-clicking a window offers Close.
-- Inventory item -> Give/Take..., Bind To...: Give/Take is conditional -- only present (and its exact label/target) depends on whether a secondary inventory window is currently open, and which of the two inventories holds the clicked item.
-- NotificationSummary -> Open, Open All.
+Right-clicking a map tile now stacks context-menu contributions from everything on that tile -- every occupant entity (`world.GetOccupantEntityIdsAt`, not just the Blocking one) plus the terrain, each its own group led by a read-only name header (`ContextMenuOption.Header` -- bold text on a slightly darker background, doubling as the visual separator between one group and the next, so no separate blank-divider concept was needed) followed by its own options: "Loot" first if it's a corpse, always "Inspect" (`MapWindow.TryOpenEntityContextMenuAt`). No `IContextMenuProvider` interface was built -- `ContextMenuController.Open` already just takes a flat option list, so a tile's menu is built by concatenating each occupant's/terrain's own option list (the same idiom TextBox's own option-building method already used).
 
-Deliberately not built now, and no `IContextMenuProvider` interface either -- `ContextMenuController.Open` already just takes a flat option list, so a tile's menu can be built by concatenating each present entity's/terrain's/subsystem's own option list (same idiom as TextBox's own option-building method) with no interface needed; conditional inclusion is just "the caller doesn't add that option." The one piece not yet designed is dividers between each contributor's group -- add a divider sentinel to the option type once this is actually scoped, rather than guessing its shape now.
+The same header-row mechanism, and the generic `Element.OnRightClicked` settable-delegate hook it's built on (any `Element`, not just `Window`, can opt into a right-click menu without its own `OnRightClickTapAction` override), also now drive four more right-click menus:
+- Window -> Close/Close All, for every DynamicHud window (`DynamicHudContextMenus.BuildCloseMenu`, wired via `InventoryFolderController`/`SecondaryInventoryWindowController`).
+- Notification popup -> Close/Close All always; Minimize/Minimize All only when not a System notification, and Minimize All itself skips any open System notification (`NotificationCenter`).
+- NotificationSummary -> Open/Open All, scoped to just the right-clicked category, disabled when that category has nothing unread (`NotificationCenter`).
+- Inventory item -> Give/Take, conditional on whether a secondary inventory window is open and which side owns the clicked stack (`InventoryGridContent.BuildGiveTakeMenu`). Needed a way for the player's own inventory grid to ask "is a secondary window open, and for whom" without a direct circular dependency on `SecondaryInventoryWindowController` (each depends on the other) -- resolved via a settable `InventoryFolderController.GetSecondaryTargetEntityId` callback, wired by `ShellBootstrapper` after both controllers exist, the same late-bound-delegate pattern `OnCorpseClicked`/`OnInspectionOpened` already use for an identical construction-order cycle.
+
+**Deliberately not built this pass:** "Bind To..." (item -> hotbar slot via a context-menu sub-menu) -- see its own Low Priority TODO item below, since it needs a cascading-submenu capability this pass never otherwise required.
 
 #### Player stats v1
 
@@ -604,6 +605,12 @@ more badges piecemeal.
 
 ### Low Priority
 
+#### Inventory item "Bind To..." context-menu option, and context-menu sub-menus
+
+Deferred from AdvancedMapContextMenu (see above, landed) -- right-clicking an inventory item stack should offer "Bind To..." (bind it to a hotbar slot without dragging), but there's no slot-picker UI to hang it off today: binding only ever happens by dragging a cell onto a hotbar slot (`HotbarContent.BindItem`/`ItemHotkeyBindingComponent`). The agreed shape is a context-menu sub-menu listing every hotbar slot (`HotkeySlotLayout.Entries`/`GetKeyLabel` for the label, `HotkeySlotLayout.IsLocked` to show a locked slot disabled rather than omitted, matching this codebase's established "show why, don't just hide" convention elsewhere) -- picking one calls the same bind primitive drag-and-drop already uses. Not available for a Merged Stack cell (`InventoryItemStackCell.CanBindToHotbar` false), same restriction drag-binding already enforces.
+
+Needs a genuinely new capability neither `ContextMenuOption` nor `ContextMenu` has: a cascading sub-menu. An option would carry a nested `IReadOnlyList<ContextMenuOption>` instead of (or alongside) `OnSelect`; clicking it opens a second popup east of the clicked row (the same `PopupPositioning` math the main menu already uses) rather than invoking `OnSelect`/closing; `ContextMenuController` would need a second managed `ContextMenu` instance for it, opened/closed alongside the parent; and `UiInputController`'s existing outside-click-closes-the-menu check (today reads `ContextMenuController.Menu`'s rectangle alone) would need to check both rectangles. None of AdvancedMapContextMenu's five landed menus needed this, so it was deliberately left unbuilt rather than guessed at.
+
 #### Split Presentation into Presentation + UIEngine projects
 
 Mirrors the existing `Engine → Game` split (see CLAUDE.md's own Layers note: Engine is generic ECS/modding infra with "no game-specific knowledge," Game depends on it) one layer up: `UIEngine` would hold the generic Element/window framework and its basic supporting logic, `Presentation` would hold the game-specific concrete windows/content built on top of it. Dependency rule, settled: `UIEngine` may reference `Engine` only (never `Game`, keeping it exactly as game-agnostic as `Engine` itself is); `Presentation` may reference `UIEngine` and/or `Engine` (and, as today, `Game`) -- never the reverse in either case. `UIEngine` sits parallel to `Game` (both depend only on `Engine`), not stacked between `Game` and `Presentation`: `Engine → Game`, `Engine → UIEngine`, `Game + UIEngine → Presentation → DungeonCrawlerWorld(exe)`.
@@ -631,6 +638,10 @@ Every `ElementPoolService.RegisterFactory<T>` call (`ElementPoolService`'s own c
 #### Solid highlight border for highlighted tiles
 
 `DrawMaskedTileHighlight` (`Presentation/UI/MapWindow.cs`) draws every highlighted tile -- targetable/hovered ability tiles, the pending-Delayed-action fallback, and the inspector's Gold selection alike -- as one uniform translucent wash (`borderColor * TargetSelectionMaskAlpha`, 50% alpha) across the whole tile. Despite the name, there's no actual border/outline drawn at all today -- an earlier "inset mask with a solid opaque border ring" technique was deliberately replaced by the current whole-tile wash (see that method's own doc comment) so the sprite underneath stays visible. Add back a thin border ring at 100% opacity, using the same `borderColor` the wash already uses, on top of the translucent fill -- makes a highlighted tile's actual edges legible (useful once `ComputeTargetableTiles`'s Cone/Line overshoot above is fixed and the highlighted shape stops being a simple rectangle-ish blob) without giving up the "sprite stays visible" property the wash-only redesign was for.
+
+#### Improved targeting visuals -- fainter glow plus opaque corner markers
+
+A different design direction for the same code the "Solid highlight border for highlighted tiles" item above targets (`DrawMaskedTileHighlight`, `Presentation/UI/MapWindow.cs`) -- worth deciding between the two rather than landing both. Instead of a full-tile wash plus a thin full-perimeter border ring, make the translucent fill noticeably more transparent than today's flat `TargetSelectionMaskAlpha` (0.5), and replace the ring with four short corner marks -- one bracket at each of the tile's four corners, inset slightly from the actual tile edges -- drawn at full (100%) opacity in the same `borderColor` (`TargetableTileBorderColor`/`HoveredTargetTileBorderColor`) the wash already uses. Reads as a lighter, more legible highlight than either today's flat wash or a full opaque ring would, while still keeping the underlying sprite/terrain visible through the fainter glow. No concrete corner-mark geometry (bracket length, inset distance) worked out yet.
 
 #### Extract a shared tick-fraction HUD bar element
 
