@@ -59,9 +59,13 @@ public sealed class AchievementModule : IGameModule
     }
 
     /// <summary>Registers the AchievementUnlockedComponent multi pool</summary>
+    /// <remarks>
+    /// Player-only today (maximumEntityCount: 4, small headroom), so the entity-index side stays tiny. initialCapacity
+    /// tracks Definitions.Count directly instead of a guessed constant, so it never goes stale as achievements are added.
+    /// </remarks>
     /// <param name="componentManager"></param>
     public void RegisterComponents(ComponentManager componentManager) =>
-        componentManager.RegisterMultiPool<AchievementUnlockedComponent>();
+        componentManager.RegisterMultiPool<AchievementUnlockedComponent>(maximumEntityCount: 4, initialCapacity: Definitions.Count);
 
     /// <remarks>
     /// This module has no per-frame work of its own.

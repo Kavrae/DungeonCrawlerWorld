@@ -34,6 +34,6 @@ public sealed class InventoryModuleTests
         manager.Merge(0, new InventoryDisabledComponent(isDisabled: true));
         manager.Merge(0, new InventoryDisabledComponent(isDisabled: false));
 
-        Assert.IsFalse(manager.GetDirectPool<InventoryDisabledComponent>().GetReadonly(0).IsDisabled);
+        Assert.IsFalse(manager.GetPackedPool<InventoryDisabledComponent>().GetReadonly(0).IsDisabled);
     }
 }

@@ -117,7 +117,7 @@ public sealed class InventoryQueriesTests
     [TestMethod]
     public void IsInventoryDisabled_NoComponentPresent_DefaultsToFalse()
     {
-        var pool = new DirectComponentPool<InventoryDisabledComponent>(initialCapacity: 10, static (ref existing, incoming) => existing.IsDisabled = incoming.IsDisabled);
+        var pool = new PackedComponentPool<InventoryDisabledComponent>(maximumEntityCount: 10, initialCapacity: 10, static (ref existing, incoming) => existing.IsDisabled = incoming.IsDisabled);
 
         Assert.IsFalse(InventoryQueries.IsInventoryDisabled(pool, 0));
     }
@@ -125,7 +125,7 @@ public sealed class InventoryQueriesTests
     [TestMethod]
     public void IsInventoryDisabled_ComponentPresentAndTrue_ReturnsTrue()
     {
-        var pool = new DirectComponentPool<InventoryDisabledComponent>(initialCapacity: 10, static (ref existing, incoming) => existing.IsDisabled = incoming.IsDisabled);
+        var pool = new PackedComponentPool<InventoryDisabledComponent>(maximumEntityCount: 10, initialCapacity: 10, static (ref existing, incoming) => existing.IsDisabled = incoming.IsDisabled);
         pool.Add(0, new InventoryDisabledComponent(isDisabled: true));
 
         Assert.IsTrue(InventoryQueries.IsInventoryDisabled(pool, 0));

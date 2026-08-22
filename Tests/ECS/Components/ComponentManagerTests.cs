@@ -77,6 +77,67 @@ public sealed class ComponentManagerTests
         manager.GetMultiPool<MultiTestComponent>().Add(49, new MultiTestComponent { Value = 1 });
     }
 
+    /// <summary>
+    /// A pool registered with an explicit maximumEntityCount override (see RegisterPackedPool/RegisterMultiPool's
+    /// own remarks) is deliberately smaller than the world's full entity id space, and grows itself on demand
+    /// instead -- ResizeEntityCapacity must not force it back up to world scale the next time some unrelated
+    /// entity creation grows the global capacity, or the memory saving from the override would be a one-frame
+    /// illusion.
+    /// </summary>
+    [TestMethod]
+    public void ResizeEntityCapacity_SkipsPackedPoolRegisteredWithMaximumEntityCountOverride()
+    {
+        var manager = new ComponentManager(initialEntityCapacity: 4, initialComponentCapacity: 4);
+        manager.RegisterPackedPool<PackedTestComponent>((ref existing, incoming) => existing = incoming, maximumEntityCount: 8, initialCapacity: 8);
+        var pool = manager.GetPackedPool<PackedTestComponent>();
+        var bytesBeforeResize = pool.EstimatedBytes;
+
+        manager.ResizeEntityCapacity(1000);
+
+        Assert.AreEqual(bytesBeforeResize, pool.EstimatedBytes);
+    }
+
+    [TestMethod]
+    public void ResizeEntityCapacity_SkipsMultiPoolRegisteredWithMaximumEntityCountOverride()
+    {
+        var manager = new ComponentManager(initialEntityCapacity: 4, initialComponentCapacity: 4);
+        manager.RegisterMultiPool<MultiTestComponent>(maximumEntityCount: 8, initialCapacity: 8);
+        var pool = manager.GetMultiPool<MultiTestComponent>();
+        var bytesBeforeResize = pool.EstimatedBytes;
+
+        manager.ResizeEntityCapacity(1000);
+
+        Assert.AreEqual(bytesBeforeResize, pool.EstimatedBytes);
+    }
+
+    [TestMethod]
+    public void ResizeEntityCapacity_StillGrowsPoolRegisteredWithoutOverride()
+    {
+        var manager = new ComponentManager(initialEntityCapacity: 4, initialComponentCapacity: 4);
+        manager.RegisterMultiPool<MultiTestComponent>();
+        var pool = manager.GetMultiPool<MultiTestComponent>();
+        var bytesBeforeResize = pool.EstimatedBytes;
+
+        manager.ResizeEntityCapacity(1000);
+
+        Assert.IsTrue(pool.EstimatedBytes > bytesBeforeResize);
+    }
+
+    [TestMethod]
+    public void RegisterPackedPool_InitialCapacityOverrideOnly_DoesNotOptOutOfResizeEntityCapacity()
+    {
+        // initialCapacity only affects dense storage, which ResizeEntityCapacity never touches -- a pool that
+        // shrinks just its dense seed (e.g. Crawler/CorpseLooted, which can attach to any entity so their
+        // entity-index side stays on the default world-scale track) should still track the global capacity.
+        var manager = new ComponentManager(initialEntityCapacity: 4, initialComponentCapacity: 4);
+        manager.RegisterPackedPool<PackedTestComponent>((ref existing, incoming) => existing = incoming, initialCapacity: 8);
+
+        manager.ResizeEntityCapacity(1000);
+
+        manager.GetPackedPool<PackedTestComponent>().Add(999, new PackedTestComponent { Value = 1 });
+        Assert.IsTrue(manager.GetPackedPool<PackedTestComponent>().Has(999));
+    }
+
     [TestMethod]
     public void RemoveAllComponents_RemovesAcrossAllPoolKinds()
     {

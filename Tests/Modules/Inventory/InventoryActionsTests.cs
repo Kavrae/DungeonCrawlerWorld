@@ -255,10 +255,10 @@ public sealed class InventoryActionsTests
         var manager = CreateRegisteredManager();
 
         InventoryActions.SetInventoryDisabled(manager, entityId: 0, disabled: true);
-        Assert.IsTrue(InventoryQueries.IsInventoryDisabled(manager.GetDirectPool<InventoryDisabledComponent>(), 0));
+        Assert.IsTrue(InventoryQueries.IsInventoryDisabled(manager.GetPackedPool<InventoryDisabledComponent>(), 0));
 
         InventoryActions.SetInventoryDisabled(manager, entityId: 0, disabled: false);
-        Assert.IsFalse(InventoryQueries.IsInventoryDisabled(manager.GetDirectPool<InventoryDisabledComponent>(), 0));
+        Assert.IsFalse(InventoryQueries.IsInventoryDisabled(manager.GetPackedPool<InventoryDisabledComponent>(), 0));
     }
 
     [TestMethod]

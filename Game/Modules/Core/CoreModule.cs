@@ -44,8 +44,11 @@ public sealed class CoreModule : IGameModule
 
         componentManager.RegisterDirectPool<SpriteComponent>(static (ref existing, incoming) => { });
 
-        componentManager.RegisterMultiPool<NonBlockingComponent>();
-        componentManager.RegisterMultiPool<ForceBlockingComponent>();
+        // Rough estimate of potential non-blocking entity population.
+        componentManager.RegisterMultiPool<NonBlockingComponent>(maximumEntityCount: 40_000, initialCapacity: 40_000);
+
+        // Always very rare (0 live instances in the same measurement) -- start small, grow on demand.
+        componentManager.RegisterMultiPool<ForceBlockingComponent>(maximumEntityCount: 16, initialCapacity: 16);
 
         componentManager.RegisterDirectPool<TransformComponent>(static (ref existing, incoming) =>
         {

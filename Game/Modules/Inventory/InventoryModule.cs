@@ -47,9 +47,18 @@ public sealed class InventoryModule : IGameModule
     public void RegisterComponents(ComponentManager componentManager)
     {
         componentManager.RegisterMultiPool<InventoryItemStackComponent>();
-        componentManager.RegisterDirectPool<InventoryDisabledComponent>(static (ref existing, incoming) => existing.IsDisabled = incoming.IsDisabled);
+
+        // Rare -- generally only once at a time on the player, but could be more via a lock-down status effect.
+        // Registered as Packed rather than Direct: Direct pool is reserved for genuinely near-universal components
+        // (Transform/Sprite/etc.), and only Packed offers a dense-side capacity reduction alongside the entity-index one.
+        componentManager.RegisterPackedPool<InventoryDisabledComponent>(
+            static (ref existing, incoming) => existing.IsDisabled = incoming.IsDisabled, maximumEntityCount: 16, initialCapacity: 16);
+
         componentManager.RegisterPackedPool<PendingConsumableActivationComponent>(static (ref existing, incoming) => existing = incoming);
-        componentManager.RegisterMultiPool<ItemHotkeyBindingComponent>();
+
+        // Player-only, 24 hotkey slots total -- small entity-index seed, dense capacity matches the slot count.
+        componentManager.RegisterMultiPool<ItemHotkeyBindingComponent>(maximumEntityCount: 2, initialCapacity: 24);
+
         componentManager.RegisterPackedPool<InventoryComponent>(static (ref existing, incoming) => existing = incoming);
     }
 

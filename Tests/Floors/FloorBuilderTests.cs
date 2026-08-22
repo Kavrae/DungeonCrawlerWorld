@@ -110,10 +110,12 @@ public sealed class FloorBuilderTests
     /// The player must not be placed before/during TestMapBuilder.Populate (PlaceEntityOnMap
     /// has no free-space check, so an earlier player placement could be silently overwritten
     /// by a later wall/creature at the same cell) -- this confirms the player actually lands
-    /// on a real, unoccupied, on-map cell once CreatePlayer runs (called separately from
-    /// PopulateFloor now -- see FloorBuilder's own doc comment for why: GameLoop triggers it
-    /// once on its first live Update() tick instead), and that World.PlayerEntityId is wired
-    /// to whatever id the player actually got (not any particular hardcoded value).
+    /// on a real, unoccupied, on-map cell once CreatePlayer runs (its id reserved separately
+    /// via ReservePlayerEntity, before PopulateFloor -- see FloorBuilder's own doc comments for
+    /// why: CreatePlayer's free-cell search needs the floor already populated, while reserving
+    /// the id first is what lands the player on entity id 0), and that World.PlayerEntityId is
+    /// wired to whatever id the player actually got (not any particular hardcoded value here --
+    /// see ReservePlayerEntity_CalledFirst_ReturnsEntityIdZero below for that specific claim).
     /// </summary>
     [TestMethod]
     public void PopulateFloor_PlacesPlayerOnAFreeOnMapCellAndWiresPlayerEntityId()
@@ -123,8 +125,10 @@ public sealed class FloorBuilderTests
         var ecsContext = BuildEcsContext(world, mathUtility);
 
         var crawlerNumberAllocator = new UniqueNumberAllocator(mathUtility, 1, 13_000_000);
+        var playerEntityId = FloorBuilder.ReservePlayerEntity(ecsContext);
         FloorBuilder.PopulateFloor(world, ecsContext, mathUtility, crawlerNumberAllocator, new FrameEventBuffer<EntityMovedEvent>());
-        world.PlayerEntityId = FloorBuilder.CreatePlayer(world, ecsContext, mathUtility, new FrameEventBuffer<EntityMovedEvent>(), crawlerNumberAllocator);
+        FloorBuilder.CreatePlayer(world, ecsContext, mathUtility, new FrameEventBuffer<EntityMovedEvent>(), crawlerNumberAllocator, playerEntityId);
+        world.PlayerEntityId = playerEntityId;
 
         Assert.IsTrue(ecsContext.EntityManager.EntityExists(world.PlayerEntityId));
 
@@ -134,5 +138,24 @@ public sealed class FloorBuilderTests
 
         var movement = ecsContext.ComponentManager.GetPackedPool<MovementComponent>().GetReadonly(world.PlayerEntityId);
         Assert.AreEqual(MovementMode.PlayerControlled, movement.MovementMode);
+    }
+
+    /// <summary>
+    /// The actual point of ReservePlayerEntity existing as a separate, earlier call: reserving
+    /// before PopulateFloor's ~2.6M NPC/terrain entities exist lands the player on entity id 0
+    /// (FreeIdPool.Rent's first call against a fresh pool always returns 0), not a high id
+    /// assigned after population -- see ReservePlayerEntity's own doc comment for why that
+    /// matters (Player-only component pool capacity).
+    /// </summary>
+    [TestMethod]
+    public void ReservePlayerEntity_CalledFirst_ReturnsEntityIdZero()
+    {
+        var world = new Game.World.World(new Map(new Vector3Int(20, 20, 3)));
+        var mathUtility = new MathUtility(new Random(1));
+        var ecsContext = BuildEcsContext(world, mathUtility);
+
+        var playerEntityId = FloorBuilder.ReservePlayerEntity(ecsContext);
+
+        Assert.AreEqual(0, playerEntityId);
     }
 }

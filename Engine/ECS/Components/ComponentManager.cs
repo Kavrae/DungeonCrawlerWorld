@@ -11,6 +11,7 @@ public sealed class ComponentManager
     private readonly int _initialComponentCapacity;
 
     private readonly Dictionary<Type, IComponentPool> _componentPools = [];
+    private readonly HashSet<Type> _independentlySizedTypes = [];
 
     /// <summary>Initializes a new instance of the <see cref="ComponentManager"/> class.</summary>
     /// <param name="initialEntityCapacity">The initial capacity for indexing component pools based on the estimated number of entities with the component.</param>
@@ -36,20 +37,43 @@ public sealed class ComponentManager
     }
 
     /// <summary>Registers a packed component pool for the specified component type.</summary>
-    /// <remarks>Packed component pools are suitable for components that are expected to be present on a subset of entities.</remarks>
-    public void RegisterPackedPool<T>(MergeAction<T> mergeAction) where T : struct
+    /// <remarks>
+    /// Packed component pools are suitable for components that are expected to be present on a subset of entities.
+    /// maximumEntityCount/initialCapacity default to the manager's own world-scale fields; pass smaller values for a
+    /// component known to be rare. initialCapacity (dense/instance-count storage) is always safe to shrink on its own
+    /// -- it already grows independently as needed (see PackedComponentPool.EnsureDenseCapacityForOneMore) regardless
+    /// of ResizeEntityCapacity. maximumEntityCount (entity-index storage) additionally opts the pool out of
+    /// ResizeEntityCapacity's uniform sweep -- pass it only when the component realistically can't land on just any
+    /// entity in the world (e.g. Player-only), since the pool still grows itself on demand (see PackedComponentPool.Add)
+    /// if an entity id beyond the seed is ever actually used.
+    /// </remarks>
+    public void RegisterPackedPool<T>(MergeAction<T> mergeAction, int? maximumEntityCount = null, int? initialCapacity = null) where T : struct
     {
         ThrowIfAlreadyRegistered(typeof(T));
-        _componentPools.Add(typeof(T), new PackedComponentPool<T>(_initialEntityCapacity, _initialComponentCapacity, mergeAction));
+        _componentPools.Add(typeof(T), new PackedComponentPool<T>(maximumEntityCount ?? _initialEntityCapacity, initialCapacity ?? _initialComponentCapacity, mergeAction));
+
+        if (maximumEntityCount is not null)
+        {
+            _independentlySizedTypes.Add(typeof(T));
+        }
     }
 
     /// <summary>Registers a multi component pool for the specified component type.</summary>
-    /// <remarks>Multi component pools are suitable for components that can be added multiple times to the same entity.</remarks>
+    /// <remarks>
+    /// Multi component pools are suitable for components that can be added multiple times to the same entity.
+    /// See RegisterPackedPool's own remarks for maximumEntityCount/initialCapacity -- the same optional-override,
+    /// grow-on-demand behavior applies here.
+    /// </remarks>
     /// <typeparam name="T"></typeparam>
-    public void RegisterMultiPool<T>() where T : struct
+    public void RegisterMultiPool<T>(int? maximumEntityCount = null, int? initialCapacity = null) where T : struct
     {
         ThrowIfAlreadyRegistered(typeof(T));
-        _componentPools.Add(typeof(T), new MultiComponentPool<T>(_initialEntityCapacity, _initialComponentCapacity));
+        _componentPools.Add(typeof(T), new MultiComponentPool<T>(maximumEntityCount ?? _initialEntityCapacity, initialCapacity ?? _initialComponentCapacity));
+
+        if (maximumEntityCount is not null)
+        {
+            _independentlySizedTypes.Add(typeof(T));
+        }
     }
 
     private void ThrowIfAlreadyRegistered(Type componentType)
@@ -175,10 +199,21 @@ public sealed class ComponentManager
     /// <remarks> For inspection tooling (e.g. Diagnostics/ComponentInspector). </remarks>
     public Dictionary<Type, IComponentPool>.ValueCollection AllPools => _componentPools.Values;
 
+    /// <remarks>
+    /// Skips any pool registered with an explicit maximumEntityCount/initialCapacity override (see
+    /// RegisterPackedPool/RegisterMultiPool) -- those pools are deliberately smaller than the world's full
+    /// entity id space and grow themselves on demand instead of being forced back up to newMaximumEntityCount
+    /// here every time some unrelated entity creation grows the global capacity.
+    /// </remarks>
     public void ResizeEntityCapacity(int newMaximumEntityCount)
     {
-        foreach (var componentPool in _componentPools.Values)
+        foreach (var (type, componentPool) in _componentPools)
         {
+            if (_independentlySizedTypes.Contains(type))
+            {
+                continue;
+            }
+
             componentPool.Resize(newMaximumEntityCount);
         }
     }

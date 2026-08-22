@@ -49,6 +49,8 @@ public static class WorldSessionBootstrapper
 
         var ecsContext = bootstrapResult.EcsContext;
 
+        var playerEntityId = FloorBuilder.ReservePlayerEntity(ecsContext);
+
         diagnostics.AttachEcsContext(ecsContext.ComponentManager, ecsContext.EntityManager);
         ecsContext.SystemManager.Profiler = diagnostics.FrameCostRecorder;
         ecsContext.EventBus.Profiler = diagnostics.FrameCostRecorder;
@@ -82,7 +84,8 @@ public static class WorldSessionBootstrapper
 
         using (diagnostics.StartupProfiler?.Phase("Player Spawn"))
         {
-            world.PlayerEntityId = FloorBuilder.CreatePlayer(world, ecsContext, mathUtility, bootstrapResult.MovedEntities, crawlerNumberAllocator);
+            FloorBuilder.CreatePlayer(world, ecsContext, mathUtility, bootstrapResult.MovedEntities, crawlerNumberAllocator, playerEntityId);
+            world.PlayerEntityId = playerEntityId;
 
             ecsContext.EventBus.Publish(new EnteredDungeonEvent());
             ecsContext.EventBus.Publish(new FloorEnteredEvent(floorNumber));

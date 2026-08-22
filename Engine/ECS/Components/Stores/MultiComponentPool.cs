@@ -1,4 +1,5 @@
 using System.Runtime.CompilerServices;
+using static Engine.ECS.Components.EntityCapacityGrowth;
 
 namespace Engine.ECS.Components.Stores;
 
@@ -119,20 +120,24 @@ public sealed class MultiComponentPool<T> : IReadOnlyMultiComponentPool<T>, IIns
         _maximumEntityCount = newMaximumEntityCount;
     }
 
+    /// <summary>True if entityId is within the pool's current entity-indexed capacity.</summary>
+    /// <remarks>A rare/independently-sized pool (see ComponentManager.RegisterMultiPool's maximumEntityCount override) may be smaller than the world's full entity id space -- an out-of-bounds entityId simply has never had this component, not a bug. Add grows the pool on demand instead of assuming bounds.</remarks>
+    private bool IsInBounds(int entityId) => (uint)entityId < (uint)_maximumEntityCount;
+
     /// <summary> True if the specified entity has at least one component of this type. </summary>
     /// <param name="entityId">The ID of the entity to check.</param>
-    public bool Has(int entityId) => _entityCounts[entityId] > 0;
+    public bool Has(int entityId) => IsInBounds(entityId) && _entityCounts[entityId] > 0;
 
     /// <summary> Gets how many components of this type the specified entity owns. </summary>
     /// <param name="entityId">The ID of the entity to check.</param>
     /// <returns>The number of components entityId owns.</returns>
-    public int CountForEntity(int entityId) => _entityCounts[entityId];
+    public int CountForEntity(int entityId) => IsInBounds(entityId) ? _entityCounts[entityId] : 0;
 
     /// <summary> Gets the entity-scoped version for the specified entity. </summary>
     /// <remarks>Distinct from a single component's own dense-index version: this increments on any Add/Remove/update affecting any of entityId's instances, so a consumer only interested in "did anything about this entity's instances change" doesn't need to track every dense index individually.</remarks>
     /// <param name="entityId">The ID of the entity to check.</param>
     /// <returns>The entity-scoped version.</returns>
-    public uint GetEntityVersion(int entityId) => _entityVersions[entityId];
+    public uint GetEntityVersion(int entityId) => IsInBounds(entityId) ? _entityVersions[entityId] : 0;
 
     /// <summary> Adds a new component instance to the pool for the specified entity. </summary>
     /// <remarks>Unlike DirectComponentPool/PackedComponentPool, this never merges -- an entity may hold several instances, so there is no single existing one to merge into. The new instance is inserted at the head of entityId's chain.</remarks>
@@ -140,6 +145,11 @@ public sealed class MultiComponentPool<T> : IReadOnlyMultiComponentPool<T>, IIns
     /// <param name="component">The component to add.</param>
     public void Add(int entityId, T component)
     {
+        if (!IsInBounds(entityId))
+        {
+            Resize(NextCapacityFor(_maximumEntityCount, entityId));
+        }
+
         EnsureDenseCapacityForOneMore();
 
         var newDenseIndex = _count++;
@@ -172,7 +182,7 @@ public sealed class MultiComponentPool<T> : IReadOnlyMultiComponentPool<T>, IIns
     /// <returns>True if at least one component was removed, false if the entity had none.</returns>
     public bool Remove(int entityId)
     {
-        var denseIndex = _entityIdToFirstDenseIndexMap[entityId];
+        var denseIndex = IsInBounds(entityId) ? _entityIdToFirstDenseIndexMap[entityId] : -1;
         if (denseIndex == -1)
         {
             return false;
@@ -195,7 +205,7 @@ public sealed class MultiComponentPool<T> : IReadOnlyMultiComponentPool<T>, IIns
     {
         ArgumentNullException.ThrowIfNull(predicate);
 
-        for (var denseIndex = _entityIdToFirstDenseIndexMap[entityId]; denseIndex != -1;)
+        for (var denseIndex = IsInBounds(entityId) ? _entityIdToFirstDenseIndexMap[entityId] : -1; denseIndex != -1;)
         {
             var next = _denseNext[denseIndex];
 
@@ -221,7 +231,7 @@ public sealed class MultiComponentPool<T> : IReadOnlyMultiComponentPool<T>, IIns
     {
         ArgumentNullException.ThrowIfNull(predicate);
 
-        for (var denseIndex = _entityIdToFirstDenseIndexMap[entityId]; denseIndex != -1;)
+        for (var denseIndex = IsInBounds(entityId) ? _entityIdToFirstDenseIndexMap[entityId] : -1; denseIndex != -1;)
         {
             var next = _denseNext[denseIndex];
 
@@ -250,7 +260,7 @@ public sealed class MultiComponentPool<T> : IReadOnlyMultiComponentPool<T>, IIns
     /// <summary> Gets the dense index of the first component instance in entityId's chain. </summary>
     /// <param name="entityId">The ID of the entity to check.</param>
     /// <returns>The dense index of the first instance, or -1 if entityId owns none.</returns>
-    public int GetFirstDenseIndex(int entityId) => _entityIdToFirstDenseIndexMap[entityId];
+    public int GetFirstDenseIndex(int entityId) => IsInBounds(entityId) ? _entityIdToFirstDenseIndexMap[entityId] : -1;
 
     /// <summary> Gets the dense index of the next component instance in the same entity's chain. </summary>
     /// <param name="denseIndex">The dense index to advance from.</param>
@@ -371,7 +381,7 @@ public sealed class MultiComponentPool<T> : IReadOnlyMultiComponentPool<T>, IIns
         ArgumentNullException.ThrowIfNull(predicate);
         ArgumentNullException.ThrowIfNull(updater);
 
-        for (var denseIndex = _entityIdToFirstDenseIndexMap[entityId]; denseIndex != -1; denseIndex = _denseNext[denseIndex])
+        for (var denseIndex = IsInBounds(entityId) ? _entityIdToFirstDenseIndexMap[entityId] : -1; denseIndex != -1; denseIndex = _denseNext[denseIndex])
         {
             ref var component = ref _denseComponents[denseIndex];
             if (predicate(ref component))
@@ -402,7 +412,7 @@ public sealed class MultiComponentPool<T> : IReadOnlyMultiComponentPool<T>, IIns
         ArgumentNullException.ThrowIfNull(predicate);
         ArgumentNullException.ThrowIfNull(updater);
 
-        for (var denseIndex = _entityIdToFirstDenseIndexMap[entityId]; denseIndex != -1; denseIndex = _denseNext[denseIndex])
+        for (var denseIndex = IsInBounds(entityId) ? _entityIdToFirstDenseIndexMap[entityId] : -1; denseIndex != -1; denseIndex = _denseNext[denseIndex])
         {
             ref var component = ref _denseComponents[denseIndex];
             if (predicate(ref component, state))
@@ -423,7 +433,7 @@ public sealed class MultiComponentPool<T> : IReadOnlyMultiComponentPool<T>, IIns
     {
         ArgumentNullException.ThrowIfNull(predicate);
 
-        for (var denseIndex = _entityIdToFirstDenseIndexMap[entityId]; denseIndex != -1; denseIndex = _denseNext[denseIndex])
+        for (var denseIndex = IsInBounds(entityId) ? _entityIdToFirstDenseIndexMap[entityId] : -1; denseIndex != -1; denseIndex = _denseNext[denseIndex])
         {
             ref readonly var component = ref _denseComponents[denseIndex];
             if (predicate(in component))
@@ -443,7 +453,7 @@ public sealed class MultiComponentPool<T> : IReadOnlyMultiComponentPool<T>, IIns
     {
         ArgumentNullException.ThrowIfNull(predicate);
 
-        for (var denseIndex = _entityIdToFirstDenseIndexMap[entityId]; denseIndex != -1; denseIndex = _denseNext[denseIndex])
+        for (var denseIndex = IsInBounds(entityId) ? _entityIdToFirstDenseIndexMap[entityId] : -1; denseIndex != -1; denseIndex = _denseNext[denseIndex])
         {
             ref readonly var component = ref _denseComponents[denseIndex];
             if (predicate(in component, state))
@@ -464,7 +474,7 @@ public sealed class MultiComponentPool<T> : IReadOnlyMultiComponentPool<T>, IIns
         ArgumentNullException.ThrowIfNull(predicate);
 
         var matchCount = 0;
-        for (var denseIndex = _entityIdToFirstDenseIndexMap[entityId]; denseIndex != -1; denseIndex = _denseNext[denseIndex])
+        for (var denseIndex = IsInBounds(entityId) ? _entityIdToFirstDenseIndexMap[entityId] : -1; denseIndex != -1; denseIndex = _denseNext[denseIndex])
         {
             if (predicate(ref _denseComponents[denseIndex]))
             {
@@ -482,7 +492,7 @@ public sealed class MultiComponentPool<T> : IReadOnlyMultiComponentPool<T>, IIns
         ArgumentNullException.ThrowIfNull(predicate);
 
         var matchCount = 0;
-        for (var denseIndex = _entityIdToFirstDenseIndexMap[entityId]; denseIndex != -1; denseIndex = _denseNext[denseIndex])
+        for (var denseIndex = IsInBounds(entityId) ? _entityIdToFirstDenseIndexMap[entityId] : -1; denseIndex != -1; denseIndex = _denseNext[denseIndex])
         {
             if (predicate(ref _denseComponents[denseIndex], state))
             {
@@ -500,7 +510,7 @@ public sealed class MultiComponentPool<T> : IReadOnlyMultiComponentPool<T>, IIns
         ArgumentNullException.ThrowIfNull(destination);
 
         destination.Clear();
-        for (var denseIndex = _entityIdToFirstDenseIndexMap[entityId]; denseIndex != -1; denseIndex = _denseNext[denseIndex])
+        for (var denseIndex = IsInBounds(entityId) ? _entityIdToFirstDenseIndexMap[entityId] : -1; denseIndex != -1; denseIndex = _denseNext[denseIndex])
         {
             destination.Add(_denseComponents[denseIndex]);
         }

@@ -1,4 +1,5 @@
 using System.Runtime.CompilerServices;
+using static Engine.ECS.Components.EntityCapacityGrowth;
 
 namespace Engine.ECS.Components.Stores;
 
@@ -92,11 +93,20 @@ public sealed class PackedComponentPool<T> : IReadOnlyComponentPool<T>, IInspect
         _maxEntities = newMaximumEntityCount;
     }
 
+    /// <summary>True if entityId is within the pool's current entity-indexed capacity.</summary>
+    /// <remarks>A rare/independently-sized pool (see ComponentManager.RegisterPackedPool's maximumEntityCount override) may be smaller than the world's full entity id space -- an out-of-bounds entityId simply has never had this component, not a bug. Add grows the pool on demand instead of assuming bounds.</remarks>
+    private bool IsInBounds(int entityId) => (uint)entityId < (uint)_maxEntities;
+
     /// <summary> Adds a component to the pool for the specified entity. </summary>
     /// <param name="entityId">The ID of the entity to add the component to.</param>
     /// <param name="newComponent">The component to add.</param>
     public void Add(int entityId, T newComponent)
     {
+        if (!IsInBounds(entityId))
+        {
+            Resize(NextCapacityFor(_maxEntities, entityId));
+        }
+
         var denseIndex = _entityIdToDenseIndexMap[entityId];
         if (denseIndex >= 0)
         {
@@ -121,12 +131,15 @@ public sealed class PackedComponentPool<T> : IReadOnlyComponentPool<T>, IInspect
     /// <param name="newComponent">The component to merge.</param>
     public void Merge(int entityId, T newComponent)
     {
-        var denseIndex = _entityIdToDenseIndexMap[entityId];
-        if (denseIndex >= 0)
+        if (IsInBounds(entityId))
         {
-            _mergeImplementation(ref _denseComponents[denseIndex], newComponent);
-            _denseVersions[denseIndex]++;
-            return;
+            var denseIndex = _entityIdToDenseIndexMap[entityId];
+            if (denseIndex >= 0)
+            {
+                _mergeImplementation(ref _denseComponents[denseIndex], newComponent);
+                _denseVersions[denseIndex]++;
+                return;
+            }
         }
 
         Add(entityId, newComponent);
@@ -134,14 +147,14 @@ public sealed class PackedComponentPool<T> : IReadOnlyComponentPool<T>, IInspect
 
     /// <summary>True if the specified entity has a component of this type</summary>
     /// <param name="entityId">The ID of the entity to check.</param>
-    public bool Has(int entityId) => _entityIdToDenseIndexMap[entityId] >= 0;
+    public bool Has(int entityId) => IsInBounds(entityId) && _entityIdToDenseIndexMap[entityId] >= 0;
 
     /// <summary>Attempts to get a readonly reference to the component for the specified entity.</summary>
     /// <param name="entityId">The ID of the entity to check.</param>
     /// <param name="component">Stores a readonly reference to the component if the entity has one, or the default value if not.</param>
     public bool TryGetReadonly(int entityId, out T component)
     {
-        var denseIndex = _entityIdToDenseIndexMap[entityId];
+        var denseIndex = IsInBounds(entityId) ? _entityIdToDenseIndexMap[entityId] : -1;
         if (denseIndex < 0)
         {
             component = default;
@@ -156,7 +169,7 @@ public sealed class PackedComponentPool<T> : IReadOnlyComponentPool<T>, IInspect
     /// <param name="entityId">The ID of the entity to check.</param>
     public ref readonly T GetReadonly(int entityId)
     {
-        var denseIndex = _entityIdToDenseIndexMap[entityId];
+        var denseIndex = IsInBounds(entityId) ? _entityIdToDenseIndexMap[entityId] : -1;
         if (denseIndex < 0)
         {
             throw new InvalidOperationException($"Entity {entityId} does not have component {typeof(T).Name}.");
@@ -171,7 +184,7 @@ public sealed class PackedComponentPool<T> : IReadOnlyComponentPool<T>, IInspect
     /// <returns>The number of inspection entries added.</returns>
     public int CopyInspectionDataForEntity(int entityId, List<InspectedComponentEntry> destination)
     {
-        var denseIndex = _entityIdToDenseIndexMap[entityId];
+        var denseIndex = IsInBounds(entityId) ? _entityIdToDenseIndexMap[entityId] : -1;
         if (denseIndex < 0)
         {
             return 0;
@@ -190,7 +203,7 @@ public sealed class PackedComponentPool<T> : IReadOnlyComponentPool<T>, IInspect
     /// <returns>The version of the component.</returns>
     public uint GetVersion(int entityId)
     {
-        var denseIndex = _entityIdToDenseIndexMap[entityId];
+        var denseIndex = IsInBounds(entityId) ? _entityIdToDenseIndexMap[entityId] : -1;
         if (denseIndex < 0)
         {
             throw new InvalidOperationException($"Entity {entityId} does not have component {typeof(T).Name}.");
@@ -205,7 +218,7 @@ public sealed class PackedComponentPool<T> : IReadOnlyComponentPool<T>, IInspect
     /// <returns>True if the component was set, false otherwise.</returns>
     public bool TrySet(int entityId, T value)
     {
-        var denseIndex = _entityIdToDenseIndexMap[entityId];
+        var denseIndex = IsInBounds(entityId) ? _entityIdToDenseIndexMap[entityId] : -1;
         if (denseIndex < 0)
         {
             return false;
@@ -224,7 +237,7 @@ public sealed class PackedComponentPool<T> : IReadOnlyComponentPool<T>, IInspect
     {
         ArgumentNullException.ThrowIfNull(updater);
 
-        var denseIndex = _entityIdToDenseIndexMap[entityId];
+        var denseIndex = IsInBounds(entityId) ? _entityIdToDenseIndexMap[entityId] : -1;
         if (denseIndex < 0)
         {
             return false;
@@ -245,7 +258,7 @@ public sealed class PackedComponentPool<T> : IReadOnlyComponentPool<T>, IInspect
     {
         ArgumentNullException.ThrowIfNull(updater);
 
-        var denseIndex = _entityIdToDenseIndexMap[entityId];
+        var denseIndex = IsInBounds(entityId) ? _entityIdToDenseIndexMap[entityId] : -1;
         if (denseIndex < 0)
         {
             return false;
@@ -320,7 +333,7 @@ public sealed class PackedComponentPool<T> : IReadOnlyComponentPool<T>, IInspect
     /// <returns>True if the component was removed, false otherwise.</returns>
     public bool Remove(int entityId)
     {
-        var denseIndex = _entityIdToDenseIndexMap[entityId];
+        var denseIndex = IsInBounds(entityId) ? _entityIdToDenseIndexMap[entityId] : -1;
         if (denseIndex < 0)
         {
             return false;

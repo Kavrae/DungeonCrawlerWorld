@@ -65,7 +65,7 @@ public sealed class InventoryFolderController(
     /// <summary>Fixed HUD-style gap between the two windows, in the same spirit as ShellBootstrapper.ActionLockGap -- not tied to map tile size, which changes with zoom.</summary>
     private const float Gap = 12f;
 
-    private readonly DirectComponentPool<InventoryDisabledComponent> _disabledPool = componentManager.GetDirectPool<InventoryDisabledComponent>();
+    private readonly PackedComponentPool<InventoryDisabledComponent> _disabledPool = componentManager.GetPackedPool<InventoryDisabledComponent>();
 
     private Folder _folder = null!;
     private WindowSlot<InventoryManagementWindow> _inventorySlot = null!;

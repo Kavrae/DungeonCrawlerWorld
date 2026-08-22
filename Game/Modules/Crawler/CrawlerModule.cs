@@ -9,8 +9,9 @@ public sealed class CrawlerModule : IModule
 {
     public Guid Id { get; } = new("d9f6a1c4-8b2e-4f3a-9c1d-000000000011");
 
+    // Rough estimate of crawler population on startup.
     public void RegisterComponents(ComponentManager componentManager) =>
-        componentManager.RegisterPackedPool<CrawlerComponent>(static (ref existing, incoming) => existing = incoming);
+        componentManager.RegisterPackedPool<CrawlerComponent>(static (ref existing, incoming) => existing = incoming, initialCapacity: 4_000);
 
     public void RegisterSystems(SystemManager systemManager, ComponentManager componentManager)
     {

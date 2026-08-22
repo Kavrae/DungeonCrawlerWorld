@@ -215,4 +215,27 @@ public sealed class MultiComponentPoolTests
 
         Assert.AreEqual(2u, destination[0].Version);
     }
+
+    [TestMethod]
+    public void Has_EntityIdBeyondCapacity_ReturnsFalseInsteadOfThrowing()
+    {
+        var pool = new MultiComponentPool<TestComponent>(maximumEntityCount: 4, initialCapacity: 4);
+
+        Assert.IsFalse(pool.Has(1000));
+        Assert.AreEqual(0, pool.CountForEntity(1000));
+        Assert.AreEqual(0u, pool.GetEntityVersion(1000));
+        Assert.AreEqual(-1, pool.GetFirstDenseIndex(1000));
+        Assert.IsFalse(pool.Remove(1000));
+    }
+
+    [TestMethod]
+    public void Add_EntityIdBeyondMaximumEntityCount_GrowsEntityIndexOnDemand()
+    {
+        var pool = new MultiComponentPool<TestComponent>(maximumEntityCount: 4, initialCapacity: 4);
+
+        pool.Add(1000, new TestComponent { Value = 42 });
+
+        Assert.IsTrue(pool.Has(1000));
+        Assert.AreEqual(1, pool.CountForEntity(1000));
+    }
 }

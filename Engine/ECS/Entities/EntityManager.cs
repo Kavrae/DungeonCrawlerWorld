@@ -1,5 +1,6 @@
 using Engine.Collections;
 using Engine.ECS.Components;
+using static Engine.ECS.Components.EntityCapacityGrowth;
 
 namespace Engine.ECS.Entities;
 
@@ -35,13 +36,7 @@ public sealed class EntityManager
 
         if (entityId >= _capacity)
         {
-            var newCapacity = _capacity * 2;
-            if (newCapacity <= entityId)
-            {
-                newCapacity = entityId + 1;
-            }
-
-            _capacity = newCapacity;
+            _capacity = NextCapacityFor(_capacity, entityId);
             _componentManager.ResizeEntityCapacity(_capacity);
         }
 

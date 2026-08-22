@@ -107,4 +107,36 @@ public sealed class PackedComponentPoolTests
 
         Assert.IsTrue(pool.Has(99));
     }
+
+    [TestMethod]
+    public void Has_EntityIdBeyondCapacity_ReturnsFalseInsteadOfThrowing()
+    {
+        var pool = new PackedComponentPool<TestComponent>(maximumEntityCount: 4, initialCapacity: 4, AverageMerge);
+
+        Assert.IsFalse(pool.Has(1000));
+        Assert.IsFalse(pool.TryGetReadonly(1000, out _));
+        Assert.IsFalse(pool.Remove(1000));
+    }
+
+    [TestMethod]
+    public void Add_EntityIdBeyondMaximumEntityCount_GrowsSparseMapOnDemand()
+    {
+        var pool = new PackedComponentPool<TestComponent>(maximumEntityCount: 4, initialCapacity: 4, AverageMerge);
+
+        pool.Add(1000, new TestComponent { Value = 42 });
+
+        Assert.IsTrue(pool.Has(1000));
+        Assert.AreEqual(42, pool.GetReadonly(1000).Value);
+    }
+
+    [TestMethod]
+    public void Merge_EntityIdBeyondMaximumEntityCount_GrowsSparseMapOnDemand()
+    {
+        var pool = new PackedComponentPool<TestComponent>(maximumEntityCount: 4, initialCapacity: 4, AverageMerge);
+
+        pool.Merge(1000, new TestComponent { Value = 42 });
+
+        Assert.IsTrue(pool.Has(1000));
+        Assert.AreEqual(42, pool.GetReadonly(1000).Value);
+    }
 }

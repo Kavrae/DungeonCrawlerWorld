@@ -53,9 +53,29 @@ public static class FloorBuilder
         (AbilityScoreType.Charisma, 4f, -1f, 0.25f, -0.08f),
     ];
 
-    public static int CreatePlayer(Game.World.World world, EcsContext ecsContext, MathUtility mathUtility, FrameEventBuffer<EntityMovedEvent> movedEntities, UniqueNumberAllocator crawlerNumberAllocator)
+    /// <summary>Mints the Player's entity id.</summary>
+    /// <remarks>
+    /// Called before PopulateFloor, not inside CreatePlayer -- reserving it first, before any of
+    /// PopulateFloor's ~2.6M NPC/terrain entities exist, deterministically lands the Player on
+    /// entity id 0 (see FreeIdPool.Rent: the first Rent() call against a fresh pool always
+    /// returns 0) instead of a high id assigned after population. That's what lets the
+    /// Player-only component pool capacity overrides (AchievementUnlockedComponent,
+    /// ActionHotkeyBindingComponent, ItemHotkeyBindingComponent, HotkeyExpansionUnlockComponent --
+    /// see TODO.md's "Per-pool entity capacity for rare component types") actually stay near
+    /// their small seed size instead of growing to cover a ~2M-scale id the moment the Player is
+    /// created. The reserved id carries no components until CreatePlayer runs -- safe, since
+    /// every component pool gates access on its own presence-tracking, never a raw id-range scan.
+    /// </remarks>
+    public static int ReservePlayerEntity(EcsContext ecsContext) => ecsContext.EntityManager.CreateEntity();
+
+    /// <summary>Builds and places the Player entity, using an id already reserved via ReservePlayerEntity.</summary>
+    /// <remarks>
+    /// Still runs after PopulateFloor, unlike the id reservation above -- the free-cell search
+    /// below (FindFreeGroundCellNear) reads live map occupancy, so it genuinely needs the floor
+    /// already populated, not just the id already minted.
+    /// </remarks>
+    public static void CreatePlayer(Game.World.World world, EcsContext ecsContext, MathUtility mathUtility, FrameEventBuffer<EntityMovedEvent> movedEntities, UniqueNumberAllocator crawlerNumberAllocator, int entityId)
     {
-        var entityId = ecsContext.EntityManager.CreateEntity();
         new PlayerBlueprint(mathUtility, crawlerNumberAllocator).Build(ecsContext.ComponentManager, entityId);
 
         for (var i = 0; i < TestPoisonStackCount; i++)
@@ -94,8 +114,6 @@ public static class FloorBuilder
         // PlayerActivityLog's existing spawn-time log line is preserved unchanged.
         movedEntities.Record(new EntityMovedEvent(entityId, spawnPosition, spawnPosition, transform.Size));
         ecsContext.EventBus.Publish(new EntityMovedEvent(entityId, spawnPosition, spawnPosition, transform.Size));
-
-        return entityId;
     }
 
     /// <summary>

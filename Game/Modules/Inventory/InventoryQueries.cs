@@ -16,7 +16,7 @@ public static class InventoryQueries
     /// <param name="disabledPool">The pool of disabled inventory components.</param>
     /// <param name="entityId">The ID of the entity to check.</param>
     /// <returns><c>true</c> if the inventory is disabled; otherwise, <c>false</c>.</returns>
-    public static bool IsInventoryDisabled(DirectComponentPool<InventoryDisabledComponent> disabledPool, int entityId) =>
+    public static bool IsInventoryDisabled(PackedComponentPool<InventoryDisabledComponent> disabledPool, int entityId) =>
         disabledPool.TryGetReadonly(entityId, out var component) && component.IsDisabled;
 
     /// <summary>Tries to get the stack of items from their inventory for a given entity and item definition.</summary>

@@ -71,10 +71,14 @@ public sealed class ActionsModule : IGameModule
             static (ref PendingDelayedActionComponent existing, PendingDelayedActionComponent incoming) => existing = incoming);
         componentManager.RegisterPackedPool<PendingActionActivationComponent>(
             static (ref PendingActionActivationComponent existing, PendingActionActivationComponent incoming) => existing = incoming);
-        componentManager.RegisterMultiPool<ActionHotkeyBindingComponent>();
-        componentManager.RegisterPackedPool<HotkeyExpansionUnlockComponent>(static (ref existing, incoming) => existing = incoming);
+        // Player-only, 24 hotkey slots total -- small entity-index seed, dense capacity matches the slot count.
+        componentManager.RegisterMultiPool<ActionHotkeyBindingComponent>(maximumEntityCount: 2, initialCapacity: 24);
+        // Player-only, only 4 expansions exist.
+        componentManager.RegisterPackedPool<HotkeyExpansionUnlockComponent>(
+            static (ref existing, incoming) => existing = incoming, maximumEntityCount: 2, initialCapacity: 4);
         componentManager.RegisterPackedPool<PotionCooldownComponent>(static (ref existing, incoming) => existing = incoming);
-        componentManager.RegisterMultiPool<ScrollMasteryComponent>();
+        // Player-only, exceedingly rare (hours between masteries) -- small seed, grows organically.
+        componentManager.RegisterMultiPool<ScrollMasteryComponent>(maximumEntityCount: 2, initialCapacity: 8);
     }
 
     public void RegisterSystems(SystemManager systemManager, ComponentManager componentManager)
