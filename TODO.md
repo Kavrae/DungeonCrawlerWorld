@@ -657,10 +657,6 @@ A different design direction for the same code the "Solid highlight border for h
 
 `MapWindow.DrawHealthBar` (`Presentation/UI/MapWindow.cs`) is arguably already a lighter third instance -- the same core `effectiveMax`-fraction inset-fill-rectangle computation (via `StatModifierMath.GetEffectiveValue` against `StatModifierTarget.MaximumHealth`), just without the tick-mark graduations and positioned above a map entity's glyph instead of in a HUD corner, and per-*any*-entity rather than player-only. Not identical enough to fold in as-is, but worth including in scope if this item is ever picked up, rather than treating it as a fourth future copy once a "real" third HUD bar shows up.
 
-#### TextDividers with a label
-
-A divider variant that renders a short string centered within the line, unlike `SeparatorBar` (`Presentation/UI/SeparatorBar.cs`), a plain solid bar with no text support at all. `ItemDetailsWindow`'s own section headers ("Effects"/"Activation") are an ordinary text line drawn above a separate `SeparatorBar`-based divider today, not one combined element -- this would let a header and its divider collapse into one. Would also suit a future `InspectionWindowContent` pass, whose own per-subject spacers have no label today either.
-
 #### Per-entity sprite scale
 
 `SpriteRenderer.Draw` (`Presentation/Rendering/SpriteRenderer.cs`) always stretches a sprite's source rectangle to fill its tile footprint exactly -- fine for tile-sized art (Wall, Grass) but wrong for character sprites, which don't all read at a consistent apparent size relative to their footprint: confirmed in-game, the player sprite needs to render larger and goblin sprites smaller. Needs a per-entity (or per-`SpriteComponent`) scale factor -- e.g. a `Scale` field on `SpriteComponent` (`Game/Modules/Core/Components/SpriteComponent.cs`) that `MapWindow.TryDrawEntityVisual` applies when computing the destination rectangle passed to `SpriteRenderer.Draw`, rather than always drawing at exactly the tile's own footprint size.

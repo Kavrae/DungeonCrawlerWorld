@@ -1,6 +1,5 @@
 using Engine.Math;
 using Game.Modules.Actions;
-using Game.Modules.Actions.Activators;
 using Game.Modules.Inventory;
 using Microsoft.Xna.Framework;
 using Presentation.Fonts;
@@ -16,10 +15,12 @@ namespace Presentation.UI.Inventory;
 /// clicked (see that controller's own doc comment). Close-only (no minimize), the same shape as
 /// InventoryManagementWindow/CorpseInventoryWindow, not InspectionWindow (minimize-only).
 ///
-/// Sections, top to bottom, a divider (BuildDivider, mirroring InspectionWindowContent.BuildSpacer)
-/// before every one after the first: sprite/glyph + name (no header); Effects (header, one line
-/// per ActionEffect entry, or "None"); Activation (header, omitted entirely when Activator is
-/// null -- a shape-preview grid plus Targeting/Timing/per-activator-type text lines, all sourced
+/// Sections, top to bottom, a divider (BuildDivider, a single TextDivider row -- plain when its
+/// label is omitted, mirroring InspectionWindowContent.BuildSpacer; labeled for the two sections
+/// that have one) before every one after the first: sprite/glyph + name (no header); Effects
+/// (labeled divider, then one line per ActionEffect entry, or "None"); Activation (labeled
+/// divider, omitted entirely when Activator is null -- a shape-preview grid plus
+/// Targeting/Timing/per-activator-type text lines, all sourced
 /// from ItemComparisonStatExtraction so single-item rendering and Item Details Comparison's own
 /// per-line coloring can never drift out of sync about what lines exist); full
 /// Description (no header, omitted when blank -- same convention InspectionWindowContent.
@@ -57,8 +58,6 @@ public sealed class ItemDetailsWindow(
     private const float IconSize = 32f;
     private const float RowHeight = 18f;
     private const float RowTextGap = 6f;
-    private const float BlockPadding = 12f;
-    private const float SeparatorHeight = 1f;
 
     /// <summary>Soft per-widget height cap for the target shape preview grid -- independent of this window's own overall MaximumSize/scroll safety net, specifically so one large-AreaSize Burst can't single-handedly blow out the window's height; TargetShapePreviewGeometry.ComputeCellSize shrinks cells to fit within this instead.</summary>
     private const float TargetShapePreviewMaxHeight = 160f;
@@ -71,7 +70,6 @@ public sealed class ItemDetailsWindow(
 
     private static readonly Color HeaderTextColor = WindowPalette.TitleColor;
     private static readonly Color BodyTextColor = Color.White;
-    private static readonly Color SeparatorColor = WindowPalette.PanelContentColor;
 
     /// <summary>Item Details Comparison's own per-line coloring -- Better doubles as the "this item has a stat at least one other compared item doesn't" exclusive marker too (see ResolveLineColor's own doc comment), so the same color means "advantage" either way.</summary>
     private static readonly Color BetterColor = Color.LightGreen;
@@ -157,12 +155,12 @@ public sealed class ItemDetailsWindow(
         var width = _contentWidth;
 
         BuildNameRow(_definition, width);
-        BuildDivider(width);
+        BuildDivider(width, "Effects", 0.125f);
         BuildEffectsSection(_definition, width);
 
         if (_definition.Activator is { } activator)
         {
-            BuildDivider(width);
+            BuildDivider(width, "Activation", 0.125f);
             BuildActivationSection(activator, width);
         }
 
@@ -211,8 +209,6 @@ public sealed class ItemDetailsWindow(
 
     private void BuildEffectsSection(ItemDefinition definition, float width)
     {
-        BuildFixedTextLine(width, "Effects", HeaderTextColor);
-
         var stats = ItemComparisonStatExtraction.ExtractEffectStats(definition);
         foreach (var stat in stats)
         {
@@ -227,7 +223,6 @@ public sealed class ItemDetailsWindow(
 
     private void BuildActivationSection(IActionActivator activator, float width)
     {
-        BuildFixedTextLine(width, "Activation", HeaderTextColor);
         BuildTargetingRow(activator, width);
     }
 
@@ -421,24 +416,17 @@ public sealed class ItemDetailsWindow(
         AddChild(line);
     }
 
-    /// <summary>Padding between one section and the next, with a 1px divider (SeparatorBar's own 75%-width centering) vertically centered within it -- mirrors InspectionWindowContent.BuildSpacer, but SeparatorColor is light (PanelContentColor) rather than Black, since this window's own background is the dark PanelBackgroundColor rather than the default white body.</summary>
-    private void BuildDivider(float width)
+    /// <summary>Section-opening divider -- a single TextDivider row, always 95% width, in HeaderTextColor. Plain (mirroring InspectionWindowContent.BuildSpacer) when label/textPosition are left at their defaults; labeled, with the line broken at textPosition, when a section has its own label (Effects/Activation).</summary>
+    private void BuildDivider(float width, string label = "", float textPosition = 0f)
     {
-        var spacer = ElementPoolService.CreateElement<Window>(this, new ElementOptions
-        {
-            Hierarchy = new ElementHierarchyOptions { CanContainChildren = true },
-            Layout = new ElementLayoutOptions { Size = new Vector2(width, BlockPadding), MaximumSize = new Vector2(width, UnboundedChildHeight), DisplayMode = ElementDisplayMode.Fixed, IsTransparent = true },
-            Chrome = new ElementChromeOptions { ShowBorder = false, ShowTitle = false, CanUserFocus = false },
-        });
-        AddChild(spacer);
-
-        var separator = ElementPoolService.CreateElement<SeparatorBar>(spacer, new ElementOptions
+        var divider = ElementPoolService.CreateElement<TextDivider>(this, new ElementOptions
         {
             Hierarchy = new ElementHierarchyOptions { CanContainChildren = false },
-            Layout = new ElementLayoutOptions { RelativePosition = new Vector2(0, (BlockPadding - SeparatorHeight) / 2f), Size = new Vector2(width, SeparatorHeight), DisplayMode = ElementDisplayMode.Fixed },
+            Layout = new ElementLayoutOptions { Size = new Vector2(width, RowHeight), MaximumSize = new Vector2(width, UnboundedChildHeight), DisplayMode = ElementDisplayMode.Fixed },
             Chrome = new ElementChromeOptions { ShowBorder = false, ShowTitle = false, CanUserFocus = false },
+            Content = new ElementContentOptions { ContentColor = Color.Transparent },
         });
-        separator.Configure(SeparatorColor);
-        spacer.AddChild(separator);
+        AddChild(divider);
+        divider.Configure(label, HeaderTextColor, 0.95f, textPosition);
     }
 }

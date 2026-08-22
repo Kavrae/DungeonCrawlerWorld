@@ -83,6 +83,7 @@ public static class ElementFactoryRegistry
         Register<AbilityScoreColumnHeader>((font, elements, glyph) => new AbilityScoreColumnHeader(font, elements, glyph));
         Register<AbilityScoreModifierRow>((font, elements, glyph) => new AbilityScoreModifierRow(font, elements, glyph));
         Register<SeparatorBar>((font, elements, glyph) => new SeparatorBar(font, elements, glyph));
+        Register<TextDivider>((font, elements, glyph) => new TextDivider(font, elements, glyph));
         Register<Tooltip>((font, elements, glyph) => new Tooltip(font, elements, glyph));
 
         pool.RegisterFactory<CorpseInventoryWindow>(() => new CorpseInventoryWindow(
