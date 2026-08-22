@@ -15,5 +15,5 @@ namespace Game.Modules.StatModifiers.Components;
 /// </summary>
 public readonly record struct ExpiringStatModifierComponent
 {
-    public override readonly string ToString() => "ExpiringStatModifierComponent";
+    public override readonly string ToString() => nameof(ExpiringStatModifierComponent);
 }

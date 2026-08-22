@@ -1,3 +1,5 @@
+using Engine.Utilities;
+
 namespace Game.Modules.Mana.Components;
 
 /// <summary>
@@ -16,5 +18,8 @@ public struct ManaComponent(float currentMana, float maximumMana)
     public float CurrentMana { get; set; } = currentMana;
     public float MaximumMana { get; set; } = maximumMana;
 
-    public override readonly string ToString() => $"CurrentMana : {CurrentMana}\nMaximumMana : {MaximumMana}";
+    public override readonly string ToString() =>
+        MaximumMana > 0
+            ? $"{StringUtility.BuildPercentageBar("MP", (int)CurrentMana, (int)MaximumMana, 20)} {(int)CurrentMana}/{(int)MaximumMana}"
+            : $"Invalid MaximumMana: {MaximumMana}";
 }

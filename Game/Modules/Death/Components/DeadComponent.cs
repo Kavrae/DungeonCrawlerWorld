@@ -9,5 +9,5 @@
 /// <cleanupVersion>1</cleanupVersion>
 public readonly record struct DeadComponent(int? KilledByEntityId, long DiedAtFrame)
 {
-    public override readonly string ToString() => $"KilledByEntityId : {KilledByEntityId}, DiedAtFrame : {DiedAtFrame}";
+    public override readonly string ToString() => $"KilledByEntityId : {KilledByEntityId}\nDiedAtFrame : {DiedAtFrame}";
 }

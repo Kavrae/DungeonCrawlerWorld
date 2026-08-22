@@ -14,5 +14,5 @@ public struct HealthComponent(float currentHealth, float maximumHealth)
     public override readonly string ToString() =>
         MaximumHealth > 0
             ? $"{StringUtility.BuildPercentageBar("HP", (int)CurrentHealth, (int)MaximumHealth, 20)} {(int)CurrentHealth}/{(int)MaximumHealth}"
-            : $"HP : [invalid MaximumHealth: {MaximumHealth}]";
+            : $"Invalid MaximumHealth: {MaximumHealth}";
 }

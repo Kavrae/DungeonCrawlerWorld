@@ -17,4 +17,6 @@ public struct AuraSourceExpiryComponent(StatusEffectType type, ushort framesUnti
 {
     public StatusEffectType Type { get; set; } = type;
     public ushort FramesUntilNextTick { get; set; } = framesUntilNextTick;
+
+    public override readonly string ToString() => $"Type : {Type}\nFramesUntilNextTick : {FramesUntilNextTick}";
 }

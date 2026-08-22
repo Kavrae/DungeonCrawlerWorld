@@ -14,5 +14,5 @@ public struct ActionLockComponent(ushort standardLockFrames, ushort currentLockT
     public ushort CurrentLockTotalFrames { get; set; } = currentLockTotalFrames;
     public ushort CurrentLockFramesRemaining { get; set; } = currentLockFramesRemaining;
 
-    public override readonly string ToString() => $"StandardLockFrames : {StandardLockFrames}\nCurrentLockTotalFrames : {CurrentLockTotalFrames}\nCurrentLockFramesRemaining : {CurrentLockFramesRemaining}";
+    public override readonly string ToString() => $"{CurrentLockFramesRemaining}\\{CurrentLockTotalFrames}\nStandardLockFrames : {StandardLockFrames}";
 }

@@ -12,4 +12,5 @@ public struct ScrollMasteryComponent(Guid spellId, ushort usageCount)
 {
     public Guid SpellId { get; } = spellId;
     public ushort UsageCount { get; set; } = usageCount;
+    public override readonly string ToString() => $"SpellId : {SpellId}\nUsageCount : {UsageCount}";
 }

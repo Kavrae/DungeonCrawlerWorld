@@ -35,5 +35,5 @@ public struct StatModifierComponent(
     public ushort? RemainingDurationFrames { get; set; } = remainingDurationFrames;
     public StatusEffectSource Source { get; } = source;
 
-    public override readonly string ToString() => $"Target : {Target}\nOperation : {Operation}\nPolarity : {Polarity}\nCanModify : {CanModify}\nMagnitude : {Magnitude}\nRemainingDurationFrames : {RemainingDurationFrames}\nSource : {Source}";
+    public override readonly string ToString() => $"Target : {Target}\nSource : {Source}\nOperation : {(Operation == StatModifierOperation.Additive ? Polarity == StatModifierPolarity.Buff ? '+' : '-' : Polarity == StatModifierPolarity.Buff ? 'x' : '÷')}{Magnitude}\nCanModify : {CanModify}\nRemainingDurationFrames : {RemainingDurationFrames}";
 }

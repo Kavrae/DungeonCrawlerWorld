@@ -17,5 +17,5 @@ public struct AbilityScoreComponent(AbilityScoreType type, ushort baseValue, ush
     /// <summary>base combined with whichever StatModifierComponents currently target this score, clamped [0, short.MaxValue] -- precomputed by AbilityScoreEffects at grant/change time, not read-time (see AbilityScoreMath).</summary>
     public ushort Total { get; set; } = total;
 
-    public override readonly string ToString() => $"Type : {Type}\nBaseValue : {BaseValue}\nTotal : {Total}";
+    public override readonly string ToString() => $"{Type} : {BaseValue}({Total})";
 }

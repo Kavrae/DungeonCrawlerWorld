@@ -7,5 +7,5 @@ public struct HotkeyExpansionUnlockComponent(byte unlockedSlotCount)
 {
     public byte UnlockedSlotCount { get; set; } = unlockedSlotCount;
 
-    public override readonly string ToString() => $"UnlockedSlotCount : {UnlockedSlotCount}";
+    public override readonly string ToString() => $"Unlocked Slot Count : {UnlockedSlotCount}";
 }
