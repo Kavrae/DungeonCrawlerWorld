@@ -1,3 +1,4 @@
+using Engine.Math;
 using Game.Modules.Actions;
 using Game.Modules.Actions.Activators;
 using Game.Modules.Inventory;
@@ -17,10 +18,10 @@ namespace Presentation.UI.Inventory;
 ///
 /// Sections, top to bottom, a divider (BuildDivider, mirroring InspectionWindowContent.BuildSpacer)
 /// before every one after the first: sprite/glyph + name (no header); Effects (header, one line
-/// per ActionEffect entry -- a placeholder GetType().Name rendering, or "None", until the generic
-/// ToString formatting followup lands); Activation (header, omitted entirely when Activator is
-/// null -- Targeting/Timing plus one or two hand-picked fields per concrete activator type,
-/// mirroring what InventoryGridContent.UpdateHover already hand-picks for WandActivator); full
+/// per ActionEffect entry via ActionEffectFormatting.FormatEntry, or "None"); Activation (header,
+/// omitted entirely when Activator is null -- Targeting/Timing plus one or two hand-picked fields
+/// per concrete activator type, mirroring what InventoryGridContent.UpdateHover already
+/// hand-picks for WandActivator); full
 /// Description (no header, omitted when blank -- same convention InspectionWindowContent.
 /// BuildDescriptionRow already uses); Tags, comma-separated (no header). Every top-level child
 /// tiles vertically via the host window's own ChildElementTileMode.Vertical (see
@@ -47,7 +48,8 @@ public sealed class ItemDetailsWindow(
     ElementPoolService elementPoolService,
     GlyphRenderer glyphRenderer,
     SpriteSheetService spriteSheetService,
-    SpriteRenderer spriteRenderer)
+    SpriteRenderer spriteRenderer,
+    ActionCatalog actionCatalog)
     : Window(fontService, elementPoolService, glyphRenderer)
 {
     public static readonly Color BackgroundColor = WindowPalette.PanelBackgroundColor;
@@ -57,6 +59,12 @@ public sealed class ItemDetailsWindow(
     private const float RowTextGap = 6f;
     private const float BlockPadding = 12f;
     private const float SeparatorHeight = 1f;
+
+    /// <summary>Soft per-widget height cap for the target shape preview grid -- independent of this window's own overall MaximumSize/scroll safety net, specifically so one large-AreaSize Burst can't single-handedly blow out the window's height; TargetShapePreviewGeometry.ComputeCellSize shrinks cells to fit within this instead.</summary>
+    private const float TargetShapePreviewMaxHeight = 160f;
+
+    /// <summary>BuildTargetingRow divides its own width into this many equal zones -- text (left), the target shape grid (centered in the middle one), and an empty zone (right, reserved for now).</summary>
+    private const float TargetingRowZoneCount = 3f;
 
     /// <summary>A generous, effectively-unlimited per-row height cap -- see InspectionWindowContent.UnboundedChildHeight's own doc comment for why this is needed: without it, a row tiled past the host window's own one-screen-tall content size gets silently clamped to nothing.</summary>
     private const float UnboundedChildHeight = 10000f;
@@ -167,7 +175,7 @@ public sealed class ItemDetailsWindow(
         {
             foreach (var entry in effect.Entries)
             {
-                BuildFixedTextLine(width, entry.GetType().Name, BodyTextColor);
+                BuildFixedTextLine(width, ActionEffectFormatting.FormatEntry(entry), BodyTextColor);
                 any = true;
             }
         }
@@ -181,18 +189,68 @@ public sealed class ItemDetailsWindow(
     private void BuildActivationSection(IActionActivator activator, float width)
     {
         BuildFixedTextLine(width, "Activation", HeaderTextColor);
-        BuildFixedTextLine(width, $"Targeting: {activator.Targeting.Shape}, Range {activator.Targeting.Range}", BodyTextColor);
-        BuildFixedTextLine(width, $"Timing: {activator.Timing.Category}", BodyTextColor);
+        BuildTargetingRow(activator, width);
+    }
 
-        switch (activator)
+    /// <summary>
+    /// Three equal-width zones: targeting shape/range caption plus every Timing/per-activator-type
+    /// line, stacked in the left zone; the target shape preview grid (see
+    /// TargetShapePreviewGeometry/TargetShapePreviewElement for the shape math/rendering) centered
+    /// within the middle zone; the right zone deliberately left empty for now. Vertically centered
+    /// against the taller of the text column/grid. Both are sized entirely up front (line count *
+    /// RowHeight for the text column; columns/rows/cellSize from the same TargetingSpec for the
+    /// grid, capped to the middle zone's own width) before this row -- and everything inside it --
+    /// is created, so none of it risks the Fixed-vs-WrapContent shrink-feedback pitfall the window
+    /// itself hit earlier.
+    /// </summary>
+    private void BuildTargetingRow(IActionActivator activator, float width)
+    {
+        var textLines = new List<string> { $"{activator.Targeting.Shape} (Range {activator.Targeting.Range})" };
+        textLines.AddRange(ActionActivatorFormatting.BuildLines(activator, actionCatalog));
+
+        var zoneWidth = width / TargetingRowZoneCount;
+
+        var offsets = TargetShapePreviewGeometry.ComputeOffsets(activator.Targeting);
+        var (minX, minY, columns, rows) = TargetShapePreviewGeometry.ComputeBounds(offsets);
+        var cellSize = TargetShapePreviewGeometry.ComputeCellSize(columns, rows, zoneWidth, TargetShapePreviewMaxHeight);
+        var gridWidth = columns * cellSize;
+        var gridHeight = rows * cellSize;
+
+        var textColumnHeight = textLines.Count * RowHeight;
+        var rowHeight = System.Math.Max(textColumnHeight, gridHeight);
+
+        var row = ElementPoolService.CreateElement<Window>(this, new ElementOptions
         {
-            case WandActivator wand:
-                BuildFixedTextLine(width, $"Charges: {wand.Charges}/{wand.MaxCharges}", BodyTextColor);
-                break;
-            case SpellActivator { ManaCost: > 0 } spell:
-                BuildFixedTextLine(width, $"Mana Cost: {spell.ManaCost}", BodyTextColor);
-                break;
+            Hierarchy = new ElementHierarchyOptions { CanContainChildren = true },
+            Layout = new ElementLayoutOptions { Size = new Vector2(width, rowHeight), MaximumSize = new Vector2(width, UnboundedChildHeight), DisplayMode = ElementDisplayMode.Fixed },
+            Chrome = new ElementChromeOptions { ShowBorder = false, ShowTitle = false, CanUserFocus = false },
+            Content = new ElementContentOptions { ContentColor = Color.Transparent },
+        });
+        AddChild(row);
+
+        for (var i = 0; i < textLines.Count; i++)
+        {
+            var line = ElementPoolService.CreateElement<TextWindow>(row, new ElementOptions
+            {
+                Hierarchy = new ElementHierarchyOptions { CanContainChildren = false },
+                Layout = new ElementLayoutOptions { RelativePosition = new Vector2(0, i * RowHeight), Size = new Vector2(zoneWidth, RowHeight), DisplayMode = ElementDisplayMode.Fixed },
+                Chrome = new ElementChromeOptions { ShowBorder = false, ShowTitle = false, CanUserFocus = false },
+                Content = new ElementContentOptions { ContentColor = Color.Transparent },
+                Text = new TextOptions { Text = textLines[i], TextColor = BodyTextColor },
+            });
+            row.AddChild(line);
         }
+
+        var gridX = zoneWidth + (zoneWidth - gridWidth) / 2f;
+        var preview = ElementPoolService.CreateElement<TargetShapePreviewElement>(row, new ElementOptions
+        {
+            Hierarchy = new ElementHierarchyOptions { CanContainChildren = false },
+            Layout = new ElementLayoutOptions { RelativePosition = new Vector2(gridX, (rowHeight - gridHeight) / 2f), Size = new Vector2(gridWidth, gridHeight), DisplayMode = ElementDisplayMode.Fixed },
+            Chrome = new ElementChromeOptions { ShowBorder = false, ShowTitle = false, CanUserFocus = false },
+            Content = new ElementContentOptions { ContentColor = Color.Transparent },
+        });
+        preview.Configure(offsets, minX, minY, cellSize);
+        row.AddChild(preview);
     }
 
     private void BuildFixedTextLine(float width, string text, Color color)

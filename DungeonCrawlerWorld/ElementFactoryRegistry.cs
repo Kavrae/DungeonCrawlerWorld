@@ -93,8 +93,9 @@ public static class ElementFactoryRegistry
             componentManager.GetDirectPool<SpriteComponent>(), componentManager.GetDirectPool<GlyphComponent>()));
 
         Register<InspectionWindow>((font, elements, glyph) => new InspectionWindow(font, elements, glyph, mapViewState));
-        Register<ItemDetailsWindow>((font, elements, glyph) => new ItemDetailsWindow(font, elements, glyph, presentation.SpriteSheetService, presentation.SpriteRenderer));
+        Register<ItemDetailsWindow>((font, elements, glyph) => new ItemDetailsWindow(font, elements, glyph, presentation.SpriteSheetService, presentation.SpriteRenderer, actionCatalog));
         Register<ItemIconElement>((font, elements, glyph) => new ItemIconElement(font, elements, glyph, presentation.SpriteSheetService, presentation.SpriteRenderer));
+        Register<TargetShapePreviewElement>((font, elements, glyph) => new TargetShapePreviewElement(font, elements, glyph));
         Register<HealthBarElement>((font, elements, glyph) => new HealthBarElement(
             font, elements, glyph,
             componentManager.GetPackedPool<HealthComponent>(),
