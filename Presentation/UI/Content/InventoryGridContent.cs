@@ -42,7 +42,8 @@ public sealed class InventoryGridContent(
     Tooltip hoverPopup,
     Func<int?> getSecondaryTargetEntityId,
     MapViewState mapViewState,
-    Action<int, Guid> onItemSelected) : IElementContent
+    Action<int, Guid> onItemSelected,
+    Action<int, Guid> onCompareRequested) : IElementContent
 {
     public static readonly Vector2 CellSize = new(24, 24);
     private const float CellGap = 1f;
@@ -212,6 +213,7 @@ public sealed class InventoryGridContent(
 
         UpdateHover(Mouse.GetState());
         UpdateSelection();
+        UpdateCompareState();
     }
 
     /// <summary>Direct per-cell field set every frame, no rebuild -- mirrors UpdateHover's own IsHovered sync exactly, since selection (driven by the Item Details window, opened/changed/closed independently of this grid) can change without this grid ever rebuilding.</summary>
@@ -220,6 +222,29 @@ public sealed class InventoryGridContent(
         foreach (var cell in _cells)
         {
             cell.IsSelected = cell.StackInstanceId is not null && cell.StackInstanceId == mapViewState.SelectedItemStackInstanceId;
+        }
+    }
+
+    /// <summary>Direct per-cell field set every frame, no rebuild -- mirrors UpdateSelection exactly. None (not compare-armed) for every cell when MapViewState.CompareRequiredActivatorType is null; otherwise Ineligible for a Merged Stack cell (no single stack to add) or one whose effective item's Activator concrete type doesn't match, Eligible when it does.</summary>
+    private void UpdateCompareState()
+    {
+        foreach (var cell in _cells)
+        {
+            if (mapViewState.CompareRequiredActivatorType is not { } requiredType)
+            {
+                cell.CompareState = CellCompareState.None;
+                continue;
+            }
+
+            if (cell.StackInstanceId is not { } stackInstanceId ||
+                !InventoryQueries.TryFindByStackInstanceId(_stacks, cell.EntityId, stackInstanceId, out var stack) ||
+                !InventoryQueries.TryResolveEffectiveItem(itemCatalog, in stack, out var definition))
+            {
+                cell.CompareState = CellCompareState.Ineligible;
+                continue;
+            }
+
+            cell.CompareState = definition.Activator?.GetType() == requiredType ? CellCompareState.Eligible : CellCompareState.Ineligible;
         }
     }
 
@@ -367,35 +392,41 @@ public sealed class InventoryGridContent(
     }
 
     /// <summary>
-    /// "Give" (this grid's own entity -> the currently-open secondary target) or "Take" (the
-    /// currently-open secondary target -> this grid's own entity) -- never both, and neither if
-    /// no secondary window is currently open (getSecondaryTargetEntityId returns null) or the
-    /// clicked cell is a Merged Stack (no single StackInstanceId to transfer, the same restriction
-    /// InventoryItemStackCell.CanBindToHotbar already enforces for drag-binding). For
-    /// CorpseInventoryWindow's own grid, getSecondaryTargetEntityId always returns that corpse's
-    /// own entityId (it *is* the secondary target for as long as it exists), so its cells only
-    /// ever offer "Take"; for the player's own grid, it queries whatever's actually open right
-    /// now (see InventoryFolderController.GetSecondaryTargetEntityId), so "Give" only appears
-    /// while a secondary window is open.
+    /// "Compare" (arms Item Details Comparison against this stack -- see ItemComparisonController.
+    /// Arm), plus "Give" (this grid's own entity -> the currently-open secondary target) or "Take"
+    /// (the currently-open secondary target -> this grid's own entity) -- never both of the latter
+    /// two, and neither if no secondary window is currently open (getSecondaryTargetEntityId
+    /// returns null). Every option here is guarded on the clicked cell not being a Merged Stack
+    /// (no single StackInstanceId to compare/transfer, the same restriction InventoryItemStackCell.
+    /// CanBindToHotbar already enforces for drag-binding). For CorpseInventoryWindow's own grid,
+    /// getSecondaryTargetEntityId always returns that corpse's own entityId (it *is* the secondary
+    /// target for as long as it exists), so its cells only ever offer "Take"; for the player's own
+    /// grid, it queries whatever's actually open right now (see InventoryFolderController.
+    /// GetSecondaryTargetEntityId), so "Give" only appears while a secondary window is open.
     /// </summary>
-    private List<ContextMenuOption> BuildGiveTakeMenu(InventoryItemStackCell cell)
+    private List<ContextMenuOption> BuildItemContextMenu(InventoryItemStackCell cell)
     {
         List<ContextMenuOption> options = [];
 
-        if (cell.StackInstanceId is not { } stackInstanceId || getSecondaryTargetEntityId() is not { } secondaryTargetEntityId)
+        if (cell.StackInstanceId is not { } stackInstanceId)
         {
             return options;
         }
 
-        if (cell.EntityId == world.PlayerEntityId && secondaryTargetEntityId != world.PlayerEntityId)
+        options.Add(new ContextMenuOption("Compare", null, Enabled: true, () => onCompareRequested(cell.EntityId, stackInstanceId)));
+
+        if (getSecondaryTargetEntityId() is { } secondaryTargetEntityId)
         {
-            options.Add(new ContextMenuOption("Give", null, Enabled: true,
-                () => InventoryActions.TryTransferStack(componentManager, cell.EntityId, secondaryTargetEntityId, stackInstanceId, world)));
-        }
-        else if (cell.EntityId == secondaryTargetEntityId && secondaryTargetEntityId != world.PlayerEntityId)
-        {
-            options.Add(new ContextMenuOption("Take", null, Enabled: true,
-                () => InventoryActions.TryTransferStack(componentManager, cell.EntityId, world.PlayerEntityId, stackInstanceId, world)));
+            if (cell.EntityId == world.PlayerEntityId && secondaryTargetEntityId != world.PlayerEntityId)
+            {
+                options.Add(new ContextMenuOption("Give", null, Enabled: true,
+                    () => InventoryActions.TryTransferStack(componentManager, cell.EntityId, secondaryTargetEntityId, stackInstanceId, world)));
+            }
+            else if (cell.EntityId == secondaryTargetEntityId && secondaryTargetEntityId != world.PlayerEntityId)
+            {
+                options.Add(new ContextMenuOption("Take", null, Enabled: true,
+                    () => InventoryActions.TryTransferStack(componentManager, cell.EntityId, world.PlayerEntityId, stackInstanceId, world)));
+            }
         }
 
         return options;
@@ -463,7 +494,7 @@ public sealed class InventoryGridContent(
             cell.Clicked += OnCellClicked;
             cell.OnRightClicked = position =>
             {
-                var options = BuildGiveTakeMenu(cell);
+                var options = BuildItemContextMenu(cell);
                 if (options.Count > 0)
                 {
                     contextMenuController.Open(new Vector2(position.X, position.Y), options);

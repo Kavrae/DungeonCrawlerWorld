@@ -44,17 +44,45 @@ public sealed class CursorTextContent(FontService fontService, GlyphRenderer gly
     private string _text = string.Empty;
     private int _remainingFrames;
 
+    /// <summary>True while a ShowPersistent message is up -- unlike the timed toast (Show), stays visible indefinitely until HidePersistent, no fade/countdown. First caller is Item Details Comparison's own "Select next item..." while armed (see ItemComparisonController.Arm/Disarm). Shares _text/the drawing path with the timed toast rather than a second parallel set of fields, so the two are mutually exclusive on this one instance -- Show() while a persistent message is up switches modes (ends the persistent message early); an unlikely enough overlap in practice (e.g. Ctrl+C's "Copied" firing mid-comparison-selection) that this is accepted rather than layering a priority/stacking system on top for it.</summary>
+    private bool _isPersistent;
+
     /// <summary>Starts (or restarts) the display/fade countdown with the given text -- e.g. TextBox calling Show("Copied") after a successful Ctrl+C/Ctrl+X.</summary>
     public void Show(string text)
     {
         _text = text;
         _remainingFrames = DisplayFrames;
+        _isPersistent = false;
+    }
+
+    /// <summary>Shows text at the cursor indefinitely, no fade/countdown -- call HidePersistent to end it. Calling this again with new text just updates what's shown, still with no timer.</summary>
+    public void ShowPersistent(string text)
+    {
+        _text = text;
+        _isPersistent = true;
+    }
+
+    /// <summary>Ends an active ShowPersistent message -- a no-op if none is currently showing (e.g. it already ended via a subsequent Show() switching modes).</summary>
+    public void HidePersistent()
+    {
+        if (!_isPersistent)
+        {
+            return;
+        }
+
+        _isPersistent = false;
+        _remainingFrames = 0;
     }
 
     public void Initialize(Window hostWindow) => _hostWindow = hostWindow;
 
     public void Update(GameTime gameTime)
     {
+        if (_isPersistent)
+        {
+            return;
+        }
+
         if (_remainingFrames > 0)
         {
             _remainingFrames--;
@@ -63,15 +91,24 @@ public sealed class CursorTextContent(FontService fontService, GlyphRenderer gly
 
     public void DrawContent(GameTime gameTime)
     {
+        if (_isPersistent)
+        {
+            DrawAt(GetCursorPosition(), 1f);
+            return;
+        }
+
         if (_remainingFrames <= 0)
         {
             return;
         }
 
         var alpha = _remainingFrames < FadeFrames ? (float)_remainingFrames / FadeFrames : 1f;
-        var mousePosition = GetCursorPosition();
-        var position = new Vector2(mousePosition.X, mousePosition.Y) + CursorOffset;
+        DrawAt(GetCursorPosition(), alpha);
+    }
 
+    private void DrawAt(Point mousePosition, float alpha)
+    {
+        var position = new Vector2(mousePosition.X, mousePosition.Y) + CursorOffset;
         glyphRenderer.Draw(_hostWindow.ElementPoolService.SpriteBatch, _font, _text, position, TextColor * alpha);
     }
 }

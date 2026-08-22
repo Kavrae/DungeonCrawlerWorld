@@ -2353,7 +2353,7 @@ public sealed class UiInputControllerTests
                 Layout = new ElementLayoutOptions { RelativePosition = position, Size = new Vector2(200, 200), DisplayMode = ElementDisplayMode.Fixed },
                 Chrome = new ElementChromeOptions { ShowBorder = true, CanUserFocus = false },
             });
-            window.SetContent(new InventoryGridContent(world, componentManager, itemCatalog, windowService, fontService, glyphRenderer, spriteSheetService, spriteRenderer, contextMenuController, entityId, filterTag: null, hoverPopup, static () => null, mapViewState, static (_, _) => { }));
+            window.SetContent(new InventoryGridContent(world, componentManager, itemCatalog, windowService, fontService, glyphRenderer, spriteSheetService, spriteRenderer, contextMenuController, entityId, filterTag: null, hoverPopup, static () => null, mapViewState, static (_, _) => { }, static (_, _) => { }));
             window.Initialize();
             return window;
         }
@@ -2456,7 +2456,7 @@ public sealed class UiInputControllerTests
             Layout = new ElementLayoutOptions { RelativePosition = new Vector2(0, 0), Size = new Vector2(200, 200), DisplayMode = ElementDisplayMode.Fixed },
             Chrome = new ElementChromeOptions { ShowBorder = true, CanUserFocus = false },
         });
-        sourceGridWindow.SetContent(new InventoryGridContent(world, componentManager, itemCatalog, windowService, fontService, glyphRenderer, spriteSheetService, spriteRenderer, contextMenuController, sourceEntityId, filterTag: null, hoverPopup, static () => null, mapViewState, static (_, _) => { }));
+        sourceGridWindow.SetContent(new InventoryGridContent(world, componentManager, itemCatalog, windowService, fontService, glyphRenderer, spriteSheetService, spriteRenderer, contextMenuController, sourceEntityId, filterTag: null, hoverPopup, static () => null, mapViewState, static (_, _) => { }, static (_, _) => { }));
         sourceGridWindow.Initialize();
         var cell = sourceGridWindow.ChildElements.OfType<InventoryItemStackCell>().Single();
 
@@ -2466,7 +2466,7 @@ public sealed class UiInputControllerTests
             Layout = new ElementLayoutOptions { RelativePosition = new Vector2(500, 0), Size = new Vector2(300, 300), DisplayMode = ElementDisplayMode.Fixed },
             Chrome = new ElementChromeOptions { ShowBorder = true, ShowTitle = true, CanUserFocus = false },
         });
-        destinationWindow.Configure(destinationEntityId, hoverPopup, static () => null, static (_, _) => { });
+        destinationWindow.Configure(destinationEntityId, hoverPopup, static () => null, static (_, _) => { }, static (_, _) => { });
         destinationWindow.Initialize();
 
         var controller = CreateController([], [], [sourceGridWindow, destinationWindow], [], LargeScreenSize, componentManager: componentManager, playerQuery: null);

@@ -100,11 +100,40 @@ public static class ShellBootstrapper
 
         var itemDetails = new ItemDetailsWindowController(presentation.ElementPoolService, componentManager, itemCatalog, inventory, contextMenuController, mapViewState, mapWindow);
         itemDetails.Initialize(layers);
-        inventory.OnItemSelected = itemDetails.Open;
-        secondaryInventory.OnItemSelected = itemDetails.Open;
         itemDetails.GetSecondaryInventoryWindowRectangle = () => secondaryInventory.Rectangle;
 
-        var inputController = new UiInputController(layers, screenSize, hotbarController, componentManager, world, contextMenuController, itemDetails);
+        // Built after ItemDetailsWindowController (whose single pane it always uses as the
+        // comparison's own anchor -- see ItemComparisonController.Arm) -- one-directional
+        // reference, no construction cycle, the same shape SecondaryInventoryWindowController
+        // already has on InventoryFolderController.
+        var itemComparison = new ItemComparisonController(presentation.ElementPoolService, componentManager, itemCatalog, actionCatalog, inventory, contextMenuController, mapWindow, mapViewState, itemDetails, cursorTextContent);
+        itemComparison.Initialize(layers);
+        itemDetails.GetComparisonColumnRectangles = () => itemComparison.ColumnRectangles;
+        itemDetails.OnClosed = itemComparison.ClearComparison;
+        itemDetails.OnCompareRequested = itemComparison.Arm; // The anchor pane's own Compare title button -- the second entry point into the same arm flow the "Compare" context-menu option already uses.
+        inventory.OnCompareRequested = itemComparison.Arm;
+        secondaryInventory.OnCompareRequested = itemComparison.Arm;
+
+        // The inventory's own "a real single-stack item cell was clicked" callback now branches
+        // on whether Item Details Comparison is currently armed, instead of always opening the
+        // Item Details pane directly -- see ItemComparisonController.IsArmed/AddOrToggle.
+        void OnItemClicked(int entityId, Guid stackInstanceId)
+        {
+            if (itemComparison.IsArmed)
+            {
+                itemComparison.AddOrToggle(entityId, stackInstanceId);
+            }
+            else
+            {
+                itemComparison.ClearIfAnchorChanging(entityId, stackInstanceId);
+                itemDetails.Open(entityId, stackInstanceId);
+            }
+        }
+
+        inventory.OnItemSelected = OnItemClicked;
+        secondaryInventory.OnItemSelected = OnItemClicked;
+
+        var inputController = new UiInputController(layers, screenSize, hotbarController, componentManager, world, contextMenuController, itemDetails, itemComparison);
         inputController.SetDefaultFocusElement(mapWindow);
         inputController.FocusElement(mapWindow);
 

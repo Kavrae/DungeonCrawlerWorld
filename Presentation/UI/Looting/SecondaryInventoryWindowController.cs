@@ -42,6 +42,9 @@ public sealed class SecondaryInventoryWindowController(
     /// <summary>Settable late-bound callback for "the player clicked a real single-stack item cell in this corpse/secondary grid" -- see InventoryFolderController.OnItemSelected, wired by ShellBootstrapper to the same ItemDetailsWindowController.Open. Threaded into every corpse window's own Configure call.</summary>
     public Action<int, Guid>? OnItemSelected { get; set; }
 
+    /// <summary>Settable late-bound callback for "the player chose Compare from this corpse/secondary grid's own item context menu" -- see InventoryFolderController.OnCompareRequested, wired by ShellBootstrapper to the same ItemComparisonController.Arm.</summary>
+    public Action<int, Guid>? OnCompareRequested { get; set; }
+
     public void Initialize(UiLayerStack layers)
     {
         _layers = layers;
@@ -106,7 +109,7 @@ public sealed class SecondaryInventoryWindowController(
             },
             Content = new ElementContentOptions { ContentColor = CorpseInventoryWindow.BackgroundColor },
         });
-        window.Configure(targetEntityId, _hoverPopup, (entityId, stackInstanceId) => OnItemSelected?.Invoke(entityId, stackInstanceId));
+        window.Configure(targetEntityId, _hoverPopup, (entityId, stackInstanceId) => OnItemSelected?.Invoke(entityId, stackInstanceId), (entityId, stackInstanceId) => OnCompareRequested?.Invoke(entityId, stackInstanceId));
         window.Closed += HandleClosed;
         window.OnRightClicked = position => contextMenuController.Open(new Vector2(position.X, position.Y), DynamicHudContextMenus.BuildCloseMenu(window, _layers));
         window.Initialize();

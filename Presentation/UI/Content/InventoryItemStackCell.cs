@@ -9,6 +9,14 @@ using Presentation.UI.ColorPalettes;
 
 namespace Presentation.UI.Content;
 
+/// <summary>Item Details Comparison's own per-cell state while armed (see MapViewState.CompareRequiredActivatorType/InventoryGridContent's own per-frame sync) -- None outside compare mode entirely.</summary>
+public enum CellCompareState
+{
+    None,
+    Eligible,
+    Ineligible,
+}
+
 /// <summary>
 /// One square in the inventory grid: an item stack's sprite-else-glyph icon, plus its quantity
 /// in the bottom-right corner when greater than 1. A plain Element (not Window) -- no title/
@@ -47,6 +55,9 @@ public sealed class InventoryItemStackCell(FontService fontService, ElementPoolS
 
     /// <summary>Distinct from both WindowPalette.HighlightColor (the hover overlay) and HotbarContent.ArmedGlowColor (Gold) -- IsSelected and IsHovered/Armed can all be true on related cells/slots at once and need to read apart.</summary>
     private static readonly Color SelectedGlowColor = Color.Cyan;
+
+    /// <summary>Item Details Comparison's own "eligible to add" glow -- distinct from SelectedGlowColor (Cyan) and HotbarContent.ArmedGlowColor (Gold); also the same color a comparison column's own advantage-highlighted lines use (ItemDetailsWindow.BetterColor), so "green" reads consistently as "good" everywhere this feature touches.</summary>
+    private static readonly Color CompareEligibleGlowColor = Color.LightGreen;
 
     private string? _spriteName;
     private string _glyph = string.Empty;
@@ -93,6 +104,9 @@ public sealed class InventoryItemStackCell(FontService fontService, ElementPoolS
 
     /// <summary>Drives an outward glow (see GlowRenderer.Draw, the same primitive HotbarContent's own ArmedSlot glow uses) -- true when this cell's StackInstanceId matches MapViewState.SelectedItemStackInstanceId, the item currently shown in the Item Details window. Set every frame alongside IsHovered -- see InventoryGridContent's own per-frame sync, not a rebuild-driven Configure parameter, since selection changes independently of any grid rebuild.</summary>
     public bool IsSelected { get; set; }
+
+    /// <summary>Item Details Comparison's own per-frame state, set alongside IsSelected -- Eligible glows green (this item shares the anchor's Activator type, so clicking it would add it), Ineligible grey-tints the icon the same way IsDisabled already does, None (outside compare mode) draws neither.</summary>
+    public CellCompareState CompareState { get; set; }
 
     /// <summary>
     /// cellSize is the caller's known fixed cell size (see InventoryGridContent), not ContentSize
@@ -157,9 +171,15 @@ public sealed class InventoryItemStackCell(FontService fontService, ElementPoolS
             GlowRenderer.Draw(spriteBatch, unitRectangle, new Rectangle((int)ContentAbsolutePosition.X, (int)ContentAbsolutePosition.Y, (int)ContentSize.X, (int)ContentSize.Y), SelectedGlowColor);
         }
 
+        if (CompareState == CellCompareState.Eligible)
+        {
+            GlowRenderer.Draw(spriteBatch, unitRectangle, new Rectangle((int)ContentAbsolutePosition.X, (int)ContentAbsolutePosition.Y, (int)ContentSize.X, (int)ContentSize.Y), CompareEligibleGlowColor);
+        }
+
+        var isGreyedOut = _isDisabled || CompareState == CellCompareState.Ineligible;
         SpriteComponent? sprite = _spriteName is not null && SpriteManifest.TryGet(_spriteName, out var spriteComponent) ? spriteComponent : null;
-        var spriteTint = _isDisabled ? Color.Gray : Color.White;
-        var glyphColor = _isDisabled ? Color.Gray : _glyphColor;
+        var spriteTint = isGreyedOut ? Color.Gray : Color.White;
+        var glyphColor = isGreyedOut ? Color.Gray : _glyphColor;
 
         SpriteOrGlyphRenderer.Draw(spriteBatch, spriteSheetService, spriteRenderer, GlyphRenderer, sprite, _iconGlyphFont, _glyph, glyphColor, ContentAbsolutePosition, ContentSize, spriteTint);
 

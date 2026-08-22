@@ -27,17 +27,23 @@ public sealed class TargetShapePreviewElement(FontService fontService, ElementPo
     private static readonly Color CellFillColor = WindowPalette.PanelContentColor;
     private static readonly Color PlayerMarkerColor = Color.Gold;
 
+    /// <summary>Item Details Comparison's own tile-level diff highlight -- matches ItemDetailsWindow.BetterColor, so "green" reads as "advantage" consistently across every part of this feature.</summary>
+    private static readonly Color HighlightedCellFillColor = Color.LightGreen;
+
     private IReadOnlyList<Point> _offsets = [];
     private int _minX;
     private int _minY;
     private float _cellSize;
+    private IReadOnlySet<Point>? _highlightedOffsets;
 
-    public void Configure(IReadOnlyList<Point> offsets, int minX, int minY, float cellSize)
+    /// <summary>highlightedOffsets is null outside comparison (every cell plain) -- see ItemDetailsWindow's own shape-match-gated diff computation for when/how it's populated.</summary>
+    public void Configure(IReadOnlyList<Point> offsets, int minX, int minY, float cellSize, IReadOnlySet<Point>? highlightedOffsets = null)
     {
         _offsets = offsets;
         _minX = minX;
         _minY = minY;
         _cellSize = cellSize;
+        _highlightedOffsets = highlightedOffsets;
     }
 
     public override void DrawContent(GameTime gameTime)
@@ -63,7 +69,8 @@ public sealed class TargetShapePreviewElement(FontService fontService, ElementPo
         var innerSize = outerSize - CellBorderThickness * 2;
         if (innerSize > 0)
         {
-            spriteBatch.Draw(unitRectangle, new Rectangle((int)(cellOrigin.X + CellBorderThickness), (int)(cellOrigin.Y + CellBorderThickness), (int)innerSize, (int)innerSize), CellFillColor);
+            var fillColor = _highlightedOffsets?.Contains(offset) == true ? HighlightedCellFillColor : CellFillColor;
+            spriteBatch.Draw(unitRectangle, new Rectangle((int)(cellOrigin.X + CellBorderThickness), (int)(cellOrigin.Y + CellBorderThickness), (int)innerSize, (int)innerSize), fillColor);
         }
     }
 

@@ -20,6 +20,6 @@ public static class DamagePotion
         Summary: "Deals damage to target(s).",
         MaxStackSize: MaximumStackSize,
         Activator: new PotionActivator(
-            new TargetingSpec(Shape: TargetShape.Burst, Range: 3, AreaSize: 1),
+            new TargetingSpec(Shape: TargetShape.Burst, Range: 3, AreaSize: 3),
             new ActionTiming(ActionTimingCategory.Immediate, CooldownFrames: null)));
 }

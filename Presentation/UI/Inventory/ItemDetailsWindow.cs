@@ -18,10 +18,10 @@ namespace Presentation.UI.Inventory;
 ///
 /// Sections, top to bottom, a divider (BuildDivider, mirroring InspectionWindowContent.BuildSpacer)
 /// before every one after the first: sprite/glyph + name (no header); Effects (header, one line
-/// per ActionEffect entry via ActionEffectFormatting.FormatEntry, or "None"); Activation (header,
-/// omitted entirely when Activator is null -- Targeting/Timing plus one or two hand-picked fields
-/// per concrete activator type, mirroring what InventoryGridContent.UpdateHover already
-/// hand-picks for WandActivator); full
+/// per ActionEffect entry, or "None"); Activation (header, omitted entirely when Activator is
+/// null -- a shape-preview grid plus Targeting/Timing/per-activator-type text lines, all sourced
+/// from ItemComparisonStatExtraction so single-item rendering and Item Details Comparison's own
+/// per-line coloring can never drift out of sync about what lines exist); full
 /// Description (no header, omitted when blank -- same convention InspectionWindowContent.
 /// BuildDescriptionRow already uses); Tags, comma-separated (no header). Every top-level child
 /// tiles vertically via the host window's own ChildElementTileMode.Vertical (see
@@ -73,21 +73,41 @@ public sealed class ItemDetailsWindow(
     private static readonly Color BodyTextColor = Color.White;
     private static readonly Color SeparatorColor = WindowPalette.PanelContentColor;
 
+    /// <summary>Item Details Comparison's own per-line coloring -- Better doubles as the "this item has a stat at least one other compared item doesn't" exclusive marker too (see ResolveLineColor's own doc comment), so the same color means "advantage" either way.</summary>
+    private static readonly Color BetterColor = Color.LightGreen;
+    private static readonly Color WorseColor = Color.IndianRed;
+
     private ItemDefinition? _definition;
     private float _contentWidth;
+    private IReadOnlyList<ItemDefinition> _comparedAgainst = [];
+    private readonly List<IReadOnlyList<ItemComparisonStat>> _otherItemsStats = [];
     private bool _childrenReady;
+    private int _currentEntityId;
+    private Guid _currentStackInstanceId;
+
+    /// <summary>Settable late-bound callback for this window's own "Compare" title button, if it has one -- see OnChildrenInitialized's own doc comment for why only some instances do. Wired by whichever controller creates this instance (ItemDetailsWindowController for the anchor pane; ItemComparisonController deliberately never sets this for its own comparison columns) *before* calling Initialize.</summary>
+    public Action<int, Guid>? OnCompareRequested { get; set; }
 
     /// <summary>
     /// Safe to call both before the first Initialize (a brand-new window -- the real build is
     /// deferred to OnChildrenInitialized) and afterward, on an already-open window now showing a
     /// different item (rebuilds immediately in that case). contentWidth is the target width every
     /// row is built against -- see this class's own doc comment for why it can't just be read
-    /// from this window's own ContentSize the way a Fixed-mode host safely could.
+    /// from this window's own ContentSize the way a Fixed-mode host safely could. comparedAgainst
+    /// is empty for plain single-item viewing; Item Details Comparison passes every *other*
+    /// compared item's own definition here (see ResolveLineColor) so this item's own lines color
+    /// symmetrically against them. entityId/stackInstanceId are this exact stack's own identity --
+    /// not used for rendering at all, only so the Compare title button (if this instance has one)
+    /// can invoke OnCompareRequested with the item currently shown, not a stale one captured at
+    /// construction time.
     /// </summary>
-    public void Configure(ItemDefinition definition, float contentWidth)
+    public void Configure(int entityId, Guid stackInstanceId, ItemDefinition definition, float contentWidth, IReadOnlyList<ItemDefinition> comparedAgainst = null!)
     {
+        _currentEntityId = entityId;
+        _currentStackInstanceId = stackInstanceId;
         _definition = definition;
         _contentWidth = contentWidth;
+        _comparedAgainst = comparedAgainst ?? [];
 
         if (_childrenReady)
         {
@@ -95,10 +115,27 @@ public sealed class ItemDetailsWindow(
         }
     }
 
+    /// <summary>
+    /// The Compare title button is opt-in per instance, not universal -- attached only when
+    /// OnCompareRequested is already set by the time this runs (the anchor pane's own controller
+    /// sets it before calling Initialize; Item Details Comparison's own columns never do), rather
+    /// than always attaching it and leaving it a dead click on columns. Window.BuildTitleButton/
+    /// AddTitleButton is the same mechanism CloseBehavior/MinimizeRestoreBehavior use -- appending
+    /// (the default insertIndex) inserts to the *left* of the already-attached Close button, per
+    /// AddTitleButton's own right-to-left insertion order.
+    /// </summary>
     protected override void OnChildrenInitialized()
     {
         base.OnChildrenInitialized();
         _childrenReady = true;
+
+        if (OnCompareRequested is not null)
+        {
+            var compareButton = BuildTitleButton(this, "↔");
+            compareButton.Clicked += _ => OnCompareRequested?.Invoke(_currentEntityId, _currentStackInstanceId);
+            AddTitleButton(compareButton);
+        }
+
         Rebuild();
     }
 
@@ -109,6 +146,12 @@ public sealed class ItemDetailsWindow(
         if (_definition is null)
         {
             return;
+        }
+
+        _otherItemsStats.Clear();
+        foreach (var other in _comparedAgainst)
+        {
+            _otherItemsStats.Add(ItemComparisonStatExtraction.Extract(other, actionCatalog));
         }
 
         var width = _contentWidth;
@@ -170,17 +213,13 @@ public sealed class ItemDetailsWindow(
     {
         BuildFixedTextLine(width, "Effects", HeaderTextColor);
 
-        var any = false;
-        foreach (var effect in definition.Effects)
+        var stats = ItemComparisonStatExtraction.ExtractEffectStats(definition);
+        foreach (var stat in stats)
         {
-            foreach (var entry in effect.Entries)
-            {
-                BuildFixedTextLine(width, ActionEffectFormatting.FormatEntry(entry), BodyTextColor);
-                any = true;
-            }
+            BuildFixedTextLine(width, stat.DisplayText, ResolveLineColor(stat));
         }
 
-        if (!any)
+        if (stats.Count == 0)
         {
             BuildFixedTextLine(width, "None", BodyTextColor);
         }
@@ -205,8 +244,7 @@ public sealed class ItemDetailsWindow(
     /// </summary>
     private void BuildTargetingRow(IActionActivator activator, float width)
     {
-        var textLines = new List<string> { $"{activator.Targeting.Shape} (Range {activator.Targeting.Range})" };
-        textLines.AddRange(ActionActivatorFormatting.BuildLines(activator, actionCatalog));
+        var stats = ItemComparisonStatExtraction.ExtractActivatorStats(activator, actionCatalog);
 
         var zoneWidth = width / TargetingRowZoneCount;
 
@@ -216,7 +254,7 @@ public sealed class ItemDetailsWindow(
         var gridWidth = columns * cellSize;
         var gridHeight = rows * cellSize;
 
-        var textColumnHeight = textLines.Count * RowHeight;
+        var textColumnHeight = stats.Count * RowHeight;
         var rowHeight = System.Math.Max(textColumnHeight, gridHeight);
 
         var row = ElementPoolService.CreateElement<Window>(this, new ElementOptions
@@ -228,7 +266,7 @@ public sealed class ItemDetailsWindow(
         });
         AddChild(row);
 
-        for (var i = 0; i < textLines.Count; i++)
+        for (var i = 0; i < stats.Count; i++)
         {
             var line = ElementPoolService.CreateElement<TextWindow>(row, new ElementOptions
             {
@@ -236,7 +274,7 @@ public sealed class ItemDetailsWindow(
                 Layout = new ElementLayoutOptions { RelativePosition = new Vector2(0, i * RowHeight), Size = new Vector2(zoneWidth, RowHeight), DisplayMode = ElementDisplayMode.Fixed },
                 Chrome = new ElementChromeOptions { ShowBorder = false, ShowTitle = false, CanUserFocus = false },
                 Content = new ElementContentOptions { ContentColor = Color.Transparent },
-                Text = new TextOptions { Text = textLines[i], TextColor = BodyTextColor },
+                Text = new TextOptions { Text = stats[i].DisplayText, TextColor = ResolveLineColor(stats[i]) },
             });
             row.AddChild(line);
         }
@@ -249,8 +287,111 @@ public sealed class ItemDetailsWindow(
             Chrome = new ElementChromeOptions { ShowBorder = false, ShowTitle = false, CanUserFocus = false },
             Content = new ElementContentOptions { ContentColor = Color.Transparent },
         });
-        preview.Configure(offsets, minX, minY, cellSize);
+        preview.Configure(offsets, minX, minY, cellSize, ComputeShapeHighlight(activator.Targeting, offsets));
         row.AddChild(preview);
+    }
+
+    /// <summary>
+    /// Null (plain grid, no highlight) unless every compared item -- anchor included -- shares
+    /// this exact same Targeting.Shape ("do not compare different shapes for color-coding," even
+    /// though eligibility only gates on matching Activator type, not Shape). When shapes do match,
+    /// a tile highlights green if it's present in this item's own offsets but absent from at
+    /// least one other compared item's own offsets -- the same "green if not every other compared
+    /// item has it" rule ResolveLineColor already applies per stat line, just at tile granularity
+    /// instead. No red case exists here -- a tile absent from this item's own grid was never drawn
+    /// in the first place, so there is nothing to color.
+    /// </summary>
+    private HashSet<Point>? ComputeShapeHighlight(TargetingSpec targeting, IReadOnlyList<Point> offsets)
+    {
+        if (_comparedAgainst.Count == 0)
+        {
+            return null;
+        }
+
+        var otherOffsetSets = new List<HashSet<Point>>(_comparedAgainst.Count);
+        foreach (var other in _comparedAgainst)
+        {
+            if (other.Activator is not { } otherActivator || otherActivator.Targeting.Shape != targeting.Shape)
+            {
+                return null;
+            }
+
+            otherOffsetSets.Add(new HashSet<Point>(TargetShapePreviewGeometry.ComputeOffsets(otherActivator.Targeting)));
+        }
+
+        var highlighted = new HashSet<Point>();
+        foreach (var offset in offsets)
+        {
+            foreach (var otherOffsets in otherOffsetSets)
+            {
+                if (!otherOffsets.Contains(offset))
+                {
+                    highlighted.Add(offset);
+                    break;
+                }
+            }
+        }
+
+        return highlighted;
+    }
+
+    /// <summary>
+    /// Normal (no comparison active, or this exact Key isn't shared/rankable). Better/Green when
+    /// at least one other compared item lacks a line with this same Key at all -- an advantage/
+    /// exclusive marker, the whole line colored rather than just a "name" token (this codebase's
+    /// TextWindow has one TextColor for its entire string, no per-substring styling -- see the
+    /// new "Rich inline text formatting" TODO item logged alongside this feature). Otherwise, if
+    /// every other compared item *does* have this Key and every one of them (plus this line
+    /// itself) has a ComparableValue, magnitude-colored via ItemComparisonHighlighting -- ties
+    /// (or a non-numeric Key shared by all, e.g. Shape, or two Scrolls casting different named
+    /// spells) stay Normal.
+    /// </summary>
+    private Color ResolveLineColor(ItemComparisonStat stat)
+    {
+        if (_comparedAgainst.Count == 0)
+        {
+            return BodyTextColor;
+        }
+
+        var otherValues = new List<double>();
+        foreach (var otherStats in _otherItemsStats)
+        {
+            var found = false;
+            foreach (var otherStat in otherStats)
+            {
+                if (otherStat.Key != stat.Key)
+                {
+                    continue;
+                }
+
+                found = true;
+                if (otherStat.ComparableValue is { } otherValue)
+                {
+                    otherValues.Add(otherValue);
+                }
+
+                break;
+            }
+
+            if (!found)
+            {
+                return BetterColor;
+            }
+        }
+
+        if (stat.ComparableValue is not { } ownValue)
+        {
+            return BodyTextColor;
+        }
+
+        otherValues.Add(ownValue);
+        var highlight = ItemComparisonHighlighting.ComputeHighlight(ownValue, otherValues, stat.HigherIsBetter);
+        return highlight switch
+        {
+            ComparisonHighlight.Better => BetterColor,
+            ComparisonHighlight.Worse => WorseColor,
+            _ => BodyTextColor,
+        };
     }
 
     private void BuildFixedTextLine(float width, string text, Color color)

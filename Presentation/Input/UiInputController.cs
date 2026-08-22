@@ -145,6 +145,9 @@ public sealed class UiInputController
     /// <summary>Owns the single Item Details window -- null in test setups that don't build one, in which case it simply never auto-closes on an outside click (there can't be one open without this).</summary>
     private readonly ItemDetailsWindowController? _itemDetailsWindowController;
 
+    /// <summary>Owns Item Details Comparison's own arm/add/remove state -- null in test setups that don't build one, in which case right-click simply never disarms it (there can't be anything armed without this).</summary>
+    private readonly ItemComparisonController? _itemComparisonController;
+
     /// <summary>Mouse position when the current hotbar-slot press started -- ResolveHotbarSlotClick only treats the release as a tap if it's within ContentDragTapThresholdPixels of this, the same tap-vs-drag distinction ResolveContentDrag already makes for content-drags.</summary>
     private Vector2 _hotbarPressMousePosition;
 
@@ -202,7 +205,7 @@ public sealed class UiInputController
     /// window to this same list afterward. Passing the list itself (not a snapshot/copy) is what
     /// makes that work -- this class only ever reads through the reference, never replaces it.
     /// </summary>
-    public UiInputController(UiLayerStack layers, Vector2 screenSize, HotbarController? hotbarController = null, ComponentManager? componentManager = null, IPlayerQuery? playerQuery = null, ContextMenuController? contextMenuController = null, ItemDetailsWindowController? itemDetailsWindowController = null)
+    public UiInputController(UiLayerStack layers, Vector2 screenSize, HotbarController? hotbarController = null, ComponentManager? componentManager = null, IPlayerQuery? playerQuery = null, ContextMenuController? contextMenuController = null, ItemDetailsWindowController? itemDetailsWindowController = null, ItemComparisonController? itemComparisonController = null)
     {
         _layers = layers;
         _screenSize = screenSize;
@@ -211,6 +214,7 @@ public sealed class UiInputController
         _playerQuery = playerQuery;
         _contextMenuController = contextMenuController;
         _itemDetailsWindowController = itemDetailsWindowController;
+        _itemComparisonController = itemComparisonController;
 
         // Subscribing is safe to do unconditionally and permanently -- SDL simply never raises
         // SDL_TEXTINPUT while text input is stopped (see SetFocus's Start/StopTextInput calls
@@ -1077,6 +1081,12 @@ public sealed class UiInputController
         // if the release lands on a lootable corpse; a right-click on empty space or anything
         // else correctly leaves it closed.
         _contextMenuController?.Close();
+
+        // Same unconditional-on-every-right-press precedence -- Item Details Comparison's own
+        // "right-click stops adding" (see ItemComparisonController.Disarm's own doc comment for
+        // why this doesn't also close already-open columns). A subsequent right-click-tap on an
+        // eligible item can still re-arm via its own "Compare" context-menu option regardless.
+        _itemComparisonController?.Disarm();
 
         _rightDragElement = TryHitTestInteraction(position).Element;
         _rightDragStartMousePosition = new Vector2(mouseState.X, mouseState.Y);

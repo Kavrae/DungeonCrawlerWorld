@@ -56,6 +56,9 @@ public sealed class MapViewState
 
     /// <summary>The inventory item stack currently shown in the Item Details window, if any -- drives the selection glow on both InventoryGridContent's matching cell and HotbarContent's matching bound slot (see GlowRenderer.Draw, the same primitive ArmedSlot's own glow already uses). By StackInstanceId, not ItemDefinitionId -- same reasoning as ArmedItemStackInstanceId above. Set/cleared by ItemDetailsWindowController.Open/Close.</summary>
     public Guid? SelectedItemStackInstanceId;
+
+    /// <summary>Non-null while Item Details Comparison is armed (see ItemComparisonController.Arm/Disarm/ClearComparison) -- the anchor item's own Activator concrete type, the eligibility gate every other item must match to be added. InventoryGridContent reads this every frame to grey out ineligible cells and highlight eligible ones (see InventoryItemStackCell.CompareState).</summary>
+    public Type? CompareRequiredActivatorType;
 }
 
 /// <summary>

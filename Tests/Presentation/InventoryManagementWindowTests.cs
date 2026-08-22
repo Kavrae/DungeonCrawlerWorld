@@ -71,7 +71,7 @@ public sealed class InventoryManagementWindowTests
             Layout = new ElementLayoutOptions { RelativePosition = new Vector2(0, 0), Size = new Vector2(300, 300), DisplayMode = ElementDisplayMode.Fixed },
             Chrome = new ElementChromeOptions { ShowBorder = true, ShowTitle = true, CanUserFocus = false },
         });
-        window.Configure(EntityId, hoverPopup, static () => null, static (_, _) => { });
+        window.Configure(EntityId, hoverPopup, static () => null, static (_, _) => { }, static (_, _) => { });
         window.Initialize();
 
         return (window, componentManager, firstItemId, secondItemId, scrollItemId);
