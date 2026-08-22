@@ -98,7 +98,13 @@ public static class ShellBootstrapper
         inventory.GetSecondaryTargetEntityId = () => secondaryInventory.OpenTargetEntityId;
         mapWindow.OnInspectionOpened = () => inspectionWindow.SetDisplayMode(ElementDisplayMode.Fixed);
 
-        var inputController = new UiInputController(layers, screenSize, hotbarController, componentManager, world, contextMenuController);
+        var itemDetails = new ItemDetailsWindowController(presentation.ElementPoolService, componentManager, itemCatalog, inventory, contextMenuController, mapViewState, mapWindow);
+        itemDetails.Initialize(layers);
+        inventory.OnItemSelected = itemDetails.Open;
+        secondaryInventory.OnItemSelected = itemDetails.Open;
+        itemDetails.GetSecondaryInventoryWindowRectangle = () => secondaryInventory.Rectangle;
+
+        var inputController = new UiInputController(layers, screenSize, hotbarController, componentManager, world, contextMenuController, itemDetails);
         inputController.SetDefaultFocusElement(mapWindow);
         inputController.FocusElement(mapWindow);
 

@@ -2343,6 +2343,7 @@ public sealed class UiInputControllerTests
         var world = new Game.World.World(new Game.World.Map(new Vector3Int(10, 10, 1)));
         var contextMenuController = new ContextMenuController(windowService);
         contextMenuController.Initialize(new UiLayerStack());
+        var mapViewState = new MapViewState();
 
         Window BuildGridWindow(int entityId, Vector2 position)
         {
@@ -2352,7 +2353,7 @@ public sealed class UiInputControllerTests
                 Layout = new ElementLayoutOptions { RelativePosition = position, Size = new Vector2(200, 200), DisplayMode = ElementDisplayMode.Fixed },
                 Chrome = new ElementChromeOptions { ShowBorder = true, CanUserFocus = false },
             });
-            window.SetContent(new InventoryGridContent(world, componentManager, itemCatalog, windowService, fontService, glyphRenderer, spriteSheetService, spriteRenderer, contextMenuController, entityId, filterTag: null, hoverPopup, static () => null));
+            window.SetContent(new InventoryGridContent(world, componentManager, itemCatalog, windowService, fontService, glyphRenderer, spriteSheetService, spriteRenderer, contextMenuController, entityId, filterTag: null, hoverPopup, static () => null, mapViewState, static (_, _) => { }));
             window.Initialize();
             return window;
         }
@@ -2437,9 +2438,10 @@ public sealed class UiInputControllerTests
         var world = new Game.World.World(new Game.World.Map(new Vector3Int(10, 10, 1)));
         var contextMenuController = new ContextMenuController(windowService);
         contextMenuController.Initialize(new UiLayerStack());
+        var mapViewState = new MapViewState();
 
         windowService.RegisterFactory<InventoryManagementWindow>(() => new InventoryManagementWindow(
-            fontService, windowService, glyphRenderer, spriteSheetService, spriteRenderer, componentManager, itemCatalog, world, contextMenuController));
+            fontService, windowService, glyphRenderer, spriteSheetService, spriteRenderer, componentManager, itemCatalog, world, contextMenuController, mapViewState));
 
         var hoverPopup = windowService.CreateElement<Tooltip>(null, new ElementOptions
         {
@@ -2454,7 +2456,7 @@ public sealed class UiInputControllerTests
             Layout = new ElementLayoutOptions { RelativePosition = new Vector2(0, 0), Size = new Vector2(200, 200), DisplayMode = ElementDisplayMode.Fixed },
             Chrome = new ElementChromeOptions { ShowBorder = true, CanUserFocus = false },
         });
-        sourceGridWindow.SetContent(new InventoryGridContent(world, componentManager, itemCatalog, windowService, fontService, glyphRenderer, spriteSheetService, spriteRenderer, contextMenuController, sourceEntityId, filterTag: null, hoverPopup, static () => null));
+        sourceGridWindow.SetContent(new InventoryGridContent(world, componentManager, itemCatalog, windowService, fontService, glyphRenderer, spriteSheetService, spriteRenderer, contextMenuController, sourceEntityId, filterTag: null, hoverPopup, static () => null, mapViewState, static (_, _) => { }));
         sourceGridWindow.Initialize();
         var cell = sourceGridWindow.ChildElements.OfType<InventoryItemStackCell>().Single();
 
@@ -2464,7 +2466,7 @@ public sealed class UiInputControllerTests
             Layout = new ElementLayoutOptions { RelativePosition = new Vector2(500, 0), Size = new Vector2(300, 300), DisplayMode = ElementDisplayMode.Fixed },
             Chrome = new ElementChromeOptions { ShowBorder = true, ShowTitle = true, CanUserFocus = false },
         });
-        destinationWindow.Configure(destinationEntityId, hoverPopup, static () => null);
+        destinationWindow.Configure(destinationEntityId, hoverPopup, static () => null, static (_, _) => { });
         destinationWindow.Initialize();
 
         var controller = CreateController([], [], [sourceGridWindow, destinationWindow], [], LargeScreenSize, componentManager: componentManager, playerQuery: null);

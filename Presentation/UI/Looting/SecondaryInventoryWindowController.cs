@@ -36,6 +36,12 @@ public sealed class SecondaryInventoryWindowController(
     /// <summary>The currently-open secondary/corpse window's own target entity id, if any -- lets InventoryFolderController's own GetSecondaryTargetEntityId (wired by ShellBootstrapper) answer "is a secondary window open, and for whom" for the player's own inventory grid's Give/Take menu, without that grid needing a direct reference to this controller.</summary>
     public int? OpenTargetEntityId => _window is null ? null : _currentTargetEntityId;
 
+    /// <summary>The currently-open corpse/secondary window's own bounds, if any -- Rectangle.Empty (never contains a click) when nothing is open. Lets ItemDetailsWindowController's own outside-click-close check treat this window as "still inside," the same way it already does for the player's own InventoryManagementWindow.</summary>
+    public Rectangle Rectangle => _window?.Rectangle ?? Rectangle.Empty;
+
+    /// <summary>Settable late-bound callback for "the player clicked a real single-stack item cell in this corpse/secondary grid" -- see InventoryFolderController.OnItemSelected, wired by ShellBootstrapper to the same ItemDetailsWindowController.Open. Threaded into every corpse window's own Configure call.</summary>
+    public Action<int, Guid>? OnItemSelected { get; set; }
+
     public void Initialize(UiLayerStack layers)
     {
         _layers = layers;
@@ -100,7 +106,7 @@ public sealed class SecondaryInventoryWindowController(
             },
             Content = new ElementContentOptions { ContentColor = CorpseInventoryWindow.BackgroundColor },
         });
-        window.Configure(targetEntityId, _hoverPopup);
+        window.Configure(targetEntityId, _hoverPopup, (entityId, stackInstanceId) => OnItemSelected?.Invoke(entityId, stackInstanceId));
         window.Closed += HandleClosed;
         window.OnRightClicked = position => contextMenuController.Open(new Vector2(position.X, position.Y), DynamicHudContextMenus.BuildCloseMenu(window, _layers));
         window.Initialize();

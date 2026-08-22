@@ -41,7 +41,8 @@ public sealed class CorpseInventoryWindow(
     SpriteRenderer spriteRenderer,
     ItemCatalog itemCatalog,
     World world,
-    ContextMenuController contextMenuController)
+    ContextMenuController contextMenuController,
+    MapViewState mapViewState)
     : Window(fontService, elementPoolService, glyphRenderer)
 {
     private static readonly Vector2 IconSize = new(48, 48);
@@ -64,12 +65,14 @@ public sealed class CorpseInventoryWindow(
 
     private int _entityId;
     private Tooltip _hoverPopup = null!;
+    private Action<int, Guid> _onItemSelected = static (_, _) => { };
 
     /// <summary>Must be called after CreateElement but before Initialize -- same contract InventoryManagementWindow/AbilityScoreWindow's own Configure follow.</summary>
-    public void Configure(int entityId, Tooltip hoverPopup)
+    public void Configure(int entityId, Tooltip hoverPopup, Action<int, Guid> onItemSelected)
     {
         _entityId = entityId;
         _hoverPopup = hoverPopup;
+        _onItemSelected = onItemSelected;
     }
 
     /// <summary>See AbilityScoreWindow's own doc comment for why building children here, not in Configure -- ContentSize isn't real until after MeasureAndArrange.</summary>
@@ -167,7 +170,7 @@ public sealed class CorpseInventoryWindow(
         // once), so its own grid's Give/Take menu only ever needs to offer "Take," never query
         // anything external (contrast InventoryManagementWindow's own callback, which has to ask
         // whether a secondary window is open at all).
-        gridWindow.SetContent(new InventoryGridContent(world, componentManager, itemCatalog, ElementPoolService, FontService, GlyphRenderer, spriteSheetService, spriteRenderer, contextMenuController, _entityId, filterTag: null, _hoverPopup, () => _entityId));
+        gridWindow.SetContent(new InventoryGridContent(world, componentManager, itemCatalog, ElementPoolService, FontService, GlyphRenderer, spriteSheetService, spriteRenderer, contextMenuController, _entityId, filterTag: null, _hoverPopup, () => _entityId, mapViewState, _onItemSelected));
         AddChild(gridWindow); // Initializes gridWindow, which in turn Initializes (and builds the cells of) its InventoryGridContent -- see Window.OnChildrenInitialized/AddChild's own doc comment on why Initialize is never called explicitly here.
     }
 

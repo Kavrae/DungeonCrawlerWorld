@@ -19,12 +19,14 @@ public static class ScrollOfHealing
 
     private const int MaximumStackSize = 999;
 
+    private const float HealAmount = 0.5f;
+
     public static ItemDefinition Build() => new(
         Id, "Scroll of Healing", "Scroll", "s", Color.White,
         Tags: [Tag.Scroll, Tag.Consumable, Tag.Healing, Tag.Self],
-        Effects: [new ActionEffect([new DirectHeal(0.5f)])],
-        Description: "A scroll inscribed with the Heal spell. Crumbles to dust once read.",
-        Summary: "Heal target(s) by 50%.",
+        Effects: [new ActionEffect([new DirectHeal(HealAmount)])],
+        Description: "A scroll inscribed with the Heal spell. Heals the target by a percentage of their maximum health and then crumbles to dust.",
+        Summary: $"Heal target(s) by {HealAmount:P0}.",
         MaxStackSize: MaximumStackSize,
         Activator: new ScrollActivator(
             new TargetingSpec(Shape: TargetShape.AdjacentWithSelf, Range: 0),

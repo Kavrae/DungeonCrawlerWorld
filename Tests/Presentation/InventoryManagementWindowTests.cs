@@ -53,9 +53,10 @@ public sealed class InventoryManagementWindowTests
         var world = new Game.World.World(new Game.World.Map(new Vector3Int(10, 10, 1)));
         var contextMenuController = new ContextMenuController(windowService);
         contextMenuController.Initialize(new UiLayerStack());
+        var mapViewState = new MapViewState();
 
         windowService.RegisterFactory<InventoryManagementWindow>(() => new InventoryManagementWindow(
-            fontService, windowService, glyphRenderer, spriteSheetService, spriteRenderer, componentManager, itemCatalog, world, contextMenuController));
+            fontService, windowService, glyphRenderer, spriteSheetService, spriteRenderer, componentManager, itemCatalog, world, contextMenuController, mapViewState));
 
         var hoverPopup = windowService.CreateElement<Tooltip>(null, new ElementOptions
         {
@@ -70,7 +71,7 @@ public sealed class InventoryManagementWindowTests
             Layout = new ElementLayoutOptions { RelativePosition = new Vector2(0, 0), Size = new Vector2(300, 300), DisplayMode = ElementDisplayMode.Fixed },
             Chrome = new ElementChromeOptions { ShowBorder = true, ShowTitle = true, CanUserFocus = false },
         });
-        window.Configure(EntityId, hoverPopup, static () => null);
+        window.Configure(EntityId, hoverPopup, static () => null, static (_, _) => { });
         window.Initialize();
 
         return (window, componentManager, firstItemId, secondItemId, scrollItemId);

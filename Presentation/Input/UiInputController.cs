@@ -7,6 +7,7 @@ using Microsoft.Xna.Framework;
 using Microsoft.Xna.Framework.Input;
 using Presentation.UI;
 using Presentation.UI.Content;
+using Presentation.UI.Inventory;
 
 namespace Presentation.Input;
 
@@ -141,6 +142,9 @@ public sealed class UiInputController
     /// <summary>Owns the single shared ContextMenu popup -- null in test setups that don't build one, in which case right-click context menus simply never open and an already-open one (there can't be, without this) never needs dismissing.</summary>
     private readonly ContextMenuController? _contextMenuController;
 
+    /// <summary>Owns the single Item Details window -- null in test setups that don't build one, in which case it simply never auto-closes on an outside click (there can't be one open without this).</summary>
+    private readonly ItemDetailsWindowController? _itemDetailsWindowController;
+
     /// <summary>Mouse position when the current hotbar-slot press started -- ResolveHotbarSlotClick only treats the release as a tap if it's within ContentDragTapThresholdPixels of this, the same tap-vs-drag distinction ResolveContentDrag already makes for content-drags.</summary>
     private Vector2 _hotbarPressMousePosition;
 
@@ -198,7 +202,7 @@ public sealed class UiInputController
     /// window to this same list afterward. Passing the list itself (not a snapshot/copy) is what
     /// makes that work -- this class only ever reads through the reference, never replaces it.
     /// </summary>
-    public UiInputController(UiLayerStack layers, Vector2 screenSize, HotbarController? hotbarController = null, ComponentManager? componentManager = null, IPlayerQuery? playerQuery = null, ContextMenuController? contextMenuController = null)
+    public UiInputController(UiLayerStack layers, Vector2 screenSize, HotbarController? hotbarController = null, ComponentManager? componentManager = null, IPlayerQuery? playerQuery = null, ContextMenuController? contextMenuController = null, ItemDetailsWindowController? itemDetailsWindowController = null)
     {
         _layers = layers;
         _screenSize = screenSize;
@@ -206,6 +210,7 @@ public sealed class UiInputController
         _componentManager = componentManager;
         _playerQuery = playerQuery;
         _contextMenuController = contextMenuController;
+        _itemDetailsWindowController = itemDetailsWindowController;
 
         // Subscribing is safe to do unconditionally and permanently -- SDL simply never raises
         // SDL_TEXTINPUT while text input is stopped (see SetFocus's Start/StopTextInput calls
@@ -620,6 +625,18 @@ public sealed class UiInputController
         if (_contextMenuController is { IsOpen: true } contextMenuController && !contextMenuController.Menu.Rectangle.Contains(clickPosition))
         {
             contextMenuController.Close();
+            _activeInteraction = ElementInteraction.NotHit;
+            return;
+        }
+
+        // Same "one input consumed by the cancel" spirit as the context-menu check above -- a
+        // click that closes the Item Details window doesn't also fall through to whatever's
+        // underneath (e.g. closing it and issuing a map-tile move/attack in the same click).
+        // IsOutsideClick itself decides what counts as "still inside" (this window, the player's
+        // own Inventory window, and an open secondary/corpse window).
+        if (_itemDetailsWindowController is { IsOpen: true } itemDetailsWindowController && itemDetailsWindowController.IsOutsideClick(clickPosition))
+        {
+            itemDetailsWindowController.Close();
             _activeInteraction = ElementInteraction.NotHit;
             return;
         }

@@ -40,7 +40,9 @@ public sealed class InventoryGridContent(
     int entityId,
     Tag? filterTag,
     Tooltip hoverPopup,
-    Func<int?> getSecondaryTargetEntityId) : IElementContent
+    Func<int?> getSecondaryTargetEntityId,
+    MapViewState mapViewState,
+    Action<int, Guid> onItemSelected) : IElementContent
 {
     public static readonly Vector2 CellSize = new(24, 24);
     private const float CellGap = 1f;
@@ -209,6 +211,16 @@ public sealed class InventoryGridContent(
         }
 
         UpdateHover(Mouse.GetState());
+        UpdateSelection();
+    }
+
+    /// <summary>Direct per-cell field set every frame, no rebuild -- mirrors UpdateHover's own IsHovered sync exactly, since selection (driven by the Item Details window, opened/changed/closed independently of this grid) can change without this grid ever rebuilding.</summary>
+    private void UpdateSelection()
+    {
+        foreach (var cell in _cells)
+        {
+            cell.IsSelected = cell.StackInstanceId is not null && cell.StackInstanceId == mapViewState.SelectedItemStackInstanceId;
+        }
     }
 
     /// <summary>
@@ -314,7 +326,19 @@ public sealed class InventoryGridContent(
 
     private void OnHostWindowResized(Element _) => RebuildCells();
 
-    /// <summary>Clicking a badged (merged) cell expands its item id; clicking anything else while an id is expanded collapses it back -- including one of that group's own now-visible member cells, the same single "click toggles" rule applying uniformly rather than special-casing a click inside the expanded block.</summary>
+    /// <summary>
+    /// Clicking a badged (merged) cell expands its item id. A real single-stack cell click
+    /// (standalone, or one of an already-expanded group's own member cells) opens/updates the
+    /// Item Details window for that stack instead of collapsing anything -- the group needs to
+    /// stay expanded while the player browses its members' details one at a time. Collapsing an
+    /// expanded group back down therefore no longer happens via re-clicking one of its own
+    /// members (there is no persistent badge cell to re-click while expanded -- see
+    /// InventoryItemStackCell's own doc comment on Expansion Stacks replacing the badge entirely)
+    /// -- instead, any click that lands on a cell *outside* the expanded group (a different
+    /// item's own badge, an ungrouped item, or empty grid space handled by returning early above
+    /// this method) still collapses it, the closest equivalent to the old "click anything else"
+    /// rule now that a member click has its own dedicated meaning.
+    /// </summary>
     private void OnCellClicked(Element element)
     {
         if (element is not InventoryItemStackCell cell)
@@ -325,17 +349,21 @@ public sealed class InventoryGridContent(
         if (cell.MergedStackBadgeVisible)
         {
             _expandedItemDefinitionId = cell.ItemDefinitionId;
-        }
-        else if (_expandedItemDefinitionId is not null)
-        {
-            _expandedItemDefinitionId = null;
-        }
-        else
-        {
+            RebuildCells();
             return;
         }
 
-        RebuildCells();
+        if (cell.StackInstanceId is { } stackInstanceId)
+        {
+            onItemSelected(cell.EntityId, stackInstanceId);
+        }
+
+        var isExpandedMember = _expandedItemDefinitionId is not null && cell.ItemDefinitionId == _expandedItemDefinitionId;
+        if (!isExpandedMember && _expandedItemDefinitionId is not null)
+        {
+            _expandedItemDefinitionId = null;
+            RebuildCells();
+        }
     }
 
     /// <summary>

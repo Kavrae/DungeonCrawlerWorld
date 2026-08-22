@@ -45,6 +45,9 @@ public sealed class InventoryItemStackCell(FontService fontService, ElementPoolS
     private static readonly Color GroupBorderColor = Color.Black;
     private const float GroupBorderThickness = 2f;
 
+    /// <summary>Distinct from both WindowPalette.HighlightColor (the hover overlay) and HotbarContent.ArmedGlowColor (Gold) -- IsSelected and IsHovered/Armed can all be true on related cells/slots at once and need to read apart.</summary>
+    private static readonly Color SelectedGlowColor = Color.Cyan;
+
     private string? _spriteName;
     private string _glyph = string.Empty;
     private Color _glyphColor;
@@ -87,6 +90,9 @@ public sealed class InventoryItemStackCell(FontService fontService, ElementPoolS
 
     /// <summary>Drives a translucent highlight overlay -- see InventoryGridContent's own hover polling. Mirrors AbilityScoreColumnHeader.IsHovered.</summary>
     public bool IsHovered { get; set; }
+
+    /// <summary>Drives an outward glow (see GlowRenderer.Draw, the same primitive HotbarContent's own ArmedSlot glow uses) -- true when this cell's StackInstanceId matches MapViewState.SelectedItemStackInstanceId, the item currently shown in the Item Details window. Set every frame alongside IsHovered -- see InventoryGridContent's own per-frame sync, not a rebuild-driven Configure parameter, since selection changes independently of any grid rebuild.</summary>
+    public bool IsSelected { get; set; }
 
     /// <summary>
     /// cellSize is the caller's known fixed cell size (see InventoryGridContent), not ContentSize
@@ -144,6 +150,11 @@ public sealed class InventoryItemStackCell(FontService fontService, ElementPoolS
         if (IsHovered)
         {
             spriteBatch.Draw(unitRectangle, new Rectangle((int)ContentAbsolutePosition.X, (int)ContentAbsolutePosition.Y, (int)ContentSize.X, (int)ContentSize.Y), WindowPalette.HighlightColor);
+        }
+
+        if (IsSelected)
+        {
+            GlowRenderer.Draw(spriteBatch, unitRectangle, new Rectangle((int)ContentAbsolutePosition.X, (int)ContentAbsolutePosition.Y, (int)ContentSize.X, (int)ContentSize.Y), SelectedGlowColor);
         }
 
         SpriteComponent? sprite = _spriteName is not null && SpriteManifest.TryGet(_spriteName, out var spriteComponent) ? spriteComponent : null;

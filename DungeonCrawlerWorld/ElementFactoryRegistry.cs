@@ -73,7 +73,7 @@ public static class ElementFactoryRegistry
 
         pool.RegisterFactory<InventoryManagementWindow>(() => new InventoryManagementWindow(
             presentation.FontService, pool, presentation.GlyphRenderer, presentation.SpriteSheetService, presentation.SpriteRenderer,
-            componentManager, itemCatalog, world, contextMenuController));
+            componentManager, itemCatalog, world, contextMenuController, mapViewState));
         Register<InventoryItemStackCell>((font, elements, glyph) => new InventoryItemStackCell(font, elements, glyph, presentation.SpriteSheetService, presentation.SpriteRenderer));
         Register<GridControl>((font, elements, glyph) => new GridControl(font, elements, glyph));
         Register<Toggle>((font, elements, glyph) => new Toggle(font, elements, glyph));
@@ -87,12 +87,14 @@ public static class ElementFactoryRegistry
 
         pool.RegisterFactory<CorpseInventoryWindow>(() => new CorpseInventoryWindow(
             presentation.FontService, pool, presentation.GlyphRenderer, componentManager,
-            presentation.SpriteSheetService, presentation.SpriteRenderer, itemCatalog, world, contextMenuController));
+            presentation.SpriteSheetService, presentation.SpriteRenderer, itemCatalog, world, contextMenuController, mapViewState));
         Register<EntityIconElement>((font, elements, glyph) => new EntityIconElement(
             font, elements, glyph, presentation.SpriteSheetService, presentation.SpriteRenderer,
             componentManager.GetDirectPool<SpriteComponent>(), componentManager.GetDirectPool<GlyphComponent>()));
 
         Register<InspectionWindow>((font, elements, glyph) => new InspectionWindow(font, elements, glyph, mapViewState));
+        Register<ItemDetailsWindow>((font, elements, glyph) => new ItemDetailsWindow(font, elements, glyph, presentation.SpriteSheetService, presentation.SpriteRenderer));
+        Register<ItemIconElement>((font, elements, glyph) => new ItemIconElement(font, elements, glyph, presentation.SpriteSheetService, presentation.SpriteRenderer));
         Register<HealthBarElement>((font, elements, glyph) => new HealthBarElement(
             font, elements, glyph,
             componentManager.GetPackedPool<HealthComponent>(),

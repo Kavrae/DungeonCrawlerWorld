@@ -77,6 +77,9 @@ public sealed class HotbarContent(
     private static readonly Color ArmedGlowColor = Color.Gold;
     private static readonly Color DragDropTargetGlowColor = Color.Gold;
 
+    /// <summary>Distinct from ArmedGlowColor -- a bound item slot can be both armed and the Item Details window's current selection at once, and the two need to read apart. Matches InventoryItemStackCell.SelectedGlowColor.</summary>
+    private static readonly Color SelectedGlowColor = Color.Cyan;
+
     /// <summary>Width for the Armed Hotkey Summary popup: 3 slots plus the 2 inter-slot gaps
     /// between them (see HotbarController.UpdateSummary, which centers this over whichever single
     /// slot it's currently showing).</summary>
@@ -508,6 +511,11 @@ public sealed class HotbarContent(
         else if (ItemHotkeyBindingQueries.TryGet(_itemHotkeyBindings, playerEntityId, slot, out var stackInstanceId) && TryResolveBoundItem(playerEntityId, stackInstanceId, out var item, out var stack))
         {
             DrawSlotVisual(spriteBatch, unitRectangle, bounds, contentBounds, BuildItemVisual(playerEntityId, item, stack, isActive), alpha);
+
+            if (stackInstanceId == mapViewState.SelectedItemStackInstanceId)
+            {
+                GlowRenderer.Draw(spriteBatch, unitRectangle, bounds, SelectedGlowColor);
+            }
         }
         else
         {

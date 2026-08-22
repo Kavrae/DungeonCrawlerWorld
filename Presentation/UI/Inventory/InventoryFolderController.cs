@@ -92,6 +92,9 @@ public sealed class InventoryFolderController(
     /// </summary>
     public Func<int?>? GetSecondaryTargetEntityId { get; set; }
 
+    /// <summary>Settable late-bound callback for "the player clicked a real single-stack item cell in their own inventory grid" -- wired by ShellBootstrapper to ItemDetailsWindowController.Open once that controller exists (built after this one, and itself depends on this controller's PlayerInventoryWindow accessor, so the two can't reference each other via constructor injection -- same ordering cycle GetSecondaryTargetEntityId already breaks the same way). Threaded down to the player's own InventoryManagementWindow via CreateInventoryWindow's Configure call, and from there to every tab's own InventoryGridContent.</summary>
+    public Action<int, Guid>? OnItemSelected { get; set; }
+
     /// <summary>Opens the player's own Inventory window if it isn't already -- idempotent, same as WindowSlot.Open itself. Lets a non-folder trigger (e.g. clicking a corpse to loot it) reuse this window instead of the folder tile being the only way to open it.</summary>
     public void OpenInventoryWindow() => _inventorySlot.Open();
 
@@ -203,7 +206,7 @@ public sealed class InventoryFolderController(
             },
             Content = new ElementContentOptions { ContentColor = InventoryManagementWindow.BackgroundColor },
         });
-        window.Configure(world.PlayerEntityId, _inventoryHoverPopup, () => GetSecondaryTargetEntityId?.Invoke());
+        window.Configure(world.PlayerEntityId, _inventoryHoverPopup, () => GetSecondaryTargetEntityId?.Invoke(), (entityId, stackInstanceId) => OnItemSelected?.Invoke(entityId, stackInstanceId));
         window.Closed += _ => _inventoryHoverPopup.Hide(); // Closing the Inventory window mid-hover shouldn't leave the popup stranded.
         window.OnRightClicked = position => contextMenuController.Open(new Vector2(position.X, position.Y), DynamicHudContextMenus.BuildCloseMenu(window, _layers));
         return window;

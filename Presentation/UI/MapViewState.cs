@@ -53,6 +53,9 @@ public sealed class MapViewState
 
     /// <summary>Detail mode's followed target -- -1 when none (Basic mode uses SelectedMapNodePosition instead, since it targets a tile, not a single followed entity).</summary>
     public int InspectedEntityId = -1;
+
+    /// <summary>The inventory item stack currently shown in the Item Details window, if any -- drives the selection glow on both InventoryGridContent's matching cell and HotbarContent's matching bound slot (see GlowRenderer.Draw, the same primitive ArmedSlot's own glow already uses). By StackInstanceId, not ItemDefinitionId -- same reasoning as ArmedItemStackInstanceId above. Set/cleared by ItemDetailsWindowController.Open/Close.</summary>
+    public Guid? SelectedItemStackInstanceId;
 }
 
 /// <summary>
