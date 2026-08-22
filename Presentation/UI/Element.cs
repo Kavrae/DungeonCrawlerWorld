@@ -1526,6 +1526,31 @@ public class Element
         MeasureAndArrange();
     }
 
+    /// <summary>
+    /// Extension point for a subclass's own pluggable/swappable state that neither Build (which
+    /// only resets what ElementOptions itself covers) nor ClearEventSubscriptions (events only)
+    /// touches -- e.g. Window's own pluggable IElementContent, set via SetContent rather than
+    /// through ElementOptions. Called by ElementPoolService.CloseElement for every element in a
+    /// close cascade (this element and, via CloseAllChildren, every descendant), always before
+    /// the element is actually returned to its pool -- not the same moment as the public Closed
+    /// event above, which fires once, only for the element Close() was actually called on, before
+    /// CloseElement even runs. No-op by default; override only if a subclass introduces its own
+    /// side-channel pluggable reference.
+    ///
+    /// Deliberately a single targeted hook, not a blanket "reset every field" sweep: Build already
+    /// re-initializes ordinary per-use state (position, size, colors, chrome flags) from
+    /// ElementOptions on every rent, and a reflective full-field reset would have no way to tell
+    /// permanent constructor-captured wiring (fontService, elementPoolService, ...) from genuine
+    /// per-use state without per-field annotation -- the same "easy to forget" problem this exists
+    /// to solve, just automated. Confirmed need: a Window whose _content was never cleared on
+    /// pool-return kept driving its previous life's content (a closed Inventory window's tab-body
+    /// Window recycled into InspectionWindowContent's own manual row containers, still silently
+    /// updating/rebuilding the old InventoryTabContent every frame) -- see Window's own override.
+    /// </summary>
+    protected internal virtual void OnClosed()
+    {
+    }
+
     public void Close()
     {
         Closed?.Invoke(this);

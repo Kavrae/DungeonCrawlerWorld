@@ -1,7 +1,9 @@
 using Engine.ECS.Context;
 using Game.Modules.Actions;
 using Game.Modules.Core.Components;
+using Game.Modules.Health.Components;
 using Game.Modules.Inventory;
+using Game.Modules.StatModifiers.Components;
 using Game.World;
 using Presentation.Bootstrap;
 using Presentation.Fonts;
@@ -64,7 +66,8 @@ public static class ElementFactoryRegistry
             camera,
             actionTargeting,
             playerMovement,
-            contextMenuController));
+            contextMenuController,
+            componentManager.GetPackedPool<ActionLockComponent>()));
 
         Register<Folder>((font, elements, glyph) => new Folder(font, elements, glyph, presentation.SpriteSheetService, presentation.SpriteRenderer));
 
@@ -88,5 +91,11 @@ public static class ElementFactoryRegistry
         Register<EntityIconElement>((font, elements, glyph) => new EntityIconElement(
             font, elements, glyph, presentation.SpriteSheetService, presentation.SpriteRenderer,
             componentManager.GetDirectPool<SpriteComponent>(), componentManager.GetDirectPool<GlyphComponent>()));
+
+        Register<InspectionWindow>((font, elements, glyph) => new InspectionWindow(font, elements, glyph, mapViewState));
+        Register<HealthBarElement>((font, elements, glyph) => new HealthBarElement(
+            font, elements, glyph,
+            componentManager.GetPackedPool<HealthComponent>(),
+            componentManager.IsRegistered<StatModifierComponent>() ? componentManager.GetMultiPool<StatModifierComponent>() : null));
     }
 }

@@ -119,6 +119,7 @@ public sealed class ElementPoolService
         CloseAllTitleButtons(element);
         CloseAllChildren(element);
         ClearEventSubscriptions(element);
+        element.OnClosed();
 
         if (_elementPoolsByType.TryGetValue(element.GetType(), out var pool))
         {

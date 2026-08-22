@@ -18,7 +18,7 @@ namespace Presentation.UI;
 /// </summary>
 public enum UiLayer
 {
-    /// <summary>Map, debug stats, selection inspector -- world content plus fixed, distinct panels.</summary>
+    /// <summary>Map, debug stats -- world content plus fixed, distinct panels.</summary>
     Base = 0,
 
     /// <summary>Health bar, mana bar, hotbar, action lock, status effects -- persistent chrome, not generally opened/closed by the player.</summary>

@@ -125,7 +125,8 @@ public sealed class MapWindowTests
 
         windowService.RegisterFactory<MapWindow>(() => new MapWindow(
             fontService, windowService, world, mapViewState, componentManager, new EventBus(), resolvedActionCatalog, resolvedItemCatalog, new TileRenderer(), new GlyphRenderer(),
-            new SpriteSheetService(null, "Spritesheets"), new SpriteRenderer(), camera, actionTargeting, playerMovement, contextMenuController));
+            new SpriteSheetService(null, "Spritesheets"), new SpriteRenderer(), camera, actionTargeting, playerMovement, contextMenuController,
+            componentManager.GetPackedPool<ActionLockComponent>()));
 
         var mapWindow = windowService.CreateElement<MapWindow>(null, new ElementOptions
         {
@@ -1057,32 +1058,35 @@ public sealed class MapWindowTests
     }
 
     [TestMethod]
-    public void TryOpenCorpseContextMenuAt_AdjacentCorpse_OpensMenuWithLootEnabled()
+    public void TryOpenEntityContextMenuAt_AdjacentCorpse_OpensMenuWithLootEnabled()
     {
         var (world, mapViewState, mapWindow, componentManager) = BuildMapWindowWithPlayer(300, 300, 1, new Vector3Int(100, 100, 0));
         mapWindow.OnCorpseClicked = _ => { };
         var corpsePosition = new Vector3Int(101, 100, 0);
         PlaceCorpse(world, componentManager, corpsePosition);
 
-        mapWindow.TryOpenCorpseContextMenuAt(ComputeScreenPositionForMapPosition(mapWindow, mapViewState, corpsePosition));
+        mapWindow.TryOpenEntityContextMenuAt(ComputeScreenPositionForMapPosition(mapWindow, mapViewState, corpsePosition));
 
         Assert.IsTrue(mapWindow.ContextMenuController.IsOpen);
         var rows = mapWindow.ContextMenuController.Menu.ChildElements;
-        Assert.HasCount(1, rows);
+        // 2, not 1 -- PlaceCorpse merges DeadComponent directly rather than going through
+        // DeathSystem.ConvertToNonBlocking, so the corpse stays Blocking here, and "Inspect"
+        // (see TryOpenEntityContextMenuAt) now always accompanies "Loot" for a Blocking corpse.
+        Assert.HasCount(2, rows);
         var lootButton = (Button)rows[0];
         Assert.AreEqual("Loot", lootButton.LeftText);
         Assert.IsTrue(lootButton.Enabled);
     }
 
     [TestMethod]
-    public void TryOpenCorpseContextMenuAt_NonAdjacentCorpse_OpensMenuWithLootDisabled()
+    public void TryOpenEntityContextMenuAt_NonAdjacentCorpse_OpensMenuWithLootDisabled()
     {
         var (world, mapViewState, mapWindow, componentManager) = BuildMapWindowWithPlayer(300, 300, 1, new Vector3Int(100, 100, 0));
         mapWindow.OnCorpseClicked = _ => { };
         var corpsePosition = new Vector3Int(110, 100, 0);
         PlaceCorpse(world, componentManager, corpsePosition);
 
-        mapWindow.TryOpenCorpseContextMenuAt(ComputeScreenPositionForMapPosition(mapWindow, mapViewState, corpsePosition));
+        mapWindow.TryOpenEntityContextMenuAt(ComputeScreenPositionForMapPosition(mapWindow, mapViewState, corpsePosition));
 
         Assert.IsTrue(mapWindow.ContextMenuController.IsOpen, "Still shown -- just disabled -- so the player sees why nothing happens rather than the menu silently omitting it.");
         var lootButton = (Button)mapWindow.ContextMenuController.Menu.ChildElements[0];
@@ -1090,12 +1094,12 @@ public sealed class MapWindowTests
     }
 
     [TestMethod]
-    public void TryOpenCorpseContextMenuAt_NoCorpseOnTile_OpensNothing()
+    public void TryOpenEntityContextMenuAt_NoCorpseOnTile_OpensNothing()
     {
         var (_, mapViewState, mapWindow, _) = BuildMapWindowWithPlayer(300, 300, 1, new Vector3Int(100, 100, 0));
         mapWindow.OnCorpseClicked = _ => { };
 
-        mapWindow.TryOpenCorpseContextMenuAt(ComputeScreenPositionForMapPosition(mapWindow, mapViewState, new Vector3Int(105, 100, 0)));
+        mapWindow.TryOpenEntityContextMenuAt(ComputeScreenPositionForMapPosition(mapWindow, mapViewState, new Vector3Int(105, 100, 0)));
 
         Assert.IsFalse(mapWindow.ContextMenuController.IsOpen);
     }
@@ -1109,13 +1113,80 @@ public sealed class MapWindowTests
         var corpsePosition = new Vector3Int(101, 100, 0);
         PlaceCorpse(world, componentManager, corpsePosition);
 
-        mapWindow.TryOpenCorpseContextMenuAt(ComputeScreenPositionForMapPosition(mapWindow, mapViewState, corpsePosition));
+        mapWindow.TryOpenEntityContextMenuAt(ComputeScreenPositionForMapPosition(mapWindow, mapViewState, corpsePosition));
         var menu = mapWindow.ContextMenuController.Menu;
         var lootButton = (Button)menu.ChildElements[0];
         menu.HandleClick(lootButton.Rectangle.Center);
 
         Assert.AreEqual(CorpseEntityId, invokedEntityId);
         Assert.IsFalse(mapWindow.ContextMenuController.IsOpen);
+    }
+
+    [TestMethod]
+    public void TryOpenEntityContextMenuAt_NonBlockingCorpse_StillOffersInspect()
+    {
+        var (world, mapViewState, mapWindow, componentManager) = BuildMapWindowWithPlayer(300, 300, 1, new Vector3Int(100, 100, 0));
+        mapWindow.OnCorpseClicked = _ => { };
+        var corpsePosition = new Vector3Int(101, 100, 0);
+        PlaceCorpse(world, componentManager, corpsePosition);
+
+        // Mirrors DeathSystem's own sequence -- a real corpse is converted non-Blocking, so
+        // GetBlockingEntityId no longer resolves it there (unlike PlaceCorpse's own bare
+        // DeadComponent merge above, which leaves the corpse Blocking -- see this class's own
+        // doc comment on the AdjacentCorpse test).
+        componentManager.GetMultiPool<NonBlockingComponent>().Add(CorpseEntityId, new NonBlockingComponent());
+        var transform = componentManager.GetDirectPool<TransformComponent>().GetReadonly(CorpseEntityId);
+        world.ConvertToNonBlocking(CorpseEntityId, ref transform);
+
+        mapWindow.TryOpenEntityContextMenuAt(ComputeScreenPositionForMapPosition(mapWindow, mapViewState, corpsePosition));
+
+        Assert.IsTrue(mapWindow.ContextMenuController.IsOpen);
+        var rows = mapWindow.ContextMenuController.Menu.ChildElements;
+        Assert.HasCount(2, rows);
+        var inspectButton = (Button)rows[1];
+        Assert.AreEqual("Inspect", inspectButton.LeftText);
+    }
+
+    [TestMethod]
+    public void TryOpenEntityContextMenuAt_BlockingEntity_OpensMenuWithInspectDisabledWithoutActionLockComponent()
+    {
+        var (world, mapViewState, mapWindow, componentManager) = BuildMapWindowWithPlayer(300, 300, 1, new Vector3Int(100, 100, 0));
+        var targetPosition = new Vector3Int(101, 100, 0);
+        var transform = new TransformComponent(targetPosition, new Vector2Byte(1, 1));
+        componentManager.Merge(CorpseEntityId, transform);
+        world.PlaceEntityOnMap(CorpseEntityId, targetPosition, ref transform);
+
+        mapWindow.TryOpenEntityContextMenuAt(ComputeScreenPositionForMapPosition(mapWindow, mapViewState, targetPosition));
+
+        Assert.IsTrue(mapWindow.ContextMenuController.IsOpen);
+        var rows = mapWindow.ContextMenuController.Menu.ChildElements;
+        Assert.HasCount(1, rows);
+        var inspectButton = (Button)rows[0];
+        Assert.AreEqual("Inspect", inspectButton.LeftText);
+        // Disabled -- ActionLockGate.IsBlocked treats "no ActionLockComponent at all" (this
+        // test never merges one for the player) the same as "locked," matching every other
+        // ActionLockGate consumer's own convention.
+        Assert.IsFalse(inspectButton.Enabled);
+    }
+
+    [TestMethod]
+    public void ContextMenuInspectOption_Selected_SetsDetailInspectionAndLocksPlayer()
+    {
+        var (world, mapViewState, mapWindow, componentManager) = BuildMapWindowWithPlayer(300, 300, 1, new Vector3Int(100, 100, 0));
+        componentManager.Merge(PlayerEntityId, new ActionLockComponent(standardLockFrames: 20, currentLockTotalFrames: 0, currentLockFramesRemaining: 0));
+        var targetPosition = new Vector3Int(101, 100, 0);
+        var transform = new TransformComponent(targetPosition, new Vector2Byte(1, 1));
+        componentManager.Merge(CorpseEntityId, transform);
+        world.PlaceEntityOnMap(CorpseEntityId, targetPosition, ref transform);
+
+        mapWindow.TryOpenEntityContextMenuAt(ComputeScreenPositionForMapPosition(mapWindow, mapViewState, targetPosition));
+        var menu = mapWindow.ContextMenuController.Menu;
+        var inspectButton = (Button)menu.ChildElements[0];
+        menu.HandleClick(inspectButton.Rectangle.Center);
+
+        Assert.AreEqual(InspectionMode.Detail, mapViewState.InspectionMode);
+        Assert.AreEqual(CorpseEntityId, mapViewState.InspectedEntityId);
+        Assert.IsTrue(ActionLockGate.IsBlocked(componentManager.GetPackedPool<ActionLockComponent>(), PlayerEntityId));
     }
 
     private static readonly Guid TestPotionId = new("66666666-6666-6666-6666-666666666666");

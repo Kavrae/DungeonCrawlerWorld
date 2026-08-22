@@ -25,7 +25,14 @@ internal static class WindowPalette
     /// <summary>Reserved for a future Element subclass that draws header text generically -- nothing does today (Folder's header draws an icon, not text).</summary>
     public static readonly Color HeaderTextColor = Color.Black;
 
-    /// <summary>Dark panel look shared by the management-style windows (Inventory, Ability Scores) -- an explicit opt-in override of BodyColor below, not every window's default.</summary>
+    /// <summary>
+    /// Dark panel look shared by the management-style windows (Inventory, secondary/corpse
+    /// Inventory, Ability Scores, InspectionWindow) -- an explicit opt-in override of BodyColor
+    /// below, not every window's default. A 50%-alpha version of this (Color * 0.5f) was tried
+    /// as an Inspection V2 transparency experiment and reverted -- it hurt visibility too much
+    /// once InspectionWindow sat over the map -- so don't re-propose halving this again without
+    /// a different approach (e.g. per-window opt-in rather than shared-palette-wide).
+    /// </summary>
     public static readonly Color PanelBackgroundColor = new(45, 45, 45);
 
     /// <summary>Light content areas set against PanelBackgroundColor's dark chrome -- the Inventory folder's own tiles and AbilityScoreWindow's columns both use this, so a management-style panel's inner content reads consistently wherever it appears.</summary>

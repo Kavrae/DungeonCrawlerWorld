@@ -64,6 +64,7 @@ public sealed class MapWindow : Window
     private readonly PackedComponentPool<DeadComponent>? _deadPool;
     private readonly MultiComponentPool<InventoryItemStackComponent>? _inventoryStacks;
     private readonly PackedComponentPool<CorpseLootedComponent>? _corpseLootedPool;
+    private readonly PackedComponentPool<ActionLockComponent> _actionLockPool;
 
     private readonly TileRenderer _tileRenderer;
     private readonly GlyphRenderer _glyphRenderer;
@@ -104,7 +105,7 @@ public sealed class MapWindow : Window
 
     /// <summary>
     /// Invoked with a corpse's entity id when the player selects "Loot" from its right-click
-    /// context menu (see TryOpenCorpseContextMenuAt). Settable rather than a constructor
+    /// context menu (see TryOpenEntityContextMenuAt). Settable rather than a constructor
     /// dependency for the same reason IsTextInputFocused above is: the real listener
     /// (SecondaryInventoryWindowController) is built after MapWindow -- see ShellBootstrapper.
     /// Build's own ordering notes. Null (before that wiring runs, and in tests that construct a
@@ -112,6 +113,14 @@ public sealed class MapWindow : Window
     /// than one with a "Loot" option that does nothing.
     /// </summary>
     public Action<int>? OnCorpseClicked { get; set; }
+
+    /// <summary>
+    /// Invoked whenever a map-tile click sets Basic inspection (see SelectMapNodes) or the
+    /// right-click "Inspect" option sets Detail inspection (see TryOpenEntityContextMenuAt) --
+    /// lets ShellBootstrapper un-minimize InspectionWindow without MapWindow needing a direct
+    /// reference to it, the same settable-delegate shape OnCorpseClicked above already uses.
+    /// </summary>
+    public Action? OnInspectionOpened { get; set; }
 
     /// <summary>Internal, not private, so tests can inspect an opened corpse context menu (its option list, an option's Enabled state) without needing to also thread one through every existing MapWindow test helper's return tuple.</summary>
     internal ContextMenuController ContextMenuController => _contextMenuController;
@@ -139,7 +148,8 @@ public sealed class MapWindow : Window
         MapCamera camera,
         ActionTargetingController actionTargeting,
         PlayerMovementController playerMovement,
-        ContextMenuController contextMenuController) : base(fontService, elementPoolService, glyphRenderer)
+        ContextMenuController contextMenuController,
+        PackedComponentPool<ActionLockComponent> actionLockPool) : base(fontService, elementPoolService, glyphRenderer)
     {
         ArgumentNullException.ThrowIfNull(world);
         ArgumentNullException.ThrowIfNull(mapViewState);
@@ -155,6 +165,7 @@ public sealed class MapWindow : Window
         ArgumentNullException.ThrowIfNull(actionTargeting);
         ArgumentNullException.ThrowIfNull(playerMovement);
         ArgumentNullException.ThrowIfNull(contextMenuController);
+        ArgumentNullException.ThrowIfNull(actionLockPool);
 
         _world = world;
         _mapViewState = mapViewState;
@@ -175,6 +186,7 @@ public sealed class MapWindow : Window
         _corpseLootedPool = componentManager.IsRegistered<CorpseLootedComponent>()
             ? componentManager.GetPackedPool<CorpseLootedComponent>()
             : null;
+        _actionLockPool = actionLockPool;
         _tileRenderer = tileRenderer;
         _glyphRenderer = glyphRenderer;
         _spriteSheetService = spriteSheetService;
@@ -284,7 +296,15 @@ public sealed class MapWindow : Window
         DrawGlyphs(spriteBatch, unitRectangle);
         DrawGlowOverlay(spriteBatch, unitRectangle);
         DrawTargetingHighlights(spriteBatch, unitRectangle);
-        DrawSelectedTileHighlight(spriteBatch, unitRectangle);
+
+        if (_mapViewState.InspectionMode == InspectionMode.Detail)
+        {
+            DrawFollowedEntityHighlight(spriteBatch, unitRectangle);
+        }
+        else
+        {
+            DrawSelectedTileHighlight(spriteBatch, unitRectangle);
+        }
     }
 
     /// <summary>
@@ -391,6 +411,35 @@ public sealed class MapWindow : Window
         }
 
         DrawMaskedTileHighlight(spriteBatch, unitRectangle, selectedPosition.X, selectedPosition.Y, Color.Gold);
+    }
+
+    /// <summary>
+    /// Detail/Admin inspection's own highlight -- tracks the followed entity's live
+    /// TransformComponent.Position every frame instead of a frozen tile position (see
+    /// DrawSelectedTileHighlight, Basic mode's equivalent), so the highlight moves with the
+    /// entity as it walks. Highlights every tile of the entity's own footprint (TransformComponent.
+    /// Size), not just its origin tile -- a multi-tile (Huge) entity should read as fully
+    /// selected, the same footprint DrawPrimaryOccupant itself draws the entity's sprite across.
+    /// DrawMaskedTileHighlight already no-ops cleanly per-tile when a given tile falls outside
+    /// the camera's currently visible viewport, so an entity that walks off-screen (in whole or
+    /// in part) simply stops drawing a highlight for whichever tiles are off-screen, rather than
+    /// throwing or drawing garbage -- no extra guard needed here for that case.
+    /// </summary>
+    private void DrawFollowedEntityHighlight(SpriteBatch spriteBatch, Texture2D unitRectangle)
+    {
+        var entityId = _mapViewState.InspectedEntityId;
+        if (entityId == -1 || !_transformPool.TryGetReadonly(entityId, out var transform))
+        {
+            return;
+        }
+
+        for (var offsetX = 0; offsetX < transform.Size.X; offsetX++)
+        {
+            for (var offsetY = 0; offsetY < transform.Size.Y; offsetY++)
+            {
+                DrawMaskedTileHighlight(spriteBatch, unitRectangle, transform.Position.X + offsetX, transform.Position.Y + offsetY, Color.Gold);
+            }
+        }
     }
 
     /// <summary>
@@ -795,6 +844,9 @@ public sealed class MapWindow : Window
         if (_camera.TryGetHoveredMapPosition(mousePosition, _contentState.AbsolutePosition, out var mapPosition))
         {
             _mapViewState.SelectedMapNodePosition = mapPosition;
+            _mapViewState.InspectionMode = InspectionMode.Basic;
+            _mapViewState.InspectedEntityId = -1;
+            OnInspectionOpened?.Invoke();
         }
     }
 
@@ -835,41 +887,81 @@ public sealed class MapWindow : Window
             return;
         }
 
-        TryOpenCorpseContextMenuAt(mousePosition);
+        TryOpenEntityContextMenuAt(mousePosition);
     }
 
     /// <summary>
-    /// Opens a one-item "Loot" context menu for the corpse under mousePosition, if any --
-    /// replaces the old click-to-loot (see OnCorpseClicked's own doc comment). Internal, not
-    /// private, so tests can simulate a right-click-tap at a specific screen position directly.
-    /// A miss (off-map, no corpse on the hovered tile, or nothing wired to OnCorpseClicked)
-    /// simply opens nothing -- OnRightClickTapAction's only other job, cancelling an armed/
-    /// pending action, already ran and found nothing to cancel either, so a right-click over
-    /// empty space is correctly a total no-op, matching this codebase's "remove unexpected
-    /// actions" principle. "Loot" itself is enabled only when the player is adjacent (see
-    /// IsAdjacentToPlayer) -- otherwise still shown, just disabled, so the player sees why
-    /// nothing happens rather than the menu silently omitting it.
+    /// Opens a context menu for whatever's on the tile under mousePosition, if anything --
+    /// "Loot" for a corpse there (replaces the old click-to-loot, see OnCorpseClicked's own doc
+    /// comment), "Inspect" for the tile's Blocking entity (Details/Admin inspection -- see
+    /// MapViewState.InspectionMode's own doc comment on why Admin isn't a separate option yet;
+    /// AdvancedMapContextMenu will later generalize this to every entity/terrain on the tile,
+    /// not just the Blocking one). Internal, not private, so tests can simulate a right-click-tap
+    /// at a specific screen position directly. A miss (off-map, nothing to loot/inspect) simply
+    /// opens nothing -- OnRightClickTapAction's only other job, cancelling an armed/pending
+    /// action, already ran and found nothing to cancel either, so a right-click over empty space
+    /// is correctly a total no-op, matching this codebase's "remove unexpected actions"
+    /// principle. Each option is disabled rather than omitted when it can't currently be taken
+    /// ("Loot" when the player isn't adjacent, "Inspect" while the global cooldown is active) so
+    /// the player sees why, rather than the menu silently missing an option.
     /// </summary>
-    internal void TryOpenCorpseContextMenuAt(Point mousePosition)
+    internal void TryOpenEntityContextMenuAt(Point mousePosition)
     {
-        if (OnCorpseClicked is null || _deadPool is null || !_camera.TryGetHoveredMapPosition(mousePosition, _contentState.AbsolutePosition, out var mapPosition))
+        if (!_camera.TryGetHoveredMapPosition(mousePosition, _contentState.AbsolutePosition, out var mapPosition))
         {
             return;
         }
 
-        foreach (var entityId in _world.GetOccupantEntityIdsAt(new Vector3Int(mapPosition.X, mapPosition.Y, _mapViewState.CurrentMapLayer)))
+        var tilePosition = new Vector3Int(mapPosition.X, mapPosition.Y, _mapViewState.CurrentMapLayer);
+
+        List<ContextMenuOption> options = [];
+
+        var corpseEntityId = -1;
+        if (_deadPool is not null)
         {
-            if (!_deadPool.Has(entityId))
+            foreach (var entityId in _world.GetOccupantEntityIdsAt(tilePosition))
             {
-                continue;
+                if (_deadPool.Has(entityId))
+                {
+                    corpseEntityId = entityId;
+                    break;
+                }
             }
-
-            var onCorpseClicked = OnCorpseClicked;
-            _contextMenuController.Open(new Vector2(mousePosition.X, mousePosition.Y), [
-                new ContextMenuOption("Loot", null, IsAdjacentToPlayer(entityId), () => onCorpseClicked.Invoke(entityId)),
-            ]);
-            return;
         }
+
+        if (OnCorpseClicked is { } onCorpseClicked && corpseEntityId != -1)
+        {
+            options.Add(new ContextMenuOption("Loot", null, IsAdjacentToPlayer(corpseEntityId), () => onCorpseClicked.Invoke(corpseEntityId)));
+        }
+
+        // Prefer the tile's Blocking entity for Inspect; fall back to a corpse there, since
+        // dying (DeathSystem.ConvertToNonBlocking) removes an entity from the Blocking slot --
+        // without this fallback, a corpse alone on a tile (the common case) never offered
+        // Inspect at all.
+        var inspectEntityId = _world.Map.GetBlockingEntityId(tilePosition);
+        if (inspectEntityId == -1)
+        {
+            inspectEntityId = corpseEntityId;
+        }
+
+        if (inspectEntityId != -1)
+        {
+            options.Add(new ContextMenuOption("Inspect", null, !ActionLockGate.IsBlocked(_actionLockPool, _world.PlayerEntityId), () => InspectEntity(inspectEntityId)));
+        }
+
+        if (options.Count > 0)
+        {
+            _contextMenuController.Open(new Vector2(mousePosition.X, mousePosition.Y), options);
+        }
+    }
+
+    /// <summary>Details/Admin inspection's actual activation -- sets Detail mode on the shared entityId (see MapViewState.InspectedEntityId), starts the global cooldown (the same shared ActionLockComponent lock movement/melee/consumables already use), and un-minimizes InspectionWindow. Only ever reached via the "Inspect" ContextMenuOption above, which already gates on the cooldown being clear -- no redundant re-check here, matching how "Loot" above trusts its own Enabled gate instead of re-checking adjacency.</summary>
+    private void InspectEntity(int entityId)
+    {
+        _mapViewState.InspectionMode = InspectionMode.Detail;
+        _mapViewState.InspectedEntityId = entityId;
+        ActionLockGate.Lock(_actionLockPool, _world.PlayerEntityId);
+        OnInspectionOpened?.Invoke();
     }
 
     protected override void OnEscapeAction() => _actionTargeting.CancelArmedOrPendingAction();

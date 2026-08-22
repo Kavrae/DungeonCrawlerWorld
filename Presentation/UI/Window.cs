@@ -31,6 +31,15 @@ public class Window : Element
     public IElementContent? Content => _content;
 
     /// <summary>
+    /// Window's own OnClosed override -- see Element.OnClosed's own doc comment for the general
+    /// reasoning and the confirmed bug (a closed Inventory window's tab-body Window recycled into
+    /// InspectionWindowContent's manual row containers, still silently driving its old
+    /// InventoryTabContent every frame) this closes off generically for every Window, not just
+    /// that one call site.
+    /// </summary>
+    protected internal override void OnClosed() => _content = null;
+
+    /// <summary>
     /// Internal, not protected: chrome behaviors (see IWindowChromeBehavior) live outside
     /// the Window subclass hierarchy but still need the window's title font to build
     /// matching title buttons.

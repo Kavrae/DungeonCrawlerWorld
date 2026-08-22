@@ -27,12 +27,13 @@ namespace DungeonCrawlerWorld;
 /// <cleanupVersion>1</cleanupVersion>>
 public static class ShellBootstrapper
 {
-    private const float ScreenMargin = 12f;
-
     private const float DebugWindowHeight = 24f;
-    private const float SelectionWindowWidth = 300f;
     private const float ActionLockGap = 8f;
     private const float ManaBarGap = 3f;
+    private const float InspectionWindowGap = 8f;
+
+    /// <summary>Empty headroom left between InspectionWindow's bottom edge and the hotbar's worst-case (fully expanded) top edge -- no minimap exists yet, this just keeps the corner free for one, per the Inspection V2 request.</summary>
+    private const float MinimapReserve = 140f;
 
     /// <summary>Builds the game shell context.</summary>
     /// <param name="presentation"></param>
@@ -86,14 +87,15 @@ public static class ShellBootstrapper
 
         contextMenuController.Initialize(layers);
 
-        var (mapWindow, mapSize) = BuildBaseWindows(presentation, ecsContext, screenSize, diagnostics, mapViewState, layers);
-        var (questTriggerWindow, hotbarContent) = BuildStaticHudWindows(presentation, world, ecsContext, actionCatalog, itemCatalog, screenSize, mapViewState, mapSize, layers);
+        var mapWindow = BuildBaseWindows(presentation, ecsContext, screenSize, diagnostics, mapViewState, layers);
+        var (questTriggerWindow, hotbarContent, inspectionWindow) = BuildStaticHudWindows(presentation, world, ecsContext, actionCatalog, itemCatalog, screenSize, mapViewState, layers);
         var (notificationCenter, inventory) = BuildDynamicHudWindows(presentation, world, ecsContext, itemCatalog, mapWindow, layers);
         var hotbarController = BuildHotbarController(presentation, mapViewState, hotbarContent, actionTargeting, layers);
         BuildUserWindows(presentation, cursorTextContent, dragGhostContent, layers);
 
         var secondaryInventory = BuildSecondaryInventoryWindowController(presentation, ecsContext, inventory, layers);
         mapWindow.OnCorpseClicked = secondaryInventory.OpenLoot;
+        mapWindow.OnInspectionOpened = () => inspectionWindow.SetDisplayMode(ElementDisplayMode.Fixed);
 
         var inputController = new UiInputController(layers, screenSize, hotbarController, componentManager, world, contextMenuController);
         inputController.SetDefaultFocusElement(mapWindow);
@@ -133,25 +135,24 @@ public static class ShellBootstrapper
         return new ShellContext(mapWindow, notificationCenter, inventory, layers, inputController);
     }
 
-    /// <summary>Base tier: the map itself plus the debug stats footer directly beneath it -- see UiInputController's own doc comment for what each of the four tiers means. mapSize is returned for BuildStaticHudWindows, whose selection window needs it to dock against the map's actual bottom edge. MapWindow's own factory (and every other pooled type's) is already registered by the time this runs -- see Build's ElementFactoryRegistry.RegisterAll call.</summary>
-    private static (MapWindow MapWindow, Vector2 MapSize) BuildBaseWindows(
+    /// <summary>Base tier: the map itself plus the debug stats footer directly beneath it -- see UiInputController's own doc comment for what each of the four tiers means. MapWindow's own factory (and every other pooled type's) is already registered by the time this runs -- see Build's ElementFactoryRegistry.RegisterAll call.</summary>
+    private static MapWindow BuildBaseWindows(
         PresentationContext presentation, EcsContext ecsContext, Vector2 screenSize, DiagnosticsEngine? diagnostics, MapViewState mapViewState, UiLayerStack layers)
     {
-        var mapSize = new Vector2(screenSize.X - ScreenMargin * 2, screenSize.Y - ScreenMargin * 3 - DebugWindowHeight);
+        var mapSize = new Vector2(screenSize.X, screenSize.Y - DebugWindowHeight);
 
         var mapWindow = presentation.ElementPoolService.CreateElement<MapWindow>(null, new ElementOptions
         {
             Layout = new ElementLayoutOptions
             {
-                RelativePosition = new Vector2(ScreenMargin, ScreenMargin),
+                RelativePosition = Vector2.Zero,
                 Size = mapSize,
                 DisplayMode = ElementDisplayMode.Fixed,
             },
             Chrome = new ElementChromeOptions
             {
                 ShowBorder = true,
-                ShowTitle = true,
-                TitleText = "Dungeon Crawler World",
+                ShowTitle = false,
                 CanUserScrollHorizontal = true,
                 CanUserScrollVertical = true,
             },
@@ -163,7 +164,7 @@ public static class ShellBootstrapper
         {
             Layout = new ElementLayoutOptions
             {
-                RelativePosition = new Vector2(ScreenMargin, ScreenMargin + mapSize.Y + ScreenMargin),
+                RelativePosition = new Vector2(0, mapSize.Y),
                 Size = new Vector2(mapSize.X, DebugWindowHeight),
                 DisplayMode = ElementDisplayMode.Fixed,
             },
@@ -173,31 +174,13 @@ public static class ShellBootstrapper
         debugWindow.Initialize();
         layers.Add(UiLayer.Base, debugWindow);
 
-        return (mapWindow, mapSize);
+        return mapWindow;
     }
 
-    /// <summary>StaticHUD tier: the selection/inspector panel, the player health bar, action lock, status effects, the hotbar, and the quest trigger -- see UiInputController's own doc comment for what each of the four tiers means. questTriggerWindow is returned for Build, which wires its Clicked event once the DynamicHUD tier (needed by OpenQuestComposer) also exists. hotbarContent is returned too, for BuildHotbarController.</summary>
-    private static (TextWindow QuestTriggerWindow, HotbarContent HotbarContent) BuildStaticHudWindows(
-        PresentationContext presentation, World world, EcsContext ecsContext, ActionCatalog actionCatalog, ItemCatalog itemCatalog, Vector2 screenSize, MapViewState mapViewState, Vector2 mapSize, UiLayerStack layers)
+    /// <summary>StaticHUD tier: the player health bar, action lock, status effects, InspectionWindow, the hotbar, and the quest trigger -- see UiInputController's own doc comment for what each of the four tiers means. questTriggerWindow is returned for Build, which wires its Clicked event once the DynamicHUD tier (needed by OpenQuestComposer) also exists. hotbarContent and inspectionWindow are returned too, for BuildHotbarController and Build's own OnInspectionOpened wiring respectively.</summary>
+    private static (TextWindow QuestTriggerWindow, HotbarContent HotbarContent, InspectionWindow InspectionWindow) BuildStaticHudWindows(
+        PresentationContext presentation, World world, EcsContext ecsContext, ActionCatalog actionCatalog, ItemCatalog itemCatalog, Vector2 screenSize, MapViewState mapViewState, UiLayerStack layers)
     {
-        var componentInspector = new ComponentInspector(ecsContext.ComponentManager);
-        var selectionWindowHeight = screenSize.Y * 0.75f;
-        var selectionWindow = presentation.ElementPoolService.CreateElement<Window>(null, new ElementOptions
-        {
-            Hierarchy = new ElementHierarchyOptions { CanContainChildren = true, ChildrenTileMode = ChildElementTileMode.Vertical },
-            Layout = new ElementLayoutOptions
-            {
-                RelativePosition = new Vector2(screenSize.X - HudMetrics.Margin.X - SelectionWindowWidth, ScreenMargin + mapSize.Y - selectionWindowHeight),
-                Size = new Vector2(SelectionWindowWidth, selectionWindowHeight),
-                DisplayMode = ElementDisplayMode.Fixed,
-                IsTransparent = true,
-            },
-            Chrome = new ElementChromeOptions { ShowBorder = false, ShowTitle = false, CanUserScrollVertical = true },
-        });
-        selectionWindow.SetContent(new SelectionWindowContent(world, mapViewState, ecsContext.ComponentManager, componentInspector, presentation.ElementPoolService));
-        selectionWindow.Initialize();
-        layers.Add(UiLayer.StaticHud, selectionWindow);
-
         var playerHealthBarWindow = presentation.ElementPoolService.CreateElement<Window>(null, new ElementOptions
         {
             Layout = new ElementLayoutOptions
@@ -259,6 +242,38 @@ public static class ShellBootstrapper
         playerStatusEffectsWindow.Initialize();
         layers.Add(UiLayer.StaticHud, playerStatusEffectsWindow);
 
+        // Right-aligned column, directly beneath the status effects row, leaving MinimapReserve
+        // of empty headroom above the hotbar's own worst-case (fully expanded) top edge -- see
+        // MinimapReserve's own doc comment. Same width as the health bar (PlayerHealthBarContent.
+        // Size.X), per the Inspection V2 request.
+        var inspectionWindowTop = HudMetrics.Margin.Y + PlayerHealthBarContent.Size.Y + ManaBarGap + PlayerManaBarContent.Size.Y + PlayerStatusEffectsContent.Size.Y + InspectionWindowGap;
+        var hotbarClearanceTop = screenSize.Y - HotbarContent.MaximumSize.Y - HudMetrics.Margin.Y * 1.5f;
+        var inspectionWindowBottom = hotbarClearanceTop - InspectionWindowGap - MinimapReserve;
+        var inspectionWindowSize = new Vector2(PlayerHealthBarContent.Size.X, System.Math.Max(0f, inspectionWindowBottom - inspectionWindowTop));
+
+        var inspectionWindow = presentation.ElementPoolService.CreateElement<InspectionWindow>(null, new ElementOptions
+        {
+            Hierarchy = new ElementHierarchyOptions { CanContainChildren = true, ChildrenTileMode = ChildElementTileMode.Vertical },
+            Layout = new ElementLayoutOptions
+            {
+                RelativePosition = new Vector2(screenSize.X - HudMetrics.Margin.X - inspectionWindowSize.X, inspectionWindowTop),
+                Size = inspectionWindowSize,
+                DisplayMode = ElementDisplayMode.Fixed,
+            },
+            Chrome = new ElementChromeOptions
+            {
+                ShowTitle = true,
+                ShowTitleWhenMinimized = true,
+                TitleText = InspectionWindow.MinimizedTitle,
+                CanUserClose = false,
+                CanUserMinimize = true,
+                CanUserScrollVertical = true,
+            },
+        });
+        inspectionWindow.SetContent(new InspectionWindowContent(world, mapViewState, ecsContext.ComponentManager, ecsContext.EntityManager, presentation.ElementPoolService));
+        inspectionWindow.Initialize();
+        layers.Add(UiLayer.StaticHud, inspectionWindow);
+
         // Bottom-center, overlaying the map -- StaticHUD tier draws over Base, the same way
         // selectionWindow/playerHealthBarWindow already do. HotbarContent's Size depends on the
         // player's currently-unlocked Expansion slot count, so it's constructed first and its own
@@ -299,7 +314,7 @@ public static class ShellBootstrapper
         questTriggerWindow.Initialize();
         layers.Add(UiLayer.StaticHud, questTriggerWindow);
 
-        return (questTriggerWindow, hotbarContent);
+        return (questTriggerWindow, hotbarContent, inspectionWindow);
     }
 
     /// <summary>DynamicHUD tier: NotificationCenter owns/populates its own folder+popups, and InventoryFolderController does the same for its own folder+window (both add to UiLayer.DynamicHud specifically; their two Tooltip-family hover popups go to UiLayer.Tooltip instead) -- see UiLayer's own doc comment for what each tier means. Build also passes the same layer stack into OpenQuestComposer later, since that popup belongs in DynamicHud too. Every pooled type either of these creates is already registered by the time this runs -- see Build's ElementFactoryRegistry.RegisterAll call.</summary>

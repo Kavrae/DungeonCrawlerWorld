@@ -47,4 +47,24 @@ public sealed class MapViewState
 
     /// <summary>The map tile the mouse is currently over, on the player's own Z layer -- null when nothing is armed or the mouse isn't over the map. Updated every frame while an action is armed (see MapWindow.UpdateHoveredTile).</summary>
     public Vector3Int? HoveredTile;
+
+    /// <summary>What InspectionWindow is currently showing, if anything -- see InspectionWindow's own doc comment.</summary>
+    public InspectionMode InspectionMode;
+
+    /// <summary>Detail mode's followed target -- -1 when none (Basic mode uses SelectedMapNodePosition instead, since it targets a tile, not a single followed entity).</summary>
+    public int InspectedEntityId = -1;
+}
+
+/// <summary>
+/// InspectionWindow's current tier -- Basic (click a tile, see SelectedMapNodePosition) or
+/// Detail (context-menu Inspect, follows InspectedEntityId). One Detail value covers both the
+/// "Details" and "Admin" tiers described in the Inspection V2 plan: Admin's full component dump
+/// is always appended beneath Detail's content for now (no gating exists yet -- see TODO.md's
+/// Admin Mode Toggle item), so there's nothing today that would ever set them differently.
+/// </summary>
+public enum InspectionMode : byte
+{
+    None,
+    Basic,
+    Detail,
 }
