@@ -30,14 +30,14 @@ namespace Presentation.UI;
 public sealed class Tooltip(FontService fontService, ElementPoolService elementPoolService, GlyphRenderer glyphRenderer)
     : TextWindow(fontService, elementPoolService, glyphRenderer)
 {
-    /// <summary>Repositions and shows this popup next to target -- a title bar only if title is supplied (toggled dynamically since one shared instance may be used both with and without a title across calls, e.g. AbilityScoreWindow's score-description vs. modifier-source popups). Call every frame the same thing should stay hovered -- cheap no-op churn, the same idiom every current caller (AbilityScoreWindow, InventoryGridContent, HotbarController) already uses for its own hover-driven popup.</summary>
-    public void ShowNear(Rectangle target, PopupAnchor anchor, Vector2 gap, string body, string? title = null)
+    /// <summary>Repositions and shows this popup next to target -- a titleText bar only if titleText is supplied (toggled dynamically since one shared instance may be used both with and without a titleText across calls, e.g. AbilityScoreWindow's score-description vs. modifier-source popups). Call every frame the same thing should stay hovered -- cheap no-op churn, the same idiom every current caller (AbilityScoreWindow, InventoryGridContent, HotbarController) already uses for its own hover-driven popup.</summary>
+    public void ShowNear(Rectangle target, PopupAnchor anchor, Vector2 gap, string bodyText, string? titleText = null)
     {
-        _headerState.ShowHeader = title is not null;
-        TitleText = title ?? string.Empty;
+        _headerState.ShowHeader = titleText is not null;
+        TitleText = titleText ?? string.Empty;
 
-        UpdateText(body); // Resizes CurrentSize to the new content first -- PopupPositioning below needs the real, post-resize size.
-        SetRelativePosition(PopupPositioning.GetPosition(target, CurrentSize, anchor, gap)); // Always top-level, so RelativePosition == absolute screen position.
+        UpdateText(bodyText);
+        SetRelativePosition(PopupPositioning.GetPositionWithinBounds(target, CurrentSize, anchor, gap, ElementPoolService.GraphicsDevice.Viewport.Bounds));
 
         IsVisible = true;
     }

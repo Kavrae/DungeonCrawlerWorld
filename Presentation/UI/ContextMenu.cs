@@ -125,6 +125,18 @@ public sealed class ContextMenu(FontService fontService, ElementPoolService elem
 
     public void Hide() => IsVisible = false;
 
+    /// <summary>The size Show(topLeft, options) will set this menu's own bounds to -- exposed so ContextMenuController can position this menu edge-aware (PopupPositioning.GetPositionWithinBounds) before calling Show, since Show is also what first computes/applies this size.</summary>
+    public Vector2 MeasureSize(IReadOnlyList<ContextMenuOption> options)
+    {
+        var totalHeight = 0f;
+        foreach (var option in options)
+        {
+            totalHeight += option.IsHeader ? HeaderRowHeight : RowHeight;
+        }
+
+        return new Vector2(MeasureWidth(options), totalHeight) + BorderInsetDoubled;
+    }
+
     /// <summary>Widest Label+HotkeyText pairing across every row (headers included, HotkeyText-less), so every row shares one width and the hotkey column lines up -- the same "measure the widest, pin every row to it" idiom GridControl's own sort tile uses.</summary>
     private float MeasureWidth(IReadOnlyList<ContextMenuOption> options)
     {

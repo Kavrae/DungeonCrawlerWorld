@@ -20,11 +20,9 @@ public sealed class SecondaryInventoryWindowController(
     ElementPoolService elementPoolService,
     ComponentManager componentManager,
     InventoryFolderController inventoryFolderController,
-    ContextMenuController contextMenuController)
+    ContextMenuController contextMenuController,
+    MapWindow mapWindow)
 {
-    /// <summary>Fixed HUD-style gap to the right of the player's own inventory window -- same spirit as InventoryFolderController.Gap.</summary>
-    private const float Gap = 12f;
-
     /// <summary>Fixed width cap for the corpse grid's own item hover popup; height auto-grows with content -- see Tooltip, mirroring InventoryFolderController's own hover popup sizing.</summary>
     private static readonly Vector2 HoverPopupMaximumSize = new(220, 10000f);
 
@@ -92,8 +90,9 @@ public sealed class SecondaryInventoryWindowController(
             {
                 // Derived from the player window's own live position/size (both user-movable/
                 // resizable), not a hardcoded offset, so this stays adjacent even after the
-                // player drags their inventory window elsewhere.
-                RelativePosition = playerWindow.RelativePosition + new Vector2(playerWindow.CurrentSize.X + Gap, 0),
+                // player drags their inventory window elsewhere. Singleton window (siblingCount
+                // 0), clamped to the map's own screen-bounds proxy so this can't spawn off-screen.
+                RelativePosition = WindowCascadePlacement.ComputePosition(playerWindow.Rectangle, playerWindow.CurrentSize, 0, mapWindow.CurrentSize),
                 Size = playerWindow.CurrentSize,
                 DisplayMode = ElementDisplayMode.Fixed,
             },

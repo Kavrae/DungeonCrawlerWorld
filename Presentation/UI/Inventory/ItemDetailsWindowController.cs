@@ -28,9 +28,6 @@ public sealed class ItemDetailsWindowController(
     MapViewState mapViewState,
     MapWindow mapWindow)
 {
-    /// <summary>Fixed HUD-style gap to the right of the player's own inventory window -- same spirit as InventoryFolderController.Gap/SecondaryInventoryWindowController.Gap.</summary>
-    private const float Gap = 12f;
-
     private readonly MultiComponentPool<InventoryItemStackComponent> _stacks = componentManager.GetMultiPool<InventoryItemStackComponent>();
 
     private UiLayerStack _layers = null!;
@@ -144,8 +141,16 @@ public sealed class ItemDetailsWindowController(
                 // Derived from the player window's own live position/size, not a hardcoded
                 // offset, the same idiom SecondaryInventoryWindowController.OpenLoot already
                 // uses for the corpse window -- stays adjacent even after the player drags
-                // their inventory window elsewhere.
-                RelativePosition = playerWindow.RelativePosition + new Vector2(playerWindow.CurrentSize.X + Gap, 0),
+                // their inventory window elsewhere. Singleton window (siblingCount 0), clamped
+                // to the map's own screen-bounds proxy via WindowCascadePlacement so this can
+                // never spawn off-screen if the player's dragged Inventory near an edge. Clamp
+                // size uses height 0, not mapWindow.CurrentSize.Y (the WrapContent growth
+                // ceiling, ~the full map height) -- feeding that into the clamp collapses
+                // `screenSize.Y - size.Y` to ~0, forcing Y to the very top regardless of the
+                // player window's own Top (confirmed by reproduction on the comparison-column
+                // version of this same call).
+                RelativePosition = WindowCascadePlacement.ComputePosition(
+                    playerWindow.Rectangle, new Vector2(playerWindow.CurrentSize.X, 0), 0, mapWindow.CurrentSize),
                 // WrapContent, not Fixed -- see ItemDetailsWindow's own doc comment for why:
                 // a Fixed-mode window whose own height shrinks between rebuilds re-measures its
                 // children against its own (small, stale) content size instead of a stable outer

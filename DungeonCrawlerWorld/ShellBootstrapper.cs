@@ -93,7 +93,7 @@ public static class ShellBootstrapper
         var hotbarController = BuildHotbarController(presentation, mapViewState, hotbarContent, actionTargeting, layers);
         BuildUserWindows(presentation, cursorTextContent, dragGhostContent, layers);
 
-        var secondaryInventory = BuildSecondaryInventoryWindowController(presentation, ecsContext, inventory, contextMenuController, layers);
+        var secondaryInventory = BuildSecondaryInventoryWindowController(presentation, ecsContext, inventory, contextMenuController, mapWindow, layers);
         mapWindow.OnCorpseClicked = secondaryInventory.OpenLoot;
         inventory.GetSecondaryTargetEntityId = () => secondaryInventory.OpenTargetEntityId;
         mapWindow.OnInspectionOpened = () => inspectionWindow.SetDisplayMode(ElementDisplayMode.Fixed);
@@ -378,9 +378,9 @@ public static class ShellBootstrapper
 
     /// <summary>Built after InventoryFolderController (which it reuses the player's own inventory window through, see PlayerInventoryWindow/OpenInventoryWindow) and after MapWindow exists (whose OnCorpseClicked Build wires to this controller's OpenLoot right after this call returns).</summary>
     private static SecondaryInventoryWindowController BuildSecondaryInventoryWindowController(
-        PresentationContext presentation, EcsContext ecsContext, InventoryFolderController inventory, ContextMenuController contextMenuController, UiLayerStack layers)
+        PresentationContext presentation, EcsContext ecsContext, InventoryFolderController inventory, ContextMenuController contextMenuController, MapWindow mapWindow, UiLayerStack layers)
     {
-        var controller = new SecondaryInventoryWindowController(presentation.ElementPoolService, ecsContext.ComponentManager, inventory, contextMenuController);
+        var controller = new SecondaryInventoryWindowController(presentation.ElementPoolService, ecsContext.ComponentManager, inventory, contextMenuController, mapWindow);
         controller.Initialize(layers);
         return controller;
     }

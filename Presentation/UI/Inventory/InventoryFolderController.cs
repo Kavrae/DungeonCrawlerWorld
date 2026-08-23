@@ -62,9 +62,6 @@ public sealed class InventoryFolderController(
     /// <summary>Both windows take up this fraction of the map window's own width, side by side.</summary>
     private const float WindowWidthFraction = 0.33f;
 
-    /// <summary>Fixed HUD-style gap between the two windows, in the same spirit as ShellBootstrapper.ActionLockGap -- not tied to map tile size, which changes with zoom.</summary>
-    private const float Gap = 12f;
-
     private readonly PackedComponentPool<InventoryDisabledComponent> _disabledPool = componentManager.GetPackedPool<InventoryDisabledComponent>();
 
     private Folder _folder = null!;
@@ -218,13 +215,25 @@ public sealed class InventoryFolderController(
     private AbilityScoreWindow CreateAbilityScoreWindow()
     {
         var windowWidth = WindowWidth;
+        var childSize = new Vector2(windowWidth, WindowHeight);
+
+        // Anchored to the live Inventory window's own Rectangle when it's open, so this now
+        // follows Inventory if it's been dragged (previously this recomputed a parallel position
+        // from the same WindowPosition/WindowWidth constants Inventory itself uses, rather than
+        // reading Inventory's own live position -- silently wrong the moment Inventory moved).
+        // Falls back to today's exact fixed position, unchanged, when Inventory isn't open (no
+        // live window to anchor to) -- still clamped to screen either way.
+        var relativePosition = PlayerInventoryWindow is { } playerWindow
+            ? WindowCascadePlacement.ComputePosition(playerWindow.Rectangle, childSize, 0, mapWindow.CurrentSize)
+            : ScreenBoundsClamp.Clamp(new Vector2(WindowPosition.X + windowWidth + WindowCascadePlacement.Gap, WindowPosition.Y), childSize, mapWindow.CurrentSize);
+
         var window = elementPoolService.CreateElement<AbilityScoreWindow>(null, new ElementOptions
         {
             Hierarchy = new ElementHierarchyOptions { CanContainChildren = true },
             Layout = new ElementLayoutOptions
             {
-                RelativePosition = new Vector2(WindowPosition.X + windowWidth + Gap, WindowPosition.Y),
-                Size = new Vector2(windowWidth, WindowHeight),
+                RelativePosition = relativePosition,
+                Size = childSize,
                 DisplayMode = ElementDisplayMode.Fixed,
             },
             Chrome = new ElementChromeOptions

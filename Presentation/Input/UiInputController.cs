@@ -1575,11 +1575,10 @@ public sealed class UiInputController
     /// <summary>
     /// Pulls a drag-to-move's destination position back inside GetPositionBounds -- called with
     /// size unchanged, so an element dragged toward/past an edge simply stops there instead of
-    /// continuing to follow the mouse off-screen (or out of its parent's content area).
+    /// continuing to follow the mouse off-screen (or out of its parent's content area). Forwards to
+    /// ScreenBoundsClamp, shared with WindowCascadePlacement/PopupPositioning's own off-screen guards.
     /// </summary>
-    private static Vector2 ClampMoveToBounds(Vector2 position, Vector2 size, Vector2 bounds) => new(
-        MathHelper.Clamp(position.X, 0, MathHelper.Max(0, bounds.X - size.X)),
-        MathHelper.Clamp(position.Y, 0, MathHelper.Max(0, bounds.Y - size.Y)));
+    private static Vector2 ClampMoveToBounds(Vector2 position, Vector2 size, Vector2 bounds) => ScreenBoundsClamp.Clamp(position, size, bounds);
 
     /// <summary>
     /// Pulls a drag-to-resize's destination position+size back inside bounds. Unlike a move

@@ -47,7 +47,8 @@ public sealed class ContextMenuController(ElementPoolService elementPoolService)
     public void Open(Vector2 cursorPosition, IReadOnlyList<ContextMenuOption> options)
     {
         var cursorRectangle = new Rectangle((int)cursorPosition.X, (int)cursorPosition.Y, 0, 0);
-        var topLeft = PopupPositioning.GetPosition(cursorRectangle, Vector2.Zero, PopupAnchor.SouthEast, Vector2.Zero);
+        var menuSize = _menu.MeasureSize(options); // The exact size Show below will apply -- computed ahead of it so flip/clamp below sees the real footprint, not Vector2.Zero.
+        var topLeft = PopupPositioning.GetPositionWithinBounds(cursorRectangle, menuSize, PopupAnchor.SouthEast, Vector2.Zero, elementPoolService.GraphicsDevice.Viewport.Bounds);
         _menu.Show(topLeft, options);
     }
 

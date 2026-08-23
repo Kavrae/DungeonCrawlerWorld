@@ -33,9 +33,6 @@ public sealed class ItemComparisonController(
     /// <summary>Shown at the cursor for as long as IsArmed -- see Arm/Disarm/ClearComparison.</summary>
     private const string SelectNextItemMessage = "Select next item...";
 
-    /// <summary>Fixed HUD-style gap between one column and the next -- same spirit as ItemDetailsWindowController.Gap/InventoryFolderController.Gap.</summary>
-    private const float Gap = 12f;
-
     private readonly MultiComponentPool<InventoryItemStackComponent> _stacks = componentManager.GetMultiPool<InventoryItemStackComponent>();
 
     /// <summary>The additional compared items, anchor excluded -- index-aligned with _columns.</summary>
@@ -228,7 +225,7 @@ public sealed class ItemComparisonController(
         itemDetailsWindowController.UpdateComparedAgainst(definitions);
 
         var anchorDefinition = itemDetailsWindowController.CurrentDefinition;
-        var previousRectangle = itemDetailsWindowController.Rectangle;
+        var anchorRectangle = itemDetailsWindowController.Rectangle;
 
         for (var i = 0; i < _entries.Count; i++)
         {
@@ -246,35 +243,45 @@ public sealed class ItemComparisonController(
                 }
             }
 
-            var column = CreateColumn(_entries[i].EntityId, _entries[i].StackInstanceId, definitions[i], previousRectangle, otherDefinitions);
+            var column = CreateColumn(_entries[i].EntityId, _entries[i].StackInstanceId, definitions[i], anchorRectangle, i, otherDefinitions);
             if (column is null)
             {
                 continue;
             }
 
             _columns.Add(column);
-            previousRectangle = column.Rectangle;
         }
     }
 
     /// <summary>OnCompareRequested is deliberately never set here -- comparison columns get a Close button but no Compare button of their own (see ItemDetailsWindow.OnChildrenInitialized's own doc comment on why attachment is opt-in per instance).</summary>
-    private ItemDetailsWindow? CreateColumn(int entityId, Guid stackInstanceId, ItemDefinition definition, Rectangle previousRectangle, IReadOnlyList<ItemDefinition> comparedAgainst)
+    private ItemDetailsWindow? CreateColumn(int entityId, Guid stackInstanceId, ItemDefinition definition, Rectangle anchorRectangle, int siblingIndex, IReadOnlyList<ItemDefinition> comparedAgainst)
     {
         if (inventoryFolderController.PlayerInventoryWindow is not { } playerWindow)
         {
             return null;
         }
 
+        var maximumSize = new Vector2(playerWindow.CurrentSize.X, mapWindow.CurrentSize.Y);
         var window = elementPoolService.CreateElement<ItemDetailsWindow>(null, new ElementOptions
         {
             Hierarchy = new ElementHierarchyOptions { CanContainChildren = true, ChildrenTileMode = ChildElementTileMode.Vertical },
             Layout = new ElementLayoutOptions
             {
-                // Chained off the previous column's (or the anchor's, for the first one) own
-                // live Rectangle -- the same "derived from a live sibling, not a hardcoded
-                // offset" idiom every other child window in this codebase already uses.
-                RelativePosition = new Vector2(previousRectangle.Right + Gap, previousRectangle.Top),
-                MaximumSize = new Vector2(playerWindow.CurrentSize.X, mapWindow.CurrentSize.Y),
+                // Anchored to the comparison anchor's own live Rectangle, not chained through the
+                // previous column, and cascaded diagonally per sibling index -- see
+                // WindowCascadePlacement's own doc comment: chaining off the previous column used
+                // to run each new one further right by a full window-width, letting a
+                // third-or-later column spawn off-screen with nothing to pull it back. Clamped to
+                // the map's own screen-bounds proxy either way -- clamp size uses height 0, not
+                // maximumSize.Y (the WrapContent growth ceiling, ~the full map height): feeding
+                // that into the clamp made `screenSize.Y - size.Y` collapse to ~0, forcing every
+                // column's Y to the very top regardless of the anchor's own position or the
+                // cascade offset -- confirmed by reproduction (columns landing at the top of the
+                // screen with no vertical stagger). The real rendered height is unknown up front
+                // (WrapContent), so height-0 just keeps the position clamp from fighting the
+                // anchor-relative Y at all, rather than asserting a wrong assumed height.
+                RelativePosition = WindowCascadePlacement.ComputePosition(anchorRectangle, new Vector2(maximumSize.X, 0), siblingIndex, mapWindow.CurrentSize),
+                MaximumSize = maximumSize,
                 DisplayMode = ElementDisplayMode.WrapContent,
             },
             Chrome = new ElementChromeOptions
