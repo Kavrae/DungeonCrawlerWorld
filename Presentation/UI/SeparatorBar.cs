@@ -14,8 +14,8 @@ namespace Presentation.UI;
 /// the narrower bar is purely a DrawContent detail; the element's own bounds stay full width/
 /// height to avoid disturbing that chain.
 /// </summary>
-public sealed class SeparatorBar(FontService fontService, ElementPoolService elementPoolService, GlyphRenderer glyphRenderer)
-    : Element(fontService, elementPoolService, glyphRenderer)
+public sealed class SeparatorBar(FontService fontService, ElementPoolService elementPoolService, LabelRenderer labelRenderer)
+    : Element(fontService, elementPoolService, labelRenderer)
 {
     private const float WidthFraction = 0.75f;
 

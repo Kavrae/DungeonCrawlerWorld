@@ -33,7 +33,7 @@ public sealed class InventoryGridContent(
     ItemCatalog itemCatalog,
     ElementPoolService elementPoolService,
     FontService fontService,
-    GlyphRenderer glyphRenderer,
+    LabelRenderer labelRenderer,
     SpriteSheetService spriteSheetService,
     SpriteRenderer spriteRenderer,
     ContextMenuController contextMenuController,

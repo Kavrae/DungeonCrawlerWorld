@@ -21,10 +21,10 @@ namespace Presentation.UI;
 public sealed class HealthBarElement(
     FontService fontService,
     ElementPoolService elementPoolService,
-    GlyphRenderer glyphRenderer,
+    LabelRenderer labelRenderer,
     PackedComponentPool<HealthComponent> healthPool,
     MultiComponentPool<StatModifierComponent>? statModifiers)
-    : Element(fontService, elementPoolService, glyphRenderer)
+    : Element(fontService, elementPoolService, labelRenderer)
 {
     private int _entityId;
 

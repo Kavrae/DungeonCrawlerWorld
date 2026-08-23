@@ -44,8 +44,8 @@ public enum CellCompareState
 /// to build on; it's the one case that gets the disabled-cursor treatment while hovering a hotbar
 /// slot mid-drag.
 /// </summary>
-public sealed class InventoryItemStackCell(FontService fontService, ElementPoolService elementPoolService, GlyphRenderer glyphRenderer, SpriteSheetService spriteSheetService, SpriteRenderer spriteRenderer)
-    : Element(fontService, elementPoolService, glyphRenderer)
+public sealed class InventoryItemStackCell(FontService fontService, ElementPoolService elementPoolService, LabelRenderer labelRenderer, SpriteSheetService spriteSheetService, SpriteRenderer spriteRenderer)
+    : Element(fontService, elementPoolService, labelRenderer)
 {
     private const float IconGlyphFontFraction = 0.6f;
     private const float QuantityFontFraction = 0.5f;
@@ -181,7 +181,7 @@ public sealed class InventoryItemStackCell(FontService fontService, ElementPoolS
         var spriteTint = isGreyedOut ? Color.Gray : Color.White;
         var glyphColor = isGreyedOut ? Color.Gray : _glyphColor;
 
-        SpriteOrGlyphRenderer.Draw(spriteBatch, spriteSheetService, spriteRenderer, GlyphRenderer, sprite, _iconGlyphFont, _glyph, glyphColor, ContentAbsolutePosition, ContentSize, spriteTint);
+        SpriteOrGlyphRenderer.Draw(spriteBatch, spriteSheetService, spriteRenderer, LabelRenderer, sprite, _iconGlyphFont, _glyph, glyphColor, ContentAbsolutePosition, ContentSize, spriteTint);
 
         ItemIconRenderer.DrawQuantityBadge(spriteBatch, _quantityFont, _quantity, _chargeText, ContentAbsolutePosition, ContentSize);
 

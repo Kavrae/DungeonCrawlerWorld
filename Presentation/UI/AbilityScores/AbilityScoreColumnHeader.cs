@@ -15,8 +15,8 @@ namespace Presentation.UI.AbilityScores;
 /// IsHovered drives a translucent highlight overlay (see AbilityScoreWindow's own hover
 /// polling) -- immediate, unlike the hover-popup delay, since a highlight is instant feedback.
 /// </summary>
-public sealed class AbilityScoreColumnHeader(FontService fontService, ElementPoolService elementPoolService, GlyphRenderer glyphRenderer)
-    : Element(fontService, elementPoolService, glyphRenderer)
+public sealed class AbilityScoreColumnHeader(FontService fontService, ElementPoolService elementPoolService, LabelRenderer labelRenderer)
+    : Element(fontService, elementPoolService, labelRenderer)
 {
     private const float NameFontFraction = 0.35f;
     private const float TotalFontFraction = 0.3f;
@@ -53,7 +53,7 @@ public sealed class AbilityScoreColumnHeader(FontService fontService, ElementPoo
 
         var stripSize = new Vector2(ContentSize.X, ContentSize.Y / 2f);
 
-        GlyphRenderer.DrawCentered(spriteBatch, _nameFont, _name, ContentAbsolutePosition, stripSize, TextColor);
-        GlyphRenderer.DrawCentered(spriteBatch, _totalFont, _totalText, ContentAbsolutePosition + new Vector2(0, stripSize.Y), stripSize, TextColor);
+        LabelRenderer.DrawCentered(spriteBatch, _nameFont, _name, ContentAbsolutePosition, stripSize, TextColor);
+        LabelRenderer.DrawCentered(spriteBatch, _totalFont, _totalText, ContentAbsolutePosition + new Vector2(0, stripSize.Y), stripSize, TextColor);
     }
 }

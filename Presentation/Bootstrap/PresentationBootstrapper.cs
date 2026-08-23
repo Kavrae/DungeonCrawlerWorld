@@ -22,12 +22,12 @@ public static class PresentationBootstrapper
 
         var fontService = new FontService(fontsDirectory);
         var spriteBatchRenderer = new SpriteBatchRenderer(graphicsDevice);
-        var glyphRenderer = new GlyphRenderer();
+        var labelRenderer = new LabelRenderer();
         var tileRenderer = new TileRenderer();
         var spriteSheetService = new SpriteSheetService(graphicsDevice, spritesheetsDirectory);
         var spriteRenderer = new SpriteRenderer();
         var elementPoolService = new ElementPoolService();
 
-        return new PresentationContext(fontService, spriteBatchRenderer, glyphRenderer, tileRenderer, spriteSheetService, spriteRenderer, elementPoolService);
+        return new PresentationContext(fontService, spriteBatchRenderer, labelRenderer, tileRenderer, spriteSheetService, spriteRenderer, elementPoolService);
     }
 }

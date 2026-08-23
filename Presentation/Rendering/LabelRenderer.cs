@@ -10,7 +10,7 @@ namespace Presentation.Rendering;
 /// (e.g. MapWindow) resolve which entity/font/position/color to use and pass those in as
 /// plain values.
 /// </summary>
-public sealed class GlyphRenderer
+public sealed class LabelRenderer
 {
     // Keyed by (font, glyph) rather than measured fresh every call -- TextBounds is a pure
     // function of the font and exact string, and the same (font, glyph) pairs repeat every
@@ -19,9 +19,17 @@ public sealed class GlyphRenderer
     // one-time cost per distinct glyph the game ever actually uses.
     private readonly Dictionary<(SpriteFontBase Font, string Glyph), Vector2> _inkCenterCache = [];
 
-    public void Draw(SpriteBatch spriteBatch, SpriteFontBase font, string glyph, Vector2 position, Color color)
+    /// <summary>outline defaults false -- plain UI text (buttons, tabs, toggles, context menus, ...) sits on its own window background and doesn't need it. Map-drawn glyphs (entities, terrain, layer badges) pass true so they stay legible against whatever color terrain tile is underneath.</summary>
+    public void Draw(SpriteBatch spriteBatch, SpriteFontBase font, string glyph, Vector2 position, Color color, bool outline = false)
     {
-        spriteBatch.DrawString(font, glyph, position, color);
+        if (outline)
+        {
+            ContrastTextRenderer.Draw(spriteBatch, font, glyph, position, fillColor: color);
+        }
+        else
+        {
+            spriteBatch.DrawString(font, glyph, position, color);
+        }
     }
 
     /// <summary>
@@ -39,8 +47,8 @@ public sealed class GlyphRenderer
         return footprintCenter - GetInkCenterAtOrigin(font, glyph);
     }
 
-    public void DrawCentered(SpriteBatch spriteBatch, SpriteFontBase font, string glyph, Vector2 footprintTopLeft, Vector2 footprintSize, Color color) =>
-        Draw(spriteBatch, font, glyph, GetCenteredPosition(font, glyph, footprintTopLeft, footprintSize), color);
+    public void DrawCentered(SpriteBatch spriteBatch, SpriteFontBase font, string glyph, Vector2 footprintTopLeft, Vector2 footprintSize, Color color, bool outline = false) =>
+        Draw(spriteBatch, font, glyph, GetCenteredPosition(font, glyph, footprintTopLeft, footprintSize), color, outline);
 
     /// <summary>
     /// Where text must be drawn so it's flush against footprintSize's right edge and vertically

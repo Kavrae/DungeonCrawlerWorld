@@ -15,12 +15,12 @@ namespace Presentation.Rendering;
 /// </summary>
 public static class SpriteOrGlyphRenderer
 {
-    /// <summary>Draws sprite if present, else glyph if non-empty. Returns whether anything was actually drawn.</summary>
+    /// <summary>Draws sprite if present, else glyph if non-empty. Returns whether anything was actually drawn. outline defaults false -- only MapWindow's own entity/terrain draws pass true, since those glyphs sit over arbitrary terrain colors; Folder/inventory item-cell icons sit on a fixed window background and don't need it.</summary>
     public static bool Draw(
         SpriteBatch spriteBatch,
         SpriteSheetService spriteSheetService,
         SpriteRenderer spriteRenderer,
-        GlyphRenderer glyphRenderer,
+        LabelRenderer labelRenderer,
         SpriteComponent? sprite,
         SpriteFontBase glyphFont,
         string glyph,
@@ -28,7 +28,8 @@ public static class SpriteOrGlyphRenderer
         Vector2 topLeft,
         Vector2 size,
         Color spriteTint,
-        float alphaMultiplier = 1f)
+        float alphaMultiplier = 1f,
+        bool outline = false)
     {
         if (sprite is { } spriteComponent)
         {
@@ -39,7 +40,7 @@ public static class SpriteOrGlyphRenderer
 
         if (!string.IsNullOrEmpty(glyph))
         {
-            glyphRenderer.DrawCentered(spriteBatch, glyphFont, glyph, topLeft, size, glyphColor * alphaMultiplier);
+            labelRenderer.DrawCentered(spriteBatch, glyphFont, glyph, topLeft, size, glyphColor * alphaMultiplier, outline);
             return true;
         }
 

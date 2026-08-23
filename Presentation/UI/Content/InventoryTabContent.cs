@@ -18,7 +18,7 @@ namespace Presentation.UI.Content;
 /// Initialize built, the same discipline InventoryGridContent/TabbedContent's own tab tiles
 /// already follow.
 /// </summary>
-public sealed class InventoryTabContent(ElementPoolService elementPoolService, FontService fontService, GlyphRenderer glyphRenderer, InventoryGridContent gridContent) : IElementContent
+public sealed class InventoryTabContent(ElementPoolService elementPoolService, FontService fontService, LabelRenderer labelRenderer, InventoryGridContent gridContent) : IElementContent
 {
     private static readonly IReadOnlyList<string> SortOptionLabels = ["A-Z", "Z-A", "Qty Hi", "Qty Lo"];
 

@@ -17,8 +17,8 @@ namespace Presentation.UI;
 /// everywhere -- there is no per-instance toggle for either; IsHovered/IsPressed are both driven
 /// externally by UiInputController (see PressedButton/HoveredButton there), not self-polled.
 /// </summary>
-public sealed class Button(FontService fontService, ElementPoolService elementPoolService, GlyphRenderer glyphRenderer)
-    : Element(fontService, elementPoolService, glyphRenderer)
+public sealed class Button(FontService fontService, ElementPoolService elementPoolService, LabelRenderer labelRenderer)
+    : Element(fontService, elementPoolService, labelRenderer)
 {
     public SpriteFontBase ContentFont { get; set; } = fontService.GetFont(12);
 
@@ -143,11 +143,11 @@ public sealed class Button(FontService fontService, ElementPoolService elementPo
             // No hotkey column and no explicit left-align request -- ink-centered, the same
             // look every title button ("X", "_", "O") has always had. DrawLeftAligned's
             // box-based (not ink-based) vertical centering reads visibly low for a single short
-            // glyph in a small square button -- see GlyphRenderer's own doc comment on why
+            // glyph in a small square button -- see LabelRenderer's own doc comment on why
             // MeasureString's line box is a poor stand-in for a glyph's actual rendered ink.
             if (!string.IsNullOrEmpty(LeftText))
             {
-                GlyphRenderer.DrawCentered(spriteBatch, ContentFont, LeftText, ContentAbsolutePosition, ContentSize, textColor);
+                LabelRenderer.DrawCentered(spriteBatch, ContentFont, LeftText, ContentAbsolutePosition, ContentSize, textColor);
             }
         }
         else
@@ -160,12 +160,12 @@ public sealed class Button(FontService fontService, ElementPoolService elementPo
 
             if (!string.IsNullOrEmpty(LeftText))
             {
-                GlyphRenderer.DrawLeftAligned(spriteBatch, ContentFont, LeftText, textFootprintPosition, textFootprintSize, textColor);
+                LabelRenderer.DrawLeftAligned(spriteBatch, ContentFont, LeftText, textFootprintPosition, textFootprintSize, textColor);
             }
 
             if (!string.IsNullOrEmpty(RightText))
             {
-                GlyphRenderer.DrawRightAligned(spriteBatch, ContentFont, RightText, textFootprintPosition, textFootprintSize, textColor);
+                LabelRenderer.DrawRightAligned(spriteBatch, ContentFont, RightText, textFootprintPosition, textFootprintSize, textColor);
             }
         }
     }

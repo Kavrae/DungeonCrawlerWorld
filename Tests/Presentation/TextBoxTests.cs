@@ -17,7 +17,7 @@ namespace Tests.Presentation;
 [TestClass]
 public sealed class TextBoxTests
 {
-    private static ElementPoolService CreateWindowService() => TestElementPoolServiceFactory.Create(new FontService("Fonts"), new GlyphRenderer());
+    private static ElementPoolService CreateWindowService() => TestElementPoolServiceFactory.Create(new FontService("Fonts"), new LabelRenderer());
 
     private static TextBox CreateTextBox(ElementPoolService windowService, bool multiline = false)
     {

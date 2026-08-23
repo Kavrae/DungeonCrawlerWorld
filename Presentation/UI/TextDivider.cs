@@ -16,8 +16,8 @@ namespace Presentation.UI;
 /// Configure, since different call sites want different values (e.g. ItemDetailsWindow's section
 /// headers use 90%/25%).
 /// </summary>
-public sealed class TextDivider(FontService fontService, ElementPoolService elementPoolService, GlyphRenderer glyphRenderer)
-    : Element(fontService, elementPoolService, glyphRenderer)
+public sealed class TextDivider(FontService fontService, ElementPoolService elementPoolService, LabelRenderer labelRenderer)
+    : Element(fontService, elementPoolService, labelRenderer)
 {
     private const float LineHeight = 1f;
 

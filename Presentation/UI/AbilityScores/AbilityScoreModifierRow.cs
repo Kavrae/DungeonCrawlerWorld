@@ -18,8 +18,8 @@ namespace Presentation.UI.AbilityScores;
 /// AbilityScoreWindow's hover popup reads. IsHovered mirrors AbilityScoreColumnHeader's own
 /// immediate highlight-on-hover.
 /// </summary>
-public sealed class AbilityScoreModifierRow(FontService fontService, ElementPoolService elementPoolService, GlyphRenderer glyphRenderer)
-    : Element(fontService, elementPoolService, glyphRenderer)
+public sealed class AbilityScoreModifierRow(FontService fontService, ElementPoolService elementPoolService, LabelRenderer labelRenderer)
+    : Element(fontService, elementPoolService, labelRenderer)
 {
     private const float FontFraction = 0.6f;
 
@@ -58,6 +58,6 @@ public sealed class AbilityScoreModifierRow(FontService fontService, ElementPool
         }
 
         var footprintSize = new Vector2(ContentSize.X - Padding, ContentSize.Y);
-        GlyphRenderer.DrawRightAligned(spriteBatch, _font, _text, ContentAbsolutePosition, footprintSize, TextColor);
+        LabelRenderer.DrawRightAligned(spriteBatch, _font, _text, ContentAbsolutePosition, footprintSize, TextColor);
     }
 }

@@ -44,7 +44,7 @@ public sealed class DragGhostContent(
     FontService fontService,
     SpriteSheetService spriteSheetService,
     SpriteRenderer spriteRenderer,
-    GlyphRenderer glyphRenderer) : IElementContent
+    LabelRenderer labelRenderer) : IElementContent
 {
     private const float GlyphSizeFraction = 0.6f;
 
@@ -99,7 +99,7 @@ public sealed class DragGhostContent(
         var mousePosition = state.CursorPosition;
 
         DragGhostRenderer.Draw(
-            _hostWindow.ElementPoolService.SpriteBatch, spriteSheetService, spriteRenderer, glyphRenderer, font,
+            _hostWindow.ElementPoolService.SpriteBatch, spriteSheetService, spriteRenderer, labelRenderer, font,
             sprite, glyph, glyphColor, new Vector2(mousePosition.X, mousePosition.Y), size);
     }
 }

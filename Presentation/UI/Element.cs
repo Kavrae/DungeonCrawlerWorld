@@ -151,8 +151,8 @@ public class Element
     public bool IsFocused => _isFocused;
 
     /*========Header========*/
-    /// <summary>Internal, not protected, for the same reason as WindowService/FontService -- Button uses this to center its label the same way GlyphRenderer centers map tile glyphs.</summary>
-    internal GlyphRenderer GlyphRenderer { get; }
+    /// <summary>Internal, not protected, for the same reason as WindowService/FontService -- Button uses this to center its label the same way LabelRenderer centers map tile glyphs.</summary>
+    internal LabelRenderer LabelRenderer { get; }
 
     /// <summary>
     /// Generic header-region bookkeeping -- see ElementHeaderState's own doc comment. Window's
@@ -256,14 +256,14 @@ public class Element
     protected Vector2 _maxScrollOffset;
     public Vector2 MaxScrollOffset => _maxScrollOffset;
 
-    public Element(FontService fontService, ElementPoolService elementPoolService, GlyphRenderer glyphRenderer)
+    public Element(FontService fontService, ElementPoolService elementPoolService, LabelRenderer labelRenderer)
     {
         ArgumentNullException.ThrowIfNull(fontService);
         ArgumentNullException.ThrowIfNull(elementPoolService);
-        ArgumentNullException.ThrowIfNull(glyphRenderer);
+        ArgumentNullException.ThrowIfNull(labelRenderer);
 
         FontService = fontService;
-        GlyphRenderer = glyphRenderer;
+        LabelRenderer = labelRenderer;
         _elementPoolService = elementPoolService;
     }
 

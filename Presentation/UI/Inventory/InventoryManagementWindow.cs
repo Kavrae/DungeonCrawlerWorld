@@ -35,14 +35,14 @@ namespace Presentation.UI.Inventory;
 public sealed class InventoryManagementWindow(
     FontService fontService,
     ElementPoolService elementPoolService,
-    GlyphRenderer glyphRenderer,
+    LabelRenderer labelRenderer,
     SpriteSheetService spriteSheetService,
     SpriteRenderer spriteRenderer,
     ComponentManager componentManager,
     ItemCatalog itemCatalog,
     World world,
     ContextMenuController contextMenuController,
-    MapViewState mapViewState) : Window(fontService, elementPoolService, glyphRenderer)
+    MapViewState mapViewState) : Window(fontService, elementPoolService, labelRenderer)
 {
     /// <summary>Dark grey background for both this window's own content area and TabbedContent's body window (see Configure) -- individual grid cells stay white-with-a-black-border (InventoryItemStackCell) so they read as distinct squares against it. Shared with AbilityScoreWindow's own background -- see WindowPalette.</summary>
     public static readonly Color BackgroundColor = WindowPalette.PanelBackgroundColor;
@@ -68,7 +68,7 @@ public sealed class InventoryManagementWindow(
 
         var tagCounts = InventoryTagQueries.GetTagCounts(componentManager, itemCatalog, entityId);
         _currentTags = ToTagSet(tagCounts);
-        _tabbedContent = new TabbedContent(BuildTabDefinitions(tagCounts), elementPoolService, fontService, glyphRenderer, BackgroundColor);
+        _tabbedContent = new TabbedContent(BuildTabDefinitions(tagCounts), elementPoolService, fontService, labelRenderer, BackgroundColor);
         SetContent(_tabbedContent);
 
         _tagVersionWatcher.HasChanged(CurrentInventoryVersion()); // Primes the baseline so the next Update doesn't immediately rebuild against the list just built above.
@@ -124,7 +124,7 @@ public sealed class InventoryManagementWindow(
 
     private InventoryTabContent CreateTabContent(Tag? filterTag)
     {
-        var gridContent = new InventoryGridContent(world, componentManager, itemCatalog, elementPoolService, fontService, glyphRenderer, spriteSheetService, spriteRenderer, contextMenuController, _entityId, filterTag, _hoverPopup, _getSecondaryTargetEntityId, mapViewState, _onItemSelected, _onCompareRequested);
-        return new InventoryTabContent(elementPoolService, fontService, glyphRenderer, gridContent);
+        var gridContent = new InventoryGridContent(world, componentManager, itemCatalog, elementPoolService, fontService, labelRenderer, spriteSheetService, spriteRenderer, contextMenuController, _entityId, filterTag, _hoverPopup, _getSecondaryTargetEntityId, mapViewState, _onItemSelected, _onCompareRequested);
+        return new InventoryTabContent(elementPoolService, fontService, labelRenderer, gridContent);
     }
 }

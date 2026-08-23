@@ -27,8 +27,8 @@ namespace Presentation.UI;
 /// call just to keep winning draw order against them -- that's gone now; the tier itself
 /// guarantees it.
 /// </summary>
-public sealed class Tooltip(FontService fontService, ElementPoolService elementPoolService, GlyphRenderer glyphRenderer)
-    : TextWindow(fontService, elementPoolService, glyphRenderer)
+public sealed class Tooltip(FontService fontService, ElementPoolService elementPoolService, LabelRenderer labelRenderer)
+    : TextWindow(fontService, elementPoolService, labelRenderer)
 {
     /// <summary>Repositions and shows this popup next to target -- a titleText bar only if titleText is supplied (toggled dynamically since one shared instance may be used both with and without a titleText across calls, e.g. AbilityScoreWindow's score-description vs. modifier-source popups). Call every frame the same thing should stay hovered -- cheap no-op churn, the same idiom every current caller (AbilityScoreWindow, InventoryGridContent, HotbarController) already uses for its own hover-driven popup.</summary>
     public void ShowNear(Rectangle target, PopupAnchor anchor, Vector2 gap, string bodyText, string? titleText = null)

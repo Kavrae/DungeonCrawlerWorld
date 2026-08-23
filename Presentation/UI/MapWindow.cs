@@ -68,7 +68,7 @@ public sealed class MapWindow : Window
     private readonly DirectComponentPool<DisplayTextComponent> _displayTextPool;
 
     private readonly TileRenderer _tileRenderer;
-    private readonly GlyphRenderer _glyphRenderer;
+    private readonly LabelRenderer _labelRenderer;
     private readonly SpriteSheetService _spriteSheetService;
     private readonly SpriteRenderer _spriteRenderer;
 
@@ -143,14 +143,14 @@ public sealed class MapWindow : Window
         ActionCatalog actionCatalog,
         ItemCatalog itemCatalog,
         TileRenderer tileRenderer,
-        GlyphRenderer glyphRenderer,
+        LabelRenderer labelRenderer,
         SpriteSheetService spriteSheetService,
         SpriteRenderer spriteRenderer,
         MapCamera camera,
         ActionTargetingController actionTargeting,
         PlayerMovementController playerMovement,
         ContextMenuController contextMenuController,
-        PackedComponentPool<ActionLockComponent> actionLockPool) : base(fontService, elementPoolService, glyphRenderer)
+        PackedComponentPool<ActionLockComponent> actionLockPool) : base(fontService, elementPoolService, labelRenderer)
     {
         ArgumentNullException.ThrowIfNull(world);
         ArgumentNullException.ThrowIfNull(mapViewState);
@@ -159,7 +159,7 @@ public sealed class MapWindow : Window
         ArgumentNullException.ThrowIfNull(actionCatalog);
         ArgumentNullException.ThrowIfNull(itemCatalog);
         ArgumentNullException.ThrowIfNull(tileRenderer);
-        ArgumentNullException.ThrowIfNull(glyphRenderer);
+        ArgumentNullException.ThrowIfNull(labelRenderer);
         ArgumentNullException.ThrowIfNull(spriteSheetService);
         ArgumentNullException.ThrowIfNull(spriteRenderer);
         ArgumentNullException.ThrowIfNull(camera);
@@ -190,7 +190,7 @@ public sealed class MapWindow : Window
         _actionLockPool = actionLockPool;
         _displayTextPool = componentManager.GetDirectPool<DisplayTextComponent>();
         _tileRenderer = tileRenderer;
-        _glyphRenderer = glyphRenderer;
+        _labelRenderer = labelRenderer;
         _spriteSheetService = spriteSheetService;
         _spriteRenderer = spriteRenderer;
 
@@ -549,7 +549,7 @@ public sealed class MapWindow : Window
         var glyphColor = isDead ? Color.Gray : glyphComponent.GlyphColor;
         var spriteTint = isDead ? Color.Gray : Color.White;
 
-        return SpriteOrGlyphRenderer.Draw(spriteBatch, _spriteSheetService, _spriteRenderer, _glyphRenderer, sprite, font, glyph, glyphColor, footprintTopLeft, footprintSize, spriteTint, alphaMultiplier);
+        return SpriteOrGlyphRenderer.Draw(spriteBatch, _spriteSheetService, _spriteRenderer, _labelRenderer, sprite, font, glyph, glyphColor, footprintTopLeft, footprintSize, spriteTint, alphaMultiplier, outline: true);
     }
 
     private void DrawTerrainGlyph(SpriteBatch spriteBatch, TerrainLayer? terrainLayer, int mapNodeX, int mapNodeY, Vector2 tileOrigin)
@@ -699,7 +699,7 @@ public sealed class MapWindow : Window
         var badgeSize = new Vector2(_camera.CurrentTileSize.X, _camera.CurrentTileSize.Y) * LootBagBadgeSizeFraction;
         var badgePosition = new Vector2(footprintTopLeft.X + footprintSize.X - badgeSize.X, footprintTopLeft.Y);
 
-        SpriteOrGlyphRenderer.Draw(spriteBatch, _spriteSheetService, _spriteRenderer, _glyphRenderer, lootBagSprite, _badgeFont, string.Empty, tint, badgePosition, badgeSize, tint);
+        SpriteOrGlyphRenderer.Draw(spriteBatch, _spriteSheetService, _spriteRenderer, _labelRenderer, lootBagSprite, _badgeFont, string.Empty, tint, badgePosition, badgeSize, tint, outline: true);
     }
 
     private void DrawEntityIcons(SpriteBatch spriteBatch, Texture2D unitRectangle, int entityId, Vector2 footprintTopLeft, Vector2 footprintSize)
@@ -802,13 +802,13 @@ public sealed class MapWindow : Window
         if (hasHigherLayer)
         {
             var drawPosition = new Vector2(tileOrigin.X + _camera.CurrentTileSize.X - _badgeFont.LineHeight, tileOrigin.Y);
-            _glyphRenderer.Draw(spriteBatch, _badgeFont, "^", drawPosition, UpLayerBadgeColor);
+            _labelRenderer.Draw(spriteBatch, _badgeFont, "^", drawPosition, UpLayerBadgeColor, outline: true);
         }
 
         if (hasLowerLayer)
         {
             var drawPosition = new Vector2(tileOrigin.X + _camera.CurrentTileSize.X - _badgeFont.LineHeight, tileOrigin.Y + _camera.CurrentTileSize.Y - _badgeFont.LineHeight);
-            _glyphRenderer.Draw(spriteBatch, _badgeFont, "v", drawPosition, DownLayerBadgeColor);
+            _labelRenderer.Draw(spriteBatch, _badgeFont, "v", drawPosition, DownLayerBadgeColor, outline: true);
         }
     }
 

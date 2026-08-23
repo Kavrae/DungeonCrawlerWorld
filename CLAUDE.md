@@ -48,7 +48,7 @@ dotnet run --project DungeonCrawlerWorld/DungeonCrawlerWorld.csproj
 - `CompositeBlueprint`: ordered parts (e.g. race, then class) + optional `overrides` delegate. Later parts run after earlier — order matters for adjustments.
 
 ## Presentation
-- `PresentationBootstrapper`: fixed service set (FontService, SpriteBatchRenderer, GlyphRenderer, TileRenderer, WindowService) — no module system (set is static).
+- `PresentationBootstrapper`: fixed service set (FontService, SpriteBatchRenderer, LabelRenderer, TileRenderer, WindowService) — no module system (set is static).
 - UI: `Window`/`WindowService`/`MapWindow`, content panes (`InspectionWindowContent`, `DebugWindowContent`). `NotificationCenter` can block gameplay update for a frame (checked in `GameLoop.Update` before `EcsContext` advances).
 - Core design principles: remove ambiguity, remove unexpected actions. When an interaction could mean more than one thing (e.g. a drag with no single underlying identity to act on), don't guess — either resolve it to something concrete first, or refuse it outright with clear feedback (a disabled cursor, a no-op) rather than doing something the player didn't ask for.
 

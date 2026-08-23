@@ -24,8 +24,8 @@ namespace Presentation.UI;
 /// only -- a context-menu-driven picker is deliberately deferred, see TODO.md's "Advanced sort
 /// control".
 /// </summary>
-public sealed class GridControl(FontService fontService, ElementPoolService elementPoolService, GlyphRenderer glyphRenderer)
-    : Window(fontService, elementPoolService, glyphRenderer)
+public sealed class GridControl(FontService fontService, ElementPoolService elementPoolService, LabelRenderer labelRenderer)
+    : Window(fontService, elementPoolService, labelRenderer)
 {
     public const float RowHeight = 24f;
 

@@ -19,7 +19,7 @@ public sealed class ActionLockContent(World world, ComponentManager componentMan
 
     private readonly PackedComponentPool<ActionLockComponent> _actionLocks = componentManager.GetPackedPool<ActionLockComponent>();
     private readonly DirectComponentPool<GlyphComponent> _glyphs = componentManager.GetDirectPool<GlyphComponent>();
-    private readonly RadialFillRenderer _radialFill = new(new GlyphRenderer());
+    private readonly RadialFillRenderer _radialFill = new(new LabelRenderer());
 
     private Window _hostWindow = null!;
     private SpriteFontBase _font = null!;

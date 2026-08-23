@@ -24,7 +24,7 @@ namespace Presentation.UI;
 /// instead (replacing any active selection first), but only when Multiline -- a
 /// single-line box treats Shift+Enter the same as a plain Enter.
 /// </summary>
-public sealed class TextBox(FontService fontService, ElementPoolService elementPoolService, GlyphRenderer glyphRenderer, CursorTextContent? cursorTextContent = null, ContextMenuController? contextMenuController = null) : TextWindow(fontService, elementPoolService, glyphRenderer)
+public sealed class TextBox(FontService fontService, ElementPoolService elementPoolService, LabelRenderer labelRenderer, CursorTextContent? cursorTextContent = null, ContextMenuController? contextMenuController = null) : TextWindow(fontService, elementPoolService, labelRenderer)
 {
     private static readonly Color FocusIndicatorColor = Color.Gold;
     private static readonly BorderThickness FocusIndicatorThickness = BorderThickness.Uniform(new Vector2(2, 2));

@@ -45,7 +45,7 @@ public sealed class PlayerStatusEffectsContent(World world, ComponentManager com
 
     private readonly MultiComponentPool<StatusEffectStack> _statusEffectStacks = componentManager.GetMultiPool<StatusEffectStack>();
     private readonly PackedComponentPool<PotionCooldownComponent> _potionCooldowns = componentManager.GetPackedPool<PotionCooldownComponent>();
-    private readonly GlyphRenderer _glyphRenderer = new();
+    private readonly LabelRenderer _labelRenderer = new();
     private readonly List<StatusEffectType> _activeEffectTypes = [];
 
     /// <summary>Poison/Burning's own current stack counts, keyed by type -- only ever holds entries for types that actually want a count shown (see DrawIcon's own Poison/Burning check, mirrored in RefreshStatusEffectState below).</summary>
@@ -121,7 +121,7 @@ public sealed class PlayerStatusEffectsContent(World world, ComponentManager com
     {
         DrawIconBackground(spriteBatch, unitRectangle, origin, size);
 
-        _glyphRenderer.DrawCentered(spriteBatch, _font, GetGlyph(effectType), origin, size, GetColor(effectType));
+        _labelRenderer.DrawCentered(spriteBatch, _font, GetGlyph(effectType), origin, size, GetColor(effectType));
 
         if (_stackCountsByType.TryGetValue(effectType, out var stackCount))
         {
@@ -135,7 +135,7 @@ public sealed class PlayerStatusEffectsContent(World world, ComponentManager com
 
         if (itemCatalog.TryGet(HealthPotion.Id, out var healthPotion))
         {
-            _glyphRenderer.DrawCentered(spriteBatch, _font, healthPotion.Glyph, origin, size, healthPotion.GlyphColor);
+            _labelRenderer.DrawCentered(spriteBatch, _font, healthPotion.Glyph, origin, size, healthPotion.GlyphColor);
         }
 
         DrawTextBelowIcon(spriteBatch, origin, size, PotionCooldownEffects.RemainingSeconds(framesRemaining).ToString());

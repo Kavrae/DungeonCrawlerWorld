@@ -16,8 +16,8 @@ namespace Presentation.UI.Content;
 /// sprite/glyph directly rather than resolving them from an entity's own component pools -- an
 /// item has no entity id of its own to look up.
 /// </summary>
-public sealed class ItemIconElement(FontService fontService, ElementPoolService elementPoolService, GlyphRenderer glyphRenderer, SpriteSheetService spriteSheetService, SpriteRenderer spriteRenderer)
-    : Element(fontService, elementPoolService, glyphRenderer)
+public sealed class ItemIconElement(FontService fontService, ElementPoolService elementPoolService, LabelRenderer labelRenderer, SpriteSheetService spriteSheetService, SpriteRenderer spriteRenderer)
+    : Element(fontService, elementPoolService, labelRenderer)
 {
     private const float GlyphFontSizeFraction = 0.8f;
 
@@ -38,6 +38,6 @@ public sealed class ItemIconElement(FontService fontService, ElementPoolService 
     {
         SpriteComponent? sprite = _spriteName is not null && SpriteManifest.TryGet(_spriteName, out var spriteComponent) ? spriteComponent : null;
 
-        SpriteOrGlyphRenderer.Draw(ElementPoolService.SpriteBatch, spriteSheetService, spriteRenderer, GlyphRenderer, sprite, _glyphFont, _glyph, _glyphColor, ContentAbsolutePosition, ContentSize, Color.White);
+        SpriteOrGlyphRenderer.Draw(ElementPoolService.SpriteBatch, spriteSheetService, spriteRenderer, LabelRenderer, sprite, _glyphFont, _glyph, _glyphColor, ContentAbsolutePosition, ContentSize, Color.White);
     }
 }

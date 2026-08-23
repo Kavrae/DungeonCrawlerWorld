@@ -105,7 +105,7 @@ public sealed class HotbarContent(
     private readonly PackedComponentPool<PotionCooldownComponent> _potionCooldowns = componentManager.GetPackedPool<PotionCooldownComponent>();
     private readonly PackedComponentPool<ManaComponent> _mana = componentManager.GetPackedPool<ManaComponent>();
     private readonly PackedComponentPool<HotkeyExpansionUnlockComponent> _hotkeyExpansionUnlocks = componentManager.GetPackedPool<HotkeyExpansionUnlockComponent>();
-    private readonly RadialFillRenderer _radialFill = new(new GlyphRenderer(), spriteSheetService, spriteRenderer);
+    private readonly RadialFillRenderer _radialFill = new(new LabelRenderer(), spriteSheetService, spriteRenderer);
 
     private Window _hostWindow = null!;
     private SpriteFontBase _font = null!;

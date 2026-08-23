@@ -87,8 +87,8 @@ public class Window : Element
     public Vector2 TitleAbsolutePosition => HeaderAbsolutePosition;
     public Rectangle TitleRectangle => HeaderRectangle;
 
-    public Window(FontService fontService, ElementPoolService windowService, GlyphRenderer glyphRenderer)
-        : base(fontService, windowService, glyphRenderer)
+    public Window(FontService fontService, ElementPoolService windowService, LabelRenderer labelRenderer)
+        : base(fontService, windowService, labelRenderer)
     {
         TitleFont = fontService.GetFont(12);
     }

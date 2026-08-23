@@ -79,8 +79,8 @@ public static class ShellBootstrapper
             componentManager.GetPackedPool<MovementComponent>());
 
         //TODO look at pulling these contents into a new context if it continues to grow.
-        var cursorTextContent = new CursorTextContent(presentation.FontService, presentation.GlyphRenderer);
-        var dragGhostContent = new DragGhostContent(world, actionCatalog, itemCatalog, componentManager.GetMultiPool<InventoryItemStackComponent>(), presentation.FontService, presentation.SpriteSheetService, presentation.SpriteRenderer, presentation.GlyphRenderer);
+        var cursorTextContent = new CursorTextContent(presentation.FontService, presentation.LabelRenderer);
+        var dragGhostContent = new DragGhostContent(world, actionCatalog, itemCatalog, componentManager.GetMultiPool<InventoryItemStackComponent>(), presentation.FontService, presentation.SpriteSheetService, presentation.SpriteRenderer, presentation.LabelRenderer);
         var contextMenuController = new ContextMenuController(presentation.ElementPoolService);
 
         ElementFactoryRegistry.RegisterAll(presentation, ecsContext, actionCatalog, itemCatalog, world, mapViewState, camera, actionTargeting, playerMovement, cursorTextContent, contextMenuController);
@@ -360,7 +360,7 @@ public static class ShellBootstrapper
         notificationCenter.Initialize();
 
         var inventory = new InventoryFolderController(
-            presentation.ElementPoolService, world, ecsContext.ComponentManager, presentation.FontService, presentation.GlyphRenderer,
+            presentation.ElementPoolService, world, ecsContext.ComponentManager, presentation.FontService, presentation.LabelRenderer,
             presentation.SpriteSheetService, presentation.SpriteRenderer, itemCatalog, mapWindow, contextMenuController);
         inventory.Initialize(layers);
 

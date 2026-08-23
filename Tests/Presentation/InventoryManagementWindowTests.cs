@@ -41,14 +41,14 @@ public sealed class InventoryManagementWindowTests
         InventoryActions.AddItem(componentManager, EntityId, firstItemId, quantity: 1);
 
         var fontService = new FontService("Fonts");
-        var glyphRenderer = new GlyphRenderer();
-        var windowService = TestElementPoolServiceFactory.Create(fontService, glyphRenderer);
+        var labelRenderer = new LabelRenderer();
+        var windowService = TestElementPoolServiceFactory.Create(fontService, labelRenderer);
         var spriteSheetService = new SpriteSheetService(null, "Spritesheets");
         var spriteRenderer = new SpriteRenderer();
-        windowService.RegisterFactory<InventoryItemStackCell>(() => new InventoryItemStackCell(fontService, windowService, glyphRenderer, spriteSheetService, spriteRenderer));
-        windowService.RegisterFactory<GridControl>(() => new GridControl(fontService, windowService, glyphRenderer));
-        windowService.RegisterFactory<Toggle>(() => new Toggle(fontService, windowService, glyphRenderer));
-        windowService.RegisterFactory<Tooltip>(() => new Tooltip(fontService, windowService, glyphRenderer));
+        windowService.RegisterFactory<InventoryItemStackCell>(() => new InventoryItemStackCell(fontService, windowService, labelRenderer, spriteSheetService, spriteRenderer));
+        windowService.RegisterFactory<GridControl>(() => new GridControl(fontService, windowService, labelRenderer));
+        windowService.RegisterFactory<Toggle>(() => new Toggle(fontService, windowService, labelRenderer));
+        windowService.RegisterFactory<Tooltip>(() => new Tooltip(fontService, windowService, labelRenderer));
 
         var world = new Game.World.World(new Game.World.Map(new Vector3Int(10, 10, 1)));
         var contextMenuController = new ContextMenuController(windowService);
@@ -56,7 +56,7 @@ public sealed class InventoryManagementWindowTests
         var mapViewState = new MapViewState();
 
         windowService.RegisterFactory<InventoryManagementWindow>(() => new InventoryManagementWindow(
-            fontService, windowService, glyphRenderer, spriteSheetService, spriteRenderer, componentManager, itemCatalog, world, contextMenuController, mapViewState));
+            fontService, windowService, labelRenderer, spriteSheetService, spriteRenderer, componentManager, itemCatalog, world, contextMenuController, mapViewState));
 
         var hoverPopup = windowService.CreateElement<Tooltip>(null, new ElementOptions
         {

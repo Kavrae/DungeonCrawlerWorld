@@ -17,7 +17,7 @@ namespace Presentation.UI.Content;
 /// live mouse position rather than relative to any window's own bounds, and User is the topmost
 /// tier, so this always renders above whatever it's reporting on.
 /// </summary>
-public sealed class CursorTextContent(FontService fontService, GlyphRenderer glyphRenderer) : IElementContent
+public sealed class CursorTextContent(FontService fontService, LabelRenderer labelRenderer) : IElementContent
 {
     /// <summary>
     /// How DrawContent finds the live cursor position -- assigned once ShellBootstrapper.Build
@@ -109,6 +109,6 @@ public sealed class CursorTextContent(FontService fontService, GlyphRenderer gly
     private void DrawAt(Point mousePosition, float alpha)
     {
         var position = new Vector2(mousePosition.X, mousePosition.Y) + CursorOffset;
-        glyphRenderer.Draw(_hostWindow.ElementPoolService.SpriteBatch, _font, _text, position, TextColor * alpha);
+        labelRenderer.Draw(_hostWindow.ElementPoolService.SpriteBatch, _font, _text, position, TextColor * alpha);
     }
 }

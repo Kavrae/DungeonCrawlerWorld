@@ -45,7 +45,7 @@ public sealed class UiInputControllerTests
     private static MouseState MouseAtWithRightButton(int x, int y, ButtonState rightButton) =>
         new(x, y, 0, ButtonState.Released, ButtonState.Released, rightButton, ButtonState.Released, ButtonState.Released);
 
-    private static ElementPoolService CreateWindowService() => TestElementPoolServiceFactory.Create(new FontService("Fonts"), new GlyphRenderer());
+    private static ElementPoolService CreateWindowService() => TestElementPoolServiceFactory.Create(new FontService("Fonts"), new LabelRenderer());
 
     /// <summary>
     /// Test-only convenience matching UiInputController's old four-list constructor shape --
@@ -80,7 +80,7 @@ public sealed class UiInputControllerTests
     }
 
     /// <summary>Records HandleRightDragStart/HandleRightDrag calls, so UiInputController's right-button wiring (hit-test on press, total-delta-since-start on every held frame) can be verified end-to-end without a real MapWindow.</summary>
-    private sealed class RightDragSpyWindow(FontService fontService, ElementPoolService windowService, GlyphRenderer glyphRenderer) : Window(fontService, windowService, glyphRenderer)
+    private sealed class RightDragSpyWindow(FontService fontService, ElementPoolService windowService, LabelRenderer labelRenderer) : Window(fontService, windowService, labelRenderer)
     {
         public int DragStartCallCount { get; private set; }
         public int DragEndCallCount { get; private set; }
@@ -100,7 +100,7 @@ public sealed class UiInputControllerTests
 
     private static RightDragSpyWindow CreateRightDragSpyWindow(ElementPoolService windowService, FontService fontService, Vector2 relativePosition)
     {
-        windowService.RegisterFactory<RightDragSpyWindow>(() => new RightDragSpyWindow(fontService, windowService, new GlyphRenderer()));
+        windowService.RegisterFactory<RightDragSpyWindow>(() => new RightDragSpyWindow(fontService, windowService, new LabelRenderer()));
         var window = windowService.CreateElement<RightDragSpyWindow>(null, new ElementOptions
         {
             Layout = new ElementLayoutOptions { RelativePosition = relativePosition, Size = new Vector2(200, 100), DisplayMode = ElementDisplayMode.Fixed },
@@ -983,7 +983,7 @@ public sealed class UiInputControllerTests
     public void RightMouseDrag_ReportsTotalDeltaSinceStart_ToTheWindowUnderTheCursor()
     {
         var fontService = new FontService("Fonts");
-        var windowService = TestElementPoolServiceFactory.Create(fontService, new GlyphRenderer());
+        var windowService = TestElementPoolServiceFactory.Create(fontService, new LabelRenderer());
         var window = CreateRightDragSpyWindow(windowService, fontService, new Vector2(0, 0));
         var controller = CreateController([window], [], [], [], LargeScreenSize);
 
@@ -1006,7 +1006,7 @@ public sealed class UiInputControllerTests
     public void RightMouseDrag_ReleasingThenPressingAgain_StartsAFreshDrag()
     {
         var fontService = new FontService("Fonts");
-        var windowService = TestElementPoolServiceFactory.Create(fontService, new GlyphRenderer());
+        var windowService = TestElementPoolServiceFactory.Create(fontService, new LabelRenderer());
         var window = CreateRightDragSpyWindow(windowService, fontService, new Vector2(0, 0));
         var controller = CreateController([window], [], [], [], LargeScreenSize);
 
@@ -1030,7 +1030,7 @@ public sealed class UiInputControllerTests
     public void RightMouseDrag_Releasing_FiresDragEndOnce()
     {
         var fontService = new FontService("Fonts");
-        var windowService = TestElementPoolServiceFactory.Create(fontService, new GlyphRenderer());
+        var windowService = TestElementPoolServiceFactory.Create(fontService, new LabelRenderer());
         var window = CreateRightDragSpyWindow(windowService, fontService, new Vector2(0, 0));
         var controller = CreateController([window], [], [], [], LargeScreenSize);
 
@@ -1050,7 +1050,7 @@ public sealed class UiInputControllerTests
     public void RightMouseClick_NoMovement_FiresRightClickTapInsteadOfDragEnd()
     {
         var fontService = new FontService("Fonts");
-        var windowService = TestElementPoolServiceFactory.Create(fontService, new GlyphRenderer());
+        var windowService = TestElementPoolServiceFactory.Create(fontService, new LabelRenderer());
         var window = CreateRightDragSpyWindow(windowService, fontService, new Vector2(0, 0));
         var controller = CreateController([window], [], [], [], LargeScreenSize);
 
@@ -1067,14 +1067,14 @@ public sealed class UiInputControllerTests
     public void RightClickTextBoxThenClickContextMenuOption_InvokesTheOption()
     {
         var fontService = new FontService("Fonts");
-        var glyphRenderer = new GlyphRenderer();
-        var windowService = TestElementPoolServiceFactory.Create(fontService, glyphRenderer);
+        var labelRenderer = new LabelRenderer();
+        var windowService = TestElementPoolServiceFactory.Create(fontService, labelRenderer);
         var layers = new UiLayerStack();
 
         var contextMenuController = new ContextMenuController(windowService);
         contextMenuController.Initialize(layers);
 
-        windowService.RegisterFactory<TextBox>(() => new TextBox(fontService, windowService, glyphRenderer, null, contextMenuController));
+        windowService.RegisterFactory<TextBox>(() => new TextBox(fontService, windowService, labelRenderer, null, contextMenuController));
         var textBox = windowService.CreateElement<TextBox>(null, new ElementOptions
         {
             Layout = new ElementLayoutOptions { RelativePosition = new Vector2(50, 50), Size = new Vector2(200, 30), DisplayMode = ElementDisplayMode.Fixed },
@@ -1119,8 +1119,8 @@ public sealed class UiInputControllerTests
     public void RightClickTextBoxInsideMenuWindowThenClickContextMenuOption_InvokesTheOption()
     {
         var fontService = new FontService("Fonts");
-        var glyphRenderer = new GlyphRenderer();
-        var windowService = TestElementPoolServiceFactory.Create(fontService, glyphRenderer);
+        var labelRenderer = new LabelRenderer();
+        var windowService = TestElementPoolServiceFactory.Create(fontService, labelRenderer);
         var layers = new UiLayerStack();
 
         var contextMenuController = new ContextMenuController(windowService);
@@ -1135,7 +1135,7 @@ public sealed class UiInputControllerTests
         layers.Add(UiLayer.DynamicHud, parentWindow);
         layers.OpenMenuWindow(parentWindow); // Simulates Inventory's own "same Menu Mode" wiring.
 
-        windowService.RegisterFactory<TextBox>(() => new TextBox(fontService, windowService, glyphRenderer, null, contextMenuController));
+        windowService.RegisterFactory<TextBox>(() => new TextBox(fontService, windowService, labelRenderer, null, contextMenuController));
         var textBox = windowService.CreateElement<TextBox>(parentWindow, new ElementOptions
         {
             Layout = new ElementLayoutOptions { RelativePosition = new Vector2(50, 50), Size = new Vector2(200, 30), DisplayMode = ElementDisplayMode.Fixed },
@@ -1176,7 +1176,7 @@ public sealed class UiInputControllerTests
     public void RightMouseClick_MovementBelowTapThreshold_StillFiresRightClickTap()
     {
         var fontService = new FontService("Fonts");
-        var windowService = TestElementPoolServiceFactory.Create(fontService, new GlyphRenderer());
+        var windowService = TestElementPoolServiceFactory.Create(fontService, new LabelRenderer());
         var window = CreateRightDragSpyWindow(windowService, fontService, new Vector2(0, 0));
         var controller = CreateController([window], [], [], [], LargeScreenSize);
 
@@ -1195,7 +1195,7 @@ public sealed class UiInputControllerTests
     public void RightMouseDrag_MovementPastTapThreshold_FiresDragEndNotRightClickTap()
     {
         var fontService = new FontService("Fonts");
-        var windowService = TestElementPoolServiceFactory.Create(fontService, new GlyphRenderer());
+        var windowService = TestElementPoolServiceFactory.Create(fontService, new LabelRenderer());
         var window = CreateRightDragSpyWindow(windowService, fontService, new Vector2(0, 0));
         var controller = CreateController([window], [], [], [], LargeScreenSize);
 
@@ -1214,7 +1214,7 @@ public sealed class UiInputControllerTests
     public void RightMouseDrag_WandersPastThresholdThenBackToStart_StillFiresDragEndNotRightClickTap()
     {
         var fontService = new FontService("Fonts");
-        var windowService = TestElementPoolServiceFactory.Create(fontService, new GlyphRenderer());
+        var windowService = TestElementPoolServiceFactory.Create(fontService, new LabelRenderer());
         var window = CreateRightDragSpyWindow(windowService, fontService, new Vector2(0, 0));
         var controller = CreateController([window], [], [], [], LargeScreenSize);
 
@@ -2062,10 +2062,10 @@ public sealed class UiInputControllerTests
         var stackInstanceId = InventoryActions.AddItem(componentManager, playerEntityId, itemId, quantity: 1);
 
         var fontService = new FontService("Fonts");
-        var glyphRenderer = new GlyphRenderer();
-        var windowService = TestElementPoolServiceFactory.Create(fontService, glyphRenderer);
+        var labelRenderer = new LabelRenderer();
+        var windowService = TestElementPoolServiceFactory.Create(fontService, labelRenderer);
         windowService.RegisterFactory<InventoryItemStackCell>(() => new InventoryItemStackCell(
-            fontService, windowService, glyphRenderer, new SpriteSheetService(null, "Spritesheets"), new SpriteRenderer()));
+            fontService, windowService, labelRenderer, new SpriteSheetService(null, "Spritesheets"), new SpriteRenderer()));
 
         var cell = windowService.CreateElement<InventoryItemStackCell>(null, new ElementOptions
         {
@@ -2113,10 +2113,10 @@ public sealed class UiInputControllerTests
         var stackInstanceId = InventoryActions.AddItem(componentManager, corpseEntityId, itemId, quantity: 1);
 
         var fontService = new FontService("Fonts");
-        var glyphRenderer = new GlyphRenderer();
-        var windowService = TestElementPoolServiceFactory.Create(fontService, glyphRenderer);
+        var labelRenderer = new LabelRenderer();
+        var windowService = TestElementPoolServiceFactory.Create(fontService, labelRenderer);
         windowService.RegisterFactory<InventoryItemStackCell>(() => new InventoryItemStackCell(
-            fontService, windowService, glyphRenderer, new SpriteSheetService(null, "Spritesheets"), new SpriteRenderer()));
+            fontService, windowService, labelRenderer, new SpriteSheetService(null, "Spritesheets"), new SpriteRenderer()));
 
         var cell = windowService.CreateElement<InventoryItemStackCell>(null, new ElementOptions
         {
@@ -2327,12 +2327,12 @@ public sealed class UiInputControllerTests
         InventoryActions.AddItem(componentManager, sourceEntityId, itemId, quantity: 1);
 
         var fontService = new FontService("Fonts");
-        var glyphRenderer = new GlyphRenderer();
-        var windowService = TestElementPoolServiceFactory.Create(fontService, glyphRenderer);
+        var labelRenderer = new LabelRenderer();
+        var windowService = TestElementPoolServiceFactory.Create(fontService, labelRenderer);
         var spriteSheetService = new SpriteSheetService(null, "Spritesheets");
         var spriteRenderer = new SpriteRenderer();
-        windowService.RegisterFactory<InventoryItemStackCell>(() => new InventoryItemStackCell(fontService, windowService, glyphRenderer, spriteSheetService, spriteRenderer));
-        windowService.RegisterFactory<Tooltip>(() => new Tooltip(fontService, windowService, glyphRenderer));
+        windowService.RegisterFactory<InventoryItemStackCell>(() => new InventoryItemStackCell(fontService, windowService, labelRenderer, spriteSheetService, spriteRenderer));
+        windowService.RegisterFactory<Tooltip>(() => new Tooltip(fontService, windowService, labelRenderer));
         var hoverPopup = windowService.CreateElement<Tooltip>(null, new ElementOptions
         {
             Layout = new ElementLayoutOptions { RelativePosition = Vector2.Zero, MaximumSize = new Vector2(220, 220), DisplayMode = ElementDisplayMode.WrapContent, IsVisible = false },
@@ -2353,7 +2353,7 @@ public sealed class UiInputControllerTests
                 Layout = new ElementLayoutOptions { RelativePosition = position, Size = new Vector2(200, 200), DisplayMode = ElementDisplayMode.Fixed },
                 Chrome = new ElementChromeOptions { ShowBorder = true, CanUserFocus = false },
             });
-            window.SetContent(new InventoryGridContent(world, componentManager, itemCatalog, windowService, fontService, glyphRenderer, spriteSheetService, spriteRenderer, contextMenuController, entityId, filterTag: null, hoverPopup, static () => null, mapViewState, static (_, _) => { }, static (_, _) => { }));
+            window.SetContent(new InventoryGridContent(world, componentManager, itemCatalog, windowService, fontService, labelRenderer, spriteSheetService, spriteRenderer, contextMenuController, entityId, filterTag: null, hoverPopup, static () => null, mapViewState, static (_, _) => { }, static (_, _) => { }));
             window.Initialize();
             return window;
         }
@@ -2426,14 +2426,14 @@ public sealed class UiInputControllerTests
         InventoryActions.AddItem(componentManager, sourceEntityId, itemId, quantity: 1);
 
         var fontService = new FontService("Fonts");
-        var glyphRenderer = new GlyphRenderer();
-        var windowService = TestElementPoolServiceFactory.Create(fontService, glyphRenderer);
+        var labelRenderer = new LabelRenderer();
+        var windowService = TestElementPoolServiceFactory.Create(fontService, labelRenderer);
         var spriteSheetService = new SpriteSheetService(null, "Spritesheets");
         var spriteRenderer = new SpriteRenderer();
-        windowService.RegisterFactory<InventoryItemStackCell>(() => new InventoryItemStackCell(fontService, windowService, glyphRenderer, spriteSheetService, spriteRenderer));
-        windowService.RegisterFactory<GridControl>(() => new GridControl(fontService, windowService, glyphRenderer));
-        windowService.RegisterFactory<Toggle>(() => new Toggle(fontService, windowService, glyphRenderer));
-        windowService.RegisterFactory<Tooltip>(() => new Tooltip(fontService, windowService, glyphRenderer));
+        windowService.RegisterFactory<InventoryItemStackCell>(() => new InventoryItemStackCell(fontService, windowService, labelRenderer, spriteSheetService, spriteRenderer));
+        windowService.RegisterFactory<GridControl>(() => new GridControl(fontService, windowService, labelRenderer));
+        windowService.RegisterFactory<Toggle>(() => new Toggle(fontService, windowService, labelRenderer));
+        windowService.RegisterFactory<Tooltip>(() => new Tooltip(fontService, windowService, labelRenderer));
 
         var world = new Game.World.World(new Game.World.Map(new Vector3Int(10, 10, 1)));
         var contextMenuController = new ContextMenuController(windowService);
@@ -2441,7 +2441,7 @@ public sealed class UiInputControllerTests
         var mapViewState = new MapViewState();
 
         windowService.RegisterFactory<InventoryManagementWindow>(() => new InventoryManagementWindow(
-            fontService, windowService, glyphRenderer, spriteSheetService, spriteRenderer, componentManager, itemCatalog, world, contextMenuController, mapViewState));
+            fontService, windowService, labelRenderer, spriteSheetService, spriteRenderer, componentManager, itemCatalog, world, contextMenuController, mapViewState));
 
         var hoverPopup = windowService.CreateElement<Tooltip>(null, new ElementOptions
         {
@@ -2456,7 +2456,7 @@ public sealed class UiInputControllerTests
             Layout = new ElementLayoutOptions { RelativePosition = new Vector2(0, 0), Size = new Vector2(200, 200), DisplayMode = ElementDisplayMode.Fixed },
             Chrome = new ElementChromeOptions { ShowBorder = true, CanUserFocus = false },
         });
-        sourceGridWindow.SetContent(new InventoryGridContent(world, componentManager, itemCatalog, windowService, fontService, glyphRenderer, spriteSheetService, spriteRenderer, contextMenuController, sourceEntityId, filterTag: null, hoverPopup, static () => null, mapViewState, static (_, _) => { }, static (_, _) => { }));
+        sourceGridWindow.SetContent(new InventoryGridContent(world, componentManager, itemCatalog, windowService, fontService, labelRenderer, spriteSheetService, spriteRenderer, contextMenuController, sourceEntityId, filterTag: null, hoverPopup, static () => null, mapViewState, static (_, _) => { }, static (_, _) => { }));
         sourceGridWindow.Initialize();
         var cell = sourceGridWindow.ChildElements.OfType<InventoryItemStackCell>().Single();
 
@@ -2548,8 +2548,8 @@ public sealed class UiInputControllerTests
             Activator: new DirectAction(new TargetingSpec(TargetShape.SingleTarget, Range: 1), new ActionTiming(ActionTimingCategory.Immediate, ActionLockFrames: 30, CooldownFrames: null))));
 
         var fontService = new FontService("Fonts");
-        var glyphRenderer = new GlyphRenderer();
-        var windowService = TestElementPoolServiceFactory.Create(fontService, glyphRenderer);
+        var labelRenderer = new LabelRenderer();
+        var windowService = TestElementPoolServiceFactory.Create(fontService, labelRenderer);
 
         var hotbar = new HotbarContent(
             world, new MapViewState(), componentManager, new EventBus(), actionCatalog, new ItemCatalog(),

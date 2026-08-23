@@ -71,7 +71,7 @@ public sealed class HotbarContentTests
 
         var world = new Game.World.World(new Game.World.Map(new Vector3Int(10, 10, 1))) { PlayerEntityId = PlayerEntityId };
         var fontService = new FontService("Fonts");
-        var windowService = TestElementPoolServiceFactory.Create(fontService, new GlyphRenderer());
+        var windowService = TestElementPoolServiceFactory.Create(fontService, new LabelRenderer());
 
         var hotbar = new HotbarContent(
             world, new MapViewState(), componentManager, new EventBus(), new ActionCatalog(), new ItemCatalog(),

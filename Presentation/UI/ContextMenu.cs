@@ -17,8 +17,8 @@ namespace Presentation.UI;
 /// "shared mechanics, distributed content" split Tooltip's own ShowNear already uses (positioning/
 /// layering mechanics live here; what the options actually are is entirely the caller's business).
 /// </summary>
-public sealed class ContextMenu(FontService fontService, ElementPoolService elementPoolService, GlyphRenderer glyphRenderer)
-    : Window(fontService, elementPoolService, glyphRenderer)
+public sealed class ContextMenu(FontService fontService, ElementPoolService elementPoolService, LabelRenderer labelRenderer)
+    : Window(fontService, elementPoolService, labelRenderer)
 {
     private const float RowHeight = 22f;
 

@@ -29,10 +29,10 @@ public sealed class NotificationCenterTests
     private static ElementPoolService CreateWindowService()
     {
         var fontService = new FontService("Fonts");
-        var glyphRenderer = new GlyphRenderer();
-        var windowService = TestElementPoolServiceFactory.Create(fontService, glyphRenderer);
+        var labelRenderer = new LabelRenderer();
+        var windowService = TestElementPoolServiceFactory.Create(fontService, labelRenderer);
         windowService.RegisterFactory<Folder>(() => new Folder(
-            fontService, windowService, glyphRenderer, new SpriteSheetService(null, "Spritesheets"), new SpriteRenderer()));
+            fontService, windowService, labelRenderer, new SpriteSheetService(null, "Spritesheets"), new SpriteRenderer()));
         return windowService;
     }
 
@@ -131,12 +131,12 @@ public sealed class NotificationCenterTests
     private static (ElementPoolService WindowService, Func<Folder> GetFolder) CreateWindowServiceCapturingFolder()
     {
         var fontService = new FontService("Fonts");
-        var glyphRenderer = new GlyphRenderer();
-        var windowService = TestElementPoolServiceFactory.Create(fontService, glyphRenderer);
+        var labelRenderer = new LabelRenderer();
+        var windowService = TestElementPoolServiceFactory.Create(fontService, labelRenderer);
         Folder? capturedFolder = null;
         windowService.RegisterFactory<Folder>(() =>
         {
-            capturedFolder = new Folder(fontService, windowService, glyphRenderer, new SpriteSheetService(null, "Spritesheets"), new SpriteRenderer());
+            capturedFolder = new Folder(fontService, windowService, labelRenderer, new SpriteSheetService(null, "Spritesheets"), new SpriteRenderer());
             return capturedFolder;
         });
         return (windowService, () => capturedFolder ?? throw new InvalidOperationException("Folder not created yet."));
@@ -320,10 +320,10 @@ public sealed class NotificationCenterTests
     public void ClickingCloseButton_OnNewerOverlappingNotification_ClosesOnlyThatOne()
     {
         var fontService = new FontService("Fonts");
-        var glyphRenderer = new GlyphRenderer();
-        var windowService = TestElementPoolServiceFactory.Create(fontService, glyphRenderer);
+        var labelRenderer = new LabelRenderer();
+        var windowService = TestElementPoolServiceFactory.Create(fontService, labelRenderer);
         windowService.RegisterFactory<Folder>(() => new Folder(
-            fontService, windowService, glyphRenderer, new SpriteSheetService(null, "Spritesheets"), new SpriteRenderer()));
+            fontService, windowService, labelRenderer, new SpriteSheetService(null, "Spritesheets"), new SpriteRenderer()));
         var capturedPopups = new List<TextWindow>();
 
         // Overrides WindowService's default TextWindow factory just to capture each created
@@ -333,7 +333,7 @@ public sealed class NotificationCenterTests
         // Window's internal layout math in the test.
         windowService.RegisterFactory<TextWindow>(() =>
         {
-            var window = new TextWindow(fontService, windowService, new GlyphRenderer());
+            var window = new TextWindow(fontService, windowService, new LabelRenderer());
             capturedPopups.Add(window);
             return window;
         });
@@ -367,14 +367,14 @@ public sealed class NotificationCenterTests
     private static (ElementPoolService WindowService, List<TextWindow> CapturedPopups) CreateWindowServiceCapturingTextWindows()
     {
         var fontService = new FontService("Fonts");
-        var glyphRenderer = new GlyphRenderer();
-        var windowService = TestElementPoolServiceFactory.Create(fontService, glyphRenderer);
+        var labelRenderer = new LabelRenderer();
+        var windowService = TestElementPoolServiceFactory.Create(fontService, labelRenderer);
         windowService.RegisterFactory<Folder>(() => new Folder(
-            fontService, windowService, glyphRenderer, new SpriteSheetService(null, "Spritesheets"), new SpriteRenderer()));
+            fontService, windowService, labelRenderer, new SpriteSheetService(null, "Spritesheets"), new SpriteRenderer()));
         var capturedPopups = new List<TextWindow>();
         windowService.RegisterFactory<TextWindow>(() =>
         {
-            var window = new TextWindow(fontService, windowService, new GlyphRenderer());
+            var window = new TextWindow(fontService, windowService, new LabelRenderer());
             capturedPopups.Add(window);
             return window;
         });

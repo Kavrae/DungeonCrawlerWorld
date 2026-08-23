@@ -16,7 +16,7 @@ namespace Tests.Presentation;
 [TestClass]
 public sealed class TextWindowSizingTests
 {
-    private static ElementPoolService CreateWindowService() => TestElementPoolServiceFactory.Create(new FontService("Fonts"), new GlyphRenderer());
+    private static ElementPoolService CreateWindowService() => TestElementPoolServiceFactory.Create(new FontService("Fonts"), new LabelRenderer());
 
     private static TextWindow CreateWrapContentTextWindow(ElementPoolService windowService, string text, Vector2 maximumSize)
     {

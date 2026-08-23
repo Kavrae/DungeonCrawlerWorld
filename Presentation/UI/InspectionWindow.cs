@@ -15,8 +15,8 @@ namespace Presentation.UI;
 /// way Window's default does (MinimumHeaderWidth) -- this panel's width must always match
 /// PlayerHealthBarContent.Size.X (see ShellBootstrapper), restored or not.
 /// </summary>
-public sealed class InspectionWindow(FontService fontService, ElementPoolService elementPoolService, GlyphRenderer glyphRenderer, MapViewState mapViewState)
-    : Window(fontService, elementPoolService, glyphRenderer)
+public sealed class InspectionWindow(FontService fontService, ElementPoolService elementPoolService, LabelRenderer labelRenderer, MapViewState mapViewState)
+    : Window(fontService, elementPoolService, labelRenderer)
 {
     public const string MinimizedTitle = "Inspection";
 

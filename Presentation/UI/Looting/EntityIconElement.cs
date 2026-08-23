@@ -16,12 +16,12 @@ namespace Presentation.UI.Looting;
 public sealed class EntityIconElement(
     FontService fontService,
     ElementPoolService elementPoolService,
-    GlyphRenderer glyphRenderer,
+    LabelRenderer labelRenderer,
     SpriteSheetService spriteSheetService,
     SpriteRenderer spriteRenderer,
     DirectComponentPool<SpriteComponent> spritePool,
     DirectComponentPool<GlyphComponent> glyphPool)
-    : Element(fontService, elementPoolService, glyphRenderer)
+    : Element(fontService, elementPoolService, labelRenderer)
 {
     private const float GlyphFontSizeFraction = 0.8f;
 
@@ -41,6 +41,6 @@ public sealed class EntityIconElement(
         var glyph = hasGlyph ? glyphComponent.Glyph : string.Empty;
         var glyphColor = hasGlyph ? glyphComponent.GlyphColor : Color.White;
 
-        SpriteOrGlyphRenderer.Draw(ElementPoolService.SpriteBatch, spriteSheetService, spriteRenderer, GlyphRenderer, sprite, _glyphFont, glyph, glyphColor, ContentAbsolutePosition, ContentSize, Color.White);
+        SpriteOrGlyphRenderer.Draw(ElementPoolService.SpriteBatch, spriteSheetService, spriteRenderer, LabelRenderer, sprite, _glyphFont, glyph, glyphColor, ContentAbsolutePosition, ContentSize, Color.White);
     }
 }

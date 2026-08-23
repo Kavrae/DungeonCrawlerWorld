@@ -32,7 +32,7 @@ public sealed class InventoryFolderController(
     World world,
     ComponentManager componentManager,
     FontService fontService,
-    GlyphRenderer glyphRenderer,
+    LabelRenderer labelRenderer,
     SpriteSheetService spriteSheetService,
     SpriteRenderer spriteRenderer,
     ItemCatalog itemCatalog,

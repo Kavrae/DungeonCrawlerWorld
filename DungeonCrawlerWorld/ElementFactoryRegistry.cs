@@ -35,11 +35,11 @@ public static class ElementFactoryRegistry
         var pool = presentation.ElementPoolService;
         var componentManager = ecsContext.ComponentManager;
 
-        // Supplies the fontService/pool/glyphRenderer trio every plain registration repeats, so
+        // Supplies the fontService/pool/labelRenderer trio every plain registration repeats, so
         // each call site below only has to spell out its own type-specific extras.
-        void Register<TElement>(Func<FontService, ElementPoolService, GlyphRenderer, TElement> factory)
+        void Register<TElement>(Func<FontService, ElementPoolService, LabelRenderer, TElement> factory)
             where TElement : Element
-            => pool.RegisterFactory(() => factory(presentation.FontService, pool, presentation.GlyphRenderer));
+            => pool.RegisterFactory(() => factory(presentation.FontService, pool, presentation.LabelRenderer));
 
         Register<Window>((font, elements, glyph) => new Window(font, elements, glyph));
         Register<Button>((font, elements, glyph) => new Button(font, elements, glyph));
@@ -60,7 +60,7 @@ public static class ElementFactoryRegistry
             actionCatalog,
             itemCatalog,
             presentation.TileRenderer,
-            presentation.GlyphRenderer,
+            presentation.LabelRenderer,
             presentation.SpriteSheetService,
             presentation.SpriteRenderer,
             camera,
@@ -72,14 +72,14 @@ public static class ElementFactoryRegistry
         Register<Folder>((font, elements, glyph) => new Folder(font, elements, glyph, presentation.SpriteSheetService, presentation.SpriteRenderer));
 
         pool.RegisterFactory<InventoryManagementWindow>(() => new InventoryManagementWindow(
-            presentation.FontService, pool, presentation.GlyphRenderer, presentation.SpriteSheetService, presentation.SpriteRenderer,
+            presentation.FontService, pool, presentation.LabelRenderer, presentation.SpriteSheetService, presentation.SpriteRenderer,
             componentManager, itemCatalog, world, contextMenuController, mapViewState));
         Register<InventoryItemStackCell>((font, elements, glyph) => new InventoryItemStackCell(font, elements, glyph, presentation.SpriteSheetService, presentation.SpriteRenderer));
         Register<GridControl>((font, elements, glyph) => new GridControl(font, elements, glyph));
         Register<Toggle>((font, elements, glyph) => new Toggle(font, elements, glyph));
 
         pool.RegisterFactory<AbilityScoreWindow>(() => new AbilityScoreWindow(
-            presentation.FontService, pool, presentation.GlyphRenderer, componentManager));
+            presentation.FontService, pool, presentation.LabelRenderer, componentManager));
         Register<AbilityScoreColumnHeader>((font, elements, glyph) => new AbilityScoreColumnHeader(font, elements, glyph));
         Register<AbilityScoreModifierRow>((font, elements, glyph) => new AbilityScoreModifierRow(font, elements, glyph));
         Register<SeparatorBar>((font, elements, glyph) => new SeparatorBar(font, elements, glyph));
@@ -87,7 +87,7 @@ public static class ElementFactoryRegistry
         Register<Tooltip>((font, elements, glyph) => new Tooltip(font, elements, glyph));
 
         pool.RegisterFactory<CorpseInventoryWindow>(() => new CorpseInventoryWindow(
-            presentation.FontService, pool, presentation.GlyphRenderer, componentManager,
+            presentation.FontService, pool, presentation.LabelRenderer, componentManager,
             presentation.SpriteSheetService, presentation.SpriteRenderer, itemCatalog, world, contextMenuController, mapViewState));
         Register<EntityIconElement>((font, elements, glyph) => new EntityIconElement(
             font, elements, glyph, presentation.SpriteSheetService, presentation.SpriteRenderer,

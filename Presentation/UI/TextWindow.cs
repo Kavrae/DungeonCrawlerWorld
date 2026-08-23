@@ -8,7 +8,7 @@ using Presentation.UI.ColorPalettes;
 
 namespace Presentation.UI;
 
-public class TextWindow(FontService fontService, ElementPoolService elementPoolService, GlyphRenderer glyphRenderer) : Window(fontService, elementPoolService, glyphRenderer)
+public class TextWindow(FontService fontService, ElementPoolService elementPoolService, LabelRenderer labelRenderer) : Window(fontService, elementPoolService, labelRenderer)
 {
     public string OriginalText { get; set; } = string.Empty;
     public DisplayText DisplayText { get; set; }

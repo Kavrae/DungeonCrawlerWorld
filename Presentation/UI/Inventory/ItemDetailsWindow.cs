@@ -47,11 +47,11 @@ namespace Presentation.UI.Inventory;
 public sealed class ItemDetailsWindow(
     FontService fontService,
     ElementPoolService elementPoolService,
-    GlyphRenderer glyphRenderer,
+    LabelRenderer labelRenderer,
     SpriteSheetService spriteSheetService,
     SpriteRenderer spriteRenderer,
     ActionCatalog actionCatalog)
-    : Window(fontService, elementPoolService, glyphRenderer)
+    : Window(fontService, elementPoolService, labelRenderer)
 {
     public static readonly Color BackgroundColor = WindowPalette.PanelBackgroundColor;
 

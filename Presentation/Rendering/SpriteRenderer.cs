@@ -7,7 +7,7 @@ namespace Presentation.Rendering;
 /// Draws a spritesheet region stretched to fill an arbitrary pixel footprint. Decoupled from
 /// Map/World/ComponentManager -- callers (e.g. MapWindow) resolve which entity/texture/
 /// source-region/position/tint to use and pass those in as plain values, mirroring
-/// GlyphRenderer's role for text.
+/// LabelRenderer's role for text.
 /// </summary>
 public sealed class SpriteRenderer
 {

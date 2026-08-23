@@ -22,7 +22,7 @@ public static class DragGhostRenderer
         SpriteBatch spriteBatch,
         SpriteSheetService spriteSheetService,
         SpriteRenderer spriteRenderer,
-        GlyphRenderer glyphRenderer,
+        LabelRenderer labelRenderer,
         SpriteFontBase glyphFont,
         SpriteComponent? sprite,
         string glyph,
@@ -31,6 +31,6 @@ public static class DragGhostRenderer
         Vector2 size)
     {
         var topLeft = centerPosition - size / 2f;
-        SpriteOrGlyphRenderer.Draw(spriteBatch, spriteSheetService, spriteRenderer, glyphRenderer, sprite, glyphFont, glyph, glyphColor, topLeft, size, Color.White, Alpha);
+        SpriteOrGlyphRenderer.Draw(spriteBatch, spriteSheetService, spriteRenderer, labelRenderer, sprite, glyphFont, glyph, glyphColor, topLeft, size, Color.White, Alpha);
     }
 }

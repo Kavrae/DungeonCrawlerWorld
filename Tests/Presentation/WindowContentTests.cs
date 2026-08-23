@@ -33,7 +33,7 @@ public sealed class WindowContentTests
         public void HandleTextInput(char character) => TypedCharacters.Add(character);
     }
 
-    private static ElementPoolService CreateWindowService() => TestElementPoolServiceFactory.Create(new FontService("Fonts"), new GlyphRenderer());
+    private static ElementPoolService CreateWindowService() => TestElementPoolServiceFactory.Create(new FontService("Fonts"), new LabelRenderer());
 
     [TestMethod]
     public void Initialize_ContentAttached_ReceivesHostWindow()

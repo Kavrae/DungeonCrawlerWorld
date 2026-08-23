@@ -5,7 +5,7 @@ using Presentation.Rendering;
 namespace Tests.Presentation.Rendering;
 
 [TestClass]
-public sealed class GlyphRendererTests
+public sealed class LabelRendererTests
 {
     /// <summary>
     /// Regression: centering used to be computed against MeasureString's generic line-height
@@ -18,7 +18,7 @@ public sealed class GlyphRendererTests
     [TestMethod]
     public void GetCenteredPosition_ResultingGlyphInkCenterMatchesFootprintCenter()
     {
-        var renderer = new GlyphRenderer();
+        var renderer = new LabelRenderer();
         var font = new FontService("Fonts").GetFont(24);
         const string glyph = "g";
         var footprintTopLeft = new Vector2(30, 60);
@@ -43,7 +43,7 @@ public sealed class GlyphRendererTests
     [TestMethod]
     public void GetCenteredPosition_LargerFootprint_MovesPositionFurtherFromOrigin()
     {
-        var renderer = new GlyphRenderer();
+        var renderer = new LabelRenderer();
         var font = new FontService("Fonts").GetFont(36);
         const string glyph = "g";
         var origin = Vector2.Zero;
@@ -58,7 +58,7 @@ public sealed class GlyphRendererTests
     [TestMethod]
     public void GetCenteredPosition_FootprintTopLeftOffset_TranslatesResultByTheSameAmount()
     {
-        var renderer = new GlyphRenderer();
+        var renderer = new LabelRenderer();
         var font = new FontService("Fonts").GetFont(8);
         const string glyph = "f";
         var footprintSize = new Vector2(12, 12);
@@ -78,7 +78,7 @@ public sealed class GlyphRendererTests
     [TestMethod]
     public void GetCenteredPosition_DifferentGlyphsSameFont_AreNotConflated()
     {
-        var renderer = new GlyphRenderer();
+        var renderer = new LabelRenderer();
         var font = new FontService("Fonts").GetFont(24);
         var footprintTopLeft = Vector2.Zero;
         var footprintSize = new Vector2(24, 24);
@@ -93,7 +93,7 @@ public sealed class GlyphRendererTests
     [TestMethod]
     public void GetCenteredPosition_RepeatedAndInterleavedLookups_ReturnConsistentResults()
     {
-        var renderer = new GlyphRenderer();
+        var renderer = new LabelRenderer();
         var font = new FontService("Fonts").GetFont(24);
         var footprintTopLeft = new Vector2(5, 5);
         var footprintSize = new Vector2(24, 24);

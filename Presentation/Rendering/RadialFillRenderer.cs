@@ -12,7 +12,7 @@ namespace Presentation.Rendering;
 /// slots are the one caller that supplies both (items can have real sprites, unlike abilities
 /// today) and sets Sprite/SpriteTint per draw.
 /// </summary>
-public sealed class RadialFillRenderer(GlyphRenderer glyphRenderer, SpriteSheetService? spriteSheetService = null, SpriteRenderer? spriteRenderer = null)
+public sealed class RadialFillRenderer(LabelRenderer labelRenderer, SpriteSheetService? spriteSheetService = null, SpriteRenderer? spriteRenderer = null)
 {
     private const int SliverCount = 72;
     private static readonly Color MaskColor = new Color(64, 64, 64) * 0.5f;
@@ -38,11 +38,11 @@ public sealed class RadialFillRenderer(GlyphRenderer glyphRenderer, SpriteSheetS
 
         if (Sprite is { } sprite && spriteSheetService is not null && spriteRenderer is not null)
         {
-            SpriteOrGlyphRenderer.Draw(spriteBatch, spriteSheetService, spriteRenderer, glyphRenderer, sprite, font, Glyph, GlyphColor, position, size, SpriteTint, alphaMultiplier);
+            SpriteOrGlyphRenderer.Draw(spriteBatch, spriteSheetService, spriteRenderer, labelRenderer, sprite, font, Glyph, GlyphColor, position, size, SpriteTint, alphaMultiplier);
         }
         else
         {
-            glyphRenderer.DrawCentered(spriteBatch, font, Glyph, position, size, GlyphColor * alphaMultiplier);
+            labelRenderer.DrawCentered(spriteBatch, font, Glyph, position, size, GlyphColor * alphaMultiplier);
         }
 
         DrawRadialMask(spriteBatch, unitRectangle, bounds);

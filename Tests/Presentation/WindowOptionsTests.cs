@@ -16,7 +16,7 @@ namespace Tests.Presentation;
 [TestClass]
 public sealed class WindowOptionsTests
 {
-    private static ElementPoolService CreateWindowService() => TestElementPoolServiceFactory.Create(new FontService("Fonts"), new GlyphRenderer());
+    private static ElementPoolService CreateWindowService() => TestElementPoolServiceFactory.Create(new FontService("Fonts"), new LabelRenderer());
 
     [TestMethod]
     public void CreateWindow_AllGroupsUnset_FallsBackToDefaults()

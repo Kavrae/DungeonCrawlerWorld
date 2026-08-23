@@ -22,8 +22,8 @@ namespace Presentation.UI.Content;
 /// abstract stat either. The caster's own cell and the mirrored left side are left blank -- the
 /// left side would just repeat the same distance values already visible on the right.
 /// </summary>
-public sealed class TargetShapePreviewElement(FontService fontService, ElementPoolService elementPoolService, GlyphRenderer glyphRenderer)
-    : Element(fontService, elementPoolService, glyphRenderer)
+public sealed class TargetShapePreviewElement(FontService fontService, ElementPoolService elementPoolService, LabelRenderer labelRenderer)
+    : Element(fontService, elementPoolService, labelRenderer)
 {
     private const float CellGap = 1f;
     private const float CellBorderThickness = 1f;
@@ -91,7 +91,7 @@ public sealed class TargetShapePreviewElement(FontService fontService, ElementPo
         }
 
         var text = offset.X.ToString();
-        GlyphRenderer.DrawCentered(spriteBatch, _numberFont, text, cellOrigin, new Vector2(outerSize, outerSize), DistanceNumberColor);
+        LabelRenderer.DrawCentered(spriteBatch, _numberFont, text, cellOrigin, new Vector2(outerSize, outerSize), DistanceNumberColor);
     }
 
     /// <summary>The caster's own cell (0,0) -- always present, whether or not it's also one of the targeted _offsets (Self/AdjacentWithSelf target it, most other shapes don't; either way the circle marks it).</summary>

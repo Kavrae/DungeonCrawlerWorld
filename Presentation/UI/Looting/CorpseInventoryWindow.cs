@@ -35,7 +35,7 @@ namespace Presentation.UI.Looting;
 public sealed class CorpseInventoryWindow(
     FontService fontService,
     ElementPoolService elementPoolService,
-    GlyphRenderer glyphRenderer,
+    LabelRenderer labelRenderer,
     ComponentManager componentManager,
     SpriteSheetService spriteSheetService,
     SpriteRenderer spriteRenderer,
@@ -43,7 +43,7 @@ public sealed class CorpseInventoryWindow(
     World world,
     ContextMenuController contextMenuController,
     MapViewState mapViewState)
-    : Window(fontService, elementPoolService, glyphRenderer)
+    : Window(fontService, elementPoolService, labelRenderer)
 {
     private static readonly Vector2 IconSize = new(48, 48);
     private const float Padding = 8f;
@@ -172,7 +172,7 @@ public sealed class CorpseInventoryWindow(
         // once), so its own grid's Give/Take menu only ever needs to offer "Take," never query
         // anything external (contrast InventoryManagementWindow's own callback, which has to ask
         // whether a secondary window is open at all).
-        gridWindow.SetContent(new InventoryGridContent(world, componentManager, itemCatalog, ElementPoolService, FontService, GlyphRenderer, spriteSheetService, spriteRenderer, contextMenuController, _entityId, filterTag: null, _hoverPopup, () => _entityId, mapViewState, _onItemSelected, _onCompareRequested));
+        gridWindow.SetContent(new InventoryGridContent(world, componentManager, itemCatalog, ElementPoolService, FontService, LabelRenderer, spriteSheetService, spriteRenderer, contextMenuController, _entityId, filterTag: null, _hoverPopup, () => _entityId, mapViewState, _onItemSelected, _onCompareRequested));
         AddChild(gridWindow); // Initializes gridWindow, which in turn Initializes (and builds the cells of) its InventoryGridContent -- see Window.OnChildrenInitialized/AddChild's own doc comment on why Initialize is never called explicitly here.
     }
 

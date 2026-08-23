@@ -65,7 +65,7 @@ public sealed class MapWindowTests
         var world = new Game.World.World(new Game.World.Map(new Vector3Int(mapSizeX, mapSizeY, mapSizeZ)));
         var mapViewState = new MapViewState();
         var fontService = new FontService("Fonts");
-        var windowService = TestElementPoolServiceFactory.Create(fontService, new GlyphRenderer());
+        var windowService = TestElementPoolServiceFactory.Create(fontService, new LabelRenderer());
 
         var componentManager = new ComponentManager(100, 50);
         componentManager.RegisterDirectPool<TransformComponent>(static (ref existing, incoming) => existing = incoming);
@@ -125,7 +125,7 @@ public sealed class MapWindowTests
         contextMenuController.Initialize(new UiLayerStack());
 
         windowService.RegisterFactory<MapWindow>(() => new MapWindow(
-            fontService, windowService, world, mapViewState, componentManager, new EventBus(), resolvedActionCatalog, resolvedItemCatalog, new TileRenderer(), new GlyphRenderer(),
+            fontService, windowService, world, mapViewState, componentManager, new EventBus(), resolvedActionCatalog, resolvedItemCatalog, new TileRenderer(), new LabelRenderer(),
             new SpriteSheetService(null, "Spritesheets"), new SpriteRenderer(), camera, actionTargeting, playerMovement, contextMenuController,
             componentManager.GetPackedPool<ActionLockComponent>()));
 

@@ -23,8 +23,8 @@ namespace Presentation.UI.AbilityScores;
 /// popup -- kept self-contained here rather than routed through UiInputController since nothing
 /// else needs to know about it.
 /// </summary>
-public sealed class AbilityScoreWindow(FontService fontService, ElementPoolService elementPoolService, GlyphRenderer glyphRenderer, ComponentManager componentManager)
-    : Window(fontService, elementPoolService, glyphRenderer)
+public sealed class AbilityScoreWindow(FontService fontService, ElementPoolService elementPoolService, LabelRenderer labelRenderer, ComponentManager componentManager)
+    : Window(fontService, elementPoolService, labelRenderer)
 {
     private const int ColumnCount = 5;
     private const float HeaderHeight = 50f;
