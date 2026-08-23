@@ -157,11 +157,14 @@ public class TextWindow(FontService fontService, ElementPoolService elementPoolS
     protected float TextContentHeight() => ContentFont.LineHeight * DisplayText.LineCount + LinePadding * 2;
 
     /// <summary>
-    /// Virtual so TextBox can override it: StringUtility's word-wrap chunks/splits on spaces
-    /// only and doesn't treat an embedded '\n' as a forced line break (confirmed by
-    /// StringUtilityTests.SimpleWordWrap_EmbeddedNewlineNotAtChunkBoundary...) -- fine for
-    /// this base class (nothing here ever produces embedded newlines), but a TextBox's own
-    /// Shift+Enter does, so it needs to wrap around that gap instead of assuming it away.
+    /// Virtual so TextBox can override it: StringUtility.WordWrapWithHyphenation treats a
+    /// pre-existing '\n' (e.g. this base class's own InspectionWindowContent admin-dump text,
+    /// StatModifierComponent.ToString() among others) as a forced break, but
+    /// StringUtility.SimpleWordWrap -- used only below the hyphenation width threshold -- still
+    /// doesn't (confirmed by StringUtilityTests.SimpleWordWrap_EmbeddedNewlineNotAtChunkBoundary,
+    /// a deliberate, documented limitation, not a bug). TextBox needs its own override
+    /// regardless of either: it must reconstruct OriginalText-index-aligned line spans for caret
+    /// positioning, which an already-wrapped/hyphenated string can't give it back reliably.
     /// </summary>
     public virtual void ReformatDisplayText()
     {

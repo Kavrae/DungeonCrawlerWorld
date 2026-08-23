@@ -23,6 +23,9 @@ public static class StringUtility
     /// bare carriage return).</summary>
     private const string LineBreak = "\n";
 
+    /// <summary>Word boundaries for WordWrapWithHyphenation's own walk -- space (a real word gap) and '\n' (a pre-existing forced break, e.g. StatModifierComponent.ToString()'s multi-line dump). Splitting on both keeps every extracted "word" single-line, so TextMeasurer.MeasureWidth below always measures one line's width -- FontStashSharp's MeasureString collapses a multi-line string down to its widest line's width, which previously desynced remainingLineWidth from the actual cursor position whenever an embedded '\n' rode along inside a word with no adjacent space (confirmed: InspectionWindowContent's StatModifierComponent dump wrapping "CanModify" into "CanMod-\nify" for no width-related reason, and inflating DisplayText.LineCount past the true line count).</summary>
+    private static readonly char[] WordBoundaryChars = [' ', '\n'];
+
     /// <summary>Builds a UI bar of the given size and prefix (e.g. "HP", "E"), filled to a percentage of currentValue/maximumValue.</summary>
     public static string BuildPercentageBar(string prefix, int currentValue, int maximumValue, int barSize)
     {
@@ -175,9 +178,9 @@ public static class StringUtility
         var stringBuilder = new StringBuilder(originalText.Length + 16);
         var remainingLineWidth = criteria.MaximumPixelWidth;
 
-        // Walk space-delimited words directly (matching string.Split(' ')'s inclusion of
-        // empty entries between consecutive spaces) instead of materializing the whole
-        // words array up front -- avoids that one array allocation per call. Each word
+        // Walk space-or-newline-delimited words directly (matching string.Split(' ')'s
+        // inclusion of empty entries between consecutive spaces) instead of materializing the
+        // whole words array up front -- avoids that one array allocation per call. Each word
         // still becomes its own string when sliced out below: FontStashSharp's
         // MeasureString has no ReadOnlySpan<char> overload (checked directly against the
         // installed package), so a per-word string is unavoidable regardless of how the
@@ -185,10 +188,11 @@ public static class StringUtility
         var wordStartIndex = 0;
         while (true)
         {
-            var nextSpaceIndex = originalText.IndexOf(' ', wordStartIndex);
-            var word = nextSpaceIndex < 0
+            var nextBoundaryIndex = originalText.IndexOfAny(WordBoundaryChars, wordStartIndex);
+            var word = nextBoundaryIndex < 0
                 ? originalText[wordStartIndex..]
-                : originalText[wordStartIndex..nextSpaceIndex];
+                : originalText[wordStartIndex..nextBoundaryIndex];
+            var boundaryIsForcedBreak = nextBoundaryIndex >= 0 && originalText[nextBoundaryIndex] == '\n';
 
             if (remainingLineWidth != criteria.MaximumPixelWidth)
             {
@@ -262,11 +266,22 @@ public static class StringUtility
             }
             while (remainingWord.Length > 0);
 
-            if (nextSpaceIndex < 0)
+            if (nextBoundaryIndex < 0)
             {
                 break;
             }
-            wordStartIndex = nextSpaceIndex + 1;
+
+            // A pre-existing '\n' is a forced break, not a word gap -- unlike a space (handled
+            // by the leading-space append at the top of the next iteration), it must start a
+            // genuinely fresh line, or the next word's own fresh-line measurement above would
+            // wrongly think there's still (up to) a full line of room left on this one.
+            if (boundaryIsForcedBreak)
+            {
+                stringBuilder.Append(LineBreak);
+                remainingLineWidth = criteria.MaximumPixelWidth;
+            }
+
+            wordStartIndex = nextBoundaryIndex + 1;
         }
 
         var formattedText = stringBuilder.ToString();

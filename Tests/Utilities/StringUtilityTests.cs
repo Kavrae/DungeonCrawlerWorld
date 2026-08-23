@@ -266,6 +266,28 @@ public sealed class StringUtilityTests
     }
 
     [TestMethod]
+    public void FormatText_WordwrapMode_EmbeddedNewlineWithNoAdjacentSpace_StartsOwnLineInsteadOfBeingMismeasured()
+    {
+        // Regression: unlike SimpleWordWrap (see the sibling test below, a documented, accepted
+        // limitation), WordWrapWithHyphenation must treat a pre-existing '\n' as its own word
+        // boundary -- InspectionWindowContent's admin dump feeds StatModifierComponent.ToString()
+        // (embeds '\n' between fields with no adjacent space, e.g. "...}\nOperation : ...") straight
+        // into a TextWindow. Before this was fixed, "AB\nCDEFGHIJ" (no space anywhere) was scanned
+        // as one 11-character "word" containing a raw '\n', measured as if it were a single line
+        // (110px), and hyphenated by character-position math that had no idea a line break sat in
+        // the middle -- producing a literal '\n' embedded mid-hyphenated-chunk ("AB\nCDE-...") and
+        // a DisplayText.LineCount that didn't match what SpriteBatch.DrawString actually renders.
+        var criteria = new FormatTextCriteria(new FixedWidthTextMeasurer(10), 70, "AB\nCDEFGHIJ", FormatTextMode.Wordwrap);
+
+        var result = StringUtility.FormatText(criteria);
+
+        // "AB" ends its own line at the '\n' (never merged with "CDEFGHIJ" into one mismeasured
+        // word); "CDEFGHIJ" then wraps independently, exactly as if it had been passed in alone.
+        Assert.AreEqual("AB\nCDEFG-\nHIJ", result.FormattedText);
+        Assert.AreEqual(3, result.LineCount);
+    }
+
+    [TestMethod]
     public void SimpleWordWrap_EmbeddedNewlineNotAtChunkBoundary_GetsSplitMidChunkInsteadOfRespected()
     {
         // Regression-documenting test, not a fix: SimpleWordWrap chunks by a fixed character
