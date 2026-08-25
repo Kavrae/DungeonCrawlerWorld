@@ -205,7 +205,7 @@ public sealed class BlueprintTests
     }
 
     [TestMethod]
-    public void PlayerBlueprint_Build_SetsGlyphHealthPlayerControlledMovementActionLockAndTransform()
+    public void PlayerBlueprint_Build_SetsGlyphBodyPartsPlayerControlledMovementActionLockAndTransform()
     {
         var ecsContext = BuildEcsContext();
         var entityId = ecsContext.EntityManager.CreateEntity();
@@ -215,8 +215,36 @@ public sealed class BlueprintTests
         var glyph = ecsContext.ComponentManager.GetDirectPool<GlyphComponent>().GetReadonly(entityId);
         Assert.AreEqual("@", glyph.Glyph);
 
-        var health = ecsContext.ComponentManager.GetPackedPool<SimpleHealthComponent>().GetReadonly(entityId);
-        Assert.IsTrue(health.CurrentHealth >= 1 && health.CurrentHealth <= health.MaximumHealth);
+        // The player is Complex health via the Human race it composes in -- no SimpleHealthComponent at all.
+        Assert.IsFalse(ecsContext.ComponentManager.GetPackedPool<SimpleHealthComponent>().Has(entityId));
+
+        var expectedPartsByName = new Dictionary<string, (BodyPartType Type, ushort MinimumHealth, ushort MaximumHealth, bool IsVital)>
+        {
+            ["Head"] = (BodyPartType.Head, 40, 40, true),
+            ["Torso"] = (BodyPartType.Torso, 80, 80, true),
+            ["Left Arm"] = (BodyPartType.Arm, 25, 25, false),
+            ["Right Arm"] = (BodyPartType.Arm, 25, 25, false),
+            ["Left Leg"] = (BodyPartType.Leg, 40, 40, false),
+            ["Right Leg"] = (BodyPartType.Leg, 40, 40, false),
+        };
+
+        var bodyParts = ecsContext.ComponentManager.GetMultiPool<BodyPartComponent>();
+        var actualCount = 0;
+        var actualMaximumSum = 0f;
+        for (var denseIndex = bodyParts.GetFirstDenseIndex(entityId); denseIndex != -1; denseIndex = bodyParts.GetNextDenseIndex(denseIndex))
+        {
+            ref readonly var part = ref bodyParts.GetReadonlyByDenseIndex(denseIndex);
+            Assert.IsTrue(expectedPartsByName.TryGetValue(part.Name, out var expected), $"Unexpected body part name: {part.Name}");
+            Assert.AreEqual(expected.Type, part.Type);
+            Assert.AreEqual(expected.IsVital, part.IsVital);
+            Assert.AreEqual((float)expected.MaximumHealth, part.MaximumHealth);
+            Assert.IsTrue(part.CurrentHealth >= expected.MinimumHealth && part.CurrentHealth <= expected.MaximumHealth);
+            actualMaximumSum += part.MaximumHealth;
+            actualCount++;
+        }
+
+        Assert.AreEqual(expectedPartsByName.Count, actualCount);
+        Assert.AreEqual(250f, actualMaximumSum);
 
         var movement = ecsContext.ComponentManager.GetPackedPool<MovementComponent>().GetReadonly(entityId);
         Assert.AreEqual(MovementMode.PlayerControlled, movement.MovementMode);
@@ -225,8 +253,10 @@ public sealed class BlueprintTests
         Assert.IsTrue(ecsContext.ComponentManager.GetPackedPool<ActionLockComponent>().Has(entityId));
         Assert.IsTrue(ecsContext.ComponentManager.GetDirectPool<TransformComponent>().Has(entityId));
 
-        // No RaceComponent/ClassComponent -- nothing needs the player to have either.
-        Assert.IsFalse(ecsContext.ComponentManager.GetMultiPool<RaceComponent>().Has(entityId));
+        // Race: Human (via body-part composition), but no ClassComponent -- nothing needs the player to have one.
+        var racePool = ecsContext.ComponentManager.GetMultiPool<RaceComponent>();
+        Assert.IsTrue(racePool.Has(entityId));
+        Assert.AreEqual(Human.RaceId, racePool.GetReadonlyByDenseIndex(racePool.GetFirstDenseIndex(entityId)).Id);
         Assert.IsFalse(ecsContext.ComponentManager.GetMultiPool<ClassComponent>().Has(entityId));
 
         // The player is always a Crawler.

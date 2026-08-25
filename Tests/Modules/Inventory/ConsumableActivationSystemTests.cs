@@ -76,6 +76,7 @@ public sealed class ConsumableActivationSystemTests
         componentManager.RegisterPackedPool<PoisonTimerComponent>(static (ref existing, incoming) => { });
         componentManager.RegisterPackedPool<HotkeyExpansionUnlockComponent>(static (ref existing, incoming) => existing = incoming);
         componentManager.RegisterMultiPool<ItemHotkeyBindingComponent>();
+        componentManager.RegisterMultiPool<BodyPartComponent>();
 
         var itemCatalog = new ItemCatalog();
         var splashTargeting = new TargetingSpec(TargetShape.Burst, Range: 3, AreaSize: 1);
@@ -117,7 +118,8 @@ public sealed class ConsumableActivationSystemTests
             statusEffectAppliers: null,
             playerQuery: null,
             auraSources: null,
-            itemHotkeyBindings: componentManager.GetMultiPool<ItemHotkeyBindingComponent>());
+            itemHotkeyBindings: componentManager.GetMultiPool<ItemHotkeyBindingComponent>(),
+            bodyParts: componentManager.GetMultiPool<BodyPartComponent>());
 
         return (system, componentManager, mapQuery, eventBus);
     }
@@ -200,6 +202,37 @@ public sealed class ConsumableActivationSystemTests
         system.Update(default, 0);
 
         Assert.AreEqual(70, HealthOf(componentManager, TargetEntityId));
+    }
+
+    /// <summary>A Complex target (BodyPartComponents, no SimpleHealthComponent) must not be rejected by ApplyPotionToTarget's presence gate -- proves the ConsumableActivationSystem fix in PLAN-human-race.md actually lands the effect instead of silently no-oping.</summary>
+    [TestMethod]
+    public void Potion_ComplexTargetWithBodyPartsAndNoSimpleHealth_HealsByHealFractionOfItsOwnMaxHealth()
+    {
+        var (system, componentManager, mapQuery, _) = Build();
+        mapQuery.SetOccupant(TargetTile, TargetEntityId);
+        componentManager.GetMultiPool<BodyPartComponent>().Add(TargetEntityId, new BodyPartComponent("Head", BodyPartType.Head, currentHealth: 40, maximumHealth: 40, isVital: true));
+        componentManager.GetMultiPool<BodyPartComponent>().Add(TargetEntityId, new BodyPartComponent("Torso", BodyPartType.Torso, currentHealth: 40, maximumHealth: 160, isVital: true));
+        var stackInstanceId = InventoryActions.AddItem(componentManager, CasterEntityId, PotionId, quantity: 1);
+        componentManager.Merge(CasterEntityId, new PendingConsumableActivationComponent(stackInstanceId, [TargetTile]));
+        componentManager.Merge(CasterEntityId, new ActionLockComponent(standardLockFrames: ActionLockGate.StandardLockFrames, currentLockTotalFrames: 0, currentLockFramesRemaining: 0));
+
+        system.Update(default, 0);
+
+        Assert.IsFalse(componentManager.GetPackedPool<SimpleHealthComponent>().Has(TargetEntityId), "Sanity check: the target is Complex-only, no SimpleHealthComponent at all.");
+        var bodyParts = componentManager.GetMultiPool<BodyPartComponent>();
+        var totalCurrent = 0f;
+        for (var denseIndex = bodyParts.GetFirstDenseIndex(TargetEntityId); denseIndex != -1; denseIndex = bodyParts.GetNextDenseIndex(denseIndex))
+        {
+            totalCurrent += bodyParts.GetReadonlyByDenseIndex(denseIndex).CurrentHealth;
+        }
+
+        // DirectHeal(0.5f) applies the 0.5 fraction independently to each part's own MaximumHealth
+        // (ComplexHealthHeal.ApplyFractionToAllParts, not a shared total) -- Head: 40 + 0.5*40 = 60,
+        // clamped to its own max of 40 -> stays 40. Torso: 40 + 0.5*160 = 120, under its max of 160
+        // -> 120. Total: 40 + 120 = 160.
+        Assert.AreEqual(160f, totalCurrent);
+        var cooldown = componentManager.GetPackedPool<PotionCooldownComponent>().GetReadonly(TargetEntityId);
+        Assert.AreEqual(PotionCooldownEffects.DurationFrames, cooldown.FramesRemaining, "The potion must still land -- cooldown resets the same as a Simple target's would.");
     }
 
     [TestMethod]

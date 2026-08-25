@@ -84,6 +84,7 @@ public sealed class TestCombatBehaviorSystemTests
         DirectComponentPool<TransformComponent> TransformPool,
         PackedComponentPool<ActionLockComponent> ActionLockPool,
         PackedComponentPool<SimpleHealthComponent> HealthPool,
+        MultiComponentPool<BodyPartComponent> BodyParts,
         MultiComponentPool<InventoryItemStackComponent> InventoryStacks,
         MultiComponentPool<ActionInstanceComponent> ActionInstances,
         MultiComponentPool<RaceComponent> RaceComponents,
@@ -97,6 +98,7 @@ public sealed class TestCombatBehaviorSystemTests
         var transformPool = new DirectComponentPool<TransformComponent>(10, static (ref existing, incoming) => existing = incoming);
         var actionLockPool = new PackedComponentPool<ActionLockComponent>(10, 10, static (ref existing, incoming) => existing = incoming);
         var healthPool = new PackedComponentPool<SimpleHealthComponent>(10, 10, static (ref existing, incoming) => existing = incoming);
+        var bodyParts = new MultiComponentPool<BodyPartComponent>(10, 10);
         var inventoryStacks = new MultiComponentPool<InventoryItemStackComponent>(10, 10);
         var actionInstances = new MultiComponentPool<ActionInstanceComponent>(10, 10);
         var raceComponents = new MultiComponentPool<RaceComponent>(10, 10);
@@ -106,10 +108,10 @@ public sealed class TestCombatBehaviorSystemTests
         var math = mathUtility ?? new MathUtility();
 
         var system = new TestCombatBehaviorSystem(
-            movementPool, transformPool, actionLockPool, healthPool, inventoryStacks, actionInstances, raceComponents,
+            movementPool, transformPool, actionLockPool, healthPool, bodyParts, inventoryStacks, actionInstances, raceComponents,
             pendingActivations, pendingConsumableActivations, mapQuery, math, new FakePlayerQuery(playerEntityId));
 
-        return new Fixture(system, mapQuery, movementPool, transformPool, actionLockPool, healthPool, inventoryStacks, actionInstances, raceComponents, pendingActivations, pendingConsumableActivations, math);
+        return new Fixture(system, mapQuery, movementPool, transformPool, actionLockPool, healthPool, bodyParts, inventoryStacks, actionInstances, raceComponents, pendingActivations, pendingConsumableActivations, math);
     }
 
     private static void PlaceGoblin(Fixture fixture, int entityId, short currentHealth = 200, short maximumHealth = 200, bool grantPunch = true)
@@ -118,6 +120,19 @@ public sealed class TestCombatBehaviorSystemTests
         fixture.MovementPool.Add(entityId, new MovementComponent(MovementMode.Random, null, null));
         fixture.ActionLockPool.Add(entityId, new ActionLockComponent(standardLockFrames: 10, currentLockTotalFrames: 0, currentLockFramesRemaining: 0));
         fixture.HealthPool.Add(entityId, new SimpleHealthComponent(currentHealth, maximumHealth));
+        if (grantPunch)
+        {
+            fixture.ActionInstances.Add(entityId, new ActionInstanceComponent(PunchAction.Id, damageAmount: 10, cooldownFramesRemaining: 0));
+        }
+    }
+
+    /// <summary>Complex-health counterpart to PlaceGoblin -- grants BodyPartComponents instead of a SimpleHealthComponent, same shape a Human-race entity would carry.</summary>
+    private static void PlaceComplexEntity(Fixture fixture, int entityId, float headCurrent, float headMaximum, bool grantPunch = true)
+    {
+        fixture.TransformPool.Add(entityId, new TransformComponent(GoblinPosition, SingleTile));
+        fixture.MovementPool.Add(entityId, new MovementComponent(MovementMode.Random, null, null));
+        fixture.ActionLockPool.Add(entityId, new ActionLockComponent(standardLockFrames: 10, currentLockTotalFrames: 0, currentLockFramesRemaining: 0));
+        fixture.BodyParts.Add(entityId, new BodyPartComponent("Head", BodyPartType.Head, headCurrent, headMaximum, isVital: true));
         if (grantPunch)
         {
             fixture.ActionInstances.Add(entityId, new ActionInstanceComponent(PunchAction.Id, damageAmount: 10, cooldownFramesRemaining: 0));
@@ -155,6 +170,21 @@ public sealed class TestCombatBehaviorSystemTests
 
         Assert.IsFalse(fixture.PendingConsumableActivations.Has(GoblinEntityId));
         Assert.IsTrue(fixture.PendingActivations.Has(GoblinEntityId));
+    }
+
+    /// <summary>Complex-health counterpart to Update_BelowHalfHealthWithPotion_QueuesSelfHeal_NotAttack -- proves TryDecideSelfHeal's HealthQueries.TryGetTotals fix (PLAN-human-race.md) actually reads a Complex entity's summed total instead of always returning false the way the old direct SimpleHealthComponent read did.</summary>
+    [TestMethod]
+    public void Update_ComplexEntityBelowHalfHealthWithPotion_QueuesSelfHeal_NotAttack()
+    {
+        var fixture = Build();
+        PlaceComplexEntity(fixture, GoblinEntityId, headCurrent: 50, headMaximum: 200);
+        fixture.InventoryStacks.Add(GoblinEntityId, new InventoryItemStackComponent(HealthPotion.Id, quantity: 1));
+        fixture.MapQuery.SetBlockingOccupant(AdjacentTile, PlayerEntityId);
+
+        fixture.System.Update(default, 0);
+
+        Assert.IsTrue(fixture.PendingConsumableActivations.Has(GoblinEntityId));
+        Assert.IsFalse(fixture.PendingActivations.Has(GoblinEntityId), "Healing takes priority over attacking -- both should never fire the same tick.");
     }
 
     [TestMethod]

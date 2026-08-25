@@ -230,11 +230,12 @@ public sealed class ConsumableActivationSystem : ISystem
     }
 
     /// <summary>
-    /// Requires a SimpleHealthComponent to be considered a valid target at all (the same "is this a
-    /// real, alive target" gate this method has always used) -- a target with Health but no
-    /// pool a given entry actually needs (e.g. no ManaComponent for a Mana Potion) still counts
-    /// as legitimately hit for the cooldown-abuse/reset bookkeeping below, since each entry
-    /// no-ops gracefully on its own missing pool. Skipped entirely for a dead target -- "the
+    /// Requires health -- Simple or Complex -- to be considered a valid target at all (the same
+    /// "is this a real, alive target" gate this method has always used), checked by presence
+    /// across both pools rather than hard-requiring SimpleHealthComponent specifically -- a Complex
+    /// target with no pool a given entry actually needs (e.g. no ManaComponent for a Mana Potion)
+    /// still counts as legitimately hit for the cooldown-abuse/reset bookkeeping below, since each
+    /// entry no-ops gracefully on its own missing pool. Skipped entirely for a dead target -- "the
     /// target of a potion" means it landed on them, not just that a target tile happened to
     /// contain them. The cooldown-abuse check and PotionCooldownComponent reset both key off
     /// targetEntityId, not sourceEntityId -- see this class's own doc comment for why. The
@@ -245,7 +246,7 @@ public sealed class ConsumableActivationSystem : ISystem
     /// </summary>
     private void ApplyPotionToTarget(ItemDefinition item, int sourceEntityId, int targetEntityId)
     {
-        if (_deadEntities?.Has(targetEntityId) == true || !_health.TryGetReadonly(targetEntityId, out _))
+        if (_deadEntities?.Has(targetEntityId) == true || (!_health.Has(targetEntityId) && _bodyParts?.Has(targetEntityId) != true))
         {
             return;
         }

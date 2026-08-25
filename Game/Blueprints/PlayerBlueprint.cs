@@ -1,6 +1,6 @@
 using Engine.ECS.Components;
 using Engine.Math;
-using Game.Modules.AbilityScores;
+using Game.Blueprints.Races;
 using Game.Modules.AbilityScores.Components;
 using Game.Modules.Actions;
 using Game.Modules.Actions.Activators;
@@ -9,7 +9,6 @@ using Game.Modules.Actions.Definitions.DirectActions;
 using Game.Modules.Actions.Definitions.Spells;
 using Game.Modules.Core.Components;
 using Game.Modules.Crawler.Components;
-using Game.Modules.Health.Components;
 using Game.Modules.Inventory;
 using Game.Modules.Inventory.Components;
 using Game.Modules.Inventory.Definitions;
@@ -21,14 +20,14 @@ using Microsoft.Xna.Framework;
 namespace Game.Blueprints;
 
 /// <summary>
-/// The player character: rendered as the ASCII-standard '@', moved by MapWindow's input
-/// handling (MovementMode.PlayerControlled -- see MovementSystem.SetNextMapPosition) rather
-/// than any algorithmic selection. Always a Crawler -- see CrawlerComponent's own doc comment.
+/// The player character: given body parts, ActionLock, and ability scores via the Human race it
+/// composes in (Human's own default shape, unmodified -- see Human's own doc comment), with its
+/// Glyph/Sprite/Movement overridden immediately after to the player's own '@'/Player-sprite/
+/// PlayerControlled shape, the same overrides-after-parts pattern GoblinEngineerBlueprint uses.
+/// Always a Crawler -- see CrawlerComponent's own doc comment.
 /// </summary>
 public sealed class PlayerBlueprint(MathUtility mathUtility, UniqueNumberAllocator crawlerNumberAllocator) : IBlueprint
 {
-    private const ushort MaximumHealth = 100;
-
     private const ushort MagicMissileDamage = 5;
 
     private const ushort WandOfFireballStartingQuantity = 10;
@@ -43,22 +42,29 @@ public sealed class PlayerBlueprint(MathUtility mathUtility, UniqueNumberAllocat
     private const float PermanentOutgoingDamageBonus = 2f;
     private const float PermanentMaximumHealthMultiplierBonus = 0.5f;
 
+    private readonly Human _human = new(mathUtility);
+
     public void Build(ComponentManager componentManager, int entityId)
     {
-        componentManager.Merge(entityId, new GlyphComponent("@", Color.White));
+        _human.Build(componentManager, entityId);
+
+        // TryUpdate, not Merge -- GlyphComponent's merge policy only Lerps GlyphColor and never
+        // overwrites Glyph itself (see CoreModule's own registration), and MovementComponent's
+        // merge policy takes the numerically higher MovementMode rather than the latest one (see
+        // MovementModule's own registration) -- neither is a "last write wins" replace, so a
+        // second Merge call can't actually override Human's own Random/pink-'h' defaults the way
+        // GoblinEngineerBlueprint's own override step already has to sidestep the same issue for
+        // Goblin's ActionLockComponent.
+        componentManager.TryUpdate(entityId, static (ref GlyphComponent glyph) =>
+        {
+            glyph.Glyph = "@";
+            glyph.GlyphColor = Color.White;
+        });
         if (SpriteManifest.TryGet("Player", out var sprite))
         {
             componentManager.Merge(entityId, sprite);
         }
-        componentManager.Merge(entityId, new SimpleHealthComponent((short)mathUtility.Next(1, MaximumHealth + 1), MaximumHealth));
-        componentManager.Merge(entityId, new MovementComponent(MovementMode.PlayerControlled, null, null));
-        componentManager.Merge(entityId, new ActionLockComponent(standardLockFrames: 30, currentLockTotalFrames: 0, currentLockFramesRemaining: 0));
-        componentManager.Merge(entityId, new TransformComponent(new Vector3Int(-1, -1, (int)MapLayer.Ground), new Vector2Byte(1, 1)));
-
-        foreach (var abilityScoreType in Enum.GetValues<AbilityScoreType>())
-        {
-            AbilityScoreEffects.Grant(componentManager, entityId, abilityScoreType, RollAbilityScoreBaseValue());
-        }
+        componentManager.TryUpdate(entityId, static (ref MovementComponent movement) => movement.MovementMode = MovementMode.PlayerControlled);
 
         WandGrantEffects.Grant(componentManager, componentManager.GetMultiPool<AbilityScoreComponent>(), entityId, WandOfFireball.Build(), quantity: WandOfFireballStartingQuantity);
 
@@ -75,9 +81,6 @@ public sealed class PlayerBlueprint(MathUtility mathUtility, UniqueNumberAllocat
         InventoryActions.AddDivergentItem(componentManager, entityId, adjacentTargetingWand);
 
         ActionGrantEffects.Grant(componentManager, entityId, HealAction.Id, HealAction.ManaCost, damageAmount: 0, cooldownFramesRemaining: 0);
-        // damageAmount: 0 -- no per-instance override, so Punch rolls its catalog DirectDamage's own
-        // MinAmount..MaxAmount range (18-22, roughly +-10% of the old flat 20) instead of a fixed number.
-        ActionGrantEffects.Grant(componentManager, entityId, PunchAction.Id, manaCost: 0, damageAmount: 0, cooldownFramesRemaining: 0);
         ActionGrantEffects.Grant(componentManager, entityId, MagicMissileAction.Id, MagicMissileAction.ManaCost, damageAmount: MagicMissileDamage, cooldownFramesRemaining: 0);
         ActionGrantEffects.Grant(componentManager, entityId, ToxicStrikeAction.Id, manaCost: 0, damageAmount: 0, cooldownFramesRemaining: 0);
 
@@ -115,7 +118,4 @@ public sealed class PlayerBlueprint(MathUtility mathUtility, UniqueNumberAllocat
         StatModifierEffects.Apply(componentManager, entityId, StatModifierTarget.MaximumHealth, StatModifierOperation.Multiplicative, StatModifierPolarity.Buff,
             canModify: true, magnitude: PermanentMaximumHealthMultiplierBonus, durationFrames: null, StatusEffectSource.Admin);
     }
-
-    /// <summary>Two Next(1,6) rolls summed -- range [2,10] per the spec, clustering around the middle rather than uniform across the whole range. Exact shape isn't load-bearing since level-up moves these later.</summary>
-    private ushort RollAbilityScoreBaseValue() => (ushort)(mathUtility.Next(1, 6) + mathUtility.Next(1, 6));
 }

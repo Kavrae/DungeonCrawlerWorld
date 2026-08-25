@@ -8,6 +8,7 @@ using Game.Modules.Actions.Components;
 using Game.Modules.Actions.Definitions.DirectActions;
 using Game.Modules.Core.Components;
 using Game.Modules.Death.Components;
+using Game.Modules.Health;
 using Game.Modules.Health.Components;
 using Game.Modules.Inventory;
 using Game.Modules.Inventory.Components;
@@ -58,6 +59,7 @@ public sealed class TestCombatBehaviorSystem : ISystem
     private readonly DirectComponentPool<TransformComponent> _transformPool;
     private readonly PackedComponentPool<ActionLockComponent> _actionLocks;
     private readonly PackedComponentPool<SimpleHealthComponent> _health;
+    private readonly MultiComponentPool<BodyPartComponent> _bodyParts;
     private readonly MultiComponentPool<InventoryItemStackComponent> _inventoryStacks;
     private readonly MultiComponentPool<ActionInstanceComponent> _actionInstances;
     private readonly MultiComponentPool<RaceComponent> _raceComponents;
@@ -76,6 +78,7 @@ public sealed class TestCombatBehaviorSystem : ISystem
         DirectComponentPool<TransformComponent> transformPool,
         PackedComponentPool<ActionLockComponent> actionLocks,
         PackedComponentPool<SimpleHealthComponent> health,
+        MultiComponentPool<BodyPartComponent> bodyParts,
         MultiComponentPool<InventoryItemStackComponent> inventoryStacks,
         MultiComponentPool<ActionInstanceComponent> actionInstances,
         MultiComponentPool<RaceComponent> raceComponents,
@@ -90,6 +93,7 @@ public sealed class TestCombatBehaviorSystem : ISystem
         _transformPool = transformPool;
         _actionLocks = actionLocks;
         _health = health;
+        _bodyParts = bodyParts;
         _inventoryStacks = inventoryStacks;
         _actionInstances = actionInstances;
         _raceComponents = raceComponents;
@@ -146,7 +150,7 @@ public sealed class TestCombatBehaviorSystem : ISystem
     /// <summary>Below half health and holding at least one Health Potion -> drink it. Deliberately simple (a fixed 50% threshold, no smarter "how urgent is this" weighing) -- see this class's own doc comment on why.</summary>
     private bool TryDecideSelfHeal(int entityId, TransformComponent transform)
     {
-        if (!_health.TryGetReadonly(entityId, out var health) || health.CurrentHealth * 2 >= health.MaximumHealth)
+        if (!HealthQueries.TryGetTotals(_health, _bodyParts, entityId, out var current, out var maximum) || current * 2 >= maximum)
         {
             return false;
         }

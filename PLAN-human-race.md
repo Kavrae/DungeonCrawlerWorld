@@ -146,10 +146,69 @@ fix above) or file it separately.
 2. Decide on and (if wanted) fix the Goblin self-heal bug as a small follow-on, or leave it filed
    for later -- your call once you've seen the rest of this plan.
 
-## Open questions for you
+## Addendum: Human absorbed more of PlayerBlueprint than originally scoped
 
-- Body part HP split (40/80/25/25/40/40) -- fine as proposed, or do you want different numbers?
-- Fix the Goblin self-heal bug now (small, same-shaped fix) or file it separately?
-- Any other race ever becomes Human besides the player, or is `Human.cs` player-only for now (it's
-  still a fully standalone `IBlueprint`, so nothing stops a future Human NPC, but no such NPC is
-  planned here)?
+After the plan below landed, `Human` was expanded (by explicit follow-up request) to also grant
+Glyph (`@`, white), Sprite ("Player" lookup), Movement (`PlayerControlled`), `ActionLockComponent`
+(30-frame), `TransformComponent`, ability scores (the same clustered 2d6 roll `PlayerBlueprint`
+always used), and the Punch `ActionInstanceComponent` grant -- everything `PlayerBlueprint.Build`
+used to set directly for these concerns now lives in `Human.Build` instead, with `PlayerBlueprint`
+calling `_human.Build(...)` once near the top of its own `Build` and keeping only genuinely
+player-specific concerns (Crawler identity, display text, starting inventory/wands/hotkeys, the two
+mana-costed spell grants, the permanent stat-modifier buffs). This supersedes the "deliberately
+minimal compared to Goblin" framing in the Design section below -- `Human` is no longer minimal, it
+is now the player's entire starting-kit-minus-inventory. The real consequence: `Human`'s defaults
+(PlayerControlled movement, a 30-frame lock, the '@' glyph) are player-shaped, not a neutral race
+default -- a future Human NPC composing this race would need to override all of these via a
+CompositeBlueprint overrides step, the same way `GoblinEngineerBlueprint` already overrides Goblin's
+own `ActionLockComponent`.
+
+## Addendum 2: reversed -- Human is the NPC default, PlayerBlueprint overrides
+
+Reversed by explicit follow-up request: `Human.Build` now grants a generic NPC shape (pink 'h'
+glyph, no Sprite, `MovementMode.Random`) matching every other race's own pattern, and no longer
+grants a Sprite at all (a future Human NPC renders by its glyph, not silently wearing the player's
+sprite -- `MapWindow` prefers Sprite over Glyph when both are present, so leaving the old
+unconditional "Player" sprite lookup in `Human` would have made the new glyph invisible on any
+non-player Human). `ActionLockComponent`'s 30-frame value stays Human's real default, unchanged --
+not reverted to something Goblin-like, per explicit instruction. `PlayerBlueprint` overrides
+Glyph/Movement immediately after `_human.Build(...)`, and grants its own Sprite fresh (no longer an
+override, since Human doesn't grant one).
+
+**Real gotcha hit while implementing this**: overriding via a second `Merge` call (the first
+approach tried) silently failed for `GlyphComponent`/`MovementComponent`, because neither's
+registered merge policy is "last write wins":
+- `GlyphComponent` (`CoreModule.RegisterComponents`) only Lerps `GlyphColor` 50/50 between existing
+  and incoming, and never touches `Glyph` (the string) at all -- a second `Merge` call left the
+  glyph character stuck on Human's original value forever, and would have blended the color into a
+  pink/white hybrid rather than pure white.
+- `MovementComponent` (`MovementModule.RegisterComponents`) takes
+  `(MovementMode)Math.Max((byte)existing.MovementMode, (byte)incoming.MovementMode)` -- this
+  happened to still work by coincidence (`MovementMode.PlayerControlled = 2` is numerically the
+  highest value in the enum), but is not a real override and would silently break if a mode with a
+  higher ordinal were ever added.
+
+Fixed by using `componentManager.TryUpdate` instead of `Merge` for both -- a direct field mutation
+that bypasses the merge policy entirely, the same pattern `GoblinEngineerBlueprint`'s own overrides
+step already uses for Goblin's `ActionLockComponent` (`actionLock.StandardLockFrames = ...` inside a
+`TryUpdate` lambda, not a second `Merge`). **Lesson for any future composite-blueprint override**:
+check the target component's actual registered merge policy before assuming a second `Merge` call
+will "win" -- several components in this codebase have blend/concatenate/max semantics specifically
+because they're designed for legitimate multi-source composition (e.g. two buffs both granting
+`SimpleHealthComponent`), not for a deliberate override. `TryUpdate` is the safe, explicit choice
+whenever the intent is "replace this value outright," regardless of what the component's merge
+policy would otherwise do.
+
+## Decisions (confirmed)
+
+- Body part HP split: 40/80/25/25/40/40 as proposed.
+- The Goblin self-heal bug is in scope for this pass -- `TestCombatBehaviorSystem.TryDecideSelfHeal`
+  gets the same presence-check treatment as `ConsumableActivationSystem.ApplyPotionToTarget`:
+  replace its direct `_health.TryGetReadonly(entityId, out var health) || health.CurrentHealth * 2
+  >= health.MaximumHealth` check with a `HealthQueries.TryGetTotals`-based one (this one *does* need
+  the actual current/maximum values, unlike the potion gate, so it uses `TryGetTotals` rather than a
+  presence-only check -- thread a `MultiComponentPool<BodyPartComponent>` into this system/module the
+  same optional-pool way every other Health-adjacent system already does). `NpcBehaviorModule.cs`
+  needs updating to fetch and pass it through.
+- `Human.cs` stays a fully standalone, reusable `IBlueprint` (no player-only coupling) -- nothing
+  else uses it yet, but nothing prevents a future Human NPC either.

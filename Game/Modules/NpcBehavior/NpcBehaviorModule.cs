@@ -64,6 +64,7 @@ public sealed class NpcBehaviorModule : IGameModule
             componentManager.GetDirectPool<TransformComponent>(),
             componentManager.GetPackedPool<ActionLockComponent>(),
             componentManager.GetPackedPool<SimpleHealthComponent>(),
+            componentManager.GetMultiPool<BodyPartComponent>(),
             componentManager.GetMultiPool<InventoryItemStackComponent>(),
             componentManager.GetMultiPool<ActionInstanceComponent>(),
             componentManager.GetMultiPool<RaceComponent>(),
