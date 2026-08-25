@@ -81,7 +81,7 @@ public sealed class ComplexHealthRegenSystem : ISystem
                 continue;
             }
 
-            var selectedDenseIndex = BodyPartSelection.PickLowestPercentage(_bodyParts, entityId);
+            var selectedDenseIndex = BodyPartSelection.PickLowestPercentage(_bodyParts, entityId, _statModifiers);
             if (selectedDenseIndex == -1)
             {
                 continue;

@@ -2,6 +2,9 @@ using Engine.ECS.Components.Stores;
 using Engine.Math;
 using Game.Modules.Health;
 using Game.Modules.Health.Components;
+using Game.Modules.StatModifiers;
+using Game.Modules.StatModifiers.Components;
+using Game.World;
 
 namespace Tests.Modules.Health;
 
@@ -102,6 +105,37 @@ public sealed class BodyPartSelectionTests
         var pool = CreatePool();
 
         var denseIndex = BodyPartSelection.PickLowestPercentage(pool, 0);
+
+        Assert.AreEqual(-1, denseIndex);
+    }
+
+    [TestMethod]
+    public void PickLowestPercentage_PartAtRawMaximumWithActiveBuff_StillSelectableUpToTheEffectiveMaximum()
+    {
+        var pool = CreatePool();
+        // At its raw maximum (100% by that measure), but a +50% MaximumHealth buff means its real
+        // cap is 60 -- this part still has headroom and must not be treated as "already full."
+        pool.Add(0, new BodyPartComponent("Head", BodyPartType.Head, currentHealth: 40, maximumHealth: 40, isVital: true));
+        var statModifiers = new MultiComponentPool<StatModifierComponent>(maximumEntityCount: 10, initialCapacity: 4);
+        statModifiers.Add(0, new StatModifierComponent(StatModifierTarget.MaximumHealth, StatModifierOperation.Multiplicative, StatModifierPolarity.Buff,
+            canModify: true, magnitude: 0.5f, remainingDurationFrames: null, StatusEffectSource.Admin));
+
+        var denseIndex = BodyPartSelection.PickLowestPercentage(pool, 0, statModifiers);
+
+        Assert.AreEqual("Head", pool.GetReadonlyByDenseIndex(denseIndex).Name);
+    }
+
+    [TestMethod]
+    public void PickLowestPercentage_PartAtItsEffectiveMaximumWithActiveBuff_NotSelected()
+    {
+        var pool = CreatePool();
+        // 60/60 with the same +50% buff active (effective maximum is 60) -- genuinely full, unlike the case above.
+        pool.Add(0, new BodyPartComponent("Head", BodyPartType.Head, currentHealth: 60, maximumHealth: 40, isVital: true));
+        var statModifiers = new MultiComponentPool<StatModifierComponent>(maximumEntityCount: 10, initialCapacity: 4);
+        statModifiers.Add(0, new StatModifierComponent(StatModifierTarget.MaximumHealth, StatModifierOperation.Multiplicative, StatModifierPolarity.Buff,
+            canModify: true, magnitude: 0.5f, remainingDurationFrames: null, StatusEffectSource.Admin));
+
+        var denseIndex = BodyPartSelection.PickLowestPercentage(pool, 0, statModifiers);
 
         Assert.AreEqual(-1, denseIndex);
     }

@@ -229,7 +229,7 @@ public static class ShellBootstrapper
             // BorderSize left at the default (1,1) -- a thinner outset reads as a subtle bevel rather than a heavy frame.
             Chrome = new ElementChromeOptions { ShowTitle = false, ShowBorder = true, BorderStyle = BorderStyle.Outset, CanUserFocus = false },
         });
-        playerHealthBarWindow.SetContent(new PlayerHealthBarContent(world, ecsContext.ComponentManager));
+        playerHealthBarWindow.SetContent(new PlayerHealthBarContent(world, ecsContext.ComponentManager, presentation.FontService, layers));
         playerHealthBarWindow.Initialize();
         layers.Add(UiLayer.StaticHud, playerHealthBarWindow);
 

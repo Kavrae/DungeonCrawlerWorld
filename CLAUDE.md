@@ -3,7 +3,7 @@
 Guidance for Claude Code in this repo.
 
 ## Git
-Do not stage, commit, push, or run any other git commands (including read-only ones like `git status`/`git diff`/`git log`) in this repo. Leave all git operations to the user.
+Local, read-only inspection/comparison commands (`git status`, `git diff`, `git log`, and similar) are allowed. Do not run anything that writes to the repo or touches a remote — `add`, `commit`, `push`, `fetch`, `pull`, `stash`, `reset`, `checkout`/`restore`, branch/tag creation or deletion, etc. Leave those to the user.
 
 ## Commands
 ```

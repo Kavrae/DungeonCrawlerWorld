@@ -3,11 +3,14 @@ using Engine.ECS.Components;
 using Engine.ECS.Components.Stores;
 using Engine.ECS.Entities;
 using Engine.Math;
+using Engine.Utilities;
 using Game.Modules.Class.Components;
 using Game.Modules.Core.Components;
 using Game.Modules.Health;
 using Game.Modules.Health.Components;
 using Game.Modules.Race.Components;
+using Game.Modules.StatModifiers;
+using Game.Modules.StatModifiers.Components;
 using Game.World;
 using Microsoft.Xna.Framework;
 using Presentation.UI.Looting;
@@ -69,6 +72,12 @@ public sealed class InspectionWindowContent(
     private readonly PackedComponentPool<SimpleHealthComponent> _healthPool = componentManager.GetPackedPool<SimpleHealthComponent>();
     private readonly MultiComponentPool<BodyPartComponent> _bodyParts = componentManager.GetMultiPool<BodyPartComponent>();
     private readonly ComponentInspector _componentInspector = new(componentManager);
+
+    // Optional -- see StatModifierMath.GetEffectiveValue's own doc comment for why a null pool
+    // (StatModifiersModule not registered) is treated the same as "no active modifiers."
+    private readonly MultiComponentPool<StatModifierComponent>? _statModifiers = componentManager.IsRegistered<StatModifierComponent>()
+        ? componentManager.GetMultiPool<StatModifierComponent>()
+        : null;
 
     private readonly List<int> _lastSubjectIds = [];
     private readonly List<int> _scratchSubjectIds = [];
@@ -354,6 +363,7 @@ public sealed class InspectionWindowContent(
     {
         _reusableInspectionList.Clear();
         _componentInspector.CopyInspectionDataForEntity(entityId, _reusableInspectionList);
+        ReplaceHealthEntriesWithEffectiveMaximum(_reusableInspectionList, entityId, _healthPool, _bodyParts, _statModifiers);
         _reusableInspectionList.Sort(static (a, b) => string.CompareOrdinal(a.ComponentType.Name, b.ComponentType.Name));
 
         foreach (var entry in _reusableInspectionList)
@@ -375,6 +385,7 @@ public sealed class InspectionWindowContent(
     {
         _reusableInspectionList.Clear();
         _componentInspector.CopyInspectionDataForEntity(entityId, _reusableInspectionList);
+        ReplaceHealthEntriesWithEffectiveMaximum(_reusableInspectionList, entityId, _healthPool, _bodyParts, _statModifiers);
         _reusableInspectionList.Sort(static (a, b) => string.CompareOrdinal(a.ComponentType.Name, b.ComponentType.Name));
 
         var count = System.Math.Min(_reusableInspectionList.Count, _adminDumpWindows.Count);
@@ -383,6 +394,47 @@ public sealed class InspectionWindowContent(
             _adminDumpWindows[i].UpdateText(_reusableInspectionList[i].Value);
         }
     }
+
+    /// <summary>Replaces ComponentInspector's raw SimpleHealthComponent/BodyPartComponent entries with ones computed against the modifier-effective maximum instead of the raw stored field.</summary>
+    /// <remarks>
+    /// Each component's own parameterless ToString() can only ever show the pre-buff
+    /// MaximumHealth field -- it has no access to entityId or the StatModifierComponent pool
+    /// (Engine-layer generic code, no game-specific knowledge -- see CLAUDE.md). Removes the
+    /// generic entries and re-adds hand-built replacements rather than editing them in place --
+    /// CopyInspectionDataForEntity returns pre-formatted strings, not the underlying struct, so
+    /// there's nothing to edit. Uses the same StatModifierMath.GetEffectiveValue chain
+    /// HealthDamage/HealthHeal/ComplexHealthRegenSystem/BodyPartSelection already clamp against.
+    /// Static and pool-parameterized (mirrors HealthQueries/BodyPartSelection's own shape) so it's
+    /// directly unit-testable without constructing the rest of InspectionWindowContent.
+    /// </remarks>
+    internal static void ReplaceHealthEntriesWithEffectiveMaximum(
+        List<InspectedComponentEntry> destination,
+        int entityId,
+        PackedComponentPool<SimpleHealthComponent> healthPool,
+        MultiComponentPool<BodyPartComponent> bodyParts,
+        MultiComponentPool<StatModifierComponent>? statModifiers)
+    {
+        destination.RemoveAll(static entry => entry.ComponentType == typeof(SimpleHealthComponent) || entry.ComponentType == typeof(BodyPartComponent));
+
+        if (healthPool.TryGetReadonly(entityId, out var health))
+        {
+            var effectiveMaximumHealth = StatModifierMath.GetEffectiveValue(statModifiers, entityId, StatModifierTarget.MaximumHealth, health.MaximumHealth);
+            destination.Add(new InspectedComponentEntry(typeof(SimpleHealthComponent), FormatHealthBar("HP", health.CurrentHealth, effectiveMaximumHealth), 0));
+        }
+
+        for (var denseIndex = bodyParts.GetFirstDenseIndex(entityId); denseIndex != -1; denseIndex = bodyParts.GetNextDenseIndex(denseIndex))
+        {
+            ref readonly var part = ref bodyParts.GetReadonlyByDenseIndex(denseIndex);
+            var effectiveMaximumHealth = StatModifierMath.GetEffectiveValue(statModifiers, entityId, StatModifierTarget.MaximumHealth, part.MaximumHealth);
+            destination.Add(new InspectedComponentEntry(typeof(BodyPartComponent), FormatHealthBar(part.Name, part.CurrentHealth, effectiveMaximumHealth), 0));
+        }
+    }
+
+    /// <summary>Mirrors SimpleHealthComponent/BodyPartComponent's own ToString() bar format, fed the effective maximum instead of the raw stored field.</summary>
+    private static string FormatHealthBar(string prefix, float currentHealth, float effectiveMaximumHealth) =>
+        effectiveMaximumHealth > 0
+            ? $"{StringUtility.BuildPercentageBar(prefix, (int)currentHealth, (int)effectiveMaximumHealth, 20)} {(int)currentHealth}/{(int)effectiveMaximumHealth}"
+            : $"Invalid MaximumHealth: {effectiveMaximumHealth}";
 
     private string ResolveName(int entityId) =>
         _displayTextPool.TryGetReadonly(entityId, out var displayText) ? displayText.Name : "Unknown";

@@ -1,6 +1,9 @@
 using Engine.ECS.Components.Stores;
 using Game.Modules.Health;
 using Game.Modules.Health.Components;
+using Game.Modules.StatModifiers;
+using Game.Modules.StatModifiers.Components;
+using Game.World;
 
 namespace Tests.Modules.Health;
 
@@ -77,6 +80,25 @@ public sealed class ComplexHealthHealTests
 
         var part = bodyParts.GetReadonlyByDenseIndex(bodyParts.GetFirstDenseIndex(0));
         Assert.IsFalse(part.IsDisabled);
+    }
+
+    [TestMethod]
+    public void ApplyFractionToAllParts_MaximumHealthBuffActive_HealsPastRawMaximumToTheEffectiveOne()
+    {
+        var bodyParts = CreateBodyPartsPool();
+        bodyParts.Add(0, new BodyPartComponent("Head", BodyPartType.Head, currentHealth: 40, maximumHealth: 40, isVital: true));
+        var statModifiers = new MultiComponentPool<StatModifierComponent>(maximumEntityCount: 10, initialCapacity: 4);
+        statModifiers.Add(0, new StatModifierComponent(StatModifierTarget.MaximumHealth, StatModifierOperation.Multiplicative, StatModifierPolarity.Buff,
+            canModify: true, magnitude: 0.5f, remainingDurationFrames: null, StatusEffectSource.Admin));
+
+        // A part already at its raw maximum must still rise -- the true cap with a +50% buff
+        // active is 60, not 40, matching ComplexHealthDamage/ComplexHealthRegenSystem's own
+        // per-part effective-maximum clamp (see this method's own doc comment for the bug this
+        // regression test covers: ApplyFractionToAllParts used to ignore statModifiers entirely).
+        ComplexHealthHeal.ApplyFractionToAllParts(bodyParts, 0, 0.5f, statModifiers);
+
+        var part = bodyParts.GetReadonlyByDenseIndex(bodyParts.GetFirstDenseIndex(0));
+        Assert.AreEqual(60f, part.CurrentHealth, "40 + 60*0.5 = 70, clamped to the effective maximum of 60.");
     }
 
     [TestMethod]

@@ -1,6 +1,8 @@
 using Engine.ECS.Components.Stores;
 using Engine.Math;
 using Game.Modules.Health.Components;
+using Game.Modules.StatModifiers;
+using Game.Modules.StatModifiers.Components;
 
 namespace Game.Modules.Health;
 
@@ -36,16 +38,22 @@ public static class BodyPartSelection
         return -1; // Unreachable given count > 0, guarded for completeness.
     }
 
-    /// <summary>Picks entityId's body part with the lowest CurrentHealth/MaximumHealth fraction, skipping any part still inside its post-disable lockout window.</summary>
+    /// <summary>Picks entityId's body part with the lowest CurrentHealth/effective-MaximumHealth fraction, skipping any part still inside its post-disable lockout window.</summary>
     /// <remarks>
     /// The yo-yo-prevention case RegenLockoutFramesRemaining exists for. Its only caller is
     /// ComplexHealthRegenSystem's own passive-regen tick -- an active heal (potion/scroll) never
     /// goes through this method at all, see ComplexHealthHeal.ApplyFractionToAllParts, which heals
     /// every part at once rather than picking one, so there is no "should this ignore the lockout"
-    /// question for the heal path to begin with. Returns -1 if entityId owns no BodyPartComponent,
-    /// or every part is either at full health or currently locked out.
+    /// question for the heal path to begin with. Fraction is computed against each part's own
+    /// modifier-effective maximum (StatModifierMath, same chain ComplexHealthDamage/
+    /// ComplexHealthRegenSystem's own clamp already uses), not the raw MaximumHealth field -- a
+    /// part sitting at 100% of its raw max with an active MaximumHealth buff still has real
+    /// headroom up to the effective one, and treating it as "already full" here would leave it
+    /// permanently unselectable, stuck below the true cap regen should still be closing. Returns
+    /// -1 if entityId owns no BodyPartComponent, or every part is either at its effective maximum
+    /// or currently locked out.
     /// </remarks>
-    public static int PickLowestPercentage(MultiComponentPool<BodyPartComponent> bodyParts, int entityId)
+    public static int PickLowestPercentage(MultiComponentPool<BodyPartComponent> bodyParts, int entityId, MultiComponentPool<StatModifierComponent>? statModifiers = null)
     {
         var bestDenseIndex = -1;
         var bestFraction = float.MaxValue;
@@ -58,10 +66,11 @@ public static class BodyPartSelection
                 continue;
             }
 
-            var fraction = part.MaximumHealth > 0 ? part.CurrentHealth / part.MaximumHealth : 1f;
+            var effectiveMaximumHealth = StatModifierMath.GetEffectiveValue(statModifiers, entityId, StatModifierTarget.MaximumHealth, part.MaximumHealth);
+            var fraction = effectiveMaximumHealth > 0 ? part.CurrentHealth / effectiveMaximumHealth : 1f;
             if (fraction >= 1f)
             {
-                continue; // Already full, nothing to gain by selecting it.
+                continue; // Already at its effective maximum, nothing to gain by selecting it.
             }
 
             if (fraction < bestFraction)

@@ -29,7 +29,7 @@ public static class HealthHeal
         {
             if (bodyParts?.Has(entityId) == true)
             {
-                ComplexHealthHeal.ApplyFractionToAllParts(bodyParts, entityId, fraction);
+                ComplexHealthHeal.ApplyFractionToAllParts(bodyParts, entityId, fraction, statModifiers);
             }
 
             return;
