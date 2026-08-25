@@ -20,7 +20,7 @@ public sealed class AuraSourceGrantTests
     private static ActionEffectContext BuildContext(ComponentManager componentManager, MultiComponentPool<StatusEffectAuraSourceComponent>? auraSources, float durationScaleMultiplier = 1.0f) => new(
         SourceEntityId: SourceEntityId,
         TargetEntityId: TargetEntityId,
-        Health: componentManager.GetPackedPool<HealthComponent>(),
+        Health: componentManager.GetPackedPool<SimpleHealthComponent>(),
         EventBus: new EventBus(),
         MathUtility: new MathUtility(),
         ComponentManager: componentManager,
@@ -32,7 +32,7 @@ public sealed class AuraSourceGrantTests
     private static (ComponentManager ComponentManager, MultiComponentPool<StatusEffectAuraSourceComponent> AuraSources) Build()
     {
         var componentManager = new ComponentManager(initialEntityCapacity: 10, initialComponentCapacity: 10);
-        componentManager.RegisterPackedPool<HealthComponent>(static (ref existing, incoming) => existing = incoming);
+        componentManager.RegisterPackedPool<SimpleHealthComponent>(static (ref existing, incoming) => existing = incoming);
         componentManager.RegisterMultiPool<StatusEffectAuraSourceComponent>();
         componentManager.RegisterPackedPool<AuraSourceExpiryComponent>(static (ref existing, incoming) => existing = incoming);
         return (componentManager, componentManager.GetMultiPool<StatusEffectAuraSourceComponent>());

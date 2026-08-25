@@ -1,4 +1,5 @@
 using Engine.ECS.Components.Stores;
+using Game.Modules.Health;
 using Game.Modules.Health.Components;
 using Game.Modules.StatModifiers;
 using Game.Modules.StatModifiers.Components;
@@ -14,15 +15,17 @@ namespace Presentation.UI;
 /// InspectionWindow counterpart to PlayerHealthBarContent's own always-player, always-visible
 /// bar (see ResourceBarRenderer, the draw logic shared by both, and any other resource bar --
 /// mana, a future soul bar -- that adopts the same shape). Unlike PlayerHealthBarContent,
-/// draws nothing at all when the configured entity has no HealthComponent (terrain, or an
-/// entity genuinely missing one) -- InspectionWindow only ever creates this element when it
-/// already knows the subject has one, so there's no "hasHealth: false" light-grey case to show.
+/// draws nothing at all when the configured entity has neither a SimpleHealthComponent nor a
+/// BodyPartComponent (terrain, or an entity genuinely missing both) -- InspectionWindow only
+/// ever creates this element when it already knows the subject has one, so there's no
+/// "hasHealth: false" light-grey case to show.
 /// </summary>
 public sealed class HealthBarElement(
     FontService fontService,
     ElementPoolService elementPoolService,
     LabelRenderer labelRenderer,
-    PackedComponentPool<HealthComponent> healthPool,
+    PackedComponentPool<SimpleHealthComponent> healthPool,
+    MultiComponentPool<BodyPartComponent> bodyParts,
     MultiComponentPool<StatModifierComponent>? statModifiers)
     : Element(fontService, elementPoolService, labelRenderer)
 {
@@ -32,14 +35,14 @@ public sealed class HealthBarElement(
 
     public override void DrawContent(GameTime gameTime)
     {
-        if (!healthPool.TryGetReadonly(_entityId, out var health) || health.MaximumHealth <= 0)
+        if (!HealthQueries.TryGetTotals(healthPool, bodyParts, _entityId, out var currentHealth, out var maximumHealth) || maximumHealth <= 0)
         {
             return;
         }
 
-        var effectiveMaximumHealth = StatModifierMath.GetEffectiveValue(statModifiers, _entityId, StatModifierTarget.MaximumHealth, health.MaximumHealth);
+        var effectiveMaximumHealth = StatModifierMath.GetEffectiveValue(statModifiers, _entityId, StatModifierTarget.MaximumHealth, maximumHealth);
         var healthFraction = effectiveMaximumHealth > 0
-            ? MathHelper.Clamp(health.CurrentHealth / effectiveMaximumHealth, 0f, 1f)
+            ? MathHelper.Clamp(currentHealth / effectiveMaximumHealth, 0f, 1f)
             : 1f;
 
         var origin = ContentAbsolutePosition;

@@ -75,7 +75,8 @@ public sealed class MapWindowTests
         componentManager.RegisterDirectPool<DisplayTextComponent>(static (ref existing, incoming) => existing = incoming);
         componentManager.RegisterMultiPool<NonBlockingComponent>();
         componentManager.RegisterPackedPool<MovementComponent>(static (ref existing, incoming) => existing = incoming);
-        componentManager.RegisterPackedPool<HealthComponent>(static (ref existing, incoming) => existing = incoming);
+        componentManager.RegisterPackedPool<SimpleHealthComponent>(static (ref existing, incoming) => existing = incoming);
+        componentManager.RegisterMultiPool<BodyPartComponent>();
         componentManager.RegisterMultiPool<StatusEffectAuraSourceComponent>();
         componentManager.RegisterMultiPool<ActionInstanceComponent>();
         componentManager.RegisterMultiPool<ActionHotkeyBindingComponent>();
@@ -677,7 +678,7 @@ public sealed class MapWindowTests
         var targetTransform = new TransformComponent(targetPosition, new Vector2Byte(1, 1));
         componentManager.Merge(TargetEntityId, targetTransform);
         world.PlaceEntityOnMap(TargetEntityId, targetPosition, ref targetTransform);
-        componentManager.Merge(TargetEntityId, new HealthComponent(100, 100));
+        componentManager.Merge(TargetEntityId, new SimpleHealthComponent(100, 100));
 
         mapWindow.HandleHotkeys(new KeyboardState(Keys.D5), new KeyboardState());
         mapWindow.HandleHotkeys(new KeyboardState(Keys.D5), new KeyboardState());

@@ -29,7 +29,7 @@ namespace Game.Modules.Actions;
 public sealed record ActionEffectContext(
     int SourceEntityId,
     int TargetEntityId,
-    PackedComponentPool<HealthComponent> Health,
+    PackedComponentPool<SimpleHealthComponent> Health,
     EventBus EventBus,
     MathUtility MathUtility,
     ComponentManager ComponentManager,
@@ -42,6 +42,7 @@ public sealed record ActionEffectContext(
     StatusEffectAuraApplierRegistry? StatusEffectAppliers = null,
     PackedComponentPool<DeadComponent>? DeadEntities = null,
     MultiComponentPool<StatusEffectAuraSourceComponent>? AuraSources = null,
+    MultiComponentPool<BodyPartComponent>? BodyParts = null,
     IPlayerQuery? PlayerQuery = null,
     ushort? DamageOverride = null,
     float DurationScaleMultiplier = 1.0f,

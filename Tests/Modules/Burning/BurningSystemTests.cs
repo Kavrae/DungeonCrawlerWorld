@@ -1,6 +1,7 @@
 ﻿using Engine.ECS.Components.Stores;
 using Engine.ECS.Systems;
 using Engine.Events;
+using Engine.Math;
 using Game.Modules.Burning;
 using Game.Modules.Burning.Components;
 using Game.Modules.Burning.Systems;
@@ -26,7 +27,7 @@ public sealed class BurningSystemTests
 
     private static MultiComponentPool<StatusEffectStack> CreateStackPool() => new(maximumEntityCount: 10, initialCapacity: 10);
 
-    private static PackedComponentPool<HealthComponent> CreateHealthPool() =>
+    private static PackedComponentPool<SimpleHealthComponent> CreateHealthPool() =>
         new(maximumEntityCount: 10, initialCapacity: 4, static (ref existing, incoming) => existing = incoming);
 
     private static DirectComponentPool<ProcessingTierComponent> CreateTiersPool() =>
@@ -51,7 +52,7 @@ public sealed class BurningSystemTests
         stacks.Add(0, new StatusEffectStack(StatusEffectType.Burning, StatusEffectSource.Admin));
         timers.Add(0, new BurningTimerComponent(60, stackCount: 1));
         tiers.Add(0, new ProcessingTierComponent(ProcessingTierLevel.Local));
-        var system = new BurningSystem(timers, stacks, health, new EventBus(), new FakePlayerQuery(0), tiers, new ProcessingTierEvents());
+        var system = new BurningSystem(timers, stacks, health, new EventBus(), new FakePlayerQuery(0), tiers, new ProcessingTierEvents(), new MathUtility());
 
         system.Update(default, 0);
 
@@ -64,13 +65,13 @@ public sealed class BurningSystemTests
         var timers = CreateTimerPool();
         var stacks = CreateStackPool();
         var health = CreateHealthPool();
-        health.Add(0, new HealthComponent(currentHealth: 100, maximumHealth: 100));
+        health.Add(0, new SimpleHealthComponent(currentHealth: 100, maximumHealth: 100));
         for (var i = 0; i < 7; i++)
         {
             stacks.Add(0, new StatusEffectStack(StatusEffectType.Burning, StatusEffectSource.Admin));
         }
         timers.Add(0, new BurningTimerComponent(1, stackCount: 7));
-        var system = new BurningSystem(timers, stacks, health, new EventBus(), new FakePlayerQuery(0), CreateTiersPool(), new ProcessingTierEvents());
+        var system = new BurningSystem(timers, stacks, health, new EventBus(), new FakePlayerQuery(0), CreateTiersPool(), new ProcessingTierEvents(), new MathUtility());
 
         system.Update(default, 0);
 
@@ -93,10 +94,10 @@ public sealed class BurningSystemTests
         var timers = CreateTimerPool();
         var stacks = CreateStackPool();
         var health = CreateHealthPool();
-        health.Add(0, new HealthComponent(currentHealth: 100, maximumHealth: 100));
+        health.Add(0, new SimpleHealthComponent(currentHealth: 100, maximumHealth: 100));
         stacks.Add(0, new StatusEffectStack(StatusEffectType.Burning, StatusEffectSource.Admin));
         timers.Add(0, new BurningTimerComponent(BurningEffects.TickIntervalFrames, stackCount: 1));
-        var system = new BurningSystem(timers, stacks, health, new EventBus(), new FakePlayerQuery(0), CreateTiersPool(), new ProcessingTierEvents());
+        var system = new BurningSystem(timers, stacks, health, new EventBus(), new FakePlayerQuery(0), CreateTiersPool(), new ProcessingTierEvents(), new MathUtility());
 
         for (var frame = 0; frame < BurningEffects.TickIntervalFrames; frame++)
         {
@@ -112,10 +113,10 @@ public sealed class BurningSystemTests
         var timers = CreateTimerPool();
         var stacks = CreateStackPool();
         var health = CreateHealthPool();
-        health.Add(0, new HealthComponent(currentHealth: 100, maximumHealth: 100));
+        health.Add(0, new SimpleHealthComponent(currentHealth: 100, maximumHealth: 100));
         stacks.Add(0, new StatusEffectStack(StatusEffectType.Burning, StatusEffectSource.Admin));
         timers.Add(0, new BurningTimerComponent(1, stackCount: 1));
-        var system = new BurningSystem(timers, stacks, health, new EventBus(), new FakePlayerQuery(0), CreateTiersPool(), new ProcessingTierEvents());
+        var system = new BurningSystem(timers, stacks, health, new EventBus(), new FakePlayerQuery(0), CreateTiersPool(), new ProcessingTierEvents(), new MathUtility());
 
         system.Update(default, 0);
 
@@ -128,10 +129,10 @@ public sealed class BurningSystemTests
         var timers = CreateTimerPool();
         var stacks = CreateStackPool();
         var health = CreateHealthPool();
-        health.Add(0, new HealthComponent(currentHealth: 100, maximumHealth: 100));
+        health.Add(0, new SimpleHealthComponent(currentHealth: 100, maximumHealth: 100));
         stacks.Add(0, new StatusEffectStack(StatusEffectType.Burning, StatusEffectSource.Admin));
         timers.Add(0, new BurningTimerComponent(1, stackCount: 1));
-        var system = new BurningSystem(timers, stacks, health, new EventBus(), new FakePlayerQuery(0), CreateTiersPool(), new ProcessingTierEvents());
+        var system = new BurningSystem(timers, stacks, health, new EventBus(), new FakePlayerQuery(0), CreateTiersPool(), new ProcessingTierEvents(), new MathUtility());
 
         system.Update(default, 0);
         system.Update(default, 0);
@@ -143,13 +144,13 @@ public sealed class BurningSystemTests
         var timers = CreateTimerPool();
         var stacks = CreateStackPool();
         var health = CreateHealthPool();
-        health.Add(0, new HealthComponent(currentHealth: 3, maximumHealth: 100));
+        health.Add(0, new SimpleHealthComponent(currentHealth: 3, maximumHealth: 100));
         for (var i = 0; i < 5; i++)
         {
             stacks.Add(0, new StatusEffectStack(StatusEffectType.Burning, StatusEffectSource.Admin));
         }
         timers.Add(0, new BurningTimerComponent(1, stackCount: 5));
-        var system = new BurningSystem(timers, stacks, health, new EventBus(), new FakePlayerQuery(0), CreateTiersPool(), new ProcessingTierEvents());
+        var system = new BurningSystem(timers, stacks, health, new EventBus(), new FakePlayerQuery(0), CreateTiersPool(), new ProcessingTierEvents(), new MathUtility());
 
         system.Update(default, 0);
 
@@ -177,13 +178,13 @@ public sealed class BurningSystemTests
         var timers = CreateTimerPool();
         var stacks = CreateStackPool();
         var health = CreateHealthPool();
-        health.Add(0, new HealthComponent(currentHealth: 100, maximumHealth: 100));
+        health.Add(0, new SimpleHealthComponent(currentHealth: 100, maximumHealth: 100));
         stacks.Add(0, new StatusEffectStack(StatusEffectType.Burning, StatusEffectSource.Admin));
         timers.Add(0, new BurningTimerComponent(1, stackCount: 1));
         var eventBus = new EventBus();
         EntityDamagedEvent? published = null;
         eventBus.Subscribe<EntityDamagedEvent>(e => published = e);
-        var system = new BurningSystem(timers, stacks, health, eventBus, new FakePlayerQuery(0), CreateTiersPool(), new ProcessingTierEvents());
+        var system = new BurningSystem(timers, stacks, health, eventBus, new FakePlayerQuery(0), CreateTiersPool(), new ProcessingTierEvents(), new MathUtility());
 
         system.Update(default, 0);
 
@@ -199,13 +200,13 @@ public sealed class BurningSystemTests
         var timers = CreateTimerPool();
         var stacks = CreateStackPool();
         var health = CreateHealthPool();
-        health.Add(1, new HealthComponent(currentHealth: 100, maximumHealth: 100));
+        health.Add(1, new SimpleHealthComponent(currentHealth: 100, maximumHealth: 100));
         stacks.Add(1, new StatusEffectStack(StatusEffectType.Burning, StatusEffectSource.Admin));
         timers.Add(1, new BurningTimerComponent(1, stackCount: 1));
         var eventBus = new EventBus();
         var published = false;
         eventBus.Subscribe<EntityDamagedEvent>(_ => published = true);
-        var system = new BurningSystem(timers, stacks, health, eventBus, new FakePlayerQuery(playerEntityId: 0), CreateTiersPool(), new ProcessingTierEvents());
+        var system = new BurningSystem(timers, stacks, health, eventBus, new FakePlayerQuery(playerEntityId: 0), CreateTiersPool(), new ProcessingTierEvents(), new MathUtility());
 
         // Entity 1 lands in stripe 1 (entityId % StripeCount), not stripe 0.
         system.Update(default, 1);
@@ -223,7 +224,7 @@ public sealed class BurningSystemTests
         stacks.Add(0, new StatusEffectStack(StatusEffectType.Burning, StatusEffectSource.Admin));
         timers.Add(0, new BurningTimerComponent(60, stackCount: 1));
         tiers.Add(0, new ProcessingTierComponent(ProcessingTierLevel.Neighborhood));
-        var system = new BurningSystem(timers, stacks, health, new EventBus(), new FakePlayerQuery(0), tiers, new ProcessingTierEvents());
+        var system = new BurningSystem(timers, stacks, health, new EventBus(), new FakePlayerQuery(0), tiers, new ProcessingTierEvents(), new MathUtility());
 
         // Entity 0, Neighborhood-tiered (StripeCount 15 * divisor 2 = 30), lands in bucket 0 -- due only when FrameCount % 30 == 0.
         system.Update(new EngineTime(default, default, false, FrameCount: 1), 0);
@@ -241,7 +242,7 @@ public sealed class BurningSystemTests
         stacks.Add(0, new StatusEffectStack(StatusEffectType.Burning, StatusEffectSource.Admin));
         timers.Add(0, new BurningTimerComponent(60, stackCount: 1));
         tiers.Add(0, new ProcessingTierComponent(ProcessingTierLevel.Neighborhood));
-        var system = new BurningSystem(timers, stacks, health, new EventBus(), new FakePlayerQuery(0), tiers, new ProcessingTierEvents());
+        var system = new BurningSystem(timers, stacks, health, new EventBus(), new FakePlayerQuery(0), tiers, new ProcessingTierEvents(), new MathUtility());
 
         system.Update(new EngineTime(default, default, false, FrameCount: 0), 0);
 

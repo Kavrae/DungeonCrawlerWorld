@@ -1,6 +1,7 @@
 using Engine.ECS.Components.Stores;
 using Engine.ECS.Systems;
 using Engine.Events;
+using Engine.Math;
 using Game.Modules.Health;
 using Game.Modules.Health.Components;
 using Game.Modules.Poison.Components;
@@ -25,10 +26,12 @@ public sealed class PoisonSystem : ISystem
 
     private readonly PackedComponentPool<PoisonTimerComponent> _timers;
     private readonly MultiComponentPool<StatusEffectStack> _stacks;
-    private readonly PackedComponentPool<HealthComponent> _health;
+    private readonly PackedComponentPool<SimpleHealthComponent> _health;
     private readonly MultiComponentPool<StatModifierComponent>? _statModifiers;
     private readonly EventBus _eventBus;
     private readonly IPlayerQuery? _playerQuery;
+    private readonly MathUtility _mathUtility;
+    private readonly MultiComponentPool<BodyPartComponent>? _bodyParts;
     private readonly List<int> _pendingTimerRemovals = [];
 
     // Cached once instead of passing the Tick method group at the CountdownTicker.Tick call
@@ -39,10 +42,12 @@ public sealed class PoisonSystem : ISystem
     public PoisonSystem(
         PackedComponentPool<PoisonTimerComponent> timers,
         MultiComponentPool<StatusEffectStack> stacks,
-        PackedComponentPool<HealthComponent> health,
+        PackedComponentPool<SimpleHealthComponent> health,
         EventBus eventBus,
         IPlayerQuery? playerQuery,
-        MultiComponentPool<StatModifierComponent>? statModifiers = null)
+        MathUtility mathUtility,
+        MultiComponentPool<StatModifierComponent>? statModifiers = null,
+        MultiComponentPool<BodyPartComponent>? bodyParts = null)
     {
         _timers = timers;
         _stacks = stacks;
@@ -50,6 +55,8 @@ public sealed class PoisonSystem : ISystem
         _statModifiers = statModifiers;
         _eventBus = eventBus;
         _playerQuery = playerQuery;
+        _mathUtility = mathUtility;
+        _bodyParts = bodyParts;
         _tick = Tick;
     }
 
@@ -65,7 +72,7 @@ public sealed class PoisonSystem : ISystem
             return true;
         }
 
-        HealthDamage.Apply(_health, _eventBus, entityId, timer.StackCount, timer.Source, _playerQuery, StatusEffectDamageType.Describe(StatusEffectType.Poison), _statModifiers);
+        HealthDamage.Apply(_health, _eventBus, entityId, timer.StackCount, timer.Source, _playerQuery, StatusEffectDamageType.Describe(StatusEffectType.Poison), _statModifiers, _bodyParts, _mathUtility);
 
         var remainingDuration = (ushort)(timer.RemainingDurationTicks - 1);
         if (remainingDuration == 0)

@@ -84,10 +84,10 @@ public sealed class ActionEffectResolverTests
             _occupantsByPosition.TryGetValue(position, out var entityIds) ? entityIds : [];
     }
 
-    private static (FakeMapQuery MapQuery, PackedComponentPool<HealthComponent> Health, EventBus EventBus, MathUtility MathUtility, StatusEffectAuraApplierRegistry StatusEffectAppliers, ComponentManager ComponentManager) Build()
+    private static (FakeMapQuery MapQuery, PackedComponentPool<SimpleHealthComponent> Health, EventBus EventBus, MathUtility MathUtility, StatusEffectAuraApplierRegistry StatusEffectAppliers, ComponentManager ComponentManager) Build()
     {
         var mapQuery = new FakeMapQuery();
-        var health = new PackedComponentPool<HealthComponent>(maximumEntityCount: 10, initialCapacity: 10, static (ref existing, incoming) => existing = incoming);
+        var health = new PackedComponentPool<SimpleHealthComponent>(maximumEntityCount: 10, initialCapacity: 10, static (ref existing, incoming) => existing = incoming);
         var eventBus = new EventBus();
         var mathUtility = new MathUtility(new NeverCritRandom());
         var statusEffectAppliers = new StatusEffectAuraApplierRegistry();
@@ -101,7 +101,7 @@ public sealed class ActionEffectResolverTests
     {
         var (mapQuery, health, eventBus, mathUtility, statusEffectAppliers, componentManager) = Build();
         mapQuery.SetBlockingOccupant(TargetTile, BlockingTargetEntityId);
-        health.Add(BlockingTargetEntityId, new HealthComponent(100, 100));
+        health.Add(BlockingTargetEntityId, new SimpleHealthComponent(100, 100));
 
         ActionEffectResolver.Apply(Action, Instance, SourceEntityId, [TargetTile], mapQuery, health, eventBus, mathUtility, playerQuery: null, statusEffectAppliers, componentManager);
 
@@ -114,7 +114,7 @@ public sealed class ActionEffectResolverTests
     {
         var (mapQuery, health, eventBus, mathUtility, statusEffectAppliers, componentManager) = Build();
         mapQuery.AddNonBlockingOccupant(TargetTile, NonBlockingTargetEntityId);
-        health.Add(NonBlockingTargetEntityId, new HealthComponent(100, 100));
+        health.Add(NonBlockingTargetEntityId, new SimpleHealthComponent(100, 100));
 
         ActionEffectResolver.Apply(Action, Instance, SourceEntityId, [TargetTile], mapQuery, health, eventBus, mathUtility, playerQuery: null, statusEffectAppliers, componentManager);
 
@@ -128,8 +128,8 @@ public sealed class ActionEffectResolverTests
         var (mapQuery, health, eventBus, mathUtility, statusEffectAppliers, componentManager) = Build();
         mapQuery.AddNonBlockingOccupant(TargetTile, NonBlockingTargetEntityId);
         mapQuery.AddNonBlockingOccupant(TargetTile, SecondNonBlockingTargetEntityId);
-        health.Add(NonBlockingTargetEntityId, new HealthComponent(100, 100));
-        health.Add(SecondNonBlockingTargetEntityId, new HealthComponent(100, 100));
+        health.Add(NonBlockingTargetEntityId, new SimpleHealthComponent(100, 100));
+        health.Add(SecondNonBlockingTargetEntityId, new SimpleHealthComponent(100, 100));
 
         ActionEffectResolver.Apply(Action, Instance, SourceEntityId, [TargetTile], mapQuery, health, eventBus, mathUtility, playerQuery: null, statusEffectAppliers, componentManager);
 
@@ -144,8 +144,8 @@ public sealed class ActionEffectResolverTests
         var (mapQuery, health, eventBus, mathUtility, statusEffectAppliers, componentManager) = Build();
         mapQuery.SetBlockingOccupant(TargetTile, BlockingTargetEntityId);
         mapQuery.AddNonBlockingOccupant(TargetTile, NonBlockingTargetEntityId);
-        health.Add(BlockingTargetEntityId, new HealthComponent(100, 100));
-        health.Add(NonBlockingTargetEntityId, new HealthComponent(100, 100));
+        health.Add(BlockingTargetEntityId, new SimpleHealthComponent(100, 100));
+        health.Add(NonBlockingTargetEntityId, new SimpleHealthComponent(100, 100));
 
         ActionEffectResolver.Apply(Action, Instance, SourceEntityId, [TargetTile], mapQuery, health, eventBus, mathUtility, playerQuery: null, statusEffectAppliers, componentManager);
 
@@ -174,7 +174,7 @@ public sealed class ActionEffectResolverTests
     {
         var (mapQuery, health, eventBus, mathUtility, statusEffectAppliers, componentManager) = Build();
         mapQuery.SetBlockingOccupant(TargetTile, BlockingTargetEntityId);
-        health.Add(BlockingTargetEntityId, new HealthComponent(100, 100));
+        health.Add(BlockingTargetEntityId, new SimpleHealthComponent(100, 100));
         componentManager.RegisterMultiPool<AbilityScoreComponent>();
         var abilityScores = componentManager.GetMultiPool<AbilityScoreComponent>();
         abilityScores.Add(SourceEntityId, new AbilityScoreComponent(AbilityScoreType.Strength, baseValue: 8, total: 8));
@@ -190,7 +190,7 @@ public sealed class ActionEffectResolverTests
     {
         var (mapQuery, health, eventBus, mathUtility, statusEffectAppliers, componentManager) = Build();
         mapQuery.SetBlockingOccupant(TargetTile, BlockingTargetEntityId);
-        health.Add(BlockingTargetEntityId, new HealthComponent(100, 100));
+        health.Add(BlockingTargetEntityId, new SimpleHealthComponent(100, 100));
 
         ActionEffectResolver.Apply(StrengthTaggedAction, StrengthTaggedInstance, SourceEntityId, [TargetTile], mapQuery, health, eventBus, mathUtility, playerQuery: null, statusEffectAppliers, componentManager);
 
@@ -202,7 +202,7 @@ public sealed class ActionEffectResolverTests
     {
         var (mapQuery, health, eventBus, mathUtility, statusEffectAppliers, componentManager) = Build();
         mapQuery.SetBlockingOccupant(TargetTile, BlockingTargetEntityId);
-        health.Add(BlockingTargetEntityId, new HealthComponent(100, 100));
+        health.Add(BlockingTargetEntityId, new SimpleHealthComponent(100, 100));
         componentManager.RegisterMultiPool<AbilityScoreComponent>();
         var abilityScores = componentManager.GetMultiPool<AbilityScoreComponent>();
         // SourceEntityId has no AbilityScoreComponent entries at all.
@@ -247,7 +247,7 @@ public sealed class ActionEffectResolverTests
         Assert.AreEqual(NonBlockingTargetEntityId, applier.AppliedCalls[0].EntityId);
     }
 
-    /// <summary>The concrete "immortal but affectable" regression: the target never gets a HealthComponent at all, and the status effect still grants.</summary>
+    /// <summary>The concrete "immortal but affectable" regression: the target never gets a SimpleHealthComponent at all, and the status effect still grants.</summary>
     [TestMethod]
     public void Apply_TargetWithNoHealthComponentAtAll_StillGrantsStatusEffect()
     {

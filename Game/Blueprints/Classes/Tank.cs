@@ -11,9 +11,9 @@ namespace Game.Blueprints.Classes;
 /// <summary>
 /// Tanks have 10% more max health than their race baseline, plus a permanent +10% HealthRegen
 /// StatModifier (regen has no stored field to multiply in place now that it's computed live from
-/// Constitution -- see HealthRegenSystem -- so the bonus is granted as a modifier on
+/// Constitution -- see SimpleHealthRegenSystem -- so the bonus is granted as a modifier on
 /// StatModifierTarget.HealthRegen instead, the same way PlayerBlueprint's own permanent bonuses
-/// are granted). Order-independent: if a race blueprint already set HealthComponent, Tank boosts
+/// are granted). Order-independent: if a race blueprint already set SimpleHealthComponent, Tank boosts
 /// its MaximumHealth in place; if not (Tank built standalone, or composed before a race), Tank
 /// merges in its own baseline instead, so the class's mechanic still functions rather than
 /// silently doing nothing because of composition order. The regen modifier is granted either way.
@@ -31,16 +31,16 @@ public sealed class Tank(MathUtility mathUtility) : IBlueprint
     {
         componentManager.Merge(entityId, new ClassComponent(ClassId, ClassName, Description));
 
-        if (componentManager.GetPackedPool<HealthComponent>().Has(entityId))
+        if (componentManager.GetPackedPool<SimpleHealthComponent>().Has(entityId))
         {
-            componentManager.TryUpdate(entityId, static (ref HealthComponent healthComponent) =>
+            componentManager.TryUpdate(entityId, static (ref SimpleHealthComponent healthComponent) =>
             {
                 healthComponent.MaximumHealth *= 1.10f;
             });
         }
         else
         {
-            componentManager.Merge(entityId, new HealthComponent((short)mathUtility.Next(1, BaselineMaximumHealth + 1), BaselineMaximumHealth));
+            componentManager.Merge(entityId, new SimpleHealthComponent((short)mathUtility.Next(1, BaselineMaximumHealth + 1), BaselineMaximumHealth));
         }
 
         StatModifierEffects.Apply(componentManager, entityId, StatModifierTarget.HealthRegen, StatModifierOperation.Multiplicative, StatModifierPolarity.Buff,

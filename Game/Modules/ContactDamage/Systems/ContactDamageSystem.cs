@@ -1,6 +1,7 @@
 ﻿using Engine.ECS.Components.Stores;
 using Engine.ECS.Systems;
 using Engine.Events;
+using Engine.Math;
 using Game.Modules.ContactDamage.Components;
 using Game.Modules.Death.Components;
 using Game.Modules.Health;
@@ -19,7 +20,7 @@ namespace Game.Modules.ContactDamage.Systems;
 /// moving population, a measured hotspot; see FrameEventBuffer's own doc comment) and ticks
 /// ongoing exposure via the same Update, combined in one class since both operate on the same
 /// ContactDamageExposureComponent pool. StripeCount is deliberately 1, not the 10
-/// HealthRegenSystem/ActionLockSystem use -- see BurningSystem's own doc comment for why:
+/// SimpleHealthRegenSystem/ActionLockSystem use -- see BurningSystem's own doc comment for why:
 /// the population (entities currently standing on a hazard tile) is expected to stay small,
 /// and striping would stretch "every N frames" into "every N * StripeCount real frames." Still
 /// wrapped in a TieredEntityStripeSet despite base StripeCount 1, though (unlike the old plain
@@ -40,13 +41,15 @@ public sealed class ContactDamageSystem : ISystem
 
     private readonly PackedComponentPool<DamageOnContactComponent> _hazards;
     private readonly PackedComponentPool<ContactDamageExposureComponent> _exposures;
-    private readonly PackedComponentPool<HealthComponent> _health;
+    private readonly PackedComponentPool<SimpleHealthComponent> _health;
     private readonly MultiComponentPool<StatModifierComponent>? _statModifiers;
     private readonly EventBus _eventBus;
     private readonly IMapQuery _mapQuery;
     private readonly IPlayerQuery? _playerQuery;
     private readonly FrameEventBuffer<EntityMovedEvent> _movedEntities;
     private readonly PackedComponentPool<DeadComponent>? _deadEntities;
+    private readonly MultiComponentPool<BodyPartComponent>? _bodyParts;
+    private readonly MathUtility _mathUtility;
     private readonly TieredEntityStripeSet _tieredStripeSet;
 
     // CountdownTicker.Tick's contract needs a reused pendingRemovals list regardless -- this
@@ -64,15 +67,17 @@ public sealed class ContactDamageSystem : ISystem
     public ContactDamageSystem(
         PackedComponentPool<DamageOnContactComponent> hazards,
         PackedComponentPool<ContactDamageExposureComponent> exposures,
-        PackedComponentPool<HealthComponent> health,
+        PackedComponentPool<SimpleHealthComponent> health,
         EventBus eventBus,
         IMapQuery mapQuery,
         IPlayerQuery? playerQuery,
         FrameEventBuffer<EntityMovedEvent> movedEntities,
         DirectComponentPool<ProcessingTierComponent> processingTiers,
         ProcessingTierEvents processingTierEvents,
+        MathUtility mathUtility,
         MultiComponentPool<StatModifierComponent>? statModifiers = null,
-        PackedComponentPool<DeadComponent>? deadEntities = null)
+        PackedComponentPool<DeadComponent>? deadEntities = null,
+        MultiComponentPool<BodyPartComponent>? bodyParts = null)
     {
         _hazards = hazards;
         _exposures = exposures;
@@ -83,6 +88,8 @@ public sealed class ContactDamageSystem : ISystem
         _playerQuery = playerQuery;
         _movedEntities = movedEntities;
         _deadEntities = deadEntities;
+        _mathUtility = mathUtility;
+        _bodyParts = bodyParts;
         _tick = Tick;
 
         _tieredStripeSet = ProcessingTierWiring.CreateAndWire(StripeCount, exposures, processingTiers, processingTierEvents);
@@ -98,7 +105,7 @@ public sealed class ContactDamageSystem : ISystem
         var terrainEntityId = _mapQuery.GetTerrainEntityIdAt(moved.NewPosition);
         if (terrainEntityId != -1 && _hazards.TryGetReadonly(terrainEntityId, out var hazard))
         {
-            HealthDamage.Apply(_health, _eventBus, moved.EntityId, hazard.DamagePerTick, StatusEffectSource.FromEntity(terrainEntityId), _playerQuery, "Contact", _statModifiers);
+            HealthDamage.Apply(_health, _eventBus, moved.EntityId, hazard.DamagePerTick, StatusEffectSource.FromEntity(terrainEntityId), _playerQuery, "Contact", _statModifiers, _bodyParts, _mathUtility, _deadEntities);
 
             if (_exposures.Has(moved.EntityId))
             {
@@ -154,7 +161,7 @@ public sealed class ContactDamageSystem : ISystem
             return false;
         }
 
-        HealthDamage.Apply(_health, _eventBus, entityId, hazard.DamagePerTick, StatusEffectSource.FromEntity(exposure.SourceEntityId), _playerQuery, "Contact", _statModifiers);
+        HealthDamage.Apply(_health, _eventBus, entityId, hazard.DamagePerTick, StatusEffectSource.FromEntity(exposure.SourceEntityId), _playerQuery, "Contact", _statModifiers, _bodyParts, _mathUtility, _deadEntities);
 
         _exposures.TryUpdate(entityId, hazard.TickIntervalFrames, static (ref ContactDamageExposureComponent e, ushort tickIntervalFrames) => e.FramesUntilNextTick = tickIntervalFrames);
 

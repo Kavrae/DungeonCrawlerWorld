@@ -67,7 +67,7 @@ public sealed class ConsumableActivationSystemTests
         componentManager.RegisterPackedPool<PendingConsumableActivationComponent>(static (ref existing, incoming) => existing = incoming);
         componentManager.RegisterPackedPool<ActionLockComponent>(static (ref existing, incoming) => existing = incoming);
         componentManager.RegisterPackedPool<PotionCooldownComponent>(static (ref existing, incoming) => existing = incoming);
-        componentManager.RegisterPackedPool<HealthComponent>(static (ref existing, incoming) => existing = incoming);
+        componentManager.RegisterPackedPool<SimpleHealthComponent>(static (ref existing, incoming) => existing = incoming);
         componentManager.RegisterPackedPool<DeadComponent>(static (ref existing, incoming) => existing = incoming);
         componentManager.RegisterPackedPool<ManaComponent>(static (ref existing, incoming) => existing = incoming);
         componentManager.RegisterMultiPool<InventoryItemStackComponent>();
@@ -102,7 +102,7 @@ public sealed class ConsumableActivationSystemTests
             componentManager.GetPackedPool<PendingConsumableActivationComponent>(),
             componentManager.GetPackedPool<ActionLockComponent>(),
             componentManager.GetPackedPool<PotionCooldownComponent>(),
-            componentManager.GetPackedPool<HealthComponent>(),
+            componentManager.GetPackedPool<SimpleHealthComponent>(),
             itemCatalog,
             new ActionCatalog(),
             mapQuery,
@@ -129,7 +129,7 @@ public sealed class ConsumableActivationSystemTests
         componentManager.RegisterPackedPool<PendingConsumableActivationComponent>(static (ref existing, incoming) => existing = incoming);
         componentManager.RegisterPackedPool<ActionLockComponent>(static (ref existing, incoming) => existing = incoming);
         componentManager.RegisterPackedPool<PotionCooldownComponent>(static (ref existing, incoming) => existing = incoming);
-        componentManager.RegisterPackedPool<HealthComponent>(static (ref existing, incoming) => existing = incoming);
+        componentManager.RegisterPackedPool<SimpleHealthComponent>(static (ref existing, incoming) => existing = incoming);
         componentManager.RegisterPackedPool<DeadComponent>(static (ref existing, incoming) => existing = incoming);
         componentManager.RegisterPackedPool<ManaComponent>(static (ref existing, incoming) => existing = incoming);
         componentManager.RegisterMultiPool<InventoryItemStackComponent>();
@@ -154,7 +154,7 @@ public sealed class ConsumableActivationSystemTests
             componentManager.GetPackedPool<PendingConsumableActivationComponent>(),
             componentManager.GetPackedPool<ActionLockComponent>(),
             componentManager.GetPackedPool<PotionCooldownComponent>(),
-            componentManager.GetPackedPool<HealthComponent>(),
+            componentManager.GetPackedPool<SimpleHealthComponent>(),
             itemCatalog,
             new ActionCatalog(),
             mapQuery,
@@ -171,7 +171,7 @@ public sealed class ConsumableActivationSystemTests
     }
 
     private static float HealthOf(ComponentManager componentManager, int entityId) =>
-        componentManager.GetPackedPool<HealthComponent>().TryGetReadonly(entityId, out var health) ? health.CurrentHealth : -1f;
+        componentManager.GetPackedPool<SimpleHealthComponent>().TryGetReadonly(entityId, out var health) ? health.CurrentHealth : -1f;
 
     private static float ManaOf(ComponentManager componentManager, int entityId) =>
         componentManager.GetPackedPool<ManaComponent>().TryGetReadonly(entityId, out var mana) ? mana.CurrentMana : -1f;
@@ -192,7 +192,7 @@ public sealed class ConsumableActivationSystemTests
     {
         var (system, componentManager, mapQuery, _) = Build();
         mapQuery.SetOccupant(TargetTile, TargetEntityId);
-        componentManager.Merge(TargetEntityId, new HealthComponent(currentHealth: 20, maximumHealth: 100));
+        componentManager.Merge(TargetEntityId, new SimpleHealthComponent(currentHealth: 20, maximumHealth: 100));
         var stackInstanceId = InventoryActions.AddItem(componentManager, CasterEntityId, PotionId, quantity: 1);
         componentManager.Merge(CasterEntityId, new PendingConsumableActivationComponent(stackInstanceId, [TargetTile]));
         componentManager.Merge(CasterEntityId, new ActionLockComponent(standardLockFrames: ActionLockGate.StandardLockFrames, currentLockTotalFrames: 0, currentLockFramesRemaining: 0));
@@ -207,7 +207,7 @@ public sealed class ConsumableActivationSystemTests
     {
         var (system, componentManager, mapQuery, _) = Build();
         mapQuery.SetOccupant(TargetTile, TargetEntityId);
-        componentManager.Merge(TargetEntityId, new HealthComponent(currentHealth: 20, maximumHealth: 100));
+        componentManager.Merge(TargetEntityId, new SimpleHealthComponent(currentHealth: 20, maximumHealth: 100));
         componentManager.Merge(TargetEntityId, new ManaComponent(currentMana: 3, maximumMana: 10));
         var stackInstanceId = InventoryActions.AddItem(componentManager, CasterEntityId, ManaPotionId, quantity: 1);
         componentManager.Merge(CasterEntityId, new PendingConsumableActivationComponent(stackInstanceId, [TargetTile]));
@@ -225,7 +225,7 @@ public sealed class ConsumableActivationSystemTests
     {
         var (system, componentManager, mapQuery, _) = Build();
         mapQuery.SetOccupant(TargetTile, TargetEntityId);
-        componentManager.Merge(TargetEntityId, new HealthComponent(currentHealth: 20, maximumHealth: 100));
+        componentManager.Merge(TargetEntityId, new SimpleHealthComponent(currentHealth: 20, maximumHealth: 100));
         var stackInstanceId = InventoryActions.AddItem(componentManager, CasterEntityId, ManaPotionId, quantity: 1);
         componentManager.Merge(CasterEntityId, new PendingConsumableActivationComponent(stackInstanceId, [TargetTile]));
         componentManager.Merge(CasterEntityId, new ActionLockComponent(standardLockFrames: ActionLockGate.StandardLockFrames, currentLockTotalFrames: 0, currentLockFramesRemaining: 0));
@@ -243,7 +243,7 @@ public sealed class ConsumableActivationSystemTests
     {
         var (system, componentManager, mapQuery, _) = Build();
         mapQuery.SetOccupant(TargetTile, TargetEntityId);
-        componentManager.Merge(TargetEntityId, new HealthComponent(currentHealth: 20, maximumHealth: 100));
+        componentManager.Merge(TargetEntityId, new SimpleHealthComponent(currentHealth: 20, maximumHealth: 100));
         var stackInstanceId = InventoryActions.AddItem(componentManager, CasterEntityId, PotionId, quantity: 3);
         componentManager.Merge(CasterEntityId, new PendingConsumableActivationComponent(stackInstanceId, [TargetTile]));
         componentManager.Merge(CasterEntityId, new ActionLockComponent(standardLockFrames: ActionLockGate.StandardLockFrames, currentLockTotalFrames: 0, currentLockFramesRemaining: 0));
@@ -261,7 +261,7 @@ public sealed class ConsumableActivationSystemTests
     {
         var (system, componentManager, mapQuery, _) = Build();
         mapQuery.SetOccupant(TargetTile, TargetEntityId);
-        componentManager.Merge(TargetEntityId, new HealthComponent(currentHealth: 20, maximumHealth: 100));
+        componentManager.Merge(TargetEntityId, new SimpleHealthComponent(currentHealth: 20, maximumHealth: 100));
         var stackInstanceId = InventoryActions.AddItem(componentManager, CasterEntityId, PotionId, quantity: 1);
         componentManager.Merge(CasterEntityId, new PendingConsumableActivationComponent(stackInstanceId, [TargetTile]));
         componentManager.Merge(CasterEntityId, new ActionLockComponent(standardLockFrames: ActionLockGate.StandardLockFrames, currentLockTotalFrames: 0, currentLockFramesRemaining: 0));
@@ -280,7 +280,7 @@ public sealed class ConsumableActivationSystemTests
         var (system, componentManager, mapQuery, _) = Build();
         var selfTile = new Vector3Int(9, 9, 0);
         mapQuery.SetOccupant(selfTile, CasterEntityId);
-        componentManager.Merge(CasterEntityId, new HealthComponent(currentHealth: 20, maximumHealth: 100));
+        componentManager.Merge(CasterEntityId, new SimpleHealthComponent(currentHealth: 20, maximumHealth: 100));
         var stackInstanceId = InventoryActions.AddItem(componentManager, CasterEntityId, PotionId, quantity: 1);
         componentManager.Merge(CasterEntityId, new PendingConsumableActivationComponent(stackInstanceId, [selfTile]));
         componentManager.Merge(CasterEntityId, new ActionLockComponent(standardLockFrames: ActionLockGate.StandardLockFrames, currentLockTotalFrames: 0, currentLockFramesRemaining: 0));
@@ -296,7 +296,7 @@ public sealed class ConsumableActivationSystemTests
     {
         var (system, componentManager, mapQuery, _) = BuildWithAbilityScores();
         mapQuery.SetOccupant(TargetTile, TargetEntityId);
-        componentManager.Merge(TargetEntityId, new HealthComponent(currentHealth: 20, maximumHealth: 100));
+        componentManager.Merge(TargetEntityId, new SimpleHealthComponent(currentHealth: 20, maximumHealth: 100));
         componentManager.GetMultiPool<AbilityScoreComponent>().Add(TargetEntityId, new AbilityScoreComponent(AbilityScoreType.Constitution, baseValue: 300, total: 300));
         var stackInstanceId = InventoryActions.AddItem(componentManager, CasterEntityId, PotionId, quantity: 1);
         componentManager.Merge(CasterEntityId, new PendingConsumableActivationComponent(stackInstanceId, [TargetTile]));
@@ -314,7 +314,7 @@ public sealed class ConsumableActivationSystemTests
     {
         var (system, componentManager, mapQuery, eventBus) = Build();
         mapQuery.SetOccupant(TargetTile, TargetEntityId);
-        componentManager.Merge(TargetEntityId, new HealthComponent(currentHealth: 20, maximumHealth: 100));
+        componentManager.Merge(TargetEntityId, new SimpleHealthComponent(currentHealth: 20, maximumHealth: 100));
         var stackInstanceId = InventoryActions.AddItem(componentManager, CasterEntityId, PotionId, quantity: 1);
         componentManager.Merge(CasterEntityId, new PendingConsumableActivationComponent(stackInstanceId, [TargetTile]));
         componentManager.Merge(CasterEntityId, new ActionLockComponent(standardLockFrames: ActionLockGate.StandardLockFrames, currentLockTotalFrames: 0, currentLockFramesRemaining: 0));
@@ -336,7 +336,7 @@ public sealed class ConsumableActivationSystemTests
     {
         var (system, componentManager, mapQuery, eventBus) = Build();
         mapQuery.SetOccupant(TargetTile, TargetEntityId);
-        componentManager.Merge(TargetEntityId, new HealthComponent(currentHealth: 20, maximumHealth: 100));
+        componentManager.Merge(TargetEntityId, new SimpleHealthComponent(currentHealth: 20, maximumHealth: 100));
         var stackInstanceId = InventoryActions.AddItem(componentManager, CasterEntityId, PotionId, quantity: 1);
         componentManager.Merge(CasterEntityId, new PendingConsumableActivationComponent(stackInstanceId, [TargetTile]));
         componentManager.Merge(CasterEntityId, new ActionLockComponent(standardLockFrames: ActionLockGate.StandardLockFrames, currentLockTotalFrames: 0, currentLockFramesRemaining: 0));
@@ -355,7 +355,7 @@ public sealed class ConsumableActivationSystemTests
     {
         var (system, componentManager, mapQuery, _) = Build();
         mapQuery.SetOccupant(TargetTile, TargetEntityId);
-        componentManager.Merge(TargetEntityId, new HealthComponent(currentHealth: 20, maximumHealth: 100));
+        componentManager.Merge(TargetEntityId, new SimpleHealthComponent(currentHealth: 20, maximumHealth: 100));
         componentManager.Merge(CasterEntityId, new PendingConsumableActivationComponent(PotionId, [TargetTile]));
 
         system.Update(default, 0);
@@ -382,7 +382,7 @@ public sealed class ConsumableActivationSystemTests
     {
         var (system, componentManager, mapQuery, _) = Build();
         mapQuery.SetOccupant(TargetTile, TargetEntityId);
-        componentManager.Merge(TargetEntityId, new HealthComponent(currentHealth: 20, maximumHealth: 100));
+        componentManager.Merge(TargetEntityId, new SimpleHealthComponent(currentHealth: 20, maximumHealth: 100));
         var stackInstanceId = InventoryActions.AddItem(componentManager, CasterEntityId, PotionId, quantity: 1);
         componentManager.Merge(CasterEntityId, new PendingConsumableActivationComponent(stackInstanceId, [TargetTile]));
         componentManager.Merge(CasterEntityId, new ActionLockComponent(standardLockFrames: ActionLockGate.StandardLockFrames, currentLockTotalFrames: 30, currentLockFramesRemaining: 30));
@@ -398,7 +398,7 @@ public sealed class ConsumableActivationSystemTests
     {
         var (system, componentManager, mapQuery, _) = Build();
         mapQuery.SetOccupant(TargetTile, TargetEntityId);
-        componentManager.Merge(TargetEntityId, new HealthComponent(currentHealth: 20, maximumHealth: 100));
+        componentManager.Merge(TargetEntityId, new SimpleHealthComponent(currentHealth: 20, maximumHealth: 100));
         var stackInstanceId = InventoryActions.AddItem(componentManager, CasterEntityId, PotionId, quantity: 1);
         componentManager.Merge(CasterEntityId, new PendingConsumableActivationComponent(stackInstanceId, [TargetTile]));
         componentManager.GetPackedPool<DeadComponent>().Add(CasterEntityId, new DeadComponent(KilledByEntityId: null, DiedAtFrame: 0));
@@ -414,7 +414,7 @@ public sealed class ConsumableActivationSystemTests
     {
         var (system, componentManager, mapQuery, _) = Build();
         mapQuery.SetOccupant(TargetTile, TargetEntityId);
-        componentManager.Merge(TargetEntityId, new HealthComponent(currentHealth: 20, maximumHealth: 100));
+        componentManager.Merge(TargetEntityId, new SimpleHealthComponent(currentHealth: 20, maximumHealth: 100));
         componentManager.GetPackedPool<HotkeyExpansionUnlockComponent>().Add(TargetEntityId, new HotkeyExpansionUnlockComponent(unlockedSlotCount: 10));
         var stackInstanceId = InventoryActions.AddItem(componentManager, CasterEntityId, HotkeyExpansionPotionId, quantity: 1);
         componentManager.Merge(CasterEntityId, new PendingConsumableActivationComponent(stackInstanceId, [TargetTile]));
@@ -430,7 +430,7 @@ public sealed class ConsumableActivationSystemTests
     {
         var (system, componentManager, mapQuery, _) = Build();
         mapQuery.SetOccupant(TargetTile, TargetEntityId);
-        componentManager.Merge(TargetEntityId, new HealthComponent(currentHealth: 20, maximumHealth: 100));
+        componentManager.Merge(TargetEntityId, new SimpleHealthComponent(currentHealth: 20, maximumHealth: 100));
         componentManager.GetPackedPool<HotkeyExpansionUnlockComponent>().Add(TargetEntityId, new HotkeyExpansionUnlockComponent(unlockedSlotCount: 18));
         var stackInstanceId = InventoryActions.AddItem(componentManager, CasterEntityId, HotkeyExpansionPotionId, quantity: 1);
         componentManager.Merge(CasterEntityId, new PendingConsumableActivationComponent(stackInstanceId, [TargetTile]));
@@ -446,7 +446,7 @@ public sealed class ConsumableActivationSystemTests
     {
         var (system, componentManager, mapQuery, _) = Build();
         mapQuery.SetOccupant(TargetTile, TargetEntityId);
-        componentManager.Merge(TargetEntityId, new HealthComponent(currentHealth: 20, maximumHealth: 100));
+        componentManager.Merge(TargetEntityId, new SimpleHealthComponent(currentHealth: 20, maximumHealth: 100));
         var originalStackInstanceId = GrantWandAndGetStackInstanceId(componentManager, CasterEntityId, charges: 3, maxCharges: 3);
         componentManager.Merge(CasterEntityId, new PendingConsumableActivationComponent(originalStackInstanceId, [TargetTile]));
         componentManager.Merge(CasterEntityId, new ActionLockComponent(standardLockFrames: ActionLockGate.StandardLockFrames, currentLockTotalFrames: 0, currentLockFramesRemaining: 0));
@@ -473,7 +473,7 @@ public sealed class ConsumableActivationSystemTests
     {
         var (system, componentManager, mapQuery, _) = Build();
         mapQuery.SetOccupant(TargetTile, TargetEntityId);
-        componentManager.Merge(TargetEntityId, new HealthComponent(currentHealth: 20, maximumHealth: 100));
+        componentManager.Merge(TargetEntityId, new SimpleHealthComponent(currentHealth: 20, maximumHealth: 100));
         var originalStackInstanceId = GrantWandAndGetStackInstanceId(componentManager, CasterEntityId, charges: 3, maxCharges: 3);
         var bindings = componentManager.GetMultiPool<ItemHotkeyBindingComponent>();
         bindings.Add(CasterEntityId, new ItemHotkeyBindingComponent(HotkeySlot.Slot1, originalStackInstanceId));
@@ -492,7 +492,7 @@ public sealed class ConsumableActivationSystemTests
     {
         var (system, componentManager, mapQuery, _) = Build();
         mapQuery.SetOccupant(TargetTile, TargetEntityId);
-        componentManager.Merge(TargetEntityId, new HealthComponent(currentHealth: 20, maximumHealth: 100));
+        componentManager.Merge(TargetEntityId, new SimpleHealthComponent(currentHealth: 20, maximumHealth: 100));
         var stackInstanceId = GrantWandAndGetStackInstanceId(componentManager, CasterEntityId, charges: 1, maxCharges: 3);
         componentManager.Merge(CasterEntityId, new PendingConsumableActivationComponent(stackInstanceId, [TargetTile]));
         componentManager.Merge(CasterEntityId, new ActionLockComponent(standardLockFrames: ActionLockGate.StandardLockFrames, currentLockTotalFrames: 0, currentLockFramesRemaining: 0));
@@ -508,7 +508,7 @@ public sealed class ConsumableActivationSystemTests
     {
         var (system, componentManager, mapQuery, _) = Build();
         mapQuery.SetOccupant(TargetTile, TargetEntityId);
-        componentManager.Merge(TargetEntityId, new HealthComponent(currentHealth: 20, maximumHealth: 100));
+        componentManager.Merge(TargetEntityId, new SimpleHealthComponent(currentHealth: 20, maximumHealth: 100));
         var stackInstanceId = GrantWandAndGetStackInstanceId(componentManager, CasterEntityId, charges: 0, maxCharges: 3);
         componentManager.Merge(CasterEntityId, new PendingConsumableActivationComponent(stackInstanceId, [TargetTile]));
         componentManager.Merge(CasterEntityId, new ActionLockComponent(standardLockFrames: ActionLockGate.StandardLockFrames, currentLockTotalFrames: 0, currentLockFramesRemaining: 0));
@@ -525,7 +525,7 @@ public sealed class ConsumableActivationSystemTests
     {
         var (system, componentManager, mapQuery, _) = Build();
         mapQuery.SetOccupant(TargetTile, TargetEntityId);
-        componentManager.Merge(TargetEntityId, new HealthComponent(currentHealth: 20, maximumHealth: 100));
+        componentManager.Merge(TargetEntityId, new SimpleHealthComponent(currentHealth: 20, maximumHealth: 100));
         var stackInstanceId = GrantWandAndGetStackInstanceId(componentManager, CasterEntityId, charges: 3, maxCharges: 3);
         componentManager.Merge(CasterEntityId, new PendingConsumableActivationComponent(stackInstanceId, [TargetTile]));
         componentManager.Merge(CasterEntityId, new ActionLockComponent(standardLockFrames: ActionLockGate.StandardLockFrames, currentLockTotalFrames: 30, currentLockFramesRemaining: 30));

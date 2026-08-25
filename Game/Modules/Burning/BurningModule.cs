@@ -1,6 +1,7 @@
 using Engine.ECS.Components;
 using Engine.ECS.Systems;
 using Engine.Events;
+using Engine.Math;
 using Game.Modules.Burning.Components;
 using Game.Modules.Burning.Systems;
 using Game.Modules.Health.Components;
@@ -30,12 +31,14 @@ public sealed class BurningModule : IGameModule
     private EventBus _eventBus = null!;
     private IPlayerQuery? _playerQuery;
     private ProcessingTierEvents _processingTierEvents = null!;
+    private MathUtility _mathUtility = null!;
 
     public void Configure(GameModuleContext context)
     {
         _eventBus = context.EventBus;
         _playerQuery = context.PlayerQuery;
         _processingTierEvents = context.ProcessingTierEvents;
+        _mathUtility = context.MathUtility;
         context.StatusEffectAuraAppliers.Register(new TimerBasedAuraApplier<BurningTimerComponent>(StatusEffectType.Burning, BurningEffects.ApplyStack));
     }
 
@@ -44,7 +47,7 @@ public sealed class BurningModule : IGameModule
 
     public void RegisterSystems(SystemManager systemManager, ComponentManager componentManager)
     {
-        if (!componentManager.IsRegistered<HealthComponent>())
+        if (!componentManager.IsRegistered<SimpleHealthComponent>())
         {
             return;
         }
@@ -52,15 +55,20 @@ public sealed class BurningModule : IGameModule
         var statModifiers = componentManager.IsRegistered<StatModifierComponent>()
             ? componentManager.GetMultiPool<StatModifierComponent>()
             : null;
+        var bodyParts = componentManager.IsRegistered<BodyPartComponent>()
+            ? componentManager.GetMultiPool<BodyPartComponent>()
+            : null;
 
         systemManager.Register(new BurningSystem(
             componentManager.GetPackedPool<BurningTimerComponent>(),
             componentManager.GetMultiPool<StatusEffectStack>(),
-            componentManager.GetPackedPool<HealthComponent>(),
+            componentManager.GetPackedPool<SimpleHealthComponent>(),
             _eventBus,
             _playerQuery,
             componentManager.GetDirectPool<ProcessingTierComponent>(),
             _processingTierEvents,
-            statModifiers));
+            _mathUtility,
+            statModifiers,
+            bodyParts));
     }
 }

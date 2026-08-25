@@ -26,7 +26,7 @@ namespace Game.Modules.Actions;
 /// GameModuleContext.StatusEffectAuraAppliers is always a live, shared registry regardless of
 /// which effect modules (if any) are loaded -- ActionEffectResolver's StatusEffects grant is a
 /// graceful no-op (TryGet returning false) for any StatusEffectType nothing registered an
-/// applier for, the same optional treatment StatModifierComponent/HealthComponent already get.
+/// applier for, the same optional treatment StatModifierComponent/SimpleHealthComponent already get.
 ///
 /// Also owns PotionCooldownComponent/PotionCooldownSystem (Game.Modules.Actions.Activators/
 /// Systems) -- that bookkeeping is a property of a PotionActivator-kind activation happening, not
@@ -90,7 +90,7 @@ public sealed class ActionsModule : IGameModule
 
         systemManager.Register(new PotionCooldownSystem(componentManager.GetPackedPool<PotionCooldownComponent>()));
 
-        if (!componentManager.IsRegistered<HealthComponent>())
+        if (!componentManager.IsRegistered<SimpleHealthComponent>())
         {
             return;
         }
@@ -101,12 +101,13 @@ public sealed class ActionsModule : IGameModule
         var abilityScores = componentManager.GetOptionalMultiPool<AbilityScoreComponent>();
         var auraSources = componentManager.GetOptionalMultiPool<StatusEffectAuraSourceComponent>();
         var hotkeyExpansionUnlocks = componentManager.GetPackedPool<HotkeyExpansionUnlockComponent>();
+        var bodyParts = componentManager.GetOptionalMultiPool<BodyPartComponent>();
 
         systemManager.Register(new DelayedActionSystem(
             componentManager.GetPackedPool<PendingDelayedActionComponent>(),
             componentManager.GetPackedPool<ActionLockComponent>(),
             componentManager.GetMultiPool<ActionInstanceComponent>(),
-            componentManager.GetPackedPool<HealthComponent>(),
+            componentManager.GetPackedPool<SimpleHealthComponent>(),
             _actionCatalog,
             _mapQuery,
             _eventBus,
@@ -118,14 +119,15 @@ public sealed class ActionsModule : IGameModule
             deadEntities,
             abilityScores,
             auraSources,
-            hotkeyExpansionUnlocks));
+            hotkeyExpansionUnlocks,
+            bodyParts));
 
         systemManager.Register(new ActionActivationSystem(
             componentManager.GetPackedPool<PendingActionActivationComponent>(),
             componentManager.GetPackedPool<ActionLockComponent>(),
             componentManager.GetMultiPool<ActionInstanceComponent>(),
             componentManager.GetPackedPool<PendingDelayedActionComponent>(),
-            componentManager.GetPackedPool<HealthComponent>(),
+            componentManager.GetPackedPool<SimpleHealthComponent>(),
             _actionCatalog,
             _mapQuery,
             _eventBus,
@@ -138,6 +140,7 @@ public sealed class ActionsModule : IGameModule
             mana,
             abilityScores,
             auraSources,
-            hotkeyExpansionUnlocks));
+            hotkeyExpansionUnlocks,
+            bodyParts));
     }
 }

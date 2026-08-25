@@ -1,5 +1,6 @@
 using Engine.ECS.Components;
 using Engine.ECS.Systems;
+using Engine.Math;
 using Game.Modules.AbilityScores.Components;
 using Game.Modules.Death.Components;
 using Game.Modules.Health.Components;
@@ -18,12 +19,17 @@ public sealed class HealthModule : IGameModule
     public IReadOnlyList<Type> Dependencies { get; } = [];
 
     private ProcessingTierEvents _processingTierEvents = null!;
+    private MathUtility _mathUtility = null!;
 
-    public void Configure(GameModuleContext context) => _processingTierEvents = context.ProcessingTierEvents;
+    public void Configure(GameModuleContext context)
+    {
+        _processingTierEvents = context.ProcessingTierEvents;
+        _mathUtility = context.MathUtility;
+    }
 
     public void RegisterComponents(ComponentManager componentManager)
     {
-        componentManager.RegisterPackedPool<HealthComponent>(static (ref existing, incoming) =>
+        componentManager.RegisterPackedPool<SimpleHealthComponent>(static (ref existing, incoming) =>
         {
             // Floored at 0: a negative MaximumHealth here would make the Clamp below throw
             // (min > max), and "negative max health" isn't a meaningful state regardless of how
@@ -31,12 +37,14 @@ public sealed class HealthModule : IGameModule
             existing.MaximumHealth = MathHelper.Clamp((existing.MaximumHealth + incoming.MaximumHealth) / 2f, 0f, float.MaxValue);
             existing.CurrentHealth = MathHelper.Clamp((existing.CurrentHealth + incoming.CurrentHealth) / 2f, 0f, existing.MaximumHealth);
         });
+
+        componentManager.RegisterMultiPool<BodyPartComponent>();
     }
 
     public void RegisterSystems(SystemManager systemManager, ComponentManager componentManager)
     {
         // StatModifierComponent may not be registered at all (e.g. a test building a minimal
-        // module set without StatModifiersModule) -- HealthRegenSystem/HealthDamage both treat
+        // module set without StatModifiersModule) -- SimpleHealthRegenSystem/HealthDamage both treat
         // a null pool the same as "no active modifiers" (StatModifierMath.GetEffectiveValue
         // returns the base value unchanged), so this stays optional rather than a hard
         // Dependencies requirement that would force every such module list to include it.
@@ -53,8 +61,17 @@ public sealed class HealthModule : IGameModule
             ? componentManager.GetMultiPool<AbilityScoreComponent>()
             : null;
 
-        systemManager.Register(new HealthRegenSystem(
-            componentManager.GetPackedPool<HealthComponent>(),
+        systemManager.Register(new SimpleHealthRegenSystem(
+            componentManager.GetPackedPool<SimpleHealthComponent>(),
+            componentManager.GetDirectPool<ProcessingTierComponent>(),
+            _processingTierEvents,
+            statModifiers,
+            deadEntities,
+            abilityScores));
+
+        // Always registered -- RegisterComponents always calls RegisterMultiPool<BodyPartComponent>(), unlike the genuinely-optional pools above.
+        systemManager.Register(new ComplexHealthRegenSystem(
+            componentManager.GetMultiPool<BodyPartComponent>(),
             componentManager.GetDirectPool<ProcessingTierComponent>(),
             _processingTierEvents,
             statModifiers,

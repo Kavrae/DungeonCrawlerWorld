@@ -16,7 +16,7 @@ namespace Tests.Bootstrap;
 /// built-in-replacing module) live in the separate Mods.TestFixtures project rather than
 /// inside Mods.ExampleMod itself -- Mods.ExampleMod is the plan's shippable "one trivial
 /// IModule" verification fixture, and dropping a module that intentionally breaks
-/// HealthComponent into the same DLL as that would make the real game crash if someone
+/// SimpleHealthComponent into the same DLL as that would make the real game crash if someone
 /// actually copied Mods.ExampleMod.dll into Mods/ per the plan's own verification steps.
 /// </summary>
 [TestClass]
@@ -90,7 +90,7 @@ public sealed class GameBootstrapperTests
             var result = GameBootstrapper.Build(world, mathUtility, directory.FullName, initialEntityCapacity: 100, initialComponentCapacity: 50);
 
             Assert.IsEmpty(result.Failures);
-            Assert.IsTrue(result.EcsContext.ComponentManager.IsRegistered<HealthComponent>());
+            Assert.IsTrue(result.EcsContext.ComponentManager.IsRegistered<SimpleHealthComponent>());
         }
         finally
         {
@@ -114,7 +114,7 @@ public sealed class GameBootstrapperTests
             // built-ins it rides alongside still registering correctly (no exception, no
             // failure reported), exactly what "join without disturbing anything" means for a
             // trivial mod.
-            Assert.IsTrue(result.EcsContext.ComponentManager.IsRegistered<HealthComponent>());
+            Assert.IsTrue(result.EcsContext.ComponentManager.IsRegistered<SimpleHealthComponent>());
         }
         finally
         {
@@ -134,7 +134,7 @@ public sealed class GameBootstrapperTests
             var result = GameBootstrapper.Build(world, mathUtility, directory.FullName, initialEntityCapacity: 100, initialComponentCapacity: 50);
 
             // Mods.TestFixtures.dll also defines ReplacementHealthModule, which survives
-            // dry-run and legitimately replaces HealthModule -- so HealthComponent itself
+            // dry-run and legitimately replaces HealthModule -- so SimpleHealthComponent itself
             // isn't a valid "rest of world still builds" signal here (see that module's doc
             // comment). ActionLockComponent is untouched by either fixture module.
             Assert.HasCount(1, result.Failures);
@@ -161,11 +161,11 @@ public sealed class GameBootstrapperTests
             var result = GameBootstrapper.Build(world, mathUtility, directory.FullName, initialEntityCapacity: 100, initialComponentCapacity: 50);
 
             // ReplacementHealthModule shares the real HealthModule's Id and registers
-            // nothing -- HealthComponent ending up unregistered is only possible if the mod
+            // nothing -- SimpleHealthComponent ending up unregistered is only possible if the mod
             // actually replaced the built-in HealthModule rather than coexisting with it.
             // ActionLockComponent registering normally confirms this replacement is
             // selective, not a side effect of the whole world failing to build.
-            Assert.IsFalse(result.EcsContext.ComponentManager.IsRegistered<HealthComponent>());
+            Assert.IsFalse(result.EcsContext.ComponentManager.IsRegistered<SimpleHealthComponent>());
             Assert.IsTrue(result.EcsContext.ComponentManager.IsRegistered<ActionLockComponent>());
         }
         finally

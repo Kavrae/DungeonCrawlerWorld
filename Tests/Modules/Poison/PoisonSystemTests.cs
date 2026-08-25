@@ -1,5 +1,6 @@
 ﻿using Engine.ECS.Components.Stores;
 using Engine.Events;
+using Engine.Math;
 using Game.Modules.Health.Components;
 using Game.Modules.Poison;
 using Game.Modules.Poison.Components;
@@ -23,7 +24,7 @@ public sealed class PoisonSystemTests
 
     private static MultiComponentPool<StatusEffectStack> CreateStackPool() => new(maximumEntityCount: 10, initialCapacity: 10);
 
-    private static PackedComponentPool<HealthComponent> CreateHealthPool() =>
+    private static PackedComponentPool<SimpleHealthComponent> CreateHealthPool() =>
         new(maximumEntityCount: 10, initialCapacity: 4, static (ref existing, incoming) => existing = incoming);
 
     [TestMethod]
@@ -33,7 +34,7 @@ public sealed class PoisonSystemTests
         var stacks = CreateStackPool();
         var health = CreateHealthPool();
         timers.Add(0, new PoisonTimerComponent(60, stackCount: 1, remainingDurationTicks: 5, StatusEffectSource.Admin));
-        var system = new PoisonSystem(timers, stacks, health, new EventBus(), new FakePlayerQuery(0));
+        var system = new PoisonSystem(timers, stacks, health, new EventBus(), new FakePlayerQuery(0), new MathUtility());
 
         system.Update(default, 0);
 
@@ -46,9 +47,9 @@ public sealed class PoisonSystemTests
         var timers = CreateTimerPool();
         var stacks = CreateStackPool();
         var health = CreateHealthPool();
-        health.Add(0, new HealthComponent(currentHealth: 100, maximumHealth: 100));
+        health.Add(0, new SimpleHealthComponent(currentHealth: 100, maximumHealth: 100));
         timers.Add(0, new PoisonTimerComponent(1, stackCount: 7, remainingDurationTicks: 5, StatusEffectSource.Admin));
-        var system = new PoisonSystem(timers, stacks, health, new EventBus(), new FakePlayerQuery(0));
+        var system = new PoisonSystem(timers, stacks, health, new EventBus(), new FakePlayerQuery(0), new MathUtility());
 
         system.Update(default, 0);
 
@@ -62,9 +63,9 @@ public sealed class PoisonSystemTests
         var timers = CreateTimerPool();
         var stacks = CreateStackPool();
         var health = CreateHealthPool();
-        health.Add(0, new HealthComponent(currentHealth: 100, maximumHealth: 100));
+        health.Add(0, new SimpleHealthComponent(currentHealth: 100, maximumHealth: 100));
         timers.Add(0, new PoisonTimerComponent(1, stackCount: 7, remainingDurationTicks: 5, StatusEffectSource.Admin));
-        var system = new PoisonSystem(timers, stacks, health, new EventBus(), new FakePlayerQuery(0));
+        var system = new PoisonSystem(timers, stacks, health, new EventBus(), new FakePlayerQuery(0), new MathUtility());
 
         system.Update(default, 0);
 
@@ -77,9 +78,9 @@ public sealed class PoisonSystemTests
         var timers = CreateTimerPool();
         var stacks = CreateStackPool();
         var health = CreateHealthPool();
-        health.Add(0, new HealthComponent(currentHealth: 100, maximumHealth: 100));
+        health.Add(0, new SimpleHealthComponent(currentHealth: 100, maximumHealth: 100));
         timers.Add(0, new PoisonTimerComponent(1, stackCount: 3, remainingDurationTicks: 5, StatusEffectSource.Admin));
-        var system = new PoisonSystem(timers, stacks, health, new EventBus(), new FakePlayerQuery(0));
+        var system = new PoisonSystem(timers, stacks, health, new EventBus(), new FakePlayerQuery(0), new MathUtility());
 
         system.Update(default, 0);
 
@@ -92,12 +93,12 @@ public sealed class PoisonSystemTests
         var timers = CreateTimerPool();
         var stacks = CreateStackPool();
         var health = CreateHealthPool();
-        health.Add(0, new HealthComponent(currentHealth: 100, maximumHealth: 100));
+        health.Add(0, new SimpleHealthComponent(currentHealth: 100, maximumHealth: 100));
         stacks.Add(0, new StatusEffectStack(StatusEffectType.Poison, StatusEffectSource.Admin));
         stacks.Add(0, new StatusEffectStack(StatusEffectType.Poison, StatusEffectSource.Admin));
         stacks.Add(0, new StatusEffectStack(StatusEffectType.Poison, StatusEffectSource.Admin));
         timers.Add(0, new PoisonTimerComponent(1, stackCount: 3, remainingDurationTicks: 1, StatusEffectSource.Admin));
-        var system = new PoisonSystem(timers, stacks, health, new EventBus(), new FakePlayerQuery(0));
+        var system = new PoisonSystem(timers, stacks, health, new EventBus(), new FakePlayerQuery(0), new MathUtility());
 
         system.Update(default, 0);
 
@@ -111,9 +112,9 @@ public sealed class PoisonSystemTests
         var timers = CreateTimerPool();
         var stacks = CreateStackPool();
         var health = CreateHealthPool();
-        health.Add(0, new HealthComponent(currentHealth: 100, maximumHealth: 100));
+        health.Add(0, new SimpleHealthComponent(currentHealth: 100, maximumHealth: 100));
         timers.Add(0, new PoisonTimerComponent(1, stackCount: 1, remainingDurationTicks: 1, StatusEffectSource.Admin));
-        var system = new PoisonSystem(timers, stacks, health, new EventBus(), new FakePlayerQuery(0));
+        var system = new PoisonSystem(timers, stacks, health, new EventBus(), new FakePlayerQuery(0), new MathUtility());
 
         system.Update(default, 0);
         system.Update(default, 0);
@@ -125,9 +126,9 @@ public sealed class PoisonSystemTests
         var timers = CreateTimerPool();
         var stacks = CreateStackPool();
         var health = CreateHealthPool();
-        health.Add(0, new HealthComponent(currentHealth: 3, maximumHealth: 100));
+        health.Add(0, new SimpleHealthComponent(currentHealth: 3, maximumHealth: 100));
         timers.Add(0, new PoisonTimerComponent(1, stackCount: 5, remainingDurationTicks: 5, StatusEffectSource.Admin));
-        var system = new PoisonSystem(timers, stacks, health, new EventBus(), new FakePlayerQuery(0));
+        var system = new PoisonSystem(timers, stacks, health, new EventBus(), new FakePlayerQuery(0), new MathUtility());
 
         system.Update(default, 0);
 
@@ -145,9 +146,9 @@ public sealed class PoisonSystemTests
         var timers = CreateTimerPool();
         var stacks = CreateStackPool();
         var health = CreateHealthPool();
-        health.Add(0, new HealthComponent(currentHealth: 100, maximumHealth: 100));
+        health.Add(0, new SimpleHealthComponent(currentHealth: 100, maximumHealth: 100));
         timers.Add(0, new PoisonTimerComponent(1, stackCount: 4, remainingDurationTicks: 3, StatusEffectSource.Admin));
-        var system = new PoisonSystem(timers, stacks, health, new EventBus(), new FakePlayerQuery(0));
+        var system = new PoisonSystem(timers, stacks, health, new EventBus(), new FakePlayerQuery(0), new MathUtility());
 
         system.Update(default, 0); // FramesUntilNextTick starts at 1 -- tick 1 fires immediately: duration 3 -> 2
         Assert.IsTrue(timers.Has(0));
@@ -176,12 +177,12 @@ public sealed class PoisonSystemTests
         var timers = CreateTimerPool();
         var stacks = CreateStackPool();
         var health = CreateHealthPool();
-        health.Add(0, new HealthComponent(currentHealth: 100, maximumHealth: 100));
+        health.Add(0, new SimpleHealthComponent(currentHealth: 100, maximumHealth: 100));
         timers.Add(0, new PoisonTimerComponent(1, stackCount: 1, remainingDurationTicks: 5, StatusEffectSource.Admin));
         var eventBus = new EventBus();
         EntityDamagedEvent? published = null;
         eventBus.Subscribe<EntityDamagedEvent>(e => published = e);
-        var system = new PoisonSystem(timers, stacks, health, eventBus, new FakePlayerQuery(0));
+        var system = new PoisonSystem(timers, stacks, health, eventBus, new FakePlayerQuery(0), new MathUtility());
 
         system.Update(default, 0);
 
@@ -197,12 +198,12 @@ public sealed class PoisonSystemTests
         var timers = CreateTimerPool();
         var stacks = CreateStackPool();
         var health = CreateHealthPool();
-        health.Add(1, new HealthComponent(currentHealth: 100, maximumHealth: 100));
+        health.Add(1, new SimpleHealthComponent(currentHealth: 100, maximumHealth: 100));
         timers.Add(1, new PoisonTimerComponent(1, stackCount: 1, remainingDurationTicks: 5, StatusEffectSource.Admin));
         var eventBus = new EventBus();
         var published = false;
         eventBus.Subscribe<EntityDamagedEvent>(_ => published = true);
-        var system = new PoisonSystem(timers, stacks, health, eventBus, new FakePlayerQuery(playerEntityId: 0));
+        var system = new PoisonSystem(timers, stacks, health, eventBus, new FakePlayerQuery(playerEntityId: 0), new MathUtility());
 
         system.Update(default, 0);
 

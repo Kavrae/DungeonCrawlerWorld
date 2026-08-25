@@ -32,7 +32,7 @@ public static class ActionEffectResolver
         int sourceEntityId,
         IReadOnlyList<Vector3Int> targetTiles,
         IMapQuery mapQuery,
-        PackedComponentPool<HealthComponent> health,
+        PackedComponentPool<SimpleHealthComponent> health,
         EventBus eventBus,
         MathUtility mathUtility,
         IPlayerQuery? playerQuery,
@@ -42,7 +42,8 @@ public static class ActionEffectResolver
         PackedComponentPool<DeadComponent>? deadEntities = null,
         MultiComponentPool<AbilityScoreComponent>? abilityScores = null,
         MultiComponentPool<StatusEffectAuraSourceComponent>? auraSources = null,
-        PackedComponentPool<HotkeyExpansionUnlockComponent>? hotkeyExpansionUnlocks = null)
+        PackedComponentPool<HotkeyExpansionUnlockComponent>? hotkeyExpansionUnlocks = null,
+        MultiComponentPool<BodyPartComponent>? bodyParts = null)
     {
         eventBus.Publish(new ActionActivatedEvent(sourceEntityId, action.Id));
 
@@ -61,6 +62,7 @@ public static class ActionEffectResolver
             StatusEffectAppliers: statusEffectAppliers,
             DeadEntities: deadEntities,
             AuraSources: auraSources,
+            BodyParts: bodyParts,
             PlayerQuery: playerQuery,
             DamageOverride: instance.DamageAmount > 0 ? instance.DamageAmount : null);
 

@@ -124,6 +124,7 @@ public sealed class GameLoop : Microsoft.Xna.Framework.Game
         GraphicsDevice.Clear(Color.LightGray);
 
         _presentation.SpriteBatchRenderer.StartSpriteBatch();
+        _presentation.ElementPoolService.ResetRenderState();
 
         var shellDrawStart = Stopwatch.GetTimestamp();
         _shell.Draw(gameTime);

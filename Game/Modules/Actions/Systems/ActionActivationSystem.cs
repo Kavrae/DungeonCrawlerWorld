@@ -30,7 +30,7 @@ public sealed class ActionActivationSystem : ISystem
     private readonly PackedComponentPool<ActionLockComponent> _actionLocks;
     private readonly MultiComponentPool<ActionInstanceComponent> _actionInstances;
     private readonly PackedComponentPool<PendingDelayedActionComponent> _pendingDelayedActions;
-    private readonly PackedComponentPool<HealthComponent> _health;
+    private readonly PackedComponentPool<SimpleHealthComponent> _health;
     private readonly MultiComponentPool<StatModifierComponent>? _statModifiers;
     private readonly ActionCatalog _actionCatalog;
     private readonly IMapQuery _mapQuery;
@@ -44,6 +44,7 @@ public sealed class ActionActivationSystem : ISystem
     private readonly MathUtility _mathUtility;
     private readonly MultiComponentPool<StatusEffectAuraSourceComponent>? _auraSources;
     private readonly PackedComponentPool<HotkeyExpansionUnlockComponent>? _hotkeyExpansionUnlocks;
+    private readonly MultiComponentPool<BodyPartComponent>? _bodyParts;
     private readonly EntityStripeSet _stripeSet;
 
     public ActionActivationSystem(
@@ -51,7 +52,7 @@ public sealed class ActionActivationSystem : ISystem
         PackedComponentPool<ActionLockComponent> actionLocks,
         MultiComponentPool<ActionInstanceComponent> actionInstances,
         PackedComponentPool<PendingDelayedActionComponent> pendingDelayedActions,
-        PackedComponentPool<HealthComponent> health,
+        PackedComponentPool<SimpleHealthComponent> health,
         ActionCatalog actionCatalog,
         IMapQuery mapQuery,
         EventBus eventBus,
@@ -64,7 +65,8 @@ public sealed class ActionActivationSystem : ISystem
         PackedComponentPool<ManaComponent>? mana = null,
         MultiComponentPool<AbilityScoreComponent>? abilityScores = null,
         MultiComponentPool<StatusEffectAuraSourceComponent>? auraSources = null,
-        PackedComponentPool<HotkeyExpansionUnlockComponent>? hotkeyExpansionUnlocks = null)
+        PackedComponentPool<HotkeyExpansionUnlockComponent>? hotkeyExpansionUnlocks = null,
+        MultiComponentPool<BodyPartComponent>? bodyParts = null)
     {
         _pendingActivations = pendingActivations;
         _actionLocks = actionLocks;
@@ -84,6 +86,7 @@ public sealed class ActionActivationSystem : ISystem
         _abilityScores = abilityScores;
         _auraSources = auraSources;
         _hotkeyExpansionUnlocks = hotkeyExpansionUnlocks;
+        _bodyParts = bodyParts;
 
         _stripeSet = EntityStripeSet.CreateAndWire(StripeCount, pendingActivations);
     }
@@ -163,7 +166,7 @@ public sealed class ActionActivationSystem : ISystem
             return false;
         }
 
-        ActionEffectResolver.Apply(action, instance, entityId, targetTiles, _mapQuery, _health, _eventBus, _mathUtility, _playerQuery, _statusEffectAppliers, _componentManager, _statModifiers, _deadEntities, _abilityScores, _auraSources, _hotkeyExpansionUnlocks);
+        ActionEffectResolver.Apply(action, instance, entityId, targetTiles, _mapQuery, _health, _eventBus, _mathUtility, _playerQuery, _statusEffectAppliers, _componentManager, _statModifiers, _deadEntities, _abilityScores, _auraSources, _hotkeyExpansionUnlocks, _bodyParts);
         ActionLockGate.Lock(_actionLocks, entityId, action.Activator.Timing.ActionLockFrames);
         return true;
     }
@@ -182,7 +185,7 @@ public sealed class ActionActivationSystem : ISystem
 
     private bool TryActivateFreeCast(int entityId, ActionDefinition action, ActionInstanceComponent instance, Vector3Int[] targetTiles)
     {
-        ActionEffectResolver.Apply(action, instance, entityId, targetTiles, _mapQuery, _health, _eventBus, _mathUtility, _playerQuery, _statusEffectAppliers, _componentManager, _statModifiers, _deadEntities, _abilityScores, _auraSources, _hotkeyExpansionUnlocks);
+        ActionEffectResolver.Apply(action, instance, entityId, targetTiles, _mapQuery, _health, _eventBus, _mathUtility, _playerQuery, _statusEffectAppliers, _componentManager, _statModifiers, _deadEntities, _abilityScores, _auraSources, _hotkeyExpansionUnlocks, _bodyParts);
         return true;
     }
 

@@ -13,7 +13,7 @@ using Game.World;
 
 namespace Tests.Modules.Mana;
 
-/// <summary>Mirrors HealthRegenSystemTests exactly in shape, with Intelligence in place of Constitution and Mana's own much smaller flat regen range in place of Health's -- see ManaRegenSystem's own doc comment for why it's built off HealthRegenSystem's exact shape.</summary>
+/// <summary>Mirrors HealthRegenSystemTests exactly in shape, with Intelligence in place of Constitution and Mana's own much smaller flat regen range in place of Health's -- see ManaRegenSystem's own doc comment for why it's built off SimpleHealthRegenSystem's exact shape.</summary>
 [TestClass]
 public sealed class ManaRegenSystemTests
 {

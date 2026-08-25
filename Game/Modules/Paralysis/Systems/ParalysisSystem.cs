@@ -12,7 +12,7 @@ namespace Game.Modules.Paralysis.Systems;
 /// shown as paralyzed" (HUD glyph, StatusEffectQueries). Does not touch ActionLockComponent:
 /// ParalysisEffects.Apply already locked it to the same DurationFrames at grant time, and
 /// ActionLockSystem decrements it at the same real-frame rate independently, so both expire in
-/// lockstep without this system re-asserting anything. Also does not touch HealthComponent --
+/// lockstep without this system re-asserting anything. Also does not touch SimpleHealthComponent --
 /// Paralysis has no damage component at all, unlike Burning/Poison, proving a status effect can
 /// apply to entities without hit points.
 /// </summary>

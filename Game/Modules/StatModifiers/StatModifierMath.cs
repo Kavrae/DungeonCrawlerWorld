@@ -45,7 +45,7 @@ public static class StatModifierMath
         return CalculateTotal(baseValue, additiveSum, multiplicativeSum);
     }
 
-    /// <summary>Same as GetEffectiveValue, but for any number of targets in a single walk of the entity's modifier chain -- for callers (e.g. HealthRegenSystem, needing both HealthRegen and MaximumHealth) that would otherwise walk the same chain once per target per cycle.</summary>
+    /// <summary>Same as GetEffectiveValue, but for any number of targets in a single walk of the entity's modifier chain -- for callers (e.g. SimpleHealthRegenSystem, needing both HealthRegen and MaximumHealth) that would otherwise walk the same chain once per target per cycle.</summary>
     /// <remarks>
     /// destination receives each pairs entry's effective value at the same index -- a
     /// caller-owned buffer rather than an allocated return array, matching this codebase's

@@ -8,7 +8,7 @@ public enum StatModifierTarget : byte
     OutgoingDamage,
     MaximumHealth,
 
-    /// <summary>Layers on top of HealthRegenSystem's live-computed (Constitution-derived) base regen amount. Not a stored base value of its own; there's nothing left to modify in place, StatModifierMath.GetEffectiveValues is applied to the freshly-computed amount each visit.</summary>
+    /// <summary>Layers on top of SimpleHealthRegenSystem's live-computed (Constitution-derived) base regen amount. Not a stored base value of its own; there's nothing left to modify in place, StatModifierMath.GetEffectiveValues is applied to the freshly-computed amount each visit.</summary>
     HealthRegen,
 
     MaximumMana,

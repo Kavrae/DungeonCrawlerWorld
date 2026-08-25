@@ -1,5 +1,6 @@
 using Engine.ECS.Components;
 using Engine.ECS.Components.Stores;
+using Game.Modules.Health;
 using Game.Modules.Health.Components;
 using Game.Modules.StatModifiers;
 using Game.Modules.StatModifiers.Components;
@@ -17,14 +18,15 @@ namespace Presentation.UI.Content;
 /// ShellBootstrapper), the same pattern DebugWindowContent uses, rather than living inside
 /// MapWindow -- it belongs to the HUD tier (screen-absolute coordinates), not the map's own
 /// local content-viewport space. Light grey full-width fill when the player has no
-/// HealthComponent at all -- reserved for a future temporarily/permanently-immortal player
+/// SimpleHealthComponent at all -- reserved for a future temporarily/permanently-immortal player
 /// state, rather than hiding the bar outright.
 /// </summary>
 public sealed class PlayerHealthBarContent(World world, ComponentManager componentManager) : IElementContent
 {
     public static readonly Vector2 Size = new(HudMetrics.EntrySize.X * 4.5f, HudMetrics.EntrySize.Y * 0.75f);
 
-    private readonly PackedComponentPool<HealthComponent> _healthPool = componentManager.GetPackedPool<HealthComponent>();
+    private readonly PackedComponentPool<SimpleHealthComponent> _healthPool = componentManager.GetPackedPool<SimpleHealthComponent>();
+    private readonly MultiComponentPool<BodyPartComponent> _bodyParts = componentManager.GetMultiPool<BodyPartComponent>();
 
     // Optional -- see StatModifierMath.GetEffectiveValue's own doc comment for why a null pool
     // (StatModifiersModule not registered) is treated the same as "no active modifiers."
@@ -39,11 +41,11 @@ public sealed class PlayerHealthBarContent(World world, ComponentManager compone
 
     public void Initialize(Window hostWindow) => _hostWindow = hostWindow;
 
-    /// <summary>Whether the player currently has a HealthComponent and what fraction of effective max health remains is decided here -- Draw only reads the cached fraction and maps it to a fill color/width.</summary>
+    /// <summary>Whether the player currently has a SimpleHealthComponent and what fraction of effective max health remains is decided here -- Draw only reads the cached fraction and maps it to a fill color/width.</summary>
     public void Update(GameTime gameTime)
     {
         var playerEntityId = world.PlayerEntityId;
-        if (playerEntityId < 0 || !_healthPool.TryGetReadonly(playerEntityId, out var health) || health.MaximumHealth <= 0)
+        if (playerEntityId < 0 || !HealthQueries.TryGetTotals(_healthPool, _bodyParts, playerEntityId, out var currentHealth, out var maximumHealth) || maximumHealth <= 0)
         {
             _hasHealth = false;
             _healthFraction = 1f;
@@ -51,9 +53,9 @@ public sealed class PlayerHealthBarContent(World world, ComponentManager compone
         }
 
         _hasHealth = true;
-        var effectiveMaximumHealth = StatModifierMath.GetEffectiveValue(_statModifiers, playerEntityId, StatModifierTarget.MaximumHealth, health.MaximumHealth);
+        var effectiveMaximumHealth = StatModifierMath.GetEffectiveValue(_statModifiers, playerEntityId, StatModifierTarget.MaximumHealth, maximumHealth);
         _healthFraction = effectiveMaximumHealth > 0
-            ? MathHelper.Clamp(health.CurrentHealth / effectiveMaximumHealth, 0f, 1f)
+            ? MathHelper.Clamp(currentHealth / effectiveMaximumHealth, 0f, 1f)
             : 1f;
     }
 

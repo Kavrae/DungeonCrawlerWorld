@@ -83,7 +83,7 @@ public sealed class TestCombatBehaviorSystemTests
         PackedComponentPool<MovementComponent> MovementPool,
         DirectComponentPool<TransformComponent> TransformPool,
         PackedComponentPool<ActionLockComponent> ActionLockPool,
-        PackedComponentPool<HealthComponent> HealthPool,
+        PackedComponentPool<SimpleHealthComponent> HealthPool,
         MultiComponentPool<InventoryItemStackComponent> InventoryStacks,
         MultiComponentPool<ActionInstanceComponent> ActionInstances,
         MultiComponentPool<RaceComponent> RaceComponents,
@@ -96,7 +96,7 @@ public sealed class TestCombatBehaviorSystemTests
         var movementPool = new PackedComponentPool<MovementComponent>(10, 10, static (ref existing, incoming) => existing = incoming);
         var transformPool = new DirectComponentPool<TransformComponent>(10, static (ref existing, incoming) => existing = incoming);
         var actionLockPool = new PackedComponentPool<ActionLockComponent>(10, 10, static (ref existing, incoming) => existing = incoming);
-        var healthPool = new PackedComponentPool<HealthComponent>(10, 10, static (ref existing, incoming) => existing = incoming);
+        var healthPool = new PackedComponentPool<SimpleHealthComponent>(10, 10, static (ref existing, incoming) => existing = incoming);
         var inventoryStacks = new MultiComponentPool<InventoryItemStackComponent>(10, 10);
         var actionInstances = new MultiComponentPool<ActionInstanceComponent>(10, 10);
         var raceComponents = new MultiComponentPool<RaceComponent>(10, 10);
@@ -117,7 +117,7 @@ public sealed class TestCombatBehaviorSystemTests
         fixture.TransformPool.Add(entityId, new TransformComponent(GoblinPosition, SingleTile));
         fixture.MovementPool.Add(entityId, new MovementComponent(MovementMode.Random, null, null));
         fixture.ActionLockPool.Add(entityId, new ActionLockComponent(standardLockFrames: 10, currentLockTotalFrames: 0, currentLockFramesRemaining: 0));
-        fixture.HealthPool.Add(entityId, new HealthComponent(currentHealth, maximumHealth));
+        fixture.HealthPool.Add(entityId, new SimpleHealthComponent(currentHealth, maximumHealth));
         if (grantPunch)
         {
             fixture.ActionInstances.Add(entityId, new ActionInstanceComponent(PunchAction.Id, damageAmount: 10, cooldownFramesRemaining: 0));
@@ -209,7 +209,7 @@ public sealed class TestCombatBehaviorSystemTests
         fixture.TransformPool.Add(GoblinEntityId, new TransformComponent(GoblinPosition, SingleTile));
         fixture.MovementPool.Add(GoblinEntityId, new MovementComponent(MovementMode.Random, null, null));
         fixture.ActionLockPool.Add(GoblinEntityId, new ActionLockComponent(standardLockFrames: ActionLockGate.StandardLockFrames, currentLockTotalFrames: 30, currentLockFramesRemaining: 30));
-        // Deliberately no HealthComponent/InventoryItemStackComponent/ActionInstanceComponent
+        // Deliberately no SimpleHealthComponent/InventoryItemStackComponent/ActionInstanceComponent
         // registered for this entity -- if the system tried to read any of them before checking
         // the action lock, this would throw or behave unexpectedly instead of just skipping.
 

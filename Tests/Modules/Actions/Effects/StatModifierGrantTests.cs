@@ -18,7 +18,7 @@ public sealed class StatModifierGrantTests
     private static ActionEffectContext BuildContext(ComponentManager componentManager, float durationScaleMultiplier) => new(
         SourceEntityId: SourceEntityId,
         TargetEntityId: TargetEntityId,
-        Health: componentManager.GetPackedPool<HealthComponent>(),
+        Health: componentManager.GetPackedPool<SimpleHealthComponent>(),
         EventBus: new EventBus(),
         MathUtility: new MathUtility(),
         ComponentManager: componentManager,
@@ -30,7 +30,7 @@ public sealed class StatModifierGrantTests
     private static ComponentManager Build()
     {
         var componentManager = new ComponentManager(initialEntityCapacity: 10, initialComponentCapacity: 10);
-        componentManager.RegisterPackedPool<HealthComponent>(static (ref existing, incoming) => existing = incoming);
+        componentManager.RegisterPackedPool<SimpleHealthComponent>(static (ref existing, incoming) => existing = incoming);
         componentManager.RegisterMultiPool<StatModifierComponent>();
         return componentManager;
     }

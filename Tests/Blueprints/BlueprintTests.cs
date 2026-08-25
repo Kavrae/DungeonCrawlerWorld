@@ -155,7 +155,7 @@ public sealed class BlueprintTests
     }
 
     [TestMethod]
-    public void Goblin_Build_SetsRaceHealthMovementActionLockAndTransform()
+    public void Goblin_Build_SetsRaceBodyPartsMovementActionLockAndTransform()
     {
         var ecsContext = BuildEcsContext();
         var entityId = ecsContext.EntityManager.CreateEntity();
@@ -165,8 +165,37 @@ public sealed class BlueprintTests
         var racePool = ecsContext.ComponentManager.GetMultiPool<RaceComponent>();
         Assert.IsTrue(racePool.Has(entityId));
         Assert.AreEqual("Goblin", racePool.GetReadonlyByDenseIndex(racePool.GetFirstDenseIndex(entityId)).Name);
-        var health = ecsContext.ComponentManager.GetPackedPool<HealthComponent>().GetReadonly(entityId);
-        Assert.IsTrue(health.CurrentHealth >= 1 && health.CurrentHealth <= health.MaximumHealth);
+
+        Assert.IsFalse(ecsContext.ComponentManager.GetPackedPool<SimpleHealthComponent>().Has(entityId));
+
+        var expectedPartsByName = new Dictionary<string, (BodyPartType Type, ushort MinimumHealth, ushort MaximumHealth, bool IsVital)>
+        {
+            ["Head"] = (BodyPartType.Head, 30, 30, true),
+            ["Torso"] = (BodyPartType.Torso, 60, 60, true),
+            ["Left Arm"] = (BodyPartType.Arm, 20, 20, false),
+            ["Right Arm"] = (BodyPartType.Arm, 20, 20, false),
+            ["Left Leg"] = (BodyPartType.Leg, 35, 35, false),
+            ["Right Leg"] = (BodyPartType.Leg, 35, 35, false),
+        };
+
+        var bodyParts = ecsContext.ComponentManager.GetMultiPool<BodyPartComponent>();
+        var actualCount = 0;
+        var actualMaximumSum = 0f;
+        for (var denseIndex = bodyParts.GetFirstDenseIndex(entityId); denseIndex != -1; denseIndex = bodyParts.GetNextDenseIndex(denseIndex))
+        {
+            ref readonly var part = ref bodyParts.GetReadonlyByDenseIndex(denseIndex);
+            Assert.IsTrue(expectedPartsByName.TryGetValue(part.Name, out var expected), $"Unexpected body part name: {part.Name}");
+            Assert.AreEqual(expected.Type, part.Type);
+            Assert.AreEqual(expected.IsVital, part.IsVital);
+            Assert.AreEqual((float)expected.MaximumHealth, part.MaximumHealth);
+            Assert.IsTrue(part.CurrentHealth >= expected.MinimumHealth && part.CurrentHealth <= expected.MaximumHealth);
+            actualMaximumSum += part.MaximumHealth;
+            actualCount++;
+        }
+
+        Assert.AreEqual(expectedPartsByName.Count, actualCount);
+        Assert.AreEqual(200f, actualMaximumSum);
+
         Assert.IsTrue(ecsContext.ComponentManager.GetPackedPool<MovementComponent>().Has(entityId));
         Assert.IsTrue(ecsContext.ComponentManager.GetPackedPool<ActionLockComponent>().Has(entityId));
         Assert.IsTrue(ecsContext.ComponentManager.GetDirectPool<TransformComponent>().Has(entityId));
@@ -186,7 +215,7 @@ public sealed class BlueprintTests
         var glyph = ecsContext.ComponentManager.GetDirectPool<GlyphComponent>().GetReadonly(entityId);
         Assert.AreEqual("@", glyph.Glyph);
 
-        var health = ecsContext.ComponentManager.GetPackedPool<HealthComponent>().GetReadonly(entityId);
+        var health = ecsContext.ComponentManager.GetPackedPool<SimpleHealthComponent>().GetReadonly(entityId);
         Assert.IsTrue(health.CurrentHealth >= 1 && health.CurrentHealth <= health.MaximumHealth);
 
         var movement = ecsContext.ComponentManager.GetPackedPool<MovementComponent>().GetReadonly(entityId);
@@ -283,7 +312,7 @@ public sealed class BlueprintTests
         new Fairy(new MathUtility(new Random(1))).Build(ecsContext.ComponentManager, entityId);
 
         Assert.IsTrue(ecsContext.ComponentManager.GetMultiPool<RaceComponent>().Has(entityId));
-        var health = ecsContext.ComponentManager.GetPackedPool<HealthComponent>().GetReadonly(entityId);
+        var health = ecsContext.ComponentManager.GetPackedPool<SimpleHealthComponent>().GetReadonly(entityId);
         Assert.IsTrue(health.CurrentHealth >= 1 && health.CurrentHealth <= health.MaximumHealth);
         Assert.IsTrue(ecsContext.ComponentManager.GetPackedPool<MovementComponent>().Has(entityId));
         Assert.IsTrue(ecsContext.ComponentManager.GetPackedPool<ActionLockComponent>().Has(entityId));
@@ -334,7 +363,7 @@ public sealed class BlueprintTests
 
         // No race ran first, so Tank merges its own baseline instead of silently doing
         // nothing -- the class still functions when composed (or used) without a race.
-        var health = ecsContext.ComponentManager.GetPackedPool<HealthComponent>().GetReadonly(entityId);
+        var health = ecsContext.ComponentManager.GetPackedPool<SimpleHealthComponent>().GetReadonly(entityId);
         Assert.AreEqual((ushort)100, health.MaximumHealth);
         Assert.IsTrue(health.CurrentHealth >= 1 && health.CurrentHealth <= health.MaximumHealth);
         Assert.IsTrue(ecsContext.ComponentManager.GetMultiPool<ClassComponent>().Has(entityId));
@@ -370,16 +399,16 @@ public sealed class BlueprintTests
     {
         var ecsContext = BuildEcsContext();
         var entityId = ecsContext.EntityManager.CreateEntity();
-        ecsContext.ComponentManager.GetPackedPool<HealthComponent>().Add(entityId, new HealthComponent(50, 100));
+        ecsContext.ComponentManager.GetPackedPool<SimpleHealthComponent>().Add(entityId, new SimpleHealthComponent(50, 100));
 
         new Tank(new MathUtility(new Random(1))).Build(ecsContext.ComponentManager, entityId);
 
-        var health = ecsContext.ComponentManager.GetPackedPool<HealthComponent>().GetReadonly(entityId);
+        var health = ecsContext.ComponentManager.GetPackedPool<SimpleHealthComponent>().GetReadonly(entityId);
         Assert.AreEqual((short)110, health.MaximumHealth);
         AssertHasHealthRegenBonusModifier(ecsContext.ComponentManager, entityId);
     }
 
-    /// <summary>Regen has no stored field for Tank to have multiplied in place anymore (see HealthRegenSystem) -- its +10% bonus is a granted StatModifier instead, asserted here by presence/shape rather than by reading a HealthComponent field.</summary>
+    /// <summary>Regen has no stored field for Tank to have multiplied in place anymore (see SimpleHealthRegenSystem) -- its +10% bonus is a granted StatModifier instead, asserted here by presence/shape rather than by reading a SimpleHealthComponent field.</summary>
     private static void AssertHasHealthRegenBonusModifier(ComponentManager componentManager, int entityId)
     {
         var statModifiers = componentManager.GetMultiPool<StatModifierComponent>();

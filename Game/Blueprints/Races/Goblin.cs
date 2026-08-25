@@ -5,6 +5,7 @@ using Game.Modules.Actions.Components;
 using Game.Modules.Actions.Definitions.DirectActions;
 using Game.Modules.Core.Components;
 using Game.Blueprints.NPCs;
+using Game.Modules.Health;
 using Game.Modules.Health.Components;
 using Game.Modules.Movement.Components;
 using Game.Modules.Race.Components;
@@ -29,7 +30,16 @@ public sealed class Goblin(MathUtility mathUtility) : IBlueprint
 
     private static readonly string[] DisplayNames = DisplayNameCache.BuildDisplayNames(PersonalNameOptions, RaceName);
 
-    private const ushort MaximumHealth = 200;
+    /// <summary>Head/Torso are Vital; sums to 200, matching the flat SimpleHealthComponent total this replaced so the split doesn't itself rebalance Goblin's overall toughness. Not a final balance pass -- see PLAN-body-parts.md's Phase 3 proof case.</summary>
+    private static readonly BodyPartTemplate[] BodyParts =
+    [
+        new BodyPartTemplate("Head", BodyPartType.Head, 30, 30, IsVital: true),
+        new BodyPartTemplate("Torso", BodyPartType.Torso, 60, 60, IsVital: true),
+        new BodyPartTemplate("Left Arm", BodyPartType.Arm, 20, 20, IsVital: false),
+        new BodyPartTemplate("Right Arm", BodyPartType.Arm, 20, 20, IsVital: false),
+        new BodyPartTemplate("Left Leg", BodyPartType.Leg, 35, 35, IsVital: false),
+        new BodyPartTemplate("Right Leg", BodyPartType.Leg, 35, 35, IsVital: false),
+    ];
 
     /// <summary>Flat default for every NPC race, adjustable in a later balance pass -- see TODO.md's Stats entry.</summary>
     private const ushort DefaultAbilityScoreBaseValue = 5;
@@ -51,7 +61,7 @@ public sealed class Goblin(MathUtility mathUtility) : IBlueprint
         {
             componentManager.Merge(entityId, sprite);
         }
-        componentManager.Merge(entityId, new HealthComponent((short)mathUtility.Next(1, MaximumHealth + 1), MaximumHealth));
+        ComplexHealthEffects.GrantBodyParts(componentManager, entityId, mathUtility, BodyParts);
         componentManager.Merge(entityId, new MovementComponent(MovementMode.Random, null, null));
         componentManager.Merge(entityId, new ActionLockComponent(standardLockFrames: 54, currentLockTotalFrames: 0, currentLockFramesRemaining: 0));
 

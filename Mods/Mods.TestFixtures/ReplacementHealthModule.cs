@@ -8,12 +8,12 @@ namespace Mods.TestFixtures;
 /// Uses the built-in HealthModule's real Id (see Game.Modules.Health.HealthModule.Id), so
 /// ModuleSet.Combine replaces it instead of adding this one alongside it -- a fixture for
 /// proving mod-replaces-built-in end to end. Registers nothing at all, so the replacement is
-/// observable: HealthComponent ends up unregistered only if this mod actually replaced
+/// observable: SimpleHealthComponent ends up unregistered only if this mod actually replaced
 /// HealthModule rather than coexisting with it. HealthModule is deliberately chosen (over
 /// e.g. CoreModule or MovementModule) because nothing else declares a Dependencies entry on
 /// it, so replacing it doesn't also break an unrelated built-in's dependency resolution.
 ///
-/// Deliberately breaks any game content that assumes HealthComponent exists (e.g.
+/// Deliberately breaks any game content that assumes SimpleHealthComponent exists (e.g.
 /// TestMapBuilder's Goblin blueprint) if actually dropped into a running game's Mods/ folder
 /// -- that's the correct, expected consequence of the "friends sharing mod folders" trust
 /// model (nothing validates a replacement preserves the built-in's contract), not a defect.

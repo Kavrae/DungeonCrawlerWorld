@@ -1,6 +1,7 @@
 ﻿using Engine.ECS.Components;
 using Engine.ECS.Systems;
 using Engine.Events;
+using Engine.Math;
 using Game.Modules.ContactDamage.Components;
 using Game.Modules.ContactDamage.Systems;
 using Game.Modules.Death.Components;
@@ -33,6 +34,7 @@ public sealed class ContactDamageModule : IGameModule
     private IPlayerQuery? _playerQuery;
     private FrameEventBuffer<EntityMovedEvent> _movedEntities = null!;
     private ProcessingTierEvents _processingTierEvents = null!;
+    private MathUtility _mathUtility = null!;
 
     public void Configure(GameModuleContext context)
     {
@@ -41,6 +43,7 @@ public sealed class ContactDamageModule : IGameModule
         _playerQuery = context.PlayerQuery;
         _movedEntities = context.MovedEntities;
         _processingTierEvents = context.ProcessingTierEvents;
+        _mathUtility = context.MathUtility;
     }
 
     public void RegisterComponents(ComponentManager componentManager)
@@ -51,7 +54,7 @@ public sealed class ContactDamageModule : IGameModule
 
     public void RegisterSystems(SystemManager systemManager, ComponentManager componentManager)
     {
-        if (!componentManager.IsRegistered<HealthComponent>())
+        if (!componentManager.IsRegistered<SimpleHealthComponent>())
         {
             return;
         }
@@ -62,18 +65,23 @@ public sealed class ContactDamageModule : IGameModule
         var deadEntities = componentManager.IsRegistered<DeadComponent>()
             ? componentManager.GetPackedPool<DeadComponent>()
             : null;
+        var bodyParts = componentManager.IsRegistered<BodyPartComponent>()
+            ? componentManager.GetMultiPool<BodyPartComponent>()
+            : null;
 
         systemManager.Register(new ContactDamageSystem(
             componentManager.GetPackedPool<DamageOnContactComponent>(),
             componentManager.GetPackedPool<ContactDamageExposureComponent>(),
-            componentManager.GetPackedPool<HealthComponent>(),
+            componentManager.GetPackedPool<SimpleHealthComponent>(),
             _eventBus,
             _mapQuery,
             _playerQuery,
             _movedEntities,
             componentManager.GetDirectPool<ProcessingTierComponent>(),
             _processingTierEvents,
+            _mathUtility,
             statModifiers,
-            deadEntities));
+            deadEntities,
+            bodyParts));
     }
 }

@@ -14,7 +14,7 @@ namespace Game.Modules.Paralysis;
 /// the shared StatusEffectAuraApplierRegistry during Configure, so any future aura source (or a
 /// StatusEffectGrant inside any IActionActivator's own ActionEffect) can grant Paralysis
 /// without depending on this module directly. Unlike BurningModule/PoisonModule,
-/// RegisterSystems does NOT gate on HealthComponent -- Paralysis has nothing to do with hit
+/// RegisterSystems does NOT gate on SimpleHealthComponent -- Paralysis has nothing to do with hit
 /// points, only ActionLockComponent -- the concrete proof that a status effect can apply to
 /// entities without hit points.
 /// </summary>

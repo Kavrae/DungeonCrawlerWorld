@@ -41,6 +41,6 @@ public sealed record DirectDamage(short MinAmount, short MaxAmount) : IActionEff
             scaled *= StatModifierMath.GetEffectiveValue(context.StatModifiers, context.SourceEntityId, StatModifierTarget.CritMultiplier, CritMath.BaseCritMultiplier);
         }
 
-        HealthDamage.Apply(context.Health, context.EventBus, context.TargetEntityId, (ushort)scaled, StatusEffectSource.FromEntity(context.SourceEntityId), context.PlayerQuery, context.ActivatorName, context.StatModifiers);
+        HealthDamage.Apply(context.Health, context.EventBus, context.TargetEntityId, (ushort)scaled, StatusEffectSource.FromEntity(context.SourceEntityId), context.PlayerQuery, context.ActivatorName, context.StatModifiers, context.BodyParts, context.MathUtility, context.DeadEntities);
     }
 }

@@ -48,7 +48,7 @@ namespace Game.Modules.Inventory.Systems;
 /// silently-omittable one.
 ///
 /// ScrollActivator: no cooldown-abuse mechanic (potion-specific, never mentioned for scrolls) and
-/// no hard HealthComponent requirement on the target (see ApplyScrollToTarget) -- instead scales
+/// no hard SimpleHealthComponent requirement on the target (see ApplyScrollToTarget) -- instead scales
 /// Range/AreaSize (already resolved into request.TargetTiles by Presentation, see
 /// ScrollScalingEffects' own doc comment) and any duration the effect carries by the *caster's*
 /// Intelligence, then records the activation toward mastering the scroll's spell (see
@@ -72,7 +72,7 @@ public sealed class ConsumableActivationSystem : ISystem
     private readonly PackedComponentPool<PendingConsumableActivationComponent> _pendingActivations;
     private readonly PackedComponentPool<ActionLockComponent> _actionLocks;
     private readonly PackedComponentPool<PotionCooldownComponent> _potionCooldowns;
-    private readonly PackedComponentPool<HealthComponent> _health;
+    private readonly PackedComponentPool<SimpleHealthComponent> _health;
     private readonly MultiComponentPool<StatModifierComponent>? _statModifiers;
     private readonly ItemCatalog _itemCatalog;
     private readonly ActionCatalog _actionCatalog;
@@ -88,13 +88,14 @@ public sealed class ConsumableActivationSystem : ISystem
     private readonly IPlayerQuery? _playerQuery;
     private readonly MultiComponentPool<StatusEffectAuraSourceComponent>? _auraSources;
     private readonly MultiComponentPool<ItemHotkeyBindingComponent>? _itemHotkeyBindings;
+    private readonly MultiComponentPool<BodyPartComponent>? _bodyParts;
     private readonly EntityStripeSet _stripeSet;
 
     public ConsumableActivationSystem(
         PackedComponentPool<PendingConsumableActivationComponent> pendingActivations,
         PackedComponentPool<ActionLockComponent> actionLocks,
         PackedComponentPool<PotionCooldownComponent> potionCooldowns,
-        PackedComponentPool<HealthComponent> health,
+        PackedComponentPool<SimpleHealthComponent> health,
         ItemCatalog itemCatalog,
         ActionCatalog actionCatalog,
         IMapQuery mapQuery,
@@ -109,7 +110,8 @@ public sealed class ConsumableActivationSystem : ISystem
         StatusEffectAuraApplierRegistry? statusEffectAppliers = null,
         IPlayerQuery? playerQuery = null,
         MultiComponentPool<StatusEffectAuraSourceComponent>? auraSources = null,
-        MultiComponentPool<ItemHotkeyBindingComponent>? itemHotkeyBindings = null)
+        MultiComponentPool<ItemHotkeyBindingComponent>? itemHotkeyBindings = null,
+        MultiComponentPool<BodyPartComponent>? bodyParts = null)
     {
         _pendingActivations = pendingActivations;
         _actionLocks = actionLocks;
@@ -130,6 +132,7 @@ public sealed class ConsumableActivationSystem : ISystem
         _playerQuery = playerQuery;
         _auraSources = auraSources;
         _itemHotkeyBindings = itemHotkeyBindings;
+        _bodyParts = bodyParts;
 
         _stripeSet = EntityStripeSet.CreateAndWire(StripeCount, pendingActivations);
     }
@@ -227,7 +230,7 @@ public sealed class ConsumableActivationSystem : ISystem
     }
 
     /// <summary>
-    /// Requires a HealthComponent to be considered a valid target at all (the same "is this a
+    /// Requires a SimpleHealthComponent to be considered a valid target at all (the same "is this a
     /// real, alive target" gate this method has always used) -- a target with Health but no
     /// pool a given entry actually needs (e.g. no ManaComponent for a Mana Potion) still counts
     /// as legitimately hit for the cooldown-abuse/reset bookkeeping below, since each entry
@@ -283,7 +286,7 @@ public sealed class ConsumableActivationSystem : ISystem
             : 1.0f;
 
     /// <summary>
-    /// Unlike ApplyPotionToTarget, doesn't hard-require a HealthComponent on the target -- each
+    /// Unlike ApplyPotionToTarget, doesn't hard-require a SimpleHealthComponent on the target -- each
     /// effect entry already no-ops gracefully when its required component/pool is missing (the
     /// same "immortal but affectable" targeting melee already uses), and a scroll effect (e.g.
     /// TorchMarkEffectEntry) may not need Health at all. Skipped only for a dead target.
@@ -309,7 +312,7 @@ public sealed class ConsumableActivationSystem : ISystem
         }
     }
 
-    /// <summary>Same "immortal but affectable" treatment as ApplyScrollToTarget -- no hard HealthComponent requirement, each effect entry no-ops gracefully on its own missing pool. Skipped only for a dead target.</summary>
+    /// <summary>Same "immortal but affectable" treatment as ApplyScrollToTarget -- no hard SimpleHealthComponent requirement, each effect entry no-ops gracefully on its own missing pool. Skipped only for a dead target.</summary>
     private void ApplyWandToTarget(ItemDefinition item, int sourceEntityId, int targetEntityId)
     {
         if (_deadEntities?.Has(targetEntityId) == true)
@@ -380,6 +383,7 @@ public sealed class ConsumableActivationSystem : ISystem
             StatusEffectAppliers: _statusEffectAppliers,
             DeadEntities: _deadEntities,
             AuraSources: _auraSources,
+            BodyParts: _bodyParts,
             PlayerQuery: _playerQuery,
             DamageOverride: null,
             DurationScaleMultiplier: durationScaleMultiplier);

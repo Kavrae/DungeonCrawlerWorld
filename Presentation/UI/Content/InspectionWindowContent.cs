@@ -5,6 +5,7 @@ using Engine.ECS.Entities;
 using Engine.Math;
 using Game.Modules.Class.Components;
 using Game.Modules.Core.Components;
+using Game.Modules.Health;
 using Game.Modules.Health.Components;
 using Game.Modules.Race.Components;
 using Game.World;
@@ -65,7 +66,8 @@ public sealed class InspectionWindowContent(
     private readonly DirectComponentPool<DisplayTextComponent> _displayTextPool = componentManager.GetDirectPool<DisplayTextComponent>();
     private readonly MultiComponentPool<RaceComponent> _racePool = componentManager.GetMultiPool<RaceComponent>();
     private readonly MultiComponentPool<ClassComponent> _classPool = componentManager.GetMultiPool<ClassComponent>();
-    private readonly PackedComponentPool<HealthComponent> _healthPool = componentManager.GetPackedPool<HealthComponent>();
+    private readonly PackedComponentPool<SimpleHealthComponent> _healthPool = componentManager.GetPackedPool<SimpleHealthComponent>();
+    private readonly MultiComponentPool<BodyPartComponent> _bodyParts = componentManager.GetMultiPool<BodyPartComponent>();
     private readonly ComponentInspector _componentInspector = new(componentManager);
 
     private readonly List<int> _lastSubjectIds = [];
@@ -211,7 +213,7 @@ public sealed class InspectionWindowContent(
         elementPoolService.CloseAllChildren(_hostWindow);
     }
 
-    /// <summary>One subject's block -- icon+name/race/class rows, HP bar (entities with a HealthComponent only), description, then a padded separator -- shared by Basic's per-occupant loop and Detail's single followed entity.</summary>
+    /// <summary>One subject's block -- icon+name/race/class rows, HP bar (entities with a SimpleHealthComponent or BodyPartComponent only), description, then a padded separator -- shared by Basic's per-occupant loop and Detail's single followed entity.</summary>
     private void BuildSubjectBlock(int entityId, float blockWidth)
     {
         BuildHeaderRow(entityId, blockWidth);
@@ -278,7 +280,7 @@ public sealed class InspectionWindowContent(
 
     private void BuildHealthRowIfPresent(int entityId, float blockWidth)
     {
-        if (!_healthPool.TryGetReadonly(entityId, out var health) || health.MaximumHealth <= 0)
+        if (!HealthQueries.TryGetTotals(_healthPool, _bodyParts, entityId, out _, out var maximumHealth) || maximumHealth <= 0)
         {
             return;
         }

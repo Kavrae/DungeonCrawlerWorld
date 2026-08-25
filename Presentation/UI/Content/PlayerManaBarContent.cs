@@ -16,7 +16,7 @@ namespace Presentation.UI.Content;
 /// that always renders rather than hiding at full mana. Light grey full-width fill when the
 /// player has no ManaComponent at all -- not an error state, just "hasn't gained a mana-costing
 /// ability yet" (see ManaGrant.EnsureManaComponentExists), the same fallback treatment
-/// PlayerHealthBarContent gives a hypothetical HealthComponent-less player.
+/// PlayerHealthBarContent gives a hypothetical SimpleHealthComponent-less player.
 /// </summary>
 public sealed class PlayerManaBarContent(World world, ComponentManager componentManager) : IElementContent
 {

@@ -15,7 +15,7 @@ public static class PotionCooldownEffects
     /// <summary>5s @ GameTiming.FramesPerSecond -- the cooldown at Constitution total 300 (AbilityScoreMath's own clamp range).</summary>
     public const ushort MinDurationFrames = GameTiming.FramesPerSecond * 5;
 
-    /// <summary>Linear ramp from DurationFrames at Constitution total 1 down to MinDurationFrames at total 300 -- endpoints passed high-to-low since more Constitution means a shorter cooldown here (the inverse direction of HealthRegenSystem's own Constitution ramp).</summary>
+    /// <summary>Linear ramp from DurationFrames at Constitution total 1 down to MinDurationFrames at total 300 -- endpoints passed high-to-low since more Constitution means a shorter cooldown here (the inverse direction of SimpleHealthRegenSystem's own Constitution ramp).</summary>
     public static ushort ComputeDurationFrames(ushort constitutionTotal) =>
         (ushort)AbilityScoreMath.Lerp(constitutionTotal, DurationFrames, MinDurationFrames);
 

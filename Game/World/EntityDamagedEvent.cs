@@ -13,5 +13,5 @@
 /// spells) and this exists purely for logging, not for any gameplay branching.
 /// </param>
 /// <param name="Amount">The damage actually dealt, after the target's own IncomingDamage modifiers (e.g. a flat damage-reduction buff) already reduced it -- not the raw amount the source attempted.</param>
-/// <param name="MaximumHealth">The modifier-adjusted effective max (see StatModifierMath), not the raw stored HealthComponent field -- otherwise a buffed CurrentHealth could legitimately exceed the value logged here.</param>
+/// <param name="MaximumHealth">The modifier-adjusted effective max (see StatModifierMath), not the raw stored SimpleHealthComponent field -- otherwise a buffed CurrentHealth could legitimately exceed the value logged here.</param>
 public readonly record struct EntityDamagedEvent(int EntityId, ushort Amount, StatusEffectSource Source, ushort CurrentHealth, ushort MaximumHealth, string DamageType);

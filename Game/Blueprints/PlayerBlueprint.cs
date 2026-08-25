@@ -39,7 +39,7 @@ public sealed class PlayerBlueprint(MathUtility mathUtility, UniqueNumberAllocat
     /// <summary>Matches the Expansion group's old fixed slot count -- nobody loses hotkey access just because Expansion now grows past 10. See HotkeyExpansionUnlockComponent's own doc comment.</summary>
     private const byte DefaultUnlockedExpansionSlots = 5;
 
-    /// <summary>PermanentHybridBuffTest -- exercises a permanent modifier granting both a flat and a percentage bonus at once. See StatModifierComponent's own doc comment for why this never mutates HealthComponent/ActionInstanceComponent directly.</summary>
+    /// <summary>PermanentHybridBuffTest -- exercises a permanent modifier granting both a flat and a percentage bonus at once. See StatModifierComponent's own doc comment for why this never mutates SimpleHealthComponent/ActionInstanceComponent directly.</summary>
     private const float PermanentOutgoingDamageBonus = 2f;
     private const float PermanentMaximumHealthMultiplierBonus = 0.5f;
 
@@ -50,7 +50,7 @@ public sealed class PlayerBlueprint(MathUtility mathUtility, UniqueNumberAllocat
         {
             componentManager.Merge(entityId, sprite);
         }
-        componentManager.Merge(entityId, new HealthComponent((short)mathUtility.Next(1, MaximumHealth + 1), MaximumHealth));
+        componentManager.Merge(entityId, new SimpleHealthComponent((short)mathUtility.Next(1, MaximumHealth + 1), MaximumHealth));
         componentManager.Merge(entityId, new MovementComponent(MovementMode.PlayerControlled, null, null));
         componentManager.Merge(entityId, new ActionLockComponent(standardLockFrames: 30, currentLockTotalFrames: 0, currentLockFramesRemaining: 0));
         componentManager.Merge(entityId, new TransformComponent(new Vector3Int(-1, -1, (int)MapLayer.Ground), new Vector2Byte(1, 1)));

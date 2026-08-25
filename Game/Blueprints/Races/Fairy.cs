@@ -39,7 +39,7 @@ public sealed class Fairy(MathUtility mathUtility) : IBlueprint
         componentManager.Merge(entityId, new DisplayTextComponent(DisplayNames[mathUtility.Next(0, DisplayNames.Length)], Description));
 
         componentManager.Merge(entityId, new GlyphComponent("f", Color.DeepPink));
-        componentManager.Merge(entityId, new HealthComponent((ushort)mathUtility.Next(1, MaximumHealth + 1), MaximumHealth));
+        componentManager.Merge(entityId, new SimpleHealthComponent((ushort)mathUtility.Next(1, MaximumHealth + 1), MaximumHealth));
         componentManager.Merge(entityId, new MovementComponent(MovementMode.Random, null, null));
         componentManager.Merge(entityId, new ActionLockComponent(standardLockFrames: 48, currentLockTotalFrames: 0, currentLockFramesRemaining: 0));
 

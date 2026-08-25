@@ -15,7 +15,7 @@ namespace Game.Modules.Health.Systems;
 
 /// <summary>Regenerates entity current and maximum health, adjusting for ability scores, modifiers, and processing tier.</summary>
 /// <cleanupVersion>1</cleanupVersion>
-public sealed class HealthRegenSystem : ISystem
+public sealed class SimpleHealthRegenSystem : ISystem
 {
     public byte StripeCount => (byte)GameTiming.FramesPerSecond;
 
@@ -25,15 +25,15 @@ public sealed class HealthRegenSystem : ISystem
     /// <summary>Flat HP/sec at Constitution total 300.</summary>
     private const float MaxHealthRegenPerSecond = 6f;
 
-    private readonly PackedComponentPool<HealthComponent> _healthComponents;
+    private readonly PackedComponentPool<SimpleHealthComponent> _healthComponents;
     private readonly DirectComponentPool<ProcessingTierComponent> _processingTiers;
     private readonly MultiComponentPool<StatModifierComponent>? _statModifiers;
     private readonly PackedComponentPool<DeadComponent>? _deadEntities;
     private readonly MultiComponentPool<AbilityScoreComponent>? _abilityScores;
     private readonly TieredEntityStripeSet _tieredStripeSet;
 
-    public HealthRegenSystem(
-        PackedComponentPool<HealthComponent> healthComponents,
+    public SimpleHealthRegenSystem(
+        PackedComponentPool<SimpleHealthComponent> healthComponents,
         DirectComponentPool<ProcessingTierComponent> processingTiers,
         ProcessingTierEvents processingTierEvents,
         MultiComponentPool<StatModifierComponent>? statModifiers = null,
@@ -73,7 +73,7 @@ public sealed class HealthRegenSystem : ISystem
             }
 
             // No AbilityScoresModule loaded, or this entity never got a Constitution score
-            // (e.g. a non-creature HealthComponent holder) -- 0 regen, same as today's
+            // (e.g. a non-creature SimpleHealthComponent holder) -- 0 regen, same as today's
             // effectiveRegen == 0 skip below, just resolved a step earlier.
             if (_abilityScores is null || !AbilityScoreQueries.TryGetComponent(_abilityScores, entityId, AbilityScoreType.Constitution, out var constitution))
             {
@@ -98,7 +98,7 @@ public sealed class HealthRegenSystem : ISystem
                 continue;
             }
 
-            _healthComponents.TryUpdate(entityId, (effectiveRegen, effectiveMaximumHealth), static (ref HealthComponent healthComponent, (float EffectiveRegen, float EffectiveMaximumHealth) state) =>
+            _healthComponents.TryUpdate(entityId, (effectiveRegen, effectiveMaximumHealth), static (ref SimpleHealthComponent healthComponent, (float EffectiveRegen, float EffectiveMaximumHealth) state) =>
             {
                 healthComponent.CurrentHealth = MathHelper.Clamp(healthComponent.CurrentHealth + state.EffectiveRegen, 0f, state.EffectiveMaximumHealth);
             });

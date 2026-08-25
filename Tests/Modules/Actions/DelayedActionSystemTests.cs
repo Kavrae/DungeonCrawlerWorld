@@ -54,7 +54,7 @@ public sealed class DelayedActionSystemTests
         componentManager.RegisterPackedPool<PendingDelayedActionComponent>(static (ref existing, incoming) => existing = incoming);
         componentManager.RegisterPackedPool<ActionLockComponent>(static (ref existing, incoming) => existing = incoming);
         componentManager.RegisterMultiPool<ActionInstanceComponent>();
-        componentManager.RegisterPackedPool<HealthComponent>(static (ref existing, incoming) => existing = incoming);
+        componentManager.RegisterPackedPool<SimpleHealthComponent>(static (ref existing, incoming) => existing = incoming);
         componentManager.RegisterPackedPool<DeadComponent>(static (ref existing, incoming) => existing = incoming);
 
         var mapQuery = new FakeMapQuery();
@@ -71,7 +71,7 @@ public sealed class DelayedActionSystemTests
             componentManager.GetPackedPool<PendingDelayedActionComponent>(),
             componentManager.GetPackedPool<ActionLockComponent>(),
             componentManager.GetMultiPool<ActionInstanceComponent>(),
-            componentManager.GetPackedPool<HealthComponent>(),
+            componentManager.GetPackedPool<SimpleHealthComponent>(),
             actionCatalog,
             mapQuery,
             eventBus,
@@ -86,14 +86,14 @@ public sealed class DelayedActionSystemTests
     }
 
     private static float HealthOf(ComponentManager componentManager, int entityId) =>
-        componentManager.GetPackedPool<HealthComponent>().TryGetReadonly(entityId, out var health) ? health.CurrentHealth : -1f;
+        componentManager.GetPackedPool<SimpleHealthComponent>().TryGetReadonly(entityId, out var health) ? health.CurrentHealth : -1f;
 
     [TestMethod]
     public void LockStillCounting_EffectIsNotResolved()
     {
         var (system, componentManager, mapQuery, _) = Build();
         mapQuery.SetOccupant(TargetTile, TargetEntityId);
-        componentManager.Merge(TargetEntityId, new HealthComponent(100, 100));
+        componentManager.Merge(TargetEntityId, new SimpleHealthComponent(100, 100));
         componentManager.Merge(CasterEntityId, new ActionInstanceComponent(ActionId, damageAmount: 15, cooldownFramesRemaining: 0));
         componentManager.Merge(CasterEntityId, new ActionLockComponent(standardLockFrames: ActionLockGate.StandardLockFrames, currentLockTotalFrames: 30, currentLockFramesRemaining: 10));
         componentManager.Merge(CasterEntityId, new PendingDelayedActionComponent(ActionId, [TargetTile]));
@@ -109,7 +109,7 @@ public sealed class DelayedActionSystemTests
     {
         var (system, componentManager, mapQuery, _) = Build();
         mapQuery.SetOccupant(TargetTile, TargetEntityId);
-        componentManager.Merge(TargetEntityId, new HealthComponent(100, 100));
+        componentManager.Merge(TargetEntityId, new SimpleHealthComponent(100, 100));
         componentManager.Merge(CasterEntityId, new ActionInstanceComponent(ActionId, damageAmount: 15, cooldownFramesRemaining: 0));
         componentManager.Merge(CasterEntityId, new ActionLockComponent(standardLockFrames: ActionLockGate.StandardLockFrames, currentLockTotalFrames: 30, currentLockFramesRemaining: 0));
         componentManager.Merge(CasterEntityId, new PendingDelayedActionComponent(ActionId, [TargetTile]));
@@ -125,7 +125,7 @@ public sealed class DelayedActionSystemTests
     {
         var (system, componentManager, mapQuery, _) = Build();
         mapQuery.SetOccupant(TargetTile, TargetEntityId);
-        componentManager.Merge(TargetEntityId, new HealthComponent(100, 100));
+        componentManager.Merge(TargetEntityId, new SimpleHealthComponent(100, 100));
         componentManager.Merge(CasterEntityId, new ActionInstanceComponent(ActionId, damageAmount: 15, cooldownFramesRemaining: 0));
         componentManager.Merge(CasterEntityId, new ActionLockComponent(standardLockFrames: ActionLockGate.StandardLockFrames, currentLockTotalFrames: 30, currentLockFramesRemaining: 0));
         componentManager.Merge(CasterEntityId, new PendingDelayedActionComponent(ActionId, [TargetTile]));
@@ -142,7 +142,7 @@ public sealed class DelayedActionSystemTests
     {
         var (system, componentManager, mapQuery, _) = Build();
         mapQuery.SetOccupant(TargetTile, TargetEntityId);
-        componentManager.Merge(TargetEntityId, new HealthComponent(100, 100));
+        componentManager.Merge(TargetEntityId, new SimpleHealthComponent(100, 100));
 
         system.Update(default, 0);
 

@@ -99,7 +99,8 @@ public static class ElementFactoryRegistry
         Register<TargetShapePreviewElement>((font, elements, glyph) => new TargetShapePreviewElement(font, elements, glyph));
         Register<HealthBarElement>((font, elements, glyph) => new HealthBarElement(
             font, elements, glyph,
-            componentManager.GetPackedPool<HealthComponent>(),
+            componentManager.GetPackedPool<SimpleHealthComponent>(),
+            componentManager.GetMultiPool<BodyPartComponent>(),
             componentManager.IsRegistered<StatModifierComponent>() ? componentManager.GetMultiPool<StatModifierComponent>() : null));
     }
 }

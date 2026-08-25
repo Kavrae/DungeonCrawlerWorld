@@ -57,7 +57,7 @@ public sealed class TestCombatBehaviorSystem : ISystem
     private readonly PackedComponentPool<MovementComponent> _movementPool;
     private readonly DirectComponentPool<TransformComponent> _transformPool;
     private readonly PackedComponentPool<ActionLockComponent> _actionLocks;
-    private readonly PackedComponentPool<HealthComponent> _health;
+    private readonly PackedComponentPool<SimpleHealthComponent> _health;
     private readonly MultiComponentPool<InventoryItemStackComponent> _inventoryStacks;
     private readonly MultiComponentPool<ActionInstanceComponent> _actionInstances;
     private readonly MultiComponentPool<RaceComponent> _raceComponents;
@@ -75,7 +75,7 @@ public sealed class TestCombatBehaviorSystem : ISystem
         PackedComponentPool<MovementComponent> movementPool,
         DirectComponentPool<TransformComponent> transformPool,
         PackedComponentPool<ActionLockComponent> actionLocks,
-        PackedComponentPool<HealthComponent> health,
+        PackedComponentPool<SimpleHealthComponent> health,
         MultiComponentPool<InventoryItemStackComponent> inventoryStacks,
         MultiComponentPool<ActionInstanceComponent> actionInstances,
         MultiComponentPool<RaceComponent> raceComponents,

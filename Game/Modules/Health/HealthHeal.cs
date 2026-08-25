@@ -6,24 +6,39 @@ using Microsoft.Xna.Framework;
 
 namespace Game.Modules.Health;
 
-/// <summary>Raises CurrentHealth, mirroring HealthDamage.Apply's shape in reverse -- clamped at the modifier-effective MaximumHealth (see StatModifierMath), not the raw stored field, so a permanent +max-HP buff still caps healing correctly. A no-op for an entity with no HealthComponent (e.g. an "immortal" entity), same as HealthDamage.Apply.</summary>
+/// <summary>Simple/Complex dispatching facade for healing by a fraction of max health -- the shared chokepoint DirectHeal, and any future heal effect, leans on.</summary>
+/// <remarks>
+/// Dispatches on which pool actually has entityId, mirroring HealthDamage.Apply: a
+/// SimpleHealthComponent raises CurrentHealth by fraction of the modifier-effective
+/// MaximumHealth, clamped there rather than the raw stored field (see StatModifierMath's own doc
+/// comment for why). A BodyPartComponent-owning entity with no SimpleHealthComponent delegates to
+/// ComplexHealthHeal.ApplyFractionToAllParts, which applies the same fraction independently to
+/// every part's own MaximumHealth rather than one shared pool. Neither pool having entityId is a
+/// no-op, same as HealthDamage.Apply.
+/// </remarks>
 public static class HealthHeal
 {
     public static void Apply(
-        PackedComponentPool<HealthComponent> health,
+        PackedComponentPool<SimpleHealthComponent> health,
         int entityId,
-        short amount,
-        MultiComponentPool<StatModifierComponent>? statModifiers = null)
+        float fraction,
+        MultiComponentPool<StatModifierComponent>? statModifiers = null,
+        MultiComponentPool<BodyPartComponent>? bodyParts = null)
     {
         if (!health.Has(entityId))
         {
+            if (bodyParts?.Has(entityId) == true)
+            {
+                ComplexHealthHeal.ApplyFractionToAllParts(bodyParts, entityId, fraction);
+            }
+
             return;
         }
 
-        health.TryUpdate(entityId, (statModifiers, entityId, amount), static (ref HealthComponent healthComponent, (MultiComponentPool<StatModifierComponent>? StatModifiers, int EntityId, short Amount) state) =>
+        health.TryUpdate(entityId, (statModifiers, entityId, fraction), static (ref SimpleHealthComponent healthComponent, (MultiComponentPool<StatModifierComponent>? StatModifiers, int EntityId, float Fraction) state) =>
         {
             var effectiveMaximumHealth = StatModifierMath.GetEffectiveValue(state.StatModifiers, state.EntityId, StatModifierTarget.MaximumHealth, healthComponent.MaximumHealth);
-            healthComponent.CurrentHealth = MathHelper.Clamp(healthComponent.CurrentHealth + state.Amount, 0f, effectiveMaximumHealth);
+            healthComponent.CurrentHealth = MathHelper.Clamp(healthComponent.CurrentHealth + state.Fraction * effectiveMaximumHealth, 0f, effectiveMaximumHealth);
         });
     }
 }

@@ -26,7 +26,7 @@ public sealed class DelayedActionSystem : ISystem
     private readonly PackedComponentPool<PendingDelayedActionComponent> _pendingActions;
     private readonly PackedComponentPool<ActionLockComponent> _actionLocks;
     private readonly MultiComponentPool<ActionInstanceComponent> _actionInstances;
-    private readonly PackedComponentPool<HealthComponent> _health;
+    private readonly PackedComponentPool<SimpleHealthComponent> _health;
     private readonly MultiComponentPool<StatModifierComponent>? _statModifiers;
     private readonly ActionCatalog _actionCatalog;
     private readonly IMapQuery _mapQuery;
@@ -39,13 +39,14 @@ public sealed class DelayedActionSystem : ISystem
     private readonly MathUtility _mathUtility;
     private readonly MultiComponentPool<StatusEffectAuraSourceComponent>? _auraSources;
     private readonly PackedComponentPool<HotkeyExpansionUnlockComponent>? _hotkeyExpansionUnlocks;
+    private readonly MultiComponentPool<BodyPartComponent>? _bodyParts;
     private readonly EntityStripeSet _stripeSet;
 
     public DelayedActionSystem(
         PackedComponentPool<PendingDelayedActionComponent> pendingActions,
         PackedComponentPool<ActionLockComponent> actionLocks,
         MultiComponentPool<ActionInstanceComponent> actionInstances,
-        PackedComponentPool<HealthComponent> health,
+        PackedComponentPool<SimpleHealthComponent> health,
         ActionCatalog actionCatalog,
         IMapQuery mapQuery,
         EventBus eventBus,
@@ -57,7 +58,8 @@ public sealed class DelayedActionSystem : ISystem
         PackedComponentPool<DeadComponent>? deadEntities = null,
         MultiComponentPool<AbilityScoreComponent>? abilityScores = null,
         MultiComponentPool<StatusEffectAuraSourceComponent>? auraSources = null,
-        PackedComponentPool<HotkeyExpansionUnlockComponent>? hotkeyExpansionUnlocks = null)
+        PackedComponentPool<HotkeyExpansionUnlockComponent>? hotkeyExpansionUnlocks = null,
+        MultiComponentPool<BodyPartComponent>? bodyParts = null)
     {
         _pendingActions = pendingActions;
         _actionLocks = actionLocks;
@@ -75,6 +77,7 @@ public sealed class DelayedActionSystem : ISystem
         _abilityScores = abilityScores;
         _auraSources = auraSources;
         _hotkeyExpansionUnlocks = hotkeyExpansionUnlocks;
+        _bodyParts = bodyParts;
 
         _stripeSet = EntityStripeSet.CreateAndWire(StripeCount, pendingActions);
     }
@@ -106,7 +109,7 @@ public sealed class DelayedActionSystem : ISystem
             if (_actionCatalog.TryGet(pending.ActionId, out var action) &&
                 ActionInstanceQueries.TryGet(_actionInstances, entityId, pending.ActionId, out var instance))
             {
-                ActionEffectResolver.Apply(action, instance, entityId, pending.TargetTiles, _mapQuery, _health, _eventBus, _mathUtility, _playerQuery, _statusEffectAppliers, _componentManager, _statModifiers, _deadEntities, _abilityScores, _auraSources, _hotkeyExpansionUnlocks);
+                ActionEffectResolver.Apply(action, instance, entityId, pending.TargetTiles, _mapQuery, _health, _eventBus, _mathUtility, _playerQuery, _statusEffectAppliers, _componentManager, _statModifiers, _deadEntities, _abilityScores, _auraSources, _hotkeyExpansionUnlocks, _bodyParts);
             }
 
             _pendingActions.Remove(entityId);

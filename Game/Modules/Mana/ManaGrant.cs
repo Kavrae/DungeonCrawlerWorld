@@ -12,7 +12,7 @@ namespace Game.Modules.Mana;
 /// Intelligence AbilityScoreComponent yet (nothing sensible to size MaximumMana from -- callers
 /// must grant ability scores before granting a mana-costing action, the same ordering
 /// PlayerBlueprint follows). MaximumMana is a one-time snapshot of Intelligence's Total at grant
-/// time, not a value that tracks Intelligence forever after -- mirrors how HealthComponent.
+/// time, not a value that tracks Intelligence forever after -- mirrors how SimpleHealthComponent.
 /// MaximumHealth is baked once at blueprint-build time rather than recomputed live, with
 /// StatModifierTarget.MaximumMana as the seam for anything (equipment, buffs) that wants to
 /// adjust it afterward.

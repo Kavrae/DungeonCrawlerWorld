@@ -64,7 +64,7 @@ public sealed class InventoryModule : IGameModule
 
     public void RegisterSystems(SystemManager systemManager, ComponentManager componentManager)
     {
-        if (!componentManager.IsRegistered<HealthComponent>())
+        if (!componentManager.IsRegistered<SimpleHealthComponent>())
         {
             return;
         }
@@ -76,12 +76,13 @@ public sealed class InventoryModule : IGameModule
         var abilityScores = componentManager.GetOptionalMultiPool<AbilityScoreComponent>();
         var auraSources = componentManager.GetOptionalMultiPool<StatusEffectAuraSourceComponent>();
         var itemHotkeyBindings = componentManager.GetOptionalMultiPool<ItemHotkeyBindingComponent>();
+        var bodyParts = componentManager.GetOptionalMultiPool<BodyPartComponent>();
 
         systemManager.Register(new ConsumableActivationSystem(
             componentManager.GetPackedPool<PendingConsumableActivationComponent>(),
             componentManager.GetPackedPool<ActionLockComponent>(),
             componentManager.GetPackedPool<PotionCooldownComponent>(),
-            componentManager.GetPackedPool<HealthComponent>(),
+            componentManager.GetPackedPool<SimpleHealthComponent>(),
             _itemCatalog,
             _actionCatalog,
             _mapQuery,
@@ -96,6 +97,7 @@ public sealed class InventoryModule : IGameModule
             _statusEffectAppliers,
             _playerQuery,
             auraSources,
-            itemHotkeyBindings));
+            itemHotkeyBindings,
+            bodyParts));
     }
 }

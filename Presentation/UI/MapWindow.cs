@@ -8,6 +8,7 @@ using Game.Modules.Actions;
 using Game.Modules.Core;
 using Game.Modules.Core.Components;
 using Game.Modules.Death.Components;
+using Game.Modules.Health;
 using Game.Modules.Health.Components;
 using Game.Modules.Inventory;
 using Game.Modules.Inventory.Components;
@@ -59,7 +60,8 @@ public sealed class MapWindow : Window
     private readonly DirectComponentPool<GlyphComponent> _glyphPool;
     private readonly DirectComponentPool<SpriteComponent> _spritePool;
     private readonly MultiComponentPool<NonBlockingComponent> _nonBlockingPool;
-    private readonly PackedComponentPool<HealthComponent> _healthPool;
+    private readonly PackedComponentPool<SimpleHealthComponent> _healthPool;
+    private readonly MultiComponentPool<BodyPartComponent> _bodyParts;
     private readonly MultiComponentPool<StatModifierComponent>? _statModifiers;
     private readonly PackedComponentPool<DeadComponent>? _deadPool;
     private readonly MultiComponentPool<InventoryItemStackComponent>? _inventoryStacks;
@@ -174,7 +176,8 @@ public sealed class MapWindow : Window
         _glyphPool = componentManager.GetDirectPool<GlyphComponent>();
         _spritePool = componentManager.GetDirectPool<SpriteComponent>();
         _nonBlockingPool = componentManager.GetMultiPool<NonBlockingComponent>();
-        _healthPool = componentManager.GetPackedPool<HealthComponent>();
+        _healthPool = componentManager.GetPackedPool<SimpleHealthComponent>();
+        _bodyParts = componentManager.GetMultiPool<BodyPartComponent>();
         _statModifiers = componentManager.IsRegistered<StatModifierComponent>()
             ? componentManager.GetMultiPool<StatModifierComponent>()
             : null;
@@ -715,13 +718,13 @@ public sealed class MapWindow : Window
     /// <summary>Thin bar at the top of the entity's own footprint, above its glyph, hidden at full health. Black backdrop doubles as the outline and the "missing health" portion; the fill rect insets 1px and its width (not the outline's) scales with the health fraction.</summary>
     private void DrawHealthBar(SpriteBatch spriteBatch, Texture2D unitRectangle, int entityId, Vector2 footprintTopLeft, Vector2 footprintSize)
     {
-        if (!_healthPool.TryGetReadonly(entityId, out var health) || health.MaximumHealth <= 0)
+        if (!HealthQueries.TryGetTotals(_healthPool, _bodyParts, entityId, out var currentHealth, out var maximumHealth) || maximumHealth <= 0)
         {
             return;
         }
 
-        var effectiveMaximumHealth = StatModifierMath.GetEffectiveValue(_statModifiers, entityId, StatModifierTarget.MaximumHealth, health.MaximumHealth);
-        if (effectiveMaximumHealth <= 0 || health.CurrentHealth >= effectiveMaximumHealth)
+        var effectiveMaximumHealth = StatModifierMath.GetEffectiveValue(_statModifiers, entityId, StatModifierTarget.MaximumHealth, maximumHealth);
+        if (effectiveMaximumHealth <= 0 || currentHealth >= effectiveMaximumHealth)
         {
             return;
         }
@@ -733,7 +736,7 @@ public sealed class MapWindow : Window
         var outerRectangle = new Rectangle((int)barX, (int)barY, (int)barWidth, HealthBarHeightPixels);
         spriteBatch.Draw(unitRectangle, outerRectangle, HealthBarPalette.OutlineColor);
 
-        var healthFraction = health.CurrentHealth / effectiveMaximumHealth;
+        var healthFraction = currentHealth / effectiveMaximumHealth;
         var innerWidth = (int)((outerRectangle.Width - 2) * healthFraction);
         if (innerWidth > 0)
         {

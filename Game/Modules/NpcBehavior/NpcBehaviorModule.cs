@@ -46,7 +46,7 @@ public sealed class NpcBehaviorModule : IGameModule
 
     public void RegisterSystems(SystemManager systemManager, ComponentManager componentManager)
     {
-        if (!componentManager.IsRegistered<HealthComponent>() ||
+        if (!componentManager.IsRegistered<SimpleHealthComponent>() ||
             !componentManager.IsRegistered<InventoryItemStackComponent>() ||
             !componentManager.IsRegistered<ActionInstanceComponent>() ||
             !componentManager.IsRegistered<PendingActionActivationComponent>() ||
@@ -63,7 +63,7 @@ public sealed class NpcBehaviorModule : IGameModule
             componentManager.GetPackedPool<MovementComponent>(),
             componentManager.GetDirectPool<TransformComponent>(),
             componentManager.GetPackedPool<ActionLockComponent>(),
-            componentManager.GetPackedPool<HealthComponent>(),
+            componentManager.GetPackedPool<SimpleHealthComponent>(),
             componentManager.GetMultiPool<InventoryItemStackComponent>(),
             componentManager.GetMultiPool<ActionInstanceComponent>(),
             componentManager.GetMultiPool<RaceComponent>(),

@@ -14,9 +14,9 @@ using Game.World;
 namespace Tests.Modules.Health;
 
 [TestClass]
-public sealed class HealthRegenSystemTests
+public sealed class SimpleHealthRegenSystemTests
 {
-    private static PackedComponentPool<HealthComponent> CreatePool() =>
+    private static PackedComponentPool<SimpleHealthComponent> CreatePool() =>
         new(maximumEntityCount: 10, initialCapacity: 4,
             static (ref existing, incoming) => existing = incoming);
 
@@ -24,7 +24,7 @@ public sealed class HealthRegenSystemTests
         new(initialCapacity: 10,
             static (ref existing, incoming) => existing = incoming);
 
-    /// <summary>Constitution total 300 -- HealthRegenSystem's MaxHealthRegenPerSecond, a flat 6 HP/sec -- so any entity regens a clean 6/visit at Local tier (StripeCount is a full second's worth of frames), or 12/visit at Neighborhood (120-frame/2-second cadence: 6 * 120/60 = 12).</summary>
+    /// <summary>Constitution total 300 -- SimpleHealthRegenSystem's MaxHealthRegenPerSecond, a flat 6 HP/sec -- so any entity regens a clean 6/visit at Local tier (StripeCount is a full second's worth of frames), or 12/visit at Neighborhood (120-frame/2-second cadence: 6 * 120/60 = 12).</summary>
     private static MultiComponentPool<AbilityScoreComponent> CreateAbilityScoresPoolWithMaxConstitution(int entityId)
     {
         var pool = new MultiComponentPool<AbilityScoreComponent>(maximumEntityCount: 10, initialCapacity: 4);
@@ -36,8 +36,8 @@ public sealed class HealthRegenSystemTests
     public void Update_RegeneratesHealthByLiveComputedConstitutionAmount()
     {
         var pool = CreatePool();
-        pool.Add(0, new HealthComponent(currentHealth: 50, maximumHealth: 200));
-        var system = new HealthRegenSystem(pool, CreateTiersPool(), new ProcessingTierEvents(), abilityScores: CreateAbilityScoresPoolWithMaxConstitution(0));
+        pool.Add(0, new SimpleHealthComponent(currentHealth: 50, maximumHealth: 200));
+        var system = new SimpleHealthRegenSystem(pool, CreateTiersPool(), new ProcessingTierEvents(), abilityScores: CreateAbilityScoresPoolWithMaxConstitution(0));
 
         system.Update(default, 0);
 
@@ -48,8 +48,8 @@ public sealed class HealthRegenSystemTests
     public void Update_ClampsAtMaximumHealth()
     {
         var pool = CreatePool();
-        pool.Add(0, new HealthComponent(currentHealth: 199, maximumHealth: 200));
-        var system = new HealthRegenSystem(pool, CreateTiersPool(), new ProcessingTierEvents(), abilityScores: CreateAbilityScoresPoolWithMaxConstitution(0));
+        pool.Add(0, new SimpleHealthComponent(currentHealth: 199, maximumHealth: 200));
+        var system = new SimpleHealthRegenSystem(pool, CreateTiersPool(), new ProcessingTierEvents(), abilityScores: CreateAbilityScoresPoolWithMaxConstitution(0));
 
         system.Update(default, 0);
 
@@ -60,10 +60,10 @@ public sealed class HealthRegenSystemTests
     public void Update_DeadEntity_DoesNotRegenerate()
     {
         var pool = CreatePool();
-        pool.Add(0, new HealthComponent(currentHealth: 0, maximumHealth: 200));
+        pool.Add(0, new SimpleHealthComponent(currentHealth: 0, maximumHealth: 200));
         var deadEntities = new PackedComponentPool<DeadComponent>(10, 10, static (ref existing, incoming) => existing = incoming);
         deadEntities.Add(0, new DeadComponent(KilledByEntityId: null, DiedAtFrame: 0));
-        var system = new HealthRegenSystem(pool, CreateTiersPool(), new ProcessingTierEvents(), statModifiers: null, deadEntities: deadEntities, abilityScores: CreateAbilityScoresPoolWithMaxConstitution(0));
+        var system = new SimpleHealthRegenSystem(pool, CreateTiersPool(), new ProcessingTierEvents(), statModifiers: null, deadEntities: deadEntities, abilityScores: CreateAbilityScoresPoolWithMaxConstitution(0));
 
         system.Update(default, 0);
 
@@ -74,8 +74,8 @@ public sealed class HealthRegenSystemTests
     public void Update_NoAbilityScorePool_LeavesCurrentHealthUnchanged()
     {
         var pool = CreatePool();
-        pool.Add(0, new HealthComponent(currentHealth: 50, maximumHealth: 200));
-        var system = new HealthRegenSystem(pool, CreateTiersPool(), new ProcessingTierEvents());
+        pool.Add(0, new SimpleHealthComponent(currentHealth: 50, maximumHealth: 200));
+        var system = new SimpleHealthRegenSystem(pool, CreateTiersPool(), new ProcessingTierEvents());
 
         system.Update(default, 0);
 
@@ -86,9 +86,9 @@ public sealed class HealthRegenSystemTests
     public void Update_NoConstitutionScoreForEntity_LeavesCurrentHealthUnchanged()
     {
         var pool = CreatePool();
-        pool.Add(0, new HealthComponent(currentHealth: 50, maximumHealth: 200));
+        pool.Add(0, new SimpleHealthComponent(currentHealth: 50, maximumHealth: 200));
         var abilityScores = new MultiComponentPool<AbilityScoreComponent>(maximumEntityCount: 10, initialCapacity: 4);
-        var system = new HealthRegenSystem(pool, CreateTiersPool(), new ProcessingTierEvents(), abilityScores: abilityScores);
+        var system = new SimpleHealthRegenSystem(pool, CreateTiersPool(), new ProcessingTierEvents(), abilityScores: abilityScores);
 
         system.Update(default, 0);
 
@@ -106,13 +106,13 @@ public sealed class HealthRegenSystemTests
     public void Update_LargeNegativeHealthRegenModifier_ClampsToZeroInsteadOfUnderflowWrapping()
     {
         var pool = CreatePool();
-        pool.Add(0, new HealthComponent(currentHealth: -32000, maximumHealth: 200));
+        pool.Add(0, new SimpleHealthComponent(currentHealth: -32000, maximumHealth: 200));
         var abilityScores = new MultiComponentPool<AbilityScoreComponent>(maximumEntityCount: 10, initialCapacity: 4);
         abilityScores.Add(0, new AbilityScoreComponent(AbilityScoreType.Constitution, baseValue: 1, total: 1));
         var statModifiers = new MultiComponentPool<StatModifierComponent>(maximumEntityCount: 10, initialCapacity: 4);
         statModifiers.Add(0, new StatModifierComponent(StatModifierTarget.HealthRegen, StatModifierOperation.Additive, StatModifierPolarity.Debuff,
             canModify: false, magnitude: -100000f, remainingDurationFrames: null, StatusEffectSource.Admin));
-        var system = new HealthRegenSystem(pool, CreateTiersPool(), new ProcessingTierEvents(), statModifiers: statModifiers, abilityScores: abilityScores);
+        var system = new SimpleHealthRegenSystem(pool, CreateTiersPool(), new ProcessingTierEvents(), statModifiers: statModifiers, abilityScores: abilityScores);
 
         system.Update(default, 0);
 
@@ -124,9 +124,9 @@ public sealed class HealthRegenSystemTests
     {
         var pool = CreatePool();
         var tiers = CreateTiersPool();
-        pool.Add(0, new HealthComponent(currentHealth: 50, maximumHealth: 200));
+        pool.Add(0, new SimpleHealthComponent(currentHealth: 50, maximumHealth: 200));
         tiers.Add(0, new ProcessingTierComponent(ProcessingTierLevel.Neighborhood));
-        var system = new HealthRegenSystem(pool, tiers, new ProcessingTierEvents(), abilityScores: CreateAbilityScoresPoolWithMaxConstitution(0));
+        var system = new SimpleHealthRegenSystem(pool, tiers, new ProcessingTierEvents(), abilityScores: CreateAbilityScoresPoolWithMaxConstitution(0));
 
         // Entity 0, Neighborhood-tiered (StripeCount 60 * divisor 2 = 120), lands in bucket 0 -- due only when FrameCount % 120 == 0.
         system.Update(new EngineTime(default, default, false, FrameCount: 1), 0);
@@ -139,9 +139,9 @@ public sealed class HealthRegenSystemTests
     {
         var pool = CreatePool();
         var tiers = CreateTiersPool();
-        pool.Add(0, new HealthComponent(currentHealth: 50, maximumHealth: 200));
+        pool.Add(0, new SimpleHealthComponent(currentHealth: 50, maximumHealth: 200));
         tiers.Add(0, new ProcessingTierComponent(ProcessingTierLevel.Neighborhood));
-        var system = new HealthRegenSystem(pool, tiers, new ProcessingTierEvents(), abilityScores: CreateAbilityScoresPoolWithMaxConstitution(0));
+        var system = new SimpleHealthRegenSystem(pool, tiers, new ProcessingTierEvents(), abilityScores: CreateAbilityScoresPoolWithMaxConstitution(0));
 
         // Neighborhood cadence is twice Local's (120 frames/2 seconds vs 60 frames/1 second), so
         // the per-visit amount is proportionally larger too: 6 * 120/60 = 12, not the 6 a

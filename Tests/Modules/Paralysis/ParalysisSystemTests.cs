@@ -82,7 +82,7 @@ public sealed class ParalysisSystemTests
     }
 
     /// <summary>
-    /// ParalysisSystem's constructor takes no HealthComponent pool at all -- the concrete
+    /// ParalysisSystem's constructor takes no SimpleHealthComponent pool at all -- the concrete
     /// regression test that ticking Paralysis to expiry never needs, and never touches, hit
     /// points, unlike Burning/Poison's own systems.
     /// </summary>

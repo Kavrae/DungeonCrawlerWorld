@@ -33,16 +33,16 @@ public sealed class ActionEffectTests
         public override double NextDouble() => 1.0;
     }
 
-    private static (ComponentManager ComponentManager, PackedComponentPool<HealthComponent> Health, EventBus EventBus) Build()
+    private static (ComponentManager ComponentManager, PackedComponentPool<SimpleHealthComponent> Health, EventBus EventBus) Build()
     {
         var componentManager = new ComponentManager(initialEntityCapacity: 10, initialComponentCapacity: 10);
-        componentManager.RegisterPackedPool<HealthComponent>(static (ref existing, incoming) => existing = incoming);
-        return (componentManager, componentManager.GetPackedPool<HealthComponent>(), new EventBus());
+        componentManager.RegisterPackedPool<SimpleHealthComponent>(static (ref existing, incoming) => existing = incoming);
+        return (componentManager, componentManager.GetPackedPool<SimpleHealthComponent>(), new EventBus());
     }
 
     private static ActionEffectContext Context(
         ComponentManager componentManager,
-        PackedComponentPool<HealthComponent> health,
+        PackedComponentPool<SimpleHealthComponent> health,
         EventBus eventBus,
         MathUtility mathUtility,
         MultiComponentPool<StatModifierComponent>? statModifiers = null,
@@ -53,7 +53,7 @@ public sealed class ActionEffectTests
     public void DirectDamage_RollsWithinMinMaxRange_WhenNoOverride()
     {
         var (componentManager, health, eventBus) = Build();
-        health.Add(TargetEntityId, new HealthComponent(100, 100));
+        health.Add(TargetEntityId, new SimpleHealthComponent(100, 100));
         var mathUtility = new MathUtility(new NeverCritRandom());
 
         new DirectDamage(MinAmount: 10, MaxAmount: 10).Apply(Context(componentManager, health, eventBus, mathUtility));
@@ -65,7 +65,7 @@ public sealed class ActionEffectTests
     public void DirectDamage_DamageOverride_BypassesTheRoll()
     {
         var (componentManager, health, eventBus) = Build();
-        health.Add(TargetEntityId, new HealthComponent(100, 100));
+        health.Add(TargetEntityId, new SimpleHealthComponent(100, 100));
         var mathUtility = new MathUtility(new NeverCritRandom());
 
         new DirectDamage(MinAmount: 999, MaxAmount: 999).Apply(Context(componentManager, health, eventBus, mathUtility, damageOverride: 10));
@@ -77,7 +77,7 @@ public sealed class ActionEffectTests
     public void DirectDamage_CritRoll_MultipliesTheFullyScaledResult()
     {
         var (componentManager, health, eventBus) = Build();
-        health.Add(TargetEntityId, new HealthComponent(100, 100));
+        health.Add(TargetEntityId, new SimpleHealthComponent(100, 100));
         var mathUtility = new MathUtility(new AlwaysCritRandom());
 
         new DirectDamage(MinAmount: 10, MaxAmount: 10).Apply(Context(componentManager, health, eventBus, mathUtility));
@@ -90,12 +90,50 @@ public sealed class ActionEffectTests
     public void DirectDamage_ZeroBaseAmount_DoesNothing()
     {
         var (componentManager, health, eventBus) = Build();
-        health.Add(TargetEntityId, new HealthComponent(100, 100));
+        health.Add(TargetEntityId, new SimpleHealthComponent(100, 100));
         var mathUtility = new MathUtility(new NeverCritRandom());
 
         new DirectDamage(MinAmount: 0, MaxAmount: 0).Apply(Context(componentManager, health, eventBus, mathUtility));
 
         Assert.AreEqual(100, health.GetReadonly(TargetEntityId).CurrentHealth);
+    }
+
+    [TestMethod]
+    public void DirectDamage_ComplexTarget_LandsOnExactlyOneBodyPart()
+    {
+        var (componentManager, health, eventBus) = Build();
+        componentManager.RegisterMultiPool<BodyPartComponent>();
+        var bodyParts = componentManager.GetMultiPool<BodyPartComponent>();
+        bodyParts.Add(TargetEntityId, new BodyPartComponent("Torso", BodyPartType.Torso, currentHealth: 100, maximumHealth: 100, isVital: true));
+        var mathUtility = new MathUtility(new NeverCritRandom());
+        var context = Context(componentManager, health, eventBus, mathUtility) with { BodyParts = bodyParts };
+
+        new DirectDamage(MinAmount: 10, MaxAmount: 10).Apply(context);
+
+        var part = bodyParts.GetReadonlyByDenseIndex(bodyParts.GetFirstDenseIndex(TargetEntityId));
+        Assert.AreEqual("Torso", part.Name);
+        Assert.AreEqual(90, part.CurrentHealth);
+    }
+
+    [TestMethod]
+    public void DirectHeal_ComplexTarget_HealsEveryPartByFraction_InsteadOfHealthHealApply()
+    {
+        var (componentManager, health, eventBus) = Build();
+        componentManager.RegisterMultiPool<BodyPartComponent>();
+        var bodyParts = componentManager.GetMultiPool<BodyPartComponent>();
+        bodyParts.Add(TargetEntityId, new BodyPartComponent("Head", BodyPartType.Head, currentHealth: 10, maximumHealth: 20, isVital: true));
+        bodyParts.Add(TargetEntityId, new BodyPartComponent("Torso", BodyPartType.Torso, currentHealth: 30, maximumHealth: 60, isVital: true));
+        var mathUtility = new MathUtility();
+        var context = Context(componentManager, health, eventBus, mathUtility) with { BodyParts = bodyParts };
+
+        new DirectHeal(0.5f).Apply(context);
+
+        for (var denseIndex = bodyParts.GetFirstDenseIndex(TargetEntityId); denseIndex != -1; denseIndex = bodyParts.GetNextDenseIndex(denseIndex))
+        {
+            var part = bodyParts.GetReadonlyByDenseIndex(denseIndex);
+            var expected = part.Name == "Head" ? 20f : 60f; // Both rise by 50% of their own max -- Head to full, Torso from 30 to 60 (also full).
+            Assert.AreEqual(expected, part.CurrentHealth, $"Part {part.Name} should have healed by 50% of its own MaximumHealth.");
+        }
     }
 
     [TestMethod]
@@ -133,7 +171,7 @@ public sealed class ActionEffectTests
     public void ChainedEffect_TriggerRolled_AppliesAllTriggeredEffectsInOrder()
     {
         var (componentManager, health, eventBus) = Build();
-        health.Add(TargetEntityId, new HealthComponent(currentHealth: 10, maximumHealth: 100));
+        health.Add(TargetEntityId, new SimpleHealthComponent(currentHealth: 10, maximumHealth: 100));
         var mathUtility = new MathUtility(new AlwaysCritRandom()); // NextDouble() -> 0.0, always below TriggerChance.
         // DirectHeal, not DirectDamage -- AlwaysCritRandom would also force every nested
         // damage roll to crit, coupling this test to crit math it isn't trying to exercise.
@@ -149,7 +187,7 @@ public sealed class ActionEffectTests
     public void ChainedEffect_TriggerNotRolled_DoesNothing()
     {
         var (componentManager, health, eventBus) = Build();
-        health.Add(TargetEntityId, new HealthComponent(100, 100));
+        health.Add(TargetEntityId, new SimpleHealthComponent(100, 100));
         var mathUtility = new MathUtility(new NeverCritRandom());
         ActionEffect[] triggered = [new([new DirectDamage(5, 5)])];
 
@@ -163,7 +201,7 @@ public sealed class ActionEffectTests
     public void ChainedEffect_SelfReferentialChain_TerminatesInsteadOfRecursingForever()
     {
         var (componentManager, health, eventBus) = Build();
-        health.Add(TargetEntityId, new HealthComponent(100, 100));
+        health.Add(TargetEntityId, new SimpleHealthComponent(100, 100));
         var mathUtility = new MathUtility(new AlwaysCritRandom());
 
         List<IActionEffectEntry> entries = [];
@@ -178,7 +216,7 @@ public sealed class ActionEffectTests
     public void ActionEffectSequence_MultipleEffects_AppliesAllInOrder()
     {
         var (componentManager, health, eventBus) = Build();
-        health.Add(TargetEntityId, new HealthComponent(100, 100));
+        health.Add(TargetEntityId, new SimpleHealthComponent(100, 100));
         var mathUtility = new MathUtility(new NeverCritRandom());
         ActionEffect[] effects = [new([new DirectDamage(5, 5)]), new([new DirectDamage(5, 5)])];
 

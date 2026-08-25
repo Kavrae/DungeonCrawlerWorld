@@ -23,7 +23,7 @@ public static class ResourceBarRenderer
     private static readonly float[] MinorTickFractions = [0.125f, 0.375f, 0.625f, 0.875f];
 
     /// <param name="fraction">Current/effective-maximum, clamped [0,1] by the caller.</param>
-    /// <param name="hasResource">False draws NoResourceColor instead of fractionColor(fraction) -- e.g. "no HealthComponent at all," not merely "empty."</param>
+    /// <param name="hasResource">False draws NoResourceColor instead of fractionColor(fraction) -- e.g. "no SimpleHealthComponent at all," not merely "empty."</param>
     /// <param name="outlineColor">This resource's own outline/tick color -- see HealthBarPalette.OutlineColor/ManaBarPalette.OutlineColor.</param>
     /// <param name="fractionColor">This resource's own fraction-to-fill-color mapping -- see HealthBarPalette.FractionColor/ManaBarPalette.FractionColor.</param>
     public static void Draw(SpriteBatch spriteBatch, Texture2D unitRectangle, Rectangle bar, float fraction, bool hasResource, Color outlineColor, Func<float, Color> fractionColor)

@@ -1,6 +1,7 @@
 using Engine.ECS.Components.Stores;
 using Engine.ECS.Systems;
 using Engine.Events;
+using Engine.Math;
 using Game.Modules.Burning.Components;
 using Game.Modules.Health;
 using Game.Modules.Health.Components;
@@ -29,10 +30,12 @@ public sealed class BurningSystem : ISystem
 
     private readonly PackedComponentPool<BurningTimerComponent> _timers;
     private readonly MultiComponentPool<StatusEffectStack> _stacks;
-    private readonly PackedComponentPool<HealthComponent> _health;
+    private readonly PackedComponentPool<SimpleHealthComponent> _health;
     private readonly MultiComponentPool<StatModifierComponent>? _statModifiers;
     private readonly EventBus _eventBus;
     private readonly IPlayerQuery? _playerQuery;
+    private readonly MathUtility _mathUtility;
+    private readonly MultiComponentPool<BodyPartComponent>? _bodyParts;
     private readonly TieredEntityStripeSet _tieredStripeSet;
     private readonly List<int> _pendingTimerRemovals = [];
 
@@ -44,12 +47,14 @@ public sealed class BurningSystem : ISystem
     public BurningSystem(
         PackedComponentPool<BurningTimerComponent> timers,
         MultiComponentPool<StatusEffectStack> stacks,
-        PackedComponentPool<HealthComponent> health,
+        PackedComponentPool<SimpleHealthComponent> health,
         EventBus eventBus,
         IPlayerQuery? playerQuery,
         DirectComponentPool<ProcessingTierComponent> processingTiers,
         ProcessingTierEvents processingTierEvents,
-        MultiComponentPool<StatModifierComponent>? statModifiers = null)
+        MathUtility mathUtility,
+        MultiComponentPool<StatModifierComponent>? statModifiers = null,
+        MultiComponentPool<BodyPartComponent>? bodyParts = null)
     {
         _timers = timers;
         _stacks = stacks;
@@ -57,6 +62,8 @@ public sealed class BurningSystem : ISystem
         _statModifiers = statModifiers;
         _eventBus = eventBus;
         _playerQuery = playerQuery;
+        _mathUtility = mathUtility;
+        _bodyParts = bodyParts;
         _tick = Tick;
 
         _tieredStripeSet = ProcessingTierWiring.CreateAndWire(StripeCount, timers, processingTiers, processingTierEvents);
@@ -93,7 +100,7 @@ public sealed class BurningSystem : ISystem
             }
         }
 
-        HealthDamage.Apply(_health, _eventBus, entityId, stackCount, source, _playerQuery, StatusEffectDamageType.Describe(StatusEffectType.Burning), _statModifiers);
+        HealthDamage.Apply(_health, _eventBus, entityId, stackCount, source, _playerQuery, StatusEffectDamageType.Describe(StatusEffectType.Burning), _statModifiers, _bodyParts, _mathUtility);
         _stacks.RemoveByDenseIndex(foundDenseIndex);
 
         var remainingStacks = (byte)(stackCount - 1);

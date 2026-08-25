@@ -13,7 +13,7 @@ namespace Game.Blueprints.Races;
 
 /// <summary>
 /// A test fixture race for exercising melee status effects, deliberately with no
-/// HealthComponent.
+/// SimpleHealthComponent.
 /// </summary>
 public sealed class Ghost(MathUtility mathUtility) : IBlueprint
 {

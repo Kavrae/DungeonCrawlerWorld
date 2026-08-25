@@ -48,7 +48,7 @@ public sealed class ContactDamageSystemTests
     private static PackedComponentPool<ContactDamageExposureComponent> CreateExposurePool() =>
         new(maximumEntityCount: 200, initialCapacity: 4, static (ref existing, incoming) => { });
 
-    private static PackedComponentPool<HealthComponent> CreateHealthPool() =>
+    private static PackedComponentPool<SimpleHealthComponent> CreateHealthPool() =>
         new(maximumEntityCount: 200, initialCapacity: 4, static (ref existing, incoming) => existing = incoming);
 
     private static PackedComponentPool<DeadComponent> CreateDeadPool() =>
@@ -61,7 +61,7 @@ public sealed class ContactDamageSystemTests
         ContactDamageSystem System,
         PackedComponentPool<DamageOnContactComponent> Hazards,
         PackedComponentPool<ContactDamageExposureComponent> Exposures,
-        PackedComponentPool<HealthComponent> Health,
+        PackedComponentPool<SimpleHealthComponent> Health,
         FakeMapQuery MapQuery,
         FrameEventBuffer<EntityMovedEvent> MovedEntities,
         PackedComponentPool<DeadComponent> DeadEntities,
@@ -75,11 +75,11 @@ public sealed class ContactDamageSystemTests
         var deadEntities = CreateDeadPool();
         var processingTiers = CreateTiersPool();
 
-        health.Add(MoverEntityId, new HealthComponent(currentHealth: 100, maximumHealth: 100));
+        health.Add(MoverEntityId, new SimpleHealthComponent(currentHealth: 100, maximumHealth: 100));
         hazards.Add(TerrainEntityId, new DamageOnContactComponent(damagePerTick: 10, tickIntervalFrames: 60));
         mapQuery.SetTerrain(new Vector3Int(5, 5, 0), TerrainEntityId);
 
-        var system = new ContactDamageSystem(hazards, exposures, health, new EventBus(), mapQuery, new FakePlayerQuery(MoverEntityId), movedEntities, processingTiers, new ProcessingTierEvents(), statModifiers: null, deadEntities: deadEntities);
+        var system = new ContactDamageSystem(hazards, exposures, health, new EventBus(), mapQuery, new FakePlayerQuery(MoverEntityId), movedEntities, processingTiers, new ProcessingTierEvents(), new MathUtility(), statModifiers: null, deadEntities: deadEntities);
 
         return (system, hazards, exposures, health, mapQuery, movedEntities, deadEntities, processingTiers);
     }

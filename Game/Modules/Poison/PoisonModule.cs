@@ -1,6 +1,7 @@
 using Engine.ECS.Components;
 using Engine.ECS.Systems;
 using Engine.Events;
+using Engine.Math;
 using Game.Modules.Health.Components;
 using Game.Modules.Poison.Components;
 using Game.Modules.Poison.Systems;
@@ -38,11 +39,13 @@ public sealed class PoisonModule : IGameModule
 
     private EventBus _eventBus = null!;
     private IPlayerQuery? _playerQuery;
+    private MathUtility _mathUtility = null!;
 
     public void Configure(GameModuleContext context)
     {
         _eventBus = context.EventBus;
         _playerQuery = context.PlayerQuery;
+        _mathUtility = context.MathUtility;
         context.StatusEffectAuraAppliers.Register(new TimerBasedAuraApplier<PoisonTimerComponent>(
             StatusEffectType.Poison,
             (componentManager, entityId, source) => PoisonEffects.ApplyStack(componentManager, entityId, source, AuraDurationTicks)));
@@ -53,7 +56,7 @@ public sealed class PoisonModule : IGameModule
 
     public void RegisterSystems(SystemManager systemManager, ComponentManager componentManager)
     {
-        if (!componentManager.IsRegistered<HealthComponent>())
+        if (!componentManager.IsRegistered<SimpleHealthComponent>())
         {
             return;
         }
@@ -61,13 +64,18 @@ public sealed class PoisonModule : IGameModule
         var statModifiers = componentManager.IsRegistered<StatModifierComponent>()
             ? componentManager.GetMultiPool<StatModifierComponent>()
             : null;
+        var bodyParts = componentManager.IsRegistered<BodyPartComponent>()
+            ? componentManager.GetMultiPool<BodyPartComponent>()
+            : null;
 
         systemManager.Register(new PoisonSystem(
             componentManager.GetPackedPool<PoisonTimerComponent>(),
             componentManager.GetMultiPool<StatusEffectStack>(),
-            componentManager.GetPackedPool<HealthComponent>(),
+            componentManager.GetPackedPool<SimpleHealthComponent>(),
             _eventBus,
             _playerQuery,
-            statModifiers));
+            _mathUtility,
+            statModifiers,
+            bodyParts));
     }
 }
