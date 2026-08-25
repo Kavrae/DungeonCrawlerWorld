@@ -483,7 +483,6 @@ public class Element
             return;
         }
 
-        var graphicsDevice = _elementPoolService.GraphicsDevice;
         var spriteBatch = _elementPoolService.SpriteBatch;
         var unitRectangle = _elementPoolService.UnitRectangle;
 
@@ -512,25 +511,23 @@ public class Element
             if (RequiresContentViewport)
             {
                 // A dedicated viewport translates this window's local-coordinate content onto
-                // screen and hard-clips whatever overflows it
-                spriteBatch.End();
-
-                var previousViewport = graphicsDevice.Viewport;
-                graphicsDevice.Viewport = Viewport;
-                spriteBatch.Begin(SpriteSortMode.Deferred, BlendState.AlphaBlend, null, null, null, null, CameraTransform);
+                // screen and hard-clips whatever overflows it. Pushed/popped through
+                // ElementPoolService (see PushRenderState's own doc comment) rather than a raw
+                // SpriteBatch End/Begin, so a scrollable Element nested inside another scrollable
+                // Element hands back the exact ambient state it inherited instead of clobbering
+                // it -- confirmed live bug otherwise (see TextBox.DrawContent's own doc comment).
+                _elementPoolService.PushRenderState(_elementPoolService.CurrentRenderState with { Viewport = Viewport, TransformMatrix = CameraTransform });
 
                 DrawContent(gameTime);
 
-                spriteBatch.End();
-                graphicsDevice.Viewport = previousViewport;
-                spriteBatch.Begin(SpriteSortMode.Deferred, BlendState.AlphaBlend);
+                _elementPoolService.PopRenderState();
             }
             else
             {
                 DrawContent(gameTime);
             }
 
-            if (RequiresContentViewport)
+            if (RequiresContentViewport && _children.Count > 0)
             {
                 // Unlike the viewport swap above (which only ever wraps this element's own
                 // DrawContent), children draw in absolute screen coordinates, not local ones, so
@@ -541,22 +538,22 @@ public class Element
                 // at, however far outside this element's own bounds that is. Confirmed bug: the
                 // Inventory tab strip's tiles rendered past the window's left border while
                 // scrolling instead of disappearing off the edge. Intersected with whatever
-                // scissor is already active (harmless today -- nothing nests scrollable elements
-                // yet -- but correct if that ever changes) rather than overwritten outright.
-                spriteBatch.End();
-
-                var previousScissorRectangle = graphicsDevice.ScissorRectangle;
-                graphicsDevice.ScissorRectangle = Rectangle.Intersect(previousScissorRectangle, _contentState.Rectangle);
-                spriteBatch.Begin(SpriteSortMode.Deferred, BlendState.AlphaBlend, null, null, ScissorClipRasterizerState);
+                // scissor is already active -- nesting does happen today (e.g. TabbedContent's own
+                // scrollable body window hosting the Inventory tab's own scrollable grid window)
+                // -- via PushRenderState/CurrentRenderState, same reasoning as the viewport swap
+                // above.
+                //
+                // Skipped when there are no children (e.g. TextWindow) -- avoids an extra
+                // SpriteBatch End/Begin and ScissorRectangle swap for a loop that draws nothing.
+                var clippedScissor = Rectangle.Intersect(_elementPoolService.CurrentRenderState.ScissorRectangle, _contentState.Rectangle);
+                _elementPoolService.PushRenderState(_elementPoolService.CurrentRenderState with { ScissorRectangle = clippedScissor, RasterizerState = ScissorClipRasterizerState });
 
                 foreach (var childElement in _children)
                 {
                     childElement.Draw(gameTime);
                 }
 
-                spriteBatch.End();
-                graphicsDevice.ScissorRectangle = previousScissorRectangle;
-                spriteBatch.Begin(SpriteSortMode.Deferred, BlendState.AlphaBlend);
+                _elementPoolService.PopRenderState();
             }
             else
             {

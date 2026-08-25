@@ -251,6 +251,12 @@ public sealed class NotificationCenter(ElementPoolService elementPoolService, Ev
         notificationWindow.Closed += OnActiveNotificationClosed;
         _activeNotifications.Add((notificationWindow, notification));
         notificationWindow.Initialize();
+
+        if (notificationWindow.MaxScrollOffset == Vector2.Zero)
+        {
+            notificationWindow.CanUserScrollVertical = false;
+        }
+
         layers.Add(UiLayer.DynamicHud, notificationWindow);
 
         // A System notification is the menu-window case -- see

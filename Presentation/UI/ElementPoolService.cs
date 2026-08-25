@@ -1,4 +1,5 @@
 using Engine.Collections;
+using Microsoft.Xna.Framework;
 using Microsoft.Xna.Framework.Graphics;
 using System.Reflection;
 
@@ -38,6 +39,71 @@ public sealed class ElementPoolService
         GraphicsDevice = graphicsDevice;
         SpriteBatch = spriteBatch;
         UnitRectangle = unitRectangle;
+    }
+
+    /// <summary>
+    /// Full SpriteBatch.Begin parameter set plus the two GraphicsDevice properties Element.Draw's
+    /// scoped passes also swap (Viewport, ScissorRectangle) -- everything a nested pass needs to
+    /// hand back the exact ambient state it inherited once its own scope ends, rather than
+    /// resetting to some hardcoded default. See PushRenderState/PopRenderState.
+    /// </summary>
+    public readonly record struct RenderState(SamplerState SamplerState, DepthStencilState? DepthStencilState, RasterizerState? RasterizerState, Effect? Effect, Matrix TransformMatrix, Viewport Viewport, Rectangle ScissorRectangle);
+
+    private readonly Stack<RenderState> _renderStateStack = new();
+    private RenderState _currentRenderState;
+
+    /// <summary>
+    /// Currently-active ambient render state. Element.Draw's own scoped passes only ever compose
+    /// a new RenderState off this one (via `with`, overriding just the field(s) that pass cares
+    /// about) rather than constructing one from scratch -- see Draw's two RequiresContentViewport
+    /// blocks -- so anything they don't explicitly touch keeps flowing through unchanged no
+    /// matter how deep the nesting.
+    /// </summary>
+    public RenderState CurrentRenderState => _currentRenderState;
+
+    /// <summary>
+    /// Establishes the root ambient state every nested Push/PopRenderState call ultimately
+    /// unwinds back to. Called once per frame, from GameLoop.Draw right after
+    /// SpriteBatchRenderer.StartSpriteBatch, whose own Begin call this has to mirror exactly --
+    /// there's no way to ask a SpriteBatch what parameters its currently-active Begin used.
+    /// </summary>
+    public void ResetRenderState()
+    {
+        _renderStateStack.Clear();
+        _currentRenderState = new RenderState(SamplerState.PointClamp, null, null, null, Matrix.Identity, GraphicsDevice.Viewport, GraphicsDevice.ScissorRectangle);
+    }
+
+    /// <summary>
+    /// Ends the currently-active SpriteBatch pass, saves it, and begins a new one with newState.
+    /// Pairs with PopRenderState, which every caller must invoke exactly once for each
+    /// PushRenderState (see Element.Draw's two RequiresContentViewport blocks, the only caller).
+    /// Fixes the bug a hardcoded "restore to a plain Begin" used to cause: a nested scrollable
+    /// Element used to drop whatever ambient RasterizerState/TransformMatrix/SamplerState an
+    /// ancestor's own scoped pass had active, corrupting anything the ancestor drew afterward
+    /// (confirmed live -- see TextBox.DrawContent's own doc comment). Push/Pop restore the exact
+    /// prior state instead, so nesting composes correctly no matter how deep.
+    /// </summary>
+    public void PushRenderState(RenderState newState)
+    {
+        SpriteBatch.End();
+        _renderStateStack.Push(_currentRenderState);
+        _currentRenderState = newState;
+        ApplyCurrentRenderState();
+    }
+
+    /// <summary>See PushRenderState.</summary>
+    public void PopRenderState()
+    {
+        SpriteBatch.End();
+        _currentRenderState = _renderStateStack.Pop();
+        ApplyCurrentRenderState();
+    }
+
+    private void ApplyCurrentRenderState()
+    {
+        GraphicsDevice.Viewport = _currentRenderState.Viewport;
+        GraphicsDevice.ScissorRectangle = _currentRenderState.ScissorRectangle;
+        SpriteBatch.Begin(SpriteSortMode.Deferred, BlendState.AlphaBlend, _currentRenderState.SamplerState, _currentRenderState.DepthStencilState, _currentRenderState.RasterizerState, _currentRenderState.Effect, _currentRenderState.TransformMatrix);
     }
 
     /// <summary>Per-Type cache of every event's backing field across the whole Element/Window/... hierarchy for that Type -- see ClearEventSubscriptions.</summary>
