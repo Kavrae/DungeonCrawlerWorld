@@ -33,7 +33,8 @@ public static class HealthDamage
         MultiComponentPool<StatModifierComponent>? statModifiers = null,
         MultiComponentPool<BodyPartComponent>? bodyParts = null,
         MathUtility? mathUtility = null,
-        PackedComponentPool<DeadComponent>? deadEntities = null)
+        PackedComponentPool<DeadComponent>? deadEntities = null,
+        BodyPartTargetRule? targetRule = null)
     {
         if (!health.TryGetReadonly(entityId, out var beforeHealth))
         {
@@ -44,7 +45,7 @@ public static class HealthDamage
                     throw new InvalidOperationException($"{nameof(HealthDamage)}.{nameof(Apply)} requires {nameof(mathUtility)} to be set for a Complex-health entity (entityId {entityId}).");
                 }
 
-                ComplexHealthDamage.Apply(health, bodyParts, eventBus, entityId, amount, source, playerQuery, damageType, statModifiers, mathUtility, deadEntities);
+                ComplexHealthDamage.Apply(health, bodyParts, eventBus, entityId, amount, source, playerQuery, damageType, statModifiers, mathUtility, deadEntities, targetRule);
             }
 
             return; // No SimpleHealthComponent or BodyPartComponent -- fine, e.g. an "immortal" entity a status effect still applied to.

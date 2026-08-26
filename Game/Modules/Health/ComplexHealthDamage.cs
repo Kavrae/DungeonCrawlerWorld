@@ -36,9 +36,12 @@ public static class ComplexHealthDamage
         string damageType,
         MultiComponentPool<StatModifierComponent>? statModifiers,
         MathUtility mathUtility,
-        PackedComponentPool<DeadComponent>? deadEntities)
+        PackedComponentPool<DeadComponent>? deadEntities,
+        BodyPartTargetRule? targetRule = null)
     {
-        var denseIndex = BodyPartSelection.PickRandom(bodyParts, entityId, mathUtility);
+        var denseIndex = targetRule is { } rule
+            ? BodyPartSelection.PickByTypeWithFallback(bodyParts, entityId, rule, mathUtility)
+            : BodyPartSelection.PickRandom(bodyParts, entityId, mathUtility);
         if (denseIndex == -1)
         {
             return;

@@ -210,8 +210,8 @@ public sealed class ConsumableActivationSystemTests
     {
         var (system, componentManager, mapQuery, _) = Build();
         mapQuery.SetOccupant(TargetTile, TargetEntityId);
-        componentManager.GetMultiPool<BodyPartComponent>().Add(TargetEntityId, new BodyPartComponent("Head", BodyPartType.Head, currentHealth: 40, maximumHealth: 40, isVital: true));
-        componentManager.GetMultiPool<BodyPartComponent>().Add(TargetEntityId, new BodyPartComponent("Torso", BodyPartType.Torso, currentHealth: 40, maximumHealth: 160, isVital: true));
+        componentManager.GetMultiPool<BodyPartComponent>().Add(TargetEntityId, new BodyPartComponent("Head", BodyPartType.Head, 0, currentHealth: 40, maximumHealth: 40, isVital: true));
+        componentManager.GetMultiPool<BodyPartComponent>().Add(TargetEntityId, new BodyPartComponent("Torso", BodyPartType.Torso, 0, currentHealth: 40, maximumHealth: 160, isVital: true));
         var stackInstanceId = InventoryActions.AddItem(componentManager, CasterEntityId, PotionId, quantity: 1);
         componentManager.Merge(CasterEntityId, new PendingConsumableActivationComponent(stackInstanceId, [TargetTile]));
         componentManager.Merge(CasterEntityId, new ActionLockComponent(standardLockFrames: ActionLockGate.StandardLockFrames, currentLockTotalFrames: 0, currentLockFramesRemaining: 0));

@@ -4,6 +4,7 @@ using Engine.Events;
 using Engine.Math;
 using Game.Modules.Actions;
 using Game.Modules.Actions.Effects;
+using Game.Modules.Health;
 using Game.Modules.Health.Components;
 using Game.Modules.StatModifiers;
 using Game.Modules.StatModifiers.Components;
@@ -104,7 +105,7 @@ public sealed class ActionEffectTests
         var (componentManager, health, eventBus) = Build();
         componentManager.RegisterMultiPool<BodyPartComponent>();
         var bodyParts = componentManager.GetMultiPool<BodyPartComponent>();
-        bodyParts.Add(TargetEntityId, new BodyPartComponent("Torso", BodyPartType.Torso, currentHealth: 100, maximumHealth: 100, isVital: true));
+        bodyParts.Add(TargetEntityId, new BodyPartComponent("Torso", BodyPartType.Torso, 0, currentHealth: 100, maximumHealth: 100, isVital: true));
         var mathUtility = new MathUtility(new NeverCritRandom());
         var context = Context(componentManager, health, eventBus, mathUtility) with { BodyParts = bodyParts };
 
@@ -115,14 +116,34 @@ public sealed class ActionEffectTests
         Assert.AreEqual(90, part.CurrentHealth);
     }
 
+    /// <summary>Mirrors DirectDamage_ComplexTarget_LandsOnExactlyOneBodyPart's fixture-building style -- proves TargetBodyPartType actually reaches HealthDamage.Apply as a BodyPartTargetRule, the same path MagicMissileAction's own Head-targeting relies on.</summary>
+    [TestMethod]
+    public void DirectDamage_TargetBodyPartTypeSet_LandsOnThatTypeAgainstComplexTarget()
+    {
+        var (componentManager, health, eventBus) = Build();
+        componentManager.RegisterMultiPool<BodyPartComponent>();
+        var bodyParts = componentManager.GetMultiPool<BodyPartComponent>();
+        bodyParts.Add(TargetEntityId, new BodyPartComponent("Head", BodyPartType.Head, 5, currentHealth: 30, maximumHealth: 30, isVital: true));
+        bodyParts.Add(TargetEntityId, new BodyPartComponent("Torso", BodyPartType.Torso, 4, currentHealth: 100, maximumHealth: 100, isVital: true));
+        var mathUtility = new MathUtility(new NeverCritRandom());
+        var context = Context(componentManager, health, eventBus, mathUtility) with { BodyParts = bodyParts };
+
+        new DirectDamage(MinAmount: 10, MaxAmount: 10, TargetBodyPartType: BodyPartType.Head).Apply(context);
+
+        var headDenseIndex = BodyPartSelection.PickByType(bodyParts, TargetEntityId, BodyPartType.Head);
+        Assert.AreEqual(20, bodyParts.GetReadonlyByDenseIndex(headDenseIndex).CurrentHealth);
+        var torsoDenseIndex = BodyPartSelection.PickByType(bodyParts, TargetEntityId, BodyPartType.Torso);
+        Assert.AreEqual(100, bodyParts.GetReadonlyByDenseIndex(torsoDenseIndex).CurrentHealth, "Torso must be untouched -- the hit landed on Head.");
+    }
+
     [TestMethod]
     public void DirectHeal_ComplexTarget_HealsEveryPartByFraction_InsteadOfHealthHealApply()
     {
         var (componentManager, health, eventBus) = Build();
         componentManager.RegisterMultiPool<BodyPartComponent>();
         var bodyParts = componentManager.GetMultiPool<BodyPartComponent>();
-        bodyParts.Add(TargetEntityId, new BodyPartComponent("Head", BodyPartType.Head, currentHealth: 10, maximumHealth: 20, isVital: true));
-        bodyParts.Add(TargetEntityId, new BodyPartComponent("Torso", BodyPartType.Torso, currentHealth: 30, maximumHealth: 60, isVital: true));
+        bodyParts.Add(TargetEntityId, new BodyPartComponent("Head", BodyPartType.Head, 0, currentHealth: 10, maximumHealth: 20, isVital: true));
+        bodyParts.Add(TargetEntityId, new BodyPartComponent("Torso", BodyPartType.Torso, 0, currentHealth: 30, maximumHealth: 60, isVital: true));
         var mathUtility = new MathUtility();
         var context = Context(componentManager, health, eventBus, mathUtility) with { BodyParts = bodyParts };
 

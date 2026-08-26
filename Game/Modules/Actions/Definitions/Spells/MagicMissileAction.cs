@@ -1,6 +1,7 @@
 using Engine.Math;
 using Game.Modules.Actions.Activators;
 using Game.Modules.Actions.Effects;
+using Game.Modules.Health.Components;
 using Microsoft.Xna.Framework;
 
 namespace Game.Modules.Actions.Definitions.Spells;
@@ -14,7 +15,7 @@ public static class MagicMissileAction
     public static ActionDefinition Build() => new(
         Id, "Magic Missile", "Magic Missile", "m", Color.Black,
         Tags: [Tag.Ranged, Tag.Attack, Tag.Spell],
-        Effects: [new ActionEffect([new DirectDamage(MinAmount: 20, MaxAmount: 25)])],
+        Effects: [new ActionEffect([new DirectDamage(MinAmount: 20, MaxAmount: 25, TargetBodyPartType: BodyPartType.Head)])],
         Activator: new SpellActivator(
             new TargetingSpec(TargetShape.SingleTarget, Range: 20),
             new ActionTiming(ActionTimingCategory.Immediate, CooldownFrames: null),

@@ -30,15 +30,19 @@ public sealed class Goblin(MathUtility mathUtility) : IBlueprint
 
     private static readonly string[] DisplayNames = DisplayNameCache.BuildDisplayNames(PersonalNameOptions, RaceName);
 
-    /// <summary>Head/Torso are Vital; sums to 200, matching the flat SimpleHealthComponent total this replaced so the split doesn't itself rebalance Goblin's overall toughness. Not a final balance pass -- see PLAN-body-parts.md's Phase 3 proof case.</summary>
+    /// <summary>Head/Torso are Vital; sums to 200, matching the flat SimpleHealthComponent total this replaced so the split doesn't itself rebalance Goblin's overall toughness. 10 parts (Arm/Leg each split off a Hand/Foot) -- not a final balance pass, see PLAN-targeted-body-part-damage.md. VerticalPosition: Head 5, Torso 4, Arm 3, Hand 2, Leg 1, Foot 0.</summary>
     private static readonly BodyPartTemplate[] BodyParts =
     [
-        new BodyPartTemplate("Head", BodyPartType.Head, 30, 30, IsVital: true),
-        new BodyPartTemplate("Torso", BodyPartType.Torso, 60, 60, IsVital: true),
-        new BodyPartTemplate("Left Arm", BodyPartType.Arm, 20, 20, IsVital: false),
-        new BodyPartTemplate("Right Arm", BodyPartType.Arm, 20, 20, IsVital: false),
-        new BodyPartTemplate("Left Leg", BodyPartType.Leg, 35, 35, IsVital: false),
-        new BodyPartTemplate("Right Leg", BodyPartType.Leg, 35, 35, IsVital: false),
+        new BodyPartTemplate("Head", BodyPartType.Head, 5, 30, 30, IsVital: true),
+        new BodyPartTemplate("Torso", BodyPartType.Torso, 4, 60, 60, IsVital: true),
+        new BodyPartTemplate("Left Arm", BodyPartType.Arm, 3, 15, 15, IsVital: false),
+        new BodyPartTemplate("Right Arm", BodyPartType.Arm, 3, 15, 15, IsVital: false),
+        new BodyPartTemplate("Left Hand", BodyPartType.Hand, 2, 5, 5, IsVital: false),
+        new BodyPartTemplate("Right Hand", BodyPartType.Hand, 2, 5, 5, IsVital: false),
+        new BodyPartTemplate("Left Leg", BodyPartType.Leg, 1, 25, 25, IsVital: false),
+        new BodyPartTemplate("Right Leg", BodyPartType.Leg, 1, 25, 25, IsVital: false),
+        new BodyPartTemplate("Left Foot", BodyPartType.Foot, 0, 10, 10, IsVital: false),
+        new BodyPartTemplate("Right Foot", BodyPartType.Foot, 0, 10, 10, IsVital: false),
     ];
 
     /// <summary>Flat default for every NPC race, adjustable in a later balance pass -- see TODO.md's Stats entry.</summary>

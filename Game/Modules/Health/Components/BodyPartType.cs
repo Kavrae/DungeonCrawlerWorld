@@ -8,4 +8,6 @@ public enum BodyPartType : byte
     Torso,
     Arm,
     Leg,
+    Hand,
+    Foot,
 }

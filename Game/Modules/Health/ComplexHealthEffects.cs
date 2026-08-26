@@ -19,7 +19,7 @@ public static class ComplexHealthEffects
         foreach (var part in parts)
         {
             var startingHealth = mathUtility.Next(part.MinimumHealth, part.MaximumHealth + 1);
-            bodyParts.Add(entityId, new BodyPartComponent(part.Name, part.Type, startingHealth, part.MaximumHealth, part.IsVital));
+            bodyParts.Add(entityId, new BodyPartComponent(part.Name, part.Type, part.VerticalPosition, startingHealth, part.MaximumHealth, part.IsVital));
         }
     }
 }

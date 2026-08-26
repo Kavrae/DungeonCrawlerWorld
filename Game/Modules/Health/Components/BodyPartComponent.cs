@@ -13,10 +13,13 @@ namespace Game.Modules.Health.Components;
 /// exemption-kind flag into the one component that grants the exemption rather than a second
 /// component that could drift out of sync.
 /// </remarks>
-public struct BodyPartComponent(string name, BodyPartType type, float currentHealth, float maximumHealth, bool isVital)
+public struct BodyPartComponent(string name, BodyPartType type, byte verticalPosition, float currentHealth, float maximumHealth, bool isVital)
 {
     public string Name { get; set; } = name;
     public BodyPartType Type { get; set; } = type;
+
+    /// <summary>Higher = higher up the body; meaningful only relative to this same entity's own other parts.</summary>
+    public byte VerticalPosition { get; set; } = verticalPosition;
     public float CurrentHealth { get; set; } = currentHealth;
     public float MaximumHealth { get; set; } = maximumHealth;
     public bool IsVital { get; set; } = isVital;

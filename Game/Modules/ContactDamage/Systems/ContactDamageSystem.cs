@@ -105,7 +105,8 @@ public sealed class ContactDamageSystem : ISystem
         var terrainEntityId = _mapQuery.GetTerrainEntityIdAt(moved.NewPosition);
         if (terrainEntityId != -1 && _hazards.TryGetReadonly(terrainEntityId, out var hazard))
         {
-            HealthDamage.Apply(_health, _eventBus, moved.EntityId, hazard.DamagePerTick, StatusEffectSource.FromEntity(terrainEntityId), _playerQuery, "Contact", _statModifiers, _bodyParts, _mathUtility, _deadEntities);
+            var targetRule = new BodyPartTargetRule(hazard.PreferredTargetType, BodyPartFallback.Bottommost);
+            HealthDamage.Apply(_health, _eventBus, moved.EntityId, hazard.DamagePerTick, StatusEffectSource.FromEntity(terrainEntityId), _playerQuery, "Contact", _statModifiers, _bodyParts, _mathUtility, _deadEntities, targetRule);
 
             if (_exposures.Has(moved.EntityId))
             {
@@ -161,7 +162,8 @@ public sealed class ContactDamageSystem : ISystem
             return false;
         }
 
-        HealthDamage.Apply(_health, _eventBus, entityId, hazard.DamagePerTick, StatusEffectSource.FromEntity(exposure.SourceEntityId), _playerQuery, "Contact", _statModifiers, _bodyParts, _mathUtility, _deadEntities);
+        BodyPartTargetRule? targetRule = hazard.PreferredTargetType is { } type ? new BodyPartTargetRule(type, BodyPartFallback.Bottommost) : null;
+        HealthDamage.Apply(_health, _eventBus, entityId, hazard.DamagePerTick, StatusEffectSource.FromEntity(exposure.SourceEntityId), _playerQuery, "Contact", _statModifiers, _bodyParts, _mathUtility, _deadEntities, targetRule);
 
         _exposures.TryUpdate(entityId, hazard.TickIntervalFrames, static (ref ContactDamageExposureComponent e, ushort tickIntervalFrames) => e.FramesUntilNextTick = tickIntervalFrames);
 

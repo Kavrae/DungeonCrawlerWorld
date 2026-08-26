@@ -1,5 +1,6 @@
 using Game.Modules.AbilityScores;
 using Game.Modules.Health;
+using Game.Modules.Health.Components;
 using Game.Modules.StatModifiers;
 using Game.World;
 
@@ -22,7 +23,7 @@ namespace Game.Modules.Actions.Effects;
 /// call HealthDamage.Apply directly on their own tick timers, so DoT damage deliberately never
 /// rolls variance or crit.
 /// </summary>
-public sealed record DirectDamage(short MinAmount, short MaxAmount) : IActionEffectEntry
+public sealed record DirectDamage(short MinAmount, short MaxAmount, BodyPartType? TargetBodyPartType = null) : IActionEffectEntry
 {
     public void Apply(ActionEffectContext context)
     {
@@ -41,6 +42,7 @@ public sealed record DirectDamage(short MinAmount, short MaxAmount) : IActionEff
             scaled *= StatModifierMath.GetEffectiveValue(context.StatModifiers, context.SourceEntityId, StatModifierTarget.CritMultiplier, CritMath.BaseCritMultiplier);
         }
 
-        HealthDamage.Apply(context.Health, context.EventBus, context.TargetEntityId, (ushort)scaled, StatusEffectSource.FromEntity(context.SourceEntityId), context.PlayerQuery, context.ActivatorName, context.StatModifiers, context.BodyParts, context.MathUtility, context.DeadEntities);
+        BodyPartTargetRule? targetRule = TargetBodyPartType is { } type ? new BodyPartTargetRule(type, BodyPartFallback.Random) : null;
+        HealthDamage.Apply(context.Health, context.EventBus, context.TargetEntityId, (ushort)scaled, StatusEffectSource.FromEntity(context.SourceEntityId), context.PlayerQuery, context.ActivatorName, context.StatModifiers, context.BodyParts, context.MathUtility, context.DeadEntities, targetRule);
     }
 }

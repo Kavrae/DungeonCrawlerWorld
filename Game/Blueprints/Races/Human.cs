@@ -30,14 +30,19 @@ public sealed class Human(MathUtility mathUtility) : IBlueprint
     private const string RaceName = "Human";
     private const string Description = "Adaptable and unremarkable in any single way -- which is exactly what makes them so widespread.";
 
+    /// <summary>Head/Torso are Vital; sums to 250, matching the flat SimpleHealthComponent total this replaced so the split doesn't itself rebalance Human's overall toughness. 10 parts (Arm/Leg each split off a Hand/Foot) -- not a final balance pass, see PLAN-targeted-body-part-damage.md. VerticalPosition: Head 5, Torso 4, Arm 3, Hand 2, Leg 1, Foot 0.</summary>
     private static readonly BodyPartTemplate[] BodyParts =
     [
-        new BodyPartTemplate("Head", BodyPartType.Head, 40, 40, IsVital: true),
-        new BodyPartTemplate("Torso", BodyPartType.Torso, 80, 80, IsVital: true),
-        new BodyPartTemplate("Left Arm", BodyPartType.Arm, 25, 25, IsVital: false),
-        new BodyPartTemplate("Right Arm", BodyPartType.Arm, 25, 25, IsVital: false),
-        new BodyPartTemplate("Left Leg", BodyPartType.Leg, 40, 40, IsVital: false),
-        new BodyPartTemplate("Right Leg", BodyPartType.Leg, 40, 40, IsVital: false),
+        new BodyPartTemplate("Head", BodyPartType.Head, 5, 40, 40, IsVital: true),
+        new BodyPartTemplate("Torso", BodyPartType.Torso, 4, 80, 80, IsVital: true),
+        new BodyPartTemplate("Left Arm", BodyPartType.Arm, 3, 20, 20, IsVital: false),
+        new BodyPartTemplate("Right Arm", BodyPartType.Arm, 3, 20, 20, IsVital: false),
+        new BodyPartTemplate("Left Hand", BodyPartType.Hand, 2, 5, 5, IsVital: false),
+        new BodyPartTemplate("Right Hand", BodyPartType.Hand, 2, 5, 5, IsVital: false),
+        new BodyPartTemplate("Left Leg", BodyPartType.Leg, 1, 30, 30, IsVital: false),
+        new BodyPartTemplate("Right Leg", BodyPartType.Leg, 1, 30, 30, IsVital: false),
+        new BodyPartTemplate("Left Foot", BodyPartType.Foot, 0, 10, 10, IsVital: false),
+        new BodyPartTemplate("Right Foot", BodyPartType.Foot, 0, 10, 10, IsVital: false),
     ];
 
     public void Build(ComponentManager componentManager, int entityId)

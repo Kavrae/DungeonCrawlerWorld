@@ -47,12 +47,12 @@ public sealed class HealthWindowTests
     {
         var healthPool = CreateHealthPool();
         var bodyParts = CreateBodyPartsPool();
-        bodyParts.Add(EntityId, new BodyPartComponent("Head", BodyPartType.Head, currentHealth: 10, maximumHealth: 10, isVital: true));
-        bodyParts.Add(EntityId, new BodyPartComponent("Torso", BodyPartType.Torso, currentHealth: 15, maximumHealth: 20, isVital: true));
-        bodyParts.Add(EntityId, new BodyPartComponent("Left Arm", BodyPartType.Arm, currentHealth: 8, maximumHealth: 8, isVital: false));
-        bodyParts.Add(EntityId, new BodyPartComponent("Right Arm", BodyPartType.Arm, currentHealth: 8, maximumHealth: 8, isVital: false));
-        bodyParts.Add(EntityId, new BodyPartComponent("Left Leg", BodyPartType.Leg, currentHealth: 4, maximumHealth: 9, isVital: false));
-        bodyParts.Add(EntityId, new BodyPartComponent("Right Leg", BodyPartType.Leg, currentHealth: 9, maximumHealth: 9, isVital: false));
+        bodyParts.Add(EntityId, new BodyPartComponent("Head", BodyPartType.Head, verticalPosition: 0, currentHealth: 10, maximumHealth: 10, isVital: true));
+        bodyParts.Add(EntityId, new BodyPartComponent("Torso", BodyPartType.Torso, verticalPosition: 0, currentHealth: 15, maximumHealth: 20, isVital: true));
+        bodyParts.Add(EntityId, new BodyPartComponent("Left Arm", BodyPartType.Arm, verticalPosition: 0, currentHealth: 8, maximumHealth: 8, isVital: false));
+        bodyParts.Add(EntityId, new BodyPartComponent("Right Arm", BodyPartType.Arm, verticalPosition: 0, currentHealth: 8, maximumHealth: 8, isVital: false));
+        bodyParts.Add(EntityId, new BodyPartComponent("Left Leg", BodyPartType.Leg, verticalPosition: 0, currentHealth: 4, maximumHealth: 9, isVital: false));
+        bodyParts.Add(EntityId, new BodyPartComponent("Right Leg", BodyPartType.Leg, verticalPosition: 0, currentHealth: 9, maximumHealth: 9, isVital: false));
 
         List<HealthWindow.BodyPartRow> rows = [];
         HealthWindow.BuildBodyPartRows(rows, EntityId, healthPool, bodyParts, statModifiers: null);
@@ -71,7 +71,7 @@ public sealed class HealthWindowTests
         // ComplexHealthHeal/BodyPartSelection/PlayerHealthHoverContent had.
         var healthPool = CreateHealthPool();
         var bodyParts = CreateBodyPartsPool();
-        bodyParts.Add(EntityId, new BodyPartComponent("Head", BodyPartType.Head, currentHealth: 10, maximumHealth: 10, isVital: true));
+        bodyParts.Add(EntityId, new BodyPartComponent("Head", BodyPartType.Head, verticalPosition: 0, currentHealth: 10, maximumHealth: 10, isVital: true));
         var statModifiers = CreateMaximumHealthBuffPool(0.5f);
 
         List<HealthWindow.BodyPartRow> rows = [];

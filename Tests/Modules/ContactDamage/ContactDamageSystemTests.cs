@@ -5,6 +5,7 @@ using Engine.Math;
 using Game.Modules.ContactDamage.Components;
 using Game.Modules.ContactDamage.Systems;
 using Game.Modules.Death.Components;
+using Game.Modules.Health;
 using Game.Modules.Health.Components;
 using Game.Modules.ProcessingTier;
 using Game.Modules.ProcessingTier.Components;
@@ -56,6 +57,35 @@ public sealed class ContactDamageSystemTests
 
     private static DirectComponentPool<ProcessingTierComponent> CreateTiersPool() =>
         new(initialCapacity: 200, static (ref existing, incoming) => existing = incoming);
+
+    private static MultiComponentPool<BodyPartComponent> CreateBodyPartsPool() =>
+        new(maximumEntityCount: 200, initialCapacity: 8);
+
+    /// <summary>Complex-health counterpart to Build -- the mover carries BodyPartComponents (Head/Torso, mirroring a Human-shaped fixture) instead of a SimpleHealthComponent, and the hazard's own PreferredTargetType is caller-supplied so a test can exercise either the type-match or the bottommost-fallback path.</summary>
+    private static (
+        ContactDamageSystem System,
+        PackedComponentPool<DamageOnContactComponent> Hazards,
+        MultiComponentPool<BodyPartComponent> BodyParts,
+        FakeMapQuery MapQuery,
+        FrameEventBuffer<EntityMovedEvent> MovedEntities) BuildComplex(BodyPartType? preferredTargetType)
+    {
+        var hazards = CreateHazardPool();
+        var exposures = CreateExposurePool();
+        var health = CreateHealthPool();
+        var bodyParts = CreateBodyPartsPool();
+        var mapQuery = new FakeMapQuery();
+        var movedEntities = new FrameEventBuffer<EntityMovedEvent>();
+        var processingTiers = CreateTiersPool();
+
+        bodyParts.Add(MoverEntityId, new BodyPartComponent("Head", BodyPartType.Head, verticalPosition: 5, currentHealth: 100, maximumHealth: 100, isVital: true));
+        bodyParts.Add(MoverEntityId, new BodyPartComponent("Torso", BodyPartType.Torso, verticalPosition: 4, currentHealth: 100, maximumHealth: 100, isVital: true));
+        hazards.Add(TerrainEntityId, new DamageOnContactComponent(damagePerTick: 10, tickIntervalFrames: 60, preferredTargetType: preferredTargetType));
+        mapQuery.SetTerrain(new Vector3Int(5, 5, 0), TerrainEntityId);
+
+        var system = new ContactDamageSystem(hazards, exposures, health, new EventBus(), mapQuery, new FakePlayerQuery(MoverEntityId), movedEntities, processingTiers, new ProcessingTierEvents(), new MathUtility(), statModifiers: null, deadEntities: null, bodyParts: bodyParts);
+
+        return (system, hazards, bodyParts, mapQuery, movedEntities);
+    }
 
     private static (
         ContactDamageSystem System,
@@ -266,5 +296,36 @@ public sealed class ContactDamageSystemTests
 
         // Decremented by the Neighborhood tier's own framesPerVisit (base StripeCount 1 * divisor 2 = 2).
         Assert.AreEqual(58, exposures.GetReadonly(MoverEntityId).FramesUntilNextTick);
+    }
+
+    [TestMethod]
+    public void SteppingOntoHazard_PreferredTargetTypePresentOnMover_DealsDamageToThatType()
+    {
+        var (system, _, bodyParts, _, movedEntities) = BuildComplex(preferredTargetType: BodyPartType.Head);
+
+        movedEntities.Record(new EntityMovedEvent(MoverEntityId, new Vector3Int(4, 5, 0), new Vector3Int(5, 5, 0), new Vector2Byte(1, 1)));
+        SimulateFrame(system, movedEntities);
+
+        var headDenseIndex = BodyPartSelection.PickByType(bodyParts, MoverEntityId, BodyPartType.Head);
+        Assert.AreEqual(90, bodyParts.GetReadonlyByDenseIndex(headDenseIndex).CurrentHealth);
+        var torsoDenseIndex = BodyPartSelection.PickByType(bodyParts, MoverEntityId, BodyPartType.Torso);
+        Assert.AreEqual(100, bodyParts.GetReadonlyByDenseIndex(torsoDenseIndex).CurrentHealth, "Torso must be untouched -- the hit landed on Head.");
+    }
+
+    [TestMethod]
+    public void SteppingOntoHazard_PreferredTargetTypeAbsentOnMover_FallsBackToBottommost()
+    {
+        // The mover has no Foot part -- ContactDamageSystem hardcodes a Bottommost fallback for
+        // every hazard with a PreferredTargetType set, so the hit must land on Torso (VerticalPosition
+        // 4), the lower of the mover's two fixture parts, not Head (VerticalPosition 5).
+        var (system, _, bodyParts, _, movedEntities) = BuildComplex(preferredTargetType: BodyPartType.Foot);
+
+        movedEntities.Record(new EntityMovedEvent(MoverEntityId, new Vector3Int(4, 5, 0), new Vector3Int(5, 5, 0), new Vector2Byte(1, 1)));
+        SimulateFrame(system, movedEntities);
+
+        var torsoDenseIndex = BodyPartSelection.PickByType(bodyParts, MoverEntityId, BodyPartType.Torso);
+        Assert.AreEqual(90, bodyParts.GetReadonlyByDenseIndex(torsoDenseIndex).CurrentHealth);
+        var headDenseIndex = BodyPartSelection.PickByType(bodyParts, MoverEntityId, BodyPartType.Head);
+        Assert.AreEqual(100, bodyParts.GetReadonlyByDenseIndex(headDenseIndex).CurrentHealth, "Head must be untouched -- the fallback landed on the bottommost part, Torso.");
     }
 }

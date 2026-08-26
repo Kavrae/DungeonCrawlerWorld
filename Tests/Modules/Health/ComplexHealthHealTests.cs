@@ -29,8 +29,8 @@ public sealed class ComplexHealthHealTests
     public void ApplyFractionToAllParts_RaisesEachPartByFractionOfItsOwnMaximum()
     {
         var bodyParts = CreateBodyPartsPool();
-        bodyParts.Add(0, new BodyPartComponent("Head", BodyPartType.Head, currentHealth: 10, maximumHealth: 30, isVital: true));
-        bodyParts.Add(0, new BodyPartComponent("Leg", BodyPartType.Leg, currentHealth: 20, maximumHealth: 40, isVital: false));
+        bodyParts.Add(0, new BodyPartComponent("Head", BodyPartType.Head, 0, currentHealth: 10, maximumHealth: 30, isVital: true));
+        bodyParts.Add(0, new BodyPartComponent("Leg", BodyPartType.Leg, 0, currentHealth: 20, maximumHealth: 40, isVital: false));
 
         ComplexHealthHeal.ApplyFractionToAllParts(bodyParts, 0, 0.5f);
 
@@ -43,7 +43,7 @@ public sealed class ComplexHealthHealTests
     public void ApplyFractionToAllParts_AlreadyFullPart_ClampsWithoutOverflow()
     {
         var bodyParts = CreateBodyPartsPool();
-        bodyParts.Add(0, new BodyPartComponent("Torso", BodyPartType.Torso, currentHealth: 60, maximumHealth: 60, isVital: true));
+        bodyParts.Add(0, new BodyPartComponent("Torso", BodyPartType.Torso, 0, currentHealth: 60, maximumHealth: 60, isVital: true));
 
         ComplexHealthHeal.ApplyFractionToAllParts(bodyParts, 0, 0.5f);
 
@@ -55,7 +55,7 @@ public sealed class ComplexHealthHealTests
     public void ApplyFractionToAllParts_LockedOutPart_HealsAnyway()
     {
         var bodyParts = CreateBodyPartsPool();
-        bodyParts.Add(0, new BodyPartComponent("Arm", BodyPartType.Arm, currentHealth: 0, maximumHealth: 20, isVital: false));
+        bodyParts.Add(0, new BodyPartComponent("Arm", BodyPartType.Arm, 0, currentHealth: 0, maximumHealth: 20, isVital: false));
         bodyParts.UpdateByDenseIndex(bodyParts.GetFirstDenseIndex(0), static (ref BodyPartComponent part) =>
         {
             part.IsDisabled = true;
@@ -73,7 +73,7 @@ public sealed class ComplexHealthHealTests
     public void ApplyFractionToAllParts_PartHealedAboveZero_ClearsIsDisabled()
     {
         var bodyParts = CreateBodyPartsPool();
-        bodyParts.Add(0, new BodyPartComponent("Arm", BodyPartType.Arm, currentHealth: 0, maximumHealth: 20, isVital: false));
+        bodyParts.Add(0, new BodyPartComponent("Arm", BodyPartType.Arm, 0, currentHealth: 0, maximumHealth: 20, isVital: false));
         bodyParts.UpdateByDenseIndex(bodyParts.GetFirstDenseIndex(0), static (ref BodyPartComponent part) => part.IsDisabled = true);
 
         ComplexHealthHeal.ApplyFractionToAllParts(bodyParts, 0, 0.1f);
@@ -86,7 +86,7 @@ public sealed class ComplexHealthHealTests
     public void ApplyFractionToAllParts_MaximumHealthBuffActive_HealsPastRawMaximumToTheEffectiveOne()
     {
         var bodyParts = CreateBodyPartsPool();
-        bodyParts.Add(0, new BodyPartComponent("Head", BodyPartType.Head, currentHealth: 40, maximumHealth: 40, isVital: true));
+        bodyParts.Add(0, new BodyPartComponent("Head", BodyPartType.Head, 0, currentHealth: 40, maximumHealth: 40, isVital: true));
         var statModifiers = new MultiComponentPool<StatModifierComponent>(maximumEntityCount: 10, initialCapacity: 4);
         statModifiers.Add(0, new StatModifierComponent(StatModifierTarget.MaximumHealth, StatModifierOperation.Multiplicative, StatModifierPolarity.Buff,
             canModify: true, magnitude: 0.5f, remainingDurationFrames: null, StatusEffectSource.Admin));
@@ -105,8 +105,8 @@ public sealed class ComplexHealthHealTests
     public void ApplyFractionToAllParts_MixedDamageEntity_EachPartRaisedByTheSameFraction_NotConverged()
     {
         var bodyParts = CreateBodyPartsPool();
-        bodyParts.Add(0, new BodyPartComponent("Leg", BodyPartType.Leg, currentHealth: 8, maximumHealth: 40, isVital: false)); // 20%
-        bodyParts.Add(0, new BodyPartComponent("Torso", BodyPartType.Torso, currentHealth: 54, maximumHealth: 60, isVital: true)); // 90%
+        bodyParts.Add(0, new BodyPartComponent("Leg", BodyPartType.Leg, 0, currentHealth: 8, maximumHealth: 40, isVital: false)); // 20%
+        bodyParts.Add(0, new BodyPartComponent("Torso", BodyPartType.Torso, 0, currentHealth: 54, maximumHealth: 60, isVital: true)); // 90%
 
         ComplexHealthHeal.ApplyFractionToAllParts(bodyParts, 0, 0.25f);
 

@@ -38,8 +38,8 @@ public sealed class ComplexHealthDamageTests
     public void Apply_DamageLandsOnExactlyOnePart()
     {
         var bodyParts = CreateBodyPartsPool();
-        bodyParts.Add(0, new BodyPartComponent("Head", BodyPartType.Head, currentHealth: 30, maximumHealth: 30, isVital: true));
-        bodyParts.Add(0, new BodyPartComponent("Torso", BodyPartType.Torso, currentHealth: 60, maximumHealth: 60, isVital: true));
+        bodyParts.Add(0, new BodyPartComponent("Head", BodyPartType.Head, 0, currentHealth: 30, maximumHealth: 30, isVital: true));
+        bodyParts.Add(0, new BodyPartComponent("Torso", BodyPartType.Torso, 0, currentHealth: 60, maximumHealth: 60, isVital: true));
         var mathUtility = new MathUtility(new FirstPartRandom());
 
         ComplexHealthDamage.Apply(CreateHealthPool(), bodyParts, new EventBus(), 0, 10, StatusEffectSource.Admin, playerQuery: null, "Test", statModifiers: null, mathUtility, deadEntities: null);
@@ -60,7 +60,7 @@ public sealed class ComplexHealthDamageTests
     public void Apply_HitDropsNonVitalPartToZero_SetsDisabledAndLockout()
     {
         var bodyParts = CreateBodyPartsPool();
-        bodyParts.Add(0, new BodyPartComponent("Arm", BodyPartType.Arm, currentHealth: 5, maximumHealth: 20, isVital: false));
+        bodyParts.Add(0, new BodyPartComponent("Arm", BodyPartType.Arm, 0, currentHealth: 5, maximumHealth: 20, isVital: false));
         var mathUtility = new MathUtility(new FirstPartRandom());
 
         ComplexHealthDamage.Apply(CreateHealthPool(), bodyParts, new EventBus(), 0, 10, StatusEffectSource.Admin, playerQuery: null, "Test", statModifiers: null, mathUtility, deadEntities: null);
@@ -75,7 +75,7 @@ public sealed class ComplexHealthDamageTests
     public void Apply_HitDropsVitalPartToZero_PublishesEntityDiedExactlyOnce()
     {
         var bodyParts = CreateBodyPartsPool();
-        bodyParts.Add(1, new BodyPartComponent("Head", BodyPartType.Head, currentHealth: 5, maximumHealth: 30, isVital: true));
+        bodyParts.Add(1, new BodyPartComponent("Head", BodyPartType.Head, 0, currentHealth: 5, maximumHealth: 30, isVital: true));
         var mathUtility = new MathUtility(new FirstPartRandom());
         var eventBus = new EventBus();
         var deadEntities = CreateDeadPool();
@@ -109,7 +109,7 @@ public sealed class ComplexHealthDamageTests
     public void Apply_IncomingDamageModifierReducesAmount()
     {
         var bodyParts = CreateBodyPartsPool();
-        bodyParts.Add(0, new BodyPartComponent("Torso", BodyPartType.Torso, currentHealth: 60, maximumHealth: 60, isVital: true));
+        bodyParts.Add(0, new BodyPartComponent("Torso", BodyPartType.Torso, 0, currentHealth: 60, maximumHealth: 60, isVital: true));
         var mathUtility = new MathUtility(new FirstPartRandom());
         var statModifiers = new MultiComponentPool<StatModifierComponent>(maximumEntityCount: 10, initialCapacity: 4);
         statModifiers.Add(0, new StatModifierComponent(StatModifierTarget.IncomingDamage, StatModifierOperation.Additive, StatModifierPolarity.Buff,
@@ -125,7 +125,7 @@ public sealed class ComplexHealthDamageTests
     public void Apply_ClampsAgainstEffectiveMaximumHealth()
     {
         var bodyParts = CreateBodyPartsPool();
-        bodyParts.Add(0, new BodyPartComponent("Torso", BodyPartType.Torso, currentHealth: 30, maximumHealth: 60, isVital: true));
+        bodyParts.Add(0, new BodyPartComponent("Torso", BodyPartType.Torso, 0, currentHealth: 30, maximumHealth: 60, isVital: true));
         var mathUtility = new MathUtility(new FirstPartRandom());
         var statModifiers = new MultiComponentPool<StatModifierComponent>(maximumEntityCount: 10, initialCapacity: 4);
         statModifiers.Add(0, new StatModifierComponent(StatModifierTarget.MaximumHealth, StatModifierOperation.Additive, StatModifierPolarity.Debuff,
@@ -141,8 +141,8 @@ public sealed class ComplexHealthDamageTests
     public void Apply_PlayerInvolved_PublishesEntityDamagedWithSummedTotalNotSinglePart()
     {
         var bodyParts = CreateBodyPartsPool();
-        bodyParts.Add(0, new BodyPartComponent("Head", BodyPartType.Head, currentHealth: 30, maximumHealth: 30, isVital: true));
-        bodyParts.Add(0, new BodyPartComponent("Torso", BodyPartType.Torso, currentHealth: 60, maximumHealth: 60, isVital: true));
+        bodyParts.Add(0, new BodyPartComponent("Head", BodyPartType.Head, 0, currentHealth: 30, maximumHealth: 30, isVital: true));
+        bodyParts.Add(0, new BodyPartComponent("Torso", BodyPartType.Torso, 0, currentHealth: 60, maximumHealth: 60, isVital: true));
         var mathUtility = new MathUtility(new FirstPartRandom());
         var eventBus = new EventBus();
         EntityDamagedEvent? published = null;
@@ -160,7 +160,7 @@ public sealed class ComplexHealthDamageTests
     public void Apply_NoPlayerInvolvement_DoesNotPublishEntityDamaged()
     {
         var bodyParts = CreateBodyPartsPool();
-        bodyParts.Add(1, new BodyPartComponent("Torso", BodyPartType.Torso, currentHealth: 60, maximumHealth: 60, isVital: true));
+        bodyParts.Add(1, new BodyPartComponent("Torso", BodyPartType.Torso, 0, currentHealth: 60, maximumHealth: 60, isVital: true));
         var mathUtility = new MathUtility(new FirstPartRandom());
         var eventBus = new EventBus();
         var published = false;
@@ -169,5 +169,40 @@ public sealed class ComplexHealthDamageTests
         ComplexHealthDamage.Apply(CreateHealthPool(), bodyParts, eventBus, 1, 10, StatusEffectSource.FromEntity(2), new FakePlayerQuery(0), "Test", statModifiers: null, mathUtility, deadEntities: null);
 
         Assert.IsFalse(published);
+    }
+
+    [TestMethod]
+    public void Apply_TargetRuleWithMatchingTypePresent_LandsOnThatType()
+    {
+        var bodyParts = CreateBodyPartsPool();
+        bodyParts.Add(0, new BodyPartComponent("Head", BodyPartType.Head, 5, currentHealth: 30, maximumHealth: 30, isVital: true));
+        bodyParts.Add(0, new BodyPartComponent("Torso", BodyPartType.Torso, 4, currentHealth: 60, maximumHealth: 60, isVital: true));
+        var mathUtility = new MathUtility(new FirstPartRandom());
+        var targetRule = new BodyPartTargetRule(BodyPartType.Head, BodyPartFallback.Random);
+
+        ComplexHealthDamage.Apply(CreateHealthPool(), bodyParts, new EventBus(), 0, 10, StatusEffectSource.Admin, playerQuery: null, "Test", statModifiers: null, mathUtility, deadEntities: null, targetRule);
+
+        var headDenseIndex = BodyPartSelection.PickByType(bodyParts, 0, BodyPartType.Head);
+        Assert.AreEqual(20, bodyParts.GetReadonlyByDenseIndex(headDenseIndex).CurrentHealth);
+        var torsoDenseIndex = BodyPartSelection.PickByType(bodyParts, 0, BodyPartType.Torso);
+        Assert.AreEqual(60, bodyParts.GetReadonlyByDenseIndex(torsoDenseIndex).CurrentHealth, "Torso must be untouched -- the hit landed on Head.");
+    }
+
+    [TestMethod]
+    public void Apply_TargetRuleWithNoMatchingType_FallsBackPerRule()
+    {
+        var bodyParts = CreateBodyPartsPool();
+        bodyParts.Add(0, new BodyPartComponent("Head", BodyPartType.Head, 5, currentHealth: 30, maximumHealth: 30, isVital: true));
+        bodyParts.Add(0, new BodyPartComponent("Torso", BodyPartType.Torso, 4, currentHealth: 60, maximumHealth: 60, isVital: true));
+        var mathUtility = new MathUtility(new FirstPartRandom());
+        // No Foot part exists -- Bottommost fallback must select Torso, the lower-VerticalPosition of the two.
+        var targetRule = new BodyPartTargetRule(BodyPartType.Foot, BodyPartFallback.Bottommost);
+
+        ComplexHealthDamage.Apply(CreateHealthPool(), bodyParts, new EventBus(), 0, 10, StatusEffectSource.Admin, playerQuery: null, "Test", statModifiers: null, mathUtility, deadEntities: null, targetRule);
+
+        var torsoDenseIndex = BodyPartSelection.PickByType(bodyParts, 0, BodyPartType.Torso);
+        Assert.AreEqual(50, bodyParts.GetReadonlyByDenseIndex(torsoDenseIndex).CurrentHealth);
+        var headDenseIndex = BodyPartSelection.PickByType(bodyParts, 0, BodyPartType.Head);
+        Assert.AreEqual(30, bodyParts.GetReadonlyByDenseIndex(headDenseIndex).CurrentHealth, "Head must be untouched -- the fallback landed on the bottommost part, Torso.");
     }
 }

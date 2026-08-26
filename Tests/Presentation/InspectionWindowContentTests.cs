@@ -48,8 +48,8 @@ public sealed class InspectionWindowContentTests
     {
         var healthPool = CreateHealthPool();
         var bodyParts = CreateBodyPartsPool();
-        bodyParts.Add(EntityId, new BodyPartComponent("Head", BodyPartType.Head, currentHealth: 50, maximumHealth: 40, isVital: true));
-        bodyParts.Add(EntityId, new BodyPartComponent("Torso", BodyPartType.Torso, currentHealth: 60, maximumHealth: 80, isVital: true));
+        bodyParts.Add(EntityId, new BodyPartComponent("Head", BodyPartType.Head, verticalPosition: 0, currentHealth: 50, maximumHealth: 40, isVital: true));
+        bodyParts.Add(EntityId, new BodyPartComponent("Torso", BodyPartType.Torso, verticalPosition: 0, currentHealth: 60, maximumHealth: 80, isVital: true));
         var statModifiers = CreateMaximumHealthBuffPool(0.5f);
         List<InspectedComponentEntry> entries = [];
 

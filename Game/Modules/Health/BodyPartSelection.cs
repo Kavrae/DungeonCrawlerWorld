@@ -82,4 +82,65 @@ public static class BodyPartSelection
 
         return bestDenseIndex;
     }
+
+    /// <summary>Picks entityId's highest-VerticalPosition body part (e.g. the Head).</summary>
+    /// <remarks>Returns -1 if entityId owns no BodyPartComponent.</remarks>
+    public static int PickTopmost(MultiComponentPool<BodyPartComponent> bodyParts, int entityId) =>
+        PickExtreme(bodyParts, entityId, preferHigher: true);
+
+    /// <summary>Picks entityId's lowest-VerticalPosition body part (e.g. a Foot).</summary>
+    /// <remarks>Returns -1 if entityId owns no BodyPartComponent.</remarks>
+    public static int PickBottommost(MultiComponentPool<BodyPartComponent> bodyParts, int entityId) =>
+        PickExtreme(bodyParts, entityId, preferHigher: false);
+
+    /// <summary>Shared linear walk behind PickTopmost/PickBottommost, parameterized by comparison direction rather than duplicated per direction.</summary>
+    private static int PickExtreme(MultiComponentPool<BodyPartComponent> bodyParts, int entityId, bool preferHigher)
+    {
+        var bestDenseIndex = -1;
+        var bestPosition = preferHigher ? -1 : byte.MaxValue + 1;
+
+        for (var denseIndex = bodyParts.GetFirstDenseIndex(entityId); denseIndex != -1; denseIndex = bodyParts.GetNextDenseIndex(denseIndex))
+        {
+            ref readonly var part = ref bodyParts.GetReadonlyByDenseIndex(denseIndex);
+            if (preferHigher ? part.VerticalPosition > bestPosition : part.VerticalPosition < bestPosition)
+            {
+                bestPosition = part.VerticalPosition;
+                bestDenseIndex = denseIndex;
+            }
+        }
+
+        return bestDenseIndex;
+    }
+
+    /// <summary>Picks entityId's first body part of the requested type.</summary>
+    /// <remarks>Returns -1 if entityId owns no BodyPartComponent of that type -- the expected "no Foot on this race" outcome, not an error case.</remarks>
+    public static int PickByType(MultiComponentPool<BodyPartComponent> bodyParts, int entityId, BodyPartType type)
+    {
+        for (var denseIndex = bodyParts.GetFirstDenseIndex(entityId); denseIndex != -1; denseIndex = bodyParts.GetNextDenseIndex(denseIndex))
+        {
+            if (bodyParts.GetReadonlyByDenseIndex(denseIndex).Type == type)
+            {
+                return denseIndex;
+            }
+        }
+
+        return -1;
+    }
+
+    /// <summary>Picks entityId's body part matching rule.PreferredType, falling back to rule.Fallback's own selection when no part of that type exists (or rule.PreferredType is null -- no type preference at all, e.g. lava's generic bottom-up targeting).</summary>
+    public static int PickByTypeWithFallback(MultiComponentPool<BodyPartComponent> bodyParts, int entityId, BodyPartTargetRule rule, MathUtility mathUtility)
+    {
+        var typeMatch = rule.PreferredType is { } type ? PickByType(bodyParts, entityId, type) : -1;
+        if (typeMatch != -1)
+        {
+            return typeMatch;
+        }
+
+        return rule.Fallback switch
+        {
+            BodyPartFallback.Topmost => PickTopmost(bodyParts, entityId),
+            BodyPartFallback.Bottommost => PickBottommost(bodyParts, entityId),
+            _ => PickRandom(bodyParts, entityId, mathUtility),
+        };
+    }
 }

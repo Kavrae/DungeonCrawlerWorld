@@ -68,7 +68,7 @@ public sealed class ComplexHealthRegenSystemTests
     {
         var bodyParts = CreateBodyPartsPool();
         var system = new ComplexHealthRegenSystem(bodyParts, CreateTiersPool(), new ProcessingTierEvents(), abilityScores: CreateAbilityScoresPoolWithMaxConstitution(0));
-        bodyParts.Add(0, new BodyPartComponent("Torso", BodyPartType.Torso, currentHealth: 50, maximumHealth: 200, isVital: true));
+        bodyParts.Add(0, new BodyPartComponent("Torso", BodyPartType.Torso, 0, currentHealth: 50, maximumHealth: 200, isVital: true));
 
         system.Update(default, 0);
 
@@ -80,7 +80,7 @@ public sealed class ComplexHealthRegenSystemTests
     {
         var bodyParts = CreateBodyPartsPool();
         var system = new ComplexHealthRegenSystem(bodyParts, CreateTiersPool(), new ProcessingTierEvents(), abilityScores: CreateAbilityScoresPoolWithMaxConstitution(0));
-        bodyParts.Add(0, new BodyPartComponent("Torso", BodyPartType.Torso, currentHealth: 199, maximumHealth: 200, isVital: true));
+        bodyParts.Add(0, new BodyPartComponent("Torso", BodyPartType.Torso, 0, currentHealth: 199, maximumHealth: 200, isVital: true));
 
         system.Update(default, 0);
 
@@ -93,7 +93,7 @@ public sealed class ComplexHealthRegenSystemTests
         var bodyParts = CreateBodyPartsPool();
         var deadEntities = new PackedComponentPool<DeadComponent>(10, 10, static (ref existing, incoming) => existing = incoming);
         var system = new ComplexHealthRegenSystem(bodyParts, CreateTiersPool(), new ProcessingTierEvents(), statModifiers: null, deadEntities: deadEntities, abilityScores: CreateAbilityScoresPoolWithMaxConstitution(0));
-        bodyParts.Add(0, new BodyPartComponent("Torso", BodyPartType.Torso, currentHealth: 0, maximumHealth: 200, isVital: true));
+        bodyParts.Add(0, new BodyPartComponent("Torso", BodyPartType.Torso, 0, currentHealth: 0, maximumHealth: 200, isVital: true));
         deadEntities.Add(0, new DeadComponent(KilledByEntityId: null, DiedAtFrame: 0));
 
         system.Update(default, 0);
@@ -106,7 +106,7 @@ public sealed class ComplexHealthRegenSystemTests
     {
         var bodyParts = CreateBodyPartsPool();
         var system = new ComplexHealthRegenSystem(bodyParts, CreateTiersPool(), new ProcessingTierEvents());
-        bodyParts.Add(0, new BodyPartComponent("Torso", BodyPartType.Torso, currentHealth: 50, maximumHealth: 200, isVital: true));
+        bodyParts.Add(0, new BodyPartComponent("Torso", BodyPartType.Torso, 0, currentHealth: 50, maximumHealth: 200, isVital: true));
 
         system.Update(default, 0);
 
@@ -119,7 +119,7 @@ public sealed class ComplexHealthRegenSystemTests
         var bodyParts = CreateBodyPartsPool();
         var abilityScores = new MultiComponentPool<AbilityScoreComponent>(maximumEntityCount: 10, initialCapacity: 4);
         var system = new ComplexHealthRegenSystem(bodyParts, CreateTiersPool(), new ProcessingTierEvents(), abilityScores: abilityScores);
-        bodyParts.Add(0, new BodyPartComponent("Torso", BodyPartType.Torso, currentHealth: 50, maximumHealth: 200, isVital: true));
+        bodyParts.Add(0, new BodyPartComponent("Torso", BodyPartType.Torso, 0, currentHealth: 50, maximumHealth: 200, isVital: true));
 
         system.Update(default, 0);
 
@@ -131,8 +131,8 @@ public sealed class ComplexHealthRegenSystemTests
     {
         var bodyParts = CreateBodyPartsPool();
         var system = new ComplexHealthRegenSystem(bodyParts, CreateTiersPool(), new ProcessingTierEvents(), abilityScores: CreateAbilityScoresPoolWithMaxConstitution(0));
-        bodyParts.Add(0, new BodyPartComponent("Head", BodyPartType.Head, currentHealth: 10, maximumHealth: 100, isVital: true)); // 10%
-        bodyParts.Add(0, new BodyPartComponent("Torso", BodyPartType.Torso, currentHealth: 90, maximumHealth: 100, isVital: true)); // 90%
+        bodyParts.Add(0, new BodyPartComponent("Head", BodyPartType.Head, 0, currentHealth: 10, maximumHealth: 100, isVital: true)); // 10%
+        bodyParts.Add(0, new BodyPartComponent("Torso", BodyPartType.Torso, 0, currentHealth: 90, maximumHealth: 100, isVital: true)); // 90%
 
         system.Update(default, 0);
 
@@ -145,8 +145,8 @@ public sealed class ComplexHealthRegenSystemTests
     {
         var bodyParts = CreateBodyPartsPool();
         var system = new ComplexHealthRegenSystem(bodyParts, CreateTiersPool(), new ProcessingTierEvents());
-        bodyParts.Add(0, new BodyPartComponent("Head", BodyPartType.Head, currentHealth: 5, maximumHealth: 100, isVital: true)); // Lowest %, but locked out.
-        bodyParts.Add(0, new BodyPartComponent("Torso", BodyPartType.Torso, currentHealth: 50, maximumHealth: 100, isVital: true));
+        bodyParts.Add(0, new BodyPartComponent("Head", BodyPartType.Head, 0, currentHealth: 5, maximumHealth: 100, isVital: true)); // Lowest %, but locked out.
+        bodyParts.Add(0, new BodyPartComponent("Torso", BodyPartType.Torso, 0, currentHealth: 50, maximumHealth: 100, isVital: true));
         SetLockout(bodyParts, 0, "Head", 100);
 
         system.Update(default, 0);
@@ -161,7 +161,7 @@ public sealed class ComplexHealthRegenSystemTests
     {
         var bodyParts = CreateBodyPartsPool();
         var system = new ComplexHealthRegenSystem(bodyParts, CreateTiersPool(), new ProcessingTierEvents(), abilityScores: CreateAbilityScoresPoolWithMaxConstitution(0));
-        bodyParts.Add(0, new BodyPartComponent("Torso", BodyPartType.Torso, currentHealth: 50, maximumHealth: 200, isVital: true));
+        bodyParts.Add(0, new BodyPartComponent("Torso", BodyPartType.Torso, 0, currentHealth: 50, maximumHealth: 200, isVital: true));
         SetLockout(bodyParts, 0, "Torso", 120);
 
         system.Update(default, 0); // Lockout 120 -> 60 (still > 0): skipped, no regen this visit.
@@ -180,7 +180,7 @@ public sealed class ComplexHealthRegenSystemTests
     {
         var bodyParts = CreateBodyPartsPool();
         var system = new ComplexHealthRegenSystem(bodyParts, CreateTiersPool(), new ProcessingTierEvents(), abilityScores: CreateAbilityScoresPoolWithMaxConstitution(0));
-        bodyParts.Add(0, new BodyPartComponent("Torso", BodyPartType.Torso, currentHealth: 0, maximumHealth: 200, isVital: true));
+        bodyParts.Add(0, new BodyPartComponent("Torso", BodyPartType.Torso, 0, currentHealth: 0, maximumHealth: 200, isVital: true));
         bodyParts.UpdateByDenseIndex(bodyParts.GetFirstDenseIndex(0), static (ref BodyPartComponent part) => part.IsDisabled = true);
 
         system.Update(default, 0);

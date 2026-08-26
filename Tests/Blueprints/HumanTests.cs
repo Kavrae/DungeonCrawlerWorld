@@ -127,10 +127,14 @@ public sealed class HumanTests
         {
             ["Head"] = (BodyPartType.Head, 40, 40, true),
             ["Torso"] = (BodyPartType.Torso, 80, 80, true),
-            ["Left Arm"] = (BodyPartType.Arm, 25, 25, false),
-            ["Right Arm"] = (BodyPartType.Arm, 25, 25, false),
-            ["Left Leg"] = (BodyPartType.Leg, 40, 40, false),
-            ["Right Leg"] = (BodyPartType.Leg, 40, 40, false),
+            ["Left Arm"] = (BodyPartType.Arm, 20, 20, false),
+            ["Right Arm"] = (BodyPartType.Arm, 20, 20, false),
+            ["Left Hand"] = (BodyPartType.Hand, 5, 5, false),
+            ["Right Hand"] = (BodyPartType.Hand, 5, 5, false),
+            ["Left Leg"] = (BodyPartType.Leg, 30, 30, false),
+            ["Right Leg"] = (BodyPartType.Leg, 30, 30, false),
+            ["Left Foot"] = (BodyPartType.Foot, 10, 10, false),
+            ["Right Foot"] = (BodyPartType.Foot, 10, 10, false),
         };
 
         var bodyParts = ecsContext.ComponentManager.GetMultiPool<BodyPartComponent>();
