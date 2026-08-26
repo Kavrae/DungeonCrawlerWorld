@@ -75,7 +75,7 @@ public sealed class GameLoop : Microsoft.Xna.Framework.Game
         var screenSize = new Vector2(_graphics.PreferredBackBufferWidth, _graphics.PreferredBackBufferHeight);
         using (_diagnostics.StartupProfiler?.Phase("Window/Shell Setup"))
         {
-            _shell = ShellBootstrapper.Build(_presentation, _worldSession.World, _worldSession.EcsContext, _worldSession.ActionCatalog, _worldSession.ItemCatalog, screenSize, _diagnostics);
+            _shell = ShellBootstrapper.Build(_presentation, _worldSession, screenSize, _diagnostics);
         }
 
         base.Initialize();

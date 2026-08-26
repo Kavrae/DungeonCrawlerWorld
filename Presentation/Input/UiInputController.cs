@@ -580,7 +580,7 @@ public sealed class UiInputController
     /// Same eligibility as CloseTopmostClosableWindow, but closes every match across every
     /// CloseableWindows layer, topmost first. Each layer's list is snapshotted into an array
     /// before iterating: Window.Close() removes itself from its layer via its own Closed handler
-    /// (see NotificationCenter.OnActiveNotificationClosed / InventoryFolderController.WindowSlot.
+    /// (see NotificationCenter.OnActiveNotificationClosed / InventoryFolderController.WindowLifecycle.
     /// HandleClosed), which would otherwise corrupt an in-progress enumeration of that same live
     /// list -- the same snapshot-first reasoning ElementPoolService.CloseAllChildren already uses.
     /// </summary>

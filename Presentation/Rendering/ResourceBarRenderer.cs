@@ -7,9 +7,11 @@ namespace Presentation.Rendering;
 /// Shared outline+fill+tick-mark rendering for any current/maximum resource bar -- health, mana,
 /// and any future resource (e.g. a soul bar) that follows the same shape. Originally
 /// health-specific (extracted from PlayerHealthBarContent for InspectionWindow's smaller
-/// per-subject HP bar, see HealthBarElement), generalized once PlayerManaBarContent needed the
-/// identical outline/fill/tick math too -- it had its own hand-copied duplicate before this,
-/// the exact "easy to get right once, then forget to reuse" drift this extraction closes off.
+/// per-subject HP bar), generalized once PlayerManaBarContent needed the identical outline/fill/
+/// tick math too -- it had its own hand-copied duplicate before this, the exact "easy to get right
+/// once, then forget to reuse" drift this extraction closes off. InspectionWindowContent's own
+/// per-subject bar and HealthWindow's per-body-part bars both now go through the entity-agnostic
+/// FractionBarElement wrapper rather than a health-specific one.
 /// The one thing that legitimately differs per resource -- its palette (outline + fraction-to-
 /// color mapping, see HealthBarPalette/ManaBarPalette) -- is the caller's own to supply, so this
 /// stays resource-agnostic rather than hardcoding health's colors. Callers that want

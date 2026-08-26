@@ -2,11 +2,8 @@ using Engine.ECS.Components;
 using Engine.ECS.Components.Stores;
 using FontStashSharp;
 using Game.Modules.Actions.Activators;
-using Game.Modules.Burning;
 using Game.Modules.Inventory;
 using Game.Modules.Inventory.Definitions;
-using Game.Modules.Paralysis;
-using Game.Modules.Poison;
 using Game.Modules.StatusEffects;
 using Game.Modules.StatusEffects.Components;
 using Game.World;
@@ -31,7 +28,7 @@ namespace Presentation.UI.Content;
 /// (not overlaid on top of it -- that read as visual clutter against the glyph) instead of a
 /// stack count.
 /// </summary>
-public sealed class PlayerStatusEffectsContent(World world, ComponentManager componentManager, ItemCatalog itemCatalog, FontService fontService) : IElementContent
+public sealed class PlayerStatusEffectsContent(World world, ComponentManager componentManager, ItemCatalog itemCatalog, FontService fontService, StatusEffectDisplayRegistry statusEffectDisplays) : IElementContent
 {
     public static readonly Vector2 Size = new(PlayerHealthBarContent.Size.X, HudMetrics.EntrySize.Y / 2f * 1.5f);
 
@@ -168,14 +165,8 @@ public sealed class PlayerStatusEffectsContent(World world, ComponentManager com
         spriteBatch.Draw(unitRectangle, new Rectangle(outerRectangle.X + 1, outerRectangle.Y + 1, outerRectangle.Width - 2, outerRectangle.Height - 2), Color.White);
     }
 
-    /// <summary>Presentation's own type -> glyph mapping (rendering knowledge belongs here, not in the shared StatusEffects core module, which stays ignorant of individual effects -- see StatusEffectsModule's own doc comment). "?" is an intentionally-visible fallback for any future effect type added here without a mapping yet, rather than throwing mid-draw.</summary>
-    private static string GetGlyph(StatusEffectType effectType) => effectType switch
-    {
-        StatusEffectType.Burning => BurningEffects.Glyph,
-        StatusEffectType.Poison => PoisonEffects.Glyph,
-        StatusEffectType.Paralysis => ParalysisEffects.Glyph,
-        _ => "?",
-    };
+    /// <summary>Looks up each effect module's own registered glyph (see IStatusEffectDisplay). "?" is an intentionally-visible fallback for any active effect type with no registered display, rather than throwing mid-draw.</summary>
+    private string GetGlyph(StatusEffectType effectType) => statusEffectDisplays.TryGet(effectType, out var display) ? display.Glyph : "?";
 
     /// <summary>Same reasoning/fallback as GetGlyph above -- kept as its own switch rather than folded into GetGlyph so each is a single, simple type -> value mapping.</summary>
     private static Color GetColor(StatusEffectType effectType) => effectType switch

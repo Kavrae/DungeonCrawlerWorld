@@ -1,9 +1,8 @@
 using Engine.ECS.Context;
 using Game.Modules.Actions;
 using Game.Modules.Core.Components;
-using Game.Modules.Health.Components;
 using Game.Modules.Inventory;
-using Game.Modules.StatModifiers.Components;
+using Game.Modules.StatusEffects;
 using Game.World;
 using Presentation.Bootstrap;
 using Presentation.Fonts;
@@ -24,6 +23,7 @@ public static class ElementFactoryRegistry
         EcsContext ecsContext,
         ActionCatalog actionCatalog,
         ItemCatalog itemCatalog,
+        StatusEffectDisplayRegistry statusEffectDisplays,
         World world,
         MapViewState mapViewState,
         MapCamera camera,
@@ -80,6 +80,8 @@ public static class ElementFactoryRegistry
 
         pool.RegisterFactory<AbilityScoreWindow>(() => new AbilityScoreWindow(
             presentation.FontService, pool, presentation.LabelRenderer, componentManager));
+        pool.RegisterFactory<HealthWindow>(() => new HealthWindow(
+            presentation.FontService, pool, presentation.LabelRenderer, componentManager, statusEffectDisplays));
         Register<AbilityScoreColumnHeader>((font, elements, glyph) => new AbilityScoreColumnHeader(font, elements, glyph));
         Register<AbilityScoreModifierRow>((font, elements, glyph) => new AbilityScoreModifierRow(font, elements, glyph));
         Register<SeparatorBar>((font, elements, glyph) => new SeparatorBar(font, elements, glyph));
@@ -97,10 +99,6 @@ public static class ElementFactoryRegistry
         Register<ItemDetailsWindow>((font, elements, glyph) => new ItemDetailsWindow(font, elements, glyph, presentation.SpriteSheetService, presentation.SpriteRenderer, actionCatalog));
         Register<ItemIconElement>((font, elements, glyph) => new ItemIconElement(font, elements, glyph, presentation.SpriteSheetService, presentation.SpriteRenderer));
         Register<TargetShapePreviewElement>((font, elements, glyph) => new TargetShapePreviewElement(font, elements, glyph));
-        Register<HealthBarElement>((font, elements, glyph) => new HealthBarElement(
-            font, elements, glyph,
-            componentManager.GetPackedPool<SimpleHealthComponent>(),
-            componentManager.GetMultiPool<BodyPartComponent>(),
-            componentManager.IsRegistered<StatModifierComponent>() ? componentManager.GetMultiPool<StatModifierComponent>() : null));
+        Register<FractionBarElement>((font, elements, glyph) => new FractionBarElement(font, elements, glyph));
     }
 }

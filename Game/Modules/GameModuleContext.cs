@@ -33,6 +33,9 @@ public sealed record GameModuleContext(IMapQuery MapQuery, MathUtility MathUtili
     public StatusEffectAuraApplierRegistry StatusEffectAuraAppliers { get; init; } = new();
 
     /// <summary>Shared across every module's Configure call within one build -- same reasoning as StatusEffectAuraAppliers above.</summary>
+    public StatusEffectDisplayRegistry StatusEffectDisplays { get; init; } = new();
+
+    /// <summary>Shared across every module's Configure call within one build -- same reasoning as StatusEffectAuraAppliers above.</summary>
     public ActionCatalog Actions { get; init; } = new();
 
     /// <summary>Shared across every module's Configure call within one build -- same reasoning as Actions above; a mod could register its own achievements the same way a mod could register its own actions.</summary>

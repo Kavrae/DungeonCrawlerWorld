@@ -307,6 +307,21 @@ Unblocked now that Body parts (above) has landed. Each `BodyPartComponent` needs
 
 Unblocked now that Body parts (above) has landed. `StatusEffectStack`/`StatusEffectAuraApplierRegistry` (`Game/Modules/StatusEffects/`) today apply every status effect at the entity level -- correct for something like Poison (a systemic effect, no reason to localize it to one part), wrong for something like Burning on a Complex entity (a burning leg reads more naturally than a burning entity, and ties into the targeted-damage followup above -- lava burning the legs specifically should also apply Burning to the legs specifically, not the whole entity). Needs a way for a `StatusEffectGrant`/`IStatusEffectAuraApplier` to declare whether it's entity-scoped (today's behavior, unchanged default) or part-scoped, and for the part-scoped case, a place to actually track "this body part has N stacks of Burning" -- likely a second `MultiComponentPool`-shaped store keyed by (entityId, bodyPartId) rather than entityId alone, distinct from today's per-entity `StatusEffectStack`. Feeds directly into the HealthWindow item under Presentation, which needs to display per-part status effects once they can exist.
 
+#### Investigate GetEffectiveValue(MaximumHealth) call frequency -- possible caching need
+
+Since the Body parts landing and its follow-on fixes, `StatModifierMath.GetEffectiveValue(...,
+StatModifierTarget.MaximumHealth, ...)` is now called per body part in several hot paths --
+`ComplexHealthDamage`, `ComplexHealthRegenSystem` (both the selection walk and the clamp),
+`ComplexHealthHeal`, `BodyPartSelection.PickLowestPercentage`, plus once per frame per visible row
+in `PlayerHealthHoverContent`/`InspectionWindowContent`'s Admin dump. Each call re-walks the
+entity's full `StatModifierComponent` chain from scratch. Investigate whether this is actually
+called often enough (population size, frame frequency) to show up as a measurable cost, and if so,
+whether a per-entity cached effective-MaximumHealth value (invalidated on modifier grant/expiry,
+mirroring how `AbilityScoreComponent.Total` is precomputed eagerly rather than read lazily -- see
+that component's own doc comment) is worth the added complexity, versus leaving it as the simple,
+always-correct lazy computation it is today. Queued after the current body-parts follow-up work
+(items 1/3/2+4 below); not yet investigated.
+
 #### Limb-specific gameplay penalties beyond disable
 
 Body parts itself (above) has landed; still blocked on its BodyPartType categorization follow-up
@@ -720,9 +735,29 @@ Presentation-side rendering/interaction for the staircase. See the matching Game
 
 Exists side-by-side with inventory for easy click-and-drag equipping. Collapsible either direction -- inventory collapsible to give the equipment menu full screen space, and vice versa. Pauses the game while open (see Pause modality under Global) -- Inventory management's own pause-while-open wiring (a third OR-term in `GameLoop.Update`, alongside `MapWindow.IsPaused`/`NotificationCenter.HasBlockingNotification`) is the seam to extend, not re-solve.
 
-#### HealthWindow -- per-body-part health and status display
+#### HealthWindow -- per-body-part health and status display (landed)
 
-Unblocked now that the Body parts item (Game, above) has landed. A bar showing only the summed total (today's `PlayerHealthBarContent`/`MapWindow.DrawHealthBar`, both now driven by `HealthQueries.TryGetTotals`) can't show a Complex entity's real state -- a summed total bar hides which specific part is critical, and death-by-Vital-part-at-zero can happen while the bar still reads well above empty (see the Body parts item's own note on this). Needs a real window (`HealthWindow`, mirroring `AbilityScoreWindow`'s `Folder` + pooled-`Window` pattern) listing every body part the inspected entity owns -- name, current/maximum HP (reusing the "Extract a shared tick-fraction HUD bar element" item's eventual shared bar renderer if that lands first, or `PlayerHealthBarContent`'s own draw shape otherwise), Vital/disabled state, and whatever status effects (see the per-body-part status effects item under Game above) are currently active on that specific part. Likely a natural extension of `InspectionWindowContent`'s Basic/Detail modes (see the Player selection menu item above) rather than a fully separate window -- worth deciding which once ComplexHealth's actual query shape (`HealthQueries.TryGetTotals` and whatever per-part enumeration accompanies it) exists to design against.
+See `PLAN-health-window.md` for the full design record. A new red-heart `Button`
+(`HealthWindowController`, above the Inventory folder -- `InventoryFolderController.FolderPosition`
+shifted down to clear it) opens `HealthWindow`: one row per body part with live current/maximum HP
+text (computed against each part's modifier-effective maximum, not the raw stored field -- see the
+Body parts item's own note on why that distinction matters), plus a single Status Effects section
+above the per-part rows showing every active effect with its own remaining duration (Poison/
+Burning/Paralysis each needed their own duration formula -- no shared "total remaining" field
+exists across status effect timer components). Status effects are entity-scoped only today, not
+per-body-part, so they render once rather than repeated under every part -- see the per-body-part
+status effects item below for when that could change. `WindowLifecycle<T>` (the Inventory/Ability Score
+window-toggle helper, renamed from `WindowSlot<T>` -- "Slot" undersold its actual open/close/
+UiLayerStack-sync/close-event responsibilities) was extracted out of `InventoryFolderController` into its own file as part of
+this, now shared by three consumers instead of two.
+
+Not done: Vital/disabled state per part isn't shown yet (the data exists on `BodyPartComponent`,
+just not surfaced here). Body parts still list in whatever order `MultiComponentPool`'s own chain
+enumerates them -- flat, not laid out by actual anatomical position (Head above Torso above Legs,
+Arms to the sides). Revisit this window's layout once a real position concept exists for
+`BodyPartType` (see the Targeted body part damage item above, which already anticipates
+position-driven targeting like lava hitting legs specifically) to lay parts out spatially instead
+of a flat list.
 
 #### Player health bar hover -- per-body-part HP dropdown
 

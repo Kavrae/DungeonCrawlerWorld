@@ -13,6 +13,7 @@ using Game.Modules.StatModifiers;
 using Game.Modules.StatModifiers.Components;
 using Game.World;
 using Microsoft.Xna.Framework;
+using Presentation.UI.ColorPalettes;
 using Presentation.UI.Looting;
 
 namespace Presentation.UI.Content;
@@ -289,10 +290,13 @@ public sealed class InspectionWindowContent(
 
     private void BuildHealthRowIfPresent(int entityId, float blockWidth)
     {
-        if (!HealthQueries.TryGetTotals(_healthPool, _bodyParts, entityId, out _, out var maximumHealth) || maximumHealth <= 0)
+        if (!HealthQueries.TryGetTotals(_healthPool, _bodyParts, entityId, out var currentHealth, out var maximumHealth) || maximumHealth <= 0)
         {
             return;
         }
+
+        var effectiveMaximumHealth = StatModifierMath.GetEffectiveValue(_statModifiers, entityId, StatModifierTarget.MaximumHealth, maximumHealth);
+        var healthFraction = effectiveMaximumHealth > 0 ? MathHelper.Clamp(currentHealth / effectiveMaximumHealth, 0f, 1f) : 1f;
 
         var rowHeight = BarHeight + BarVerticalPadding * 2;
         var row = elementPoolService.CreateElement<Window>(_hostWindow, new ElementOptions
@@ -307,14 +311,14 @@ public sealed class InspectionWindowContent(
         var barWidth = blockWidth * BarWidthFraction;
         var barX = (blockWidth - barWidth) / 2f;
 
-        var bar = elementPoolService.CreateElement<HealthBarElement>(row, new ElementOptions
+        var bar = elementPoolService.CreateElement<FractionBarElement>(row, new ElementOptions
         {
             Hierarchy = new ElementHierarchyOptions { CanContainChildren = false },
             Layout = new ElementLayoutOptions { RelativePosition = new Vector2(barX, BarVerticalPadding), Size = new Vector2(barWidth, BarHeight), DisplayMode = ElementDisplayMode.Fixed },
             Chrome = new ElementChromeOptions { ShowBorder = false, ShowTitle = false, CanUserFocus = false },
             Content = new ElementContentOptions { ContentColor = Color.Transparent },
         });
-        bar.Configure(entityId);
+        bar.Configure(healthFraction, hasResource: true, HealthBarPalette.OutlineColor, HealthBarPalette.FractionColor);
         row.AddChild(bar);
     }
 

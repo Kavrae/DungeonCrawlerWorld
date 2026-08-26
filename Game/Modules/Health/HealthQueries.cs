@@ -7,7 +7,7 @@ namespace Game.Modules.Health;
 /// <remarks>
 /// Mirrors IMapQuery.IsBlocking's own single-chokepoint reasoning, applied here to
 /// Simple-vs-Complex. Deliberately does not fold in StatModifierMath's MaximumHealth modifier --
-/// callers that need the modifier-effective maximum (HealthBarElement, MapWindow.DrawHealthBar)
+/// callers that need the modifier-effective maximum (InspectionWindowContent, MapWindow.DrawHealthBar)
 /// apply StatModifierMath.GetEffectiveValue to the returned maximum themselves, same as they
 /// already do today against SimpleHealthComponent.MaximumHealth directly; this only owns the
 /// Simple-vs-Complex sum, not the modifier chain on top of it.

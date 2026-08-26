@@ -4,6 +4,7 @@ using Engine.Math;
 using Game.Diagnostics;
 using Game.Modules.Actions;
 using Game.Modules.Inventory;
+using Game.Modules.StatusEffects;
 using Game.World;
 
 namespace DungeonCrawlerWorld;
@@ -32,4 +33,5 @@ public sealed record WorldSessionContext(
     UniqueNumberAllocator CrawlerNumberAllocator,
     ActionCatalog ActionCatalog,
     ItemCatalog ItemCatalog,
-    PlayerActivityLog PlayerActivityLog);
+    PlayerActivityLog PlayerActivityLog,
+    StatusEffectDisplayRegistry StatusEffectDisplays);

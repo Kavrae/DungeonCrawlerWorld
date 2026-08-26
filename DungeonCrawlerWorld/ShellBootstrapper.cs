@@ -8,6 +8,7 @@ using Game.Modules.Inventory;
 using Game.Modules.Inventory.Components;
 using Game.Modules.Mana.Components;
 using Game.Modules.Movement.Components;
+using Game.Modules.StatusEffects;
 using Game.Notifications;
 using Game.World;
 using Microsoft.Xna.Framework;
@@ -37,20 +38,20 @@ public static class ShellBootstrapper
 
     /// <summary>Builds the game shell context.</summary>
     /// <param name="presentation"></param>
-    /// <param name="world"></param>
-    /// <param name="ecsContext"></param>
-    /// <param name="actionCatalog"></param>
-    /// <param name="itemCatalog"></param>
+    /// <param name="worldSession">Bundles World/EcsContext/ActionCatalog/ItemCatalog/StatusEffectDisplays -- passed through as one object, not destructured at the call site, since GameLoop has exactly one caller and every field here already exists for GameLoop's own sake (see WorldSessionContext's own doc comment).</param>
     /// <param name="screenSize"></param>
     /// <param name="diagnostics">Null when no diagnostics feature is enabled -- see DebugWindowContent's own doc comment.</param>
     /// <returns></returns>
-    public static ShellContext Build(PresentationContext presentation, World world, EcsContext ecsContext, ActionCatalog actionCatalog, ItemCatalog itemCatalog, Vector2 screenSize, DiagnosticsEngine? diagnostics = null)
+    public static ShellContext Build(PresentationContext presentation, WorldSessionContext worldSession, Vector2 screenSize, DiagnosticsEngine? diagnostics = null)
     {
         ArgumentNullException.ThrowIfNull(presentation);
-        ArgumentNullException.ThrowIfNull(world);
-        ArgumentNullException.ThrowIfNull(ecsContext);
-        ArgumentNullException.ThrowIfNull(actionCatalog);
-        ArgumentNullException.ThrowIfNull(itemCatalog);
+        ArgumentNullException.ThrowIfNull(worldSession);
+
+        var world = worldSession.World;
+        var ecsContext = worldSession.EcsContext;
+        var actionCatalog = worldSession.ActionCatalog;
+        var itemCatalog = worldSession.ItemCatalog;
+        var statusEffectDisplays = worldSession.StatusEffectDisplays;
 
         var layers = new UiLayerStack();
         var componentManager = ecsContext.ComponentManager;
@@ -83,12 +84,12 @@ public static class ShellBootstrapper
         var dragGhostContent = new DragGhostContent(world, actionCatalog, itemCatalog, componentManager.GetMultiPool<InventoryItemStackComponent>(), presentation.FontService, presentation.SpriteSheetService, presentation.SpriteRenderer, presentation.LabelRenderer);
         var contextMenuController = new ContextMenuController(presentation.ElementPoolService);
 
-        ElementFactoryRegistry.RegisterAll(presentation, ecsContext, actionCatalog, itemCatalog, world, mapViewState, camera, actionTargeting, playerMovement, cursorTextContent, contextMenuController);
+        ElementFactoryRegistry.RegisterAll(presentation, ecsContext, actionCatalog, itemCatalog, statusEffectDisplays, world, mapViewState, camera, actionTargeting, playerMovement, cursorTextContent, contextMenuController);
 
         contextMenuController.Initialize(layers);
 
         var mapWindow = BuildBaseWindows(presentation, ecsContext, screenSize, diagnostics, mapViewState, layers);
-        var (questTriggerWindow, hotbarContent, inspectionWindow) = BuildStaticHudWindows(presentation, world, ecsContext, actionCatalog, itemCatalog, screenSize, mapViewState, layers);
+        var (questTriggerWindow, hotbarContent, inspectionWindow) = BuildStaticHudWindows(presentation, world, ecsContext, actionCatalog, itemCatalog, statusEffectDisplays, screenSize, mapViewState, layers);
         var (notificationCenter, inventory) = BuildDynamicHudWindows(presentation, world, ecsContext, itemCatalog, mapWindow, contextMenuController, layers);
         var hotbarController = BuildHotbarController(presentation, mapViewState, hotbarContent, actionTargeting, layers);
         BuildUserWindows(presentation, cursorTextContent, dragGhostContent, layers);
@@ -215,7 +216,7 @@ public static class ShellBootstrapper
 
     /// <summary>StaticHUD tier: the player health bar, action lock, status effects, InspectionWindow, the hotbar, and the quest trigger -- see UiInputController's own doc comment for what each of the four tiers means. questTriggerWindow is returned for Build, which wires its Clicked event once the DynamicHUD tier (needed by OpenQuestComposer) also exists. hotbarContent and inspectionWindow are returned too, for BuildHotbarController and Build's own OnInspectionOpened wiring respectively.</summary>
     private static (TextWindow QuestTriggerWindow, HotbarContent HotbarContent, InspectionWindow InspectionWindow) BuildStaticHudWindows(
-        PresentationContext presentation, World world, EcsContext ecsContext, ActionCatalog actionCatalog, ItemCatalog itemCatalog, Vector2 screenSize, MapViewState mapViewState, UiLayerStack layers)
+        PresentationContext presentation, World world, EcsContext ecsContext, ActionCatalog actionCatalog, ItemCatalog itemCatalog, StatusEffectDisplayRegistry statusEffectDisplays, Vector2 screenSize, MapViewState mapViewState, UiLayerStack layers)
     {
         var playerHealthBarWindow = presentation.ElementPoolService.CreateElement<Window>(null, new ElementOptions
         {
@@ -274,7 +275,7 @@ public static class ShellBootstrapper
             },
             Chrome = new ElementChromeOptions { ShowTitle = false, ShowBorder = false, CanUserFocus = false },
         });
-        playerStatusEffectsWindow.SetContent(new PlayerStatusEffectsContent(world, ecsContext.ComponentManager, itemCatalog, presentation.FontService));
+        playerStatusEffectsWindow.SetContent(new PlayerStatusEffectsContent(world, ecsContext.ComponentManager, itemCatalog, presentation.FontService, statusEffectDisplays));
         playerStatusEffectsWindow.Initialize();
         layers.Add(UiLayer.StaticHud, playerStatusEffectsWindow);
 
@@ -358,6 +359,14 @@ public static class ShellBootstrapper
     {
         var notificationCenter = new NotificationCenter(presentation.ElementPoolService, ecsContext.EventBus, layers, contextMenuController);
         notificationCenter.Initialize();
+
+        // Built before InventoryFolderController, which reads this controller's own
+        // ButtonPosition/ButtonSize (static fields, resolved independently of construction order)
+        // to sit its own Folder directly beneath this button -- see FolderPosition's own doc
+        // comment. No actual construction-order dependency between the two controllers; built in
+        // this order simply because it reads naturally top-to-bottom.
+        var health = new HealthWindowController(presentation.ElementPoolService, world, ecsContext.ComponentManager, presentation.FontService, presentation.LabelRenderer);
+        health.Initialize(layers);
 
         var inventory = new InventoryFolderController(
             presentation.ElementPoolService, world, ecsContext.ComponentManager, presentation.FontService, presentation.LabelRenderer,

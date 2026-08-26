@@ -15,14 +15,14 @@ namespace Presentation.UI.Inventory;
 /// <summary>
 /// Owns the Inventory Folder and the two windows it can open (Inventory, Ability Score) -- the
 /// same orchestrating role NotificationCenter plays for its own folder+popups, and the
-/// Folder/pooled-window lifecycle is deliberately the same shape: WindowSlot.Open mirrors
-/// NotificationCenter.ShowActive, WindowSlot's own close handling mirrors OnActiveNotificationClosed.
+/// Folder/pooled-window lifecycle is deliberately the same shape: WindowLifecycle.Open mirrors
+/// NotificationCenter.ShowActive, WindowLifecycle's own close handling mirrors OnActiveNotificationClosed.
 ///
 /// The two tiles and the folder icon are three independent triggers: the Inventory tile toggles
 /// only the Inventory window (opens it if closed, closes it if open), the Stats tile toggles
 /// only the Ability Score window, and expanding/minimizing the folder itself (its header icon,
 /// not either tile -- see Folder's own doc comment) opens/closes both together. This composes
-/// cleanly since WindowSlot.Open is idempotent (no-ops if already open) and minimizing only
+/// cleanly since WindowLifecycle.Open is idempotent (no-ops if already open) and minimizing only
 /// re-fires once both windows are actually closed (see MinimizeFolderIfNothingOpen) -- otherwise
 /// closing just one of the two via its own X button would immediately cascade into force-closing
 /// the other, which nobody asked for.
@@ -39,9 +39,11 @@ public sealed class InventoryFolderController(
     MapWindow mapWindow,
     ContextMenuController contextMenuController)
 {
-    /// <summary>Beneath the Notification folder, with enough clearance that NotificationCenter's own folder never overlaps this one even fully expanded (NotificationCenter.FolderMaximumSize).</summary>
-    private static readonly Vector2 FolderGap = new(0, 20);
-    private static readonly Vector2 FolderPosition = HudMetrics.Margin + new Vector2(0, NotificationCenter.FolderMaximumSize.Y) + FolderGap;
+    /// <summary>Between this Folder's own top edge and HealthWindowController's heart button sitting directly above it -- mirrors this field's own former shape/reasoning (it used to sit directly beneath the Notification folder; the heart button now occupies that slot instead, see HealthWindowController.ButtonPosition).</summary>
+    private static readonly Vector2 HealthButtonGap = new(0, 8);
+
+    /// <summary>Internal, not private -- lets InventoryFolderControllerTests confirm this actually shifted down to clear HealthWindowController's own button, the same InternalsVisibleTo access other layout-sensitive tests already rely on (see Presentation.csproj).</summary>
+    internal static readonly Vector2 FolderPosition = HealthWindowController.ButtonPosition + new Vector2(0, HealthWindowController.ButtonSize.Y) + HealthButtonGap;
 
     private static readonly Vector2 TileSize = new(78, HudMetrics.EntrySize.Y);
 
@@ -65,8 +67,8 @@ public sealed class InventoryFolderController(
     private readonly PackedComponentPool<InventoryDisabledComponent> _disabledPool = componentManager.GetPackedPool<InventoryDisabledComponent>();
 
     private Folder _folder = null!;
-    private WindowSlot<InventoryManagementWindow> _inventorySlot = null!;
-    private WindowSlot<AbilityScoreWindow> _abilityScoreSlot = null!;
+    private WindowLifecycle<InventoryManagementWindow> _inventorySlot = null!;
+    private WindowLifecycle<AbilityScoreWindow> _abilityScoreSlot = null!;
     private Tooltip _abilityScoreHoverPopup = null!;
     private Tooltip _inventoryHoverPopup = null!;
     private UiLayerStack _layers = null!;
@@ -95,14 +97,14 @@ public sealed class InventoryFolderController(
     /// <summary>Settable late-bound callback for "the player chose Compare from an inventory item cell's own context menu" -- wired by ShellBootstrapper to ItemComparisonController.Arm once that controller exists, the same ordering reason OnItemSelected is wired the same way. Threaded the same path.</summary>
     public Action<int, Guid>? OnCompareRequested { get; set; }
 
-    /// <summary>Opens the player's own Inventory window if it isn't already -- idempotent, same as WindowSlot.Open itself. Lets a non-folder trigger (e.g. clicking a corpse to loot it) reuse this window instead of the folder tile being the only way to open it.</summary>
+    /// <summary>Opens the player's own Inventory window if it isn't already -- idempotent, same as WindowLifecycle.Open itself. Lets a non-folder trigger (e.g. clicking a corpse to loot it) reuse this window instead of the folder tile being the only way to open it.</summary>
     public void OpenInventoryWindow() => _inventorySlot.Open();
 
     public void Initialize(UiLayerStack layers)
     {
         _layers = layers;
-        _inventorySlot = new WindowSlot<InventoryManagementWindow>(CreateInventoryWindow, IsInventoryDisabled, layers, MinimizeFolderIfNothingOpen);
-        _abilityScoreSlot = new WindowSlot<AbilityScoreWindow>(CreateAbilityScoreWindow, IsInventoryDisabled, layers, MinimizeFolderIfNothingOpen);
+        _inventorySlot = new WindowLifecycle<InventoryManagementWindow>(CreateInventoryWindow, IsInventoryDisabled, layers, MinimizeFolderIfNothingOpen);
+        _abilityScoreSlot = new WindowLifecycle<AbilityScoreWindow>(CreateAbilityScoreWindow, IsInventoryDisabled, layers, MinimizeFolderIfNothingOpen);
 
         // Created once and shared across every open/close of the Ability Score window -- same
         // "persistent, toggled via IsVisible" lifecycle as HotbarController's own Armed Hotkey
@@ -276,57 +278,6 @@ public sealed class InventoryFolderController(
         {
             _inventorySlot.Open();
             _abilityScoreSlot.Open();
-        }
-    }
-
-    /// <summary>
-    /// Generic "one pooled window this controller can open/close/toggle" slot -- shared shape
-    /// behind InventoryManagementWindow and AbilityScoreWindow, which otherwise differ only in
-    /// their own ElementOptions (createAndConfigure) and disabled predicate. Pooled and reused
-    /// for a future open (see ElementPoolService) -- ElementPoolService.CloseElement clears
-    /// every event on a pooled Element (Closed included) before it goes back into its pool, so
-    /// HandleClosed's own subscription can't outlive the reuse cycle without detaching itself.
-    /// </summary>
-    private sealed class WindowSlot<TWindow>(Func<TWindow> createAndConfigure, Func<bool> isDisabled, UiLayerStack layers, Action onClosed)
-        where TWindow : Element
-    {
-        public TWindow? Window { get; private set; }
-
-        public void Open()
-        {
-            if (Window is not null || isDisabled())
-            {
-                return;
-            }
-
-            var window = createAndConfigure();
-            window.Closed += HandleClosed;
-            window.Initialize();
-            layers.Add(UiLayer.DynamicHud, window);
-            layers.OpenMenuWindow(window); // Both Inventory and Ability Scores are menu windows -- see UiLayerStack.OpenMenuWindow/GameLoop's pause check.
-            Window = window;
-        }
-
-        public void Toggle()
-        {
-            if (Window is not null)
-            {
-                Window.Close();
-            }
-            else
-            {
-                Open();
-            }
-        }
-
-        public void CloseIfOpen() => Window?.Close();
-
-        private void HandleClosed(Element closedWindow)
-        {
-            layers.Remove(UiLayer.DynamicHud, closedWindow);
-            layers.CloseMenuWindow(closedWindow);
-            Window = null;
-            onClosed();
         }
     }
 }

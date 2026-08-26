@@ -84,7 +84,7 @@ public sealed class TabbedContent(IReadOnlyList<TabbedContent.TabDefinition> tab
     /// with a brand new TabbedContent every open. No defensive unsubscribe needed for the Resized
     /// subscription below either -- ElementPoolService.CloseElement clears every event on hostWindow
     /// (Resized included) when it's closed at the end of the previous open, and a new open never
-    /// reaches Initialize without going through Close first (see WindowSlot.Open in
+    /// reaches Initialize without going through Close first (see WindowLifecycle.Open in
     /// InventoryFolderController).
     /// </summary>
     public void Initialize(Window hostWindow)

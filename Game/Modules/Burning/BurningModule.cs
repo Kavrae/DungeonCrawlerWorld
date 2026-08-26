@@ -40,6 +40,8 @@ public sealed class BurningModule : IGameModule
         _processingTierEvents = context.ProcessingTierEvents;
         _mathUtility = context.MathUtility;
         context.StatusEffectAuraAppliers.Register(new TimerBasedAuraApplier<BurningTimerComponent>(StatusEffectType.Burning, BurningEffects.ApplyStack));
+        context.StatusEffectDisplays.Register(new TimerBasedStatusEffectDisplay<BurningTimerComponent>(StatusEffectType.Burning, BurningEffects.Glyph,
+            burning => burning.FramesUntilNextTick + (burning.StackCount - 1) * BurningEffects.TickIntervalFrames));
     }
 
     public void RegisterComponents(ComponentManager componentManager) =>

@@ -24,8 +24,12 @@ public sealed class ParalysisModule : IGameModule
 
     public IReadOnlyList<Type> Dependencies { get; } = [typeof(StatusEffectsModule)];
 
-    public void Configure(GameModuleContext context) =>
+    public void Configure(GameModuleContext context)
+    {
         context.StatusEffectAuraAppliers.Register(new TimerBasedAuraApplier<ParalysisTimerComponent>(StatusEffectType.Paralysis, ParalysisEffects.Apply));
+        context.StatusEffectDisplays.Register(new TimerBasedStatusEffectDisplay<ParalysisTimerComponent>(StatusEffectType.Paralysis, ParalysisEffects.Glyph,
+            paralysis => paralysis.FramesUntilNextTick));
+    }
 
     public void RegisterComponents(ComponentManager componentManager) =>
         componentManager.RegisterPackedPool<ParalysisTimerComponent>(static (ref existing, incoming) => { });
