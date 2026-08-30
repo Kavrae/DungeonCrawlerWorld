@@ -84,4 +84,56 @@ public static class BodyPartDamageEffects
         var effectiveMaximumHealthForEvent = MathUtility.ClampUShort(StatModifierMath.GetEffectiveValue(statModifiers, entityId, StatModifierTarget.MaximumHealth, totalMaximum), 0, ushort.MaxValue);
         eventBus.Publish(new EntityDamagedEvent(entityId, effectiveAmount, source, MathUtility.ClampUShort(totalCurrent, 0, ushort.MaxValue), effectiveMaximumHealthForEvent, damageType));
     }
+
+    /// <summary>
+    /// BodyPartTargetMode.All counterpart to PublishDamageEvents -- that method is shaped around
+    /// one already-known denseIndex; this one scans every part entityId owns once a whole-entity
+    /// hit has already been applied to all of them, so a fireball fires at most one
+    /// EntityDiedEvent (any Vital part landed at 0) and exactly one aggregate EntityDamagedEvent
+    /// for the whole hit, not one of each per part.
+    /// </summary>
+    public static void PublishAggregateDamageEvents(
+        PackedComponentPool<SimpleHealthComponent> health,
+        MultiComponentPool<BodyPartComponent> bodyParts,
+        EventBus eventBus,
+        int entityId,
+        ushort effectiveAmount,
+        StatusEffectSource source,
+        IPlayerQuery? playerQuery,
+        string damageType,
+        MultiComponentPool<StatModifierComponent>? statModifiers,
+        PackedComponentPool<DeadComponent>? deadEntities)
+    {
+        var anyVitalPartAtZero = false;
+        for (var denseIndex = bodyParts.GetFirstDenseIndex(entityId); denseIndex != -1; denseIndex = bodyParts.GetNextDenseIndex(denseIndex))
+        {
+            ref readonly var part = ref bodyParts.GetReadonlyByDenseIndex(denseIndex);
+            if (part.IsVital && part.CurrentHealth == 0)
+            {
+                anyVitalPartAtZero = true;
+                break;
+            }
+        }
+
+        if (anyVitalPartAtZero && deadEntities?.Has(entityId) != true && entityId != playerQuery?.PlayerEntityId)
+        {
+            eventBus.Publish(new EntityDiedEvent(entityId, source));
+        }
+
+        if (playerQuery is null)
+        {
+            return;
+        }
+
+        var playerInvolved = entityId == playerQuery.PlayerEntityId
+            || (source.Kind == StatusEffectSourceKind.Entity && source.EntityId == playerQuery.PlayerEntityId);
+        if (!playerInvolved)
+        {
+            return;
+        }
+
+        HealthQueries.TryGetTotals(health, bodyParts, entityId, out var totalCurrent, out var totalMaximum);
+        var effectiveMaximumHealthForEvent = MathUtility.ClampUShort(StatModifierMath.GetEffectiveValue(statModifiers, entityId, StatModifierTarget.MaximumHealth, totalMaximum), 0, ushort.MaxValue);
+        eventBus.Publish(new EntityDamagedEvent(entityId, effectiveAmount, source, MathUtility.ClampUShort(totalCurrent, 0, ushort.MaxValue), effectiveMaximumHealthForEvent, damageType));
+    }
 }

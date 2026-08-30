@@ -1,10 +1,12 @@
 using Engine.ECS.Components;
 using Engine.ECS.Systems;
+using Engine.Events;
 using Game.Modules.Core.Components;
 using Game.Modules.Paralysis.Components;
 using Game.Modules.Paralysis.Systems;
 using Game.Modules.StatusEffects;
 using Game.Modules.StatusEffects.Components;
+using Game.World;
 
 namespace Game.Modules.Paralysis;
 
@@ -24,9 +26,17 @@ public sealed class ParalysisModule : IGameModule
 
     public IReadOnlyList<Type> Dependencies { get; } = [typeof(StatusEffectsModule)];
 
+    private EventBus _eventBus = null!;
+    private IPlayerQuery? _playerQuery;
+
     public void Configure(GameModuleContext context)
     {
-        context.StatusEffectAuraAppliers.Register(new TimerBasedAuraApplier<ParalysisTimerComponent>(StatusEffectType.Paralysis, ParalysisEffects.Apply));
+        _eventBus = context.EventBus;
+        _playerQuery = context.PlayerQuery;
+
+        context.StatusEffectAuraAppliers.Register(new TimerBasedAuraApplier<ParalysisTimerComponent>(
+            StatusEffectType.Paralysis,
+            (componentManager, entityId, source) => ParalysisEffects.Apply(componentManager, entityId, source, _eventBus, _playerQuery)));
         context.StatusEffectDisplays.Register(new TimerBasedStatusEffectDisplay<ParalysisTimerComponent>(StatusEffectType.Paralysis, ParalysisEffects.Glyph,
             paralysis => paralysis.FramesUntilNextTick));
     }

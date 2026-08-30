@@ -1,28 +1,42 @@
 using Engine.ECS.Components;
 using Engine.ECS.Systems;
-using Engine.Modules;
+using Game.Modules.ProcessingTier;
+using Game.Modules.ProcessingTier.Components;
 using Game.Modules.StatusEffects.Components;
+using Game.Modules.StatusEffects.Systems;
 
 namespace Game.Modules.StatusEffects;
 
 /// <summary>
-/// Shared status-effect storage only -- no systems of its own, the same shape as CoreModule.
-/// Individual effects (BurningModule, ...) are their own separate modules depending on this
-/// one plus whatever else they specifically need, rather than every effect's system and
-/// Dependencies accumulating into one ever-growing module.
+/// Shared status-effect storage, plus StatusEffectImmunityExpirySystem (the one system every
+/// immunity, regardless of which effect it targets, expires through). Individual effects
+/// (BurningModule, ...) are their own separate modules depending on this one plus whatever else
+/// they specifically need, rather than every effect's system and Dependencies accumulating into
+/// one ever-growing module.
 /// </summary>
-public sealed class StatusEffectsModule : IModule
+public sealed class StatusEffectsModule : IGameModule
 {
     public Guid Id { get; } = new("d9f6a1c4-8b2e-4f3a-9c1d-000000000007");
+
+    private ProcessingTierEvents _processingTierEvents = null!;
+
+    public void Configure(GameModuleContext context)
+    {
+        _processingTierEvents = context.ProcessingTierEvents;
+    }
 
     public void RegisterComponents(ComponentManager componentManager)
     {
         componentManager.RegisterMultiPool<StatusEffectStack>();
         componentManager.RegisterMultiPool<BodyPartStatusEffectStack>();
+        componentManager.RegisterMultiPool<StatusEffectImmunityComponent>();
     }
 
     public void RegisterSystems(SystemManager systemManager, ComponentManager componentManager)
     {
-        // No systems of its own -- shared storage only, effect modules build on it.
+        systemManager.Register(new StatusEffectImmunityExpirySystem(
+            componentManager.GetMultiPool<StatusEffectImmunityComponent>(),
+            componentManager.GetDirectPool<ProcessingTierComponent>(),
+            _processingTierEvents));
     }
 }

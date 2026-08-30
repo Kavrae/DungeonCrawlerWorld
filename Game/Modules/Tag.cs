@@ -22,6 +22,9 @@ public enum Tag : byte
     Wand,
     Fire,
 
+    /// <summary>Carried as the damageTags/activeTags on Poison's own DoT tick (PoisonSystem.Tick) -- lets a ConditionTag: Tag.Poison-scoped IncomingDamage modifier reduce poison damage specifically, the same generic mechanism Tag.Fire already gives Burning.</summary>
+    Poison,
+
     // AbilityScoreType's 7 members, mirrored 1:1 -- lets an ability tagged with one of these get
     // a damage bonus from the matching ability score (see ActionEffectResolver.
     // ComputeAbilityScoreDamageBonus), the same generic tag-driven mechanism regardless of which

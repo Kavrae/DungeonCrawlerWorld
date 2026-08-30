@@ -24,6 +24,9 @@ public sealed class PoisonSystem : ISystem
 {
     public byte StripeCount => 1;
 
+    /// <summary>Passed as HealthDamage.Apply's damageTags on every tick -- lets a ConditionTag: Tag.Poison-scoped IncomingDamage modifier reduce poison damage specifically. Cached once rather than allocated fresh per tick.</summary>
+    private static readonly Tag[] PoisonDamageTags = [Tag.Poison];
+
     private readonly PackedComponentPool<PoisonTimerComponent> _timers;
     private readonly MultiComponentPool<StatusEffectStack> _stacks;
     private readonly PackedComponentPool<SimpleHealthComponent> _health;
@@ -73,7 +76,7 @@ public sealed class PoisonSystem : ISystem
         }
 
         HealthDamage.Apply(_health, _eventBus, entityId, timer.StackCount, timer.Source, _playerQuery, StatusEffectDamageType.Describe(StatusEffectType.Poison), _statModifiers, _bodyParts, _mathUtility,
-            targetRule: new BodyPartTargetRule(BodyPartType.Internal, BodyPartFallback.Random));
+            targetRule: new BodyPartTargetRule(BodyPartType.Internal, BodyPartFallback.Random), damageTags: PoisonDamageTags);
 
         var remainingDuration = (ushort)(timer.RemainingDurationTicks - 1);
         if (remainingDuration == 0)

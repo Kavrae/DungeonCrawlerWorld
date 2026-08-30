@@ -134,6 +134,22 @@ public sealed class SimpleHealthRegenSystemTests
         Assert.AreEqual(50, pool.GetReadonly(0).CurrentHealth);
     }
 
+    /// <summary>Regen is now routed through HealthHeal.Apply (sourceEntityId: entityId, a self-heal) -- an IncomingHealing modifier scales the regen tick the same way it would scale a potion or spell.</summary>
+    [TestMethod]
+    public void Update_IncomingHealingModifier_ScalesRegenTick()
+    {
+        var pool = CreatePool();
+        pool.Add(0, new SimpleHealthComponent(currentHealth: 50, maximumHealth: 200));
+        var statModifiers = new MultiComponentPool<StatModifierComponent>(maximumEntityCount: 10, initialCapacity: 4);
+        statModifiers.Add(0, new StatModifierComponent(StatModifierTarget.IncomingHealing, StatModifierOperation.Multiplicative, StatModifierPolarity.Buff,
+            canModify: false, magnitude: 0.5f, remainingDurationFrames: null, StatusEffectSource.Admin));
+        var system = new SimpleHealthRegenSystem(pool, CreateTiersPool(), new ProcessingTierEvents(), statModifiers, abilityScores: CreateAbilityScoresPoolWithMaxConstitution(0));
+
+        system.Update(default, 0);
+
+        Assert.AreEqual(59, pool.GetReadonly(0).CurrentHealth, "6 base regen * 1.5 = 9; 50 + 9 = 59.");
+    }
+
     [TestMethod]
     public void Update_ThrottledEntity_OnEligibleCycle_Regenerates()
     {

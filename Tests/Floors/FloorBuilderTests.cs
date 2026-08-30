@@ -80,6 +80,9 @@ public sealed class FloorBuilderTests
         var coreItemsModule = new CoreItemsModule();
         coreItemsModule.Configure(context);
 
+        var statusEffectsModule = new StatusEffectsModule();
+        statusEffectsModule.Configure(context);
+
         IReadOnlyList<IModule> modules =
         [
             coreModule,
@@ -92,7 +95,7 @@ public sealed class FloorBuilderTests
             new ClassModule(),
             actionsModule,
             coreActionsModule,
-            new StatusEffectsModule(),
+            statusEffectsModule,
             burningModule,
             poisonModule,
             contactDamageModule,

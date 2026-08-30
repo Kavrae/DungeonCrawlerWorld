@@ -25,6 +25,8 @@ public sealed class CoreItemsModule : IGameModule
         ScrollOfHealing.Build,
         ScrollOfTorch.Build,
         WandOfFireball.Build,
+        ImmunityTestPotion.Build,
+        ResistanceTestPotion.Build,
     ];
 
     public void Configure(GameModuleContext context)

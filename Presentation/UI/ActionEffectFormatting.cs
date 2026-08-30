@@ -20,7 +20,7 @@ public static class ActionEffectFormatting
     public static string FormatEntry(IActionEffectEntry entry) => entry switch
     {
         DirectDamage damage => FormatDirectDamage(damage),
-        DirectHeal heal => $"Heals {heal.Fraction:P0} of max health",
+        DirectHeal heal => FormatDirectHeal(heal),
         DirectManaRestore mana => $"Restores {mana.Fraction:P0} of max mana",
         StatusEffectGrant status => $"Applies {status.StackCount} stack{(status.StackCount == 1 ? "" : "s")} of {status.Type}",
         StatModifierGrant modifier => FormatStatModifierGrant(modifier),
@@ -31,9 +31,14 @@ public static class ActionEffectFormatting
     };
 
     private static string FormatDirectDamage(DirectDamage damage) =>
-        damage.MinAmount == damage.MaxAmount
-            ? $"Deals {damage.MinAmount} damage"
-            : $"Deals {damage.MinAmount}-{damage.MaxAmount} damage";
+        damage.MinFlatDamage == damage.MaxFlatDamage
+            ? $"Deals {damage.MinFlatDamage} damage"
+            : $"Deals {damage.MinFlatDamage}-{damage.MaxFlatDamage} damage";
+
+    private static string FormatDirectHeal(DirectHeal heal) =>
+        heal.FlatAmount > 0
+            ? $"Heals {heal.FlatAmount} + {heal.PercentOfMaxHealth:P0} of max health"
+            : $"Heals {heal.PercentOfMaxHealth:P0} of max health";
 
     /// <summary>Reuses StatModifierComponent.ToString()'s own +/-/x/÷ symbol convention for Operation x Polarity (Game/Modules/StatModifiers/Components/StatModifierComponent.cs) so an item's own preview reads consistently with the Ability Score window's live modifier list.</summary>
     private static string FormatStatModifierGrant(StatModifierGrant modifier)

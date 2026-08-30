@@ -105,6 +105,8 @@ public sealed class PlayerBlueprint(MathUtility mathUtility, UniqueNumberAllocat
         var toxicIdolStackId = InventoryActions.AddItem(componentManager, entityId, ToxicIdol.Id, quantity: 5);
         InventoryActions.AddItem(componentManager, entityId, ScrollOfHealing.Id, quantity: 5);
         InventoryActions.AddItem(componentManager, entityId, ScrollOfTorch.Id, quantity: 5);
+        InventoryActions.AddItem(componentManager, entityId, ImmunityTestPotion.Id, quantity: 5);
+        InventoryActions.AddItem(componentManager, entityId, ResistanceTestPotion.Id, quantity: 5);
 
         componentManager.Merge(entityId, new ItemHotkeyBindingComponent(HotkeySlot.Slot1, healthPotionStackId));
         componentManager.Merge(entityId, new ItemHotkeyBindingComponent(HotkeySlot.Slot2, manaPotionStackId));

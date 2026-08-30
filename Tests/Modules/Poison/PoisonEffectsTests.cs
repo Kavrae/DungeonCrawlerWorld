@@ -1,6 +1,8 @@
 using Engine.ECS.Components;
 using Game.Modules.Poison;
 using Game.Modules.Poison.Components;
+using Game.Modules.StatModifiers;
+using Game.Modules.StatModifiers.Components;
 using Game.Modules.StatusEffects;
 using Game.Modules.StatusEffects.Components;
 using Game.World;
@@ -16,6 +18,62 @@ public sealed class PoisonEffectsTests
         componentManager.RegisterMultiPool<StatusEffectStack>();
         componentManager.RegisterPackedPool<PoisonTimerComponent>(static (ref existing, incoming) => { });
         return componentManager;
+    }
+
+    private static ComponentManager CreateComponentManagerWithImmunity()
+    {
+        var componentManager = CreateComponentManager();
+        componentManager.RegisterMultiPool<StatusEffectImmunityComponent>();
+        return componentManager;
+    }
+
+    [TestMethod]
+    public void ApplyStack_EntityImmuneToPoison_DoesNotAddAStack()
+    {
+        var componentManager = CreateComponentManagerWithImmunity();
+        componentManager.GetMultiPool<StatusEffectImmunityComponent>().Add(0, new StatusEffectImmunityComponent(StatusEffectType.Poison, remainingDurationFrames: null));
+
+        PoisonEffects.ApplyStack(componentManager, 0, StatusEffectSource.Admin, durationInTicks: 5);
+
+        Assert.AreEqual(0, StatusEffectQueries.CountStacks(componentManager.GetMultiPool<StatusEffectStack>(), 0, StatusEffectType.Poison));
+        Assert.IsFalse(componentManager.GetPackedPool<PoisonTimerComponent>().Has(0));
+    }
+
+    [TestMethod]
+    public void ApplyStack_EntityImmuneToBurningOnly_StillGetsPoisoned()
+    {
+        var componentManager = CreateComponentManagerWithImmunity();
+        componentManager.GetMultiPool<StatusEffectImmunityComponent>().Add(0, new StatusEffectImmunityComponent(StatusEffectType.Burning, remainingDurationFrames: null));
+
+        PoisonEffects.ApplyStack(componentManager, 0, StatusEffectSource.Admin, durationInTicks: 5);
+
+        Assert.AreEqual(1, StatusEffectQueries.CountStacks(componentManager.GetMultiPool<StatusEffectStack>(), 0, StatusEffectType.Poison));
+    }
+
+    [TestMethod]
+    public void ApplyStack_OutgoingDebuffDurationModifierOnSource_ScalesDuration()
+    {
+        var componentManager = CreateComponentManager();
+        componentManager.RegisterMultiPool<StatModifierComponent>();
+        componentManager.GetMultiPool<StatModifierComponent>().Add(1, new StatModifierComponent(
+            StatModifierTarget.OutgoingDebuffDuration, StatModifierOperation.Multiplicative, StatModifierPolarity.Debuff, canModify: false, magnitude: 1.0f, remainingDurationFrames: null, StatusEffectSource.Admin));
+
+        PoisonEffects.ApplyStack(componentManager, entityId: 0, StatusEffectSource.FromEntity(1), durationInTicks: 5);
+
+        Assert.AreEqual(10, componentManager.GetPackedPool<PoisonTimerComponent>().GetReadonly(0).RemainingDurationTicks, "5 * (1 + 1.0) = 10.");
+    }
+
+    [TestMethod]
+    public void ApplyStack_IncomingDebuffDurationModifierOnTarget_ScalesDuration()
+    {
+        var componentManager = CreateComponentManager();
+        componentManager.RegisterMultiPool<StatModifierComponent>();
+        componentManager.GetMultiPool<StatModifierComponent>().Add(0, new StatModifierComponent(
+            StatModifierTarget.IncomingDebuffDuration, StatModifierOperation.Multiplicative, StatModifierPolarity.Debuff, canModify: false, magnitude: -0.5f, remainingDurationFrames: null, StatusEffectSource.Admin));
+
+        PoisonEffects.ApplyStack(componentManager, entityId: 0, StatusEffectSource.Admin, durationInTicks: 10);
+
+        Assert.AreEqual(5, componentManager.GetPackedPool<PoisonTimerComponent>().GetReadonly(0).RemainingDurationTicks, "10 * (1 - 0.5) = 5.");
     }
 
     [TestMethod]

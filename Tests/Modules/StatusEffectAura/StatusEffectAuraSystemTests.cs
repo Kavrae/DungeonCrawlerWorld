@@ -147,7 +147,7 @@ public sealed class StatusEffectAuraSystemTests
     private static StatusEffectAuraApplierRegistry DefaultApplierRegistry()
     {
         var registry = new StatusEffectAuraApplierRegistry();
-        registry.Register(new TimerBasedAuraApplier<BurningTimerComponent>(StatusEffectType.Burning, BurningEffects.ApplyStack));
+        registry.Register(new TimerBasedAuraApplier<BurningTimerComponent>(StatusEffectType.Burning, (cm, id, source) => BurningEffects.ApplyStack(cm, id, source)));
         registry.Register(new TimerBasedAuraApplier<PoisonTimerComponent>(StatusEffectType.Poison, (cm, id, source) => PoisonEffects.ApplyStack(cm, id, source, durationInTicks: 1)));
         return registry;
     }

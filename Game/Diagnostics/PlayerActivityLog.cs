@@ -36,6 +36,8 @@ public sealed class PlayerActivityLog : IDisposable
 
         eventBus.Subscribe<EntityMovedEvent>(OnEntityMoved);
         eventBus.Subscribe<EntityDamagedEvent>(OnEntityDamaged);
+        eventBus.Subscribe<EntityHealedEvent>(OnEntityHealed);
+        eventBus.Subscribe<StatusEffectImmunityBlockedEvent>(OnStatusEffectImmunityBlocked);
     }
 
     /// <summary>
@@ -77,6 +79,34 @@ public sealed class PlayerActivityLog : IDisposable
         }
 
         Write($"DAMAGE amount={damaged.Amount} type={damaged.DamageType} source={DescribeSource(damaged.Source)} target={DescribeEntity(damaged.EntityId)} currentHealth={damaged.CurrentHealth} maximumHealth={damaged.MaximumHealth}");
+    }
+
+    /// <summary>Mirrors OnEntityDamaged exactly -- both directions the player can appear in a heal event (healed, or the source that healed someone else) are logged, same reasoning as the DAMAGE line above.</summary>
+    private void OnEntityHealed(EntityHealedEvent healed)
+    {
+        var playerIsTarget = healed.EntityId == _world.PlayerEntityId;
+        var playerIsSource = healed.Source.Kind == StatusEffectSourceKind.Entity && healed.Source.EntityId == _world.PlayerEntityId;
+
+        if (!playerIsTarget && !playerIsSource)
+        {
+            return;
+        }
+
+        Write($"HEAL amount={healed.Amount:0.##} type={healed.HealType} source={DescribeSource(healed.Source)} target={DescribeEntity(healed.EntityId)} currentHealth={healed.CurrentHealth:0.##} maximumHealth={healed.MaximumHealth:0.##}");
+    }
+
+    /// <summary>Mirrors OnEntityDamaged/OnEntityHealed exactly -- StatusEffectImmunity.IsImmune already gates the publish itself on player-involvement, so this handler's own check is defense in depth, not the only guard.</summary>
+    private void OnStatusEffectImmunityBlocked(StatusEffectImmunityBlockedEvent blocked)
+    {
+        var playerIsTarget = blocked.EntityId == _world.PlayerEntityId;
+        var playerIsSource = blocked.Source.Kind == StatusEffectSourceKind.Entity && blocked.Source.EntityId == _world.PlayerEntityId;
+
+        if (!playerIsTarget && !playerIsSource)
+        {
+            return;
+        }
+
+        Write($"BLOCKED type={blocked.EffectType} source={DescribeSource(blocked.Source)} target={DescribeEntity(blocked.EntityId)} (immune)");
     }
 
     /// <summary>entityId alone, or "Name (#entityId)" if the entity has a DisplayTextComponent -- shared by both the source and target sides of a DAMAGE line.</summary>

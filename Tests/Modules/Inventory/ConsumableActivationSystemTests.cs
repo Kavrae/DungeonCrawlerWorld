@@ -226,11 +226,11 @@ public sealed class ConsumableActivationSystemTests
             totalCurrent += bodyParts.GetReadonlyByDenseIndex(denseIndex).CurrentHealth;
         }
 
-        // DirectHeal(0.5f) applies the 0.5 fraction independently to each part's own MaximumHealth
-        // (ComplexHealthHeal.ApplyFractionToAllParts, not a shared total) -- Head: 40 + 0.5*40 = 60,
-        // clamped to its own max of 40 -> stays 40. Torso: 40 + 0.5*160 = 120, under its max of 160
-        // -> 120. Total: 40 + 120 = 160.
-        Assert.AreEqual(160f, totalCurrent);
+        // DirectHeal(0.5f) computes one total against the entity's overall max (Head 40 + Torso
+        // 160 = 200), 0.5*200 = 100, split evenly across the 2 parts = 50 each
+        // (ComplexHealthHeal.ApplyToAllParts) -- Head: 40 + 50 = 90, clamped to its own max of 40
+        // -> stays 40. Torso: 40 + 50 = 90, under its max of 160 -> 90. Total: 40 + 90 = 130.
+        Assert.AreEqual(130f, totalCurrent);
         var cooldown = componentManager.GetPackedPool<PotionCooldownComponent>().GetReadonly(TargetEntityId);
         Assert.AreEqual(PotionCooldownEffects.DurationFrames, cooldown.FramesRemaining, "The potion must still land -- cooldown resets the same as a Simple target's would.");
     }

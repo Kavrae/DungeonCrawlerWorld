@@ -6,6 +6,7 @@ using Game.Modules.Actions.Effects;
 using Game.Modules.Health.Components;
 using Game.Modules.StatModifiers;
 using Game.Modules.StatModifiers.Components;
+using Game.World;
 
 namespace Tests.Modules.Actions.Effects;
 
@@ -74,5 +75,47 @@ public sealed class StatModifierGrantTests
         entry.Apply(BuildContext(componentManager, durationScaleMultiplier: 4.0f));
 
         Assert.IsNull(GetGrantedModifier(componentManager).RemainingDurationFrames);
+    }
+
+    [TestMethod]
+    public void Apply_DebuffGrantWithOutgoingDebuffDurationOnCaster_ScalesDuration()
+    {
+        var componentManager = Build();
+        componentManager.GetMultiPool<StatModifierComponent>().Add(SourceEntityId, new StatModifierComponent(
+            StatModifierTarget.OutgoingDebuffDuration, StatModifierOperation.Multiplicative, StatModifierPolarity.Debuff, canModify: false, magnitude: 1.0f, remainingDurationFrames: null, StatusEffectSource.FromEntity(SourceEntityId)));
+        var entry = new StatModifierGrant(StatModifierTarget.IncomingDamage, StatModifierOperation.Multiplicative, StatModifierPolarity.Debuff, CanModify: false, Magnitude: 0.1f, DurationFrames: 100);
+
+        entry.Apply(BuildContext(componentManager, durationScaleMultiplier: 1.0f));
+
+        Assert.AreEqual((ushort?)200, GetGrantedModifier(componentManager).RemainingDurationFrames, "100 * (1 + 1.0) = 200.");
+    }
+
+    [TestMethod]
+    public void Apply_DebuffGrantWithIncomingDebuffDurationOnTarget_ScalesDuration()
+    {
+        var componentManager = Build();
+        componentManager.GetMultiPool<StatModifierComponent>().Add(TargetEntityId, new StatModifierComponent(
+            StatModifierTarget.IncomingDebuffDuration, StatModifierOperation.Multiplicative, StatModifierPolarity.Debuff, canModify: false, magnitude: -0.5f, remainingDurationFrames: null, StatusEffectSource.FromEntity(TargetEntityId)));
+        var entry = new StatModifierGrant(StatModifierTarget.IncomingDamage, StatModifierOperation.Multiplicative, StatModifierPolarity.Debuff, CanModify: false, Magnitude: 0.1f, DurationFrames: 100);
+
+        entry.Apply(BuildContext(componentManager, durationScaleMultiplier: 1.0f));
+
+        Assert.AreEqual((ushort?)50, GetGrantedModifier(componentManager).RemainingDurationFrames, "100 * (1 - 0.5) = 50 -- debuffs against the target expire faster.");
+    }
+
+    [TestMethod]
+    public void Apply_BuffGrant_UsesBuffDurationTargetsNotDebuff()
+    {
+        var componentManager = Build();
+        // Scoped to Debuff -- must have zero effect on this Buff-polarity grant.
+        componentManager.GetMultiPool<StatModifierComponent>().Add(TargetEntityId, new StatModifierComponent(
+            StatModifierTarget.IncomingDebuffDuration, StatModifierOperation.Multiplicative, StatModifierPolarity.Debuff, canModify: false, magnitude: -0.9f, remainingDurationFrames: null, StatusEffectSource.FromEntity(TargetEntityId)));
+        componentManager.GetMultiPool<StatModifierComponent>().Add(TargetEntityId, new StatModifierComponent(
+            StatModifierTarget.IncomingBuffDuration, StatModifierOperation.Multiplicative, StatModifierPolarity.Buff, canModify: false, magnitude: 0.5f, remainingDurationFrames: null, StatusEffectSource.FromEntity(TargetEntityId)));
+        var entry = new StatModifierGrant(StatModifierTarget.OutgoingDamage, StatModifierOperation.Additive, StatModifierPolarity.Buff, CanModify: true, Magnitude: 1f, DurationFrames: 100);
+
+        entry.Apply(BuildContext(componentManager, durationScaleMultiplier: 1.0f));
+
+        Assert.AreEqual((ushort?)150, GetGrantedModifier(componentManager).RemainingDurationFrames, "100 * (1 + 0.5) = 150 -- the IncomingDebuffDuration modifier must not apply to a Buff grant.");
     }
 }

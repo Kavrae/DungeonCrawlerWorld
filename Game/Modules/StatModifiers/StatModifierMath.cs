@@ -13,8 +13,9 @@ public static class StatModifierMath
     /// <param name="entityId">The ID of the entity.</param>
     /// <param name="target">The target stat.</param>
     /// <param name="baseValue">The base value of the stat.</param>
+    /// <param name="activeTags">The current activation's own Tags (e.g. ActionEffectContext.ActivatorTags) -- a modifier with a non-null ConditionTag only contributes when activeTags contains it; null (the default) means only unconditional modifiers apply.</param>
     /// <returns>The effective value of the stat.</returns>
-    public static float GetEffectiveValue(MultiComponentPool<StatModifierComponent>? pool, int entityId, StatModifierTarget target, float baseValue)
+    public static float GetEffectiveValue(MultiComponentPool<StatModifierComponent>? pool, int entityId, StatModifierTarget target, float baseValue, IReadOnlyList<Tag>? activeTags = null)
     {
         if (pool is null)
         {
@@ -28,6 +29,11 @@ public static class StatModifierMath
         {
             ref readonly var modifier = ref pool.GetReadonlyByDenseIndex(denseIndex);
             if (modifier.Target != target)
+            {
+                continue;
+            }
+
+            if (modifier.ConditionTag is { } conditionTag && (activeTags is null || !activeTags.Contains(conditionTag)))
             {
                 continue;
             }
@@ -57,7 +63,8 @@ public static class StatModifierMath
     /// <param name="entityId">The ID of the entity.</param>
     /// <param name="pairs">Each target stat and its base value.</param>
     /// <param name="destination">Receives each pairs entry's effective value, at the same index.</param>
-    public static void GetEffectiveValues(MultiComponentPool<StatModifierComponent>? pool, int entityId, ReadOnlySpan<(StatModifierTarget Target, float BaseValue)> pairs, Span<float> destination)
+    /// <param name="activeTags">Same meaning as GetEffectiveValue's own activeTags parameter, applied uniformly across every pair.</param>
+    public static void GetEffectiveValues(MultiComponentPool<StatModifierComponent>? pool, int entityId, ReadOnlySpan<(StatModifierTarget Target, float BaseValue)> pairs, Span<float> destination, IReadOnlyList<Tag>? activeTags = null)
     {
         ArgumentOutOfRangeException.ThrowIfNotEqual(pairs.Length, destination.Length);
 
@@ -77,6 +84,11 @@ public static class StatModifierMath
         for (var denseIndex = pool.GetFirstDenseIndex(entityId); denseIndex != -1; denseIndex = pool.GetNextDenseIndex(denseIndex))
         {
             ref readonly var modifier = ref pool.GetReadonlyByDenseIndex(denseIndex);
+
+            if (modifier.ConditionTag is { } conditionTag && (activeTags is null || !activeTags.Contains(conditionTag)))
+            {
+                continue;
+            }
 
             for (var i = 0; i < pairs.Length; i++)
             {

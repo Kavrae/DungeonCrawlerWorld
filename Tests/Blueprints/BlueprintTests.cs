@@ -285,13 +285,15 @@ public sealed class BlueprintTests
 
         // Starting items: 5 Health Potions, 5 Mana Potions, 3 Hotkey Expansion Potions, 5 Volatile
         // Concoctions (damage), 5 Toxic Flasks (Poison+Burning), 5 Toxic Idols (Poison aura toggle),
-        // 5 Scrolls of Healing, 5 Scrolls of Torch -- see the ActionEffect/ActionActivator plan's
-        // concrete test content. Plus a batch of 10 Wands of Fireball and one TEMPORARY divergent
-        // Adjacent-targeting test wand -- two separate stacks sharing WandOfFireball.Id, since the
-        // divergent one carries its own Override -- see the per-slot item divergence work.
+        // 5 Scrolls of Healing, 5 Scrolls of Torch, 5 Vials of Warding (Burning+Poison immunity),
+        // 5 Draughts of Insulation (Burning+Poison resistance) -- see the ActionEffect/
+        // ActionActivator plan's concrete test content. Plus a batch of 10 Wands of Fireball and
+        // one TEMPORARY divergent Adjacent-targeting test wand -- two separate stacks sharing
+        // WandOfFireball.Id, since the divergent one carries its own Override -- see the per-slot
+        // item divergence work.
         var stacks = new List<InventoryItemStackComponent>();
         InventoryQueries.CopyStacksForEntity(ecsContext.ComponentManager.GetMultiPool<InventoryItemStackComponent>(), entityId, stacks);
-        Assert.HasCount(10, stacks);
+        Assert.HasCount(12, stacks);
 
         var healthPotionStack = stacks.Single(stack => stack.ItemDefinitionId == HealthPotion.Id);
         Assert.AreEqual(5, healthPotionStack.Quantity);
@@ -324,6 +326,14 @@ public sealed class BlueprintTests
         var scrollOfTorchStack = stacks.Single(stack => stack.ItemDefinitionId == ScrollOfTorch.Id);
         Assert.AreEqual(5, scrollOfTorchStack.Quantity);
         Assert.IsFalse(scrollOfTorchStack.IsDisabled);
+
+        var immunityTestPotionStack = stacks.Single(stack => stack.ItemDefinitionId == ImmunityTestPotion.Id);
+        Assert.AreEqual(5, immunityTestPotionStack.Quantity);
+        Assert.IsFalse(immunityTestPotionStack.IsDisabled);
+
+        var resistanceTestPotionStack = stacks.Single(stack => stack.ItemDefinitionId == ResistanceTestPotion.Id);
+        Assert.AreEqual(5, resistanceTestPotionStack.Quantity);
+        Assert.IsFalse(resistanceTestPotionStack.IsDisabled);
 
         var wandOfFireballStacks = stacks.Where(stack => stack.ItemDefinitionId == WandOfFireball.Id).ToList();
         Assert.HasCount(2, wandOfFireballStacks);

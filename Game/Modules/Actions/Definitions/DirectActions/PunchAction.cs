@@ -13,7 +13,7 @@ public static class PunchAction
     public static ActionDefinition Build() => new(
         Id, "Punch", "Punch", "p", Color.Black,
         Tags: [Tag.Melee, Tag.Unarmed, Tag.Attack, Tag.Strength],
-        Effects: [new ActionEffect([new DirectDamage(MinAmount: 18, MaxAmount: 22)])],
+        Effects: [new ActionEffect([new DirectDamage(MinFlatDamage: 18, MaxFlatDamage: 22)])],
         Activator: new DirectAction(
             new TargetingSpec(TargetShape.Adjacent, Range: 0),
             new ActionTiming(ActionTimingCategory.Immediate, CooldownFrames: null)),

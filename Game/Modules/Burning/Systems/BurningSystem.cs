@@ -24,6 +24,9 @@ namespace Game.Modules.Burning.Systems;
 /// </summary>
 public sealed class BurningSystem : ISystem
 {
+    /// <summary>Passed as HealthDamage.Apply's damageTags on every tick -- lets a ConditionTag: Tag.Fire-scoped IncomingDamage modifier reduce burning damage specifically. Cached once rather than allocated fresh per tick.</summary>
+    private static readonly Tag[] BurningDamageTags = [Tag.Fire];
+
     private const byte StripeCountValue = 15;
 
     public byte StripeCount => StripeCountValue;
@@ -100,7 +103,7 @@ public sealed class BurningSystem : ISystem
             }
         }
 
-        HealthDamage.Apply(_health, _eventBus, entityId, stackCount, source, _playerQuery, StatusEffectDamageType.Describe(StatusEffectType.Burning), _statModifiers, _bodyParts, _mathUtility);
+        HealthDamage.Apply(_health, _eventBus, entityId, stackCount, source, _playerQuery, StatusEffectDamageType.Describe(StatusEffectType.Burning), _statModifiers, _bodyParts, _mathUtility, damageTags: BurningDamageTags);
         _stacks.RemoveByDenseIndex(foundDenseIndex);
 
         var remainingStacks = (byte)(stackCount - 1);

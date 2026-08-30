@@ -189,4 +189,77 @@ public sealed class PlayerActivityLogTests
             File.Delete(logPath);
         }
     }
+
+    [TestMethod]
+    public void EntityHealed_ForPlayer_IsLoggedWithAmountAndSource()
+    {
+        var world = CreateWorld(playerEntityId: 0);
+        var eventBus = new EventBus();
+        var logPath = CreateTempLogPath();
+        try
+        {
+            var log = new PlayerActivityLog(world, CreateComponentManager(), eventBus, logPath);
+            log.BeginFrame(9, DateTime.Now);
+
+            eventBus.Publish(new EntityHealedEvent(0, 12f, StatusEffectSource.Admin, 93f, 100f, "Regeneration"));
+            log.Dispose();
+
+            var contents = File.ReadAllText(logPath);
+            StringAssert.Contains(contents, "HEAL");
+            StringAssert.Contains(contents, "amount=12");
+            StringAssert.Contains(contents, "Regeneration");
+            StringAssert.Contains(contents, "Admin");
+        }
+        finally
+        {
+            File.Delete(logPath);
+        }
+    }
+
+    [TestMethod]
+    public void EntityHealed_ForNonPlayer_IsNotLogged()
+    {
+        var world = CreateWorld(playerEntityId: 0);
+        var eventBus = new EventBus();
+        var logPath = CreateTempLogPath();
+        try
+        {
+            using var log = new PlayerActivityLog(world, CreateComponentManager(), eventBus, logPath);
+            log.BeginFrame(1, DateTime.Now);
+
+            eventBus.Publish(new EntityHealedEvent(1, 12f, StatusEffectSource.Admin, 93f, 100f, "Regeneration"));
+
+            Assert.AreEqual(0L, new FileInfo(logPath).Length);
+        }
+        finally
+        {
+            File.Delete(logPath);
+        }
+    }
+
+    /// <summary>HealthHeal.Apply already publishes this case (player as Source, an NPC as the healed EntityId) -- this guards that the log's own filter doesn't drop it, mirroring EntityDamaged_PlayerIsSourceOfDamageToNonPlayer_IsLoggedWithTarget.</summary>
+    [TestMethod]
+    public void EntityHealed_PlayerIsSourceOfHealToNonPlayer_IsLoggedWithTarget()
+    {
+        var world = CreateWorld(playerEntityId: 0);
+        var eventBus = new EventBus();
+        var logPath = CreateTempLogPath();
+        try
+        {
+            var log = new PlayerActivityLog(world, CreateComponentManager(), eventBus, logPath);
+            log.BeginFrame(3, DateTime.Now);
+
+            eventBus.Publish(new EntityHealedEvent(5, 20f, StatusEffectSource.FromEntity(0), 88f, 100f, "Heal"));
+            log.Dispose();
+
+            var contents = File.ReadAllText(logPath);
+            StringAssert.Contains(contents, "HEAL");
+            StringAssert.Contains(contents, "amount=20");
+            StringAssert.Contains(contents, "target=5");
+        }
+        finally
+        {
+            File.Delete(logPath);
+        }
+    }
 }

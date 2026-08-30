@@ -26,7 +26,7 @@ public sealed class ActionEffectResolverTests
     private static readonly Vector3Int TargetTile = new(5, 5, 0);
     private static readonly ActionDefinition Action = new(
         Guid.NewGuid(), "Test Attack", null, "#", default, [],
-        Effects: [new ActionEffect([new DirectDamage(MinAmount: 0, MaxAmount: 0)])],
+        Effects: [new ActionEffect([new DirectDamage(MinFlatDamage: 0, MaxFlatDamage: 0)])],
         Activator: new SpellActivator(new TargetingSpec(TargetShape.SingleTarget, Range: 10), new ActionTiming(ActionTimingCategory.Immediate, ActionLockFrames: 30, CooldownFrames: null)));
     private static readonly ActionInstanceComponent Instance = new(Action.Id, damageAmount: 15, cooldownFramesRemaining: 0);
 
@@ -165,7 +165,7 @@ public sealed class ActionEffectResolverTests
 
     private static readonly ActionDefinition StrengthTaggedAction = new(
         Guid.NewGuid(), "Test Strength Attack", null, "#", default, [Tag.Strength],
-        Effects: [new ActionEffect([new DirectDamage(MinAmount: 0, MaxAmount: 0)])],
+        Effects: [new ActionEffect([new DirectDamage(MinFlatDamage: 0, MaxFlatDamage: 0)])],
         Activator: new SpellActivator(new TargetingSpec(TargetShape.SingleTarget, Range: 10), new ActionTiming(ActionTimingCategory.Immediate, ActionLockFrames: 30, CooldownFrames: null)));
     private static readonly ActionInstanceComponent StrengthTaggedInstance = new(StrengthTaggedAction.Id, damageAmount: 15, cooldownFramesRemaining: 0);
 

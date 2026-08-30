@@ -1,4 +1,5 @@
 using Engine.ECS.Components;
+using Engine.Events;
 using Engine.Utilities;
 using Game.Modules.Burning.Components;
 using Game.Modules.StatusEffects;
@@ -18,8 +19,14 @@ public static class BurningEffects
     /// <summary>🔥 (U+1F525, "fire"). Requires Symbola-Emoji.ttf loaded as a fallback font (see FontService).</summary>
     public const string Glyph = "🔥";
 
-    public static void ApplyStack(ComponentManager componentManager, int entityId, StatusEffectSource source)
+    /// <summary>No-ops entirely if entityId is currently immune to Burning (StatusEffectImmunity), or once MaxStacks is reached.</summary>
+    public static void ApplyStack(ComponentManager componentManager, int entityId, StatusEffectSource source, EventBus? eventBus = null, IPlayerQuery? playerQuery = null)
     {
+        if (StatusEffectImmunity.IsImmune(componentManager, entityId, StatusEffectType.Burning, source, eventBus, playerQuery))
+        {
+            return;
+        }
+
         var timers = componentManager.GetPackedPool<BurningTimerComponent>();
 
         if (timers.TryGetReadonly(entityId, out var existingTimer) && existingTimer.StackCount >= MaxStacks)

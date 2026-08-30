@@ -15,6 +15,11 @@ namespace Game.Modules.StatModifiers.Components;
 /// themselves eligible to be modified prevents that kind of effect from being able to target
 /// itself or chain into infinite recursion. No such effect exists yet; this pass only carries
 /// the field.
+///
+/// ConditionTag gates this modifier on the current activation's own Tags (ActionEffectContext.
+/// ActivatorTags/ItemDefinition.Tags) rather than always being active -- null means unconditional
+/// (every existing modifier). See StatModifierMath.GetEffectiveValue's activeTags parameter,
+/// the single place this is consumed.
 /// </summary>
 public struct StatModifierComponent(
     StatModifierTarget target,
@@ -23,7 +28,8 @@ public struct StatModifierComponent(
     bool canModify,
     float magnitude,
     ushort? remainingDurationFrames,
-    StatusEffectSource source)
+    StatusEffectSource source,
+    Tag? conditionTag = null)
 {
     public StatModifierTarget Target { get; } = target;
     public StatModifierOperation Operation { get; } = operation;
@@ -34,6 +40,7 @@ public struct StatModifierComponent(
     /// <summary>null means "never expires" -- StatModifierExpirySystem skips ticking/removing a modifier at this value.</summary>
     public ushort? RemainingDurationFrames { get; set; } = remainingDurationFrames;
     public StatusEffectSource Source { get; } = source;
+    public Tag? ConditionTag { get; } = conditionTag;
 
-    public override readonly string ToString() => $"Target : {Target}\nSource : {Source}\nOperation : {(Operation == StatModifierOperation.Additive ? Polarity == StatModifierPolarity.Buff ? '+' : '-' : Polarity == StatModifierPolarity.Buff ? 'x' : '÷')}{Magnitude}\nCanModify : {CanModify}\nRemainingDurationFrames : {RemainingDurationFrames}";
+    public override readonly string ToString() => $"Target : {Target}\nSource : {Source}\nOperation : {(Operation == StatModifierOperation.Additive ? Polarity == StatModifierPolarity.Buff ? '+' : '-' : Polarity == StatModifierPolarity.Buff ? 'x' : '÷')}{Magnitude}\nCanModify : {CanModify}\nRemainingDurationFrames : {RemainingDurationFrames}\nConditionTag : {(ConditionTag is { } tag ? tag.ToString() : "None")}";
 }

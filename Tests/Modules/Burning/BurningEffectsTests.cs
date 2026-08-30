@@ -19,6 +19,31 @@ public sealed class BurningEffectsTests
     }
 
     [TestMethod]
+    public void ApplyStack_EntityImmuneToBurning_DoesNotAddAStack()
+    {
+        var componentManager = CreateComponentManager();
+        componentManager.RegisterMultiPool<StatusEffectImmunityComponent>();
+        componentManager.GetMultiPool<StatusEffectImmunityComponent>().Add(0, new StatusEffectImmunityComponent(StatusEffectType.Burning, remainingDurationFrames: null));
+
+        BurningEffects.ApplyStack(componentManager, 0, StatusEffectSource.Admin);
+
+        Assert.AreEqual(0, StatusEffectQueries.CountStacks(componentManager.GetMultiPool<StatusEffectStack>(), 0, StatusEffectType.Burning));
+        Assert.IsFalse(componentManager.GetPackedPool<BurningTimerComponent>().Has(0));
+    }
+
+    [TestMethod]
+    public void ApplyStack_EntityImmuneToPoisonOnly_StillCatchesFire()
+    {
+        var componentManager = CreateComponentManager();
+        componentManager.RegisterMultiPool<StatusEffectImmunityComponent>();
+        componentManager.GetMultiPool<StatusEffectImmunityComponent>().Add(0, new StatusEffectImmunityComponent(StatusEffectType.Poison, remainingDurationFrames: null));
+
+        BurningEffects.ApplyStack(componentManager, 0, StatusEffectSource.Admin);
+
+        Assert.AreEqual(1, StatusEffectQueries.CountStacks(componentManager.GetMultiPool<StatusEffectStack>(), 0, StatusEffectType.Burning));
+    }
+
+    [TestMethod]
     public void ApplyStack_AddsAStack()
     {
         var componentManager = CreateComponentManager();

@@ -1,4 +1,5 @@
 using Engine.ECS.Components;
+using Engine.Events;
 using Engine.Utilities;
 using Game.Modules.Core.Components;
 using Game.Modules.Paralysis.Components;
@@ -29,13 +30,19 @@ public static class ParalysisEffects
     public const string Glyph = "⚡";
 
     /// <summary>
-    /// Not a stacking effect -- reapplying while already active refreshes FramesUntilNextTick to
-    /// the greater of what it already was and DurationFrames (never additive, same rule
-    /// PoisonEffects.ApplyStack uses for its own duration), and never adds a second
-    /// StatusEffectStack entry.
+    /// No-ops entirely if entityId is currently immune to Paralysis (StatusEffectImmunity).
+    /// Otherwise not a stacking effect -- reapplying while already active refreshes
+    /// FramesUntilNextTick to the greater of what it already was and DurationFrames (never
+    /// additive, same rule PoisonEffects.ApplyStack uses for its own duration), and never adds a
+    /// second StatusEffectStack entry.
     /// </summary>
-    public static void Apply(ComponentManager componentManager, int entityId, StatusEffectSource source)
+    public static void Apply(ComponentManager componentManager, int entityId, StatusEffectSource source, EventBus? eventBus = null, IPlayerQuery? playerQuery = null)
     {
+        if (StatusEffectImmunity.IsImmune(componentManager, entityId, StatusEffectType.Paralysis, source, eventBus, playerQuery))
+        {
+            return;
+        }
+
         var timers = componentManager.GetPackedPool<ParalysisTimerComponent>();
 
         if (timers.Has(entityId))

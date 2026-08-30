@@ -15,7 +15,7 @@ public static class DamagePotion
     public static ItemDefinition Build() => new(
         Id, "Volatile Concoction", "HealthPotion", "d", Color.OrangeRed,
         Tags: [Tag.Potion, Tag.Consumable],
-        Effects: [new ActionEffect([new DirectDamage(MinAmount: 20, MaxAmount: 30)])],
+        Effects: [new ActionEffect([new DirectDamage(MinFlatDamage: 20, MaxFlatDamage: 30)])],
         Description: "A viscerally unstable brew that bursts into caustic shrapnel on impact. Whatever it's made of, it was never meant to be swallowed -- throw it instead.",
         Summary: "Deals damage to target(s).",
         MaxStackSize: MaximumStackSize,

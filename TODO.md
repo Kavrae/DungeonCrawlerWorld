@@ -64,13 +64,6 @@ Reuse `Game/Modules/Inventory/` storage (a shop/chest is just another entity wit
 `InventoryItemStackComponent` stacks). Missing: trade/transfer UI and rules (pricing, restocking,
 capacity).
 
-#### ActionEffectResolver damage/heal consistency
-
-`ActionEffectResolver.Apply` scales damage through caster `OutgoingDamage` then target `IncomingDamage`
--- a real two-sided pipeline. `DirectHeal` has no equivalent (no caster/target healing modifier at all).
-Once Stats/Equipment can modify heal, add `StatModifierTarget.OutgoingHealing`/`IncomingHealing`
-mirroring the damage pair.
-
 #### Generalize ActionInstanceComponent.DamageOverride into a per-action override system
 
 Today only `DamageAmount` can be overridden per-instance (set at grant time, e.g. Goblin's Punch).
@@ -280,23 +273,14 @@ Example FreeCast/Immediate ability raising the caster's own outgoing damage for 
 
 Self-targeted, combining a timed `StatModifierGrant(IncomingDamage, ...)` (fully supported today) with
 a periodic self-heal built like Burning/Poison's DoT (`TimerBasedAuraApplier<T>`, healing instead of
-damaging). Motivates finishing ActionEffectResolver damage/heal consistency above -- the regen tick
-would have no incoming/outgoing healing modifier in the chain at all until that lands.
+damaging). The regen tick can now carry `IncomingHealing`/`OutgoingHealing` through the chain the same
+way DirectHeal does (`HealthHeal.ComputeAmount`).
 
 #### FreeCast toggle-aura ability
 
 Item side landed (Toxic Idol, `IMPLEMENTATION-NOTES.md`). Still want the actual FreeCast *ability*
 version (usable during an Action Lock) for that specific coverage, and to remove the "costs a stack to
 toggle off" quirk (see Toggle item activator above).
-
-#### Targeted body part damage and multi-part effects
-
-Replace Body Parts' current random-part hit (`IMPLEMENTATION-NOTES.md`) with real per-part targeting: a
-single-target attack lands on a chosen part (needs a targeting UI, not designed here); an area/
-environmental effect resolves by its own rule (lava hits legs; a Fireball's Burst hits every part
-equally) instead of one random winner. Needs `ActionEffect`/`IActionEffectEntry` to carry an optional
-body-part-selection rule (`Random` default, `Lowest`/`AllParts`/a specific `BodyPartType`).
-`ActionEffectResolver.Apply`'s modifier chain would run once per selected part.
 
 #### BodyPartType categorization -- lifting/pickup still open
 

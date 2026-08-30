@@ -22,6 +22,32 @@ public sealed class ParalysisEffectsTests
     }
 
     [TestMethod]
+    public void Apply_EntityImmuneToParalysis_DoesNotAddAStackOrLockActions()
+    {
+        var componentManager = CreateComponentManager();
+        componentManager.RegisterMultiPool<StatusEffectImmunityComponent>();
+        componentManager.GetMultiPool<StatusEffectImmunityComponent>().Add(0, new StatusEffectImmunityComponent(StatusEffectType.Paralysis, remainingDurationFrames: null));
+
+        ParalysisEffects.Apply(componentManager, 0, StatusEffectSource.Admin);
+
+        Assert.AreEqual(0, StatusEffectQueries.CountStacks(componentManager.GetMultiPool<StatusEffectStack>(), 0, StatusEffectType.Paralysis));
+        Assert.IsFalse(componentManager.GetPackedPool<ParalysisTimerComponent>().Has(0));
+        Assert.AreEqual(0, componentManager.GetPackedPool<ActionLockComponent>().GetReadonly(0).CurrentLockFramesRemaining);
+    }
+
+    [TestMethod]
+    public void Apply_EntityImmuneToPoisonOnly_StillGetsParalyzed()
+    {
+        var componentManager = CreateComponentManager();
+        componentManager.RegisterMultiPool<StatusEffectImmunityComponent>();
+        componentManager.GetMultiPool<StatusEffectImmunityComponent>().Add(0, new StatusEffectImmunityComponent(StatusEffectType.Poison, remainingDurationFrames: null));
+
+        ParalysisEffects.Apply(componentManager, 0, StatusEffectSource.Admin);
+
+        Assert.AreEqual(1, StatusEffectQueries.CountStacks(componentManager.GetMultiPool<StatusEffectStack>(), 0, StatusEffectType.Paralysis));
+    }
+
+    [TestMethod]
     public void Apply_NewEntity_AddsAStack()
     {
         var componentManager = CreateComponentManager();

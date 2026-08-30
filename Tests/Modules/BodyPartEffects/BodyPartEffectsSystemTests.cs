@@ -1,4 +1,5 @@
 using Engine.ECS.Components.Stores;
+using Game.Modules;
 using Game.Modules.BodyPartEffects.Components;
 using Game.Modules.BodyPartEffects.Systems;
 using Game.Modules.Health.Components;
@@ -158,7 +159,7 @@ public sealed class BodyPartEffectsSystemTests
     }
 
     [TestMethod]
-    public void Update_OneDamagedArm_GrantsProportionalMeleeOutgoingDamageModifier()
+    public void Update_OneDamagedArm_GrantsProportionalMeleeConditionalOutgoingDamageModifier()
     {
         var bodyParts = CreateBodyPartsPool();
         var statModifiers = CreateStatModifiersPool();
@@ -167,7 +168,8 @@ public sealed class BodyPartEffectsSystemTests
 
         system.Update(default, 0);
 
-        Assert.AreEqual(50f, StatModifierMath.GetEffectiveValue(statModifiers, 0, StatModifierTarget.MeleeOutgoingDamage, 100f), 0.01f, "50% HP arm -> 0.5x melee damage.");
+        Assert.AreEqual(50f, StatModifierMath.GetEffectiveValue(statModifiers, 0, StatModifierTarget.OutgoingDamage, 100f, [Tag.Melee]), 0.01f, "50% HP arm -> 0.5x melee damage.");
+        Assert.AreEqual(100f, StatModifierMath.GetEffectiveValue(statModifiers, 0, StatModifierTarget.OutgoingDamage, 100f), 0.01f, "Untouched without Tag.Melee in the active tags -- this grant is melee-conditional.");
     }
 
     [TestMethod]
@@ -181,7 +183,7 @@ public sealed class BodyPartEffectsSystemTests
 
         system.Update(default, 0);
 
-        Assert.AreEqual(25f, StatModifierMath.GetEffectiveValue(statModifiers, 0, StatModifierTarget.MeleeOutgoingDamage, 100f), 0.01f, "0.5 * 0.5 = 0.25x, not 0.5x.");
+        Assert.AreEqual(25f, StatModifierMath.GetEffectiveValue(statModifiers, 0, StatModifierTarget.OutgoingDamage, 100f, [Tag.Melee]), 0.01f, "0.5 * 0.5 = 0.25x, not 0.5x.");
     }
 
     [TestMethod]
@@ -197,7 +199,7 @@ public sealed class BodyPartEffectsSystemTests
         system.Update(default, 0);
 
         Assert.IsTrue(meleeDisabled.Has(0));
-        Assert.IsFalse(TryGetModifier(statModifiers, 0, StatModifierTarget.MeleeOutgoingDamage, out _));
+        Assert.IsFalse(TryGetModifier(statModifiers, 0, StatModifierTarget.OutgoingDamage, out _));
     }
 
     [TestMethod]

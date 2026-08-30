@@ -1,5 +1,6 @@
 using Engine.ECS.Components.Stores;
 using Engine.ECS.Systems;
+using Engine.Events;
 using Engine.Utilities;
 using Game.Modules.AbilityScores;
 using Game.Modules.AbilityScores.Components;
@@ -9,7 +10,7 @@ using Game.Modules.ProcessingTier;
 using Game.Modules.ProcessingTier.Components;
 using Game.Modules.StatModifiers;
 using Game.Modules.StatModifiers.Components;
-using Microsoft.Xna.Framework;
+using Game.World;
 
 namespace Game.Modules.Health.Systems;
 
@@ -30,6 +31,8 @@ public sealed class SimpleHealthRegenSystem : ISystem
     private readonly MultiComponentPool<StatModifierComponent>? _statModifiers;
     private readonly PackedComponentPool<DeadComponent>? _deadEntities;
     private readonly MultiComponentPool<AbilityScoreComponent>? _abilityScores;
+    private readonly EventBus? _eventBus;
+    private readonly IPlayerQuery? _playerQuery;
     private readonly TieredEntityStripeSet _tieredStripeSet;
 
     public SimpleHealthRegenSystem(
@@ -38,34 +41,28 @@ public sealed class SimpleHealthRegenSystem : ISystem
         ProcessingTierEvents processingTierEvents,
         MultiComponentPool<StatModifierComponent>? statModifiers = null,
         PackedComponentPool<DeadComponent>? deadEntities = null,
-        MultiComponentPool<AbilityScoreComponent>? abilityScores = null)
+        MultiComponentPool<AbilityScoreComponent>? abilityScores = null,
+        EventBus? eventBus = null,
+        IPlayerQuery? playerQuery = null)
     {
         _healthComponents = healthComponents;
         _processingTiers = processingTiers;
         _statModifiers = statModifiers;
         _deadEntities = deadEntities;
         _abilityScores = abilityScores;
+        _eventBus = eventBus;
+        _playerQuery = playerQuery;
 
         _tieredStripeSet = ProcessingTierWiring.CreateAndWire(StripeCount, healthComponents, processingTiers, processingTierEvents);
     }
 
-    /// <summary>Updates the current health of all entities in the current stripe by the regen amount.</summary>
+    /// <summary>Updates the current health of all entities in the current stripe by the regen amount, routed through HealthHeal.Apply (sourceEntityId: entityId, a self-heal) so a regen tick carries Outgoing/IncomingHealing modifiers the same way any other heal does.</summary>
     /// <param name="time"></param>
     /// <param name="stripeIndex"></param>
     public void Update(EngineTime time, byte stripeIndex)
     {
-        // Reused across every due entity in this Update call, not re-stackalloc'd per entity --
-        // each iteration overwrites both entries before reading them.
-        Span<(StatModifierTarget Target, float BaseValue)> pairs = stackalloc (StatModifierTarget, float)[2];
-        Span<float> effectiveValues = stackalloc float[2];
-
         foreach (var entityId in _tieredStripeSet.GetDueEntities(time.FrameCount))
         {
-            if (!_healthComponents.TryGetReadonly(entityId, out var currentHealthComponent))
-            {
-                continue;
-            }
-
             // A corpse shouldn't regenerate back above 0.
             if (_deadEntities?.Has(entityId) == true)
             {
@@ -86,22 +83,14 @@ public sealed class SimpleHealthRegenSystem : ISystem
 
             var amountPerSecond = AbilityScoreMath.Lerp(constitution.Total, MinHealthRegenPerSecond, MaxHealthRegenPerSecond);
             var rawAmount = amountPerSecond * secondsPerVisit;
-
-            pairs[0] = (StatModifierTarget.MaximumHealth, currentHealthComponent.MaximumHealth);
-            pairs[1] = (StatModifierTarget.HealthRegen, rawAmount);
-            StatModifierMath.GetEffectiveValues(_statModifiers, entityId, pairs, effectiveValues);
-            var effectiveMaximumHealth = effectiveValues[0];
-            var effectiveRegen = effectiveValues[1];
+            var effectiveRegen = StatModifierMath.GetEffectiveValue(_statModifiers, entityId, StatModifierTarget.HealthRegen, rawAmount);
 
             if (effectiveRegen == 0f)
             {
                 continue;
             }
 
-            _healthComponents.TryUpdate(entityId, (effectiveRegen, effectiveMaximumHealth), static (ref SimpleHealthComponent healthComponent, (float EffectiveRegen, float EffectiveMaximumHealth) state) =>
-            {
-                healthComponent.CurrentHealth = MathHelper.Clamp(healthComponent.CurrentHealth + state.EffectiveRegen, 0f, state.EffectiveMaximumHealth);
-            });
+            HealthHeal.Apply(_healthComponents, entityId, percentOfMaxHealth: 0f, _statModifiers, flatAmount: effectiveRegen, sourceEntityId: entityId, eventBus: _eventBus, playerQuery: _playerQuery, healType: "Regeneration");
         }
     }
 }

@@ -51,19 +51,79 @@ Full record: `PLAN-body-parts.md`.
   of summed total.
 - Non-vital part at 0 -> `IsDisabled` + 10s regen lockout (not death). Nothing reads `IsDisabled` for
   gameplay beyond the Limb-specific-penalties note below.
-- Damage picks one random part (`BodyPartSelection.PickRandom`) -- real per-part targeting still open.
-- `HealthDamage.Apply`/`HealthHeal.Apply` dispatch Simple/Complex; heal broadcasts a fraction to every
-  part (unlike regen's single-part focus).
+- `HealthDamage.Apply`/`HealthHeal.Apply` dispatch Simple/Complex; targeting mode (single part --
+  random/most-damaged/a specific type -- or every part at once) is now shared by damage and heal, see
+  "Damage/heal modifier & targeting consistency" below.
 
 ### Limb-specific gameplay penalties
 
 Full record: `PLAN-body-part-gameplay-effects.md`. `Game/Modules/BodyPartEffects/BodyPartEffectsSystem`:
 Leg/Foot condition -> `StatModifierTarget.MovementLockFrames` (MovementSystem); Arm/Hand condition ->
-`StatModifierTarget.MeleeOutgoingDamage` (DirectDamage, Tag.Melee only). Each damaged part's own
-linear-lerp penalty (1x-2x lock, 1x-0x damage by HP%) compounds multiplicatively across however many
-parts the entity has. All-parts-disabled -> hard block (`MovementDisabledComponent`/
-`MeleeDisabledComponent`) replaces the multiplier. `BodyPartType.Wing` suppresses the penalty entirely
-(unused by any race yet). Movement/melee consumption landed; lifting/pickup gating still open.
+`StatModifierTarget.OutgoingDamage` scoped to `ConditionTag: Tag.Melee` (DirectDamage -- see below).
+Each damaged part's own linear-lerp penalty (1x-2x lock, 1x-0x damage by HP%) compounds multiplicatively
+across however many parts the entity has. All-parts-disabled -> hard block
+(`MovementDisabledComponent`/`MeleeDisabledComponent`) replaces the multiplier. `BodyPartType.Wing`
+suppresses the penalty entirely (unused by any race yet). Movement/melee consumption landed;
+lifting/pickup gating still open.
+
+### Damage/heal modifier & targeting consistency
+
+Full record: this session. `StatModifierComponent.ConditionTag` (a `Tag?`) generalizes "this modifier
+only applies to e.g. melee/healing/potion activations" -- `StatModifierMath.GetEffectiveValue(s)` take
+an optional `activeTags` and skip a modifier whose `ConditionTag` isn't in that list. Replaced the old
+one-off `StatModifierTarget.MeleeOutgoingDamage` special case entirely (now `OutgoingDamage` +
+`ConditionTag: Tag.Melee`); `BodyPartEffectsSystem`'s own grant/find/remove now key off
+`(Target, ConditionTag)` together, not `Target` alone, since a player-granted modifier can now share a
+target with a body-part-condition-granted one.
+- `StatModifierTarget.OutgoingHealing`/`IncomingHealing` mirror `OutgoingDamage`/`IncomingDamage`;
+  `HealthHeal.ComputeAmount` is the shared flat+percent-then-modifier-chain calculation both the Simple
+  path and every `ComplexHealthHeal` path call.
+- `DirectDamage`/`DirectHeal` both take `PercentOfMaxHealth` (of the modifier-effective max health,
+  `HealthQueries.TryGetEffectiveMaximum`) alongside their existing flat amount (`MinAmount`/`MaxAmount`
+  roll, `FlatAmount`) -- combined into one base amount before any other modifier runs.
+- `BodyPartTargetMode` (`SingleTarget`/`LowestPercentage`/`All`) is shared by both effects.
+  `SingleTarget` (default for damage) keeps today's random-or-specific-type-with-fallback behavior.
+  `LowestPercentage` targets the single most-damaged part (`BodyPartSelection.PickLowestPercentage`,
+  previously only reachable by passive regen). `All` (default for heal, preserving every existing
+  potion/scroll's "heals everyone" behavior) computes the total **once** against the entity's overall
+  effective max, then splits it evenly across however many parts exist -- deliberately not a per-part
+  percentage, so a flat amount (or an additive modifier) isn't multiplied by body-part count.
+  `ComplexHealthDamage.ApplyToAllParts`/`ComplexHealthHeal.ApplyToAllParts` are the respective
+  implementations; damage publishes one aggregate `EntityDamagedEvent`/`EntityDiedEvent` pair for the
+  whole hit rather than one per part (`BodyPartDamageEffects.PublishAggregateDamageEvents`).
+- **Status effect version** (prevention/effectiveness/duration for Poison/Burning and any timed
+  `StatModifierComponent` grant): `StatusEffectImmunityComponent` (`Game/Modules/StatusEffects/`) is
+  a hard on/off gate, not a StatModifier scale -- timed (`RemainingDurationFrames`, null =
+  permanent, ticked by the new `StatusEffectImmunityExpirySystem`) or permanent, checked by
+  `StatusEffectImmunity.IsImmune` at the true chokepoint each effect already funnels every grant
+  through (`PoisonEffects.ApplyStack`, `BurningEffects.ApplyStack`,
+  `BurningAuraApplier.ApplyBodyPartScopedStack`, `ParalysisEffects.Apply`). `StatusEffectsModule` is now an `IGameModule` (was
+  a plain `IModule`) purely to reach `ProcessingTierEvents` in `Configure` for that expiry system --
+  any test building an `EcsContext` via the raw `Engine.Bootstrapper.Build` (not `GameBootstrapper`)
+  must now call `.Configure(context)` on it too, same as every other `IGameModule` in that list
+  (see `FloorBuilderTests.BuildEcsContext`). `Tag.Poison` (new) and `Tag.Fire` (already existed) are
+  now threaded as `damageTags`/`activeTags` into Poison/Burning's own `HealthDamage.Apply`/
+  `StatModifierMath.GetEffectiveValue` calls, so a `ConditionTag`-scoped `IncomingDamage` modifier
+  reduces one damage type specifically -- no new `StatModifierTarget` needed for that pillar.
+  `StatModifierTarget.Outgoing/IncomingBuffDuration` and `Outgoing/IncomingDebuffDuration` (4, split
+  by the granted modifier's own `Polarity`) scale a `StatModifierGrant`'s `DurationFrames` and
+  `PoisonEffects.ApplyStack`'s own `durationInTicks` (unconditional there -- an aura-refreshed grant
+  has no real activator to scope a `ConditionTag` against). Burning has no independent duration to
+  scale (a stack's own decay -- one removed per tick -- is its only duration signal, and that same
+  `StackCount` also drives its damage) -- deliberately not attempted. Two real, catalog-registered
+  test potions (`ImmunityTestPotion`/`ResistanceTestPotion`, granted `quantity: 5` in
+  `PlayerBlueprint` like every other starting potion) exercise all three pillars end-to-end.
+- `EntityHealedEvent` mirrors `EntityDamagedEvent` (player-involved-only, consumed by
+  `PlayerActivityLog`'s new `HEAL` log line) -- published by `HealthHeal.Apply`/`ComplexHealthHeal` when
+  both an `EventBus` and `IPlayerQuery` are supplied (both optional, unlike `HealthDamage.Apply`'s
+  required `eventBus`, since most low-level heal callers/tests have no need to observe one landing).
+- `SimpleHealthRegenSystem`/`ComplexHealthRegenSystem` now route their own periodic tick through
+  `HealthHeal.Apply` (`flatAmount`: the live Constitution-derived amount, `sourceEntityId`: the
+  entity itself -- a self-heal) instead of mutating health inline, so a regen tick also carries
+  `OutgoingHealing`/`IncomingHealing` and logs a `HEAL type=Regeneration` line. `ComplexHealthRegenSystem`
+  now takes a `PackedComponentPool<SimpleHealthComponent>` purely to satisfy `HealthHeal.Apply`'s
+  Simple-vs-Complex dispatch check (always resolves Complex for the body-parts-only entities it
+  drives) -- mirrors `ComplexHealthDamage.Apply`'s identical requirement.
 
 ### Corpse looting
 

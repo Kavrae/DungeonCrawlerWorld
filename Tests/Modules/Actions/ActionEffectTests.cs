@@ -57,7 +57,7 @@ public sealed class ActionEffectTests
         health.Add(TargetEntityId, new SimpleHealthComponent(100, 100));
         var mathUtility = new MathUtility(new NeverCritRandom());
 
-        new DirectDamage(MinAmount: 10, MaxAmount: 10).Apply(Context(componentManager, health, eventBus, mathUtility));
+        new DirectDamage(MinFlatDamage: 10, MaxFlatDamage: 10).Apply(Context(componentManager, health, eventBus, mathUtility));
 
         Assert.AreEqual(90, health.GetReadonly(TargetEntityId).CurrentHealth);
     }
@@ -69,7 +69,7 @@ public sealed class ActionEffectTests
         health.Add(TargetEntityId, new SimpleHealthComponent(100, 100));
         var mathUtility = new MathUtility(new NeverCritRandom());
 
-        new DirectDamage(MinAmount: 999, MaxAmount: 999).Apply(Context(componentManager, health, eventBus, mathUtility, damageOverride: 10));
+        new DirectDamage(MinFlatDamage: 999, MaxFlatDamage: 999).Apply(Context(componentManager, health, eventBus, mathUtility, damageOverride: 10));
 
         Assert.AreEqual(90, health.GetReadonly(TargetEntityId).CurrentHealth, "The 999-999 catalog range must be ignored entirely once DamageOverride is set.");
     }
@@ -81,7 +81,7 @@ public sealed class ActionEffectTests
         health.Add(TargetEntityId, new SimpleHealthComponent(100, 100));
         var mathUtility = new MathUtility(new AlwaysCritRandom());
 
-        new DirectDamage(MinAmount: 10, MaxAmount: 10).Apply(Context(componentManager, health, eventBus, mathUtility));
+        new DirectDamage(MinFlatDamage: 10, MaxFlatDamage: 10).Apply(Context(componentManager, health, eventBus, mathUtility));
 
         // 10 base * CritMath.BaseCritMultiplier (3x) = 30.
         Assert.AreEqual(70, health.GetReadonly(TargetEntityId).CurrentHealth);
@@ -94,7 +94,7 @@ public sealed class ActionEffectTests
         health.Add(TargetEntityId, new SimpleHealthComponent(100, 100));
         var mathUtility = new MathUtility(new NeverCritRandom());
 
-        new DirectDamage(MinAmount: 0, MaxAmount: 0).Apply(Context(componentManager, health, eventBus, mathUtility));
+        new DirectDamage(MinFlatDamage: 0, MaxFlatDamage: 0).Apply(Context(componentManager, health, eventBus, mathUtility));
 
         Assert.AreEqual(100, health.GetReadonly(TargetEntityId).CurrentHealth);
     }
@@ -109,7 +109,7 @@ public sealed class ActionEffectTests
         var mathUtility = new MathUtility(new NeverCritRandom());
         var context = Context(componentManager, health, eventBus, mathUtility) with { BodyParts = bodyParts };
 
-        new DirectDamage(MinAmount: 10, MaxAmount: 10).Apply(context);
+        new DirectDamage(MinFlatDamage: 10, MaxFlatDamage: 10).Apply(context);
 
         var part = bodyParts.GetReadonlyByDenseIndex(bodyParts.GetFirstDenseIndex(TargetEntityId));
         Assert.AreEqual("Torso", part.Name);
@@ -128,7 +128,7 @@ public sealed class ActionEffectTests
         var mathUtility = new MathUtility(new NeverCritRandom());
         var context = Context(componentManager, health, eventBus, mathUtility) with { BodyParts = bodyParts };
 
-        new DirectDamage(MinAmount: 10, MaxAmount: 10, TargetBodyPartType: BodyPartType.Head).Apply(context);
+        new DirectDamage(MinFlatDamage: 10, MaxFlatDamage: 10, TargetBodyPartType: BodyPartType.Head).Apply(context);
 
         var headDenseIndex = BodyPartSelection.PickByType(bodyParts, TargetEntityId, BodyPartType.Head);
         Assert.AreEqual(20, bodyParts.GetReadonlyByDenseIndex(headDenseIndex).CurrentHealth);
@@ -137,7 +137,7 @@ public sealed class ActionEffectTests
     }
 
     [TestMethod]
-    public void DirectHeal_ComplexTarget_HealsEveryPartByFraction_InsteadOfHealthHealApply()
+    public void DirectHeal_ComplexTarget_SplitsOneTotalEvenlyAcrossParts_InsteadOfPerPartFraction()
     {
         var (componentManager, health, eventBus) = Build();
         componentManager.RegisterMultiPool<BodyPartComponent>();
@@ -149,11 +149,13 @@ public sealed class ActionEffectTests
 
         new DirectHeal(0.5f).Apply(context);
 
+        // Total = 50% of the entity's overall max (20+60=80) = 40, split evenly across 2 parts =
+        // 20 each -- Head: 10+20=30, clamped to its own max of 20. Torso: 30+20=50 (under its max of 60).
         for (var denseIndex = bodyParts.GetFirstDenseIndex(TargetEntityId); denseIndex != -1; denseIndex = bodyParts.GetNextDenseIndex(denseIndex))
         {
             var part = bodyParts.GetReadonlyByDenseIndex(denseIndex);
-            var expected = part.Name == "Head" ? 20f : 60f; // Both rise by 50% of their own max -- Head to full, Torso from 30 to 60 (also full).
-            Assert.AreEqual(expected, part.CurrentHealth, $"Part {part.Name} should have healed by 50% of its own MaximumHealth.");
+            var expected = part.Name == "Head" ? 20f : 50f;
+            Assert.AreEqual(expected, part.CurrentHealth, $"Part {part.Name} should have received an equal absolute share of the total heal, clamped at its own max.");
         }
     }
 

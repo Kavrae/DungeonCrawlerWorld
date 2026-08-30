@@ -2,12 +2,15 @@
 using Engine.ECS.Systems;
 using Engine.Events;
 using Engine.Math;
+using Game.Modules;
 using Game.Modules.Burning;
 using Game.Modules.Burning.Components;
 using Game.Modules.Burning.Systems;
 using Game.Modules.Health.Components;
 using Game.Modules.ProcessingTier;
 using Game.Modules.ProcessingTier.Components;
+using Game.Modules.StatModifiers;
+using Game.Modules.StatModifiers.Components;
 using Game.Modules.StatusEffects;
 using Game.Modules.StatusEffects.Components;
 using Game.World;
@@ -77,6 +80,50 @@ public sealed class BurningSystemTests
 
         Assert.AreEqual(93, health.GetReadonly(0).CurrentHealth);
         Assert.AreEqual(6, StatusEffectQueries.CountStacks(stacks, 0, StatusEffectType.Burning));
+    }
+
+    [TestMethod]
+    public void Update_ConditionalIncomingDamageDebuffScopedToFire_ReducesDamage()
+    {
+        var timers = CreateTimerPool();
+        var stacks = CreateStackPool();
+        var health = CreateHealthPool();
+        health.Add(0, new SimpleHealthComponent(currentHealth: 100, maximumHealth: 100));
+        for (var i = 0; i < 10; i++)
+        {
+            stacks.Add(0, new StatusEffectStack(StatusEffectType.Burning, StatusEffectSource.Admin));
+        }
+        timers.Add(0, new BurningTimerComponent(1, stackCount: 10));
+        var statModifiers = new MultiComponentPool<StatModifierComponent>(maximumEntityCount: 10, initialCapacity: 4);
+        statModifiers.Add(0, new StatModifierComponent(StatModifierTarget.IncomingDamage, StatModifierOperation.Multiplicative, StatModifierPolarity.Buff,
+            canModify: false, magnitude: -0.5f, remainingDurationFrames: null, StatusEffectSource.Admin, Tag.Fire));
+        var system = new BurningSystem(timers, stacks, health, new EventBus(), new FakePlayerQuery(0), CreateTiersPool(), new ProcessingTierEvents(), new MathUtility(), statModifiers);
+
+        system.Update(default, 0);
+
+        Assert.AreEqual(95, health.GetReadonly(0).CurrentHealth, "10 * 0.5 = 5 damage taken.");
+    }
+
+    [TestMethod]
+    public void Update_UnconditionalIncomingDamageDebuff_StillReducesBurningDamage()
+    {
+        var timers = CreateTimerPool();
+        var stacks = CreateStackPool();
+        var health = CreateHealthPool();
+        health.Add(0, new SimpleHealthComponent(currentHealth: 100, maximumHealth: 100));
+        for (var i = 0; i < 10; i++)
+        {
+            stacks.Add(0, new StatusEffectStack(StatusEffectType.Burning, StatusEffectSource.Admin));
+        }
+        timers.Add(0, new BurningTimerComponent(1, stackCount: 10));
+        var statModifiers = new MultiComponentPool<StatModifierComponent>(maximumEntityCount: 10, initialCapacity: 4);
+        statModifiers.Add(0, new StatModifierComponent(StatModifierTarget.IncomingDamage, StatModifierOperation.Multiplicative, StatModifierPolarity.Buff,
+            canModify: false, magnitude: -0.5f, remainingDurationFrames: null, StatusEffectSource.Admin));
+        var system = new BurningSystem(timers, stacks, health, new EventBus(), new FakePlayerQuery(0), CreateTiersPool(), new ProcessingTierEvents(), new MathUtility(), statModifiers);
+
+        system.Update(default, 0);
+
+        Assert.AreEqual(95, health.GetReadonly(0).CurrentHealth, "Unconditional IncomingDamage debuffs apply regardless of ConditionTag.");
     }
 
     /// <summary>

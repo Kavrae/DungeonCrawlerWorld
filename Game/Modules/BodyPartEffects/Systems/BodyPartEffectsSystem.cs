@@ -20,7 +20,9 @@ namespace Game.Modules.BodyPartEffects.Systems;
 /// <remarks>
 /// Each due entity's own Leg/Foot parts compound multiplicatively (per-part 1x at 100% HP up to
 /// 2x at 0% HP) into a single StatModifierTarget.MovementLockFrames debuff; Arm/Hand parts
-/// compound (per-part 1x down to 0x) into StatModifierTarget.MeleeOutgoingDamage. A non-disabled
+/// compound (per-part 1x down to 0x) into a StatModifierTarget.OutgoingDamage debuff scoped to
+/// Tag.Melee via StatModifierComponent.ConditionTag (melee-only, unlike the movement debuff
+/// above, which applies unconditionally). A non-disabled
 /// Wing part suppresses the leg penalty (and the hard block below) entirely, checked before
 /// either. Every Leg/Foot (or Arm/Hand) simultaneously disabled grants a hard-block marker
 /// (MovementDisabledComponent/MeleeDisabledComponent) instead of just an extreme multiplier --
@@ -141,7 +143,7 @@ public sealed class BodyPartEffectsSystem : ISystem
         if (!anyArmOrHand)
         {
             _meleeDisabled.Remove(entityId);
-            RemoveModifier(entityId, StatModifierTarget.MeleeOutgoingDamage);
+            RemoveModifier(entityId, StatModifierTarget.OutgoingDamage, Tag.Melee);
             return;
         }
 
@@ -152,19 +154,19 @@ public sealed class BodyPartEffectsSystem : ISystem
                 _meleeDisabled.Add(entityId, default);
             }
 
-            RemoveModifier(entityId, StatModifierTarget.MeleeOutgoingDamage);
+            RemoveModifier(entityId, StatModifierTarget.OutgoingDamage, Tag.Melee);
             return;
         }
 
         _meleeDisabled.Remove(entityId);
-        SyncModifier(entityId, StatModifierTarget.MeleeOutgoingDamage, combinedMultiplier);
+        SyncModifier(entityId, StatModifierTarget.OutgoingDamage, combinedMultiplier, Tag.Melee);
     }
 
     private static float HealthFraction(in BodyPartComponent part) =>
         part.MaximumHealth > 0 ? MathHelper.Clamp(part.CurrentHealth / part.MaximumHealth, 0f, 1f) : 0f;
 
     /// <summary>Grants/updates/removes this system's own permanent multiplicative StatModifierComponent for target, so its effective value equals baseValue * combinedMultiplier (see StatModifierMath's own additive-then-multiplicative formula) -- StatModifierComponent's fields are get-only, so an actual change always means remove-then-re-add rather than an in-place magnitude edit.</summary>
-    private void SyncModifier(int entityId, StatModifierTarget target, float combinedMultiplier)
+    private void SyncModifier(int entityId, StatModifierTarget target, float combinedMultiplier, Tag? conditionTag = null)
     {
         if (_statModifiers is null)
         {
@@ -172,7 +174,7 @@ public sealed class BodyPartEffectsSystem : ISystem
         }
 
         var desiredMagnitude = combinedMultiplier - 1f;
-        var existingDenseIndex = FindModifierDenseIndex(entityId, target, out var existingMagnitude);
+        var existingDenseIndex = FindModifierDenseIndex(entityId, target, conditionTag, out var existingMagnitude);
 
         if (System.Math.Abs(desiredMagnitude) <= ModifierMagnitudeEpsilon)
         {
@@ -195,30 +197,36 @@ public sealed class BodyPartEffectsSystem : ISystem
         }
 
         _statModifiers.Add(entityId, new StatModifierComponent(
-            target, StatModifierOperation.Multiplicative, StatModifierPolarity.Debuff, canModify: false, desiredMagnitude, remainingDurationFrames: null, StatusEffectSource.Admin));
+            target, StatModifierOperation.Multiplicative, StatModifierPolarity.Debuff, canModify: false, desiredMagnitude, remainingDurationFrames: null, StatusEffectSource.Admin, conditionTag));
     }
 
-    private void RemoveModifier(int entityId, StatModifierTarget target)
+    private void RemoveModifier(int entityId, StatModifierTarget target, Tag? conditionTag = null)
     {
         if (_statModifiers is null)
         {
             return;
         }
 
-        var denseIndex = FindModifierDenseIndex(entityId, target, out _);
+        var denseIndex = FindModifierDenseIndex(entityId, target, conditionTag, out _);
         if (denseIndex != -1)
         {
             _statModifiers.RemoveByDenseIndex(denseIndex);
         }
     }
 
-    /// <summary>Target alone is enough to identify "this system's own grant" -- MovementLockFrames/MeleeOutgoingDamage exist solely for this system, nothing else ever grants against them.</summary>
-    private int FindModifierDenseIndex(int entityId, StatModifierTarget target, out float magnitude)
+    /// <summary>
+    /// Matches on (Target, ConditionTag) together, not Target alone -- MovementLockFrames is still
+    /// unconditional and unique to this system, but OutgoingDamage is not: a player-granted melee
+    /// buff can also target OutgoingDamage (with its own, different ConditionTag/no condition at
+    /// all), and matching by Target alone would find/clobber that unrelated modifier instead of
+    /// this system's own Tag.Melee-scoped grant.
+    /// </summary>
+    private int FindModifierDenseIndex(int entityId, StatModifierTarget target, Tag? conditionTag, out float magnitude)
     {
         for (var denseIndex = _statModifiers!.GetFirstDenseIndex(entityId); denseIndex != -1; denseIndex = _statModifiers.GetNextDenseIndex(denseIndex))
         {
             ref readonly var modifier = ref _statModifiers.GetReadonlyByDenseIndex(denseIndex);
-            if (modifier.Target == target)
+            if (modifier.Target == target && modifier.ConditionTag == conditionTag && modifier.Source.Kind == StatusEffectSourceKind.Admin)
             {
                 magnitude = modifier.Magnitude;
                 return denseIndex;

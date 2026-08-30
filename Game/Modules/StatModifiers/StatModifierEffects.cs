@@ -16,10 +16,11 @@ public static class StatModifierEffects
         bool canModify,
         float magnitude,
         ushort? durationFrames,
-        StatusEffectSource source)
+        StatusEffectSource source,
+        Tag? conditionTag = null)
     {
         componentManager.GetMultiPool<StatModifierComponent>().Add(entityId, new StatModifierComponent(
-            target, operation, polarity, canModify, magnitude, durationFrames, source));
+            target, operation, polarity, canModify, magnitude, durationFrames, source, conditionTag));
 
         if (durationFrames != null)
         {

@@ -1,5 +1,6 @@
 using Engine.ECS.Components;
 using Engine.ECS.Systems;
+using Engine.Events;
 using Engine.Math;
 using Game.Modules.AbilityScores.Components;
 using Game.Modules.Death.Components;
@@ -8,6 +9,7 @@ using Game.Modules.Health.Systems;
 using Game.Modules.ProcessingTier;
 using Game.Modules.ProcessingTier.Components;
 using Game.Modules.StatModifiers.Components;
+using Game.World;
 using Microsoft.Xna.Framework;
 
 namespace Game.Modules.Health;
@@ -20,11 +22,15 @@ public sealed class HealthModule : IGameModule
 
     private ProcessingTierEvents _processingTierEvents = null!;
     private MathUtility _mathUtility = null!;
+    private EventBus _eventBus = null!;
+    private IPlayerQuery? _playerQuery;
 
     public void Configure(GameModuleContext context)
     {
         _processingTierEvents = context.ProcessingTierEvents;
         _mathUtility = context.MathUtility;
+        _eventBus = context.EventBus;
+        _playerQuery = context.PlayerQuery;
     }
 
     public void RegisterComponents(ComponentManager componentManager)
@@ -72,16 +78,21 @@ public sealed class HealthModule : IGameModule
             _processingTierEvents,
             statModifiers,
             deadEntities,
-            abilityScores));
+            abilityScores,
+            _eventBus,
+            _playerQuery));
 
         // Always registered -- RegisterComponents always calls RegisterMultiPool<BodyPartComponent>(), unlike the genuinely-optional pools above.
         systemManager.Register(new ComplexHealthRegenSystem(
             componentManager.GetMultiPool<BodyPartComponent>(),
+            componentManager.GetPackedPool<SimpleHealthComponent>(),
             componentManager.GetDirectPool<ProcessingTierComponent>(),
             _processingTierEvents,
             statModifiers,
             deadEntities,
             abilityScores,
-            bodyPartBurningTimers));
+            bodyPartBurningTimers,
+            _eventBus,
+            _playerQuery));
     }
 }

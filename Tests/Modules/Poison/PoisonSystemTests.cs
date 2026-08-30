@@ -1,10 +1,13 @@
 ﻿using Engine.ECS.Components.Stores;
 using Engine.Events;
 using Engine.Math;
+using Game.Modules;
 using Game.Modules.Health.Components;
 using Game.Modules.Poison;
 using Game.Modules.Poison.Components;
 using Game.Modules.Poison.Systems;
+using Game.Modules.StatModifiers;
+using Game.Modules.StatModifiers.Components;
 using Game.Modules.StatusEffects;
 using Game.Modules.StatusEffects.Components;
 using Game.World;
@@ -208,6 +211,42 @@ public sealed class PoisonSystemTests
         system.Update(default, 0);
 
         Assert.IsFalse(published);
+    }
+
+    [TestMethod]
+    public void Update_ConditionalIncomingDamageDebuffScopedToPoison_ReducesDamage()
+    {
+        var timers = CreateTimerPool();
+        var stacks = CreateStackPool();
+        var health = CreateHealthPool();
+        health.Add(0, new SimpleHealthComponent(currentHealth: 100, maximumHealth: 100));
+        timers.Add(0, new PoisonTimerComponent(1, stackCount: 10, remainingDurationTicks: 5, StatusEffectSource.Admin));
+        var statModifiers = new MultiComponentPool<StatModifierComponent>(maximumEntityCount: 10, initialCapacity: 4);
+        statModifiers.Add(0, new StatModifierComponent(StatModifierTarget.IncomingDamage, StatModifierOperation.Multiplicative, StatModifierPolarity.Buff,
+            canModify: false, magnitude: -0.5f, remainingDurationFrames: null, StatusEffectSource.Admin, Tag.Poison));
+        var system = new PoisonSystem(timers, stacks, health, new EventBus(), new FakePlayerQuery(0), new MathUtility(), statModifiers);
+
+        system.Update(default, 0);
+
+        Assert.AreEqual(95, health.GetReadonly(0).CurrentHealth, "10 * 0.5 = 5 damage taken.");
+    }
+
+    [TestMethod]
+    public void Update_UnconditionalIncomingDamageDebuff_StillReducesPoisonDamage()
+    {
+        var timers = CreateTimerPool();
+        var stacks = CreateStackPool();
+        var health = CreateHealthPool();
+        health.Add(0, new SimpleHealthComponent(currentHealth: 100, maximumHealth: 100));
+        timers.Add(0, new PoisonTimerComponent(1, stackCount: 10, remainingDurationTicks: 5, StatusEffectSource.Admin));
+        var statModifiers = new MultiComponentPool<StatModifierComponent>(maximumEntityCount: 10, initialCapacity: 4);
+        statModifiers.Add(0, new StatModifierComponent(StatModifierTarget.IncomingDamage, StatModifierOperation.Multiplicative, StatModifierPolarity.Buff,
+            canModify: false, magnitude: -0.5f, remainingDurationFrames: null, StatusEffectSource.Admin));
+        var system = new PoisonSystem(timers, stacks, health, new EventBus(), new FakePlayerQuery(0), new MathUtility(), statModifiers);
+
+        system.Update(default, 0);
+
+        Assert.AreEqual(95, health.GetReadonly(0).CurrentHealth, "Unconditional IncomingDamage debuffs apply regardless of ConditionTag.");
     }
 
     /// <summary>Complex target: Poison always aims at Internal (BodyPartTargetRule(Internal, Random)), never scattering across other parts the way Burning's own random-part-per-tick does -- run across several seeds since a bug here would only sometimes land wrong.</summary>

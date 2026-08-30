@@ -80,7 +80,7 @@ public static class FloorBuilder
 
         for (var i = 0; i < TestPoisonStackCount; i++)
         {
-            PoisonEffects.ApplyStack(ecsContext.ComponentManager, entityId, StatusEffectSource.Admin, TestPoisonDurationTicks);
+            PoisonEffects.ApplyStack(ecsContext.ComponentManager, entityId, StatusEffectSource.Admin, TestPoisonDurationTicks, ecsContext.EventBus, world);
         }
 
         foreach (var seed in TestAbilityScoreModifierSeeds)

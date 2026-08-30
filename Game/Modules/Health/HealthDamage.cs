@@ -34,7 +34,9 @@ public static class HealthDamage
         MultiComponentPool<BodyPartComponent>? bodyParts = null,
         MathUtility? mathUtility = null,
         PackedComponentPool<DeadComponent>? deadEntities = null,
-        BodyPartTargetRule? targetRule = null)
+        BodyPartTargetRule? targetRule = null,
+        IReadOnlyList<Tag>? damageTags = null,
+        BodyPartTargetMode targetMode = BodyPartTargetMode.SingleTarget)
     {
         if (!health.TryGetReadonly(entityId, out var beforeHealth))
         {
@@ -45,7 +47,14 @@ public static class HealthDamage
                     throw new InvalidOperationException($"{nameof(HealthDamage)}.{nameof(Apply)} requires {nameof(mathUtility)} to be set for a Complex-health entity (entityId {entityId}).");
                 }
 
-                ComplexHealthDamage.Apply(health, bodyParts, eventBus, entityId, amount, source, playerQuery, damageType, statModifiers, mathUtility, deadEntities, targetRule);
+                if (targetMode == BodyPartTargetMode.All)
+                {
+                    ComplexHealthDamage.ApplyToAllParts(health, bodyParts, eventBus, entityId, amount, source, playerQuery, damageType, statModifiers, deadEntities, damageTags);
+                }
+                else
+                {
+                    ComplexHealthDamage.Apply(health, bodyParts, eventBus, entityId, amount, source, playerQuery, damageType, statModifiers, mathUtility, deadEntities, targetRule, damageTags, targetMode);
+                }
             }
 
             return; // No SimpleHealthComponent or BodyPartComponent -- fine, e.g. an "immortal" entity a status effect still applied to.
@@ -58,7 +67,7 @@ public static class HealthDamage
         // damage into healing. Computed once up front (not per-call-site) since both the health
         // clamp below and the EntityDamagedEvent need the same, already-reduced amount.
         var effectiveAmount = MathUtility.ClampUShort(
-            StatModifierMath.GetEffectiveValue(statModifiers, entityId, StatModifierTarget.IncomingDamage, amount),
+            StatModifierMath.GetEffectiveValue(statModifiers, entityId, StatModifierTarget.IncomingDamage, amount, damageTags),
             0,
             ushort.MaxValue);
 

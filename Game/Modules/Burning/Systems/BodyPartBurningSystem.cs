@@ -28,6 +28,9 @@ namespace Game.Modules.Burning.Systems;
 /// </summary>
 public sealed class BodyPartBurningSystem : ISystem
 {
+    /// <summary>Passed as StatModifierMath.GetEffectiveValue's activeTags below -- lets a ConditionTag: Tag.Fire-scoped IncomingDamage modifier reduce burning damage specifically, the same as BurningSystem's own entity-scoped tick. Cached once rather than allocated fresh per tick.</summary>
+    private static readonly Tag[] BurningDamageTags = [Tag.Fire];
+
     private const byte StripeCountValue = 15;
 
     public byte StripeCount => StripeCountValue;
@@ -113,7 +116,7 @@ public sealed class BodyPartBurningSystem : ISystem
         if (bodyPartDenseIndex != -1)
         {
             var effectiveAmount = MathUtility.ClampUShort(
-                StatModifierMath.GetEffectiveValue(_statModifiers, entityId, StatModifierTarget.IncomingDamage, stackCount),
+                StatModifierMath.GetEffectiveValue(_statModifiers, entityId, StatModifierTarget.IncomingDamage, stackCount, BurningDamageTags),
                 0,
                 ushort.MaxValue);
 

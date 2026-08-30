@@ -53,8 +53,8 @@ public static class ItemComparisonStatExtraction
 
         return entry switch
         {
-            DirectDamage damage => new ItemComparisonStat("effect:damage", displayText, (damage.MinAmount + damage.MaxAmount) / 2.0, HigherIsBetter: true),
-            DirectHeal heal => new ItemComparisonStat("effect:heal", displayText, heal.Fraction * 100, HigherIsBetter: true),
+            DirectDamage damage => new ItemComparisonStat("effect:damage", displayText, (damage.MinFlatDamage + damage.MaxFlatDamage) / 2.0, HigherIsBetter: true),
+            DirectHeal heal => new ItemComparisonStat("effect:heal", displayText, heal.PercentOfMaxHealth * 100 + heal.FlatAmount, HigherIsBetter: true),
             DirectManaRestore mana => new ItemComparisonStat("effect:manaRestore", displayText, mana.Fraction * 100, HigherIsBetter: true),
             StatusEffectGrant status => new ItemComparisonStat($"effect:status:{status.Type}", displayText, status.StackCount, HigherIsBetter: true),
             // Signed by Polarity regardless of Operation (Additive/Multiplicative) -- a simplification: this value only drives green/red ranking, not the actual applied math (see StatModifierGrant.Apply for that), so a buff always ranks "higher magnitude is better" and a debuff the opposite.

@@ -1,5 +1,6 @@
 using Engine.ECS.Components;
 using Engine.ECS.Components.Stores;
+using Engine.Events;
 using Engine.Math;
 using Game.Modules.Burning.Components;
 using Game.Modules.ContactDamage.Components;
@@ -29,7 +30,7 @@ namespace Game.Modules.Burning;
 /// damage already uses is reused here (DamageOnContactComponent.PreferredTargetType), so a burning
 /// part and a contact-damaged part read as the same "where a hazard hits" rule.
 /// </remarks>
-public sealed class BurningAuraApplier(MathUtility mathUtility) : IStatusEffectAuraApplier
+public sealed class BurningAuraApplier(MathUtility mathUtility, EventBus? eventBus = null, IPlayerQuery? playerQuery = null) : IStatusEffectAuraApplier
 {
     public StatusEffectType EffectType => StatusEffectType.Burning;
 
@@ -69,12 +70,12 @@ public sealed class BurningAuraApplier(MathUtility mathUtility) : IStatusEffectA
             var partId = ResolveTargetPartId(entityId, preferredType);
             if (partId is { } resolvedPartId)
             {
-                ApplyBodyPartScopedStack(entityId, resolvedPartId, source);
+                ApplyBodyPartScopedStack(componentManager, entityId, resolvedPartId, source);
                 return;
             }
         }
 
-        BurningEffects.ApplyStack(componentManager, entityId, source);
+        BurningEffects.ApplyStack(componentManager, entityId, source, eventBus, playerQuery);
     }
 
     private void EnsurePools(ComponentManager componentManager)
@@ -134,9 +135,14 @@ public sealed class BurningAuraApplier(MathUtility mathUtility) : IStatusEffectA
         return denseIndex == -1 ? null : _bodyParts!.GetReadonlyByDenseIndex(denseIndex).PartId;
     }
 
-    /// <summary>Grants (or tops off) one Burning stack on entityId's partId -- mirrors BurningEffects.ApplyStack's own grant-or-top-off-capped-at-MaxStacks shape, scoped to the one part instead of the whole entity.</summary>
-    private void ApplyBodyPartScopedStack(int entityId, byte partId, StatusEffectSource source)
+    /// <summary>Grants (or tops off) one Burning stack on entityId's partId -- mirrors BurningEffects.ApplyStack's own grant-or-top-off-capped-at-MaxStacks (and immunity) shape, scoped to the one part instead of the whole entity.</summary>
+    private void ApplyBodyPartScopedStack(ComponentManager componentManager, int entityId, byte partId, StatusEffectSource source)
     {
+        if (StatusEffectImmunity.IsImmune(componentManager, entityId, StatusEffectType.Burning, source, eventBus, playerQuery))
+        {
+            return;
+        }
+
         var existingTimerDenseIndex = FindBodyPartTimer(entityId, partId);
         if (existingTimerDenseIndex != -1 && _bodyPartTimers!.GetReadonlyByDenseIndex(existingTimerDenseIndex).StackCount >= BurningEffects.MaxStacks)
         {

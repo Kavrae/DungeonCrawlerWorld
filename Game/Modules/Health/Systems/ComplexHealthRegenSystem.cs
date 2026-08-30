@@ -1,5 +1,6 @@
 using Engine.ECS.Components.Stores;
 using Engine.ECS.Systems;
+using Engine.Events;
 using Engine.Utilities;
 using Game.Modules.AbilityScores;
 using Game.Modules.AbilityScores.Components;
@@ -9,17 +10,22 @@ using Game.Modules.ProcessingTier;
 using Game.Modules.ProcessingTier.Components;
 using Game.Modules.StatModifiers;
 using Game.Modules.StatModifiers.Components;
-using Microsoft.Xna.Framework;
+using Game.World;
 
 namespace Game.Modules.Health.Systems;
 
 /// <summary>Complex-health counterpart to SimpleHealthRegenSystem -- regenerates one body part per due entity per visit, adjusting for ability scores, modifiers, and processing tier.</summary>
 /// <remarks>
-/// Two differences from SimpleHealthRegenSystem: BodyPartSelection.PickLowestPercentage picks
-/// which of the entity's parts gets this visit's regen (instead of unconditionally updating a
-/// single pool), and every visit to a due entity also walks that entity's own BodyPartComponent
-/// chain once to decrement any nonzero RegenLockoutFramesRemaining, regardless of whether a part
-/// was selected for healing this tick.
+/// Routes each visit through HealthHeal.Apply (targetMode: LowestPercentage, sourceEntityId:
+/// entityId -- a self-heal), which is what BodyPartSelection.PickLowestPercentage/the
+/// bodyPartBurningTimers exclusion actually run against now (ComplexHealthHeal.ApplyToSinglePart
+/// -- see its own doc comment); this system no longer picks a part or mutates health itself.
+/// Requires a SimpleHealthComponent pool purely to satisfy HealthHeal.Apply's Simple-vs-Complex
+/// dispatch check -- every entity this system's own stripe set drives owns BodyPartComponent, so
+/// that check always resolves to the Complex branch, mirroring ComplexHealthDamage.Apply's
+/// identical requirement. Every visit to a due entity also walks that entity's own
+/// BodyPartComponent chain once to decrement any nonzero RegenLockoutFramesRemaining, regardless
+/// of whether a part was selected for healing this tick.
 /// </remarks>
 public sealed class ComplexHealthRegenSystem : ISystem
 {
@@ -32,28 +38,37 @@ public sealed class ComplexHealthRegenSystem : ISystem
     private const float MaxHealthRegenPerSecond = 6f;
 
     private readonly MultiComponentPool<BodyPartComponent> _bodyParts;
+    private readonly PackedComponentPool<SimpleHealthComponent> _health;
     private readonly DirectComponentPool<ProcessingTierComponent> _processingTiers;
     private readonly MultiComponentPool<StatModifierComponent>? _statModifiers;
     private readonly PackedComponentPool<DeadComponent>? _deadEntities;
     private readonly MultiComponentPool<AbilityScoreComponent>? _abilityScores;
     private readonly MultiComponentPool<BodyPartBurningTimerComponent>? _bodyPartBurningTimers;
+    private readonly EventBus? _eventBus;
+    private readonly IPlayerQuery? _playerQuery;
     private readonly TieredEntityStripeSet _tieredStripeSet;
 
     public ComplexHealthRegenSystem(
         MultiComponentPool<BodyPartComponent> bodyParts,
+        PackedComponentPool<SimpleHealthComponent> health,
         DirectComponentPool<ProcessingTierComponent> processingTiers,
         ProcessingTierEvents processingTierEvents,
         MultiComponentPool<StatModifierComponent>? statModifiers = null,
         PackedComponentPool<DeadComponent>? deadEntities = null,
         MultiComponentPool<AbilityScoreComponent>? abilityScores = null,
-        MultiComponentPool<BodyPartBurningTimerComponent>? bodyPartBurningTimers = null)
+        MultiComponentPool<BodyPartBurningTimerComponent>? bodyPartBurningTimers = null,
+        EventBus? eventBus = null,
+        IPlayerQuery? playerQuery = null)
     {
         _bodyParts = bodyParts;
+        _health = health;
         _processingTiers = processingTiers;
         _statModifiers = statModifiers;
         _deadEntities = deadEntities;
         _abilityScores = abilityScores;
         _bodyPartBurningTimers = bodyPartBurningTimers;
+        _eventBus = eventBus;
+        _playerQuery = playerQuery;
 
         _tieredStripeSet = ProcessingTierWiring.CreateAndWire(StripeCount, bodyParts, processingTiers, processingTierEvents);
     }
@@ -84,12 +99,6 @@ public sealed class ComplexHealthRegenSystem : ISystem
                 continue;
             }
 
-            var selectedDenseIndex = BodyPartSelection.PickLowestPercentage(_bodyParts, entityId, _statModifiers, _bodyPartBurningTimers);
-            if (selectedDenseIndex == -1)
-            {
-                continue;
-            }
-
             var secondsPerVisit = framesPerVisit / (float)GameTiming.FramesPerSecond;
             var amountPerSecond = AbilityScoreMath.Lerp(constitution.Total, MinHealthRegenPerSecond, MaxHealthRegenPerSecond);
             var rawAmount = amountPerSecond * secondsPerVisit;
@@ -100,16 +109,7 @@ public sealed class ComplexHealthRegenSystem : ISystem
                 continue;
             }
 
-            _bodyParts.UpdateByDenseIndex(selectedDenseIndex, (EffectiveRegen: effectiveRegen, _statModifiers, entityId), static (ref BodyPartComponent part, (float EffectiveRegen, MultiComponentPool<StatModifierComponent>? StatModifiers, int EntityId) state) =>
-            {
-                var effectiveMaximumHealth = StatModifierMath.GetEffectiveValue(state.StatModifiers, state.EntityId, StatModifierTarget.MaximumHealth, part.MaximumHealth);
-                part.CurrentHealth = MathHelper.Clamp(part.CurrentHealth + state.EffectiveRegen, 0f, effectiveMaximumHealth);
-
-                if (part.CurrentHealth > 0)
-                {
-                    part.IsDisabled = false;
-                }
-            });
+            HealthHeal.Apply(_health, entityId, percentOfMaxHealth: 0f, _statModifiers, _bodyParts, flatAmount: effectiveRegen, sourceEntityId: entityId, targetMode: BodyPartTargetMode.LowestPercentage, bodyPartBurningTimers: _bodyPartBurningTimers, eventBus: _eventBus, playerQuery: _playerQuery, healType: "Regeneration");
         }
     }
 
