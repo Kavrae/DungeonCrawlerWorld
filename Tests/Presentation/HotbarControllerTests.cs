@@ -26,6 +26,7 @@ namespace Tests.Presentation;
 /// calls some method.
 /// </summary>
 [TestClass]
+[DoNotParallelize]
 public sealed class HotbarControllerTests
 {
     private const int PlayerEntityId = 1;
@@ -87,7 +88,7 @@ public sealed class HotbarControllerTests
             componentManager.GetPackedPool<ActionLockComponent>(),
             componentManager.GetPackedPool<ManaComponent>());
 
-        var fontService = new FontService("Fonts");
+        var fontService = TestFonts.Shared;
         var hotbarContent = new HotbarContent(world, mapViewState, componentManager, new EventBus(), actionCatalog, itemCatalog, fontService, new SpriteSheetService(null, "Spritesheets"), new SpriteRenderer(), new Vector2(1920, 1080));
         var hotbarController = new HotbarController(mapViewState, hotbarContent, actionTargeting);
 

@@ -22,13 +22,14 @@ namespace Tests.Presentation;
 /// bookkeeping.
 /// </summary>
 [TestClass]
+[DoNotParallelize]
 public sealed class NotificationCenterTests
 {
     private static readonly Point FirstActiveNotificationTopLeft = new(200, 200);
 
     private static ElementPoolService CreateWindowService()
     {
-        var fontService = new FontService("Fonts");
+        var fontService = TestFonts.Shared;
         var labelRenderer = new LabelRenderer();
         var windowService = TestElementPoolServiceFactory.Create(fontService, labelRenderer);
         windowService.RegisterFactory<Folder>(() => new Folder(
@@ -130,7 +131,7 @@ public sealed class NotificationCenterTests
 
     private static (ElementPoolService WindowService, Func<Folder> GetFolder) CreateWindowServiceCapturingFolder()
     {
-        var fontService = new FontService("Fonts");
+        var fontService = TestFonts.Shared;
         var labelRenderer = new LabelRenderer();
         var windowService = TestElementPoolServiceFactory.Create(fontService, labelRenderer);
         Folder? capturedFolder = null;
@@ -319,7 +320,7 @@ public sealed class NotificationCenterTests
     [TestMethod]
     public void ClickingCloseButton_OnNewerOverlappingNotification_ClosesOnlyThatOne()
     {
-        var fontService = new FontService("Fonts");
+        var fontService = TestFonts.Shared;
         var labelRenderer = new LabelRenderer();
         var windowService = TestElementPoolServiceFactory.Create(fontService, labelRenderer);
         windowService.RegisterFactory<Folder>(() => new Folder(
@@ -366,7 +367,7 @@ public sealed class NotificationCenterTests
     /// <summary>Captures every TextWindow WindowService creates -- the only way to inspect an active popup's own TitleText, since NotificationCenter doesn't expose its windows. Mirrors ClickingCloseButton_OnNewerOverlappingNotification_ClosesOnlyThatOne's technique.</summary>
     private static (ElementPoolService WindowService, List<TextWindow> CapturedPopups) CreateWindowServiceCapturingTextWindows()
     {
-        var fontService = new FontService("Fonts");
+        var fontService = TestFonts.Shared;
         var labelRenderer = new LabelRenderer();
         var windowService = TestElementPoolServiceFactory.Create(fontService, labelRenderer);
         windowService.RegisterFactory<Folder>(() => new Folder(

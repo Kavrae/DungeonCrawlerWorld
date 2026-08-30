@@ -12,9 +12,10 @@ namespace Tests.Presentation;
 /// TextWindow.UpdateScrollBounds, which only Fixed/Fill call).
 /// </summary>
 [TestClass]
+[DoNotParallelize]
 public sealed class TextWindowScrollingTests
 {
-    private static ElementPoolService CreateWindowService() => TestElementPoolServiceFactory.Create(new FontService("Fonts"), new LabelRenderer());
+    private static ElementPoolService CreateWindowService() => TestElementPoolServiceFactory.Create(TestFonts.Shared, new LabelRenderer());
 
     private static TextWindow CreateFixedTextWindow(ElementPoolService windowService, string text, Vector2 size, bool canUserScrollVertical)
     {

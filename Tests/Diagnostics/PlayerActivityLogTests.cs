@@ -3,6 +3,7 @@ using Engine.Events;
 using Engine.Math;
 using Game.Diagnostics;
 using Game.Modules.Core.Components;
+using Game.Modules.StatusEffects;
 using Game.World;
 
 namespace Tests.Diagnostics;
@@ -255,6 +256,77 @@ public sealed class PlayerActivityLogTests
             var contents = File.ReadAllText(logPath);
             StringAssert.Contains(contents, "HEAL");
             StringAssert.Contains(contents, "amount=20");
+            StringAssert.Contains(contents, "target=5");
+        }
+        finally
+        {
+            File.Delete(logPath);
+        }
+    }
+
+    [TestMethod]
+    public void StatusEffectImmunityBlocked_ForPlayer_IsLoggedWithTypeAndSource()
+    {
+        var world = CreateWorld(playerEntityId: 0);
+        var eventBus = new EventBus();
+        var logPath = CreateTempLogPath();
+        try
+        {
+            var log = new PlayerActivityLog(world, CreateComponentManager(), eventBus, logPath);
+            log.BeginFrame(9, DateTime.Now);
+
+            eventBus.Publish(new StatusEffectImmunityBlockedEvent(0, StatusEffectType.Burning, StatusEffectSource.FromEntity(7)));
+            log.Dispose();
+
+            var contents = File.ReadAllText(logPath);
+            StringAssert.Contains(contents, "BLOCKED");
+            StringAssert.Contains(contents, "Burning");
+            StringAssert.Contains(contents, "target=0");
+        }
+        finally
+        {
+            File.Delete(logPath);
+        }
+    }
+
+    [TestMethod]
+    public void StatusEffectImmunityBlocked_ForNonPlayer_IsNotLogged()
+    {
+        var world = CreateWorld(playerEntityId: 0);
+        var eventBus = new EventBus();
+        var logPath = CreateTempLogPath();
+        try
+        {
+            using var log = new PlayerActivityLog(world, CreateComponentManager(), eventBus, logPath);
+            log.BeginFrame(1, DateTime.Now);
+
+            eventBus.Publish(new StatusEffectImmunityBlockedEvent(1, StatusEffectType.Poison, StatusEffectSource.Admin));
+
+            Assert.AreEqual(0L, new FileInfo(logPath).Length);
+        }
+        finally
+        {
+            File.Delete(logPath);
+        }
+    }
+
+    /// <summary>Mirrors EntityDamaged_PlayerIsSourceOfDamageToNonPlayer_IsLoggedWithTarget -- the player attempting (and being blocked) to inflict an effect on an immune NPC must still be logged.</summary>
+    [TestMethod]
+    public void StatusEffectImmunityBlocked_PlayerIsSourceOnNonPlayerTarget_IsLoggedWithTarget()
+    {
+        var world = CreateWorld(playerEntityId: 0);
+        var eventBus = new EventBus();
+        var logPath = CreateTempLogPath();
+        try
+        {
+            var log = new PlayerActivityLog(world, CreateComponentManager(), eventBus, logPath);
+            log.BeginFrame(3, DateTime.Now);
+
+            eventBus.Publish(new StatusEffectImmunityBlockedEvent(5, StatusEffectType.Poison, StatusEffectSource.FromEntity(0)));
+            log.Dispose();
+
+            var contents = File.ReadAllText(logPath);
+            StringAssert.Contains(contents, "BLOCKED");
             StringAssert.Contains(contents, "target=5");
         }
         finally

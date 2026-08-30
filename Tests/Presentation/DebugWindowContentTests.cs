@@ -19,6 +19,7 @@ using Presentation.UI.Content;
 namespace Tests.Presentation;
 
 [TestClass]
+[DoNotParallelize]
 public sealed class DebugWindowContentTests
 {
     private static EcsContext BuildEcsContext()
@@ -58,7 +59,7 @@ public sealed class DebugWindowContentTests
         var entityId = ecsContext.EntityManager.CreateEntity();
         ecsContext.ComponentManager.GetPackedPool<MovementComponent>().Add(entityId, new MovementComponent(MovementMode.Random, null, null));
 
-        var fontService = new FontService("Fonts");
+        var fontService = TestFonts.Shared;
         var windowService = TestElementPoolServiceFactory.Create(fontService, new LabelRenderer());
         var hostWindow = windowService.CreateElement<Window>(null, new ElementOptions());
         hostWindow.SetContent(new DebugWindowContent(fontService, ecsContext.EntityManager, ecsContext.ComponentManager, diagnostics: null));
@@ -73,7 +74,7 @@ public sealed class DebugWindowContentTests
     {
         var ecsContext = BuildEcsContext();
 
-        var fontService = new FontService("Fonts");
+        var fontService = TestFonts.Shared;
         var windowService = TestElementPoolServiceFactory.Create(fontService, new LabelRenderer());
         var hostWindow = windowService.CreateElement<Window>(null, new ElementOptions());
         hostWindow.SetContent(new DebugWindowContent(fontService, ecsContext.EntityManager, ecsContext.ComponentManager, diagnostics: null));

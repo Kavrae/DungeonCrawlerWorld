@@ -29,6 +29,7 @@ namespace Tests.Presentation;
 /// UiInputController had zero test coverage before Phase A0.
 /// </summary>
 [TestClass]
+[DoNotParallelize]
 public sealed class UiInputControllerTests
 {
     private static readonly KeyboardState NoKeys = new();
@@ -45,7 +46,7 @@ public sealed class UiInputControllerTests
     private static MouseState MouseAtWithRightButton(int x, int y, ButtonState rightButton) =>
         new(x, y, 0, ButtonState.Released, ButtonState.Released, rightButton, ButtonState.Released, ButtonState.Released);
 
-    private static ElementPoolService CreateWindowService() => TestElementPoolServiceFactory.Create(new FontService("Fonts"), new LabelRenderer());
+    private static ElementPoolService CreateWindowService() => TestElementPoolServiceFactory.Create(TestFonts.Shared, new LabelRenderer());
 
     /// <summary>
     /// Test-only convenience matching UiInputController's old four-list constructor shape --
@@ -982,7 +983,7 @@ public sealed class UiInputControllerTests
     [TestMethod]
     public void RightMouseDrag_ReportsTotalDeltaSinceStart_ToTheWindowUnderTheCursor()
     {
-        var fontService = new FontService("Fonts");
+        var fontService = TestFonts.Shared;
         var windowService = TestElementPoolServiceFactory.Create(fontService, new LabelRenderer());
         var window = CreateRightDragSpyWindow(windowService, fontService, new Vector2(0, 0));
         var controller = CreateController([window], [], [], [], LargeScreenSize);
@@ -1005,7 +1006,7 @@ public sealed class UiInputControllerTests
     [TestMethod]
     public void RightMouseDrag_ReleasingThenPressingAgain_StartsAFreshDrag()
     {
-        var fontService = new FontService("Fonts");
+        var fontService = TestFonts.Shared;
         var windowService = TestElementPoolServiceFactory.Create(fontService, new LabelRenderer());
         var window = CreateRightDragSpyWindow(windowService, fontService, new Vector2(0, 0));
         var controller = CreateController([window], [], [], [], LargeScreenSize);
@@ -1029,7 +1030,7 @@ public sealed class UiInputControllerTests
     [TestMethod]
     public void RightMouseDrag_Releasing_FiresDragEndOnce()
     {
-        var fontService = new FontService("Fonts");
+        var fontService = TestFonts.Shared;
         var windowService = TestElementPoolServiceFactory.Create(fontService, new LabelRenderer());
         var window = CreateRightDragSpyWindow(windowService, fontService, new Vector2(0, 0));
         var controller = CreateController([window], [], [], [], LargeScreenSize);
@@ -1049,7 +1050,7 @@ public sealed class UiInputControllerTests
     [TestMethod]
     public void RightMouseClick_NoMovement_FiresRightClickTapInsteadOfDragEnd()
     {
-        var fontService = new FontService("Fonts");
+        var fontService = TestFonts.Shared;
         var windowService = TestElementPoolServiceFactory.Create(fontService, new LabelRenderer());
         var window = CreateRightDragSpyWindow(windowService, fontService, new Vector2(0, 0));
         var controller = CreateController([window], [], [], [], LargeScreenSize);
@@ -1066,7 +1067,7 @@ public sealed class UiInputControllerTests
     [TestMethod]
     public void RightClickTextBoxThenClickContextMenuOption_InvokesTheOption()
     {
-        var fontService = new FontService("Fonts");
+        var fontService = TestFonts.Shared;
         var labelRenderer = new LabelRenderer();
         var windowService = TestElementPoolServiceFactory.Create(fontService, labelRenderer);
         var layers = new UiLayerStack();
@@ -1117,7 +1118,7 @@ public sealed class UiInputControllerTests
     [TestMethod]
     public void RightClickTextBoxInsideMenuWindowThenClickContextMenuOption_InvokesTheOption()
     {
-        var fontService = new FontService("Fonts");
+        var fontService = TestFonts.Shared;
         var labelRenderer = new LabelRenderer();
         var windowService = TestElementPoolServiceFactory.Create(fontService, labelRenderer);
         var layers = new UiLayerStack();
@@ -1173,7 +1174,7 @@ public sealed class UiInputControllerTests
     [TestMethod]
     public void RightMouseClick_MovementBelowTapThreshold_StillFiresRightClickTap()
     {
-        var fontService = new FontService("Fonts");
+        var fontService = TestFonts.Shared;
         var windowService = TestElementPoolServiceFactory.Create(fontService, new LabelRenderer());
         var window = CreateRightDragSpyWindow(windowService, fontService, new Vector2(0, 0));
         var controller = CreateController([window], [], [], [], LargeScreenSize);
@@ -1192,7 +1193,7 @@ public sealed class UiInputControllerTests
     [TestMethod]
     public void RightMouseDrag_MovementPastTapThreshold_FiresDragEndNotRightClickTap()
     {
-        var fontService = new FontService("Fonts");
+        var fontService = TestFonts.Shared;
         var windowService = TestElementPoolServiceFactory.Create(fontService, new LabelRenderer());
         var window = CreateRightDragSpyWindow(windowService, fontService, new Vector2(0, 0));
         var controller = CreateController([window], [], [], [], LargeScreenSize);
@@ -1211,7 +1212,7 @@ public sealed class UiInputControllerTests
     [TestMethod]
     public void RightMouseDrag_WandersPastThresholdThenBackToStart_StillFiresDragEndNotRightClickTap()
     {
-        var fontService = new FontService("Fonts");
+        var fontService = TestFonts.Shared;
         var windowService = TestElementPoolServiceFactory.Create(fontService, new LabelRenderer());
         var window = CreateRightDragSpyWindow(windowService, fontService, new Vector2(0, 0));
         var controller = CreateController([window], [], [], [], LargeScreenSize);
@@ -2159,7 +2160,7 @@ public sealed class UiInputControllerTests
         itemCatalog.Register(new ItemDefinition(itemId, "Test Item", null, "t", Color.White, Tags: [], Effects: []));
         var stackInstanceId = InventoryActions.AddItem(componentManager, playerEntityId, itemId, quantity: 1);
 
-        var fontService = new FontService("Fonts");
+        var fontService = TestFonts.Shared;
         var labelRenderer = new LabelRenderer();
         var windowService = TestElementPoolServiceFactory.Create(fontService, labelRenderer);
         windowService.RegisterFactory<InventoryItemStackCell>(() => new InventoryItemStackCell(
@@ -2210,7 +2211,7 @@ public sealed class UiInputControllerTests
         itemCatalog.Register(new ItemDefinition(itemId, "Test Item", null, "t", Color.White, Tags: [], Effects: []));
         var stackInstanceId = InventoryActions.AddItem(componentManager, corpseEntityId, itemId, quantity: 1);
 
-        var fontService = new FontService("Fonts");
+        var fontService = TestFonts.Shared;
         var labelRenderer = new LabelRenderer();
         var windowService = TestElementPoolServiceFactory.Create(fontService, labelRenderer);
         windowService.RegisterFactory<InventoryItemStackCell>(() => new InventoryItemStackCell(
@@ -2424,7 +2425,7 @@ public sealed class UiInputControllerTests
         itemCatalog.Register(new ItemDefinition(itemId, "Test Item", null, "t", Color.White, Tags: [], Effects: []));
         InventoryActions.AddItem(componentManager, sourceEntityId, itemId, quantity: 1);
 
-        var fontService = new FontService("Fonts");
+        var fontService = TestFonts.Shared;
         var labelRenderer = new LabelRenderer();
         var windowService = TestElementPoolServiceFactory.Create(fontService, labelRenderer);
         var spriteSheetService = new SpriteSheetService(null, "Spritesheets");
@@ -2522,7 +2523,7 @@ public sealed class UiInputControllerTests
         itemCatalog.Register(new ItemDefinition(itemId, "Test Item", null, "t", Color.White, Tags: [], Effects: []));
         InventoryActions.AddItem(componentManager, sourceEntityId, itemId, quantity: 1);
 
-        var fontService = new FontService("Fonts");
+        var fontService = TestFonts.Shared;
         var labelRenderer = new LabelRenderer();
         var windowService = TestElementPoolServiceFactory.Create(fontService, labelRenderer);
         var spriteSheetService = new SpriteSheetService(null, "Spritesheets");
@@ -2643,7 +2644,7 @@ public sealed class UiInputControllerTests
         actionCatalog.Register(new ActionDefinition(actionId, "Test Action", null, "t", Color.White, [], Effects: [ActionEffect.None],
             Activator: new DirectAction(new TargetingSpec(TargetShape.SingleTarget, Range: 1), new ActionTiming(ActionTimingCategory.Immediate, ActionLockFrames: 30, CooldownFrames: null))));
 
-        var fontService = new FontService("Fonts");
+        var fontService = TestFonts.Shared;
         var labelRenderer = new LabelRenderer();
         var windowService = TestElementPoolServiceFactory.Create(fontService, labelRenderer);
 

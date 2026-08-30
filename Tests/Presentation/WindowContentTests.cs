@@ -14,6 +14,7 @@ namespace Tests.Presentation;
 /// asks Phase 4 to validate before DebugWindow/SelectionWindow/NotificationCenter commit to it.
 /// </summary>
 [TestClass]
+[DoNotParallelize]
 public sealed class WindowContentTests
 {
     private sealed class RecordingContent : IElementContent
@@ -33,7 +34,7 @@ public sealed class WindowContentTests
         public void HandleTextInput(char character) => TypedCharacters.Add(character);
     }
 
-    private static ElementPoolService CreateWindowService() => TestElementPoolServiceFactory.Create(new FontService("Fonts"), new LabelRenderer());
+    private static ElementPoolService CreateWindowService() => TestElementPoolServiceFactory.Create(TestFonts.Shared, new LabelRenderer());
 
     [TestMethod]
     public void Initialize_ContentAttached_ReceivesHostWindow()

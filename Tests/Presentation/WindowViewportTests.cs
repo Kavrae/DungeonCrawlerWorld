@@ -16,9 +16,10 @@ namespace Tests.Presentation;
 /// does too.
 /// </summary>
 [TestClass]
+[DoNotParallelize]
 public sealed class WindowViewportTests
 {
-    private static ElementPoolService CreateWindowService() => TestElementPoolServiceFactory.Create(new FontService("Fonts"), new LabelRenderer());
+    private static ElementPoolService CreateWindowService() => TestElementPoolServiceFactory.Create(TestFonts.Shared, new LabelRenderer());
 
     [TestMethod]
     public void SetRelativePosition_UpdatesWindowViewportToMatchContentRectangle()

@@ -26,6 +26,7 @@ namespace Tests.Presentation;
 /// review misses" lesson for click/hit-test work.
 /// </summary>
 [TestClass]
+[DoNotParallelize]
 public sealed class HealthWindowControllerTests
 {
     private const int PlayerEntityId = 1;
@@ -33,7 +34,7 @@ public sealed class HealthWindowControllerTests
     private static (HealthWindowController Health, UiLayerStack Layers) Build()
     {
         var world = new Game.World.World(new Game.World.Map(new Vector3Int(20, 20, 1))) { PlayerEntityId = PlayerEntityId };
-        var fontService = new FontService("Fonts");
+        var fontService = TestFonts.Shared;
         var labelRenderer = new LabelRenderer();
         var layers = new UiLayerStack();
         var pool = TestElementPoolServiceFactory.Create(fontService, labelRenderer);

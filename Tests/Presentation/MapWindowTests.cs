@@ -30,6 +30,7 @@ namespace Tests.Presentation;
 /// on Map.MapNodes before this fix).
 /// </summary>
 [TestClass]
+[DoNotParallelize]
 public sealed class MapWindowTests
 {
     private const int PlayerEntityId = 1;
@@ -82,7 +83,7 @@ public sealed class MapWindowTests
     {
         var world = new Game.World.World(new Game.World.Map(new Vector3Int(mapSizeX, mapSizeY, mapSizeZ)));
         var mapViewState = new MapViewState();
-        var fontService = new FontService("Fonts");
+        var fontService = TestFonts.Shared;
         var windowService = TestElementPoolServiceFactory.Create(fontService, new LabelRenderer());
 
         var componentManager = new ComponentManager(100, 50);
@@ -632,6 +633,13 @@ public sealed class MapWindowTests
             mapWindow.Update(new GameTime());
         }
 
+        // MapWindow.Update reads the real OS mouse cursor (Mouse.GetState()) to drive
+        // UpdateHoveredTile every call -- without resetting it back to "no hover" here, this test
+        // would be at the mercy of wherever the cursor physically sits on the machine running it
+        // (see HandleHotkeys_PressingArmedItemSlotAgainWithNoHoveredTile_DoesNothingAndStaysArmed's
+        // own doc comment for a confirmed real repro of exactly that). An off-map point
+        // deterministically clears it regardless of the real cursor's position.
+        mapWindow.UpdateHoveredTile(new Point(-1, -1));
         mapWindow.HandleHotkeys(new KeyboardState(Keys.D4), new KeyboardState());
 
         Assert.IsFalse(componentManager.GetPackedPool<PendingActionActivationComponent>().Has(PlayerEntityId));
@@ -1294,6 +1302,14 @@ public sealed class MapWindowTests
             mapWindow.Update(new GameTime());
         }
 
+        // MapWindow.Update reads the real OS mouse cursor (Mouse.GetState()) to drive
+        // UpdateHoveredTile every call -- without resetting it back to "no hover" here, this test
+        // was flaky depending on wherever the cursor physically sat on the machine running it
+        // (confirmed: it failed with a real HoveredTile of {101,101,0}, one tile from the player,
+        // inside the Potion's own Burst/Range-3 footprint). An off-map point deterministically
+        // clears it, the same way HandleHotkeys_PressingArmedItemSlotAgainAfterDoubleTapWindowElapses_ConfirmsAgainstHoveredTile
+        // deterministically sets a real one.
+        mapWindow.UpdateHoveredTile(new Point(-1, -1));
         mapWindow.HandleHotkeys(new KeyboardState(Keys.D1), new KeyboardState());
 
         Assert.IsFalse(componentManager.GetPackedPool<PendingConsumableActivationComponent>().Has(PlayerEntityId));

@@ -27,6 +27,7 @@ namespace Tests.Presentation;
 /// own doc comments); the position math itself (PopupPositioning) is pure geometry and unaffected.
 /// </summary>
 [TestClass]
+[DoNotParallelize]
 public sealed class PlayerHealthBarContentTests
 {
     private const int PlayerEntityId = 1;
@@ -35,7 +36,7 @@ public sealed class PlayerHealthBarContentTests
     private static (PlayerHealthBarContent Content, Window HostWindow) Build(bool complexHealth)
     {
         var world = new Game.World.World(new Game.World.Map(new Vector3Int(20, 20, 1))) { PlayerEntityId = PlayerEntityId };
-        var fontService = new FontService("Fonts");
+        var fontService = TestFonts.Shared;
         var layers = new UiLayerStack();
         var windowService = TestElementPoolServiceFactory.Create(fontService, new LabelRenderer());
 
@@ -197,7 +198,7 @@ public sealed class PlayerHealthBarContentTests
         statModifiers.Add(PlayerEntityId, new StatModifierComponent(StatModifierTarget.MaximumHealth, StatModifierOperation.Multiplicative, StatModifierPolarity.Buff,
             canModify: true, magnitude: 0.5f, remainingDurationFrames: null, StatusEffectSource.Admin));
         var world = new Game.World.World(new Game.World.Map(new Vector3Int(5, 5, 1))) { PlayerEntityId = PlayerEntityId };
-        var hoverContent = new PlayerHealthHoverContent(world, bodyParts, new FontService("Fonts"), statModifiers);
+        var hoverContent = new PlayerHealthHoverContent(world, bodyParts, TestFonts.Shared, statModifiers);
 
         var rows = new List<PlayerHealthHoverContent.RowData>();
         hoverContent.BuildRows(rows);

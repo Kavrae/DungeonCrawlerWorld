@@ -21,6 +21,7 @@ namespace Tests.Presentation;
 /// actually gained or lost.
 /// </summary>
 [TestClass]
+[DoNotParallelize]
 public sealed class InventoryManagementWindowTests
 {
     private const int EntityId = 1;
@@ -40,7 +41,7 @@ public sealed class InventoryManagementWindowTests
         itemCatalog.Register(new ItemDefinition(scrollItemId, "Scroll", null, "s", Color.White, Tags: [Tag.Scroll], Effects: []));
         InventoryActions.AddItem(componentManager, EntityId, firstItemId, quantity: 1);
 
-        var fontService = new FontService("Fonts");
+        var fontService = TestFonts.Shared;
         var labelRenderer = new LabelRenderer();
         var windowService = TestElementPoolServiceFactory.Create(fontService, labelRenderer);
         var spriteSheetService = new SpriteSheetService(null, "Spritesheets");

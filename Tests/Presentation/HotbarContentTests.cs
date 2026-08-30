@@ -26,6 +26,7 @@ namespace Tests.Presentation;
 /// component pools and geometry -- no SpriteBatch involved -- so they're covered here too.
 /// </summary>
 [TestClass]
+[DoNotParallelize]
 public sealed class HotbarContentTests
 {
     private const int PlayerEntityId = 1;
@@ -70,7 +71,7 @@ public sealed class HotbarContentTests
         componentManager.RegisterPackedPool<HotkeyExpansionUnlockComponent>(static (ref existing, incoming) => existing = incoming);
 
         var world = new Game.World.World(new Game.World.Map(new Vector3Int(10, 10, 1))) { PlayerEntityId = PlayerEntityId };
-        var fontService = new FontService("Fonts");
+        var fontService = TestFonts.Shared;
         var windowService = TestElementPoolServiceFactory.Create(fontService, new LabelRenderer());
 
         var hotbar = new HotbarContent(

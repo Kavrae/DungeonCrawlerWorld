@@ -14,9 +14,10 @@ namespace Tests.Presentation;
 /// window down to whatever the widest wrapped line actually needs.
 /// </summary>
 [TestClass]
+[DoNotParallelize]
 public sealed class TextWindowSizingTests
 {
-    private static ElementPoolService CreateWindowService() => TestElementPoolServiceFactory.Create(new FontService("Fonts"), new LabelRenderer());
+    private static ElementPoolService CreateWindowService() => TestElementPoolServiceFactory.Create(TestFonts.Shared, new LabelRenderer());
 
     private static TextWindow CreateWrapContentTextWindow(ElementPoolService windowService, string text, Vector2 maximumSize)
     {

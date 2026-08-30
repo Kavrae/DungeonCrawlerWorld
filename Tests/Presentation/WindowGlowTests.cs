@@ -7,9 +7,10 @@ namespace Tests.Presentation;
 
 /// <summary>Covers Window.SetGlow's bookkeeping -- the actual ring rendering (GlowRenderer) is visual and verified in-game, not unit-testable without a GraphicsDevice.</summary>
 [TestClass]
+[DoNotParallelize]
 public sealed class WindowGlowTests
 {
-    private static ElementPoolService CreateWindowService() => TestElementPoolServiceFactory.Create(new FontService("Fonts"), new LabelRenderer());
+    private static ElementPoolService CreateWindowService() => TestElementPoolServiceFactory.Create(TestFonts.Shared, new LabelRenderer());
 
     private static Window CreateWindow(ElementPoolService windowService)
     {

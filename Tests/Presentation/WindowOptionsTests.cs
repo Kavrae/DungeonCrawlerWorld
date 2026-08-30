@@ -14,9 +14,10 @@ namespace Tests.Presentation;
 /// without a new subclass).
 /// </summary>
 [TestClass]
+[DoNotParallelize]
 public sealed class WindowOptionsTests
 {
-    private static ElementPoolService CreateWindowService() => TestElementPoolServiceFactory.Create(new FontService("Fonts"), new LabelRenderer());
+    private static ElementPoolService CreateWindowService() => TestElementPoolServiceFactory.Create(TestFonts.Shared, new LabelRenderer());
 
     [TestMethod]
     public void CreateWindow_AllGroupsUnset_FallsBackToDefaults()

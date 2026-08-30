@@ -14,9 +14,10 @@ namespace Tests.Presentation;
 /// window's own WindowDisplayMode the way the generic minimize/restore behavior would.
 /// </summary>
 [TestClass]
+[DoNotParallelize]
 public sealed class NotificationMinimizeBehaviorTests
 {
-    private static ElementPoolService CreateWindowService() => TestElementPoolServiceFactory.Create(new FontService("Fonts"), new LabelRenderer());
+    private static ElementPoolService CreateWindowService() => TestElementPoolServiceFactory.Create(TestFonts.Shared, new LabelRenderer());
 
     private static Window CreateWindowWithCloseAndNotificationMinimize(ElementPoolService windowService, Action onMinimize)
     {

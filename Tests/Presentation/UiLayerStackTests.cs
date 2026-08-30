@@ -13,9 +13,10 @@ namespace Tests.Presentation;
 /// InvokesTheOption), and only incidentally.
 /// </summary>
 [TestClass]
+[DoNotParallelize]
 public sealed class UiLayerStackTests
 {
-    private static ElementPoolService CreateWindowService() => TestElementPoolServiceFactory.Create(new FontService("Fonts"), new LabelRenderer());
+    private static ElementPoolService CreateWindowService() => TestElementPoolServiceFactory.Create(TestFonts.Shared, new LabelRenderer());
 
     private static Window CreateWindow(ElementPoolService windowService) =>
         windowService.CreateElement<Window>(null, new ElementOptions());

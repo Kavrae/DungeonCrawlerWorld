@@ -5,6 +5,7 @@ using Presentation.Rendering;
 namespace Tests.Presentation.Rendering;
 
 [TestClass]
+[DoNotParallelize]
 public sealed class LabelRendererTests
 {
     /// <summary>
@@ -19,7 +20,7 @@ public sealed class LabelRendererTests
     public void GetCenteredPosition_ResultingGlyphInkCenterMatchesFootprintCenter()
     {
         var renderer = new LabelRenderer();
-        var font = new FontService("Fonts").GetFont(24);
+        var font = TestFonts.Shared.GetFont(24);
         const string glyph = "g";
         var footprintTopLeft = new Vector2(30, 60);
         var footprintSize = new Vector2(72, 72); // e.g. a 3x3 Huge footprint at 24px tiles.
@@ -44,7 +45,7 @@ public sealed class LabelRendererTests
     public void GetCenteredPosition_LargerFootprint_MovesPositionFurtherFromOrigin()
     {
         var renderer = new LabelRenderer();
-        var font = new FontService("Fonts").GetFont(36);
+        var font = TestFonts.Shared.GetFont(36);
         const string glyph = "g";
         var origin = Vector2.Zero;
 
@@ -59,7 +60,7 @@ public sealed class LabelRendererTests
     public void GetCenteredPosition_FootprintTopLeftOffset_TranslatesResultByTheSameAmount()
     {
         var renderer = new LabelRenderer();
-        var font = new FontService("Fonts").GetFont(8);
+        var font = TestFonts.Shared.GetFont(8);
         const string glyph = "f";
         var footprintSize = new Vector2(12, 12);
 
@@ -79,7 +80,7 @@ public sealed class LabelRendererTests
     public void GetCenteredPosition_DifferentGlyphsSameFont_AreNotConflated()
     {
         var renderer = new LabelRenderer();
-        var font = new FontService("Fonts").GetFont(24);
+        var font = TestFonts.Shared.GetFont(24);
         var footprintTopLeft = Vector2.Zero;
         var footprintSize = new Vector2(24, 24);
 
@@ -94,7 +95,7 @@ public sealed class LabelRendererTests
     public void GetCenteredPosition_RepeatedAndInterleavedLookups_ReturnConsistentResults()
     {
         var renderer = new LabelRenderer();
-        var font = new FontService("Fonts").GetFont(24);
+        var font = TestFonts.Shared.GetFont(24);
         var footprintTopLeft = new Vector2(5, 5);
         var footprintSize = new Vector2(24, 24);
 

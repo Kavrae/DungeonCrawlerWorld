@@ -7,6 +7,7 @@ namespace Tests.Presentation;
 
 /// <summary>Covers Folder's expand/collapse toggle and child tiling. Icon rendering itself (sprite vs. glyph fallback) is drawn through GraphicsDevice/SpriteBatch and isn't unit-testable headlessly -- verified in-game instead.</summary>
 [TestClass]
+[DoNotParallelize]
 public sealed class FolderTests
 {
     private static readonly Vector2 FolderPosition = new(30, 30);
@@ -14,7 +15,7 @@ public sealed class FolderTests
 
     private static ElementPoolService CreateWindowService()
     {
-        var fontService = new FontService("Fonts");
+        var fontService = TestFonts.Shared;
         var labelRenderer = new LabelRenderer();
         var windowService = TestElementPoolServiceFactory.Create(fontService, labelRenderer);
         windowService.RegisterFactory<Folder>(() => new Folder(

@@ -15,9 +15,10 @@ namespace Tests.Presentation;
 /// with the key held fires exactly once, the same as the old edge-triggered HandleKeyPress did.
 /// </summary>
 [TestClass]
+[DoNotParallelize]
 public sealed class TextBoxTests
 {
-    private static ElementPoolService CreateWindowService() => TestElementPoolServiceFactory.Create(new FontService("Fonts"), new LabelRenderer());
+    private static ElementPoolService CreateWindowService() => TestElementPoolServiceFactory.Create(TestFonts.Shared, new LabelRenderer());
 
     private static TextBox CreateTextBox(ElementPoolService windowService, bool multiline = false)
     {
@@ -185,7 +186,7 @@ public sealed class TextBoxTests
     public void GrowingPastMaximumSize_CapsHeightAndDoesNotExceedIt()
     {
         var windowService = CreateWindowService();
-        var lineHeight = new FontService("Fonts").GetFont(8).LineHeight;
+        var lineHeight = TestFonts.Shared.GetFont(8).LineHeight;
         var threeLineCap = lineHeight * 3 + 3 * 2;
         var textBox = CreateGrowableMultilineTextBox(windowService, threeLineCap);
 

@@ -97,7 +97,11 @@ target with a body-part-condition-granted one.
   permanent, ticked by the new `StatusEffectImmunityExpirySystem`) or permanent, checked by
   `StatusEffectImmunity.IsImmune` at the true chokepoint each effect already funnels every grant
   through (`PoisonEffects.ApplyStack`, `BurningEffects.ApplyStack`,
-  `BurningAuraApplier.ApplyBodyPartScopedStack`, `ParalysisEffects.Apply`). `StatusEffectsModule` is now an `IGameModule` (was
+  `BurningAuraApplier.ApplyBodyPartScopedStack`, `ParalysisEffects.Apply`), each of which now also
+  takes optional `EventBus?`/`IPlayerQuery?` params (threaded from each module's own `Configure`-captured
+  fields) so a blocked grant publishes `StatusEffectImmunityBlockedEvent` -- player-involved-only,
+  mirrors `EntityDamagedEvent`/`EntityHealedEvent` -- logged by `PlayerActivityLog` as a `BLOCKED` line.
+  `StatusEffectsModule` is now an `IGameModule` (was
   a plain `IModule`) purely to reach `ProcessingTierEvents` in `Configure` for that expiry system --
   any test building an `EcsContext` via the raw `Engine.Bootstrapper.Build` (not `GameBootstrapper`)
   must now call `.Configure(context)` on it too, same as every other `IGameModule` in that list
@@ -161,6 +165,41 @@ behavior-composition follow-up (see TODO.md).
 (placeholder). Consumer wiring still open (see TODO.md).
 
 ## Presentation
+
+### FontService lifetime, and a test-only FreeType finalizer crash
+
+- `FontService` (`Presentation/Fonts/FontService.cs`) is now `IDisposable`, disposing its owned
+  `FontStashSharp.FontSystem` -- that type owns real native FreeType face/library handles
+  (`FNA.NET.FontStashSharp` bundles FreeType as its built-in rasterizer, needed for
+  `DroidSansJapanese.ttf`/`Symbola-Emoji.ttf` coverage the pure-managed StbTrueType path can't
+  provide). Nothing calls `Dispose` in production (`PresentationBootstrapper.Build` creates exactly
+  one `FontService` for the whole game process, harmlessly left for the finalizer at exit).
+- The test suite used to construct 45+ independent `FontService` instances across ~21
+  `Tests/Presentation/*` files, none ever disposed -- each undisposed native FreeType context only
+  ever got cleaned up by its own finalizer, and enough of them competing for finalization near
+  test-host shutdown caused an intermittent, unrecoverable `0xC0000005` access violation inside
+  `FreeTypeSharp.FT.FT_Done_Face`. Fixed by `Tests/Presentation/TestFonts.cs`: exactly one shared
+  `FontService` for the whole test run (matching production's own proven-safe single-instance
+  case), combined with `[DoNotParallelize]` on every one of those 21 test classes -- a single
+  mutable `FontSystem`'s dynamic glyph atlas is not thread-safe, and `MSTestSettings.cs` runs tests
+  in parallel by default, so a genuinely shared instance without that attribute corrupted glyph
+  measurements under concurrent access instead (a different, correctness-not-crash bug, ruled out
+  before landing this). See `TestFonts.cs`'s own doc comment for the full reasoning, including why
+  a `[ThreadStatic]`-per-worker instance (tried in between) still crashed intermittently and wasn't
+  enough on its own.
+- While chasing this, found (and fixed) an unrelated pre-existing flake:
+  `MapWindowTests.HandleHotkeys_PressingArmedItemSlotAgainWithNoHoveredTile_DoesNothingAndStaysArmed`
+  (and its Action-side twin, `...PressingArmedSlotAgainWithNoHoveredTile_DoesNothingAndStaysArmed`)
+  failed independent of any of the above (reproduced against the file at `HEAD`, before any font
+  work). Root cause: `MapWindow.Update` reads the real OS mouse cursor (`Mouse.GetState()`) every
+  call to drive `UpdateHoveredTile` -- both tests looped `Update` 20 times expecting "no hovered
+  tile" afterward without ever resetting it, so they were actually asserting against wherever the
+  physical mouse cursor sat on the machine running them (confirmed via a diagnostic assert: a real
+  run produced `HoveredTile={101,101,0}`, one tile from the player, inside the failing test's own
+  Potion Burst/Range-3 footprint -- big enough to often catch a real cursor position, unlike the
+  Action test's much smaller Adjacent footprint, explaining why only the Item one flaked
+  reliably). Fixed by calling `mapWindow.UpdateHoveredTile(new Point(-1, -1))` (deterministically
+  off-map) right before the final `HandleHotkeys` press in both tests.
 
 ### Selected item details window + Item Details Comparison
 

@@ -3,7 +3,7 @@ using FontStashSharp;
 namespace Presentation.Fonts;
 
 /// <summary>Loads and hands out fonts by size, wrapping FontStashSharp's dynamic glyph rasterization.</summary>
-public sealed class FontService
+public sealed class FontService : IDisposable
 {
     private readonly FontSystem _fontSystem;
 
@@ -27,4 +27,6 @@ public sealed class FontService
     }
 
     public SpriteFontBase GetFont(int fontSize) => _fontSystem.GetFont(fontSize);
+
+    public void Dispose() => _fontSystem.Dispose();
 }

@@ -11,9 +11,10 @@ namespace Tests.Presentation;
 /// minimize/restore is a single toggling button, not two buttons that could both show at once.
 /// </summary>
 [TestClass]
+[DoNotParallelize]
 public sealed class WindowChromeButtonTests
 {
-    private static ElementPoolService CreateWindowService() => TestElementPoolServiceFactory.Create(new FontService("Fonts"), new LabelRenderer());
+    private static ElementPoolService CreateWindowService() => TestElementPoolServiceFactory.Create(TestFonts.Shared, new LabelRenderer());
 
     private static Window CreateWindowWithCloseAndMinimize(ElementPoolService windowService)
     {
