@@ -1,6 +1,7 @@
 using Engine.ECS.Components;
 using Engine.ECS.Components.Stores;
 using Engine.Utilities;
+using Game.Modules.Burning;
 using Game.Modules.Health.Components;
 using Game.Modules.StatModifiers;
 using Game.Modules.StatModifiers.Components;
@@ -19,10 +20,10 @@ namespace Presentation.UI;
 /// each part's own TextDivider header, plus a single Status Effects section above them. Color and
 /// section-divider style borrowed from ItemDetailsWindow (dark PanelBackgroundColor background,
 /// white body text, TitleColor-labeled TextDivider headers), the same template every future detail
-/// window in this codebase should reach for. Status effects render once, not repeated per part --
-/// they're entity-scoped only today, not per-body-part (see PLAN-health-window.md's own confirmed
-/// decision), so repeating the same list under every part would misleadingly imply six
-/// independently-afflicted parts. Collapses to nothing when no effect is active.
+/// window in this codebase should reach for. The top Status Effects section shows only entity-scoped
+/// effects (StatusEffectStack -- Poison, Paralysis, entity-scoped Burning); a body-part-scoped
+/// Burning (see PLAN-per-body-part-status-effects.md) instead shows its own line under that one
+/// part's own bar, not repeated under every part -- each collapses to nothing when nothing is active.
 /// </summary>
 public sealed class HealthWindow(
     FontService fontService,
@@ -67,12 +68,25 @@ public sealed class HealthWindow(
 
     private readonly MultiComponentPool<StatusEffectStack> _statusEffectStacks = componentManager.GetMultiPool<StatusEffectStack>();
 
+    // Optional -- BurningModule might not be loaded at all (e.g. a minimal test), in which case
+    // no body part can ever carry a body-part-scoped burn and every per-part status line below
+    // collapses to nothing, same as the entity-scoped section already does with no active effects.
+    private readonly MultiComponentPool<BodyPartBurningTimerComponent>? _bodyPartBurningTimers = componentManager.IsRegistered<BodyPartBurningTimerComponent>()
+        ? componentManager.GetMultiPool<BodyPartBurningTimerComponent>()
+        : null;
+
     private readonly List<BodyPartRow> _bodyPartRows = [];
     private readonly List<StatusEffectRow> _statusEffectRows = [];
     private readonly List<StatusEffectType> _activeEffectTypesScratch = [];
     private readonly List<FractionBarElement> _bodyPartBars = [];
     private readonly List<TextWindow> _statusEffectRowWindows = [];
-    private readonly VersionWatcher _statusEffectVersionWatcher = new();
+    private readonly List<TextWindow?> _bodyPartStatusEffectRowWindows = [];
+
+    // Last-seen structural signature for each section, compared (not version-watched -- see
+    // Update's own comment for why) every frame to decide whether a real rebuild is warranted.
+    private readonly List<StatusEffectType> _previousActiveEffectTypes = [];
+    private readonly List<byte> _activeBurningPartIdsScratch = [];
+    private readonly List<byte> _previousActiveBurningPartIds = [];
 
     private int _entityId;
     private int _framesSinceLastTextRefresh;
@@ -83,24 +97,50 @@ public sealed class HealthWindow(
     /// <summary>
     /// Built here, not in Configure, for the same reason AbilityScoreWindow.BuildColumns is --
     /// ContentSize isn't real until Element.Initialize's own MeasureAndArrange has run. Primes
-    /// the version watcher against this same initial build so Update's own change-check doesn't
-    /// immediately see the priming call itself as a change and rebuild a second time -- same
-    /// priming AbilityScoreWindow.OnChildrenInitialized does for its own two watchers.
+    /// the previous-signature snapshots against this same initial build so Update's own
+    /// change-check doesn't immediately see the priming call itself as a change and rebuild a
+    /// second time -- same priming AbilityScoreWindow.OnChildrenInitialized does for its own
+    /// watchers.
     /// </summary>
     protected override void OnChildrenInitialized()
     {
         base.OnChildrenInitialized();
 
         RebuildContent();
-        _statusEffectVersionWatcher.HasChanged(_statusEffectStacks.GetEntityVersion(_entityId));
+        StatusEffectQueries.GetActiveEffectTypes(_statusEffectStacks, _entityId, _previousActiveEffectTypes);
+        BuildBurningPartIds(_previousActiveBurningPartIds, _bodyParts, _bodyPartBurningTimers, _entityId);
     }
 
+    /// <summary>
+    /// Rebuilds only when the *set* of visible rows actually changed (an effect type or a
+    /// burning part appearing/disappearing), not on every raw pool mutation -- unlike
+    /// MultiComponentPool.GetEntityVersion (what this used to watch via VersionWatcher), which
+    /// bumps on every Add *and* Remove, including the routine "consume one stack, decrement the
+    /// count" Remove every BurningSystem/PoisonSystem/BodyPartBurningSystem tick already does
+    /// while an effect is simply ticking along unchanged. That made RebuildContent (which closes
+    /// and recreates every divider/bar/row) fire on every ~1-second tick of any active effect
+    /// instead of only on a real grant/expiry, starving the cheaper RefreshRowValues text-only
+    /// path of ever actually running while this window was open. GetActiveEffectTypes/
+    /// BuildBurningPartIds are both keyed off presence (a type is or isn't active; a part is or
+    /// isn't currently burning), so they're stable frame to frame across a tick that only changes
+    /// a stack count, and only actually differ on a genuine appearance/disappearance.
+    /// </summary>
     public override void Update(GameTime gameTime)
     {
         base.Update(gameTime);
 
-        if (_statusEffectVersionWatcher.HasChanged(_statusEffectStacks.GetEntityVersion(_entityId)))
+        StatusEffectQueries.GetActiveEffectTypes(_statusEffectStacks, _entityId, _activeEffectTypesScratch);
+        BuildBurningPartIds(_activeBurningPartIdsScratch, _bodyParts, _bodyPartBurningTimers, _entityId);
+
+        var statusEffectsChanged = !SequenceEqual(_activeEffectTypesScratch, _previousActiveEffectTypes);
+        var bodyPartStatusEffectsChanged = !SequenceEqual(_activeBurningPartIdsScratch, _previousActiveBurningPartIds);
+        if (statusEffectsChanged || bodyPartStatusEffectsChanged)
         {
+            _previousActiveEffectTypes.Clear();
+            _previousActiveEffectTypes.AddRange(_activeEffectTypesScratch);
+            _previousActiveBurningPartIds.Clear();
+            _previousActiveBurningPartIds.AddRange(_activeBurningPartIdsScratch);
+
             RebuildContent();
             _framesSinceLastTextRefresh = 0;
             return;
@@ -122,9 +162,49 @@ public sealed class HealthWindow(
         elementPoolService.CloseAllChildren(this);
         _statusEffectRowWindows.Clear();
         _bodyPartBars.Clear();
+        _bodyPartStatusEffectRowWindows.Clear();
 
         BuildStatusEffectSection();
         BuildBodyPartSection();
+    }
+
+    /// <summary>Fills destination with the PartId of every body part currently showing an active body-part-scoped Burning line -- the per-part-section counterpart to StatusEffectQueries.GetActiveEffectTypes, in the same stable (dense body-part-chain) order every call, so Update's own frame-to-frame comparison only reports a change on a genuine appear/disappear, not on an ordinary tick's stack-count decrement.</summary>
+    private static void BuildBurningPartIds(List<byte> destination, MultiComponentPool<BodyPartComponent> bodyParts, MultiComponentPool<BodyPartBurningTimerComponent>? bodyPartBurningTimers, int entityId)
+    {
+        destination.Clear();
+
+        if (bodyPartBurningTimers is null)
+        {
+            return;
+        }
+
+        for (var denseIndex = bodyParts.GetFirstDenseIndex(entityId); denseIndex != -1; denseIndex = bodyParts.GetNextDenseIndex(denseIndex))
+        {
+            var partId = bodyParts.GetReadonlyByDenseIndex(denseIndex).PartId;
+            if (TryGetBodyPartBurningLine(bodyPartBurningTimers, entityId, partId, out _, out _))
+            {
+                destination.Add(partId);
+            }
+        }
+    }
+
+    private static bool SequenceEqual<T>(List<T> first, List<T> second)
+    {
+        if (first.Count != second.Count)
+        {
+            return false;
+        }
+
+        var comparer = EqualityComparer<T>.Default;
+        for (var index = 0; index < first.Count; index++)
+        {
+            if (!comparer.Equals(first[index], second[index]))
+            {
+                return false;
+            }
+        }
+
+        return true;
     }
 
     private void BuildStatusEffectSection()
@@ -158,10 +238,14 @@ public sealed class HealthWindow(
             var row = _bodyPartRows[index];
             BuildDivider(width, row.Name);
             _bodyPartBars.Add(AddBarRow(width, ComputeFraction(row)));
+
+            _bodyPartStatusEffectRowWindows.Add(TryGetBodyPartBurningLine(_bodyPartBurningTimers, _entityId, row.PartId, out var text, out var color)
+                ? AddTextRow(text, color)
+                : null);
         }
     }
 
-    /// <summary>Refreshes bar fractions/remaining-duration text in place, by index position -- mirrors InspectionWindowContent.RefreshAdminDump's own "refresh in place, don't rebuild" approach and its same accepted limitation if row count ever drifted between refreshes (it doesn't here -- structural changes go through RebuildContent instead, gated by _statusEffectVersionWatcher above).</summary>
+    /// <summary>Refreshes bar fractions/remaining-duration text in place, by index position -- mirrors InspectionWindowContent.RefreshAdminDump's own "refresh in place, don't rebuild" approach and its same accepted limitation if row count ever drifted between refreshes (it doesn't here -- structural changes go through RebuildContent instead, gated by Update's own signature comparison above).</summary>
     private void RefreshRowValues()
     {
         BuildBodyPartRows(_bodyPartRows, _entityId, _healthPool, _bodyParts, _statModifiers);
@@ -169,6 +253,13 @@ public sealed class HealthWindow(
         for (var index = 0; index < bodyPartCount; index++)
         {
             _bodyPartBars[index].Configure(ComputeFraction(_bodyPartRows[index]), hasResource: true, HealthBarPalette.OutlineColor, HealthBarPalette.FractionColor);
+
+            if (index < _bodyPartStatusEffectRowWindows.Count
+                && _bodyPartStatusEffectRowWindows[index] is { } bodyPartStatusEffectRow
+                && TryGetBodyPartBurningLine(_bodyPartBurningTimers, _entityId, _bodyPartRows[index].PartId, out var text, out _))
+            {
+                bodyPartStatusEffectRow.UpdateText(text);
+            }
         }
 
         BuildStatusEffectRows(_statusEffectRows, _activeEffectTypesScratch, _entityId, _statusEffectStacks, statusEffectDisplays, componentManager);
@@ -265,7 +356,7 @@ public sealed class HealthWindow(
         _ => BodyTextColor,
     };
 
-    internal readonly record struct BodyPartRow(string Name, float CurrentHealth, float MaximumHealth);
+    internal readonly record struct BodyPartRow(string Name, float CurrentHealth, float MaximumHealth, byte PartId);
 
     internal readonly record struct StatusEffectRow(StatusEffectType Type, int? RemainingSeconds);
 
@@ -290,7 +381,7 @@ public sealed class HealthWindow(
         if (healthPool.TryGetReadonly(entityId, out var health))
         {
             var effectiveMaximum = StatModifierMath.GetEffectiveValue(statModifiers, entityId, StatModifierTarget.MaximumHealth, health.MaximumHealth);
-            destination.Add(new BodyPartRow("HP", health.CurrentHealth, effectiveMaximum));
+            destination.Add(new BodyPartRow("HP", health.CurrentHealth, effectiveMaximum, PartId: 0));
             return;
         }
 
@@ -298,8 +389,45 @@ public sealed class HealthWindow(
         {
             ref readonly var part = ref bodyParts.GetReadonlyByDenseIndex(denseIndex);
             var effectiveMaximum = StatModifierMath.GetEffectiveValue(statModifiers, entityId, StatModifierTarget.MaximumHealth, part.MaximumHealth);
-            destination.Add(new BodyPartRow(part.Name, part.CurrentHealth, effectiveMaximum));
+            destination.Add(new BodyPartRow(part.Name, part.CurrentHealth, effectiveMaximum, part.PartId));
         }
+    }
+
+    /// <summary>True (with a formatted line, same glyph+name+duration format FormatStatusEffectRow already uses for the entity-scoped section) if entityId's partId currently has an active body-part-scoped Burning timer.</summary>
+    /// <remarks>
+    /// Pure data assembly, no rendering -- see BuildBodyPartRows' own doc comment for why (static,
+    /// explicit parameters, directly testable). Reads BodyPartBurningTimerComponent's own
+    /// FramesUntilNextTick/StackCount directly (the same formula BurningModule registers for the
+    /// entity-scoped BurningTimerComponent case) rather than through IStatusEffectDisplay, since
+    /// that interface's GetRemainingDurationFrames takes no partId. bodyPartBurningTimers is
+    /// nullable -- BurningModule might not be loaded at all (see this class's own field doc comment).
+    /// </remarks>
+    internal static bool TryGetBodyPartBurningLine(MultiComponentPool<BodyPartBurningTimerComponent>? bodyPartBurningTimers, int entityId, byte partId, out string text, out Color color)
+    {
+        text = string.Empty;
+        color = BodyTextColor;
+
+        if (bodyPartBurningTimers is null)
+        {
+            return false;
+        }
+
+        for (var denseIndex = bodyPartBurningTimers.GetFirstDenseIndex(entityId); denseIndex != -1; denseIndex = bodyPartBurningTimers.GetNextDenseIndex(denseIndex))
+        {
+            ref readonly var timer = ref bodyPartBurningTimers.GetReadonlyByDenseIndex(denseIndex);
+            if (timer.PartId != partId)
+            {
+                continue;
+            }
+
+            var remainingFrames = timer.FramesUntilNextTick + (timer.StackCount - 1) * BurningEffects.TickIntervalFrames;
+            var remainingSeconds = (int)System.Math.Ceiling(remainingFrames / (float)GameTiming.FramesPerSecond);
+            text = $"{BurningEffects.Glyph} {StatusEffectType.Burning}: {remainingSeconds}s";
+            color = GetColor(StatusEffectType.Burning);
+            return true;
+        }
+
+        return false;
     }
 
     /// <summary>Pure data assembly, no rendering -- see BuildBodyPartRows' own doc comment for why. One row per StatusEffectQueries.GetActiveEffectTypes entry, each with its own remaining duration in real seconds (null if the active type has no registered IStatusEffectDisplay -- a future effect type with no display registered yet).</summary>

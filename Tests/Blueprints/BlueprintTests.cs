@@ -171,7 +171,8 @@ public sealed class BlueprintTests
         var expectedPartsByName = new Dictionary<string, (BodyPartType Type, ushort MinimumHealth, ushort MaximumHealth, bool IsVital)>
         {
             ["Head"] = (BodyPartType.Head, 30, 30, true),
-            ["Torso"] = (BodyPartType.Torso, 60, 60, true),
+            ["Torso"] = (BodyPartType.Torso, 50, 50, true),
+            ["Internal"] = (BodyPartType.Internal, 10, 10, true),
             ["Left Arm"] = (BodyPartType.Arm, 15, 15, false),
             ["Right Arm"] = (BodyPartType.Arm, 15, 15, false),
             ["Left Hand"] = (BodyPartType.Hand, 5, 5, false),
@@ -225,7 +226,8 @@ public sealed class BlueprintTests
         var expectedPartsByName = new Dictionary<string, (BodyPartType Type, ushort MinimumHealth, ushort MaximumHealth, bool IsVital)>
         {
             ["Head"] = (BodyPartType.Head, 40, 40, true),
-            ["Torso"] = (BodyPartType.Torso, 80, 80, true),
+            ["Torso"] = (BodyPartType.Torso, 65, 65, true),
+            ["Internal"] = (BodyPartType.Internal, 15, 15, true),
             ["Left Arm"] = (BodyPartType.Arm, 20, 20, false),
             ["Right Arm"] = (BodyPartType.Arm, 20, 20, false),
             ["Left Hand"] = (BodyPartType.Hand, 5, 5, false),

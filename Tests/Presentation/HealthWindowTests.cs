@@ -1,4 +1,4 @@
-using Engine.ECS.Components;
+﻿using Engine.ECS.Components;
 using Engine.ECS.Components.Stores;
 using Game.Modules.Burning;
 using Game.Modules.Burning.Components;
@@ -47,12 +47,12 @@ public sealed class HealthWindowTests
     {
         var healthPool = CreateHealthPool();
         var bodyParts = CreateBodyPartsPool();
-        bodyParts.Add(EntityId, new BodyPartComponent("Head", BodyPartType.Head, verticalPosition: 0, currentHealth: 10, maximumHealth: 10, isVital: true));
-        bodyParts.Add(EntityId, new BodyPartComponent("Torso", BodyPartType.Torso, verticalPosition: 0, currentHealth: 15, maximumHealth: 20, isVital: true));
-        bodyParts.Add(EntityId, new BodyPartComponent("Left Arm", BodyPartType.Arm, verticalPosition: 0, currentHealth: 8, maximumHealth: 8, isVital: false));
-        bodyParts.Add(EntityId, new BodyPartComponent("Right Arm", BodyPartType.Arm, verticalPosition: 0, currentHealth: 8, maximumHealth: 8, isVital: false));
-        bodyParts.Add(EntityId, new BodyPartComponent("Left Leg", BodyPartType.Leg, verticalPosition: 0, currentHealth: 4, maximumHealth: 9, isVital: false));
-        bodyParts.Add(EntityId, new BodyPartComponent("Right Leg", BodyPartType.Leg, verticalPosition: 0, currentHealth: 9, maximumHealth: 9, isVital: false));
+        bodyParts.Add(EntityId, new BodyPartComponent("Head", BodyPartType.Head, 0, verticalPosition: 0, currentHealth: 10, maximumHealth: 10, isVital: true));
+        bodyParts.Add(EntityId, new BodyPartComponent("Torso", BodyPartType.Torso, 0, verticalPosition: 0, currentHealth: 15, maximumHealth: 20, isVital: true));
+        bodyParts.Add(EntityId, new BodyPartComponent("Left Arm", BodyPartType.Arm, 0, verticalPosition: 0, currentHealth: 8, maximumHealth: 8, isVital: false));
+        bodyParts.Add(EntityId, new BodyPartComponent("Right Arm", BodyPartType.Arm, 0, verticalPosition: 0, currentHealth: 8, maximumHealth: 8, isVital: false));
+        bodyParts.Add(EntityId, new BodyPartComponent("Left Leg", BodyPartType.Leg, 0, verticalPosition: 0, currentHealth: 4, maximumHealth: 9, isVital: false));
+        bodyParts.Add(EntityId, new BodyPartComponent("Right Leg", BodyPartType.Leg, 0, verticalPosition: 0, currentHealth: 9, maximumHealth: 9, isVital: false));
 
         List<HealthWindow.BodyPartRow> rows = [];
         HealthWindow.BuildBodyPartRows(rows, EntityId, healthPool, bodyParts, statModifiers: null);
@@ -71,7 +71,7 @@ public sealed class HealthWindowTests
         // ComplexHealthHeal/BodyPartSelection/PlayerHealthHoverContent had.
         var healthPool = CreateHealthPool();
         var bodyParts = CreateBodyPartsPool();
-        bodyParts.Add(EntityId, new BodyPartComponent("Head", BodyPartType.Head, verticalPosition: 0, currentHealth: 10, maximumHealth: 10, isVital: true));
+        bodyParts.Add(EntityId, new BodyPartComponent("Head", BodyPartType.Head, 0, verticalPosition: 0, currentHealth: 10, maximumHealth: 10, isVital: true));
         var statModifiers = CreateMaximumHealthBuffPool(0.5f);
 
         List<HealthWindow.BodyPartRow> rows = [];
@@ -183,5 +183,39 @@ public sealed class HealthWindowTests
         Assert.HasCount(1, rows);
         Assert.AreEqual(StatusEffectType.Paralysis, rows[0].Type);
         Assert.AreEqual(2, rows[0].RemainingSeconds);
+    }
+
+    [TestMethod]
+    public void TryGetBodyPartBurningLine_PartHasActiveBodyPartScopedBurn_ReturnsFormattedLine()
+    {
+        var bodyPartBurningTimers = new MultiComponentPool<BodyPartBurningTimerComponent>(maximumEntityCount: 10, initialCapacity: 4);
+        // FramesUntilNextTick 45 + (StackCount 2 - 1) * TickIntervalFrames 60 = 105 frames = 1.75s -> ceil to 2 -- same formula the entity-scoped BurningTimerComponent display uses.
+        bodyPartBurningTimers.Add(EntityId, new BodyPartBurningTimerComponent(partId: 1, stackCount: 2, framesUntilNextTick: 45));
+
+        var found = HealthWindow.TryGetBodyPartBurningLine(bodyPartBurningTimers, EntityId, partId: 1, out var text, out _);
+
+        Assert.IsTrue(found);
+        Assert.Contains("2s", text);
+        Assert.Contains(BurningEffects.Glyph, text);
+    }
+
+    [TestMethod]
+    public void TryGetBodyPartBurningLine_DifferentPartOnFire_ThisPartReturnsFalse()
+    {
+        var bodyPartBurningTimers = new MultiComponentPool<BodyPartBurningTimerComponent>(maximumEntityCount: 10, initialCapacity: 4);
+        bodyPartBurningTimers.Add(EntityId, new BodyPartBurningTimerComponent(partId: 1, stackCount: 2, framesUntilNextTick: 45));
+
+        var found = HealthWindow.TryGetBodyPartBurningLine(bodyPartBurningTimers, EntityId, partId: 0, out var text, out _);
+
+        Assert.IsFalse(found);
+        Assert.AreEqual(string.Empty, text);
+    }
+
+    [TestMethod]
+    public void TryGetBodyPartBurningLine_NoPoolSupplied_ReturnsFalse()
+    {
+        var found = HealthWindow.TryGetBodyPartBurningLine(null, EntityId, partId: 0, out _, out _);
+
+        Assert.IsFalse(found);
     }
 }

@@ -60,6 +60,11 @@ public sealed class HealthModule : IGameModule
         var abilityScores = componentManager.IsRegistered<AbilityScoreComponent>()
             ? componentManager.GetMultiPool<AbilityScoreComponent>()
             : null;
+        // Optional -- BurningModule might not be loaded at all (see BodyPartBurningTimerComponent's
+        // own doc comment for why it's registered here, under Health, rather than under Burning).
+        var bodyPartBurningTimers = componentManager.IsRegistered<BodyPartBurningTimerComponent>()
+            ? componentManager.GetMultiPool<BodyPartBurningTimerComponent>()
+            : null;
 
         systemManager.Register(new SimpleHealthRegenSystem(
             componentManager.GetPackedPool<SimpleHealthComponent>(),
@@ -76,6 +81,7 @@ public sealed class HealthModule : IGameModule
             _processingTierEvents,
             statModifiers,
             deadEntities,
-            abilityScores));
+            abilityScores,
+            bodyPartBurningTimers));
     }
 }

@@ -36,6 +36,7 @@ public sealed class ComplexHealthRegenSystem : ISystem
     private readonly MultiComponentPool<StatModifierComponent>? _statModifiers;
     private readonly PackedComponentPool<DeadComponent>? _deadEntities;
     private readonly MultiComponentPool<AbilityScoreComponent>? _abilityScores;
+    private readonly MultiComponentPool<BodyPartBurningTimerComponent>? _bodyPartBurningTimers;
     private readonly TieredEntityStripeSet _tieredStripeSet;
 
     public ComplexHealthRegenSystem(
@@ -44,13 +45,15 @@ public sealed class ComplexHealthRegenSystem : ISystem
         ProcessingTierEvents processingTierEvents,
         MultiComponentPool<StatModifierComponent>? statModifiers = null,
         PackedComponentPool<DeadComponent>? deadEntities = null,
-        MultiComponentPool<AbilityScoreComponent>? abilityScores = null)
+        MultiComponentPool<AbilityScoreComponent>? abilityScores = null,
+        MultiComponentPool<BodyPartBurningTimerComponent>? bodyPartBurningTimers = null)
     {
         _bodyParts = bodyParts;
         _processingTiers = processingTiers;
         _statModifiers = statModifiers;
         _deadEntities = deadEntities;
         _abilityScores = abilityScores;
+        _bodyPartBurningTimers = bodyPartBurningTimers;
 
         _tieredStripeSet = ProcessingTierWiring.CreateAndWire(StripeCount, bodyParts, processingTiers, processingTierEvents);
     }
@@ -81,7 +84,7 @@ public sealed class ComplexHealthRegenSystem : ISystem
                 continue;
             }
 
-            var selectedDenseIndex = BodyPartSelection.PickLowestPercentage(_bodyParts, entityId, _statModifiers);
+            var selectedDenseIndex = BodyPartSelection.PickLowestPercentage(_bodyParts, entityId, _statModifiers, _bodyPartBurningTimers);
             if (selectedDenseIndex == -1)
             {
                 continue;

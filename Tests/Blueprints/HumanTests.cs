@@ -126,7 +126,8 @@ public sealed class HumanTests
         var expectedPartsByName = new Dictionary<string, (BodyPartType Type, ushort MinimumHealth, ushort MaximumHealth, bool IsVital)>
         {
             ["Head"] = (BodyPartType.Head, 40, 40, true),
-            ["Torso"] = (BodyPartType.Torso, 80, 80, true),
+            ["Torso"] = (BodyPartType.Torso, 65, 65, true),
+            ["Internal"] = (BodyPartType.Internal, 15, 15, true),
             ["Left Arm"] = (BodyPartType.Arm, 20, 20, false),
             ["Right Arm"] = (BodyPartType.Arm, 20, 20, false),
             ["Left Hand"] = (BodyPartType.Hand, 5, 5, false),

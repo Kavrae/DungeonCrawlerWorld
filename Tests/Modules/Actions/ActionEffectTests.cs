@@ -1,4 +1,4 @@
-using Engine.ECS.Components;
+﻿using Engine.ECS.Components;
 using Engine.ECS.Components.Stores;
 using Engine.Events;
 using Engine.Math;
@@ -105,7 +105,7 @@ public sealed class ActionEffectTests
         var (componentManager, health, eventBus) = Build();
         componentManager.RegisterMultiPool<BodyPartComponent>();
         var bodyParts = componentManager.GetMultiPool<BodyPartComponent>();
-        bodyParts.Add(TargetEntityId, new BodyPartComponent("Torso", BodyPartType.Torso, 0, currentHealth: 100, maximumHealth: 100, isVital: true));
+        bodyParts.Add(TargetEntityId, new BodyPartComponent("Torso", BodyPartType.Torso, 0, 0, currentHealth: 100, maximumHealth: 100, isVital: true));
         var mathUtility = new MathUtility(new NeverCritRandom());
         var context = Context(componentManager, health, eventBus, mathUtility) with { BodyParts = bodyParts };
 
@@ -123,8 +123,8 @@ public sealed class ActionEffectTests
         var (componentManager, health, eventBus) = Build();
         componentManager.RegisterMultiPool<BodyPartComponent>();
         var bodyParts = componentManager.GetMultiPool<BodyPartComponent>();
-        bodyParts.Add(TargetEntityId, new BodyPartComponent("Head", BodyPartType.Head, 5, currentHealth: 30, maximumHealth: 30, isVital: true));
-        bodyParts.Add(TargetEntityId, new BodyPartComponent("Torso", BodyPartType.Torso, 4, currentHealth: 100, maximumHealth: 100, isVital: true));
+        bodyParts.Add(TargetEntityId, new BodyPartComponent("Head", BodyPartType.Head, 0, 5, currentHealth: 30, maximumHealth: 30, isVital: true));
+        bodyParts.Add(TargetEntityId, new BodyPartComponent("Torso", BodyPartType.Torso, 0, 4, currentHealth: 100, maximumHealth: 100, isVital: true));
         var mathUtility = new MathUtility(new NeverCritRandom());
         var context = Context(componentManager, health, eventBus, mathUtility) with { BodyParts = bodyParts };
 
@@ -142,8 +142,8 @@ public sealed class ActionEffectTests
         var (componentManager, health, eventBus) = Build();
         componentManager.RegisterMultiPool<BodyPartComponent>();
         var bodyParts = componentManager.GetMultiPool<BodyPartComponent>();
-        bodyParts.Add(TargetEntityId, new BodyPartComponent("Head", BodyPartType.Head, 0, currentHealth: 10, maximumHealth: 20, isVital: true));
-        bodyParts.Add(TargetEntityId, new BodyPartComponent("Torso", BodyPartType.Torso, 0, currentHealth: 30, maximumHealth: 60, isVital: true));
+        bodyParts.Add(TargetEntityId, new BodyPartComponent("Head", BodyPartType.Head, 0, 0, currentHealth: 10, maximumHealth: 20, isVital: true));
+        bodyParts.Add(TargetEntityId, new BodyPartComponent("Torso", BodyPartType.Torso, 0, 0, currentHealth: 30, maximumHealth: 60, isVital: true));
         var mathUtility = new MathUtility();
         var context = Context(componentManager, health, eventBus, mathUtility) with { BodyParts = bodyParts };
 

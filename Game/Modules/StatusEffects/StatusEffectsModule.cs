@@ -15,8 +15,11 @@ public sealed class StatusEffectsModule : IModule
 {
     public Guid Id { get; } = new("d9f6a1c4-8b2e-4f3a-9c1d-000000000007");
 
-    public void RegisterComponents(ComponentManager componentManager) =>
+    public void RegisterComponents(ComponentManager componentManager)
+    {
         componentManager.RegisterMultiPool<StatusEffectStack>();
+        componentManager.RegisterMultiPool<BodyPartStatusEffectStack>();
+    }
 
     public void RegisterSystems(SystemManager systemManager, ComponentManager componentManager)
     {

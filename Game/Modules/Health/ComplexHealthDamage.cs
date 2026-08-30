@@ -1,13 +1,11 @@
 using Engine.ECS.Components.Stores;
 using Engine.Events;
 using Engine.Math;
-using Engine.Utilities;
 using Game.Modules.Death.Components;
 using Game.Modules.Health.Components;
 using Game.Modules.StatModifiers;
 using Game.Modules.StatModifiers.Components;
 using Game.World;
-using Microsoft.Xna.Framework;
 
 namespace Game.Modules.Health;
 
@@ -52,39 +50,7 @@ public static class ComplexHealthDamage
             0,
             ushort.MaxValue);
 
-        bodyParts.UpdateByDenseIndex(denseIndex, (statModifiers, entityId, effectiveAmount), static (ref BodyPartComponent part, (MultiComponentPool<StatModifierComponent>? StatModifiers, int EntityId, ushort Amount) state) =>
-        {
-            var effectiveMaximumHealth = StatModifierMath.GetEffectiveValue(state.StatModifiers, state.EntityId, StatModifierTarget.MaximumHealth, part.MaximumHealth);
-            part.CurrentHealth = MathHelper.Clamp(part.CurrentHealth - state.Amount, 0f, effectiveMaximumHealth);
-
-            if (part.CurrentHealth == 0)
-            {
-                part.IsDisabled = true;
-                part.RegenLockoutFramesRemaining = (ushort)(10 * GameTiming.FramesPerSecond);
-            }
-        });
-
-        ref readonly var updatedPart = ref bodyParts.GetReadonlyByDenseIndex(denseIndex);
-
-        if (updatedPart.IsVital && updatedPart.CurrentHealth == 0 && deadEntities?.Has(entityId) != true && entityId != playerQuery?.PlayerEntityId)
-        {
-            eventBus.Publish(new EntityDiedEvent(entityId, source));
-        }
-
-        if (playerQuery is null)
-        {
-            return;
-        }
-
-        var playerInvolved = entityId == playerQuery.PlayerEntityId
-            || (source.Kind == StatusEffectSourceKind.Entity && source.EntityId == playerQuery.PlayerEntityId);
-        if (!playerInvolved)
-        {
-            return;
-        }
-
-        HealthQueries.TryGetTotals(health, bodyParts, entityId, out var totalCurrent, out var totalMaximum);
-        var effectiveMaximumHealthForEvent = MathUtility.ClampUShort(StatModifierMath.GetEffectiveValue(statModifiers, entityId, StatModifierTarget.MaximumHealth, totalMaximum), 0, ushort.MaxValue);
-        eventBus.Publish(new EntityDamagedEvent(entityId, effectiveAmount, source, MathUtility.ClampUShort(totalCurrent, 0, ushort.MaxValue), effectiveMaximumHealthForEvent, damageType));
+        BodyPartDamageEffects.ApplyToPart(bodyParts, denseIndex, statModifiers, entityId, effectiveAmount);
+        BodyPartDamageEffects.PublishDamageEvents(health, bodyParts, eventBus, denseIndex, entityId, effectiveAmount, source, playerQuery, damageType, statModifiers, deadEntities);
     }
 }

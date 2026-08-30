@@ -1,4 +1,4 @@
-using Engine.ECS.Components;
+﻿using Engine.ECS.Components;
 using Engine.ECS.Components.Stores;
 using Engine.Math;
 using Game.Blueprints.Races;
@@ -132,7 +132,7 @@ public sealed class TestCombatBehaviorSystemTests
         fixture.TransformPool.Add(entityId, new TransformComponent(GoblinPosition, SingleTile));
         fixture.MovementPool.Add(entityId, new MovementComponent(MovementMode.Random, null, null));
         fixture.ActionLockPool.Add(entityId, new ActionLockComponent(standardLockFrames: 10, currentLockTotalFrames: 0, currentLockFramesRemaining: 0));
-        fixture.BodyParts.Add(entityId, new BodyPartComponent("Head", BodyPartType.Head, 0, headCurrent, headMaximum, isVital: true));
+        fixture.BodyParts.Add(entityId, new BodyPartComponent("Head", BodyPartType.Head, 0, 0, headCurrent, headMaximum, isVital: true));
         if (grantPunch)
         {
             fixture.ActionInstances.Add(entityId, new ActionInstanceComponent(PunchAction.Id, damageAmount: 10, cooldownFramesRemaining: 0));

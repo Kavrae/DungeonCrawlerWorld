@@ -77,8 +77,8 @@ public sealed class ContactDamageSystemTests
         var movedEntities = new FrameEventBuffer<EntityMovedEvent>();
         var processingTiers = CreateTiersPool();
 
-        bodyParts.Add(MoverEntityId, new BodyPartComponent("Head", BodyPartType.Head, verticalPosition: 5, currentHealth: 100, maximumHealth: 100, isVital: true));
-        bodyParts.Add(MoverEntityId, new BodyPartComponent("Torso", BodyPartType.Torso, verticalPosition: 4, currentHealth: 100, maximumHealth: 100, isVital: true));
+        bodyParts.Add(MoverEntityId, new BodyPartComponent("Head", BodyPartType.Head, 0, verticalPosition: 5, currentHealth: 100, maximumHealth: 100, isVital: true));
+        bodyParts.Add(MoverEntityId, new BodyPartComponent("Torso", BodyPartType.Torso, 0, verticalPosition: 4, currentHealth: 100, maximumHealth: 100, isVital: true));
         hazards.Add(TerrainEntityId, new DamageOnContactComponent(damagePerTick: 10, tickIntervalFrames: 60, preferredTargetType: preferredTargetType));
         mapQuery.SetTerrain(new Vector3Int(5, 5, 0), TerrainEntityId);
 

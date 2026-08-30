@@ -72,7 +72,8 @@ public sealed class PoisonSystem : ISystem
             return true;
         }
 
-        HealthDamage.Apply(_health, _eventBus, entityId, timer.StackCount, timer.Source, _playerQuery, StatusEffectDamageType.Describe(StatusEffectType.Poison), _statModifiers, _bodyParts, _mathUtility);
+        HealthDamage.Apply(_health, _eventBus, entityId, timer.StackCount, timer.Source, _playerQuery, StatusEffectDamageType.Describe(StatusEffectType.Poison), _statModifiers, _bodyParts, _mathUtility,
+            targetRule: new BodyPartTargetRule(BodyPartType.Internal, BodyPartFallback.Random));
 
         var remainingDuration = (ushort)(timer.RemainingDurationTicks - 1);
         if (remainingDuration == 0)

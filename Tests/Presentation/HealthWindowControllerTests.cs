@@ -42,6 +42,8 @@ public sealed class HealthWindowControllerTests
         componentManager.RegisterPackedPool<SimpleHealthComponent>(static (ref existing, incoming) => existing = incoming);
         componentManager.RegisterMultiPool<BodyPartComponent>();
         componentManager.RegisterMultiPool<StatusEffectStack>();
+        componentManager.RegisterMultiPool<BodyPartStatusEffectStack>();
+        componentManager.RegisterMultiPool<BodyPartBurningTimerComponent>();
         componentManager.RegisterPackedPool<PoisonTimerComponent>(static (ref existing, incoming) => { });
         componentManager.RegisterPackedPool<BurningTimerComponent>(static (ref existing, incoming) => { });
         componentManager.RegisterPackedPool<ParalysisTimerComponent>(static (ref existing, incoming) => { });

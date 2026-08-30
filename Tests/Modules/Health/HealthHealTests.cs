@@ -1,4 +1,4 @@
-using Engine.ECS.Components.Stores;
+﻿using Engine.ECS.Components.Stores;
 using Game.Modules.Health;
 using Game.Modules.Health.Components;
 
@@ -45,7 +45,7 @@ public sealed class HealthHealTests
     {
         var pool = CreatePool();
         var bodyParts = new MultiComponentPool<BodyPartComponent>(maximumEntityCount: 10, initialCapacity: 4);
-        bodyParts.Add(0, new BodyPartComponent("Torso", BodyPartType.Torso, 0, currentHealth: 50, maximumHealth: 100, isVital: true));
+        bodyParts.Add(0, new BodyPartComponent("Torso", BodyPartType.Torso, 0, 0, currentHealth: 50, maximumHealth: 100, isVital: true));
 
         HealthHeal.Apply(pool, 0, 0.25f, bodyParts: bodyParts);
 

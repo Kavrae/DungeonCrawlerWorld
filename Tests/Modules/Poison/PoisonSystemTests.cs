@@ -209,4 +209,42 @@ public sealed class PoisonSystemTests
 
         Assert.IsFalse(published);
     }
+
+    /// <summary>Complex target: Poison always aims at Internal (BodyPartTargetRule(Internal, Random)), never scattering across other parts the way Burning's own random-part-per-tick does -- run across several seeds since a bug here would only sometimes land wrong.</summary>
+    [TestMethod]
+    public void Update_ComplexTarget_DamageAlwaysLandsOnInternal()
+    {
+        for (var seed = 0; seed < 10; seed++)
+        {
+            var timers = CreateTimerPool();
+            var stacks = CreateStackPool();
+            var health = CreateHealthPool();
+            var bodyParts = new MultiComponentPool<BodyPartComponent>(maximumEntityCount: 10, initialCapacity: 8);
+            bodyParts.Add(0, new BodyPartComponent("Head", BodyPartType.Head, partId: 0, verticalPosition: 5, currentHealth: 40, maximumHealth: 40, isVital: true));
+            bodyParts.Add(0, new BodyPartComponent("Torso", BodyPartType.Torso, partId: 1, verticalPosition: 4, currentHealth: 65, maximumHealth: 65, isVital: true));
+            bodyParts.Add(0, new BodyPartComponent("Internal", BodyPartType.Internal, partId: 2, verticalPosition: 4, currentHealth: 15, maximumHealth: 15, isVital: true));
+            timers.Add(0, new PoisonTimerComponent(1, stackCount: 3, remainingDurationTicks: 5, StatusEffectSource.Admin));
+            var system = new PoisonSystem(timers, stacks, health, new EventBus(), new FakePlayerQuery(0), new MathUtility(new Random(seed)), statModifiers: null, bodyParts);
+
+            system.Update(default, 0);
+
+            Assert.AreEqual(40f, GetPartHealth(bodyParts, 0, "Head"), $"Seed {seed}: Head must be untouched.");
+            Assert.AreEqual(65f, GetPartHealth(bodyParts, 0, "Torso"), $"Seed {seed}: Torso must be untouched.");
+            Assert.AreEqual(12f, GetPartHealth(bodyParts, 0, "Internal"), $"Seed {seed}: Internal must always take the hit.");
+        }
+    }
+
+    private static float GetPartHealth(MultiComponentPool<BodyPartComponent> bodyParts, int entityId, string name)
+    {
+        for (var denseIndex = bodyParts.GetFirstDenseIndex(entityId); denseIndex != -1; denseIndex = bodyParts.GetNextDenseIndex(denseIndex))
+        {
+            var part = bodyParts.GetReadonlyByDenseIndex(denseIndex);
+            if (part.Name == name)
+            {
+                return part.CurrentHealth;
+            }
+        }
+
+        return float.NaN;
+    }
 }

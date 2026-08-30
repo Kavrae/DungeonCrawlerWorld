@@ -1,4 +1,4 @@
-using Engine.ECS.Components.Stores;
+﻿using Engine.ECS.Components.Stores;
 using Game.Modules.Health;
 using Game.Modules.Health.Components;
 
@@ -18,9 +18,9 @@ public sealed class HealthQueriesTests
     {
         var simpleHealth = CreateSimplePool();
         var bodyParts = CreateBodyPartsPool();
-        bodyParts.Add(0, new BodyPartComponent("Head", BodyPartType.Head, 0, currentHealth: 9, maximumHealth: 10, isVital: true));
-        bodyParts.Add(0, new BodyPartComponent("Torso", BodyPartType.Torso, 0, currentHealth: 15, maximumHealth: 20, isVital: true));
-        bodyParts.Add(0, new BodyPartComponent("Arm", BodyPartType.Arm, 0, currentHealth: 10, maximumHealth: 15, isVital: false));
+        bodyParts.Add(0, new BodyPartComponent("Head", BodyPartType.Head, 0, 0, currentHealth: 9, maximumHealth: 10, isVital: true));
+        bodyParts.Add(0, new BodyPartComponent("Torso", BodyPartType.Torso, 0, 0, currentHealth: 15, maximumHealth: 20, isVital: true));
+        bodyParts.Add(0, new BodyPartComponent("Arm", BodyPartType.Arm, 0, 0, currentHealth: 10, maximumHealth: 15, isVital: false));
 
         var found = HealthQueries.TryGetTotals(simpleHealth, bodyParts, 0, out var current, out var maximum);
 

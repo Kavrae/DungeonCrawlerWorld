@@ -16,10 +16,11 @@ public static class ComplexHealthEffects
     public static void GrantBodyParts(ComponentManager componentManager, int entityId, MathUtility mathUtility, IReadOnlyList<BodyPartTemplate> parts)
     {
         var bodyParts = componentManager.GetMultiPool<BodyPartComponent>();
-        foreach (var part in parts)
+        for (var partId = 0; partId < parts.Count; partId++)
         {
+            var part = parts[partId];
             var startingHealth = mathUtility.Next(part.MinimumHealth, part.MaximumHealth + 1);
-            bodyParts.Add(entityId, new BodyPartComponent(part.Name, part.Type, part.VerticalPosition, startingHealth, part.MaximumHealth, part.IsVital));
+            bodyParts.Add(entityId, new BodyPartComponent(part.Name, part.Type, (byte)partId, part.VerticalPosition, startingHealth, part.MaximumHealth, part.IsVital));
         }
     }
 }

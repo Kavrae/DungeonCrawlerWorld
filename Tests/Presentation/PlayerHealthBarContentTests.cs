@@ -1,4 +1,4 @@
-using Engine.ECS.Components;
+﻿using Engine.ECS.Components;
 using Engine.ECS.Components.Stores;
 using Engine.Math;
 using Game.Modules.Core.Components;
@@ -49,12 +49,12 @@ public sealed class PlayerHealthBarContentTests
         if (complexHealth)
         {
             var bodyParts = componentManager.GetMultiPool<BodyPartComponent>();
-            bodyParts.Add(PlayerEntityId, new BodyPartComponent("Head", BodyPartType.Head, 0, 10, 10, isVital: true));
-            bodyParts.Add(PlayerEntityId, new BodyPartComponent("Torso", BodyPartType.Torso, 0, 15, 20, isVital: true));
-            bodyParts.Add(PlayerEntityId, new BodyPartComponent("Left Arm", BodyPartType.Arm, 0, 8, 8, isVital: false));
-            bodyParts.Add(PlayerEntityId, new BodyPartComponent("Right Arm", BodyPartType.Arm, 0, 8, 8, isVital: false));
-            bodyParts.Add(PlayerEntityId, new BodyPartComponent("Left Leg", BodyPartType.Leg, 0, 4, 9, isVital: false));
-            bodyParts.Add(PlayerEntityId, new BodyPartComponent("Right Leg", BodyPartType.Leg, 0, 9, 9, isVital: false));
+            bodyParts.Add(PlayerEntityId, new BodyPartComponent("Head", BodyPartType.Head, 0, 0, 10, 10, isVital: true));
+            bodyParts.Add(PlayerEntityId, new BodyPartComponent("Torso", BodyPartType.Torso, 0, 0, 15, 20, isVital: true));
+            bodyParts.Add(PlayerEntityId, new BodyPartComponent("Left Arm", BodyPartType.Arm, 0, 0, 8, 8, isVital: false));
+            bodyParts.Add(PlayerEntityId, new BodyPartComponent("Right Arm", BodyPartType.Arm, 0, 0, 8, 8, isVital: false));
+            bodyParts.Add(PlayerEntityId, new BodyPartComponent("Left Leg", BodyPartType.Leg, 0, 0, 4, 9, isVital: false));
+            bodyParts.Add(PlayerEntityId, new BodyPartComponent("Right Leg", BodyPartType.Leg, 0, 0, 9, 9, isVital: false));
         }
         else
         {
@@ -192,7 +192,7 @@ public sealed class PlayerHealthBarContentTests
         // read below 100% once a +50% MaximumHealth buff makes its true cap 15 -- regression for
         // the same bug ComplexHealthHeal/BodyPartSelection.PickLowestPercentage had.
         var bodyParts = new MultiComponentPool<BodyPartComponent>(maximumEntityCount: 10, initialCapacity: 4);
-        bodyParts.Add(PlayerEntityId, new BodyPartComponent("Head", BodyPartType.Head, verticalPosition: 0, currentHealth: 10, maximumHealth: 10, isVital: true));
+        bodyParts.Add(PlayerEntityId, new BodyPartComponent("Head", BodyPartType.Head, 0, verticalPosition: 0, currentHealth: 10, maximumHealth: 10, isVital: true));
         var statModifiers = new MultiComponentPool<StatModifierComponent>(maximumEntityCount: 10, initialCapacity: 4);
         statModifiers.Add(PlayerEntityId, new StatModifierComponent(StatModifierTarget.MaximumHealth, StatModifierOperation.Multiplicative, StatModifierPolarity.Buff,
             canModify: true, magnitude: 0.5f, remainingDurationFrames: null, StatusEffectSource.Admin));
