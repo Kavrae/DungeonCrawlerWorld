@@ -132,6 +132,22 @@ Once multiple entities can plausibly have contributed to a kill, corpse looting 
 
 V1: a mob loots a nearby corpse's inventory into its own, stopping once its own inventory is full (`InventoryCapacity.MaxNonPlayerStackCount`, see the Corpse looting item below) -- no preference among available items, just fills up. V2: preference based on the mob's own combat style and the item's rarity, once either concept exists.
 
+#### Add source and target modifier checks for all actions, even if not already used
+
+`DirectDamage` is the only `IActionEffectEntry` (`Game/Modules/Actions/Effects/`) that consistently
+runs both a source-side ("Outgoing") and target-side ("Incoming") `StatModifierMath.GetEffectiveValue`
+pass -- `DirectHeal`/`DirectManaRestore`/`HotkeyExpansionGrant`/`StatusEffectGrant`/`ChainedEffect`/
+`AuraSourceGrant` don't check either side at all today, even where the underlying `StatModifierTarget`
+already exists in principle (see the "ActionEffectResolver damage/heal consistency" item above for
+the concrete `OutgoingHealing`/`IncomingHealing` gap this would close). Worth making both checks a
+standard part of every effect entry's own `Apply`, even for a stat that has no real
+`StatModifierTarget` consumer yet -- so a future buff/debuff/equipment source can hook into an
+existing effect purely by granting a modifier, without needing to touch that effect entry's code at
+all (the same shape `BodyPartEffectsSystem`'s `MeleeOutgoingDamage` debuff already proved out for
+`DirectDamage` -- see `PLAN-body-part-gameplay-effects.md`). No new `StatModifierTarget` members are
+being proposed here; this is about the calling convention every effect entry should follow, not a
+specific stat to add.
+
 ### Low Priority
 
 #### Show runner race
@@ -334,21 +350,6 @@ entity owns, since no action yet declares which specific part(s) actually perfor
 #### Per-body-part vs whole-entity status effects
 
 Unblocked now that Body parts (above) has landed. `StatusEffectStack`/`StatusEffectAuraApplierRegistry` (`Game/Modules/StatusEffects/`) today apply every status effect at the entity level -- correct for something like Poison (a systemic effect, no reason to localize it to one part), wrong for something like Burning on a Complex entity (a burning leg reads more naturally than a burning entity, and ties into the targeted-damage followup above -- lava burning the legs specifically should also apply Burning to the legs specifically, not the whole entity). Needs a way for a `StatusEffectGrant`/`IStatusEffectAuraApplier` to declare whether it's entity-scoped (today's behavior, unchanged default) or part-scoped, and for the part-scoped case, a place to actually track "this body part has N stacks of Burning" -- likely a second `MultiComponentPool`-shaped store keyed by (entityId, bodyPartId) rather than entityId alone, distinct from today's per-entity `StatusEffectStack`. Feeds directly into the HealthWindow item under Presentation, which needs to display per-part status effects once they can exist.
-
-#### Investigate GetEffectiveValue(MaximumHealth) call frequency -- possible caching need
-
-Since the Body parts landing and its follow-on fixes, `StatModifierMath.GetEffectiveValue(...,
-StatModifierTarget.MaximumHealth, ...)` is now called per body part in several hot paths --
-`ComplexHealthDamage`, `ComplexHealthRegenSystem` (both the selection walk and the clamp),
-`ComplexHealthHeal`, `BodyPartSelection.PickLowestPercentage`, plus once per frame per visible row
-in `PlayerHealthHoverContent`/`InspectionWindowContent`'s Admin dump. Each call re-walks the
-entity's full `StatModifierComponent` chain from scratch. Investigate whether this is actually
-called often enough (population size, frame frequency) to show up as a measurable cost, and if so,
-whether a per-entity cached effective-MaximumHealth value (invalidated on modifier grant/expiry,
-mirroring how `AbilityScoreComponent.Total` is precomputed eagerly rather than read lazily -- see
-that component's own doc comment) is worth the added complexity, versus leaving it as the simple,
-always-correct lazy computation it is today. The body-parts follow-up work this was queued behind
-(items 1/3/2+4) has now all landed; not yet investigated.
 
 #### Limb-specific gameplay penalties beyond disable (landed)
 
@@ -949,11 +950,18 @@ Promoted to High from the old "Long parameter lists" note below (which had drift
 
 This item is to *plan*, not execute, a refactor -- and the plan needs to resolve a real design fork before touching code: (1) group related pools into small parameter-object records per cluster (e.g. a targeting-pools bundle, an action-pending-components bundle), mirroring the shape `ActionTiming`/`TargetingSpec` already use internally for a handful of related fields; or (2) reconsider whether some of these classes should just take `ComponentManager` and resolve their own pools instead, giving up the call-site-visible-dependency benefit for a shorter signature. Whichever direction, it has to be applied consistently across every constructor above, not fixed one class at a time -- a half-migrated codebase with two different "how a system gets its pools" conventions would be worse than the current, at least-consistent state.
 
-#### Clean up unit tests by removing or fixing fragile tests
+#### Clean up unit tests by removing or fixing fragile tests (landed)
 
-`dotnet test Tests/Tests.csproj` currently has 15 pre-existing failures unrelated to whatever feature happens to be in flight -- confirmed unrelated to the Inspection V2 work (`Presentation/UI/InspectionWindow.cs` et al.) since none of the failing tests touch anything that work changed. Two clusters stand out: a `Tests/Presentation/MapWindowTests.cs` group (`SelectMapNodes_ClickOnMap_SetsSelection`, `RightMouseDrag_DecouplesCameraFromPlayer_UntilHomeRecouples`, `UpdateZoomLevel_RecalculatesMaxScrollAndReclampsCurrentPosition`, several `OnRightDragAction`/`OnRightDragEndAction`/`HandleHotkeys` cases) all failing on camera pixel-to-tile math, suggesting a shared fixture assumption (e.g. a hardcoded "Team zoom = 18px tiles" comment) has drifted out of sync with an actual default changed elsewhere; and a scattered set with no obvious shared cause (`Tests/Collections/FreeIdPoolTests.cs`'s `Release_Twice_ThrowsOnSecondRelease`/`Release_NotIssued_Throws`, an `EntityManager` `DestroyEntity_NotAlive_Throws`, `Tests/Diagnostics/PlayerActivityLogTests.cs`'s two `EntityDamaged_*_LogsNameAlongsideEntityId` cases, and `Tests/Blueprints/BlueprintTests.cs`'s `Fairy_Build_SetsRaceHealthMovementActionLockAndTransform` asserting a stale punch-damage constant).
+`dotnet test Tests/Tests.csproj` had drifted to 25 failures (up from the 15 first logged here) by the time this was picked up -- every one root-caused individually rather than with a blanket fix, landing in exactly 6 independent clusters, no scattered/unexplained failures left:
 
-A fragile/failing suite is worse than no suite -- it trains whoever's working nearby to ignore red output, and each of these should either get fixed (if it's catching a real, still-relevant regression) or removed (if it's testing a since-changed assumption that's no longer meaningful). Needs someone to actually run down each failure's root cause individually rather than a blanket fix -- the MapWindowTests cluster in particular looks like one shared root cause, not five independent bugs.
+- **`Tests/Presentation/MapWindowTests.cs` camera pixel-to-tile math (9 tests).** Confirmed exactly the suspected cause: `MapCamera.BaseTileSizePixels` is 36, but the test file's own comments and literals still assumed the old 18px Team-zoom tile size from before a since-landed "increased tile size" commit. Fixed by adding `TileSizePixels`/`ViewportColumns`/`ViewportRows`/`ScreenCenterColumn`/`ScreenCenterRow` constants (verified against the real camera, not hand-derived) and recomputing every dependent literal from them -- not a blind find-replace, since a couple of values (half-tile rounding thresholds, a near-full-tile-boundary drag, one zoom test's map width vs. the new Borough viewport size) needed real recomputation, not just scaling.
+- **`Presentation/UI/ContextMenuController.Open` NullReferenceException (8 tests).** A "Child window cascade. Edge flip." commit added a `GraphicsDevice.Viewport.Bounds` read for edge-flip math, but `ElementPoolService.GraphicsDevice` is never wired up in tests (no real GraphicsDevice headlessly). Fixed with the same explicit-bounds seam `PlayerHealthBarContent.Update`'s dual overload already uses elsewhere in this codebase -- an internal `ScreenBoundsOverrideForTests` property, set via a new `TestElementPoolServiceFactory.CreateContextMenuController` helper.
+- **`Tests/Collections/FreeIdPoolTests.cs`/`EntityManagerTests.cs` throw-on-release assumption (3 tests).** `FreeIdPool.Release` was deliberately changed to a silent no-op on an unissued/already-released id (redundant cleanup, not a game-breaking state, per direct feedback) -- the tests were the stale side here, rewritten to assert the no-op contract (including that a double-release doesn't let two `Rent()` calls hand out the same id) instead of reverting the production behavior.
+- **`Tests/Diagnostics/PlayerActivityLogTests.cs` name-format mismatch (2 tests).** `PlayerActivityLog.DescribeEntity`'s doc comment and its actual output never agreed with each other since the day both were written (doc said `"id (Name)"`, code produced `"Name (#id)"`); fixed the doc comment and the two tests to match the real, working output.
+- **`Tests/Blueprints/BlueprintTests.cs` stale Fairy punch-damage literal (1 test).** A balance-pass edit to `Fairy.PunchDamage` (5 -> 3) landed without updating the test's expected value.
+- **`Tests/Modules/Health/SimpleHealthComponentTests.cs` casing (2 tests).** Tests asserted lowercase `"invalid"`; `SimpleHealthComponent.ToString()` actually returns `"Invalid MaximumHealth: ..."` -- a plain case-sensitivity typo.
+
+`dotnet test Tests/Tests.csproj` now passes all 1238 tests.
 
 #### Data storage, starting with window locations and sizes
 

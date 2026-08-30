@@ -37,8 +37,8 @@ public sealed class WindowCascadePlacementTests
 
         var result = WindowCascadePlacement.ComputePosition(anchor, childSize, siblingCount: 5, ScreenSize);
 
-        Assert.IsTrue(result.X + childSize.X <= ScreenSize.X);
-        Assert.IsTrue(result.Y + childSize.Y <= ScreenSize.Y);
+        Assert.IsLessThanOrEqualTo(ScreenSize.X, result.X + childSize.X);
+        Assert.IsLessThanOrEqualTo(ScreenSize.Y, result.Y + childSize.Y);
     }
 }
 

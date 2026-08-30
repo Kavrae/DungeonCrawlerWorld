@@ -34,6 +34,24 @@ public sealed class MapWindowTests
 {
     private const int PlayerEntityId = 1;
 
+    /// <summary>Mirrors MapCamera.BaseTileSizePixels (Team zoom) -- kept as its own constant here so every tile-size-derived literal below is computed from one place instead of a second hand-copied magic number.</summary>
+    private const int TileSizePixels = 36;
+
+    /// <summary>
+    /// Visible column/row count MapCamera.UpdateTileSizes computes for BuildMapWindowCore's fixed
+    /// 1256x776 content size at Team zoom -- floor(contentSize / TileSizePixels) + 2, see that
+    /// method's own margin comment. Verified against the real camera rather than re-derived by
+    /// hand in each test that needs it.
+    /// </summary>
+    private const int ViewportColumns = 36;
+
+    private const int ViewportRows = 23;
+
+    /// <summary>Column/row the camera centers a followed player on -- ViewportColumns/2 and ViewportRows/2, verified against the real camera's initial CenterCameraOn.</summary>
+    private const int ScreenCenterColumn = 18;
+
+    private const int ScreenCenterRow = 11;
+
     private static (Game.World.World World, MapViewState MapViewState, MapWindow MapWindow) BuildMapWindow(int mapSizeX, int mapSizeY, int mapSizeZ)
     {
         var (world, mapViewState, mapWindow, _) = BuildMapWindowCore(mapSizeX, mapSizeY, mapSizeZ, playerPosition: null);
@@ -122,8 +140,7 @@ public sealed class MapWindowTests
             componentManager.GetDirectPool<TransformComponent>(),
             componentManager.GetPackedPool<MovementComponent>());
 
-        var contextMenuController = new ContextMenuController(windowService);
-        contextMenuController.Initialize(new UiLayerStack());
+        var contextMenuController = TestElementPoolServiceFactory.CreateContextMenuController(windowService, new UiLayerStack());
 
         windowService.RegisterFactory<MapWindow>(() => new MapWindow(
             fontService, windowService, world, mapViewState, componentManager, new EventBus(), resolvedActionCatalog, resolvedItemCatalog, new TileRenderer(), new LabelRenderer(),
@@ -144,9 +161,9 @@ public sealed class MapWindowTests
     {
         var (_, mapViewState, mapWindow) = BuildMapWindow(5, 5, 1);
 
-        // Team zoom = 18px tiles; the viewport (1256px content / 18 + 1 = 70 columns) is
+        // Team zoom = 36px tiles; the viewport (1256px content / 36 + 2 = 36 columns) is
         // far larger than this 5-wide map, so tile column 10 is visible but off the map.
-        mapWindow.SelectMapNodes(new Point(10 * 18 + 1, 1));
+        mapWindow.SelectMapNodes(new Point(10 * TileSizePixels + 1, 1));
 
         Assert.IsNull(mapViewState.SelectedMapNodePosition);
     }
@@ -156,7 +173,7 @@ public sealed class MapWindowTests
     {
         var (_, mapViewState, mapWindow) = BuildMapWindow(5, 5, 1);
 
-        mapWindow.SelectMapNodes(new Point(1 * 18 + 1, 1 * 18 + 1));
+        mapWindow.SelectMapNodes(new Point(1 * TileSizePixels + 1, 1 * TileSizePixels + 1));
 
         Assert.AreEqual(new Point(1, 1), mapViewState.SelectedMapNodePosition);
     }
@@ -166,10 +183,10 @@ public sealed class MapWindowTests
     /// max scroll was computed against a still-zero visible tile count -- the bound ended up
     /// as the full map width/height instead of (map size - visible tiles), letting the map
     /// scroll a whole extra viewport past its real edge (reported as "scrolls too far").
-    /// With a 200-wide map and 71 visible columns at Team zoom (1256px content / 18px
-    /// tiles + 2 -- see UpdateTileSizes' own margin comment), the correct max scroll is 129,
-    /// which puts the map's last column (199) at the window's rightmost visible column
-    /// (index 70).
+    /// With a 200-wide map and ViewportColumns visible columns at Team zoom (1256px content /
+    /// 36px tiles + 2 -- see UpdateTileSizes' own margin comment), the correct max scroll is
+    /// 200 - ViewportColumns = 164, which puts the map's last column (199) at the window's
+    /// rightmost visible column (index ViewportColumns - 1 = 35).
     /// </summary>
     [TestMethod]
     public void UpdateScrollPosition_ScrollingPastMax_StopsWithMapsLastColumnAtWindowsRightEdge()
@@ -177,22 +194,23 @@ public sealed class MapWindowTests
         var (_, mapViewState, mapWindow) = BuildMapWindow(200, 5, 1);
 
         mapWindow.UpdateScrollPosition(new Point(100_000, 0));
-        mapWindow.SelectMapNodes(new Point(70 * 18 + 1, 1));
+        mapWindow.SelectMapNodes(new Point((ViewportColumns - 1) * TileSizePixels + 1, 1));
 
         Assert.AreEqual(new Point(199, 0), mapViewState.SelectedMapNodePosition);
     }
 
     /// <summary>
     /// Regression test: UpdateZoomLevel changed the visible tile count via UpdateTileSizes
-    /// but never recalculated max scroll, so it went stale after any zoom change. Scrolling
-    /// to Team zoom's max (129, see above), then zooming out to Borough (4px tiles -- the
-    /// whole 200-wide map fits in the 1256px content area, so the correct max scroll is 0)
-    /// must re-clamp the stale scroll position down to 0, not leave it at 129.
+    /// but never recalculated max scroll, so it went stale after any zoom change. A 100-wide
+    /// map is bigger than Team's 36-column viewport (so there's a real max scroll of 64 to
+    /// start from), but Borough's viewport (9px tiles, floor(1256/9)+2 = 141 columns) fits the
+    /// whole map, so zooming out to Borough must re-clamp the stale scroll position down to 0,
+    /// not leave it at 64.
     /// </summary>
     [TestMethod]
     public void UpdateZoomLevel_RecalculatesMaxScrollAndReclampsCurrentPosition()
     {
-        var (_, mapViewState, mapWindow) = BuildMapWindow(200, 5, 1);
+        var (_, mapViewState, mapWindow) = BuildMapWindow(100, 5, 1);
         mapWindow.UpdateScrollPosition(new Point(100_000, 0));
 
         mapWindow.UpdateZoomLevel(ZoomLevel.Borough);
@@ -260,23 +278,24 @@ public sealed class MapWindowTests
         var movementPool = componentManager.GetPackedPool<MovementComponent>();
         var transformPool = componentManager.GetDirectPool<TransformComponent>();
 
-        // Team zoom = 18px tiles, viewport is 70 columns x 44 rows; column/row 35/22 is
-        // screen-center, so clicking there resolves to the player's own position once the
-        // camera starts centered on them (see MapWindow.Initialize's initial CenterCameraOn).
-        mapWindow.SelectMapNodes(new Point(35 * 18 + 1, 22 * 18 + 1));
+        // Team zoom = 36px tiles, viewport is ViewportColumns x ViewportRows; ScreenCenterColumn/
+        // ScreenCenterRow is screen-center, so clicking there resolves to the player's own
+        // position once the camera starts centered on them (see MapWindow.Initialize's initial
+        // CenterCameraOn).
+        mapWindow.SelectMapNodes(new Point(ScreenCenterColumn * TileSizePixels + 1, ScreenCenterRow * TileSizePixels + 1));
         Assert.AreEqual(new Point(100, 100), mapViewState.SelectedMapNodePosition, "Camera should start centered on the player.");
 
         mapWindow.HandleHotkeys(new KeyboardState(Keys.D), new KeyboardState());
         Assert.AreEqual(new Vector3Int(101, 100, 0), movementPool.GetReadonly(PlayerEntityId).NextMapPosition, "A fresh press must move immediately, not wait out an initial cooldown.");
 
-        mapWindow.SelectMapNodes(new Point(35 * 18 + 1, 22 * 18 + 1));
+        mapWindow.SelectMapNodes(new Point(ScreenCenterColumn * TileSizePixels + 1, ScreenCenterRow * TileSizePixels + 1));
         Assert.AreEqual(new Point(100, 100), mapViewState.SelectedMapNodePosition, "Camera must not follow a merely-queued target -- MovementSystem hasn't moved the entity yet.");
 
         // Simulate MovementSystem actually applying the move (e.g. once the action lock clears).
         transformPool.TryUpdate(PlayerEntityId, static (ref TransformComponent transform) => transform.Position = new Vector3Int(101, 100, 0));
         mapWindow.Update(new GameTime());
 
-        mapWindow.SelectMapNodes(new Point(35 * 18 + 1, 22 * 18 + 1));
+        mapWindow.SelectMapNodes(new Point(ScreenCenterColumn * TileSizePixels + 1, ScreenCenterRow * TileSizePixels + 1));
         Assert.AreEqual(new Point(101, 100), mapViewState.SelectedMapNodePosition, "Camera should follow once the entity's own position actually changes.");
     }
 
@@ -354,17 +373,17 @@ public sealed class MapWindowTests
     {
         var (_, mapViewState, mapWindow, _) = BuildMapWindowWithPlayer(300, 300, 1, new Vector3Int(100, 100, 0));
 
-        // Team zoom = 18px tiles; drag left by 3 tiles' worth of pixels.
+        // Team zoom = 36px tiles; drag left by 3 tiles' worth of pixels.
         mapWindow.HandleRightDragStart();
-        mapWindow.HandleRightDrag(new Vector2(-54, 0));
+        mapWindow.HandleRightDrag(new Vector2(-3 * TileSizePixels, 0));
 
         mapWindow.HandleHotkeys(new KeyboardState(Keys.D), new KeyboardState());
 
-        mapWindow.SelectMapNodes(new Point(35 * 18 + 1, 22 * 18 + 1));
+        mapWindow.SelectMapNodes(new Point(ScreenCenterColumn * TileSizePixels + 1, ScreenCenterRow * TileSizePixels + 1));
         Assert.AreNotEqual(new Point(101, 100), mapViewState.SelectedMapNodePosition, "Camera must not follow the player once right-drag has decoupled it.");
 
         mapWindow.HandleHotkeys(new KeyboardState(Keys.Home), new KeyboardState());
-        mapWindow.SelectMapNodes(new Point(35 * 18 + 1, 22 * 18 + 1));
+        mapWindow.SelectMapNodes(new Point(ScreenCenterColumn * TileSizePixels + 1, ScreenCenterRow * TileSizePixels + 1));
 
         // Centers on the player's actual TransformComponent.Position (100,100) -- there's no
         // MovementSystem running in this MapWindow-level test to ever apply the queued
@@ -385,17 +404,18 @@ public sealed class MapWindowTests
     {
         var (_, mapViewState, mapWindow, _) = BuildMapWindowWithPlayer(300, 300, 1, new Vector3Int(100, 100, 0));
 
-        // Without any drag, a click 1px before column 35's left edge resolves to column 34.
-        mapWindow.SelectMapNodes(new Point(35 * 18 - 1, 22 * 18 + 1));
+        // Without any drag, a click 1px before ScreenCenterColumn's left edge resolves to the
+        // column before it.
+        mapWindow.SelectMapNodes(new Point(ScreenCenterColumn * TileSizePixels - 1, ScreenCenterRow * TileSizePixels + 1));
         Assert.AreEqual(new Point(99, 100), mapViewState.SelectedMapNodePosition);
 
         mapWindow.HandleRightDragStart();
 
-        // Team zoom = 18px tiles; 1px is nowhere near a whole tile, but must already shift
+        // Team zoom = 36px tiles; 1px is nowhere near a whole tile, but must already shift
         // rendering by exactly that much.
         mapWindow.HandleRightDrag(new Vector2(-1, 0));
 
-        mapWindow.SelectMapNodes(new Point(35 * 18 - 1, 22 * 18 + 1));
+        mapWindow.SelectMapNodes(new Point(ScreenCenterColumn * TileSizePixels - 1, ScreenCenterRow * TileSizePixels + 1));
         Assert.AreEqual(new Point(100, 100), mapViewState.SelectedMapNodePosition, "A 1px drag must already shift rendering by 1px, not wait for a whole tile to accumulate.");
     }
 
@@ -412,11 +432,11 @@ public sealed class MapWindowTests
 
         mapWindow.HandleRightDragStart();
 
-        // Team zoom = 18px tiles; 10px is comfortably short of a whole tile (unlike a value
-        // near 18, this can't also tip the click's own resolved column over a boundary).
+        // Team zoom = 36px tiles; 10px is comfortably short of a whole tile (unlike a value
+        // near 36, this can't also tip the click's own resolved column over a boundary).
         mapWindow.HandleRightDrag(new Vector2(-10, 0));
 
-        mapWindow.SelectMapNodes(new Point(35 * 18 + 1, 22 * 18 + 1));
+        mapWindow.SelectMapNodes(new Point(ScreenCenterColumn * TileSizePixels + 1, ScreenCenterRow * TileSizePixels + 1));
         Assert.AreEqual(new Point(100, 100), mapViewState.SelectedMapNodePosition, "A drag under a full tile must not commit a grid scroll while still in progress.");
     }
 
@@ -438,13 +458,14 @@ public sealed class MapWindowTests
 
         mapWindow.HandleRightDragStart();
 
-        // Team zoom = 18px tiles; 17px is as close to a full tile as possible without
-        // crossing it -- the worst case for how far the render offset can eat into the margin.
-        mapWindow.HandleRightDrag(new Vector2(-17, 0));
+        // Team zoom = 36px tiles; TileSizePixels - 1 (35px) is as close to a full tile as
+        // possible without crossing it -- the worst case for how far the render offset can eat
+        // into the margin.
+        mapWindow.HandleRightDrag(new Vector2(-(TileSizePixels - 1), 0));
 
         // 2px inside the window's actual content edge (1256px) -- must still resolve to a
         // real, on-map position, not be silently rejected for landing past _tileColumns.
-        mapWindow.SelectMapNodes(new Point(1254, 22 * 18 + 1));
+        mapWindow.SelectMapNodes(new Point(1254, ScreenCenterRow * TileSizePixels + 1));
         Assert.IsNotNull(mapViewState.SelectedMapNodePosition, "The window's far edge must still resolve correctly during a near-full-tile drag.");
     }
 
@@ -456,11 +477,11 @@ public sealed class MapWindowTests
 
         mapWindow.HandleRightDragStart();
 
-        // Team zoom = 18px tiles; 10px is just past half a tile (9px).
-        mapWindow.HandleRightDrag(new Vector2(-10, 0));
+        // Team zoom = 36px tiles; 19px is just past half a tile (18px).
+        mapWindow.HandleRightDrag(new Vector2(-19, 0));
         mapWindow.HandleRightDragEnd();
 
-        mapWindow.SelectMapNodes(new Point(35 * 18 + 1, 22 * 18 + 1));
+        mapWindow.SelectMapNodes(new Point(ScreenCenterColumn * TileSizePixels + 1, ScreenCenterRow * TileSizePixels + 1));
         Assert.AreEqual(new Point(101, 100), mapViewState.SelectedMapNodePosition, "Ending the drag must snap a past-half-tile remainder up to the next tile.");
     }
 
@@ -472,11 +493,11 @@ public sealed class MapWindowTests
 
         mapWindow.HandleRightDragStart();
 
-        // Team zoom = 18px tiles; 8px is just under half a tile (9px).
-        mapWindow.HandleRightDrag(new Vector2(-8, 0));
+        // Team zoom = 36px tiles; 17px is just under half a tile (18px).
+        mapWindow.HandleRightDrag(new Vector2(-17, 0));
         mapWindow.HandleRightDragEnd();
 
-        mapWindow.SelectMapNodes(new Point(35 * 18 + 1, 22 * 18 + 1));
+        mapWindow.SelectMapNodes(new Point(ScreenCenterColumn * TileSizePixels + 1, ScreenCenterRow * TileSizePixels + 1));
         Assert.AreEqual(new Point(100, 100), mapViewState.SelectedMapNodePosition, "Ending the drag must settle an under-half-tile remainder back onto the current tile, not advance it.");
     }
 
@@ -527,15 +548,15 @@ public sealed class MapWindowTests
     [TestMethod]
     public void HandleHotkeys_PressingOemMinus_ZoomsOutOneLevelAndRecalculatesMaxScroll()
     {
-        // 100 wide: bigger than Team's 71-column viewport (so there's a real max scroll to
-        // start from) but small enough to fully fit Neighborhood's 141-column viewport (so
+        // 60 wide: bigger than Team's 36-column viewport (so there's a real max scroll to
+        // start from) but small enough to fully fit Neighborhood's 71-column viewport (so
         // the re-clamp actually lands on 0, not some other nonzero bound).
-        var (_, mapViewState, mapWindow) = BuildMapWindow(100, 5, 1);
+        var (_, mapViewState, mapWindow) = BuildMapWindow(60, 5, 1);
         mapWindow.UpdateScrollPosition(new Point(100_000, 0));
 
-        // OemMinus cycles zoom out one level (Team, 18px tiles -> Neighborhood, 9px tiles);
-        // 141 columns are now visible against the 100-wide map, so the previously-valid
-        // Team-zoom max scroll (29) must be re-clamped down to 0.
+        // OemMinus cycles zoom out one level (Team, 36px tiles -> Neighborhood, 18px tiles);
+        // 71 columns are now visible against the 60-wide map, so the previously-valid
+        // Team-zoom max scroll (24) must be re-clamped down to 0.
         mapWindow.HandleHotkeys(new KeyboardState(Keys.OemMinus), new KeyboardState());
         mapWindow.SelectMapNodes(new Point(1, 1));
 
@@ -767,9 +788,9 @@ public sealed class MapWindowTests
 
         Assert.IsNotNull(mapViewState.TargetableTiles);
         Assert.HasCount(8, mapViewState.TargetableTiles);
-        Assert.IsFalse(mapViewState.TargetableTiles.Contains(new Vector3Int(100, 100, 0)), "The caster's own tile is no longer part of Adjacent's footprint.");
-        Assert.IsTrue(mapViewState.TargetableTiles.Contains(new Vector3Int(101, 100, 0)));
-        Assert.IsFalse(mapViewState.TargetableTiles.Contains(new Vector3Int(102, 100, 0)));
+        Assert.DoesNotContain(new Vector3Int(100, 100, 0), mapViewState.TargetableTiles, "The caster's own tile is no longer part of Adjacent's footprint.");
+        Assert.Contains(new Vector3Int(101, 100, 0), mapViewState.TargetableTiles);
+        Assert.DoesNotContain(new Vector3Int(102, 100, 0), mapViewState.TargetableTiles);
     }
 
     [TestMethod]
@@ -786,8 +807,8 @@ public sealed class MapWindowTests
         // Diamond of radius 10: 2*10^2 + 2*10 + 1 = 221 (same worked formula as DistanceFalloffTests).
         Assert.IsNotNull(mapViewState.TargetableTiles);
         Assert.HasCount(221, mapViewState.TargetableTiles);
-        Assert.IsTrue(mapViewState.TargetableTiles.Contains(new Vector3Int(110, 100, 0)), "Exactly at range 10 must be included.");
-        Assert.IsFalse(mapViewState.TargetableTiles.Contains(new Vector3Int(111, 100, 0)), "Beyond range 10 must be excluded.");
+        Assert.Contains(new Vector3Int(110, 100, 0), mapViewState.TargetableTiles, "Exactly at range 10 must be included.");
+        Assert.DoesNotContain(new Vector3Int(111, 100, 0), mapViewState.TargetableTiles, "Beyond range 10 must be excluded.");
     }
 
     /// <summary>
@@ -806,8 +827,8 @@ public sealed class MapWindowTests
 
         mapWindow.HandleHotkeys(new KeyboardState(Keys.D4), new KeyboardState());
         Assert.IsNotNull(mapViewState.TargetableTiles);
-        Assert.IsTrue(mapViewState.TargetableTiles.Contains(new Vector3Int(101, 100, 0)));
-        Assert.IsFalse(mapViewState.TargetableTiles.Contains(new Vector3Int(105, 100, 0)));
+        Assert.Contains(new Vector3Int(101, 100, 0), mapViewState.TargetableTiles);
+        Assert.DoesNotContain(new Vector3Int(105, 100, 0), mapViewState.TargetableTiles);
 
         // Simulate MovementSystem actually applying a move while the ability stays armed.
         transformPool.TryUpdate(PlayerEntityId, static (ref TransformComponent transform) => transform.Position = new Vector3Int(105, 100, 0));
@@ -815,9 +836,9 @@ public sealed class MapWindowTests
 
         Assert.IsNotNull(mapViewState.TargetableTiles);
         Assert.HasCount(8, mapViewState.TargetableTiles);
-        Assert.IsFalse(mapViewState.TargetableTiles.Contains(new Vector3Int(101, 100, 0)), "The footprint must move with the caster, not stay anchored to the position it was armed at.");
-        Assert.IsFalse(mapViewState.TargetableTiles.Contains(new Vector3Int(105, 100, 0)), "The caster's own new tile is no longer part of Adjacent's footprint either.");
-        Assert.IsTrue(mapViewState.TargetableTiles.Contains(new Vector3Int(106, 100, 0)));
+        Assert.DoesNotContain(new Vector3Int(101, 100, 0), mapViewState.TargetableTiles, "The footprint must move with the caster, not stay anchored to the position it was armed at.");
+        Assert.DoesNotContain(new Vector3Int(105, 100, 0), mapViewState.TargetableTiles, "The caster's own new tile is no longer part of Adjacent's footprint either.");
+        Assert.Contains(new Vector3Int(106, 100, 0), mapViewState.TargetableTiles);
     }
 
     /// <summary>Right-click/Escape is the cancel path now (see CancelArmedOrPendingAction) -- re-pressing the same hotkey confirms rather than disarms, so this exercises the actual disarm path.</summary>

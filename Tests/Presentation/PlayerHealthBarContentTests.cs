@@ -159,7 +159,7 @@ public sealed class PlayerHealthBarContentTests
         var rows = new List<PlayerHealthHoverContent.RowData>();
         hoverContent.BuildRows(rows);
 
-        Assert.AreEqual(6, rows.Count, "One row per body part -- no Total row, it's redundant with the big bar this popup is attached to.");
+        Assert.HasCount(6, rows, "One row per body part -- no Total row, it's redundant with the big bar this popup is attached to.");
 
         // BuildRows enumerates BodyPartComponent in whatever order the MultiComponentPool's own
         // dense-index chain returns them -- not insertion order -- so only set membership is
@@ -214,6 +214,6 @@ public sealed class PlayerHealthBarContentTests
         var rows = new List<PlayerHealthHoverContent.RowData>();
         hoverContent.BuildRows(rows);
 
-        Assert.AreEqual(0, rows.Count, "A Simple-health entity has no body parts to enumerate, and there's no Total row to fall back to.");
+        Assert.IsEmpty(rows, "A Simple-health entity has no body parts to enumerate, and there's no Total row to fall back to.");
     }
 }

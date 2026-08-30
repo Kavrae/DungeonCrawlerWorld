@@ -11,9 +11,12 @@ public sealed class ComponentMemoryTrackerTests
         public int Value;
     }
 
+    /// <summary>Only its size (8 bytes, vs. SmallComponent's 4) matters for the byte-estimate assertion below -- no instance is ever merged, so Value is intentionally never assigned.</summary>
     private struct LargeComponent
     {
+#pragma warning disable CS0649
         public long Value;
+#pragma warning restore CS0649
     }
 
     [TestMethod]
@@ -26,10 +29,10 @@ public sealed class ComponentMemoryTrackerTests
         var tracker = new ComponentMemoryTracker(componentManager);
         tracker.Tick();
 
-        Assert.AreEqual(2, tracker.Snapshot.Count);
+        Assert.HasCount(2, tracker.Snapshot);
         Assert.AreEqual(nameof(LargeComponent), tracker.Snapshot[0].ComponentTypeName);
         Assert.AreEqual(nameof(SmallComponent), tracker.Snapshot[1].ComponentTypeName);
-        Assert.IsTrue(tracker.Snapshot[0].EstimatedBytes > tracker.Snapshot[1].EstimatedBytes);
+        Assert.IsGreaterThan(tracker.Snapshot[1].EstimatedBytes, tracker.Snapshot[0].EstimatedBytes);
     }
 
     [TestMethod]

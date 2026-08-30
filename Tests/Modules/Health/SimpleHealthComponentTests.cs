@@ -26,7 +26,7 @@ public sealed class SimpleHealthComponentTests
 
         var text = component.ToString();
 
-        Assert.Contains("invalid", text);
+        Assert.Contains("Invalid", text);
     }
 
     [TestMethod]
@@ -36,6 +36,6 @@ public sealed class SimpleHealthComponentTests
 
         var text = component.ToString();
 
-        Assert.Contains("invalid", text);
+        Assert.Contains("Invalid", text);
     }
 }

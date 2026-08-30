@@ -79,7 +79,7 @@ public sealed class PlayerActivityLog : IDisposable
         Write($"DAMAGE amount={damaged.Amount} type={damaged.DamageType} source={DescribeSource(damaged.Source)} target={DescribeEntity(damaged.EntityId)} currentHealth={damaged.CurrentHealth} maximumHealth={damaged.MaximumHealth}");
     }
 
-    /// <summary>entityId alone, or "entityId (Name)" if the entity has a DisplayTextComponent -- shared by both the source and target sides of a DAMAGE line.</summary>
+    /// <summary>entityId alone, or "Name (#entityId)" if the entity has a DisplayTextComponent -- shared by both the source and target sides of a DAMAGE line.</summary>
     private string DescribeEntity(int entityId) =>
         _displayTextPool.TryGetReadonly(entityId, out var displayText)
             ? $"{displayText.Name} (#{entityId})"

@@ -80,7 +80,7 @@ public sealed class AuraSourceEffectsTests
         AuraSourceEffects.RemoveAll(sources, eventBus, EntityId);
 
         Assert.IsFalse(sources.Has(EntityId));
-        Assert.AreEqual(2, publishedTypes.Count);
+        Assert.HasCount(2, publishedTypes);
         CollectionAssert.Contains(publishedTypes, StatusEffectType.Poison);
         CollectionAssert.Contains(publishedTypes, StatusEffectType.Burning);
     }

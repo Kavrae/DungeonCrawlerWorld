@@ -34,7 +34,7 @@ public sealed class WandActivationEffectsTests
     {
         var midCharges = WandActivationEffects.ComputeMaxCharges(150);
 
-        Assert.IsTrue(midCharges > WandActivationEffects.MinCharges);
-        Assert.IsTrue(midCharges < WandActivationEffects.MaxCharges);
+        Assert.IsGreaterThan(WandActivationEffects.MinCharges, midCharges);
+        Assert.IsLessThan(WandActivationEffects.MaxCharges, midCharges);
     }
 }

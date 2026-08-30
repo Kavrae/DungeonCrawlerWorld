@@ -157,7 +157,7 @@ public sealed class PlayerActivityLogTests
             log.Dispose();
 
             var contents = File.ReadAllText(logPath);
-            StringAssert.Contains(contents, "target=5 (Goblin1)");
+            StringAssert.Contains(contents, "target=Goblin1 (#5)");
         }
         finally
         {
@@ -182,7 +182,7 @@ public sealed class PlayerActivityLogTests
             log.Dispose();
 
             var contents = File.ReadAllText(logPath);
-            StringAssert.Contains(contents, "source=Entity#0 (PlayerOne)");
+            StringAssert.Contains(contents, "source=PlayerOne (#0)");
         }
         finally
         {

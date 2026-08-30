@@ -35,6 +35,6 @@ public sealed class PotionCooldownEffectsTests
         var maxDurationTicks = PotionCooldownEffects.ComputeAbusePoisonDurationTicks(PotionCooldownEffects.DurationFrames);
         var minDurationTicks = PotionCooldownEffects.ComputeAbusePoisonDurationTicks(PotionCooldownEffects.MinDurationFrames);
 
-        Assert.IsTrue(minDurationTicks < maxDurationTicks);
+        Assert.IsLessThan(maxDurationTicks, minDurationTicks);
     }
 }

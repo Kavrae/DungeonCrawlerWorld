@@ -21,7 +21,7 @@ public sealed class SpriteManifestTests
         return JsonSerializer.Deserialize<List<SpriteManifestEntry>>(json) ?? [];
     }
 
-    [DataTestMethod]
+    [TestMethod]
     [DataRow("Wall")]
     [DataRow("Grass")]
     [DataRow("Player")]

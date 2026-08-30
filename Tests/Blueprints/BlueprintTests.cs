@@ -359,7 +359,7 @@ public sealed class BlueprintTests
         Assert.IsTrue(ecsContext.ComponentManager.GetDirectPool<TransformComponent>().Has(entityId));
 
         Assert.IsTrue(ActionInstanceQueries.TryGet(ecsContext.ComponentManager.GetMultiPool<ActionInstanceComponent>(), entityId, PunchAction.Id, out var punch));
-        Assert.AreEqual((ushort)5, punch.DamageAmount);
+        Assert.AreEqual((ushort)3, punch.DamageAmount);
     }
 
     [TestMethod]

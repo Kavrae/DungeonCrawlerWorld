@@ -31,21 +31,30 @@ public sealed class FreeIdPoolTests
     }
 
     [TestMethod]
-    public void Release_NotIssued_Throws()
+    public void Release_NotIssued_IsANoOp()
     {
         var pool = new FreeIdPool();
 
-        Assert.ThrowsExactly<InvalidOperationException>(() => pool.Release(0));
+        pool.Release(0);
+
+        Assert.AreEqual(0, pool.Count);
+        Assert.AreEqual(-1, pool.HighestIssuedId);
     }
 
+    /// <summary>Regression guard for the no-op: a redundant second Release must not push the id onto the free stack twice, which would otherwise let two separate Rent() calls hand out the same id to two different live entities.</summary>
     [TestMethod]
-    public void Release_Twice_ThrowsOnSecondRelease()
+    public void Release_Twice_IsANoOpOnSecondRelease()
     {
         var pool = new FreeIdPool();
         var id = pool.Rent();
         pool.Release(id);
 
-        Assert.ThrowsExactly<InvalidOperationException>(() => pool.Release(id));
+        pool.Release(id);
+        var reissued = pool.Rent();
+        var next = pool.Rent();
+
+        Assert.AreEqual(id, reissued);
+        Assert.AreNotEqual(id, next);
     }
 
     [TestMethod]

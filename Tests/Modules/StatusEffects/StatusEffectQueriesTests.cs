@@ -54,7 +54,7 @@ public sealed class StatusEffectQueriesTests
 
         StatusEffectQueries.GetActiveEffectTypes(pool, 0, destination);
 
-        Assert.AreEqual(0, destination.Count);
+        Assert.IsEmpty(destination);
     }
 
     [TestMethod]

@@ -123,7 +123,7 @@ public sealed class BodyPartBurningSystemTests
         var part = bodyParts.GetReadonlyByDenseIndex(BodyPartSelectionFindByName(bodyParts, 0, "Left Foot"));
         Assert.AreEqual(9f, part.CurrentHealth, "Sanity check: this tick's 1 damage doesn't reach 0.");
         Assert.IsFalse(part.IsDisabled);
-        Assert.IsTrue(part.RegenLockoutFramesRemaining > 0, "Even a non-lethal burn tick must refresh the lockout, or the part regens instantly once the fire's stacks run out.");
+        Assert.IsGreaterThan(0, part.RegenLockoutFramesRemaining, "Even a non-lethal burn tick must refresh the lockout, or the part regens instantly once the fire's stacks run out.");
     }
 
     [TestMethod]

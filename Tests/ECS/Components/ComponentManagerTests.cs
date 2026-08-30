@@ -120,7 +120,7 @@ public sealed class ComponentManagerTests
 
         manager.ResizeEntityCapacity(1000);
 
-        Assert.IsTrue(pool.EstimatedBytes > bytesBeforeResize);
+        Assert.IsGreaterThan(bytesBeforeResize, pool.EstimatedBytes);
     }
 
     [TestMethod]

@@ -1071,8 +1071,7 @@ public sealed class UiInputControllerTests
         var windowService = TestElementPoolServiceFactory.Create(fontService, labelRenderer);
         var layers = new UiLayerStack();
 
-        var contextMenuController = new ContextMenuController(windowService);
-        contextMenuController.Initialize(layers);
+        var contextMenuController = TestElementPoolServiceFactory.CreateContextMenuController(windowService, layers);
 
         windowService.RegisterFactory<TextBox>(() => new TextBox(fontService, windowService, labelRenderer, null, contextMenuController));
         var textBox = windowService.CreateElement<TextBox>(null, new ElementOptions
@@ -1123,8 +1122,7 @@ public sealed class UiInputControllerTests
         var windowService = TestElementPoolServiceFactory.Create(fontService, labelRenderer);
         var layers = new UiLayerStack();
 
-        var contextMenuController = new ContextMenuController(windowService);
-        contextMenuController.Initialize(layers);
+        var contextMenuController = TestElementPoolServiceFactory.CreateContextMenuController(windowService, layers);
 
         var parentWindow = windowService.CreateElement<Window>(null, new ElementOptions
         {
@@ -2341,8 +2339,7 @@ public sealed class UiInputControllerTests
         hoverPopup.Initialize();
 
         var world = new Game.World.World(new Game.World.Map(new Vector3Int(10, 10, 1)));
-        var contextMenuController = new ContextMenuController(windowService);
-        contextMenuController.Initialize(new UiLayerStack());
+        var contextMenuController = TestElementPoolServiceFactory.CreateContextMenuController(windowService, new UiLayerStack());
         var mapViewState = new MapViewState();
 
         Window BuildGridWindow(int entityId, Vector2 position)
@@ -2436,8 +2433,7 @@ public sealed class UiInputControllerTests
         windowService.RegisterFactory<Tooltip>(() => new Tooltip(fontService, windowService, labelRenderer));
 
         var world = new Game.World.World(new Game.World.Map(new Vector3Int(10, 10, 1)));
-        var contextMenuController = new ContextMenuController(windowService);
-        contextMenuController.Initialize(new UiLayerStack());
+        var contextMenuController = TestElementPoolServiceFactory.CreateContextMenuController(windowService, new UiLayerStack());
         var mapViewState = new MapViewState();
 
         windowService.RegisterFactory<InventoryManagementWindow>(() => new InventoryManagementWindow(

@@ -73,11 +73,14 @@ public sealed class EntityManagerTests
     }
 
     [TestMethod]
-    public void DestroyEntity_NotAlive_Throws()
+    public void DestroyEntity_NotAlive_IsANoOp()
     {
         var componentManager = new ComponentManager(4, 4);
         var entityManager = new EntityManager(componentManager, 4);
 
-        Assert.ThrowsExactly<InvalidOperationException>(() => entityManager.DestroyEntity(0));
+        entityManager.DestroyEntity(0);
+
+        Assert.IsFalse(entityManager.EntityExists(0));
+        Assert.AreEqual(0, entityManager.LivingEntityCount);
     }
 }

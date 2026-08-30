@@ -7,11 +7,6 @@ namespace Tests.Diagnostics;
 [TestClass]
 public sealed class LeakDetectorTests
 {
-    private struct TestComponent
-    {
-        public int Value;
-    }
-
     [TestMethod]
     public void Tick_FirstCall_SamplesImmediately()
     {

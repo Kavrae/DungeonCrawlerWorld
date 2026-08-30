@@ -228,7 +228,7 @@ public sealed class ActionEffectResolverTests
 
         ActionEffectResolver.Apply(ActionWithStatusEffect, StatusEffectInstance, SourceEntityId, [TargetTile], mapQuery, health, eventBus, mathUtility, playerQuery: null, statusEffectAppliers, componentManager);
 
-        Assert.AreEqual(1, applier.AppliedCalls.Count);
+        Assert.HasCount(1, applier.AppliedCalls);
         Assert.AreEqual(BlockingTargetEntityId, applier.AppliedCalls[0].EntityId);
         Assert.AreEqual(StatusEffectSource.FromEntity(SourceEntityId), applier.AppliedCalls[0].Source);
     }
@@ -243,7 +243,7 @@ public sealed class ActionEffectResolverTests
 
         ActionEffectResolver.Apply(ActionWithStatusEffect, StatusEffectInstance, SourceEntityId, [TargetTile], mapQuery, health, eventBus, mathUtility, playerQuery: null, statusEffectAppliers, componentManager);
 
-        Assert.AreEqual(1, applier.AppliedCalls.Count);
+        Assert.HasCount(1, applier.AppliedCalls);
         Assert.AreEqual(NonBlockingTargetEntityId, applier.AppliedCalls[0].EntityId);
     }
 
@@ -259,7 +259,7 @@ public sealed class ActionEffectResolverTests
         ActionEffectResolver.Apply(ActionWithStatusEffect, StatusEffectInstance, SourceEntityId, [TargetTile], mapQuery, health, eventBus, mathUtility, playerQuery: null, statusEffectAppliers, componentManager);
 
         Assert.IsFalse(health.Has(BlockingTargetEntityId));
-        Assert.AreEqual(1, applier.AppliedCalls.Count);
+        Assert.HasCount(1, applier.AppliedCalls);
     }
 
     [TestMethod]
@@ -314,6 +314,6 @@ public sealed class ActionEffectResolverTests
 
         ActionEffectResolver.Apply(ActionWithStatusEffect, StatusEffectInstance, SourceEntityId, [TargetTile], mapQuery, health, eventBus, mathUtility, playerQuery: null, statusEffectAppliers, componentManager, statModifiers: null, componentManager.GetPackedPool<DeadComponent>());
 
-        Assert.AreEqual(0, applier.AppliedCalls.Count);
+        Assert.IsEmpty(applier.AppliedCalls);
     }
 }

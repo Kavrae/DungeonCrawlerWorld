@@ -102,7 +102,7 @@ public sealed class HealthWindowControllerTests
     {
         var buttonBottom = HealthWindowController.ButtonPosition.Y + HealthWindowController.ButtonSize.Y;
 
-        Assert.IsTrue(InventoryFolderController.FolderPosition.Y >= buttonBottom, "The Inventory Folder must sit at or below the Health button's own bottom edge -- no overlap.");
+        Assert.IsGreaterThanOrEqualTo(buttonBottom, InventoryFolderController.FolderPosition.Y, "The Inventory Folder must sit at or below the Health button's own bottom edge -- no overlap.");
         Assert.AreEqual(HealthWindowController.ButtonPosition.X, InventoryFolderController.FolderPosition.X, "Both stay left-aligned under HudMetrics.Margin.");
     }
 }
