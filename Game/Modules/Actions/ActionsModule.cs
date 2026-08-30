@@ -6,6 +6,7 @@ using Game.Modules.Actions.Activators;
 using Game.Modules.Actions.Components;
 using Game.Modules.Actions.Systems;
 using Game.Modules.AbilityScores.Components;
+using Game.Modules.BodyPartEffects.Components;
 using Game.Modules.Core.Components;
 using Game.Modules.Death.Components;
 using Game.Modules.Health.Components;
@@ -102,6 +103,7 @@ public sealed class ActionsModule : IGameModule
         var auraSources = componentManager.GetOptionalMultiPool<StatusEffectAuraSourceComponent>();
         var hotkeyExpansionUnlocks = componentManager.GetPackedPool<HotkeyExpansionUnlockComponent>();
         var bodyParts = componentManager.GetOptionalMultiPool<BodyPartComponent>();
+        var meleeDisabled = componentManager.GetOptionalPackedPool<MeleeDisabledComponent>();
 
         systemManager.Register(new DelayedActionSystem(
             componentManager.GetPackedPool<PendingDelayedActionComponent>(),
@@ -141,6 +143,7 @@ public sealed class ActionsModule : IGameModule
             abilityScores,
             auraSources,
             hotkeyExpansionUnlocks,
-            bodyParts));
+            bodyParts,
+            meleeDisabled));
     }
 }

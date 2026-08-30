@@ -2,6 +2,7 @@
 using Engine.ECS.Systems;
 using Engine.Events;
 using Game.Modules.Actions.Components;
+using Game.Modules.BodyPartEffects.Components;
 using Game.Modules.Core;
 using Game.Modules.Core.Components;
 using Game.Modules.Death.Components;
@@ -10,6 +11,7 @@ using Game.Modules.Movement.Components;
 using Game.Modules.Movement.Systems;
 using Game.Modules.ProcessingTier;
 using Game.Modules.ProcessingTier.Components;
+using Game.Modules.StatModifiers.Components;
 using Game.Modules.StatusEffectAura.Components;
 using Game.World;
 
@@ -77,6 +79,10 @@ public sealed class MovementModule : IGameModule
         var auraSources = componentManager.IsRegistered<StatusEffectAuraSourceComponent>()
             ? componentManager.GetMultiPool<StatusEffectAuraSourceComponent>()
             : null;
+        var statModifiers = componentManager.GetOptionalMultiPool<StatModifierComponent>();
+        // Soft dependency on BodyPartEffectsModule, mirroring auraSources above -- absent means
+        // no entity's movement can ever be hard-blocked, which is correct if that module isn't loaded.
+        var movementDisabled = componentManager.GetOptionalPackedPool<MovementDisabledComponent>();
 
         systemManager.Register(new MovementSystem(
             componentManager.GetDirectPool<TransformComponent>(),
@@ -92,7 +98,9 @@ public sealed class MovementModule : IGameModule
             deadEntities,
             pendingActionActivations,
             pendingConsumableActivations,
-            auraSources));
+            auraSources,
+            statModifiers,
+            movementDisabled));
 
         systemManager.RegisterFrameScoped(_movedEntities);
     }

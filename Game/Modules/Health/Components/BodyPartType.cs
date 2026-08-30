@@ -11,4 +11,7 @@ public enum BodyPartType : byte
     Hand,
     Foot,
     Internal,
+
+
+    Wing,
 }

@@ -1,6 +1,7 @@
 using Engine.ECS.Components;
 using Engine.Events;
 using Engine.Math;
+using Game.Modules;
 using Game.Modules.Actions;
 using Game.Modules.Actions.Activators;
 using Game.Modules.Actions.Components;
@@ -408,5 +409,57 @@ public sealed class ActionActivationSystemTests
         system.Update(default, 0);
 
         Assert.AreEqual(100, HealthOf(componentManager, TargetEntityId));
+    }
+
+    /// <summary>BodyPartEffectsSystem's own hard block (every Arm/Hand simultaneously disabled) -- a Tag.Melee action must be refused outright, distinct from every other gate above which all use the shared ActionLock/cooldown/mana machinery.</summary>
+    [TestMethod]
+    public void Immediate_MeleeTaggedAction_MeleeDisabled_DoesNothingButStillConsumesRequest()
+    {
+        var componentManager = new ComponentManager(initialEntityCapacity: 20, initialComponentCapacity: 10);
+        componentManager.RegisterPackedPool<PendingActionActivationComponent>(static (ref existing, incoming) => existing = incoming);
+        componentManager.RegisterPackedPool<PendingDelayedActionComponent>(static (ref existing, incoming) => existing = incoming);
+        componentManager.RegisterPackedPool<ActionLockComponent>(static (ref existing, incoming) => existing = incoming);
+        componentManager.RegisterMultiPool<ActionInstanceComponent>();
+        componentManager.RegisterPackedPool<SimpleHealthComponent>(static (ref existing, incoming) => existing = incoming);
+        componentManager.RegisterPackedPool<Game.Modules.BodyPartEffects.Components.MeleeDisabledComponent>(static (ref existing, incoming) => { });
+
+        var mapQuery = new FakeMapQuery();
+        mapQuery.SetOccupant(TargetTile, TargetEntityId);
+        var mathUtility = new MathUtility(new NeverCritRandom());
+        var meleeActionId = new Guid("88888888-8888-8888-8888-888888888888");
+        var actionCatalog = new ActionCatalog();
+        actionCatalog.Register(new ActionDefinition(
+            meleeActionId, "Test Punch", null, "#", default, [Tag.Melee, Tag.Attack],
+            [new ActionEffect([new DirectDamage(MinAmount: 0, MaxAmount: 0)])],
+            new SpellActivator(new TargetingSpec(TargetShape.SingleTarget, Range: 10), new ActionTiming(ActionTimingCategory.Immediate, ActionLockFrames: 30, CooldownFrames: null))));
+
+        var meleeDisabled = componentManager.GetPackedPool<Game.Modules.BodyPartEffects.Components.MeleeDisabledComponent>();
+        meleeDisabled.Add(CasterEntityId, default);
+
+        var system = new ActionActivationSystem(
+            componentManager.GetPackedPool<PendingActionActivationComponent>(),
+            componentManager.GetPackedPool<ActionLockComponent>(),
+            componentManager.GetMultiPool<ActionInstanceComponent>(),
+            componentManager.GetPackedPool<PendingDelayedActionComponent>(),
+            componentManager.GetPackedPool<SimpleHealthComponent>(),
+            actionCatalog,
+            mapQuery,
+            new EventBus(),
+            mathUtility,
+            playerQuery: null,
+            new StatusEffectAuraApplierRegistry(),
+            componentManager,
+            meleeDisabled: meleeDisabled);
+
+        componentManager.Merge(TargetEntityId, new SimpleHealthComponent(100, 100));
+        componentManager.Merge(CasterEntityId, new ActionInstanceComponent(meleeActionId, damageAmount: 15, cooldownFramesRemaining: 0));
+        componentManager.Merge(CasterEntityId, new ActionLockComponent(standardLockFrames: ActionLockGate.StandardLockFrames, currentLockTotalFrames: 0, currentLockFramesRemaining: 0));
+        componentManager.Merge(CasterEntityId, new PendingActionActivationComponent(meleeActionId, [TargetTile]));
+
+        system.Update(default, 0);
+
+        Assert.AreEqual(100, HealthOf(componentManager, TargetEntityId), "Every Arm/Hand disabled -- the swing must not happen at all.");
+        Assert.AreEqual(0, componentManager.GetPackedPool<ActionLockComponent>().GetReadonly(CasterEntityId).CurrentLockFramesRemaining, "A refused activation must not lock the caster either.");
+        Assert.IsFalse(componentManager.GetPackedPool<PendingActionActivationComponent>().Has(CasterEntityId));
     }
 }

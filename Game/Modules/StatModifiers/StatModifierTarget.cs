@@ -25,6 +25,12 @@ public enum StatModifierTarget : byte
     /// <summary>Multiplier DirectDamage applies to a fully-scaled hit once CritChance rolls a crit, consumed via StatModifierMath.GetEffectiveValue against CritMath.BaseCritMultiplier.</summary>
     CritMultiplier,
 
+    /// <summary>ActionLockComponent.StandardLockFrames' modifier seam -- consumed by MovementSystem.TryMoveToNextMapPosition. BodyPartEffectsSystem grants a multiplicative debuff here as an entity's own Leg/Foot body parts take damage (see PLAN-body-part-gameplay-effects.md); nothing else grants it yet, but it's an ordinary target like any other -- a future Dexterity/equipment consumer could layer on top the same way.</summary>
+    MovementLockFrames,
+
+    /// <summary>Scales DirectDamage's result an additional time, but only when the activating action carries Tag.Melee -- unlike OutgoingDamage, which applies to every damage source uniformly. BodyPartEffectsSystem grants a multiplicative debuff here as an entity's own Arm/Hand body parts take damage.</summary>
+    MeleeOutgoingDamage,
+
     // AbilityScoreType's 7 members, mirrored 1:1 -- lets equipment/class/buffs grant a
     // StatModifierComponent targeting an ability score via the existing StatModifierEffects.Apply,
     // with no new grant API. See AbilityScoreEffects for the write path that keeps

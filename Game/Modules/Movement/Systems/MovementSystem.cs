@@ -3,12 +3,15 @@ using Engine.ECS.Systems;
 using Engine.Events;
 using Engine.Math;
 using Game.Modules.Actions.Components;
+using Game.Modules.BodyPartEffects.Components;
 using Game.Modules.Core.Components;
 using Game.Modules.Death.Components;
 using Game.Modules.Inventory.Components;
 using Game.Modules.Movement.Components;
 using Game.Modules.ProcessingTier;
 using Game.Modules.ProcessingTier.Components;
+using Game.Modules.StatModifiers;
+using Game.Modules.StatModifiers.Components;
 using Game.Modules.StatusEffectAura.Components;
 using Game.World;
 
@@ -44,6 +47,8 @@ public sealed class MovementSystem : ISystem
     private readonly PackedComponentPool<PendingActionActivationComponent>? _pendingActionActivations;
     private readonly PackedComponentPool<PendingConsumableActivationComponent>? _pendingConsumableActivations;
     private readonly MultiComponentPool<StatusEffectAuraSourceComponent>? _auraSources;
+    private readonly MultiComponentPool<StatModifierComponent>? _statModifiers;
+    private readonly PackedComponentPool<MovementDisabledComponent>? _movementDisabled;
     private readonly TieredEntityStripeSet _tieredStripeSet;
 
     public MovementSystem(
@@ -60,7 +65,9 @@ public sealed class MovementSystem : ISystem
         PackedComponentPool<DeadComponent>? deadEntities = null,
         PackedComponentPool<PendingActionActivationComponent>? pendingActionActivations = null,
         PackedComponentPool<PendingConsumableActivationComponent>? pendingConsumableActivations = null,
-        MultiComponentPool<StatusEffectAuraSourceComponent>? auraSources = null)
+        MultiComponentPool<StatusEffectAuraSourceComponent>? auraSources = null,
+        MultiComponentPool<StatModifierComponent>? statModifiers = null,
+        PackedComponentPool<MovementDisabledComponent>? movementDisabled = null)
     {
         _transformComponents = transformComponents;
         _actionLocks = actionLocks;
@@ -74,6 +81,8 @@ public sealed class MovementSystem : ISystem
         _pendingActionActivations = pendingActionActivations;
         _pendingConsumableActivations = pendingConsumableActivations;
         _auraSources = auraSources;
+        _statModifiers = statModifiers;
+        _movementDisabled = movementDisabled;
 
         _tieredStripeSet = ProcessingTierWiring.CreateAndWire(StripeCount, movementComponents, processingTiers, processingTierEvents);
     }
@@ -91,7 +100,7 @@ public sealed class MovementSystem : ISystem
     {
         foreach (var entityId in _tieredStripeSet.GetDueEntities(time.FrameCount))
         {
-            if (_deadEntities?.Has(entityId) == true)
+            if (_deadEntities?.Has(entityId) == true || _movementDisabled?.Has(entityId) == true)
             {
                 continue;
             }
@@ -171,7 +180,11 @@ public sealed class MovementSystem : ISystem
             transformComponent.Position = newPosition;
         }))
         {
-            var standardLockFrames = _actionLocks.GetReadonly(entityId).StandardLockFrames;
+            var baseLockFrames = _actionLocks.GetReadonly(entityId).StandardLockFrames;
+            var standardLockFrames = MathUtility.ClampUShort(
+                StatModifierMath.GetEffectiveValue(_statModifiers, entityId, StatModifierTarget.MovementLockFrames, baseLockFrames),
+                0,
+                ushort.MaxValue);
             var lockFrames = isDiagonal
                 ? (ushort)MathF.Round(standardLockFrames * DiagonalActionLockMultiplier)
                 : standardLockFrames;

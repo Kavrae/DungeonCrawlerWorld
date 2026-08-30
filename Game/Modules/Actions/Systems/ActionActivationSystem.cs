@@ -6,6 +6,7 @@ using Engine.Math;
 using Game.Modules.AbilityScores.Components;
 using Game.Modules.Actions.Activators;
 using Game.Modules.Actions.Components;
+using Game.Modules.BodyPartEffects.Components;
 using Game.Modules.Core.Components;
 using Game.Modules.Death.Components;
 using Game.Modules.Health.Components;
@@ -45,6 +46,7 @@ public sealed class ActionActivationSystem : ISystem
     private readonly MultiComponentPool<StatusEffectAuraSourceComponent>? _auraSources;
     private readonly PackedComponentPool<HotkeyExpansionUnlockComponent>? _hotkeyExpansionUnlocks;
     private readonly MultiComponentPool<BodyPartComponent>? _bodyParts;
+    private readonly PackedComponentPool<MeleeDisabledComponent>? _meleeDisabled;
     private readonly EntityStripeSet _stripeSet;
 
     public ActionActivationSystem(
@@ -66,7 +68,8 @@ public sealed class ActionActivationSystem : ISystem
         MultiComponentPool<AbilityScoreComponent>? abilityScores = null,
         MultiComponentPool<StatusEffectAuraSourceComponent>? auraSources = null,
         PackedComponentPool<HotkeyExpansionUnlockComponent>? hotkeyExpansionUnlocks = null,
-        MultiComponentPool<BodyPartComponent>? bodyParts = null)
+        MultiComponentPool<BodyPartComponent>? bodyParts = null,
+        PackedComponentPool<MeleeDisabledComponent>? meleeDisabled = null)
     {
         _pendingActivations = pendingActivations;
         _actionLocks = actionLocks;
@@ -87,6 +90,7 @@ public sealed class ActionActivationSystem : ISystem
         _auraSources = auraSources;
         _hotkeyExpansionUnlocks = hotkeyExpansionUnlocks;
         _bodyParts = bodyParts;
+        _meleeDisabled = meleeDisabled;
 
         _stripeSet = EntityStripeSet.CreateAndWire(StripeCount, pendingActivations);
     }
@@ -134,6 +138,14 @@ public sealed class ActionActivationSystem : ISystem
 
             var manaCost = SpellActivator.ManaCostOf(action.Activator);
             if (!HasEnoughMana(entityId, manaCost))
+            {
+                continue;
+            }
+
+            // Every Arm/Hand this entity has is simultaneously disabled (BodyPartEffectsSystem's
+            // own hard block, see PLAN-body-part-gameplay-effects.md) -- a Tag.Melee action can't
+            // be swung at all, not just at a heavily-reduced MeleeOutgoingDamage.
+            if (action.Tags.Contains(Tag.Melee) && _meleeDisabled?.Has(entityId) == true)
             {
                 continue;
             }

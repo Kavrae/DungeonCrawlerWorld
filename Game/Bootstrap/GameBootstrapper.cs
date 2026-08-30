@@ -8,6 +8,7 @@ using Game.Modules.AbilityScores;
 using Game.Modules.Achievements;
 using Game.Modules.Actions;
 using Game.Modules.Actions.Definitions;
+using Game.Modules.BodyPartEffects;
 using Game.Modules.Burning;
 using Game.Modules.Class;
 using Game.Modules.ContactDamage;
@@ -70,6 +71,7 @@ public static class GameBootstrapper
             new StatusEffectsModule(),
             new StatModifiersModule(),
             new AbilityScoresModule(),
+            new BodyPartEffectsModule(),
             new BurningModule(),
             new PoisonModule(),
             new ParalysisModule(),

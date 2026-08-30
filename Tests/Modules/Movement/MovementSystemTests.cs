@@ -2,12 +2,15 @@ using Engine.ECS.Components.Stores;
 using Engine.ECS.Systems;
 using Engine.Events;
 using Engine.Math;
+using Game.Modules.BodyPartEffects.Components;
 using Game.Modules.Core.Components;
 using Game.Modules.Death.Components;
 using Game.Modules.Movement.Components;
 using Game.Modules.Movement.Systems;
 using Game.Modules.ProcessingTier;
 using Game.Modules.ProcessingTier.Components;
+using Game.Modules.StatModifiers;
+using Game.Modules.StatModifiers.Components;
 using Game.Modules.StatusEffectAura.Components;
 using Game.Modules.StatusEffects;
 using Game.World;
@@ -129,6 +132,29 @@ public sealed class MovementSystemTests
         deadEntities.Add(0, new DeadComponent(KilledByEntityId: null, DiedAtFrame: 0));
 
         var system = new MovementSystem(transformPool, actionLockPool, movementPool, world, new EventBus(), new WorldEventSync(world), new FrameEventBuffer<EntityMovedEvent>(), null, CreateProcessingTierPool(), new ProcessingTierEvents(), deadEntities);
+        system.Update(default, 0);
+
+        Assert.AreEqual(new Vector3Int(2, 2, 0), transformPool.GetReadonly(0).Position);
+    }
+
+    /// <summary>BodyPartEffectsSystem's own hard block (every Leg/Foot simultaneously disabled) -- MovementSystem must refuse the move outright, the same way it already refuses one for a dead entity.</summary>
+    [TestMethod]
+    public void Update_MovementDisabledMarker_DoesNotMove()
+    {
+        var transformPool = CreateTransformPool();
+        var actionLockPool = CreateActionLockPool();
+        var movementPool = CreateMovementPool();
+        var movementDisabled = new PackedComponentPool<MovementDisabledComponent>(10, 10, static (ref existing, incoming) => { });
+        var world = new Game.World.World(new Map(new Vector3Int(5, 5, 1)));
+
+        var transform = new TransformComponent(new Vector3Int(2, 2, 0), new Vector2Byte(1, 1));
+        transformPool.Add(0, transform);
+        world.PlaceEntityOnMap(0, transform.Position, ref transform);
+        actionLockPool.Add(0, new ActionLockComponent(standardLockFrames: 10, currentLockTotalFrames: 0, currentLockFramesRemaining: 0));
+        movementPool.Add(0, new MovementComponent(MovementMode.Random, null, new Vector3Int(3, 2, 0)));
+        movementDisabled.Add(0, default);
+
+        var system = new MovementSystem(transformPool, actionLockPool, movementPool, world, new EventBus(), new WorldEventSync(world), new FrameEventBuffer<EntityMovedEvent>(), null, CreateProcessingTierPool(), new ProcessingTierEvents(), movementDisabled: movementDisabled);
         system.Update(default, 0);
 
         Assert.AreEqual(new Vector3Int(2, 2, 0), transformPool.GetReadonly(0).Position);
@@ -297,6 +323,30 @@ public sealed class MovementSystemTests
 
         Assert.HasCount(1, movedEntities.Items);
         Assert.AreEqual(entityMoveSync.LastSynced.Value, movedEntities.Items[0]);
+    }
+
+    /// <summary>BodyPartEffectsSystem's own MovementLockFrames grant (a damaged Leg/Foot) must actually change how long a successful move locks the entity for, not just exist unread.</summary>
+    [TestMethod]
+    public void Update_SuccessfulMove_MovementLockFramesModifierScalesAppliedLockFrames()
+    {
+        var transformPool = CreateTransformPool();
+        var actionLockPool = CreateActionLockPool();
+        var movementPool = CreateMovementPool();
+        var mapQuery = new FakeMapQuery(new Vector3Int(5, 5, 1));
+        var statModifiers = new MultiComponentPool<StatModifierComponent>(maximumEntityCount: 10, initialCapacity: 4);
+        // +100% (doubling) multiplicative debuff -- the same shape BodyPartEffectsSystem grants for a damaged leg.
+        statModifiers.Add(0, new StatModifierComponent(StatModifierTarget.MovementLockFrames, StatModifierOperation.Multiplicative, StatModifierPolarity.Debuff, canModify: false, magnitude: 1f, remainingDurationFrames: null, StatusEffectSource.Admin));
+
+        var startPosition = new Vector3Int(2, 2, 0);
+        var targetPosition = new Vector3Int(3, 2, 0);
+        transformPool.Add(0, new TransformComponent(startPosition, new Vector2Byte(1, 1)));
+        actionLockPool.Add(0, new ActionLockComponent(standardLockFrames: 10, currentLockTotalFrames: 0, currentLockFramesRemaining: 0));
+        movementPool.Add(0, new MovementComponent(MovementMode.Random, null, targetPosition));
+
+        var system = new MovementSystem(transformPool, actionLockPool, movementPool, mapQuery, new EventBus(), new RecordingEntityMoveSync(), new FrameEventBuffer<EntityMovedEvent>(), null, CreateProcessingTierPool(), new ProcessingTierEvents(), statModifiers: statModifiers);
+        system.Update(default, 0);
+
+        Assert.AreEqual(20, actionLockPool.GetReadonly(0).CurrentLockFramesRemaining, "10 base lock frames * 2x modifier = 20.");
     }
 
     /// <summary>Regression test for the redesign's dual dispatch: EventBus.Publish&lt;EntityMovedEvent&gt; is now reserved for the player's own move (a handful/sec) instead of firing for the whole population, since PlayerActivityLog subscribes to it directly and expects nothing else on the bus.</summary>

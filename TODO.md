@@ -154,6 +154,10 @@ Game-side equipment rules (what can go in which slot, stat effects of equipping)
 
 Once ComplexHealth exists (see the Body parts item below), some slot *counts* -- not just which slots exist -- should scale with an entity's own active, non-disabled body parts of the matching `BodyPartType` (see that item's BodyPartType followup) rather than being a fixed number per race: e.g. a ring slot per finger, a boot slot per foot, both shrinking if a hand/foot is lost or disabled. A `SimpleHealth` entity has no per-part detail to key off, so this only ever applies to Complex entities -- Simple ones keep whatever fixed slot layout this item otherwise defines.
 
+#### Melee actions should declare which body parts perform them
+
+Follow-up to both Equipment (above) and the body-part-gameplay-effects work (`PLAN-body-part-gameplay-effects.md` -- Legs/Feet penalizing movement, Arms/Hands penalizing melee damage via a new `BodyPartEffectsSystem`). That system currently scores a *generic* melee penalty off every Arm/Hand the entity has, since no action says which specific part(s) it's actually performed with -- correct as a placeholder only because nothing today equips a weapon to one specific limb. Once Equipment exists and a weapon can occupy a specific hand/arm slot, `IActionActivator`/`ActionEffect` (`Game/Modules/Actions/`) should let a melee action declare one or more required/performing `BodyPartType`s (or a specific equipped-slot reference) instead of the implicit "any arm will do" assumption -- e.g. a two-handed weapon requiring both Hands functional, an offhand punch only caring about the one arm that threw it. `BodyPartEffectsSystem`'s own melee-damage penalty computation would then need to key off the *acting* part(s) an activation actually declares, not a blanket aggregate across every Arm/Hand the entity owns.
+
 #### Wands (landed, without the original Equipment gate)
 
 `WandActivator` (`Game/Modules/Actions/Activators/`) landed as the concrete proof case for **per-slot item
@@ -307,9 +311,25 @@ Six followups, each unblocked now that this landed, are logged as their own TODO
 
 Unblocked now that Body parts (above) has landed with its "random part" placeholder. Real per-part targeting for damage/effects, replacing that random pick: a single-target attack should be able to land on one specific part (once a targeting UI exists to choose it -- not designed here), and an area/environmental effect should be able to resolve against multiple parts at once by its own rule rather than uniformly-random -- e.g. lava contact damage (`Game/Modules/Burning/`, `ContactDamageSystem`) hitting legs specifically (a creature standing in lava is burning its feet, not its head), while a Fireball's `Burst` applies its damage/Burning equally across every part instead of picking one winner. Needs `ActionEffect`/`IActionEffectEntry` (`Game/Modules/Actions/Effects/`) to carry an optional body-part-selection rule per entry -- a new small enum or delegate (`Random` today's default, `Lowest`/`AllParts`/a specific `BodyPartType` for the lava/fireball cases) that `ComplexHealthDamage`/whatever applies status effects to a part reads instead of always rolling random. `ActionEffectResolver.Apply`'s existing caster-then-target modifier chain (see the ActionEffectResolver damage/heal consistency item above) would need to run once per selected part rather than once per hit.
 
-#### BodyPartType categorization and gameplay effects
+#### BodyPartType categorization and gameplay effects (movement/melee landed, lifting/pickup still open)
 
-Unblocked now that Body parts (above) has landed. Each `BodyPartComponent` needs a `BodyPartType` (Head/Torso/Arm/Leg/Hand/Foot/... -- exact set not decided here) so other systems can key off *kind* of part rather than by name string. Two concrete consumers already anticipated: Equipment (see this TODO's own updated Equipment entry above -- slot count/availability keyed by which typed parts an entity currently has, e.g. a ring per finger); and actions/movement gated by a part's own disabled state -- Legs disabled slows or blocks movement (`MovementSystem`), Arms disabled blocks melee/lifting (`ActionEffectResolver`'s Adjacent-targeted attacks, `InventoryActions` pickup), the concrete "many future features" the original Body parts item flags above. No system reads a disabled part's state at all until this item lands -- the state exists (see the Body parts item's own "non-vital parts disable" note), nothing consumes it yet; this item is that consumption pass, once there's more than one gameplay system ready to key off it at once rather than wiring each in piecemeal.
+`BodyPartType` (`Head/Torso/Arm/Leg/Hand/Foot/Internal/Wing`) already existed; this item was the
+consumption pass that finally reads a disabled/damaged part's state for gameplay. See
+`PLAN-body-part-gameplay-effects.md` for the full design record: a new `Game/Modules/BodyPartEffects/`
+module (`BodyPartEffectsSystem`) translates an entity's own Leg/Foot and Arm/Hand condition into
+ordinary `StatModifierComponent` grants (`StatModifierTarget.MovementLockFrames`, consumed by
+`MovementSystem`; `StatModifierTarget.MeleeOutgoingDamage`, consumed by `DirectDamage` only for
+`Tag.Melee` actions) plus two hard-block markers (`MovementDisabledComponent`/
+`MeleeDisabledComponent`, checked by `MovementSystem`/`ActionActivationSystem`) for the
+every-part-simultaneously-disabled case. A functional `BodyPartType.Wing` suppresses the Leg/Foot
+penalty and block entirely (not granted to any race yet -- the rule exists ahead of any user).
+
+Still open, deliberately not touched by this pass: Equipment's own slot-count-per-typed-part
+consumer (see this TODO's Equipment entry above); `InventoryActions` pickup gating on a disabled
+Arm/Hand; and carry capacity/lifting (blocked on Strength/carry-capacity infrastructure that
+doesn't exist yet, its own TODO item below). Also see "Melee actions should declare which body
+parts perform them" above -- today's melee penalty is a blanket aggregate across every Arm/Hand an
+entity owns, since no action yet declares which specific part(s) actually perform it.
 
 #### Per-body-part vs whole-entity status effects
 
@@ -327,21 +347,21 @@ called often enough (population size, frame frequency) to show up as a measurabl
 whether a per-entity cached effective-MaximumHealth value (invalidated on modifier grant/expiry,
 mirroring how `AbilityScoreComponent.Total` is precomputed eagerly rather than read lazily -- see
 that component's own doc comment) is worth the added complexity, versus leaving it as the simple,
-always-correct lazy computation it is today. Queued after the current body-parts follow-up work
-(items 1/3/2+4 below); not yet investigated.
+always-correct lazy computation it is today. The body-parts follow-up work this was queued behind
+(items 1/3/2+4) has now all landed; not yet investigated.
 
-#### Limb-specific gameplay penalties beyond disable
+#### Limb-specific gameplay penalties beyond disable (landed)
 
-Body parts itself (above) has landed; still blocked on its BodyPartType categorization follow-up
-landing first -- this extends whatever binary disabled-at-0 gameplay hooks that follow-up wires (Legs
-disabled blocks movement, Arms disabled block melee/lifting) into a graduated penalty curve
-instead, closer to Fallout's own crippled-limb model than a hard cutoff: a Leg below some
-percentage threshold (not chosen here) slows movement before fully blocking it at 0 HP, an Arm
-below threshold reduces melee damage/carry capacity rather than an all-or-nothing gate. Needs a
-real percentage-to-penalty curve designed per `BodyPartType` (movement-speed scaling for Legs,
-damage/carry scaling for Arms, ...) once there's an existing binary gameplay hook on each type to
-graduate rather than just gate -- see `PLAN-body-parts.md` for the underlying data model this and
-every other Body parts follow-up build on.
+Landed together with the BodyPartType categorization item above -- see
+`PLAN-body-part-gameplay-effects.md`. Closer to Fallout's own crippled-limb model than a hard
+cutoff: each Leg/Foot (or Arm/Hand) the entity owns contributes its own linear-lerp penalty from
+its current HP fraction (1x movement lock at 100% HP up to 2x at 0%; 1x melee damage down to 0x),
+and every such part's penalty **compounds multiplicatively** across the entity's own part count --
+two damaged legs are worse than one, generic to however many an entity has, not hardcoded to a
+pair. Only once *every* Leg/Foot (or Arm/Hand) is simultaneously disabled does the hard block
+(`MovementDisabledComponent`/`MeleeDisabledComponent`) replace the graduated multiplier outright.
+Carry-capacity scaling for damaged Arms remains open, blocked on carry-capacity infrastructure not
+existing yet (see the Item weight and carry capacity item below).
 
 #### Movement System
 

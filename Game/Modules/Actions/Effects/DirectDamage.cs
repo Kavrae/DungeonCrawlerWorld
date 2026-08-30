@@ -36,6 +36,15 @@ public sealed record DirectDamage(short MinAmount, short MaxAmount, BodyPartType
         var withBonus = baseAmount + AbilityScoreTagBonus.Compute(context.SourceEntityId, context.ActivatorTags, context.AbilityScores);
         var scaled = StatModifierMath.GetEffectiveValue(context.StatModifiers, context.SourceEntityId, StatModifierTarget.OutgoingDamage, withBonus);
 
+        // Only Tag.Melee-carrying actions (Punch, ...) take this additional pass -- unlike
+        // OutgoingDamage above, which every damage source (spells included) always goes through.
+        // BodyPartEffectsSystem grants this debuff as the caster's own Arm/Hand body parts take
+        // damage; see PLAN-body-part-gameplay-effects.md.
+        if (context.ActivatorTags.Contains(Tag.Melee))
+        {
+            scaled = StatModifierMath.GetEffectiveValue(context.StatModifiers, context.SourceEntityId, StatModifierTarget.MeleeOutgoingDamage, scaled);
+        }
+
         var critChance = StatModifierMath.GetEffectiveValue(context.StatModifiers, context.SourceEntityId, StatModifierTarget.CritChance, CritMath.BaseCritChance);
         if (context.MathUtility.NextDouble() < critChance)
         {
