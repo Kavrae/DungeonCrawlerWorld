@@ -1392,6 +1392,106 @@ public sealed class UiInputControllerTests
     }
 
     /// <summary>
+    /// First mouse-side coverage of UiLayerStack's menu mode (see IMPLEMENTATION-NOTES.md's
+    /// "Pause modality" section) -- a plain, non-menu, non-exempt window becomes completely
+    /// unreachable while a menu window is open, but the menu window itself stays clickable
+    /// (ruling out "hit-testing is just broken" as a false-positive explanation for the block).
+    /// Builds its own UiLayerStack/UiInputController directly (not via CreateController) since
+    /// it needs to call OpenMenuWindow, which CreateController doesn't expose.
+    /// </summary>
+    [TestMethod]
+    public void TryHitTestInteraction_MenuModeActive_BlocksClickOnNonMenuWindow()
+    {
+        var windowService = CreateWindowService();
+        var (blockedWindow, _) = CreateFocusableWindowWithContent(windowService, new Vector2(0, 0));
+        var (menuWindow, _) = CreateFocusableWindowWithContent(windowService, new Vector2(400, 400));
+        var layers = new UiLayerStack();
+        layers.Add(UiLayer.Base, blockedWindow);
+        layers.Add(UiLayer.DynamicHud, menuWindow);
+        layers.OpenMenuWindow(menuWindow);
+        var controller = new UiInputController(layers, LargeScreenSize);
+
+        var blockedPoint = blockedWindow.ContentRectangle.Center;
+        controller.Update(NoKeys, MouseAt(blockedPoint.X, blockedPoint.Y, ButtonState.Released));
+        controller.Update(NoKeys, MouseAt(blockedPoint.X, blockedPoint.Y, ButtonState.Pressed));
+        Assert.IsNull(controller.FocusedElement, "A non-menu, non-exempt window must be unreachable while menu mode is active.");
+
+        var menuPoint = menuWindow.ContentRectangle.Center;
+        controller.Update(NoKeys, MouseAt(menuPoint.X, menuPoint.Y, ButtonState.Released));
+        controller.Update(NoKeys, MouseAt(menuPoint.X, menuPoint.Y, ButtonState.Pressed));
+        Assert.AreSame(menuWindow, controller.FocusedElement, "Sanity check: the open menu window itself must still be reachable.");
+    }
+
+    /// <summary>Confirms UiLayerStack's own documented design: menu mode is menu-vs-everything-else, not menu-window-vs-menu-window -- two simultaneously-open menu windows (e.g. Inventory and Ability Scores) both stay independently clickable.</summary>
+    [TestMethod]
+    public void TryHitTestInteraction_MenuModeActive_BothOpenMenuWindowsStayClickable()
+    {
+        var windowService = CreateWindowService();
+        var (menuWindowA, _) = CreateFocusableWindowWithContent(windowService, new Vector2(0, 0));
+        var (menuWindowB, _) = CreateFocusableWindowWithContent(windowService, new Vector2(400, 400));
+        var layers = new UiLayerStack();
+        layers.Add(UiLayer.DynamicHud, menuWindowA);
+        layers.Add(UiLayer.DynamicHud, menuWindowB);
+        layers.OpenMenuWindow(menuWindowA);
+        layers.OpenMenuWindow(menuWindowB);
+        var controller = new UiInputController(layers, LargeScreenSize);
+
+        var pointA = menuWindowA.ContentRectangle.Center;
+        controller.Update(NoKeys, MouseAt(pointA.X, pointA.Y, ButtonState.Released));
+        controller.Update(NoKeys, MouseAt(pointA.X, pointA.Y, ButtonState.Pressed));
+        Assert.AreSame(menuWindowA, controller.FocusedElement);
+
+        var pointB = menuWindowB.ContentRectangle.Center;
+        controller.Update(NoKeys, MouseAt(pointB.X, pointB.Y, ButtonState.Released));
+        controller.Update(NoKeys, MouseAt(pointB.X, pointB.Y, ButtonState.Pressed));
+        Assert.AreSame(menuWindowB, controller.FocusedElement, "Both open menu windows must stay independently clickable.");
+    }
+
+    /// <summary>A MarkMenuModeExempt element (e.g. the hotbar, an inventory folder tile) stays reachable even while menu mode blocks everything else -- confirmed added before menu mode activates, so it's exempt rather than itself a menu window (Add would otherwise auto-promote it, see UiLayerStackTests).</summary>
+    [TestMethod]
+    public void TryHitTestInteraction_MenuModeActive_StillResolvesClickOnExemptElement()
+    {
+        var windowService = CreateWindowService();
+        var (exemptWindow, _) = CreateFocusableWindowWithContent(windowService, new Vector2(0, 0));
+        var (menuWindow, _) = CreateFocusableWindowWithContent(windowService, new Vector2(400, 400));
+        var layers = new UiLayerStack();
+        layers.Add(UiLayer.StaticHud, exemptWindow);
+        layers.MarkMenuModeExempt(exemptWindow);
+        layers.Add(UiLayer.DynamicHud, menuWindow);
+        layers.OpenMenuWindow(menuWindow);
+        var controller = new UiInputController(layers, LargeScreenSize);
+
+        var pressPoint = exemptWindow.ContentRectangle.Center;
+        controller.Update(NoKeys, MouseAt(pressPoint.X, pressPoint.Y, ButtonState.Released));
+        controller.Update(NoKeys, MouseAt(pressPoint.X, pressPoint.Y, ButtonState.Pressed));
+
+        Assert.AreSame(exemptWindow, controller.FocusedElement, "A MarkMenuModeExempt element must stay reachable while menu mode blocks everything else.");
+    }
+
+    /// <summary>Keyboard-side counterpart to TryHitTestInteraction_MenuModeActive_BlocksClickOnNonMenuWindow -- RouteHotkeysToFocusedElement must stop routing to a focused window the instant menu mode blocks it, even though it was validly focused a moment before menu mode activated.</summary>
+    [TestMethod]
+    public void RouteHotkeysToFocusedElement_MenuModeActive_SkipsBlockedFocusedWindow()
+    {
+        var windowService = CreateWindowService();
+        var (focused, focusedContent) = CreateFocusableWindowWithContent(windowService, new Vector2(0, 0));
+        var (menuWindow, _) = CreateFocusableWindowWithContent(windowService, new Vector2(400, 400));
+        var layers = new UiLayerStack();
+        layers.Add(UiLayer.Base, focused);
+        layers.Add(UiLayer.DynamicHud, menuWindow);
+        var controller = new UiInputController(layers, LargeScreenSize);
+
+        var pressPoint = focused.ContentRectangle.Center;
+        controller.Update(NoKeys, MouseAt(pressPoint.X, pressPoint.Y, ButtonState.Released));
+        controller.Update(NoKeys, MouseAt(pressPoint.X, pressPoint.Y, ButtonState.Pressed));
+        Assert.AreSame(focused, controller.FocusedElement, "Sanity check: focus must land on the window before menu mode blocks it.");
+
+        layers.OpenMenuWindow(menuWindow);
+        controller.Update(NoKeys, MouseAt(pressPoint.X, pressPoint.Y, ButtonState.Released));
+
+        Assert.AreEqual(0, focusedContent.HotkeyCallCount, "A focused window that's not a menu window or exempt must not receive hotkeys once menu mode blocks it.");
+    }
+
+    /// <summary>
     /// A typed character (simulated via OnTextInput -- the internal seam a real
     /// TextInputEXT.TextInput subscription feeds in production, see the UiInputController
     /// constructor) reaches only the focused window's content, mirroring HandleKeyPress/
