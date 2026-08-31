@@ -16,19 +16,19 @@ namespace Game.Modules.Actions;
 /// <summary>
 /// Per-activation orchestration shared by ActionActivationSystem (Immediate/FreeCast) and
 /// DelayedActionSystem (a Delayed action's windup completing) -- publishes ActionActivatedEvent,
-/// builds the source-fixed half of an ActionEffectContext (DamageOverride: instance.DamageAmount,
-/// the per-instance/per-race override -- see ActionInstanceComponent's own doc comment;
-/// ActivatorTags: action.Tags, for DirectDamage's ability-score bonus), walks target tiles
-/// via IMapQuery.GetOccupantEntityIdsAt, and calls ActionEffectSequence.Apply(action.Effects,
-/// ...) once per resolved target. Contains no per-effect-kind knowledge at all -- what an
-/// action's effects actually do lives entirely on the ActionEffect/IActionEffectEntry types
-/// themselves.
+/// builds the source-fixed half of an ActionEffectContext (ActivatorTags: action.Tags, for
+/// DirectDamage's ability-score bonus), walks target tiles via IMapQuery.GetOccupantEntityIdsAt,
+/// and calls ActionEffectSequence.Apply(action.Effects, ...) once per resolved target. Contains
+/// no per-effect-kind knowledge at all -- what an action's effects actually do lives entirely on
+/// the ActionEffect/IActionEffectEntry types themselves. Takes the already-resolved action
+/// (ActionInstanceQueries.TryResolveEffectiveAction, not a raw ActionCatalog lookup) so a
+/// per-instance Override -- e.g. a flat damage number, see ActionInstanceComponent's own doc
+/// comment -- is already baked into action.Effects by the time this runs.
 /// </summary>
 public static class ActionEffectResolver
 {
     public static void Apply(
         ActionDefinition action,
-        ActionInstanceComponent instance,
         int sourceEntityId,
         IReadOnlyList<Vector3Int> targetTiles,
         IMapQuery mapQuery,
@@ -63,8 +63,7 @@ public static class ActionEffectResolver
             DeadEntities: deadEntities,
             AuraSources: auraSources,
             BodyParts: bodyParts,
-            PlayerQuery: playerQuery,
-            DamageOverride: instance.DamageAmount > 0 ? instance.DamageAmount : null);
+            PlayerQuery: playerQuery);
 
         foreach (var tile in targetTiles)
         {

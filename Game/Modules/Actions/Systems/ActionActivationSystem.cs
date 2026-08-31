@@ -125,8 +125,8 @@ public sealed class ActionActivationSystem : ISystem
             // so there's no outcome that should leave this request standing for a future visit.
             _pendingActivations.Remove(entityId);
 
-            if (!_actionCatalog.TryGet(request.ActionId, out var action) ||
-                !ActionInstanceQueries.TryGet(_actionInstances, entityId, request.ActionId, out var instance))
+            if (!ActionInstanceQueries.TryGet(_actionInstances, entityId, request.ActionId, out var instance) ||
+                !ActionInstanceQueries.TryResolveEffectiveAction(_actionCatalog, instance, out var action))
             {
                 continue;
             }
@@ -154,13 +154,13 @@ public sealed class ActionActivationSystem : ISystem
             switch (action.Activator.Timing.Category)
             {
                 case ActionTimingCategory.Immediate:
-                    activationWasSuccessful = TryActivateImmediate(entityId, action, instance, request.TargetTiles);
+                    activationWasSuccessful = TryActivateImmediate(entityId, action, request.TargetTiles);
                     break;
                 case ActionTimingCategory.Delayed:
                     activationWasSuccessful = TryActivateDelayed(entityId, action, request.TargetTiles);
                     break;
                 case ActionTimingCategory.FreeCast:
-                    activationWasSuccessful = TryActivateFreeCast(entityId, action, instance, request.TargetTiles);
+                    activationWasSuccessful = TryActivateFreeCast(entityId, action, request.TargetTiles);
                     break;
             }
             if (activationWasSuccessful)
@@ -171,14 +171,14 @@ public sealed class ActionActivationSystem : ISystem
         }
     }
 
-    private bool TryActivateImmediate(int entityId, ActionDefinition action, ActionInstanceComponent instance, Vector3Int[] targetTiles)
+    private bool TryActivateImmediate(int entityId, ActionDefinition action, Vector3Int[] targetTiles)
     {
         if (ActionLockGate.IsBlocked(_actionLocks, entityId))
         {
             return false;
         }
 
-        ActionEffectResolver.Apply(action, instance, entityId, targetTiles, _mapQuery, _health, _eventBus, _mathUtility, _playerQuery, _statusEffectAppliers, _componentManager, _statModifiers, _deadEntities, _abilityScores, _auraSources, _hotkeyExpansionUnlocks, _bodyParts);
+        ActionEffectResolver.Apply(action, entityId, targetTiles, _mapQuery, _health, _eventBus, _mathUtility, _playerQuery, _statusEffectAppliers, _componentManager, _statModifiers, _deadEntities, _abilityScores, _auraSources, _hotkeyExpansionUnlocks, _bodyParts);
         ActionLockGate.Lock(_actionLocks, entityId, action.Activator.Timing.ActionLockFrames);
         return true;
     }
@@ -195,9 +195,9 @@ public sealed class ActionActivationSystem : ISystem
         return true;
     }
 
-    private bool TryActivateFreeCast(int entityId, ActionDefinition action, ActionInstanceComponent instance, Vector3Int[] targetTiles)
+    private bool TryActivateFreeCast(int entityId, ActionDefinition action, Vector3Int[] targetTiles)
     {
-        ActionEffectResolver.Apply(action, instance, entityId, targetTiles, _mapQuery, _health, _eventBus, _mathUtility, _playerQuery, _statusEffectAppliers, _componentManager, _statModifiers, _deadEntities, _abilityScores, _auraSources, _hotkeyExpansionUnlocks, _bodyParts);
+        ActionEffectResolver.Apply(action, entityId, targetTiles, _mapQuery, _health, _eventBus, _mathUtility, _playerQuery, _statusEffectAppliers, _componentManager, _statModifiers, _deadEntities, _abilityScores, _auraSources, _hotkeyExpansionUnlocks, _bodyParts);
         return true;
     }
 

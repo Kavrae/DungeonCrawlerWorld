@@ -2,6 +2,7 @@
 using Engine.ECS.Components.Stores;
 using Engine.Math;
 using Game.Blueprints.Races;
+using Game.Modules.Actions;
 using Game.Modules.Actions.Components;
 using Game.Modules.Actions.Definitions.DirectActions;
 using Game.Modules.Core.Components;
@@ -122,7 +123,7 @@ public sealed class TestCombatBehaviorSystemTests
         fixture.HealthPool.Add(entityId, new SimpleHealthComponent(currentHealth, maximumHealth));
         if (grantPunch)
         {
-            fixture.ActionInstances.Add(entityId, new ActionInstanceComponent(PunchAction.Id, damageAmount: 10, cooldownFramesRemaining: 0));
+            fixture.ActionInstances.Add(entityId, new ActionInstanceComponent(PunchAction.Id, ActionOverrideEffects.OverrideFlatDamage(PunchAction.Build(), 10), cooldownFramesRemaining: 0));
         }
     }
 
@@ -135,7 +136,7 @@ public sealed class TestCombatBehaviorSystemTests
         fixture.BodyParts.Add(entityId, new BodyPartComponent("Head", BodyPartType.Head, 0, 0, headCurrent, headMaximum, isVital: true));
         if (grantPunch)
         {
-            fixture.ActionInstances.Add(entityId, new ActionInstanceComponent(PunchAction.Id, damageAmount: 10, cooldownFramesRemaining: 0));
+            fixture.ActionInstances.Add(entityId, new ActionInstanceComponent(PunchAction.Id, ActionOverrideEffects.OverrideFlatDamage(PunchAction.Build(), 10), cooldownFramesRemaining: 0));
         }
     }
 

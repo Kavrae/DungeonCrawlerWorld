@@ -106,10 +106,10 @@ public sealed class DelayedActionSystem : ISystem
                 continue;
             }
 
-            if (_actionCatalog.TryGet(pending.ActionId, out var action) &&
-                ActionInstanceQueries.TryGet(_actionInstances, entityId, pending.ActionId, out var instance))
+            if (ActionInstanceQueries.TryGet(_actionInstances, entityId, pending.ActionId, out var instance) &&
+                ActionInstanceQueries.TryResolveEffectiveAction(_actionCatalog, instance, out var action))
             {
-                ActionEffectResolver.Apply(action, instance, entityId, pending.TargetTiles, _mapQuery, _health, _eventBus, _mathUtility, _playerQuery, _statusEffectAppliers, _componentManager, _statModifiers, _deadEntities, _abilityScores, _auraSources, _hotkeyExpansionUnlocks, _bodyParts);
+                ActionEffectResolver.Apply(action, entityId, pending.TargetTiles, _mapQuery, _health, _eventBus, _mathUtility, _playerQuery, _statusEffectAppliers, _componentManager, _statModifiers, _deadEntities, _abilityScores, _auraSources, _hotkeyExpansionUnlocks, _bodyParts);
             }
 
             _pendingActions.Remove(entityId);

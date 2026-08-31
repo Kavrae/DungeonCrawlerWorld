@@ -58,7 +58,7 @@ public sealed class ActionCooldownSystemTests
     public void CooldownTicksDownByStripeCountPerVisit()
     {
         var (system, componentManager) = Build();
-        componentManager.Merge(EntityId, new ActionInstanceComponent(FirstActionId, damageAmount: 0, cooldownFramesRemaining: 25));
+        componentManager.Merge(EntityId, new ActionInstanceComponent(FirstActionId, overrideDefinition: null, cooldownFramesRemaining: 25));
 
         system.Update(new EngineTime(default, default, false, FrameCount: 1), 0);
 
@@ -69,7 +69,7 @@ public sealed class ActionCooldownSystemTests
     public void CooldownFlooredAtZero_NeverGoesNegative()
     {
         var (system, componentManager) = Build();
-        componentManager.Merge(EntityId, new ActionInstanceComponent(FirstActionId, damageAmount: 0, cooldownFramesRemaining: 5));
+        componentManager.Merge(EntityId, new ActionInstanceComponent(FirstActionId, overrideDefinition: null, cooldownFramesRemaining: 5));
 
         system.Update(new EngineTime(default, default, false, FrameCount: 1), 0);
 
@@ -80,8 +80,8 @@ public sealed class ActionCooldownSystemTests
     public void MultipleActionInstancesOnSameEntity_EachTickedIndependently()
     {
         var (system, componentManager) = Build();
-        componentManager.Merge(EntityId, new ActionInstanceComponent(FirstActionId, damageAmount: 0, cooldownFramesRemaining: 25));
-        componentManager.Merge(EntityId, new ActionInstanceComponent(SecondActionId, damageAmount: 0, cooldownFramesRemaining: 0));
+        componentManager.Merge(EntityId, new ActionInstanceComponent(FirstActionId, overrideDefinition: null, cooldownFramesRemaining: 25));
+        componentManager.Merge(EntityId, new ActionInstanceComponent(SecondActionId, overrideDefinition: null, cooldownFramesRemaining: 0));
 
         system.Update(new EngineTime(default, default, false, FrameCount: 1), 0);
 
@@ -93,7 +93,7 @@ public sealed class ActionCooldownSystemTests
     public void EntityNotOnItsDueFrame_IsNotTickedThisCall()
     {
         var (system, componentManager) = Build();
-        componentManager.Merge(EntityId, new ActionInstanceComponent(FirstActionId, damageAmount: 0, cooldownFramesRemaining: 25));
+        componentManager.Merge(EntityId, new ActionInstanceComponent(FirstActionId, overrideDefinition: null, cooldownFramesRemaining: 25));
 
         // FrameCount 0 % 10 == 0, not entity 1's due bucket (1).
         system.Update(new EngineTime(default, default, false, FrameCount: 0), 0);
@@ -113,7 +113,7 @@ public sealed class ActionCooldownSystemTests
     {
         var (system, componentManager, tiers) = BuildWithProcessingTiers();
         tiers.Add(EntityId, new ProcessingTierComponent(ProcessingTierLevel.Neighborhood));
-        componentManager.Merge(EntityId, new ActionInstanceComponent(FirstActionId, damageAmount: 0, cooldownFramesRemaining: 25));
+        componentManager.Merge(EntityId, new ActionInstanceComponent(FirstActionId, overrideDefinition: null, cooldownFramesRemaining: 25));
 
         system.Update(new EngineTime(default, default, false, FrameCount: 0), (byte)(EntityId % 10));
 
@@ -125,7 +125,7 @@ public sealed class ActionCooldownSystemTests
     {
         var (system, componentManager, tiers) = BuildWithProcessingTiers();
         tiers.Add(EntityId, new ProcessingTierComponent(ProcessingTierLevel.Neighborhood));
-        componentManager.Merge(EntityId, new ActionInstanceComponent(FirstActionId, damageAmount: 0, cooldownFramesRemaining: 25));
+        componentManager.Merge(EntityId, new ActionInstanceComponent(FirstActionId, overrideDefinition: null, cooldownFramesRemaining: 25));
 
         system.Update(new EngineTime(default, default, false, FrameCount: 1), (byte)(EntityId % 10));
 

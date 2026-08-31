@@ -63,9 +63,9 @@ public sealed class Human(MathUtility mathUtility) : IBlueprint
             AbilityScoreEffects.Grant(componentManager, entityId, abilityScoreType, RollAbilityScoreBaseValue());
         }
 
-        // damageAmount: 0 -- no per-instance override, so Punch rolls its catalog DirectDamage's own
-        // MinAmount..MaxAmount range (18-22, roughly +-10% of the old flat 20) instead of a fixed number.
-        ActionGrantEffects.Grant(componentManager, entityId, PunchAction.Id, manaCost: 0, damageAmount: 0, cooldownFramesRemaining: 0);
+        // overrideDefinition: null -- no per-instance override, so Punch rolls its catalog DirectDamage's
+        // own MinFlatDamage..MaxFlatDamage range (18-22) instead of a fixed number.
+        ActionGrantEffects.Grant(componentManager, entityId, PunchAction.Id, manaCost: 0, overrideDefinition: null, cooldownFramesRemaining: 0);
     }
 
     /// <summary>Two Next(1,6) rolls summed -- range [2,10] per the spec, clustering around the middle rather than uniform across the whole range. Exact shape isn't load-bearing since level-up moves these later.</summary>

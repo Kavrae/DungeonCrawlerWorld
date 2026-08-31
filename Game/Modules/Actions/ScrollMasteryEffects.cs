@@ -56,7 +56,7 @@ public static class ScrollMasteryEffects
             actionCatalog.Register(action);
         }
 
-        ActionGrantEffects.Grant(componentManager, entityId, spellId, SpellActivator.ManaCostOf(action.Activator), damageAmount: 0, cooldownFramesRemaining: 0);
+        ActionGrantEffects.Grant(componentManager, entityId, spellId, SpellActivator.ManaCostOf(action.Activator), overrideDefinition: null, cooldownFramesRemaining: 0);
         eventBus.Publish(new ScrollMasteredEvent(entityId, spellId));
     }
 

@@ -64,14 +64,6 @@ Reuse `Game/Modules/Inventory/` storage (a shop/chest is just another entity wit
 `InventoryItemStackComponent` stacks). Missing: trade/transfer UI and rules (pricing, restocking,
 capacity).
 
-#### Generalize ActionInstanceComponent.DamageOverride into a per-action override system
-
-Today only `DamageAmount` can be overridden per-instance (set at grant time, e.g. Goblin's Punch).
-Nothing else (targeting, an effect's other params, `SpellActivator.ManaCost`) can be. Generalize once a
-second use case needs it (a targeting-widening buff, a cheaper NPC variant of a shared action) --
-likely needs `PendingActionActivationComponent` to carry the actual overridden action data through,
-not just a re-looked-up `Guid ActionId`.
-
 #### Experience module
 
 XP for kills (`EntityDiedEvent`) and quests (blocked on quest completion existing as a mechanic).
@@ -317,7 +309,14 @@ race check). Raised by `TemporaryNpcLootGrant`, which targets Goblin/Fairy/Ghost
 #### In-game day/time tracking
 
 `DeadComponent.DiedAtFrame` only shows a raw frame tick in the corpse summary. A real calendar/clock
-would make that (and anything else wanting a timestamp) human-readable.
+would make that (and anything else wanting a timestamp) human-readable. Also unlocks the Crawler TV show
+item below (time-gated interactions).
+
+#### Crawler TV show
+
+Interacting with a television object at specific times of day plays an in-universe "show" -- flavor
+content, no mechanical effect. Blocked on In-game day/time tracking above (needs a real clock to gate
+on). See the matching Global item for the joke in-show advertisement.
 
 #### Achievement content backlog
 
@@ -811,3 +810,11 @@ property cleanup above -- possibly the same pass.
 Tooltips (mostly landed already elsewhere), localization/IME, and accessibility (screen reader) hooks
 are standard in general GUI frameworks, but this is an admin/debug UI over a game world, not a general
 application shell. Noted for completeness, not expected soon.
+
+#### DungeonCrawlerWorldAdvertisement joke website + in-show ad
+
+Meta joke, not in-engine content: a standalone `DungeonCrawlerWorldAdvertisement` website that makes fun
+of and rickrolls the visitor. The Crawler TV show (Game, above) would air an in-universe ad for it;
+navigating to the advertised URL (typed or via an in-show QR code) is the payoff. Two separate
+deliverables (the site itself, and the in-show ad segment) -- the site has no dependency on the game
+engine at all.

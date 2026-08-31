@@ -80,9 +80,10 @@ public sealed class PlayerBlueprint(MathUtility mathUtility, UniqueNumberAllocat
         };
         InventoryActions.AddDivergentItem(componentManager, entityId, adjacentTargetingWand);
 
-        ActionGrantEffects.Grant(componentManager, entityId, HealAction.Id, HealAction.ManaCost, damageAmount: 0, cooldownFramesRemaining: 0);
-        ActionGrantEffects.Grant(componentManager, entityId, MagicMissileAction.Id, MagicMissileAction.ManaCost, damageAmount: MagicMissileDamage, cooldownFramesRemaining: 0);
-        ActionGrantEffects.Grant(componentManager, entityId, ToxicStrikeAction.Id, manaCost: 0, damageAmount: 0, cooldownFramesRemaining: 0);
+        var magicMissileOverride = ActionOverrideEffects.OverrideFlatDamage(MagicMissileAction.Build(), MagicMissileDamage);
+        ActionGrantEffects.Grant(componentManager, entityId, HealAction.Id, HealAction.ManaCost, overrideDefinition: null, cooldownFramesRemaining: 0);
+        ActionGrantEffects.Grant(componentManager, entityId, MagicMissileAction.Id, MagicMissileAction.ManaCost, overrideDefinition: magicMissileOverride, cooldownFramesRemaining: 0);
+        ActionGrantEffects.Grant(componentManager, entityId, ToxicStrikeAction.Id, manaCost: 0, overrideDefinition: null, cooldownFramesRemaining: 0);
 
         componentManager.Merge(entityId, new ActionHotkeyBindingComponent(HotkeySlot.DefaultAttack, PunchAction.Id));
         componentManager.Merge(entityId, new ActionHotkeyBindingComponent(HotkeySlot.Base1, HealAction.Id));

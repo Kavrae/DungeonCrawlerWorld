@@ -48,7 +48,7 @@ public sealed class DelayedActionSystemTests
         public void GetEntityIdsInBox(CubeInt box, Span<int> entityIds) { }
     }
 
-    private static (DelayedActionSystem System, ComponentManager ComponentManager, FakeMapQuery MapQuery, EventBus EventBus) Build()
+    private static (DelayedActionSystem System, ComponentManager ComponentManager, FakeMapQuery MapQuery, EventBus EventBus, ActionCatalog ActionCatalog) Build()
     {
         var componentManager = new ComponentManager(initialEntityCapacity: 20, initialComponentCapacity: 10);
         componentManager.RegisterPackedPool<PendingDelayedActionComponent>(static (ref existing, incoming) => existing = incoming);
@@ -82,19 +82,26 @@ public sealed class DelayedActionSystemTests
             statModifiers: null,
             componentManager.GetPackedPool<DeadComponent>());
 
-        return (system, componentManager, mapQuery, eventBus);
+        return (system, componentManager, mapQuery, eventBus, actionCatalog);
     }
 
     private static float HealthOf(ComponentManager componentManager, int entityId) =>
         componentManager.GetPackedPool<SimpleHealthComponent>().TryGetReadonly(entityId, out var health) ? health.CurrentHealth : -1f;
 
+    /// <summary>Builds an ActionInstanceComponent whose Override pins the catalog action's shared DirectDamage entry to a fixed flat value, mirroring how a real per-race grant (see ActionOverrideEffects) makes damage deterministic instead of rolling MinFlatDamage..MaxFlatDamage.</summary>
+    private static ActionInstanceComponent FixedDamageInstance(ActionCatalog actionCatalog, Guid actionId, ushort damageAmount, ushort cooldownFramesRemaining = 0)
+    {
+        actionCatalog.TryGet(actionId, out var baseAction);
+        return new ActionInstanceComponent(actionId, ActionOverrideEffects.OverrideFlatDamage(baseAction!, damageAmount), cooldownFramesRemaining);
+    }
+
     [TestMethod]
     public void LockStillCounting_EffectIsNotResolved()
     {
-        var (system, componentManager, mapQuery, _) = Build();
+        var (system, componentManager, mapQuery, _, actionCatalog) = Build();
         mapQuery.SetOccupant(TargetTile, TargetEntityId);
         componentManager.Merge(TargetEntityId, new SimpleHealthComponent(100, 100));
-        componentManager.Merge(CasterEntityId, new ActionInstanceComponent(ActionId, damageAmount: 15, cooldownFramesRemaining: 0));
+        componentManager.Merge(CasterEntityId, FixedDamageInstance(actionCatalog, ActionId, 15, cooldownFramesRemaining: 0));
         componentManager.Merge(CasterEntityId, new ActionLockComponent(standardLockFrames: ActionLockGate.StandardLockFrames, currentLockTotalFrames: 30, currentLockFramesRemaining: 10));
         componentManager.Merge(CasterEntityId, new PendingDelayedActionComponent(ActionId, [TargetTile]));
 
@@ -107,10 +114,10 @@ public sealed class DelayedActionSystemTests
     [TestMethod]
     public void LockReachesZero_ResolvesEffectAndClearsPending()
     {
-        var (system, componentManager, mapQuery, _) = Build();
+        var (system, componentManager, mapQuery, _, actionCatalog) = Build();
         mapQuery.SetOccupant(TargetTile, TargetEntityId);
         componentManager.Merge(TargetEntityId, new SimpleHealthComponent(100, 100));
-        componentManager.Merge(CasterEntityId, new ActionInstanceComponent(ActionId, damageAmount: 15, cooldownFramesRemaining: 0));
+        componentManager.Merge(CasterEntityId, FixedDamageInstance(actionCatalog, ActionId, 15, cooldownFramesRemaining: 0));
         componentManager.Merge(CasterEntityId, new ActionLockComponent(standardLockFrames: ActionLockGate.StandardLockFrames, currentLockTotalFrames: 30, currentLockFramesRemaining: 0));
         componentManager.Merge(CasterEntityId, new PendingDelayedActionComponent(ActionId, [TargetTile]));
 
@@ -123,10 +130,10 @@ public sealed class DelayedActionSystemTests
     [TestMethod]
     public void LockReachesZero_CasterIsDead_DoesNotResolveEffect()
     {
-        var (system, componentManager, mapQuery, _) = Build();
+        var (system, componentManager, mapQuery, _, actionCatalog) = Build();
         mapQuery.SetOccupant(TargetTile, TargetEntityId);
         componentManager.Merge(TargetEntityId, new SimpleHealthComponent(100, 100));
-        componentManager.Merge(CasterEntityId, new ActionInstanceComponent(ActionId, damageAmount: 15, cooldownFramesRemaining: 0));
+        componentManager.Merge(CasterEntityId, FixedDamageInstance(actionCatalog, ActionId, 15, cooldownFramesRemaining: 0));
         componentManager.Merge(CasterEntityId, new ActionLockComponent(standardLockFrames: ActionLockGate.StandardLockFrames, currentLockTotalFrames: 30, currentLockFramesRemaining: 0));
         componentManager.Merge(CasterEntityId, new PendingDelayedActionComponent(ActionId, [TargetTile]));
         componentManager.GetPackedPool<DeadComponent>().Add(CasterEntityId, new DeadComponent(KilledByEntityId: null, DiedAtFrame: 0));
@@ -140,7 +147,7 @@ public sealed class DelayedActionSystemTests
     [TestMethod]
     public void NoPendingAction_DoesNothing()
     {
-        var (system, componentManager, mapQuery, _) = Build();
+        var (system, componentManager, mapQuery, _, actionCatalog) = Build();
         mapQuery.SetOccupant(TargetTile, TargetEntityId);
         componentManager.Merge(TargetEntityId, new SimpleHealthComponent(100, 100));
 

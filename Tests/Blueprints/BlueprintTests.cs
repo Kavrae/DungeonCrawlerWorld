@@ -44,6 +44,10 @@ namespace Tests.Blueprints;
 [TestClass]
 public sealed class BlueprintTests
 {
+    /// <summary>Reads the flat damage a grant's Override pins its DirectDamage entry to (Min == Max, same convention ActionOverrideEffects.OverrideFlatDamage produces) -- null when the instance carries no Override at all.</summary>
+    private static short? GetOverrideFlatDamage(in ActionInstanceComponent instance) =>
+        instance.Override?.Effects.SelectMany(effect => effect.Entries).OfType<Game.Modules.Actions.Effects.DirectDamage>().First().MinFlatDamage;
+
     private static EcsContext BuildEcsContext()
     {
         var world = new Game.World.World(new Map(new Vector3Int(5, 5, 1)));
@@ -206,7 +210,7 @@ public sealed class BlueprintTests
         Assert.IsTrue(ecsContext.ComponentManager.GetDirectPool<TransformComponent>().Has(entityId));
 
         Assert.IsTrue(ActionInstanceQueries.TryGet(ecsContext.ComponentManager.GetMultiPool<ActionInstanceComponent>(), entityId, PunchAction.Id, out var punch));
-        Assert.AreEqual((ushort)10, punch.DamageAmount);
+        Assert.AreEqual((short)10, GetOverrideFlatDamage(punch));
     }
 
     [TestMethod]
@@ -273,13 +277,13 @@ public sealed class BlueprintTests
         Assert.IsTrue(ecsContext.ComponentManager.GetPackedPool<CrawlerComponent>().Has(entityId));
 
         var abilityInstances = ecsContext.ComponentManager.GetMultiPool<ActionInstanceComponent>();
-        // DamageAmount 0 -- no per-instance override, unlike every other race's Punch grant -- so the
-        // player's Punch rolls its catalog DirectDamage's own MinAmount..MaxAmount range instead
-        // of a fixed number (see ActionEffectContext.DamageOverride's own doc comment).
+        // No per-instance Override -- unlike every other race's Punch grant -- so the player's
+        // Punch rolls its catalog DirectDamage's own MinFlatDamage..MaxFlatDamage range instead
+        // of a fixed number (see ActionInstanceComponent.Override's own doc comment).
         Assert.IsTrue(ActionInstanceQueries.TryGet(abilityInstances, entityId, PunchAction.Id, out var punch));
-        Assert.AreEqual((ushort)0, punch.DamageAmount);
+        Assert.IsNull(punch.Override);
         Assert.IsTrue(ActionInstanceQueries.TryGet(abilityInstances, entityId, MagicMissileAction.Id, out var magicMissile));
-        Assert.AreEqual((ushort)5, magicMissile.DamageAmount);
+        Assert.AreEqual((short)5, GetOverrideFlatDamage(magicMissile));
         Assert.IsTrue(ActionInstanceQueries.TryGet(abilityInstances, entityId, HealAction.Id, out _));
         Assert.IsTrue(ActionInstanceQueries.TryGet(abilityInstances, entityId, ToxicStrikeAction.Id, out _));
 
@@ -369,7 +373,7 @@ public sealed class BlueprintTests
         Assert.IsTrue(ecsContext.ComponentManager.GetDirectPool<TransformComponent>().Has(entityId));
 
         Assert.IsTrue(ActionInstanceQueries.TryGet(ecsContext.ComponentManager.GetMultiPool<ActionInstanceComponent>(), entityId, PunchAction.Id, out var punch));
-        Assert.AreEqual((ushort)3, punch.DamageAmount);
+        Assert.AreEqual((short)3, GetOverrideFlatDamage(punch));
     }
 
     [TestMethod]

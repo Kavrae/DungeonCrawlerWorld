@@ -46,9 +46,8 @@ public sealed class ActionEffectTests
         PackedComponentPool<SimpleHealthComponent> health,
         EventBus eventBus,
         MathUtility mathUtility,
-        MultiComponentPool<StatModifierComponent>? statModifiers = null,
-        ushort? damageOverride = null) =>
-        new(SourceEntityId, TargetEntityId, health, eventBus, mathUtility, componentManager, "Test Action", ActivatorTags: [], StatModifiers: statModifiers, DamageOverride: damageOverride);
+        MultiComponentPool<StatModifierComponent>? statModifiers = null) =>
+        new(SourceEntityId, TargetEntityId, health, eventBus, mathUtility, componentManager, "Test Action", ActivatorTags: [], StatModifiers: statModifiers);
 
     [TestMethod]
     public void DirectDamage_RollsWithinMinMaxRange_WhenNoOverride()
@@ -60,18 +59,6 @@ public sealed class ActionEffectTests
         new DirectDamage(MinFlatDamage: 10, MaxFlatDamage: 10).Apply(Context(componentManager, health, eventBus, mathUtility));
 
         Assert.AreEqual(90, health.GetReadonly(TargetEntityId).CurrentHealth);
-    }
-
-    [TestMethod]
-    public void DirectDamage_DamageOverride_BypassesTheRoll()
-    {
-        var (componentManager, health, eventBus) = Build();
-        health.Add(TargetEntityId, new SimpleHealthComponent(100, 100));
-        var mathUtility = new MathUtility(new NeverCritRandom());
-
-        new DirectDamage(MinFlatDamage: 999, MaxFlatDamage: 999).Apply(Context(componentManager, health, eventBus, mathUtility, damageOverride: 10));
-
-        Assert.AreEqual(90, health.GetReadonly(TargetEntityId).CurrentHealth, "The 999-999 catalog range must be ignored entirely once DamageOverride is set.");
     }
 
     [TestMethod]

@@ -26,6 +26,18 @@ topics; don't duplicate what a `PLAN-*.md` already records in full (link to it i
   (`WandGrantEffects`), ticks down via `InventoryActions.PeelOneIntoDivergentStack` -- first item ever
   granted as a diverged stack. Forced item-hotkey binding to key by `StackInstanceId`, not
   `ItemDefinitionId`. No Equipment gate (doesn't exist yet).
+- `ActionInstanceComponent.Override: ActionDefinition?` replaced the old bare `DamageAmount: ushort`,
+  mirroring `InventoryItemStackComponent.Override`'s shape/resolution pattern -- a full nullable clone
+  of the catalog definition (any field, not just damage), resolved via
+  `ActionInstanceQueries.TryResolveEffectiveAction` (Override if set, else `ActionCatalog.TryGet`).
+  `ActionActivationSystem`/`DelayedActionSystem` resolve `instance` first, then the effective `action`
+  off it -- `ActionEffectResolver.Apply` no longer takes `instance` at all, and
+  `ActionEffectContext.DamageOverride` is gone (a fixed value is now just `DirectDamage` with
+  `MinFlatDamage == MaxFlatDamage` baked into the granted `Override`, built via
+  `ActionOverrideEffects.OverrideFlatDamage` so a targeted `with` on the matched entry can't silently
+  drop unrelated fields, e.g. Magic Missile's `TargetBodyPartType: BodyPartType.Head`).
+  `PendingActionActivationComponent` needed no change -- same as Items, it only ever carried an
+  identity reference.
 
 ### Move inventory items to hotbar
 

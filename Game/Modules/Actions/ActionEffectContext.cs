@@ -44,6 +44,5 @@ public sealed record ActionEffectContext(
     MultiComponentPool<StatusEffectAuraSourceComponent>? AuraSources = null,
     MultiComponentPool<BodyPartComponent>? BodyParts = null,
     IPlayerQuery? PlayerQuery = null,
-    ushort? DamageOverride = null,
     float DurationScaleMultiplier = 1.0f,
     byte ChainDepth = 0);

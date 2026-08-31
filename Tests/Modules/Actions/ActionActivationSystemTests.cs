@@ -116,6 +116,13 @@ public sealed class ActionActivationSystemTests
         return (system, componentManager, actionCatalog, mapQuery);
     }
 
+    /// <summary>Builds an ActionInstanceComponent whose Override pins the catalog action's shared DirectDamage entry to a fixed flat value, mirroring how a real per-race grant (see ActionOverrideEffects) makes damage deterministic instead of rolling MinFlatDamage..MaxFlatDamage (0..0 for every test fixture action here).</summary>
+    private static ActionInstanceComponent FixedDamageInstance(ActionCatalog actionCatalog, Guid actionId, ushort damageAmount, ushort cooldownFramesRemaining = 0)
+    {
+        actionCatalog.TryGet(actionId, out var baseAction);
+        return new ActionInstanceComponent(actionId, ActionOverrideEffects.OverrideFlatDamage(baseAction!, damageAmount), cooldownFramesRemaining);
+    }
+
     private static float ManaOf(ComponentManager componentManager, int entityId) =>
         componentManager.GetPackedPool<ManaComponent>().TryGetReadonly(entityId, out var mana) ? mana.CurrentMana : -1f;
 
@@ -140,10 +147,10 @@ public sealed class ActionActivationSystemTests
     [TestMethod]
     public void Immediate_NotBlocked_AppliesDamageAndLocksAndConsumesRequest()
     {
-        var (system, componentManager, _, mapQuery) = Build();
+        var (system, componentManager, actionCatalog, mapQuery) = Build();
         mapQuery.SetOccupant(TargetTile, TargetEntityId);
         componentManager.Merge(TargetEntityId, new SimpleHealthComponent(100, 100));
-        componentManager.Merge(CasterEntityId, new ActionInstanceComponent(ImmediateActionId, damageAmount: 15, cooldownFramesRemaining: 0));
+        componentManager.Merge(CasterEntityId, FixedDamageInstance(actionCatalog, ImmediateActionId, 15, 0));
         componentManager.Merge(CasterEntityId, new ActionLockComponent(standardLockFrames: ActionLockGate.StandardLockFrames, currentLockTotalFrames: 0, currentLockFramesRemaining: 0));
         componentManager.Merge(CasterEntityId, new PendingActionActivationComponent(ImmediateActionId, [TargetTile]));
 
@@ -157,10 +164,10 @@ public sealed class ActionActivationSystemTests
     [TestMethod]
     public void Immediate_CasterIsDead_DoesNothing()
     {
-        var (system, componentManager, _, mapQuery) = Build();
+        var (system, componentManager, actionCatalog, mapQuery) = Build();
         mapQuery.SetOccupant(TargetTile, TargetEntityId);
         componentManager.Merge(TargetEntityId, new SimpleHealthComponent(100, 100));
-        componentManager.Merge(CasterEntityId, new ActionInstanceComponent(ImmediateActionId, damageAmount: 15, cooldownFramesRemaining: 0));
+        componentManager.Merge(CasterEntityId, FixedDamageInstance(actionCatalog, ImmediateActionId, 15, 0));
         componentManager.Merge(CasterEntityId, new ActionLockComponent(standardLockFrames: ActionLockGate.StandardLockFrames, currentLockTotalFrames: 0, currentLockFramesRemaining: 0));
         componentManager.Merge(CasterEntityId, new PendingActionActivationComponent(ImmediateActionId, [TargetTile]));
         componentManager.GetPackedPool<DeadComponent>().Add(CasterEntityId, new DeadComponent(KilledByEntityId: null, DiedAtFrame: 0));
@@ -174,10 +181,10 @@ public sealed class ActionActivationSystemTests
     [TestMethod]
     public void Immediate_ActionLockAlreadyBlocked_DoesNothing()
     {
-        var (system, componentManager, _, mapQuery) = Build();
+        var (system, componentManager, actionCatalog, mapQuery) = Build();
         mapQuery.SetOccupant(TargetTile, TargetEntityId);
         componentManager.Merge(TargetEntityId, new SimpleHealthComponent(100, 100));
-        componentManager.Merge(CasterEntityId, new ActionInstanceComponent(ImmediateActionId, damageAmount: 15, cooldownFramesRemaining: 0));
+        componentManager.Merge(CasterEntityId, FixedDamageInstance(actionCatalog, ImmediateActionId, 15, 0));
         componentManager.Merge(CasterEntityId, new ActionLockComponent(standardLockFrames: ActionLockGate.StandardLockFrames, currentLockTotalFrames: 30, currentLockFramesRemaining: 10));
         componentManager.Merge(CasterEntityId, new PendingActionActivationComponent(ImmediateActionId, [TargetTile]));
 
@@ -190,10 +197,10 @@ public sealed class ActionActivationSystemTests
     [TestMethod]
     public void Immediate_ActionLockClear_ButOwnCooldownStillActive_DoesNothing()
     {
-        var (system, componentManager, _, mapQuery) = Build();
+        var (system, componentManager, actionCatalog, mapQuery) = Build();
         mapQuery.SetOccupant(TargetTile, TargetEntityId);
         componentManager.Merge(TargetEntityId, new SimpleHealthComponent(100, 100));
-        componentManager.Merge(CasterEntityId, new ActionInstanceComponent(ImmediateWithCooldownActionId, damageAmount: 15, cooldownFramesRemaining: 50));
+        componentManager.Merge(CasterEntityId, FixedDamageInstance(actionCatalog, ImmediateWithCooldownActionId, 15, 50));
         componentManager.Merge(CasterEntityId, new ActionLockComponent(standardLockFrames: ActionLockGate.StandardLockFrames, currentLockTotalFrames: 0, currentLockFramesRemaining: 0));
         componentManager.Merge(CasterEntityId, new PendingActionActivationComponent(ImmediateWithCooldownActionId, [TargetTile]));
 
@@ -207,10 +214,10 @@ public sealed class ActionActivationSystemTests
     [TestMethod]
     public void Immediate_Fires_StartsBothTheSharedActionLockAndItsOwnLongerCooldown()
     {
-        var (system, componentManager, _, mapQuery) = Build();
+        var (system, componentManager, actionCatalog, mapQuery) = Build();
         mapQuery.SetOccupant(TargetTile, TargetEntityId);
         componentManager.Merge(TargetEntityId, new SimpleHealthComponent(100, 100));
-        componentManager.Merge(CasterEntityId, new ActionInstanceComponent(ImmediateWithCooldownActionId, damageAmount: 15, cooldownFramesRemaining: 0));
+        componentManager.Merge(CasterEntityId, FixedDamageInstance(actionCatalog, ImmediateWithCooldownActionId, 15, 0));
         componentManager.Merge(CasterEntityId, new ActionLockComponent(standardLockFrames: ActionLockGate.StandardLockFrames, currentLockTotalFrames: 0, currentLockFramesRemaining: 0));
         componentManager.Merge(CasterEntityId, new PendingActionActivationComponent(ImmediateWithCooldownActionId, [TargetTile]));
 
@@ -224,10 +231,10 @@ public sealed class ActionActivationSystemTests
     [TestMethod]
     public void Delayed_NotBlocked_LocksImmediately_ButDefersEffectToDelayedActionSystem()
     {
-        var (system, componentManager, _, mapQuery) = Build();
+        var (system, componentManager, actionCatalog, mapQuery) = Build();
         mapQuery.SetOccupant(TargetTile, TargetEntityId);
         componentManager.Merge(TargetEntityId, new SimpleHealthComponent(100, 100));
-        componentManager.Merge(CasterEntityId, new ActionInstanceComponent(DelayedActionId, damageAmount: 15, cooldownFramesRemaining: 0));
+        componentManager.Merge(CasterEntityId, FixedDamageInstance(actionCatalog, DelayedActionId, 15, 0));
         componentManager.Merge(CasterEntityId, new ActionLockComponent(standardLockFrames: ActionLockGate.StandardLockFrames, currentLockTotalFrames: 0, currentLockFramesRemaining: 0));
         componentManager.Merge(CasterEntityId, new PendingActionActivationComponent(DelayedActionId, [TargetTile]));
 
@@ -241,10 +248,10 @@ public sealed class ActionActivationSystemTests
     [TestMethod]
     public void Delayed_Activates_StartsItsOwnCooldownAlongsideTheSharedActionLock()
     {
-        var (system, componentManager, _, mapQuery) = Build();
+        var (system, componentManager, actionCatalog, mapQuery) = Build();
         mapQuery.SetOccupant(TargetTile, TargetEntityId);
         componentManager.Merge(TargetEntityId, new SimpleHealthComponent(100, 100));
-        componentManager.Merge(CasterEntityId, new ActionInstanceComponent(DelayedWithCooldownActionId, damageAmount: 15, cooldownFramesRemaining: 0));
+        componentManager.Merge(CasterEntityId, FixedDamageInstance(actionCatalog, DelayedWithCooldownActionId, 15, 0));
         componentManager.Merge(CasterEntityId, new ActionLockComponent(standardLockFrames: ActionLockGate.StandardLockFrames, currentLockTotalFrames: 0, currentLockFramesRemaining: 0));
         componentManager.Merge(CasterEntityId, new PendingActionActivationComponent(DelayedWithCooldownActionId, [TargetTile]));
 
@@ -258,10 +265,10 @@ public sealed class ActionActivationSystemTests
     [TestMethod]
     public void Delayed_OwnCooldownStillActive_DoesNothingEvenWithActionLockClear()
     {
-        var (system, componentManager, _, mapQuery) = Build();
+        var (system, componentManager, actionCatalog, mapQuery) = Build();
         mapQuery.SetOccupant(TargetTile, TargetEntityId);
         componentManager.Merge(TargetEntityId, new SimpleHealthComponent(100, 100));
-        componentManager.Merge(CasterEntityId, new ActionInstanceComponent(DelayedWithCooldownActionId, damageAmount: 15, cooldownFramesRemaining: 60));
+        componentManager.Merge(CasterEntityId, FixedDamageInstance(actionCatalog, DelayedWithCooldownActionId, 15, 60));
         componentManager.Merge(CasterEntityId, new ActionLockComponent(standardLockFrames: ActionLockGate.StandardLockFrames, currentLockTotalFrames: 0, currentLockFramesRemaining: 0));
         componentManager.Merge(CasterEntityId, new PendingActionActivationComponent(DelayedWithCooldownActionId, [TargetTile]));
 
@@ -274,10 +281,10 @@ public sealed class ActionActivationSystemTests
     [TestMethod]
     public void FreeCast_OffCooldown_AppliesDamageAndStartsCooldown_WithoutTouchingSharedLock()
     {
-        var (system, componentManager, _, mapQuery) = Build();
+        var (system, componentManager, actionCatalog, mapQuery) = Build();
         mapQuery.SetOccupant(TargetTile, TargetEntityId);
         componentManager.Merge(TargetEntityId, new SimpleHealthComponent(100, 100));
-        componentManager.Merge(CasterEntityId, new ActionInstanceComponent(FreeCastActionId, damageAmount: 20, cooldownFramesRemaining: 0));
+        componentManager.Merge(CasterEntityId, FixedDamageInstance(actionCatalog, FreeCastActionId, 20, 0));
         componentManager.Merge(CasterEntityId, new ActionLockComponent(standardLockFrames: ActionLockGate.StandardLockFrames, currentLockTotalFrames: 30, currentLockFramesRemaining: 30));
         componentManager.Merge(CasterEntityId, new PendingActionActivationComponent(FreeCastActionId, [TargetTile]));
 
@@ -291,10 +298,10 @@ public sealed class ActionActivationSystemTests
     [TestMethod]
     public void FreeCast_StillOnCooldown_DoesNothing()
     {
-        var (system, componentManager, _, mapQuery) = Build();
+        var (system, componentManager, actionCatalog, mapQuery) = Build();
         mapQuery.SetOccupant(TargetTile, TargetEntityId);
         componentManager.Merge(TargetEntityId, new SimpleHealthComponent(100, 100));
-        componentManager.Merge(CasterEntityId, new ActionInstanceComponent(FreeCastActionId, damageAmount: 20, cooldownFramesRemaining: 5));
+        componentManager.Merge(CasterEntityId, FixedDamageInstance(actionCatalog, FreeCastActionId, 20, 5));
         componentManager.Merge(CasterEntityId, new ActionLockComponent(standardLockFrames: ActionLockGate.StandardLockFrames, currentLockTotalFrames: 0, currentLockFramesRemaining: 0));
         componentManager.Merge(CasterEntityId, new PendingActionActivationComponent(FreeCastActionId, [TargetTile]));
 
@@ -307,11 +314,11 @@ public sealed class ActionActivationSystemTests
     [TestMethod]
     public void Immediate_InsufficientMana_DoesNothing()
     {
-        var (system, componentManager, _, mapQuery) = Build();
+        var (system, componentManager, actionCatalog, mapQuery) = Build();
         mapQuery.SetOccupant(TargetTile, TargetEntityId);
         componentManager.Merge(TargetEntityId, new SimpleHealthComponent(100, 100));
         componentManager.Merge(CasterEntityId, new ManaComponent(currentMana: 4, maximumMana: 100));
-        componentManager.Merge(CasterEntityId, new ActionInstanceComponent(ImmediateWithManaCostActionId, damageAmount: 15, cooldownFramesRemaining: 0));
+        componentManager.Merge(CasterEntityId, FixedDamageInstance(actionCatalog, ImmediateWithManaCostActionId, 15, 0));
         componentManager.Merge(CasterEntityId, new ActionLockComponent(standardLockFrames: ActionLockGate.StandardLockFrames, currentLockTotalFrames: 0, currentLockFramesRemaining: 0));
         componentManager.Merge(CasterEntityId, new PendingActionActivationComponent(ImmediateWithManaCostActionId, [TargetTile]));
 
@@ -325,11 +332,11 @@ public sealed class ActionActivationSystemTests
     [TestMethod]
     public void Immediate_SufficientMana_AppliesDamageAndSpendsMana()
     {
-        var (system, componentManager, _, mapQuery) = Build();
+        var (system, componentManager, actionCatalog, mapQuery) = Build();
         mapQuery.SetOccupant(TargetTile, TargetEntityId);
         componentManager.Merge(TargetEntityId, new SimpleHealthComponent(100, 100));
         componentManager.Merge(CasterEntityId, new ManaComponent(currentMana: 5, maximumMana: 100));
-        componentManager.Merge(CasterEntityId, new ActionInstanceComponent(ImmediateWithManaCostActionId, damageAmount: 15, cooldownFramesRemaining: 0));
+        componentManager.Merge(CasterEntityId, FixedDamageInstance(actionCatalog, ImmediateWithManaCostActionId, 15, 0));
         componentManager.Merge(CasterEntityId, new ActionLockComponent(standardLockFrames: ActionLockGate.StandardLockFrames, currentLockTotalFrames: 0, currentLockFramesRemaining: 0));
         componentManager.Merge(CasterEntityId, new PendingActionActivationComponent(ImmediateWithManaCostActionId, [TargetTile]));
 
@@ -343,10 +350,10 @@ public sealed class ActionActivationSystemTests
     [TestMethod]
     public void Immediate_NoManaComponentAtAll_ManaCostAction_DoesNothing()
     {
-        var (system, componentManager, _, mapQuery) = Build();
+        var (system, componentManager, actionCatalog, mapQuery) = Build();
         mapQuery.SetOccupant(TargetTile, TargetEntityId);
         componentManager.Merge(TargetEntityId, new SimpleHealthComponent(100, 100));
-        componentManager.Merge(CasterEntityId, new ActionInstanceComponent(ImmediateWithManaCostActionId, damageAmount: 15, cooldownFramesRemaining: 0));
+        componentManager.Merge(CasterEntityId, FixedDamageInstance(actionCatalog, ImmediateWithManaCostActionId, 15, 0));
         componentManager.Merge(CasterEntityId, new ActionLockComponent(standardLockFrames: ActionLockGate.StandardLockFrames, currentLockTotalFrames: 0, currentLockFramesRemaining: 0));
         componentManager.Merge(CasterEntityId, new PendingActionActivationComponent(ImmediateWithManaCostActionId, [TargetTile]));
 
@@ -358,10 +365,10 @@ public sealed class ActionActivationSystemTests
     [TestMethod]
     public void Immediate_ZeroManaCostAction_IgnoresManaEntirely()
     {
-        var (system, componentManager, _, mapQuery) = Build();
+        var (system, componentManager, actionCatalog, mapQuery) = Build();
         mapQuery.SetOccupant(TargetTile, TargetEntityId);
         componentManager.Merge(TargetEntityId, new SimpleHealthComponent(100, 100));
-        componentManager.Merge(CasterEntityId, new ActionInstanceComponent(ImmediateActionId, damageAmount: 15, cooldownFramesRemaining: 0));
+        componentManager.Merge(CasterEntityId, FixedDamageInstance(actionCatalog, ImmediateActionId, 15, 0));
         componentManager.Merge(CasterEntityId, new ActionLockComponent(standardLockFrames: ActionLockGate.StandardLockFrames, currentLockTotalFrames: 0, currentLockFramesRemaining: 0));
         componentManager.Merge(CasterEntityId, new PendingActionActivationComponent(ImmediateActionId, [TargetTile]));
 
@@ -373,11 +380,11 @@ public sealed class ActionActivationSystemTests
     [TestMethod]
     public void FreeCast_InsufficientMana_DoesNothing()
     {
-        var (system, componentManager, _, mapQuery) = Build();
+        var (system, componentManager, actionCatalog, mapQuery) = Build();
         mapQuery.SetOccupant(TargetTile, TargetEntityId);
         componentManager.Merge(TargetEntityId, new SimpleHealthComponent(100, 100));
         componentManager.Merge(CasterEntityId, new ManaComponent(currentMana: 4, maximumMana: 100));
-        componentManager.Merge(CasterEntityId, new ActionInstanceComponent(FreeCastWithManaCostActionId, damageAmount: 20, cooldownFramesRemaining: 0));
+        componentManager.Merge(CasterEntityId, FixedDamageInstance(actionCatalog, FreeCastWithManaCostActionId, 20, 0));
         componentManager.Merge(CasterEntityId, new ActionLockComponent(standardLockFrames: ActionLockGate.StandardLockFrames, currentLockTotalFrames: 0, currentLockFramesRemaining: 0));
         componentManager.Merge(CasterEntityId, new PendingActionActivationComponent(FreeCastWithManaCostActionId, [TargetTile]));
 
@@ -390,7 +397,7 @@ public sealed class ActionActivationSystemTests
     [TestMethod]
     public void UnknownActionId_DoesNothing_AndConsumesRequest()
     {
-        var (system, componentManager, _, _) = Build();
+        var (system, componentManager, actionCatalog, _) = Build();
         componentManager.Merge(CasterEntityId, new ActionLockComponent(standardLockFrames: ActionLockGate.StandardLockFrames, currentLockTotalFrames: 0, currentLockFramesRemaining: 0));
         componentManager.Merge(CasterEntityId, new PendingActionActivationComponent(Guid.NewGuid(), [TargetTile]));
 
@@ -402,7 +409,7 @@ public sealed class ActionActivationSystemTests
     [TestMethod]
     public void NoPendingActivation_DoesNothing()
     {
-        var (system, componentManager, _, mapQuery) = Build();
+        var (system, componentManager, actionCatalog, mapQuery) = Build();
         mapQuery.SetOccupant(TargetTile, TargetEntityId);
         componentManager.Merge(TargetEntityId, new SimpleHealthComponent(100, 100));
 
@@ -452,7 +459,7 @@ public sealed class ActionActivationSystemTests
             meleeDisabled: meleeDisabled);
 
         componentManager.Merge(TargetEntityId, new SimpleHealthComponent(100, 100));
-        componentManager.Merge(CasterEntityId, new ActionInstanceComponent(meleeActionId, damageAmount: 15, cooldownFramesRemaining: 0));
+        componentManager.Merge(CasterEntityId, FixedDamageInstance(actionCatalog, meleeActionId, 15, 0));
         componentManager.Merge(CasterEntityId, new ActionLockComponent(standardLockFrames: ActionLockGate.StandardLockFrames, currentLockTotalFrames: 0, currentLockFramesRemaining: 0));
         componentManager.Merge(CasterEntityId, new PendingActionActivationComponent(meleeActionId, [TargetTile]));
 

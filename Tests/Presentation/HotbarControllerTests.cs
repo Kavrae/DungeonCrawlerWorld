@@ -57,7 +57,7 @@ public sealed class HotbarControllerTests
         componentManager.Merge(PlayerEntityId, new TransformComponent(PlayerPosition, new Vector2Byte(1, 1)));
         componentManager.Merge(PlayerEntityId, new MovementComponent(MovementMode.PlayerControlled, null, null));
         componentManager.Merge(PlayerEntityId, new ActionLockComponent(standardLockFrames: ActionLockGate.StandardLockFrames, currentLockTotalFrames: 0, currentLockFramesRemaining: 0));
-        componentManager.Merge(PlayerEntityId, new ActionInstanceComponent(TestActionId, damageAmount: 0, cooldownFramesRemaining: 0));
+        componentManager.Merge(PlayerEntityId, new ActionInstanceComponent(TestActionId, overrideDefinition: null, cooldownFramesRemaining: 0));
         componentManager.Merge(PlayerEntityId, new HotkeyExpansionUnlockComponent(unlockedSlotCount: 5));
         componentManager.GetMultiPool<ActionHotkeyBindingComponent>().Add(PlayerEntityId, new ActionHotkeyBindingComponent(HotkeySlot.Slot1, TestActionId));
 

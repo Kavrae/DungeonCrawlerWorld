@@ -386,6 +386,5 @@ public sealed class ConsumableActivationSystem : ISystem
             AuraSources: _auraSources,
             BodyParts: _bodyParts,
             PlayerQuery: _playerQuery,
-            DamageOverride: null,
             DurationScaleMultiplier: durationScaleMultiplier);
 }

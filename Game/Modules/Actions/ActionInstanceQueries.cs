@@ -24,6 +24,24 @@ public static class ActionInstanceQueries
     public static bool TryGet(MultiComponentPool<ActionInstanceComponent> instances, int entityId, Guid actionId, out ActionInstanceComponent instance) =>
         instances.TryGetFirst(entityId, actionId, static (ref readonly ActionInstanceComponent candidate, Guid id) => candidate.ActionId == id, out instance);
 
+    /// <summary>
+    /// Resolves the effective ActionDefinition for a granted instance -- instance.Override if the
+    /// grant diverged from the catalog original, else a plain catalog lookup by ActionId. Mirrors
+    /// InventoryQueries.TryResolveEffectiveItem exactly; see ActionInstanceComponent.Override's own
+    /// doc comment for why this is the one place every activation path should resolve through
+    /// instead of calling ActionCatalog.TryGet directly.
+    /// </summary>
+    public static bool TryResolveEffectiveAction(ActionCatalog actionCatalog, in ActionInstanceComponent instance, out ActionDefinition definition)
+    {
+        if (instance.Override is { } overrideDefinition)
+        {
+            definition = overrideDefinition;
+            return true;
+        }
+
+        return actionCatalog.TryGet(instance.ActionId, out definition!);
+    }
+
     /// <summary>Tries to set the cooldown for a specific action instance.</summary>
     /// <param name="instances">The pool of action instances</param>
     /// <param name="entityId">The ID of the entity for which to set the cooldown</param>

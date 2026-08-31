@@ -26,9 +26,8 @@ public sealed class ActionEffectResolverTests
     private static readonly Vector3Int TargetTile = new(5, 5, 0);
     private static readonly ActionDefinition Action = new(
         Guid.NewGuid(), "Test Attack", null, "#", default, [],
-        Effects: [new ActionEffect([new DirectDamage(MinFlatDamage: 0, MaxFlatDamage: 0)])],
+        Effects: [new ActionEffect([new DirectDamage(MinFlatDamage: 15, MaxFlatDamage: 15)])],
         Activator: new SpellActivator(new TargetingSpec(TargetShape.SingleTarget, Range: 10), new ActionTiming(ActionTimingCategory.Immediate, ActionLockFrames: 30, CooldownFrames: null)));
-    private static readonly ActionInstanceComponent Instance = new(Action.Id, damageAmount: 15, cooldownFramesRemaining: 0);
 
     /// <summary>Records every ApplyStack call it receives instead of touching any real component pool -- keeps these tests independent of any concrete effect (Burning/Poison/Paralysis).</summary>
     private sealed class FakeStatusEffectAuraApplier(StatusEffectType effectType) : IStatusEffectAuraApplier
@@ -103,7 +102,7 @@ public sealed class ActionEffectResolverTests
         mapQuery.SetBlockingOccupant(TargetTile, BlockingTargetEntityId);
         health.Add(BlockingTargetEntityId, new SimpleHealthComponent(100, 100));
 
-        ActionEffectResolver.Apply(Action, Instance, SourceEntityId, [TargetTile], mapQuery, health, eventBus, mathUtility, playerQuery: null, statusEffectAppliers, componentManager);
+        ActionEffectResolver.Apply(Action, SourceEntityId, [TargetTile], mapQuery, health, eventBus, mathUtility, playerQuery: null, statusEffectAppliers, componentManager);
 
         Assert.AreEqual(85, health.GetReadonly(BlockingTargetEntityId).CurrentHealth);
     }
@@ -116,7 +115,7 @@ public sealed class ActionEffectResolverTests
         mapQuery.AddNonBlockingOccupant(TargetTile, NonBlockingTargetEntityId);
         health.Add(NonBlockingTargetEntityId, new SimpleHealthComponent(100, 100));
 
-        ActionEffectResolver.Apply(Action, Instance, SourceEntityId, [TargetTile], mapQuery, health, eventBus, mathUtility, playerQuery: null, statusEffectAppliers, componentManager);
+        ActionEffectResolver.Apply(Action, SourceEntityId, [TargetTile], mapQuery, health, eventBus, mathUtility, playerQuery: null, statusEffectAppliers, componentManager);
 
         Assert.AreEqual(85, health.GetReadonly(NonBlockingTargetEntityId).CurrentHealth);
     }
@@ -131,7 +130,7 @@ public sealed class ActionEffectResolverTests
         health.Add(NonBlockingTargetEntityId, new SimpleHealthComponent(100, 100));
         health.Add(SecondNonBlockingTargetEntityId, new SimpleHealthComponent(100, 100));
 
-        ActionEffectResolver.Apply(Action, Instance, SourceEntityId, [TargetTile], mapQuery, health, eventBus, mathUtility, playerQuery: null, statusEffectAppliers, componentManager);
+        ActionEffectResolver.Apply(Action, SourceEntityId, [TargetTile], mapQuery, health, eventBus, mathUtility, playerQuery: null, statusEffectAppliers, componentManager);
 
         Assert.AreEqual(85, health.GetReadonly(NonBlockingTargetEntityId).CurrentHealth);
         Assert.AreEqual(85, health.GetReadonly(SecondNonBlockingTargetEntityId).CurrentHealth);
@@ -147,7 +146,7 @@ public sealed class ActionEffectResolverTests
         health.Add(BlockingTargetEntityId, new SimpleHealthComponent(100, 100));
         health.Add(NonBlockingTargetEntityId, new SimpleHealthComponent(100, 100));
 
-        ActionEffectResolver.Apply(Action, Instance, SourceEntityId, [TargetTile], mapQuery, health, eventBus, mathUtility, playerQuery: null, statusEffectAppliers, componentManager);
+        ActionEffectResolver.Apply(Action, SourceEntityId, [TargetTile], mapQuery, health, eventBus, mathUtility, playerQuery: null, statusEffectAppliers, componentManager);
 
         Assert.AreEqual(85, health.GetReadonly(BlockingTargetEntityId).CurrentHealth);
         Assert.AreEqual(85, health.GetReadonly(NonBlockingTargetEntityId).CurrentHealth);
@@ -158,16 +157,15 @@ public sealed class ActionEffectResolverTests
     {
         var (mapQuery, health, eventBus, mathUtility, statusEffectAppliers, componentManager) = Build();
 
-        ActionEffectResolver.Apply(Action, Instance, SourceEntityId, [TargetTile], mapQuery, health, eventBus, mathUtility, playerQuery: null, statusEffectAppliers, componentManager);
+        ActionEffectResolver.Apply(Action, SourceEntityId, [TargetTile], mapQuery, health, eventBus, mathUtility, playerQuery: null, statusEffectAppliers, componentManager);
 
         Assert.IsFalse(health.Has(BlockingTargetEntityId));
     }
 
     private static readonly ActionDefinition StrengthTaggedAction = new(
         Guid.NewGuid(), "Test Strength Attack", null, "#", default, [Tag.Strength],
-        Effects: [new ActionEffect([new DirectDamage(MinFlatDamage: 0, MaxFlatDamage: 0)])],
+        Effects: [new ActionEffect([new DirectDamage(MinFlatDamage: 15, MaxFlatDamage: 15)])],
         Activator: new SpellActivator(new TargetingSpec(TargetShape.SingleTarget, Range: 10), new ActionTiming(ActionTimingCategory.Immediate, ActionLockFrames: 30, CooldownFrames: null)));
-    private static readonly ActionInstanceComponent StrengthTaggedInstance = new(StrengthTaggedAction.Id, damageAmount: 15, cooldownFramesRemaining: 0);
 
     [TestMethod]
     public void Apply_ActionTaggedWithMatchingAbilityScore_AddsScoreTotalToBaseDamage()
@@ -179,7 +177,7 @@ public sealed class ActionEffectResolverTests
         var abilityScores = componentManager.GetMultiPool<AbilityScoreComponent>();
         abilityScores.Add(SourceEntityId, new AbilityScoreComponent(AbilityScoreType.Strength, baseValue: 8, total: 8));
 
-        ActionEffectResolver.Apply(StrengthTaggedAction, StrengthTaggedInstance, SourceEntityId, [TargetTile], mapQuery, health, eventBus, mathUtility, playerQuery: null, statusEffectAppliers, componentManager, statModifiers: null, deadEntities: null, abilityScores: abilityScores);
+        ActionEffectResolver.Apply(StrengthTaggedAction, SourceEntityId, [TargetTile], mapQuery, health, eventBus, mathUtility, playerQuery: null, statusEffectAppliers, componentManager, statModifiers: null, deadEntities: null, abilityScores: abilityScores);
 
         // 15 base damage + 8 Strength Total = 23.
         Assert.AreEqual(77, health.GetReadonly(BlockingTargetEntityId).CurrentHealth);
@@ -192,7 +190,7 @@ public sealed class ActionEffectResolverTests
         mapQuery.SetBlockingOccupant(TargetTile, BlockingTargetEntityId);
         health.Add(BlockingTargetEntityId, new SimpleHealthComponent(100, 100));
 
-        ActionEffectResolver.Apply(StrengthTaggedAction, StrengthTaggedInstance, SourceEntityId, [TargetTile], mapQuery, health, eventBus, mathUtility, playerQuery: null, statusEffectAppliers, componentManager);
+        ActionEffectResolver.Apply(StrengthTaggedAction, SourceEntityId, [TargetTile], mapQuery, health, eventBus, mathUtility, playerQuery: null, statusEffectAppliers, componentManager);
 
         Assert.AreEqual(85, health.GetReadonly(BlockingTargetEntityId).CurrentHealth);
     }
@@ -207,7 +205,7 @@ public sealed class ActionEffectResolverTests
         var abilityScores = componentManager.GetMultiPool<AbilityScoreComponent>();
         // SourceEntityId has no AbilityScoreComponent entries at all.
 
-        ActionEffectResolver.Apply(StrengthTaggedAction, StrengthTaggedInstance, SourceEntityId, [TargetTile], mapQuery, health, eventBus, mathUtility, playerQuery: null, statusEffectAppliers, componentManager, statModifiers: null, deadEntities: null, abilityScores: abilityScores);
+        ActionEffectResolver.Apply(StrengthTaggedAction, SourceEntityId, [TargetTile], mapQuery, health, eventBus, mathUtility, playerQuery: null, statusEffectAppliers, componentManager, statModifiers: null, deadEntities: null, abilityScores: abilityScores);
 
         Assert.AreEqual(85, health.GetReadonly(BlockingTargetEntityId).CurrentHealth);
     }
@@ -216,7 +214,6 @@ public sealed class ActionEffectResolverTests
         Guid.NewGuid(), "Test Status Effect Attack", null, "#", default, [],
         Effects: [new ActionEffect([new StatusEffectGrant(StatusEffectType.Paralysis)])],
         Activator: new SpellActivator(new TargetingSpec(TargetShape.SingleTarget, Range: 10), new ActionTiming(ActionTimingCategory.Immediate, ActionLockFrames: 30, CooldownFrames: null)));
-    private static readonly ActionInstanceComponent StatusEffectInstance = new(ActionWithStatusEffect.Id, damageAmount: 0, cooldownFramesRemaining: 0);
 
     [TestMethod]
     public void Apply_BlockingOccupant_GrantsRegisteredStatusEffect()
@@ -226,7 +223,7 @@ public sealed class ActionEffectResolverTests
         statusEffectAppliers.Register(applier);
         mapQuery.SetBlockingOccupant(TargetTile, BlockingTargetEntityId);
 
-        ActionEffectResolver.Apply(ActionWithStatusEffect, StatusEffectInstance, SourceEntityId, [TargetTile], mapQuery, health, eventBus, mathUtility, playerQuery: null, statusEffectAppliers, componentManager);
+        ActionEffectResolver.Apply(ActionWithStatusEffect, SourceEntityId, [TargetTile], mapQuery, health, eventBus, mathUtility, playerQuery: null, statusEffectAppliers, componentManager);
 
         Assert.HasCount(1, applier.AppliedCalls);
         Assert.AreEqual(BlockingTargetEntityId, applier.AppliedCalls[0].EntityId);
@@ -241,7 +238,7 @@ public sealed class ActionEffectResolverTests
         statusEffectAppliers.Register(applier);
         mapQuery.AddNonBlockingOccupant(TargetTile, NonBlockingTargetEntityId);
 
-        ActionEffectResolver.Apply(ActionWithStatusEffect, StatusEffectInstance, SourceEntityId, [TargetTile], mapQuery, health, eventBus, mathUtility, playerQuery: null, statusEffectAppliers, componentManager);
+        ActionEffectResolver.Apply(ActionWithStatusEffect, SourceEntityId, [TargetTile], mapQuery, health, eventBus, mathUtility, playerQuery: null, statusEffectAppliers, componentManager);
 
         Assert.HasCount(1, applier.AppliedCalls);
         Assert.AreEqual(NonBlockingTargetEntityId, applier.AppliedCalls[0].EntityId);
@@ -256,7 +253,7 @@ public sealed class ActionEffectResolverTests
         statusEffectAppliers.Register(applier);
         mapQuery.SetBlockingOccupant(TargetTile, BlockingTargetEntityId);
 
-        ActionEffectResolver.Apply(ActionWithStatusEffect, StatusEffectInstance, SourceEntityId, [TargetTile], mapQuery, health, eventBus, mathUtility, playerQuery: null, statusEffectAppliers, componentManager);
+        ActionEffectResolver.Apply(ActionWithStatusEffect, SourceEntityId, [TargetTile], mapQuery, health, eventBus, mathUtility, playerQuery: null, statusEffectAppliers, componentManager);
 
         Assert.IsFalse(health.Has(BlockingTargetEntityId));
         Assert.HasCount(1, applier.AppliedCalls);
@@ -268,7 +265,7 @@ public sealed class ActionEffectResolverTests
         var (mapQuery, health, eventBus, mathUtility, statusEffectAppliers, componentManager) = Build();
         mapQuery.SetBlockingOccupant(TargetTile, BlockingTargetEntityId);
 
-        ActionEffectResolver.Apply(ActionWithStatusEffect, StatusEffectInstance, SourceEntityId, [TargetTile], mapQuery, health, eventBus, mathUtility, playerQuery: null, statusEffectAppliers, componentManager);
+        ActionEffectResolver.Apply(ActionWithStatusEffect, SourceEntityId, [TargetTile], mapQuery, health, eventBus, mathUtility, playerQuery: null, statusEffectAppliers, componentManager);
     }
 
     [TestMethod]
@@ -280,7 +277,7 @@ public sealed class ActionEffectResolverTests
         StatusEffectAppliedEvent? published = null;
         eventBus.Subscribe<StatusEffectAppliedEvent>(e => published = e);
 
-        ActionEffectResolver.Apply(ActionWithStatusEffect, StatusEffectInstance, SourceEntityId, [TargetTile], mapQuery, health, eventBus, mathUtility, playerQuery: null, statusEffectAppliers, componentManager);
+        ActionEffectResolver.Apply(ActionWithStatusEffect, SourceEntityId, [TargetTile], mapQuery, health, eventBus, mathUtility, playerQuery: null, statusEffectAppliers, componentManager);
 
         Assert.IsNotNull(published);
         Assert.AreEqual(BlockingTargetEntityId, published!.Value.EntityId);
@@ -296,7 +293,7 @@ public sealed class ActionEffectResolverTests
         var published = false;
         eventBus.Subscribe<StatusEffectAppliedEvent>(_ => published = true);
 
-        ActionEffectResolver.Apply(ActionWithStatusEffect, StatusEffectInstance, SourceEntityId, [TargetTile], mapQuery, health, eventBus, mathUtility, playerQuery: null, statusEffectAppliers, componentManager);
+        ActionEffectResolver.Apply(ActionWithStatusEffect, SourceEntityId, [TargetTile], mapQuery, health, eventBus, mathUtility, playerQuery: null, statusEffectAppliers, componentManager);
 
         Assert.IsFalse(published);
     }
@@ -312,7 +309,7 @@ public sealed class ActionEffectResolverTests
         componentManager.RegisterPackedPool<DeadComponent>(static (ref existing, incoming) => existing = incoming);
         componentManager.GetPackedPool<DeadComponent>().Add(BlockingTargetEntityId, new DeadComponent(KilledByEntityId: null, DiedAtFrame: 0));
 
-        ActionEffectResolver.Apply(ActionWithStatusEffect, StatusEffectInstance, SourceEntityId, [TargetTile], mapQuery, health, eventBus, mathUtility, playerQuery: null, statusEffectAppliers, componentManager, statModifiers: null, componentManager.GetPackedPool<DeadComponent>());
+        ActionEffectResolver.Apply(ActionWithStatusEffect, SourceEntityId, [TargetTile], mapQuery, health, eventBus, mathUtility, playerQuery: null, statusEffectAppliers, componentManager, statModifiers: null, componentManager.GetPackedPool<DeadComponent>());
 
         Assert.IsEmpty(applier.AppliedCalls);
     }

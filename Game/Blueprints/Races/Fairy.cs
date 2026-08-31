@@ -2,6 +2,7 @@ using Engine.ECS.Components;
 using Engine.Math;
 using Game.Blueprints.NPCs;
 using Game.Modules.AbilityScores;
+using Game.Modules.Actions;
 using Game.Modules.Actions.Components;
 using Game.Modules.Actions.Definitions.DirectActions;
 using Game.Modules.Core.Components;
@@ -46,7 +47,8 @@ public sealed class Fairy(MathUtility mathUtility) : IBlueprint
         componentManager.Merge(entityId, new TransformComponent(
             new Vector3Int(0, 0, (int)MapLayer.Flying), new Vector2Byte(1, 1)));
 
-        componentManager.Merge(entityId, new ActionInstanceComponent(PunchAction.Id, damageAmount: PunchDamage, cooldownFramesRemaining: 0));
+        var punchOverride = ActionOverrideEffects.OverrideFlatDamage(PunchAction.Build(), PunchDamage);
+        componentManager.Merge(entityId, new ActionInstanceComponent(PunchAction.Id, punchOverride, cooldownFramesRemaining: 0));
 
         TemporaryNpcLootGrant.GrantRandomStartingLoot(componentManager, entityId, mathUtility);
 
