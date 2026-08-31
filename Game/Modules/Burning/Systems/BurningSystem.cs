@@ -9,7 +9,6 @@ using Game.Modules.ProcessingTier;
 using Game.Modules.ProcessingTier.Components;
 using Game.Modules.StatModifiers.Components;
 using Game.Modules.StatusEffects;
-using Game.Modules.StatusEffects.Components;
 using Game.World;
 
 namespace Game.Modules.Burning.Systems;
@@ -17,10 +16,11 @@ namespace Game.Modules.Burning.Systems;
 /// <summary>
 /// Ticks down each burning entity's countdown and, once it reaches 0, deals damage equal to
 /// the current stack count and removes exactly one stack (not per-stack damage -- 7 stacks
-/// deals 7 damage total, not 49). The decrement-or-fire
-/// loop itself is Engine.ECS.Systems.CountdownTicker.Tick, shared with PoisonSystem/
-/// ContactDamageSystem/StatusEffectAuraSystem -- this class only supplies the entity-id source
-/// and what "ticking" actually does.
+/// deals 7 damage total, not 49), attributed to whichever source first set the entity ablaze
+/// (BurningTimerComponent.Source, set once on the 0-to-1 transition -- see BurningEffects.ApplyStack).
+/// The decrement-or-fire loop itself is Engine.ECS.Systems.CountdownTicker.Tick, shared with
+/// PoisonSystem/ContactDamageSystem/StatusEffectAuraSystem -- this class only supplies the
+/// entity-id source and what "ticking" actually does.
 /// </summary>
 public sealed class BurningSystem : ISystem
 {
@@ -32,7 +32,6 @@ public sealed class BurningSystem : ISystem
     public byte StripeCount => StripeCountValue;
 
     private readonly PackedComponentPool<BurningTimerComponent> _timers;
-    private readonly MultiComponentPool<StatusEffectStack> _stacks;
     private readonly PackedComponentPool<SimpleHealthComponent> _health;
     private readonly MultiComponentPool<StatModifierComponent>? _statModifiers;
     private readonly EventBus _eventBus;
@@ -49,7 +48,6 @@ public sealed class BurningSystem : ISystem
 
     public BurningSystem(
         PackedComponentPool<BurningTimerComponent> timers,
-        MultiComponentPool<StatusEffectStack> stacks,
         PackedComponentPool<SimpleHealthComponent> health,
         EventBus eventBus,
         IPlayerQuery? playerQuery,
@@ -60,7 +58,6 @@ public sealed class BurningSystem : ISystem
         MultiComponentPool<BodyPartComponent>? bodyParts = null)
     {
         _timers = timers;
-        _stacks = stacks;
         _health = health;
         _statModifiers = statModifiers;
         _eventBus = eventBus;
@@ -89,22 +86,7 @@ public sealed class BurningSystem : ISystem
             return true;
         }
 
-        var source = default(StatusEffectSource);
-        var foundDenseIndex = -1;
-
-        for (var denseIndex = _stacks.GetFirstDenseIndex(entityId); denseIndex != -1; denseIndex = _stacks.GetNextDenseIndex(denseIndex))
-        {
-            var stack = _stacks.GetReadonlyByDenseIndex(denseIndex);
-            if (stack.EffectType == StatusEffectType.Burning)
-            {
-                foundDenseIndex = denseIndex;
-                source = stack.Source;
-                break;
-            }
-        }
-
-        HealthDamage.Apply(_health, _eventBus, entityId, stackCount, source, _playerQuery, StatusEffectDamageType.Describe(StatusEffectType.Burning), _statModifiers, _bodyParts, _mathUtility, damageTags: BurningDamageTags);
-        _stacks.RemoveByDenseIndex(foundDenseIndex);
+        HealthDamage.Apply(_health, _eventBus, entityId, stackCount, timer.Source, _playerQuery, StatusEffectDamageType.Describe(StatusEffectType.Burning), _statModifiers, _bodyParts, _mathUtility, damageTags: BurningDamageTags);
 
         var remainingStacks = (byte)(stackCount - 1);
         if (remainingStacks == 0)

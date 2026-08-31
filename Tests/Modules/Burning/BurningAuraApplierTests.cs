@@ -6,7 +6,6 @@ using Game.Modules.Burning.Components;
 using Game.Modules.ContactDamage.Components;
 using Game.Modules.Health;
 using Game.Modules.Health.Components;
-using Game.Modules.StatusEffects.Components;
 using Game.World;
 
 namespace Tests.Modules.Burning;
@@ -30,8 +29,6 @@ public sealed class BurningAuraApplierTests
         componentManager.RegisterPackedPool<BurningTimerComponent>(static (ref existing, incoming) => { });
         componentManager.RegisterMultiPool<BodyPartComponent>();
         componentManager.RegisterMultiPool<BodyPartBurningTimerComponent>();
-        componentManager.RegisterMultiPool<BodyPartStatusEffectStack>();
-        componentManager.RegisterMultiPool<StatusEffectStack>();
         componentManager.RegisterPackedPool<ContactDamageExposureComponent>(static (ref existing, incoming) => { });
         componentManager.RegisterPackedPool<DamageOnContactComponent>(static (ref existing, incoming) => { });
         return componentManager;

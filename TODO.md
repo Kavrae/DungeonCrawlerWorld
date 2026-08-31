@@ -79,17 +79,6 @@ hundreds per player. Needs a `MultiComponentPool<SkillComponent>`-shaped store (
 not single-instance). See Spell leveling below for the same shape at smaller scale -- share one leveling
 primitive. Consumer: Player selection menu's skill-gated detail (Presentation, below).
 
-#### Burning/Poison stack representation -- investigate single magnitude vs. N discrete stacks
-
-Today: an int `StackCount` *and* N interchangeable `StatusEffectStack` instances in a
-`MultiComponentPool` (one per `ApplyStack`). Collapsing to one magnitude value would simplify the
-per-tick removal dance and `HealthWindow`'s duration formula, but changes decay behavior, not just
-code: N discrete stacks give graceful decay (5->4->3...) for free; one magnitude needs its decay curve
-decided explicitly (hard cutoff vs. its own taper rule). Decide the curve before changing the
-representation. Poison/Paralysis both go through `TimerBasedAuraApplier<T>`, which treats `ApplyStack`
-as "add one atomic unit" -- a magnitude field satisfies that unchanged; only widen scope to
-`IStatusEffectAuraApplier` itself if the goal is O(1) "set to target" instead of a loop.
-
 ### Medium Priority
 
 #### Toggle item activator

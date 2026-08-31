@@ -14,7 +14,6 @@ using Game.Modules.StatusEffectAura;
 using Game.Modules.StatusEffectAura.Components;
 using Game.Modules.StatusEffectAura.Systems;
 using Game.Modules.StatusEffects;
-using Game.Modules.StatusEffects.Components;
 using Game.World;
 using Microsoft.Xna.Framework;
 
@@ -120,7 +119,6 @@ public sealed class StatusEffectAuraSystemTests
         componentManager.RegisterMultiPool<StatusEffectAuraExposureComponent>();
         componentManager.RegisterPackedPool<BurningTimerComponent>(static (ref existing, incoming) => { });
         componentManager.RegisterPackedPool<PoisonTimerComponent>(static (ref existing, incoming) => { });
-        componentManager.RegisterMultiPool<StatusEffectStack>();
         componentManager.RegisterPackedPool<DeadComponent>(static (ref existing, incoming) => existing = incoming);
         componentManager.RegisterDirectPool<ProcessingTierComponent>(static (ref existing, incoming) => existing = incoming);
 

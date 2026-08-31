@@ -1,9 +1,12 @@
 ﻿using Engine.ECS.Components;
 using Engine.ECS.Components.Stores;
 using Game.Modules;
+using Game.Modules.Actions.Activators;
 using Game.Modules.Burning;
 using Game.Modules.Burning.Components;
 using Game.Modules.Health.Components;
+using Game.Modules.Inventory;
+using Game.Modules.Inventory.Definitions;
 using Game.Modules.Paralysis;
 using Game.Modules.Paralysis.Components;
 using Game.Modules.Poison;
@@ -13,6 +16,7 @@ using Game.Modules.StatModifiers.Components;
 using Game.Modules.StatusEffects;
 using Game.Modules.StatusEffects.Components;
 using Game.World;
+using Microsoft.Xna.Framework;
 using Presentation.UI;
 using System.Linq;
 
@@ -99,11 +103,10 @@ public sealed class HealthWindowTests
         Assert.AreEqual(100f, rows[0].MaximumHealth);
     }
 
-    /// <summary>Fresh ComponentManager with StatusEffectStack plus every timer component pool registered -- BuildStatusEffectRows now reads timer durations through TimerBasedStatusEffectDisplay's own GetPackedPool lookup, so the pools have to live behind a real ComponentManager instead of standing alone.</summary>
+    /// <summary>Fresh ComponentManager with every timer component pool registered -- BuildStatusEffectRows reads both presence and duration through TimerBasedStatusEffectDisplay's own GetPackedPool lookup, so the pools have to live behind a real ComponentManager instead of standing alone.</summary>
     private static ComponentManager CreateComponentManagerWithStatusEffectPools()
     {
         var componentManager = new ComponentManager(initialEntityCapacity: 10, initialComponentCapacity: 8);
-        componentManager.RegisterMultiPool<StatusEffectStack>();
         componentManager.RegisterPackedPool<PoisonTimerComponent>(static (ref existing, incoming) => { });
         componentManager.RegisterPackedPool<BurningTimerComponent>(static (ref existing, incoming) => { });
         componentManager.RegisterPackedPool<ParalysisTimerComponent>(static (ref existing, incoming) => { });
@@ -130,7 +133,7 @@ public sealed class HealthWindowTests
         List<HealthWindow.StatusEffectRow> rows = [];
         List<StatusEffectType> scratch = [];
 
-        HealthWindow.BuildStatusEffectRows(rows, scratch, EntityId, componentManager.GetMultiPool<StatusEffectStack>(), CreateStatusEffectDisplayRegistry(), componentManager);
+        HealthWindow.BuildStatusEffectRows(rows, scratch, EntityId, CreateStatusEffectDisplayRegistry(), componentManager);
 
         Assert.IsEmpty(rows);
     }
@@ -139,51 +142,92 @@ public sealed class HealthWindowTests
     public void BuildStatusEffectRows_PoisonActive_RemainingSecondsMatchesTimerFormula()
     {
         var componentManager = CreateComponentManagerWithStatusEffectPools();
-        componentManager.GetMultiPool<StatusEffectStack>().Add(EntityId, new StatusEffectStack(StatusEffectType.Poison, StatusEffectSource.Admin));
         // FramesUntilNextTick 30 + (RemainingDurationTicks 3 - 1) * TickIntervalFrames 60 = 150 frames = 2.5s -> ceil to 3.
         componentManager.GetPackedPool<PoisonTimerComponent>().Add(EntityId, new PoisonTimerComponent(framesUntilNextTick: 30, stackCount: 1, remainingDurationTicks: 3, StatusEffectSource.Admin));
 
         List<HealthWindow.StatusEffectRow> rows = [];
         List<StatusEffectType> scratch = [];
-        HealthWindow.BuildStatusEffectRows(rows, scratch, EntityId, componentManager.GetMultiPool<StatusEffectStack>(), CreateStatusEffectDisplayRegistry(), componentManager);
+        HealthWindow.BuildStatusEffectRows(rows, scratch, EntityId, CreateStatusEffectDisplayRegistry(), componentManager);
 
         Assert.HasCount(1, rows);
         Assert.AreEqual(StatusEffectType.Poison, rows[0].Type);
         Assert.AreEqual(3, rows[0].RemainingSeconds);
+        Assert.AreEqual(1, rows[0].StackCount);
     }
 
     [TestMethod]
     public void BuildStatusEffectRows_BurningActive_RemainingSecondsMatchesTimerFormula()
     {
         var componentManager = CreateComponentManagerWithStatusEffectPools();
-        componentManager.GetMultiPool<StatusEffectStack>().Add(EntityId, new StatusEffectStack(StatusEffectType.Burning, StatusEffectSource.Admin));
         // FramesUntilNextTick 45 + (StackCount 2 - 1) * TickIntervalFrames 60 = 105 frames = 1.75s -> ceil to 2.
-        componentManager.GetPackedPool<BurningTimerComponent>().Add(EntityId, new BurningTimerComponent(framesUntilNextTick: 45, stackCount: 2));
+        componentManager.GetPackedPool<BurningTimerComponent>().Add(EntityId, new BurningTimerComponent(framesUntilNextTick: 45, stackCount: 2, StatusEffectSource.Admin));
 
         List<HealthWindow.StatusEffectRow> rows = [];
         List<StatusEffectType> scratch = [];
-        HealthWindow.BuildStatusEffectRows(rows, scratch, EntityId, componentManager.GetMultiPool<StatusEffectStack>(), CreateStatusEffectDisplayRegistry(), componentManager);
+        HealthWindow.BuildStatusEffectRows(rows, scratch, EntityId, CreateStatusEffectDisplayRegistry(), componentManager);
 
         Assert.HasCount(1, rows);
         Assert.AreEqual(StatusEffectType.Burning, rows[0].Type);
         Assert.AreEqual(2, rows[0].RemainingSeconds);
+        Assert.AreEqual(2, rows[0].StackCount);
     }
 
     [TestMethod]
     public void BuildStatusEffectRows_ParalysisActive_RemainingSecondsUsesFramesUntilNextTickDirectly()
     {
         var componentManager = CreateComponentManagerWithStatusEffectPools();
-        componentManager.GetMultiPool<StatusEffectStack>().Add(EntityId, new StatusEffectStack(StatusEffectType.Paralysis, StatusEffectSource.Admin));
         // 61 frames = 1.017s -> ceil to 2, straight off FramesUntilNextTick (no repeating tick to add on top).
         componentManager.GetPackedPool<ParalysisTimerComponent>().Add(EntityId, new ParalysisTimerComponent(framesUntilNextTick: 61));
 
         List<HealthWindow.StatusEffectRow> rows = [];
         List<StatusEffectType> scratch = [];
-        HealthWindow.BuildStatusEffectRows(rows, scratch, EntityId, componentManager.GetMultiPool<StatusEffectStack>(), CreateStatusEffectDisplayRegistry(), componentManager);
+        HealthWindow.BuildStatusEffectRows(rows, scratch, EntityId, CreateStatusEffectDisplayRegistry(), componentManager);
 
         Assert.HasCount(1, rows);
         Assert.AreEqual(StatusEffectType.Paralysis, rows[0].Type);
         Assert.AreEqual(2, rows[0].RemainingSeconds);
+        Assert.AreEqual(1, rows[0].StackCount);
+    }
+
+    [TestMethod]
+    public void FormatStatusEffectRow_BurningWithMultipleStacks_ShowsStackCountNoDuration()
+    {
+        var row = new HealthWindow.StatusEffectRow(StatusEffectType.Burning, RemainingSeconds: 5, StackCount: 5);
+
+        Assert.AreEqual($"{BurningEffects.Glyph} Burning x5", HealthWindow.FormatStatusEffectRow(row, CreateStatusEffectDisplayRegistry()));
+    }
+
+    [TestMethod]
+    public void FormatStatusEffectRow_BurningWithOneStack_OmitsStackCountAndDuration()
+    {
+        var row = new HealthWindow.StatusEffectRow(StatusEffectType.Burning, RemainingSeconds: 5, StackCount: 1);
+
+        Assert.AreEqual($"{BurningEffects.Glyph} Burning", HealthWindow.FormatStatusEffectRow(row, CreateStatusEffectDisplayRegistry()));
+    }
+
+    [TestMethod]
+    public void FormatStatusEffectRow_PoisonWithMultipleStacksAndDuration_ShowsParenthesizedStackCountThenDuration()
+    {
+        var row = new HealthWindow.StatusEffectRow(StatusEffectType.Poison, RemainingSeconds: 18, StackCount: 21);
+
+        Assert.AreEqual($"{PoisonEffects.Glyph} Poison (x21): 18s", HealthWindow.FormatStatusEffectRow(row, CreateStatusEffectDisplayRegistry()));
+    }
+
+    [TestMethod]
+    public void FormatStatusEffectRow_PoisonWithOneStack_OmitsStackCount()
+    {
+        var row = new HealthWindow.StatusEffectRow(StatusEffectType.Poison, RemainingSeconds: 18, StackCount: 1);
+
+        Assert.AreEqual($"{PoisonEffects.Glyph} Poison: 18s", HealthWindow.FormatStatusEffectRow(row, CreateStatusEffectDisplayRegistry()));
+    }
+
+    /// <summary>Paralysis's own StackCount is always exactly 1 (never a stacking effect -- see ParalysisTimerComponent), so it never enters the stack-count-shown branch at all.</summary>
+    [TestMethod]
+    public void FormatStatusEffectRow_Paralysis_NeverShowsStackCount()
+    {
+        var row = new HealthWindow.StatusEffectRow(StatusEffectType.Paralysis, RemainingSeconds: 2, StackCount: 1);
+
+        Assert.AreEqual($"{ParalysisEffects.Glyph} Paralysis: 2s", HealthWindow.FormatStatusEffectRow(row, CreateStatusEffectDisplayRegistry()));
     }
 
     [TestMethod]
@@ -191,7 +235,7 @@ public sealed class HealthWindowTests
     {
         var bodyPartBurningTimers = new MultiComponentPool<BodyPartBurningTimerComponent>(maximumEntityCount: 10, initialCapacity: 4);
         // FramesUntilNextTick 45 + (StackCount 2 - 1) * TickIntervalFrames 60 = 105 frames = 1.75s -> ceil to 2 -- same formula the entity-scoped BurningTimerComponent display uses.
-        bodyPartBurningTimers.Add(EntityId, new BodyPartBurningTimerComponent(partId: 1, stackCount: 2, framesUntilNextTick: 45));
+        bodyPartBurningTimers.Add(EntityId, new BodyPartBurningTimerComponent(partId: 1, stackCount: 2, framesUntilNextTick: 45, StatusEffectSource.Admin));
 
         var found = HealthWindow.TryGetBodyPartBurningLine(bodyPartBurningTimers, EntityId, partId: 1, out var text, out _);
 
@@ -204,7 +248,7 @@ public sealed class HealthWindowTests
     public void TryGetBodyPartBurningLine_DifferentPartOnFire_ThisPartReturnsFalse()
     {
         var bodyPartBurningTimers = new MultiComponentPool<BodyPartBurningTimerComponent>(maximumEntityCount: 10, initialCapacity: 4);
-        bodyPartBurningTimers.Add(EntityId, new BodyPartBurningTimerComponent(partId: 1, stackCount: 2, framesUntilNextTick: 45));
+        bodyPartBurningTimers.Add(EntityId, new BodyPartBurningTimerComponent(partId: 1, stackCount: 2, framesUntilNextTick: 45, StatusEffectSource.Admin));
 
         var found = HealthWindow.TryGetBodyPartBurningLine(bodyPartBurningTimers, EntityId, partId: 0, out var text, out _);
 
@@ -218,6 +262,72 @@ public sealed class HealthWindowTests
         var found = HealthWindow.TryGetBodyPartBurningLine(null, EntityId, partId: 0, out _, out _);
 
         Assert.IsFalse(found);
+    }
+
+    private static PackedComponentPool<PotionCooldownComponent> CreatePotionCooldownPool() =>
+        new(maximumEntityCount: 10, initialCapacity: 4, static (ref existing, incoming) => existing = incoming);
+
+    private static ItemCatalog CreateItemCatalogWithHealthPotion()
+    {
+        var itemCatalog = new ItemCatalog();
+        itemCatalog.Register(HealthPotion.Build());
+        return itemCatalog;
+    }
+
+    [TestMethod]
+    public void TryGetPotionCooldownLine_NoPoolSupplied_ReturnsFalse()
+    {
+        var found = HealthWindow.TryGetPotionCooldownLine(null, CreateItemCatalogWithHealthPotion(), EntityId, out _, out _);
+
+        Assert.IsFalse(found);
+    }
+
+    [TestMethod]
+    public void TryGetPotionCooldownLine_NoActiveCooldown_ReturnsFalse()
+    {
+        var potionCooldowns = CreatePotionCooldownPool();
+
+        var found = HealthWindow.TryGetPotionCooldownLine(potionCooldowns, CreateItemCatalogWithHealthPotion(), EntityId, out _, out _);
+
+        Assert.IsFalse(found);
+    }
+
+    [TestMethod]
+    public void TryGetPotionCooldownLine_FramesRemainingZero_ReturnsFalse()
+    {
+        var potionCooldowns = CreatePotionCooldownPool();
+        potionCooldowns.Add(EntityId, new PotionCooldownComponent(totalFrames: 1200, framesRemaining: 0));
+
+        var found = HealthWindow.TryGetPotionCooldownLine(potionCooldowns, CreateItemCatalogWithHealthPotion(), EntityId, out _, out _);
+
+        Assert.IsFalse(found);
+    }
+
+    [TestMethod]
+    public void TryGetPotionCooldownLine_ActiveCooldown_ReturnsFormattedLine()
+    {
+        var potionCooldowns = CreatePotionCooldownPool();
+        // 121 frames = 2.017s -> ceil to 3, same PotionCooldownEffects.RemainingSeconds rounding PlayerStatusEffectsContent already relies on.
+        potionCooldowns.Add(EntityId, new PotionCooldownComponent(totalFrames: 1200, framesRemaining: 121));
+
+        var found = HealthWindow.TryGetPotionCooldownLine(potionCooldowns, CreateItemCatalogWithHealthPotion(), EntityId, out var text, out var color);
+
+        Assert.IsTrue(found);
+        Assert.AreEqual("h Potion Cooldown: 3s", text);
+        Assert.AreEqual(Color.Green, color);
+    }
+
+    [TestMethod]
+    public void TryGetPotionCooldownLine_HealthPotionNotInCatalog_UsesFallbackGlyphAndColor()
+    {
+        var potionCooldowns = CreatePotionCooldownPool();
+        potionCooldowns.Add(EntityId, new PotionCooldownComponent(totalFrames: 1200, framesRemaining: 60));
+
+        var found = HealthWindow.TryGetPotionCooldownLine(potionCooldowns, new ItemCatalog(), EntityId, out var text, out var color);
+
+        Assert.IsTrue(found);
+        Assert.AreEqual("? Potion Cooldown: 1s", text);
+        Assert.AreEqual(Color.White, color);
     }
 
     private static MultiComponentPool<StatModifierComponent> CreateStatModifiersPool() =>

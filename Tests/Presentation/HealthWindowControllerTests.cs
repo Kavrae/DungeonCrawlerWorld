@@ -4,12 +4,12 @@ using Engine.Math;
 using Game.Modules.Burning;
 using Game.Modules.Burning.Components;
 using Game.Modules.Health.Components;
+using Game.Modules.Inventory;
 using Game.Modules.Paralysis;
 using Game.Modules.Paralysis.Components;
 using Game.Modules.Poison;
 using Game.Modules.Poison.Components;
 using Game.Modules.StatusEffects;
-using Game.Modules.StatusEffects.Components;
 using Microsoft.Xna.Framework;
 using Presentation.Fonts;
 using Presentation.Rendering;
@@ -42,8 +42,6 @@ public sealed class HealthWindowControllerTests
         var componentManager = new ComponentManager(20, 10);
         componentManager.RegisterPackedPool<SimpleHealthComponent>(static (ref existing, incoming) => existing = incoming);
         componentManager.RegisterMultiPool<BodyPartComponent>();
-        componentManager.RegisterMultiPool<StatusEffectStack>();
-        componentManager.RegisterMultiPool<BodyPartStatusEffectStack>();
         componentManager.RegisterMultiPool<BodyPartBurningTimerComponent>();
         componentManager.RegisterPackedPool<PoisonTimerComponent>(static (ref existing, incoming) => { });
         componentManager.RegisterPackedPool<BurningTimerComponent>(static (ref existing, incoming) => { });
@@ -59,7 +57,9 @@ public sealed class HealthWindowControllerTests
         statusEffectDisplays.Register(new TimerBasedStatusEffectDisplay<ParalysisTimerComponent>(StatusEffectType.Paralysis, ParalysisEffects.Glyph,
             paralysis => paralysis.FramesUntilNextTick));
 
-        pool.RegisterFactory<HealthWindow>(() => new HealthWindow(fontService, pool, labelRenderer, componentManager, statusEffectDisplays));
+        var itemCatalog = new ItemCatalog();
+
+        pool.RegisterFactory<HealthWindow>(() => new HealthWindow(fontService, pool, labelRenderer, componentManager, statusEffectDisplays, itemCatalog));
         pool.RegisterFactory<TextDivider>(() => new TextDivider(fontService, pool, labelRenderer));
         pool.RegisterFactory<FractionBarElement>(() => new FractionBarElement(fontService, pool, labelRenderer));
 

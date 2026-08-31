@@ -1,4 +1,5 @@
 using Engine.ECS.Components;
+using Game.World;
 
 namespace Game.Modules.Health.Components;
 
@@ -10,7 +11,7 @@ namespace Game.Modules.Health.Components;
 /// depends on an effect-specific component type, so keeping that direction one-way (Burning depends
 /// on Health, never the reverse) means the component itself has to sit on the Health side.
 /// </remarks>
-public struct BodyPartBurningTimerComponent(byte partId, byte stackCount, ushort framesUntilNextTick) : ITickCountdown
+public struct BodyPartBurningTimerComponent(byte partId, byte stackCount, ushort framesUntilNextTick, StatusEffectSource source) : ITickCountdown
 {
     /// <summary>The specific BodyPartComponent.PartId this timer is burning, re-located each tick via BodyPartSelection.FindByPartId rather than a dense index (which isn't a stable identity).</summary>
     public byte PartId { get; set; } = partId;
@@ -19,5 +20,8 @@ public struct BodyPartBurningTimerComponent(byte partId, byte stackCount, ushort
 
     public ushort FramesUntilNextTick { get; set; } = framesUntilNextTick;
 
-    public override readonly string ToString() => $"PartId : {PartId}\nFramesUntilNextTick : {FramesUntilNextTick}\nStackCount : {StackCount}";
+    /// <summary>Set once on the 0-to-1 transition (BurningAuraApplier.ApplyBodyPartScopedStack), never overwritten by a later top-off -- mirrors BurningTimerComponent's own Source field.</summary>
+    public StatusEffectSource Source { get; set; } = source;
+
+    public override readonly string ToString() => $"PartId : {PartId}\nFramesUntilNextTick : {FramesUntilNextTick}\nStackCount : {StackCount}\nSource : {Source}";
 }

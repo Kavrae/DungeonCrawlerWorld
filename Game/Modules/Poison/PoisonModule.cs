@@ -7,14 +7,13 @@ using Game.Modules.Poison.Components;
 using Game.Modules.Poison.Systems;
 using Game.Modules.StatModifiers.Components;
 using Game.Modules.StatusEffects;
-using Game.Modules.StatusEffects.Components;
 using Game.World;
 
 namespace Game.Modules.Poison;
 
 /// <summary>
 /// Poison-specific: its own timer component and system, depending on StatusEffectsModule
-/// (shared stack storage). Parameterless, with runtime dependencies (EventBus, IPlayerQuery)
+/// (shared immunity storage). Parameterless, with runtime dependencies (EventBus, IPlayerQuery)
 /// supplied via IGameModule.Configure. Also registers a
 /// TimerBasedAuraApplier&lt;PoisonTimerComponent&gt; into the shared
 /// StatusEffectAuraApplierRegistry during Configure, so StatusEffectAuraSystem can grant
@@ -72,7 +71,6 @@ public sealed class PoisonModule : IGameModule
 
         systemManager.Register(new PoisonSystem(
             componentManager.GetPackedPool<PoisonTimerComponent>(),
-            componentManager.GetMultiPool<StatusEffectStack>(),
             componentManager.GetPackedPool<SimpleHealthComponent>(),
             _eventBus,
             _playerQuery,

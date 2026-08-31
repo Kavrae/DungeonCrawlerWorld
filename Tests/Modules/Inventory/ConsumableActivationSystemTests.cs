@@ -17,7 +17,6 @@ using Game.Modules.Mana.Components;
 using Game.Modules.Poison;
 using Game.Modules.Poison.Components;
 using Game.Modules.StatusEffects;
-using Game.Modules.StatusEffects.Components;
 using Game.World;
 using Microsoft.Xna.Framework;
 
@@ -34,6 +33,15 @@ public sealed class ConsumableActivationSystemTests
     private static readonly Guid NonConsumableId = Guid.NewGuid();
     private static readonly Guid WandId = Guid.NewGuid();
     private static readonly Vector3Int TargetTile = new(5, 5, 0);
+
+    /// <summary>Mirrors PoisonModule.Configure's own registration -- the real path StatusEffectQueries reads through.</summary>
+    private static StatusEffectDisplayRegistry CreateStatusEffectDisplays()
+    {
+        var displays = new StatusEffectDisplayRegistry();
+        displays.Register(new TimerBasedStatusEffectDisplay<PoisonTimerComponent>(StatusEffectType.Poison, PoisonEffects.Glyph,
+            poison => poison.FramesUntilNextTick + (poison.RemainingDurationTicks - 1) * PoisonEffects.TickIntervalFrames));
+        return displays;
+    }
 
     /// <summary>Catalog placeholder only -- Charges/MaxCharges always come from the specific Override each test's own AddItemWithOverride call constructs, mirroring how WandGrantEffects.Grant never grants the bare catalog entry directly. DirectDamage only (no StatusEffectGrant) -- StatusEffectAppliers isn't wired in this fixture, and these tests are about charge/peel/repoint mechanics, not status effects, which DirectDamage/HealthOf already exercises well enough on its own.</summary>
     private static ItemDefinition CreateWandDefinition(ushort charges, ushort maxCharges) =>
@@ -72,7 +80,6 @@ public sealed class ConsumableActivationSystemTests
         componentManager.RegisterPackedPool<ManaComponent>(static (ref existing, incoming) => existing = incoming);
         componentManager.RegisterMultiPool<InventoryItemStackComponent>();
         componentManager.RegisterPackedPool<InventoryComponent>(static (ref existing, incoming) => existing = incoming);
-        componentManager.RegisterMultiPool<StatusEffectStack>();
         componentManager.RegisterPackedPool<PoisonTimerComponent>(static (ref existing, incoming) => { });
         componentManager.RegisterPackedPool<HotkeyExpansionUnlockComponent>(static (ref existing, incoming) => existing = incoming);
         componentManager.RegisterMultiPool<ItemHotkeyBindingComponent>();
@@ -136,7 +143,6 @@ public sealed class ConsumableActivationSystemTests
         componentManager.RegisterPackedPool<ManaComponent>(static (ref existing, incoming) => existing = incoming);
         componentManager.RegisterMultiPool<InventoryItemStackComponent>();
         componentManager.RegisterPackedPool<InventoryComponent>(static (ref existing, incoming) => existing = incoming);
-        componentManager.RegisterMultiPool<StatusEffectStack>();
         componentManager.RegisterPackedPool<PoisonTimerComponent>(static (ref existing, incoming) => { });
         componentManager.RegisterPackedPool<HotkeyExpansionUnlockComponent>(static (ref existing, incoming) => existing = incoming);
         componentManager.RegisterMultiPool<AbilityScoreComponent>();
@@ -358,8 +364,9 @@ public sealed class ConsumableActivationSystemTests
 
         system.Update(default, 0);
 
-        Assert.AreEqual(1, StatusEffectQueries.CountStacks(componentManager.GetMultiPool<StatusEffectStack>(), TargetEntityId, StatusEffectType.Poison));
-        Assert.AreEqual(0, StatusEffectQueries.CountStacks(componentManager.GetMultiPool<StatusEffectStack>(), CasterEntityId, StatusEffectType.Poison));
+        var displays = CreateStatusEffectDisplays();
+        Assert.AreEqual(1, StatusEffectQueries.CountStacks(displays, componentManager, TargetEntityId, StatusEffectType.Poison));
+        Assert.AreEqual(0, StatusEffectQueries.CountStacks(displays, componentManager, CasterEntityId, StatusEffectType.Poison));
         Assert.IsNotNull(published);
         Assert.AreEqual(TargetEntityId, published!.EntityId);
     }
@@ -379,7 +386,7 @@ public sealed class ConsumableActivationSystemTests
 
         system.Update(default, 0);
 
-        Assert.AreEqual(0, StatusEffectQueries.CountStacks(componentManager.GetMultiPool<StatusEffectStack>(), TargetEntityId, StatusEffectType.Poison));
+        Assert.AreEqual(0, StatusEffectQueries.CountStacks(CreateStatusEffectDisplays(), componentManager, TargetEntityId, StatusEffectType.Poison));
         Assert.IsFalse(published);
     }
 

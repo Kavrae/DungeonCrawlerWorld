@@ -10,14 +10,13 @@ using Game.Modules.ProcessingTier;
 using Game.Modules.ProcessingTier.Components;
 using Game.Modules.StatModifiers.Components;
 using Game.Modules.StatusEffects;
-using Game.Modules.StatusEffects.Components;
 using Game.World;
 
 namespace Game.Modules.Burning;
 
 /// <summary>
 /// Burning-specific: its own entity-scoped and body-part-scoped timer components and systems,
-/// depending on StatusEffectsModule (shared stack storage) and HealthModule (what it damages).
+/// depending on StatusEffectsModule (shared immunity storage) and HealthModule (what it damages).
 /// Parameterless, with runtime dependencies (EventBus, IPlayerQuery) supplied via
 /// IGameModule.Configure. Also registers a BurningAuraApplier (dispatches entity-scoped vs
 /// body-part-scoped per grant -- see its own doc comment) into the shared
@@ -71,7 +70,6 @@ public sealed class BurningModule : IGameModule
 
         systemManager.Register(new BurningSystem(
             componentManager.GetPackedPool<BurningTimerComponent>(),
-            componentManager.GetMultiPool<StatusEffectStack>(),
             componentManager.GetPackedPool<SimpleHealthComponent>(),
             _eventBus,
             _playerQuery,
@@ -88,7 +86,6 @@ public sealed class BurningModule : IGameModule
         // call, so it's always safely fetchable here too).
         systemManager.Register(new BodyPartBurningSystem(
             componentManager.GetMultiPool<BodyPartBurningTimerComponent>(),
-            componentManager.GetMultiPool<BodyPartStatusEffectStack>(),
             componentManager.GetMultiPool<BodyPartComponent>(),
             componentManager.GetPackedPool<SimpleHealthComponent>(),
             _eventBus,

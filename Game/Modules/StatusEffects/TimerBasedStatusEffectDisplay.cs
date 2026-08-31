@@ -5,14 +5,14 @@ namespace Game.Modules.StatusEffects;
 
 /// <summary>
 /// A single IStatusEffectDisplay implementation for the shape every current status effect
-/// shares: remaining duration lives on a PackedComponentPool&lt;T&gt; timer component. The
-/// variable part is a Func&lt;T, int&gt; extracting remaining-duration-in-frames from the timer
-/// struct -- register one of these per effect from that effect's own Configure instead of
-/// writing a new class per effect (mirrors TimerBasedAuraApplier&lt;T&gt;'s own shape). No
-/// IStatusEffectStackCount constraint needed (unlike TimerBasedAuraApplier&lt;T&gt;) since the
-/// duration formula is fully supplied by the caller, not read generically off the struct.
+/// shares: remaining duration and stack count both live on a PackedComponentPool&lt;T&gt; timer
+/// component. The variable part is a Func&lt;T, int&gt; extracting remaining-duration-in-frames
+/// from the timer struct -- register one of these per effect from that effect's own Configure
+/// instead of writing a new class per effect (mirrors TimerBasedAuraApplier&lt;T&gt;'s own shape,
+/// including its IStatusEffectStackCount constraint -- GetStackCount reads T.StackCount
+/// generically the same way TimerBasedAuraApplier&lt;T&gt;.GetCurrentStackCount does).
 /// </summary>
-public sealed class TimerBasedStatusEffectDisplay<T> : IStatusEffectDisplay where T : struct
+public sealed class TimerBasedStatusEffectDisplay<T> : IStatusEffectDisplay where T : struct, IStatusEffectStackCount
 {
     public StatusEffectType EffectType { get; }
     public string Glyph { get; }
@@ -32,5 +32,11 @@ public sealed class TimerBasedStatusEffectDisplay<T> : IStatusEffectDisplay wher
     {
         _timers ??= componentManager.GetPackedPool<T>();
         return _timers.TryGetReadonly(entityId, out var timer) ? _getRemainingDurationFrames(timer) : null;
+    }
+
+    public int GetStackCount(ComponentManager componentManager, int entityId)
+    {
+        _timers ??= componentManager.GetPackedPool<T>();
+        return _timers.TryGetReadonly(entityId, out var timer) ? timer.StackCount : 0;
     }
 }

@@ -3,7 +3,6 @@ using Engine.Events;
 using Engine.Utilities;
 using Game.Modules.Burning.Components;
 using Game.Modules.StatusEffects;
-using Game.Modules.StatusEffects.Components;
 using Game.World;
 
 namespace Game.Modules.Burning;
@@ -34,15 +33,13 @@ public static class BurningEffects
             return;
         }
 
-        componentManager.GetMultiPool<StatusEffectStack>().Add(entityId, new StatusEffectStack(StatusEffectType.Burning, source));
-
         if (timers.Has(entityId))
         {
             timers.TryUpdate(entityId, static (ref BurningTimerComponent t) => t.StackCount++);
         }
         else
         {
-            timers.Add(entityId, new BurningTimerComponent(TickIntervalFrames, stackCount: 1));
+            timers.Add(entityId, new BurningTimerComponent(TickIntervalFrames, stackCount: 1, source));
         }
     }
 }

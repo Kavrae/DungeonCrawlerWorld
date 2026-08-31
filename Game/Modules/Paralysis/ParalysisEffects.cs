@@ -4,7 +4,6 @@ using Engine.Utilities;
 using Game.Modules.Core.Components;
 using Game.Modules.Paralysis.Components;
 using Game.Modules.StatusEffects;
-using Game.Modules.StatusEffects.Components;
 using Game.World;
 
 namespace Game.Modules.Paralysis;
@@ -33,8 +32,7 @@ public static class ParalysisEffects
     /// No-ops entirely if entityId is currently immune to Paralysis (StatusEffectImmunity).
     /// Otherwise not a stacking effect -- reapplying while already active refreshes
     /// FramesUntilNextTick to the greater of what it already was and DurationFrames (never
-    /// additive, same rule PoisonEffects.ApplyStack uses for its own duration), and never adds a
-    /// second StatusEffectStack entry.
+    /// additive, same rule PoisonEffects.ApplyStack uses for its own duration).
     /// </summary>
     public static void Apply(ComponentManager componentManager, int entityId, StatusEffectSource source, EventBus? eventBus = null, IPlayerQuery? playerQuery = null)
     {
@@ -52,7 +50,6 @@ public static class ParalysisEffects
         }
         else
         {
-            componentManager.GetMultiPool<StatusEffectStack>().Add(entityId, new StatusEffectStack(StatusEffectType.Paralysis, source));
             timers.Add(entityId, new ParalysisTimerComponent(DurationFrames));
         }
 

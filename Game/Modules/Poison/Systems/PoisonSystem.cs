@@ -7,7 +7,6 @@ using Game.Modules.Health.Components;
 using Game.Modules.Poison.Components;
 using Game.Modules.StatModifiers.Components;
 using Game.Modules.StatusEffects;
-using Game.Modules.StatusEffects.Components;
 using Game.World;
 
 namespace Game.Modules.Poison.Systems;
@@ -28,7 +27,6 @@ public sealed class PoisonSystem : ISystem
     private static readonly Tag[] PoisonDamageTags = [Tag.Poison];
 
     private readonly PackedComponentPool<PoisonTimerComponent> _timers;
-    private readonly MultiComponentPool<StatusEffectStack> _stacks;
     private readonly PackedComponentPool<SimpleHealthComponent> _health;
     private readonly MultiComponentPool<StatModifierComponent>? _statModifiers;
     private readonly EventBus _eventBus;
@@ -44,7 +42,6 @@ public sealed class PoisonSystem : ISystem
 
     public PoisonSystem(
         PackedComponentPool<PoisonTimerComponent> timers,
-        MultiComponentPool<StatusEffectStack> stacks,
         PackedComponentPool<SimpleHealthComponent> health,
         EventBus eventBus,
         IPlayerQuery? playerQuery,
@@ -53,7 +50,6 @@ public sealed class PoisonSystem : ISystem
         MultiComponentPool<BodyPartComponent>? bodyParts = null)
     {
         _timers = timers;
-        _stacks = stacks;
         _health = health;
         _statModifiers = statModifiers;
         _eventBus = eventBus;
@@ -66,12 +62,11 @@ public sealed class PoisonSystem : ISystem
     public void Update(EngineTime time, byte stripeIndex) =>
         CountdownTicker.Tick(_timers, _timers.EntityIds, _pendingTimerRemovals, _tick);
 
-    /// <summary>Returns whether the timer should be removed entirely (duration expired) -- see CountdownTicker.Tick's own doc comment for the contract. Drains every Poison stack itself before reporting removal, since that's a separate pool CountdownTicker knows nothing about (contrast BurningSystem, which only ever removes a single stack per tick, so it doesn't need this).</summary>
+    /// <summary>Returns whether the timer should be removed entirely (duration expired) -- see CountdownTicker.Tick's own doc comment for the contract. Removing the timer component alone is enough to end the effect (StackCount lives on it, not a separate pool).</summary>
     private bool Tick(int entityId, PoisonTimerComponent timer)
     {
         if (timer.RemainingDurationTicks == 0)
         {
-            RemoveAllStacks(entityId);
             return true;
         }
 
@@ -81,7 +76,6 @@ public sealed class PoisonSystem : ISystem
         var remainingDuration = (ushort)(timer.RemainingDurationTicks - 1);
         if (remainingDuration == 0)
         {
-            RemoveAllStacks(entityId);
             return true;
         }
 
@@ -92,13 +86,5 @@ public sealed class PoisonSystem : ISystem
         });
 
         return false;
-    }
-
-    /// <summary>Poison expires all at once -- every stack this entity has must be drained from the shared pool here, not just one (contrast BurningSystem, which only ever removes a single stack per tick).</summary>
-    private void RemoveAllStacks(int entityId)
-    {
-        while (_stacks.RemoveFirst(entityId, static (ref readonly StatusEffectStack stack) => stack.EffectType == StatusEffectType.Poison))
-        {
-        }
     }
 }

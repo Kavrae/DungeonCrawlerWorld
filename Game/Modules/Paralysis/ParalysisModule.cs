@@ -5,14 +5,13 @@ using Game.Modules.Core.Components;
 using Game.Modules.Paralysis.Components;
 using Game.Modules.Paralysis.Systems;
 using Game.Modules.StatusEffects;
-using Game.Modules.StatusEffects.Components;
 using Game.World;
 
 namespace Game.Modules.Paralysis;
 
 /// <summary>
 /// Paralysis-specific: its own timer component and system, depending on StatusEffectsModule
-/// (shared stack storage). Registers a TimerBasedAuraApplier&lt;ParalysisTimerComponent&gt; into
+/// (shared immunity storage). Registers a TimerBasedAuraApplier&lt;ParalysisTimerComponent&gt; into
 /// the shared StatusEffectAuraApplierRegistry during Configure, so any future aura source (or a
 /// StatusEffectGrant inside any IActionActivator's own ActionEffect) can grant Paralysis
 /// without depending on this module directly. Unlike BurningModule/PoisonModule,
@@ -52,7 +51,6 @@ public sealed class ParalysisModule : IGameModule
         }
 
         systemManager.Register(new ParalysisSystem(
-            componentManager.GetPackedPool<ParalysisTimerComponent>(),
-            componentManager.GetMultiPool<StatusEffectStack>()));
+            componentManager.GetPackedPool<ParalysisTimerComponent>()));
     }
 }

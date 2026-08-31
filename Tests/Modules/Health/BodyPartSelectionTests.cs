@@ -295,7 +295,7 @@ public sealed class BodyPartSelectionTests
         pool.Add(0, new BodyPartComponent("Left Foot", BodyPartType.Foot, partId: 0, verticalPosition: 0, currentHealth: 1, maximumHealth: 10, isVital: false)); // 10%, but burning.
         pool.Add(0, new BodyPartComponent("Right Foot", BodyPartType.Foot, partId: 1, verticalPosition: 0, currentHealth: 5, maximumHealth: 10, isVital: false)); // 50%, not burning.
         var burningTimers = new MultiComponentPool<BodyPartBurningTimerComponent>(maximumEntityCount: 10, initialCapacity: 4);
-        burningTimers.Add(0, new BodyPartBurningTimerComponent(partId: 0, stackCount: 1, framesUntilNextTick: 30));
+        burningTimers.Add(0, new BodyPartBurningTimerComponent(partId: 0, stackCount: 1, framesUntilNextTick: 30, StatusEffectSource.Admin));
 
         var denseIndex = BodyPartSelection.PickLowestPercentage(pool, 0, statModifiers: null, burningTimers);
 

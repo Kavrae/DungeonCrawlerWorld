@@ -14,11 +14,19 @@ public sealed class ParalysisEffectsTests
     private static ComponentManager CreateComponentManager()
     {
         var componentManager = new ComponentManager(initialEntityCapacity: 10, initialComponentCapacity: 10);
-        componentManager.RegisterMultiPool<StatusEffectStack>();
         componentManager.RegisterPackedPool<ParalysisTimerComponent>(static (ref existing, incoming) => { });
         componentManager.RegisterPackedPool<ActionLockComponent>(static (ref existing, incoming) => existing = incoming);
         componentManager.GetPackedPool<ActionLockComponent>().Add(0, new ActionLockComponent(standardLockFrames: ActionLockGate.StandardLockFrames, currentLockTotalFrames: 0, currentLockFramesRemaining: 0));
         return componentManager;
+    }
+
+    /// <summary>Mirrors ParalysisModule.Configure's own registration -- the real path StatusEffectQueries reads through.</summary>
+    private static StatusEffectDisplayRegistry CreateStatusEffectDisplays()
+    {
+        var displays = new StatusEffectDisplayRegistry();
+        displays.Register(new TimerBasedStatusEffectDisplay<ParalysisTimerComponent>(StatusEffectType.Paralysis, ParalysisEffects.Glyph,
+            paralysis => paralysis.FramesUntilNextTick));
+        return displays;
     }
 
     [TestMethod]
@@ -30,7 +38,7 @@ public sealed class ParalysisEffectsTests
 
         ParalysisEffects.Apply(componentManager, 0, StatusEffectSource.Admin);
 
-        Assert.AreEqual(0, StatusEffectQueries.CountStacks(componentManager.GetMultiPool<StatusEffectStack>(), 0, StatusEffectType.Paralysis));
+        Assert.AreEqual(0, StatusEffectQueries.CountStacks(CreateStatusEffectDisplays(), componentManager, 0, StatusEffectType.Paralysis));
         Assert.IsFalse(componentManager.GetPackedPool<ParalysisTimerComponent>().Has(0));
         Assert.AreEqual(0, componentManager.GetPackedPool<ActionLockComponent>().GetReadonly(0).CurrentLockFramesRemaining);
     }
@@ -44,7 +52,7 @@ public sealed class ParalysisEffectsTests
 
         ParalysisEffects.Apply(componentManager, 0, StatusEffectSource.Admin);
 
-        Assert.AreEqual(1, StatusEffectQueries.CountStacks(componentManager.GetMultiPool<StatusEffectStack>(), 0, StatusEffectType.Paralysis));
+        Assert.AreEqual(1, StatusEffectQueries.CountStacks(CreateStatusEffectDisplays(), componentManager, 0, StatusEffectType.Paralysis));
     }
 
     [TestMethod]
@@ -54,7 +62,7 @@ public sealed class ParalysisEffectsTests
 
         ParalysisEffects.Apply(componentManager, 0, StatusEffectSource.Admin);
 
-        Assert.AreEqual(1, StatusEffectQueries.CountStacks(componentManager.GetMultiPool<StatusEffectStack>(), 0, StatusEffectType.Paralysis));
+        Assert.AreEqual(1, StatusEffectQueries.CountStacks(CreateStatusEffectDisplays(), componentManager, 0, StatusEffectType.Paralysis));
     }
 
     [TestMethod]
@@ -87,7 +95,7 @@ public sealed class ParalysisEffectsTests
 
         ParalysisEffects.Apply(componentManager, 0, StatusEffectSource.Admin);
 
-        Assert.AreEqual(1, StatusEffectQueries.CountStacks(componentManager.GetMultiPool<StatusEffectStack>(), 0, StatusEffectType.Paralysis));
+        Assert.AreEqual(1, StatusEffectQueries.CountStacks(CreateStatusEffectDisplays(), componentManager, 0, StatusEffectType.Paralysis));
     }
 
     /// <summary>Refreshes to the greater of what remained and DurationFrames -- never additive, mirroring PoisonEffects.ApplyStack's own duration rule.</summary>

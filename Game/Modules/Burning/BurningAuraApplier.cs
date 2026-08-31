@@ -7,7 +7,6 @@ using Game.Modules.ContactDamage.Components;
 using Game.Modules.Health;
 using Game.Modules.Health.Components;
 using Game.Modules.StatusEffects;
-using Game.Modules.StatusEffects.Components;
 using Game.World;
 
 namespace Game.Modules.Burning;
@@ -37,7 +36,6 @@ public sealed class BurningAuraApplier(MathUtility mathUtility, EventBus? eventB
     private PackedComponentPool<BurningTimerComponent>? _entityTimers;
     private MultiComponentPool<BodyPartComponent>? _bodyParts;
     private MultiComponentPool<BodyPartBurningTimerComponent>? _bodyPartTimers;
-    private MultiComponentPool<BodyPartStatusEffectStack>? _bodyPartStacks;
     private PackedComponentPool<ContactDamageExposureComponent>? _contactExposures;
     private PackedComponentPool<DamageOnContactComponent>? _hazards;
     private bool _poolsResolved;
@@ -88,7 +86,6 @@ public sealed class BurningAuraApplier(MathUtility mathUtility, EventBus? eventB
         _entityTimers = componentManager.GetPackedPool<BurningTimerComponent>();
         _bodyParts = componentManager.IsRegistered<BodyPartComponent>() ? componentManager.GetMultiPool<BodyPartComponent>() : null;
         _bodyPartTimers = componentManager.GetMultiPool<BodyPartBurningTimerComponent>();
-        _bodyPartStacks = componentManager.GetMultiPool<BodyPartStatusEffectStack>();
         _contactExposures = componentManager.IsRegistered<ContactDamageExposureComponent>() ? componentManager.GetPackedPool<ContactDamageExposureComponent>() : null;
         _hazards = componentManager.IsRegistered<DamageOnContactComponent>() ? componentManager.GetPackedPool<DamageOnContactComponent>() : null;
         _poolsResolved = true;
@@ -149,15 +146,13 @@ public sealed class BurningAuraApplier(MathUtility mathUtility, EventBus? eventB
             return;
         }
 
-        _bodyPartStacks!.Add(entityId, new BodyPartStatusEffectStack(partId, StatusEffectType.Burning, source));
-
         if (existingTimerDenseIndex != -1)
         {
             _bodyPartTimers!.UpdateByDenseIndex(existingTimerDenseIndex, static (ref BodyPartBurningTimerComponent t) => t.StackCount++);
         }
         else
         {
-            _bodyPartTimers!.Add(entityId, new BodyPartBurningTimerComponent(partId, stackCount: 1, BurningEffects.TickIntervalFrames));
+            _bodyPartTimers!.Add(entityId, new BodyPartBurningTimerComponent(partId, stackCount: 1, BurningEffects.TickIntervalFrames, source));
         }
     }
 

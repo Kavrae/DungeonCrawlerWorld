@@ -135,27 +135,73 @@ public static class StringUtility
     /// the pattern varies with lineLength (window size/font dependent), which defeated
     /// .NET's regex cache far more than a plain UI-text-formatting call should.
     /// </summary>
+    /// <remarks>
+    /// A naive fixed-lineLength boundary can land between a UTF-16 surrogate pair (e.g. an
+    /// astral-plane emoji like BurningEffects.Glyph) -- most likely at lineLength 1, which
+    /// SimpleWordWrap's own Math.Max(1, ...) floor produces once MaximumPixelWidth collapses to
+    /// (near-)zero or negative (a real transient state during a window resize, not just
+    /// theoretical -- see TextWindowTests). The resulting line would be a single lone
+    /// surrogate, which FontStashSharp's MeasureString throws on (invalid UTF-16) rather than
+    /// just rendering oddly -- confirmed reproduction: TextWindow.WidestLineWidth crashing with
+    /// "Found a high surrogate char without a following low surrogate" once a status-effect row
+    /// starting with an emoji glyph got resized down to lineLength 1. Chunk boundaries are
+    /// precomputed (below) rather than fixed at a uniform lineLength stride, since nudging one
+    /// boundary forward by one character to keep a pair together shortens how many characters
+    /// remain for the naive text.Length/lineLength chunk count to consume -- a fixed iteration
+    /// count sized for uniform strides would run off the end of the source string once any
+    /// chunk grows.
+    /// </remarks>
     private static string InsertLineBreakEveryNCharacters(string text, int lineLength)
     {
-        var fullChunkCount = text.Length / lineLength;
-        if (fullChunkCount == 0)
+        var maximumChunkCount = text.Length / lineLength;
+        if (maximumChunkCount == 0)
         {
             return text;
         }
 
-        var outputLength = text.Length + fullChunkCount * LineBreak.Length;
-
-        return string.Create(outputLength, (text, lineLength, fullChunkCount), static (destination, state) =>
+        var chunkEndIndices = new List<int>(maximumChunkCount);
+        var index = 0;
+        for (var i = 0; i < maximumChunkCount; i++)
         {
-            var (sourceText, chunkLength, chunkCount) = state;
+            var chunkEnd = index + lineLength;
+            if (chunkEnd > text.Length)
+            {
+                // A chunk that would run past the end of the string is the "trailing partial
+                // chunk" this method's own summary already leaves unbroken -- no newline after
+                // it, same as the original fixed-stride version's own tail copy. A chunk that
+                // lands exactly on the end (chunkEnd == text.Length) is still a full lineLength
+                // chunk, not a partial one, so it keeps its own newline below.
+                break;
+            }
+
+            if (chunkEnd < text.Length && char.IsHighSurrogate(text[chunkEnd - 1]) && char.IsLowSurrogate(text[chunkEnd]))
+            {
+                chunkEnd++;
+            }
+
+            chunkEndIndices.Add(chunkEnd);
+            index = chunkEnd;
+        }
+
+        if (chunkEndIndices.Count == 0)
+        {
+            return text;
+        }
+
+        var outputLength = text.Length + chunkEndIndices.Count * LineBreak.Length;
+
+        return string.Create(outputLength, (text, chunkEndIndices), static (destination, state) =>
+        {
+            var (sourceText, boundaries) = state;
             var sourceIndex = 0;
             var destinationIndex = 0;
 
-            for (var chunkIndex = 0; chunkIndex < chunkCount; chunkIndex++)
+            foreach (var chunkEnd in boundaries)
             {
+                var chunkLength = chunkEnd - sourceIndex;
                 sourceText.AsSpan(sourceIndex, chunkLength).CopyTo(destination[destinationIndex..]);
                 destinationIndex += chunkLength;
-                sourceIndex += chunkLength;
+                sourceIndex = chunkEnd;
 
                 LineBreak.AsSpan().CopyTo(destination[destinationIndex..]);
                 destinationIndex += LineBreak.Length;

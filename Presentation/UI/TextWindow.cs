@@ -168,9 +168,15 @@ public class TextWindow(FontService fontService, ElementPoolService elementPoolS
     /// </summary>
     public virtual void ReformatDisplayText()
     {
+        // Clamped to 0, not left possibly negative -- a collapsed or negative-width window (a
+        // real transient state during resize, not just theoretical) would otherwise feed a
+        // negative MaximumPixelWidth into word-wrap, same class of degenerate input
+        // RecalculateWrapContentSize's own maximumContentWidth/maximumContentHeight already
+        // guard against.
+        var maximumPixelWidth = System.Math.Max(0f, _contentState.Size.X - ContentPadding.X * 2);
         DisplayText = StringUtility.FormatText(new FormatTextCriteria(
             new FontStashTextMeasurer(ContentFont),
-            _contentState.Size.X - ContentPadding.X * 2,
+            maximumPixelWidth,
             OriginalText,
             FormatTextMode.Wordwrap));
     }

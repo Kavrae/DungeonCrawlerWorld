@@ -5,7 +5,6 @@ using Game.Modules.Actions.Activators;
 using Game.Modules.Inventory;
 using Game.Modules.Inventory.Definitions;
 using Game.Modules.StatusEffects;
-using Game.Modules.StatusEffects.Components;
 using Game.World;
 using Microsoft.Xna.Framework;
 using Microsoft.Xna.Framework.Graphics;
@@ -18,10 +17,10 @@ namespace Presentation.UI.Content;
 /// Permanent top-right HUD readout underneath the player health bar: one icon per distinct
 /// status effect type the player currently has any stacks of, drawn left to right -- each its
 /// own square white tile with a 1px black border. Poison/Burning additionally show their current
-/// StatusEffectStack count below the icon once it's above 1 -- Paralysis is excluded since its
-/// own StackCount is always exactly 1 (see ParalysisTimerComponent), so a count there would just
-/// be noise. PotionCooldownComponent isn't a StatusEffectStack entry (it's not a stacking status
-/// effect -- see PotionCooldownEffects' own doc comment), so it gets its own trailing icon, keyed
+/// stack count (StatusEffectQueries.CountStacks) below the icon once it's above 1 -- Paralysis is
+/// excluded since its own StackCount is always exactly 1 (see ParalysisTimerComponent), so a
+/// count there would just be noise. PotionCooldownComponent isn't a stacking status effect at all
+/// (see PotionCooldownEffects' own doc comment), so it gets its own trailing icon, keyed
 /// to the Health Potion's glyph/color (the cooldown is shared across every PotionActivator --
 /// revisit this fixed glyph/color choice if that ever reads as misleading for a non-Health
 /// potion) with the remaining seconds in green below the icon
@@ -40,7 +39,6 @@ public sealed class PlayerStatusEffectsContent(World world, ComponentManager com
     private const float CountdownFontFraction = 0.6f;
     private const float CountdownTextGap = 1f;
 
-    private readonly MultiComponentPool<StatusEffectStack> _statusEffectStacks = componentManager.GetMultiPool<StatusEffectStack>();
     private readonly PackedComponentPool<PotionCooldownComponent> _potionCooldowns = componentManager.GetPackedPool<PotionCooldownComponent>();
     private readonly LabelRenderer _labelRenderer = new();
     private readonly List<StatusEffectType> _activeEffectTypes = [];
@@ -74,14 +72,14 @@ public sealed class PlayerStatusEffectsContent(World world, ComponentManager com
             return;
         }
 
-        StatusEffectQueries.GetActiveEffectTypes(_statusEffectStacks, playerEntityId, _activeEffectTypes);
+        StatusEffectQueries.GetActiveEffectTypes(statusEffectDisplays, componentManager, playerEntityId, _activeEffectTypes);
 
         _stackCountsByType.Clear();
         foreach (var effectType in _activeEffectTypes)
         {
             if (effectType is StatusEffectType.Poison or StatusEffectType.Burning)
             {
-                _stackCountsByType[effectType] = StatusEffectQueries.CountStacks(_statusEffectStacks, playerEntityId, effectType);
+                _stackCountsByType[effectType] = StatusEffectQueries.CountStacks(statusEffectDisplays, componentManager, playerEntityId, effectType);
             }
         }
 

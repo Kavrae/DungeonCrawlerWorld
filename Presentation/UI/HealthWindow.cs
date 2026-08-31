@@ -3,9 +3,12 @@ using Engine.ECS.Components.Stores;
 using Engine.Utilities;
 using FontStashSharp;
 using Game.Modules;
+using Game.Modules.Actions.Activators;
 using Game.Modules.AbilityScores;
 using Game.Modules.Burning;
 using Game.Modules.Health.Components;
+using Game.Modules.Inventory;
+using Game.Modules.Inventory.Definitions;
 using Game.Modules.StatModifiers;
 using Game.Modules.StatModifiers.Components;
 using Game.Modules.StatusEffects;
@@ -26,8 +29,12 @@ namespace Presentation.UI;
 /// part's own TextDivider header); right column is Buffs then Debuffs. Color and section-divider
 /// style borrowed from ItemDetailsWindow (dark PanelBackgroundColor background, white body text,
 /// TitleColor-labeled TextDivider headers), the same template every future detail window in this
-/// codebase should reach for. The Status Effects section shows only entity-scoped effects
-/// (StatusEffectStack -- Poison, Paralysis, entity-scoped Burning); a body-part-scoped Burning (see
+/// codebase should reach for. The Status Effects section shows entity-scoped effects
+/// (StatusEffectQueries/StatusEffectDisplayRegistry -- Poison, Paralysis, entity-scoped Burning)
+/// plus, appended after them, an active potion cooldown (PotionCooldownComponent isn't a
+/// StatusEffectType/stacking status effect at all -- see PlayerStatusEffectsContent's own doc
+/// comment -- so it gets its own line, keyed to the Health Potion's glyph/color, rather than a
+/// StatusEffectRow); a body-part-scoped Burning (see
 /// PLAN-per-body-part-status-effects.md) instead shows its own line under that one part's own bar,
 /// not repeated under every part. Buffs/Debuffs list every active StatModifierComponent on the
 /// entity except one targeting an ability score -- those are AbilityScoreWindow's own territory
@@ -41,7 +48,8 @@ public sealed class HealthWindow(
     ElementPoolService elementPoolService,
     LabelRenderer labelRenderer,
     ComponentManager componentManager,
-    StatusEffectDisplayRegistry statusEffectDisplays)
+    StatusEffectDisplayRegistry statusEffectDisplays,
+    ItemCatalog itemCatalog)
     : Window(fontService, elementPoolService, labelRenderer)
 {
     public static readonly Color BackgroundColor = WindowPalette.PanelBackgroundColor;
@@ -57,6 +65,12 @@ public sealed class HealthWindow(
 
     /// <summary>Small breathing room between one body part's bar and the next part's own TextDivider header -- not added before the first part or after the last, only between consecutive ones.</summary>
     private const float BodyPartSpacing = 6f;
+
+    /// <summary>Gap between a body part's own TextDivider header and its bar below -- fixes the two visually overlapping at RowHeight/BarHeight's default tiling.</summary>
+    private const float BodyPartBarTopSpacing = 2f;
+
+    /// <summary>Gap above every TextDivider (section header or body part header alike) -- extra breathing room from whatever content precedes it, on top of BodyPartSpacing's own between-parts gap.</summary>
+    private const float DividerTopSpacing = 4f;
 
     /// <summary>Section-divider width fraction and label text position -- the exact values ItemDetailsWindow.BuildDivider's own labeled call sites (Effects/Activation) use, reused here so both windows' headers read as the same visual language.</summary>
     private const float DividerWidthFraction = 0.95f;
@@ -83,8 +97,6 @@ public sealed class HealthWindow(
         ? componentManager.GetMultiPool<StatModifierComponent>()
         : null;
 
-    private readonly MultiComponentPool<StatusEffectStack> _statusEffectStacks = componentManager.GetMultiPool<StatusEffectStack>();
-
     // Optional -- BurningModule might not be loaded at all (e.g. a minimal test), in which case
     // no body part can ever carry a body-part-scoped burn and every per-part status line below
     // collapses to nothing, same as the entity-scoped section already does with no active effects.
@@ -99,6 +111,11 @@ public sealed class HealthWindow(
         ? componentManager.GetMultiPool<StatusEffectImmunityComponent>()
         : null;
 
+    // Optional -- same reasoning as every other optional pool in this class.
+    private readonly PackedComponentPool<PotionCooldownComponent>? _potionCooldowns = componentManager.IsRegistered<PotionCooldownComponent>()
+        ? componentManager.GetPackedPool<PotionCooldownComponent>()
+        : null;
+
     private readonly List<BodyPartRow> _bodyPartRows = [];
     private readonly List<StatusEffectRow> _statusEffectRows = [];
     private readonly List<ModifierRow> _buffRows = [];
@@ -111,6 +128,7 @@ public sealed class HealthWindow(
     private readonly List<TextWindow> _debuffRowWindows = [];
     private readonly List<TextWindow> _immunityRowWindows = [];
     private readonly List<TextWindow?> _bodyPartStatusEffectRowWindows = [];
+    private TextWindow? _potionCooldownRowWindow;
 
     // Last-seen structural signature for each section, compared (not version-watched -- see
     // Update's own comment for why) every frame to decide whether a real rebuild is warranted.
@@ -121,6 +139,7 @@ public sealed class HealthWindow(
     private readonly List<ModifierSignature> _previousModifierSignature = [];
     private readonly List<StatusEffectType> _activeImmunityTypesScratch = [];
     private readonly List<StatusEffectType> _previousActiveImmunityTypes = [];
+    private bool _previousHasPotionCooldown;
 
     private Window _leftColumn = null!;
     private Window _rightColumn = null!;
@@ -145,10 +164,11 @@ public sealed class HealthWindow(
 
         BuildColumns();
         RebuildContent();
-        StatusEffectQueries.GetActiveEffectTypes(_statusEffectStacks, _entityId, _previousActiveEffectTypes);
+        StatusEffectQueries.GetActiveEffectTypes(statusEffectDisplays, componentManager, _entityId, _previousActiveEffectTypes);
         BuildBurningPartIds(_previousActiveBurningPartIds, _bodyParts, _bodyPartBurningTimers, _entityId);
         BuildModifierSignature(_previousModifierSignature, _entityId, _statModifiers);
         BuildActiveImmunityTypes(_previousActiveImmunityTypes, _entityId, _statusEffectImmunities);
+        _previousHasPotionCooldown = TryGetPotionCooldownLine(_potionCooldowns, itemCatalog, _entityId, out _, out _);
     }
 
     /// <summary>
@@ -232,16 +252,18 @@ public sealed class HealthWindow(
     {
         base.Update(gameTime);
 
-        StatusEffectQueries.GetActiveEffectTypes(_statusEffectStacks, _entityId, _activeEffectTypesScratch);
+        StatusEffectQueries.GetActiveEffectTypes(statusEffectDisplays, componentManager, _entityId, _activeEffectTypesScratch);
         BuildBurningPartIds(_activeBurningPartIdsScratch, _bodyParts, _bodyPartBurningTimers, _entityId);
         BuildModifierSignature(_activeModifierSignatureScratch, _entityId, _statModifiers);
         BuildActiveImmunityTypes(_activeImmunityTypesScratch, _entityId, _statusEffectImmunities);
+        var hasPotionCooldownNow = TryGetPotionCooldownLine(_potionCooldowns, itemCatalog, _entityId, out _, out _);
 
         var statusEffectsChanged = !SequenceEqual(_activeEffectTypesScratch, _previousActiveEffectTypes);
         var bodyPartStatusEffectsChanged = !SequenceEqual(_activeBurningPartIdsScratch, _previousActiveBurningPartIds);
         var modifiersChanged = !SequenceEqual(_activeModifierSignatureScratch, _previousModifierSignature);
         var immunitiesChanged = !SequenceEqual(_activeImmunityTypesScratch, _previousActiveImmunityTypes);
-        if (statusEffectsChanged || bodyPartStatusEffectsChanged || modifiersChanged || immunitiesChanged)
+        var potionCooldownChanged = hasPotionCooldownNow != _previousHasPotionCooldown;
+        if (statusEffectsChanged || bodyPartStatusEffectsChanged || modifiersChanged || immunitiesChanged || potionCooldownChanged)
         {
             _previousActiveEffectTypes.Clear();
             _previousActiveEffectTypes.AddRange(_activeEffectTypesScratch);
@@ -251,6 +273,7 @@ public sealed class HealthWindow(
             _previousModifierSignature.AddRange(_activeModifierSignatureScratch);
             _previousActiveImmunityTypes.Clear();
             _previousActiveImmunityTypes.AddRange(_activeImmunityTypesScratch);
+            _previousHasPotionCooldown = hasPotionCooldownNow;
 
             RebuildContent();
             _framesSinceLastTextRefresh = 0;
@@ -278,6 +301,7 @@ public sealed class HealthWindow(
         _immunityRowWindows.Clear();
         _bodyPartBars.Clear();
         _bodyPartStatusEffectRowWindows.Clear();
+        _potionCooldownRowWindow = null;
 
         BuildStatusEffectSection(_leftColumn);
         BuildBodyPartSection(_leftColumn);
@@ -373,8 +397,9 @@ public sealed class HealthWindow(
 
     private void BuildStatusEffectSection(Window parent)
     {
-        BuildStatusEffectRows(_statusEffectRows, _activeEffectTypesScratch, _entityId, _statusEffectStacks, statusEffectDisplays, componentManager);
-        if (_statusEffectRows.Count == 0)
+        BuildStatusEffectRows(_statusEffectRows, _activeEffectTypesScratch, _entityId, statusEffectDisplays, componentManager);
+        var hasPotionCooldown = TryGetPotionCooldownLine(_potionCooldowns, itemCatalog, _entityId, out var potionCooldownText, out var potionCooldownColor);
+        if (_statusEffectRows.Count == 0 && !hasPotionCooldown)
         {
             return;
         }
@@ -385,6 +410,8 @@ public sealed class HealthWindow(
         {
             _statusEffectRowWindows.Add(AddTextRow(parent, FormatStatusEffectRow(row), GetColor(row.Type)));
         }
+
+        _potionCooldownRowWindow = hasPotionCooldown ? AddTextRow(parent, potionCooldownText, potionCooldownColor) : null;
     }
 
     private void BuildBodyPartSection(Window parent)
@@ -401,6 +428,7 @@ public sealed class HealthWindow(
 
             var row = _bodyPartRows[index];
             BuildDivider(parent, width, row.Name);
+            AddSpacer(parent, width, BodyPartBarTopSpacing);
             _bodyPartBars.Add(AddBarRow(parent, width, ComputeFraction(row)));
 
             _bodyPartStatusEffectRowWindows.Add(TryGetBodyPartBurningLine(_bodyPartBurningTimers, _entityId, row.PartId, out var text, out var color)
@@ -426,11 +454,16 @@ public sealed class HealthWindow(
             }
         }
 
-        BuildStatusEffectRows(_statusEffectRows, _activeEffectTypesScratch, _entityId, _statusEffectStacks, statusEffectDisplays, componentManager);
+        BuildStatusEffectRows(_statusEffectRows, _activeEffectTypesScratch, _entityId, statusEffectDisplays, componentManager);
         var statusEffectCount = System.Math.Min(_statusEffectRows.Count, _statusEffectRowWindows.Count);
         for (var index = 0; index < statusEffectCount; index++)
         {
             _statusEffectRowWindows[index].UpdateText(FormatStatusEffectRow(_statusEffectRows[index]));
+        }
+
+        if (_potionCooldownRowWindow is { } potionCooldownRow && TryGetPotionCooldownLine(_potionCooldowns, itemCatalog, _entityId, out var potionCooldownText, out _))
+        {
+            potionCooldownRow.UpdateText(potionCooldownText);
         }
 
         BuildModifierRows(_buffRows, _entityId, _statModifiers, StatModifierPolarity.Buff);
@@ -457,9 +490,11 @@ public sealed class HealthWindow(
 
     private static float ComputeFraction(BodyPartRow row) => row.MaximumHealth > 0 ? MathHelper.Clamp(row.CurrentHealth / row.MaximumHealth, 0f, 1f) : 0f;
 
-    /// <summary>Section-opening divider -- a single labeled TextDivider row, the same 95%-width/12.5%-label-position shape ItemDetailsWindow.BuildDivider's own Effects/Activation headers use, so this window reads as the same visual language. Added to parent (one of the two columns), not this window directly -- see BuildColumns' own doc comment.</summary>
+    /// <summary>Section-opening divider -- a single labeled TextDivider row, the same 95%-width/12.5%-label-position shape ItemDetailsWindow.BuildDivider's own Effects/Activation headers use, so this window reads as the same visual language. Added to parent (one of the two columns), not this window directly -- see BuildColumns' own doc comment. Leads with DividerTopSpacing's own blank gap, so a divider never sits flush against whatever content (or column top) precedes it.</summary>
     private void BuildDivider(Window parent, float width, string label)
     {
+        AddSpacer(parent, width, DividerTopSpacing);
+
         var divider = elementPoolService.CreateElement<TextDivider>(parent, new ElementOptions
         {
             Hierarchy = new ElementHierarchyOptions { CanContainChildren = false },
@@ -525,13 +560,31 @@ public sealed class HealthWindow(
         parent.AddChild(spacer);
     }
 
-    private string FormatStatusEffectRow(StatusEffectRow row) =>
-        row.RemainingSeconds is { } seconds
-            ? $"{GetGlyph(row.Type)} {row.Type}: {seconds}s"
-            : $"{GetGlyph(row.Type)} {row.Type}";
+    /// <summary>
+    /// Stack count is shown once it's above 1 -- a lone stack doesn't need a number, the same
+    /// convention PlayerStatusEffectsContent.DrawStackCount already uses for its own HUD icons.
+    /// Burning never shows its remaining duration: FramesUntilNextTick + (StackCount-1)*TickIntervalFrames
+    /// means the stack count already *is* the duration signal (one tick, one stack, every ~1s), so a
+    /// separate timer would just repeat "x5" as "5s". Poison/Paralysis keep their own independent
+    /// duration (Poison's RemainingDurationTicks decays on a different clock than StackCount).
+    /// </summary>
+    private string FormatStatusEffectRow(StatusEffectRow row) => FormatStatusEffectRow(row, statusEffectDisplays);
+
+    internal static string FormatStatusEffectRow(StatusEffectRow row, StatusEffectDisplayRegistry statusEffectDisplays)
+    {
+        var name = $"{GetGlyph(row.Type, statusEffectDisplays)} {row.Type}";
+        var seconds = row.Type == StatusEffectType.Burning ? null : row.RemainingSeconds;
+
+        if (row.StackCount <= 1)
+        {
+            return seconds is { } secondsOnly ? $"{name}: {secondsOnly}s" : name;
+        }
+
+        return seconds is { } secondsWithStack ? $"{name} (x{row.StackCount}): {secondsWithStack}s" : $"{name} x{row.StackCount}";
+    }
 
     /// <summary>Looks up each effect module's own registered glyph (see IStatusEffectDisplay). Same fallback philosophy as PlayerStatusEffectsContent.GetGlyph -- "?" is an intentionally-visible stand-in for any active effect type with no registered display, rather than throwing mid-build.</summary>
-    private string GetGlyph(StatusEffectType effectType) => statusEffectDisplays.TryGet(effectType, out var display) ? display.Glyph : "?";
+    private static string GetGlyph(StatusEffectType effectType, StatusEffectDisplayRegistry statusEffectDisplays) => statusEffectDisplays.TryGet(effectType, out var display) ? display.Glyph : "?";
 
     /// <summary>Same reasoning/fallback as GetGlyph above -- kept as its own switch rather than folded into GetGlyph so each is a single, simple type -> value mapping. Poison brightened from PlayerStatusEffectsContent's own DarkGreen -- fine against that content's white icon tile, unreadable against this window's own dark PanelBackgroundColor.</summary>
     private static Color GetColor(StatusEffectType effectType) => effectType switch
@@ -675,7 +728,7 @@ public sealed class HealthWindow(
 
     internal readonly record struct BodyPartRow(string Name, float CurrentHealth, float MaximumHealth, byte PartId);
 
-    internal readonly record struct StatusEffectRow(StatusEffectType Type, int? RemainingSeconds);
+    internal readonly record struct StatusEffectRow(StatusEffectType Type, int? RemainingSeconds, int StackCount);
 
     internal readonly record struct ModifierRow(StatModifierTarget Target, StatModifierOperation Operation, StatModifierPolarity Polarity, float Magnitude, Tag? ConditionTag, int? RemainingSeconds);
 
@@ -754,25 +807,50 @@ public sealed class HealthWindow(
         return false;
     }
 
-    /// <summary>Pure data assembly, no rendering -- see BuildBodyPartRows' own doc comment for why. One row per StatusEffectQueries.GetActiveEffectTypes entry, each with its own remaining duration in real seconds (null if the active type has no registered IStatusEffectDisplay -- a future effect type with no display registered yet).</summary>
+    /// <summary>
+    /// True (with a formatted line) if entityId currently has an active potion cooldown.
+    /// PotionCooldownComponent isn't a StatusEffectType/stacking status effect at all -- see
+    /// PlayerStatusEffectsContent's own doc comment for why it gets its own icon there rather
+    /// than folding into StatusEffectQueries -- so this reads it directly and keys its glyph/
+    /// color to the Health Potion's own ItemDefinition, same fixed choice
+    /// PlayerStatusEffectsContent.DrawPotionCooldownIcon already makes (the cooldown is shared
+    /// across every PotionActivator, not per-potion).
+    /// </summary>
+    internal static bool TryGetPotionCooldownLine(PackedComponentPool<PotionCooldownComponent>? potionCooldowns, ItemCatalog itemCatalog, int entityId, out string text, out Color color)
+    {
+        text = string.Empty;
+        color = BodyTextColor;
+
+        if (potionCooldowns is null || !potionCooldowns.TryGetReadonly(entityId, out var cooldown) || cooldown.FramesRemaining == 0)
+        {
+            return false;
+        }
+
+        var hasHealthPotion = itemCatalog.TryGet(HealthPotion.Id, out var healthPotion);
+        var glyph = hasHealthPotion ? healthPotion.Glyph : "?";
+        color = hasHealthPotion ? healthPotion.GlyphColor : BodyTextColor;
+        text = $"{glyph} Potion Cooldown: {PotionCooldownEffects.RemainingSeconds(cooldown.FramesRemaining)}s";
+        return true;
+    }
+
+    /// <summary>Pure data assembly, no rendering -- see BuildBodyPartRows' own doc comment for why. One row per StatusEffectQueries.GetActiveEffectTypes entry, each with its own remaining duration in real seconds (null if the active type has no registered IStatusEffectDisplay -- a future effect type with no display registered yet) and current stack count (0 likewise).</summary>
     internal static void BuildStatusEffectRows(
         List<StatusEffectRow> destination,
         List<StatusEffectType> activeTypesScratch,
         int entityId,
-        MultiComponentPool<StatusEffectStack> statusEffectStacks,
         StatusEffectDisplayRegistry statusEffectDisplays,
         ComponentManager componentManager)
     {
-        StatusEffectQueries.GetActiveEffectTypes(statusEffectStacks, entityId, activeTypesScratch);
+        StatusEffectQueries.GetActiveEffectTypes(statusEffectDisplays, componentManager, entityId, activeTypesScratch);
 
         destination.Clear();
         foreach (var effectType in activeTypesScratch)
         {
-            var remainingFrames = statusEffectDisplays.TryGet(effectType, out var display)
-                ? display.GetRemainingDurationFrames(componentManager, entityId)
-                : null;
+            var display = statusEffectDisplays.TryGet(effectType, out var foundDisplay) ? foundDisplay : null;
+            var remainingFrames = display?.GetRemainingDurationFrames(componentManager, entityId);
             var remainingSeconds = remainingFrames is { } frames ? (int)System.Math.Ceiling(frames / (float)GameTiming.FramesPerSecond) : (int?)null;
-            destination.Add(new StatusEffectRow(effectType, remainingSeconds));
+            var stackCount = display?.GetStackCount(componentManager, entityId) ?? 0;
+            destination.Add(new StatusEffectRow(effectType, remainingSeconds, stackCount));
         }
     }
 

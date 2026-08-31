@@ -10,7 +10,6 @@ using Game.Modules.ProcessingTier.Components;
 using Game.Modules.StatModifiers;
 using Game.Modules.StatModifiers.Components;
 using Game.Modules.StatusEffects;
-using Game.Modules.StatusEffects.Components;
 using Game.World;
 
 namespace Game.Modules.Burning.Systems;
@@ -18,9 +17,11 @@ namespace Game.Modules.Burning.Systems;
 /// <summary>
 /// Body-part-scoped counterpart to BurningSystem: ticks down each currently-burning body part's
 /// own countdown and, once it reaches 0, deals damage equal to the current stack count to the
-/// exact part its timer names (BodyPartSelection.FindByPartId, not a fresh targeting resolution)
-/// and removes exactly one stack -- same "not per-stack damage" rule BurningSystem's own Tick
-/// uses. Ticks a MultiComponentPool (several concurrently-burning parts per entity possible), so
+/// exact part its timer names (BodyPartSelection.FindByPartId, not a fresh targeting resolution),
+/// attributed to timer.Source (set once on the 0-to-1 transition -- see
+/// BurningAuraApplier.ApplyBodyPartScopedStack), and removes exactly one stack -- same "not
+/// per-stack damage" rule BurningSystem's own Tick uses. Ticks a MultiComponentPool (several
+/// concurrently-burning parts per entity possible), so
 /// the shared loop here is Engine.ECS.Systems.MultiCountdownTicker.Tick rather than
 /// CountdownTicker.Tick (BurningSystem's own PackedComponentPool-only version) -- mirrors
 /// StatusEffectAuraSystem's own TickExposures for the same "several due entries per entity in one
@@ -36,7 +37,6 @@ public sealed class BodyPartBurningSystem : ISystem
     public byte StripeCount => StripeCountValue;
 
     private readonly MultiComponentPool<BodyPartBurningTimerComponent> _timers;
-    private readonly MultiComponentPool<BodyPartStatusEffectStack> _stacks;
     private readonly MultiComponentPool<BodyPartComponent> _bodyParts;
     private readonly PackedComponentPool<SimpleHealthComponent> _health;
     private readonly MultiComponentPool<StatModifierComponent>? _statModifiers;
@@ -53,7 +53,6 @@ public sealed class BodyPartBurningSystem : ISystem
 
     public BodyPartBurningSystem(
         MultiComponentPool<BodyPartBurningTimerComponent> timers,
-        MultiComponentPool<BodyPartStatusEffectStack> stacks,
         MultiComponentPool<BodyPartComponent> bodyParts,
         PackedComponentPool<SimpleHealthComponent> health,
         EventBus eventBus,
@@ -64,7 +63,6 @@ public sealed class BodyPartBurningSystem : ISystem
         PackedComponentPool<DeadComponent>? deadEntities = null)
     {
         _timers = timers;
-        _stacks = stacks;
         _bodyParts = bodyParts;
         _health = health;
         _statModifiers = statModifiers;
@@ -98,19 +96,7 @@ public sealed class BodyPartBurningSystem : ISystem
             return true;
         }
 
-        var source = default(StatusEffectSource);
-        var foundStackDenseIndex = -1;
-
-        for (var denseIndex = _stacks.GetFirstDenseIndex(entityId); denseIndex != -1; denseIndex = _stacks.GetNextDenseIndex(denseIndex))
-        {
-            var stack = _stacks.GetReadonlyByDenseIndex(denseIndex);
-            if (stack.EffectType == StatusEffectType.Burning && stack.PartId == timer.PartId)
-            {
-                foundStackDenseIndex = denseIndex;
-                source = stack.Source;
-                break;
-            }
-        }
+        var source = timer.Source;
 
         var bodyPartDenseIndex = BodyPartSelection.FindByPartId(_bodyParts, entityId, timer.PartId);
         if (bodyPartDenseIndex != -1)
@@ -128,11 +114,6 @@ public sealed class BodyPartBurningSystem : ISystem
             // currently burning" exclusion stops applying the instant the last stack ticks off.
             BodyPartDamageEffects.ResetRegenLockout(_bodyParts, bodyPartDenseIndex);
             BodyPartDamageEffects.PublishDamageEvents(_health, _bodyParts, _eventBus, bodyPartDenseIndex, entityId, effectiveAmount, source, _playerQuery, StatusEffectDamageType.Describe(StatusEffectType.Burning), _statModifiers, _deadEntities);
-        }
-
-        if (foundStackDenseIndex != -1)
-        {
-            _stacks.RemoveByDenseIndex(foundStackDenseIndex);
         }
 
         var remainingStacks = (byte)(stackCount - 1);

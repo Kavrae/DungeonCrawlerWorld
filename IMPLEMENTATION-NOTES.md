@@ -176,6 +176,33 @@ behavior-composition follow-up (see TODO.md).
 (precomputed eagerly, unlike other stats). Player rolls 2-10 (cluster 3-7); every other race flat 5
 (placeholder). Consumer wiring still open (see TODO.md).
 
+### Status effect stack representation: StatusEffectStack pool deleted
+
+Full record: this session. Resolved the TODO.md "Burning/Poison stack representation" item:
+`MultiComponentPool<StatusEffectStack>`/`BodyPartStatusEffectStack` (N chain-linked pool entries
+added 1:1 per `ApplyStack`, existing only so `StatusEffectQueries` could ask "what effects are
+active, how many stacks" across effect types) are gone entirely -- the magnitude already lived
+exactly once, as `StackCount` on each effect's own timer component. `IStatusEffectDisplay` gained
+`GetStackCount(ComponentManager, int)`; `TimerBasedStatusEffectDisplay<T>`'s generic constraint
+tightened to `where T : struct, IStatusEffectStackCount` (mirrors `TimerBasedAuraApplier<T>`) so it
+implements `GetStackCount` generically off the same timer pool it already reads for duration.
+`StatusEffectQueries.HasStack/CountStacks/GetActiveEffectTypes` now take
+`(StatusEffectDisplayRegistry, ComponentManager, int entityId, ...)` instead of the old pool --
+same 3 method names/call sites in `HealthWindow`/`PlayerStatusEffectsContent`, both of which already
+had a `StatusEffectDisplayRegistry` on hand (no new plumbing). `BurningTimerComponent`/
+`BodyPartBurningTimerComponent` each gained their own `Source` field (mirroring
+`PoisonTimerComponent`'s, which already had one) so `BurningSystem`/`BodyPartBurningSystem` no
+longer need to walk a separate pool to attribute tick damage -- set once on the 0-to-1 transition,
+never overwritten by a later top-off, matching Poison's existing "first applier wins" rule (a
+minor, deliberate behavior change from the old arbitrary chain-order pick across multiple
+simultaneous sources). `StatModifiers`/`StatusEffectAura`/`StatusEffectImmunity` were reviewed and
+found unaffected -- `StatModifierComponent` never referenced `StatusEffectStack`, and
+`IStatusEffectAuraApplier`/`StatusEffectAuraApplierRegistry` already read each timer's own
+`StackCount` directly (never the deleted pool); reusing that registry for querying was considered
+and rejected since `BurningAuraApplier.GetCurrentStackCount` is deliberately scoped to whichever
+single mode (entity- vs body-part-burning) is currently hazard-relevant, which would have changed
+`HealthWindow`'s "Status Effects" list to flicker based on hazard exposure.
+
 ## Presentation
 
 ### FontService lifetime, and a test-only FreeType finalizer crash

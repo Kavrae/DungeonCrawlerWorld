@@ -110,6 +110,24 @@ public sealed class StringUtilityTests
         Assert.AreEqual(4, result.LineCount);
     }
 
+    /// <summary>
+    /// Regression test: lineLength 1 (SimpleWordWrap's own Math.Max(1, ...) floor, the real
+    /// value once MaximumPixelWidth collapses to near-zero/negative during a window resize) used
+    /// to chunk by raw UTF-16 char count, splitting "🔥" (U+1F525, a 2-UTF16-unit surrogate
+    /// pair, the same glyph BurningEffects.Glyph uses) into a lone high surrogate on its own
+    /// line -- FontStashSharp's MeasureString throws on that (invalid UTF-16), confirmed via
+    /// TextWindow.WidestLineWidth. The pair must stay together on one line instead.
+    /// </summary>
+    [TestMethod]
+    public void SimpleWordWrap_LineLengthOneWithAstralCharacter_KeepsSurrogatePairTogether()
+    {
+        var criteria = new FormatTextCriteria(new FixedWidthTextMeasurer(10), 1, "\U0001F525AB", FormatTextMode.Wordwrap);
+
+        var result = StringUtility.SimpleWordWrap(criteria);
+
+        Assert.AreEqual("\U0001F525\nA\nB", result.FormattedText);
+    }
+
     [TestMethod]
     public void SimpleWordWrap_TextShorterThanOneChunk_ReturnedUnchanged()
     {

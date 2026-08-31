@@ -15,7 +15,6 @@ public sealed class PoisonEffectsTests
     private static ComponentManager CreateComponentManager()
     {
         var componentManager = new ComponentManager(initialEntityCapacity: 10, initialComponentCapacity: 10);
-        componentManager.RegisterMultiPool<StatusEffectStack>();
         componentManager.RegisterPackedPool<PoisonTimerComponent>(static (ref existing, incoming) => { });
         return componentManager;
     }
@@ -27,6 +26,15 @@ public sealed class PoisonEffectsTests
         return componentManager;
     }
 
+    /// <summary>Mirrors PoisonModule.Configure's own registration -- the real path StatusEffectQueries reads through.</summary>
+    private static StatusEffectDisplayRegistry CreateStatusEffectDisplays()
+    {
+        var displays = new StatusEffectDisplayRegistry();
+        displays.Register(new TimerBasedStatusEffectDisplay<PoisonTimerComponent>(StatusEffectType.Poison, PoisonEffects.Glyph,
+            poison => poison.FramesUntilNextTick + (poison.RemainingDurationTicks - 1) * PoisonEffects.TickIntervalFrames));
+        return displays;
+    }
+
     [TestMethod]
     public void ApplyStack_EntityImmuneToPoison_DoesNotAddAStack()
     {
@@ -35,7 +43,7 @@ public sealed class PoisonEffectsTests
 
         PoisonEffects.ApplyStack(componentManager, 0, StatusEffectSource.Admin, durationInTicks: 5);
 
-        Assert.AreEqual(0, StatusEffectQueries.CountStacks(componentManager.GetMultiPool<StatusEffectStack>(), 0, StatusEffectType.Poison));
+        Assert.AreEqual(0, StatusEffectQueries.CountStacks(CreateStatusEffectDisplays(), componentManager, 0, StatusEffectType.Poison));
         Assert.IsFalse(componentManager.GetPackedPool<PoisonTimerComponent>().Has(0));
     }
 
@@ -47,7 +55,7 @@ public sealed class PoisonEffectsTests
 
         PoisonEffects.ApplyStack(componentManager, 0, StatusEffectSource.Admin, durationInTicks: 5);
 
-        Assert.AreEqual(1, StatusEffectQueries.CountStacks(componentManager.GetMultiPool<StatusEffectStack>(), 0, StatusEffectType.Poison));
+        Assert.AreEqual(1, StatusEffectQueries.CountStacks(CreateStatusEffectDisplays(), componentManager, 0, StatusEffectType.Poison));
     }
 
     [TestMethod]
@@ -83,7 +91,7 @@ public sealed class PoisonEffectsTests
 
         PoisonEffects.ApplyStack(componentManager, 0, StatusEffectSource.Admin, durationInTicks: 5);
 
-        Assert.AreEqual(1, StatusEffectQueries.CountStacks(componentManager.GetMultiPool<StatusEffectStack>(), 0, StatusEffectType.Poison));
+        Assert.AreEqual(1, StatusEffectQueries.CountStacks(CreateStatusEffectDisplays(), componentManager, 0, StatusEffectType.Poison));
     }
 
     [TestMethod]
@@ -110,7 +118,7 @@ public sealed class PoisonEffectsTests
             PoisonEffects.ApplyStack(componentManager, 0, StatusEffectSource.Admin, durationInTicks: 5);
         }
 
-        Assert.AreEqual(PoisonEffects.MaxStacks, StatusEffectQueries.CountStacks(componentManager.GetMultiPool<StatusEffectStack>(), 0, StatusEffectType.Poison));
+        Assert.AreEqual(PoisonEffects.MaxStacks, StatusEffectQueries.CountStacks(CreateStatusEffectDisplays(), componentManager, 0, StatusEffectType.Poison));
     }
 
     [TestMethod]

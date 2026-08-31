@@ -81,7 +81,7 @@ public static class ElementFactoryRegistry
         pool.RegisterFactory<AbilityScoreWindow>(() => new AbilityScoreWindow(
             presentation.FontService, pool, presentation.LabelRenderer, componentManager));
         pool.RegisterFactory<HealthWindow>(() => new HealthWindow(
-            presentation.FontService, pool, presentation.LabelRenderer, componentManager, statusEffectDisplays));
+            presentation.FontService, pool, presentation.LabelRenderer, componentManager, statusEffectDisplays, itemCatalog));
         Register<AbilityScoreColumnHeader>((font, elements, glyph) => new AbilityScoreColumnHeader(font, elements, glyph));
         Register<AbilityScoreModifierRow>((font, elements, glyph) => new AbilityScoreModifierRow(font, elements, glyph));
         Register<SeparatorBar>((font, elements, glyph) => new SeparatorBar(font, elements, glyph));

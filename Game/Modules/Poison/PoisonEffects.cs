@@ -7,7 +7,6 @@ using Game.Modules.Poison.Components;
 using Game.Modules.StatModifiers;
 using Game.Modules.StatModifiers.Components;
 using Game.Modules.StatusEffects;
-using Game.Modules.StatusEffects.Components;
 using Game.World;
 
 namespace Game.Modules.Poison;
@@ -53,8 +52,6 @@ public static class PoisonEffects
 
         var statModifiers = componentManager.IsRegistered<StatModifierComponent>() ? componentManager.GetMultiPool<StatModifierComponent>() : null;
         var scaledDuration = ScaleDebuffDuration(statModifiers, source, entityId, durationInTicks);
-
-        componentManager.GetMultiPool<StatusEffectStack>().Add(entityId, new StatusEffectStack(StatusEffectType.Poison, source));
 
         if (timers.Has(entityId))
         {
