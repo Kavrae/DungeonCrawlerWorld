@@ -1120,36 +1120,43 @@ public class Element
     /// </remarks>
     internal void MeasureAndArrange()
     {
-        Vector2 availableSize;
-        if (_parent == null)
-        {
-            // Root element: guaranteed to have a maximum set (from Build) already sitting
-            // in _geometry.MaximumSize.
-            availableSize = _geometry.MaximumSize;
-        }
-        else
-        {
-            // Per axis: a scrollable parent (see AddChildWindow/RecalculateScrollBoundsFromChildren)
-            // deliberately lets its children exceed its own content size on that axis -- overflow
-            // is meant to be revealed by scrolling, not clamped away -- so on that axis the child's
-            // own already-configured _geometry.MaximumSize (its Layout.MaximumSize option, e.g. a
-            // generous sentinel like SelectionWindowContent's UnboundedChildHeight) is the real
-            // constraint instead of the parent's visible content size. Without this, a scrollable
-            // parent's children were silently reclamped to the parent's actual (small) content
-            // size on every Measure regardless of what Layout.MaximumSize asked for, since this
-            // constructor-time value gets unconditionally overwritten below.
-            var parentAvailableSize = _parent.ContentSize - _geometry.RelativePosition;
-            availableSize = new Vector2(
-                _parent.CanUserScrollHorizontal
-                    ? _geometry.MaximumSize.X
-                    : parentAvailableSize.X,
-                _parent.CanUserScrollVertical
-                    ? _geometry.MaximumSize.Y
-                    : parentAvailableSize.Y);
-        }
+        // Root element: guaranteed to have a maximum set (from Build) already sitting in
+        // _geometry.MaximumSize. Otherwise, see ComputeChildAvailableSize's own doc comment.
+        var availableSize = _parent is null
+            ? _geometry.MaximumSize
+            : ComputeChildAvailableSize(_parent, this, _parent.ContentSize);
 
         Measure(availableSize);
         Arrange();
+    }
+
+    /// <summary>
+    /// Per axis: a scrollable parent (see AddChildWindow/RecalculateScrollBoundsFromChildren)
+    /// deliberately lets its children exceed its own content size on that axis -- overflow is
+    /// meant to be revealed by scrolling, not clamped away -- so on that axis the child's own
+    /// already-configured _geometry.MaximumSize (its Layout.MaximumSize option, e.g. a generous
+    /// sentinel like SelectionWindowContent's UnboundedChildHeight) is the real constraint
+    /// instead of the parent's visible content size. Without this, a scrollable parent's
+    /// children were silently reclamped to the parent's actual (small) content size on every
+    /// Measure regardless of what Layout.MaximumSize asked for, since this constructor-time
+    /// value gets unconditionally overwritten below.
+    ///
+    /// Shared by both MeasureAndArrange (asking "what's available to me from my parent?") and
+    /// MeasureChildren (asking the same question for each of its own children while cascading a
+    /// remeasure down the tree) -- MeasureChildren used to call child.Measure(...) directly with
+    /// no exemption at all, silently shrinking a scroll-exempt child's rows back to the parent's
+    /// now-small content size on any *cascading* remeasure (e.g. an ancestor window being
+    /// resized) even though a direct MeasureAndArrange call on that same child would have
+    /// preserved it correctly. Confirmed via a live HealthWindow bug: resizing the outer window
+    /// shrank every row inside its scrollable body-part column instead of just revealing less of
+    /// it through scrolling.
+    /// </summary>
+    private static Vector2 ComputeChildAvailableSize(Element parent, Element child, Vector2 parentContentSize)
+    {
+        var rawAvailableSize = parentContentSize - child._geometry.RelativePosition;
+        return new Vector2(
+            parent.CanUserScrollHorizontal ? child._geometry.MaximumSize.X : rawAvailableSize.X,
+            parent.CanUserScrollVertical ? child._geometry.MaximumSize.Y : rawAvailableSize.Y);
     }
 
     /// <summary>
@@ -1164,6 +1171,7 @@ public class Element
     private void Measure(Vector2 availableSize)
     {
         var previousSize = _geometry.CurrentSize;
+        var previousContentSize = _contentState.Size;
         _geometry.MaximumSize = availableSize;
 
         if (_geometry.DisplayMode == ElementDisplayMode.WrapContent)
@@ -1200,6 +1208,26 @@ public class Element
             }
 
             MeasureChildren(_contentState.Size);
+
+            // AddChild/RemoveChild and a child's own Resized (OnChildElementResizedForScrollBounds)
+            // already keep a scrollable element's MaxScrollOffset in sync when a CHILD changes.
+            // Neither one fires when THIS element's own ContentSize changes with no child involved
+            // -- e.g. a Fixed-size scrollable window resized via SetBounds/drag-resize, whose
+            // children keep their own already-configured sizes on the scrollable axis (see
+            // MeasureAndArrange's own scrollable-axis exemption above). Left unhandled, shrinking
+            // such a window left MaxScrollOffset stale at its old (possibly zero) value, making the
+            // newly-hidden content unreachable by scrolling -- confirmed via HealthWindow's own
+            // resizable, independently-scrolling columns. Gated on having actual children: a
+            // childless scrollable element (TextWindow/TextBox, scrolling wrapped text rather than
+            // child Elements) already computes its own correct MaxScrollOffset from text metrics in
+            // its own RecalculateFixedSize/RecalculateFillSize/RecalculateWrapContentSize override
+            // (see TextWindow.UpdateScrollBounds) -- recalculating "from children" here as well
+            // would just zero it back out, clobbering that already-correct value with the fact that
+            // there's nothing to sum over.
+            if ((CanUserScrollVertical || CanUserScrollHorizontal) && _children.Count > 0 && _contentState.Size != previousContentSize)
+            {
+                RecalculateScrollBoundsFromChildren();
+            }
         }
 
         if (_geometry.CurrentSize != previousSize)
@@ -1222,7 +1250,7 @@ public class Element
                 continue;
             }
 
-            childElement.Measure(availableContentSize - childElement.RelativePosition);
+            childElement.Measure(ComputeChildAvailableSize(this, childElement, availableContentSize));
         }
     }
 

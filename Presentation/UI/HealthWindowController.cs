@@ -32,7 +32,8 @@ public sealed class HealthWindowController(
 
     private static readonly Vector2 WindowPosition = new(300, 150);
 
-    private static readonly Vector2 WindowSize = new(260, 360);
+    /// <summary>Wider than its pre-two-column size (260) -- HealthWindow now splits this width across 2 side-by-side columns (see HealthWindow.BuildColumns), so each needs enough room on its own for a body part's bar/status line or a buff/debuff's "+50 MaximumHealth: 12s"-shaped text.</summary>
+    private static readonly Vector2 WindowSize = new(480, 360);
 
     /// <summary>♥ (U+2665, "black heart suit") -- renders via the default DroidSans font with no Symbola-Emoji fallback needed, unlike Burning/Poison/Paralysis's own emoji glyphs (see FontService).</summary>
     private const string HeartGlyph = "♥";
@@ -65,7 +66,7 @@ public sealed class HealthWindowController(
     {
         var window = elementPoolService.CreateElement<HealthWindow>(null, new ElementOptions
         {
-            Hierarchy = new ElementHierarchyOptions { CanContainChildren = true, ChildrenTileMode = ChildElementTileMode.Vertical },
+            Hierarchy = new ElementHierarchyOptions { CanContainChildren = true },
             Layout = new ElementLayoutOptions
             {
                 RelativePosition = WindowPosition,
@@ -82,7 +83,6 @@ public sealed class HealthWindowController(
                 CanUserMove = true,
                 CanUserResize = true,
                 CanUserFocus = true,
-                CanUserScrollVertical = true,
             },
             Content = new ElementContentOptions { ContentColor = HealthWindow.BackgroundColor },
         });
