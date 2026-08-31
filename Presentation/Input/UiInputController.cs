@@ -329,6 +329,7 @@ public sealed class UiInputController
         RouteHotkeysToFocusedElement(keyboardState);
         HandleFocusCycling(keyboardState);
         HandleEscape(keyboardState);
+        HandleAdminModeToggle(keyboardState);
         RouteKeyPressesToFocusedElement(keyboardState);
         RouteTextInputToFocusedElement();
 
@@ -422,6 +423,19 @@ public sealed class UiInputController
             ? -1
             : 1;
         CycleFocus(direction);
+    }
+
+    /// <summary>F12 flips GlobalState.IsAdminModeOn -- unconditional/edge-triggered like Tab/Escape above, but debug-build-only (see GlobalState's own doc comment): compiled out entirely in Release, so the hotkey doesn't exist there at all.</summary>
+    private void HandleAdminModeToggle(KeyboardState keyboardState)
+    {
+#if DEBUG
+        if (!IsKeyPressed(keyboardState, Keys.F12))
+        {
+            return;
+        }
+
+        GlobalState.IsAdminModeOn = !GlobalState.IsAdminModeOn;
+#endif
     }
 
     /// <summary>

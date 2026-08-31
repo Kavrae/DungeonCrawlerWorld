@@ -104,6 +104,7 @@ public sealed class InspectionWindowContent(
                 UpdateBasic();
                 break;
             case InspectionMode.Detail:
+            case InspectionMode.Admin:
                 UpdateDetail();
                 break;
             default:

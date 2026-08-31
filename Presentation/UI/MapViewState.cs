@@ -62,15 +62,18 @@ public sealed class MapViewState
 }
 
 /// <summary>
-/// InspectionWindow's current tier -- Basic (click a tile, see SelectedMapNodePosition) or
-/// Detail (context-menu Inspect, follows InspectedEntityId). One Detail value covers both the
-/// "Details" and "Admin" tiers described in the Inspection V2 plan: Admin's full component dump
-/// is always appended beneath Detail's content for now (no gating exists yet -- see TODO.md's
-/// Admin Mode Toggle item), so there's nothing today that would ever set them differently.
+/// InspectionWindow's current tier -- Basic (click a tile, see SelectedMapNodePosition), Detail
+/// (context-menu Inspect while GlobalState.IsAdminModeOn is off, follows InspectedEntityId), or
+/// Admin (the same context-menu Inspect while GlobalState.IsAdminModeOn is on -- see
+/// MapWindow.InspectEntity). Detail and Admin are (temporarily) rendered identically by
+/// InspectionWindowContent -- Admin's full raw-component dump is appended beneath both today,
+/// same as before this split existed -- but they're now distinct enum values so a future pass can
+/// gate the dump behind Admin alone instead.
 /// </summary>
 public enum InspectionMode : byte
 {
     None,
     Basic,
     Detail,
+    Admin,
 }

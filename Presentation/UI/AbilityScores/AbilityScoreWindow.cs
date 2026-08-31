@@ -1,4 +1,5 @@
 using Engine.ECS.Components;
+using Engine.Utilities;
 using Game.Modules.AbilityScores;
 using Game.Modules.AbilityScores.Components;
 using Game.Modules.StatModifiers;
@@ -12,9 +13,11 @@ using Presentation.UI.ColorPalettes;
 namespace Presentation.UI.AbilityScores;
 
 /// <summary>
-/// Shows the 5 Core ability scores in equal-width columns: a centered name/total header (non-
-/// scrolling) above an independently-scrolling list of "Base : N" plus each active modifier
-/// (see AbilityScoreModifierFormatter). Builds its own children directly via AddChild -- no
+/// Shows the 5 Core ability scores in equal-width columns -- 7, adding the 2 Hidden scores
+/// (Luck, Wisdom), while GlobalState.IsAdminModeOn is on (see ActiveTypes) -- each column a
+/// centered name/total header (non-scrolling) above an independently-scrolling list of
+/// "Base : N" plus each active modifier (see AbilityScoreModifierFormatter). Builds its own
+/// children directly via AddChild -- no
 /// IElementContent/TabbedContent needed, since there's nothing to tab between (mirrors how
 /// Folder.Initialize builds its own tiles directly). Created fresh by InventoryFolderController
 /// each time it's opened and returned to ElementPoolService's pool on close, same lifecycle as
@@ -26,7 +29,6 @@ namespace Presentation.UI.AbilityScores;
 public sealed class AbilityScoreWindow(FontService fontService, ElementPoolService elementPoolService, LabelRenderer labelRenderer, ComponentManager componentManager)
     : Window(fontService, elementPoolService, labelRenderer)
 {
-    private const int ColumnCount = 5;
     private const float HeaderHeight = 50f;
     private const float RowHeight = 20f;
 
@@ -52,8 +54,17 @@ public sealed class AbilityScoreWindow(FontService fontService, ElementPoolServi
         .Where(static type => !AbilityScoreCategory.IsHidden(type))
         .ToArray();
 
-    private readonly Window[] _columnListWindows = new Window[ColumnCount];
-    private readonly AbilityScoreColumnHeader[] _columnHeaders = new AbilityScoreColumnHeader[ColumnCount];
+    /// <summary>Every ability score, Core then Hidden (Enum.GetValues' declaration order -- see AbilityScoreType) -- shown instead of CoreTypes while GlobalState.IsAdminModeOn is on.</summary>
+    private static readonly AbilityScoreType[] AllTypes = Enum.GetValues<AbilityScoreType>();
+
+    /// <summary>The column set actually shown this frame -- BuildColumns/RefreshAllColumns/RefreshColumn all key off this instead of a fixed count, and Update rebuilds whenever it changes (see _lastAdminModeOn).</summary>
+    private AbilityScoreType[] ActiveTypes => GlobalState.IsAdminModeOn ? AllTypes : CoreTypes;
+
+    /// <summary>Reallocated to exactly ActiveTypes.Length by every BuildColumns call -- never padded with null trailing slots (a real, confirmed crash: UpdateHover/FindHoverCandidate below assume every entry is populated).</summary>
+    private Window[] _columnListWindows = [];
+
+    /// <summary>See _columnListWindows.</summary>
+    private AbilityScoreColumnHeader[] _columnHeaders = [];
 
     private readonly VersionWatcher _abilityScoreVersionWatcher = new();
     private readonly VersionWatcher _statModifierVersionWatcher = new();
@@ -63,6 +74,9 @@ public sealed class AbilityScoreWindow(FontService fontService, ElementPoolServi
 
     private Element? _hoveredCandidate;
     private int _hoveredFrames;
+
+    /// <summary>Mirrors GlobalState.IsAdminModeOn as of the last BuildColumns -- Update rebuilds (not just refreshes) whenever this goes stale, since toggling admin mode changes the column *count*, not just their contents.</summary>
+    private bool _lastAdminModeOn;
 
     /// <summary>Just records entityId/the shared popup -- must be called after CreateElement but before Initialize, same contract as InventoryManagementWindow.Configure. Column-building itself waits for Initialize (see its own doc comment for why). hoverPopup is owned by InventoryFolderController (created once, top-level, shared across opens) rather than a child of this window -- see Tooltip's own doc comment for why a nested child can't work here.</summary>
     public void Configure(int entityId, Tooltip hoverPopup)
@@ -94,6 +108,7 @@ public sealed class AbilityScoreWindow(FontService fontService, ElementPoolServi
     {
         base.OnChildrenInitialized();
 
+        _lastAdminModeOn = GlobalState.IsAdminModeOn;
         BuildColumns();
         RefreshAllColumns();
         _abilityScoreVersionWatcher.HasChanged(GetAbilityScoreVersion());
@@ -105,6 +120,16 @@ public sealed class AbilityScoreWindow(FontService fontService, ElementPoolServi
         base.Update(gameTime);
 
         UpdateHover(Mouse.GetState());
+
+        if (GlobalState.IsAdminModeOn != _lastAdminModeOn)
+        {
+            // Admin mode changes the column *count*, not just their contents -- a full rebuild,
+            // not RefreshAllColumns alone, same as the initial build above.
+            _lastAdminModeOn = GlobalState.IsAdminModeOn;
+            BuildColumns();
+            RefreshAllColumns();
+            return;
+        }
 
         // Both watchers must be checked every call (not short-circuited) so each stays in sync
         // with its own version source regardless of whether the other one changed this time.
@@ -134,16 +159,11 @@ public sealed class AbilityScoreWindow(FontService fontService, ElementPoolServi
 
         foreach (var header in _columnHeaders)
         {
-            header.IsHovered = header is not null && ReferenceEquals(header, candidate);
+            header.IsHovered = ReferenceEquals(header, candidate);
         }
 
         foreach (var listWindow in _columnListWindows)
         {
-            if (listWindow is null)
-            {
-                continue;
-            }
-
             foreach (var child in listWindow.ChildElements)
             {
                 if (child is AbilityScoreModifierRow row)
@@ -186,7 +206,7 @@ public sealed class AbilityScoreWindow(FontService fontService, ElementPoolServi
     {
         foreach (var header in _columnHeaders)
         {
-            if (header is not null && header.Rectangle.Contains(mousePosition))
+            if (header.Rectangle.Contains(mousePosition))
             {
                 return header;
             }
@@ -194,11 +214,6 @@ public sealed class AbilityScoreWindow(FontService fontService, ElementPoolServi
 
         foreach (var listWindow in _columnListWindows)
         {
-            if (listWindow is null)
-            {
-                continue;
-            }
-
             foreach (var child in listWindow.ChildElements)
             {
                 if (child is AbilityScoreModifierRow { Source: not null } row && row.Rectangle.Contains(mousePosition))
@@ -219,11 +234,15 @@ public sealed class AbilityScoreWindow(FontService fontService, ElementPoolServi
         // instead of leaking, mirroring RefreshColumn's row cleanup below.
         ClearColumns();
 
-        var usableWidth = ContentSize.X - Padding * 2 - ColumnGap * (ColumnCount - 1);
-        var columnWidth = usableWidth / ColumnCount;
+        var columnCount = ActiveTypes.Length;
+        _columnHeaders = new AbilityScoreColumnHeader[columnCount];
+        _columnListWindows = new Window[columnCount];
+
+        var usableWidth = ContentSize.X - Padding * 2 - ColumnGap * (columnCount - 1);
+        var columnWidth = usableWidth / columnCount;
         var listHeight = ContentSize.Y - Padding * 3 - HeaderHeight;
 
-        for (var index = 0; index < ColumnCount; index++)
+        for (var index = 0; index < columnCount; index++)
         {
             var columnX = Padding + index * (columnWidth + ColumnGap);
 
@@ -249,17 +268,12 @@ public sealed class AbilityScoreWindow(FontService fontService, ElementPoolServi
         }
     }
 
-    /// <summary>CloseAllChildren recursively closes an element's entire subtree (see ElementPoolService.CloseElement), so closing this window's own direct children (headers, list-windows) already reaches each list-window's rows/separators too.</summary>
-    private void ClearColumns()
-    {
-        elementPoolService.CloseAllChildren(this);
-        Array.Clear(_columnListWindows);
-        Array.Clear(_columnHeaders);
-    }
+    /// <summary>CloseAllChildren recursively closes an element's entire subtree (see ElementPoolService.CloseElement), so closing this window's own direct children (headers, list-windows) already reaches each list-window's rows/separators too. Doesn't touch _columnHeaders/_columnListWindows themselves -- BuildColumns (the only caller) immediately reallocates both right after this returns.</summary>
+    private void ClearColumns() => elementPoolService.CloseAllChildren(this);
 
     private void RefreshAllColumns()
     {
-        for (var index = 0; index < ColumnCount; index++)
+        for (var index = 0; index < ActiveTypes.Length; index++)
         {
             RefreshColumn(index);
         }
@@ -267,7 +281,7 @@ public sealed class AbilityScoreWindow(FontService fontService, ElementPoolServi
 
     private void RefreshColumn(int index)
     {
-        var type = CoreTypes[index];
+        var type = ActiveTypes[index];
         var listWindow = _columnListWindows[index];
 
         elementPoolService.CloseAllChildren(listWindow);

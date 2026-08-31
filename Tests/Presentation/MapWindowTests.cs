@@ -1,6 +1,7 @@
 using Engine.ECS.Components;
 using Engine.Events;
 using Engine.Math;
+using Engine.Utilities;
 using Game.Modules;
 using Game.Modules.Actions;
 using Game.Modules.Actions.Activators;
@@ -1220,6 +1221,36 @@ public sealed class MapWindowTests
         Assert.AreEqual(InspectionMode.Detail, mapViewState.InspectionMode);
         Assert.AreEqual(CorpseEntityId, mapViewState.InspectedEntityId);
         Assert.IsTrue(ActionLockGate.IsBlocked(componentManager.GetPackedPool<ActionLockComponent>(), PlayerEntityId));
+    }
+
+    [TestMethod]
+    public void ContextMenuInspectOption_Selected_WhileAdminModeOn_SetsAdminInspection()
+    {
+        // GlobalState.IsAdminModeOn is true cross-layer static state -- reset in finally so this
+        // doesn't leak into any other test regardless of pass/fail (this class is already
+        // [DoNotParallelize], so no other test can observe it mid-run either way).
+        GlobalState.IsAdminModeOn = true;
+        try
+        {
+            var (world, mapViewState, mapWindow, componentManager) = BuildMapWindowWithPlayer(300, 300, 1, new Vector3Int(100, 100, 0));
+            componentManager.Merge(PlayerEntityId, new ActionLockComponent(standardLockFrames: 20, currentLockTotalFrames: 0, currentLockFramesRemaining: 0));
+            var targetPosition = new Vector3Int(101, 100, 0);
+            var transform = new TransformComponent(targetPosition, new Vector2Byte(1, 1));
+            componentManager.Merge(CorpseEntityId, transform);
+            world.PlaceEntityOnMap(CorpseEntityId, targetPosition, ref transform);
+
+            mapWindow.TryOpenEntityContextMenuAt(ComputeScreenPositionForMapPosition(mapWindow, mapViewState, targetPosition));
+            var menu = mapWindow.ContextMenuController.Menu;
+            var inspectButton = (Button)menu.ChildElements[1]; // [0] is the entity's own name header.
+            menu.HandleClick(inspectButton.Rectangle.Center);
+
+            Assert.AreEqual(InspectionMode.Admin, mapViewState.InspectionMode);
+            Assert.AreEqual(CorpseEntityId, mapViewState.InspectedEntityId);
+        }
+        finally
+        {
+            GlobalState.IsAdminModeOn = false;
+        }
     }
 
     private static readonly Guid TestPotionId = new("66666666-6666-6666-6666-666666666666");

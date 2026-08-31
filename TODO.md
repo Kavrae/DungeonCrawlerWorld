@@ -375,6 +375,21 @@ save-file-level meta-progression store distinct from anything in a single `EcsCo
 
 ### High Priority
 
+#### Global hard minimum/maximum element sizes for user resizing
+
+`UiInputController.ComputeResize`/`ClampResizeToBounds` clamp a drag-resize to `element.MinimumSize`/
+`MaximumSize` alone (`ElementLayoutOptions.MinimumSize`/`MaximumSize`, both optional per element) --
+`Element.cs`'s own Build defaults an unset `MinimumSize` to `Vector2(0, 0)`, so any element without an
+explicit minimum can be dragged all the way down to zero (or effectively zero) width/height. That's the
+root cause class behind the TextWindow/StringUtility crash just fixed (a HealthWindow resized to a
+degenerate size fed a negative wrap width into word-wrap) -- that fix only patched the one downstream
+symptom, not the underlying gap. Add an engine-wide hard minimum and maximum (e.g. a constant pair on
+`UiInputController` or a `WindowService`-level config) that every resize clamps against unconditionally,
+regardless of whether the element sets its own `MinimumSize`/`MaximumSize`. A per-element optional
+min/max should only ever narrow that global range, never escape it -- needs validation (or clamping) at
+whichever point an element's own min/max gets set, so a caller can't accidentally configure one outside
+the global bounds.
+
 #### Split InventoryFolderController into InventoryController, FolderController, AbilityScoreController
 
 Currently owns the folder/tile shell + opening/closing both `InventoryManagementWindow` and
@@ -474,6 +489,16 @@ Context menu coverage's remaining scope; (3) click-to-arm/cast directly from a m
 the hotbar can arm an action/item.
 
 ### Medium Priority
+
+#### TextDivider label clipping and right-line spacing
+
+Investigate why the bottom of some `TextDivider` label letters (descenders -- g/y/p, etc.) render
+clipped -- possibly `DrawContent`'s `textY` centering (`(ContentSize.Y - textSize.Y) / 2f`) against a
+`MeasureString`-reported height that doesn't fully account for a descender's real glyph extent, combined
+with a tight `ContentSize.Y` (e.g. `HealthWindow.RowHeight`) leaving no slack. Separately: `textEnd`
+(`textStart + textSize.X`) is where the right-hand divider line starts immediately, with no gap against
+the label -- move it further right (a small fixed or width-fraction-relative pad before `rightEdge >
+textEnd`'s line-drawing) so the line doesn't sit flush against the text.
 
 #### Diagonal movement input timing
 

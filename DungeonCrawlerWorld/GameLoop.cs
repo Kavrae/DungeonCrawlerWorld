@@ -1,5 +1,6 @@
 using Engine.Diagnostics;
 using Engine.ECS.Systems;
+using Engine.Utilities;
 using Microsoft.Xna.Framework;
 using Microsoft.Xna.Framework.Graphics;
 using Presentation.Bootstrap;
@@ -37,6 +38,12 @@ public sealed class GameLoop : Microsoft.Xna.Framework.Game
     private ShellContext _shell = null!;
     private readonly DiagnosticsEngine _diagnostics;
     private int _frameCount;
+
+    /// <summary>FNA/SDL's own default window title is empty at the point Initialize() runs (nothing else in this codebase sets one), so the OS title bar is set explicitly here rather than captured. See _lastAdminModeOn.</summary>
+    private const string BaseWindowTitle = "Dungeon Crawler World";
+
+    /// <summary>Mirrors GlobalState.IsAdminModeOn as of the last frame Window.Title was synced -- Window.Title is only ever written on an actual change, not every frame.</summary>
+    private bool _lastAdminModeOn;
 
     /// <param name="diagnosticsFeatures">Which Diagnostics engine features to enable -- opt-in, defaults to None. See DiagnosticsFeaturesParser (Program.cs passes --diagnostics= here).</param>
     public GameLoop(DiagnosticsFeatures diagnosticsFeatures = DiagnosticsFeatures.None)
@@ -78,6 +85,8 @@ public sealed class GameLoop : Microsoft.Xna.Framework.Game
             _shell = ShellBootstrapper.Build(_presentation, _worldSession, screenSize, _diagnostics);
         }
 
+        Window.Title = BaseWindowTitle;
+
         base.Initialize();
     }
 
@@ -116,7 +125,21 @@ public sealed class GameLoop : Microsoft.Xna.Framework.Game
         _shell.Update(gameTime);
         _diagnostics.FrameCostRecorder?.Record(FrameCostCategory.Update, "GameLoop", "Shell.Update", Stopwatch.GetElapsedTime(shellUpdateStart));
 
+        SyncAdminModeWindowTitle();
+
         base.Update(gameTime);
+    }
+
+    /// <summary>Runs after _shell.Update (UiInputController's own Update, where F12 is handled) so this frame's toggle is already reflected -- only writes Window.Title on an actual change, not every frame.</summary>
+    private void SyncAdminModeWindowTitle()
+    {
+        if (GlobalState.IsAdminModeOn == _lastAdminModeOn)
+        {
+            return;
+        }
+
+        _lastAdminModeOn = GlobalState.IsAdminModeOn;
+        Window.Title = _lastAdminModeOn ? $"{BaseWindowTitle} - ADMIN" : BaseWindowTitle;
     }
 
     protected override void Draw(GameTime gameTime)

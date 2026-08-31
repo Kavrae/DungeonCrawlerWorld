@@ -1,3 +1,4 @@
+using Engine.Utilities;
 using FontStashSharp;
 using Microsoft.Xna.Framework;
 using Microsoft.Xna.Framework.Graphics;
@@ -228,7 +229,10 @@ public class Window : Element
                 : _titleColor;
             spriteBatch.Draw(unitRectangle, HeaderRectangle, titleBackgroundColor);
         }
-        spriteBatch.DrawString(TitleFont, _titleText, HeaderAbsolutePosition + TitlePadding, _titleTextColor);
+        var drawnTitleText = GlobalState.IsAdminModeOn
+            ? $"{_titleText} ({RelativePosition.X:0}, {RelativePosition.Y:0}) {CurrentSize.X:0}x{CurrentSize.Y:0}"
+            : _titleText;
+        spriteBatch.DrawString(TitleFont, drawnTitleText, HeaderAbsolutePosition + TitlePadding, _titleTextColor);
 
         foreach (var button in _titleButtons)
         {

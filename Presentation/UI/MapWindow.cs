@@ -2,6 +2,7 @@ using Engine.ECS.Components;
 using Engine.ECS.Components.Stores;
 using Engine.Events;
 using Engine.Math;
+using Engine.Utilities;
 using FontStashSharp;
 using Game.Blueprints;
 using Game.Modules.Actions;
@@ -957,10 +958,10 @@ public sealed class MapWindow : Window
 
     private string ResolveName(int entityId) => _displayTextPool.TryGetReadonly(entityId, out var displayText) ? displayText.Name : "Unknown";
 
-    /// <summary>Details/Admin inspection's actual activation -- sets Detail mode on the shared entityId (see MapViewState.InspectedEntityId), starts the global cooldown (the same shared ActionLockComponent lock movement/melee/consumables already use), and un-minimizes InspectionWindow. Only ever reached via the "Inspect" ContextMenuOption above, which already gates on the cooldown being clear -- no redundant re-check here, matching how "Loot" above trusts its own Enabled gate instead of re-checking adjacency.</summary>
+    /// <summary>Details/Admin inspection's actual activation -- sets Detail or Admin mode (GlobalState.IsAdminModeOn) on the shared entityId (see MapViewState.InspectedEntityId), starts the global cooldown (the same shared ActionLockComponent lock movement/melee/consumables already use), and un-minimizes InspectionWindow. Only ever reached via the "Inspect" ContextMenuOption above, which already gates on the cooldown being clear -- no redundant re-check here, matching how "Loot" above trusts its own Enabled gate instead of re-checking adjacency.</summary>
     private void InspectEntity(int entityId)
     {
-        _mapViewState.InspectionMode = InspectionMode.Detail;
+        _mapViewState.InspectionMode = GlobalState.IsAdminModeOn ? InspectionMode.Admin : InspectionMode.Detail;
         _mapViewState.InspectedEntityId = entityId;
         ActionLockGate.Lock(_actionLockPool, _world.PlayerEntityId);
         OnInspectionOpened?.Invoke();
