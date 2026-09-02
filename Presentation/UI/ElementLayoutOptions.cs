@@ -20,4 +20,7 @@ public sealed class ElementLayoutOptions
     public bool? IsVisible { get; set; }
 
     public bool? IsTransparent { get; set; }
+
+    /// <summary>Gap tiled after this element by RetileChildren, on top of its own size -- lets a caller reserve a blank gap before the next sibling in a Vertical/Horizontal-tiled parent without inserting a separate spacer element.</summary>
+    public float? SpacingAfter { get; set; }
 }

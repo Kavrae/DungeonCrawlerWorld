@@ -44,9 +44,6 @@ public sealed class InventoryManagementWindow(
     ContextMenuController contextMenuController,
     MapViewState mapViewState) : Window(fontService, elementPoolService, labelRenderer)
 {
-    /// <summary>Dark grey background for both this window's own content area and TabbedContent's body window (see Configure) -- individual grid cells stay white-with-a-black-border (InventoryItemStackCell) so they read as distinct squares against it. Shared with AbilityScoreWindow's own background -- see WindowPalette.</summary>
-    public static readonly Color BackgroundColor = WindowPalette.PanelBackgroundColor;
-
     private TabbedContent _tabbedContent = null!;
 
     private int _entityId;
@@ -68,7 +65,7 @@ public sealed class InventoryManagementWindow(
 
         var tagCounts = InventoryTagQueries.GetTagCounts(componentManager, itemCatalog, entityId);
         _currentTags = ToTagSet(tagCounts);
-        _tabbedContent = new TabbedContent(BuildTabDefinitions(tagCounts), elementPoolService, fontService, labelRenderer, BackgroundColor);
+        _tabbedContent = new TabbedContent(BuildTabDefinitions(tagCounts), elementPoolService, fontService, labelRenderer, WindowPalette.PanelBackgroundColor);
         SetContent(_tabbedContent);
 
         _tagVersionWatcher.HasChanged(CurrentInventoryVersion()); // Primes the baseline so the next Update doesn't immediately rebuild against the list just built above.

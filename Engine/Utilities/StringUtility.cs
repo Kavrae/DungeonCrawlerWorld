@@ -109,6 +109,42 @@ public static class StringUtility
         return new DisplayText(criteria.OriginalText[..substringLength], 1);
     }
 
+    /// <summary>
+    /// Shortens text to the widest prefix (plus "...") that still fits maximumWidth -- binary
+    /// search over TextMeasurer.MeasureWidth, the same idiom TextBox's own caret/selection
+    /// hit-testing uses for "find the longest prefix that fits." A no-op when text already fits
+    /// or maximumWidth leaves no room at all.
+    /// </summary>
+    public static string TruncateWithEllipsis(ITextMeasurer textMeasurer, string text, float maximumWidth)
+    {
+        ArgumentNullException.ThrowIfNull(textMeasurer);
+
+        const string ellipsis = "...";
+
+        if (maximumWidth <= 0 || textMeasurer.MeasureWidth(text) <= maximumWidth)
+        {
+            return text;
+        }
+
+        var ellipsisWidth = textMeasurer.MeasureWidth(ellipsis);
+        var low = 0;
+        var high = text.Length;
+        while (low < high)
+        {
+            var mid = (low + high + 1) / 2;
+            if (textMeasurer.MeasureWidth(text[..mid]) + ellipsisWidth <= maximumWidth)
+            {
+                low = mid;
+            }
+            else
+            {
+                high = mid - 1;
+            }
+        }
+
+        return low <= 0 ? ellipsis : text[..low] + ellipsis;
+    }
+
     /// <summary>Small text boxes don't have room for hyphenation and use a simpler word wrap.</summary>
     private static DisplayText WordWrap(FormatTextCriteria criteria)
     {
@@ -332,6 +368,25 @@ public static class StringUtility
 
         var formattedText = stringBuilder.ToString();
         return new DisplayText(formattedText, CountNewlineCharacters(formattedText));
+    }
+
+    /// <summary>Widest single line of possibly-multi-line text, measured in pixels -- e.g. TextWindow sizing its scrollable content area to the longest already-wrapped line rather than the whole block.</summary>
+    public static float WidestLineWidth(ITextMeasurer textMeasurer, string text)
+    {
+        ArgumentNullException.ThrowIfNull(textMeasurer);
+
+        if (string.IsNullOrEmpty(text))
+        {
+            return 0f;
+        }
+
+        var widest = 0f;
+        foreach (var line in text.Split('\n'))
+        {
+            widest = System.Math.Max(widest, textMeasurer.MeasureWidth(line.TrimEnd('\r')));
+        }
+
+        return widest;
     }
 
     /// <summary>

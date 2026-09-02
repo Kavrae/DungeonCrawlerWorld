@@ -8,6 +8,7 @@ using Microsoft.Xna.Framework;
 using Microsoft.Xna.Framework.Input;
 using Presentation.Fonts;
 using Presentation.Rendering;
+using Presentation.UI.Chrome;
 using Presentation.UI.ColorPalettes;
 
 namespace Presentation.UI.AbilityScores;
@@ -35,20 +36,10 @@ public sealed class AbilityScoreWindow(FontService fontService, ElementPoolServi
     /// <summary>Between adjacent columns.</summary>
     private const float ColumnGap = 3f;
 
-    /// <summary>Between the outermost columns and this window's own content edges (all four sides).</summary>
-    private const float Padding = 3f;
-
     /// <summary>See SeparatorBar -- the divider itself is drawn at 75% width; this is just the element's own full-width, 1px-tall footprint in the vertical tile chain.</summary>
     private const float SeparatorHeight = 1f;
 
-    /// <summary>Popup sits just to the right of whatever's hovered, vertically centered against it -- see PopupPositioning.GetPosition(East).</summary>
-    private static readonly Vector2 PopupGap = new(1, 1);
-
-    /// <summary>Shared with InventoryManagementWindow's own background -- see WindowPalette.</summary>
-    public static readonly Color BackgroundColor = WindowPalette.PanelBackgroundColor;
-
-    /// <summary>Shared with InventoryFolderController's own tile background -- see WindowPalette.</summary>
-    public static readonly Color ColumnColor = WindowPalette.PanelContentColor;
+    public static readonly Color ColumnColor = WindowPalette.AbilityScoreColumnBackground;
 
     private static readonly AbilityScoreType[] CoreTypes = Enum.GetValues<AbilityScoreType>()
         .Where(static type => !AbilityScoreCategory.IsHidden(type))
@@ -146,7 +137,7 @@ public sealed class AbilityScoreWindow(FontService fontService, ElementPoolServi
     /// <summary>
     /// Header highlight is immediate (instant visual feedback); the popup itself is delay-gated
     /// the same way HotbarController.UpdateHover gates its own Armed Hotkey Summary popup,
-    /// against the same shared HudMetrics.HoverTooltipDelayFrames -- but hides immediately on candidate change/
+    /// against the same shared HudChrome.HoverTooltipDelayFrames -- but hides immediately on candidate change/
     /// loss (no delay on hiding, only on showing, same convention MapViewState.HoverSlot uses).
     /// Known, accepted gap: unlike HandleHotbarHover, this doesn't suppress itself during an
     /// active drag of this window's own title bar -- not worth the extra plumbing unless it
@@ -183,7 +174,7 @@ public sealed class AbilityScoreWindow(FontService fontService, ElementPoolServi
             _hoveredFrames = candidate is null ? 0 : 1;
         }
 
-        if (candidate is null || _hoveredFrames < HudMetrics.HoverTooltipDelayFrames)
+        if (candidate is null || _hoveredFrames < HudChrome.HoverTooltipDelayFrames)
         {
             _hoverPopup.Hide();
             return;
@@ -191,13 +182,13 @@ public sealed class AbilityScoreWindow(FontService fontService, ElementPoolServi
 
         if (candidate is AbilityScoreColumnHeader header2)
         {
-            _hoverPopup.ShowNear(header2.Rectangle, PopupAnchor.East, PopupGap, AbilityScoreDescriptions.Get(header2.Type));
+            _hoverPopup.ShowNear(header2.Rectangle, PopupAnchor.East, PopupChrome.AbilityScorePopupGap, AbilityScoreDescriptions.Get(header2.Type));
         }
         else if (candidate is AbilityScoreModifierRow row)
         {
             var title = ModifierDisplayFormatting.DescribeSource(componentManager, row.Source!.Value);
             var body = $"{row.ModifierText}\n{ModifierDisplayFormatting.FormatDuration(row.RemainingDurationFrames)}";
-            _hoverPopup.ShowNear(row.Rectangle, PopupAnchor.East, PopupGap, body, title);
+            _hoverPopup.ShowNear(row.Rectangle, PopupAnchor.East, PopupChrome.AbilityScorePopupGap, body, title);
         }
     }
 
@@ -238,31 +229,38 @@ public sealed class AbilityScoreWindow(FontService fontService, ElementPoolServi
         _columnHeaders = new AbilityScoreColumnHeader[columnCount];
         _columnListWindows = new Window[columnCount];
 
-        var usableWidth = ContentSize.X - Padding * 2 - ColumnGap * (columnCount - 1);
+        // The outermost edges (all four sides) are the generic ContentPadding's job now (this
+        // Window has children), not a manual constant here -- ContentSize already reflects it
+        // (see ChildContentPadding's own doc comment: gated on CanContainChildren alone, so this
+        // reads correctly even immediately after ClearColumns, while still transiently childless).
+        // Only the internal header-to-list gap remains this method's own concern, via WindowChrome.Gap.
+        var usableWidth = ContentSize.X - ColumnGap * (columnCount - 1);
         var columnWidth = usableWidth / columnCount;
-        var listHeight = ContentSize.Y - Padding * 3 - HeaderHeight;
+        var listHeight = ContentSize.Y - HeaderHeight - WindowChrome.Gap;
 
         for (var index = 0; index < columnCount; index++)
         {
-            var columnX = Padding + index * (columnWidth + ColumnGap);
+            var columnX = index * (columnWidth + ColumnGap);
 
             var header = elementPoolService.CreateElement<AbilityScoreColumnHeader>(this, new ElementOptions
             {
                 Hierarchy = new ElementHierarchyOptions { CanContainChildren = false },
-                Layout = new ElementLayoutOptions { RelativePosition = new Vector2(columnX, Padding), Size = new Vector2(columnWidth, HeaderHeight), DisplayMode = ElementDisplayMode.Fixed },
+                Layout = new ElementLayoutOptions { RelativePosition = new Vector2(columnX, 0), Size = new Vector2(columnWidth, HeaderHeight), DisplayMode = ElementDisplayMode.Fixed },
                 Chrome = new ElementChromeOptions { ShowBorder = false, ShowTitle = false, CanUserFocus = false },
                 Content = new ElementContentOptions { ContentColor = ColumnColor },
             });
+            header.SetOverlayGlow(true, WindowPalette.Hover, GlowMode.InteriorFade);
             AddChild(header);
             _columnHeaders[index] = header;
 
             var listWindow = elementPoolService.CreateElement<Window>(this, new ElementOptions
             {
                 Hierarchy = new ElementHierarchyOptions { CanContainChildren = true, ChildrenTileMode = ChildElementTileMode.Vertical },
-                Layout = new ElementLayoutOptions { RelativePosition = new Vector2(columnX, HeaderHeight + Padding * 2), Size = new Vector2(columnWidth, listHeight), DisplayMode = ElementDisplayMode.Fixed },
+                Layout = new ElementLayoutOptions { RelativePosition = new Vector2(columnX, HeaderHeight + WindowChrome.Gap), Size = new Vector2(columnWidth, listHeight), DisplayMode = ElementDisplayMode.Fixed },
                 Chrome = new ElementChromeOptions { ShowBorder = false, ShowTitle = false, CanUserScrollVertical = true, CanUserFocus = false },
                 Content = new ElementContentOptions { ContentColor = ColumnColor },
             });
+            listWindow.SetOverlayGlow(true, WindowPalette.Hover, GlowMode.InteriorFade);
             AddChild(listWindow);
             _columnListWindows[index] = listWindow;
         }
@@ -299,7 +297,7 @@ public sealed class AbilityScoreWindow(FontService fontService, ElementPoolServi
                     Chrome = new ElementChromeOptions { ShowBorder = false, ShowTitle = false, CanUserFocus = false },
                     Content = new ElementContentOptions { ContentColor = ColumnColor },
                 });
-                separator.Configure(BackgroundColor);
+                separator.Configure(WindowPalette.TitleTextColor);
                 listWindow.AddChild(separator);
             }
 

@@ -13,6 +13,7 @@ using Game.Modules.StatModifiers;
 using Game.Modules.StatModifiers.Components;
 using Game.World;
 using Microsoft.Xna.Framework;
+using Presentation.UI.Chrome;
 using Presentation.UI.ColorPalettes;
 using Presentation.UI.Looting;
 
@@ -56,7 +57,6 @@ public sealed class InspectionWindowContent(
     private const float RowHeight = 16f;
     private const float RowTextGap = 6f;
     private const float BarHeight = 8f;
-    private const float BarVerticalPadding = 4f;
     private const float BarWidthFraction = 0.75f;
     private const float BlockPadding = 12f;
     private const float SeparatorHeight = 1f;
@@ -238,7 +238,11 @@ public sealed class InspectionWindowContent(
         var hasRace = _racePool.CountForEntity(entityId) > 0;
         var hasClass = _classPool.CountForEntity(entityId) > 0;
         var rowCount = 1 + (hasRace ? 1 : 0) + (hasClass ? 1 : 0);
-        var headerHeight = System.Math.Max(IconSize, rowCount * RowHeight);
+        // header's outer height isn't externally constrained (unlike its width, see textWidth
+        // below), so it grows by WindowChrome.Padding on top and bottom -- the icon/text keep
+        // their original sizes exactly, with real breathing room added around them, rather than
+        // being squeezed into a smaller box.
+        var headerHeight = System.Math.Max(IconSize, rowCount * RowHeight) + WindowChrome.Padding * 2;
 
         var header = elementPoolService.CreateElement<Window>(_hostWindow, new ElementOptions
         {
@@ -260,7 +264,10 @@ public sealed class InspectionWindowContent(
         header.AddChild(icon);
 
         var textX = IconSize + RowTextGap;
-        var textWidth = System.Math.Max(0f, blockWidth - textX);
+        // header's own content width is now blockWidth - 2*Padding (see ChildContentPadding),
+        // not the full blockWidth -- header's width is a hard constraint (must not exceed the
+        // block width), so text shrinks to fit inside the padded content area instead.
+        var textWidth = System.Math.Max(0f, blockWidth - WindowChrome.Padding * 2 - textX);
         var rowIndex = 0;
 
         AddTextRow(header, textX, rowIndex++, textWidth, ResolveName(entityId));
@@ -284,7 +291,7 @@ public sealed class InspectionWindowContent(
             Layout = new ElementLayoutOptions { RelativePosition = new Vector2(x, rowIndex * RowHeight), Size = new Vector2(width, RowHeight), MaximumSize = new Vector2(width, UnboundedChildHeight), DisplayMode = ElementDisplayMode.Fixed },
             Chrome = new ElementChromeOptions { ShowBorder = false, ShowTitle = false, CanUserFocus = false },
             Content = new ElementContentOptions { ContentColor = Color.Transparent },
-            Text = new TextOptions { Text = text, TextColor = Color.Black },
+            Text = new TextOptions { Text = text, TextColor = WindowPalette.TitleTextColor },
         });
         parent.AddChild(row);
     }
@@ -299,7 +306,7 @@ public sealed class InspectionWindowContent(
         var effectiveMaximumHealth = StatModifierMath.GetEffectiveValue(_statModifiers, entityId, StatModifierTarget.MaximumHealth, maximumHealth);
         var healthFraction = effectiveMaximumHealth > 0 ? MathHelper.Clamp(currentHealth / effectiveMaximumHealth, 0f, 1f) : 1f;
 
-        var rowHeight = BarHeight + BarVerticalPadding * 2;
+        var rowHeight = BarHeight + WindowChrome.Padding * 2;
         var row = elementPoolService.CreateElement<Window>(_hostWindow, new ElementOptions
         {
             Hierarchy = new ElementHierarchyOptions { CanContainChildren = true },
@@ -309,13 +316,18 @@ public sealed class InspectionWindowContent(
         });
         _hostWindow.AddChild(row);
 
-        var barWidth = blockWidth * BarWidthFraction;
-        var barX = (blockWidth - barWidth) / 2f;
+        // row's outer width is a hard constraint (must not exceed blockWidth); its outer height
+        // above already grew by WindowChrome.Padding on top and bottom instead, so the bar keeps
+        // its original BarHeight exactly, positioned at row's own (now padding-inset) content
+        // origin -- see HealthWindow.AddBarRow's own doc comment for the same reasoning.
+        var availableWidth = blockWidth - WindowChrome.Padding * 2;
+        var barWidth = availableWidth * BarWidthFraction;
+        var barX = (availableWidth - barWidth) / 2f;
 
         var bar = elementPoolService.CreateElement<FractionBarElement>(row, new ElementOptions
         {
             Hierarchy = new ElementHierarchyOptions { CanContainChildren = false },
-            Layout = new ElementLayoutOptions { RelativePosition = new Vector2(barX, BarVerticalPadding), Size = new Vector2(barWidth, BarHeight), DisplayMode = ElementDisplayMode.Fixed },
+            Layout = new ElementLayoutOptions { RelativePosition = new Vector2(barX, 0), Size = new Vector2(barWidth, BarHeight), DisplayMode = ElementDisplayMode.Fixed },
             Chrome = new ElementChromeOptions { ShowBorder = false, ShowTitle = false, CanUserFocus = false },
             Content = new ElementContentOptions { ContentColor = Color.Transparent },
         });
@@ -337,29 +349,39 @@ public sealed class InspectionWindowContent(
             Layout = new ElementLayoutOptions { MaximumSize = new Vector2(blockWidth, UnboundedChildHeight), DisplayMode = ElementDisplayMode.WrapContent },
             Chrome = new ElementChromeOptions { ShowBorder = false, ShowTitle = false, CanUserFocus = false },
             Content = new ElementContentOptions { ContentColor = Color.Transparent },
-            Text = new TextOptions { Text = description, TextColor = Color.Black },
+            Text = new TextOptions { Text = description, TextColor = WindowPalette.TitleTextColor },
         });
         _hostWindow.AddChild(descriptionWindow);
     }
 
-    /// <summary>Padding between one subject's section and the next, with a 1px divider (SeparatorBar's own 75%-width centering -- the same fraction the HP row above uses) vertically centered within it.</summary>
+    /// <summary>
+    /// Padding between one subject's section and the next, with a 1px divider (SeparatorBar's own
+    /// 75%-width centering -- the same fraction the HP row above uses) vertically centered within
+    /// it. spacer's outer height grows by WindowChrome.Padding on top and bottom (not externally
+    /// constrained, unlike its width) so BlockPadding still means exactly what it always did --
+    /// spacer's own padded content height -- and the vertical-centering math below is unaffected.
+    /// spacer's outer width IS a hard constraint (must not exceed blockWidth), so the separator's
+    /// own width shrinks to fit inside spacer's padded content area instead.
+    /// </summary>
     private void BuildSpacer(float blockWidth)
     {
+        var spacerHeight = BlockPadding + WindowChrome.Padding * 2;
         var spacer = elementPoolService.CreateElement<Window>(_hostWindow, new ElementOptions
         {
             Hierarchy = new ElementHierarchyOptions { CanContainChildren = true },
-            Layout = new ElementLayoutOptions { Size = new Vector2(blockWidth, BlockPadding), MaximumSize = new Vector2(blockWidth, UnboundedChildHeight), DisplayMode = ElementDisplayMode.Fixed, IsTransparent = true },
+            Layout = new ElementLayoutOptions { Size = new Vector2(blockWidth, spacerHeight), MaximumSize = new Vector2(blockWidth, UnboundedChildHeight), DisplayMode = ElementDisplayMode.Fixed, IsTransparent = true },
             Chrome = new ElementChromeOptions { ShowBorder = false, ShowTitle = false, CanUserFocus = false },
         });
         _hostWindow.AddChild(spacer);
 
+        var availableWidth = blockWidth - WindowChrome.Padding * 2;
         var separator = elementPoolService.CreateElement<SeparatorBar>(spacer, new ElementOptions
         {
             Hierarchy = new ElementHierarchyOptions { CanContainChildren = false },
-            Layout = new ElementLayoutOptions { RelativePosition = new Vector2(0, (BlockPadding - SeparatorHeight) / 2f), Size = new Vector2(blockWidth, SeparatorHeight), DisplayMode = ElementDisplayMode.Fixed },
+            Layout = new ElementLayoutOptions { RelativePosition = new Vector2(0, (BlockPadding - SeparatorHeight) / 2f), Size = new Vector2(availableWidth, SeparatorHeight), DisplayMode = ElementDisplayMode.Fixed },
             Chrome = new ElementChromeOptions { ShowBorder = false, ShowTitle = false, CanUserFocus = false },
         });
-        separator.Configure(Color.Black);
+        separator.Configure(WindowPalette.TitleTextColor);
         spacer.AddChild(separator);
     }
 
@@ -378,7 +400,7 @@ public sealed class InspectionWindowContent(
                 Hierarchy = new ElementHierarchyOptions { CanContainChildren = false },
                 Layout = new ElementLayoutOptions { MaximumSize = new Vector2(blockWidth, UnboundedChildHeight), DisplayMode = ElementDisplayMode.WrapContent },
                 Chrome = new ElementChromeOptions { ShowTitle = true, TitleText = entry.ComponentType.Name, ShowBorder = true, BorderSize = new Vector2(1, 1) },
-                Text = new TextOptions { Text = entry.Value, TextColor = Color.Black },
+                Text = new TextOptions { Text = entry.Value, TextColor = WindowPalette.TitleTextColor },
             });
             _hostWindow.AddChild(componentWindow);
             _adminDumpWindows.Add(componentWindow);

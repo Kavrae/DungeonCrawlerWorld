@@ -4,6 +4,7 @@ using Game.Modules.Core.Components;
 using Microsoft.Xna.Framework;
 using Presentation.Fonts;
 using Presentation.Rendering;
+using Presentation.UI.Chrome;
 
 namespace Presentation.UI.Looting;
 
@@ -23,15 +24,13 @@ public sealed class EntityIconElement(
     DirectComponentPool<GlyphComponent> glyphPool)
     : Element(fontService, elementPoolService, labelRenderer)
 {
-    private const float GlyphFontSizeFraction = 0.8f;
-
     private int _entityId;
     private SpriteFontBase _glyphFont = null!;
 
     public void Configure(int entityId, Vector2 iconSize)
     {
         _entityId = entityId;
-        _glyphFont = fontService.GetFont((int)(iconSize.Y * GlyphFontSizeFraction));
+        _glyphFont = fontService.GetFont((int)(iconSize.Y * FontChrome.IconGlyphFontFraction));
     }
 
     public override void DrawContent(GameTime gameTime)

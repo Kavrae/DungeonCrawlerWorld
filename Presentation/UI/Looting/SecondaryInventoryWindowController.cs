@@ -1,6 +1,8 @@
 using Engine.ECS.Components;
 using Game.Modules.Death.Components;
 using Microsoft.Xna.Framework;
+using Presentation.UI.Chrome;
+using Presentation.UI.ColorPalettes;
 using Presentation.UI.Inventory;
 
 namespace Presentation.UI.Looting;
@@ -23,9 +25,6 @@ public sealed class SecondaryInventoryWindowController(
     ContextMenuController contextMenuController,
     MapWindow mapWindow)
 {
-    /// <summary>Fixed width cap for the corpse grid's own item hover popup; height auto-grows with content -- see Tooltip, mirroring InventoryFolderController's own hover popup sizing.</summary>
-    private static readonly Vector2 HoverPopupMaximumSize = new(220, 10000f);
-
     private UiLayerStack _layers = null!;
     private Tooltip _hoverPopup = null!;
     private CorpseInventoryWindow? _window;
@@ -51,7 +50,7 @@ public sealed class SecondaryInventoryWindowController(
         // toggled-via-IsVisible lifecycle InventoryFolderController's own hover popups use.
         _hoverPopup = elementPoolService.CreateElement<Tooltip>(null, new ElementOptions
         {
-            Layout = new ElementLayoutOptions { RelativePosition = Vector2.Zero, MaximumSize = HoverPopupMaximumSize, DisplayMode = ElementDisplayMode.WrapContent, IsVisible = false },
+            Layout = new ElementLayoutOptions { RelativePosition = Vector2.Zero, MaximumSize = PopupChrome.CorpseLootHoverPopupMaximumSize, DisplayMode = ElementDisplayMode.WrapContent, IsVisible = false },
             Chrome = new ElementChromeOptions { ShowBorder = true, ShowTitle = true, CanUserFocus = false, CanUserClose = false },
         });
         _hoverPopup.Initialize();
@@ -106,7 +105,7 @@ public sealed class SecondaryInventoryWindowController(
                 CanUserResize = true,
                 CanUserFocus = true,
             },
-            Content = new ElementContentOptions { ContentColor = CorpseInventoryWindow.BackgroundColor },
+            Content = new ElementContentOptions { ContentColor = WindowPalette.PanelBackgroundColor },
         });
         window.Configure(targetEntityId, _hoverPopup, (entityId, stackInstanceId) => OnItemSelected?.Invoke(entityId, stackInstanceId), (entityId, stackInstanceId) => OnCompareRequested?.Invoke(entityId, stackInstanceId));
         window.Closed += HandleClosed;

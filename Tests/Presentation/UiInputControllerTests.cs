@@ -2388,6 +2388,13 @@ public sealed class UiInputControllerTests
         Assert.AreEqual(itemId, boundItemId);
     }
 
+    /// <summary>
+    /// The highlight is deliberately delayed by the same ContentDragGhostDelayFrames as the drag
+    /// ghost itself (see ContentDragGhostVisible) -- a plain press-then-release tap on a bound
+    /// hotbar slot used to flash every slot gold for a frame before the release could resolve it
+    /// as "not actually a drag" (confirmed live), so the highlight now waits for the same
+    /// held-long-enough signal the ghost already uses instead of firing unconditionally on press.
+    /// </summary>
     [TestMethod]
     public void Drag_FromInventoryCell_TurnsOnHotbarDragHighlight_UntilReleased()
     {
@@ -2398,7 +2405,14 @@ public sealed class UiInputControllerTests
         var pressPoint = cell.ContentRectangle.Center;
         controller.Update(NoKeys, MouseAt(pressPoint.X, pressPoint.Y, ButtonState.Released));
         controller.Update(NoKeys, MouseAt(pressPoint.X, pressPoint.Y, ButtonState.Pressed));
-        Assert.IsTrue(hotbar.IsAcceptingDrag);
+        Assert.IsFalse(hotbar.IsAcceptingDrag, "Not yet -- a fresh press hasn't been held long enough to distinguish a drag from a tap.");
+
+        for (var frame = 0; frame < 20; frame++)
+        {
+            controller.Update(NoKeys, MouseAt(pressPoint.X, pressPoint.Y, ButtonState.Pressed));
+        }
+
+        Assert.IsTrue(hotbar.IsAcceptingDrag, "Held well past the ghost-visibility delay -- should read as a real drag by now.");
 
         controller.Update(NoKeys, MouseAt(1000, 1000, ButtonState.Released));
         Assert.IsFalse(hotbar.IsAcceptingDrag);

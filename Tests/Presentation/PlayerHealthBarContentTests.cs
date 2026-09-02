@@ -12,6 +12,7 @@ using Microsoft.Xna.Framework.Input;
 using Presentation.Fonts;
 using Presentation.Rendering;
 using Presentation.UI;
+using Presentation.UI.Chrome;
 using Presentation.UI.Content;
 using System.Linq;
 
@@ -96,7 +97,7 @@ public sealed class PlayerHealthBarContentTests
         var (content, hostWindow) = Build(complexHealth: true);
         var insidePoint = InsideBar(hostWindow);
 
-        for (var frame = 0; frame < HudMetrics.HoverTooltipDelayFrames - 1; frame++)
+        for (var frame = 0; frame < HudChrome.HoverTooltipDelayFrames - 1; frame++)
         {
             content.Update(new GameTime(), MouseAt(insidePoint), ScreenBounds);
             Assert.IsFalse(content.HoverPopup.IsVisible, $"Popup must stay hidden before the delay threshold (frame {frame}).");
@@ -109,7 +110,7 @@ public sealed class PlayerHealthBarContentTests
         var (content, hostWindow) = Build(complexHealth: true);
         var insidePoint = InsideBar(hostWindow);
 
-        for (var frame = 0; frame < HudMetrics.HoverTooltipDelayFrames; frame++)
+        for (var frame = 0; frame < HudChrome.HoverTooltipDelayFrames; frame++)
         {
             content.Update(new GameTime(), MouseAt(insidePoint), ScreenBounds);
         }
@@ -123,7 +124,7 @@ public sealed class PlayerHealthBarContentTests
         var (content, hostWindow) = Build(complexHealth: true);
         var insidePoint = InsideBar(hostWindow);
 
-        for (var frame = 0; frame < HudMetrics.HoverTooltipDelayFrames; frame++)
+        for (var frame = 0; frame < HudChrome.HoverTooltipDelayFrames; frame++)
         {
             content.Update(new GameTime(), MouseAt(insidePoint), ScreenBounds);
         }
@@ -140,7 +141,7 @@ public sealed class PlayerHealthBarContentTests
         var (content, hostWindow) = Build(complexHealth: true);
         var insidePoint = InsideBar(hostWindow);
 
-        for (var frame = 0; frame < HudMetrics.HoverTooltipDelayFrames; frame++)
+        for (var frame = 0; frame < HudChrome.HoverTooltipDelayFrames; frame++)
         {
             content.Update(new GameTime(), MouseAt(insidePoint), ScreenBounds);
         }

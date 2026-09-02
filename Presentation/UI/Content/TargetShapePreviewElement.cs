@@ -3,6 +3,7 @@ using Microsoft.Xna.Framework;
 using Microsoft.Xna.Framework.Graphics;
 using Presentation.Fonts;
 using Presentation.Rendering;
+using Presentation.UI.Chrome;
 using Presentation.UI.ColorPalettes;
 
 namespace Presentation.UI.Content;
@@ -29,8 +30,6 @@ public sealed class TargetShapePreviewElement(FontService fontService, ElementPo
     private const float CellBorderThickness = 1f;
     private const float PlayerMarkerInset = 3f;
     private const int CircleSliverCount = 48;
-    private const float NumberFontFraction = 0.6f;
-    private const int MinNumberFontSize = 6;
 
     private static readonly Color CellBorderColor = WindowPalette.BorderColor;
     private static readonly Color CellFillColor = WindowPalette.PanelContentColor;
@@ -55,7 +54,7 @@ public sealed class TargetShapePreviewElement(FontService fontService, ElementPo
         _minY = minY;
         _cellSize = cellSize;
         _highlightedOffsets = highlightedOffsets;
-        _numberFont = FontService.GetFont(System.Math.Max(MinNumberFontSize, (int)(cellSize * NumberFontFraction)));
+        _numberFont = FontService.GetFont(System.Math.Max(FontChrome.TargetShapePreviewMinNumberFontSize, (int)(cellSize * FontChrome.TargetShapePreviewNumberFontFraction)));
     }
 
     public override void DrawContent(GameTime gameTime)

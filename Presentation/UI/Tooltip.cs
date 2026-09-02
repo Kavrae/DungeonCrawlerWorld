@@ -1,6 +1,7 @@
 using Microsoft.Xna.Framework;
 using Presentation.Fonts;
 using Presentation.Rendering;
+using Presentation.UI.ColorPalettes;
 
 namespace Presentation.UI;
 
@@ -30,6 +31,14 @@ namespace Presentation.UI;
 public sealed class Tooltip(FontService fontService, ElementPoolService elementPoolService, LabelRenderer labelRenderer)
     : TextWindow(fontService, elementPoolService, labelRenderer)
 {
+    /// <summary>TextWindow's own default (WindowPalette.BodyTextColor, Black) reads fine against a light content background -- every Tooltip popup instead sits on WindowPalette.PanelBackgroundColor's dark fill (Element.Build's own ContentColor fallback), where black text is illegible. No caller currently opts out with its own explicit TextOptions.TextColor, but this still only overrides the fallback, not an explicit choice.</summary>
+    public override void Build(Element? parent, ElementOptions options)
+    {
+        base.Build(parent, options);
+
+        TextColor = options.Text?.TextColor ?? WindowPalette.TitleTextColor;
+    }
+
     /// <summary>Repositions and shows this popup next to target -- a titleText bar only if titleText is supplied (toggled dynamically since one shared instance may be used both with and without a titleText across calls, e.g. AbilityScoreWindow's score-description vs. modifier-source popups). Call every frame the same thing should stay hovered -- cheap no-op churn, the same idiom every current caller (AbilityScoreWindow, InventoryGridContent, HotbarController) already uses for its own hover-driven popup.</summary>
     public void ShowNear(Rectangle target, PopupAnchor anchor, Vector2 gap, string bodyText, string? titleText = null)
     {
@@ -67,6 +76,7 @@ public sealed class Tooltip(FontService fontService, ElementPoolService elementP
         // Re-pins width to MaximumSize.X after the base class's shrink-to-widest-line pass above.
         var fixedContentWidth = _geometry.MaximumSize.X - BorderInsetDoubled.X;
         _contentState.Size.X = fixedContentWidth;
+        _contentState.BackgroundSize.X = fixedContentWidth;
         _geometry.CurrentSize.X = _geometry.MaximumSize.X;
 
         if (_headerState.ShowHeader)

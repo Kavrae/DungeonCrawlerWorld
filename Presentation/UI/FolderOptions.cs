@@ -14,6 +14,6 @@ public sealed class FolderOptions
     /// <summary>Defaults to Folder.DefaultIconSize if unset.</summary>
     public Vector2? IconSize { get; set; }
 
-    /// <summary>Defaults to WindowPalette.HeaderColor if unset -- matches Window's own title-bar default, since Folder's header reads as the same kind of chrome.</summary>
+    /// <summary>Defaults to WindowPalette.HeaderBackground if unset -- matches Window's own title-bar default, since Folder's header reads as the same kind of chrome.</summary>
     public Color? BackgroundColor { get; set; }
 }

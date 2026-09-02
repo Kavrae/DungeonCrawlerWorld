@@ -2,6 +2,7 @@ using FontStashSharp;
 using Microsoft.Xna.Framework;
 using Presentation.Fonts;
 using Presentation.Rendering;
+using Presentation.UI.Chrome;
 using Presentation.UI.ColorPalettes;
 
 namespace Presentation.UI;
@@ -20,7 +21,7 @@ namespace Presentation.UI;
 public sealed class Button(FontService fontService, ElementPoolService elementPoolService, LabelRenderer labelRenderer)
     : Element(fontService, elementPoolService, labelRenderer)
 {
-    public SpriteFontBase ContentFont { get; set; } = fontService.GetFont(12);
+    public SpriteFontBase ContentFont { get; set; } = fontService.GetFont(FontChrome.DefaultFontSize);
 
     public string LeftText { get; set; } = string.Empty;
 
@@ -59,7 +60,7 @@ public sealed class Button(FontService fontService, ElementPoolService elementPo
 
         _border.Show = options.Chrome?.ShowBorder ?? true;
 
-        _contentState.BackgroundColor = options.Content?.ContentColor ?? Color.LightGray;
+        _contentState.BackgroundColor = options.Content?.ContentColor ?? WindowPalette.PanelContentColor;
 
         LeftText = options.Text?.Text ?? string.Empty;
         RightText = null;
@@ -108,13 +109,19 @@ public sealed class Button(FontService fontService, ElementPoolService elementPo
         RecalculateFixedSize(); // Keeps CurrentSize/ContentSize current -- idempotent, since a title button's own OriginalSize never changes after Build.
 
         _geometry.AbsolutePosition = headerHostAbsolutePosition + relativePosition;
-        _contentState.AbsolutePosition = _geometry.AbsolutePosition + BorderInset; // No header of its own (HeaderInsetHeight is 0), unlike RecalculateAbsolutePositions' general case.
+        // No header of its own (HeaderInsetHeight is 0), unlike RecalculateAbsolutePositions' general
+        // case. ChildContentPadding is always Vector2.Zero here too (a title button has no
+        // children), so BackgroundAbsolutePosition/AbsolutePosition coincide -- still both set
+        // explicitly, matching RecalculateAbsolutePositions' own split, since HandleClick's content
+        // hit-test reads BackgroundRectangle (derived from BackgroundAbsolutePosition), not Rectangle.
+        _contentState.BackgroundAbsolutePosition = _geometry.AbsolutePosition + BorderInset;
+        _contentState.AbsolutePosition = _contentState.BackgroundAbsolutePosition + ChildContentPadding;
 
         RecalculateRectangles();
     }
 
-    /// <summary>Translucent dark overlay for the hover highlight -- darkens whatever ContentColor this button actually has (LightGray by default) rather than a fixed replacement color, so it still reads correctly if a caller ever sets a custom ContentColor. Deliberately not WindowPalette.HighlightColor (a gold tint meant for content rows sitting on a light background) -- a button's own resting look is already a mid-gray raised bevel, where a gold tint reads oddly; a straightforward darkening matches how a pressed/hovered physical button looks.</summary>
-    private static readonly Color HoverOverlayColor = Color.Black * 0.15f;
+    /// <summary>Translucent dark overlay for the hover highlight -- darkens whatever ContentColor this button actually has (WindowPalette.PanelContentColor by default) rather than a fixed replacement color, so it still reads correctly if a caller ever sets a custom ContentColor. Deliberately not WindowPalette.HighlightColor (a gold tint meant for content rows sitting on a light background) -- a button's own resting look is already a mid-gray raised bevel, where a gold tint reads oddly; a straightforward darkening matches how a pressed/hovered physical button looks.</summary>
+    private static readonly Color HoverOverlayColor = WindowPalette.HoverDark;
 
     /// <summary>
     /// Horizontal breathing room around LeftText/RightText when both are present -- DrawLeftAligned/

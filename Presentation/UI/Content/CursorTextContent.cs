@@ -4,6 +4,7 @@ using Microsoft.Xna.Framework;
 using Microsoft.Xna.Framework.Graphics;
 using Presentation.Fonts;
 using Presentation.Rendering;
+using Presentation.UI.Chrome;
 
 namespace Presentation.UI.Content;
 
@@ -37,7 +38,7 @@ public sealed class CursorTextContent(FontService fontService, LabelRenderer lab
 
     private static readonly Color TextColor = Color.White;
 
-    private readonly SpriteFontBase _font = fontService.GetFont(14);
+    private readonly SpriteFontBase _font = fontService.GetFont(FontChrome.CursorTextFontSize);
 
     private Window _hostWindow = null!;
 

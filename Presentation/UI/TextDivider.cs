@@ -2,6 +2,7 @@ using FontStashSharp;
 using Microsoft.Xna.Framework;
 using Presentation.Fonts;
 using Presentation.Rendering;
+using Presentation.UI.Chrome;
 
 namespace Presentation.UI;
 
@@ -27,13 +28,16 @@ public sealed class TextDivider(FontService fontService, ElementPoolService elem
     private float _textPosition;
     private SpriteFontBase _font = null!;
 
-    public void Configure(string text, Color color, float widthFraction, float textPosition, int fontSize = 12)
+    // fontSize's default can't reference FontChrome.DefaultFontSize directly -- a default
+    // parameter value must be a compile-time constant, and FontChrome's fields are plain mutable
+    // statics (see its own doc comment) -- so it resolves inside the method body instead.
+    public void Configure(string text, Color color, float widthFraction, float textPosition, int? fontSize = null)
     {
         _text = text;
         _color = color;
         _widthFraction = widthFraction;
         _textPosition = textPosition;
-        _font = FontService.GetFont(fontSize);
+        _font = FontService.GetFont(fontSize ?? FontChrome.DefaultFontSize);
     }
 
     public override void DrawContent(GameTime gameTime)
@@ -45,17 +49,30 @@ public sealed class TextDivider(FontService fontService, ElementPoolService elem
         var rightEdge = ContentSize.X - margin;
         var lineY = ContentAbsolutePosition.Y + (ContentSize.Y - LineHeight) / 2f;
 
+        // MeasureString's bounding box runs right up against the last glyph's own ink -- without
+        // this gap the right-side line rendered as if it were touching/overlapping the text.
+        var rightLineStart = textEnd + WindowChrome.Gap;
+
         if (textStart > margin)
         {
             DrawLine(margin, textStart - margin, lineY);
         }
 
-        if (rightEdge > textEnd)
+        if (rightEdge > rightLineStart)
         {
-            DrawLine(textEnd, rightEdge - textEnd, lineY);
+            DrawLine(rightLineStart, rightEdge - rightLineStart, lineY);
         }
 
-        var textY = ContentAbsolutePosition.Y + (ContentSize.Y - textSize.Y) / 2f;
+        // LineHeight, not textSize.Y -- MeasureString's own bounding box tightens to whichever
+        // glyphs this specific label actually has, so a label with no descenders (most body part
+        // names) centered a hair lower than one with a 'g'/'p'/etc. Centering against the font's
+        // real line height instead keeps every label's baseline in the same place regardless of
+        // its own glyphs, and reserves enough room that a descender never bleeds past this row's
+        // own bottom edge into a scrollable parent's clip boundary (confirmed bug: the last
+        // divider in HealthWindow's scrollable body-part list -- "Right Foot" -- had its
+        // descender sliced off by the column's own scroll clamp; only the earlier body-part
+        // dividers happened to sit ABOVE that boundary, not fixed themselves).
+        var textY = ContentAbsolutePosition.Y + (ContentSize.Y - _font.LineHeight) / 2f;
         ElementPoolService.SpriteBatch.DrawString(_font, _text, new Vector2(ContentAbsolutePosition.X + textStart, textY), _color);
     }
 

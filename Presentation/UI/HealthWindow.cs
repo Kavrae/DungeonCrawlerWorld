@@ -17,6 +17,7 @@ using Game.World;
 using Microsoft.Xna.Framework;
 using Presentation.Fonts;
 using Presentation.Rendering;
+using Presentation.UI.Chrome;
 using Presentation.UI.ColorPalettes;
 
 namespace Presentation.UI;
@@ -52,9 +53,6 @@ public sealed class HealthWindow(
     ItemCatalog itemCatalog)
     : Window(fontService, elementPoolService, labelRenderer)
 {
-    public static readonly Color BackgroundColor = WindowPalette.PanelBackgroundColor;
-
-    private static readonly Color HeaderTextColor = WindowPalette.TitleColor;
     private static readonly Color BodyTextColor = Color.White;
 
     private const float RowHeight = 18f;
@@ -86,7 +84,7 @@ public sealed class HealthWindow(
     private const float ColumnGap = 6f;
 
     /// <summary>TextWindow.ContentFont defaults to 12 only the first time a pooled instance is ever truly constructed -- a settable property, not reset by Build/Configure, so a recycled instance keeps whatever size its *previous* consumer last set (see ContextMenu/GridControl/TabbedContent's own ".ContentFont = _font" call sites, each with the same "must match" comment). Cached once and assigned explicitly in AddTextRow so a row's size never depends on what the pool handed back.</summary>
-    private readonly SpriteFontBase _bodyFont = fontService.GetFont(12);
+    private readonly SpriteFontBase _bodyFont = fontService.GetFont(FontChrome.DefaultFontSize);
 
     private readonly PackedComponentPool<SimpleHealthComponent> _healthPool = componentManager.GetPackedPool<SimpleHealthComponent>();
     private readonly MultiComponentPool<BodyPartComponent> _bodyParts = componentManager.GetMultiPool<BodyPartComponent>();
@@ -421,14 +419,8 @@ public sealed class HealthWindow(
         var width = parent.ContentSize.X;
         for (var index = 0; index < _bodyPartRows.Count; index++)
         {
-            if (index > 0)
-            {
-                AddSpacer(parent, width, BodyPartSpacing);
-            }
-
             var row = _bodyPartRows[index];
-            BuildDivider(parent, width, row.Name);
-            AddSpacer(parent, width, BodyPartBarTopSpacing);
+            BuildDivider(parent, width, row.Name, extraSpacingBefore: index > 0 ? BodyPartSpacing : 0f, spacingAfter: BodyPartBarTopSpacing);
             _bodyPartBars.Add(AddBarRow(parent, width, ComputeFraction(row)));
 
             _bodyPartStatusEffectRowWindows.Add(TryGetBodyPartBurningLine(_bodyPartBurningTimers, _entityId, row.PartId, out var text, out var color)
@@ -490,20 +482,34 @@ public sealed class HealthWindow(
 
     private static float ComputeFraction(BodyPartRow row) => row.MaximumHealth > 0 ? MathHelper.Clamp(row.CurrentHealth / row.MaximumHealth, 0f, 1f) : 0f;
 
-    /// <summary>Section-opening divider -- a single labeled TextDivider row, the same 95%-width/12.5%-label-position shape ItemDetailsWindow.BuildDivider's own Effects/Activation headers use, so this window reads as the same visual language. Added to parent (one of the two columns), not this window directly -- see BuildColumns' own doc comment. Leads with DividerTopSpacing's own blank gap, so a divider never sits flush against whatever content (or column top) precedes it.</summary>
-    private void BuildDivider(Window parent, float width, string label)
+    /// <summary>
+    /// Section-opening divider -- a single labeled TextDivider row, the same 95%-width/12.5%-label-position
+    /// shape ItemDetailsWindow.BuildDivider's own Effects/Activation headers use, so this window reads as
+    /// the same visual language. Added to parent (one of the two columns), not this window directly -- see
+    /// BuildColumns' own doc comment. Leads with DividerTopSpacing's own gap, set as the preceding
+    /// sibling's SpacingAfter so a divider never sits flush against whatever content precedes it -- a
+    /// no-op when this is the column's very first child, since there's no preceding sibling to carry that
+    /// gap; the column's own top ContentPadding covers that case instead. extraSpacingBefore adds on top
+    /// of DividerTopSpacing (see BuildBodyPartSection's own between-parts BodyPartSpacing); spacingAfter is
+    /// set on the divider itself, for whatever needs extra room right after it (see BuildBodyPartSection's
+    /// own BodyPartBarTopSpacing before its bar row).
+    /// </summary>
+    private void BuildDivider(Window parent, float width, string label, float extraSpacingBefore = 0f, float spacingAfter = 0f)
     {
-        AddSpacer(parent, width, DividerTopSpacing);
+        if (parent.ChildElements.Count > 0)
+        {
+            parent.ChildElements[^1].SetSpacingAfter(DividerTopSpacing + extraSpacingBefore);
+        }
 
         var divider = elementPoolService.CreateElement<TextDivider>(parent, new ElementOptions
         {
             Hierarchy = new ElementHierarchyOptions { CanContainChildren = false },
-            Layout = new ElementLayoutOptions { Size = new Vector2(width, RowHeight), MaximumSize = new Vector2(width, UnboundedRowHeight), DisplayMode = ElementDisplayMode.Fixed },
+            Layout = new ElementLayoutOptions { Size = new Vector2(width, RowHeight), MaximumSize = new Vector2(width, UnboundedRowHeight), DisplayMode = ElementDisplayMode.Fixed, SpacingAfter = spacingAfter },
             Chrome = new ElementChromeOptions { ShowBorder = false, ShowTitle = false, CanUserFocus = false },
             Content = new ElementContentOptions { ContentColor = Color.Transparent },
         });
         parent.AddChild(divider);
-        divider.Configure(label, HeaderTextColor, DividerWidthFraction, DividerLabelTextPosition);
+        divider.Configure(label, WindowPalette.HeaderTextColor, DividerWidthFraction, DividerLabelTextPosition);
     }
 
     private TextWindow AddTextRow(Window parent, string text, Color textColor)
@@ -521,20 +527,31 @@ public sealed class HealthWindow(
         return row;
     }
 
-    /// <summary>Wraps the actual bar in a full-width, untiled row -- the same shape InspectionWindowContent.BuildHealthRowIfPresent uses -- so the bar itself can be narrower than the row (BarWidthFraction) and centered within it, without disturbing this window's own vertical child tiling (which only ever sees the outer row's full width).</summary>
+    /// <summary>
+    /// Wraps the actual bar in a full-width, untiled row -- the same shape InspectionWindowContent.
+    /// BuildHealthRowIfPresent uses -- so the bar itself can be narrower than the row (BarWidthFraction)
+    /// and centered within it, without disturbing this window's own vertical child tiling (which
+    /// only ever sees the outer row's full width). row's outer width is a hard constraint (must not
+    /// exceed the column's own width), so the bar's width shrinks to fit inside row's own padded
+    /// content area instead; row's outer height is not similarly constrained, so it grows by
+    /// WindowChrome.Padding on top and bottom instead, letting the bar keep its original BarHeight
+    /// exactly, with real breathing room around it rather than being squeezed into a smaller box.
+    /// </summary>
     private FractionBarElement AddBarRow(Window parent, float width, float fraction)
     {
+        var rowHeight = BarHeight + WindowChrome.Padding * 2;
         var row = elementPoolService.CreateElement<Window>(parent, new ElementOptions
         {
             Hierarchy = new ElementHierarchyOptions { CanContainChildren = true },
-            Layout = new ElementLayoutOptions { Size = new Vector2(width, BarHeight), MaximumSize = new Vector2(width, UnboundedRowHeight), DisplayMode = ElementDisplayMode.Fixed },
+            Layout = new ElementLayoutOptions { Size = new Vector2(width, rowHeight), MaximumSize = new Vector2(width, UnboundedRowHeight), DisplayMode = ElementDisplayMode.Fixed },
             Chrome = new ElementChromeOptions { ShowBorder = false, ShowTitle = false, CanUserFocus = false },
             Content = new ElementContentOptions { ContentColor = Color.Transparent },
         });
         parent.AddChild(row);
 
-        var barWidth = width * BarWidthFraction;
-        var barX = (width - barWidth) / 2f;
+        var availableWidth = width - WindowChrome.Padding * 2;
+        var barWidth = availableWidth * BarWidthFraction;
+        var barX = (availableWidth - barWidth) / 2f;
 
         var bar = elementPoolService.CreateElement<FractionBarElement>(row, new ElementOptions
         {
@@ -546,18 +563,6 @@ public sealed class HealthWindow(
         row.AddChild(bar);
         bar.Configure(fraction, hasResource: true, HealthBarPalette.OutlineColor, HealthBarPalette.FractionColor);
         return bar;
-    }
-
-    /// <summary>Blank vertical gap, no divider line -- BuildDivider already opens the next section, so a second line here would be redundant clutter, unlike InspectionWindowContent.BuildSpacer's own SeparatorBar (which has no adjacent divider to lean on).</summary>
-    private void AddSpacer(Window parent, float width, float height)
-    {
-        var spacer = elementPoolService.CreateElement<Window>(parent, new ElementOptions
-        {
-            Hierarchy = new ElementHierarchyOptions { CanContainChildren = false },
-            Layout = new ElementLayoutOptions { Size = new Vector2(width, height), MaximumSize = new Vector2(width, UnboundedRowHeight), DisplayMode = ElementDisplayMode.Fixed, IsTransparent = true },
-            Chrome = new ElementChromeOptions { ShowBorder = false, ShowTitle = false, CanUserFocus = false },
-        });
-        parent.AddChild(spacer);
     }
 
     /// <summary>

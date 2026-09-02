@@ -7,8 +7,8 @@ using Microsoft.Xna.Framework;
 using Presentation.Fonts;
 using Presentation.Rendering;
 using Presentation.UI.AbilityScores;
+using Presentation.UI.Chrome;
 using Presentation.UI.ColorPalettes;
-using Presentation.UI.Notifications;
 
 namespace Presentation.UI.Inventory;
 
@@ -39,31 +39,6 @@ public sealed class InventoryFolderController(
     MapWindow mapWindow,
     ContextMenuController contextMenuController)
 {
-    /// <summary>Between this Folder's own top edge and HealthWindowController's heart button sitting directly above it -- mirrors this field's own former shape/reasoning (it used to sit directly beneath the Notification folder; the heart button now occupies that slot instead, see HealthWindowController.ButtonPosition).</summary>
-    private static readonly Vector2 HealthButtonGap = new(0, 8);
-
-    /// <summary>Internal, not private -- lets InventoryFolderControllerTests confirm this actually shifted down to clear HealthWindowController's own button, the same InternalsVisibleTo access other layout-sensitive tests already rely on (see Presentation.csproj).</summary>
-    internal static readonly Vector2 FolderPosition = HealthWindowController.ButtonPosition + new Vector2(0, HealthWindowController.ButtonSize.Y) + HealthButtonGap;
-
-    private static readonly Vector2 TileSize = new(78, HudMetrics.EntrySize.Y);
-
-    /// <summary>Same reasoning as NotificationCenter.FolderMaximumSize -- a root WrapContent Folder's own MaximumSize is otherwise left at Vector2.Zero. Twice TileSize.Y tall, plus a little breathing room, since the folder now stacks two tiles (Inventory, Stats) rather than one.</summary>
-    private static readonly Vector2 FolderMaximumSize = new(200, 180);
-
-    private static readonly Vector2 WindowPosition = new(300, 150);
-
-    /// <summary>Fixed width cap for the Ability Score hover popup; height auto-grows with content -- see Tooltip.</summary>
-    private static readonly Vector2 AbilityScoreHoverPopupMaximumSize = new(220, 10000f);
-
-    /// <summary>Fixed width cap for the Inventory item hover popup; height auto-grows with content -- see Tooltip.</summary>
-    private static readonly Vector2 InventoryHoverPopupMaximumSize = new(220, 10000f);
-
-    /// <summary>Height 30% taller than the original 350 (455) -- more room for the grid now that cells are smaller (see InventoryGridContent.CellSize). Width is no longer fixed -- see WindowWidthFraction.</summary>
-    private const float WindowHeight = 455f;
-
-    /// <summary>Both windows take up this fraction of the map window's own width, side by side.</summary>
-    private const float WindowWidthFraction = 0.33f;
-
     private readonly PackedComponentPool<InventoryDisabledComponent> _disabledPool = componentManager.GetPackedPool<InventoryDisabledComponent>();
 
     private Folder _folder = null!;
@@ -113,7 +88,7 @@ public sealed class InventoryFolderController(
         // itself lives), so it always draws above it with no re-raising needed.
         _abilityScoreHoverPopup = elementPoolService.CreateElement<Tooltip>(null, new ElementOptions
         {
-            Layout = new ElementLayoutOptions { RelativePosition = Vector2.Zero, MaximumSize = AbilityScoreHoverPopupMaximumSize, DisplayMode = ElementDisplayMode.WrapContent, IsVisible = false },
+            Layout = new ElementLayoutOptions { RelativePosition = Vector2.Zero, MaximumSize = InventoryChrome.AbilityScoreHoverPopupMaximumSize, DisplayMode = ElementDisplayMode.WrapContent, IsVisible = false },
             Chrome = new ElementChromeOptions { ShowBorder = true, ShowTitle = true, CanUserFocus = false, CanUserClose = false },
         });
         _abilityScoreHoverPopup.Initialize();
@@ -124,7 +99,7 @@ public sealed class InventoryFolderController(
         // second stomp the other's ShowNear/Hide call when both windows are open side by side.
         _inventoryHoverPopup = elementPoolService.CreateElement<Tooltip>(null, new ElementOptions
         {
-            Layout = new ElementLayoutOptions { RelativePosition = Vector2.Zero, MaximumSize = InventoryHoverPopupMaximumSize, DisplayMode = ElementDisplayMode.WrapContent, IsVisible = false },
+            Layout = new ElementLayoutOptions { RelativePosition = Vector2.Zero, MaximumSize = InventoryChrome.InventoryHoverPopupMaximumSize, DisplayMode = ElementDisplayMode.WrapContent, IsVisible = false },
             Chrome = new ElementChromeOptions { ShowBorder = true, ShowTitle = true, CanUserFocus = false, CanUserClose = false },
         });
         _inventoryHoverPopup.Initialize();
@@ -132,7 +107,7 @@ public sealed class InventoryFolderController(
 
         _folder = elementPoolService.CreateElement<Folder>(null, new ElementOptions
         {
-            Layout = new ElementLayoutOptions { RelativePosition = FolderPosition, MaximumSize = FolderMaximumSize, DisplayMode = ElementDisplayMode.WrapContent },
+            Layout = new ElementLayoutOptions { RelativePosition = InventoryChrome.FolderPosition, MaximumSize = InventoryChrome.FolderMaximumSize, DisplayMode = ElementDisplayMode.WrapContent },
             Chrome = new ElementChromeOptions { ShowBorder = true, BorderStyle = BorderStyle.Outset, CanUserFocus = false },
             Folder = new FolderOptions { FallbackGlyph = "I", SpriteName = "Inventory" },
         });
@@ -166,14 +141,14 @@ public sealed class InventoryFolderController(
 
     private bool IsInventoryDisabled() => InventoryQueries.IsInventoryDisabled(_disabledPool, world.PlayerEntityId);
 
-    private float WindowWidth => mapWindow.CurrentSize.X * WindowWidthFraction;
+    private float WindowWidth => mapWindow.CurrentSize.X * InventoryChrome.WindowWidthFraction;
 
     private void CreateTile(string text, Action onClick)
     {
         var tile = elementPoolService.CreateElement<TextWindow>(_folder, new ElementOptions
         {
             Hierarchy = new ElementHierarchyOptions { CanContainChildren = false },
-            Layout = new ElementLayoutOptions { DisplayMode = ElementDisplayMode.Fixed, Size = TileSize, IsTransparent = false },
+            Layout = new ElementLayoutOptions { DisplayMode = ElementDisplayMode.Fixed, Size = InventoryChrome.TileSize, IsTransparent = false },
             Chrome = new ElementChromeOptions { ShowBorder = true, ShowTitle = false },
             Content = new ElementContentOptions { ContentColor = WindowPalette.PanelContentColor },
             Text = new TextOptions { Text = text },
@@ -189,9 +164,9 @@ public sealed class InventoryFolderController(
             Hierarchy = new ElementHierarchyOptions { CanContainChildren = true },
             Layout = new ElementLayoutOptions
             {
-                RelativePosition = WindowPosition,
-                Size = new Vector2(WindowWidth, WindowHeight),
-                MinimumSize = new Vector2(WindowWidth, WindowHeight),
+                RelativePosition = InventoryChrome.WindowPosition,
+                Size = new Vector2(WindowWidth, InventoryChrome.WindowHeight),
+                MinimumSize = new Vector2(WindowWidth, InventoryChrome.WindowHeight),
                 MaximumSize = mapWindow.CurrentSize,
                 DisplayMode = ElementDisplayMode.Fixed,
             },
@@ -206,7 +181,7 @@ public sealed class InventoryFolderController(
                 CanUserResize = true,
                 CanUserFocus = true,
             },
-            Content = new ElementContentOptions { ContentColor = InventoryManagementWindow.BackgroundColor },
+            Content = new ElementContentOptions { ContentColor = WindowPalette.PanelBackgroundColor },
         });
         window.Configure(world.PlayerEntityId, _inventoryHoverPopup, () => GetSecondaryTargetEntityId?.Invoke(), (entityId, stackInstanceId) => OnItemSelected?.Invoke(entityId, stackInstanceId), (entityId, stackInstanceId) => OnCompareRequested?.Invoke(entityId, stackInstanceId));
         window.Closed += _ => _inventoryHoverPopup.Hide(); // Closing the Inventory window mid-hover shouldn't leave the popup stranded.
@@ -217,7 +192,7 @@ public sealed class InventoryFolderController(
     private AbilityScoreWindow CreateAbilityScoreWindow()
     {
         var windowWidth = WindowWidth;
-        var childSize = new Vector2(windowWidth, WindowHeight);
+        var childSize = new Vector2(windowWidth, InventoryChrome.WindowHeight);
 
         // Anchored to the live Inventory window's own Rectangle when it's open, so this now
         // follows Inventory if it's been dragged (previously this recomputed a parallel position
@@ -227,7 +202,7 @@ public sealed class InventoryFolderController(
         // live window to anchor to) -- still clamped to screen either way.
         var relativePosition = PlayerInventoryWindow is { } playerWindow
             ? WindowCascadePlacement.ComputePosition(playerWindow.Rectangle, childSize, 0, mapWindow.CurrentSize)
-            : ScreenBoundsClamp.Clamp(new Vector2(WindowPosition.X + windowWidth + WindowCascadePlacement.Gap, WindowPosition.Y), childSize, mapWindow.CurrentSize);
+            : ScreenBoundsClamp.Clamp(new Vector2(InventoryChrome.WindowPosition.X + windowWidth + WindowCascadePlacement.Gap, InventoryChrome.WindowPosition.Y), childSize, mapWindow.CurrentSize);
 
         var window = elementPoolService.CreateElement<AbilityScoreWindow>(null, new ElementOptions
         {
@@ -249,7 +224,7 @@ public sealed class InventoryFolderController(
                 CanUserResize = true,
                 CanUserFocus = true,
             },
-            Content = new ElementContentOptions { ContentColor = AbilityScoreWindow.BackgroundColor },
+            Content = new ElementContentOptions { ContentColor = WindowPalette.PanelBackgroundColor },
         });
         window.Configure(world.PlayerEntityId, _abilityScoreHoverPopup);
         window.Closed += _ => _abilityScoreHoverPopup.Hide(); // Closing the Stats window mid-hover shouldn't leave the popup stranded.

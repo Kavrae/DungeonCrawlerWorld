@@ -4,6 +4,7 @@ using Microsoft.Xna.Framework;
 using Microsoft.Xna.Framework.Graphics;
 using Presentation.Fonts;
 using Presentation.Rendering;
+using Presentation.UI.Chrome;
 using Presentation.UI.ColorPalettes;
 using Presentation.UI;
 
@@ -21,11 +22,10 @@ namespace Presentation.UI.AbilityScores;
 public sealed class AbilityScoreModifierRow(FontService fontService, ElementPoolService elementPoolService, LabelRenderer labelRenderer)
     : Element(fontService, elementPoolService, labelRenderer)
 {
-    private const float FontFraction = 0.6f;
+    /// <summary>Clears the column's own InteriorFade glow (see AbilityScoreWindow.BuildColumns' SetOverlayGlow on the list window this row tiles inside) -- GlowRenderer's 5 rings reach 5px deep from the list window's own right edge, which this row's right edge sits flush against, so right-aligned text needs at least that much clearance plus a little breathing room to avoid sitting under the glow.</summary>
+    private const float Padding = 8f;
 
-    private const float Padding = 3f;
-
-    private static readonly Color TextColor = WindowPalette.BodyTextColor;
+    private static readonly Color TextColor = WindowPalette.TitleTextColor;
 
     private string _text = string.Empty;
     private SpriteFontBase _font = null!;
@@ -44,7 +44,7 @@ public sealed class AbilityScoreModifierRow(FontService fontService, ElementPool
         Source = line.Source;
         ModifierText = line.ModifierText;
         RemainingDurationFrames = line.RemainingDurationFrames;
-        _font = fontService.GetFont((int)(rowHeight * FontFraction));
+        _font = fontService.GetFont((int)(rowHeight * FontChrome.AbilityScoreModifierRowFontFraction));
     }
 
     public override void DrawContent(GameTime gameTime)

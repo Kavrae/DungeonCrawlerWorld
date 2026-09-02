@@ -58,8 +58,6 @@ public sealed class CorpseInventoryWindow(
     /// <summary>Wide enough for exactly GridColumns columns of InventoryGridContent.CellSize, assuming its own private CellGap (1px, duplicated here -- see InventoryGridContent.cs) -- comfortably mid-range of the width band that computes to exactly GridColumns, not right at its edge.</summary>
     private const float GridWidth = GridColumns * (24f + 1f) + 10f;
 
-    public static readonly Color BackgroundColor = WindowPalette.PanelBackgroundColor;
-
     private readonly DirectComponentPool<DisplayTextComponent> _displayTextPool = componentManager.GetDirectPool<DisplayTextComponent>();
     private readonly PackedComponentPool<DeadComponent> _deadPool = componentManager.GetPackedPool<DeadComponent>();
 
@@ -110,10 +108,18 @@ public sealed class CorpseInventoryWindow(
         return rows * (InventoryGridContent.CellSize.Y + 1f);
     }
 
+    /// <summary>
+    /// contentWidth/contentHeight are this window's own padded content area, not its outer bounds
+    /// -- the top/left/right/bottom EDGE margin is the generic ContentPadding's job now (this
+    /// Window has children), already folded into outerInsets below (see ChildContentPadding's own
+    /// doc comment: gated on CanContainChildren alone, so this reads correctly even before any
+    /// child has actually been added yet, which is exactly when this runs -- see OnChildrenInitialized).
+    /// Only the one remaining INTERNAL gap (summary-to-grid) is still this method's own Padding.
+    /// </summary>
     private Vector2 ComputeOuterSize(float gridHeight)
     {
-        var contentWidth = System.Math.Max(IconSize.X + Padding + SummaryTextWidth, GridWidth) + Padding * 2;
-        var contentHeight = SummaryHeight + gridHeight + Padding * 3;
+        var contentWidth = System.Math.Max(IconSize.X + Padding + SummaryTextWidth, GridWidth);
+        var contentHeight = SummaryHeight + Padding + gridHeight;
 
         var outerInsets = CurrentSize - ContentSize;
         return new Vector2(contentWidth, contentHeight) + outerInsets;
@@ -124,14 +130,16 @@ public sealed class CorpseInventoryWindow(
         var icon = ElementPoolService.CreateElement<EntityIconElement>(this, new ElementOptions
         {
             Hierarchy = new ElementHierarchyOptions { CanContainChildren = false },
-            Layout = new ElementLayoutOptions { RelativePosition = new Vector2(Padding, Padding), Size = IconSize, DisplayMode = ElementDisplayMode.Fixed },
+            Layout = new ElementLayoutOptions { RelativePosition = Vector2.Zero, Size = IconSize, DisplayMode = ElementDisplayMode.Fixed },
             Chrome = new ElementChromeOptions { ShowBorder = false, ShowTitle = false, CanUserFocus = false },
             Content = new ElementContentOptions { ContentColor = Color.Transparent },
         });
         icon.Configure(_entityId, IconSize);
         AddChild(icon);
 
-        var textX = Padding * 2 + IconSize.X;
+        // Padding here is the icon-to-text gap, an internal gap distinct from the (now automatic)
+        // left edge margin -- see this class's own doc comment on ComputeOuterSize.
+        var textX = Padding + IconSize.X;
         AddSummaryLine(textX, 0, ResolveName(_entityId));
         AddSummaryLine(textX, 1, $"Slain by: {ResolveKillerName()}");
         AddSummaryLine(textX, 2, $"Died at tick: {ResolveDiedAtFrame()}");
@@ -142,7 +150,7 @@ public sealed class CorpseInventoryWindow(
         var line = ElementPoolService.CreateElement<TextWindow>(this, new ElementOptions
         {
             Hierarchy = new ElementHierarchyOptions { CanContainChildren = false },
-            Layout = new ElementLayoutOptions { RelativePosition = new Vector2(x, Padding + lineIndex * SummaryLineHeight), Size = new Vector2(SummaryTextWidth, SummaryLineHeight), DisplayMode = ElementDisplayMode.Fixed },
+            Layout = new ElementLayoutOptions { RelativePosition = new Vector2(x, lineIndex * SummaryLineHeight), Size = new Vector2(SummaryTextWidth, SummaryLineHeight), DisplayMode = ElementDisplayMode.Fixed },
             Chrome = new ElementChromeOptions { ShowBorder = false, ShowTitle = false, CanUserFocus = false },
             Content = new ElementContentOptions { ContentColor = Color.Transparent },
             Text = new TextOptions { Text = text, TextColor = Color.White },
@@ -158,7 +166,9 @@ public sealed class CorpseInventoryWindow(
             Hierarchy = new ElementHierarchyOptions { CanContainChildren = true },
             Layout = new ElementLayoutOptions
             {
-                RelativePosition = new Vector2(Padding, Padding + SummaryHeight + Padding),
+                // Padding here is the summary-to-grid gap, an internal gap distinct from the (now
+                // automatic) top/left edge margin -- see this class's own doc comment on ComputeOuterSize.
+                RelativePosition = new Vector2(0, SummaryHeight + Padding),
                 Size = new Vector2(GridWidth, gridHeight),
                 DisplayMode = ElementDisplayMode.Fixed,
             },

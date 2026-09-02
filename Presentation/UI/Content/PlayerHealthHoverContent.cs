@@ -8,6 +8,7 @@ using Microsoft.Xna.Framework;
 using Microsoft.Xna.Framework.Graphics;
 using Presentation.Fonts;
 using Presentation.Rendering;
+using Presentation.UI.Chrome;
 using Presentation.UI.ColorPalettes;
 
 namespace Presentation.UI.Content;
@@ -50,7 +51,7 @@ public sealed class PlayerHealthHoverContent(
     public void Initialize(Window hostWindow)
     {
         _hostWindow = hostWindow;
-        _font = fontService.GetFont(10);
+        _font = fontService.GetFont(FontChrome.PlayerHealthHoverFontSize);
     }
 
     public void Update(GameTime gameTime) { }

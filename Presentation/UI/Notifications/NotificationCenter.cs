@@ -1,6 +1,8 @@
 ﻿using Engine.Events;
 using Game.Notifications;
 using Microsoft.Xna.Framework;
+using Presentation.UI.Chrome;
+using Presentation.UI.ColorPalettes;
 
 namespace Presentation.UI.Notifications;
 
@@ -18,35 +20,6 @@ namespace Presentation.UI.Notifications;
 /// </summary>
 public sealed class NotificationCenter(ElementPoolService elementPoolService, EventBus eventBus, UiLayerStack layers, ContextMenuController contextMenuController)
 {
-    private static readonly Vector2 FolderPosition = HudMetrics.Margin;
-
-    /// <summary>
-    /// Generous ceiling for the Folder's WrapContent sizing -- a root WrapContent window's own
-    /// MaximumSize is otherwise left at Vector2.Zero (see Window.BuildWindow: it only falls
-    /// back to a parent's ContentSize or an explicit Layout.Size/MaximumSize, and a root Folder
-    /// has neither a parent nor a fixed Size), which would zero-cap every child's own Measure
-    /// pass forever, since a root window's MaximumSize is otherwise never recomputed after
-    /// BuildWindow. Comfortably larger than the widest/tallest the category stack can ever be.
-    /// Public: InventoryFolderController positions its own folder beneath this one, derived
-    /// from this ceiling rather than a second, silently-driftable duplicate of the same number.
-    /// </summary>
-    public static readonly Vector2 FolderMaximumSize = new(200, 400);
-
-    /// <summary>
-    /// Deliberately its own constant, not HudMetrics.EntrySize (65px wide -- sized for short
-    /// hotbar/health-bar-style content elsewhere). Also drives the Folder's own width, both
-    /// expanded (RecalculateWrapContentWindowSize fits its title/content to the widest child)
-    /// and collapsed (Folder.RecalculateMinimizedWindowSize matches that same width instead of
-    /// shrinking to just its icon). Width is 117 (78 * 1.5) to keep pace with TextWindow.
-    /// ContentFont's own 8 -> 12 (50%) increase -- otherwise the widest label ("Achievement: 0")
-    /// would overflow the tile at the larger font.
-    /// </summary>
-    private static readonly Vector2 SummaryEntrySize = new(117, HudMetrics.EntrySize.Y);
-
-    private static readonly Vector2 ActiveNotificationBasePosition = new(200, 200);
-    private static readonly Vector2 ActiveNotificationMaximumSize = new(640, 176);
-    private const int ActiveNotificationStackOffset = 10;
-
     private readonly List<(NotificationCategory Category, TextWindow SummaryWindow, List<Notification> Notifications)> _unreadByCategory = [];
     private readonly List<(Window ActiveWindow, Notification Notification)> _activeNotifications = [];
 
@@ -90,7 +63,7 @@ public sealed class NotificationCenter(ElementPoolService elementPoolService, Ev
     {
         _folder = elementPoolService.CreateElement<Folder>(null, new ElementOptions
         {
-            Layout = new ElementLayoutOptions { RelativePosition = FolderPosition, MaximumSize = FolderMaximumSize, DisplayMode = ElementDisplayMode.WrapContent },
+            Layout = new ElementLayoutOptions { RelativePosition = NotificationChrome.FolderPosition, MaximumSize = NotificationChrome.FolderMaximumSize, DisplayMode = ElementDisplayMode.WrapContent },
             Chrome = new ElementChromeOptions { ShowBorder = true, BorderStyle = BorderStyle.Outset, CanUserFocus = false },
             Folder = new FolderOptions { SpriteName = "AchievementCenter", FallbackGlyph = "★" },
         });
@@ -116,9 +89,9 @@ public sealed class NotificationCenter(ElementPoolService elementPoolService, Ev
                 var countWindow = elementPoolService.CreateElement<TextWindow>(_folder, new ElementOptions
                 {
                     Hierarchy = new ElementHierarchyOptions { CanContainChildren = false },
-                    Layout = new ElementLayoutOptions { DisplayMode = ElementDisplayMode.Fixed, Size = SummaryEntrySize, IsTransparent = false },
+                    Layout = new ElementLayoutOptions { DisplayMode = ElementDisplayMode.Fixed, Size = NotificationChrome.SummaryEntrySize, IsTransparent = false },
                     Chrome = new ElementChromeOptions { ShowBorder = true, ShowTitle = false },
-                    Content = new ElementContentOptions { ContentColor = Color.LightGray },
+                    Content = new ElementContentOptions { ContentColor = WindowPalette.PanelContentColor },
                     Text = new TextOptions { Text = $"{category}: 0" },
                 });
 
@@ -218,7 +191,7 @@ public sealed class NotificationCenter(ElementPoolService elementPoolService, Ev
 
     private void ShowActive(Notification notification)
     {
-        var offset = _activeNotifications.Count * ActiveNotificationStackOffset;
+        var offset = _activeNotifications.Count * NotificationChrome.ActiveNotificationStackOffset;
         // System notifications are uncloseable-except-by-resolution (closing IS the
         // resolution), open as a menu window (see below), and pause the game as a result (see
         // GameLoop, which checks UiLayerStack.IsMenuModeActive); Quest notifications can be
@@ -230,8 +203,8 @@ public sealed class NotificationCenter(ElementPoolService elementPoolService, Ev
             Hierarchy = new ElementHierarchyOptions { CanContainChildren = false },
             Layout = new ElementLayoutOptions
             {
-                RelativePosition = ActiveNotificationBasePosition + new Vector2(offset, offset),
-                MaximumSize = ActiveNotificationMaximumSize,
+                RelativePosition = NotificationChrome.ActiveNotificationBasePosition + new Vector2(offset, offset),
+                MaximumSize = NotificationChrome.ActiveNotificationMaximumSize,
                 DisplayMode = ElementDisplayMode.WrapContent,
             },
             Chrome = new ElementChromeOptions
@@ -245,7 +218,7 @@ public sealed class NotificationCenter(ElementPoolService elementPoolService, Ev
                 CanUserMove = true,
                 CanUserScrollVertical = true
             },
-            Text = new TextOptions { Text = BuildDisplayText(notification) },
+            Text = new TextOptions { Text = BuildDisplayText(notification), TextColor = WindowPalette.TitleTextColor },
         });
 
         notificationWindow.Closed += OnActiveNotificationClosed;
@@ -388,8 +361,8 @@ public sealed class NotificationCenter(ElementPoolService elementPoolService, Ev
     {
         var entry = _unreadByCategory.First(e => e.Category == category);
         entry.SummaryWindow.UpdateText($"{category}: {entry.Notifications.Count}");
-        entry.SummaryWindow.SetGlow(entry.Notifications.Count > 0, Color.Gold);
+        entry.SummaryWindow.SetGlow(entry.Notifications.Count > 0, WindowPalette.AttentionGlow);
 
-        _folder.SetGlow(_unreadByCategory.Any(e => e.Notifications.Count > 0), Color.Gold);
+        _folder.SetGlow(_unreadByCategory.Any(e => e.Notifications.Count > 0), WindowPalette.AttentionGlow);
     }
 }

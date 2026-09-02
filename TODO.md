@@ -548,15 +548,6 @@ Needs a real, explicit design: click-to-focus scoped strictly to a direct hit; o
 "default control" focused on `Initialize`; or keep the redirect but gate it explicitly and give
 Move/Resize an opt-in.
 
-#### UI visual overhaul
-
-No deliberate visual design pass yet -- each feature landed with whatever it shipped with. Target
-direction: Elden Ring-style minimalist chrome + FFXIV-style hotbar presentation. Also:
-`GlowRenderer.Draw` currently only draws an outward ring (never highlights an element's interior);
-wanted: a whole-element highlight, noticeably lighter than today's 0.7 max alpha. No worked-out visual
-language yet -- needs mockups before touching `BorderRenderer`/`GlowRenderer`/`WindowPalette` (shared by
-every window).
-
 #### Inventory grid item badge clarity
 
 `InventoryItemStackCell` has accumulated several badges (quantity-or-charges number, Merged-Stack "+",
@@ -581,7 +572,7 @@ clearly-stays-`Presentation` sets are both fairly obvious (generic Element/windo
 game-specific concrete windows). The hard part: `UiInputController` is mostly generic but has
 game-specific branches (`HotbarController`/`ActionTargetingController`/drag-payload type-matching) woven
 directly into its methods -- needs those pulled behind a `UIEngine`-defined hook `Presentation`
-implements, not a straight file move. `ColorPalettes`/`HudMetrics` need the same judgment call. No
+implements, not a straight file move. `ColorPalettes`/`Chrome` need the same judgment call. No
 migration plan designed -- purely a scoping note, low priority until UIEngine-shaped reuse becomes real.
 
 #### Abstract element pool factory registration
@@ -599,6 +590,13 @@ just-motionless living entity. Draw a red X overlay when `DeadComponent` is pres
 
 `Folder.SetGlow` (used by `NotificationCenter`'s unread-glow) is flat on/off. Make it pulse instead --
 more noticeable, especially once more things drive glow (Magic Menu, Skills leveling).
+
+#### "Open many" button for stacked achievement notifications
+
+`NotificationCenter`'s per-category unread count (`_unreadByCategory`) only opens one notification at a
+time (`OpenNextNotification`). Add a button that instead opens as many non-overlapping achievement
+windows at once as will fit on screen (cascade/tile placement, cf. `WindowCascadePlacement`), so a
+backlog of unread achievements doesn't have to be worked through one popup at a time.
 
 #### Highlighted-tile visual redesign -- pick one of two directions
 

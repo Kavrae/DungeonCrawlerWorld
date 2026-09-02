@@ -31,4 +31,7 @@ internal sealed class ElementGeometryState
     public Vector2 MinimumSize;
     public Vector2 MaximumSize;
     public Rectangle Rectangle;
+
+    /// <summary>Gap tiled after this element by RetileChildren, on top of its own CurrentSize -- replaces inserting a separate blank spacer element into the sibling chain.</summary>
+    public float SpacingAfter;
 }

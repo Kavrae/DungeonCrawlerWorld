@@ -7,6 +7,7 @@ using Game.Modules.Movement.Components;
 using Microsoft.Xna.Framework;
 using Microsoft.Xna.Framework.Graphics;
 using Presentation.Fonts;
+using Presentation.UI.Chrome;
 
 namespace Presentation.UI.Content;
 
@@ -51,7 +52,7 @@ public sealed class DebugWindowContent(
     public void Initialize(Window hostWindow)
     {
         _hostWindow = hostWindow;
-        _font = fontService.GetFont(8);
+        _font = fontService.GetFont(FontChrome.DebugWindowFontSize);
     }
 
     public void Update(GameTime gameTime)

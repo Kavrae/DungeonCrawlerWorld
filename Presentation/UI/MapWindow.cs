@@ -21,6 +21,7 @@ using Microsoft.Xna.Framework.Graphics;
 using Microsoft.Xna.Framework.Input;
 using Presentation.Fonts;
 using Presentation.Rendering;
+using Presentation.UI.Chrome;
 using Presentation.UI.ColorPalettes;
 
 namespace Presentation.UI;
@@ -218,11 +219,11 @@ public sealed class MapWindow : Window
     {
         base.Initialize();
 
-        _mediumFont = FontService.GetFont(24);
-        _largeFont = FontService.GetFont(72);
-        _hugeFont = FontService.GetFont(108);
-        _tinyFont = FontService.GetFont(6); // ~1/3 of _mediumFont, for the tiny-entity grid.
-        _badgeFont = FontService.GetFont(12); // Double _tinyFont, for the up/down layer-occupancy badges -- legible at a glance without competing with the main glyph.
+        _mediumFont = FontService.GetFont(FontChrome.MapMediumFontSize);
+        _largeFont = FontService.GetFont(FontChrome.MapLargeFontSize);
+        _hugeFont = FontService.GetFont(FontChrome.MapHugeFontSize);
+        _tinyFont = FontService.GetFont(FontChrome.MapTinyFontSize); // ~1/3 of _mediumFont, for the tiny-entity grid.
+        _badgeFont = FontService.GetFont(FontChrome.MapBadgeFontSize); // Double _tinyFont, for the up/down layer-occupancy badges -- legible at a glance without competing with the main glyph.
 
         _camera.Initialize(ContentSize);
         _backgroundCache.Resize();
@@ -416,7 +417,7 @@ public sealed class MapWindow : Window
             return;
         }
 
-        DrawMaskedTileHighlight(spriteBatch, unitRectangle, selectedPosition.X, selectedPosition.Y, Color.Gold);
+        DrawSelectedTileGlow(spriteBatch, unitRectangle, selectedPosition.X, selectedPosition.Y);
     }
 
     /// <summary>
@@ -443,7 +444,7 @@ public sealed class MapWindow : Window
         {
             for (var offsetY = 0; offsetY < transform.Size.Y; offsetY++)
             {
-                DrawMaskedTileHighlight(spriteBatch, unitRectangle, transform.Position.X + offsetX, transform.Position.Y + offsetY, Color.Gold);
+                DrawSelectedTileGlow(spriteBatch, unitRectangle, transform.Position.X + offsetX, transform.Position.Y + offsetY);
             }
         }
     }
@@ -460,17 +461,40 @@ public sealed class MapWindow : Window
     /// </summary>
     private void DrawMaskedTileHighlight(SpriteBatch spriteBatch, Texture2D unitRectangle, int mapNodeX, int mapNodeY, Color borderColor)
     {
+        if (!TryGetTileRectangle(mapNodeX, mapNodeY, out var tileRectangle))
+        {
+            return;
+        }
+
+        spriteBatch.Draw(unitRectangle, tileRectangle, borderColor * TargetSelectionMaskAlpha);
+    }
+
+    /// <summary>The inspector's own "this tile is selected" highlight -- a light-blue interior-fade glow (see GridSquareRenderer's own use of the same GlowMode.InteriorFade for inventory cells, so the two read as the same visual language) rather than DrawMaskedTileHighlight's flat wash, so terrain/sprites underneath stay fully legible through the ring gaps instead of being tinted.</summary>
+    private void DrawSelectedTileGlow(SpriteBatch spriteBatch, Texture2D unitRectangle, int mapNodeX, int mapNodeY)
+    {
+        if (!TryGetTileRectangle(mapNodeX, mapNodeY, out var tileRectangle))
+        {
+            return;
+        }
+
+        GlowRenderer.Draw(spriteBatch, unitRectangle, tileRectangle, WindowPalette.Selected, GlowMode.InteriorFade);
+    }
+
+    /// <summary>The on-screen rectangle for a map-node tile, or false if it's currently scrolled outside the camera's visible viewport -- shared by DrawMaskedTileHighlight and DrawSelectedTileGlow so both no-op identically for an off-screen tile instead of throwing or drawing garbage.</summary>
+    private bool TryGetTileRectangle(int mapNodeX, int mapNodeY, out Rectangle tileRectangle)
+    {
         var column = mapNodeX - _camera.CurrentScrollPosition.X;
         var row = mapNodeY - _camera.CurrentScrollPosition.Y;
 
         if (column < 0 || column >= _camera.TileColumns || row < 0 || row >= _camera.TileRows)
         {
-            return;
+            tileRectangle = Rectangle.Empty;
+            return false;
         }
 
         var origin = TileOrigin(column, row);
-        var tileRectangle = new Rectangle((int)origin.X, (int)origin.Y, _camera.CurrentTileSize.X, _camera.CurrentTileSize.Y);
-        spriteBatch.Draw(unitRectangle, tileRectangle, borderColor * TargetSelectionMaskAlpha);
+        tileRectangle = new Rectangle((int)origin.X, (int)origin.Y, _camera.CurrentTileSize.X, _camera.CurrentTileSize.Y);
+        return true;
     }
 
     /// <summary>Switches the single MapLayer this window renders, by delta layers.</summary>

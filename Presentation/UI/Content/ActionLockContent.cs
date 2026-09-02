@@ -4,17 +4,16 @@ using FontStashSharp;
 using Game.Modules.Core.Components;
 using Game.World;
 using Microsoft.Xna.Framework;
-using Microsoft.Xna.Framework.Graphics;
 using Presentation.Fonts;
 using Presentation.Rendering;
+using Presentation.UI.Chrome;
 
 namespace Presentation.UI.Content;
 
 public sealed class ActionLockContent(World world, ComponentManager componentManager, FontService fontService) : IElementContent
 {
-    public static readonly Vector2 Size = new(HudMetrics.EntrySize.Y * 1.5f, HudMetrics.EntrySize.Y * 1.5f);
+    public static readonly Vector2 Size = new(HudChrome.EntrySize.Y * 1.5f, HudChrome.EntrySize.Y * 1.5f);
 
-    private const float GlyphSizeFraction = 0.75f;
     private const int ContentInset = 2;
 
     private readonly PackedComponentPool<ActionLockComponent> _actionLocks = componentManager.GetPackedPool<ActionLockComponent>();
@@ -32,7 +31,7 @@ public sealed class ActionLockContent(World world, ComponentManager componentMan
     public void Initialize(Window hostWindow)
     {
         _hostWindow = hostWindow;
-        _font = fontService.GetFont((int)(Size.Y * GlyphSizeFraction));
+        _font = fontService.GetFont((int)(Size.Y * FontChrome.ActionLockGlyphFontFraction));
     }
 
     /// <summary>Whether the player currently has an action lock to show, and its fill fraction, is decided here -- Draw only reads the cached result and turns it into pixels.</summary>

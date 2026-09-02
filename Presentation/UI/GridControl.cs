@@ -3,6 +3,8 @@ using FontStashSharp;
 using Microsoft.Xna.Framework;
 using Presentation.Fonts;
 using Presentation.Rendering;
+using Presentation.UI.Chrome;
+using Presentation.UI.ColorPalettes;
 
 namespace Presentation.UI;
 
@@ -30,7 +32,8 @@ public sealed class GridControl(FontService fontService, ElementPoolService elem
     public const float RowHeight = 24f;
 
     private const float ControlGap = 4f;
-    private const float HorizontalPadding = 6f;
+    private const float TileTextPadding = 6f;
+    private const float LeftMargin = 6f;
     private const float SearchBoxWidth = 112f;
 
     /// <summary>Widest count text this control ever needs room for without visibly resizing as digits come and go -- four digits comfortably covers any realistic inventory tab.</summary>
@@ -39,9 +42,8 @@ public sealed class GridControl(FontService fontService, ElementPoolService elem
     /// <summary>How long the search box's text must sit unchanged before it's applied -- see DebouncedTextFilter.</summary>
     private static readonly int SearchDebounceFrames = GameTiming.FramesForSeconds(0.3f);
 
-    private static readonly Color ControlColor = new(48, 48, 48);
+    private static readonly Color ControlColor = WindowPalette.ControlBackground;
     private static readonly Color ToggleOnColor = new(80, 68, 30);
-    private static readonly Color LabelColor = Color.White;
 
     /// <summary>Fires with the newly-selected option's index into the labels Configure was given -- GridControl never knows what any index means.</summary>
     public event Action<int>? SortOptionCycled;
@@ -60,6 +62,28 @@ public sealed class GridControl(FontService fontService, ElementPoolService elem
     private TextWindow _countLabel = null!;
     private Button _sortButton = null!;
     private TextBox _searchBox = null!;
+
+    /// <summary>
+    /// This control is a flush row of controls pinned to exactly RowHeight tall, like a real
+    /// toolbar -- not a padded content panel -- so it opts out of the generic ContentPadding a
+    /// container Window would otherwise get for having children (see Element.ContentPadding's own
+    /// doc comment). Set here rather than in OnChildrenInitialized: this Window's own initial
+    /// Measure/Arrange pass (which computes ContentSize) runs between Build and
+    /// OnChildrenInitialized, and every child built in OnChildrenInitialized without an explicit
+    /// MaximumSize falls back to reading THIS ContentSize as its own MaximumSize at that same
+    /// moment (see Element.Build) -- setting the zero override only in OnChildrenInitialized left
+    /// that one Measure/Arrange pass using the still-default (4,4) padding on a freshly-pooled
+    /// instance, so a brand new GridControl's search box got clamped to a shorter MaximumSize.Y
+    /// than its own declared Size.Y on its very first open (confirmed bug: fine again after
+    /// closing and reopening, since a reused instance already carries ContentPadding == Zero from
+    /// its previous open -- ContentPadding is a plain field, never reset by Build).
+    /// </summary>
+    public override void Build(Element? parent, ElementOptions options)
+    {
+        base.Build(parent, options);
+
+        ContentPadding = Vector2.Zero;
+    }
 
     /// <summary>Must be called after CreateElement but before Initialize (same contract as InventoryManagementWindow.Configure/AbilityScoreWindow.Configure) -- sortOptionLabels must be non-empty, since the sort button always shows whichever one is currently selected. toggles may be empty (no toggles at all).</summary>
     public void Configure(IReadOnlyList<string> sortOptionLabels, IReadOnlyList<(string Label, bool DefaultOn, Action<bool> OnToggled)> toggles, string searchGhostText)
@@ -87,9 +111,11 @@ public sealed class GridControl(FontService fontService, ElementPoolService elem
     {
         base.OnChildrenInitialized();
 
-        _font = fontService.GetFont((int)(RowHeight * 0.6f));
+        _font = fontService.GetFont((int)(RowHeight * FontChrome.GridControlLabelFontFraction));
 
-        var x = HorizontalPadding;
+        // ContentPadding is already zeroed by Build (see its own doc comment) -- LeftMargin below
+        // restores this control's own original left inset now that it's no longer automatic.
+        var x = LeftMargin;
 
         _countLabel = CreateTile(WidestCountText, MeasureTileWidth(WidestCountText), x, showBorder: false);
         AddChild(_countLabel);
@@ -109,7 +135,7 @@ public sealed class GridControl(FontService fontService, ElementPoolService elem
             // carry over to an actual button, which needs a rest/pressed distinction to show.
             Chrome = new ElementChromeOptions { ShowBorder = true },
             Content = new ElementContentOptions { ContentColor = ControlColor },
-            Text = new TextOptions { Text = _sortOptionLabels[_sortOptionIndex], TextColor = LabelColor },
+            Text = new TextOptions { Text = _sortOptionLabels[_sortOptionIndex], TextColor = WindowPalette.ControlLabelTextColor },
         });
         _sortButton.ContentFont = _font; // Must match the font width was measured with, or the label can wrap/clip against the tile's own fixed width.
         _sortButton.Clicked += _ => CycleSortOption();
@@ -126,7 +152,7 @@ public sealed class GridControl(FontService fontService, ElementPoolService elem
                 Chrome = new ElementChromeOptions { ShowBorder = false, CanUserFocus = false },
                 Content = new ElementContentOptions { ContentColor = Color.Transparent },
             });
-            toggle.Configure(label, LabelPosition.East, defaultOn, ToggleOnColor, ControlColor, LabelColor, _font, onToggled);
+            toggle.Configure(label, LabelPosition.East, defaultOn, ToggleOnColor, ControlColor, WindowPalette.ControlLabelTextColor, _font, onToggled);
             AddChild(toggle);
             x += toggleWidth + ControlGap;
         }
@@ -137,11 +163,10 @@ public sealed class GridControl(FontService fontService, ElementPoolService elem
             Layout = new ElementLayoutOptions { RelativePosition = SearchBoxPosition(), Size = new Vector2(SearchBoxWidth, RowHeight), DisplayMode = ElementDisplayMode.Fixed },
             Chrome = new ElementChromeOptions { ShowBorder = true, ShowTitle = false },
             Content = new ElementContentOptions { ContentColor = ControlColor },
-            Text = new TextOptions { TextColor = LabelColor },
+            Text = new TextOptions { TextColor = WindowPalette.ControlLabelTextColor },
         });
         _searchBox.ContentFont = _font;
         _searchBox.GhostText = _searchGhostText;
-        _searchBox.GhostTextColor = Color.LightGray;
         AddChild(_searchBox); // Already initializes _searchBox -- see Element.AddChild's own doc comment.
 
         Resized += OnSelfResized;
@@ -188,7 +213,7 @@ public sealed class GridControl(FontService fontService, ElementPoolService elem
         return widest;
     }
 
-    private float MeasureTileWidth(string text) => _font.MeasureString(text).X + HorizontalPadding * 2;
+    private float MeasureTileWidth(string text) => _font.MeasureString(text).X + TileTextPadding * 2;
 
     /// <summary>
     /// A plain TextWindow tile, the same shape TabbedContent's own tab tiles use -- MinimumSize
@@ -207,7 +232,7 @@ public sealed class GridControl(FontService fontService, ElementPoolService elem
             Layout = new ElementLayoutOptions { RelativePosition = new Vector2(relativePositionX, 0), Size = tileSize, MinimumSize = tileSize, MaximumSize = tileSize, DisplayMode = ElementDisplayMode.Fixed },
             Chrome = new ElementChromeOptions { ShowBorder = showBorder, BorderStyle = BorderStyle.Inset, ShowTitle = false, CanUserFocus = false },
             Content = new ElementContentOptions { ContentColor = ControlColor },
-            Text = new TextOptions { Text = text, TextColor = LabelColor },
+            Text = new TextOptions { Text = text, TextColor = WindowPalette.ControlLabelTextColor },
         });
         tile.ContentFont = _font; // Must match the font width was measured with, or the label can wrap/clip against the tile's own fixed width.
         return tile;

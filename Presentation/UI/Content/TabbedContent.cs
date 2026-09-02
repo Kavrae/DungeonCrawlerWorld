@@ -4,6 +4,7 @@ using Microsoft.Xna.Framework;
 using Microsoft.Xna.Framework.Graphics;
 using Presentation.Fonts;
 using Presentation.Rendering;
+using Presentation.UI.Chrome;
 using Presentation.UI.ColorPalettes;
 
 namespace Presentation.UI.Content;
@@ -23,7 +24,10 @@ namespace Presentation.UI.Content;
 /// draw/hit-test z-order, the same thing every other clickable Element gets) -- so tab-index
 /// bookkeeping here is never allowed to read positions back out of ChildElements, only out of
 /// _headerTiles, which this class alone controls the order of. The selected tile's BorderStyle
-/// is Outset, every other tile's is Inset. The tab list itself is rebuildable at runtime via
+/// is Outset (every other tile's Inset) and it keeps TabTileColor/TabLabelColor (dark
+/// background, white text); every unselected tile is tinted WindowPalette.PanelContentColor/
+/// BodyTextColor (light gray background, black text) instead, so the active tab reads clearly
+/// against the rest of the strip. The tab list itself is rebuildable at runtime via
 /// SetTabs -- the Inventory window's per-tag tabs need to regenerate whenever the entity's
 /// inventory tag composition changes, not just once at construction.
 ///
@@ -49,7 +53,7 @@ public sealed class TabbedContent(IReadOnlyList<TabbedContent.TabDefinition> tab
     /// <summary>How long the search box's text must sit unchanged before it's applied as a filter -- 300ms.</summary>
     private static readonly int SearchDebounceFrames = GameTiming.FramesForSeconds(0.3f);
 
-    private static readonly Color TabTileColor = new(48, 48, 48);
+    private static readonly Color TabTileColor = WindowPalette.ControlBackground;
     private static readonly Color TabLabelColor = Color.White;
 
     private static readonly Color SearchBoxColor = new(WindowPalette.PanelBackgroundColor.R / 2, WindowPalette.PanelBackgroundColor.G / 2, WindowPalette.PanelBackgroundColor.B / 2);
@@ -90,7 +94,7 @@ public sealed class TabbedContent(IReadOnlyList<TabbedContent.TabDefinition> tab
     public void Initialize(Window hostWindow)
     {
         _hostWindow = hostWindow;
-        _font = fontService.GetFont((int)(TabHeaderHeight * 0.6f));
+        _font = fontService.GetFont((int)(TabHeaderHeight * FontChrome.TabHeaderLabelFontFraction));
 
         _tabHeaderWindow = elementPoolService.CreateElement<Window>(hostWindow, new ElementOptions
         {
@@ -98,6 +102,13 @@ public sealed class TabbedContent(IReadOnlyList<TabbedContent.TabDefinition> tab
             Layout = new ElementLayoutOptions { RelativePosition = Vector2.Zero, Size = new Vector2(HeaderStripWidth(hostWindow.ContentSize.X), TabHeaderHeight), DisplayMode = ElementDisplayMode.Fixed, IsTransparent = true },
             Chrome = new ElementChromeOptions { ShowBorder = false, ShowTitle = false, CanUserScrollHorizontal = true, CanUserFocus = false },
         });
+        // A tab strip's own tiles must flush-tile edge to edge (like any real tab bar) and stay
+        // aligned with the sibling search box beside it -- the generic ContentPadding this Window
+        // would otherwise get for having children (see Element.ContentPadding) shifted every tile
+        // down and right without the search box moving to match, both misaligning them and
+        // clipping each tile's bottom (still TabHeaderHeight tall, now rendered starting
+        // ContentPadding.Y lower within a viewport that never grew to compensate).
+        _tabHeaderWindow.ContentPadding = Vector2.Zero;
         hostWindow.AddChild(_tabHeaderWindow);
 
         _searchBox = elementPoolService.CreateElement<TextBox>(hostWindow, new ElementOptions
@@ -110,7 +121,6 @@ public sealed class TabbedContent(IReadOnlyList<TabbedContent.TabDefinition> tab
         });
         _searchBox.ContentFont = _font;
         _searchBox.GhostText = SearchGhostText;
-        _searchBox.GhostTextColor = Color.LightGray;
         hostWindow.AddChild(_searchBox);
 
         _bodyWindow = elementPoolService.CreateElement<Window>(hostWindow, new ElementOptions
@@ -209,7 +219,10 @@ public sealed class TabbedContent(IReadOnlyList<TabbedContent.TabDefinition> tab
     {
         foreach (var (tabIndex, tile) in _headerTiles)
         {
-            tile.BorderStyle = tabIndex == _activeTabIndex ? BorderStyle.Outset : BorderStyle.Inset;
+            var isSelected = tabIndex == _activeTabIndex;
+            tile.BorderStyle = isSelected ? BorderStyle.Outset : BorderStyle.Inset;
+            tile.SetContentColor(isSelected ? TabTileColor : WindowPalette.PanelContentColor);
+            tile.TextColor = isSelected ? TabLabelColor : WindowPalette.BodyTextColor;
         }
     }
 

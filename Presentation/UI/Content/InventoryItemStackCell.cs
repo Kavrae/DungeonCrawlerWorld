@@ -5,7 +5,7 @@ using Microsoft.Xna.Framework;
 using Microsoft.Xna.Framework.Graphics;
 using Presentation.Fonts;
 using Presentation.Rendering;
-using Presentation.UI.ColorPalettes;
+using Presentation.UI.Chrome;
 
 namespace Presentation.UI.Content;
 
@@ -47,16 +47,10 @@ public enum CellCompareState
 public sealed class InventoryItemStackCell(FontService fontService, ElementPoolService elementPoolService, LabelRenderer labelRenderer, SpriteSheetService spriteSheetService, SpriteRenderer spriteRenderer)
     : Element(fontService, elementPoolService, labelRenderer)
 {
-    private const float IconGlyphFontFraction = 0.6f;
-    private const float QuantityFontFraction = 0.5f;
-    private const float BadgeFontFraction = 0.45f;
     private static readonly Color GroupBorderColor = Color.Black;
     private const float GroupBorderThickness = 2f;
 
-    /// <summary>Distinct from both WindowPalette.HighlightColor (the hover overlay) and HotbarContent.ArmedGlowColor (Gold) -- IsSelected and IsHovered/Armed can all be true on related cells/slots at once and need to read apart.</summary>
-    private static readonly Color SelectedGlowColor = Color.Cyan;
-
-    /// <summary>Item Details Comparison's own "eligible to add" glow -- distinct from SelectedGlowColor (Cyan) and HotbarContent.ArmedGlowColor (Gold); also the same color a comparison column's own advantage-highlighted lines use (ItemDetailsWindow.BetterColor), so "green" reads consistently as "good" everywhere this feature touches.</summary>
+    /// <summary>Item Details Comparison's own "eligible to add" glow -- distinct from WindowPalette.AttentionGlow (Gold, the grid-square selected/armed color); also the same color a comparison column's own advantage-highlighted lines use (ItemDetailsWindow.BetterColor), so "green" reads consistently as "good" everywhere this feature touches.</summary>
     private static readonly Color CompareEligibleGlowColor = Color.LightGreen;
 
     private string? _spriteName;
@@ -102,7 +96,7 @@ public sealed class InventoryItemStackCell(FontService fontService, ElementPoolS
     /// <summary>Drives a translucent highlight overlay -- see InventoryGridContent's own hover polling. Mirrors AbilityScoreColumnHeader.IsHovered.</summary>
     public bool IsHovered { get; set; }
 
-    /// <summary>Drives an outward glow (see GlowRenderer.Draw, the same primitive HotbarContent's own ArmedSlot glow uses) -- true when this cell's StackInstanceId matches MapViewState.SelectedItemStackInstanceId, the item currently shown in the Item Details window. Set every frame alongside IsHovered -- see InventoryGridContent's own per-frame sync, not a rebuild-driven Configure parameter, since selection changes independently of any grid rebuild.</summary>
+    /// <summary>Drives GridSquareRenderer's own gold inner+outer selected glow (see DrawStateOverlay, the same treatment HotbarContent's own ArmedSlot glow uses) -- true when this cell's StackInstanceId matches MapViewState.SelectedItemStackInstanceId, the item currently shown in the Item Details window. Set every frame alongside IsHovered -- see InventoryGridContent's own per-frame sync, not a rebuild-driven Configure parameter, since selection changes independently of any grid rebuild.</summary>
     public bool IsSelected { get; set; }
 
     /// <summary>Item Details Comparison's own per-frame state, set alongside IsSelected -- Eligible glows green (this item shares the anchor's Activator type, so clicking it would add it), Ineligible grey-tints the icon the same way IsDisabled already does, None (outside compare mode) draws neither.</summary>
@@ -135,9 +129,9 @@ public sealed class InventoryItemStackCell(FontService fontService, ElementPoolS
         _groupBorderBottom = false;
         _groupBorderLeft = false;
         _groupBorderRight = false;
-        _iconGlyphFont = fontService.GetFont((int)(cellSize.Y * IconGlyphFontFraction));
-        _quantityFont = fontService.GetFont((int)(cellSize.Y * QuantityFontFraction));
-        _badgeFont = fontService.GetFont((int)(cellSize.Y * BadgeFontFraction));
+        _iconGlyphFont = fontService.GetFont((int)(cellSize.Y * FontChrome.InventoryStackIconGlyphFontFraction));
+        _quantityFont = fontService.GetFont((int)(cellSize.Y * FontChrome.InventoryStackQuantityFontFraction));
+        _badgeFont = fontService.GetFont((int)(cellSize.Y * FontChrome.InventoryStackBadgeFontFraction));
     }
 
     /// <summary>
@@ -161,19 +155,15 @@ public sealed class InventoryItemStackCell(FontService fontService, ElementPoolS
         var spriteBatch = ElementPoolService.SpriteBatch;
         var unitRectangle = ElementPoolService.UnitRectangle;
 
-        if (IsHovered)
-        {
-            spriteBatch.Draw(unitRectangle, new Rectangle((int)ContentAbsolutePosition.X, (int)ContentAbsolutePosition.Y, (int)ContentSize.X, (int)ContentSize.Y), WindowPalette.HighlightColor);
-        }
+        var bounds = new Rectangle((int)ContentAbsolutePosition.X, (int)ContentAbsolutePosition.Y, (int)ContentSize.X, (int)ContentSize.Y);
 
-        if (IsSelected)
-        {
-            GlowRenderer.Draw(spriteBatch, unitRectangle, new Rectangle((int)ContentAbsolutePosition.X, (int)ContentAbsolutePosition.Y, (int)ContentSize.X, (int)ContentSize.Y), SelectedGlowColor);
-        }
+        GridSquareRenderer.DrawBase(spriteBatch, unitRectangle, bounds);
+        GridSquareRenderer.DrawStateOverlay(spriteBatch, unitRectangle, bounds, IsSelected ? GridSquareState.Selected : IsHovered ? GridSquareState.Hovered : GridSquareState.Normal);
 
         if (CompareState == CellCompareState.Eligible)
         {
-            GlowRenderer.Draw(spriteBatch, unitRectangle, new Rectangle((int)ContentAbsolutePosition.X, (int)ContentAbsolutePosition.Y, (int)ContentSize.X, (int)ContentSize.Y), CompareEligibleGlowColor);
+            GlowRenderer.Draw(spriteBatch, unitRectangle, bounds, CompareEligibleGlowColor, GlowMode.ExteriorFade);
+            GlowRenderer.Draw(spriteBatch, unitRectangle, bounds, CompareEligibleGlowColor, GlowMode.InteriorFade);
         }
 
         var isGreyedOut = _isDisabled || CompareState == CellCompareState.Ineligible;

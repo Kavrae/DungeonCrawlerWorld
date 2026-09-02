@@ -37,7 +37,7 @@ public sealed class MapViewState
     public HotkeySlot? ArmedSlot;
 
     /// <summary>The hotbar slot currently under the cursor, once HotbarController's hover tracking
-    /// has held on the same bound slot for at least HudMetrics.HoverTooltipDelayFrames -- null the
+    /// has held on the same bound slot for at least HudChrome.HoverTooltipDelayFrames -- null the
     /// instant the cursor moves off that slot (no delay on hiding, only on showing). Takes priority
     /// over ArmedSlot, since a live hover is the most immediate signal of intent.</summary>
     public HotkeySlot? HoverSlot;

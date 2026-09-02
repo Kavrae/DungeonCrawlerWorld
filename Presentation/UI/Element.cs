@@ -4,6 +4,7 @@ using Microsoft.Xna.Framework.Input;
 using Presentation.Fonts;
 using Presentation.Input;
 using Presentation.Rendering;
+using Presentation.UI.Chrome;
 using Presentation.UI.ColorPalettes;
 
 namespace Presentation.UI;
@@ -135,11 +136,27 @@ public class Element
     protected Color _glowColor = Color.Gold;
     public Color GlowColor => _glowColor;
 
-    /// <summary>Turns the outward glow (see GlowRenderer) on/off around this window's border -- e.g. NotificationCenter's Folder while any category has an unread notification.</summary>
-    public void SetGlow(bool isGlowing, Color? color = null)
+    protected GlowMode _glowMode = GlowMode.ExteriorFade;
+    public GlowMode GlowMode => _glowMode;
+
+    /// <summary>Turns the glow (see GlowRenderer) on/off around this window's border -- e.g. NotificationCenter's Folder while any category has an unread notification. Drawn before the content background fill/DrawContent/children (see Draw), so an interior-facing mode here would just get painted over -- use SetOverlayGlow instead for a glow that needs to sit on top of content.</summary>
+    public void SetGlow(bool isGlowing, Color? color = null, GlowMode mode = GlowMode.ExteriorFade)
     {
         _isGlowing = isGlowing;
         _glowColor = color ?? Color.Gold;
+        _glowMode = mode;
+    }
+
+    protected bool _isOverlayGlowing;
+    protected Color _overlayGlowColor = Color.Gold;
+    protected GlowMode _overlayGlowMode = GlowMode.InteriorFade;
+
+    /// <summary>Turns a glow drawn over this element's content area on/off, after the content background fill and every child has drawn (see Draw) -- e.g. AbilityScoreWindow's column panels, where a white InteriorFade vignette needs to sit on top of the dark panel fill and its rows, not get erased by them.</summary>
+    public void SetOverlayGlow(bool isGlowing, Color? color = null, GlowMode mode = GlowMode.InteriorFade)
+    {
+        _isOverlayGlowing = isGlowing;
+        _overlayGlowColor = color ?? Color.Gold;
+        _overlayGlowMode = mode;
     }
 
     /*========Focus========*/
@@ -149,6 +166,23 @@ public class Element
 
     /// <summary>True while this window holds input focus -- set by UiInputController, not this window itself.</summary>
     public bool IsFocused => _isFocused;
+
+    protected bool _isActiveWindow;
+
+    /// <summary>
+    /// True for whichever top-level (root-ancestor) element was most recently clicked into --
+    /// distinct from IsFocused, which only tracks keyboard-input routing and often stays false
+    /// for an entire window: HandleMousePress skips SetFocus for a button click, and clears focus
+    /// to null for a click on any non-focusable content (most rows/cells/columns explicitly opt
+    /// out via CanUserFocus = false), so a menu window's own IsFocused rarely reflects "the
+    /// window the player is actively working in" the way this does. Set by
+    /// UiInputController.RaiseToFront, which (unlike SetFocus) runs unconditionally for every
+    /// click that hits anything at all -- e.g. Window uses this (not IsFocused) to decide whether
+    /// to show its focus-accent border.
+    /// </summary>
+    public bool IsActiveWindow => _isActiveWindow;
+
+    internal void SetIsActiveWindow(bool isActiveWindow) => _isActiveWindow = isActiveWindow;
 
     /*========Header========*/
     /// <summary>Internal, not protected, for the same reason as WindowService/FontService -- Button uses this to center its label the same way LabelRenderer centers map tile glyphs.</summary>
@@ -212,6 +246,28 @@ public class Element
             ? new Vector2(_border.Thickness.Horizontal, _border.Thickness.Vertical)
             : Vector2.Zero;
 
+    /// <summary>
+    /// ContentPadding if this element is capable of containing children at all, else zero -- a
+    /// leaf element (CanContainChildren false) draws its own self-drawn content flush against its
+    /// content edges, unaffected by ContentPadding (see its own doc comment). Gated on
+    /// CanContainChildren alone, not "and currently has at least one child" -- a container is
+    /// structurally committed to eventually holding padded children the moment it's built that
+    /// way, and reading ContentSize/ContentAbsolutePosition while transiently childless (e.g. the
+    /// gap between ClearAllChildren and repopulating) must already reflect that, or the first
+    /// child added back gets sized/positioned against a stale, wider box than the one it actually
+    /// ends up in once its own presence flips the gate. Confirmed by two live instances of exactly
+    /// that bug: AbilityScoreWindow.BuildColumns reads ContentSize right after ClearColumns, and
+    /// AbilityScoreWindow.RefreshColumn's own first row/separator reads listWindow.ContentSize
+    /// before it has any children of its own yet.
+    /// </summary>
+    protected Vector2 ChildContentPadding =>
+        _canContainChildren
+            ? ContentPadding
+            : Vector2.Zero;
+
+    /// <summary>ChildContentPadding on both edges of each axis -- see its own doc comment.</summary>
+    protected Vector2 ChildContentPaddingDoubled => ChildContentPadding * 2;
+
     public Rectangle BorderTopRectangle => _border.TopRectangle;
     public Rectangle BorderBottomRectangle => _border.BottomRectangle;
     public Rectangle BorderLeftRectangle => _border.LeftRectangle;
@@ -226,11 +282,21 @@ public class Element
     public Vector2 ContentAbsolutePosition => _contentState.AbsolutePosition;
     public Vector2 ContentSize => _contentState.Size;
     public Rectangle ContentRectangle => _contentState.Rectangle;
-    public Vector2 ContentPadding { get; set; } = new(5, 5);
+    /// <summary>
+    /// Uniform inset between this element's own edges and its children's content area (see
+    /// RecalculateAbsolutePositions/RecalculateFillSize) -- also independently used by TextBox/
+    /// TextWindow for their own text-wrap-width math, which is unaffected by the has-children
+    /// gate below since neither has children. Defaults to the generic Chrome.WindowChrome.Padding
+    /// value, not a literal, so a future data-driven theme loader can retune it globally.
+    /// </summary>
+    public Vector2 ContentPadding { get; set; } = new(WindowChrome.Padding);
     public Color ContentColor => _contentState.BackgroundColor;
 
     /// <summary>Changes the content background color after creation -- ElementContentOptions.ContentColor only ever sets it once, at CreateElement time; this is for a control that needs its own background to react to later state changes (e.g. GridControl's toggle buttons tinting differently once on).</summary>
     public void SetContentColor(Color color) => _contentState.BackgroundColor = color;
+
+    /// <summary>Changes the gap tiled after this element (see RetileChildren) after creation -- ElementLayoutOptions.SpacingAfter only ever sets it once, at CreateElement time; this is for a pooled/reused element whose spacing needs to change later.</summary>
+    public void SetSpacingAfter(float spacingAfter) => _geometry.SpacingAfter = spacingAfter;
 
     /*========Viewport========*/
     private Viewport _viewport;
@@ -297,6 +363,7 @@ public class Element
         _geometry.MaximumSize = layout?.MaximumSize ?? _parent?.ContentSize ?? layout?.Size ?? new Vector2(0, 0);
         _geometry.OriginalSize = layout?.Size ?? new Vector2(0, 0);
         _geometry.CurrentSize = _geometry.OriginalSize;
+        _geometry.SpacingAfter = layout?.SpacingAfter ?? 0f;
 
         _isVisible = layout?.IsVisible ?? true;
         _isTransparent = layout?.IsTransparent ?? false;
@@ -305,11 +372,16 @@ public class Element
         // same rationale as _isFocused reset below.
         _isGlowing = false;
         _glowColor = Color.Gold;
+        _glowMode = GlowMode.ExteriorFade;
+        _isOverlayGlowing = false;
+        _overlayGlowColor = Color.Gold;
+        _overlayGlowMode = GlowMode.InteriorFade;
 
         /*========Focus========*/
         // Pooled windows (see WindowService) must not inherit a stale focused look from
         // whatever they were last used for.
         _isFocused = false;
+        _isActiveWindow = false;
 
         /*========Header========*/
         // Only the generic visibility flags -- a header's actual size (text-measured for
@@ -326,7 +398,7 @@ public class Element
         _border.Color = chrome?.BorderColor ?? WindowPalette.BorderColor;
 
         /*========Content========*/
-        _contentState.BackgroundColor = content?.ContentColor ?? WindowPalette.BodyColor;
+        _contentState.BackgroundColor = content?.ContentColor ?? WindowPalette.PanelBackgroundColor;
 
         /*========User Controls========*/
         CanUserMove = chrome?.CanUserMove ?? false;
@@ -493,7 +565,7 @@ public class Element
 
         if (_isGlowing)
         {
-            GlowRenderer.Draw(spriteBatch, unitRectangle, _geometry.Rectangle, _glowColor);
+            GlowRenderer.Draw(spriteBatch, unitRectangle, _geometry.Rectangle, _glowColor, _glowMode);
         }
 
         if ((_geometry.DisplayMode != ElementDisplayMode.Minimized && _headerState.ShowHeader) || (_geometry.DisplayMode == ElementDisplayMode.Minimized && _headerState.ShowHeaderWhenMinimized))
@@ -505,7 +577,12 @@ public class Element
         {
             if (!_isTransparent)
             {
-                spriteBatch.Draw(unitRectangle, _contentState.Rectangle, _contentState.BackgroundColor);
+                // BackgroundRectangle, not Rectangle -- this element's own fill covers its full
+                // content area edge-to-edge; ContentPadding only insets where CHILDREN sit within
+                // that area (see ElementContentState's own doc comment), so filling just Rectangle
+                // would leave the padding band itself unpainted, a visible gap of whatever's behind
+                // this element between its border and its (deliberately smaller) content fill.
+                spriteBatch.Draw(unitRectangle, _contentState.BackgroundRectangle, _contentState.BackgroundColor);
             }
 
             if (RequiresContentViewport)
@@ -561,6 +638,11 @@ public class Element
                 {
                     childElement.Draw(gameTime);
                 }
+            }
+
+            if (_isOverlayGlowing)
+            {
+                GlowRenderer.Draw(spriteBatch, unitRectangle, _contentState.Rectangle, _overlayGlowColor, _overlayGlowMode);
             }
         }
     }
@@ -721,8 +803,12 @@ public class Element
         {
             HandleHeaderClick(mousePosition);
         }
-        else if (_contentState.Rectangle.Contains(mousePosition))
+        else if (_contentState.BackgroundRectangle.Contains(mousePosition))
         {
+            // BackgroundRectangle, not Rectangle -- a click inside the padding band (visually part
+            // of this element's own painted content, see BackgroundRectangle's own doc comment)
+            // must still count as a content click, not fall through to a dead zone just because it
+            // missed the smaller, children-only Rectangle.
             HandleContentClick(mousePosition);
         }
     }
@@ -1320,15 +1406,19 @@ public class Element
                 continue;
             }
 
+            // Relative to this element's own (already ContentPadding-inset) ContentAbsolutePosition
+            // -- see RecalculateAbsolutePositions -- so the padding itself is applied exactly once,
+            // uniformly for every child regardless of tile mode; this stays (0,0), not
+            // ContentPadding, to avoid double-applying it here too.
             childElement._geometry.RelativePosition = previousVisibleChild is null
                 ? new Vector2(0, 0)
                 : _childrenTileMode == ChildElementTileMode.Horizontal
                     ? new Vector2(
-                        previousVisibleChild._geometry.RelativePosition.X + previousVisibleChild._geometry.CurrentSize.X,
+                        previousVisibleChild._geometry.RelativePosition.X + previousVisibleChild._geometry.CurrentSize.X + previousVisibleChild._geometry.SpacingAfter,
                         previousVisibleChild._geometry.RelativePosition.Y)
                     : new Vector2(
                         previousVisibleChild._geometry.RelativePosition.X,
-                        previousVisibleChild._geometry.RelativePosition.Y + previousVisibleChild._geometry.CurrentSize.Y);
+                        previousVisibleChild._geometry.RelativePosition.Y + previousVisibleChild._geometry.CurrentSize.Y + previousVisibleChild._geometry.SpacingAfter);
 
             previousVisibleChild = childElement;
         }
@@ -1347,9 +1437,10 @@ public class Element
 
         _headerState.AbsolutePosition = _geometry.AbsolutePosition + BorderInset;
 
-        _contentState.AbsolutePosition = new Vector2(
+        _contentState.BackgroundAbsolutePosition = new Vector2(
             _geometry.AbsolutePosition.X + BorderInset.X,
             _geometry.AbsolutePosition.Y + BorderInset.Y + HeaderInsetHeight);
+        _contentState.AbsolutePosition = _contentState.BackgroundAbsolutePosition + ChildContentPadding;
 
         if (_geometry.AbsolutePosition != previousAbsolutePosition)
         {
@@ -1368,6 +1459,7 @@ public class Element
     protected virtual void RecalculateMinimizedSize()
     {
         _contentState.Size = Vector2.Zero;
+        _contentState.BackgroundSize = Vector2.Zero;
 
         var windowSize = _headerState.Size + BorderInsetDoubled;
 
@@ -1392,9 +1484,10 @@ public class Element
         // bottom border -- BorderInsetDoubled.Y, not BorderInset.Y. Getting this wrong left no
         // room for a bottom border strip, so content's own background fill (drawn after the
         // border in Draw()) painted directly over it.
-        _contentState.Size = new Vector2(
+        _contentState.BackgroundSize = new Vector2(
             _geometry.CurrentSize.X - BorderInsetDoubled.X,
             _geometry.CurrentSize.Y - BorderInsetDoubled.Y - HeaderInsetHeight);
+        _contentState.Size = _contentState.BackgroundSize - ChildContentPaddingDoubled;
     }
 
     protected virtual void RecalculateFillSize()
@@ -1405,11 +1498,12 @@ public class Element
             _geometry.CurrentSize.X - BorderInsetDoubled.X,
             _headerState.OriginalSize.Y - BorderInset.Y);
 
-        _contentState.Size = _geometry.CurrentSize
+        _contentState.BackgroundSize = _geometry.CurrentSize
             - (_headerState.ShowHeader
                 ? _headerState.Size
                 : Vector2.Zero)
             - BorderInsetDoubled;
+        _contentState.Size = _contentState.BackgroundSize - ChildContentPaddingDoubled;
     }
 
     protected virtual void RecalculateWrapContentSize()
@@ -1439,7 +1533,18 @@ public class Element
             _contentState.Size = new Vector2(0, 0);
         }
 
-        _contentState.Size += ContentPadding;
+        // Children's own RelativePosition values are relative to this element's ContentAbsolutePosition,
+        // which is ALREADY inset by ChildContentPadding (see RecalculateAbsolutePositions) -- so
+        // maxRight/maxBottom above measure only the children's own footprint, with no padding baked
+        // in yet. ChildContentPaddingDoubled (gated on CanContainChildren alone, not "and has a
+        // child right now" -- see its own doc comment) reserves room for both that leading inset
+        // and a matching trailing gap, even while still childless -- a WrapContent element's own
+        // outer bounds are computed FROM this (not the reverse, like Fixed/Fill), so there's no
+        // separate BackgroundSize stage; it's set to the same final value below. A still-childless
+        // CanContainChildren element (e.g. Folder before its first child is added) gets this same
+        // floor rather than zero, so its header (see MinimumHeaderWidth) never has to shrink from a
+        // literal (0,0) content size.
+        _contentState.Size += ChildContentPaddingDoubled;
 
         // A WrapContent element must be at least as wide as its header needs (e.g. Window's
         // title text + buttons -- see MinimumHeaderWidth), not just its content.
@@ -1447,6 +1552,11 @@ public class Element
         {
             _contentState.Size.X = System.Math.Max(_contentState.Size.X, MinimumHeaderWidth());
         }
+
+        // No separate "before padding" stage exists for WrapContent (see this method's own
+        // padding comment above) -- BackgroundSize is the same final value, so this element's own
+        // background fill still covers its full outer content area, padding included.
+        _contentState.BackgroundSize = _contentState.Size;
 
         _geometry.CurrentSize = _contentState.Size;
         if (_headerState.ShowHeader)
@@ -1473,6 +1583,7 @@ public class Element
         _geometry.Rectangle = new Rectangle((int)_geometry.AbsolutePosition.X, (int)_geometry.AbsolutePosition.Y, (int)_geometry.CurrentSize.X, (int)_geometry.CurrentSize.Y);
         _headerState.Rectangle = new Rectangle((int)_headerState.AbsolutePosition.X, (int)_headerState.AbsolutePosition.Y, (int)_headerState.Size.X, (int)_headerState.Size.Y);
         _contentState.Rectangle = new Rectangle((int)_contentState.AbsolutePosition.X, (int)_contentState.AbsolutePosition.Y, (int)_contentState.Size.X, (int)_contentState.Size.Y);
+        _contentState.BackgroundRectangle = new Rectangle((int)_contentState.BackgroundAbsolutePosition.X, (int)_contentState.BackgroundAbsolutePosition.Y, (int)_contentState.BackgroundSize.X, (int)_contentState.BackgroundSize.Y);
         _viewport = new Viewport(_contentState.Rectangle);
 
         RecalculateBorderRectangles();

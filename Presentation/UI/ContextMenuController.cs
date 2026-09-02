@@ -1,4 +1,5 @@
 using Microsoft.Xna.Framework;
+using Presentation.UI.Chrome;
 
 namespace Presentation.UI;
 
@@ -13,18 +14,6 @@ namespace Presentation.UI;
 /// </summary>
 public sealed class ContextMenuController(ElementPoolService elementPoolService)
 {
-    /// <summary>
-    /// Generous ceiling for the menu's own Fixed-mode MaximumSize -- comfortably larger than any
-    /// realistic option list could ever need (the same "generous ceiling" reasoning
-    /// NotificationCenter.FolderMaximumSize already uses for its own WrapContent Folder). Fixed
-    /// mode's own size clamp (RecalculateFixedSize) reads MaximumSize as whatever Build last set
-    /// it to and never re-derives it later -- a parent-null Element (see ContextMenu's own doc
-    /// comment on why it must stay top-level) has no parent ContentSize to fall back on either,
-    /// so without an explicit MaximumSize here it defaults to (0,0) and every later Show/SetBounds
-    /// call gets silently clamped down to nothing, however large a size it actually asks for.
-    /// </summary>
-    private static readonly Vector2 MaximumMenuSize = new(600, 2000);
-
     private ContextMenu _menu = null!;
 
     public bool IsOpen => _menu.IsVisible;
@@ -47,7 +36,7 @@ public sealed class ContextMenuController(ElementPoolService elementPoolService)
         _menu = elementPoolService.CreateElement<ContextMenu>(null, new ElementOptions
         {
             Hierarchy = new ElementHierarchyOptions { CanContainChildren = true },
-            Layout = new ElementLayoutOptions { IsVisible = false, MaximumSize = MaximumMenuSize, DisplayMode = ElementDisplayMode.Fixed },
+            Layout = new ElementLayoutOptions { IsVisible = false, MaximumSize = PopupChrome.ContextMenuMaximumSize, DisplayMode = ElementDisplayMode.Fixed },
             Chrome = new ElementChromeOptions { ShowBorder = true, ShowTitle = false, CanUserFocus = false },
         });
         _menu.Initialize();

@@ -8,6 +8,7 @@ using Game.World;
 using Microsoft.Xna.Framework;
 using Presentation.Fonts;
 using Presentation.Rendering;
+using Presentation.UI.Chrome;
 
 namespace Presentation.UI.Content;
 
@@ -46,8 +47,6 @@ public sealed class DragGhostContent(
     SpriteRenderer spriteRenderer,
     LabelRenderer labelRenderer) : IElementContent
 {
-    private const float GlyphSizeFraction = 0.6f;
-
     /// <summary>
     /// How DrawContent finds the live content-drag state -- assigned once ShellBootstrapper.Build
     /// has constructed a real UiInputController, which happens after this class does (see that
@@ -95,7 +94,7 @@ public sealed class DragGhostContent(
 
         var size = state.SourceSize;
         SpriteComponent? sprite = spriteName is not null && SpriteManifest.TryGet(spriteName, out var spriteComponent) ? spriteComponent : null;
-        var font = fontService.GetFont((int)(size.Y * GlyphSizeFraction));
+        var font = fontService.GetFont((int)(size.Y * FontChrome.DragGhostGlyphFontFraction));
         var mousePosition = state.CursorPosition;
 
         DragGhostRenderer.Draw(

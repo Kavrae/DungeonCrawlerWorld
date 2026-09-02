@@ -4,6 +4,7 @@ using FontStashSharp;
 using Game.Blueprints;
 using Presentation.Fonts;
 using Presentation.Rendering;
+using Presentation.UI.Chrome;
 
 namespace Presentation.UI.Content;
 
@@ -19,8 +20,6 @@ namespace Presentation.UI.Content;
 public sealed class ItemIconElement(FontService fontService, ElementPoolService elementPoolService, LabelRenderer labelRenderer, SpriteSheetService spriteSheetService, SpriteRenderer spriteRenderer)
     : Element(fontService, elementPoolService, labelRenderer)
 {
-    private const float GlyphFontSizeFraction = 0.8f;
-
     private string? _spriteName;
     private string _glyph = string.Empty;
     private Color _glyphColor;
@@ -31,7 +30,7 @@ public sealed class ItemIconElement(FontService fontService, ElementPoolService 
         _spriteName = spriteName;
         _glyph = glyph;
         _glyphColor = glyphColor;
-        _glyphFont = fontService.GetFont((int)(iconSize.Y * GlyphFontSizeFraction));
+        _glyphFont = fontService.GetFont((int)(iconSize.Y * FontChrome.IconGlyphFontFraction));
     }
 
     public override void DrawContent(GameTime gameTime)

@@ -2,6 +2,7 @@ using FontStashSharp;
 using Microsoft.Xna.Framework;
 using Presentation.Fonts;
 using Presentation.Rendering;
+using Presentation.UI.Chrome;
 using Presentation.UI.ColorPalettes;
 
 namespace Presentation.UI;
@@ -25,13 +26,10 @@ public sealed class ContextMenu(FontService fontService, ElementPoolService elem
     /// <summary>Shorter than an ordinary option row -- a header is a label, not a target the player aims a click at, so it doesn't need the same tap-friendly height.</summary>
     private const float HeaderRowHeight = 18f;
 
-    /// <summary>Slightly darker than the menu's own white body -- see ContextMenu.Show's header-row branch. Same "light content area reads as a distinct panel" idiom WindowPalette.PanelContentColor already uses, just one step subtler here (a label row, not a whole separate panel).</summary>
-    private static readonly Color HeaderBackgroundColor = Color.LightGray;
-
     /// <summary>Gap between an option's Label and its HotkeyText column, when present -- e.g. "Copy" and "Ctrl+C" need visible daylight between them, not just whatever's left over once both are right/left-aligned within the same row.</summary>
     private const float HotkeyGap = 24f;
 
-    private readonly SpriteFontBase _font = fontService.GetFont(12);
+    private readonly SpriteFontBase _font = fontService.GetFont(FontChrome.DefaultFontSize);
 
     /// <summary>
     /// Repositions, rebuilds, and shows this menu with the given options next to topLeft --
@@ -53,15 +51,15 @@ public sealed class ContextMenu(FontService fontService, ElementPoolService elem
             totalHeight += option.IsHeader ? HeaderRowHeight : RowHeight;
         }
 
-        // The outer window's own border eats into its ContentSize (see RecalculateFixedSize) --
-        // sizing the window to exactly width by totalHeight would leave a content area a couple
-        // pixels shorter/narrower than that, which then clamps the first row's own Fixed size
-        // down below its MinimumSize during Measure (parent-relative Measure always overwrites a
-        // child's MaximumSize to the parent's real available content size -- see Tooltip's own
-        // doc comment on the same fact). Adding BorderInsetDoubled back here is what makes the
-        // *content* area actually come out to width by totalHeight, matching what every row
-        // below is itself sized to.
-        SetBounds(topLeft, new Vector2(width, totalHeight) + BorderInsetDoubled);
+        // The outer window's own border AND ContentPadding (this Window has children) both eat
+        // into its ContentSize (see RecalculateFixedSize) -- sizing the window to exactly width
+        // by totalHeight would leave a content area shorter/narrower than that, which then clamps
+        // the first row's own Fixed size down below its MinimumSize during Measure (parent-relative
+        // Measure always overwrites a child's MaximumSize to the parent's real available content
+        // size -- see Tooltip's own doc comment on the same fact). Adding both insets back here is
+        // what makes the *content* area actually come out to width by totalHeight, matching what
+        // every row below is itself sized to.
+        SetBounds(topLeft, new Vector2(width, totalHeight) + BorderInsetDoubled + ChildContentPaddingDoubled);
 
         var y = 0f;
         foreach (var option in options)
@@ -89,7 +87,7 @@ public sealed class ContextMenu(FontService fontService, ElementPoolService elem
             Hierarchy = new ElementHierarchyOptions { CanContainChildren = false },
             Layout = new ElementLayoutOptions { RelativePosition = new Vector2(0, y), Size = rowSize, MinimumSize = rowSize, MaximumSize = rowSize, DisplayMode = ElementDisplayMode.Fixed },
             Chrome = new ElementChromeOptions { ShowBorder = false, ShowTitle = false, CanUserFocus = false },
-            Content = new ElementContentOptions { ContentColor = HeaderBackgroundColor },
+            Content = new ElementContentOptions { ContentColor = WindowPalette.PanelContentColor },
             Text = new TextOptions { Text = option.Label, TextColor = WindowPalette.BodyTextColor, Bold = true },
         });
         header.ContentFont = _font; // Must match the font MeasureWidth used, or labels can clip against the row's own fixed width.
@@ -134,7 +132,7 @@ public sealed class ContextMenu(FontService fontService, ElementPoolService elem
             totalHeight += option.IsHeader ? HeaderRowHeight : RowHeight;
         }
 
-        return new Vector2(MeasureWidth(options), totalHeight) + BorderInsetDoubled;
+        return new Vector2(MeasureWidth(options), totalHeight) + BorderInsetDoubled + ChildContentPaddingDoubled;
     }
 
     /// <summary>Widest Label+HotkeyText pairing across every row (headers included, HotkeyText-less), so every row shares one width and the hotkey column lines up -- the same "measure the widest, pin every row to it" idiom GridControl's own sort tile uses.</summary>

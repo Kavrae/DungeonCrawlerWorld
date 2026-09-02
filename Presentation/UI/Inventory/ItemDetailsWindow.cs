@@ -53,8 +53,6 @@ public sealed class ItemDetailsWindow(
     ActionCatalog actionCatalog)
     : Window(fontService, elementPoolService, labelRenderer)
 {
-    public static readonly Color BackgroundColor = WindowPalette.PanelBackgroundColor;
-
     private const float IconSize = 32f;
     private const float RowHeight = 18f;
     private const float RowTextGap = 6f;
@@ -68,7 +66,6 @@ public sealed class ItemDetailsWindow(
     /// <summary>A generous, effectively-unlimited per-row height cap -- see InspectionWindowContent.UnboundedChildHeight's own doc comment for why this is needed: without it, a row tiled past the host window's own one-screen-tall content size gets silently clamped to nothing.</summary>
     private const float UnboundedChildHeight = 10000f;
 
-    private static readonly Color HeaderTextColor = WindowPalette.TitleColor;
     private static readonly Color BodyTextColor = Color.White;
 
     /// <summary>Item Details Comparison's own per-line coloring -- Better doubles as the "this item has a stat at least one other compared item doesn't" exclusive marker too (see ResolveLineColor's own doc comment), so the same color means "advantage" either way.</summary>
@@ -152,7 +149,12 @@ public sealed class ItemDetailsWindow(
             _otherItemsStats.Add(ItemComparisonStatExtraction.Extract(other, actionCatalog));
         }
 
-        var width = _contentWidth;
+        // _contentWidth is the target OUTER width this window should end up matching (see this
+        // class's own doc comment) -- since this window is WrapContent (grows to fit its rows plus
+        // ContentPadding on both edges, not the reverse), rows themselves must be sized to
+        // _contentWidth minus that padding, or the window would end up ContentPadding*2 wider than
+        // the caller actually asked for.
+        var width = _contentWidth - ContentPadding.X * 2;
 
         BuildNameRow(_definition, width);
         BuildDivider(width, "Effects", 0.125f);
@@ -176,10 +178,16 @@ public sealed class ItemDetailsWindow(
 
     private void BuildNameRow(ItemDefinition definition, float width)
     {
+        // row's outer width is a hard constraint (must equal width exactly, matching every other
+        // top-level row so this window's own WrapContent measurement stays consistent); its outer
+        // height is not similarly constrained, so it grows by ContentPadding on top and bottom
+        // instead, keeping IconSize/RowHeight exactly as before with real breathing room added --
+        // see HealthWindow.AddBarRow's own doc comment for the same reasoning.
+        var rowHeight = IconSize + ContentPadding.Y * 2;
         var row = ElementPoolService.CreateElement<Window>(this, new ElementOptions
         {
             Hierarchy = new ElementHierarchyOptions { CanContainChildren = true },
-            Layout = new ElementLayoutOptions { Size = new Vector2(width, IconSize), MaximumSize = new Vector2(width, UnboundedChildHeight), DisplayMode = ElementDisplayMode.Fixed },
+            Layout = new ElementLayoutOptions { Size = new Vector2(width, rowHeight), MaximumSize = new Vector2(width, UnboundedChildHeight), DisplayMode = ElementDisplayMode.Fixed },
             Chrome = new ElementChromeOptions { ShowBorder = false, ShowTitle = false, CanUserFocus = false },
             Content = new ElementContentOptions { ContentColor = Color.Transparent },
         });
@@ -195,11 +203,14 @@ public sealed class ItemDetailsWindow(
         icon.Configure(definition.SpriteName, definition.Glyph, definition.GlyphColor, new Vector2(IconSize, IconSize));
         row.AddChild(icon);
 
+        // row's own content width is width - ContentPadding*2 (see the width comment above), not
+        // the outer width -- width is a hard constraint, so the text shrinks to fit instead.
+        var availableWidth = width - ContentPadding.X * 2;
         var textX = IconSize + RowTextGap;
         var nameLine = ElementPoolService.CreateElement<TextWindow>(row, new ElementOptions
         {
             Hierarchy = new ElementHierarchyOptions { CanContainChildren = false },
-            Layout = new ElementLayoutOptions { RelativePosition = new Vector2(textX, (IconSize - RowHeight) / 2f), Size = new Vector2(System.Math.Max(0f, width - textX), RowHeight), DisplayMode = ElementDisplayMode.Fixed },
+            Layout = new ElementLayoutOptions { RelativePosition = new Vector2(textX, (IconSize - RowHeight) / 2f), Size = new Vector2(System.Math.Max(0f, availableWidth - textX), RowHeight), DisplayMode = ElementDisplayMode.Fixed },
             Chrome = new ElementChromeOptions { ShowBorder = false, ShowTitle = false, CanUserFocus = false },
             Content = new ElementContentOptions { ContentColor = Color.Transparent },
             Text = new TextOptions { Text = definition.Name, TextColor = BodyTextColor },
@@ -241,7 +252,10 @@ public sealed class ItemDetailsWindow(
     {
         var stats = ItemComparisonStatExtraction.ExtractActivatorStats(activator, actionCatalog);
 
-        var zoneWidth = width / TargetingRowZoneCount;
+        // row's own content width is width - ContentPadding*2 (width is a hard constraint,
+        // matching every other top-level row), so the three zones divide that, not the outer width.
+        var availableWidth = width - ContentPadding.X * 2;
+        var zoneWidth = availableWidth / TargetingRowZoneCount;
 
         var offsets = TargetShapePreviewGeometry.ComputeOffsets(activator.Targeting);
         var (minX, minY, columns, rows) = TargetShapePreviewGeometry.ComputeBounds(offsets);
@@ -252,10 +266,13 @@ public sealed class ItemDetailsWindow(
         var textColumnHeight = stats.Count * RowHeight;
         var rowHeight = System.Math.Max(textColumnHeight, gridHeight);
 
+        // row's outer height is not externally constrained (unlike its width), so it grows by
+        // ContentPadding on top and bottom instead -- rowHeight itself still means row's own
+        // content height throughout the rest of this method (text/grid vertical centering).
         var row = ElementPoolService.CreateElement<Window>(this, new ElementOptions
         {
             Hierarchy = new ElementHierarchyOptions { CanContainChildren = true },
-            Layout = new ElementLayoutOptions { Size = new Vector2(width, rowHeight), MaximumSize = new Vector2(width, UnboundedChildHeight), DisplayMode = ElementDisplayMode.Fixed },
+            Layout = new ElementLayoutOptions { Size = new Vector2(width, rowHeight + ContentPadding.Y * 2), MaximumSize = new Vector2(width, UnboundedChildHeight), DisplayMode = ElementDisplayMode.Fixed },
             Chrome = new ElementChromeOptions { ShowBorder = false, ShowTitle = false, CanUserFocus = false },
             Content = new ElementContentOptions { ContentColor = Color.Transparent },
         });
@@ -416,7 +433,7 @@ public sealed class ItemDetailsWindow(
         AddChild(line);
     }
 
-    /// <summary>Section-opening divider -- a single TextDivider row, always 95% width, in HeaderTextColor. Plain (mirroring InspectionWindowContent.BuildSpacer) when label/textPosition are left at their defaults; labeled, with the line broken at textPosition, when a section has its own label (Effects/Activation).</summary>
+    /// <summary>Section-opening divider -- a single TextDivider row, always 95% width, in WindowPalette.HeaderTextColor. Plain (mirroring InspectionWindowContent.BuildSpacer) when label/textPosition are left at their defaults; labeled, with the line broken at textPosition, when a section has its own label (Effects/Activation).</summary>
     private void BuildDivider(float width, string label = "", float textPosition = 0f)
     {
         var divider = ElementPoolService.CreateElement<TextDivider>(this, new ElementOptions
@@ -427,6 +444,6 @@ public sealed class ItemDetailsWindow(
             Content = new ElementContentOptions { ContentColor = Color.Transparent },
         });
         AddChild(divider);
-        divider.Configure(label, HeaderTextColor, 0.95f, textPosition);
+        divider.Configure(label, WindowPalette.HeaderTextColor, 0.95f, textPosition);
     }
 }

@@ -16,6 +16,7 @@ using Microsoft.Xna.Framework.Graphics;
 using Presentation.Bootstrap;
 using Presentation.Input;
 using Presentation.UI;
+using Presentation.UI.Chrome;
 using Presentation.UI.Content;
 using Presentation.UI.Inventory;
 using Presentation.UI.Looting;
@@ -28,14 +29,6 @@ namespace DungeonCrawlerWorld;
 /// <cleanupVersion>1</cleanupVersion>>
 public static class ShellBootstrapper
 {
-    private const float DebugWindowHeight = 24f;
-    private const float ActionLockGap = 8f;
-    private const float ManaBarGap = 3f;
-    private const float InspectionWindowGap = 8f;
-
-    /// <summary>Empty headroom left between InspectionWindow's bottom edge and the hotbar's worst-case (fully expanded) top edge -- no minimap exists yet, this just keeps the corner free for one, per the Inspection V2 request.</summary>
-    private const float MinimapReserve = 140f;
-
     /// <summary>Builds the game shell context.</summary>
     /// <param name="presentation"></param>
     /// <param name="worldSession">Bundles World/EcsContext/ActionCatalog/ItemCatalog/StatusEffectDisplays -- passed through as one object, not destructured at the call site, since GameLoop has exactly one caller and every field here already exists for GameLoop's own sake (see WorldSessionContext's own doc comment).</param>
@@ -46,6 +39,8 @@ public static class ShellBootstrapper
     {
         ArgumentNullException.ThrowIfNull(presentation);
         ArgumentNullException.ThrowIfNull(worldSession);
+
+        HudChrome.ResolveLayout(screenSize);
 
         var world = worldSession.World;
         var ecsContext = worldSession.EcsContext;
@@ -176,14 +171,12 @@ public static class ShellBootstrapper
     private static MapWindow BuildBaseWindows(
         PresentationContext presentation, EcsContext ecsContext, Vector2 screenSize, DiagnosticsEngine? diagnostics, MapViewState mapViewState, UiLayerStack layers)
     {
-        var mapSize = new Vector2(screenSize.X, screenSize.Y - DebugWindowHeight);
-
         var mapWindow = presentation.ElementPoolService.CreateElement<MapWindow>(null, new ElementOptions
         {
             Layout = new ElementLayoutOptions
             {
-                RelativePosition = Vector2.Zero,
-                Size = mapSize,
+                RelativePosition = HudChrome.MapWindowPosition,
+                Size = HudChrome.MapWindowSize,
                 DisplayMode = ElementDisplayMode.Fixed,
             },
             Chrome = new ElementChromeOptions
@@ -201,8 +194,8 @@ public static class ShellBootstrapper
         {
             Layout = new ElementLayoutOptions
             {
-                RelativePosition = new Vector2(0, mapSize.Y),
-                Size = new Vector2(mapSize.X, DebugWindowHeight),
+                RelativePosition = HudChrome.DebugWindowPosition,
+                Size = HudChrome.DebugWindowSize,
                 DisplayMode = ElementDisplayMode.Fixed,
             },
             Chrome = new ElementChromeOptions { ShowBorder = true, CanUserFocus = false },
@@ -222,7 +215,7 @@ public static class ShellBootstrapper
         {
             Layout = new ElementLayoutOptions
             {
-                RelativePosition = new Vector2(screenSize.X - PlayerHealthBarContent.Size.X - HudMetrics.Margin.X, HudMetrics.Margin.Y),
+                RelativePosition = HudChrome.PlayerHealthBarPosition,
                 Size = PlayerHealthBarContent.Size,
                 DisplayMode = ElementDisplayMode.Fixed,
                 IsTransparent = true,
@@ -238,7 +231,7 @@ public static class ShellBootstrapper
         {
             Layout = new ElementLayoutOptions
             {
-                RelativePosition = new Vector2(screenSize.X - PlayerManaBarContent.Size.X - HudMetrics.Margin.X, HudMetrics.Margin.Y + PlayerHealthBarContent.Size.Y + ManaBarGap),
+                RelativePosition = HudChrome.PlayerManaBarPosition,
                 Size = PlayerManaBarContent.Size,
                 DisplayMode = ElementDisplayMode.Fixed,
                 IsTransparent = true,
@@ -253,7 +246,7 @@ public static class ShellBootstrapper
         {
             Layout = new ElementLayoutOptions
             {
-                RelativePosition = new Vector2(screenSize.X - PlayerHealthBarContent.Size.X - HudMetrics.Margin.X - ActionLockContent.Size.X - ActionLockGap, HudMetrics.Margin.Y),
+                RelativePosition = HudChrome.ActionLockPosition,
                 Size = ActionLockContent.Size,
                 DisplayMode = ElementDisplayMode.Fixed,
                 IsTransparent = true,
@@ -268,7 +261,7 @@ public static class ShellBootstrapper
         {
             Layout = new ElementLayoutOptions
             {
-                RelativePosition = new Vector2(screenSize.X - PlayerHealthBarContent.Size.X - HudMetrics.Margin.X, HudMetrics.Margin.Y + PlayerHealthBarContent.Size.Y + ManaBarGap + PlayerManaBarContent.Size.Y),
+                RelativePosition = HudChrome.PlayerStatusEffectsPosition,
                 Size = PlayerStatusEffectsContent.Size,
                 DisplayMode = ElementDisplayMode.Fixed,
                 IsTransparent = true,
@@ -279,22 +272,17 @@ public static class ShellBootstrapper
         playerStatusEffectsWindow.Initialize();
         layers.Add(UiLayer.StaticHud, playerStatusEffectsWindow);
 
-        // Right-aligned column, directly beneath the status effects row, leaving MinimapReserve
-        // of empty headroom above the hotbar's own worst-case (fully expanded) top edge -- see
-        // MinimapReserve's own doc comment. Same width as the health bar (PlayerHealthBarContent.
-        // Size.X), per the Inspection V2 request.
-        var inspectionWindowTop = HudMetrics.Margin.Y + PlayerHealthBarContent.Size.Y + ManaBarGap + PlayerManaBarContent.Size.Y + PlayerStatusEffectsContent.Size.Y + InspectionWindowGap;
-        var hotbarClearanceTop = screenSize.Y - HotbarContent.MaximumSize.Y - HudMetrics.Margin.Y * 1.5f;
-        var inspectionWindowBottom = hotbarClearanceTop - InspectionWindowGap - MinimapReserve;
-        var inspectionWindowSize = new Vector2(PlayerHealthBarContent.Size.X, System.Math.Max(0f, inspectionWindowBottom - inspectionWindowTop));
-
+        // Right-aligned column, directly beneath the status effects row -- see HudChrome.
+        // ResolveLayout's own MinimapReserve constant for why headroom is left above the
+        // hotbar's worst-case (fully expanded) top edge. Same width as the health bar
+        // (PlayerHealthBarContent.Size.X), per the Inspection V2 request.
         var inspectionWindow = presentation.ElementPoolService.CreateElement<InspectionWindow>(null, new ElementOptions
         {
             Hierarchy = new ElementHierarchyOptions { CanContainChildren = true, ChildrenTileMode = ChildElementTileMode.Vertical },
             Layout = new ElementLayoutOptions
             {
-                RelativePosition = new Vector2(screenSize.X - HudMetrics.Margin.X - inspectionWindowSize.X, inspectionWindowTop),
-                Size = inspectionWindowSize,
+                RelativePosition = HudChrome.InspectionWindowPosition,
+                Size = HudChrome.InspectionWindowSize,
                 DisplayMode = ElementDisplayMode.Fixed,
             },
             Chrome = new ElementChromeOptions
@@ -342,8 +330,8 @@ public static class ShellBootstrapper
         // overlays the fullscreen map, same reasoning as selectionWindow above.
         var questTriggerWindow = presentation.ElementPoolService.CreateElement<TextWindow>(null, new ElementOptions
         {
-            // Left margin matches the notification count window's (HudMetrics.Margin.X).
-            Layout = new ElementLayoutOptions { RelativePosition = new Vector2(HudMetrics.Margin.X, 800), Size = new Vector2(120, 30), DisplayMode = ElementDisplayMode.Fixed },
+            // Left margin matches the notification count window's (HudChrome.Margin.X).
+            Layout = new ElementLayoutOptions { RelativePosition = HudChrome.QuestTriggerWindowPosition, Size = HudChrome.QuestTriggerWindowSize, DisplayMode = ElementDisplayMode.Fixed },
             Chrome = new ElementChromeOptions { ShowBorder = true, CanUserFocus = false },
             Content = new ElementContentOptions { ContentColor = Color.LightGray },
             Text = new TextOptions { Text = "New Quest" },

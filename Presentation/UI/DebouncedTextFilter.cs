@@ -3,7 +3,7 @@ namespace Presentation.UI;
 /// <summary>
 /// Debounces a rapidly-changing text value (e.g. a search box's live OriginalText) into a stable
 /// "applied" value once it's sat unchanged for debounceFrames consecutive Update calls -- the
-/// same delay-gated idiom HudMetrics.HoverTooltipDelayFrames already establishes for this
+/// same delay-gated idiom HudChrome.HoverTooltipDelayFrames already establishes for this
 /// codebase's hover popups, just keyed off typing instead of hovering. TabbedContent's own tab
 /// search was the first consumer of this exact logic; GridControl's item search is the second,
 /// which is what pulled it out into its own reusable type.

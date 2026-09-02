@@ -5,6 +5,7 @@ using Microsoft.Xna.Framework;
 using Microsoft.Xna.Framework.Graphics;
 using Presentation.Fonts;
 using Presentation.Rendering;
+using Presentation.UI.Chrome;
 using Presentation.UI.ColorPalettes;
 
 namespace Presentation.UI;
@@ -52,8 +53,8 @@ public sealed class Folder : Element
         _iconSize = folderOptions?.IconSize ?? DefaultIconSize;
         _spriteName = folderOptions?.SpriteName;
         _fallbackGlyph = folderOptions?.FallbackGlyph ?? string.Empty;
-        _fallbackGlyphFont = FontService.GetFont((int)(_iconSize.Y * 0.6f));
-        _backgroundColor = folderOptions?.BackgroundColor ?? WindowPalette.HeaderColor;
+        _fallbackGlyphFont = FontService.GetFont((int)(_iconSize.Y * FontChrome.FolderFallbackGlyphFontFraction));
+        _backgroundColor = folderOptions?.BackgroundColor ?? WindowPalette.HeaderBackground;
 
         _canContainChildren = true;
         _childrenTileMode = ChildElementTileMode.Vertical;
@@ -90,8 +91,17 @@ public sealed class Folder : Element
     {
         _headerState.Size = _iconSize;
         _contentState.Size = Vector2.Zero;
+        _contentState.BackgroundSize = Vector2.Zero;
         _geometry.CurrentSize = _iconSize + BorderInsetDoubled;
     }
+
+    /// <summary>
+    /// The header must never shrink narrower than the icon it always shows (see DrawHeader) --
+    /// without this, a childless expanded Folder's header width comes entirely from
+    /// RecalculateWrapContentSize's own ContentPadding floor (see Element's own doc comment on
+    /// that), which is far narrower than a real icon and leaves the icon unclickable.
+    /// </summary>
+    protected override float MinimumHeaderWidth() => _iconSize.X;
 
     /// <summary>
     /// The icon lives in the header rect, not the content rect, so toggling here (not

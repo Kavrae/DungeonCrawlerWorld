@@ -10,6 +10,7 @@ using Microsoft.Xna.Framework;
 using Microsoft.Xna.Framework.Graphics;
 using Presentation.Fonts;
 using Presentation.Rendering;
+using Presentation.UI.Chrome;
 
 namespace Presentation.UI.Content;
 
@@ -29,14 +30,10 @@ namespace Presentation.UI.Content;
 /// </summary>
 public sealed class PlayerStatusEffectsContent(World world, ComponentManager componentManager, ItemCatalog itemCatalog, FontService fontService, StatusEffectDisplayRegistry statusEffectDisplays) : IElementContent
 {
-    public static readonly Vector2 Size = new(PlayerHealthBarContent.Size.X, HudMetrics.EntrySize.Y / 2f * 1.5f);
+    public static readonly Vector2 Size = new(PlayerHealthBarContent.Size.X, HudChrome.EntrySize.Y / 2f * 1.5f);
 
     private const float IconSpacing = 1f;
 
-    // Glyph drawn smaller than its background square -- a glyph sized to exactly fill the
-    // square read as cramped/touching the border.
-    private const float GlyphSizeFraction = 0.75f;
-    private const float CountdownFontFraction = 0.6f;
     private const float CountdownTextGap = 1f;
 
     private readonly PackedComponentPool<PotionCooldownComponent> _potionCooldowns = componentManager.GetPackedPool<PotionCooldownComponent>();
@@ -56,8 +53,11 @@ public sealed class PlayerStatusEffectsContent(World world, ComponentManager com
     public void Initialize(Window hostWindow)
     {
         _hostWindow = hostWindow;
-        _font = fontService.GetFont((int)(Size.Y * GlyphSizeFraction));
-        _countdownFont = fontService.GetFont((int)(Size.Y * CountdownFontFraction));
+
+        // Glyph drawn smaller than its background square -- a glyph sized to exactly fill the
+        // square read as cramped/touching the border.
+        _font = fontService.GetFont((int)(Size.Y * FontChrome.PlayerStatusGlyphFontFraction));
+        _countdownFont = fontService.GetFont((int)(Size.Y * FontChrome.PlayerStatusCountdownFontFraction));
     }
 
     /// <summary>Which status effect types are active, their stack counts, and the potion cooldown are all decided here -- Draw only reads the cached results and lays out icons/text.</summary>

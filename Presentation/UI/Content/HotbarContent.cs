@@ -16,6 +16,8 @@ using Microsoft.Xna.Framework.Graphics;
 using Presentation.Fonts;
 using Presentation.Input;
 using Presentation.Rendering;
+using Presentation.UI.Chrome;
+using Presentation.UI.ColorPalettes;
 
 namespace Presentation.UI.Content;
 
@@ -29,8 +31,10 @@ namespace Presentation.UI.Content;
 /// changes as rows/pages are revealed, so this window resizes/repositions itself at runtime (see
 /// RefreshLayoutIfChanged) rather than having a fixed Size the way most HUD windows do. Every
 /// slot always renders (bound, unbound, or not-yet-unlocked alike) with a permanent
-/// BorderStyle.FlatContrast border; the armed slot additionally gets GlowRenderer's outward glow
-/// (see NotificationCenter's own unread-glow for the same primitive). A slot that's disabled for
+/// BorderStyle.FlatContrast border; the armed slot additionally gets GlowRenderer's gold inner+
+/// outer fade (see NotificationCenter's own unread-glow for the same primitive, and
+/// GridSquareRenderer.DrawStateOverlay's Selected case for the same treatment on a selected
+/// inventory cell). A slot that's disabled for
 /// any reason -- an unaffordable action, an unusable/out-of-stock item, or a not-yet-unlocked
 /// Expansion slot in an already-revealed row/page -- draws its border, icon, and text overlays
 /// all at DisabledSlotAlpha; the radial cooldown/lock wedge (RadialFillRenderer) stays scoped to
@@ -49,42 +53,21 @@ public sealed class HotbarContent(
     SpriteRenderer spriteRenderer,
     Vector2 screenSize) : IElementContent
 {
-    public static readonly Vector2 SlotSize = new(HudMetrics.EntrySize.Y * 2.25f, HudMetrics.EntrySize.Y * 2.25f);
-
-    private const int BaseSlotCount = 3;
-    private const int ExpansionColumnsPerRow = 5;
-    private const int MaxExpansionRows = 2;
-    private const int MaxExpansionPages = 2;
-    private const int SlotsPerExpansionPage = ExpansionColumnsPerRow * MaxExpansionRows;
+    public static readonly Vector2 SlotSize = new(HudChrome.EntrySize.Y * 2.25f, HudChrome.EntrySize.Y * 2.25f);
 
     /// <summary>Fallback only -- every real entity that can open a hotbar gets one from PlayerBlueprint. Matches Expansion's old fixed slot count, so a missing component still shows a sensible bar rather than an empty/degenerate one.</summary>
     private const short DefaultUnlockedExpansionSlots = 10;
 
-    private const float GlyphSizeFraction = 0.75f;
-    private const float OverlayFontFraction = 0.3f;
-    private const float CountdownFontFraction = 0.4375f;
     private Vector2 OverlayPadding = new(4f, 2f);
-    private const float SlotGap = 1f;
-    private const float GroupGap = 10f;
-    private const float ExpansionPageGap = GroupGap;
     private const float CountdownTextGap = 2f;
     private const float DisabledSlotAlpha = 0.5f;
     private static readonly BorderThickness SlotBorderThickness = BorderThickness.Uniform(new Vector2(2, 2));
-
-    private static readonly Color UnboundSlotColor = new(48, 48, 48);
-    private static readonly Color BoundSlotBackgroundColor = Color.WhiteSmoke;
-    private static readonly Color BoundSlotGlyphColor = Color.Black;
-    private static readonly Color ArmedGlowColor = Color.Gold;
-    private static readonly Color DragDropTargetGlowColor = Color.Gold;
-
-    /// <summary>Distinct from ArmedGlowColor -- a bound item slot can be both armed and the Item Details window's current selection at once, and the two need to read apart. Matches InventoryItemStackCell.SelectedGlowColor.</summary>
-    private static readonly Color SelectedGlowColor = Color.Cyan;
 
     /// <summary>Width for the Armed Hotkey Summary popup: 3 slots plus the 2 inter-slot gaps
     /// between them (see HotbarController.UpdateSummary, which centers this over whichever single
     /// slot it's currently showing).</summary>
     internal const int SummarySlotSpan = 3;
-    internal static readonly float SummaryWidth = SummarySlotSpan * SlotSize.X + (SummarySlotSpan - 1) * SlotGap;
+    internal static readonly float SummaryWidth = SummarySlotSpan * SlotSize.X + (SummarySlotSpan - 1) * HotbarChrome.SlotGap;
 
     /// <summary>
     /// Set by UiInputController while a content-drag (an inventory item cell, or an already-
@@ -134,27 +117,27 @@ public sealed class HotbarContent(
     /// a hard cap, so page 2's slots -- drawn fine by DrawContent/EnumerateSlotBounds, which don't
     /// go through the clamped Rectangle -- were never actually clickable/droppable once revealed.
     /// </summary>
-    public static readonly Vector2 MaximumSize = ComputeSize(MaxExpansionRows, MaxExpansionPages);
+    public static readonly Vector2 MaximumSize = ComputeSize(HotbarChrome.MaxExpansionRows, HotbarChrome.MaxExpansionPages);
 
     private static Vector2 ComputeSize(int rowsVisible, int pagesVisible)
     {
-        var baseWidth = BaseSlotCount * SlotSize.X + (BaseSlotCount - 1) * SlotGap;
+        var baseWidth = HotbarChrome.BaseSlotCount * SlotSize.X + (HotbarChrome.BaseSlotCount - 1) * HotbarChrome.SlotGap;
         var defaultAttackWidth = SlotSize.X;
-        var pageWidth = ExpansionColumnsPerRow * SlotSize.X + (ExpansionColumnsPerRow - 1) * SlotGap;
-        var expansionWidth = pagesVisible * pageWidth + (pagesVisible - 1) * ExpansionPageGap;
-        var totalWidth = baseWidth + GroupGap + defaultAttackWidth + GroupGap + expansionWidth;
+        var pageWidth = HotbarChrome.ExpansionColumnsPerRow * SlotSize.X + (HotbarChrome.ExpansionColumnsPerRow - 1) * HotbarChrome.SlotGap;
+        var expansionWidth = pagesVisible * pageWidth + (pagesVisible - 1) * HotbarChrome.ExpansionPageGap;
+        var totalWidth = baseWidth + HotbarChrome.GroupGap + defaultAttackWidth + HotbarChrome.GroupGap + expansionWidth;
 
-        var expansionHeight = rowsVisible * SlotSize.Y + (rowsVisible - 1) * SlotGap;
+        var expansionHeight = rowsVisible * SlotSize.Y + (rowsVisible - 1) * HotbarChrome.SlotGap;
         return new Vector2(totalWidth, expansionHeight);
     }
 
     /// <summary>Page 1 (Slot1-10) fills top-to-bottom first -- 1 row until more than a row's worth is unlocked, then 2 (the max -- see this class's own doc comment on pages sitting side by side instead of stacking further).</summary>
     private static int GetExpansionRowsVisible(short unlockedSlots) =>
-        unlockedSlots > ExpansionColumnsPerRow ? MaxExpansionRows : 1;
+        unlockedSlots > HotbarChrome.ExpansionColumnsPerRow ? HotbarChrome.MaxExpansionRows : 1;
 
     /// <summary>Page 2 (Slot11-20) only appears once page 1 is entirely unlocked.</summary>
     private static int GetExpansionPagesVisible(short unlockedSlots) =>
-        unlockedSlots > SlotsPerExpansionPage ? MaxExpansionPages : 1;
+        unlockedSlots > HotbarChrome.SlotsPerExpansionPage ? HotbarChrome.MaxExpansionPages : 1;
 
     /// <summary>playerEntityId can still be World's unset sentinel (-1) here -- ShellBootstrapper constructs this class (and reads its Size) before GameLoop's first Update actually spawns the player (see FloorBuilder.CreatePlayer), so a negative id must fall back the same as "no component" rather than indexing the pool with it.</summary>
     private static short GetUnlockedExpansionSlots(PackedComponentPool<HotkeyExpansionUnlockComponent> hotkeyExpansionUnlocks, int playerEntityId) =>
@@ -163,9 +146,9 @@ public sealed class HotbarContent(
     public void Initialize(Window hostWindow)
     {
         _hostWindow = hostWindow;
-        _font = fontService.GetFont((int)(SlotSize.Y * GlyphSizeFraction));
-        _overlayFont = fontService.GetFont((int)(SlotSize.Y * OverlayFontFraction));
-        _countdownFont = fontService.GetFont((int)(SlotSize.Y * CountdownFontFraction));
+        _font = fontService.GetFont((int)(SlotSize.Y * FontChrome.HotbarSlotGlyphFontFraction));
+        _overlayFont = fontService.GetFont((int)(SlotSize.Y * FontChrome.HotbarOverlayFontFraction));
+        _countdownFont = fontService.GetFont((int)(SlotSize.Y * FontChrome.HotbarCountdownFontFraction));
     }
 
     public void Update(GameTime gameTime)
@@ -238,7 +221,7 @@ public sealed class HotbarContent(
 
     /// <summary>Shared by ShellBootstrapper (initial placement) and RefreshLayoutIfChanged (every subsequent resize) so the two can never drift into disagreeing formulas.</summary>
     public static Vector2 ComputeBottomCenteredPosition(Vector2 size, Vector2 screenSize) =>
-        new((screenSize.X - size.X) / 2f, screenSize.Y - size.Y - HudMetrics.Margin.Y * 1.5f);
+        new((screenSize.X - size.X) / 2f, screenSize.Y - size.Y - HudChrome.Margin.Y * 1.5f);
 
     public void DrawContent(GameTime gameTime)
     {
@@ -252,7 +235,7 @@ public sealed class HotbarContent(
 
             if (IsAcceptingDrag)
             {
-                GlowRenderer.Draw(spriteBatch, unitRectangle, bounds, DragDropTargetGlowColor);
+                GlowRenderer.Draw(spriteBatch, unitRectangle, bounds, WindowPalette.AttentionGlow);
             }
         }
     }
@@ -275,22 +258,22 @@ public sealed class HotbarContent(
         var pagesVisible = GetExpansionPagesVisible(_unlockedExpansionSlots);
         var expansionHeight = ComputeSize(rowsVisible, pagesVisible).Y;
         var origin = _hostWindow.ContentAbsolutePosition;
-        var baseWidth = BaseSlotCount * SlotSize.X + (BaseSlotCount - 1) * SlotGap;
+        var baseWidth = HotbarChrome.BaseSlotCount * SlotSize.X + (HotbarChrome.BaseSlotCount - 1) * HotbarChrome.SlotGap;
         var centeredRowY = origin.Y + (expansionHeight - SlotSize.Y) / 2f;
 
         var x = origin.X;
-        for (var i = 0; i < BaseSlotCount; i++)
+        for (var i = 0; i < HotbarChrome.BaseSlotCount; i++)
         {
             var slot = (HotkeySlot)((int)HotkeySlot.Base1 + i);
             yield return (slot, new Rectangle((int)x, (int)centeredRowY, (int)SlotSize.X, (int)SlotSize.Y));
-            x += SlotSize.X + SlotGap;
+            x += SlotSize.X + HotbarChrome.SlotGap;
         }
 
-        x = origin.X + baseWidth + GroupGap;
+        x = origin.X + baseWidth + HotbarChrome.GroupGap;
         yield return (HotkeySlot.DefaultAttack, new Rectangle((int)x, (int)centeredRowY, (int)SlotSize.X, (int)SlotSize.Y));
 
-        var expansionOriginX = x + SlotSize.X + GroupGap;
-        var pageWidth = ExpansionColumnsPerRow * SlotSize.X + (ExpansionColumnsPerRow - 1) * SlotGap;
+        var expansionOriginX = x + SlotSize.X + HotbarChrome.GroupGap;
+        var pageWidth = HotbarChrome.ExpansionColumnsPerRow * SlotSize.X + (HotbarChrome.ExpansionColumnsPerRow - 1) * HotbarChrome.SlotGap;
 
         foreach (var entry in HotkeySlotLayout.Entries)
         {
@@ -299,9 +282,9 @@ public sealed class HotbarContent(
                 continue;
             }
 
-            var pageOriginX = expansionOriginX + entry.Page * (pageWidth + ExpansionPageGap);
-            var slotX = pageOriginX + entry.Column * (SlotSize.X + SlotGap);
-            var slotY = origin.Y + entry.Row * (SlotSize.Y + SlotGap);
+            var pageOriginX = expansionOriginX + entry.Page * (pageWidth + HotbarChrome.ExpansionPageGap);
+            var slotX = pageOriginX + entry.Column * (SlotSize.X + HotbarChrome.SlotGap);
+            var slotY = origin.Y + entry.Row * (SlotSize.Y + HotbarChrome.SlotGap);
             yield return (entry.Slot, new Rectangle((int)slotX, (int)slotY, (int)SlotSize.X, (int)SlotSize.Y));
         }
     }
@@ -514,22 +497,31 @@ public sealed class HotbarContent(
 
             if (stackInstanceId == mapViewState.SelectedItemStackInstanceId)
             {
-                GlowRenderer.Draw(spriteBatch, unitRectangle, bounds, SelectedGlowColor);
+                GlowRenderer.Draw(spriteBatch, unitRectangle, bounds, WindowPalette.AttentionGlow, GlowMode.ExteriorFade);
+                GlowRenderer.Draw(spriteBatch, unitRectangle, bounds, WindowPalette.AttentionGlow, GlowMode.InteriorFade);
             }
         }
         else
         {
-            // Unbound -- either genuinely empty (isActive true) or a not-yet-unlocked Expansion
-            // slot (isActive false, see ComputeIsSlotActive) -- either way, just the flat tint.
-            spriteBatch.Draw(unitRectangle, contentBounds, UnboundSlotColor * alpha);
+            // Genuinely unbound (or a not-yet-unlocked Expansion slot) -- DrawSlotVisual/
+            // RadialFillRenderer never runs for this branch, so this is the only place that needs
+            // to fill the slot's own background (DrawSlotVisual's own RadialFillRenderer.Draw call
+            // already fills contentBounds with this same color for the two branches above).
+            spriteBatch.Draw(unitRectangle, contentBounds, WindowPalette.ControlBackground * alpha);
         }
+
+        // Every slot -- bound or not -- gets this same inward-fading white vignette layered on top
+        // of its own background/icon, framing the slot. Drawn after DrawSlotVisual (not before) so
+        // a bound slot's opaque icon background doesn't immediately paint over it.
+        GlowRenderer.Draw(spriteBatch, unitRectangle, contentBounds, WindowPalette.Hover, GlowMode.InteriorFade, alpha);
 
         var (top, bottom, left, right) = BorderThickness.GetEdgeRectangles(bounds, SlotBorderThickness);
         BorderRenderer.Draw(spriteBatch, unitRectangle, BorderStyle.FlatContrast, Color.White, top, bottom, left, right, alpha);
 
         if (mapViewState.ArmedSlot == slot)
         {
-            GlowRenderer.Draw(spriteBatch, unitRectangle, bounds, ArmedGlowColor);
+            GlowRenderer.Draw(spriteBatch, unitRectangle, bounds, WindowPalette.AttentionGlow, GlowMode.ExteriorFade);
+            GlowRenderer.Draw(spriteBatch, unitRectangle, bounds, WindowPalette.AttentionGlow, GlowMode.InteriorFade);
         }
 
         DrawKeyLabel(spriteBatch, bounds, slot, alpha);
@@ -603,7 +595,7 @@ public sealed class HotbarContent(
         return new SlotVisual(
             SpriteName: item.SpriteName,
             Glyph: item.Glyph,
-            GlyphColor: BoundSlotGlyphColor,
+            GlyphColor: WindowPalette.SlotGlyphColor,
             FillPercentage: isActive ? ComputeItemFillPercentage(playerEntityId) : 0f,
             BadgeText: item.Activator is WandActivator wandActivator
                 ? $"{wandActivator.Charges}/{wandActivator.MaxCharges}"
@@ -621,7 +613,7 @@ public sealed class HotbarContent(
         _radialFill.SpriteTint = Color.White;
         _radialFill.Glyph = visual.Glyph;
         _radialFill.GlyphColor = visual.GlyphColor;
-        _radialFill.BackgroundColor = BoundSlotBackgroundColor;
+        _radialFill.BackgroundColor = WindowPalette.ControlBackground;
         _radialFill.FillPercentage = visual.FillPercentage;
         _radialFill.Draw(spriteBatch, unitRectangle, _font, contentBounds, alpha);
 

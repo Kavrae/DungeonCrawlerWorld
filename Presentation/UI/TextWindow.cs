@@ -1,9 +1,9 @@
 using Engine.Utilities;
 using FontStashSharp;
 using Microsoft.Xna.Framework;
-using Microsoft.Xna.Framework.Graphics;
 using Presentation.Fonts;
 using Presentation.Rendering;
+using Presentation.UI.Chrome;
 using Presentation.UI.ColorPalettes;
 
 namespace Presentation.UI;
@@ -12,7 +12,7 @@ public class TextWindow(FontService fontService, ElementPoolService elementPoolS
 {
     public string OriginalText { get; set; } = string.Empty;
     public DisplayText DisplayText { get; set; }
-    public SpriteFontBase ContentFont { get; set; } = fontService.GetFont(12);
+    public SpriteFontBase ContentFont { get; set; } = fontService.GetFont(FontChrome.DefaultFontSize);
     public Color TextColor { get; set; }
 
     /// <summary>No bold font asset exists in this codebase (see FontService -- DroidSans regular only), so Bold renders as a cheap 1px-offset double-draw instead of a real bold weight -- close enough for a UI label (e.g. ContextMenu's own header rows) without needing a second font file.</summary>
@@ -114,11 +114,22 @@ public class TextWindow(FontService fontService, ElementPoolService elementPoolS
         // UpdateScrollBounds below.
         _contentState.Size.Y = System.Math.Min(wrappedTextHeight, maximumContentHeight);
 
+        // TextWindow always forces _canContainChildren false (see Build), so there's no separate
+        // padded-vs-full distinction here -- BackgroundSize must still be set explicitly, though,
+        // since this fully replaces the base RecalculateWrapContentSize (never calls it) and
+        // nothing else sets it for this element. Without this, every WrapContent TextWindow/
+        // TextBox/Tooltip (every hover popup and notification in the game) draws its own
+        // background at a stale, zero-initialized size -- fully invisible.
+        _contentState.BackgroundSize = _contentState.Size;
+
         _geometry.CurrentSize = _contentState.Size;
         if (_headerState.ShowHeader)
         {
-            // Resize horizontally to fit the new content size, but keep the vertical size.
-            _headerState.Size = new Vector2(_contentState.Size.X, _headerState.OriginalSize.Y - BorderInset.Y);
+            // Resize horizontally to fit the new content size, but keep the vertical size --
+            // OriginalSize.Y as-is, not shrunk by BorderInset.Y (a stray subtraction that used to
+            // sit here undersized every WrapContent TextWindow/Tooltip's own title bar relative to
+            // what Window.Build actually measured it at, most visible once WindowTitleFontSize grew).
+            _headerState.Size = new Vector2(_contentState.Size.X, _headerState.OriginalSize.Y);
             _geometry.CurrentSize.Y += _headerState.Size.Y;
         }
         _geometry.CurrentSize += BorderInsetDoubled;
@@ -126,21 +137,7 @@ public class TextWindow(FontService fontService, ElementPoolService elementPoolS
         UpdateScrollBounds();
     }
 
-    private float WidestLineWidth()
-    {
-        if (string.IsNullOrEmpty(DisplayText.FormattedText))
-        {
-            return 0f;
-        }
-
-        var widest = 0f;
-        foreach (var line in DisplayText.FormattedText.Split('\n'))
-        {
-            widest = Math.Max(widest, ContentFont.MeasureString(line.TrimEnd('\r')).X);
-        }
-
-        return widest;
-    }
+    private float WidestLineWidth() => StringUtility.WidestLineWidth(new FontStashTextMeasurer(ContentFont), DisplayText.FormattedText);
 
     private void UpdateScrollBounds()
     {

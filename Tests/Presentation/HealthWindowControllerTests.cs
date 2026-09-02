@@ -14,7 +14,7 @@ using Microsoft.Xna.Framework;
 using Presentation.Fonts;
 using Presentation.Rendering;
 using Presentation.UI;
-using Presentation.UI.Inventory;
+using Presentation.UI.Chrome;
 using System.Linq;
 
 namespace Tests.Presentation;
@@ -101,9 +101,9 @@ public sealed class HealthWindowControllerTests
     [TestMethod]
     public void FolderPosition_ShiftedBelowHealthButton_NoOverlap()
     {
-        var buttonBottom = HealthWindowController.ButtonPosition.Y + HealthWindowController.ButtonSize.Y;
+        var buttonBottom = HealthWindowChrome.ButtonPosition.Y + HealthWindowChrome.ButtonSize.Y;
 
-        Assert.IsGreaterThanOrEqualTo(buttonBottom, InventoryFolderController.FolderPosition.Y, "The Inventory Folder must sit at or below the Health button's own bottom edge -- no overlap.");
-        Assert.AreEqual(HealthWindowController.ButtonPosition.X, InventoryFolderController.FolderPosition.X, "Both stay left-aligned under HudMetrics.Margin.");
+        Assert.IsGreaterThanOrEqualTo(buttonBottom, InventoryChrome.FolderPosition.Y, "The Inventory Folder must sit at or below the Health button's own bottom edge -- no overlap.");
+        Assert.AreEqual(HealthWindowChrome.ButtonPosition.X, InventoryChrome.FolderPosition.X, "Both stay left-aligned under HudChrome.Margin.");
     }
 }

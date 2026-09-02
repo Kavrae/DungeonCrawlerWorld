@@ -1,10 +1,10 @@
 using Engine.Utilities;
 using FontStashSharp;
 using Microsoft.Xna.Framework;
-using Microsoft.Xna.Framework.Graphics;
 using Microsoft.Xna.Framework.Input;
 using Presentation.Fonts;
 using Presentation.Rendering;
+using Presentation.UI.Chrome;
 using Presentation.UI.ChromeBehaviors;
 using Presentation.UI.ColorPalettes;
 
@@ -52,6 +52,9 @@ public class Window : Element
     /// </summary>
     internal SpriteFontBase TitleFont { get; }
 
+    /// <summary>Wraps TitleFont for StringUtility.TruncateWithEllipsis -- built once here since TitleFont itself never changes after construction (see TitleFont's own doc comment).</summary>
+    private readonly FontStashTextMeasurer _titleFontMeasurer;
+
     public Vector2 TitlePadding { get; set; } = new(5, 2);
 
     private string _titleText = string.Empty;
@@ -60,11 +63,11 @@ public class Window : Element
     private Color _titleColor;
     public Color TitleColor => _titleColor;
 
-    private Color _focusedTitleColor;
-    public Color FocusedTitleColor => _focusedTitleColor;
-
     private Color _titleTextColor;
     public Color TitleTextColor => _titleTextColor;
+
+    /// <summary>This window's own border color when unfocused -- captured at Build time (see Build) so Update can restore it once IsFocused clears, instead of the focused accent (see FocusAccentColor) permanently clobbering a window's own custom BorderColor.</summary>
+    private Color _unfocusedBorderColor;
 
     private List<Button> _titleButtons = [];
     public List<Button> TitleButtons { get => _titleButtons; set => _titleButtons = value; }
@@ -91,7 +94,8 @@ public class Window : Element
     public Window(FontService fontService, ElementPoolService windowService, LabelRenderer labelRenderer)
         : base(fontService, windowService, labelRenderer)
     {
-        TitleFont = fontService.GetFont(12);
+        TitleFont = fontService.GetFont(FontChrome.WindowTitleFontSize);
+        _titleFontMeasurer = new FontStashTextMeasurer(TitleFont);
     }
 
     public override void Build(Element? parent, ElementOptions options)
@@ -101,10 +105,14 @@ public class Window : Element
         var chrome = options.Chrome;
 
         _titleText = chrome?.TitleText ?? string.Empty;
-        _titleColor = chrome?.TitleColor ?? WindowPalette.TitleColor;
-        _focusedTitleColor = chrome?.FocusedTitleColor ?? WindowPalette.TitleFocusedColor;
+        _titleColor = chrome?.TitleColor ?? WindowPalette.HeaderBackground;
         _titleTextColor = chrome?.TitleTextColor ?? WindowPalette.TitleTextColor;
         _titleButtons = [];
+
+        // Captured after base.Build has resolved _border.Color (chrome?.BorderColor ??
+        // WindowPalette.BorderColor) -- Update restores this once IsFocused clears, rather than
+        // FocusAccentColor permanently overwriting whatever this window's own border color is.
+        _unfocusedBorderColor = _border.Color;
 
         CanUserClose = chrome?.CanUserClose ?? false;
         CanUserMinimize = chrome?.CanUserMinimize ?? false;
@@ -143,6 +151,14 @@ public class Window : Element
     public override void Update(GameTime gameTime)
     {
         base.Update(gameTime);
+
+        // Header background no longer swaps on focus (see DrawHeader) -- shown as a border accent
+        // instead, resolved here rather than in Build since IsActiveWindow changes every frame
+        // while Build only ever runs once (or once per pooled reuse). IsActiveWindow, not
+        // IsFocused -- most windows' actual keyboard-focus target is a title button or content
+        // TextBox, not the Window itself, and clicking non-focusable content (most rows/cells)
+        // clears keyboard focus entirely (see IsActiveWindow's own doc comment).
+        _border.Color = _isActiveWindow ? WindowPalette.FocusAccentColor : _unfocusedBorderColor;
 
         _content?.Update(gameTime);
     }
@@ -224,14 +240,20 @@ public class Window : Element
 
         if (!_isTransparent)
         {
-            var titleBackgroundColor = _isFocused
-                ? _focusedTitleColor
-                : _titleColor;
-            spriteBatch.Draw(unitRectangle, HeaderRectangle, titleBackgroundColor);
+            spriteBatch.Draw(unitRectangle, HeaderRectangle, _titleColor);
         }
         var drawnTitleText = GlobalState.IsAdminModeOn
             ? $"{_titleText} ({RelativePosition.X:0}, {RelativePosition.Y:0}) {CurrentSize.X:0}x{CurrentSize.Y:0}"
             : _titleText;
+
+        // Most windows are sized to fit their own title (see MinimumHeaderWidth), so this is a
+        // no-op for them -- but a fixed-width popup (e.g. Tooltip.UseFixedWidth, pinned to
+        // HotbarContent.SummaryWidth regardless of what title text it's asked to show) can be
+        // handed a title wider than its own header, which used to just draw past the window's
+        // own edge uncontained.
+        var availableTextWidth = HeaderSize.X - TitlePadding.X * 2 - TotalTitleButtonsWidth();
+        drawnTitleText = StringUtility.TruncateWithEllipsis(_titleFontMeasurer, drawnTitleText, availableTextWidth);
+
         spriteBatch.DrawString(TitleFont, drawnTitleText, HeaderAbsolutePosition + TitlePadding, _titleTextColor);
 
         foreach (var button in _titleButtons)
@@ -354,6 +376,7 @@ public class Window : Element
         _headerState.Size = new Vector2(MinimumHeaderWidth(), textSize.Y + TitlePadding.Y * 2);
 
         _contentState.Size = new Vector2(0, 0);
+        _contentState.BackgroundSize = new Vector2(0, 0);
 
         var windowSize = _headerState.Size + BorderInsetDoubled;
 

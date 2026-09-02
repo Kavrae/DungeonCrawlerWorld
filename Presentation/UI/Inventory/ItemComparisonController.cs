@@ -4,6 +4,7 @@ using Game.Modules.Actions;
 using Game.Modules.Inventory;
 using Game.Modules.Inventory.Components;
 using Microsoft.Xna.Framework;
+using Presentation.UI.ColorPalettes;
 using Presentation.UI.Content;
 
 namespace Presentation.UI.Inventory;
@@ -296,7 +297,7 @@ public sealed class ItemComparisonController(
                 CanUserScrollVertical = true,
                 CanUserFocus = true,
             },
-            Content = new ElementContentOptions { ContentColor = ItemDetailsWindow.BackgroundColor },
+            Content = new ElementContentOptions { ContentColor = WindowPalette.PanelBackgroundColor },
         });
         window.Configure(entityId, stackInstanceId, definition, playerWindow.ContentSize.X, comparedAgainst);
         window.Closed += HandleColumnClosed;

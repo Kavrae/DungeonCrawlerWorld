@@ -2,6 +2,7 @@ using Game.Modules.Actions;
 using Microsoft.Xna.Framework;
 using Presentation.Fonts;
 using Presentation.Rendering;
+using Presentation.UI.Chrome;
 using Presentation.UI.Content;
 
 namespace Presentation.UI;
@@ -15,9 +16,6 @@ namespace Presentation.UI;
 /// <cleanupVersion>1</cleanupVersion>
 public sealed class HotbarController(MapViewState mapViewState, HotbarContent hotbarContent, ActionTargetingController actionTargeting)
 {
-    /// <summary>Bottom edge sits exactly this far above the summarized slot's top edge.</summary>
-    private static readonly Vector2 SummaryGap = new(0, 1);
-
     private HotkeySlot? _pressedSlot;
     private HotkeySlot? _hoveredSlot;
     private int _hoveredSlotFrames;
@@ -80,7 +78,7 @@ public sealed class HotbarController(MapViewState mapViewState, HotbarContent ho
             _hoveredSlotFrames = candidateSlot is null ? 0 : 1;
         }
 
-        mapViewState.HoverSlot = _hoveredSlotFrames >= HudMetrics.HoverTooltipDelayFrames ? candidateSlot : null;
+        mapViewState.HoverSlot = _hoveredSlotFrames >= HudChrome.HoverTooltipDelayFrames ? candidateSlot : null;
 
         UpdateSummary();
     }
@@ -103,6 +101,6 @@ public sealed class HotbarController(MapViewState mapViewState, HotbarContent ho
             return;
         }
 
-        _summaryWindow.ShowNear(hotbarContent.GetSlotBounds(slot), PopupAnchor.North, SummaryGap, summary, title);
+        _summaryWindow.ShowNear(hotbarContent.GetSlotBounds(slot), PopupAnchor.North, PopupChrome.HotbarSummaryGap, summary, title);
     }
 }

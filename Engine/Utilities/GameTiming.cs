@@ -4,7 +4,7 @@ namespace Engine.Utilities;
 /// <remarks>The single source of truth for converting
 /// between frames and seconds, so anywhere a duration is expressed in frames (e.g.
 /// PotionCooldownEffects.DurationFrames, ActionTargetingController.DoubleTapWindowFrames,
-/// HudMetrics.HoverTooltipDelayFrames) can state its real-world duration without hardcoding a
+/// HudChrome.HoverTooltipDelayFrames) can state its real-world duration without hardcoding a
 /// bare "60", and without those unrelated call sites having to depend on each other to share it.
 /// </remarks>
 /// <cleanupVersion>1</cleanupVersion>

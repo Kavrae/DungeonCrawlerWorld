@@ -370,6 +370,17 @@ public sealed class UiInputController
         if (_contentDragItemStackInstanceId is not null || _contentDragMergedItemDefinitionId is not null || _contentDragActionId is not null)
         {
             _contentDragHeldFrames++;
+
+            // Delayed the same ContentDragGhostDelayFrames as the drag ghost itself (see
+            // ContentDragGhostVisible) -- arming a hotbar slot is a plain press-then-release on
+            // that same slot, which used to flash every slot gold for a frame or two before the
+            // release resolved it as "not actually a drag" (confirmed live: TryStartContentDrag
+            // used to turn this on unconditionally on press, before a tap could ever be told
+            // apart from a drag).
+            if (_contentDragHeldFrames == ContentDragGhostDelayFrames && !IsDragFromNonPlayerInventory)
+            {
+                SetHotbarDragHighlight(true);
+            }
         }
 
         _previousKeyboardState = keyboardState;
@@ -793,12 +804,6 @@ public sealed class UiInputController
                 _contentDragOriginSlot = pressedSlot;
                 _contentDragStartMousePosition = new Vector2(clickPosition.X, clickPosition.Y);
             }
-        }
-
-        if ((_contentDragItemStackInstanceId is not null || _contentDragMergedItemDefinitionId is not null || _contentDragActionId is not null) &&
-            !IsDragFromNonPlayerInventory)
-        {
-            SetHotbarDragHighlight(true);
         }
     }
 
@@ -1278,13 +1283,54 @@ public sealed class UiInputController
     /// Raises element within its own parent's children (no-op if it has no parent -- see
     /// Element.RaiseToFront), then raises whichever top-level ancestor contains it within its
     /// own tier (baseElements/staticHudElements/dynamicHudElements/userElements), so the whole
-    /// subtree ends up drawn/hit-tested on top of its siblings at every level.
+    /// subtree ends up drawn/hit-tested on top of its siblings at every level. Also marks that
+    /// root ancestor as the active window (see SetActiveWindow) -- this runs on every click that
+    /// hits anything at all, regardless of whether SetFocus goes on to change keyboard focus.
     /// </summary>
     private void RaiseToFront(Element element)
     {
         element.RaiseToFront();
 
-        _layers.RaiseToFront(GetRootAncestor(element));
+        var rootAncestor = GetRootAncestor(element);
+        _layers.RaiseToFront(rootAncestor);
+        SetActiveWindow(rootAncestor);
+    }
+
+    /// <summary>
+    /// The root-ancestor element most recently raised to front -- see Element.IsActiveWindow.
+    /// Tracked independently of _focusedElement/SetFocus: a click on a non-focusable row/cell/
+    /// column (most menu-window content) still raises its window to front here even though
+    /// SetFocus clears keyboard focus to null for that same click.
+    /// </summary>
+    private Element? _activeWindow;
+
+    private void SetActiveWindow(Element window)
+    {
+        if (_activeWindow == window)
+        {
+            return;
+        }
+
+        if (_activeWindow is not null)
+        {
+            _activeWindow.SetIsActiveWindow(false);
+            _activeWindow.Closed -= OnActiveWindowClosed;
+        }
+
+        _activeWindow = window;
+        _activeWindow.SetIsActiveWindow(true);
+        _activeWindow.Closed += OnActiveWindowClosed;
+    }
+
+    /// <summary>Clears _activeWindow when it closes -- otherwise a stale reference to a since-pooled-and-reused Element could compare equal to a later SetActiveWindow(sameInstance) call and wrongly skip re-marking it active (see SetActiveWindow's reference-equality check).</summary>
+    private void OnActiveWindowClosed(Element closedElement)
+    {
+        closedElement.Closed -= OnActiveWindowClosed;
+
+        if (_activeWindow == closedElement)
+        {
+            _activeWindow = null;
+        }
     }
 
     /// <summary>Walks up ParentElement to the top-level ancestor -- shared by RaiseToFront and CycleFocus, both of which operate on whichever tier-root element a given element belongs to, not the element itself.</summary>

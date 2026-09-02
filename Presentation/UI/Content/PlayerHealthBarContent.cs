@@ -10,6 +10,7 @@ using Microsoft.Xna.Framework;
 using Microsoft.Xna.Framework.Input;
 using Presentation.Fonts;
 using Presentation.Rendering;
+using Presentation.UI.Chrome;
 using Presentation.UI.ColorPalettes;
 
 namespace Presentation.UI.Content;
@@ -33,7 +34,7 @@ namespace Presentation.UI.Content;
 /// </remarks>
 public sealed class PlayerHealthBarContent(World world, ComponentManager componentManager, FontService fontService, UiLayerStack layers) : IElementContent
 {
-    public static readonly Vector2 Size = new(HudMetrics.EntrySize.X * 4.5f, HudMetrics.EntrySize.Y * 0.75f);
+    public static readonly Vector2 Size = new(HudChrome.EntrySize.X * 4.5f, HudChrome.EntrySize.Y * 0.75f);
 
     /// <summary>Matches ShowBorder's default (1,1) BorderSize, doubled -- see Element.BorderInsetDoubled. The popup's row content itself reads its host window's actual resolved ContentSize at draw time, so this only needs to be a reasonable approximation, not pixel-exact.</summary>
     private static readonly Vector2 PopupBorderInsetDoubled = new(2, 2);
@@ -113,14 +114,14 @@ public sealed class PlayerHealthBarContent(World world, ComponentManager compone
         UpdateHover(mouseState, screenBounds);
     }
 
-    /// <summary>Delay-gated via HudMetrics.HoverTooltipDelayFrames before showing (mirrors AbilityScoreWindow.UpdateHover), but hides immediately with no delay on hover loss.</summary>
+    /// <summary>Delay-gated via HudChrome.HoverTooltipDelayFrames before showing (mirrors AbilityScoreWindow.UpdateHover), but hides immediately with no delay on hover loss.</summary>
     private void UpdateHover(MouseState mouseState, Rectangle screenBounds)
     {
         var barRectangle = BarRectangle();
         var isHovering = barRectangle.Contains(new Point(mouseState.X, mouseState.Y));
         _hoveredFrames = isHovering ? _hoveredFrames + 1 : 0;
 
-        if (!isHovering || _hoveredFrames < HudMetrics.HoverTooltipDelayFrames)
+        if (!isHovering || _hoveredFrames < HudChrome.HoverTooltipDelayFrames)
         {
             _hoverPopup.IsVisible = false;
             return;

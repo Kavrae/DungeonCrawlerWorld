@@ -1,9 +1,9 @@
 using FontStashSharp;
 using Game.Modules.AbilityScores;
 using Microsoft.Xna.Framework;
-using Microsoft.Xna.Framework.Graphics;
 using Presentation.Fonts;
 using Presentation.Rendering;
+using Presentation.UI.Chrome;
 using Presentation.UI.ColorPalettes;
 
 namespace Presentation.UI.AbilityScores;
@@ -18,10 +18,7 @@ namespace Presentation.UI.AbilityScores;
 public sealed class AbilityScoreColumnHeader(FontService fontService, ElementPoolService elementPoolService, LabelRenderer labelRenderer)
     : Element(fontService, elementPoolService, labelRenderer)
 {
-    private const float NameFontFraction = 0.35f;
-    private const float TotalFontFraction = 0.3f;
-
-    private static readonly Color TextColor = WindowPalette.BodyTextColor;
+    private static readonly Color TextColor = WindowPalette.TitleTextColor;
 
     private string _name = string.Empty;
     private string _totalText = string.Empty;
@@ -37,8 +34,8 @@ public sealed class AbilityScoreColumnHeader(FontService fontService, ElementPoo
         Type = type;
         _name = type.ToString();
         _totalText = total.ToString();
-        _nameFont = fontService.GetFont((int)(headerSize.Y * NameFontFraction));
-        _totalFont = fontService.GetFont((int)(headerSize.Y * TotalFontFraction));
+        _nameFont = fontService.GetFont((int)(headerSize.Y * FontChrome.AbilityScoreColumnNameFontFraction));
+        _totalFont = fontService.GetFont((int)(headerSize.Y * FontChrome.AbilityScoreColumnTotalFontFraction));
     }
 
     public override void DrawContent(GameTime gameTime)

@@ -5,6 +5,7 @@ using Microsoft.Xna.Framework.Graphics;
 using Microsoft.Xna.Framework.Input;
 using Presentation.Fonts;
 using Presentation.Rendering;
+using Presentation.UI.ColorPalettes;
 using Presentation.UI.Content;
 using SDL3;
 using System.Text;
@@ -26,13 +27,13 @@ namespace Presentation.UI;
 /// </summary>
 public sealed class TextBox(FontService fontService, ElementPoolService elementPoolService, LabelRenderer labelRenderer, CursorTextContent? cursorTextContent = null, ContextMenuController? contextMenuController = null) : TextWindow(fontService, elementPoolService, labelRenderer)
 {
-    private static readonly Color FocusIndicatorColor = Color.Gold;
+    private static readonly Color FocusIndicatorColor = WindowPalette.FocusAccentColor;
     private static readonly BorderThickness FocusIndicatorThickness = BorderThickness.Uniform(new Vector2(2, 2));
 
     /// <summary>Multiline boxes start tall enough for exactly this many lines and never shrink below it, regardless of how little text is in the box. See AutoSizeToContent.</summary>
     private const int MinimumVisibleLines = 2;
 
-    /// <summary>Same delay-gated frame-counter idiom as HudMetrics.HoverTooltipDelayFrames/DebouncedTextFilter -- toggles CaretVisible every half-second while focused.</summary>
+    /// <summary>Same delay-gated frame-counter idiom as HudChrome.HoverTooltipDelayFrames/DebouncedTextFilter -- toggles CaretVisible every half-second while focused.</summary>
     private static readonly int CaretBlinkIntervalFrames = GameTiming.FramesForSeconds(0.5f);
 
     /// <summary>Roughly standard OS double-click timing -- a second click on (near) the same character within this window counts as a double-click; a third, a triple-click. See RegisterClickForMultiClick.</summary>
@@ -107,7 +108,7 @@ public sealed class TextBox(FontService fontService, ElementPoolService elementP
     /// <summary>Placeholder text shown whenever the box is both empty and unfocused (see DrawContent) -- null (the default) draws nothing, so every existing TextBox usage is unaffected.</summary>
     public string? GhostText { get; set; }
 
-    public Color GhostTextColor { get; set; } = Color.LightGray;
+    public Color GhostTextColor { get; set; } = WindowPalette.GhostText;
 
     public override void Build(Element? parent, ElementOptions options)
     {
@@ -130,7 +131,7 @@ public sealed class TextBox(FontService fontService, ElementPoolService elementP
         _consecutiveClickCount = 0;
         _lastClickIndex = -1;
         GhostText = null;
-        GhostTextColor = Color.LightGray;
+        GhostTextColor = WindowPalette.GhostText;
     }
 
     public override void Initialize()

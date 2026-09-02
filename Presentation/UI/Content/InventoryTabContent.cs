@@ -71,7 +71,7 @@ public sealed class InventoryTabContent(ElementPoolService elementPoolService, F
                 DisplayMode = ElementDisplayMode.Fixed,
             },
             Chrome = new ElementChromeOptions { ShowBorder = false, ShowTitle = false, CanUserScrollVertical = true, CanUserFocus = false },
-            Content = new ElementContentOptions { ContentColor = WindowPalette.PanelContentColor },
+            Content = new ElementContentOptions { ContentColor = Color.Transparent },
         });
         hostWindow.AddChild(_gridWindow); // Already initializes _gridWindow -- see AddChild's own doc comment.
 

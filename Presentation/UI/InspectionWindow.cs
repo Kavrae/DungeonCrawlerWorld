@@ -50,6 +50,7 @@ public sealed class InspectionWindow(FontService fontService, ElementPoolService
 
         _headerState.Size = new Vector2(_geometry.OriginalSize.X, textSize.Y + TitlePadding.Y * 2);
         _contentState.Size = Vector2.Zero;
+        _contentState.BackgroundSize = Vector2.Zero;
         _geometry.CurrentSize = new Vector2(_geometry.OriginalSize.X, _headerState.Size.Y + BorderInsetDoubled.Y);
     }
 }

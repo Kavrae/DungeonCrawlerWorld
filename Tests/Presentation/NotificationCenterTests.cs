@@ -248,7 +248,7 @@ public sealed class NotificationCenterTests
         notificationCenter.AddNotification(NotificationCategory.Quest, "Explore the dungeon.", showImmediately: false);
 
         // The Folder starts collapsed (see Folder.Initialize) -- clicking anywhere within its
-        // small icon-sized header at HudMetrics.Margin (30, 30) expands it, tiling the
+        // small icon-sized header at HudChrome.Margin (30, 30) expands it, tiling the
         // category badges vertically beneath. Only then does Quest's badge have a real,
         // clickable on-screen position -- read via WindowRectangle (its exact layout depends
         // on border/title-icon sizing) rather than hand-derived pixel math.

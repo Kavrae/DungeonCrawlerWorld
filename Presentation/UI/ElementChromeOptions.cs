@@ -19,7 +19,6 @@ public sealed class ElementChromeOptions
     public string? TitleText { get; set; }
 
     public Color? TitleColor { get; set; }
-    public Color? FocusedTitleColor { get; set; }
     public Color? TitleTextColor { get; set; }
 
     /*========Border========*/

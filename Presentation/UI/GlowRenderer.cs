@@ -3,32 +3,65 @@ using Microsoft.Xna.Framework.Graphics;
 
 namespace Presentation.UI;
 
+/// <summary>Which shape a glow takes -- see GlowRenderer.Draw.</summary>
+public enum GlowMode
+{
+    /// <summary>A single flat overlay at half the glow color's saturation across the entire bounds -- no rings.</summary>
+    InteriorFull,
+
+    /// <summary>Rings fading inward from the border toward the center of bounds.</summary>
+    InteriorFade,
+
+    /// <summary>Rings fading outward from the border away from bounds.</summary>
+    ExteriorFade,
+}
+
 /// <summary>
-/// Draws a soft outward glow around a rectangle -- shared by any Window that opts in via
-/// SetGlow. No shader/gradient support exists in this renderer stack (SpriteBatchRenderer's
+/// Draws a glow around or within a rectangle -- shared by any Window that opts in via SetGlow.
+/// No shader/gradient support exists in this renderer stack (SpriteBatchRenderer's
 /// unitRectangle is a flat-color quad, same constraint BorderRenderer/MapTintGrid work
-/// within), so the fade is approximated with GlowRingCount concentric 1px rings expanding
-/// outward from bounds, reusing BorderThickness.GetEdgeRectangles the same way BorderRenderer
-/// does but against an inflated rectangle instead of an inset one.
+/// within), so InteriorFade/ExteriorFade approximate the fade with FadeRingCount concentric
+/// 1px rings, reusing BorderThickness.GetEdgeRectangles the same way BorderRenderer does, against
+/// an inset (InteriorFade) or inflated (ExteriorFade) rectangle.
 /// </summary>
 public static class GlowRenderer
 {
-    private const int GlowRingCount = 7;
-    private const float MaximumAlpha = 0.7f;
+    private const int FadeRingCount = 5;
+    private const float FadeMaximumAlpha = 0.5f;
 
-    public static void Draw(SpriteBatch spriteBatch, Texture2D unitRectangle, Rectangle bounds, Color glowColor)
+    public static void Draw(SpriteBatch spriteBatch, Texture2D unitRectangle, Rectangle bounds, Color glowColor, GlowMode mode = GlowMode.ExteriorFade, float alphaMultiplier = 1f)
     {
-        for (var distance = 1; distance <= GlowRingCount; distance++)
+        switch (mode)
         {
-            var ringBounds = new Rectangle(
-                bounds.X - distance,
-                bounds.Y - distance,
-                bounds.Width + distance * 2,
-                bounds.Height + distance * 2);
+            case GlowMode.InteriorFull:
+                spriteBatch.Draw(unitRectangle, bounds, glowColor * (FadeMaximumAlpha * alphaMultiplier));
+                break;
+            case GlowMode.InteriorFade:
+                DrawFadeRings(spriteBatch, unitRectangle, bounds, glowColor, alphaMultiplier, inward: true);
+                break;
+            case GlowMode.ExteriorFade:
+                DrawFadeRings(spriteBatch, unitRectangle, bounds, glowColor, alphaMultiplier, inward: false);
+                break;
+        }
+    }
 
-            // distance=1 (just outside the border) -> MaximumAlpha, distance=GlowRingCount -> 0.
-            var alpha = MaximumAlpha * (1f - (distance - 1) / (float)(GlowRingCount - 1));
-            var ringColor = glowColor * alpha;
+    // ringIndex=1 (closest to the border) -> FadeMaximumAlpha, and the falloff continues linearly
+    // such that a hypothetical ring FadeRingCount+1 would land exactly on 0.
+    private static float RingAlpha(int ringIndex) => FadeMaximumAlpha * (1f - (ringIndex - 1) / (float)FadeRingCount);
+
+    private static void DrawFadeRings(SpriteBatch spriteBatch, Texture2D unitRectangle, Rectangle bounds, Color glowColor, float alphaMultiplier, bool inward)
+    {
+        for (var ringIndex = 1; ringIndex <= FadeRingCount; ringIndex++)
+        {
+            var ringBounds = inward
+                ? BorderThickness.Inset(bounds, BorderThickness.Uniform(new Vector2(ringIndex, ringIndex)))
+                : new Rectangle(
+                    bounds.X - ringIndex,
+                    bounds.Y - ringIndex,
+                    bounds.Width + ringIndex * 2,
+                    bounds.Height + ringIndex * 2);
+
+            var ringColor = glowColor * (RingAlpha(ringIndex) * alphaMultiplier);
 
             var (top, bottom, left, right) = BorderThickness.GetEdgeRectangles(ringBounds, BorderThickness.Uniform(Vector2.One));
             spriteBatch.Draw(unitRectangle, top, ringColor);

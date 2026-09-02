@@ -1,9 +1,9 @@
 using Engine.ECS.Components;
 using Game.World;
-using Microsoft.Xna.Framework;
 using Presentation.Fonts;
 using Presentation.Rendering;
-using Presentation.UI.Notifications;
+using Presentation.UI.Chrome;
+using Presentation.UI.ColorPalettes;
 
 namespace Presentation.UI;
 
@@ -22,19 +22,6 @@ public sealed class HealthWindowController(
     FontService fontService,
     LabelRenderer labelRenderer)
 {
-    /// <summary>Beneath the Notification folder, with enough clearance that NotificationCenter's own folder never overlaps this one even fully expanded (NotificationCenter.FolderMaximumSize) -- the same clearance InventoryFolderController.FolderPosition used to keep for itself before this button took its slot.</summary>
-    private static readonly Vector2 NotificationClearanceGap = new(0, 20);
-
-    public static readonly Vector2 ButtonPosition = HudMetrics.Margin + new Vector2(0, NotificationCenter.FolderMaximumSize.Y) + NotificationClearanceGap;
-
-    /// <summary>Square, one HudMetrics.EntrySize row tall -- reads as a real icon button (see Button's own single-glyph ink-centered DrawContent) rather than a wide text tile.</summary>
-    public static readonly Vector2 ButtonSize = new(HudMetrics.EntrySize.Y, HudMetrics.EntrySize.Y);
-
-    private static readonly Vector2 WindowPosition = new(300, 150);
-
-    /// <summary>Wider than its pre-two-column size (260) -- HealthWindow now splits this width across 2 side-by-side columns (see HealthWindow.BuildColumns), so each needs enough room on its own for a body part's bar/status line or a buff/debuff's "+50 MaximumHealth: 12s"-shaped text.</summary>
-    private static readonly Vector2 WindowSize = new(480, 360);
-
     /// <summary>♥ (U+2665, "black heart suit") -- renders via the default DroidSans font with no Symbola-Emoji fallback needed, unlike Burning/Poison/Paralysis's own emoji glyphs (see FontService).</summary>
     private const string HeartGlyph = "♥";
 
@@ -47,9 +34,9 @@ public sealed class HealthWindowController(
 
         _button = elementPoolService.CreateElement<Button>(null, new ElementOptions
         {
-            Layout = new ElementLayoutOptions { RelativePosition = ButtonPosition, Size = ButtonSize, DisplayMode = ElementDisplayMode.Fixed },
+            Layout = new ElementLayoutOptions { RelativePosition = HealthWindowChrome.ButtonPosition, Size = HealthWindowChrome.ButtonSize, DisplayMode = ElementDisplayMode.Fixed },
             Chrome = new ElementChromeOptions { ShowBorder = true, BorderStyle = BorderStyle.Outset, CanUserFocus = false },
-            Text = new TextOptions { Text = HeartGlyph, TextColor = Color.Red },
+            Text = new TextOptions { Text = HeartGlyph, TextColor = WindowPalette.HeartGlyphColor },
         });
         _button.Initialize();
         _button.Clicked += _ => _slot.Toggle();
@@ -69,8 +56,8 @@ public sealed class HealthWindowController(
             Hierarchy = new ElementHierarchyOptions { CanContainChildren = true },
             Layout = new ElementLayoutOptions
             {
-                RelativePosition = WindowPosition,
-                Size = WindowSize,
+                RelativePosition = HealthWindowChrome.WindowPosition,
+                Size = HealthWindowChrome.WindowSize,
                 DisplayMode = ElementDisplayMode.Fixed,
             },
             Chrome = new ElementChromeOptions
@@ -84,7 +71,7 @@ public sealed class HealthWindowController(
                 CanUserResize = true,
                 CanUserFocus = true,
             },
-            Content = new ElementContentOptions { ContentColor = HealthWindow.BackgroundColor },
+            Content = new ElementContentOptions { ContentColor = WindowPalette.PanelBackgroundColor },
         });
         window.Configure(world.PlayerEntityId);
         return window;
