@@ -7,4 +7,5 @@ public enum InventorySortOrder
     NameDescending,
     QuantityDescending,
     QuantityAscending,
+    RecentlyAcquiredDescending,
 }

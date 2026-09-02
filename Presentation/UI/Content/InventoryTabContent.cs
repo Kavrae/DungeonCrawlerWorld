@@ -20,7 +20,7 @@ namespace Presentation.UI.Content;
 /// </summary>
 public sealed class InventoryTabContent(ElementPoolService elementPoolService, FontService fontService, LabelRenderer labelRenderer, InventoryGridContent gridContent) : IElementContent
 {
-    private static readonly IReadOnlyList<string> SortOptionLabels = ["A-Z", "Z-A", "Qty Hi", "Qty Lo"];
+    private static readonly IReadOnlyList<string> SortOptionLabels = ["A-Z", "Z-A", "Qty Hi", "Qty Lo", "New"];
 
     private const string SearchGhostText = "Search Items";
 

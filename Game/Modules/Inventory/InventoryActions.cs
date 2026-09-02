@@ -256,6 +256,13 @@ public static class InventoryActions
     /// destination are the same entity -- a drop back onto the grid it came from should never
     /// remove-then-re-add a stack it's already looking at -- or if the stack isn't found, or if the
     /// destination is a non-player entity already at its stack cap (see InventoryCapacity).
+    ///
+    /// FirstAcquiredUtcTicks is the one field NOT preserved verbatim: when destinationEntityId is
+    /// the player (e.g. "Take" from a corpse/loot window), it's re-stamped to now -- since this
+    /// method never merges, every transfer onto the player is by definition a new stack there, and
+    /// looting something should read as freshly acquired regardless of how long it sat wherever it
+    /// came from. A transfer to any other entity (e.g. "Give" from the player, or between two
+    /// non-player entities) leaves it untouched.
     /// </summary>
     public static bool TryTransferStack(ComponentManager componentManager, int sourceEntityId, int destinationEntityId, Guid stackInstanceId, IPlayerQuery? playerQuery)
     {
@@ -274,6 +281,11 @@ public static class InventoryActions
 
         var snapshot = stacks.GetReadonlyByDenseIndex(sourceDenseIndex);
         stacks.RemoveByDenseIndex(sourceDenseIndex);
+
+        if (destinationEntityId == playerQuery?.PlayerEntityId)
+        {
+            snapshot.FirstAcquiredUtcTicks = DateTime.UtcNow.Ticks;
+        }
 
         InventoryGrant.EnsureInventoryComponentExists(componentManager, destinationEntityId);
         stacks.Add(destinationEntityId, snapshot);

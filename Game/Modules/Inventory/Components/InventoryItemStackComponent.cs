@@ -25,12 +25,27 @@ namespace Game.Modules.Inventory.Components;
 /// (see InventoryActions.AddDivergentItem/PeelOneIntoDivergentStack) -- the mechanism this
 /// component's own doc comment used to only predict ("a stack that later diverges from its
 /// ItemDefinition ... is expected to become its own Quantity == 1 stack once that system exists").
+///
+/// FirstAcquiredUtcTicks is stamped once, at construction, the same "assigned inline, not a ctor
+/// param" shape as StackInstanceId above -- every call site that builds a genuinely new stack
+/// (InventoryActions.AddItem/AddItemWithOverride/AddDivergentItem) gets a fresh timestamp for
+/// free, with no explicit code at any of them. Merging into an existing stack (plain or already-
+/// divergent) only ever mutates that stack's Quantity in place, so its original timestamp is
+/// never touched -- and InventoryActions.TryTransferStack moves a stack by copying this whole
+/// struct verbatim, so a transferred stack normally keeps the timestamp it already had. It has a
+/// setter (unlike the otherwise-identical-shaped StackInstanceId, which never changes) for exactly
+/// one exception: TryTransferStack re-stamps it to "now" when the destination is the player --
+/// looting an item into the player's own inventory reads as a fresh acquisition for sort purposes,
+/// regardless of how long it sat in a corpse or another entity's inventory first. Powers the
+/// "recently acquired" sort (see InventorySortOrder.RecentlyAcquiredDescending).
 /// </summary>
 public struct InventoryItemStackComponent(Guid itemDefinitionId, ushort quantity, bool isDisabled = false, ItemDefinition? overrideDefinition = null, bool isDivergent = false)
 {
     public Guid ItemDefinitionId { get; } = itemDefinitionId;
 
     public Guid StackInstanceId { get; } = Guid.NewGuid();
+
+    public long FirstAcquiredUtcTicks { get; set; } = DateTime.UtcNow.Ticks;
 
     public ushort Quantity { get; set; } = quantity;
 
@@ -41,5 +56,5 @@ public struct InventoryItemStackComponent(Guid itemDefinitionId, ushort quantity
     public bool IsDivergent { get; set; } = isDivergent;
 
     public override readonly string ToString() =>
-        $"ItemDefinitionId : {ItemDefinitionId}\nStackInstanceId : {StackInstanceId}\nQuantity : {Quantity}\nIsDisabled : {IsDisabled}\nIsDivergent : {IsDivergent}";
+        $"ItemDefinitionId : {ItemDefinitionId}\nStackInstanceId : {StackInstanceId}\nFirstAcquiredUtcTicks : {FirstAcquiredUtcTicks}\nQuantity : {Quantity}\nIsDisabled : {IsDisabled}\nIsDivergent : {IsDivergent}";
 }

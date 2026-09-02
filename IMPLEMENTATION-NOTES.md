@@ -273,6 +273,18 @@ types, so a future Magic Menu gets them free. Frame counts always shown as secon
 - `Toggle` (`Presentation/UI/Toggle.cs`): generic checkbox widget -- bordered square +
   `LabelPosition`-placed label, `Action<bool>` callback. Not Inventory-specific despite landing there
   first.
+- `InventoryItemStackComponent.FirstAcquiredUtcTicks`: stamped inline at construction
+  (`= DateTime.UtcNow.Ticks`), the same "assigned in the property initializer, not a ctor param"
+  shape as `StackInstanceId` -- every genuinely-new-stack call site in `InventoryActions` gets a
+  fresh timestamp for free, while merging into an existing stack (plain or already-divergent) only
+  ever mutates `Quantity` in place, leaving it untouched; `TryTransferStack` copies the whole struct,
+  so a transferred stack normally keeps its original timestamp -- except when the destination is the
+  player (has a setter for exactly this one case), where it's re-stamped to now: since
+  `TryTransferStack` never merges, a transfer onto the player is always a new stack there, so looting
+  something (e.g. "Take" from a corpse/loot window) should read as freshly acquired regardless of how
+  long it sat wherever it came from. Powers the "New" sort option
+  (`InventorySortOrder.RecentlyAcquiredDescending`); a merged-badge cell in `InventoryGridContent`
+  sorts by the newest `FirstAcquiredUtcTicks` among its member stacks, not any single member's own.
 
 ### Context menu
 

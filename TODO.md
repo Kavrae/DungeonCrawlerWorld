@@ -428,14 +428,6 @@ Both the Tab search box and the item-name search box are always-visible today. S
 alternative: a small icon expanding into the box on click (ghost text/debounce unchanged), collapsing
 back when empty and unfocused. Pure presentation change.
 
-#### Inventory item FirstAcquired timestamp
-
-No stack tracks when first obtained -- needed for a "recently acquired" sort. Should apply only to the
-first unit of a given item (merging into an existing stack's Quantity doesn't reset it). Open question:
-a field on `InventoryItemStackComponent` (simple, but paid by every stack) vs. a sparse
-`MultiComponentPool<ItemFirstAcquiredComponent>` (rare-to-touch, closer to `AchievementUnlockedComponent`'s
-shape).
-
 #### Inventory tab reordering + custom-tag trailing tab
 
 Dynamic per-tag tabs landed (`IMPLEMENTATION-NOTES.md`). Still open: user-reordering the default sort,

@@ -97,6 +97,29 @@ public sealed class InventoryManagementWindowTests
         return null;
     }
 
+    /// <summary>Depth-first search for the Window hosting the active tab's InventoryGridContent (the same Window FindActiveGrid finds via its Tag, but returning the Window itself so a test can walk its child cells in on-screen order).</summary>
+    private static Window? FindActiveGridWindow(Element element)
+    {
+        if (element is Window { Tag: InventoryGridContent } window)
+        {
+            return window;
+        }
+
+        foreach (var child in element.ChildElements)
+        {
+            if (FindActiveGridWindow(child) is { } found)
+            {
+                return found;
+            }
+        }
+
+        return null;
+    }
+
+    /// <summary>The active grid's own cells in rendered order -- RebuildCells adds them to its host Window as children in exactly its sorted order, so child order here is sort order.</summary>
+    private static List<InventoryItemStackCell> GetOrderedCells(Element root) =>
+        FindActiveGridWindow(root)!.ChildElements.OfType<InventoryItemStackCell>().ToList();
+
     /// <summary>Depth-first search for a tab header tile (TextWindow) with the given label.</summary>
     private static TextWindow? FindTabTile(Element element, string label)
     {
@@ -152,5 +175,47 @@ public sealed class InventoryManagementWindowTests
 
         Assert.IsNotNull(FindTabTile(window, Tag.Potion.ToString()), "The pre-existing Potion tab should still exist.");
         Assert.IsNotNull(FindTabTile(window, Tag.Scroll.ToString()), "A newly-represented tag should get its own tab once the tab list actually changes.");
+    }
+
+    [TestMethod]
+    public void SortOrder_RecentlyAcquiredDescending_OrdersCellsNewestFirst()
+    {
+        // Build() already grants firstItemId; secondItemId and scrollItemId are granted here,
+        // each after a short sleep, so the three stacks have distinctly ordered FirstAcquiredUtcTicks.
+        var (window, componentManager, firstItemId, secondItemId, scrollItemId) = Build();
+        Thread.Sleep(5);
+        InventoryActions.AddItem(componentManager, EntityId, secondItemId, quantity: 1);
+        Thread.Sleep(5);
+        InventoryActions.AddItem(componentManager, EntityId, scrollItemId, quantity: 1);
+
+        var grid = FindActiveGrid(window);
+        Assert.IsNotNull(grid, "The default-active 'All' tab should already have a grid.");
+        grid!.SortOrder = InventorySortOrder.RecentlyAcquiredDescending;
+
+        var orderedItemIds = GetOrderedCells(window).Select(cell => cell.ItemDefinitionId).ToList();
+        CollectionAssert.AreEqual(new[] { scrollItemId, secondItemId, firstItemId }, orderedItemIds);
+    }
+
+    [TestMethod]
+    public void SortOrder_RecentlyAcquiredDescending_MergedStackSortsByItsNewestMember()
+    {
+        // secondItemId is granted twice as a divergent item (two distinct member stacks merged
+        // into one badged cell) -- the second grant, well after firstItemId, must be what the
+        // merged cell sorts by, not either member's Quantity or the group's oldest timestamp.
+        var (window, componentManager, firstItemId, secondItemId, _) = Build();
+        Thread.Sleep(5);
+        var secondItemDefinition = new ItemDefinition(secondItemId, "Potion B", null, "b", Color.White, Tags: [Tag.Potion], Effects: []);
+        InventoryActions.AddDivergentItem(componentManager, EntityId, secondItemDefinition with { Description = "batch 1" });
+        Thread.Sleep(5);
+        InventoryActions.AddDivergentItem(componentManager, EntityId, secondItemDefinition with { Description = "batch 2" });
+
+        var grid = FindActiveGrid(window);
+        Assert.IsNotNull(grid);
+        grid!.SortOrder = InventorySortOrder.RecentlyAcquiredDescending;
+
+        var orderedCells = GetOrderedCells(window);
+        var mergedCell = orderedCells.Single(cell => cell.ItemDefinitionId == secondItemId);
+        Assert.IsTrue(mergedCell.MergedStackBadgeVisible, "Two divergent stacks of the same item should merge into one badged cell.");
+        Assert.AreEqual(0, orderedCells.IndexOf(mergedCell), "The merged cell (newest member acquired after firstItemId) must sort ahead of firstItemId.");
     }
 }
