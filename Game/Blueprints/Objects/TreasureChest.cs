@@ -20,9 +20,9 @@ namespace Game.Blueprints.Objects;
 /// starting health -- high enough that a stray AOE hit won't randomly destroy one. Immune to
 /// Poison and Paralysis (permanent StatusEffectImmunityComponent grants, the same mechanism every
 /// status effect's own ApplyStack already checks) but not to Burning, so it can still be destroyed
-/// by fire. Starts with 1-10 random items (stack sizes 1-5, see LootTable) and 0-5 Gold, 0 Credits
-/// -- a much smaller roll than a creature's own 1-10 starting Gold (StartingCurrencyGrant), since a
-/// chest's Gold is found loot, not a personal purse. If destroyed, ContainerDestructionSystem
+/// by fire. Starts with 1-10 random items (stack sizes 1-5, see LootTable) and 0-5 Gold, 0-1
+/// Credits -- a much smaller Gold roll than a creature's own 1-10 starting Gold
+/// (StartingCurrencyGrant), since a chest's Gold is found loot, not a personal purse. If destroyed, ContainerDestructionSystem
 /// clears its inventory and renames it "Destroyed" -- see that system's own doc comment.
 /// </summary>
 public sealed class TreasureChest(MathUtility mathUtility) : IBlueprint
@@ -39,6 +39,8 @@ public sealed class TreasureChest(MathUtility mathUtility) : IBlueprint
 
     private const int MinimumStartingGold = 0;
     private const int MaximumStartingGold = 5;
+    private const int MinimumStartingCredits = 0;
+    private const int MaximumStartingCredits = 1;
 
     /// <summary>Built once via each item's own pure, side-effect-free Build() factory, the same set TemporaryNpcLootGrant draws from -- no ItemCatalog injection needed just to read each item's MaxStackSize.</summary>
     private static readonly ItemDefinition[] LootTable =
@@ -65,7 +67,9 @@ public sealed class TreasureChest(MathUtility mathUtility) : IBlueprint
         componentManager.Merge(entityId, new TransformComponent(new Vector3Int(0, 0, (int)MapLayer.Ground), new Vector2Byte(1, 1)));
         componentManager.Merge(entityId, new SimpleHealthComponent(MaximumHealth, MaximumHealth));
         componentManager.Merge(entityId, new ContainerComponent());
-        componentManager.Merge(entityId, new CurrencyComponent(mathUtility.Next(MinimumStartingGold, MaximumStartingGold + 1), credits: 0));
+        componentManager.Merge(entityId, new CurrencyComponent(
+            mathUtility.Next(MinimumStartingGold, MaximumStartingGold + 1),
+            mathUtility.Next(MinimumStartingCredits, MaximumStartingCredits + 1)));
 
         var immunities = componentManager.GetMultiPool<StatusEffectImmunityComponent>();
         immunities.Add(entityId, new StatusEffectImmunityComponent(StatusEffectType.Poison, remainingDurationFrames: null));

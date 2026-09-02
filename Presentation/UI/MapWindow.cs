@@ -681,7 +681,8 @@ public sealed class MapWindow : Window
     /// opened, or grey-tinted itself once it has -- the same "already looted, no need to check
     /// again" cue, just an explicit tint rather than a draw-order trick (an earlier before/after-
     /// draw-order version was too easily fully hidden by the corpse's own opaque sprite instead
-    /// of reading as dimmed).
+    /// of reading as dimmed). See DrawLootBagBadgeIfCarryingItems -- the same badge/tint also
+    /// draws for a live container (DrawEntityIcons), not just a dead creature here.
     /// </summary>
     private void DrawCorpses(SpriteBatch spriteBatch, IReadOnlyList<int> occupants, int mapNodeX, int mapNodeY, Vector2 tileOrigin)
     {
@@ -706,12 +707,23 @@ public sealed class MapWindow : Window
             var footprintSize = new Vector2(transformComponent.Size.X * _camera.CurrentTileSize.X, transformComponent.Size.Y * _camera.CurrentTileSize.Y);
 
             TryDrawEntityVisual(spriteBatch, entityId, FontForSize(transformComponent.Size.X), tileOrigin, footprintSize);
+            DrawLootBagBadgeIfCarryingItems(spriteBatch, entityId, tileOrigin, footprintSize);
+        }
+    }
 
-            if (_inventoryStacks?.CountForEntity(entityId) > 0)
-            {
-                var alreadyLooted = _lootedPool?.Has(entityId) == true;
-                DrawLootBagBadge(spriteBatch, tileOrigin, footprintSize, alreadyLooted ? Color.Gray : Color.White);
-            }
+    /// <summary>
+    /// Shared by DrawCorpses (a dead creature) and DrawEntityIcons (a live, still-Blocking
+    /// container -- see ContainerComponent's own doc comment: lootable while alive, unlike a
+    /// corpse) -- draws the LootBag-Red badge only when the entity actually carries items, at
+    /// full color if its loot window has never been opened, or grey-tinted once it has (the same
+    /// LootedComponent-driven cue either way, regardless of which path called this).
+    /// </summary>
+    private void DrawLootBagBadgeIfCarryingItems(SpriteBatch spriteBatch, int entityId, Vector2 footprintTopLeft, Vector2 footprintSize)
+    {
+        if (_inventoryStacks?.CountForEntity(entityId) > 0)
+        {
+            var alreadyLooted = _lootedPool?.Has(entityId) == true;
+            DrawLootBagBadge(spriteBatch, footprintTopLeft, footprintSize, alreadyLooted ? Color.Gray : Color.White);
         }
     }
 
@@ -743,6 +755,15 @@ public sealed class MapWindow : Window
         }
 
         DrawHealthBar(spriteBatch, unitRectangle, entityId, footprintTopLeft, footprintSize);
+
+        // A container is lootable while alive, unlike a creature (only lootable once dead, see
+        // DrawCorpses' own call to the same badge helper) -- gated on ContainerComponent, not
+        // just "carries items," since a live goblin/fairy/player also carries its own inventory
+        // stacks and must not show a loot-bag badge for those.
+        if (_containerPool?.Has(entityId) == true)
+        {
+            DrawLootBagBadgeIfCarryingItems(spriteBatch, entityId, footprintTopLeft, footprintSize);
+        }
     }
 
     /// <summary>Thin bar at the top of the entity's own footprint, above its glyph, hidden at full health. Black backdrop doubles as the outline and the "missing health" portion; the fill rect insets 1px and its width (not the outline's) scales with the health fraction.</summary>

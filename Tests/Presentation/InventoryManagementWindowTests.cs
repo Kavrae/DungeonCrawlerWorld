@@ -50,6 +50,7 @@ public sealed class InventoryManagementWindowTests
         windowService.RegisterFactory<GridControl>(() => new GridControl(fontService, windowService, labelRenderer));
         windowService.RegisterFactory<Toggle>(() => new Toggle(fontService, windowService, labelRenderer));
         windowService.RegisterFactory<Tooltip>(() => new Tooltip(fontService, windowService, labelRenderer));
+        windowService.RegisterFactory<CurrencyElement>(() => new CurrencyElement(fontService, windowService, labelRenderer, spriteSheetService, spriteRenderer));
 
         var world = new Game.World.World(new Game.World.Map(new Vector3Int(10, 10, 1)));
         var contextMenuController = new ContextMenuController(windowService);

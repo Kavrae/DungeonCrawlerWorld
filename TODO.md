@@ -58,14 +58,6 @@ doesn't exist yet) plus an actual "use" action.
 
 Design as one shared "attachment mode" concept reusable by any future aura-granting effect.
 
-#### Loot currency
-
-Containers/corpses should be able to hold and yield `CurrencyComponent` Gold (and rarely Credits) on
-loot, not just item stacks -- see `PLAN-storage-containers.md` for the landed container/Currency work
-this builds on. Needs a transfer/pickup path analogous to `InventoryActions.TryTransferStack` but for
-currency values instead of discrete stacks; a `TreasureChest` today only grants Gold at spawn
-(0-5), never loses it, since nothing can take it yet.
-
 #### Shops
 
 Trade/transfer UI and rules (pricing, restocking, capacity), spending `CurrencyComponent.Gold`
@@ -642,16 +634,25 @@ ever picked up.
 #### Element footer
 
 A generic "footer" primitive: a fixed-height region that always displays at the bottom of an element
-regardless of its content size or scrolling. The Inventory window's Currency row (`CurrencyRow`,
+regardless of its content size or scrolling. The Inventory window's Currency row (`CurrencyRowContent`,
 `PLAN-storage-containers.md`) is the first consumer, hand-wired twice today rather than through a
 shared primitive -- `InventoryManagementWindow` had to grow an extra nested Window (hosting
-`TabbedContent` in `ContentSize - (0, CurrencyRow.Height)` instead of via `SetContent` directly on
-itself) purely to make room for it, and `SecondaryInventoryWindow` folds the same row height into its
-own one-time size computation. Tolerable at one/two hand-built copies per this codebase's own
+`TabbedContent` in `ContentSize - (0, CurrencyRowContent.Height)` instead of via `SetContent` directly
+on itself) purely to make room for it, and `SecondaryInventoryWindow` folds the same row height into
+its own one-time size computation. Tolerable at one/two hand-built copies per this codebase's own
 "abstract on the third occurrence" convention (see the HUD bar item above) -- if a second real
 consumer shows up, build the real primitive and, as part of that, remove
 `InventoryManagementWindow`'s extra nested window (host `TabbedContent` directly again, with the
 footer primitive reserving its own space instead).
+
+#### Context menu amount picker
+
+`CurrencyRowContent`'s Give/Take (and their "All" variants -- see `PLAN-storage-containers.md`)
+always move a currency's *entire* balance; a currency element dragged onto another entity's grid/row
+does the same. Add a textbox popup (reusing `TextBox`, same mechanism `TextBox context menu wiring`
+above wants for Cut/Copy/Paste) letting the player specify a partial amount instead, both for the
+context menu options and (harder -- needs a way to intercept a drag-drop before it resolves) a
+partial-amount drag.
 
 #### Per-entity sprite scale
 

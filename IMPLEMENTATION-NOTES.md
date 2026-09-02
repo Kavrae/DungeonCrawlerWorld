@@ -176,19 +176,52 @@ Full design/rationale: `PLAN-storage-containers.md`.
   `SecondaryInventoryWindow` -- both now apply to containers (and, later, shops), not just corpses.
   `SecondaryInventoryWindowController` (unrenamed, already generically named) is unaffected.
 - `Game/Modules/Currency/`: `CurrencyComponent` (`Gold`/`Credits` ints, packed pool, overwrite merge).
-  Player/Goblin/Fairy each grant 1-10 starting Gold via `StartingCurrencyGrant`; `TreasureChest`
-  grants 0-5 (found loot, not a personal purse). `ToString()` follows `DeadComponent`/
-  `ManaComponent`'s own "Label : Value" per-line convention for the admin inspection dump.
-- `CurrencyRow` (`Presentation/UI/`): shared "Gold : X    Credits : Y" footer row, built once by
-  `InventoryManagementWindow` (player's own Gold) and `SecondaryInventoryWindow` (the looted
-  entity's Gold -- 0/0 for a chest today). `InventoryManagementWindow` had to host `TabbedContent`
-  in a new inner Window instead of via `SetContent` directly on itself to make room for the row --
-  see TODO.md's Element footer entry for the eventual generic-primitive cleanup.
+  Player grants 1-10 starting Gold only (`StartingCurrencyGrant.GrantRandomStartingGold`);
+  Goblin/Fairy grant 1-10 Gold + 0-1 Credits (`GrantRandomStartingGoldAndCredits` -- one `Merge`
+  call for both fields together, never two sequential grants, since the overwrite merge policy
+  would let the second silently zero what the first just set); `TreasureChest` grants 0-5 Gold +
+  0-1 Credits inline. `ToString()` follows `DeadComponent`/`ManaComponent`'s own "Label : Value"
+  per-line convention for the admin inspection dump.
 - Live-testing find: `TextWindow.Build` reset `OriginalText`/`TextColor`/`Bold` on every pooled
   reuse but never `ContentFont` -- a size set by one consumer (e.g. `HealthWindow`'s bigger buff
   font) leaked into whatever next reused that pooled `TextWindow` (confirmed via
   `InspectionWindowContent`'s admin dump rows rendering at a stale size). Fixed at the same
   pool-reset choke point, not per call site.
+
+### Loot currency
+
+Full design/rationale: `PLAN-loot-currency.md` -- builds directly on the Currency/container work in
+`PLAN-storage-containers.md`.
+
+- `CurrencyActions` (`Game/Modules/Currency/`): `TryTransfer(componentManager, source,
+  destination, CurrencyType type)` and `TryTransferAll`, mirroring `InventoryActions.
+  TryTransferStack`'s shape -- always moves the source's *entire* current balance of that currency
+  (no partial amounts yet, see TODO.md's Context menu amount picker entry), reading then writing
+  the whole `CurrencyComponent` on each side (never a partial-field `Merge`, since the overwrite
+  merge policy would zero the untouched field). No capacity concept -- `InventoryCapacity` is
+  purely about distinct stack count, meaningless for a single packed value. `CurrencyType`
+  (`Gold`/`Credits`) is a real enum, not an `isGold` bool -- a bool hard-limits to exactly two
+  currencies; `TryTransferAll` iterates `Enum.GetValues<CurrencyType>()` rather than naming
+  Gold/Credits individually, so a future third currency needs only a new enum case.
+- The old static `CurrencyRow` (one read-only `TextWindow` per window) is gone, replaced by
+  `CurrencyElement` (`Presentation/UI/Content/`, one per currency -- sprite + "{Label} : {n}" text,
+  hover/drag/right-click, mirrors `InventoryItemStackCell`'s shape) and `CurrencyRowContent` (owns
+  both elements, hover polling, the Give/Give All/Take/Take All context menu -- mirrors
+  `InventoryGridContent.BuildItemContextMenu`'s exact Give/Take decision logic). Icon sits
+  `IconGap` (4px) past the text's own measured width, not pinned to the row's far edge.
+- `IInventoryDropTarget` (`Presentation/UI/Content/`, `{ int EntityId { get; } }`) -- implemented
+  by both `InventoryGridContent` and `CurrencyRowContent`, so `UiInputController`'s drop-target walk
+  (renamed `FindHostingGrid` -> `FindDropTargetEntityId`) finds either one via the same `Window {
+  Tag: IInventoryDropTarget }` match: an item dropped on a currency row, and a currency element
+  dropped on a grid, both transfer correctly now ("for consistency," per the original ask).
+  Currency drags never bind to a hotbar slot (same treatment as a Merged Stack drag -- blocked
+  cursor over hotbar slots, same `_contentDragCurrencyType`-gated early return in
+  `ResolveContentDrag` that a Merged Stack's own refusal already used).
+- `DragGhostContent`/`DragGhostState` gained a `CurrencyType` field, drawing the Gold/Credits
+  sprite while dragging. Live-testing find: the drag ghost initially used
+  `CurrencyElement.CurrentSize` (the whole "Gold : 10 [sprite]" bounds, much wider than tall) as
+  its source size, stretching the sprite horizontally -- fixed by adding
+  `CurrencyElement.IconSize` (just the square icon) and reading that instead.
 
 ### Toggle poison aura ability -- item side
 

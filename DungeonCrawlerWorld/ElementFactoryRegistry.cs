@@ -98,6 +98,7 @@ public static class ElementFactoryRegistry
         Register<InspectionWindow>((font, elements, glyph) => new InspectionWindow(font, elements, glyph, mapViewState));
         Register<ItemDetailsWindow>((font, elements, glyph) => new ItemDetailsWindow(font, elements, glyph, presentation.SpriteSheetService, presentation.SpriteRenderer, actionCatalog));
         Register<ItemIconElement>((font, elements, glyph) => new ItemIconElement(font, elements, glyph, presentation.SpriteSheetService, presentation.SpriteRenderer));
+        Register<CurrencyElement>((font, elements, glyph) => new CurrencyElement(font, elements, glyph, presentation.SpriteSheetService, presentation.SpriteRenderer));
         Register<TargetShapePreviewElement>((font, elements, glyph) => new TargetShapePreviewElement(font, elements, glyph));
         Register<FractionBarElement>((font, elements, glyph) => new FractionBarElement(font, elements, glyph));
     }

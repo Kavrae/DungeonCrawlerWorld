@@ -1,12 +1,12 @@
 using Engine.ECS.Components;
 using Engine.ECS.Components.Stores;
 using Game.Modules.Core.Components;
-using Game.Modules.Currency.Components;
 using Game.Modules.Death.Components;
 using Game.Modules.Inventory;
 using Game.Modules.Inventory.Components;
 using Game.World;
 using Microsoft.Xna.Framework;
+using Microsoft.Xna.Framework.Input;
 using Presentation.Fonts;
 using Presentation.Rendering;
 using Presentation.UI.ColorPalettes;
@@ -34,11 +34,10 @@ namespace Presentation.UI.Looting;
 /// broke dragging out of a corpse's grid (confirmed by live testing -- cells rebuilt during that
 /// reentrant call never got correctly hit-tested afterward). Also pins MinimumSize to this same
 /// starting size (see Element.SetMinimumSize) so the window can never be user-resized smaller
-/// than what it opened at. A fixed-height Currency row (see CurrencyRow) sits below the grid,
-/// reading the target entity's own CurrencyComponent -- 0/0 for a container (containers don't
-/// hold Currency yet, see TODO.md's Loot currency entry), real values for a corpse. Like the
-/// summary/grid above, it's positioned once at open time and never repositioned on resize --
-/// consistent with those two never adjusting either.
+/// than what it opened at. A fixed-height Currency row (see CurrencyRowContent) sits below the
+/// grid, showing the target entity's own Gold/Credits, each independently hoverable/draggable/
+/// right-clickable. Like the summary/grid above, it's positioned once at open time and never
+/// repositioned on resize -- consistent with those two never adjusting either.
 /// </summary>
 public sealed class SecondaryInventoryWindow(
     FontService fontService,
@@ -69,15 +68,11 @@ public sealed class SecondaryInventoryWindow(
     private readonly DirectComponentPool<DisplayTextComponent> _displayTextPool = componentManager.GetDirectPool<DisplayTextComponent>();
     private readonly PackedComponentPool<DeadComponent> _deadPool = componentManager.GetPackedPool<DeadComponent>();
 
-    private readonly PackedComponentPool<CurrencyComponent>? _currencyPool = componentManager.IsRegistered<CurrencyComponent>()
-        ? componentManager.GetPackedPool<CurrencyComponent>()
-        : null;
-
     private int _entityId;
     private Tooltip _hoverPopup = null!;
     private Action<int, Guid> _onItemSelected = static (_, _) => { };
     private Action<int, Guid> _onCompareRequested = static (_, _) => { };
-    private TextWindow _currencyRow = null!;
+    private CurrencyRowContent _currencyRowContent = null!;
 
     /// <summary>Must be called after CreateElement but before Initialize -- same contract InventoryManagementWindow/AbilityScoreWindow's own Configure follow.</summary>
     public void Configure(int entityId, Tooltip hoverPopup, Action<int, Guid> onItemSelected, Action<int, Guid> onCompareRequested)
@@ -101,14 +96,20 @@ public sealed class SecondaryInventoryWindow(
         BuildSummary();
         BuildGrid(gridHeight);
 
-        _currencyRow = CurrencyRow.Build(this, ElementPoolService, SummaryHeight + Padding + gridHeight + Padding, ContentSize.X);
+        // getSecondaryTargetEntityId always returns this window's own _entityId, same
+        // self-referential shape BuildGrid's own InventoryGridContent uses -- this window *is*
+        // the secondary target for as long as it exists, so its own currency row's context menu
+        // only ever needs to offer "Take"/"Take All".
+        _currencyRowContent = new CurrencyRowContent(componentManager, world, contextMenuController, ElementPoolService, FontService, LabelRenderer, spriteSheetService, spriteRenderer, () => _entityId);
+        _currencyRowContent.Build(this, _entityId, SummaryHeight + Padding + gridHeight + Padding, ContentSize.X);
     }
 
     public override void Update(GameTime gameTime)
     {
         base.Update(gameTime);
 
-        _currencyRow.UpdateText(CurrencyRow.Format(_currencyPool, _entityId));
+        _currencyRowContent.RefreshAmounts();
+        _currencyRowContent.UpdateHover(Mouse.GetState());
     }
 
     /// <summary>Always at least MinimumRows (a 2x5 grid) worth of height, regardless of how few items the target entity actually starts with -- items can be dragged in later (see InventoryActions.TryTransferStack), and this window's size is set once, up front, never revisited (see this class's own doc comment), so a target that opened with room for only 1 row would otherwise force the grid to scroll the moment a second row's worth of items arrived.</summary>
@@ -142,7 +143,7 @@ public sealed class SecondaryInventoryWindow(
     private Vector2 ComputeOuterSize(float gridHeight)
     {
         var contentWidth = System.Math.Max(IconSize.X + Padding + SummaryTextWidth, GridWidth);
-        var contentHeight = SummaryHeight + Padding + gridHeight + Padding + CurrencyRow.Height;
+        var contentHeight = SummaryHeight + Padding + gridHeight + Padding + CurrencyRowContent.Height;
 
         var outerInsets = CurrentSize - ContentSize;
         return new Vector2(contentWidth, contentHeight) + outerInsets;

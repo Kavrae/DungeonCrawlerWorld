@@ -2,6 +2,7 @@ using Engine.ECS.Components.Stores;
 using Game.Blueprints;
 using Game.Modules.Actions;
 using Game.Modules.Core.Components;
+using Game.Modules.Currency;
 using Game.Modules.Inventory;
 using Game.Modules.Inventory.Components;
 using Game.World;
@@ -16,7 +17,7 @@ namespace Presentation.UI.Content;
 /// The live content-drag state DragGhostContent needs to draw a frame -- see DragGhostContent.GetState.
 /// Bundles what UiInputController's own content-drag fields expose (ContentDragGhostVisible,
 /// ContentDragItemStackInstanceId, ContentDragMergedItemDefinitionId, ContentDragActionId,
-/// ContentDragOriginEntityId, ContentDragSourceSize, CurrentMousePosition) into one snapshot
+/// ContentDragCurrencyType, ContentDragOriginEntityId, ContentDragSourceSize, CurrentMousePosition) into one snapshot
 /// instead of DragGhostContent holding a live UiInputController reference just to pull seven
 /// unrelated properties off it every frame. MergedItemDefinitionId is the icon fallback for a
 /// Merged Stack drag (see InventoryItemStackCell's own doc comment for the Base/Diverging/Merged
@@ -25,7 +26,7 @@ namespace Presentation.UI.Content;
 /// own item/action either way) -- only an InventoryItemStackCell-origin drag sets it, and it may
 /// belong to any entity's own inventory, not just the player's.
 /// </summary>
-public readonly record struct DragGhostState(bool Visible, Guid? ItemStackInstanceId, Guid? MergedItemDefinitionId, Guid? ActionId, int? OriginEntityId, Vector2 SourceSize, Point CursorPosition);
+public readonly record struct DragGhostState(bool Visible, Guid? ItemStackInstanceId, Guid? MergedItemDefinitionId, Guid? ActionId, CurrencyType? CurrencyType, int? OriginEntityId, Vector2 SourceSize, Point CursorPosition);
 
 /// <summary>
 /// A cursor-following copy of a dragged item's or action's icon while UiInputController's
@@ -86,6 +87,15 @@ public sealed class DragGhostContent(
         else if (state.ActionId is { } actionId && actionCatalog.TryGet(actionId, out var action))
         {
             (spriteName, glyph, glyphColor) = (action.SpriteName, action.Glyph, action.GlyphColor);
+        }
+        else if (state.CurrencyType is { } currencyType)
+        {
+            (spriteName, glyph, glyphColor) = currencyType switch
+            {
+                CurrencyType.Gold => ("Currency-Gold", "G", Color.Gold),
+                CurrencyType.Credits => ("Currency-Credit", "C", Color.LightBlue),
+                _ => throw new ArgumentOutOfRangeException(),
+            };
         }
         else
         {

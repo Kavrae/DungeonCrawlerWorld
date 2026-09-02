@@ -44,7 +44,7 @@ public sealed class InventoryGridContent(
     Func<int?> getSecondaryTargetEntityId,
     MapViewState mapViewState,
     Action<int, Guid> onItemSelected,
-    Action<int, Guid> onCompareRequested) : IElementContent
+    Action<int, Guid> onCompareRequested) : IElementContent, IInventoryDropTarget
 {
     public static readonly Vector2 CellSize = new(24, 24);
     private const float CellGap = 1f;

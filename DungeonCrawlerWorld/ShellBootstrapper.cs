@@ -147,6 +147,7 @@ public static class ShellBootstrapper
             inputController.ContentDragItemStackInstanceId,
             inputController.ContentDragMergedItemDefinitionId,
             inputController.ContentDragActionId,
+            inputController.ContentDragCurrencyType,
             inputController.ContentDragOriginEntityId,
             inputController.ContentDragSourceSize,
             inputController.CurrentMousePosition);

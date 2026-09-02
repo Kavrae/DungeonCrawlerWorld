@@ -172,7 +172,7 @@ public sealed class BlueprintTests
 
         var currency = ecsContext.ComponentManager.GetPackedPool<CurrencyComponent>().GetReadonly(entityId);
         Assert.IsTrue(currency.Gold >= 0 && currency.Gold <= 5, $"Expected Gold in [0,5], was {currency.Gold}.");
-        Assert.AreEqual(0, currency.Credits);
+        Assert.IsTrue(currency.Credits >= 0 && currency.Credits <= 1, $"Expected Credits in [0,1], was {currency.Credits}.");
     }
 
     [TestMethod]
@@ -269,7 +269,7 @@ public sealed class BlueprintTests
         Assert.IsTrue(ActionInstanceQueries.TryGet(ecsContext.ComponentManager.GetMultiPool<ActionInstanceComponent>(), entityId, PunchAction.Id, out var punch));
         Assert.AreEqual((short)10, GetOverrideFlatDamage(punch));
 
-        AssertHasRandomStartingGold(ecsContext.ComponentManager, entityId);
+        AssertHasRandomStartingGoldAndCredits(ecsContext.ComponentManager, entityId);
     }
 
     [TestMethod]
@@ -436,15 +436,23 @@ public sealed class BlueprintTests
         Assert.IsTrue(ActionInstanceQueries.TryGet(ecsContext.ComponentManager.GetMultiPool<ActionInstanceComponent>(), entityId, PunchAction.Id, out var punch));
         Assert.AreEqual((short)3, GetOverrideFlatDamage(punch));
 
-        AssertHasRandomStartingGold(ecsContext.ComponentManager, entityId);
+        AssertHasRandomStartingGoldAndCredits(ecsContext.ComponentManager, entityId);
     }
 
-    /// <summary>Player/Goblin/Fairy each grant 1-10 starting Gold and 0 Credits via StartingCurrencyGrant.</summary>
+    /// <summary>Player grants 1-10 starting Gold and 0 Credits via StartingCurrencyGrant.GrantRandomStartingGold.</summary>
     private static void AssertHasRandomStartingGold(ComponentManager componentManager, int entityId)
     {
         var currency = componentManager.GetPackedPool<CurrencyComponent>().GetReadonly(entityId);
         Assert.IsTrue(currency.Gold >= 1 && currency.Gold <= 10, $"Expected Gold in [1,10], was {currency.Gold}.");
         Assert.AreEqual(0, currency.Credits);
+    }
+
+    /// <summary>Goblin/Fairy grant 1-10 starting Gold and 0-1 Credits via StartingCurrencyGrant.GrantRandomStartingGoldAndCredits.</summary>
+    private static void AssertHasRandomStartingGoldAndCredits(ComponentManager componentManager, int entityId)
+    {
+        var currency = componentManager.GetPackedPool<CurrencyComponent>().GetReadonly(entityId);
+        Assert.IsTrue(currency.Gold >= 1 && currency.Gold <= 10, $"Expected Gold in [1,10], was {currency.Gold}.");
+        Assert.IsTrue(currency.Credits >= 0 && currency.Credits <= 1, $"Expected Credits in [0,1], was {currency.Credits}.");
     }
 
     [TestMethod]

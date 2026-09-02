@@ -2520,7 +2520,7 @@ public sealed class UiInputControllerTests
     /// destination is a real InventoryManagementWindow (TabbedContent -> per-tab body window ->
     /// InventoryTabContent -> its own nested grid window) instead of a bare Window hosting
     /// InventoryGridContent directly -- reproducing the actual player-inventory structure, in case
-    /// FindHostingGrid's ParentElement walk behaves differently against that deeper nesting.
+    /// FindDropTargetEntityId's ParentElement walk behaves differently against that deeper nesting.
     /// </summary>
     [TestMethod]
     public void Drag_FromNonPlayerEntitysGridToRealInventoryManagementWindow_TransfersTheStack()
@@ -2546,6 +2546,7 @@ public sealed class UiInputControllerTests
         windowService.RegisterFactory<GridControl>(() => new GridControl(fontService, windowService, labelRenderer));
         windowService.RegisterFactory<Toggle>(() => new Toggle(fontService, windowService, labelRenderer));
         windowService.RegisterFactory<Tooltip>(() => new Tooltip(fontService, windowService, labelRenderer));
+        windowService.RegisterFactory<CurrencyElement>(() => new CurrencyElement(fontService, windowService, labelRenderer, spriteSheetService, spriteRenderer));
 
         var world = new Game.World.World(new Game.World.Map(new Vector3Int(10, 10, 1)));
         var contextMenuController = TestElementPoolServiceFactory.CreateContextMenuController(windowService, new UiLayerStack());

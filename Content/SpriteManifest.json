@@ -255,5 +255,29 @@
         "CellHeight": 16
       }
     ]
+  },
+  {
+    "Name": "Currency-Gold",
+    "Cells": [
+      {
+        "SheetPath": "Pixel Crawler - Free Pack/Environment/Props/Static/Resources.png",
+        "Column": 3,
+        "Row": 3,
+        "CellWidth": 16,
+        "CellHeight": 16
+      }
+    ]
+  },
+  {
+    "Name": "Currency-Credit",
+    "Cells": [
+      {
+        "SheetPath": "Pixel Crawler - Free Pack/Environment/Props/Static/Resources.png",
+        "Column": 2,
+        "Row": 3,
+        "CellWidth": 16,
+        "CellHeight": 16
+      }
+    ]
   }
 ]

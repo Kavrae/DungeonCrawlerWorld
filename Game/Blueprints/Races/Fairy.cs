@@ -51,7 +51,7 @@ public sealed class Fairy(MathUtility mathUtility) : IBlueprint
         componentManager.Merge(entityId, new ActionInstanceComponent(PunchAction.Id, punchOverride, cooldownFramesRemaining: 0));
 
         TemporaryNpcLootGrant.GrantRandomStartingLoot(componentManager, entityId, mathUtility);
-        StartingCurrencyGrant.GrantRandomStartingGold(componentManager, entityId, mathUtility);
+        StartingCurrencyGrant.GrantRandomStartingGoldAndCredits(componentManager, entityId, mathUtility);
 
         AbilityScoreEffects.GrantDefaults(componentManager, entityId, DefaultAbilityScoreBaseValue);
     }

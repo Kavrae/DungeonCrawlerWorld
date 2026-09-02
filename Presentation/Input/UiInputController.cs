@@ -1,6 +1,7 @@
 using Engine.ECS.Components;
 using Engine.Utilities;
 using Game.Modules.Actions;
+using Game.Modules.Currency;
 using Game.Modules.Inventory;
 using Game.World;
 using Microsoft.Xna.Framework;
@@ -108,6 +109,9 @@ public sealed class UiInputController
 
     /// <summary>Same role as _contentDragItemStackInstanceId, for a drag that started on an already-bound action slot -- never both set at once (a slot binds to at most one of {action, item}, see IHotkeySlotBinding). There's no action-cell drag source today (no spellbook/action-list UI exists), so this is only ever populated via a bound hotbar slot, unlike the item payload which can also come from InventoryItemStackCell.</summary>
     private Guid? _contentDragActionId;
+
+    /// <summary>Which currency is being dragged, null otherwise (see CurrencyElement.Type) -- never bindable to a hotbar slot, Currency has no hotbar concept at all (see IsContentDragBlockedAt).</summary>
+    private CurrencyType? _contentDragCurrencyType;
 
     /// <summary>The dragged source's own on-screen size at the moment the drag started -- InventoryItemStackCell.CurrentSize for an inventory cell, HotbarContent.SlotSize for a hotbar slot (the slot, not the whole hotbar window). DragGhostContent draws the ghost at this size rather than one fixed size for every drag, so it doesn't visibly jump in scale relative to wherever it was actually picked up from.</summary>
     private Vector2 _contentDragSourceSize;
@@ -302,12 +306,15 @@ public sealed class UiInputController
     /// <summary>The action currently being content-dragged, if any -- see _contentDragActionId's own doc comment. Public for the same reason as ContentDragItemStackInstanceId above.</summary>
     public Guid? ContentDragActionId => _contentDragActionId;
 
+    /// <summary>Which currency is currently being content-dragged, if any -- see _contentDragCurrencyType's own doc comment. Public for the same reason as ContentDragItemStackInstanceId above.</summary>
+    public CurrencyType? ContentDragCurrencyType => _contentDragCurrencyType;
+
     /// <summary>The entity ContentDragItemStackInstanceId/ContentDragMergedItemDefinitionId's stack actually belongs to, if the drag started on an InventoryItemStackCell -- see _contentDragOriginEntityId's own doc comment. Public for the same reason as ContentDragItemStackInstanceId above -- DragGhostContent needs this to resolve a corpse-originated drag's icon, not just the player's own inventory.</summary>
     public int? ContentDragOriginEntityId => _contentDragOriginEntityId;
 
     /// <summary>Whether DragGhostContent should actually draw the ghost right now -- true once a content-drag payload has been held for ContentDragGhostDelayFrames. See that constant's own doc comment for why this delay exists. Public for the same reason as ContentDragItemStackInstanceId above.</summary>
     public bool ContentDragGhostVisible =>
-        (_contentDragItemStackInstanceId is not null || _contentDragMergedItemDefinitionId is not null || _contentDragActionId is not null) && _contentDragHeldFrames >= ContentDragGhostDelayFrames;
+        (_contentDragItemStackInstanceId is not null || _contentDragMergedItemDefinitionId is not null || _contentDragActionId is not null || _contentDragCurrencyType is not null) && _contentDragHeldFrames >= ContentDragGhostDelayFrames;
 
     /// <summary>See _contentDragSourceSize's own doc comment. Public for the same reason as ContentDragItemStackInstanceId above.</summary>
     public Vector2 ContentDragSourceSize => _contentDragSourceSize;
@@ -367,7 +374,7 @@ public sealed class UiInputController
         UpdateCursor(mouseState);
         HandleHotbarHover(mouseState);
 
-        if (_contentDragItemStackInstanceId is not null || _contentDragMergedItemDefinitionId is not null || _contentDragActionId is not null)
+        if (_contentDragItemStackInstanceId is not null || _contentDragMergedItemDefinitionId is not null || _contentDragActionId is not null || _contentDragCurrencyType is not null)
         {
             _contentDragHeldFrames++;
 
@@ -759,6 +766,7 @@ public sealed class UiInputController
         _contentDragItemStackInstanceId = null;
         _contentDragMergedItemDefinitionId = null;
         _contentDragActionId = null;
+        _contentDragCurrencyType = null;
         _contentDragOriginHotbar = null;
         _contentDragOriginSlot = null;
         _contentDragOriginEntityId = null;
@@ -783,6 +791,15 @@ public sealed class UiInputController
 
             _contentDragOriginEntityId = cell.EntityId;
             _contentDragSourceSize = cell.CurrentSize;
+            _contentDragStartMousePosition = new Vector2(clickPosition.X, clickPosition.Y);
+        }
+        else if (_activeInteraction.Element is CurrencyElement currencyElement)
+        {
+            _contentDragCurrencyType = currencyElement.Type;
+            _contentDragOriginEntityId = currencyElement.EntityId;
+            // IconSize (the square icon alone), not CurrentSize (the whole "Gold : 10 [sprite]"
+            // bounds, much wider than tall) -- using the latter stretched the ghost horizontally.
+            _contentDragSourceSize = currencyElement.IconSize;
             _contentDragStartMousePosition = new Vector2(clickPosition.X, clickPosition.Y);
         }
         else if (_activeInteraction.Element is Window { Content: HotbarContent hotbarContent } &&
@@ -902,7 +919,7 @@ public sealed class UiInputController
     /// </summary>
     private void ResolveContentDrag(Point releasePosition)
     {
-        if (_contentDragItemStackInstanceId is null && _contentDragActionId is null && _contentDragMergedItemDefinitionId is null)
+        if (_contentDragItemStackInstanceId is null && _contentDragActionId is null && _contentDragMergedItemDefinitionId is null && _contentDragCurrencyType is null)
         {
             return;
         }
@@ -918,21 +935,29 @@ public sealed class UiInputController
             var dropInteraction = TryHitTestInteraction(releasePosition);
 
             // Inventory-to-inventory transfer: the drop landed inside another entity's own grid
-            // window. Checked before the Merged-Stack-never-binds early return just below, since
-            // (unlike hotbar binding) a Merged Stack CAN move as a whole batch between grids --
-            // see InventoryActions.TryTransferAllStacksOfItem. The same-entity guard already lives
-            // in InventoryActions itself (defense in depth) -- dropping back onto the origin
-            // entity's own grid is a safe no-op either way, so it isn't special-cased here too.
+            // window, or its currency row -- both implement IInventoryDropTarget (see
+            // FindDropTargetEntityId), so an item dropped on a currency row and a currency
+            // element dropped on a grid both resolve here too, "for consistency." Checked before
+            // the Merged-Stack-never-binds early return just below, since (unlike hotbar binding)
+            // a Merged Stack CAN move as a whole batch between grids -- see
+            // InventoryActions.TryTransferAllStacksOfItem. The same-entity guard already lives in
+            // InventoryActions/CurrencyActions themselves (defense in depth) -- dropping back onto
+            // the origin entity's own grid/row is a safe no-op either way, so it isn't
+            // special-cased here too.
             if (_componentManager is { } componentManager && _contentDragOriginEntityId is { } originEntityId &&
-                FindHostingGrid(dropInteraction.Element) is { } dropGrid)
+                FindDropTargetEntityId(dropInteraction.Element) is { } destinationEntityId)
             {
                 if (_contentDragItemStackInstanceId is { } stackInstanceId)
                 {
-                    InventoryActions.TryTransferStack(componentManager, originEntityId, dropGrid.EntityId, stackInstanceId, _playerQuery);
+                    InventoryActions.TryTransferStack(componentManager, originEntityId, destinationEntityId, stackInstanceId, _playerQuery);
                 }
                 else if (_contentDragMergedItemDefinitionId is { } itemDefinitionId)
                 {
-                    InventoryActions.TryTransferAllStacksOfItem(componentManager, originEntityId, dropGrid.EntityId, itemDefinitionId, _playerQuery);
+                    InventoryActions.TryTransferAllStacksOfItem(componentManager, originEntityId, destinationEntityId, itemDefinitionId, _playerQuery);
+                }
+                else if (_contentDragCurrencyType is { } currencyType)
+                {
+                    CurrencyActions.TryTransfer(componentManager, originEntityId, destinationEntityId, currencyType);
                 }
 
                 return;
@@ -940,10 +965,11 @@ public sealed class UiInputController
 
             // A Merged Stack's drag never binds to a hotbar slot -- there is no single stack a
             // drop there could mean (see InventoryItemStackCell.CanBindToHotbar's own doc
-            // comment). IsContentDragBlockedAt already showed MouseCursor.No the whole time it
-            // hovered a hotbar slot; the drag just ends here with no binding change, cleanup
-            // happens in finally either way.
-            if (_contentDragMergedItemDefinitionId is not null)
+            // comment). Currency never binds to a hotbar slot either -- there's no hotbar concept
+            // for it at all. IsContentDragBlockedAt already showed MouseCursor.No the whole time
+            // either hovered a hotbar slot; the drag just ends here with no binding change,
+            // cleanup happens in finally either way.
+            if (_contentDragMergedItemDefinitionId is not null || _contentDragCurrencyType is not null)
             {
                 return;
             }
@@ -973,6 +999,7 @@ public sealed class UiInputController
             _contentDragItemStackInstanceId = null;
             _contentDragMergedItemDefinitionId = null;
             _contentDragActionId = null;
+            _contentDragCurrencyType = null;
             _contentDragOriginHotbar = null;
             _contentDragOriginSlot = null;
             _contentDragOriginEntityId = null;
@@ -983,23 +1010,24 @@ public sealed class UiInputController
 
     /// <summary>
     /// Walks up from element through ParentElement looking for the nearest ancestor Window hosting
-    /// an InventoryGridContent -- handles the drop landing on a specific InventoryItemStackCell or
-    /// on empty grid space alike, matching "drop location is anywhere on the receiving entity's
-    /// item grid." Checked via Window.Tag, not Window.Content -- InventoryGridContent isn't always
-    /// assigned as its host window's Content (see InventoryGridContent.Initialize's own doc
-    /// comment: InventoryTabContent's own hosting pattern drives it manually and never calls
-    /// SetContent at all, unlike SecondaryInventoryWindow's), so Tag is the one thing both hosting
-    /// patterns reliably set (confirmed via a live-testing repro against the real, TabbedContent-
-    /// nested InventoryManagementWindow structure -- Content-based matching silently found nothing
-    /// there, even though it worked against a simpler hand-built test harness).
+    /// an IInventoryDropTarget (InventoryGridContent for item stacks, CurrencyRowContent for
+    /// Gold/Credits) -- handles the drop landing on a specific cell/currency element or on empty
+    /// grid/row space alike, matching "drop location is anywhere on the receiving entity's item
+    /// grid or currency row." Checked via Window.Tag, not Window.Content -- InventoryGridContent
+    /// isn't always assigned as its host window's Content (see InventoryGridContent.Initialize's
+    /// own doc comment: InventoryTabContent's own hosting pattern drives it manually and never
+    /// calls SetContent at all, unlike SecondaryInventoryWindow's), so Tag is the one thing both
+    /// hosting patterns reliably set (confirmed via a live-testing repro against the real,
+    /// TabbedContent-nested InventoryManagementWindow structure -- Content-based matching silently
+    /// found nothing there, even though it worked against a simpler hand-built test harness).
     /// </summary>
-    private static InventoryGridContent? FindHostingGrid(Element? element)
+    private static int? FindDropTargetEntityId(Element? element)
     {
         for (var candidate = element; candidate is not null; candidate = candidate.ParentElement)
         {
-            if (candidate is Window { Tag: InventoryGridContent grid })
+            if (candidate is Window { Tag: IInventoryDropTarget target })
             {
-                return grid;
+                return target.EntityId;
             }
         }
 
@@ -1761,10 +1789,10 @@ public sealed class UiInputController
     private bool IsDragFromNonPlayerInventory =>
         _playerQuery is not null && _contentDragOriginEntityId is { } originEntityId && originEntityId != _playerQuery.PlayerEntityId;
 
-    /// <summary>True while dragging something that can never bind to a hotbar slot -- a Merged Stack cell (see _contentDragMergedItemDefinitionId's own doc comment) or an item from another entity's own inventory (see IsDragFromNonPlayerInventory) -- and position is currently over one. Checked ahead of the position == previousPosition shortcut so the cursor reads correctly for every frame of a stationary hover, not just the one it first arrived on.</summary>
+    /// <summary>True while dragging something that can never bind to a hotbar slot -- a Merged Stack cell (see _contentDragMergedItemDefinitionId's own doc comment), Currency (see _contentDragCurrencyType's own doc comment -- no hotbar concept for it at all), or an item from another entity's own inventory (see IsDragFromNonPlayerInventory) -- and position is currently over one. Checked ahead of the position == previousPosition shortcut so the cursor reads correctly for every frame of a stationary hover, not just the one it first arrived on.</summary>
     private bool IsContentDragBlockedAt(Point position)
     {
-        if (_contentDragMergedItemDefinitionId is null && !IsDragFromNonPlayerInventory)
+        if (_contentDragMergedItemDefinitionId is null && _contentDragCurrencyType is null && !IsDragFromNonPlayerInventory)
         {
             return false;
         }
