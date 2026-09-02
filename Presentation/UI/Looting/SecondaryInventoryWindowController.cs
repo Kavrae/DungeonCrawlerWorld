@@ -9,14 +9,15 @@ namespace Presentation.UI.Looting;
 
 /// <summary>
 /// Opens a second inventory-grid window next to the player's own InventoryManagementWindow,
-/// targeting some other entity -- corpses today, a chest/shop later reusing this same controller
-/// rather than growing its own (see TODO.md's Corpse looting entry, and the InventoryFolderController
-/// split entry -- deliberately kept separate from InventoryFolderController itself since that class
-/// is about the player's own folder/windows and is slated for its own breakup). One target at a
-/// time: opening a different corpse replaces whichever window is currently open; opening the same
-/// one again closes it (a toggle, matching this codebase's re-press-to-confirm/cancel convention
-/// elsewhere -- e.g. the hotbar). Deliberately owns no knowledge of what's being looted beyond an
-/// entity id -- CorpseInventoryWindow itself is what's corpse-specific.
+/// targeting some other entity -- corpses and containers (treasure chests, lootable while alive
+/// or destroyed) today, a shop later reusing this same controller rather than growing its own
+/// (see TODO.md's Corpse looting entry, and the InventoryFolderController split entry --
+/// deliberately kept separate from InventoryFolderController itself since that class is about the
+/// player's own folder/windows and is slated for its own breakup). One target at a time: opening
+/// a different target replaces whichever window is currently open; opening the same one again
+/// closes it (a toggle, matching this codebase's re-press-to-confirm/cancel convention elsewhere
+/// -- e.g. the hotbar). Deliberately owns no knowledge of what's being looted beyond an entity id
+/// -- SecondaryInventoryWindow itself owns any target-specific display (name/killer/died-tick).
 /// </summary>
 public sealed class SecondaryInventoryWindowController(
     ElementPoolService elementPoolService,
@@ -27,7 +28,7 @@ public sealed class SecondaryInventoryWindowController(
 {
     private UiLayerStack _layers = null!;
     private Tooltip _hoverPopup = null!;
-    private CorpseInventoryWindow? _window;
+    private SecondaryInventoryWindow? _window;
     private int _currentTargetEntityId = -1;
 
     /// <summary>The currently-open secondary/corpse window's own target entity id, if any -- lets InventoryFolderController's own GetSecondaryTargetEntityId (wired by ShellBootstrapper) answer "is a secondary window open, and for whom" for the player's own inventory grid's Give/Take menu, without that grid needing a direct reference to this controller.</summary>
@@ -61,7 +62,7 @@ public sealed class SecondaryInventoryWindowController(
     /// Invoked from a corpse's right-click context menu "Loot" option (see MapWindow.
     /// TryOpenCorpseContextMenuAt). Toggles closed if targetEntityId is already the open target;
     /// otherwise opens the player's own inventory window (idempotent) alongside a fresh
-    /// CorpseInventoryWindow for targetEntityId -- replacing whichever target was previously open,
+    /// SecondaryInventoryWindow for targetEntityId -- replacing whichever target was previously open,
     /// if any -- and marks it looted.
     /// </summary>
     public void OpenLoot(int targetEntityId)
@@ -80,9 +81,9 @@ public sealed class SecondaryInventoryWindowController(
             return; // Disabled inventory -- nothing to loot alongside (see InventoryFolderController.IsInventoryDisabled).
         }
 
-        componentManager.Merge(targetEntityId, new CorpseLootedComponent());
+        componentManager.Merge(targetEntityId, new LootedComponent());
 
-        var window = elementPoolService.CreateElement<CorpseInventoryWindow>(null, new ElementOptions
+        var window = elementPoolService.CreateElement<SecondaryInventoryWindow>(null, new ElementOptions
         {
             Hierarchy = new ElementHierarchyOptions { CanContainChildren = true },
             Layout = new ElementLayoutOptions

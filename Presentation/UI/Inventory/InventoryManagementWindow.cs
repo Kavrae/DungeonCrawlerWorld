@@ -1,5 +1,7 @@
 using Engine.ECS.Components;
+using Engine.ECS.Components.Stores;
 using Game.Modules;
+using Game.Modules.Currency.Components;
 using Game.Modules.Inventory;
 using Game.Modules.Inventory.Components;
 using Game.World;
@@ -31,6 +33,13 @@ namespace Presentation.UI.Inventory;
 /// existing hidden window. A dedicated Window subclass (rather than a plain Window hosting
 /// TabbedContent via SetContent) purely so Configure/Update have somewhere to live -- the
 /// codebase's own convention for when a Window subclass is warranted (MapWindow, TextWindow).
+///
+/// TabbedContent no longer owns this window's full ContentSize directly -- it's hosted in an
+/// inner Window sized ContentSize - (0, CurrencyRow.Height) instead, so a fixed-height Currency
+/// row (see CurrencyRow) can sit below it, the same GridControl-row-above/grid-below split
+/// InventoryTabContent itself already uses one layer down. Built in OnChildrenInitialized, not
+/// Configure, since it needs a real ContentSize (see SecondaryInventoryWindow's own doc comment
+/// on the same constraint).
 /// </summary>
 public sealed class InventoryManagementWindow(
     FontService fontService,
@@ -45,6 +54,12 @@ public sealed class InventoryManagementWindow(
     MapViewState mapViewState) : Window(fontService, elementPoolService, labelRenderer)
 {
     private TabbedContent _tabbedContent = null!;
+    private Window _tabbedContentWindow = null!;
+    private TextWindow _currencyRow = null!;
+
+    private readonly PackedComponentPool<CurrencyComponent>? _currencyPool = componentManager.IsRegistered<CurrencyComponent>()
+        ? componentManager.GetPackedPool<CurrencyComponent>()
+        : null;
 
     private int _entityId;
     private Tooltip _hoverPopup = null!;
@@ -65,15 +80,44 @@ public sealed class InventoryManagementWindow(
 
         var tagCounts = InventoryTagQueries.GetTagCounts(componentManager, itemCatalog, entityId);
         _currentTags = ToTagSet(tagCounts);
+        // Not SetContent(this, ...) -- see this class's own doc comment: TabbedContent is hosted
+        // in an inner Window built by OnChildrenInitialized, once ContentSize is real, so a
+        // Currency row can share this window's content area with it.
         _tabbedContent = new TabbedContent(BuildTabDefinitions(tagCounts), elementPoolService, fontService, labelRenderer, WindowPalette.PanelBackgroundColor);
-        SetContent(_tabbedContent);
 
         _tagVersionWatcher.HasChanged(CurrentInventoryVersion()); // Primes the baseline so the next Update doesn't immediately rebuild against the list just built above.
+    }
+
+    protected override void OnChildrenInitialized()
+    {
+        base.OnChildrenInitialized(); // _content is never set on this window itself (see Configure) -- a no-op, kept for consistency with Window's own contract.
+
+        _tabbedContentWindow = ElementPoolService.CreateElement<Window>(this, new ElementOptions
+        {
+            Hierarchy = new ElementHierarchyOptions { CanContainChildren = true },
+            Layout = new ElementLayoutOptions { RelativePosition = Vector2.Zero, Size = ContentSize - new Vector2(0, CurrencyRow.Height), DisplayMode = ElementDisplayMode.Fixed },
+            Chrome = new ElementChromeOptions { ShowBorder = false, ShowTitle = false, CanUserFocus = false },
+        });
+        _tabbedContentWindow.SetContent(_tabbedContent);
+        AddChild(_tabbedContentWindow); // Initializes _tabbedContentWindow, which in turn Initializes _tabbedContent (see Window.OnChildrenInitialized/AddChild's own doc comment on why Initialize is never called explicitly here).
+
+        _currencyRow = CurrencyRow.Build(this, ElementPoolService, ContentSize.Y - CurrencyRow.Height, ContentSize.X);
+
+        Resized += OnWindowResized; // No manual unsubscribe needed -- ElementPoolService.CloseElement clears every event on this window (Resized included) when it's returned to the pool on close, the same discipline TabbedContent's own host-window subscription relies on.
+    }
+
+    private void OnWindowResized(Element _)
+    {
+        _tabbedContentWindow.SetSize(ContentSize - new Vector2(0, CurrencyRow.Height));
+        _currencyRow.SetRelativePosition(new Vector2(0, ContentSize.Y - CurrencyRow.Height));
+        _currencyRow.SetSize(new Vector2(ContentSize.X, CurrencyRow.Height));
     }
 
     public override void Update(GameTime gameTime)
     {
         base.Update(gameTime);
+
+        _currencyRow.UpdateText(CurrencyRow.Format(_currencyPool, _entityId));
 
         if (!_tagVersionWatcher.HasChanged(CurrentInventoryVersion()))
         {

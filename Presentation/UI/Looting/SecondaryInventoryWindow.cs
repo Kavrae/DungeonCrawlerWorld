@@ -1,6 +1,7 @@
 using Engine.ECS.Components;
 using Engine.ECS.Components.Stores;
 using Game.Modules.Core.Components;
+using Game.Modules.Currency.Components;
 using Game.Modules.Death.Components;
 using Game.Modules.Inventory;
 using Game.Modules.Inventory.Components;
@@ -14,25 +15,32 @@ using Presentation.UI.Content;
 namespace Presentation.UI.Looting;
 
 /// <summary>
-/// The corpse side of looting: a fixed summary (icon, name, killer, death tick) above a plain
+/// The non-player side of looting: a fixed summary (icon, name, killer, death tick) above a plain
 /// item grid, capped at InventoryCapacity.MaxNonPlayerStackCount items -- no tabs/sort/filter,
-/// see TODO.md's Corpse looting entry. Every position/size below is explicit and deterministic
-/// (fixed pixel offsets, a fixed grid column count) rather than derived from ambient ContentSize
-/// propagation or ChildElementTileMode auto-tiling -- an earlier version relying on those produced
-/// an inconsistent, jumbled layout (confirmed by live testing) once nested inside this window's
-/// own OnChildrenInitialized-built structure, a combination (Window-hosted InventoryGridContent
-/// nested inside a manually-built custom Window) this codebase hadn't exercised before.
+/// see TODO.md's Corpse looting entry. Hosts any other entity's inventory by id -- a corpse today,
+/// a treasure chest (lootable even while alive) too, and eventually a shop -- see
+/// SecondaryInventoryWindowController's own doc comment. Every position/size below is explicit and
+/// deterministic (fixed pixel offsets, a fixed grid column count) rather than derived from ambient
+/// ContentSize propagation or ChildElementTileMode auto-tiling -- an earlier version relying on
+/// those produced an inconsistent, jumbled layout (confirmed by live testing) once nested inside
+/// this window's own OnChildrenInitialized-built structure, a combination (Window-hosted
+/// InventoryGridContent nested inside a manually-built custom Window) this codebase hadn't
+/// exercised before.
 ///
-/// Sizes itself exactly once, from the corpse's own raw stack count, before building any
+/// Sizes itself exactly once, from the target entity's own raw stack count, before building any
 /// children at all (see OnChildrenInitialized) -- deliberately not a build-then-shrink-to-fit
 /// pass: resizing gridWindow (or this window) *after* InventoryGridContent has already built real
 /// cells re-fires its own Resized-driven rebuild reentrantly, mid-Measure, which is what actually
 /// broke dragging out of a corpse's grid (confirmed by live testing -- cells rebuilt during that
 /// reentrant call never got correctly hit-tested afterward). Also pins MinimumSize to this same
 /// starting size (see Element.SetMinimumSize) so the window can never be user-resized smaller
-/// than what it opened at.
+/// than what it opened at. A fixed-height Currency row (see CurrencyRow) sits below the grid,
+/// reading the target entity's own CurrencyComponent -- 0/0 for a container (containers don't
+/// hold Currency yet, see TODO.md's Loot currency entry), real values for a corpse. Like the
+/// summary/grid above, it's positioned once at open time and never repositioned on resize --
+/// consistent with those two never adjusting either.
 /// </summary>
-public sealed class CorpseInventoryWindow(
+public sealed class SecondaryInventoryWindow(
     FontService fontService,
     ElementPoolService elementPoolService,
     LabelRenderer labelRenderer,
@@ -61,10 +69,15 @@ public sealed class CorpseInventoryWindow(
     private readonly DirectComponentPool<DisplayTextComponent> _displayTextPool = componentManager.GetDirectPool<DisplayTextComponent>();
     private readonly PackedComponentPool<DeadComponent> _deadPool = componentManager.GetPackedPool<DeadComponent>();
 
+    private readonly PackedComponentPool<CurrencyComponent>? _currencyPool = componentManager.IsRegistered<CurrencyComponent>()
+        ? componentManager.GetPackedPool<CurrencyComponent>()
+        : null;
+
     private int _entityId;
     private Tooltip _hoverPopup = null!;
     private Action<int, Guid> _onItemSelected = static (_, _) => { };
     private Action<int, Guid> _onCompareRequested = static (_, _) => { };
+    private TextWindow _currencyRow = null!;
 
     /// <summary>Must be called after CreateElement but before Initialize -- same contract InventoryManagementWindow/AbilityScoreWindow's own Configure follow.</summary>
     public void Configure(int entityId, Tooltip hoverPopup, Action<int, Guid> onItemSelected, Action<int, Guid> onCompareRequested)
@@ -87,19 +100,28 @@ public sealed class CorpseInventoryWindow(
 
         BuildSummary();
         BuildGrid(gridHeight);
+
+        _currencyRow = CurrencyRow.Build(this, ElementPoolService, SummaryHeight + Padding + gridHeight + Padding, ContentSize.X);
     }
 
-    /// <summary>Always at least MinimumRows (a 2x5 grid) worth of height, regardless of how few items the corpse actually starts with -- items can be dragged in later (see InventoryActions.TryTransferStack), and this window's size is set once, up front, never revisited (see this class's own doc comment), so a corpse that opened with room for only 1 row would otherwise force the grid to scroll the moment a second row's worth of items arrived.</summary>
+    public override void Update(GameTime gameTime)
+    {
+        base.Update(gameTime);
+
+        _currencyRow.UpdateText(CurrencyRow.Format(_currencyPool, _entityId));
+    }
+
+    /// <summary>Always at least MinimumRows (a 2x5 grid) worth of height, regardless of how few items the target entity actually starts with -- items can be dragged in later (see InventoryActions.TryTransferStack), and this window's size is set once, up front, never revisited (see this class's own doc comment), so a target that opened with room for only 1 row would otherwise force the grid to scroll the moment a second row's worth of items arrived.</summary>
     private const int MinimumGridRows = 2;
 
     /// <summary>
-    /// Rows needed for the corpse's raw InventoryItemStackComponent count -- not
+    /// Rows needed for the target entity's raw InventoryItemStackComponent count -- not
     /// InventoryGridContent's own (possibly smaller) VisibleItemCount, since that depends on its
     /// default same-item stack merging and isn't known until the grid actually builds cells,
     /// which must happen only once, after this window's final size is already set (see this
     /// class's own doc comment). Raw stack count is never smaller than the merged cell count, so
     /// this is always tall enough -- worst case a little extra empty space at the bottom of the
-    /// grid on a corpse carrying several divergent stacks of the same item, never a cramped grid.
+    /// grid on a target carrying several divergent stacks of the same item, never a cramped grid.
     /// </summary>
     private float ComputeGridHeight()
     {
@@ -114,12 +136,13 @@ public sealed class CorpseInventoryWindow(
     /// Window has children), already folded into outerInsets below (see ChildContentPadding's own
     /// doc comment: gated on CanContainChildren alone, so this reads correctly even before any
     /// child has actually been added yet, which is exactly when this runs -- see OnChildrenInitialized).
-    /// Only the one remaining INTERNAL gap (summary-to-grid) is still this method's own Padding.
+    /// The two remaining INTERNAL gaps (summary-to-grid, grid-to-currency-row) are still this
+    /// method's own Padding.
     /// </summary>
     private Vector2 ComputeOuterSize(float gridHeight)
     {
         var contentWidth = System.Math.Max(IconSize.X + Padding + SummaryTextWidth, GridWidth);
-        var contentHeight = SummaryHeight + Padding + gridHeight;
+        var contentHeight = SummaryHeight + Padding + gridHeight + Padding + CurrencyRow.Height;
 
         var outerInsets = CurrentSize - ContentSize;
         return new Vector2(contentWidth, contentHeight) + outerInsets;
@@ -176,7 +199,7 @@ public sealed class CorpseInventoryWindow(
             Content = new ElementContentOptions { ContentColor = WindowPalette.PanelContentColor },
         });
 
-        // getSecondaryTargetEntityId always returns this corpse's own _entityId -- this window
+        // getSecondaryTargetEntityId always returns this window's own _entityId -- this window
         // *is* the currently-open secondary target for as long as it exists (see
         // SecondaryInventoryWindowController.OpenLoot, which never has more than one open at
         // once), so its own grid's Give/Take menu only ever needs to offer "Take," never query

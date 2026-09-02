@@ -58,11 +58,22 @@ doesn't exist yet) plus an actual "use" action.
 
 Design as one shared "attachment mode" concept reusable by any future aura-granting effect.
 
-#### Shops and storage containers
+#### Loot currency
 
-Reuse `Game/Modules/Inventory/` storage (a shop/chest is just another entity with
-`InventoryItemStackComponent` stacks). Missing: trade/transfer UI and rules (pricing, restocking,
-capacity).
+Containers/corpses should be able to hold and yield `CurrencyComponent` Gold (and rarely Credits) on
+loot, not just item stacks -- see `PLAN-storage-containers.md` for the landed container/Currency work
+this builds on. Needs a transfer/pickup path analogous to `InventoryActions.TryTransferStack` but for
+currency values instead of discrete stacks; a `TreasureChest` today only grants Gold at spawn
+(0-5), never loses it, since nothing can take it yet.
+
+#### Shops
+
+Trade/transfer UI and rules (pricing, restocking, capacity), spending `CurrencyComponent.Gold`
+acquired via loot -- see `PLAN-storage-containers.md`. Reuses `Game/Modules/Inventory/` storage the
+same way `TreasureChest` does (a shop is just another entity with `InventoryItemStackComponent`
+stacks) and `SecondaryInventoryWindowController`/`SecondaryInventoryWindow`, both written generically
+enough already to host a shop's inventory alongside the player's own. Credits reserved for a
+late-game feature, no consumer yet.
 
 #### Experience module
 
@@ -114,6 +125,13 @@ alongside `DeadComponent`) or on a timeout since last hit (avoids crediting an o
 V1: fill own inventory from a nearby corpse until full (`InventoryCapacity.MaxNonPlayerStackCount`), no
 preference. V2: preference by combat style/item rarity, once either concept exists.
 
+#### Destroyed items
+
+A "destroyed" item state: displays as "destroyed", modified description, can still be picked up, but
+can't be used. Update `ContainerDestructionSystem` (and any future container types --
+`PLAN-storage-containers.md`) to mark a destroyed container's inventory items destroyed instead of
+deleting them outright, once this lands.
+
 #### Add source and target modifier checks for all actions
 
 Only `DirectDamage` runs both an Outgoing (source) and Incoming (target)
@@ -123,6 +141,21 @@ effect entry's `Apply`, even with no real `StatModifierTarget` consumer yet, so 
 source can hook in by granting a modifier alone. Calling-convention change, not a new stat.
 
 ### Low Priority
+
+#### Repair destroyed items
+
+Item-type-specific Repair skills to restore a destroyed item -- blocked on Destroyed items (above) and
+the not-yet-existing Skills system (this file's own Skills entry).
+
+#### Trapped containers
+
+Containers (`PLAN-storage-containers.md`) can be trapped. Needs a trap-effect concept triggered on
+interaction/loot.
+
+#### Trap detection and disarming skills
+
+Skills-system consumer (blocked on Skills, same as Repair destroyed items above) for detecting/
+disarming Trapped containers.
 
 #### Show runner race
 
@@ -605,6 +638,20 @@ shape, differing only in backing component/palette). Tolerable at two copies -- 
 generic element if a third shows up (e.g. Soul Essence). `MapWindow.DrawHealthBar` is arguably a lighter
 third instance already (same fraction math, no ticks, per-any-entity) -- include it in scope if this is
 ever picked up.
+
+#### Element footer
+
+A generic "footer" primitive: a fixed-height region that always displays at the bottom of an element
+regardless of its content size or scrolling. The Inventory window's Currency row (`CurrencyRow`,
+`PLAN-storage-containers.md`) is the first consumer, hand-wired twice today rather than through a
+shared primitive -- `InventoryManagementWindow` had to grow an extra nested Window (hosting
+`TabbedContent` in `ContentSize - (0, CurrencyRow.Height)` instead of via `SetContent` directly on
+itself) purely to make room for it, and `SecondaryInventoryWindow` folds the same row height into its
+own one-time size computation. Tolerable at one/two hand-built copies per this codebase's own
+"abstract on the third occurrence" convention (see the HUD bar item above) -- if a second real
+consumer shows up, build the real primitive and, as part of that, remove
+`InventoryManagementWindow`'s extra nested window (host `TabbedContent` directly again, with the
+footer primitive reserving its own space instead).
 
 #### Per-entity sprite scale
 

@@ -144,7 +144,8 @@ target with a body-part-condition-granted one.
 ### Corpse looting
 
 - Right-click "Loot" (disabled if not adjacent) opens `InventoryManagementWindow` +
-  `CorpseInventoryWindow` (`Presentation/UI/Looting/`), both menu-mode windows.
+  `SecondaryInventoryWindow` (`Presentation/UI/Looting/`, renamed from `CorpseInventoryWindow` once
+  containers landed -- see `PLAN-storage-containers.md`), both menu-mode windows.
   `SecondaryInventoryWindowController` owns open/close/replace, written generically for chest/shop
   reuse.
 - Items drag both directions via `InventoryActions.TryTransferStack`/`TryTransferAllStacksOfItem` (no
@@ -154,6 +155,40 @@ target with a body-part-condition-granted one.
   player unlimited.
 - No real loot table yet -- Goblins/Fairies/Ghosts get a **temporary** random 0-20-stack inventory
   (`TemporaryNpcLootGrant`).
+
+### Storage containers and Currency
+
+Full design/rationale: `PLAN-storage-containers.md`.
+
+- `TreasureChest` (`Game/Blueprints/Objects/`): a `Wall`/`Lava`-style stationary prop (no creature
+  identity) marked `ContainerComponent` (`Game/Modules/Containers/`) -- lootable via the map's "Loot"
+  context menu option even while alive, unlike a corpse (`MapWindow.AddEntityGroup` now gates on
+  `_deadPool` OR `_containerPool`). 100 starting health, immune to Poison/Paralysis
+  (`StatusEffectImmunityComponent`, permanent) but not Burning. Starts with 1-10 random items
+  (stacks of 1-5, `CoreItemsModule`'s definitions) and 0-5 Gold. Uses the existing global
+  `InventoryCapacity.MaxNonPlayerStackCount` (20), not a bespoke per-container cap.
+- `ContainerDestructionSystem` reacts to the same `EntityDiedEvent` `DeathSystem` does (both
+  subscribe independently, no ordering dependency): clears the container's inventory stacks and
+  overwrites its `DisplayTextComponent` to "Destroyed" -- a creature's corpse keeps its name/items
+  intact, a destroyed container does not. See TODO.md's Destroyed items entry for the eventual
+  "mark destroyed instead of delete" follow-up.
+- `CorpseLootedComponent`/`CorpseInventoryWindow` renamed to `LootedComponent`/
+  `SecondaryInventoryWindow` -- both now apply to containers (and, later, shops), not just corpses.
+  `SecondaryInventoryWindowController` (unrenamed, already generically named) is unaffected.
+- `Game/Modules/Currency/`: `CurrencyComponent` (`Gold`/`Credits` ints, packed pool, overwrite merge).
+  Player/Goblin/Fairy each grant 1-10 starting Gold via `StartingCurrencyGrant`; `TreasureChest`
+  grants 0-5 (found loot, not a personal purse). `ToString()` follows `DeadComponent`/
+  `ManaComponent`'s own "Label : Value" per-line convention for the admin inspection dump.
+- `CurrencyRow` (`Presentation/UI/`): shared "Gold : X    Credits : Y" footer row, built once by
+  `InventoryManagementWindow` (player's own Gold) and `SecondaryInventoryWindow` (the looted
+  entity's Gold -- 0/0 for a chest today). `InventoryManagementWindow` had to host `TabbedContent`
+  in a new inner Window instead of via `SetContent` directly on itself to make room for the row --
+  see TODO.md's Element footer entry for the eventual generic-primitive cleanup.
+- Live-testing find: `TextWindow.Build` reset `OriginalText`/`TextColor`/`Bold` on every pooled
+  reuse but never `ContentFont` -- a size set by one consumer (e.g. `HealthWindow`'s bigger buff
+  font) leaked into whatever next reused that pooled `TextWindow` (confirmed via
+  `InspectionWindowContent`'s admin dump rows rendering at a stale size). Fixed at the same
+  pool-reset choke point, not per call site.
 
 ### Toggle poison aura ability -- item side
 

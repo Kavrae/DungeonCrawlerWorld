@@ -7,6 +7,7 @@ using Engine.Modules;
 using Game.Floors;
 using Game.Modules;
 using Game.Modules.AbilityScores;
+using Game.Modules.Containers;
 using Game.Modules.Actions;
 using Game.Modules.Actions.Definitions;
 using Game.Modules.Burning;
@@ -15,6 +16,7 @@ using Game.Modules.ContactDamage;
 using Game.Modules.Core;
 using Game.Modules.Core.Components;
 using Game.Modules.Crawler;
+using Game.Modules.Currency;
 using Game.Modules.Health;
 using Game.Modules.Inventory;
 using Game.Modules.Mana;
@@ -83,6 +85,9 @@ public sealed class FloorBuilderTests
         var statusEffectsModule = new StatusEffectsModule();
         statusEffectsModule.Configure(context);
 
+        var containersModule = new ContainersModule();
+        containersModule.Configure(context);
+
         IReadOnlyList<IModule> modules =
         [
             coreModule,
@@ -104,6 +109,8 @@ public sealed class FloorBuilderTests
             processingTierModule,
             new InventoryModule(),
             coreItemsModule,
+            new CurrencyModule(),
+            containersModule,
         ];
 
         return Bootstrapper.Build(modules, initialEntityCapacity: 5000, initialComponentCapacity: 5000);

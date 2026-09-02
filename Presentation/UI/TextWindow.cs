@@ -27,6 +27,14 @@ public class TextWindow(FontService fontService, ElementPoolService elementPoolS
         OriginalText = options.Text?.Text ?? string.Empty;
         TextColor = options.Text?.TextColor ?? WindowPalette.BodyTextColor;
         Bold = options.Text?.Bold ?? false;
+        // ElementOptions/TextOptions carries no font-size field -- every consumer that wants a
+        // non-default size sets ContentFont imperatively after CreateElement returns (e.g.
+        // HealthWindow's AddTextRow, ItemDetailsWindow's name row). Reset to the default here, on
+        // every Build (pooled reuse included, not just first construction), so a size set by a
+        // previous consumer doesn't leak into a differently-sized pooled reuse (confirmed live:
+        // InspectionWindowContent's rows were rendering at whatever size the pool's TextWindow had
+        // last been given elsewhere).
+        ContentFont = fontService.GetFont(FontChrome.DefaultFontSize);
         _canContainChildren = false;
     }
 

@@ -404,7 +404,7 @@ public sealed class InventoryGridContent(
     /// two, and neither if no secondary window is currently open (getSecondaryTargetEntityId
     /// returns null). Every option here is guarded on the clicked cell not being a Merged Stack
     /// (no single StackInstanceId to compare/transfer, the same restriction InventoryItemStackCell.
-    /// CanBindToHotbar already enforces for drag-binding). For CorpseInventoryWindow's own grid,
+    /// CanBindToHotbar already enforces for drag-binding). For SecondaryInventoryWindow's own grid,
     /// getSecondaryTargetEntityId always returns that corpse's own entityId (it *is* the secondary
     /// target for as long as it exists), so its cells only ever offer "Take"; for the player's own
     /// grid, it queries whatever's actually open right now (see InventoryFolderController.

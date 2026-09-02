@@ -6,6 +6,7 @@ using Engine.Utilities;
 using FontStashSharp;
 using Game.Blueprints;
 using Game.Modules.Actions;
+using Game.Modules.Containers.Components;
 using Game.Modules.Core;
 using Game.Modules.Core.Components;
 using Game.Modules.Death.Components;
@@ -67,7 +68,8 @@ public sealed class MapWindow : Window
     private readonly MultiComponentPool<StatModifierComponent>? _statModifiers;
     private readonly PackedComponentPool<DeadComponent>? _deadPool;
     private readonly MultiComponentPool<InventoryItemStackComponent>? _inventoryStacks;
-    private readonly PackedComponentPool<CorpseLootedComponent>? _corpseLootedPool;
+    private readonly PackedComponentPool<LootedComponent>? _lootedPool;
+    private readonly PackedComponentPool<ContainerComponent>? _containerPool;
     private readonly PackedComponentPool<ActionLockComponent> _actionLockPool;
     private readonly DirectComponentPool<DisplayTextComponent> _displayTextPool;
 
@@ -189,8 +191,11 @@ public sealed class MapWindow : Window
         _inventoryStacks = componentManager.IsRegistered<InventoryItemStackComponent>()
             ? componentManager.GetMultiPool<InventoryItemStackComponent>()
             : null;
-        _corpseLootedPool = componentManager.IsRegistered<CorpseLootedComponent>()
-            ? componentManager.GetPackedPool<CorpseLootedComponent>()
+        _lootedPool = componentManager.IsRegistered<LootedComponent>()
+            ? componentManager.GetPackedPool<LootedComponent>()
+            : null;
+        _containerPool = componentManager.IsRegistered<ContainerComponent>()
+            ? componentManager.GetPackedPool<ContainerComponent>()
             : null;
         _actionLockPool = actionLockPool;
         _displayTextPool = componentManager.GetDirectPool<DisplayTextComponent>();
@@ -704,7 +709,7 @@ public sealed class MapWindow : Window
 
             if (_inventoryStacks?.CountForEntity(entityId) > 0)
             {
-                var alreadyLooted = _corpseLootedPool?.Has(entityId) == true;
+                var alreadyLooted = _lootedPool?.Has(entityId) == true;
                 DrawLootBagBadge(spriteBatch, tileOrigin, footprintSize, alreadyLooted ? Color.Gray : Color.White);
             }
         }
@@ -924,8 +929,9 @@ public sealed class MapWindow : Window
     /// Opens a stacked context menu for everything on the tile under mousePosition -- every
     /// occupant (world.GetOccupantEntityIdsAt, Blocking or not) plus the terrain, each its own
     /// group: a read-only name header (see ContextMenuOption.Header -- also the visual separator
-    /// from the next group, no blank divider needed), "Loot" first if that entity is a corpse
-    /// (replaces the old click-to-loot, see OnCorpseClicked's own doc comment), then always
+    /// from the next group, no blank divider needed), "Loot" first if that entity is a corpse or
+    /// a container (a container is lootable even while alive -- see ContainerComponent's own doc
+    /// comment; replaces the old click-to-loot, see OnCorpseClicked's own doc comment), then always
     /// "Inspect" (Details/Admin inspection -- see MapViewState.InspectionMode's own doc comment
     /// on why Admin isn't a separate option yet). Internal, not private, so tests can simulate a
     /// right-click-tap at a specific screen position directly. A miss (off-map, nothing on the
@@ -967,12 +973,12 @@ public sealed class MapWindow : Window
         }
     }
 
-    /// <summary>Appends one contributor's own group to the tile's stacked menu -- a read-only name header, then whatever options it offers. Works identically for a creature occupant or the terrain entity itself, since both are just an entityId with a DisplayTextComponent -- terrain simply never has a DeadComponent, so it never picks up "Loot".</summary>
+    /// <summary>Appends one contributor's own group to the tile's stacked menu -- a read-only name header, then whatever options it offers. Works identically for a creature occupant or the terrain entity itself, since both are just an entityId with a DisplayTextComponent -- terrain simply never has a DeadComponent or ContainerComponent, so it never picks up "Loot".</summary>
     private void AddEntityGroup(List<ContextMenuOption> options, int entityId)
     {
         options.Add(ContextMenuOption.Header(ResolveName(entityId)));
 
-        if (_deadPool?.Has(entityId) == true && OnCorpseClicked is { } onCorpseClicked)
+        if ((_deadPool?.Has(entityId) == true || _containerPool?.Has(entityId) == true) && OnCorpseClicked is { } onCorpseClicked)
         {
             options.Add(new ContextMenuOption("Loot", null, IsAdjacentToPlayer(entityId), () => onCorpseClicked.Invoke(entityId)));
         }

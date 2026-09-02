@@ -15,7 +15,7 @@ namespace Presentation.UI.Inventory;
 /// Persistent single-item details pane -- shows whatever item ItemDetailsWindowController last
 /// selected, updating in place rather than opening a second window when a different item is
 /// clicked (see that controller's own doc comment). Close-only (no minimize), the same shape as
-/// InventoryManagementWindow/CorpseInventoryWindow, not InspectionWindow (minimize-only).
+/// InventoryManagementWindow/SecondaryInventoryWindow, not InspectionWindow (minimize-only).
 ///
 /// Sections, top to bottom, a divider (BuildDivider, a single TextDivider row -- plain when its
 /// label is omitted, mirroring InspectionWindowContent.BuildSpacer; labeled for the two sections

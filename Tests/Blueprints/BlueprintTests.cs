@@ -20,10 +20,14 @@ using Game.Modules.Actions.Definitions.DirectActions;
 using Game.Modules.Actions.Definitions.Spells;
 using Game.Modules.Class;
 using Game.Modules.Class.Components;
+using Game.Modules.Containers;
+using Game.Modules.Containers.Components;
 using Game.Modules.Core;
 using Game.Modules.Core.Components;
 using Game.Modules.Crawler;
 using Game.Modules.Crawler.Components;
+using Game.Modules.Currency;
+using Game.Modules.Currency.Components;
 using Game.Modules.Health;
 using Game.Modules.Health.Components;
 using Game.Modules.Inventory;
@@ -37,6 +41,8 @@ using Game.Modules.Race;
 using Game.Modules.Race.Components;
 using Game.Modules.StatModifiers;
 using Game.Modules.StatModifiers.Components;
+using Game.Modules.StatusEffects;
+using Game.Modules.StatusEffects.Components;
 using Game.World;
 
 namespace Tests.Blueprints;
@@ -84,6 +90,12 @@ public sealed class BlueprintTests
         var coreItemsModule = new CoreItemsModule();
         coreItemsModule.Configure(context);
 
+        var statusEffectsModule = new StatusEffectsModule();
+        statusEffectsModule.Configure(context);
+
+        var containersModule = new ContainersModule();
+        containersModule.Configure(context);
+
         IReadOnlyList<IModule> modules =
         [
             coreModule,
@@ -100,6 +112,9 @@ public sealed class BlueprintTests
             processingTierModule,
             new InventoryModule(),
             coreItemsModule,
+            new CurrencyModule(),
+            statusEffectsModule,
+            containersModule,
         ];
 
         return Bootstrapper.Build(modules, initialEntityCapacity: 100, initialComponentCapacity: 50);
@@ -116,6 +131,48 @@ public sealed class BlueprintTests
         Assert.IsTrue(ecsContext.ComponentManager.GetDirectPool<DisplayTextComponent>().Has(entityId));
         Assert.IsTrue(ecsContext.ComponentManager.GetDirectPool<GlyphComponent>().Has(entityId));
         Assert.IsTrue(ecsContext.ComponentManager.GetDirectPool<TransformComponent>().Has(entityId));
+    }
+
+    [TestMethod]
+    public void TreasureChest_Build_SetsDisplayTextGlyphTransformHealthContainerAndImmunities()
+    {
+        var ecsContext = BuildEcsContext();
+        var entityId = ecsContext.EntityManager.CreateEntity();
+
+        new TreasureChest(new MathUtility(new Random(1))).Build(ecsContext.ComponentManager, entityId);
+
+        var displayText = ecsContext.ComponentManager.GetDirectPool<DisplayTextComponent>().GetReadonly(entityId);
+        Assert.AreEqual("Treasure Chest", displayText.Name);
+
+        var glyph = ecsContext.ComponentManager.GetDirectPool<GlyphComponent>().GetReadonly(entityId);
+        Assert.AreEqual("T", glyph.Glyph);
+        Assert.AreEqual(Microsoft.Xna.Framework.Color.Gold, glyph.GlyphColor);
+
+        Assert.IsTrue(ecsContext.ComponentManager.GetDirectPool<TransformComponent>().Has(entityId));
+
+        var health = ecsContext.ComponentManager.GetPackedPool<SimpleHealthComponent>().GetReadonly(entityId);
+        Assert.AreEqual(100f, health.CurrentHealth);
+        Assert.AreEqual(100f, health.MaximumHealth);
+
+        Assert.IsTrue(ecsContext.ComponentManager.GetPackedPool<ContainerComponent>().Has(entityId));
+
+        var immunities = ecsContext.ComponentManager.GetMultiPool<StatusEffectImmunityComponent>();
+        var immuneTypes = new List<StatusEffectType>();
+        for (var denseIndex = immunities.GetFirstDenseIndex(entityId); denseIndex != -1; denseIndex = immunities.GetNextDenseIndex(denseIndex))
+        {
+            immuneTypes.Add(immunities.GetReadonlyByDenseIndex(denseIndex).EffectType);
+        }
+        CollectionAssert.AreEquivalent(new[] { StatusEffectType.Poison, StatusEffectType.Paralysis }, immuneTypes);
+
+        var stacks = new List<InventoryItemStackComponent>();
+        InventoryQueries.CopyStacksForEntity(ecsContext.ComponentManager.GetMultiPool<InventoryItemStackComponent>(), entityId, stacks);
+        var totalItemCount = stacks.Sum(stack => (int)stack.Quantity);
+        Assert.IsTrue(stacks.Count >= 1, "Expected at least one starting item stack.");
+        Assert.IsTrue(totalItemCount >= 1 && totalItemCount <= 50, $"Expected 1-10 items of quantity 1-5 each (max 50 total), was {totalItemCount}.");
+
+        var currency = ecsContext.ComponentManager.GetPackedPool<CurrencyComponent>().GetReadonly(entityId);
+        Assert.IsTrue(currency.Gold >= 0 && currency.Gold <= 5, $"Expected Gold in [0,5], was {currency.Gold}.");
+        Assert.AreEqual(0, currency.Credits);
     }
 
     [TestMethod]
@@ -211,6 +268,8 @@ public sealed class BlueprintTests
 
         Assert.IsTrue(ActionInstanceQueries.TryGet(ecsContext.ComponentManager.GetMultiPool<ActionInstanceComponent>(), entityId, PunchAction.Id, out var punch));
         Assert.AreEqual((short)10, GetOverrideFlatDamage(punch));
+
+        AssertHasRandomStartingGold(ecsContext.ComponentManager, entityId);
     }
 
     [TestMethod]
@@ -355,6 +414,8 @@ public sealed class BlueprintTests
 
         var hotkeyExpansionUnlock = ecsContext.ComponentManager.GetPackedPool<HotkeyExpansionUnlockComponent>().GetReadonly(entityId);
         Assert.AreEqual((short)5, hotkeyExpansionUnlock.UnlockedSlotCount);
+
+        AssertHasRandomStartingGold(ecsContext.ComponentManager, entityId);
     }
 
     [TestMethod]
@@ -374,6 +435,16 @@ public sealed class BlueprintTests
 
         Assert.IsTrue(ActionInstanceQueries.TryGet(ecsContext.ComponentManager.GetMultiPool<ActionInstanceComponent>(), entityId, PunchAction.Id, out var punch));
         Assert.AreEqual((short)3, GetOverrideFlatDamage(punch));
+
+        AssertHasRandomStartingGold(ecsContext.ComponentManager, entityId);
+    }
+
+    /// <summary>Player/Goblin/Fairy each grant 1-10 starting Gold and 0 Credits via StartingCurrencyGrant.</summary>
+    private static void AssertHasRandomStartingGold(ComponentManager componentManager, int entityId)
+    {
+        var currency = componentManager.GetPackedPool<CurrencyComponent>().GetReadonly(entityId);
+        Assert.IsTrue(currency.Gold >= 1 && currency.Gold <= 10, $"Expected Gold in [1,10], was {currency.Gold}.");
+        Assert.AreEqual(0, currency.Credits);
     }
 
     [TestMethod]

@@ -15,6 +15,7 @@ using Game.Modules.Class;
 using Game.Modules.Class.Components;
 using Game.Modules.Core;
 using Game.Modules.Core.Components;
+using Game.Modules.Currency;
 using Game.Modules.Health;
 using Game.Modules.Inventory;
 using Game.Modules.Movement;
@@ -68,6 +69,7 @@ public sealed class CompositeBlueprintTests
             actionsModule,
             processingTierModule,
             new InventoryModule(),
+            new CurrencyModule(),
         ];
 
         return Bootstrapper.Build(modules, initialEntityCapacity: 100, initialComponentCapacity: 50);

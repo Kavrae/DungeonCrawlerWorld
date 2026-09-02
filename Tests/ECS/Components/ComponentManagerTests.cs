@@ -127,7 +127,7 @@ public sealed class ComponentManagerTests
     public void RegisterPackedPool_InitialCapacityOverrideOnly_DoesNotOptOutOfResizeEntityCapacity()
     {
         // initialCapacity only affects dense storage, which ResizeEntityCapacity never touches -- a pool that
-        // shrinks just its dense seed (e.g. Crawler/CorpseLooted, which can attach to any entity so their
+        // shrinks just its dense seed (e.g. Crawler/Looted, which can attach to any entity so their
         // entity-index side stays on the default world-scale track) should still track the global capacity.
         var manager = new ComponentManager(initialEntityCapacity: 4, initialComponentCapacity: 4);
         manager.RegisterPackedPool<PackedTestComponent>((ref existing, incoming) => existing = incoming, initialCapacity: 8);

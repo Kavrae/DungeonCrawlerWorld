@@ -988,7 +988,7 @@ public sealed class UiInputController
     /// item grid." Checked via Window.Tag, not Window.Content -- InventoryGridContent isn't always
     /// assigned as its host window's Content (see InventoryGridContent.Initialize's own doc
     /// comment: InventoryTabContent's own hosting pattern drives it manually and never calls
-    /// SetContent at all, unlike CorpseInventoryWindow's), so Tag is the one thing both hosting
+    /// SetContent at all, unlike SecondaryInventoryWindow's), so Tag is the one thing both hosting
     /// patterns reliably set (confirmed via a live-testing repro against the real, TabbedContent-
     /// nested InventoryManagementWindow structure -- Content-based matching silently found nothing
     /// there, even though it worked against a simpler hand-built test harness).

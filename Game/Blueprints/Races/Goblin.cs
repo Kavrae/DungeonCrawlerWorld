@@ -78,6 +78,7 @@ public sealed class Goblin(MathUtility mathUtility) : IBlueprint
         componentManager.Merge(entityId, new ActionInstanceComponent(PunchAction.Id, punchOverride, cooldownFramesRemaining: 0));
 
         TemporaryNpcLootGrant.GrantRandomStartingLoot(componentManager, entityId, mathUtility);
+        StartingCurrencyGrant.GrantRandomStartingGold(componentManager, entityId, mathUtility);
 
         AbilityScoreEffects.GrantDefaults(componentManager, entityId, DefaultAbilityScoreBaseValue);
 

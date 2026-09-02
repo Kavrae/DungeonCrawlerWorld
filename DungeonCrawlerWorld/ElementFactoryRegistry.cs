@@ -88,7 +88,7 @@ public static class ElementFactoryRegistry
         Register<TextDivider>((font, elements, glyph) => new TextDivider(font, elements, glyph));
         Register<Tooltip>((font, elements, glyph) => new Tooltip(font, elements, glyph));
 
-        pool.RegisterFactory<CorpseInventoryWindow>(() => new CorpseInventoryWindow(
+        pool.RegisterFactory<SecondaryInventoryWindow>(() => new SecondaryInventoryWindow(
             presentation.FontService, pool, presentation.LabelRenderer, componentManager,
             presentation.SpriteSheetService, presentation.SpriteRenderer, itemCatalog, world, contextMenuController, mapViewState));
         Register<EntityIconElement>((font, elements, glyph) => new EntityIconElement(

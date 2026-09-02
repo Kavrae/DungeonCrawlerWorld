@@ -14,7 +14,9 @@ using Game.Modules.Class;
 using Game.Modules.ContactDamage;
 using Game.Modules.Core;
 using Game.Modules.Core.Components;
+using Game.Modules.Containers;
 using Game.Modules.Crawler;
+using Game.Modules.Currency;
 using Game.Modules.Death;
 using Game.Modules.Health;
 using Game.Modules.Inventory;
@@ -81,6 +83,8 @@ public static class GameBootstrapper
             new CrawlerModule(),
             new InventoryModule(),
             new CoreItemsModule(),
+            new CurrencyModule(),
+            new ContainersModule(),
         ];
 
         var mapQuery = (IMapQuery)world;
