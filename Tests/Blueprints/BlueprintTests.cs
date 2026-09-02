@@ -39,6 +39,8 @@ using Game.Modules.Movement.Components;
 using Game.Modules.ProcessingTier;
 using Game.Modules.Race;
 using Game.Modules.Race.Components;
+using Game.Modules.Shops;
+using Game.Modules.Shops.Components;
 using Game.Modules.StatModifiers;
 using Game.Modules.StatModifiers.Components;
 using Game.Modules.StatusEffects;
@@ -96,6 +98,9 @@ public sealed class BlueprintTests
         var containersModule = new ContainersModule();
         containersModule.Configure(context);
 
+        var shopModule = new ShopModule();
+        shopModule.Configure(context);
+
         IReadOnlyList<IModule> modules =
         [
             coreModule,
@@ -115,6 +120,7 @@ public sealed class BlueprintTests
             new CurrencyModule(),
             statusEffectsModule,
             containersModule,
+            shopModule,
         ];
 
         return Bootstrapper.Build(modules, initialEntityCapacity: 100, initialComponentCapacity: 50);
@@ -173,6 +179,103 @@ public sealed class BlueprintTests
         var currency = ecsContext.ComponentManager.GetPackedPool<CurrencyComponent>().GetReadonly(entityId);
         Assert.IsTrue(currency.Gold >= 0 && currency.Gold <= 5, $"Expected Gold in [0,5], was {currency.Gold}.");
         Assert.IsTrue(currency.Credits >= 0 && currency.Credits <= 1, $"Expected Credits in [0,1], was {currency.Credits}.");
+    }
+
+    [TestMethod]
+    public void Shop_Build_SetsDisplayTextGlyphTransformHealthContainerCurrencyAndImmunities()
+    {
+        var ecsContext = BuildEcsContext();
+        var entityId = ecsContext.EntityManager.CreateEntity();
+
+        new Shop().Build(ecsContext.ComponentManager, entityId);
+
+        var displayText = ecsContext.ComponentManager.GetDirectPool<DisplayTextComponent>().GetReadonly(entityId);
+        Assert.AreEqual("Shop", displayText.Name);
+
+        var glyph = ecsContext.ComponentManager.GetDirectPool<GlyphComponent>().GetReadonly(entityId);
+        Assert.AreEqual("S", glyph.Glyph);
+        Assert.AreEqual(Microsoft.Xna.Framework.Color.DarkBlue, glyph.GlyphColor);
+
+        Assert.IsTrue(ecsContext.ComponentManager.GetDirectPool<TransformComponent>().Has(entityId));
+
+        var health = ecsContext.ComponentManager.GetPackedPool<SimpleHealthComponent>().GetReadonly(entityId);
+        Assert.AreEqual(1000f, health.CurrentHealth);
+        Assert.AreEqual(1000f, health.MaximumHealth);
+
+        Assert.IsTrue(ecsContext.ComponentManager.GetPackedPool<ContainerComponent>().Has(entityId));
+        Assert.IsFalse(ecsContext.ComponentManager.GetPackedPool<ShopComponent>().Has(entityId), "Shop is the shared shell only -- no ShopComponent and no stock by itself.");
+
+        var currency = ecsContext.ComponentManager.GetPackedPool<CurrencyComponent>().GetReadonly(entityId);
+        Assert.AreEqual(1000, currency.Gold);
+        Assert.AreEqual(0, currency.Credits);
+
+        var stacks = new List<InventoryItemStackComponent>();
+        InventoryQueries.CopyStacksForEntity(ecsContext.ComponentManager.GetMultiPool<InventoryItemStackComponent>(), entityId, stacks);
+        Assert.AreEqual(0, stacks.Count, "Shop by itself grants no stock -- that's each concrete shop type's own composed-in stock part.");
+
+        var immunities = ecsContext.ComponentManager.GetMultiPool<StatusEffectImmunityComponent>();
+        var immuneTypes = new List<StatusEffectType>();
+        for (var denseIndex = immunities.GetFirstDenseIndex(entityId); denseIndex != -1; denseIndex = immunities.GetNextDenseIndex(denseIndex))
+        {
+            immuneTypes.Add(immunities.GetReadonlyByDenseIndex(denseIndex).EffectType);
+        }
+        CollectionAssert.AreEquivalent(new[] { StatusEffectType.Poison, StatusEffectType.Paralysis }, immuneTypes);
+    }
+
+    [TestMethod]
+    public void PotionShop_Build_GrantsPotionOnlyShopComponentAndStock()
+    {
+        var ecsContext = BuildEcsContext();
+        var entityId = ecsContext.EntityManager.CreateEntity();
+
+        new PotionShop(new MathUtility(new Random(1))).Build(ecsContext.ComponentManager, entityId);
+
+        Assert.AreEqual("Potion Shop", ecsContext.ComponentManager.GetDirectPool<DisplayTextComponent>().GetReadonly(entityId).Name, "The composite's own override step must rename the shared \"Shop\" shell, not just concatenate onto it.");
+        Assert.IsTrue(ecsContext.ComponentManager.GetPackedPool<ContainerComponent>().Has(entityId), "PotionShop must still compose in the Shop shell.");
+
+        var shop = ecsContext.ComponentManager.GetPackedPool<ShopComponent>().GetReadonly(entityId);
+        CollectionAssert.AreEqual(new[] { Tag.Potion }, shop.AllowedTags?.ToArray());
+        Assert.AreEqual(1.10f, shop.BuyMultiplier);
+        Assert.AreEqual(0.90f, shop.SellMultiplier);
+
+        var stacks = new List<InventoryItemStackComponent>();
+        InventoryQueries.CopyStacksForEntity(ecsContext.ComponentManager.GetMultiPool<InventoryItemStackComponent>(), entityId, stacks);
+        var totalItemCount = stacks.Sum(stack => (int)stack.Quantity);
+        Assert.IsTrue(stacks.Count is >= 5 and <= 10, $"Expected 5-10 stacks, was {stacks.Count}.");
+        Assert.IsTrue(totalItemCount >= 5 && totalItemCount <= 50, $"Expected 5-10 items of quantity 1-5 each (max 50 total), was {totalItemCount}.");
+
+        var potionItemIds = new HashSet<Guid>
+        {
+            HealthPotion.Build().Id, ManaPotion.Build().Id, HotkeyExpansionPotion.Build().Id, DamagePotion.Build().Id,
+            ToxicPotion.Build().Id, ToxicIdol.Build().Id, ImmunityTestPotion.Build().Id, ResistanceTestPotion.Build().Id,
+        };
+        foreach (var stack in stacks)
+        {
+            Assert.IsTrue(potionItemIds.Contains(stack.ItemDefinitionId), "Every PotionShop stack must be one of the catalog's Potion-tagged items.");
+        }
+    }
+
+    [TestMethod]
+    public void GeneralShop_Build_GrantsAnyTagShopComponentAndStock()
+    {
+        var ecsContext = BuildEcsContext();
+        var entityId = ecsContext.EntityManager.CreateEntity();
+
+        new GeneralShop(new MathUtility(new Random(1))).Build(ecsContext.ComponentManager, entityId);
+
+        Assert.AreEqual("General Shop", ecsContext.ComponentManager.GetDirectPool<DisplayTextComponent>().GetReadonly(entityId).Name, "The composite's own override step must rename the shared \"Shop\" shell, not just concatenate onto it.");
+        Assert.IsTrue(ecsContext.ComponentManager.GetPackedPool<ContainerComponent>().Has(entityId), "GeneralShop must still compose in the Shop shell.");
+
+        var shop = ecsContext.ComponentManager.GetPackedPool<ShopComponent>().GetReadonly(entityId);
+        Assert.IsNull(shop.AllowedTags, "General Shop must trade any tag.");
+        Assert.AreEqual(1.20f, shop.BuyMultiplier);
+        Assert.AreEqual(0.80f, shop.SellMultiplier);
+
+        var stacks = new List<InventoryItemStackComponent>();
+        InventoryQueries.CopyStacksForEntity(ecsContext.ComponentManager.GetMultiPool<InventoryItemStackComponent>(), entityId, stacks);
+        var totalItemCount = stacks.Sum(stack => (int)stack.Quantity);
+        Assert.IsTrue(stacks.Count is >= 5 and <= 10, $"Expected 5-10 stacks, was {stacks.Count}.");
+        Assert.IsTrue(totalItemCount >= 5 && totalItemCount <= 50, $"Expected 5-10 items of quantity 1-5 each (max 50 total), was {totalItemCount}.");
     }
 
     [TestMethod]
@@ -415,7 +518,7 @@ public sealed class BlueprintTests
         var hotkeyExpansionUnlock = ecsContext.ComponentManager.GetPackedPool<HotkeyExpansionUnlockComponent>().GetReadonly(entityId);
         Assert.AreEqual((short)5, hotkeyExpansionUnlock.UnlockedSlotCount);
 
-        AssertHasRandomStartingGold(ecsContext.ComponentManager, entityId);
+        AssertHasFixedStartingGold(ecsContext.ComponentManager, entityId);
     }
 
     [TestMethod]
@@ -439,11 +542,11 @@ public sealed class BlueprintTests
         AssertHasRandomStartingGoldAndCredits(ecsContext.ComponentManager, entityId);
     }
 
-    /// <summary>Player grants 1-10 starting Gold and 0 Credits via StartingCurrencyGrant.GrantRandomStartingGold.</summary>
-    private static void AssertHasRandomStartingGold(ComponentManager componentManager, int entityId)
+    /// <summary>Player grants a flat 100 starting Gold and 0 Credits via StartingCurrencyGrant.GrantFixedStartingGold.</summary>
+    private static void AssertHasFixedStartingGold(ComponentManager componentManager, int entityId)
     {
         var currency = componentManager.GetPackedPool<CurrencyComponent>().GetReadonly(entityId);
-        Assert.IsTrue(currency.Gold >= 1 && currency.Gold <= 10, $"Expected Gold in [1,10], was {currency.Gold}.");
+        Assert.AreEqual(StartingCurrencyGrant.PlayerStartingGold, currency.Gold);
         Assert.AreEqual(0, currency.Credits);
     }
 

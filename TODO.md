@@ -58,15 +58,6 @@ doesn't exist yet) plus an actual "use" action.
 
 Design as one shared "attachment mode" concept reusable by any future aura-granting effect.
 
-#### Shops
-
-Trade/transfer UI and rules (pricing, restocking, capacity), spending `CurrencyComponent.Gold`
-acquired via loot -- see `PLAN-storage-containers.md`. Reuses `Game/Modules/Inventory/` storage the
-same way `TreasureChest` does (a shop is just another entity with `InventoryItemStackComponent`
-stacks) and `SecondaryInventoryWindowController`/`SecondaryInventoryWindow`, both written generically
-enough already to host a shop's inventory alongside the player's own. Credits reserved for a
-late-game feature, no consumer yet.
-
 #### Experience module
 
 XP for kills (`EntityDiedEvent`) and quests (blocked on quest completion existing as a mechanic).
@@ -116,6 +107,14 @@ alongside `DeadComponent`) or on a timeout since last hit (avoids crediting an o
 
 V1: fill own inventory from a nearby corpse until full (`InventoryCapacity.MaxNonPlayerStackCount`), no
 preference. V2: preference by combat style/item rarity, once either concept exists.
+
+#### NPCs use shops
+
+Goblins/Fairies/Ghosts buying and selling at a `Shop`/`PotionShop`/`GeneralShop` autonomously via
+`ShopActions.TryBuyFromShop`/`TrySellToShop` -- see `PLAN-shops.md` (the player-only version already
+shipped). Needs actual economic decision-making (what to sell for spare Gold, what to buy when low
+on supplies) -- blocked on the NPC behavior composition item (this file's own Low Priority section),
+which is where that decision would live once it exists.
 
 #### Destroyed items
 
@@ -645,6 +644,15 @@ partial-amount drag.
 `SpriteRenderer.Draw` always stretches to fill the tile footprint exactly -- wrong for character
 sprites (confirmed in-game: player needs to render larger, goblins smaller). Needs a per-entity/
 per-`SpriteComponent` scale factor applied in `MapWindow.TryDrawEntityVisual`.
+
+#### Multi-tile sprites
+
+No entity's sprite spans more than one tile today -- `TransformComponent.Size` already carries a
+footprint (e.g. a corpse/tiny-entity grid already reasons about it), but `MapWindow`'s draw path
+always renders one sprite stretched to exactly one tile's own `CurrentTileSize`, never a single
+sprite spanning the whole footprint. `Shop`'s own `Sprite = "Shop-1x1"` (`PLAN-shops.md`) is a
+deliberately-named 1x1 placeholder for this -- a real multi-tile shop sprite (e.g. "Shop-2x2") is
+the concrete first implementation once this lands.
 
 #### Status effect stack count on the player's status bar
 

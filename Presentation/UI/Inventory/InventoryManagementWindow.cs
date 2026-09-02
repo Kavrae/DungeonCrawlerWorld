@@ -1,4 +1,5 @@
 using Engine.ECS.Components;
+using Engine.Events;
 using Game.Modules;
 using Game.Modules.Inventory;
 using Game.Modules.Inventory.Components;
@@ -46,7 +47,8 @@ public sealed class InventoryManagementWindow(
     ItemCatalog itemCatalog,
     World world,
     ContextMenuController contextMenuController,
-    MapViewState mapViewState) : Window(fontService, elementPoolService, labelRenderer)
+    MapViewState mapViewState,
+    EventBus? eventBus = null) : Window(fontService, elementPoolService, labelRenderer)
 {
     private TabbedContent _tabbedContent = null!;
     private CurrencyRowContent _currencyRowContent = null!;
@@ -71,7 +73,7 @@ public sealed class InventoryManagementWindow(
         var tagCounts = InventoryTagQueries.GetTagCounts(componentManager, itemCatalog, entityId);
         _currentTags = ToTagSet(tagCounts);
         _tabbedContent = new TabbedContent(BuildTabDefinitions(tagCounts), elementPoolService, fontService, labelRenderer, WindowPalette.PanelBackgroundColor);
-        _currencyRowContent = new CurrencyRowContent(entityId, componentManager, world, contextMenuController, elementPoolService, fontService, labelRenderer, spriteSheetService, spriteRenderer, _getSecondaryTargetEntityId);
+        _currencyRowContent = new CurrencyRowContent(entityId, componentManager, world, contextMenuController, elementPoolService, fontService, labelRenderer, spriteSheetService, spriteRenderer, _getSecondaryTargetEntityId, eventBus);
         SetContent(_tabbedContent);
         SetFooterContent(_currencyRowContent, CurrencyRowContent.Height);
 

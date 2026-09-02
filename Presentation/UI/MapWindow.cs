@@ -14,6 +14,7 @@ using Game.Modules.Health;
 using Game.Modules.Health.Components;
 using Game.Modules.Inventory;
 using Game.Modules.Inventory.Components;
+using Game.Modules.Shops.Components;
 using Game.Modules.StatModifiers;
 using Game.Modules.StatModifiers.Components;
 using Game.World;
@@ -70,6 +71,7 @@ public sealed class MapWindow : Window
     private readonly MultiComponentPool<InventoryItemStackComponent>? _inventoryStacks;
     private readonly PackedComponentPool<LootedComponent>? _lootedPool;
     private readonly PackedComponentPool<ContainerComponent>? _containerPool;
+    private readonly PackedComponentPool<ShopComponent>? _shopPool;
     private readonly PackedComponentPool<ActionLockComponent> _actionLockPool;
     private readonly DirectComponentPool<DisplayTextComponent> _displayTextPool;
 
@@ -120,6 +122,9 @@ public sealed class MapWindow : Window
     /// than one with a "Loot" option that does nothing.
     /// </summary>
     public Action<int>? OnCorpseClicked { get; set; }
+
+    /// <summary>Invoked with a shop's entity id when the player selects "Shop" from its right-click context menu (see AddEntityGroup) -- same settable-delegate shape as OnCorpseClicked, wired by ShellBootstrapper to ShopWindowController.OpenShop.</summary>
+    public Action<int>? OnShopClicked { get; set; }
 
     /// <summary>
     /// Invoked whenever a map-tile click sets Basic inspection (see SelectMapNodes) or the
@@ -196,6 +201,9 @@ public sealed class MapWindow : Window
             : null;
         _containerPool = componentManager.IsRegistered<ContainerComponent>()
             ? componentManager.GetPackedPool<ContainerComponent>()
+            : null;
+        _shopPool = componentManager.IsRegistered<ShopComponent>()
+            ? componentManager.GetPackedPool<ShopComponent>()
             : null;
         _actionLockPool = actionLockPool;
         _displayTextPool = componentManager.GetDirectPool<DisplayTextComponent>();
@@ -994,14 +1002,24 @@ public sealed class MapWindow : Window
         }
     }
 
-    /// <summary>Appends one contributor's own group to the tile's stacked menu -- a read-only name header, then whatever options it offers. Works identically for a creature occupant or the terrain entity itself, since both are just an entityId with a DisplayTextComponent -- terrain simply never has a DeadComponent or ContainerComponent, so it never picks up "Loot".</summary>
+    /// <summary>Appends one contributor's own group to the tile's stacked menu -- a read-only name header, then whatever options it offers. Works identically for a creature occupant or the terrain entity itself, since both are just an entityId with a DisplayTextComponent -- terrain simply never has a DeadComponent/ContainerComponent/ShopComponent, so it never picks up "Loot"/"Shop".</summary>
     private void AddEntityGroup(List<ContextMenuOption> options, int entityId)
     {
         options.Add(ContextMenuOption.Header(ResolveName(entityId)));
 
-        if ((_deadPool?.Has(entityId) == true || _containerPool?.Has(entityId) == true) && OnCorpseClicked is { } onCorpseClicked)
+        var isShop = _shopPool?.Has(entityId) == true;
+
+        // A shop is still a ContainerComponent (see Shop's own doc comment), but gets its own
+        // "Shop" verb instead of the generic corpse/chest "Loot" one -- excluded here so a shop
+        // never offers both.
+        if ((_deadPool?.Has(entityId) == true || (_containerPool?.Has(entityId) == true && !isShop)) && OnCorpseClicked is { } onCorpseClicked)
         {
             options.Add(new ContextMenuOption("Loot", null, IsAdjacentToPlayer(entityId), () => onCorpseClicked.Invoke(entityId)));
+        }
+
+        if (isShop && OnShopClicked is { } onShopClicked)
+        {
+            options.Add(new ContextMenuOption("Shop", null, IsAdjacentToPlayer(entityId), () => onShopClicked.Invoke(entityId)));
         }
 
         options.Add(new ContextMenuOption("Inspect", null, !ActionLockGate.IsBlocked(_actionLockPool, _world.PlayerEntityId), () => InspectEntity(entityId)));

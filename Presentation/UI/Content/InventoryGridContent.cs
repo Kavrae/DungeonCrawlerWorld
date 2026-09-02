@@ -2,8 +2,11 @@ using Engine.ECS.Components;
 using Engine.ECS.Components.Stores;
 using Game.Modules;
 using Game.Modules.Actions.Activators;
+using Game.Modules.Currency.Components;
 using Game.Modules.Inventory;
 using Game.Modules.Inventory.Components;
+using Game.Modules.Shops;
+using Game.Modules.Shops.Components;
 using Game.World;
 using Microsoft.Xna.Framework;
 using Microsoft.Xna.Framework.Input;
@@ -46,8 +49,13 @@ public sealed class InventoryGridContent(
     Action<int, Guid> onItemSelected,
     Action<int, Guid> onCompareRequested) : IElementContent, IInventoryDropTarget
 {
-    public static readonly Vector2 CellSize = new(24, 24);
-    private const float CellGap = 1f;
+    /// <summary>50% larger than the original (24,24) for readability. internal, not private -- SecondaryInventoryWindow/ShopWindow both derive their own fixed grid width from this and CellGap rather than hand-duplicating the numbers (see their own doc comments on why that duplication was a landmine).</summary>
+    public static readonly Vector2 CellSize = new(36, 36);
+
+    /// <summary>Width multiplier for a shop-mode cell (see ShopItemStackCell) -- 4x wider than CellSize at the same height, room for sprite + name + price instead of just an icon. internal, not private -- ShopWindow derives its own fixed grid width from this and CellSize/CellGap rather than hand-duplicating the number.</summary>
+    internal const float ShopCellWidthMultiplier = 4f;
+
+    internal const float CellGap = 1f;
 
     /// <summary>The entity whose inventory this grid displays -- what UiInputController's content-drag path reads to identify a drop target's owning entity (see InventoryActions.TryTransferStack).</summary>
     public int EntityId => entityId;
@@ -56,6 +64,8 @@ public sealed class InventoryGridContent(
     private static readonly Vector2 PopupGap = new(1, 1);
 
     private readonly MultiComponentPool<InventoryItemStackComponent> _stacks = componentManager.GetMultiPool<InventoryItemStackComponent>();
+    private readonly PackedComponentPool<ShopComponent>? _shopPool = componentManager.IsRegistered<ShopComponent>() ? componentManager.GetPackedPool<ShopComponent>() : null;
+    private readonly PackedComponentPool<CurrencyComponent>? _currencyPool = componentManager.IsRegistered<CurrencyComponent>() ? componentManager.GetPackedPool<CurrencyComponent>() : null;
     private readonly List<InventoryItemStackComponent> _reusableStacks = [];
     private readonly List<(InventoryItemStackComponent Stack, ItemDefinition Definition)> _reusableVisibleEntries = [];
     private readonly Dictionary<Guid, List<int>> _reusableGroupIndices = [];
@@ -206,13 +216,25 @@ public sealed class InventoryGridContent(
         // entityId's inventory grid" regardless of which of the two hosting patterns built it.
         hostWindow.Tag = this;
 
+        _isShopMode = mapViewState.OpenShopEntityId is not null;
         RebuildCells();
         _versionWatcher.HasChanged(_stacks.GetEntityVersion(entityId));
     }
 
+    /// <summary>Whichever cell type/size is currently active -- ShopItemStackCell at 4x width while a shop is open (see MapViewState.OpenShopEntityId), plain InventoryItemStackCell at CellSize otherwise. Read by both this grid's own layout (RebuildCells/ComputeColumnCount) and, transiently, by whatever triggered the mode change.</summary>
+    private bool _isShopMode;
+
+    private Vector2 ActiveCellSize => _isShopMode ? new Vector2(CellSize.X * ShopCellWidthMultiplier, CellSize.Y) : CellSize;
+
     public void Update(GameTime gameTime)
     {
-        if (_versionWatcher.HasChanged(_stacks.GetEntityVersion(entityId)))
+        var shopModeNow = mapViewState.OpenShopEntityId is not null;
+        if (shopModeNow != _isShopMode)
+        {
+            _isShopMode = shopModeNow;
+            RebuildCells();
+        }
+        else if (_versionWatcher.HasChanged(_stacks.GetEntityVersion(entityId)))
         {
             RebuildCells();
         }
@@ -231,9 +253,24 @@ public sealed class InventoryGridContent(
         }
     }
 
-    /// <summary>Direct per-cell field set every frame, no rebuild -- mirrors UpdateSelection exactly. None (not compare-armed) for every cell when MapViewState.CompareRequiredActivatorType is null; otherwise Ineligible for a Merged Stack cell (no single stack to add) or one whose effective item's Activator concrete type doesn't match, Eligible when it does.</summary>
+    /// <summary>
+    /// Direct per-cell field set every frame, no rebuild -- mirrors UpdateSelection exactly. Shop
+    /// mode takes priority over Item Details Comparison (the two are never both meaningfully
+    /// active for the same grid in practice, and a shop's own buy/sell eligibility is the more
+    /// urgent signal while one is open): while MapViewState.OpenShopEntityId is set, every cell's
+    /// CompareState instead reflects shop trade eligibility (see UpdateShopEligibilityState).
+    /// Otherwise None (not compare-armed) for every cell when MapViewState.CompareRequiredActivatorType
+    /// is null; Ineligible for a Merged Stack cell (no single stack to add) or one whose effective
+    /// item's Activator concrete type doesn't match, Eligible when it does.
+    /// </summary>
     private void UpdateCompareState()
     {
+        if (mapViewState.OpenShopEntityId is { } shopEntityId)
+        {
+            UpdateShopEligibilityState(shopEntityId);
+            return;
+        }
+
         foreach (var cell in _cells)
         {
             if (mapViewState.CompareRequiredActivatorType is not { } requiredType)
@@ -251,6 +288,49 @@ public sealed class InventoryGridContent(
             }
 
             cell.CompareState = definition.Activator?.GetType() == requiredType ? CellCompareState.Eligible : CellCompareState.Ineligible;
+        }
+    }
+
+    /// <summary>
+    /// Eligible when this cell's item can be traded with shopEntityId's own ShopComponent (tag
+    /// match) AND whichever side would be paying Gold can afford it -- the shop's own grid checks
+    /// the player's Gold (a purchase), the player's own grid checks the shop's Gold (a sale). A
+    /// Merged Stack cell (no single stack to price) is always Ineligible, same as compare mode's
+    /// own handling. Ineligible cells grey out (existing isGreyedOut logic) and refuse to drag/
+    /// Give/Take (see UiInputController.TryStartContentDrag and BuildItemContextMenu below) --
+    /// closes the currency-drain-style exploit a naive reuse of plain Give/Take would otherwise
+    /// open for wrong-tag or unaffordable trades.
+    /// </summary>
+    private void UpdateShopEligibilityState(int shopEntityId)
+    {
+        if (_shopPool is null || _currencyPool is null || !_shopPool.TryGetReadonly(shopEntityId, out var shop))
+        {
+            foreach (var cell in _cells)
+            {
+                cell.CompareState = CellCompareState.Ineligible;
+            }
+
+            return;
+        }
+
+        var isThisGridTheShop = entityId == shopEntityId;
+        var payerEntityId = isThisGridTheShop ? world.PlayerEntityId : shopEntityId;
+        _currencyPool.TryGetReadonly(payerEntityId, out var payerCurrency);
+
+        foreach (var cell in _cells)
+        {
+            if (cell.StackInstanceId is not { } stackInstanceId ||
+                !InventoryQueries.TryFindByStackInstanceId(_stacks, cell.EntityId, stackInstanceId, out var stack) ||
+                !InventoryQueries.TryResolveEffectiveItem(itemCatalog, in stack, out var definition) ||
+                !ShopActions.CanTrade(shop, definition))
+            {
+                cell.CompareState = CellCompareState.Ineligible;
+                continue;
+            }
+
+            var perItemPrice = isThisGridTheShop ? ShopActions.ComputeBuyPrice(shop, definition) : ShopActions.ComputeSellPrice(shop, definition);
+            var totalPrice = perItemPrice * stack.Quantity;
+            cell.CompareState = payerCurrency.Gold >= totalPrice ? CellCompareState.Eligible : CellCompareState.Ineligible;
         }
     }
 
@@ -421,17 +501,45 @@ public sealed class InventoryGridContent(
 
         options.Add(new ContextMenuOption("Compare", null, Enabled: true, () => onCompareRequested(cell.EntityId, stackInstanceId)));
 
-        if (getSecondaryTargetEntityId() is { } secondaryTargetEntityId)
+        // While a shop is open, every cell's CompareState instead reflects shop trade eligibility
+        // (see UpdateShopEligibilityState) -- Ineligible (wrong tag, or the paying side can't
+        // afford it) means Give/Take must not even be offered, closing the same currency-drain-
+        // style exploit a naive reuse of plain Give/Take would otherwise open.
+        var isShopIneligible = mapViewState.OpenShopEntityId is not null && cell.CompareState == CellCompareState.Ineligible;
+
+        if (!isShopIneligible && getSecondaryTargetEntityId() is { } secondaryTargetEntityId)
         {
+            // A shop endpoint routes the same Give/Take gesture through ShopActions instead of a
+            // plain transfer -- "Give" to a shop is a sale (ShopActions.TrySellToShop), "Take"
+            // from a shop is a purchase (ShopActions.TryBuyFromShop), both moving Gold the
+            // opposite direction at the shop's own price.
             if (cell.EntityId == world.PlayerEntityId && secondaryTargetEntityId != world.PlayerEntityId)
             {
-                options.Add(new ContextMenuOption("Give", null, Enabled: true,
-                    () => InventoryActions.TryTransferStack(componentManager, cell.EntityId, secondaryTargetEntityId, stackInstanceId, world)));
+                options.Add(new ContextMenuOption("Give", null, Enabled: true, () =>
+                {
+                    if (_shopPool?.Has(secondaryTargetEntityId) == true)
+                    {
+                        ShopActions.TrySellToShop(componentManager, itemCatalog, world.PlayerEntityId, secondaryTargetEntityId, stackInstanceId, world);
+                    }
+                    else
+                    {
+                        InventoryActions.TryTransferStack(componentManager, cell.EntityId, secondaryTargetEntityId, stackInstanceId, world);
+                    }
+                }));
             }
             else if (cell.EntityId == secondaryTargetEntityId && secondaryTargetEntityId != world.PlayerEntityId)
             {
-                options.Add(new ContextMenuOption("Take", null, Enabled: true,
-                    () => InventoryActions.TryTransferStack(componentManager, cell.EntityId, world.PlayerEntityId, stackInstanceId, world)));
+                options.Add(new ContextMenuOption("Take", null, Enabled: true, () =>
+                {
+                    if (_shopPool?.Has(secondaryTargetEntityId) == true)
+                    {
+                        ShopActions.TryBuyFromShop(componentManager, itemCatalog, world.PlayerEntityId, secondaryTargetEntityId, stackInstanceId, world);
+                    }
+                    else
+                    {
+                        InventoryActions.TryTransferStack(componentManager, cell.EntityId, world.PlayerEntityId, stackInstanceId, world);
+                    }
+                }));
             }
         }
 
@@ -476,6 +584,7 @@ public sealed class InventoryGridContent(
         VisibleItemCount = _reusableCellEntries.Count;
 
         var columns = ComputeColumnCount();
+        var cellSize = ActiveCellSize;
 
         for (var i = 0; i < _reusableCellEntries.Count; i++)
         {
@@ -483,20 +592,33 @@ public sealed class InventoryGridContent(
 
             var column = i % columns;
             var row = i / columns;
-            var position = new Vector2(column * (CellSize.X + CellGap), row * (CellSize.Y + CellGap));
+            var position = new Vector2(column * (cellSize.X + CellGap), row * (cellSize.Y + CellGap));
             var isExpandedMember = _expandedItemDefinitionId is not null && entry.Definition.Id == _expandedItemDefinitionId && !entry.MergedStackBadgeVisible;
 
-            var cell = elementPoolService.CreateElement<InventoryItemStackCell>(_hostWindow, new ElementOptions
+            var options = new ElementOptions
             {
                 Hierarchy = new ElementHierarchyOptions { CanContainChildren = false },
                 // An expanded group's member cells skip their own normal border entirely -- the
                 // group border (below) replaces it, drawn only on the group's outer perimeter, so
                 // two adjacent members share a clean, unbroken join with no line between them.
-                Layout = new ElementLayoutOptions { RelativePosition = position, Size = CellSize, DisplayMode = ElementDisplayMode.Fixed },
+                Layout = new ElementLayoutOptions { RelativePosition = position, Size = cellSize, DisplayMode = ElementDisplayMode.Fixed },
                 Chrome = new ElementChromeOptions { ShowBorder = !isExpandedMember, CanUserFocus = false },
                 Content = new ElementContentOptions { ContentColor = Color.Transparent },
-            });
-            cell.Configure(entityId, entry.Definition.Id, entry.StackInstanceId, entry.Definition.SpriteName, entry.Definition.Glyph, entry.Definition.GlyphColor, entry.Quantity, entry.ChargeText, entry.IsDisabled, entry.IsDivergent, entry.MergedStackBadgeVisible, CellSize);
+            };
+
+            InventoryItemStackCell cell = _isShopMode
+                ? elementPoolService.CreateElement<ShopItemStackCell>(_hostWindow, options)
+                : elementPoolService.CreateElement<InventoryItemStackCell>(_hostWindow, options);
+
+            cell.Configure(entityId, entry.Definition.Id, entry.StackInstanceId, entry.Definition.SpriteName, entry.Definition.Glyph, entry.Definition.GlyphColor, entry.Quantity, entry.ChargeText, entry.IsDisabled, entry.IsDivergent, entry.MergedStackBadgeVisible, cellSize);
+
+            if (cell is ShopItemStackCell shopCell)
+            {
+                var (perItemPrice, totalPrice) = ComputeShopPrices(entry.Definition, entry.Quantity);
+                shopCell.SetItemName(entry.Definition.Name);
+                shopCell.SetPrice(totalPrice, perItemPrice);
+            }
+
             cell.Clicked += OnCellClicked;
             cell.OnRightClicked = position =>
             {
@@ -523,6 +645,20 @@ public sealed class InventoryGridContent(
                 cell.SetGroupBorderEdges(top, bottom, left, right);
             }
         }
+
+        // A freshly created/pooled-and-reused cell's own CompareState defaults to (or still
+        // carries, from its prior use in the pool) a stale value -- Configure never touches it,
+        // only this per-frame sync does. Every RebuildCells call site used to rely on Update's own
+        // later UpdateCompareState call to fix that up the same frame, but Initialize calls
+        // RebuildCells directly with no such follow-up, so a grid's very first render (e.g. right
+        // when a shop window opens, or right after a purchase lands a new stack in the player's
+        // own inventory and triggers a rebuild) could draw one frame -- or, worse, persist until
+        // the next unrelated Update -- with every cell showing whatever eligibility state its
+        // pooled instance happened to carry over. Calling it here, unconditionally, at the end of
+        // every rebuild closes that gap regardless of which caller triggered it (confirmed live:
+        // a just-purchased item read as disabled in the player's own grid until manually
+        // triggering an unrelated rebuild).
+        UpdateCompareState();
     }
 
     private bool IsExpandedMemberAt(int index) =>
@@ -530,8 +666,24 @@ public sealed class InventoryGridContent(
         _reusableCellEntries[index].Definition.Id == _expandedItemDefinitionId &&
         !_reusableCellEntries[index].MergedStackBadgeVisible;
 
-    private int ComputeColumnCount() =>
-        System.Math.Max(1, (int)((_hostWindow.ContentSize.X + CellGap) / (CellSize.X + CellGap)));
+    private int ComputeColumnCount()
+    {
+        var cellSize = ActiveCellSize;
+        return System.Math.Max(1, (int)((_hostWindow.ContentSize.X + CellGap) / (cellSize.X + CellGap)));
+    }
+
+    /// <summary>(0,0) outside shop mode or when the open shop's own ShopComponent can't be resolved -- callers only ever read this while building a ShopItemStackCell, which only happens while _isShopMode is true. isThisGridTheShop mirrors UpdateShopEligibilityState's own direction rule: this grid showing the shop's own stock prices a purchase (ComputeBuyPrice), the player's own grid prices a sale (ComputeSellPrice).</summary>
+    private (int PerItemPrice, int TotalPrice) ComputeShopPrices(ItemDefinition definition, int quantity)
+    {
+        if (mapViewState.OpenShopEntityId is not { } shopEntityId || _shopPool is null || !_shopPool.TryGetReadonly(shopEntityId, out var shop))
+        {
+            return (0, 0);
+        }
+
+        var isThisGridTheShop = entityId == shopEntityId;
+        var perItemPrice = isThisGridTheShop ? ShopActions.ComputeBuyPrice(shop, definition) : ShopActions.ComputeSellPrice(shop, definition);
+        return (perItemPrice, perItemPrice * quantity);
+    }
 
     /// <summary>
     /// Groups _reusableVisibleEntries by ItemDefinitionId when GroupDivergedStacks is on --
@@ -546,7 +698,15 @@ public sealed class InventoryGridContent(
     {
         _reusableCellEntries.Clear();
 
-        if (!_groupDivergedStacks)
+        // Shop mode always shows one cell per physical stack, regardless of GroupDivergedStacks --
+        // a Merged Stack cell has no single StackInstanceId (see InventoryItemStackCell's own doc
+        // comment), so it can never actually be priced/given/taken/dragged to or from a shop
+        // (BuildItemContextMenu and UiInputController's drag path both require one). The player's
+        // own starting kit and a shop's own random stock draw from the same item catalog, so
+        // buying something the player already carries some of (the common case, not an edge one)
+        // would otherwise collapse into an untradeable Merged Stack the instant it landed --
+        // confirmed live: a freshly bought item read as permanently disabled for selling back.
+        if (!_groupDivergedStacks || _isShopMode)
         {
             foreach (var (stack, definition) in _reusableVisibleEntries)
             {

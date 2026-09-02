@@ -223,6 +223,32 @@ Full design/rationale: `PLAN-loot-currency.md` -- builds directly on the Currenc
   its source size, stretching the sprite horizontally -- fixed by adding
   `CurrencyElement.IconSize` (just the square icon) and reading that instead.
 
+### Shops
+
+Full design/rationale: `PLAN-shops.md` -- builds on the Currency/container work in
+`PLAN-storage-containers.md`/`PLAN-loot-currency.md`.
+
+- `ItemDefinition.Value` (Gold worth) + `Game/Modules/Shops/` (`ShopComponent`, `ShopActions.
+  TryBuyFromShop`/`TrySellToShop`, check-then-commit). `Shop`/`PotionShop`/`GeneralShop`
+  (`Game/Blueprints/Objects/`) composed via `CompositeBlueprint`, not inheritance -- same
+  shell+stock-part shape `GoblinEngineerBlueprint` established for race+class.
+  `ShopWindow`/`ShopWindowController` (`Presentation/UI/Shops/`) mirror `SecondaryInventoryWindow`/
+  `SecondaryInventoryWindowController` as a template, not a shared base -- a shop's summary/close
+  behavior differs enough (no `LootedComponent`, drives `MapViewState.OpenShopEntityId` instead)
+  that extending would have cost more than a focused sibling.
+- Player can Give Gold to a shop, never Take it back (`CurrencyRowContent`/`UiInputController` both
+  gate on `ShopComponent`). `InventoryGridContent.CellSize` bumped 24->36; a new `ShopItemStackCell`
+  (`InventoryItemStackCell` un-sealed for this) swaps in while a shop is open, reusing
+  `CellCompareState`'s existing grey-out/green-glow language for trade eligibility (tag + Gold)
+  instead of Item Details Comparison.
+- Live-testing find worth flagging generically: a display grid's own default same-item stack
+  grouping (`InventoryGridContent.GroupDivergedStacks`) can silently produce an untradeable "Merged
+  Stack" cell (no single `StackInstanceId`) whenever two physical stacks of one item coexist --
+  routine here since a shop's own random stock draws from the same catalog the player's starting
+  kit does. Any future UI built on top of grouped grid cells should check whether its own
+  per-cell action needs a real `StackInstanceId` before assuming a merged cell is just a cosmetic
+  concern.
+
 ### Toggle poison aura ability -- item side
 
 Toxic Idol (`Game/Modules/Inventory/Definitions/ToxicIdol.cs`) is the first user of `AuraSourceGrant`'s

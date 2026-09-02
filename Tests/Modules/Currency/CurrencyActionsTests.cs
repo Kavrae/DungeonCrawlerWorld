@@ -113,4 +113,56 @@ public sealed class CurrencyActionsTests
 
         Assert.IsFalse(result);
     }
+
+    [TestMethod]
+    public void TryTransfer_ExactAmount_MovesOnlyThatAmountLeavingTheRemainderOnSource()
+    {
+        var manager = CreateRegisteredManager();
+        manager.Merge(0, new CurrencyComponent(gold: 10, credits: 0));
+        manager.Merge(1, new CurrencyComponent(gold: 2, credits: 0));
+
+        var result = CurrencyActions.TryTransfer(manager, sourceEntityId: 0, destinationEntityId: 1, CurrencyType.Gold, amount: 7);
+
+        Assert.IsTrue(result);
+        var pool = manager.GetPackedPool<CurrencyComponent>();
+        Assert.AreEqual(3, pool.GetReadonly(0).Gold, "Source should keep the balance it didn't hand over.");
+        Assert.AreEqual(9, pool.GetReadonly(1).Gold);
+    }
+
+    [TestMethod]
+    public void TryTransfer_ExactAmount_InsufficientBalance_ReturnsFalseAndChangesNothing()
+    {
+        var manager = CreateRegisteredManager();
+        manager.Merge(0, new CurrencyComponent(gold: 5, credits: 0));
+        manager.Merge(1, new CurrencyComponent(gold: 2, credits: 0));
+
+        var result = CurrencyActions.TryTransfer(manager, sourceEntityId: 0, destinationEntityId: 1, CurrencyType.Gold, amount: 6);
+
+        Assert.IsFalse(result);
+        var pool = manager.GetPackedPool<CurrencyComponent>();
+        Assert.AreEqual(5, pool.GetReadonly(0).Gold);
+        Assert.AreEqual(2, pool.GetReadonly(1).Gold);
+    }
+
+    [TestMethod]
+    public void TryTransfer_ExactAmount_ZeroOrNegative_IsANoOpThatReturnsTrue()
+    {
+        var manager = CreateRegisteredManager();
+        manager.Merge(0, new CurrencyComponent(gold: 5, credits: 0));
+
+        Assert.IsTrue(CurrencyActions.TryTransfer(manager, sourceEntityId: 0, destinationEntityId: 1, CurrencyType.Gold, amount: 0));
+        Assert.IsTrue(CurrencyActions.TryTransfer(manager, sourceEntityId: 0, destinationEntityId: 1, CurrencyType.Gold, amount: -3));
+        Assert.AreEqual(5, manager.GetPackedPool<CurrencyComponent>().GetReadonly(0).Gold, "A zero/negative-amount transfer must not touch either balance.");
+    }
+
+    [TestMethod]
+    public void TryTransfer_ExactAmount_SameEntity_ReturnsFalse()
+    {
+        var manager = CreateRegisteredManager();
+        manager.Merge(0, new CurrencyComponent(gold: 5, credits: 0));
+
+        var result = CurrencyActions.TryTransfer(manager, sourceEntityId: 0, destinationEntityId: 0, CurrencyType.Gold, amount: 1);
+
+        Assert.IsFalse(result);
+    }
 }

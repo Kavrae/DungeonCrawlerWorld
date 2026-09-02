@@ -59,6 +59,9 @@ public sealed class MapViewState
 
     /// <summary>Non-null while Item Details Comparison is armed (see ItemComparisonController.Arm/Disarm/ClearComparison) -- the anchor item's own Activator concrete type, the eligibility gate every other item must match to be added. InventoryGridContent reads this every frame to grey out ineligible cells and highlight eligible ones (see InventoryItemStackCell.CompareState).</summary>
     public Type? CompareRequiredActivatorType;
+
+    /// <summary>The currently-open shop's own entity id, if any -- set/cleared by ShopWindowController.OpenShop/its own Closed handler, the same shared cross-window flag CompareRequiredActivatorType above already is. Not yet read by anything (a future pass switches both the shop's own grid and the player's own inventory grid to the wider, price-showing ShopItemStackCell layout while this is set).</summary>
+    public int? OpenShopEntityId;
 }
 
 /// <summary>

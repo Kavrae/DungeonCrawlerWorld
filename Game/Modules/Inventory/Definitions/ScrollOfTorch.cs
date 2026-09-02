@@ -42,6 +42,7 @@ public static class ScrollOfTorch
         Description: "A scroll that marks an area with a bright, temporary light.",
         Summary: "Marks the target area with a temporary torch light.",
         MaxStackSize: MaximumStackSize,
+        GoldValue: 14,
         Activator: new ScrollActivator(
             new TargetingSpec(Shape: TargetShape.Burst, Range: 5, AreaSize: 3),
             new ActionTiming(ActionTimingCategory.Immediate, CooldownFrames: null),

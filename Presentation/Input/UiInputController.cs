@@ -1,8 +1,11 @@
 using Engine.ECS.Components;
+using Engine.ECS.Components.Stores;
 using Engine.Utilities;
 using Game.Modules.Actions;
 using Game.Modules.Currency;
 using Game.Modules.Inventory;
+using Game.Modules.Shops;
+using Game.Modules.Shops.Components;
 using Game.World;
 using Microsoft.Xna.Framework;
 using Microsoft.Xna.Framework.Input;
@@ -143,6 +146,15 @@ public sealed class UiInputController
     /// <summary>See _componentManager -- passed straight through to InventoryActions' capacity check for a non-player transfer destination.</summary>
     private readonly IPlayerQuery? _playerQuery;
 
+    /// <summary>Needed only for a content-drag whose origin or destination is a shop (see ResolveContentDrag's ShopActions.TryBuyFromShop/TrySellToShop branch) -- null in test setups that don't wire one, in which case such a drag simply falls through to the plain, non-priced InventoryActions.TryTransferStack.</summary>
+    private readonly ItemCatalog? _itemCatalog;
+
+    /// <summary>Derived from _componentManager, not a separate constructor parameter -- same conditional-registration convention as every other optional pool in this codebase. Null whenever ShopComponent isn't registered at all (e.g. most test setups), in which case no drag ever reads as touching a shop.</summary>
+    private readonly PackedComponentPool<ShopComponent>? _shopPool;
+
+    /// <summary>Needed only to check MapViewState.OpenShopEntityId -- while a shop is open, TryStartContentDrag refuses to pick up a cell InventoryGridContent has already marked CellCompareState.Ineligible (see InventoryGridContent.UpdateShopEligibilityState), the same "can't drag what you can't trade" gate BuildItemContextMenu applies to Give/Take. Null in test setups that don't wire one, in which case a content-drag never reads as shop-gated.</summary>
+    private readonly MapViewState? _mapViewState;
+
     /// <summary>Owns the single shared ContextMenu popup -- null in test setups that don't build one, in which case right-click context menus simply never open and an already-open one (there can't be, without this) never needs dismissing.</summary>
     private readonly ContextMenuController? _contextMenuController;
 
@@ -209,7 +221,7 @@ public sealed class UiInputController
     /// window to this same list afterward. Passing the list itself (not a snapshot/copy) is what
     /// makes that work -- this class only ever reads through the reference, never replaces it.
     /// </summary>
-    public UiInputController(UiLayerStack layers, Vector2 screenSize, HotbarController? hotbarController = null, ComponentManager? componentManager = null, IPlayerQuery? playerQuery = null, ContextMenuController? contextMenuController = null, ItemDetailsWindowController? itemDetailsWindowController = null, ItemComparisonController? itemComparisonController = null)
+    public UiInputController(UiLayerStack layers, Vector2 screenSize, HotbarController? hotbarController = null, ComponentManager? componentManager = null, IPlayerQuery? playerQuery = null, ContextMenuController? contextMenuController = null, ItemDetailsWindowController? itemDetailsWindowController = null, ItemComparisonController? itemComparisonController = null, ItemCatalog? itemCatalog = null, MapViewState? mapViewState = null)
     {
         _layers = layers;
         _screenSize = screenSize;
@@ -219,6 +231,9 @@ public sealed class UiInputController
         _contextMenuController = contextMenuController;
         _itemDetailsWindowController = itemDetailsWindowController;
         _itemComparisonController = itemComparisonController;
+        _itemCatalog = itemCatalog;
+        _mapViewState = mapViewState;
+        _shopPool = componentManager?.IsRegistered<ShopComponent>() == true ? componentManager.GetPackedPool<ShopComponent>() : null;
 
         // Subscribing is safe to do unconditionally and permanently -- SDL simply never raises
         // SDL_TEXTINPUT while text input is stopped (see SetFocus's Start/StopTextInput calls
@@ -778,6 +793,14 @@ public sealed class UiInputController
         // _contentDragMergedItemDefinitionId (its own ItemDefinitionId, for DragGhostContent's
         // icon) so ResolveContentDrag/IsContentDragBlockedAt can refuse the bind specifically,
         // without refusing the drag itself.
+        // While a shop is open, a cell InventoryGridContent has marked Ineligible (wrong tag, or
+        // the paying side can't afford it -- see InventoryGridContent.UpdateShopEligibilityState)
+        // must not even start a drag, the same gate BuildItemContextMenu applies to Give/Take.
+        if (_activeInteraction.Element is InventoryItemStackCell { CompareState: CellCompareState.Ineligible } && _mapViewState?.OpenShopEntityId is not null)
+        {
+            return;
+        }
+
         if (_activeInteraction.Element is InventoryItemStackCell cell)
         {
             if (cell.StackInstanceId is { } cellStackInstanceId)
@@ -790,10 +813,21 @@ public sealed class UiInputController
             }
 
             _contentDragOriginEntityId = cell.EntityId;
-            _contentDragSourceSize = cell.CurrentSize;
+
+            // Square regardless of the source cell's own shape -- a ShopItemStackCell is 4x wider
+            // than tall (see InventoryGridContent.ShopCellWidthMultiplier), and DragGhostContent
+            // draws the item's plain icon at this size, not the cell's full sprite+name+price
+            // layout, so stretching it to the cell's own width read as a squashed/distorted icon
+            // (confirmed live). An ordinary cell is already square, so Min here is a no-op for it.
+            var dragGhostDimension = System.Math.Min(cell.CurrentSize.X, cell.CurrentSize.Y);
+            _contentDragSourceSize = new Vector2(dragGhostDimension, dragGhostDimension);
             _contentDragStartMousePosition = new Vector2(clickPosition.X, clickPosition.Y);
         }
-        else if (_activeInteraction.Element is CurrencyElement currencyElement)
+        // A shop's own Gold can never be dragged away -- a player can Give money to a shop but
+        // never Take it (see CurrencyRowContent.BuildCurrencyContextMenu's own matching guard on
+        // the context-menu path); dragging the player's own currency ONTO a shop (Give) is
+        // unaffected, since that's the drop TARGET, not the drag's own origin element.
+        else if (_activeInteraction.Element is CurrencyElement currencyElement && _shopPool?.Has(currencyElement.EntityId) != true)
         {
             _contentDragCurrencyType = currencyElement.Type;
             _contentDragOriginEntityId = currencyElement.EntityId;
@@ -947,12 +981,33 @@ public sealed class UiInputController
             if (_componentManager is { } componentManager && _contentDragOriginEntityId is { } originEntityId &&
                 FindDropTargetEntityId(dropInteraction.Element) is { } destinationEntityId)
             {
+                var originIsShop = _shopPool?.Has(originEntityId) == true;
+                var destinationIsShop = _shopPool?.Has(destinationEntityId) == true;
+
                 if (_contentDragItemStackInstanceId is { } stackInstanceId)
                 {
-                    InventoryActions.TryTransferStack(componentManager, originEntityId, destinationEntityId, stackInstanceId, _playerQuery);
+                    if (originIsShop && _itemCatalog is { } buyCatalog)
+                    {
+                        // Dragged out of the shop's own grid, into the player's -- a purchase (see ShopActions.TryBuyFromShop).
+                        ShopActions.TryBuyFromShop(componentManager, buyCatalog, destinationEntityId, originEntityId, stackInstanceId, _playerQuery);
+                    }
+                    else if (destinationIsShop && _itemCatalog is { } sellCatalog)
+                    {
+                        // Dragged out of the player's own grid, into the shop's -- a sale (see ShopActions.TrySellToShop).
+                        ShopActions.TrySellToShop(componentManager, sellCatalog, originEntityId, destinationEntityId, stackInstanceId, _playerQuery);
+                    }
+                    else
+                    {
+                        InventoryActions.TryTransferStack(componentManager, originEntityId, destinationEntityId, stackInstanceId, _playerQuery);
+                    }
                 }
-                else if (_contentDragMergedItemDefinitionId is { } itemDefinitionId)
+                else if (_contentDragMergedItemDefinitionId is { } itemDefinitionId && !originIsShop && !destinationIsShop)
                 {
+                    // Shop stock never diverges (ShopStock.GrantRandomStock only ever calls
+                    // InventoryActions.AddItem, which merges same-item stacks -- see its own doc
+                    // comment), so a Merged Stack drag touching a shop shouldn't normally arise;
+                    // refusing it outright rather than falling through to an unpriced batch
+                    // transfer keeps that guarantee even if it ever did.
                     InventoryActions.TryTransferAllStacksOfItem(componentManager, originEntityId, destinationEntityId, itemDefinitionId, _playerQuery);
                 }
                 else if (_contentDragCurrencyType is { } currencyType)

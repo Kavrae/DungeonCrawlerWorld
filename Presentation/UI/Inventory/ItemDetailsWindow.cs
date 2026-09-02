@@ -26,7 +26,8 @@ namespace Presentation.UI.Inventory;
 /// from ItemComparisonStatExtraction so single-item rendering and Item Details Comparison's own
 /// per-line coloring can never drift out of sync about what lines exist); full
 /// Description (no header, omitted when blank -- same convention InspectionWindowContent.
-/// BuildDescriptionRow already uses); Tags, comma-separated (no header). Every top-level child
+/// BuildDescriptionRow already uses); GoldValue (no header, currency-gold icon + "{n}G", same
+/// icon-beside-text shape the name row uses); Tags, comma-separated (no header). Every top-level child
 /// tiles vertically via the host window's own ChildElementTileMode.Vertical (see
 /// ItemDetailsWindowController.Open), the same convention InspectionWindowContent uses, rather
 /// than manual Y math -- only the name row's own icon-beside-text layout needs an explicit
@@ -191,7 +192,48 @@ public sealed class ItemDetailsWindow(
         }
 
         BuildDivider(width);
+        BuildValueRow(_definition.GoldValue, width);
+
+        BuildDivider(width);
         BuildWrappingTextLine(width, string.Join(", ", _definition.Tags));
+    }
+
+    /// <summary>Item's base Gold worth (see ItemDefinition.GoldValue's own doc comment) -- same icon+text row shape BuildNameRow uses, but with a fixed RowHeight text line (no doubled name font) and the Currency-Gold sprite/glyph instead of the item's own.</summary>
+    private void BuildValueRow(int value, float width)
+    {
+        var rowContentHeight = System.Math.Max(IconSize, RowHeight);
+        var rowHeight = rowContentHeight + ContentPadding.Y * 2;
+        var row = ElementPoolService.CreateElement<Window>(this, new ElementOptions
+        {
+            Hierarchy = new ElementHierarchyOptions { CanContainChildren = true },
+            Layout = new ElementLayoutOptions { Size = new Vector2(width, rowHeight), MaximumSize = new Vector2(width, UnboundedChildHeight), DisplayMode = ElementDisplayMode.Fixed },
+            Chrome = new ElementChromeOptions { ShowBorder = false, ShowTitle = false, CanUserFocus = false },
+            Content = new ElementContentOptions { ContentColor = Color.Transparent },
+        });
+        AddChild(row);
+
+        var icon = ElementPoolService.CreateElement<ItemIconElement>(row, new ElementOptions
+        {
+            Hierarchy = new ElementHierarchyOptions { CanContainChildren = false },
+            Layout = new ElementLayoutOptions { RelativePosition = new Vector2(0, (rowContentHeight - IconSize) / 2f), Size = new Vector2(IconSize, IconSize), DisplayMode = ElementDisplayMode.Fixed },
+            Chrome = new ElementChromeOptions { ShowBorder = false, ShowTitle = false, CanUserFocus = false },
+            Content = new ElementContentOptions { ContentColor = Color.Transparent },
+        });
+        icon.Configure("Currency-Gold", "G", Color.Gold, new Vector2(IconSize, IconSize));
+        row.AddChild(icon);
+
+        var textX = IconSize + RowTextGap;
+        var availableWidth = width - ContentPadding.X * 2;
+        var valueLine = ElementPoolService.CreateElement<TextWindow>(row, new ElementOptions
+        {
+            Hierarchy = new ElementHierarchyOptions { CanContainChildren = false },
+            Layout = new ElementLayoutOptions { RelativePosition = new Vector2(textX, (rowContentHeight - RowHeight) / 2f), Size = new Vector2(System.Math.Max(0f, availableWidth - textX), RowHeight), DisplayMode = ElementDisplayMode.Fixed },
+            Chrome = new ElementChromeOptions { ShowBorder = false, ShowTitle = false, CanUserFocus = false },
+            Content = new ElementContentOptions { ContentColor = Color.Transparent },
+            Text = new TextOptions { Text = $"{value}G", TextColor = BodyTextColor },
+        });
+        valueLine.ContentFont = _bodyFont; // See _bodyFont's own doc comment.
+        row.AddChild(valueLine);
     }
 
     private void BuildNameRow(ItemDefinition definition, float width)

@@ -54,7 +54,8 @@ public sealed class TestMapBuilder(EntityManager entityManager, ComponentManager
     private readonly Engineer _engineer = new();
     private readonly Tank _tank = new(mathUtility);
     private readonly GoblinEngineerBlueprint _goblinEngineer = new(new Goblin(mathUtility), new Engineer());
-    private readonly TreasureChest _treasureChest = new(mathUtility);
+    private readonly GeneralShop _generalShop = new(mathUtility);
+    private readonly PotionShop _potionShop = new(mathUtility);
     private readonly PackedComponentPool<MovementComponent> _movementComponents = componentManager.GetPackedPool<MovementComponent>();
     private readonly PackedComponentPool<ActionLockComponent> _actionLocks = componentManager.GetPackedPool<ActionLockComponent>();
 
@@ -367,25 +368,18 @@ public sealed class TestMapBuilder(EntityManager entityManager, ComponentManager
         StaggerActionLock(phasingFairyId);
         PlaceAt(world, phasingFairyId, 17, 16);
 
-        // 5 treasure chests scattered near the player's own TEMPORARY spawn point (column 17,
-        // map-vertical-center row -- see FloorBuilder.CreatePlayer's wallAdjacentOrigin) so
-        // they're immediately discoverable on spawn; base column offset +3 keeps the jittered
-        // range clear of the column-16 wall corridor.
-        BuildTreasureChests(world, count: 5, column: 20, row: world.Map.Size.Y / 2, radius: 3);
+        // One of each shop near the player's own TEMPORARY spawn point (column 17, map-vertical-
+        // center row -- see FloorBuilder.CreatePlayer's wallAdjacentOrigin); column offsets keep
+        // both clear of the column-16 wall corridor and of each other.
+        BuildShop(world, _generalShop, column: 20, row: world.Map.Size.Y / 2);
+        BuildShop(world, _potionShop, column: 23, row: world.Map.Size.Y / 2);
     }
 
-    /// <summary>Scatters count treasure chests within +/-radius of (column, row) via a small per-axis jitter, the same random-placement shape as BuildTinyGoblins.</summary>
-    private void BuildTreasureChests(World.World world, int count, int column, int row, int radius)
+    private void BuildShop(World.World world, IBlueprint shop, int column, int row)
     {
-        for (var i = 0; i < count; i++)
-        {
-            var entityId = entityManager.CreateEntity();
-            _treasureChest.Build(componentManager, entityId);
-
-            var jitteredColumn = column + mathUtility.Next(-radius, radius + 1);
-            var jitteredRow = row + mathUtility.Next(-radius, radius + 1);
-            PlaceAt(world, entityId, jitteredColumn, jitteredRow);
-        }
+        var entityId = entityManager.CreateEntity();
+        shop.Build(componentManager, entityId);
+        PlaceAt(world, entityId, column, row);
     }
 
     /// <summary>Builds count plain-Goblin-glyph entities, all Tiny, all at the same cell -- for exercising MapWindow's tiny-entity grid/cap.</summary>

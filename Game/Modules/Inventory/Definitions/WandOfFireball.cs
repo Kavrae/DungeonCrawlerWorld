@@ -31,6 +31,7 @@ public static class WandOfFireball
         Effects: [new ActionEffect([new DirectDamage(MinDamage, MaxDamage), new StatusEffectGrant(StatusEffectType.Burning, StackCount: BurningStacks)])],
         Description: "A wand that hurls a bursting ball of fire, scorching everything caught in its blast and leaving them burning.",
         Summary: "Deals fire damage in a burst and inflicts Burning.",
+        GoldValue: 20,
         Activator: new WandActivator(
             new TargetingSpec(Shape: TargetShape.Burst, Range: Range, AreaSize: AreaSize),
             new ActionTiming(ActionTimingCategory.Immediate, CooldownFrames: null),

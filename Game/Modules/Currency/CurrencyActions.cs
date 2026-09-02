@@ -39,6 +39,43 @@ public static class CurrencyActions
         return true;
     }
 
+    /// <summary>
+    /// Transfers exactly amount of one currency -- the Shops chokepoint (a trade's Gold side is
+    /// never the payer's whole balance). amount &lt;= 0 is a no-op that returns true (a 0-Value item
+    /// trades for free, not a failed trade); otherwise fails with no state changed if the source
+    /// can't cover amount. Reads/writes the whole CurrencyComponent on each side same as the
+    /// whole-balance overload above, for the same reason (a partial-field Merge would zero the
+    /// untouched currency).
+    /// </summary>
+    public static bool TryTransfer(ComponentManager componentManager, int sourceEntityId, int destinationEntityId, CurrencyType type, int amount)
+    {
+        if (amount <= 0)
+        {
+            return true;
+        }
+
+        if (sourceEntityId == destinationEntityId || !componentManager.IsRegistered<CurrencyComponent>())
+        {
+            return false;
+        }
+
+        var pool = componentManager.GetPackedPool<CurrencyComponent>();
+        pool.TryGetReadonly(sourceEntityId, out var source);
+        if (GetAmount(source, type) < amount)
+        {
+            return false;
+        }
+
+        SetAmount(ref source, type, GetAmount(source, type) - amount);
+        componentManager.Merge(sourceEntityId, source);
+
+        pool.TryGetReadonly(destinationEntityId, out var destination);
+        SetAmount(ref destination, type, GetAmount(destination, type) + amount);
+        componentManager.Merge(destinationEntityId, destination);
+
+        return true;
+    }
+
     /// <summary>Every currency at once -- "Give All"/"Take All" in the Currency context menu. Iterates CurrencyType's own values rather than naming Gold/Credits individually, so a future third currency is picked up automatically.</summary>
     public static bool TryTransferAll(ComponentManager componentManager, int sourceEntityId, int destinationEntityId)
     {

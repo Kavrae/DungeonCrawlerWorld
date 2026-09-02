@@ -20,6 +20,7 @@ public sealed class AchievementModule : IGameModule
     public IReadOnlyList<Type> Dependencies { get; } = [];
 
     private static readonly IReadOnlyList<IAchievementDefinition> Definitions = [
+        new AngelInvestorAchievement(),
         new ArchivistAchievement(),
         new BigMusclesAchievement(),
         new DrinkingProblemAchievement(),

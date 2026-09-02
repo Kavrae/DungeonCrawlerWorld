@@ -21,6 +21,7 @@ using Presentation.UI.Content;
 using Presentation.UI.Inventory;
 using Presentation.UI.Looting;
 using Presentation.UI.Notifications;
+using Presentation.UI.Shops;
 using System.Diagnostics;
 
 namespace DungeonCrawlerWorld;
@@ -90,13 +91,31 @@ public static class ShellBootstrapper
         BuildUserWindows(presentation, cursorTextContent, dragGhostContent, layers);
 
         var secondaryInventory = BuildSecondaryInventoryWindowController(presentation, ecsContext, inventory, contextMenuController, mapWindow, layers);
-        mapWindow.OnCorpseClicked = secondaryInventory.OpenLoot;
-        inventory.GetSecondaryTargetEntityId = () => secondaryInventory.OpenTargetEntityId;
+        var shopWindowController = BuildShopWindowController(presentation, mapViewState, inventory, contextMenuController, mapWindow, layers);
+
+        // A corpse/container window and a shop window are never open together -- both cascade off
+        // the same player-inventory-window position (see WindowCascadePlacement.ComputePosition in
+        // OpenLoot/OpenShop), so two open at once would overlap. Opening either force-closes the
+        // other first.
+        mapWindow.OnCorpseClicked = entityId =>
+        {
+            shopWindowController.CloseIfOpen();
+            secondaryInventory.OpenLoot(entityId);
+        };
+        mapWindow.OnShopClicked = entityId =>
+        {
+            secondaryInventory.CloseIfOpen();
+            shopWindowController.OpenShop(entityId);
+        };
+
+        // OpenTargetEntityId is null on whichever of the two ISN'T currently open (mutual
+        // exclusion above guarantees at most one ever is), so this is never ambiguous.
+        inventory.GetSecondaryTargetEntityId = () => secondaryInventory.OpenTargetEntityId ?? shopWindowController.OpenTargetEntityId;
         mapWindow.OnInspectionOpened = () => inspectionWindow.SetDisplayMode(ElementDisplayMode.Fixed);
 
         var itemDetails = new ItemDetailsWindowController(presentation.ElementPoolService, componentManager, itemCatalog, inventory, contextMenuController, mapViewState, mapWindow);
         itemDetails.Initialize(layers);
-        itemDetails.GetSecondaryInventoryWindowRectangle = () => secondaryInventory.Rectangle;
+        itemDetails.GetSecondaryInventoryWindowRectangle = () => secondaryInventory.Rectangle != Rectangle.Empty ? secondaryInventory.Rectangle : shopWindowController.Rectangle;
 
         // Built after ItemDetailsWindowController (whose single pane it always uses as the
         // comparison's own anchor -- see ItemComparisonController.Arm) -- one-directional
@@ -109,6 +128,7 @@ public static class ShellBootstrapper
         itemDetails.OnCompareRequested = itemComparison.Arm; // The anchor pane's own Compare title button -- the second entry point into the same arm flow the "Compare" context-menu option already uses.
         inventory.OnCompareRequested = itemComparison.Arm;
         secondaryInventory.OnCompareRequested = itemComparison.Arm;
+        shopWindowController.OnCompareRequested = itemComparison.Arm;
 
         // The inventory's own "a real single-stack item cell was clicked" callback now branches
         // on whether Item Details Comparison is currently armed, instead of always opening the
@@ -128,8 +148,9 @@ public static class ShellBootstrapper
 
         inventory.OnItemSelected = OnItemClicked;
         secondaryInventory.OnItemSelected = OnItemClicked;
+        shopWindowController.OnItemSelected = OnItemClicked;
 
-        var inputController = new UiInputController(layers, screenSize, hotbarController, componentManager, world, contextMenuController, itemDetails, itemComparison);
+        var inputController = new UiInputController(layers, screenSize, hotbarController, componentManager, world, contextMenuController, itemDetails, itemComparison, itemCatalog, mapViewState);
         inputController.SetDefaultFocusElement(mapWindow);
         inputController.FocusElement(mapWindow);
 
@@ -378,6 +399,15 @@ public static class ShellBootstrapper
         PresentationContext presentation, EcsContext ecsContext, InventoryFolderController inventory, ContextMenuController contextMenuController, MapWindow mapWindow, UiLayerStack layers)
     {
         var controller = new SecondaryInventoryWindowController(presentation.ElementPoolService, ecsContext.ComponentManager, inventory, contextMenuController, mapWindow);
+        controller.Initialize(layers);
+        return controller;
+    }
+
+    /// <summary>Same construction shape as BuildSecondaryInventoryWindowController above -- built after InventoryFolderController and MapWindow for the same reasons.</summary>
+    private static ShopWindowController BuildShopWindowController(
+        PresentationContext presentation, MapViewState mapViewState, InventoryFolderController inventory, ContextMenuController contextMenuController, MapWindow mapWindow, UiLayerStack layers)
+    {
+        var controller = new ShopWindowController(presentation.ElementPoolService, mapViewState, inventory, contextMenuController, mapWindow);
         controller.Initialize(layers);
         return controller;
     }

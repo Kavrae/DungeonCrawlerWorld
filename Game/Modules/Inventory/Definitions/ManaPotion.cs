@@ -19,6 +19,7 @@ public static class ManaPotion
         Description: "Fully restores the target(s) mana. Oddly tastes like TV static.",
         Summary: "Restore target's mana.",
         MaxStackSize: MaximumStackSize,
+        GoldValue: 7,
         Activator: new PotionActivator(
             new TargetingSpec(Shape: TargetShape.Burst, Range: 3, AreaSize: 1),
             new ActionTiming(ActionTimingCategory.Immediate, CooldownFrames: null)));

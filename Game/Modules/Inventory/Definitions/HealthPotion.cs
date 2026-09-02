@@ -19,6 +19,7 @@ public static class HealthPotion
         Description: "Increases your health by at least 50%. Doesn't cure poison or other health-seeping conditions such as succubus-inflicted gonorrhea. So remember to wrap it up, bucko.",
         Summary: "Heal target(s) by 50%.",
         MaxStackSize: MaximumStackSize,
+        GoldValue: 5,
         Activator: new PotionActivator(
             new TargetingSpec(Shape: TargetShape.Burst, Range: 3, AreaSize: 1),
             new ActionTiming(ActionTimingCategory.Immediate, CooldownFrames: null)));

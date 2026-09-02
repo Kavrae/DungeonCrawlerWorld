@@ -15,6 +15,7 @@ namespace Game.Modules.Inventory;
 /// <param name="Summary">A brief summary of the item.</param>
 /// <param name="MaxStackSize">The maximum stack size for the item in a single inventory or hotkey slot.</param>
 /// <param name="Activator">The optional activator type for the item that determines how the effects are activated, if any.</param>
+/// <param name="GoldValue">The item's base worth in Gold -- what a shop's buy/sell price is computed from (see Game/Modules/Shops/ShopActions.cs), and shown in the item details window. Not itself a price; a shop applies its own buy/sell multiplier on top.</param>
 /// <cleanupVersion>1</cleanupVersion>
 public sealed record ItemDefinition(
     Guid Id,
@@ -27,5 +28,6 @@ public sealed record ItemDefinition(
     string Description = "",
     string Summary = "",
     int? MaxStackSize = null,
-    IActionActivator? Activator = null)
+    IActionActivator? Activator = null,
+    int GoldValue = 0)
     : ActivatableDefinition(Id, Name, SpriteName, Glyph, GlyphColor, Tags, Effects, Description, Summary);

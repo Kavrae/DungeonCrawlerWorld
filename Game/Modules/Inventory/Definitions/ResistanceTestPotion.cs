@@ -32,6 +32,7 @@ public static class ResistanceTestPotion
         Description: "A thick, insulating draught that dulls the sting of fire and venom alike, though only for a while.",
         Summary: "Reduces Burning and Poison damage taken by 50% for 10 minutes.",
         MaxStackSize: MaximumStackSize,
+        GoldValue: 8,
         Activator: new PotionActivator(
             new TargetingSpec(Shape: TargetShape.Burst, Range: 3, AreaSize: 1),
             new ActionTiming(ActionTimingCategory.Immediate, CooldownFrames: null)));

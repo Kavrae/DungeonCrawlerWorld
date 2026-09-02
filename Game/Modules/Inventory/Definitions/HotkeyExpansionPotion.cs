@@ -20,6 +20,7 @@ public static class HotkeyExpansionPotion
         Description: "Do you ever feel like you just don't have enough menus blocking your view? Well lets fix that! Lets add 5 more hotkey slots right in the middle of your screen. Note : Your hotkey list caps out at 20 slots.",
         Summary: "Adds 5 new hotkey slots.",
         MaxStackSize: MaximumStackSize,
+        GoldValue: 12,
         Activator: new PotionActivator(
             new TargetingSpec(Shape: TargetShape.Self, Range: 0, AreaSize: 0),
             new ActionTiming(ActionTimingCategory.Immediate, GameTiming.FramesForSeconds(5f), CooldownFrames: null)));

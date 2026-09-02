@@ -50,6 +50,8 @@ public sealed class AchievementModuleTests
 
     private static readonly Guid UnarmedCombatAchievementId = new UnarmedCombatAchievement().Id;
 
+    private static readonly Guid AngelInvestorAchievementId = new AngelInvestorAchievement().Id;
+
     [TestMethod]
     public void EnteredDungeon_WithoutPlayerQuery_NeverSubscribesSoNothingUnlocks()
     {
@@ -279,6 +281,29 @@ public sealed class AchievementModuleTests
             ecsContext.ComponentManager.GetMultiPool<AchievementUnlockedComponent>(),
             playerEntityId,
             EarlyAdopterAchievementId));
+    }
+
+    [TestMethod]
+    public void GaveGoldToShop_UnlocksAngelInvestorAndPublishesNotification()
+    {
+        var (ecsContext, eventBus, world) = Build();
+        var playerEntityId = ecsContext.EntityManager.CreateEntity();
+        var shopEntityId = ecsContext.EntityManager.CreateEntity();
+        world.PlayerEntityId = playerEntityId;
+        NotificationRequestedEvent? published = null;
+        eventBus.Subscribe<NotificationRequestedEvent>(requested => published = requested);
+
+        eventBus.Publish(new Game.Modules.Shops.GoldGivenToShopEvent(playerEntityId, shopEntityId, 50));
+        eventBus.DispatchBuffered<NotificationRequestedEvent>();
+
+        Assert.IsTrue(AchievementQueries.HasEarned(
+            ecsContext.ComponentManager.GetMultiPool<AchievementUnlockedComponent>(),
+            playerEntityId,
+            AngelInvestorAchievementId));
+
+        Assert.IsNotNull(published);
+        Assert.AreEqual(NotificationCategory.Achievement, published!.Category);
+        Assert.AreEqual("Angel Investor", published.Title);
     }
 
     [TestMethod]

@@ -58,7 +58,7 @@ public sealed class UiInputControllerTests
     /// </summary>
     private static UiInputController CreateController(
         IReadOnlyList<Element> baseElements, IReadOnlyList<Element> staticHudElements, IReadOnlyList<Element> dynamicHudElements, IReadOnlyList<Element> userElements,
-        Vector2 screenSize, HotbarController? hotbarController = null, ComponentManager? componentManager = null, IPlayerQuery? playerQuery = null)
+        Vector2 screenSize, HotbarController? hotbarController = null, ComponentManager? componentManager = null, IPlayerQuery? playerQuery = null, ItemCatalog? itemCatalog = null, MapViewState? mapViewState = null)
     {
         var layers = new UiLayerStack();
         foreach (var element in baseElements)
@@ -77,7 +77,7 @@ public sealed class UiInputControllerTests
         {
             layers.Add(UiLayer.User, element);
         }
-        return new UiInputController(layers, screenSize, hotbarController, componentManager, playerQuery);
+        return new UiInputController(layers, screenSize, hotbarController, componentManager, playerQuery, itemCatalog: itemCatalog, mapViewState: mapViewState);
     }
 
     /// <summary>Records HandleRightDragStart/HandleRightDrag calls, so UiInputController's right-button wiring (hit-test on press, total-delta-since-start on every held frame) can be verified end-to-end without a real MapWindow.</summary>
@@ -2513,6 +2513,145 @@ public sealed class UiInputControllerTests
         var stacks = componentManager.GetMultiPool<InventoryItemStackComponent>();
         Assert.AreEqual(1, stacks.CountForEntity(sourceEntityId));
         Assert.IsTrue(InventoryQueries.TryGetStack(stacks, sourceEntityId, itemId, out _));
+    }
+
+    /// <summary>
+    /// Same shape as BuildInventoryToInventoryDragHarness, but sourceEntityId is world.PlayerEntityId
+    /// and destinationEntityId carries a ShopComponent -- for exercising the shop-aware branches of
+    /// TryStartContentDrag (refuses to even pick up an Ineligible cell) and ResolveContentDrag
+    /// (routes through ShopActions.TrySellToShop/TryBuyFromShop instead of a plain transfer).
+    /// mapViewState.OpenShopEntityId is set to shopEntityId, mirroring what ShopWindowController.
+    /// OpenShop does for real. potionItemId carries Tag.Potion (tradeable with an allowedTags:
+    /// [Tag.Potion] shop); toolItemId does not (always Ineligible against that same shop).
+    /// </summary>
+    private static (Window PlayerGridWindow, Window ShopGridWindow, ComponentManager ComponentManager, MapViewState MapViewState, ItemCatalog ItemCatalog, Guid PotionItemId, Guid ToolItemId, int PlayerEntityId, int ShopEntityId) BuildShopDragHarness()
+    {
+        const int playerEntityId = 1;
+        const int shopEntityId = 2;
+
+        var componentManager = new ComponentManager(initialEntityCapacity: 20, initialComponentCapacity: 20);
+        componentManager.RegisterMultiPool<InventoryItemStackComponent>();
+        componentManager.RegisterPackedPool<InventoryComponent>(static (ref existing, incoming) => existing = incoming);
+        componentManager.RegisterPackedPool<Game.Modules.Shops.Components.ShopComponent>(static (ref existing, incoming) => existing = incoming);
+        componentManager.RegisterPackedPool<Game.Modules.Currency.Components.CurrencyComponent>(static (ref existing, incoming) => existing = incoming);
+
+        var potionItemId = Guid.NewGuid();
+        var toolItemId = Guid.NewGuid();
+        var itemCatalog = new ItemCatalog();
+        itemCatalog.Register(new ItemDefinition(potionItemId, "Test Potion", null, "p", Color.White, Tags: [Game.Modules.Tag.Potion], Effects: [], GoldValue: 10));
+        itemCatalog.Register(new ItemDefinition(toolItemId, "Test Tool", null, "t", Color.White, Tags: [Game.Modules.Tag.Tool], Effects: [], GoldValue: 10));
+        InventoryActions.AddItem(componentManager, playerEntityId, potionItemId, quantity: 1);
+        InventoryActions.AddItem(componentManager, playerEntityId, toolItemId, quantity: 1);
+
+        componentManager.Merge(shopEntityId, new Game.Modules.Shops.Components.ShopComponent(allowedTags: [Game.Modules.Tag.Potion], buyMultiplier: 1.10f, sellMultiplier: 0.90f));
+        componentManager.Merge(shopEntityId, new Game.Modules.Currency.Components.CurrencyComponent(gold: 1000, credits: 0));
+        componentManager.Merge(playerEntityId, new Game.Modules.Currency.Components.CurrencyComponent(gold: 0, credits: 0));
+
+        var fontService = TestFonts.Shared;
+        var labelRenderer = new LabelRenderer();
+        var windowService = TestElementPoolServiceFactory.Create(fontService, labelRenderer);
+        var spriteSheetService = new SpriteSheetService(null, "Spritesheets");
+        var spriteRenderer = new SpriteRenderer();
+        windowService.RegisterFactory<InventoryItemStackCell>(() => new InventoryItemStackCell(fontService, windowService, labelRenderer, spriteSheetService, spriteRenderer));
+        windowService.RegisterFactory<ShopItemStackCell>(() => new ShopItemStackCell(fontService, windowService, labelRenderer, spriteSheetService, spriteRenderer));
+        windowService.RegisterFactory<Tooltip>(() => new Tooltip(fontService, windowService, labelRenderer));
+        var hoverPopup = windowService.CreateElement<Tooltip>(null, new ElementOptions
+        {
+            Layout = new ElementLayoutOptions { RelativePosition = Vector2.Zero, MaximumSize = new Vector2(220, 220), DisplayMode = ElementDisplayMode.WrapContent, IsVisible = false },
+            Chrome = new ElementChromeOptions { ShowBorder = true, ShowTitle = true, CanUserFocus = false, CanUserClose = false },
+        });
+        hoverPopup.Initialize();
+
+        var world = new Game.World.World(new Game.World.Map(new Vector3Int(10, 10, 1))) { PlayerEntityId = playerEntityId };
+        var contextMenuController = TestElementPoolServiceFactory.CreateContextMenuController(windowService, new UiLayerStack());
+        var mapViewState = new MapViewState { OpenShopEntityId = shopEntityId };
+
+        Window BuildGridWindow(int entityId, Vector2 position)
+        {
+            var window = windowService.CreateElement<Window>(null, new ElementOptions
+            {
+                Hierarchy = new ElementHierarchyOptions { CanContainChildren = true },
+                Layout = new ElementLayoutOptions { RelativePosition = position, Size = new Vector2(200, 200), DisplayMode = ElementDisplayMode.Fixed },
+                Chrome = new ElementChromeOptions { ShowBorder = true, CanUserFocus = false },
+            });
+            window.SetContent(new InventoryGridContent(world, componentManager, itemCatalog, windowService, fontService, labelRenderer, spriteSheetService, spriteRenderer, contextMenuController, entityId, filterTag: null, hoverPopup, static () => null, mapViewState, static (_, _) => { }, static (_, _) => { }));
+            window.Initialize();
+            return window;
+        }
+
+        var playerGridWindow = BuildGridWindow(playerEntityId, new Vector2(0, 0));
+        var shopGridWindow = BuildGridWindow(shopEntityId, new Vector2(500, 0));
+
+        // A fresh Update resolves this frame's eligibility (CompareState) against the just-merged
+        // ShopComponent/CurrencyComponent -- RebuildCells alone (run by Initialize) never sets
+        // CompareState, only UpdateShopEligibilityState (run from Update) does.
+        ((InventoryGridContent)playerGridWindow.Tag!).Update(new GameTime());
+        ((InventoryGridContent)shopGridWindow.Tag!).Update(new GameTime());
+
+        return (playerGridWindow, shopGridWindow, componentManager, mapViewState, itemCatalog, potionItemId, toolItemId, playerEntityId, shopEntityId);
+    }
+
+    [TestMethod]
+    public void Drag_IneligibleShopCell_NeverStartsADragAtAll()
+    {
+        var (playerGridWindow, shopGridWindow, componentManager, mapViewState, itemCatalog, _, toolItemId, playerEntityId, shopEntityId) = BuildShopDragHarness();
+        var controller = CreateController([playerGridWindow, shopGridWindow], [], [], [], LargeScreenSize, componentManager: componentManager, playerQuery: null, itemCatalog: itemCatalog, mapViewState: mapViewState);
+
+        var toolCell = playerGridWindow.ChildElements.OfType<InventoryItemStackCell>().Single(c => c.ItemDefinitionId == toolItemId);
+        Assert.AreEqual(CellCompareState.Ineligible, toolCell.CompareState, "Sanity check: a Tool-tagged item must read Ineligible against a Potion-only shop before the drag itself is attempted.");
+
+        var pressPoint = toolCell.ContentRectangle.Center;
+        controller.Update(NoKeys, MouseAt(pressPoint.X, pressPoint.Y, ButtonState.Released));
+        controller.Update(NoKeys, MouseAt(pressPoint.X, pressPoint.Y, ButtonState.Pressed));
+
+        var dropPoint = shopGridWindow.ContentRectangle.Center;
+        controller.Update(NoKeys, MouseAt(dropPoint.X, dropPoint.Y, ButtonState.Released));
+
+        var stacks = componentManager.GetMultiPool<InventoryItemStackComponent>();
+        Assert.IsTrue(InventoryQueries.TryGetStack(stacks, playerEntityId, toolItemId, out _), "The Tool must never have left the player's own inventory -- the drag should have been refused at press time.");
+        Assert.IsFalse(InventoryQueries.TryGetStack(stacks, shopEntityId, toolItemId, out _));
+    }
+
+    [TestMethod]
+    public void Drag_EligibleItemFromPlayerToShop_SellsAtTheShopsPrice()
+    {
+        var (playerGridWindow, shopGridWindow, componentManager, mapViewState, itemCatalog, potionItemId, _, playerEntityId, shopEntityId) = BuildShopDragHarness();
+        var controller = CreateController([playerGridWindow, shopGridWindow], [], [], [], LargeScreenSize, componentManager: componentManager, playerQuery: null, itemCatalog: itemCatalog, mapViewState: mapViewState);
+
+        var potionCell = playerGridWindow.ChildElements.OfType<InventoryItemStackCell>().Single(c => c.ItemDefinitionId == potionItemId);
+        Assert.AreEqual(CellCompareState.Eligible, potionCell.CompareState, "Sanity check: a Potion-tagged item must read Eligible against a Potion-only shop -- the shop can always afford to buy since it starts with 1000 Gold.");
+
+        var pressPoint = potionCell.ContentRectangle.Center;
+        controller.Update(NoKeys, MouseAt(pressPoint.X, pressPoint.Y, ButtonState.Released));
+        controller.Update(NoKeys, MouseAt(pressPoint.X, pressPoint.Y, ButtonState.Pressed));
+
+        var dropPoint = shopGridWindow.ContentRectangle.Center;
+        controller.Update(NoKeys, MouseAt(dropPoint.X, dropPoint.Y, ButtonState.Released));
+
+        var stacks = componentManager.GetMultiPool<InventoryItemStackComponent>();
+        Assert.IsFalse(InventoryQueries.TryGetStack(stacks, playerEntityId, potionItemId, out _));
+        Assert.IsTrue(InventoryQueries.TryGetStack(stacks, shopEntityId, potionItemId, out _));
+
+        var currencies = componentManager.GetPackedPool<Game.Modules.Currency.Components.CurrencyComponent>();
+        Assert.AreEqual(9, currencies.GetReadonly(playerEntityId).Gold, "10 GoldValue * 0.90 SellMultiplier = 9 Gold paid to the player.");
+        Assert.AreEqual(991, currencies.GetReadonly(shopEntityId).Gold, "The shop's own 1000 starting Gold, minus the 9 it just paid out.");
+    }
+
+    [TestMethod]
+    public void Drag_FromAShopModeCell_GhostSourceSizeStaysSquare()
+    {
+        var (playerGridWindow, shopGridWindow, componentManager, mapViewState, itemCatalog, potionItemId, _, _, _) = BuildShopDragHarness();
+        var controller = CreateController([playerGridWindow, shopGridWindow], [], [], [], LargeScreenSize, componentManager: componentManager, playerQuery: null, itemCatalog: itemCatalog, mapViewState: mapViewState);
+
+        var potionCell = playerGridWindow.ChildElements.OfType<InventoryItemStackCell>().Single(c => c.ItemDefinitionId == potionItemId);
+        Assert.AreEqual(InventoryGridContent.CellSize.X * 4, potionCell.CurrentSize.X, "Sanity check: the cell itself really is the wide, 4x shop-mode shape, not a plain square one.");
+
+        var pressPoint = potionCell.ContentRectangle.Center;
+        controller.Update(NoKeys, MouseAt(pressPoint.X, pressPoint.Y, ButtonState.Released));
+        controller.Update(NoKeys, MouseAt(pressPoint.X, pressPoint.Y, ButtonState.Pressed));
+
+        Assert.AreEqual(InventoryGridContent.CellSize.Y, controller.ContentDragSourceSize.X, "The drag ghost must stay a square icon at the cell's own height, not stretch to its 4x width.");
+        Assert.AreEqual(InventoryGridContent.CellSize.Y, controller.ContentDragSourceSize.Y);
     }
 
     /// <summary>

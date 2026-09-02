@@ -19,6 +19,7 @@ public static class DamagePotion
         Description: "A viscerally unstable brew that bursts into caustic shrapnel on impact. Whatever it's made of, it was never meant to be swallowed -- throw it instead.",
         Summary: "Deals damage to target(s).",
         MaxStackSize: MaximumStackSize,
+        GoldValue: 9,
         Activator: new PotionActivator(
             new TargetingSpec(Shape: TargetShape.Burst, Range: 3, AreaSize: 3),
             new ActionTiming(ActionTimingCategory.Immediate, CooldownFrames: null)));

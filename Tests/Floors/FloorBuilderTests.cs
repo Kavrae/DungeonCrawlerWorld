@@ -25,6 +25,7 @@ using Game.Modules.Movement.Components;
 using Game.Modules.Poison;
 using Game.Modules.ProcessingTier;
 using Game.Modules.Race;
+using Game.Modules.Shops;
 using Game.Modules.StatModifiers;
 using Game.Modules.StatusEffectAura;
 using Game.Modules.StatusEffects;
@@ -88,6 +89,9 @@ public sealed class FloorBuilderTests
         var containersModule = new ContainersModule();
         containersModule.Configure(context);
 
+        var shopModule = new ShopModule();
+        shopModule.Configure(context);
+
         IReadOnlyList<IModule> modules =
         [
             coreModule,
@@ -111,6 +115,7 @@ public sealed class FloorBuilderTests
             coreItemsModule,
             new CurrencyModule(),
             containersModule,
+            shopModule,
         ];
 
         return Bootstrapper.Build(modules, initialEntityCapacity: 5000, initialComponentCapacity: 5000);

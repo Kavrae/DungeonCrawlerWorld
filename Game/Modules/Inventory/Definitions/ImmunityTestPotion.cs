@@ -28,6 +28,7 @@ public static class ImmunityTestPotion
         Description: "A shimmering vial that coats the drinker in a ward against fire and venom alike. The protection is complete, but not permanent.",
         Summary: "Grants immunity to Burning and Poison for 10 minutes.",
         MaxStackSize: MaximumStackSize,
+        GoldValue: 3,
         Activator: new PotionActivator(
             new TargetingSpec(Shape: TargetShape.Burst, Range: 3, AreaSize: 1),
             new ActionTiming(ActionTimingCategory.Immediate, CooldownFrames: null)));

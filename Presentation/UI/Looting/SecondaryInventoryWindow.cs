@@ -61,8 +61,8 @@ public sealed class SecondaryInventoryWindow(
     /// <summary>Fixed at 5 columns (the "2x5" shape a 10-item corpse should read as) rather than derived from ambient window width -- see this class's own doc comment for why a dynamic width caused the original layout bug.</summary>
     private const int GridColumns = 5;
 
-    /// <summary>Wide enough for exactly GridColumns columns of InventoryGridContent.CellSize, assuming its own private CellGap (1px, duplicated here -- see InventoryGridContent.cs) -- comfortably mid-range of the width band that computes to exactly GridColumns, not right at its edge.</summary>
-    private const float GridWidth = GridColumns * (24f + 1f) + 10f;
+    /// <summary>Wide enough for exactly GridColumns columns of InventoryGridContent.CellSize -- derived from CellSize/CellGap directly (rather than hand-duplicating those numbers, the landmine the 50%-cell-size bump exposed the first version of this constant to) -- comfortably mid-range of the width band that computes to exactly GridColumns, not right at its edge.</summary>
+    private static readonly float GridWidth = GridColumns * (InventoryGridContent.CellSize.X + InventoryGridContent.CellGap) + 10f;
 
     private readonly DirectComponentPool<DisplayTextComponent> _displayTextPool = componentManager.GetDirectPool<DisplayTextComponent>();
     private readonly PackedComponentPool<DeadComponent> _deadPool = componentManager.GetPackedPool<DeadComponent>();
@@ -119,7 +119,7 @@ public sealed class SecondaryInventoryWindow(
     {
         var stackCount = componentManager.GetMultiPool<InventoryItemStackComponent>().CountForEntity(_entityId);
         var rows = System.Math.Max(MinimumGridRows, (int)System.Math.Ceiling(stackCount / (double)GridColumns));
-        return rows * (InventoryGridContent.CellSize.Y + 1f);
+        return rows * (InventoryGridContent.CellSize.Y + InventoryGridContent.CellGap);
     }
 
     /// <summary>
@@ -128,9 +128,11 @@ public sealed class SecondaryInventoryWindow(
     /// Window has children), already folded into outerInsets below (see ChildContentPadding's own
     /// doc comment: gated on CanContainChildren alone, so this reads correctly even before any
     /// child has actually been added yet, which is exactly when this runs -- see OnChildrenInitialized).
-    /// The one remaining INTERNAL gap (summary-to-grid) is still this method's own Padding; the
-    /// grid-to-currency-row gap no longer needs one here -- FooterHeight (already set by Configure
-    /// before this window's very first MeasureAndArrange) is already baked into outerInsets below.
+    /// The one remaining INTERNAL gap (summary-to-grid) is still this method's own Padding.
+    /// FooterHeight is added explicitly, on top of outerInsets -- ContentSize already excludes it
+    /// (see RecalculateFixedSize), so relying on outerInsets alone to carry it through undersized
+    /// this window by exactly one footer's worth of height (confirmed live: the currency row
+    /// visibly overlapped/clipped the grid's own bottom row).
     /// </summary>
     private Vector2 ComputeOuterSize(float gridHeight)
     {
@@ -138,7 +140,7 @@ public sealed class SecondaryInventoryWindow(
         var contentHeight = SummaryHeight + Padding + gridHeight;
 
         var outerInsets = CurrentSize - ContentSize;
-        return new Vector2(contentWidth, contentHeight) + outerInsets;
+        return new Vector2(contentWidth, contentHeight) + outerInsets + new Vector2(0, FooterHeight);
     }
 
     private void BuildSummary()
@@ -191,6 +193,14 @@ public sealed class SecondaryInventoryWindow(
             Chrome = new ElementChromeOptions { ShowBorder = false, ShowTitle = false, CanUserScrollVertical = true, CanUserFocus = false },
             Content = new ElementContentOptions { ContentColor = WindowPalette.PanelContentColor },
         });
+
+        // Flush against gridWindow's own bounds, not inset a second time on top of the generic
+        // ContentPadding every CanContainChildren window gets by default (see GridControl.Build's
+        // own identical convention) -- ComputeGridHeight sizes gridHeight to exactly fit
+        // InventoryGridContent's own two rows of cells, with no padding budgeted in; leaving the
+        // default (4,4) padding here silently shrank the usable content area below that, clipping
+        // the bottom row (confirmed live).
+        gridWindow.ContentPadding = Vector2.Zero;
 
         // getSecondaryTargetEntityId always returns this window's own _entityId -- this window
         // *is* the currently-open secondary target for as long as it exists (see

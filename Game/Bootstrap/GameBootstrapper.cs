@@ -27,6 +27,7 @@ using Game.Modules.Paralysis;
 using Game.Modules.Poison;
 using Game.Modules.ProcessingTier;
 using Game.Modules.Race;
+using Game.Modules.Shops;
 using Game.Modules.StatModifiers;
 using Game.Modules.StatusEffectAura;
 using Game.Modules.StatusEffects;
@@ -85,6 +86,7 @@ public static class GameBootstrapper
             new CoreItemsModule(),
             new CurrencyModule(),
             new ContainersModule(),
+            new ShopModule(),
         ];
 
         var mapQuery = (IMapQuery)world;

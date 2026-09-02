@@ -13,6 +13,7 @@ using Game.Modules.Health.Components;
 using Game.Modules.Inventory;
 using Game.Modules.Inventory.Components;
 using Game.Modules.Movement.Components;
+using Game.Modules.Shops.Components;
 using Game.Modules.StatusEffectAura.Components;
 using Microsoft.Xna.Framework;
 using Microsoft.Xna.Framework.Input;
@@ -109,6 +110,7 @@ public sealed class MapWindowTests
         componentManager.RegisterPackedPool<PendingDelayedActionComponent>(static (ref existing, incoming) => existing = incoming);
         componentManager.RegisterPackedPool<ActionLockComponent>(static (ref existing, incoming) => existing = incoming);
         componentManager.RegisterPackedPool<DeadComponent>(static (ref existing, incoming) => existing = incoming);
+        componentManager.RegisterPackedPool<ShopComponent>(static (ref existing, incoming) => existing = incoming);
 
         if (playerPosition is { } position)
         {
@@ -1153,6 +1155,52 @@ public sealed class MapWindowTests
         menu.HandleClick(lootButton.Rectangle.Center);
 
         Assert.AreEqual(CorpseEntityId, invokedEntityId);
+        Assert.IsFalse(mapWindow.ContextMenuController.IsOpen);
+    }
+
+    private const int ShopEntityId = 3;
+
+    private static void PlaceShop(Game.World.World world, ComponentManager componentManager, Vector3Int position)
+    {
+        var transform = new TransformComponent(position, new Vector2Byte(1, 1));
+        componentManager.Merge(ShopEntityId, transform);
+        world.PlaceEntityOnMap(ShopEntityId, position, ref transform);
+        componentManager.Merge(ShopEntityId, new ShopComponent(allowedTags: null, buyMultiplier: 1.2f, sellMultiplier: 0.8f));
+    }
+
+    [TestMethod]
+    public void TryOpenEntityContextMenuAt_AdjacentShop_OpensMenuWithShopEnabledAndNoLoot()
+    {
+        var (world, mapViewState, mapWindow, componentManager) = BuildMapWindowWithPlayer(300, 300, 1, new Vector3Int(100, 100, 0));
+        mapWindow.OnShopClicked = _ => { };
+        var shopPosition = new Vector3Int(101, 100, 0);
+        PlaceShop(world, componentManager, shopPosition);
+
+        mapWindow.TryOpenEntityContextMenuAt(ComputeScreenPositionForMapPosition(mapWindow, mapViewState, shopPosition));
+
+        Assert.IsTrue(mapWindow.ContextMenuController.IsOpen);
+        var rows = mapWindow.ContextMenuController.Menu.ChildElements;
+        Assert.HasCount(3, rows, "[0] header, [1] Shop, [2] Inspect -- no Loot for a shop.");
+        var shopButton = (Button)rows[1];
+        Assert.AreEqual("Shop", shopButton.LeftText);
+        Assert.IsTrue(shopButton.Enabled);
+    }
+
+    [TestMethod]
+    public void ContextMenuShopOption_Selected_InvokesOnShopClickedAndClosesMenu()
+    {
+        var (world, mapViewState, mapWindow, componentManager) = BuildMapWindowWithPlayer(300, 300, 1, new Vector3Int(100, 100, 0));
+        var invokedEntityId = -1;
+        mapWindow.OnShopClicked = entityId => invokedEntityId = entityId;
+        var shopPosition = new Vector3Int(101, 100, 0);
+        PlaceShop(world, componentManager, shopPosition);
+
+        mapWindow.TryOpenEntityContextMenuAt(ComputeScreenPositionForMapPosition(mapWindow, mapViewState, shopPosition));
+        var menu = mapWindow.ContextMenuController.Menu;
+        var shopButton = (Button)menu.ChildElements[1];
+        menu.HandleClick(shopButton.Rectangle.Center);
+
+        Assert.AreEqual(ShopEntityId, invokedEntityId);
         Assert.IsFalse(mapWindow.ContextMenuController.IsOpen);
     }
 

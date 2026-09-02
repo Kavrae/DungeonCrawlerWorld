@@ -43,6 +43,9 @@ public sealed class SecondaryInventoryWindowController(
     /// <summary>Settable late-bound callback for "the player chose Compare from this corpse/secondary grid's own item context menu" -- see InventoryFolderController.OnCompareRequested, wired by ShellBootstrapper to the same ItemComparisonController.Arm.</summary>
     public Action<int, Guid>? OnCompareRequested { get; set; }
 
+    /// <summary>Closes whichever corpse/container window is currently open, if any -- a no-op otherwise. Lets ShellBootstrapper enforce "a corpse/container window and a shop window are never open at once" (both cascade off the same player-inventory-window position, so two open together would overlap) without this controller needing any awareness of ShopWindowController.</summary>
+    public void CloseIfOpen() => _window?.Close();
+
     public void Initialize(UiLayerStack layers)
     {
         _layers = layers;

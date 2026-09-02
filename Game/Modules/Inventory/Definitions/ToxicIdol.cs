@@ -31,6 +31,7 @@ public static class ToxicIdol
         Description: "A squat stone idol weeping a slow green ichor. Holding it active keeps you wreathed in a spreading toxic cloud -- useful for softening a crowd, less so for standing still in one.",
         Summary: "Toggles a Poison aura (range 4) around you.",
         MaxStackSize: MaximumStackSize,
+        GoldValue: 15,
         Activator: new PotionActivator(
             new TargetingSpec(Shape: TargetShape.Self, Range: 0, AreaSize: 0),
             new ActionTiming(ActionTimingCategory.Immediate, CooldownFrames: null)));

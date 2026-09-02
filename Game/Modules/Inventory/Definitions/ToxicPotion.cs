@@ -23,6 +23,7 @@ public static class ToxicPotion
         Description: "A sloshing flask of concentrated venom and embers. It doesn't hit hard on its own -- it hits long after you've stopped paying attention.",
         Summary: "Inflicts 5 stacks of Poison and 3 stacks of Burning.",
         MaxStackSize: MaximumStackSize,
+        GoldValue: 6,
         Activator: new PotionActivator(
             new TargetingSpec(Shape: TargetShape.Burst, Range: 3, AreaSize: 1),
             new ActionTiming(ActionTimingCategory.Immediate, CooldownFrames: null)));

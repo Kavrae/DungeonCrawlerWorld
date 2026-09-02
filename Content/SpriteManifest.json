@@ -279,5 +279,17 @@
         "CellHeight": 16
       }
     ]
+  },
+  {
+    "Name": "Shop-1x1",
+    "Cells": [
+      {
+        "SheetPath": "Pixel Crawler - Free Pack/Environment/Structures/Buildings/Interior/Interior_Props_01.png",
+        "Column": 1,
+        "Row": 11,
+        "CellWidth": 16,
+        "CellHeight": 16
+      }
+    ]
   }
 ]

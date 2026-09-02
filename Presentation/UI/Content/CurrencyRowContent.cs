@@ -1,7 +1,10 @@
 using Engine.ECS.Components;
 using Engine.ECS.Components.Stores;
+using Engine.Events;
 using Game.Modules.Currency;
 using Game.Modules.Currency.Components;
+using Game.Modules.Shops;
+using Game.Modules.Shops.Components;
 using Game.World;
 using Microsoft.Xna.Framework;
 using Microsoft.Xna.Framework.Input;
@@ -29,12 +32,17 @@ public sealed class CurrencyRowContent(
     LabelRenderer labelRenderer,
     SpriteSheetService spriteSheetService,
     SpriteRenderer spriteRenderer,
-    Func<int?> getSecondaryTargetEntityId) : IElementContent, IInventoryDropTarget
+    Func<int?> getSecondaryTargetEntityId,
+    EventBus? eventBus = null) : IElementContent, IInventoryDropTarget
 {
     public const float Height = 24f;
 
     private readonly PackedComponentPool<CurrencyComponent>? _currencyPool = componentManager.IsRegistered<CurrencyComponent>()
         ? componentManager.GetPackedPool<CurrencyComponent>()
+        : null;
+
+    private readonly PackedComponentPool<ShopComponent>? _shopPool = componentManager.IsRegistered<ShopComponent>()
+        ? componentManager.GetPackedPool<ShopComponent>()
         : null;
 
     private Window _hostWindow = null!;
@@ -124,7 +132,7 @@ public sealed class CurrencyRowContent(
         _creditsElement!.SetAmount(credits);
     }
 
-    /// <summary>Mirrors InventoryGridContent.BuildItemContextMenu's exact Give/Take decision logic. "Give"/"Take" move only the clicked element's own currency; "Give All"/"Take All" move both regardless of which element was right-clicked.</summary>
+    /// <summary>Mirrors InventoryGridContent.BuildItemContextMenu's exact Give/Take decision logic. "Give"/"Take" move only the clicked element's own currency; "Give All"/"Take All" move both regardless of which element was right-clicked. A shop never offers "Take"/"Take All" -- a player can Give Gold to a shop but never take it back out (see this class's own doc comment).</summary>
     private List<ContextMenuOption> BuildCurrencyContextMenu(CurrencyElement element)
     {
         List<ContextMenuOption> options = [];
@@ -137,9 +145,9 @@ public sealed class CurrencyRowContent(
         if (element.EntityId == world.PlayerEntityId && secondaryTargetEntityId != world.PlayerEntityId)
         {
             options.Add(new ContextMenuOption("Give", null, Enabled: true, () => TransferOne(element, world.PlayerEntityId, secondaryTargetEntityId)));
-            options.Add(new ContextMenuOption("Give All", null, Enabled: true, () => CurrencyActions.TryTransferAll(componentManager, world.PlayerEntityId, secondaryTargetEntityId)));
+            options.Add(new ContextMenuOption("Give All", null, Enabled: true, () => TransferAll(world.PlayerEntityId, secondaryTargetEntityId)));
         }
-        else if (element.EntityId == secondaryTargetEntityId && secondaryTargetEntityId != world.PlayerEntityId)
+        else if (element.EntityId == secondaryTargetEntityId && secondaryTargetEntityId != world.PlayerEntityId && _shopPool?.Has(secondaryTargetEntityId) != true)
         {
             options.Add(new ContextMenuOption("Take", null, Enabled: true, () => TransferOne(element, secondaryTargetEntityId, world.PlayerEntityId)));
             options.Add(new ContextMenuOption("Take All", null, Enabled: true, () => CurrencyActions.TryTransferAll(componentManager, secondaryTargetEntityId, world.PlayerEntityId)));
@@ -148,6 +156,33 @@ public sealed class CurrencyRowContent(
         return options;
     }
 
-    private void TransferOne(CurrencyElement element, int sourceEntityId, int destinationEntityId) =>
-        CurrencyActions.TryTransfer(componentManager, sourceEntityId, destinationEntityId, element.Type);
+    /// <summary>Moves one currency type's whole balance -- publishes GoldGivenToShopEvent (the "Angel Investor" achievement's own trigger) afterward whenever the destination is a shop and there was actually Gold to give. Take never reaches the shop branch: destinationEntityId is always world.PlayerEntityId on that path, which never carries ShopComponent.</summary>
+    private void TransferOne(CurrencyElement element, int sourceEntityId, int destinationEntityId)
+    {
+        var goldBeforeTransfer = ReadGold(sourceEntityId);
+        if (CurrencyActions.TryTransfer(componentManager, sourceEntityId, destinationEntityId, element.Type) && element.Type == CurrencyType.Gold)
+        {
+            PublishGoldGivenToShopIfApplicable(sourceEntityId, destinationEntityId, goldBeforeTransfer);
+        }
+    }
+
+    /// <summary>"Give All" -- same GoldGivenToShopEvent trigger as TransferOne, regardless of whether Credits also moved alongside the Gold.</summary>
+    private void TransferAll(int sourceEntityId, int destinationEntityId)
+    {
+        var goldBeforeTransfer = ReadGold(sourceEntityId);
+        if (CurrencyActions.TryTransferAll(componentManager, sourceEntityId, destinationEntityId))
+        {
+            PublishGoldGivenToShopIfApplicable(sourceEntityId, destinationEntityId, goldBeforeTransfer);
+        }
+    }
+
+    private int ReadGold(int entityId) => _currencyPool?.TryGetReadonly(entityId, out var currency) == true ? currency.Gold : 0;
+
+    private void PublishGoldGivenToShopIfApplicable(int sourceEntityId, int destinationEntityId, int goldAmount)
+    {
+        if (goldAmount > 0 && eventBus is not null && _shopPool?.Has(destinationEntityId) == true)
+        {
+            eventBus.Publish(new GoldGivenToShopEvent(sourceEntityId, destinationEntityId, goldAmount));
+        }
+    }
 }

@@ -95,7 +95,7 @@ public sealed class PlayerBlueprint(MathUtility mathUtility, UniqueNumberAllocat
 
         componentManager.Merge(entityId, new DisplayTextComponent("Player1", "This is you. What else did you expect?"));
 
-        StartingCurrencyGrant.GrantRandomStartingGold(componentManager, entityId, mathUtility);
+        StartingCurrencyGrant.GrantFixedStartingGold(componentManager, entityId);
 
         // ItemHotkeyBindingComponent binds by StackInstanceId, not ItemDefinitionId (see its own
         // doc comment) -- AddItem's return value is the exact stack each of these starting grants

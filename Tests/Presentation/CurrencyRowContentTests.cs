@@ -1,6 +1,10 @@
 using Engine.ECS.Components;
+using Engine.Events;
 using Engine.Math;
 using Game.Modules.Currency;
+using Game.Modules.Currency.Components;
+using Game.Modules.Shops;
+using Game.Modules.Shops.Components;
 using Game.World;
 using Microsoft.Xna.Framework;
 using Presentation.Fonts;
@@ -86,5 +90,112 @@ public sealed class CurrencyRowContentTests
 
         Assert.AreEqual(hostWindow.ContentSize.X / 2f, goldElement.CurrentSize.X);
         Assert.AreEqual(hostWindow.ContentSize.X / 2f, creditsElement.RelativePosition.X);
+    }
+
+    private const int PlayerEntityId = 10;
+    private const int ShopEntityId = 11;
+
+    /// <summary>
+    /// Builds a row for rowEntityId, with world.PlayerEntityId fixed to PlayerEntityId and
+    /// getSecondaryTargetEntityId fixed to secondaryTargetEntityId -- enough to drive
+    /// BuildCurrencyContextMenu's own Give/Take decision (see CurrencyRowContent's own doc
+    /// comment) without needing a real InventoryManagementWindow/ShopWindow around it. Unlike
+    /// Build() above, registers CurrencyComponent and ShopComponent so TransferOne/TransferAll's
+    /// real balance reads/shop checks have something to act on.
+    /// </summary>
+    private static (CurrencyElement GoldElement, ComponentManager ComponentManager, ContextMenuController ContextMenuController) BuildForGiveTake(int rowEntityId, int secondaryTargetEntityId, EventBus? eventBus = null)
+    {
+        var componentManager = new ComponentManager(initialEntityCapacity: 20, initialComponentCapacity: 10);
+        componentManager.RegisterPackedPool<CurrencyComponent>(static (ref existing, incoming) => existing = incoming);
+        componentManager.RegisterPackedPool<ShopComponent>(static (ref existing, incoming) => existing = incoming);
+        var fontService = TestFonts.Shared;
+        var labelRenderer = new LabelRenderer();
+        var windowService = TestElementPoolServiceFactory.Create(fontService, labelRenderer);
+        var spriteSheetService = new SpriteSheetService(null, "Spritesheets");
+        var spriteRenderer = new SpriteRenderer();
+        windowService.RegisterFactory<CurrencyElement>(() => new CurrencyElement(fontService, windowService, labelRenderer, spriteSheetService, spriteRenderer));
+
+        var world = new Game.World.World(new Game.World.Map(new Vector3Int(10, 10, 1))) { PlayerEntityId = PlayerEntityId };
+        var contextMenuController = TestElementPoolServiceFactory.CreateContextMenuController(windowService, new UiLayerStack());
+
+        var content = new CurrencyRowContent(rowEntityId, componentManager, world, contextMenuController, windowService, fontService, labelRenderer, spriteSheetService, spriteRenderer, () => secondaryTargetEntityId, eventBus);
+
+        var hostWindow = windowService.CreateElement<Window>(null, new ElementOptions
+        {
+            Hierarchy = new ElementHierarchyOptions { CanContainChildren = true },
+            Layout = new ElementLayoutOptions { Size = new Vector2(100f, CurrencyRowContent.Height), DisplayMode = ElementDisplayMode.Fixed },
+        });
+        hostWindow.ContentPadding = Vector2.Zero;
+        hostWindow.SetContent(content);
+        hostWindow.Initialize();
+
+        var goldElement = hostWindow.ChildElements.OfType<CurrencyElement>().Single(element => element.Type == CurrencyType.Gold);
+        return (goldElement, componentManager, contextMenuController);
+    }
+
+    [TestMethod]
+    public void RightClickPlayerRow_SecondaryTargetIsShop_OffersGiveButNotTake()
+    {
+        var (goldElement, componentManager, contextMenuController) = BuildForGiveTake(PlayerEntityId, ShopEntityId);
+        componentManager.Merge(ShopEntityId, new ShopComponent(allowedTags: null, buyMultiplier: 1.2f, sellMultiplier: 0.8f));
+
+        goldElement.OnRightClicked!.Invoke(Point.Zero);
+
+        Assert.IsTrue(contextMenuController.IsOpen);
+        var labels = contextMenuController.Menu.ChildElements.OfType<Button>().Select(button => button.LeftText).ToList();
+        CollectionAssert.Contains(labels, "Give");
+        CollectionAssert.Contains(labels, "Give All");
+    }
+
+    [TestMethod]
+    public void RightClickShopRow_SecondaryTargetIsItself_OffersNoOptionsAtAll()
+    {
+        var (shopGoldElement, componentManager, contextMenuController) = BuildForGiveTake(ShopEntityId, ShopEntityId);
+        componentManager.Merge(ShopEntityId, new ShopComponent(allowedTags: null, buyMultiplier: 1.2f, sellMultiplier: 0.8f));
+
+        shopGoldElement.OnRightClicked!.Invoke(Point.Zero);
+
+        Assert.IsFalse(contextMenuController.IsOpen, "A shop can never Take/Take All its own currency back from the player -- see CurrencyRowContent.BuildCurrencyContextMenu's own ShopComponent check.");
+    }
+
+    [TestMethod]
+    public void GiveGoldToShop_PublishesGoldGivenToShopEventWithTheAmountGiven()
+    {
+        var eventBus = new EventBus();
+        var (goldElement, componentManager, contextMenuController) = BuildForGiveTake(PlayerEntityId, ShopEntityId, eventBus);
+        componentManager.Merge(PlayerEntityId, new CurrencyComponent(gold: 42, credits: 0));
+        componentManager.Merge(ShopEntityId, new ShopComponent(allowedTags: null, buyMultiplier: 1.2f, sellMultiplier: 0.8f));
+
+        GoldGivenToShopEvent? published = null;
+        eventBus.Subscribe<GoldGivenToShopEvent>(e => published = e);
+
+        goldElement.OnRightClicked!.Invoke(Point.Zero);
+        var giveButton = contextMenuController.Menu.ChildElements.OfType<Button>().Single(button => button.LeftText == "Give");
+        contextMenuController.Menu.HandleClick(giveButton.Rectangle.Center);
+
+        Assert.IsNotNull(published);
+        Assert.AreEqual(PlayerEntityId, published!.Value.PlayerEntityId);
+        Assert.AreEqual(ShopEntityId, published.Value.ShopEntityId);
+        Assert.AreEqual(42, published.Value.Amount);
+        Assert.AreEqual(0, componentManager.GetPackedPool<CurrencyComponent>().GetReadonly(PlayerEntityId).Gold, "The whole balance moved -- Give (not Give All) still moves the entire Gold amount today, see CurrencyActions.TryTransfer's own doc comment.");
+    }
+
+    [TestMethod]
+    public void GiveGoldToNonShopTarget_DoesNotPublishGoldGivenToShopEvent()
+    {
+        const int corpseEntityId = 12;
+        var eventBus = new EventBus();
+        var (goldElement, componentManager, contextMenuController) = BuildForGiveTake(PlayerEntityId, corpseEntityId, eventBus);
+        componentManager.Merge(PlayerEntityId, new CurrencyComponent(gold: 42, credits: 0));
+
+        var publishedCount = 0;
+        eventBus.Subscribe<GoldGivenToShopEvent>(_ => publishedCount++);
+
+        goldElement.OnRightClicked!.Invoke(Point.Zero);
+        var giveButton = contextMenuController.Menu.ChildElements.OfType<Button>().Single(button => button.LeftText == "Give");
+        contextMenuController.Menu.HandleClick(giveButton.Rectangle.Center);
+
+        Assert.AreEqual(0, publishedCount);
+        Assert.AreEqual(0, componentManager.GetPackedPool<CurrencyComponent>().GetReadonly(PlayerEntityId).Gold, "Give itself must still have happened -- only the shop-specific event is what's suppressed for a non-shop target.");
     }
 }

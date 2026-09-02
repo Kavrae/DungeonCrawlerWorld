@@ -44,28 +44,30 @@ public enum CellCompareState
 /// to build on; it's the one case that gets the disabled-cursor treatment while hovering a hotbar
 /// slot mid-drag.
 /// </summary>
-public sealed class InventoryItemStackCell(FontService fontService, ElementPoolService elementPoolService, LabelRenderer labelRenderer, SpriteSheetService spriteSheetService, SpriteRenderer spriteRenderer)
+/// <summary>Not sealed -- ShopItemStackCell subclasses this for the shop-mode grid (sprite+name+price layout instead of icon+quantity-badge), reusing Configure/the base fill+hover/selected/eligible-glow drawing via its own DrawContent override. See that class's own doc comment.</summary>
+public class InventoryItemStackCell(FontService fontService, ElementPoolService elementPoolService, LabelRenderer labelRenderer, SpriteSheetService spriteSheetService, SpriteRenderer spriteRenderer)
     : Element(fontService, elementPoolService, labelRenderer)
 {
     private static readonly Color GroupBorderColor = Color.Black;
     private const float GroupBorderThickness = 2f;
 
-    /// <summary>Item Details Comparison's own "eligible to add" glow -- distinct from WindowPalette.AttentionGlow (Gold, the grid-square selected/armed color); also the same color a comparison column's own advantage-highlighted lines use (ItemDetailsWindow.BetterColor), so "green" reads consistently as "good" everywhere this feature touches.</summary>
-    private static readonly Color CompareEligibleGlowColor = Color.LightGreen;
+    /// <summary>Item Details Comparison's own "eligible to add" glow -- distinct from WindowPalette.AttentionGlow (Gold, the grid-square selected/armed color); also the same color a comparison column's own advantage-highlighted lines use (ItemDetailsWindow.BetterColor), so "green" reads consistently as "good" everywhere this feature touches. Also reused as-is by ShopItemStackCell's own eligible-glow (shop trade eligibility, not comparison, but the same "green means you can" visual language).</summary>
+    protected static readonly Color CompareEligibleGlowColor = Color.LightGreen;
 
-    private string? _spriteName;
-    private string _glyph = string.Empty;
-    private Color _glyphColor;
+    /// <summary>protected, not private -- ShopItemStackCell's own DrawContent override reads these directly (its sprite/name/price layout replaces the icon+quantity-badge one below entirely, so it can't reuse this class's own DrawContent body, only its Configure-computed data).</summary>
+    protected string? _spriteName;
+    protected string _glyph = string.Empty;
+    protected Color _glyphColor;
     private int _quantity;
     private string? _chargeText;
-    private bool _isDisabled;
+    protected bool _isDisabled;
     private bool _groupBorderTop;
     private bool _groupBorderBottom;
     private bool _groupBorderLeft;
     private bool _groupBorderRight;
-    private SpriteFontBase _iconGlyphFont = null!;
-    private SpriteFontBase _quantityFont = null!;
-    private SpriteFontBase _badgeFont = null!;
+    protected SpriteFontBase _iconGlyphFont = null!;
+    protected SpriteFontBase _quantityFont = null!;
+    protected SpriteFontBase _badgeFont = null!;
 
     public Guid ItemDefinitionId { get; private set; }
 

@@ -28,6 +28,7 @@ public static class ScrollOfHealing
         Description: "A scroll inscribed with the Heal spell. Heals the target by a percentage of their maximum health and then crumbles to dust.",
         Summary: $"Heal target(s) by {HealAmount:P0}.",
         MaxStackSize: MaximumStackSize,
+        GoldValue: 11,
         Activator: new ScrollActivator(
             new TargetingSpec(Shape: TargetShape.AdjacentWithSelf, Range: 0),
             new ActionTiming(ActionTimingCategory.Immediate, CooldownFrames: null),

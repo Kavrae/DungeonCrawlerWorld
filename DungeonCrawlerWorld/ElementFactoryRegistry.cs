@@ -12,6 +12,7 @@ using Presentation.UI.AbilityScores;
 using Presentation.UI.Content;
 using Presentation.UI.Inventory;
 using Presentation.UI.Looting;
+using Presentation.UI.Shops;
 
 namespace DungeonCrawlerWorld;
 
@@ -73,8 +74,9 @@ public static class ElementFactoryRegistry
 
         pool.RegisterFactory<InventoryManagementWindow>(() => new InventoryManagementWindow(
             presentation.FontService, pool, presentation.LabelRenderer, presentation.SpriteSheetService, presentation.SpriteRenderer,
-            componentManager, itemCatalog, world, contextMenuController, mapViewState));
+            componentManager, itemCatalog, world, contextMenuController, mapViewState, ecsContext.EventBus));
         Register<InventoryItemStackCell>((font, elements, glyph) => new InventoryItemStackCell(font, elements, glyph, presentation.SpriteSheetService, presentation.SpriteRenderer));
+        Register<ShopItemStackCell>((font, elements, glyph) => new ShopItemStackCell(font, elements, glyph, presentation.SpriteSheetService, presentation.SpriteRenderer));
         Register<GridControl>((font, elements, glyph) => new GridControl(font, elements, glyph));
         Register<Toggle>((font, elements, glyph) => new Toggle(font, elements, glyph));
 
@@ -89,6 +91,9 @@ public static class ElementFactoryRegistry
         Register<Tooltip>((font, elements, glyph) => new Tooltip(font, elements, glyph));
 
         pool.RegisterFactory<SecondaryInventoryWindow>(() => new SecondaryInventoryWindow(
+            presentation.FontService, pool, presentation.LabelRenderer, componentManager,
+            presentation.SpriteSheetService, presentation.SpriteRenderer, itemCatalog, world, contextMenuController, mapViewState));
+        pool.RegisterFactory<ShopWindow>(() => new ShopWindow(
             presentation.FontService, pool, presentation.LabelRenderer, componentManager,
             presentation.SpriteSheetService, presentation.SpriteRenderer, itemCatalog, world, contextMenuController, mapViewState));
         Register<EntityIconElement>((font, elements, glyph) => new EntityIconElement(
