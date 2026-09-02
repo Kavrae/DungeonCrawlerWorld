@@ -18,6 +18,9 @@ public static class FontChrome
     public static int PlayerHealthHoverFontSize = 10;
     public static int CursorTextFontSize = 14;
 
+    /// <summary>Item Details window's own item-name row -- double DefaultFontSize, so the name reads as this window's real heading now that its title bar no longer carries one (see ItemDetailsWindow.BuildNameRow).</summary>
+    public static int ItemDetailsNameFontSize = DefaultFontSize * 2;
+
     /// <summary>MapWindow's own fixed glyph sizes -- the tiny-entity grid, the main glyph at medium zoom, and two escalating "huge" zoom tiers.</summary>
     public static int MapTinyFontSize = 6;
     public static int MapMediumFontSize = 24;

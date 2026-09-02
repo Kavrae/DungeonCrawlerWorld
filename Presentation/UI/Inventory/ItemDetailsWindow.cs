@@ -1,9 +1,11 @@
 using Engine.Math;
+using FontStashSharp;
 using Game.Modules.Actions;
 using Game.Modules.Inventory;
 using Microsoft.Xna.Framework;
 using Presentation.Fonts;
 using Presentation.Rendering;
+using Presentation.UI.Chrome;
 using Presentation.UI.ColorPalettes;
 using Presentation.UI.Content;
 
@@ -72,6 +74,12 @@ public sealed class ItemDetailsWindow(
     private static readonly Color BetterColor = Color.LightGreen;
     private static readonly Color WorseColor = Color.IndianRed;
 
+    /// <summary>TextWindow.ContentFont defaults to DefaultFontSize only the first time a pooled instance is ever truly constructed -- a settable property, not reset by Build/Configure, so a recycled instance keeps whatever size its *previous* consumer last set. Cached once and assigned explicitly wherever a TextWindow row is built (BuildNameRow's own _nameFont included) so no row's size ever depends on what the pool handed back -- see HealthWindow._bodyFont's own doc comment for the same reasoning. Without this, a TextWindow instance the pool last handed to BuildNameRow (set to _nameFont) could come back for an ordinary Effects/Activation/Description/Tags row still carrying the doubled name size.</summary>
+    private readonly SpriteFontBase _bodyFont = fontService.GetFont(FontChrome.DefaultFontSize);
+
+    /// <summary>See _bodyFont's own doc comment -- BuildNameRow's own doubled-size counterpart.</summary>
+    private readonly SpriteFontBase _nameFont = fontService.GetFont(FontChrome.ItemDetailsNameFontSize);
+
     private ItemDefinition? _definition;
     private float _contentWidth;
     private IReadOnlyList<ItemDefinition> _comparedAgainst = [];
@@ -80,7 +88,7 @@ public sealed class ItemDetailsWindow(
     private int _currentEntityId;
     private Guid _currentStackInstanceId;
 
-    /// <summary>Settable late-bound callback for this window's own "Compare" title button, if it has one -- see OnChildrenInitialized's own doc comment for why only some instances do. Wired by whichever controller creates this instance (ItemDetailsWindowController for the anchor pane; ItemComparisonController deliberately never sets this for its own comparison columns) *before* calling Initialize.</summary>
+    /// <summary>Settable late-bound callback for this window's own "Compare" title button, if it has one -- see this class's own Initialize override for why only some instances do. Wired by whichever controller creates this instance (ItemDetailsWindowController for the anchor pane; ItemComparisonController deliberately never sets this for its own comparison columns) *before* calling Initialize.</summary>
     public Action<int, Guid>? OnCompareRequested { get; set; }
 
     /// <summary>
@@ -114,15 +122,19 @@ public sealed class ItemDetailsWindow(
     /// The Compare title button is opt-in per instance, not universal -- attached only when
     /// OnCompareRequested is already set by the time this runs (the anchor pane's own controller
     /// sets it before calling Initialize; Item Details Comparison's own columns never do), rather
-    /// than always attaching it and leaving it a dead click on columns. Window.BuildTitleButton/
-    /// AddTitleButton is the same mechanism CloseBehavior/MinimizeRestoreBehavior use -- appending
-    /// (the default insertIndex) inserts to the *left* of the already-attached Close button, per
-    /// AddTitleButton's own right-to-left insertion order.
+    /// than always attaching it and leaving it a dead click on columns. Deliberately added here,
+    /// not in OnChildrenInitialized -- Window.Initialize's own CloseBehavior/MinimizeRestoreBehavior
+    /// attachment (see its own doc comment) doesn't run until *after* base.Initialize() (which is
+    /// what actually fires OnChildrenInitialized, from deep inside Element.Initialize) returns, so
+    /// attaching Compare there ran before Close ever existed -- appending (the default insertIndex)
+    /// only inserts to the left of whatever's *already* attached, so Compare ended up added first
+    /// and read as the rightmost button, past Close's own right edge. Calling AddTitleButton here,
+    /// after base.Initialize() has fully returned (Close/Minimize included), keeps every window's
+    /// title buttons in the same left-to-right order: unique -> minimize/restore -> close.
     /// </summary>
-    protected override void OnChildrenInitialized()
+    public override void Initialize()
     {
-        base.OnChildrenInitialized();
-        _childrenReady = true;
+        base.Initialize();
 
         if (OnCompareRequested is not null)
         {
@@ -130,6 +142,12 @@ public sealed class ItemDetailsWindow(
             compareButton.Clicked += _ => OnCompareRequested?.Invoke(_currentEntityId, _currentStackInstanceId);
             AddTitleButton(compareButton);
         }
+    }
+
+    protected override void OnChildrenInitialized()
+    {
+        base.OnChildrenInitialized();
+        _childrenReady = true;
 
         Rebuild();
     }
@@ -178,12 +196,15 @@ public sealed class ItemDetailsWindow(
 
     private void BuildNameRow(ItemDefinition definition, float width)
     {
-        // row's outer width is a hard constraint (must equal width exactly, matching every other
-        // top-level row so this window's own WrapContent measurement stays consistent); its outer
-        // height is not similarly constrained, so it grows by ContentPadding on top and bottom
-        // instead, keeping IconSize/RowHeight exactly as before with real breathing room added --
+        // Row content height is the taller of the icon and the (now doubled) name text -- no
+        // longer just IconSize, since _nameFont's own line height can exceed it. row's outer
+        // width is a hard constraint (must equal width exactly, matching every other top-level
+        // row so this window's own WrapContent measurement stays consistent); its outer height is
+        // not similarly constrained, so it grows by ContentPadding on top and bottom instead --
         // see HealthWindow.AddBarRow's own doc comment for the same reasoning.
-        var rowHeight = IconSize + ContentPadding.Y * 2;
+        var nameLineHeight = _nameFont.LineHeight;
+        var rowContentHeight = System.Math.Max(IconSize, nameLineHeight);
+        var rowHeight = rowContentHeight + ContentPadding.Y * 2;
         var row = ElementPoolService.CreateElement<Window>(this, new ElementOptions
         {
             Hierarchy = new ElementHierarchyOptions { CanContainChildren = true },
@@ -196,7 +217,7 @@ public sealed class ItemDetailsWindow(
         var icon = ElementPoolService.CreateElement<ItemIconElement>(row, new ElementOptions
         {
             Hierarchy = new ElementHierarchyOptions { CanContainChildren = false },
-            Layout = new ElementLayoutOptions { RelativePosition = Vector2.Zero, Size = new Vector2(IconSize, IconSize), DisplayMode = ElementDisplayMode.Fixed },
+            Layout = new ElementLayoutOptions { RelativePosition = new Vector2(0, (rowContentHeight - IconSize) / 2f), Size = new Vector2(IconSize, IconSize), DisplayMode = ElementDisplayMode.Fixed },
             Chrome = new ElementChromeOptions { ShowBorder = false, ShowTitle = false, CanUserFocus = false },
             Content = new ElementContentOptions { ContentColor = Color.Transparent },
         });
@@ -210,11 +231,12 @@ public sealed class ItemDetailsWindow(
         var nameLine = ElementPoolService.CreateElement<TextWindow>(row, new ElementOptions
         {
             Hierarchy = new ElementHierarchyOptions { CanContainChildren = false },
-            Layout = new ElementLayoutOptions { RelativePosition = new Vector2(textX, (IconSize - RowHeight) / 2f), Size = new Vector2(System.Math.Max(0f, availableWidth - textX), RowHeight), DisplayMode = ElementDisplayMode.Fixed },
+            Layout = new ElementLayoutOptions { RelativePosition = new Vector2(textX, (rowContentHeight - nameLineHeight) / 2f), Size = new Vector2(System.Math.Max(0f, availableWidth - textX), nameLineHeight), DisplayMode = ElementDisplayMode.Fixed },
             Chrome = new ElementChromeOptions { ShowBorder = false, ShowTitle = false, CanUserFocus = false },
             Content = new ElementContentOptions { ContentColor = Color.Transparent },
             Text = new TextOptions { Text = definition.Name, TextColor = BodyTextColor },
         });
+        nameLine.ContentFont = _nameFont; // Must match the font Size/nameLineHeight above were computed for -- see _nameFont's own doc comment for why this can't be left to TextWindow's own default.
         row.AddChild(nameLine);
     }
 
@@ -288,6 +310,7 @@ public sealed class ItemDetailsWindow(
                 Content = new ElementContentOptions { ContentColor = Color.Transparent },
                 Text = new TextOptions { Text = stats[i].DisplayText, TextColor = ResolveLineColor(stats[i]) },
             });
+            line.ContentFont = _bodyFont; // See _bodyFont's own doc comment.
             row.AddChild(line);
         }
 
@@ -416,6 +439,7 @@ public sealed class ItemDetailsWindow(
             Content = new ElementContentOptions { ContentColor = Color.Transparent },
             Text = new TextOptions { Text = text, TextColor = color },
         });
+        line.ContentFont = _bodyFont; // See _bodyFont's own doc comment.
         AddChild(line);
     }
 
@@ -430,6 +454,7 @@ public sealed class ItemDetailsWindow(
             Content = new ElementContentOptions { ContentColor = Color.Transparent },
             Text = new TextOptions { Text = text, TextColor = BodyTextColor },
         });
+        line.ContentFont = _bodyFont; // See _bodyFont's own doc comment.
         AddChild(line);
     }
 

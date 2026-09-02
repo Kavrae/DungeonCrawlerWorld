@@ -173,7 +173,6 @@ public sealed class InventoryFolderController(
             Chrome = new ElementChromeOptions
             {
                 ShowTitle = true,
-                TitleText = "Inventory",
                 ShowBorder = true,
                 CanUserClose = true,
                 CanUserMinimize = false,
@@ -216,7 +215,6 @@ public sealed class InventoryFolderController(
             Chrome = new ElementChromeOptions
             {
                 ShowTitle = true,
-                TitleText = "Ability Scores",
                 ShowBorder = true,
                 CanUserClose = true,
                 CanUserMinimize = false,

@@ -9,17 +9,15 @@ namespace Presentation.UI;
 /// targets (see InspectionWindowContent) -- Basic (map-tile click) or Detail (context-menu
 /// Inspect, follows its target; also carries the always-on Admin component dump -- see
 /// MapViewState.InspectionMode's own doc comment). Cannot be closed (CanUserClose = false);
-/// minimizing clears the current inspection target and retitles to "Inspection" rather than
-/// just collapsing in place, since there's nothing meaningful left to show once minimized.
-/// RecalculateMinimizedSize is overridden so minimizing never shrinks the title bar's width the
-/// way Window's default does (MinimumHeaderWidth) -- this panel's width must always match
-/// PlayerHealthBarContent.Size.X (see ShellBootstrapper), restored or not.
+/// minimizing clears the current inspection target and its title, since there's nothing
+/// meaningful left to show once minimized. RecalculateMinimizedSize is overridden so minimizing
+/// never shrinks the title bar's width the way Window's default does (MinimumHeaderWidth) --
+/// this panel's width must always match PlayerHealthBarContent.Size.X (see
+/// ShellBootstrapper), restored or not.
 /// </summary>
 public sealed class InspectionWindow(FontService fontService, ElementPoolService elementPoolService, LabelRenderer labelRenderer, MapViewState mapViewState)
     : Window(fontService, elementPoolService, labelRenderer)
 {
-    public const string MinimizedTitle = "Inspection";
-
     /// <summary>Starts minimized -- a HUD-persistent panel with nothing to inspect yet defaults to its collapsed, title-only footprint, the same convention Folder.Initialize already follows.</summary>
     public override void Initialize()
     {
@@ -40,7 +38,7 @@ public sealed class InspectionWindow(FontService fontService, ElementPoolService
 
         mapViewState.InspectionMode = InspectionMode.None;
         mapViewState.InspectedEntityId = -1;
-        TitleText = MinimizedTitle;
+        TitleText = string.Empty;
     }
 
     /// <summary>Preserves the window's full configured width while minimized -- only Window.MinimumHeaderWidth's shrink-to-fit-text behavior is skipped, matching Folder's own per-subclass override of the same hook (RecalculateMinimizedSize is protected virtual specifically so subclasses can do this).</summary>

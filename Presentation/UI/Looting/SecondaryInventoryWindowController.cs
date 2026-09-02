@@ -98,7 +98,6 @@ public sealed class SecondaryInventoryWindowController(
             Chrome = new ElementChromeOptions
             {
                 ShowTitle = true,
-                TitleText = "Corpse",
                 ShowBorder = true,
                 CanUserClose = true,
                 CanUserMove = true,

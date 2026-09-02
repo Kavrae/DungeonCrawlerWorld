@@ -289,7 +289,6 @@ public static class ShellBootstrapper
             {
                 ShowTitle = true,
                 ShowTitleWhenMinimized = true,
-                TitleText = InspectionWindow.MinimizedTitle,
                 CanUserClose = false,
                 CanUserMinimize = true,
                 CanUserScrollVertical = true,

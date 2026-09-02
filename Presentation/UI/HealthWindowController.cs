@@ -63,7 +63,6 @@ public sealed class HealthWindowController(
             Chrome = new ElementChromeOptions
             {
                 ShowTitle = true,
-                TitleText = "Health",
                 ShowBorder = true,
                 CanUserClose = true,
                 CanUserMinimize = false,

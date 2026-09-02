@@ -168,7 +168,6 @@ public sealed class ItemDetailsWindowController(
             Chrome = new ElementChromeOptions
             {
                 ShowTitle = true,
-                TitleText = "Item Details",
                 ShowBorder = true,
                 CanUserClose = true,
                 CanUserMinimize = false,

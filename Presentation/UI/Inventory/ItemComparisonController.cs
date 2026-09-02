@@ -288,7 +288,6 @@ public sealed class ItemComparisonController(
             Chrome = new ElementChromeOptions
             {
                 ShowTitle = true,
-                TitleText = definition.Name, // Distinguishes columns from each other and from the anchor's own fixed "Item Details" title.
                 ShowBorder = true,
                 CanUserClose = true,
                 CanUserMinimize = false,
