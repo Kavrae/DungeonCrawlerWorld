@@ -31,6 +31,14 @@ public class Window : Element
     /// </summary>
     public IElementContent? Content => _content;
 
+    /// <summary>Pluggable content for the reserved footer band (see Element.FooterHeight) -- set via SetFooterContent, hosted in _footerHostWindow once ContentSize is real (see OnChildrenInitialized).</summary>
+    private IElementContent? _footerContent;
+
+    /// <summary>Borderless/titleless child window occupying the reserved footer band -- an ordinary AddChild descendant, not a header-style escape hatch (see Element.FooterHeight's own doc comment for why). Null until OnChildrenInitialized runs, and only ever created if SetFooterContent was called first.</summary>
+    private Window? _footerHostWindow;
+
+    public IElementContent? FooterContent => _footerContent;
+
     /// <summary>
     /// Window's own OnClosed override -- see Element.OnClosed's own doc comment for the general
     /// reasoning and the confirmed bug (a closed Inventory window's tab-body Window recycled into
@@ -43,6 +51,9 @@ public class Window : Element
     {
         base.OnClosed();
         _content = null;
+        _footerContent = null;
+        _footerHostWindow = null;
+        FooterHeight = 0f;
     }
 
     /// <summary>
@@ -146,7 +157,32 @@ public class Window : Element
         }
     }
 
-    protected override void OnChildrenInitialized() => _content?.Initialize(this);
+    protected override void OnChildrenInitialized()
+    {
+        _content?.Initialize(this);
+
+        if (_footerContent is not null)
+        {
+            _footerHostWindow = ElementPoolService.CreateElement<Window>(this, new ElementOptions
+            {
+                Hierarchy = new ElementHierarchyOptions { CanContainChildren = true },
+                Layout = new ElementLayoutOptions { RelativePosition = new Vector2(0, ContentSize.Y), Size = new Vector2(ContentSize.X, FooterHeight), DisplayMode = ElementDisplayMode.Fixed },
+                Chrome = new ElementChromeOptions { ShowBorder = false, ShowTitle = false, CanUserFocus = false },
+            });
+            // Pass-through host -- its own children must sit flush against the footer band, not
+            // inset a second time on top of this window's own ContentPadding (see
+            // GridControl.Build/TabbedContent's _tabHeaderWindow for the same convention).
+            _footerHostWindow.ContentPadding = Vector2.Zero;
+            _footerHostWindow.SetContent(_footerContent);
+            AddChild(_footerHostWindow);
+
+            // Keeps the footer host pinned to the bottom of ContentSize across later resizes --
+            // mirrors what InventoryManagementWindow.OnWindowResized used to do by hand for its
+            // own currency row. No manual unsubscribe needed: ElementPoolService.CloseElement
+            // clears every event (Resized included) on pool-return.
+            Resized += (_) => _footerHostWindow?.SetBounds(new Vector2(0, ContentSize.Y), new Vector2(ContentSize.X, FooterHeight));
+        }
+    }
 
     public override void Update(GameTime gameTime)
     {
@@ -194,6 +230,24 @@ public class Window : Element
 
         ElementPoolService.CloseAllChildren(this);
         _content = content;
+    }
+
+    /// <summary>
+    /// Reserves a fixed-height band at the bottom of this window's content area for content,
+    /// hosted in its own borderless/titleless child window (see OnChildrenInitialized) once
+    /// ContentSize is real -- must be called before Initialize, same contract as SetContent.
+    /// Only records intent here: FooterHeight must already be set before this window's own first
+    /// MeasureAndArrange (during Initialize) for ContentSize to come out correctly shrunk from
+    /// the start, but the footer host window itself can't be created until ContentSize is final,
+    /// which for a window that computes its own final size in OnChildrenInitialized (e.g.
+    /// SecondaryInventoryWindow) is later than Configure -- see its own doc comment.
+    /// </summary>
+    public void SetFooterContent(IElementContent content, float height)
+    {
+        ArgumentNullException.ThrowIfNull(content);
+
+        _footerContent = content;
+        FooterHeight = height;
     }
 
     /// <summary>Attaches a chrome capability (see IChromeBehavior) to this window.</summary>

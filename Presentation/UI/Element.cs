@@ -211,6 +211,27 @@ public class Element
     /// <summary>Natural width the header needs for its own content, independent of the element's own content area -- e.g. Window measures its title text plus buttons; a header-less Element (or Folder, whose icon never needs more width than its content already provides) keeps the default of zero.</summary>
     protected virtual float MinimumHeaderWidth() => 0f;
 
+    /*========Footer========*/
+    /// <summary>
+    /// Fixed-height region reserved at the bottom of this element's own (already padded) content
+    /// area -- see Window.SetFooterContent, the only setter. Unlike the header, a footer has no
+    /// AbsolutePosition/Rectangle/DrawFooter of its own: its content is hosted as an ordinary
+    /// child Window (see Window.OnChildrenInitialized), which draws/hit-tests/scrolls-immune
+    /// itself through the same pipeline every other child already uses -- there is nothing here
+    /// that needs its own header-style escape hatch. Only meaningful for Fixed/Fill display
+    /// modes -- RecalculateWrapContentSize's own content-size-from-children scan already includes
+    /// the footer host window as an ordinary child, so adding FooterHeight on top the way header
+    /// does would double-count it; no current consumer is WrapContent, so this is left
+    /// unsupported rather than solved speculatively. Also only correct while this element itself
+    /// is not scrollable (CanUserScrollVertical/Horizontal false) -- Draw's children scissor-clip
+    /// intersects with ContentRectangle, which by construction ends exactly where the footer
+    /// begins, so a scrollable element's own footer would be clipped away entirely; neither
+    /// current consumer's outer window scrolls itself, only an inner content window does.
+    /// </summary>
+    public float FooterHeight { get; private protected set; }
+
+    public bool ShowFooter => FooterHeight > 0f;
+
     /// <summary>Draws this element's header region -- Window's title bar (background/text/buttons) and Folder's icon are both just their own override of this, called from Draw whenever the header is shown (see the ShowHeader/ShowHeaderWhenMinimized gate there). No-op by default. Overrides needing SpriteBatch/Texture2D read them from ElementPoolService (see its own doc comment) rather than taking them as parameters.</summary>
     protected virtual void DrawHeader(GameTime gameTime) { }
 
@@ -1239,7 +1260,24 @@ public class Element
     /// </summary>
     private static Vector2 ComputeChildAvailableSize(Element parent, Element child, Vector2 parentContentSize)
     {
-        var rawAvailableSize = parentContentSize - child._geometry.RelativePosition;
+        // parentContentSize is parent.ContentSize (or, from Measure's own cascade, the equally
+        // footer-shrunk _contentState.Size) -- already excludes parent.FooterHeight (see
+        // RecalculateFixedSize/RecalculateFillSize). The footer host window itself (see
+        // Window.SetFooterContent) is positioned at RelativePosition.Y == parent.ContentSize.Y,
+        // i.e. exactly the boundary that exclusion creates -- without adding FooterHeight back
+        // here, "remaining space" collapses to precisely zero for it every time, regardless of
+        // its own requested height. Every other child's own DESIRED size already respects the
+        // smaller, footer-excluded ContentSize on its own merits (every current consumer reads
+        // ContentSize directly to decide what to ask for), so relaxing this shared cap doesn't
+        // let one bleed into the footer band. Confirmed via a live regression: the footer host
+        // window (and everything inside it) collapsed to a degenerate zero-height rectangle,
+        // reading as mispositioned/transparent/unhoverable/undraggable all at once. Applied here,
+        // not by each caller individually -- MeasureAndArrange (a child's own first measure,
+        // called from Initialize/SetBounds) and Measure's own MeasureChildren cascade (an
+        // already-attached child's later remeasure) are two separate call sites that both need
+        // it; a first attempt patched only the latter and missed the former.
+        var effectiveParentContentSize = parentContentSize + new Vector2(0, parent.FooterHeight);
+        var rawAvailableSize = effectiveParentContentSize - child._geometry.RelativePosition;
         return new Vector2(
             parent.CanUserScrollHorizontal ? child._geometry.MaximumSize.X : rawAvailableSize.X,
             parent.CanUserScrollVertical ? child._geometry.MaximumSize.Y : rawAvailableSize.Y);
@@ -1293,6 +1331,9 @@ public class Element
                     throw new NotImplementedException("No default display mode.");
             }
 
+            // FooterHeight relaxation lives in ComputeChildAvailableSize itself (see its own doc
+            // comment), not here -- both this cascade and MeasureAndArrange's own first-measure
+            // call site route through it, so it only needs applying once.
             MeasureChildren(_contentState.Size);
 
             // AddChild/RemoveChild and a child's own Resized (OnChildElementResizedForScrollBounds)
@@ -1487,7 +1528,7 @@ public class Element
         _contentState.BackgroundSize = new Vector2(
             _geometry.CurrentSize.X - BorderInsetDoubled.X,
             _geometry.CurrentSize.Y - BorderInsetDoubled.Y - HeaderInsetHeight);
-        _contentState.Size = _contentState.BackgroundSize - ChildContentPaddingDoubled;
+        _contentState.Size = _contentState.BackgroundSize - ChildContentPaddingDoubled - new Vector2(0, FooterHeight);
     }
 
     protected virtual void RecalculateFillSize()
@@ -1503,7 +1544,7 @@ public class Element
                 ? _headerState.Size
                 : Vector2.Zero)
             - BorderInsetDoubled;
-        _contentState.Size = _contentState.BackgroundSize - ChildContentPaddingDoubled;
+        _contentState.Size = _contentState.BackgroundSize - ChildContentPaddingDoubled - new Vector2(0, FooterHeight);
     }
 
     protected virtual void RecalculateWrapContentSize()

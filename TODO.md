@@ -631,20 +631,6 @@ generic element if a third shows up (e.g. Soul Essence). `MapWindow.DrawHealthBa
 third instance already (same fraction math, no ticks, per-any-entity) -- include it in scope if this is
 ever picked up.
 
-#### Element footer
-
-A generic "footer" primitive: a fixed-height region that always displays at the bottom of an element
-regardless of its content size or scrolling. The Inventory window's Currency row (`CurrencyRowContent`,
-`PLAN-storage-containers.md`) is the first consumer, hand-wired twice today rather than through a
-shared primitive -- `InventoryManagementWindow` had to grow an extra nested Window (hosting
-`TabbedContent` in `ContentSize - (0, CurrencyRowContent.Height)` instead of via `SetContent` directly
-on itself) purely to make room for it, and `SecondaryInventoryWindow` folds the same row height into
-its own one-time size computation. Tolerable at one/two hand-built copies per this codebase's own
-"abstract on the third occurrence" convention (see the HUD bar item above) -- if a second real
-consumer shows up, build the real primitive and, as part of that, remove
-`InventoryManagementWindow`'s extra nested window (host `TabbedContent` directly again, with the
-footer primitive reserving its own space instead).
-
 #### Context menu amount picker
 
 `CurrencyRowContent`'s Give/Take (and their "All" variants -- see `PLAN-storage-containers.md`)

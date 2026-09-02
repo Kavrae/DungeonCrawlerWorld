@@ -140,6 +140,49 @@ public sealed class InventoryManagementWindowTests
         return null;
     }
 
+    /// <summary>Depth-first search for the footer host Window (see Window.SetFooterContent) whose Tag currently references CurrencyRowContent -- same Tag-based lookup convention as FindActiveGrid.</summary>
+    private static Window? FindCurrencyFooterHostWindow(Element element)
+    {
+        if (element is Window { Tag: CurrencyRowContent } window)
+        {
+            return window;
+        }
+
+        foreach (var child in element.ChildElements)
+        {
+            if (FindCurrencyFooterHostWindow(child) is { } found)
+            {
+                return found;
+            }
+        }
+
+        return null;
+    }
+
+    /// <summary>
+    /// Integration-level regression check, on top of the isolated primitive coverage in
+    /// WindowFooterTests.cs -- exercises the real InventoryManagementWindow/TabbedContent/
+    /// CurrencyRowContent combination this whole primitive was built for (see TODO.md's "Element
+    /// footer" item), rather than just a stub IElementContent.
+    /// </summary>
+    [TestMethod]
+    public void Configure_TabbedContentHostedDirectly_CurrencyFooterHasRealNonZeroHeight()
+    {
+        var (window, _, _, _, _) = Build();
+
+        Assert.IsInstanceOfType<TabbedContent>(window.Content, "TabbedContent should be hosted directly via SetContent now -- no more extra nested window.");
+        Assert.IsInstanceOfType<CurrencyRowContent>(window.FooterContent);
+        Assert.AreEqual(CurrencyRowContent.Height, window.FooterHeight);
+
+        var footerHostWindow = FindCurrencyFooterHostWindow(window);
+        Assert.IsNotNull(footerHostWindow, "Expected a footer host window hosting the currency row (Tag-tracked, see CurrencyRowContent.Initialize).");
+        Assert.AreEqual(CurrencyRowContent.Height, footerHostWindow!.CurrentSize.Y, "Regression check: the footer host window must not collapse to zero height (see Element.ComputeChildAvailableSize).");
+
+        var currencyElements = footerHostWindow.ChildElements.OfType<CurrencyElement>().ToList();
+        Assert.HasCount(2, currencyElements, "Expected Gold and Credits elements.");
+        Assert.IsTrue(currencyElements.All(element => element.CurrentSize.Y > 0), "Currency elements must have real, nonzero height, not just a correct position.");
+    }
+
     [TestMethod]
     public void Update_QuantityChangeWithinSameTagSet_DoesNotRebuildTheActiveTabsGrid()
     {

@@ -4,7 +4,6 @@ using Game.Modules.Inventory;
 using Game.Modules.Inventory.Components;
 using Game.World;
 using Microsoft.Xna.Framework;
-using Microsoft.Xna.Framework.Input;
 using Presentation.Fonts;
 using Presentation.Rendering;
 using Presentation.UI.ColorPalettes;
@@ -33,12 +32,9 @@ namespace Presentation.UI.Inventory;
 /// TabbedContent via SetContent) purely so Configure/Update have somewhere to live -- the
 /// codebase's own convention for when a Window subclass is warranted (MapWindow, TextWindow).
 ///
-/// TabbedContent no longer owns this window's full ContentSize directly -- it's hosted in an
-/// inner Window sized ContentSize - (0, CurrencyRowContent.Height) instead, so a fixed-height
-/// Currency row (see CurrencyRowContent) can sit below it, the same GridControl-row-above/
-/// grid-below split InventoryTabContent itself already uses one layer down. Built in
-/// OnChildrenInitialized, not Configure, since it needs a real ContentSize (see
-/// SecondaryInventoryWindow's own doc comment on the same constraint).
+/// TabbedContent is hosted directly via SetContent on this window itself; the fixed-height
+/// Currency row (see CurrencyRowContent) is hosted via SetFooterContent instead of an extra
+/// hand-built nested window (see Element.FooterHeight/Window.SetFooterContent).
 /// </summary>
 public sealed class InventoryManagementWindow(
     FontService fontService,
@@ -53,7 +49,6 @@ public sealed class InventoryManagementWindow(
     MapViewState mapViewState) : Window(fontService, elementPoolService, labelRenderer)
 {
     private TabbedContent _tabbedContent = null!;
-    private Window _tabbedContentWindow = null!;
     private CurrencyRowContent _currencyRowContent = null!;
 
     private int _entityId;
@@ -75,45 +70,17 @@ public sealed class InventoryManagementWindow(
 
         var tagCounts = InventoryTagQueries.GetTagCounts(componentManager, itemCatalog, entityId);
         _currentTags = ToTagSet(tagCounts);
-        // Not SetContent(this, ...) -- see this class's own doc comment: TabbedContent is hosted
-        // in an inner Window built by OnChildrenInitialized, once ContentSize is real, so a
-        // Currency row can share this window's content area with it.
         _tabbedContent = new TabbedContent(BuildTabDefinitions(tagCounts), elementPoolService, fontService, labelRenderer, WindowPalette.PanelBackgroundColor);
-        _currencyRowContent = new CurrencyRowContent(componentManager, world, contextMenuController, elementPoolService, fontService, labelRenderer, spriteSheetService, spriteRenderer, _getSecondaryTargetEntityId);
+        _currencyRowContent = new CurrencyRowContent(entityId, componentManager, world, contextMenuController, elementPoolService, fontService, labelRenderer, spriteSheetService, spriteRenderer, _getSecondaryTargetEntityId);
+        SetContent(_tabbedContent);
+        SetFooterContent(_currencyRowContent, CurrencyRowContent.Height);
 
         _tagVersionWatcher.HasChanged(CurrentInventoryVersion()); // Primes the baseline so the next Update doesn't immediately rebuild against the list just built above.
-    }
-
-    protected override void OnChildrenInitialized()
-    {
-        base.OnChildrenInitialized(); // _content is never set on this window itself (see Configure) -- a no-op, kept for consistency with Window's own contract.
-
-        _tabbedContentWindow = ElementPoolService.CreateElement<Window>(this, new ElementOptions
-        {
-            Hierarchy = new ElementHierarchyOptions { CanContainChildren = true },
-            Layout = new ElementLayoutOptions { RelativePosition = Vector2.Zero, Size = ContentSize - new Vector2(0, CurrencyRowContent.Height), DisplayMode = ElementDisplayMode.Fixed },
-            Chrome = new ElementChromeOptions { ShowBorder = false, ShowTitle = false, CanUserFocus = false },
-        });
-        _tabbedContentWindow.SetContent(_tabbedContent);
-        AddChild(_tabbedContentWindow); // Initializes _tabbedContentWindow, which in turn Initializes _tabbedContent (see Window.OnChildrenInitialized/AddChild's own doc comment on why Initialize is never called explicitly here).
-
-        _currencyRowContent.Build(this, _entityId, ContentSize.Y - CurrencyRowContent.Height, ContentSize.X);
-
-        Resized += OnWindowResized; // No manual unsubscribe needed -- ElementPoolService.CloseElement clears every event on this window (Resized included) when it's returned to the pool on close, the same discipline TabbedContent's own host-window subscription relies on.
-    }
-
-    private void OnWindowResized(Element _)
-    {
-        _tabbedContentWindow.SetSize(ContentSize - new Vector2(0, CurrencyRowContent.Height));
-        _currencyRowContent.Reposition(ContentSize.Y - CurrencyRowContent.Height, ContentSize.X);
     }
 
     public override void Update(GameTime gameTime)
     {
         base.Update(gameTime);
-
-        _currencyRowContent.RefreshAmounts();
-        _currencyRowContent.UpdateHover(Mouse.GetState());
 
         if (!_tagVersionWatcher.HasChanged(CurrentInventoryVersion()))
         {

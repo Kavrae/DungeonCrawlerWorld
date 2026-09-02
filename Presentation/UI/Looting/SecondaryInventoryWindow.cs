@@ -6,7 +6,6 @@ using Game.Modules.Inventory;
 using Game.Modules.Inventory.Components;
 using Game.World;
 using Microsoft.Xna.Framework;
-using Microsoft.Xna.Framework.Input;
 using Presentation.Fonts;
 using Presentation.Rendering;
 using Presentation.UI.ColorPalettes;
@@ -74,42 +73,34 @@ public sealed class SecondaryInventoryWindow(
     private Action<int, Guid> _onCompareRequested = static (_, _) => { };
     private CurrencyRowContent _currencyRowContent = null!;
 
-    /// <summary>Must be called after CreateElement but before Initialize -- same contract InventoryManagementWindow/AbilityScoreWindow's own Configure follow.</summary>
+    /// <summary>Must be called after CreateElement but before Initialize -- same contract InventoryManagementWindow/AbilityScoreWindow's own Configure follow. Constructs and registers the currency row here too (not OnChildrenInitialized) -- SetFooterContent only needs to record FooterHeight, which must already be set before this window's own first MeasureAndArrange for ContentSize to come out correctly shrunk (see Window.SetFooterContent's own doc comment).</summary>
     public void Configure(int entityId, Tooltip hoverPopup, Action<int, Guid> onItemSelected, Action<int, Guid> onCompareRequested)
     {
         _entityId = entityId;
         _hoverPopup = hoverPopup;
         _onItemSelected = onItemSelected;
         _onCompareRequested = onCompareRequested;
-    }
-
-    /// <summary>See AbilityScoreWindow's own doc comment for why building children here, not in Configure -- ContentSize isn't real until after MeasureAndArrange.</summary>
-    protected override void OnChildrenInitialized()
-    {
-        base.OnChildrenInitialized();
-
-        var gridHeight = ComputeGridHeight();
-        var finalSize = ComputeOuterSize(gridHeight);
-        SetMinimumSize(finalSize);
-        SetSize(finalSize);
-
-        BuildSummary();
-        BuildGrid(gridHeight);
 
         // getSecondaryTargetEntityId always returns this window's own _entityId, same
         // self-referential shape BuildGrid's own InventoryGridContent uses -- this window *is*
         // the secondary target for as long as it exists, so its own currency row's context menu
         // only ever needs to offer "Take"/"Take All".
-        _currencyRowContent = new CurrencyRowContent(componentManager, world, contextMenuController, ElementPoolService, FontService, LabelRenderer, spriteSheetService, spriteRenderer, () => _entityId);
-        _currencyRowContent.Build(this, _entityId, SummaryHeight + Padding + gridHeight + Padding, ContentSize.X);
+        _currencyRowContent = new CurrencyRowContent(entityId, componentManager, world, contextMenuController, ElementPoolService, FontService, LabelRenderer, spriteSheetService, spriteRenderer, () => _entityId);
+        SetFooterContent(_currencyRowContent, CurrencyRowContent.Height);
     }
 
-    public override void Update(GameTime gameTime)
+    /// <summary>See AbilityScoreWindow's own doc comment for why building children here, not in Configure -- ContentSize isn't real until after MeasureAndArrange. SetSize must run before base.OnChildrenInitialized so the footer host window (built by the base call) is created off this window's own final ContentSize, not a placeholder one.</summary>
+    protected override void OnChildrenInitialized()
     {
-        base.Update(gameTime);
+        var gridHeight = ComputeGridHeight();
+        var finalSize = ComputeOuterSize(gridHeight);
+        SetMinimumSize(finalSize);
+        SetSize(finalSize);
 
-        _currencyRowContent.RefreshAmounts();
-        _currencyRowContent.UpdateHover(Mouse.GetState());
+        base.OnChildrenInitialized();
+
+        BuildSummary();
+        BuildGrid(gridHeight);
     }
 
     /// <summary>Always at least MinimumRows (a 2x5 grid) worth of height, regardless of how few items the target entity actually starts with -- items can be dragged in later (see InventoryActions.TryTransferStack), and this window's size is set once, up front, never revisited (see this class's own doc comment), so a target that opened with room for only 1 row would otherwise force the grid to scroll the moment a second row's worth of items arrived.</summary>
@@ -137,13 +128,14 @@ public sealed class SecondaryInventoryWindow(
     /// Window has children), already folded into outerInsets below (see ChildContentPadding's own
     /// doc comment: gated on CanContainChildren alone, so this reads correctly even before any
     /// child has actually been added yet, which is exactly when this runs -- see OnChildrenInitialized).
-    /// The two remaining INTERNAL gaps (summary-to-grid, grid-to-currency-row) are still this
-    /// method's own Padding.
+    /// The one remaining INTERNAL gap (summary-to-grid) is still this method's own Padding; the
+    /// grid-to-currency-row gap no longer needs one here -- FooterHeight (already set by Configure
+    /// before this window's very first MeasureAndArrange) is already baked into outerInsets below.
     /// </summary>
     private Vector2 ComputeOuterSize(float gridHeight)
     {
         var contentWidth = System.Math.Max(IconSize.X + Padding + SummaryTextWidth, GridWidth);
-        var contentHeight = SummaryHeight + Padding + gridHeight + Padding + CurrencyRowContent.Height;
+        var contentHeight = SummaryHeight + Padding + gridHeight;
 
         var outerInsets = CurrentSize - ContentSize;
         return new Vector2(contentWidth, contentHeight) + outerInsets;
