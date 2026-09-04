@@ -63,6 +63,11 @@ public sealed class InventoryGridContent(
     /// <summary>Popup sits just to the right of whatever's hovered, vertically centered against it -- see PopupPositioning.GetPosition(East).</summary>
     private static readonly Vector2 PopupGap = new(1, 1);
 
+    /// <summary>Same LightGreen/LightCoral pair ShopItemStackCell's own price-line color and ItemDetailsWindow's BetterColor/WorseColor already use (LightCoral, not IndianRed -- see ItemDetailsWindow.WorseColor's own doc comment for why) -- see ComputeHoverRows' own doc comment for the favorable/unfavorable-per-grid-direction rule these color.</summary>
+    private static readonly Color FavorableStatusColor = Color.LightGreen;
+
+    private static readonly Color UnfavorableStatusColor = Color.LightCoral;
+
     private readonly MultiComponentPool<InventoryItemStackComponent> _stacks = componentManager.GetMultiPool<InventoryItemStackComponent>();
     private readonly PackedComponentPool<ShopComponent>? _shopPool = componentManager.IsRegistered<ShopComponent>() ? componentManager.GetPackedPool<ShopComponent>() : null;
     private readonly PackedComponentPool<CurrencyComponent>? _currencyPool = componentManager.IsRegistered<CurrencyComponent>() ? componentManager.GetPackedPool<CurrencyComponent>() : null;
@@ -328,8 +333,9 @@ public sealed class InventoryGridContent(
                 continue;
             }
 
-            var perItemPrice = isThisGridTheShop ? ShopActions.ComputeBuyPrice(shop, definition) : ShopActions.ComputeSellPrice(shop, definition);
-            var totalPrice = perItemPrice * stack.Quantity;
+            var totalPrice = isThisGridTheShop
+                ? ShopStockPricing.ComputeBulkBuyPrice(componentManager, shopEntityId, shop, definition, stack.Quantity)
+                : ShopStockPricing.ComputeBulkSellPrice(componentManager, shopEntityId, shop, definition, stack.Quantity);
             cell.CompareState = payerCurrency.Gold >= totalPrice ? CellCompareState.Eligible : CellCompareState.Ineligible;
         }
     }
@@ -368,11 +374,13 @@ public sealed class InventoryGridContent(
 
         ItemDefinition? definition = null;
         var isSingleStack = candidate.StackInstanceId is not null;
+        ushort? stackQuantity = null;
         if (candidate.StackInstanceId is { } stackInstanceId)
         {
             if (InventoryQueries.TryFindByStackInstanceId(_stacks, entityId, stackInstanceId, out var stack))
             {
                 InventoryQueries.TryResolveEffectiveItem(itemCatalog, in stack, out definition);
+                stackQuantity = stack.Quantity;
             }
         }
         else
@@ -402,8 +410,111 @@ public sealed class InventoryGridContent(
             }
         }
 
-        hoverPopup.ShowNear(candidate.Rectangle, PopupAnchor.East, PopupGap, summary, definition.Name);
+        var rows = ComputeHoverRows(definition, stackQuantity);
+
+        // Shop mode's band table needs a guaranteed-wide-enough box for its range-annotated rows
+        // (e.g. "Understocked (10-14)") -- a plain description tooltip still shrinks to content as
+        // before.
+        hoverPopup.UseFixedWidth = rows is not null;
+
+        hoverPopup.ShowNear(candidate.Rectangle, PopupAnchor.East, PopupGap, summary, definition.Name, rows);
     }
+
+    /// <summary>
+    /// The stock-band table (one row per StockStatus, each showing its own stock range alongside
+    /// its price) under the description while shop mode is open -- null outside it. Shown
+    /// unconditionally, not just when the current band is Overstocked/Understocked -- the whole
+    /// point of a band table (PLAN-stock-based-shop-pricing.md's Phase 5) is showing the player
+    /// where "now" sits on the curve, which is exactly as informative for a Normal-band item as any
+    /// other. Rows are all one neutral color -- the shop's *current* band is marked with an
+    /// inner-fade glow instead (green for Desperate/Understocked, red for Overstocked/Flooded, white
+    /// for Normal -- a fixed mapping, not the favorable/unfavorable-per-grid-direction rule
+    /// ShopItemStackCell's own price-line color still uses) rather than by coloring that row's text.
+    /// A divider separates the table from the description above it.
+    ///
+    /// On the player's own grid specifically (never the shop's own -- buying from the shop has no
+    /// analogous cap), a wrong-tag item or one the shop is already at ItemDefinition.
+    /// MaximumShopStock for (the same hard sell-cap TrySellToShop itself enforces) instead shows a
+    /// single "Shop will not buy" row -- the band table would misleadingly imply a sale is still
+    /// possible, just pricier.
+    ///
+    /// If stackQuantity has a value (any real quantity to price, including 1), a per-trade bracket
+    /// receipt (PLAN-stock-based-shop-pricing.md's Phase 5) is always appended below the band table,
+    /// past a second divider -- one row per band the trade actually crosses plus a Total row when it
+    /// crosses more than one band, or just the Total alone when it stays within a single band (that
+    /// band's own row in the table above already shows the identical per-unit price, so listing it
+    /// again as a one-line "receipt" would be redundant). Omitted entirely only when there's no
+    /// concrete quantity to price at all (a merged cell with no single stack behind it).
+    /// </summary>
+    private IReadOnlyList<TooltipRow>? ComputeHoverRows(ItemDefinition definition, ushort? stackQuantity)
+    {
+        if (!_isShopMode || mapViewState.OpenShopEntityId is not { } shopEntityId || _shopPool is null || !_shopPool.TryGetReadonly(shopEntityId, out var shop))
+        {
+            return null;
+        }
+
+        var isThisGridTheShop = entityId == shopEntityId;
+        var neutralColor = hoverPopup.TextColor;
+
+        if (!isThisGridTheShop)
+        {
+            var maximumShopStock = definition.MaximumShopStock ?? ShopStockPricing.DefaultMaximumShopStock;
+            var currentStock = ShopStockPricing.GetTotalStock(componentManager, shopEntityId, definition.Id);
+            if (!ShopActions.CanTrade(shop, definition) || currentStock >= maximumShopStock)
+            {
+                return [TooltipRow.Divider(neutralColor), new TooltipRow("Shop will not buy", string.Empty, UnfavorableStatusColor)];
+            }
+        }
+
+        var preferredStockLevel = ShopStockPricing.GetPreferredStockLevel(componentManager, shopEntityId, definition.Id);
+        var maxStock = definition.MaximumShopStock ?? ShopStockPricing.DefaultMaximumShopStock;
+        var (e1, e2, e3, e4) = ShopStockPricing.GetBandEdges(preferredStockLevel, maxStock);
+        var currentStockLevel = ShopStockPricing.GetTotalStock(componentManager, shopEntityId, definition.Id);
+        var currentBand = ShopStockPricing.GetStockStatus(currentStockLevel, e1, e2, e3, e4);
+        var shopMultiplier = isThisGridTheShop ? shop.BuyMultiplier : shop.SellMultiplier;
+
+        var rows = new List<TooltipRow> { TooltipRow.Divider(neutralColor) };
+        foreach (var band in ShopStockPricing.GetAllBands())
+        {
+            var (low, high) = ShopStockPricing.GetBandRange(band, e1, e2, e3, e4);
+            var rangeText = band == StockStatus.Flooded ? $"{low}+" : $"{low}-{high}";
+            var perUnitPrice = ShopStockPricing.GetBandPricePerUnit(definition, shopMultiplier, band);
+            var glowColor = band == currentBand ? GlowColorFor(band) : (Color?)null;
+            rows.Add(new TooltipRow(band.ToString(), $"{perUnitPrice}G", neutralColor, GlowColor: glowColor, MiddleText: rangeText));
+        }
+
+        if (stackQuantity is { } quantity)
+        {
+            var breakdown = isThisGridTheShop
+                ? ShopStockPricing.ComputeBulkBuyBreakdown(componentManager, shopEntityId, shop, definition, quantity)
+                : ShopStockPricing.ComputeBulkSellBreakdown(componentManager, shopEntityId, shop, definition, quantity);
+
+            rows.Add(TooltipRow.Divider(neutralColor));
+
+            var showPerBandRows = breakdown.Count > 1;
+            var total = 0;
+            foreach (var band in breakdown)
+            {
+                total += band.Subtotal;
+                if (showPerBandRows)
+                {
+                    rows.Add(new TooltipRow($"{band.Units}x{band.PerUnitPrice}G", $"{band.Subtotal}G", neutralColor));
+                }
+            }
+
+            rows.Add(new TooltipRow("Total", $"{total}G", neutralColor));
+        }
+
+        return rows;
+    }
+
+    /// <summary>Fixed color for whichever band is the shop's own *current* one on the band table -- green for Desperate/Understocked, red for Overstocked/Flooded, white for Normal. Unlike ShopItemStackCell.PriceIsFavorable/PriceIsUnfavorable, this does not flip with which grid is being drawn -- the band table always describes the shop's own stock, not a buy/sell direction.</summary>
+    private static Color GlowColorFor(StockStatus band) => band switch
+    {
+        StockStatus.Desperate or StockStatus.Understocked => FavorableStatusColor,
+        StockStatus.Overstocked or StockStatus.Flooded => UnfavorableStatusColor,
+        _ => Color.White,
+    };
 
     private InventoryItemStackCell? FindHoverCandidate(Point mousePosition)
     {
@@ -614,9 +725,9 @@ public sealed class InventoryGridContent(
 
             if (cell is ShopItemStackCell shopCell)
             {
-                var (perItemPrice, totalPrice) = ComputeShopPrices(entry.Definition, entry.Quantity);
                 shopCell.SetItemName(entry.Definition.Name);
-                shopCell.SetPrice(totalPrice, perItemPrice);
+                shopCell.SetPrice(ComputeShopTotalPrice(entry.Definition, entry.Quantity), entry.Quantity);
+                shopCell.SetStockStatus(ComputeShopStockStatus(entry.Definition), mapViewState.OpenShopEntityId == entityId);
             }
 
             cell.Clicked += OnCellClicked;
@@ -672,18 +783,37 @@ public sealed class InventoryGridContent(
         return System.Math.Max(1, (int)((_hostWindow.ContentSize.X + CellGap) / (cellSize.X + CellGap)));
     }
 
-    /// <summary>(0,0) outside shop mode or when the open shop's own ShopComponent can't be resolved -- callers only ever read this while building a ShopItemStackCell, which only happens while _isShopMode is true. isThisGridTheShop mirrors UpdateShopEligibilityState's own direction rule: this grid showing the shop's own stock prices a purchase (ComputeBuyPrice), the player's own grid prices a sale (ComputeSellPrice).</summary>
-    private (int PerItemPrice, int TotalPrice) ComputeShopPrices(ItemDefinition definition, int quantity)
+    /// <summary>
+    /// 0 outside shop mode or when the open shop's own ShopComponent can't be resolved -- callers
+    /// only ever read this while building a ShopItemStackCell, which only happens while _isShopMode
+    /// is true. isThisGridTheShop mirrors UpdateShopEligibilityState's own direction rule: this grid
+    /// showing the shop's own stock prices a purchase, the player's own grid prices a sale. The real
+    /// bulk-priced total for the whole stack -- what actually gets charged -- not a per-unit price;
+    /// the cell itself no longer shows a per-unit breakdown (see ShopItemStackCell.SetPrice), the
+    /// hover tooltip's own band table/receipt covers that in full.
+    /// </summary>
+    private int ComputeShopTotalPrice(ItemDefinition definition, int quantity)
     {
         if (mapViewState.OpenShopEntityId is not { } shopEntityId || _shopPool is null || !_shopPool.TryGetReadonly(shopEntityId, out var shop))
         {
-            return (0, 0);
+            return 0;
         }
 
         var isThisGridTheShop = entityId == shopEntityId;
-        var perItemPrice = isThisGridTheShop ? ShopActions.ComputeBuyPrice(shop, definition) : ShopActions.ComputeSellPrice(shop, definition);
-        return (perItemPrice, perItemPrice * quantity);
+        return isThisGridTheShop
+            ? ShopStockPricing.ComputeBulkBuyPrice(componentManager, shopEntityId, shop, definition, (ushort)quantity)
+            : ShopStockPricing.ComputeBulkSellPrice(componentManager, shopEntityId, shop, definition, (ushort)quantity);
     }
+
+    /// <summary>
+    /// The shop's own stock status for definition -- always keyed off the shop entity regardless of
+    /// which grid is being built (the shop's own grid or the player's own grid while shop mode is
+    /// active both describe the same shop's stock, see ComputeShopPrices' own doc comment for the
+    /// matching isThisGridTheShop direction rule). Normal (no color) outside shop mode or when the
+    /// open shop's own ShopComponent can't be resolved -- same fallback ComputeShopPrices uses.
+    /// </summary>
+    private StockStatus ComputeShopStockStatus(ItemDefinition definition) =>
+        mapViewState.OpenShopEntityId is { } shopEntityId ? ShopStockPricing.GetStockStatus(componentManager, shopEntityId, definition) : StockStatus.Normal;
 
     /// <summary>
     /// Groups _reusableVisibleEntries by ItemDefinitionId when GroupDivergedStacks is on --

@@ -1702,6 +1702,21 @@ public class Element
     public void SetMinimumSize(Vector2 minimumSize) => _geometry.MinimumSize = minimumSize;
 
     /// <summary>
+    /// Sets MaximumSize after construction -- same reasoning as SetMinimumSize, one door up: Build
+    /// only ever sets it once (Layout.MaximumSize if given, else a parented element inherits its
+    /// parent's own ContentSize, else -- the case a parentless Fixed-mode window with no explicit
+    /// MaximumSize hits -- it falls back to Layout.Size itself, permanently ceiling that window at
+    /// whatever size it happened to be created with). A window that needs to grow past its own
+    /// original size later (e.g. AbilityScoreWindow.ResizeWindowToPreserveColumnWidth widening
+    /// itself for admin mode's extra columns) needs this raised first -- SetSize alone silently
+    /// clamps right back down to the stale ceiling otherwise (confirmed live: the window "grew" on
+    /// screen only up to its own original width, no further, no matter how large a size SetSize
+    /// was given). Does not itself trigger a re-measure -- call SetSize afterward if the current
+    /// size also needs to move up to the new ceiling.
+    /// </summary>
+    public void SetMaximumSize(Vector2 maximumSize) => _geometry.MaximumSize = maximumSize;
+
+    /// <summary>
     /// Sets relative position and Fixed-mode size together in one MeasureAndArrange pass --
     /// needed for left/top-edge resize, which must move position and
     /// size together to keep the opposite edge visually fixed. A separate SetSize then

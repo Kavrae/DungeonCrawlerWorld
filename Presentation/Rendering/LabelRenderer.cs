@@ -52,25 +52,32 @@ public sealed class LabelRenderer
 
     /// <summary>
     /// Where text must be drawn so it's flush against footprintSize's right edge and vertically
-    /// centered within it -- a plain MeasureString-based line-box position, not GetCenteredPosition's
-    /// ink-bound centering (right-aligned text like "Source : +2" needs its whole line box flush
-    /// right so a column of these lines up cleanly, not each string's individual ink).
+    /// centered within it -- horizontally, a plain MeasureString-based line-box position, not
+    /// GetCenteredPosition's ink-bound centering (right-aligned text like "Source : +2" needs its
+    /// whole line box flush right so a column of these lines up cleanly, not each string's
+    /// individual ink). Vertically, centers against font.LineHeight, not MeasureString(text).Y --
+    /// the same "generic line box sits well below where the ink actually renders" fix
+    /// GetCenteredPosition's own doc comment describes (e.g. "g" at font size 24 measures a
+    /// ~29px-tall box but its ink only occupies roughly Y=[10,29] within it); using the box's own
+    /// height here centered every row's text too low, bleeding descenders past the footprint's own
+    /// bottom edge (confirmed live: AbilityScoreModifierRow's modifier text, ShopItemStackCell's
+    /// name/price lines, Tooltip's status line -- every DrawLeftAligned/DrawRightAligned consumer).
+    /// LineHeight is a per-font constant (not per-string), which also keeps a column of rows
+    /// vertically consistent regardless of which ones happen to have descenders -- same property
+    /// TextDivider's own DrawContent already uses for exactly this reason.
     /// </summary>
     public Vector2 GetRightAlignedPosition(SpriteFontBase font, string text, Vector2 footprintTopLeft, Vector2 footprintSize)
     {
-        var textSize = font.MeasureString(text);
-        return footprintTopLeft + new Vector2(footprintSize.X - textSize.X, (footprintSize.Y - textSize.Y) / 2f);
+        var textWidth = font.MeasureString(text).X;
+        return footprintTopLeft + new Vector2(footprintSize.X - textWidth, (footprintSize.Y - font.LineHeight) / 2f);
     }
 
     public void DrawRightAligned(SpriteBatch spriteBatch, SpriteFontBase font, string text, Vector2 footprintTopLeft, Vector2 footprintSize, Color color) =>
         Draw(spriteBatch, font, text, GetRightAlignedPosition(font, text, footprintTopLeft, footprintSize), color);
 
-    /// <summary>Where text must be drawn so it's flush against footprintSize's left edge and vertically centered within it -- the left-aligned counterpart to GetRightAlignedPosition, for a row that needs both (e.g. a context-menu option's label on the left, its hotkey on the right).</summary>
-    public Vector2 GetLeftAlignedPosition(SpriteFontBase font, string text, Vector2 footprintTopLeft, Vector2 footprintSize)
-    {
-        var textSize = font.MeasureString(text);
-        return footprintTopLeft + new Vector2(0, (footprintSize.Y - textSize.Y) / 2f);
-    }
+    /// <summary>Where text must be drawn so it's flush against footprintSize's left edge and vertically centered within it -- the left-aligned counterpart to GetRightAlignedPosition (see its own doc comment for the LineHeight-vs-MeasureString fix this shares), for a row that needs both (e.g. a context-menu option's label on the left, its hotkey on the right).</summary>
+    public Vector2 GetLeftAlignedPosition(SpriteFontBase font, string text, Vector2 footprintTopLeft, Vector2 footprintSize) =>
+        footprintTopLeft + new Vector2(0, (footprintSize.Y - font.LineHeight) / 2f);
 
     public void DrawLeftAligned(SpriteBatch spriteBatch, SpriteFontBase font, string text, Vector2 footprintTopLeft, Vector2 footprintSize, Color color) =>
         Draw(spriteBatch, font, text, GetLeftAlignedPosition(font, text, footprintTopLeft, footprintSize), color);

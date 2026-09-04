@@ -31,7 +31,6 @@ public static class ScrollOfTorch
     public static readonly Guid Id = new("7c3e9a1d-4b6f-4e2a-8d1c-000000000021");
     public static readonly Guid SpellId = new("7c3e9a1d-4b6f-4e2a-8d1c-000000000022");
 
-    private const int MaximumStackSize = 999;
     private const int BaseFramesRemaining = GameTiming.FramesPerSecond * 10; // 10s at Intelligence 1 (100%)
     private const int AuraAndGlowStrength = 8; // -> 3-tile reach, matching this scroll's own base AreaSize
 
@@ -41,7 +40,6 @@ public static class ScrollOfTorch
         Effects: [new ActionEffect([new AuraSourceGrant(StatusEffectType.Light, AuraAndGlowStrength, Color.White, DurationFrames: BaseFramesRemaining)])],
         Description: "A scroll that marks an area with a bright, temporary light.",
         Summary: "Marks the target area with a temporary torch light.",
-        MaxStackSize: MaximumStackSize,
         GoldValue: 14,
         Activator: new ScrollActivator(
             new TargetingSpec(Shape: TargetShape.Burst, Range: 5, AreaSize: 3),

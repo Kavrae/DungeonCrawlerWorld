@@ -8,6 +8,9 @@ namespace Game.Modules.Inventory;
 /// <summary>Write-side counterpart to InventoryQueries -- mutates an entity's inventory storage.</summary>
 public static class InventoryActions
 {
+    /// <summary>The per-item-stack cap every entity starts with -- see MaxStackSizeComponent's own doc comment for the per-entity override that replaces this for whichever entity has one.</summary>
+    public const ushort DefaultMaxStackSize = 999;
+
     /// <summary>
     /// Grants quantity of itemDefinitionId, stacking onto an existing matching stack if one
     /// exists rather than always creating a new one -- this is the "identical items grouped with
@@ -15,27 +18,54 @@ public static class InventoryActions
     /// future loot drops), so it's also where InventoryGrant.EnsureInventoryComponentExists runs
     /// -- every caller gets the "gains an inventory on first item" behavior for free, the player
     /// included, with no per-call-site handling needed. Returns the StackInstanceId of whichever
-    /// stack the granted units ended up in (new or merged-into-existing) -- e.g. so a caller can
-    /// immediately bind a hotkey to the exact stack just granted (see ItemHotkeyBindingComponent's
-    /// own doc comment for why binding is by StackInstanceId, not ItemDefinitionId).
+    /// stack the *last* granted unit ended up in -- e.g. so a caller can immediately bind a hotkey
+    /// to the exact stack just granted (see ItemHotkeyBindingComponent's own doc comment for why
+    /// binding is by StackInstanceId, not ItemDefinitionId).
+    ///
+    /// Any quantity that would overflow entityId's own effective cap (see
+    /// GetEffectiveMaxStackSize) spills into additional new stacks rather than growing one stack
+    /// past it -- splitting a stack that already exceeds the cap is a separate, not-yet-built TODO
+    /// item, so this only ever affects freshly-granted quantity.
     /// </summary>
     public static Guid AddItem(ComponentManager componentManager, int entityId, Guid itemDefinitionId, ushort quantity)
     {
         InventoryGrant.EnsureInventoryComponentExists(componentManager, entityId);
 
         var stacks = componentManager.GetMultiPool<InventoryItemStackComponent>();
+        var effectiveCap = GetEffectiveMaxStackSize(componentManager, entityId);
+        var remaining = quantity;
+        var lastStackInstanceId = Guid.Empty;
 
         var matchedDenseIndex = FindMatchingDenseIndex(stacks, entityId, stack => stack.ItemDefinitionId == itemDefinitionId);
         if (matchedDenseIndex != -1)
         {
-            stacks.UpdateByDenseIndex(matchedDenseIndex, quantity, static (ref InventoryItemStackComponent stack, ushort add) => stack.Quantity += add);
-            return stacks.GetReadonlyByDenseIndex(matchedDenseIndex).StackInstanceId;
+            var existingQuantity = stacks.GetReadonlyByDenseIndex(matchedDenseIndex).Quantity;
+            var room = (ushort)System.Math.Max(0, effectiveCap - existingQuantity);
+            var addNow = (ushort)System.Math.Min(remaining, room);
+            if (addNow > 0)
+            {
+                stacks.UpdateByDenseIndex(matchedDenseIndex, addNow, static (ref InventoryItemStackComponent stack, ushort add) => stack.Quantity += add);
+                remaining -= addNow;
+            }
+
+            lastStackInstanceId = stacks.GetReadonlyByDenseIndex(matchedDenseIndex).StackInstanceId;
         }
 
-        var newStack = new InventoryItemStackComponent(itemDefinitionId, quantity);
-        stacks.Add(entityId, newStack);
-        return newStack.StackInstanceId;
+        while (remaining > 0)
+        {
+            var chunk = (ushort)System.Math.Min(remaining, effectiveCap);
+            var newStack = new InventoryItemStackComponent(itemDefinitionId, chunk);
+            stacks.Add(entityId, newStack);
+            lastStackInstanceId = newStack.StackInstanceId;
+            remaining -= chunk;
+        }
+
+        return lastStackInstanceId;
     }
+
+    /// <summary>entityId's own MaxStackSizeComponent if it has one (today only ever the player, post-ObsessiveCollectorAchievement), else DefaultMaxStackSize -- every stack-growing method below reads this instead of any per-item cap, so the same entity's cap applies uniformly to every item it holds. Uses GetOptionalPackedPool, not GetPackedPool -- MaxStackSizeComponent is rare enough that plenty of minimal test harnesses (and any future caller) never register its pool at all, and "not registered" should read exactly like "not set," not throw.</summary>
+    public static ushort GetEffectiveMaxStackSize(ComponentManager componentManager, int entityId) =>
+        componentManager.GetOptionalPackedPool<MaxStackSizeComponent>() is { } pool && pool.TryGetReadonly(entityId, out var overrideComponent) ? overrideComponent.Value : DefaultMaxStackSize;
 
     /// <summary>
     /// Ticks the matching stack's Quantity down by 1, removing the stack entirely once it hits
@@ -81,7 +111,6 @@ public static class InventoryActions
         a.GlyphColor == b.GlyphColor &&
         a.Description == b.Description &&
         a.Summary == b.Summary &&
-        a.MaxStackSize == b.MaxStackSize &&
         Equals(a.Activator, b.Activator) &&
         a.Tags.SequenceEqual(b.Tags) &&
         a.Effects.SequenceEqual(b.Effects);
@@ -112,16 +141,15 @@ public static class InventoryActions
     /// unit granted together this way is still identical to every other (e.g. a freshly-granted
     /// batch of wands, all at the same Intelligence-derived MaxCharges baked in at grant time).
     /// Merges into an existing plain (IsDivergent == false) stack of the same ItemDefinitionId if
-    /// one has an equivalent Override, respecting effectiveDefinition.MaxStackSize -- any quantity
-    /// that would overflow the cap spills into additional new stacks rather than growing one stack
-    /// past it. No ItemCatalog lookup needed -- effectiveDefinition already carries its own
-    /// MaxStackSize, unlike plain AddItem above (which only ever receives a bare Guid).
+    /// one has an equivalent Override, respecting entityId's own effective cap (see
+    /// GetEffectiveMaxStackSize) -- any quantity that would overflow it spills into additional new
+    /// stacks rather than growing one stack past it.
     /// </summary>
     public static void AddItemWithOverride(ComponentManager componentManager, int entityId, ItemDefinition effectiveDefinition, ushort quantity)
     {
         InventoryGrant.EnsureInventoryComponentExists(componentManager, entityId);
         var stacks = componentManager.GetMultiPool<InventoryItemStackComponent>();
-        var maxStackSize = effectiveDefinition.MaxStackSize;
+        var effectiveCap = GetEffectiveMaxStackSize(componentManager, entityId);
         var remaining = quantity;
 
         var matchedDenseIndex = FindMatchingDenseIndex(stacks, entityId,
@@ -130,7 +158,7 @@ public static class InventoryActions
         if (matchedDenseIndex != -1)
         {
             var existingQuantity = stacks.GetReadonlyByDenseIndex(matchedDenseIndex).Quantity;
-            var room = maxStackSize is { } cap ? (ushort)System.Math.Max(0, cap - existingQuantity) : remaining;
+            var room = (ushort)System.Math.Max(0, effectiveCap - existingQuantity);
             var addNow = (ushort)System.Math.Min(remaining, room);
             if (addNow > 0)
             {
@@ -141,7 +169,7 @@ public static class InventoryActions
 
         while (remaining > 0)
         {
-            var chunk = maxStackSize is { } cap ? (ushort)System.Math.Min(remaining, cap) : remaining;
+            var chunk = (ushort)System.Math.Min(remaining, effectiveCap);
             stacks.Add(entityId, new InventoryItemStackComponent(effectiveDefinition.Id, chunk, overrideDefinition: effectiveDefinition, isDivergent: false));
             remaining -= chunk;
         }
@@ -152,8 +180,8 @@ public static class InventoryActions
     /// from its ItemDefinition (a wand's remaining charges today, a future enchant permanently
     /// modifying stats). Adds one unit with Override = overrideDefinition, IsDivergent: true,
     /// merging (Quantity++) into an existing divergent stack of the same ItemDefinitionId with an
-    /// equivalent Override if one exists and has room under overrideDefinition.MaxStackSize, else
-    /// creating a new Quantity: 1 stack. Returns the StackInstanceId of whichever stack the unit
+    /// equivalent Override if one exists and has room under entityId's own effective cap (see
+    /// GetEffectiveMaxStackSize), else creating a new Quantity: 1 stack. Returns the StackInstanceId of whichever stack the unit
     /// ended up in (new or merged-into-existing) -- callers (e.g. a wand repointing its hotkey
     /// binding after firing) need this to know exactly which physical stack now holds it.
     /// </summary>
@@ -161,11 +189,11 @@ public static class InventoryActions
     {
         InventoryGrant.EnsureInventoryComponentExists(componentManager, entityId);
         var stacks = componentManager.GetMultiPool<InventoryItemStackComponent>();
-        var maxStackSize = overrideDefinition.MaxStackSize;
+        var effectiveCap = GetEffectiveMaxStackSize(componentManager, entityId);
 
         var matchedDenseIndex = FindMatchingDenseIndex(stacks, entityId,
             stack => stack.IsDivergent && stack.Override is { } existing && AreEquivalentOverrides(existing, overrideDefinition) &&
-                     (maxStackSize is not { } cap || stack.Quantity < cap));
+                     stack.Quantity < effectiveCap);
 
         if (matchedDenseIndex != -1)
         {

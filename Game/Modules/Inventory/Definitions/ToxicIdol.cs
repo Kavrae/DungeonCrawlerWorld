@@ -21,7 +21,6 @@ public static class ToxicIdol
 {
     public static readonly Guid Id = new("f3a8c1d6-2b4e-4a9f-8c6d-1e7b3a5f9c2d");
 
-    private const int MaximumStackSize = 999;
     private const int AuraAndGlowStrength = 16;
 
     public static ItemDefinition Build() => new(
@@ -30,7 +29,6 @@ public static class ToxicIdol
         Effects: [new ActionEffect([new AuraSourceGrant(StatusEffectType.Poison, AuraAndGlowStrength, Color.DarkGreen)])],
         Description: "A squat stone idol weeping a slow green ichor. Holding it active keeps you wreathed in a spreading toxic cloud -- useful for softening a crowd, less so for standing still in one.",
         Summary: "Toggles a Poison aura (range 4) around you.",
-        MaxStackSize: MaximumStackSize,
         GoldValue: 15,
         Activator: new PotionActivator(
             new TargetingSpec(Shape: TargetShape.Self, Range: 0, AreaSize: 0),

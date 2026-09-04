@@ -13,8 +13,9 @@ namespace Game.Modules.Achievements;
 /// <param name="actionCatalog">The action catalog.</param>
 /// <param name="itemCatalog">The item catalog.</param>
 /// <param name="unlock">The unlock callback.</param>
+/// <param name="polledConditions">Shared list SubscribePolled appends to -- owned and drained each frame by AchievementModule's own AchievementPollingSystem.</param>
 /// <cleanupVersion>1</cleanupVersion>
-public sealed class AchievementTriggerContext(EventBus eventBus, IPlayerQuery? playerQuery, ComponentManager componentManager, ActionCatalog actionCatalog, ItemCatalog itemCatalog, Action<int> unlock)
+public sealed class AchievementTriggerContext(EventBus eventBus, IPlayerQuery? playerQuery, ComponentManager componentManager, ActionCatalog actionCatalog, ItemCatalog itemCatalog, Action<int> unlock, List<Func<bool>> polledConditions)
 {
     public EventBus EventBus { get; } = eventBus;
 
@@ -62,5 +63,32 @@ public sealed class AchievementTriggerContext(EventBus eventBus, IPlayerQuery? p
         };
 
         EventBus.Subscribe(handler);
+    }
+
+    /// <summary>
+    /// Registers a per-frame polled condition instead of an event subscription -- for an achievement
+    /// whose unlock condition is a standing state (e.g. "does any inventory stack currently hold at
+    /// least N") rather than a discrete occurrence, where no event exists to hang a Subscribe off
+    /// of. Checked every frame by AchievementModule's AchievementPollingSystem until it returns
+    /// true once, at which point it unlocks and is removed from the poll list.
+    /// </summary>
+    /// <param name="condition">Re-evaluated every frame; returning true unlocks the achievement.</param>
+    public void SubscribePolled(Func<bool> condition)
+    {
+        if (PlayerQuery is not { } playerQuery)
+        {
+            return;
+        }
+
+        polledConditions.Add(() =>
+        {
+            if (!condition())
+            {
+                return false;
+            }
+
+            unlock(playerQuery.PlayerEntityId);
+            return true;
+        });
     }
 }

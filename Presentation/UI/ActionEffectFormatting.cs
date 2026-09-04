@@ -23,6 +23,8 @@ public static class ActionEffectFormatting
         DirectHeal heal => FormatDirectHeal(heal),
         DirectManaRestore mana => $"Restores {mana.Fraction:P0} of max mana",
         StatusEffectGrant status => $"Applies {status.StackCount} stack{(status.StackCount == 1 ? "" : "s")} of {status.Type}",
+        StatusEffectImmunityGrant immunity => $"{immunity.Type} Immunity",
+        StatModifierGrant modifier when IsDamageReduction(modifier) => FormatDamageReduction(modifier),
         StatModifierGrant modifier => FormatStatModifierGrant(modifier),
         AuraSourceGrant aura => FormatAuraSourceGrant(aura),
         HotkeyExpansionGrant expansion => $"Unlocks {expansion.Slots} additional hotkey slot{(expansion.Slots == 1 ? "" : "s")}",
@@ -39,6 +41,17 @@ public static class ActionEffectFormatting
         heal.FlatAmount > 0
             ? $"Heals {heal.FlatAmount} + {heal.PercentOfMaxHealth:P0} of max health"
             : $"Heals {heal.PercentOfMaxHealth:P0} of max health";
+
+    /// <summary>A Multiplicative, negative-magnitude IncomingDamage modifier -- the only shape "reduces damage taken" is currently granted in (e.g. ResistanceTestPotion) -- reads as "50%: x-0.5" under the generic Target/symbol/Magnitude format below, which is technically correct but not what a player wants to read. FormatDamageReduction below gives this one shape its own plain-English line instead.</summary>
+    private static bool IsDamageReduction(StatModifierGrant modifier) =>
+        modifier.Target == StatModifierTarget.IncomingDamage && modifier.Operation == StatModifierOperation.Multiplicative && modifier.Magnitude < 0;
+
+    /// <summary>ConditionTag prefixed when present (e.g. "Fire Damage Reduction : 50%") -- unscoped IncomingDamage reductions (ConditionTag null) apply to every damage source, so the tag prefix would be misleading there.</summary>
+    private static string FormatDamageReduction(StatModifierGrant modifier)
+    {
+        var tagPrefix = modifier.ConditionTag is { } tag ? $"{tag} " : string.Empty;
+        return $"{tagPrefix}Damage Reduction : {-modifier.Magnitude:P0}";
+    }
 
     /// <summary>Reuses StatModifierComponent.ToString()'s own +/-/x/÷ symbol convention for Operation x Polarity (Game/Modules/StatModifiers/Components/StatModifierComponent.cs) so an item's own preview reads consistently with the Ability Score window's live modifier list.</summary>
     private static string FormatStatModifierGrant(StatModifierGrant modifier)

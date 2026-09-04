@@ -17,8 +17,6 @@ public static class ScrollOfHealing
 {
     public static readonly Guid Id = new("7c3e9a1d-4b6f-4e2a-8d1c-000000000020");
 
-    private const int MaximumStackSize = 999;
-
     private const float HealAmount = 0.5f;
 
     public static ItemDefinition Build() => new(
@@ -27,7 +25,6 @@ public static class ScrollOfHealing
         Effects: [new ActionEffect([new DirectHeal(HealAmount)])],
         Description: "A scroll inscribed with the Heal spell. Heals the target by a percentage of their maximum health and then crumbles to dust.",
         Summary: $"Heal target(s) by {HealAmount:P0}.",
-        MaxStackSize: MaximumStackSize,
         GoldValue: 11,
         Activator: new ScrollActivator(
             new TargetingSpec(Shape: TargetShape.AdjacentWithSelf, Range: 0),

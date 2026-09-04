@@ -23,8 +23,8 @@ public static class InventoryChrome
     /// <summary>Fixed width cap for the Ability Score hover popup; height auto-grows with content -- see Tooltip.</summary>
     public static Vector2 AbilityScoreHoverPopupMaximumSize = new(220, 10000f);
 
-    /// <summary>Fixed width cap for the Inventory item hover popup; height auto-grows with content -- see Tooltip.</summary>
-    public static Vector2 InventoryHoverPopupMaximumSize = new(220, 10000f);
+    /// <summary>Width cap for the Inventory item hover popup; height auto-grows with content -- see Tooltip. 225, not 220 -- confirmed live that the shop band table's range-annotated rows (e.g. "Understocked (10-14)") no longer fit the old 220 once Tooltip.UseFixedWidth pins width to this exact value in shop mode (see InventoryGridContent.UpdateHover).</summary>
+    public static Vector2 InventoryHoverPopupMaximumSize = new(225, 10000f);
 
     /// <summary>Height 30% taller than the original 350 (455) -- more room for the grid now that cells are smaller (see InventoryGridContent.CellSize). Width is no longer fixed -- see WindowWidthFraction.</summary>
     public static float WindowHeight = 455f;

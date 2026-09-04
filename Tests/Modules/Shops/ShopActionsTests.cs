@@ -22,6 +22,7 @@ public sealed class ShopActionsTests
 
     private static readonly Guid PotionItemId = Guid.NewGuid();
     private static readonly Guid ToolItemId = Guid.NewGuid();
+    private static readonly Guid CappedItemId = Guid.NewGuid();
 
     private static readonly ShopComponent PotionOnlyShop = new(allowedTags: [Tag.Potion], buyMultiplier: 1.10f, sellMultiplier: 0.90f);
     private static readonly ShopComponent GeneralShop = new(allowedTags: null, buyMultiplier: 1.20f, sellMultiplier: 0.80f);
@@ -44,6 +45,7 @@ public sealed class ShopActionsTests
         var catalog = new ItemCatalog();
         catalog.Register(new ItemDefinition(PotionItemId, "Test Potion", null, "p", Color.White, Tags: [Tag.Potion], Effects: [], GoldValue: PotionValue));
         catalog.Register(new ItemDefinition(ToolItemId, "Test Tool", null, "t", Color.White, Tags: [Tag.Tool], Effects: [], GoldValue: ToolValue));
+        catalog.Register(new ItemDefinition(CappedItemId, "Test Capped Potion", null, "c", Color.White, Tags: [Tag.Potion], Effects: [], GoldValue: PotionValue, MaximumShopStock: 5));
 
         return (manager, catalog);
     }
@@ -101,15 +103,20 @@ public sealed class ShopActionsTests
         var (manager, catalog) = BuildManager();
         manager.Merge(ShopEntityId, PotionOnlyShop);
         manager.Merge(ShopEntityId, new CurrencyComponent(gold: 0, credits: 0));
-        manager.Merge(PlayerEntityId, new CurrencyComponent(gold: 100, credits: 0));
+        manager.Merge(PlayerEntityId, new CurrencyComponent(gold: 1000, credits: 0));
         var stackId = InventoryActions.AddItem(manager, ShopEntityId, PotionItemId, quantity: 3);
+        catalog.TryGet(PotionItemId, out var potion);
+        // Not a flat ComputeBuyPrice * quantity any more -- ShopStockPricing's stock-aware bracket
+        // price is what actually gets charged (see ShopStockPricingTests for the pricing math
+        // itself; this test only cares that the trade charges exactly what that pricing says).
+        var expectedTotalPrice = ShopStockPricing.ComputeBulkBuyPrice(manager, ShopEntityId, PotionOnlyShop, potion, quantity: 3);
 
         var result = ShopActions.TryBuyFromShop(manager, catalog, PlayerEntityId, ShopEntityId, stackId, NoEntityIsThePlayer);
 
         Assert.IsTrue(result);
         var currencies = manager.GetPackedPool<CurrencyComponent>();
-        Assert.AreEqual(100 - 11 * 3, currencies.GetReadonly(PlayerEntityId).Gold);
-        Assert.AreEqual(11 * 3, currencies.GetReadonly(ShopEntityId).Gold);
+        Assert.AreEqual(1000 - expectedTotalPrice, currencies.GetReadonly(PlayerEntityId).Gold);
+        Assert.AreEqual(expectedTotalPrice, currencies.GetReadonly(ShopEntityId).Gold);
 
         var stacks = manager.GetMultiPool<InventoryItemStackComponent>();
         Assert.IsFalse(stacks.Has(ShopEntityId));
@@ -183,13 +190,18 @@ public sealed class ShopActionsTests
         manager.Merge(ShopEntityId, new CurrencyComponent(gold: 1000, credits: 0));
         manager.Merge(PlayerEntityId, new CurrencyComponent(gold: 0, credits: 0));
         var stackId = InventoryActions.AddItem(manager, PlayerEntityId, PotionItemId, quantity: 4);
+        catalog.TryGet(PotionItemId, out var potion);
+        // Not a flat ComputeSellPrice * quantity any more -- ShopStockPricing's stock-aware bracket
+        // price is what actually gets paid (the shop starts with zero of this item, so it's
+        // Understocked and pays a premium; see ShopStockPricingTests for the pricing math itself).
+        var expectedTotalPrice = ShopStockPricing.ComputeBulkSellPrice(manager, ShopEntityId, PotionOnlyShop, potion, quantity: 4);
 
         var result = ShopActions.TrySellToShop(manager, catalog, PlayerEntityId, ShopEntityId, stackId, NoEntityIsThePlayer);
 
         Assert.IsTrue(result);
         var currencies = manager.GetPackedPool<CurrencyComponent>();
-        Assert.AreEqual(9 * 4, currencies.GetReadonly(PlayerEntityId).Gold);
-        Assert.AreEqual(1000 - 9 * 4, currencies.GetReadonly(ShopEntityId).Gold);
+        Assert.AreEqual(expectedTotalPrice, currencies.GetReadonly(PlayerEntityId).Gold);
+        Assert.AreEqual(1000 - expectedTotalPrice, currencies.GetReadonly(ShopEntityId).Gold);
 
         var stacks = manager.GetMultiPool<InventoryItemStackComponent>();
         Assert.IsFalse(stacks.Has(PlayerEntityId));
@@ -228,5 +240,38 @@ public sealed class ShopActionsTests
         Assert.IsFalse(result);
         Assert.AreEqual(0, manager.GetPackedPool<CurrencyComponent>().GetReadonly(PlayerEntityId).Gold);
         Assert.IsTrue(manager.GetMultiPool<InventoryItemStackComponent>().Has(PlayerEntityId));
+    }
+
+    [TestMethod]
+    public void TrySellToShop_ShopAlreadyAtMaximumShopStock_ReturnsFalseAndChangesNothing()
+    {
+        var (manager, catalog) = BuildManager();
+        manager.Merge(ShopEntityId, PotionOnlyShop);
+        manager.Merge(ShopEntityId, new CurrencyComponent(gold: 1000, credits: 0));
+        manager.Merge(PlayerEntityId, new CurrencyComponent(gold: 0, credits: 0));
+        InventoryActions.AddItem(manager, ShopEntityId, CappedItemId, quantity: 5); // CappedItemId's own MaximumShopStock is 5 -- already full
+        var stackId = InventoryActions.AddItem(manager, PlayerEntityId, CappedItemId, quantity: 1);
+
+        var result = ShopActions.TrySellToShop(manager, catalog, PlayerEntityId, ShopEntityId, stackId, NoEntityIsThePlayer);
+
+        Assert.IsFalse(result);
+        Assert.AreEqual(0, manager.GetPackedPool<CurrencyComponent>().GetReadonly(PlayerEntityId).Gold);
+        Assert.AreEqual(1000, manager.GetPackedPool<CurrencyComponent>().GetReadonly(ShopEntityId).Gold);
+        Assert.IsTrue(manager.GetMultiPool<InventoryItemStackComponent>().Has(PlayerEntityId));
+    }
+
+    [TestMethod]
+    public void TrySellToShop_ShopBelowMaximumShopStock_StillSucceeds()
+    {
+        var (manager, catalog) = BuildManager();
+        manager.Merge(ShopEntityId, PotionOnlyShop);
+        manager.Merge(ShopEntityId, new CurrencyComponent(gold: 1000, credits: 0));
+        manager.Merge(PlayerEntityId, new CurrencyComponent(gold: 0, credits: 0));
+        InventoryActions.AddItem(manager, ShopEntityId, CappedItemId, quantity: 4); // one short of CappedItemId's MaximumShopStock of 5
+        var stackId = InventoryActions.AddItem(manager, PlayerEntityId, CappedItemId, quantity: 1);
+
+        var result = ShopActions.TrySellToShop(manager, catalog, PlayerEntityId, ShopEntityId, stackId, NoEntityIsThePlayer);
+
+        Assert.IsTrue(result);
     }
 }

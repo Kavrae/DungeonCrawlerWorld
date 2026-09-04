@@ -217,8 +217,56 @@ public sealed class AbilityScoreWindow(FontService fontService, ElementPoolServi
         return null;
     }
 
+    /// <summary>
+    /// Keeps each column's own width constant across an admin-mode toggle by growing/shrinking
+    /// the whole window instead -- previously BuildColumns divided whatever the window's current
+    /// ContentSize.X happened to be by the new column count, so toggling admin mode on (5 columns
+    /// -> 7) squeezed every column narrower instead of widening the window to fit the 2 new ones
+    /// (confirmed live). Reads the outgoing column count/width from _columnHeaders (still the
+    /// previous build's array at this point -- ClearColumns doesn't touch it, see its own doc
+    /// comment) and _columnHeaders.Length == 0 on the very first build, when there's no prior
+    /// width to preserve and the window's own initial size (set by whoever created it, sized for
+    /// CoreTypes.Length columns) is already correct as-is. Respects a player's own manual resize
+    /// (CanUserResize is true) the same way -- it preserves whatever the column width actually
+    /// was, not a hardcoded constant.
+    ///
+    /// SetMaximumSize before SetSize -- Element.Build sets a parentless Fixed-mode window's own
+    /// MaximumSize once, falling back to its initial Layout.Size when (as here) no explicit
+    /// MaximumSize is given, which otherwise permanently ceilings this window at whatever width it
+    /// was first created with: SetSize alone silently clamped right back down to that stale
+    /// original-5-column ceiling every time (confirmed live -- the window only ever "grew" back up
+    /// to its own starting size, never past it, however many times admin mode was toggled back on).
+    /// Only ever raises the ceiling (Math.Max against whatever it already is), never lowers it --
+    /// shrinking back to 5 columns doesn't need a smaller ceiling, and lowering it here would also
+    /// undo any headroom a player's own manual drag-resize had already established.
+    /// </summary>
+    private void ResizeWindowToPreserveColumnWidth()
+    {
+        var previousColumnCount = _columnHeaders.Length;
+        var newColumnCount = ActiveTypes.Length;
+        if (previousColumnCount == 0 || previousColumnCount == newColumnCount)
+        {
+            return;
+        }
+
+        var previousColumnWidth = (ContentSize.X - ColumnGap * (previousColumnCount - 1)) / previousColumnCount;
+        var newContentWidth = previousColumnWidth * newColumnCount + ColumnGap * (newColumnCount - 1);
+        var horizontalInset = CurrentSize.X - ContentSize.X;
+        var targetOuterWidth = newContentWidth + horizontalInset;
+
+        SetMaximumSize(new Vector2(System.Math.Max(MaximumSize.X, targetOuterWidth), MaximumSize.Y));
+        SetSize(new Vector2(targetOuterWidth, CurrentSize.Y));
+
+        // A window that grows to the right could otherwise end up partly off-screen -- the same
+        // clamp InventoryFolderController's own initial placement already applies.
+        var screenBounds = elementPoolService.GraphicsDevice.Viewport.Bounds;
+        SetRelativePosition(ScreenBoundsClamp.Clamp(RelativePosition, CurrentSize, new Vector2(screenBounds.Width, screenBounds.Height)));
+    }
+
     private void BuildColumns()
     {
+        ResizeWindowToPreserveColumnWidth();
+
         // A pooled instance being reused for a second open still has the previous open's
         // columns as live children (Element.Build resets its own _children list, but not these
         // subclass-owned arrays) -- close them first so they return to their own type pools

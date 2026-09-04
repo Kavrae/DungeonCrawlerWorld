@@ -1,6 +1,7 @@
 using Engine.Utilities;
 using Game.Blueprints;
 using Game.Modules.Core.Components;
+using Game.Modules.Shops;
 using Microsoft.Xna.Framework;
 using Microsoft.Xna.Framework.Graphics;
 using Presentation.Fonts;
@@ -11,14 +12,17 @@ namespace Presentation.UI.Content;
 
 /// <summary>
 /// The shop-mode item cell -- sprite (left, a CellSize.Y square) + truncated item name (top-right)
-/// + price (bottom-right, "{total}G ({perItem} each)" for a stack, plain "{price}G" for a single
-/// unit) instead of InventoryItemStackCell's own icon+quantity-badge layout. Same grid controls/
-/// hover/selection/eligibility-glow as the normal grid -- DrawStateOverlay/GlowRenderer are reused
-/// unchanged, only the icon-and-quantity portion of DrawContent is replaced. Named for what it's
-/// for (shop buy/sell pricing), not "detailed," which would read as easily confusable with the
-/// separate Item Details window. Configure (inherited) still drives everything but the price/name
-/// text -- SetItemName/SetPrice are the two extra setters InventoryGridContent calls right after it
-/// when building a shop-mode cell.
+/// + a stack-count/total-cost row (bottom-right, quantity flush left, "{total}G" flush right)
+/// instead of InventoryItemStackCell's own icon+quantity-badge layout. The per-unit price and any
+/// band breakdown live in the hover tooltip's own band table/receipt now (see InventoryGridContent.
+/// ComputeHoverRows) -- this row only needs to answer "how many, for how much total," so it no
+/// longer repeats the per-unit figure the tooltip already shows. Same grid controls/hover/selection/
+/// eligibility-glow as the normal grid -- DrawStateOverlay/GlowRenderer are reused unchanged, only
+/// the icon-and-quantity portion of DrawContent is replaced. Named for what it's for (shop buy/sell
+/// pricing), not "detailed," which would read as easily confusable with the separate Item Details
+/// window. Configure (inherited) still drives everything but the price/name text -- SetItemName/
+/// SetPrice/SetStockStatus are the extra setters InventoryGridContent calls right after it when
+/// building a shop-mode cell.
 /// </summary>
 public sealed class ShopItemStackCell(FontService fontService, ElementPoolService elementPoolService, LabelRenderer labelRenderer, SpriteSheetService spriteSheetService, SpriteRenderer spriteRenderer)
     : InventoryItemStackCell(fontService, elementPoolService, labelRenderer, spriteSheetService, spriteRenderer)
@@ -31,9 +35,15 @@ public sealed class ShopItemStackCell(FontService fontService, ElementPoolServic
     /// <summary>Halfway between _quantityFont's own 0.5 fraction (see FontChrome.InventoryStackQuantityFontFraction, the original, too-large price size) and this cell's first attempt at shrinking it (0.25, confirmed too small live) -- 0.375.</summary>
     private static readonly float PriceFontSizeFraction = FontChrome.InventoryStackQuantityFontFraction * 0.75f;
 
+    /// <summary>Same Better/Worse pair ItemDetailsWindow already uses -- reused here so a favorable price and an unfavorable one read with the same color language elsewhere in the UI. See PLAN-stock-based-shop-pricing.md and PriceIsFavorable/PriceIsUnfavorable's own doc comment for which StockStatus counts as which, per grid.</summary>
+    private static readonly Color FavorableColor = Color.LightGreen;
+
+    /// <summary>LightCoral, not IndianRed -- see ItemDetailsWindow.WorseColor's own doc comment for why (confirmed live too dark/muted here as well, same near-black panel background).</summary>
+    private static readonly Color UnfavorableColor = Color.LightCoral;
+
     private string _itemName = string.Empty;
     private int _totalPrice;
-    private int _perItemPrice;
+    private int _quantity;
     private FontStashTextMeasurer? _nameFontMeasurer;
 
     /// <summary>Set right after Configure -- Configure has no notion of an item's display Name (it only ever carried SpriteName/Glyph), so this is the one extra piece of data this subclass needs beyond what the base setter already captures.</summary>
@@ -43,11 +53,35 @@ public sealed class ShopItemStackCell(FontService fontService, ElementPoolServic
         _nameFontMeasurer = new FontStashTextMeasurer(_badgeFont);
     }
 
-    /// <summary>totalPrice == perItemPrice (a single-unit stack) shows just "{price}G" -- the "(N each)" parenthetical is redundant when total and per-item are the same number.</summary>
-    public void SetPrice(int totalPrice, int perItemPrice)
+    public void SetPrice(int totalPrice, int quantity)
     {
         _totalPrice = totalPrice;
-        _perItemPrice = perItemPrice;
+        _quantity = quantity;
+    }
+
+    /// <summary>Mirrors CompareState's own public-for-testability shape (see InventoryItemStackCell) -- what SetStockStatus below last set. See ShopStockPricing.GetStockStatus -- always the shop's own status regardless of which grid this cell belongs to.</summary>
+    public StockStatus StockStatus { get; private set; }
+
+    /// <summary>True on the shop's own grid (isThisGridTheShop, see InventoryGridContent.ComputeShopPrices' own doc comment for that direction rule), false on the player's own grid while shop mode is active.</summary>
+    public bool IsThisGridTheShop { get; private set; }
+
+    /// <summary>
+    /// A green price line: any band on the Overstocked/Flooded side (cheap) on the shop's own grid
+    /// -- a good deal buying -- or any band on the Understocked/Desperate side (pricey) on the
+    /// player's own grid -- a good deal selling. Reads StockStatus's own signed severity
+    /// (Desperate/Flooded are the two extremes) rather than enumerating each band, so this needs no
+    /// change as bands are added/removed. The opposite side on each grid instead reads
+    /// PriceIsUnfavorable (red); Normal (0) is neither.
+    /// </summary>
+    public bool PriceIsFavorable => IsThisGridTheShop ? (int)StockStatus > 0 : (int)StockStatus < 0;
+
+    /// <summary>See PriceIsFavorable's own doc comment -- the opposite side for this grid's own buy/sell direction.</summary>
+    public bool PriceIsUnfavorable => IsThisGridTheShop ? (int)StockStatus < 0 : (int)StockStatus > 0;
+
+    public void SetStockStatus(StockStatus status, bool isThisGridTheShop)
+    {
+        StockStatus = status;
+        IsThisGridTheShop = isThisGridTheShop;
     }
 
     public override void DrawContent(GameTime gameTime)
@@ -82,8 +116,23 @@ public sealed class ShopItemStackCell(FontService fontService, ElementPoolServic
         var truncatedName = _nameFontMeasurer is { } measurer ? StringUtility.TruncateWithEllipsis(measurer, _itemName, textWidth) : _itemName;
         LabelRenderer.DrawLeftAligned(spriteBatch, _badgeFont, truncatedName, new Vector2(textLeft, ContentAbsolutePosition.Y + NameTopPadding), new Vector2(textWidth, halfHeight - NameTopPadding), textColor);
 
+        var priceColor = isGreyedOut ? Color.Gray : PriceIsFavorable ? FavorableColor : PriceIsUnfavorable ? UnfavorableColor : textColor;
+
         var priceFont = fontService.GetFont((int)(ContentSize.Y * PriceFontSizeFraction));
-        var priceText = _totalPrice == _perItemPrice ? $"{_totalPrice}G" : $"{_totalPrice}G ({_perItemPrice} each)";
-        LabelRenderer.DrawLeftAligned(spriteBatch, priceFont, priceText, new Vector2(textLeft, ContentAbsolutePosition.Y + halfHeight), new Vector2(textWidth, halfHeight), textColor);
+        var priceRowPosition = new Vector2(textLeft, ContentAbsolutePosition.Y + halfHeight);
+        var priceRowSize = new Vector2(textWidth, halfHeight);
+
+        if (_quantity > 1)
+        {
+            LabelRenderer.DrawLeftAligned(spriteBatch, priceFont, _quantity.ToString(), priceRowPosition, priceRowSize, textColor);
+        }
+
+        // Inset from the cell's own right edge by the eligibility glow's own width -- flush against
+        // priceRowSize (== bounds' own right edge), the total would sit directly under the
+        // CompareState.Eligible InteriorFade glow's brightest, innermost ring (see GlowRenderer.
+        // FadeRingCount's own doc comment; Tooltip.DrawContent's band-table price column needed the
+        // same fix for the same reason).
+        var totalPriceRowSize = new Vector2(System.Math.Max(0f, priceRowSize.X - GlowRenderer.FadeRingCount), priceRowSize.Y);
+        LabelRenderer.DrawRightAligned(spriteBatch, priceFont, $"{_totalPrice}G", priceRowPosition, totalPriceRowSize, priceColor);
     }
 }

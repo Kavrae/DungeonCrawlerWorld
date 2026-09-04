@@ -42,7 +42,7 @@ public sealed class TreasureChest(MathUtility mathUtility) : IBlueprint
     private const int MinimumStartingCredits = 0;
     private const int MaximumStartingCredits = 1;
 
-    /// <summary>Built once via each item's own pure, side-effect-free Build() factory, the same set TemporaryNpcLootGrant draws from -- no ItemCatalog injection needed just to read each item's MaxStackSize.</summary>
+    /// <summary>Built once via each item's own pure, side-effect-free Build() factory, the same set TemporaryNpcLootGrant draws from -- no ItemCatalog injection needed just to read each item's Id.</summary>
     private static readonly ItemDefinition[] LootTable =
     [
         HealthPotion.Build(),
@@ -79,7 +79,7 @@ public sealed class TreasureChest(MathUtility mathUtility) : IBlueprint
         for (var i = 0; i < itemCount; i++)
         {
             var item = LootTable[mathUtility.Next(0, LootTable.Length)];
-            var maximumQuantity = System.Math.Min(MaximumStackQuantity, item.MaxStackSize ?? MaximumStackQuantity);
+            var maximumQuantity = Math.Min(MaximumStackQuantity, (int)InventoryActions.GetEffectiveMaxStackSize(componentManager, entityId));
             var quantity = (ushort)mathUtility.Next(MinimumStackQuantity, maximumQuantity + 1);
             InventoryActions.AddItem(componentManager, entityId, item.Id, quantity);
         }

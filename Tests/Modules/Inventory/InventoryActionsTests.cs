@@ -24,8 +24,8 @@ public sealed class InventoryActionsTests
         return manager;
     }
 
-    private static ItemDefinition CreateDefinition(Guid id, ushort charges, int? maxStackSize = null) =>
-        new(id, $"Test Wand ({charges})", SpriteName: null, Glyph: "?", Color.White, Tags: [], Effects: [], MaxStackSize: maxStackSize);
+    private static ItemDefinition CreateDefinition(Guid id, ushort charges) =>
+        new(id, $"Test Wand ({charges})", SpriteName: null, Glyph: "?", Color.White, Tags: [], Effects: []);
 
     [TestMethod]
     public void AddItem_SameItemDefinitionTwice_StacksIntoOneEntryWithSummedQuantity()
@@ -50,6 +50,89 @@ public sealed class InventoryActionsTests
         InventoryActions.AddItem(manager, entityId: 0, Guid.NewGuid(), quantity: 1);
 
         Assert.AreEqual(2, manager.GetMultiPool<InventoryItemStackComponent>().CountForEntity(0));
+    }
+
+    [TestMethod]
+    public void AddItem_NoOverrideGiven_CapsAtDefaultMaxStackSizeOf999()
+    {
+        var manager = CreateRegisteredManager();
+        var itemId = Guid.NewGuid();
+
+        InventoryActions.AddItem(manager, entityId: 0, itemId, quantity: 1500);
+
+        var pool = manager.GetMultiPool<InventoryItemStackComponent>();
+        Assert.AreEqual(2, pool.CountForEntity(0));
+
+        var quantities = new List<ushort>();
+        for (var denseIndex = pool.GetFirstDenseIndex(0); denseIndex != -1; denseIndex = pool.GetNextDenseIndex(denseIndex))
+        {
+            quantities.Add(pool.GetReadonlyByDenseIndex(denseIndex).Quantity);
+        }
+        quantities.Sort();
+
+        CollectionAssert.AreEqual(new ushort[] { 501, 999 }, quantities);
+    }
+
+    [TestMethod]
+    public void GetEffectiveMaxStackSize_EntityWithNoOverride_ReturnsDefault()
+    {
+        var manager = CreateRegisteredManager();
+
+        Assert.AreEqual(InventoryActions.DefaultMaxStackSize, InventoryActions.GetEffectiveMaxStackSize(manager, entityId: 0));
+    }
+
+    [TestMethod]
+    public void GetEffectiveMaxStackSize_EntityWithOverride_ReturnsOverride()
+    {
+        var manager = CreateRegisteredManager();
+        manager.Merge(entityId: 0, new MaxStackSizeComponent(500));
+
+        Assert.AreEqual((ushort)500, InventoryActions.GetEffectiveMaxStackSize(manager, entityId: 0));
+    }
+
+    [TestMethod]
+    public void AddItem_QuantityExceedsEntitysMaxStackSize_SpillsOverflowIntoANewStack()
+    {
+        var manager = CreateRegisteredManager();
+        var itemId = Guid.NewGuid();
+        manager.Merge(entityId: 0, new MaxStackSizeComponent(5));
+
+        InventoryActions.AddItem(manager, entityId: 0, itemId, quantity: 7);
+
+        var pool = manager.GetMultiPool<InventoryItemStackComponent>();
+        Assert.AreEqual(2, pool.CountForEntity(0));
+
+        var quantities = new List<ushort>();
+        for (var denseIndex = pool.GetFirstDenseIndex(0); denseIndex != -1; denseIndex = pool.GetNextDenseIndex(denseIndex))
+        {
+            quantities.Add(pool.GetReadonlyByDenseIndex(denseIndex).Quantity);
+        }
+        quantities.Sort();
+
+        CollectionAssert.AreEqual(new ushort[] { 2, 5 }, quantities);
+    }
+
+    [TestMethod]
+    public void AddItem_MergingWouldExceedEntitysMaxStackSize_ToppedUpStackPlusNewOverflowStack()
+    {
+        var manager = CreateRegisteredManager();
+        var itemId = Guid.NewGuid();
+        manager.Merge(entityId: 0, new MaxStackSizeComponent(5));
+
+        InventoryActions.AddItem(manager, entityId: 0, itemId, quantity: 4);
+        InventoryActions.AddItem(manager, entityId: 0, itemId, quantity: 4);
+
+        var pool = manager.GetMultiPool<InventoryItemStackComponent>();
+        Assert.AreEqual(2, pool.CountForEntity(0));
+
+        var quantities = new List<ushort>();
+        for (var denseIndex = pool.GetFirstDenseIndex(0); denseIndex != -1; denseIndex = pool.GetNextDenseIndex(denseIndex))
+        {
+            quantities.Add(pool.GetReadonlyByDenseIndex(denseIndex).Quantity);
+        }
+        quantities.Sort();
+
+        CollectionAssert.AreEqual(new ushort[] { 3, 5 }, quantities);
     }
 
     [TestMethod]
@@ -120,12 +203,13 @@ public sealed class InventoryActionsTests
     }
 
     [TestMethod]
-    public void AddItemWithOverride_QuantityExceedsMaxStackSize_SpillsIntoASecondStack()
+    public void AddItemWithOverride_QuantityExceedsEntitysMaxStackSize_SpillsIntoASecondStack()
     {
         var manager = CreateRegisteredManager();
         var itemId = Guid.NewGuid();
+        manager.Merge(entityId: 0, new MaxStackSizeComponent(10));
 
-        InventoryActions.AddItemWithOverride(manager, entityId: 0, CreateDefinition(itemId, charges: 10, maxStackSize: 10), quantity: 15);
+        InventoryActions.AddItemWithOverride(manager, entityId: 0, CreateDefinition(itemId, charges: 10), quantity: 15);
 
         var pool = manager.GetMultiPool<InventoryItemStackComponent>();
         var stacks = new List<InventoryItemStackComponent>();

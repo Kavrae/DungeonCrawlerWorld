@@ -105,4 +105,70 @@ public sealed class LabelRendererTests
 
         Assert.AreEqual(first, second);
     }
+
+    /// <summary>
+    /// Regression: GetLeftAlignedPosition/GetRightAlignedPosition used to center vertically against
+    /// MeasureString(text).Y -- the same "generic line box" GetCenteredPosition's own doc comment
+    /// describes (e.g. "g" at font size 24 measures a ~29px-tall box, but its ink only occupies
+    /// roughly the box's bottom two-thirds). Centering a tight-height footprint against that
+    /// oversized box pushed text low enough to bleed a descender past the footprint's own bottom
+    /// edge (confirmed live: AbilityScoreModifierRow, ShopItemStackCell, Tooltip's status line --
+    /// every DrawLeftAligned/DrawRightAligned consumer). The fix centers against font.LineHeight
+    /// instead -- a footprint exactly LineHeight tall should therefore get zero vertical offset.
+    /// </summary>
+    [TestMethod]
+    public void GetLeftAlignedPosition_FootprintExactlyLineHeightTall_NoVerticalOffset()
+    {
+        var renderer = new LabelRenderer();
+        var font = TestFonts.Shared.GetFont(24);
+        var footprintTopLeft = new Vector2(10, 20);
+        var footprintSize = new Vector2(200, font.LineHeight);
+
+        var position = renderer.GetLeftAlignedPosition(font, "Understocked", footprintTopLeft, footprintSize);
+
+        Assert.AreEqual(footprintTopLeft.Y, position.Y, 0.01f);
+    }
+
+    [TestMethod]
+    public void GetRightAlignedPosition_FootprintExactlyLineHeightTall_NoVerticalOffset()
+    {
+        var renderer = new LabelRenderer();
+        var font = TestFonts.Shared.GetFont(24);
+        var footprintTopLeft = new Vector2(10, 20);
+        var footprintSize = new Vector2(200, font.LineHeight);
+
+        var position = renderer.GetRightAlignedPosition(font, "Some Source : +2", footprintTopLeft, footprintSize);
+
+        Assert.AreEqual(footprintTopLeft.Y, position.Y, 0.01f);
+    }
+
+    /// <summary>Right-aligned text must still flush against the footprint's own right edge -- the LineHeight fix only changes the Y formula, not X.</summary>
+    [TestMethod]
+    public void GetRightAlignedPosition_FlushesTextToTheFootprintsRightEdge()
+    {
+        var renderer = new LabelRenderer();
+        var font = TestFonts.Shared.GetFont(24);
+        var footprintTopLeft = Vector2.Zero;
+        var footprintSize = new Vector2(200, font.LineHeight);
+        const string text = "Some Source : +2";
+
+        var position = renderer.GetRightAlignedPosition(font, text, footprintTopLeft, footprintSize);
+
+        Assert.AreEqual(footprintSize.X - font.MeasureString(text).X, position.X, 0.01f);
+    }
+
+    /// <summary>Different strings in a row of right-aligned text (e.g. one with descenders, one without) must land on the same Y -- the whole point of centering against the font's own LineHeight rather than each string's individual MeasureString box.</summary>
+    [TestMethod]
+    public void GetRightAlignedPosition_DifferentStringsSameFootprint_SameVerticalPosition()
+    {
+        var renderer = new LabelRenderer();
+        var font = TestFonts.Shared.GetFont(24);
+        var footprintTopLeft = new Vector2(10, 20);
+        var footprintSize = new Vector2(200, 40);
+
+        var withDescender = renderer.GetRightAlignedPosition(font, "Source : +2", footprintTopLeft, footprintSize);
+        var withoutDescender = renderer.GetRightAlignedPosition(font, "AC : 5", footprintTopLeft, footprintSize);
+
+        Assert.AreEqual(withDescender.Y, withoutDescender.Y, 0.01f);
+    }
 }

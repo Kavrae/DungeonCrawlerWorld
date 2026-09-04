@@ -73,7 +73,9 @@ public sealed class ItemDetailsWindow(
 
     /// <summary>Item Details Comparison's own per-line coloring -- Better doubles as the "this item has a stat at least one other compared item doesn't" exclusive marker too (see ResolveLineColor's own doc comment), so the same color means "advantage" either way.</summary>
     private static readonly Color BetterColor = Color.LightGreen;
-    private static readonly Color WorseColor = Color.IndianRed;
+
+    /// <summary>LightCoral, not IndianRed -- confirmed live that IndianRed's (205,92,92) read too dark/muted against the near-black panel background, hard to distinguish from BodyTextColor at a glance. LightCoral pairs naturally with BetterColor's own "Light" prefix and is meaningfully brighter (perceived luminance ~162 vs. ~126).</summary>
+    private static readonly Color WorseColor = Color.LightCoral;
 
     /// <summary>TextWindow.ContentFont defaults to DefaultFontSize only the first time a pooled instance is ever truly constructed -- a settable property, not reset by Build/Configure, so a recycled instance keeps whatever size its *previous* consumer last set. Cached once and assigned explicitly wherever a TextWindow row is built (BuildNameRow's own _nameFont included) so no row's size ever depends on what the pool handed back -- see HealthWindow._bodyFont's own doc comment for the same reasoning. Without this, a TextWindow instance the pool last handed to BuildNameRow (set to _nameFont) could come back for an ordinary Effects/Activation/Description/Tags row still carrying the doubled name size.</summary>
     private readonly SpriteFontBase _bodyFont = fontService.GetFont(FontChrome.DefaultFontSize);

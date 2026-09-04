@@ -1,3 +1,5 @@
+using Engine.ECS.Components;
+
 namespace Game.Modules.Achievements;
 
 /// <summary>Represents the definition of an achievement, including its core properties and trigger logic.</summary>
@@ -25,4 +27,14 @@ public interface IAchievementDefinition
     /// <summary>Registers the trigger for the achievement with the EventBus.</summary>
     /// <param name="context">The achievement trigger context.</param>
     void RegisterTrigger(AchievementTriggerContext context);
+
+    /// <summary>
+    /// Applies this achievement's mechanical reward (if any) to the entity that just earned it --
+    /// called once, immediately after the achievement is recorded as unlocked. Most achievements
+    /// have no mechanical reward yet (RewardText is flavor/notification text only) and rely on this
+    /// default no-op rather than overriding it.
+    /// </summary>
+    void ApplyReward(ComponentManager componentManager, int entityId)
+    {
+    }
 }

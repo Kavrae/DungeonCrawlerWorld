@@ -12,20 +12,26 @@ public sealed class GeneralShopStock(MathUtility mathUtility) : IBlueprint
     private const float BuyMultiplier = 1.20f;
     private const float SellMultiplier = 0.80f;
 
-    /// <summary>Every current CoreItemsModule item, built once via each item's own pure Build() factory -- mirrors TreasureChest.LootTable's own "no ItemCatalog injection needed" shape.</summary>
-    private static readonly ItemDefinition[] Stock =
+    /// <summary>
+    /// Every current CoreItemsModule item, built once via each item's own pure Build() factory --
+    /// mirrors TreasureChest.LootTable's own "no ItemCatalog injection needed" shape.
+    /// PreferredStockLevel per item is hand-tuned the same way ItemDefinition.GoldValue is
+    /// (PLAN-shops.md) -- lower across the board than PotionShopStock's own par levels, since a
+    /// generalist spreads its Gold across every tag instead of leaning on one.
+    /// </summary>
+    private static readonly ShopStockEntry[] Stock =
     [
-        HealthPotion.Build(),
-        ManaPotion.Build(),
-        HotkeyExpansionPotion.Build(),
-        DamagePotion.Build(),
-        ToxicPotion.Build(),
-        ToxicIdol.Build(),
-        ScrollOfHealing.Build(),
-        ScrollOfTorch.Build(),
-        WandOfFireball.Build(),
-        ImmunityTestPotion.Build(),
-        ResistanceTestPotion.Build(),
+        new(HealthPotion.Build(), PreferredStockLevel: 40),
+        new(ManaPotion.Build(), PreferredStockLevel: 40),
+        new(HotkeyExpansionPotion.Build(), PreferredStockLevel: 15),
+        new(DamagePotion.Build(), PreferredStockLevel: 20),
+        new(ToxicPotion.Build(), PreferredStockLevel: 20),
+        new(ToxicIdol.Build(), PreferredStockLevel: 10),
+        new(ScrollOfHealing.Build(), PreferredStockLevel: 25),
+        new(ScrollOfTorch.Build(), PreferredStockLevel: 25),
+        new(WandOfFireball.Build(), PreferredStockLevel: 5),
+        new(ImmunityTestPotion.Build(), PreferredStockLevel: 10),
+        new(ResistanceTestPotion.Build(), PreferredStockLevel: 10),
     ];
 
     public void Build(ComponentManager componentManager, int entityId)

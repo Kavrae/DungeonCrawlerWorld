@@ -26,7 +26,9 @@ public enum GlowMode
 /// </summary>
 public static class GlowRenderer
 {
-    private const int FadeRingCount = 5;
+    /// <summary>How far in pixels InteriorFade/ExteriorFade extend from bounds' own edge (one 1px ring per pixel of depth) -- public so a caller drawing text or other content right up against a glowing rectangle's edge can inset by this same amount and avoid sitting under the fade (see Tooltip.DrawContent's own band-table price column).</summary>
+    public const int FadeRingCount = 5;
+
     private const float FadeMaximumAlpha = 0.5f;
 
     public static void Draw(SpriteBatch spriteBatch, Texture2D unitRectangle, Rectangle bounds, Color glowColor, GlowMode mode = GlowMode.ExteriorFade, float alphaMultiplier = 1f)

@@ -40,6 +40,7 @@ public sealed class InventoryGridContentShopModeTests
         componentManager.RegisterMultiPool<InventoryItemStackComponent>();
         componentManager.RegisterPackedPool<InventoryComponent>(static (ref existing, incoming) => existing = incoming);
         componentManager.RegisterPackedPool<ShopComponent>(static (ref existing, incoming) => existing = incoming);
+        componentManager.RegisterMultiPool<ShopStockPreferenceComponent>();
         componentManager.RegisterPackedPool<CurrencyComponent>(static (ref existing, incoming) => existing = incoming);
 
         var fontService = TestFonts.Shared;
@@ -233,6 +234,7 @@ public sealed class InventoryGridContentShopModeTests
         componentManager.RegisterMultiPool<InventoryItemStackComponent>();
         componentManager.RegisterPackedPool<InventoryComponent>(static (ref existing, incoming) => existing = incoming);
         componentManager.RegisterPackedPool<ShopComponent>(static (ref existing, incoming) => existing = incoming);
+        componentManager.RegisterMultiPool<ShopStockPreferenceComponent>();
         componentManager.RegisterPackedPool<CurrencyComponent>(static (ref existing, incoming) => existing = incoming);
 
         var fontService = TestFonts.Shared;
@@ -295,5 +297,143 @@ public sealed class InventoryGridContentShopModeTests
 
         var cell = hostWindow.ChildElements.OfType<ShopItemStackCell>().Single();
         Assert.AreEqual(CellCompareState.Eligible, cell.CompareState);
+    }
+
+    [TestMethod]
+    public void ShopGrid_StockBelowDefaultPreferredLevel_CellReadsUnderstocked()
+    {
+        var (grid, hostWindow, componentManager, mapViewState) = Build(ShopEntityId);
+        // No ShopStockPreferenceComponent recorded -- falls back to ShopStockPricing.DefaultPreferredStockLevel
+        // (20), whose 5-band edges are (10, 15, 25, 30); 12 sits in the Understocked band [10, 14].
+        InventoryActions.AddItem(componentManager, ShopEntityId, PotionItemId, quantity: 12);
+        componentManager.Merge(ShopEntityId, new ShopComponent(allowedTags: [Tag.Potion], buyMultiplier: 1.10f, sellMultiplier: 0.90f));
+        componentManager.Merge(PlayerEntityId, new CurrencyComponent(gold: 100, credits: 0));
+
+        mapViewState.OpenShopEntityId = ShopEntityId;
+        grid.Update(new GameTime());
+
+        var cell = hostWindow.ChildElements.OfType<ShopItemStackCell>().Single();
+        Assert.AreEqual(StockStatus.Understocked, cell.StockStatus);
+        // Understocked on the shop's own grid is a worse price to buy at -- unfavorable, not favorable.
+        Assert.IsTrue(cell.IsThisGridTheShop);
+        Assert.IsTrue(cell.PriceIsUnfavorable);
+        Assert.IsFalse(cell.PriceIsFavorable);
+    }
+
+    [TestMethod]
+    public void ShopGrid_StockFarBelowDefaultPreferredLevel_CellReadsDesperate()
+    {
+        var (grid, hostWindow, componentManager, mapViewState) = Build(ShopEntityId);
+        // Default preferred level 20 -> edges (10, 15, 25, 30); 1 sits below the Desperate edge (10).
+        InventoryActions.AddItem(componentManager, ShopEntityId, PotionItemId, quantity: 1);
+        componentManager.Merge(ShopEntityId, new ShopComponent(allowedTags: [Tag.Potion], buyMultiplier: 1.10f, sellMultiplier: 0.90f));
+        componentManager.Merge(PlayerEntityId, new CurrencyComponent(gold: 100, credits: 0));
+
+        mapViewState.OpenShopEntityId = ShopEntityId;
+        grid.Update(new GameTime());
+
+        var cell = hostWindow.ChildElements.OfType<ShopItemStackCell>().Single();
+        Assert.AreEqual(StockStatus.Desperate, cell.StockStatus);
+        Assert.IsTrue(cell.PriceIsUnfavorable);
+        Assert.IsFalse(cell.PriceIsFavorable);
+    }
+
+    [TestMethod]
+    public void ShopGrid_StockAboveDefaultOverstockThreshold_CellReadsOverstocked()
+    {
+        var (grid, hostWindow, componentManager, mapViewState) = Build(ShopEntityId);
+        // Default preferred level 20 -> edges (10, 15, 25, 30); 30 sits at the Overstocked band's own upper edge.
+        InventoryActions.AddItem(componentManager, ShopEntityId, PotionItemId, quantity: 30);
+        componentManager.Merge(ShopEntityId, new ShopComponent(allowedTags: [Tag.Potion], buyMultiplier: 1.10f, sellMultiplier: 0.90f));
+        componentManager.Merge(PlayerEntityId, new CurrencyComponent(gold: 1000, credits: 0));
+
+        mapViewState.OpenShopEntityId = ShopEntityId;
+        grid.Update(new GameTime());
+
+        var cell = hostWindow.ChildElements.OfType<ShopItemStackCell>().Single();
+        Assert.AreEqual(StockStatus.Overstocked, cell.StockStatus);
+        // Overstocked on the shop's own grid is a better price to buy at -- favorable, not unfavorable.
+        Assert.IsTrue(cell.PriceIsFavorable);
+        Assert.IsFalse(cell.PriceIsUnfavorable);
+    }
+
+    [TestMethod]
+    public void ShopGrid_StockFarAboveDefaultOverstockThreshold_CellReadsFlooded()
+    {
+        var (grid, hostWindow, componentManager, mapViewState) = Build(ShopEntityId);
+        // Default preferred level 20 -> edges (10, 15, 25, 30); 999 sits well past the Flooded edge (30).
+        InventoryActions.AddItem(componentManager, ShopEntityId, PotionItemId, quantity: 999);
+        componentManager.Merge(ShopEntityId, new ShopComponent(allowedTags: [Tag.Potion], buyMultiplier: 1.10f, sellMultiplier: 0.90f));
+        componentManager.Merge(PlayerEntityId, new CurrencyComponent(gold: 10000, credits: 0));
+
+        mapViewState.OpenShopEntityId = ShopEntityId;
+        grid.Update(new GameTime());
+
+        var cell = hostWindow.ChildElements.OfType<ShopItemStackCell>().Single();
+        Assert.AreEqual(StockStatus.Flooded, cell.StockStatus);
+        Assert.IsTrue(cell.PriceIsFavorable);
+        Assert.IsFalse(cell.PriceIsUnfavorable);
+    }
+
+    [TestMethod]
+    public void ShopGrid_StockWithinPreferredBand_CellReadsNormal()
+    {
+        var (grid, hostWindow, componentManager, mapViewState) = Build(ShopEntityId);
+        InventoryActions.AddItem(componentManager, ShopEntityId, PotionItemId, quantity: 1);
+        componentManager.GetMultiPool<ShopStockPreferenceComponent>().Add(ShopEntityId, new ShopStockPreferenceComponent(PotionItemId, preferredStockLevel: 1));
+        componentManager.Merge(ShopEntityId, new ShopComponent(allowedTags: [Tag.Potion], buyMultiplier: 1.10f, sellMultiplier: 0.90f));
+        componentManager.Merge(PlayerEntityId, new CurrencyComponent(gold: 100, credits: 0));
+
+        mapViewState.OpenShopEntityId = ShopEntityId;
+        grid.Update(new GameTime());
+
+        var cell = hostWindow.ChildElements.OfType<ShopItemStackCell>().Single();
+        Assert.AreEqual(StockStatus.Normal, cell.StockStatus);
+        Assert.IsFalse(cell.PriceIsFavorable);
+        Assert.IsFalse(cell.PriceIsUnfavorable);
+    }
+
+    [TestMethod]
+    public void PlayerGrid_ShopUnderstocked_CellReadsUnderstockedAndFavorable()
+    {
+        // StockStatus is always keyed off the shop's own stock, not whichever grid is rendering --
+        // the player's own grid while shop mode is active must read the shop's Understocked status
+        // too (see InventoryGridContent.ComputeShopStockStatus's own doc comment). Unlike the shop's
+        // own grid, Understocked on the PLAYER's grid is a *better* price to sell at -- favorable.
+        var (grid, hostWindow, componentManager, mapViewState) = Build(PlayerEntityId);
+        InventoryActions.AddItem(componentManager, PlayerEntityId, PotionItemId, quantity: 1);
+        InventoryActions.AddItem(componentManager, ShopEntityId, PotionItemId, quantity: 12); // shop itself is understocked (default preferred 20 -> edges 10/15/25/30)
+        componentManager.Merge(ShopEntityId, new ShopComponent(allowedTags: [Tag.Potion], buyMultiplier: 1.10f, sellMultiplier: 0.90f));
+        componentManager.Merge(ShopEntityId, new CurrencyComponent(gold: 1000, credits: 0));
+
+        mapViewState.OpenShopEntityId = ShopEntityId;
+        grid.Update(new GameTime());
+
+        var cell = hostWindow.ChildElements.OfType<ShopItemStackCell>().Single();
+        Assert.AreEqual(StockStatus.Understocked, cell.StockStatus);
+        Assert.IsFalse(cell.IsThisGridTheShop);
+        Assert.IsTrue(cell.PriceIsFavorable);
+        Assert.IsFalse(cell.PriceIsUnfavorable);
+    }
+
+    [TestMethod]
+    public void PlayerGrid_ShopOverstocked_CellReadsOverstockedAndUnfavorable()
+    {
+        // The mirror image of PlayerGrid_ShopUnderstocked_CellReadsUnderstockedAndFavorable --
+        // Overstocked is a *worse* price to sell at on the player's own grid, the opposite of what
+        // it means on the shop's own grid.
+        var (grid, hostWindow, componentManager, mapViewState) = Build(PlayerEntityId);
+        InventoryActions.AddItem(componentManager, PlayerEntityId, PotionItemId, quantity: 1);
+        InventoryActions.AddItem(componentManager, ShopEntityId, PotionItemId, quantity: 30); // shop itself is overstocked
+        componentManager.Merge(ShopEntityId, new ShopComponent(allowedTags: [Tag.Potion], buyMultiplier: 1.10f, sellMultiplier: 0.90f));
+        componentManager.Merge(ShopEntityId, new CurrencyComponent(gold: 1000, credits: 0));
+
+        mapViewState.OpenShopEntityId = ShopEntityId;
+        grid.Update(new GameTime());
+
+        var cell = hostWindow.ChildElements.OfType<ShopItemStackCell>().Single();
+        Assert.AreEqual(StockStatus.Overstocked, cell.StockStatus);
+        Assert.IsFalse(cell.PriceIsFavorable);
+        Assert.IsTrue(cell.PriceIsUnfavorable);
     }
 }

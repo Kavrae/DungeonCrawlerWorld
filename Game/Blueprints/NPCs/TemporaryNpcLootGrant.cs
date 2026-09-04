@@ -23,7 +23,7 @@ public static class TemporaryNpcLootGrant
     /// <summary>
     /// Built once via each item's own pure, side-effect-free Build() factory -- the same one
     /// CoreItemsModule.Configure calls to populate ItemCatalog -- so this needs no ItemCatalog
-    /// injection just to read each item's MaxStackSize.
+    /// injection just to read each item's Id/Activator.
     /// </summary>
     private static readonly ItemDefinition[] AllCoreItems =
     [
@@ -39,13 +39,14 @@ public static class TemporaryNpcLootGrant
     ];
 
     /// <summary>
-    /// Rolls 0-20 stacks of a randomly selected item each, quantity 1-MaxStackSize. AddItem merges
-    /// same-item rolls into one stack rather than stacking distinct entries, so the actual
-    /// resulting distinct-stack count usually lands well under the roll with only 9 possible items
-    /// to pick from -- acceptable for throwaway test content. A rolled wand instead gets a random
-    /// MaxCharges (1-20) with Charges set to match (full charge), via AddItemWithOverride -- the
-    /// same "freshly granted identical batch, not yet divergent" primitive WandGrantEffects.Grant
-    /// itself uses, just with a flat random MaxCharges instead of one scaled off Intelligence.
+    /// Rolls 0-20 stacks of a randomly selected item each, quantity 1-entityId's own effective max
+    /// stack size (see InventoryActions.GetEffectiveMaxStackSize). AddItem merges same-item rolls
+    /// into one stack rather than stacking distinct entries, so the actual resulting distinct-stack
+    /// count usually lands well under the roll with only 9 possible items to pick from --
+    /// acceptable for throwaway test content. A rolled wand instead gets a random MaxCharges (1-20)
+    /// with Charges set to match (full charge), via AddItemWithOverride -- the same "freshly
+    /// granted identical batch, not yet divergent" primitive WandGrantEffects.Grant itself uses,
+    /// just with a flat random MaxCharges instead of one scaled off Intelligence.
     /// </summary>
     public static void GrantRandomStartingLoot(ComponentManager componentManager, int entityId, MathUtility mathUtility)
     {
@@ -53,7 +54,7 @@ public static class TemporaryNpcLootGrant
         for (var i = 0; i < stackCount; i++)
         {
             var item = AllCoreItems[mathUtility.Next(0, AllCoreItems.Length)];
-            var quantity = (ushort)mathUtility.Next(1, (item.MaxStackSize ?? MaxStackCount) + 1);
+            var quantity = (ushort)mathUtility.Next(1, InventoryActions.GetEffectiveMaxStackSize(componentManager, entityId) + 1);
 
             if (item.Activator is WandActivator wandActivator)
             {

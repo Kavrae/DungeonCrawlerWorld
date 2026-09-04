@@ -138,6 +138,16 @@ source can hook in by granting a modifier alone. Calling-convention change, not 
 Item-type-specific Repair skills to restore a destroyed item -- blocked on Destroyed items (above) and
 the not-yet-existing Skills system (this file's own Skills entry).
 
+#### Item damage and repair
+
+A new per-stack condition/durability concept, distinct from Destroyed items above (a damaged item
+stays usable, just worth less and eventually repairable, rather than a binary destroyed/not state).
+`ItemDefinition.GoldValue`/`ShopActions.ComputeBuyPrice`/`ComputeSellPrice` (`PLAN-shops.md`) would
+need a per-stack damage modifier applied on top of the flat catalog value -- necessarily per-stack,
+not per-`ItemDefinition`, same split Item weight below already follows for a different field. Repair
+likely wants to be the same Repair skill the entry above already wants, generalized to cover
+"damaged" as well as "destroyed" rather than two independent mechanics.
+
 #### Trapped containers
 
 Containers (`PLAN-storage-containers.md`) can be trapped. Needs a trap-effect concept triggered on
@@ -324,6 +334,14 @@ race check). Raised by `TemporaryNpcLootGrant`, which targets Goblin/Fairy/Ghost
 `DeadComponent.DiedAtFrame` only shows a raw frame tick in the corpse summary. A real calendar/clock
 would make that (and anything else wanting a timestamp) human-readable. Also unlocks the Crawler TV show
 item below (time-gated interactions).
+
+#### Restock shops on the day/night swap
+
+Follow-up to In-game day/time tracking above, which this is blocked on -- no real "day/night" concept
+exists yet to swap on. Once one does, reroll a shop's stock (`ShopStock.GrantRandomStock`,
+`PLAN-shops.md`) on the transition, and reset its own Gold back toward its starting amount so a
+shop the player has drained doesn't stay unable to buy anything forever. Today a shop's stock is
+rolled once at spawn and never refreshes.
 
 #### Crawler TV show
 
@@ -638,6 +656,15 @@ does the same. Add a textbox popup (reusing `TextBox`, same mechanism `TextBox c
 above wants for Cut/Copy/Paste) letting the player specify a partial amount instead, both for the
 context menu options and (harder -- needs a way to intercept a drag-drop before it resolves) a
 partial-amount drag.
+
+#### Mark items as Sell ("junk"), and a bulk-sell-tab button in shop mode
+
+A per-stack "Sell" marking -- the bulk-sale equivalent of other games' "junk" flag -- likely a new
+`InventoryItemStackComponent` field alongside the existing `IsDisabled` one. While a shop is open
+(`MapViewState.OpenShopEntityId`), add a button to the player's own inventory tab (`GridControl`/
+`InventoryTabContent`) that sells every Sell-marked, currently-eligible item in the *active* tab
+through `ShopActions.TrySellToShop` (`PLAN-shops.md`) in one action -- any tab, not only a
+dedicated "Sell" tab; marking curates what a sweep picks up, it isn't itself a tab requirement.
 
 #### Per-entity sprite scale
 

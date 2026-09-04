@@ -2533,6 +2533,7 @@ public sealed class UiInputControllerTests
         componentManager.RegisterMultiPool<InventoryItemStackComponent>();
         componentManager.RegisterPackedPool<InventoryComponent>(static (ref existing, incoming) => existing = incoming);
         componentManager.RegisterPackedPool<Game.Modules.Shops.Components.ShopComponent>(static (ref existing, incoming) => existing = incoming);
+        componentManager.RegisterMultiPool<Game.Modules.Shops.Components.ShopStockPreferenceComponent>();
         componentManager.RegisterPackedPool<Game.Modules.Currency.Components.CurrencyComponent>(static (ref existing, incoming) => existing = incoming);
 
         var potionItemId = Guid.NewGuid();
@@ -2544,6 +2545,11 @@ public sealed class UiInputControllerTests
         InventoryActions.AddItem(componentManager, playerEntityId, toolItemId, quantity: 1);
 
         componentManager.Merge(shopEntityId, new Game.Modules.Shops.Components.ShopComponent(allowedTags: [Game.Modules.Tag.Potion], buyMultiplier: 1.10f, sellMultiplier: 0.90f));
+        // PreferredStockLevel 0 keeps a single-unit sale starting from the shop's own 0 stock inside
+        // ShopStockPricing's Normal band (see its own doc comment on the preferredStockLevel-0 edge
+        // case) -- otherwise the default fallback preferred level would read this as Understocked
+        // and mark the price up, which isn't what this harness's flat-price assertions are about.
+        componentManager.GetMultiPool<Game.Modules.Shops.Components.ShopStockPreferenceComponent>().Add(shopEntityId, new Game.Modules.Shops.Components.ShopStockPreferenceComponent(potionItemId, preferredStockLevel: 0));
         componentManager.Merge(shopEntityId, new Game.Modules.Currency.Components.CurrencyComponent(gold: 1000, credits: 0));
         componentManager.Merge(playerEntityId, new Game.Modules.Currency.Components.CurrencyComponent(gold: 0, credits: 0));
 
