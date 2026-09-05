@@ -503,3 +503,42 @@ underlying action succeeded" -- an ineligible shop/trade drop is claimed-and-ref
 through to a plain transfer. A future drop-target feature (Magic Menu, Equipment slots) adds its own
 resolver to the list without `UiInputController` learning anything new. `UiInputControllerTests.cs`
 needed no changes -- its 35 `Drag_*` tests drive the real `Update` input pipeline black-box.
+
+### Global U/I/O window-toggle hotkeys landed
+
+`UiInputController.HandleWindowToggleHotkeys` -- U/I/O toggle Health/Inventory/Ability Score,
+unconditional/edge-triggered like Tab/Escape/F12, gated on `!IsTextBoxFocused` since (unlike those)
+they're printable characters. Each controller (`HealthWindowController`/`InventoryWindowController`/
+`AbilityScoreWindowController`) got a new public `Toggle*Window()` wrapping its existing private
+`WindowLifecycle.Toggle()`. The three HUD-trigger buttons were resized to match `HotbarContent.SlotSize`
+(`HealthWindowChrome`/`InventoryChrome`/`AbilityScoreChrome.ButtonSize`, all now one shared constant
+instead of three independent `HudChrome.EntrySize.Y` copies) and each grew a hotbar-style corner
+`HotkeyLabel` overlay (`ButtonOptions.HotkeyLabel`, drawn via the same `ContrastTextRenderer` hotbar
+slots already use, sized off a new `FontChrome.ButtonHotkeyLabelFontFraction`).
+
+### Inventory "Activate" (context menu + double-click) landed
+
+Click-to-activate an inventory item, matching the hotbar's own arm/target/confirm flow -- see
+`ActionTargetingController.ArmItemFromStack` (a slot-less entry point into the existing `ArmItem`,
+reusing `HandleItemSlotPress`'s own eligibility guard) and `InventoryGridContent.BuildItemContextMenu`'s
+"Activate" option (first in the list, before Compare; visible whenever `CanActivate` is true, but
+disabled -- not hidden -- while `IsPlayerActionLocked`, mirroring `MapWindow`'s own "Inspect" option's
+`ActionLockGate.IsBlocked` gate). Double-click is a second entry point to the same call.
+
+Landed alongside two generalizations prompted by this feature recurring elsewhere:
+- **Click/double-click gesture recognition moved into `UiInputController`** (`Element.DoubleClicked`,
+  opt-in via `WantsDoubleClickDetection`; `DispatchClick`/`HandleDoubleClickAwareClick`/
+  `FlushExpiredPendingClicks` defer a single click and cancel it on a real second click within
+  `UiInputController.DoubleClickWindowFrames`) -- `InventoryGridContent` no longer hand-rolls its own
+  frame counter/pending-click buffer, it just reacts to `Clicked`/`DoubleClicked` like any other
+  consumer. `ActionTargetingController.DoubleTapWindowFrames` (keyboard hotbar double-tap) now reads
+  this same shared constant instead of an independently-tuned one -- settled on double-tap's original
+  0.3s value, not double-click's briefly-tried +25% tuning.
+- **Activating anything closes every closable window** -- `UiLayerStack.CloseAllClosableWindows()` (a
+  new, unconditional sweep across every layer, no menu-mode short-circuit) is called from
+  `ActionTargetingController`'s four real commit points (`ArmAction`/`ArmItem` for arming,
+  `QueueActionActivation`/`QueueConsumableActivation` for the double-tap instant-fire paths that skip
+  arming). This replaced `UiInputController`'s own bespoke Escape-hold sweep entirely -- Escape-hold and
+  item/action activation now share the one implementation (single-tap Escape's
+  `CloseTopmostClosableWindow` is unrelated and untouched). A future Magic Menu cast goes through the
+  same `ArmAction`/`QueueActionActivation` chokepoints and gets this behavior for free.

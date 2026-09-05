@@ -2,6 +2,7 @@ using Engine.ECS.Components;
 using Engine.ECS.Components.Stores;
 using Game.Modules;
 using Game.Modules.Actions.Activators;
+using Game.Modules.Core.Components;
 using Game.Modules.Currency.Components;
 using Game.Modules.Inventory;
 using Game.Modules.Inventory.Components;
@@ -52,6 +53,7 @@ public sealed class InventoryGridContent(
     MapViewState mapViewState,
     Action<int, Guid> onItemSelected,
     Action<int, Guid> onCompareRequested,
+    Action<int, Guid> onActivateRequested,
     // Null (every non-trade caller) -- this grid's own pricing direction/cell type derive from
     // mapViewState.OpenShopEntityId/entityId as they always have. Non-null only for the trade
     // window's own two columns (PLAN-trade-window.md), which need TradeItemStackCell instead of
@@ -84,6 +86,7 @@ public sealed class InventoryGridContent(
     private readonly MultiComponentPool<InventoryItemStackComponent> _stacks = componentManager.GetMultiPool<InventoryItemStackComponent>();
     private readonly PackedComponentPool<ShopComponent>? _shopPool = componentManager.IsRegistered<ShopComponent>() ? componentManager.GetPackedPool<ShopComponent>() : null;
     private readonly PackedComponentPool<CurrencyComponent>? _currencyPool = componentManager.IsRegistered<CurrencyComponent>() ? componentManager.GetPackedPool<CurrencyComponent>() : null;
+    private readonly PackedComponentPool<ActionLockComponent>? _actionLockPool = componentManager.IsRegistered<ActionLockComponent>() ? componentManager.GetPackedPool<ActionLockComponent>() : null;
     private readonly List<InventoryItemStackComponent> _reusableStacks = [];
     private readonly List<(InventoryItemStackComponent Stack, ItemDefinition Definition)> _reusableVisibleEntries = [];
     private readonly Dictionary<Guid, List<int>> _reusableGroupIndices = [];
@@ -687,6 +690,53 @@ public sealed class InventoryGridContent(
     }
 
     /// <summary>
+    /// Double-click-to-activate -- a second entry point into the same arm flow "Activate"
+    /// (BuildItemContextMenu) uses. Single/double-click disambiguation itself (the deferred-single-
+    /// click, cancel-on-double timing) is UiInputController's own job now (see its
+    /// DispatchClick/HandleDoubleClickAwareClick) -- this only ever runs once UiInputController has
+    /// already decided a second click on this cell landed within the double-click window, so
+    /// OnCellClicked's own onItemSelected call for the first click is guaranteed never to have fired
+    /// (or ever will) for this gesture. Only wired up for player-owned, non-Merged-Stack cells (see
+    /// RebuildCells) -- a corpse/shop/trade cell, or a Merged Stack badge, never reaches here at all.
+    /// </summary>
+    private void OnCellDoubleClicked(Element element)
+    {
+        if (element is InventoryItemStackCell { StackInstanceId: { } stackInstanceId } cell)
+        {
+            TryActivate(cell.EntityId, stackInstanceId);
+        }
+    }
+
+    /// <summary>The actual Activate attempt, shared by "Activate" (BuildItemContextMenu) and a confirmed double-click (OnCellDoubleClicked) -- a no-op, not a fallback to the single-click action, if the item can't be activated or the global cooldown is still up (see CanActivate/IsPlayerActionLocked).</summary>
+    private void TryActivate(int cellEntityId, Guid stackInstanceId)
+    {
+        if (CanActivate(cellEntityId, stackInstanceId) && !IsPlayerActionLocked())
+        {
+            onActivateRequested(cellEntityId, stackInstanceId);
+        }
+    }
+
+    /// <summary>
+    /// Player-owned, non-Merged-Stack, and the effective ItemDefinition carries an IActionActivator
+    /// -- the same base eligibility ActionTargetingController.HandleItemSlotPress/ArmItemFromStack
+    /// check, duplicated here since this class already owns its own ComponentManager pool lookups
+    /// independently. Deliberately ignores the global cooldown -- see IsPlayerActionLocked, checked
+    /// separately so "Activate" stays visible-but-disabled on cooldown rather than disappearing.
+    /// </summary>
+    private bool CanActivate(int cellEntityId, Guid stackInstanceId) =>
+        cellEntityId == world.PlayerEntityId &&
+        InventoryQueries.TryFindByStackInstanceId(_stacks, world.PlayerEntityId, stackInstanceId, out var stack) &&
+        InventoryQueries.TryResolveEffectiveItem(itemCatalog, in stack, out var item) &&
+        item.Activator is not null;
+
+    /// <summary>Mirrors MapWindow's own "Inspect" context-menu option, the existing precedent for gating a UI action on the shared per-entity action lock (ActionLockGate.IsBlocked) -- null-safe the same way _shopPool/_currencyPool already are in this class, since ActionLockComponent isn't guaranteed registered in every test setup that builds an InventoryGridContent.</summary>
+    private bool IsPlayerActionLocked() => _actionLockPool is null || ActionLockGate.IsBlocked(_actionLockPool, world.PlayerEntityId);
+
+    /// <summary>
+    /// "Activate" (arms the item exactly as an ordinary hotbar press would -- see
+    /// ActionTargetingController.ArmItemFromStack -- and closes this window; shown whenever
+    /// CanActivate is true, but disabled rather than omitted while IsPlayerActionLocked, so the
+    /// player can see it exists and why it's currently unavailable; placed first, before Compare),
     /// "Compare" (arms Item Details Comparison against this stack -- see ItemComparisonController.
     /// Arm), "Add to trade" (this grid's own entity -> the matching trade-offer entity, only while a
     /// shop -- and so a trade window -- is open, see below), plus "Give"/"Sell All" (this grid's own
@@ -710,6 +760,11 @@ public sealed class InventoryGridContent(
         if (cell.StackInstanceId is not { } stackInstanceId)
         {
             return options;
+        }
+
+        if (CanActivate(cell.EntityId, stackInstanceId))
+        {
+            options.Add(new ContextMenuOption("Activate", null, Enabled: !IsPlayerActionLocked(), () => onActivateRequested(cell.EntityId, stackInstanceId)));
         }
 
         options.Add(new ContextMenuOption("Compare", null, Enabled: true, () => onCompareRequested(cell.EntityId, stackInstanceId)));
@@ -885,6 +940,18 @@ public sealed class InventoryGridContent(
             }
 
             cell.Clicked += OnCellClicked;
+
+            // Only the player's own real (non-Merged-Stack) cells ever support Activate at all (see
+            // CanActivate) -- gating DoubleClicked's subscription the same way keeps every other
+            // cell's single click exactly as instant as before double-click existed, rather than
+            // paying UiInputController's deferred-click cost for a feature that could never apply
+            // (a Merged Stack badge's own click must stay instant too -- expanding a group has
+            // nothing to do with double-click).
+            if (!entry.MergedStackBadgeVisible && entityId == world.PlayerEntityId)
+            {
+                cell.DoubleClicked += OnCellDoubleClicked;
+            }
+
             cell.OnRightClicked = tradeGridIsShopSide is { } isTradeShopSide
                 ? _ => RemoveFromTrade(cell, isTradeShopSide)
                 : position =>

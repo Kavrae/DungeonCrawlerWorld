@@ -181,6 +181,34 @@ public sealed class UiLayerStack
         elements.Add(element);
     }
 
+    /// <summary>
+    /// Closes every currently-open Window with CanUserClose true, across every layer --
+    /// unconditional: no menu-mode short-circuit (a held Escape or an item activation both clear a
+    /// modal menu window too, not just whatever's behind it) and no per-layer eligibility filter
+    /// (contrast UiInputController.CloseTopmostClosableWindow's single-tap Escape behavior, which
+    /// keeps both of those for a narrower, one-window-at-a-time dismiss). The one shared
+    /// implementation for both "the player held Escape" (UiInputController.HandleEscape) and "the
+    /// player committed to arming or activating an item/action" (ActionTargetingController) --
+    /// consolidated deliberately, so nothing left open can ever block the map view targeting needs,
+    /// regardless of which of the two triggered the clear. Snapshots each layer's list first --
+    /// Window.Close() self-removes via its own Closed handler, which would corrupt an in-progress
+    /// enumeration otherwise.
+    /// </summary>
+    public void CloseAllClosableWindows()
+    {
+        foreach (var layer in LayersDescending())
+        {
+            var snapshot = _byLayer[layer].ToArray();
+            for (var index = snapshot.Length - 1; index >= 0; index--)
+            {
+                if (snapshot[index] is Window { CanUserClose: true } window)
+                {
+                    window.Close();
+                }
+            }
+        }
+    }
+
     /// <summary>Every declared UiLayer, bottom to top -- Draw/Update/LoadContent order.</summary>
     public static IEnumerable<UiLayer> LayersAscending() => Enum.GetValues<UiLayer>();
 

@@ -66,6 +66,32 @@ public class Element
     public event Action<Element>? Clicked;
 
     /// <summary>
+    /// Raised instead of Clicked once UiInputController has recognized a second click on this same
+    /// element within its own double-click window -- see UiInputController.HandleDoubleClickAwareClick.
+    /// Opt-in: subscribing to this at all (see WantsDoubleClickDetection) is what tells
+    /// UiInputController this element's clicks need single/double disambiguation in the first place;
+    /// an element nobody has subscribed this on keeps firing Clicked immediately on every click, same
+    /// as always.
+    /// </summary>
+    public event Action<Element>? DoubleClicked;
+
+    /// <summary>UiInputController's own opt-in signal -- see DoubleClicked's own doc comment.</summary>
+    internal bool WantsDoubleClickDetection => DoubleClicked is not null;
+
+    /// <summary>
+    /// Raises Clicked directly, bypassing HandleClick/HandleContentClick/OnContentClickAction --
+    /// used only by UiInputController's deferred click dispatch (DispatchClick) once it's already
+    /// decided a given click is a genuine single click, not the first half of a double-click. Safe to
+    /// skip OnContentClickAction's own default recursion into children here specifically because
+    /// WantsDoubleClickDetection is only ever true for a childless leaf (InventoryItemStackCell)
+    /// today -- revisit before adding double-click support to any compound Element.
+    /// </summary>
+    internal void RaiseClicked() => Clicked?.Invoke(this);
+
+    /// <summary>See RaiseClicked.</summary>
+    internal void RaiseDoubleClicked() => DoubleClicked?.Invoke(this);
+
+    /// <summary>
     /// Raised whenever this window's WindowDisplayMode actually changes, regardless of what
     /// triggered it -- not just its own chrome buttons. Lets external code (e.g. a future
     /// "minimize all" action, or a chrome behavior reacting to a mode it didn't itself set)

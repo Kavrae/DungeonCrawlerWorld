@@ -60,6 +60,7 @@ public static class ShellBootstrapper
             world,
             mapViewState,
             camera,
+            uiLayers,
             actionCatalog,
             itemCatalog,
             componentManager.GetDirectPool<TransformComponent>(),
@@ -159,6 +160,8 @@ public static class ShellBootstrapper
         inventoryController.OnItemSelected = OnItemClicked;
         secondaryInventoryController.OnItemSelected = OnItemClicked;
         shopWindowController.OnItemSelected = OnItemClicked;
+
+        inventoryController.OnActivateRequested = (_, stackInstanceId) => actionTargetingController.ArmItemFromStack(stackInstanceId);
 
         var inputController = new UiInputController(uiLayers, screenSize, hotbarController, componentManager, world, contextMenuController, itemDetailsController, itemComparisonController, itemCatalog, mapViewState, ecsContext.EventBus, healthController, inventoryController, abilityScoreController);
         inputController.SetDefaultFocusElement(mapWindow);

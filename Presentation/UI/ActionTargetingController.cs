@@ -1,6 +1,5 @@
 using Engine.ECS.Components.Stores;
 using Engine.Math;
-using Engine.Utilities;
 using Game.Modules;
 using Game.Modules.AbilityScores;
 using Game.Modules.AbilityScores.Components;
@@ -28,6 +27,7 @@ public sealed class ActionTargetingController(
     World world,
     MapViewState mapViewState,
     MapCamera camera,
+    UiLayerStack uiLayers,
     ActionCatalog actionCatalog,
     ItemCatalog itemCatalog,
     DirectComponentPool<TransformComponent> transformPool,
@@ -42,8 +42,8 @@ public sealed class ActionTargetingController(
     PackedComponentPool<ManaComponent>? manaPool = null,
     MultiComponentPool<AbilityScoreComponent>? abilityScores = null)
 {
-    /// <summary>~300ms -- a second press of the same slot within this many frames of the first is a double-tap (auto-target the closest candidate, see HandleHotkeySlotPress), as opposed to a slower second press (confirm against the cursor, same as a click).</summary>
-    private static readonly int DoubleTapWindowFrames = GameTiming.FramesForSeconds(0.3f);
+    /// <summary>A second press of the same slot within this many frames of the first is a double-tap (auto-target the closest candidate, see HandleHotkeySlotPress), as opposed to a slower second press (confirm against the cursor, same as a click). Reads UiInputController's own shared click/double-click window rather than an independently tuned value, so mouse double-click and keyboard double-tap always agree.</summary>
+    private static readonly int DoubleTapWindowFrames = UiInputController.DoubleClickWindowFrames;
 
     private int _frameCounter;
 
@@ -400,8 +400,11 @@ public sealed class ActionTargetingController(
         ArmItem(slot, stackInstanceId);
     }
 
+    /// <summary>Closes every closable window before arming -- the player is committing to targeting on the map, which a window left open (Inventory, Ability Scores, a future Magic Menu, ...) would otherwise block. See UiLayerStack.CloseAllClosableWindows's own doc comment for why this is a separate sweep from Escape-hold's.</summary>
     private void ArmAction(HotkeySlot slot, Guid actionId)
     {
+        uiLayers.CloseAllClosableWindows();
+
         mapViewState.ArmedActionId = actionId;
         mapViewState.ArmedItemStackInstanceId = null;
         mapViewState.ArmedSlot = slot;
@@ -413,9 +416,11 @@ public sealed class ActionTargetingController(
         }
     }
 
-    /// <summary>Resolves targeting via TryGetArmedTargeting (not a parameter of its own) -- called after ArmedItemStackInstanceId is already set above, so it reads back the correctly (Scroll-)scaled spec instead of a stale unscaled one, the same single-chokepoint reasoning as ArmAction re-fetching Activator.Targeting itself rather than taking it as a parameter. Also, critically, what makes a diverged stack's own Override targeting (e.g. a wand with non-default Targeting) actually apply -- TryGetArmedTargeting resolves through the bound stack itself, not a bare catalog lookup by item id.</summary>
-    private void ArmItem(HotkeySlot slot, Guid stackInstanceId)
+    /// <summary>Resolves targeting via TryGetArmedTargeting (not a parameter of its own) -- called after ArmedItemStackInstanceId is already set above, so it reads back the correctly (Scroll-)scaled spec instead of a stale unscaled one, the same single-chokepoint reasoning as ArmAction re-fetching Activator.Targeting itself rather than taking it as a parameter. Also, critically, what makes a diverged stack's own Override targeting (e.g. a wand with non-default Targeting) actually apply -- TryGetArmedTargeting resolves through the bound stack itself, not a bare catalog lookup by item id. slot is null for a menu-driven arm with no originating HotkeySlot (see ArmItemFromStack) -- every ArmedSlot consumer already treats null as "no slot to highlight/reuse for a same-slot re-press confirm," which is exactly correct there: a menu-armed item can only ever be confirmed via a map-tile click.</summary>
+    private void ArmItem(HotkeySlot? slot, Guid stackInstanceId)
     {
+        uiLayers.CloseAllClosableWindows(); // See ArmAction's own doc comment -- same reasoning, covers ArmItemFromStack (Inventory's Activate/double-click) too, since it delegates here.
+
         mapViewState.ArmedItemStackInstanceId = stackInstanceId;
         mapViewState.ArmedActionId = null;
         mapViewState.ArmedSlot = slot;
@@ -425,6 +430,29 @@ public sealed class ActionTargetingController(
         {
             RefreshTargetableTiles(targeting, transform.Position, transform.Size);
         }
+    }
+
+    /// <summary>
+    /// Arms an item directly by StackInstanceId, with no originating HotkeySlot -- the entry point
+    /// for InventoryGridContent's "Activate" context-menu option and double-click gesture (see their
+    /// own doc comments). Reuses the exact eligibility guard HandleItemSlotPress applies before
+    /// arming from a hotbar press, and ArmItem's own targeting-refresh logic unchanged -- no separate
+    /// activation path. Deliberately skips HandleItemSlotPress's double-tap/self-cast shortcut: a
+    /// menu click or double-click has no natural "double-tap" gesture of its own, and a plain single
+    /// press of an unarmed hotbar slot always arms too (the self-cast shortcut is an addition on top
+    /// of that base behavior, not a replacement for it) -- so arming here matches an ordinary,
+    /// non-double-tap hotbar press exactly.
+    /// </summary>
+    public void ArmItemFromStack(Guid stackInstanceId)
+    {
+        if (!InventoryQueries.TryFindByStackInstanceId(inventoryStacks, world.PlayerEntityId, stackInstanceId, out var stack) ||
+            !InventoryQueries.TryResolveEffectiveItem(itemCatalog, in stack, out var item) ||
+            item.Activator is null)
+        {
+            return;
+        }
+
+        ArmItem(null, stackInstanceId);
     }
 
     private void Disarm()
@@ -626,7 +654,7 @@ public sealed class ActionTargetingController(
         QueueConsumableActivation(entityId, stackInstanceId, [transform.Position]);
     }
 
-    /// <summary>Presentation only ever queues an activation request -- ActionActivationSystem is the only thing that applies gameplay effects. Mirrors TryQueuePlayerMove's own queue-and-let-a-system-consume pattern for movement.</summary>
+    /// <summary>Presentation only ever queues an activation request -- ActionActivationSystem is the only thing that applies gameplay effects. Mirrors TryQueuePlayerMove's own queue-and-let-a-system-consume pattern for movement. Closes every closable window here too (not just in ArmAction) -- this is also reachable straight from a double-tap auto-target (TryActivateWithAutoTarget), which skips arming entirely, so it's the only chokepoint that catches that path. Placed after the early-return above so a no-op (no valid target) never spuriously closes anything.</summary>
     private void QueueActionActivation(int entityId, Guid actionId, List<Vector3Int> targetTiles)
     {
         if (targetTiles.Count == 0)
@@ -634,16 +662,19 @@ public sealed class ActionTargetingController(
             return;
         }
 
+        uiLayers.CloseAllClosableWindows();
         pendingActivations.Merge(entityId, new PendingActionActivationComponent(actionId, targetTiles.ToArray()));
     }
 
-    /// <summary>Item counterpart to QueueActionActivation -- ConsumableActivationSystem is the only thing that applies its gameplay effects.</summary>
+    /// <summary>Item counterpart to QueueActionActivation -- ConsumableActivationSystem is the only thing that applies its gameplay effects. See QueueActionActivation's own doc comment for why it also closes every closable window here (catches TryActivateItemOnSelf's double-tap self-cast, which skips arming).</summary>
     private void QueueConsumableActivation(int entityId, Guid stackInstanceId, List<Vector3Int> targetTiles)
     {
         if (targetTiles.Count == 0)
         {
             return;
         }
+
+        uiLayers.CloseAllClosableWindows();
 
         pendingConsumableActivations.Merge(entityId, new PendingConsumableActivationComponent(stackInstanceId, targetTiles.ToArray()));
     }

@@ -58,17 +58,19 @@ public sealed class InventoryManagementWindow(
     private Func<int?> _getSecondaryTargetEntityId = static () => null;
     private Action<int, Guid> _onItemSelected = static (_, _) => { };
     private Action<int, Guid> _onCompareRequested = static (_, _) => { };
+    private Action<int, Guid> _onActivateRequested = static (_, _) => { };
     private readonly VersionWatcher _tagVersionWatcher = new();
     private HashSet<Tag> _currentTags = [];
 
-    /// <summary>Builds this window's content for entityId's inventory. Must be called after CreateElement but before Initialize (see Window.SetContent's own doc comment) -- a fresh TabbedContent per open, since entityId varies across opens of a pooled/reused window instance. tooltipController is the one shared instance every hover-popup consumer in the app shows/hides through (see TooltipController's own doc comment) -- not a child of this window, see Tooltip's own doc comment for why a nested child can't work here. getSecondaryTargetEntityId lets each grid's own item context menu (see InventoryGridContent.BuildItemContextMenu) ask "is a secondary/corpse window currently open, and for whom" without this window needing a direct SecondaryInventoryWindowController reference -- see InventoryWindowController.GetSecondaryTargetEntityId, the actual settable source this is expected to be wired to. onItemSelected/onCompareRequested mirror that same settable-delegate shape for ItemDetailsWindowController.Open/ItemComparisonController.Arm -- see InventoryWindowController.OnItemSelected/OnCompareRequested.</summary>
-    public void Configure(int entityId, TooltipController tooltipController, Func<int?> getSecondaryTargetEntityId, Action<int, Guid> onItemSelected, Action<int, Guid> onCompareRequested)
+    /// <summary>Builds this window's content for entityId's inventory. Must be called after CreateElement but before Initialize (see Window.SetContent's own doc comment) -- a fresh TabbedContent per open, since entityId varies across opens of a pooled/reused window instance. tooltipController is the one shared instance every hover-popup consumer in the app shows/hides through (see TooltipController's own doc comment) -- not a child of this window, see Tooltip's own doc comment for why a nested child can't work here. getSecondaryTargetEntityId lets each grid's own item context menu (see InventoryGridContent.BuildItemContextMenu) ask "is a secondary/corpse window currently open, and for whom" without this window needing a direct SecondaryInventoryWindowController reference -- see InventoryWindowController.GetSecondaryTargetEntityId, the actual settable source this is expected to be wired to. onItemSelected/onCompareRequested/onActivateRequested mirror that same settable-delegate shape for ItemDetailsWindowController.Open/ItemComparisonController.Arm/closing this window + ActionTargetingController.ArmItemFromStack -- see InventoryWindowController.OnItemSelected/OnCompareRequested/OnActivateRequested.</summary>
+    public void Configure(int entityId, TooltipController tooltipController, Func<int?> getSecondaryTargetEntityId, Action<int, Guid> onItemSelected, Action<int, Guid> onCompareRequested, Action<int, Guid> onActivateRequested)
     {
         _entityId = entityId;
         _tooltipController = tooltipController;
         _getSecondaryTargetEntityId = getSecondaryTargetEntityId;
         _onItemSelected = onItemSelected;
         _onCompareRequested = onCompareRequested;
+        _onActivateRequested = onActivateRequested;
 
         var tagCounts = InventoryTagQueries.GetTagCounts(componentManager, itemCatalog, entityId);
         _currentTags = ToTagSet(tagCounts);
@@ -136,7 +138,7 @@ public sealed class InventoryManagementWindow(
 
     private InventoryTabContent CreateTabContent(Tag? filterTag)
     {
-        var gridContent = new InventoryGridContent(world, componentManager, itemCatalog, elementPoolService, fontService, labelRenderer, spriteSheetService, spriteRenderer, contextMenuController, _entityId, filterTag, _tooltipController, _getSecondaryTargetEntityId, mapViewState, _onItemSelected, _onCompareRequested);
+        var gridContent = new InventoryGridContent(world, componentManager, itemCatalog, elementPoolService, fontService, labelRenderer, spriteSheetService, spriteRenderer, contextMenuController, _entityId, filterTag, _tooltipController, _getSecondaryTargetEntityId, mapViewState, _onItemSelected, _onCompareRequested, _onActivateRequested);
         return new InventoryTabContent(elementPoolService, fontService, labelRenderer, gridContent);
     }
 }

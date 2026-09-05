@@ -547,24 +547,11 @@ AdvancedMapContextMenu's five landed menus needed this.
 
 Persisted view of the player's active stats -- fixed set.
 
-#### Player attack button or key
-
-Partially addressed: Default Attack is bound to F, fires on single press (double-tap for auto-target).
-Still open: making it visually distinct from the hotbar rather than just one more slot -- revisit
-whether that's still wanted now the hotbar itself is fast.
-
 #### Standard widget set
 
 No checkbox, radio button, dropdown, slider, list box, or tree view (`Toggle` covers checkbox --
 `IMPLEMENTATION-NOTES.md`). Tabs exist (`TabbedContent`). Inventory/spell hotbar and equipment/stats
 windows still want list/grid controls beyond what exists.
-
-#### Tooltips, description/stat views, context menus, click-to-arm on inventory & magic menus
-
-Item inspection popup and hover summary both landed, inventory-only. Remaining: (1) extend both to the
-future Magic Menu; (2) right-click context menus (arm/drop/inspect) on cells in either menu, blocked on
-Context menu coverage's remaining scope; (3) click-to-arm/cast directly from a menu cell -- today only
-the hotbar can arm an action/item.
 
 ### Medium Priority
 
@@ -820,12 +807,6 @@ Needs Options menu (above) to live in, and Standard widget set (needs at least s
 today's hotkeys are hardcoded in `MapWindow.OnHotkeysAction`/`UiInputController`. Would eventually want
 persisted storage for rebinds (see Data storage under Global, which today only covers window geometry).
 
-#### Direct menu-opening hotkeys (e.g. I for Inventory)
-
-No keyboard shortcut opens any HUD window directly -- only folder-tile clicks toggle them. Wanted: a
-global, unconditional hotkey per menu (I to start), same treatment `UiInputController` already gives
-Tab/Escape.
-
 #### Targeted key-press routing instead of a full-keyboard scan
 
 `RouteKeyPressesToFocusedWindow` calls `KeyboardState.GetPressedKeys()` every frame a window is focused
@@ -935,3 +916,21 @@ of and rickrolls the visitor. The Crawler TV show (Game, above) would air an in-
 navigating to the advertised URL (typed or via an in-show QR code) is the payoff. Two separate
 deliverables (the site itself, and the in-show ad segment) -- the site has no dependency on the game
 engine at all.
+
+## Accessibility
+
+### Low Priority
+
+#### Read the OS double-click speed instead of a hardcoded window
+
+`InventoryGridContent.DoubleClickWindowFrames` (inventory item double-click-to-activate) is a fixed
+constant, not the user's actual configured Windows double-click speed (Control Panel/Settings ->
+Mouse, default 500ms) -- unlike WinForms/WPF apps, which read this via
+`SystemInformation.DoubleClickTime`. Retrievable without a `System.Windows.Forms` dependency (which
+would force retargeting to `net10.0-windows`) via a direct `user32.dll` P/Invoke of
+`GetDoubleClickTime()`, callable at startup since it's a system-wide query with no window-handle
+dependency. Windows-only -- FNA itself is cross-platform, so this needs an `OperatingSystem.IsWindows()`
+guard with today's hardcoded value as the non-Windows fallback. Scoped to the mouse double-click only;
+`ActionTargetingController`'s separate keyboard hotbar double-tap window is a different gesture and
+wouldn't read from this. Open question if picked up: does the current +25% buffer on top of the base
+value still make sense once the base is the user's own real OS setting rather than a fixed guess.

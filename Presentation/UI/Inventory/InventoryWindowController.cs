@@ -60,6 +60,9 @@ public sealed class InventoryWindowController(
     /// <summary>Settable late-bound callback for "the player chose Compare from an inventory item cell's own context menu" -- wired by ShellBootstrapper to ItemComparisonController.Arm once that controller exists, the same ordering reason OnItemSelected is wired the same way. Threaded the same path.</summary>
     public Action<int, Guid>? OnCompareRequested { get; set; }
 
+    /// <summary>Settable late-bound callback for "the player chose Activate (or double-clicked) an inventory item cell" -- wired by ShellBootstrapper to arm the item via ActionTargetingController.ArmItemFromStack (which closes this window itself as part of arming -- see its own doc comment), the same ordering reason OnItemSelected/OnCompareRequested are wired the same way. Threaded the same path.</summary>
+    public Action<int, Guid>? OnActivateRequested { get; set; }
+
     /// <summary>Opens the player's own Inventory window if it isn't already -- idempotent, same as WindowLifecycle.Open itself. Lets a non-button trigger (e.g. clicking a corpse to loot it) reuse this window instead of the button being the only way to open it.</summary>
     public void OpenInventoryWindow() => _windowLifecycle.Open();
 
@@ -122,7 +125,13 @@ public sealed class InventoryWindowController(
             },
             Content = new ElementContentOptions { ContentColor = WindowPalette.PanelBackgroundColor },
         });
-        window.Configure(world.PlayerEntityId, tooltipController, () => GetSecondaryTargetEntityId?.Invoke(), (entityId, stackInstanceId) => OnItemSelected?.Invoke(entityId, stackInstanceId), (entityId, stackInstanceId) => OnCompareRequested?.Invoke(entityId, stackInstanceId));
+        window.Configure(
+            world.PlayerEntityId,
+            tooltipController,
+            () => GetSecondaryTargetEntityId?.Invoke(),
+            (entityId, stackInstanceId) => OnItemSelected?.Invoke(entityId, stackInstanceId),
+            (entityId, stackInstanceId) => OnCompareRequested?.Invoke(entityId, stackInstanceId),
+            (entityId, stackInstanceId) => OnActivateRequested?.Invoke(entityId, stackInstanceId));
         window.OnRightClicked = position => contextMenuController.Open(new Vector2(position.X, position.Y), DynamicHudContextMenus.BuildCloseMenu(window, _uiLayers));
         return window;
     }

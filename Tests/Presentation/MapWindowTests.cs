@@ -128,6 +128,7 @@ public sealed class MapWindowTests
             world,
             mapViewState,
             camera,
+            new UiLayerStack(),
             resolvedActionCatalog,
             resolvedItemCatalog,
             componentManager.GetDirectPool<TransformComponent>(),

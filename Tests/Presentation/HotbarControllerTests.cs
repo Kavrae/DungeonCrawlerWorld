@@ -75,6 +75,7 @@ public sealed class HotbarControllerTests
             world,
             mapViewState,
             camera,
+            new UiLayerStack(),
             actionCatalog,
             itemCatalog,
             componentManager.GetDirectPool<TransformComponent>(),
