@@ -1,4 +1,5 @@
 using Microsoft.Xna.Framework;
+using Presentation.UI.Content;
 
 namespace Presentation.UI.Chrome;
 
@@ -12,8 +13,8 @@ public static class InventoryChrome
 
     public static Vector2 ButtonPosition = HealthWindowChrome.ButtonPosition + new Vector2(0, HealthWindowChrome.ButtonSize.Y) + ButtonGap;
 
-    /// <summary>Square, one HudChrome.EntrySize row tall -- same shape as HealthWindowChrome.ButtonSize, so the three HUD-trigger buttons (Health, Inventory, Ability Score) read as one consistent vertical stack.</summary>
-    public static Vector2 ButtonSize = new(HudChrome.EntrySize.Y, HudChrome.EntrySize.Y);
+    /// <summary>Same as HealthWindowChrome.ButtonSize (HotbarContent.SlotSize), so the three HUD-trigger buttons (Health, Inventory, Ability Score) read as one consistent vertical stack, sized like the hotbar since each now also carries its own hotbar-style HotkeyLabel overlay.</summary>
+    public static Vector2 ButtonSize = HotbarContent.SlotSize;
 
     /// <summary>Same value as HealthWindowChrome.WindowPosition today, but kept as its own independent field -- two separately-owned windows that happen to coincide, not one true duplicate.</summary>
     public static Vector2 WindowPosition = new(300, 150);

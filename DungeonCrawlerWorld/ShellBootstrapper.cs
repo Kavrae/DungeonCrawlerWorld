@@ -92,7 +92,7 @@ public static class ShellBootstrapper
 
         var mapWindow = BuildBaseWindows(presentation, ecsContext, screenSize, diagnostics, mapViewState, uiLayers);
         var (questTriggerWindow, hotbarContent, inspectionWindow) = BuildStaticHudWindows(presentation, world, ecsContext, actionCatalog, itemCatalog, statusEffectDisplays, screenSize, mapViewState, uiLayers);
-        var (notificationCenter, inventoryController) = BuildDynamicHudWindows(presentation, world, ecsContext, itemCatalog, mapWindow, contextMenuController, uiLayers, tooltipController);
+        var (notificationCenter, healthController, inventoryController) = BuildDynamicHudWindows(presentation, world, ecsContext, itemCatalog, mapWindow, contextMenuController, uiLayers, tooltipController);
         var hotbarController = BuildHotbarController(mapViewState, hotbarContent, actionTargetingController, tooltipController);
         BuildUserWindows(presentation, cursorTextContent, dragGhostContent, uiLayers);
 
@@ -160,7 +160,7 @@ public static class ShellBootstrapper
         secondaryInventoryController.OnItemSelected = OnItemClicked;
         shopWindowController.OnItemSelected = OnItemClicked;
 
-        var inputController = new UiInputController(uiLayers, screenSize, hotbarController, componentManager, world, contextMenuController, itemDetailsController, itemComparisonController, itemCatalog, mapViewState, ecsContext.EventBus);
+        var inputController = new UiInputController(uiLayers, screenSize, hotbarController, componentManager, world, contextMenuController, itemDetailsController, itemComparisonController, itemCatalog, mapViewState, ecsContext.EventBus, healthController, inventoryController, abilityScoreController);
         inputController.SetDefaultFocusElement(mapWindow);
         inputController.FocusElement(mapWindow);
 
@@ -374,7 +374,7 @@ public static class ShellBootstrapper
     }
 
     /// <summary>DynamicHUD tier: NotificationCenter owns/populates its own folder+popups, and InventoryWindowController does the same for its own button+window (both add to UiLayer.DynamicHud specifically; hover popups instead show/hide through the one shared TooltipController -- see its own doc comment) -- see UiLayer's own doc comment for what each tier means. Build also passes the same layer stack into OpenQuestComposer later, since that popup belongs in DynamicHud too. Every pooled type either of these creates is already registered by the time this runs -- see Build's ElementFactoryRegistry.RegisterAll call.</summary>
-    private static (NotificationCenter NotificationCenter, InventoryWindowController Inventory) BuildDynamicHudWindows(PresentationContext presentation, World world, EcsContext ecsContext, ItemCatalog itemCatalog, MapWindow mapWindow, ContextMenuController contextMenuController, UiLayerStack layers, TooltipController tooltipController)
+    private static (NotificationCenter NotificationCenter, HealthWindowController Health, InventoryWindowController Inventory) BuildDynamicHudWindows(PresentationContext presentation, World world, EcsContext ecsContext, ItemCatalog itemCatalog, MapWindow mapWindow, ContextMenuController contextMenuController, UiLayerStack layers, TooltipController tooltipController)
     {
         var notificationCenter = new NotificationCenter(presentation.ElementPoolService, ecsContext.EventBus, layers, contextMenuController);
         notificationCenter.Initialize();
@@ -392,7 +392,7 @@ public static class ShellBootstrapper
             presentation.SpriteSheetService, presentation.SpriteRenderer, itemCatalog, mapWindow, contextMenuController, tooltipController);
         inventory.Initialize(layers);
 
-        return (notificationCenter, inventory);
+        return (notificationCenter, health, inventory);
     }
 
     /// <summary>Built after InventoryWindowController (whose PlayerInventoryWindow accessor this abilityScoreController reads to cascade its own window beside a live Inventory window -- see AbilityScoreWindowController.CreateAbilityScoreWindow) and MapWindow.</summary>

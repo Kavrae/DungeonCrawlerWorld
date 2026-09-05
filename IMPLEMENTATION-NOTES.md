@@ -489,3 +489,17 @@ are the first dedicated coverage (previously one incidental test touched any of 
   produced `"Name (#id)"`) -- fixed the doc comment + tests to match the real output.
 - `Fairy.PunchDamage` balance edit (5->3) had left a stale test literal.
 - `SimpleHealthComponent.ToString()` casing typo in test assertion ("invalid" vs "Invalid").
+
+### Drag-drop resolution extracted into per-feature resolvers
+
+`UiInputController.ResolveContentDrag` had grown a branch per drop-target-aware feature (plain
+transfer, shop buy/sell, trade window). Replaced with `Presentation/Input/DragDrop/IDragDropResolver`
++ `DragDropContext`: each feature owns its own resolver (`TradeDragDropResolver`,
+`ShopDragDropResolver`, `PlainInventoryDragDropResolver` as the always-claiming fallback), tried in a
+fixed priority list (Trade -> Shop -> Plain) built once in `UiInputController`'s constructor --
+`ResolveContentDrag` itself is back to gesture recognition + hit-testing + dispatch only. `TryResolve`
+returning `true` means "this resolver owns the drag based on who the endpoints are," not "the
+underlying action succeeded" -- an ineligible shop/trade drop is claimed-and-refused, never falls
+through to a plain transfer. A future drop-target feature (Magic Menu, Equipment slots) adds its own
+resolver to the list without `UiInputController` learning anything new. `UiInputControllerTests.cs`
+needed no changes -- its 35 `Drag_*` tests drive the real `Update` input pipeline black-box.

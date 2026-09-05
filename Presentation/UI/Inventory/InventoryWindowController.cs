@@ -35,11 +35,11 @@ public sealed class InventoryWindowController(
     private readonly PackedComponentPool<InventoryDisabledComponent> _disabledPool = componentManager.GetPackedPool<InventoryDisabledComponent>();
 
     private Button _button = null!;
-    private WindowLifecycle<InventoryManagementWindow> _slot = null!;
-    private UiLayerStack _layers = null!;
+    private WindowLifecycle<InventoryManagementWindow> _windowLifecycle = null!;
+    private UiLayerStack _uiLayers = null!;
 
     /// <summary>The player's own currently-open InventoryManagementWindow, if any -- lets SecondaryInventoryWindowController/ShopWindowController/TradeWindowController/ItemDetailsWindowController/ItemComparisonController/AbilityScoreWindowController position a window relative to it without any of them owning a second instance of their own.</summary>
-    public InventoryManagementWindow? PlayerInventoryWindow => _slot.Window;
+    public InventoryManagementWindow? PlayerInventoryWindow => _windowLifecycle.Window;
 
     /// <summary>
     /// Settable late-bound query for "is a secondary/corpse inventory window currently open, and
@@ -61,22 +61,25 @@ public sealed class InventoryWindowController(
     public Action<int, Guid>? OnCompareRequested { get; set; }
 
     /// <summary>Opens the player's own Inventory window if it isn't already -- idempotent, same as WindowLifecycle.Open itself. Lets a non-button trigger (e.g. clicking a corpse to loot it) reuse this window instead of the button being the only way to open it.</summary>
-    public void OpenInventoryWindow() => _slot.Open();
+    public void OpenInventoryWindow() => _windowLifecycle.Open();
+
+    /// <summary>Lets a global keyboard hotkey (I -- see UiInputController.HandleWindowToggleHotkeys) reuse the same open/close behavior the button's own Clicked handler already has, without exposing _windowLifecycle itself.</summary>
+    public void ToggleInventoryWindow() => _windowLifecycle.Toggle();
 
     public void Initialize(UiLayerStack layers)
     {
-        _layers = layers;
-        _slot = new WindowLifecycle<InventoryManagementWindow>(CreateInventoryWindow, IsInventoryDisabled, layers, () => { });
+        _uiLayers = layers;
+        _windowLifecycle = new WindowLifecycle<InventoryManagementWindow>(CreateInventoryWindow, IsInventoryDisabled, layers, () => { });
 
         _button = elementPoolService.CreateElement<Button>(null, new ElementOptions
         {
             Layout = new ElementLayoutOptions { RelativePosition = InventoryChrome.ButtonPosition, Size = InventoryChrome.ButtonSize, DisplayMode = ElementDisplayMode.Fixed },
             Chrome = new ElementChromeOptions { ShowBorder = true, BorderStyle = BorderStyle.Outset, CanUserFocus = false },
             Text = new TextOptions { Text = "I" },
-            Button = new ButtonOptions { SpriteName = "Inventory" },
+            Button = new ButtonOptions { SpriteName = "Inventory", HotkeyLabel = "I" },
         });
         _button.Initialize();
-        _button.Clicked += _ => _slot.Toggle();
+        _button.Clicked += _ => _windowLifecycle.Toggle();
         layers.Add(UiLayer.DynamicHud, _button);
 
         // Opening Inventory from this button while another menu window is already open is a
@@ -120,7 +123,7 @@ public sealed class InventoryWindowController(
             Content = new ElementContentOptions { ContentColor = WindowPalette.PanelBackgroundColor },
         });
         window.Configure(world.PlayerEntityId, tooltipController, () => GetSecondaryTargetEntityId?.Invoke(), (entityId, stackInstanceId) => OnItemSelected?.Invoke(entityId, stackInstanceId), (entityId, stackInstanceId) => OnCompareRequested?.Invoke(entityId, stackInstanceId));
-        window.OnRightClicked = position => contextMenuController.Open(new Vector2(position.X, position.Y), DynamicHudContextMenus.BuildCloseMenu(window, _layers));
+        window.OnRightClicked = position => contextMenuController.Open(new Vector2(position.X, position.Y), DynamicHudContextMenus.BuildCloseMenu(window, _uiLayers));
         return window;
     }
 }

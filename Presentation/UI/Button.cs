@@ -2,6 +2,7 @@ using FontStashSharp;
 using Game.Blueprints;
 using Game.Modules.Core.Components;
 using Microsoft.Xna.Framework;
+using Microsoft.Xna.Framework.Graphics;
 using Presentation.Fonts;
 using Presentation.Rendering;
 using Presentation.UI.Chrome;
@@ -65,6 +66,12 @@ public sealed class Button(FontService fontService, ElementPoolService elementPo
     /// <summary>Set via ElementOptions.Button.SpriteName -- null (the default) means this button draws its ordinary Left/RightText, never the sprite-or-glyph icon branch below. Reset on every Build, same as every other field here, so a pooled-and-reused Button can't carry a stale icon from its previous consumer.</summary>
     private string? _spriteName;
 
+    /// <summary>Set via ElementOptions.Button.HotkeyLabel -- see its own doc comment. Reset every Build, same as _spriteName.</summary>
+    private string? _hotkeyLabel;
+
+    /// <summary>Only fetched when _hotkeyLabel is actually set (the overwhelming majority of Buttons never set HotkeyLabel) -- sized off this button's own OriginalSize.Y, the same way HotbarContent sizes its own key-label font off SlotSize.Y.</summary>
+    private SpriteFontBase? _hotkeyLabelFont;
+
     public override void Build(Element? parent, ElementOptions options)
     {
         base.Build(parent, options);
@@ -83,6 +90,9 @@ public sealed class Button(FontService fontService, ElementPoolService elementPo
         IsPressed = false;
         LeftAlign = false;
         _spriteName = options.Button?.SpriteName;
+
+        _hotkeyLabel = options.Button?.HotkeyLabel;
+        _hotkeyLabelFont = _hotkeyLabel is not null ? fontService.GetFont((int)(OriginalSize.Y * FontChrome.ButtonHotkeyLabelFontFraction)) : null;
 
         _restingBorderStyle = options.Chrome?.BorderStyle ?? BorderStyle.Outset;
         BorderStyle = _restingBorderStyle;
@@ -170,10 +180,8 @@ public sealed class Button(FontService fontService, ElementPoolService elementPo
             SpriteComponent? sprite = SpriteManifest.TryGet(_spriteName, out var spriteComponent) ? spriteComponent : null;
             var spriteTint = Enabled ? Color.White : Color.Gray;
             SpriteOrGlyphRenderer.Draw(spriteBatch, spriteSheetService, spriteRenderer, LabelRenderer, sprite, ContentFont, LeftText, textColor, ContentAbsolutePosition, ContentSize, spriteTint);
-            return;
         }
-
-        if (string.IsNullOrEmpty(RightText) && !LeftAlign)
+        else if (string.IsNullOrEmpty(RightText) && !LeftAlign)
         {
             // No hotkey column and no explicit left-align request -- ink-centered, the same
             // look every title button ("X", "_", "O") has always had. DrawLeftAligned's
@@ -203,5 +211,21 @@ public sealed class Button(FontService fontService, ElementPoolService elementPo
                 LabelRenderer.DrawRightAligned(spriteBatch, ContentFont, RightText, textFootprintPosition, textFootprintSize, textColor);
             }
         }
+
+        DrawHotkeyLabel(spriteBatch);
+    }
+
+    /// <summary>Top-left corner, over whatever else DrawContent just drew -- see HotkeyLabel's own doc comment. Mirrors HotbarContent.DrawKeyLabel exactly: anchored to AbsolutePosition (the button's whole rectangle, outside the border inset), not ContentAbsolutePosition, with the same padding and the same Enabled-driven alpha every other part of this button's draw already uses.</summary>
+    private static readonly Vector2 HotkeyLabelPadding = new(4f, 2f);
+
+    private void DrawHotkeyLabel(SpriteBatch spriteBatch)
+    {
+        if (_hotkeyLabel is null || _hotkeyLabelFont is null)
+        {
+            return;
+        }
+
+        var position = AbsolutePosition + HotkeyLabelPadding;
+        ContrastTextRenderer.Draw(spriteBatch, _hotkeyLabelFont, _hotkeyLabel, position, Enabled ? 1f : 0.5f);
     }
 }

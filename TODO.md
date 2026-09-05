@@ -566,27 +566,6 @@ future Magic Menu; (2) right-click context menus (arm/drop/inspect) on cells in 
 Context menu coverage's remaining scope; (3) click-to-arm/cast directly from a menu cell -- today only
 the hotbar can arm an action/item.
 
-#### Extract UiInputController.ResolveContentDrag's drag-drop resolution into something self-contained
-
-`ResolveContentDrag` (`Presentation/Input/UiInputController.cs`) is the single dispatch point every
-content-drag release goes through -- item stack, Merged Stack, action, and currency drags alike -- and
-it's grown a new branch with every drop-target-aware feature added so far: plain inventory-to-inventory
-transfer, shop buy/sell (`ShopActions.TryBuyFromShop`/`TrySellToShop`), hotbar binding, and now the whole
-trade window, which needed two more dedicated methods on this same class
-(`ResolveTradeAwareItemDrag`/`ResolveTradeAwareCurrencyDrag`) just to hold PLAN-trade-window.md's own
-drag-drop eligibility table. Each of those methods already encodes another feature's business rules
-(shop pricing eligibility, trade eligibility per column, hotbar bind rules) directly inside the input
-layer, rather than that feature owning its own drag-resolution logic -- `UiInputController` has to know
-about `ShopActions`/trade-offer entities/hotbar slots all at once instead of just recognizing "a drag
-ended here" and asking someone else what that means. The next drop-target-aware feature (Magic Menu,
-Equipment slots, grid cell reorder) will add yet another branch/method here rather than being
-self-contained. Needs a real design pass, not a mechanical split: something like a pluggable per-
-drop-target-kind resolver that `ResolveContentDrag` looks up and delegates to, so each feature registers
-its own drag-resolution strategy instead of `UiInputController` accumulating every feature's rules
-inline. Scope the design before touching code -- this method is load-bearing (every stack/currency/
-action move in the game routes through it) and already has real regression coverage
-(`UiInputControllerTests.cs`) that any refactor must keep passing.
-
 ### Medium Priority
 
 #### TextDivider label clipping and right-line spacing

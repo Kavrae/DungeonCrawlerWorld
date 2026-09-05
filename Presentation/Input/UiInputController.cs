@@ -11,6 +11,7 @@ using Microsoft.Xna.Framework;
 using Microsoft.Xna.Framework.Input;
 using Presentation.Input.DragDrop;
 using Presentation.UI;
+using Presentation.UI.AbilityScores;
 using Presentation.UI.Content;
 using Presentation.UI.Inventory;
 using Presentation.UI.Shops;
@@ -182,6 +183,15 @@ public sealed class UiInputController
     /// <summary>Owns Item Details Comparison's own arm/add/remove state -- null in test setups that don't build one, in which case right-click simply never disarms it (there can't be anything armed without this).</summary>
     private readonly ItemComparisonController? _itemComparisonController;
 
+    /// <summary>Backs the U hotkey (see HandleWindowToggleHotkeys) -- null in test setups that don't build one, in which case U simply does nothing.</summary>
+    private readonly HealthWindowController? _healthWindowController;
+
+    /// <summary>Backs the I hotkey -- see _healthWindowController's own doc comment.</summary>
+    private readonly InventoryWindowController? _inventoryWindowController;
+
+    /// <summary>Backs the O hotkey -- see _healthWindowController's own doc comment.</summary>
+    private readonly AbilityScoreWindowController? _abilityScoreWindowController;
+
     /// <summary>Mouse position when the current hotbar-slot press started -- ResolveHotbarSlotClick only treats the release as a tap if it's within ContentDragTapThresholdPixels of this, the same tap-vs-drag distinction ResolveContentDrag already makes for content-drags.</summary>
     private Vector2 _hotbarPressMousePosition;
 
@@ -239,7 +249,7 @@ public sealed class UiInputController
     /// window to this same list afterward. Passing the list itself (not a snapshot/copy) is what
     /// makes that work -- this class only ever reads through the reference, never replaces it.
     /// </summary>
-    public UiInputController(UiLayerStack layers, Vector2 screenSize, HotbarController? hotbarController = null, ComponentManager? componentManager = null, IPlayerQuery? playerQuery = null, ContextMenuController? contextMenuController = null, ItemDetailsWindowController? itemDetailsWindowController = null, ItemComparisonController? itemComparisonController = null, ItemCatalog? itemCatalog = null, MapViewState? mapViewState = null, EventBus? eventBus = null)
+    public UiInputController(UiLayerStack layers, Vector2 screenSize, HotbarController? hotbarController = null, ComponentManager? componentManager = null, IPlayerQuery? playerQuery = null, ContextMenuController? contextMenuController = null, ItemDetailsWindowController? itemDetailsWindowController = null, ItemComparisonController? itemComparisonController = null, ItemCatalog? itemCatalog = null, MapViewState? mapViewState = null, EventBus? eventBus = null, HealthWindowController? healthWindowController = null, InventoryWindowController? inventoryWindowController = null, AbilityScoreWindowController? abilityScoreWindowController = null)
     {
         _layers = layers;
         _screenSize = screenSize;
@@ -252,6 +262,9 @@ public sealed class UiInputController
         _itemCatalog = itemCatalog;
         _mapViewState = mapViewState;
         _eventBus = eventBus;
+        _healthWindowController = healthWindowController;
+        _inventoryWindowController = inventoryWindowController;
+        _abilityScoreWindowController = abilityScoreWindowController;
         _shopPool = componentManager?.IsRegistered<ShopComponent>() == true ? componentManager.GetPackedPool<ShopComponent>() : null;
         _dragDropResolvers = BuildDragDropResolvers();
 
@@ -399,6 +412,7 @@ public sealed class UiInputController
         HandleFocusCycling(keyboardState);
         HandleEscape(keyboardState);
         HandleAdminModeToggle(keyboardState);
+        HandleWindowToggleHotkeys(keyboardState);
         RouteKeyPressesToFocusedElement(keyboardState);
         RouteTextInputToFocusedElement();
 
@@ -516,6 +530,36 @@ public sealed class UiInputController
 
         GlobalState.IsAdminModeOn = !GlobalState.IsAdminModeOn;
 #endif
+    }
+
+    /// <summary>
+    /// U/I/O toggle the Health/Inventory/Ability Score windows -- unconditional/edge-triggered like
+    /// Tab/Escape/F12 above (same IsKeyPressed helper, no menu-mode gating, since each button these
+    /// mirror is already MarkMenuModeExempt), but gated on !IsTextBoxFocused first since (unlike
+    /// Tab/Escape/F12) these are printable characters a focused TextBox should keep receiving as
+    /// ordinary typed text -- the same reason MapWindow.IsTextInputFocused gates Space.
+    /// </summary>
+    private void HandleWindowToggleHotkeys(KeyboardState keyboardState)
+    {
+        if (IsTextBoxFocused)
+        {
+            return;
+        }
+
+        if (IsKeyPressed(keyboardState, Keys.U))
+        {
+            _healthWindowController?.ToggleHealthWindow();
+        }
+
+        if (IsKeyPressed(keyboardState, Keys.I))
+        {
+            _inventoryWindowController?.ToggleInventoryWindow();
+        }
+
+        if (IsKeyPressed(keyboardState, Keys.O))
+        {
+            _abilityScoreWindowController?.ToggleAbilityScoreWindow();
+        }
     }
 
     /// <summary>

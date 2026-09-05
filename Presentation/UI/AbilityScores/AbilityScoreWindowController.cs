@@ -35,6 +35,9 @@ public sealed class AbilityScoreWindowController(
     private WindowLifecycle<AbilityScoreWindow> _slot = null!;
     private UiLayerStack _layers = null!;
 
+    /// <summary>Lets a global keyboard hotkey (O -- see UiInputController.HandleWindowToggleHotkeys) reuse the same open/close behavior the button's own Clicked handler already has, without exposing _windowLifecycle itself.</summary>
+    public void ToggleAbilityScoreWindow() => _slot.Toggle();
+
     public void Initialize(UiLayerStack layers)
     {
         _layers = layers;
@@ -45,7 +48,7 @@ public sealed class AbilityScoreWindowController(
             Layout = new ElementLayoutOptions { RelativePosition = AbilityScoreChrome.ButtonPosition, Size = AbilityScoreChrome.ButtonSize, DisplayMode = ElementDisplayMode.Fixed },
             Chrome = new ElementChromeOptions { ShowBorder = true, BorderStyle = BorderStyle.Outset, CanUserFocus = false },
             Text = new TextOptions { Text = "S" },
-            Button = new ButtonOptions { SpriteName = "AbilityScore" },
+            Button = new ButtonOptions { SpriteName = "AbilityScore", HotkeyLabel = "O" },
         });
         _button.Initialize();
         _button.Clicked += _ => _slot.Toggle();

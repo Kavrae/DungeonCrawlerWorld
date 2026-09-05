@@ -41,6 +41,9 @@ public static class FontChrome
     public static float HotbarOverlayFontFraction = 0.3f;
     public static float HotbarCountdownFontFraction = 0.4375f;
 
+    /// <summary>Same fraction as HotbarOverlayFontFraction -- Button.HotkeyLabel is drawn the same way hotbar draws each slot's own bound key, and reads at a consistent relative size once the button matches a hotbar slot's own size (see HealthWindowChrome/InventoryChrome/AbilityScoreChrome.ButtonSize).</summary>
+    public static float ButtonHotkeyLabelFontFraction = 0.3f;
+
     public static float ActionLockGlyphFontFraction = 0.75f;
 
     public static float PlayerStatusGlyphFontFraction = 0.75f;

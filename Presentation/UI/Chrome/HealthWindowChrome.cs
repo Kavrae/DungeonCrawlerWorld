@@ -1,4 +1,5 @@
 using Microsoft.Xna.Framework;
+using Presentation.UI.Content;
 
 namespace Presentation.UI.Chrome;
 
@@ -12,8 +13,8 @@ public static class HealthWindowChrome
 
     public static Vector2 ButtonPosition = HudChrome.Margin + new Vector2(0, NotificationChrome.FolderMaximumSize.Y) + NotificationClearanceGap;
 
-    /// <summary>Square, one HudChrome.EntrySize row tall -- reads as a real icon button (see Button's own single-glyph ink-centered DrawContent) rather than a wide text tile.</summary>
-    public static Vector2 ButtonSize = new(HudChrome.EntrySize.Y, HudChrome.EntrySize.Y);
+    /// <summary>Matches HotbarContent.SlotSize -- reads as a real icon button (see Button's own single-glyph ink-centered DrawContent) sized consistently with the hotbar, since this button now also carries its own hotbar-style HotkeyLabel overlay (see HealthWindowController.Initialize).</summary>
+    public static Vector2 ButtonSize = HotbarContent.SlotSize;
 
     /// <summary>Same value as InventoryChrome.WindowPosition today, but kept as its own independent field -- two separately-owned windows that happen to coincide, not one true duplicate (see InventoryChrome's own doc comment).</summary>
     public static Vector2 WindowPosition = new(300, 150);
