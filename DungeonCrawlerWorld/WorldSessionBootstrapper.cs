@@ -3,7 +3,6 @@ using Engine.Math;
 using Game.Bootstrap;
 using Game.Diagnostics;
 using Game.Floors;
-using Game.Notifications;
 using Game.World;
 
 namespace DungeonCrawlerWorld;
@@ -74,14 +73,6 @@ public static class WorldSessionBootstrapper
         {
             FloorBuilder.PopulateFloor(world, ecsContext, mathUtility, crawlerNumberAllocator, bootstrapResult.MovedEntities);
         }
-
-        // The welcome notification reacts to EnteredDungeonEvent the same way every achievement
-        // trigger does (see AchievementTriggerContext.SubscribeUntilTriggered), publishing
-        // NotificationRequestedEvent instead of a direct NotificationCenter reference -- this
-        // runs well before ShellBootstrapper.Build ever constructs one. Subscribed before
-        // CreatePlayer publishes the event below, same ordering requirement any subscriber has.
-        ecsContext.EventBus.Subscribe<EnteredDungeonEvent>(_ =>
-            ecsContext.EventBus.Publish(new NotificationRequestedEvent(NotificationCategory.System, "Welcome to the World Dungeon!", ShowImmediately: true)));
 
         using (diagnostics.StartupProfiler?.Phase("Player Spawn"))
         {

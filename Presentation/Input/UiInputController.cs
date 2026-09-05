@@ -5,14 +5,16 @@ using Engine.Utilities;
 using Game.Modules.Actions;
 using Game.Modules.Currency;
 using Game.Modules.Inventory;
-using Game.Modules.Shops;
 using Game.Modules.Shops.Components;
 using Game.World;
 using Microsoft.Xna.Framework;
 using Microsoft.Xna.Framework.Input;
+using Presentation.Input.DragDrop;
 using Presentation.UI;
 using Presentation.UI.Content;
 using Presentation.UI.Inventory;
+using Presentation.UI.Shops;
+using Presentation.UI.Trade;
 
 namespace Presentation.Input;
 
@@ -141,22 +143,34 @@ public sealed class UiInputController
     /// <summary>Owns the Armed Hotkey Summary window's arm/preview/hover state machine -- see its own doc comment. Null in test setups that don't build one (e.g. UiInputControllerTests' own harness), in which case hotbar-slot press/release/hover handling is simply skipped.</summary>
     private readonly HotbarController? _hotbarController;
 
-    /// <summary>Needed only for the inventory-to-inventory drag-transfer branch of ResolveContentDrag (InventoryActions.TryTransferStack/TryTransferAllStacksOfItem) -- null in test setups that don't wire one, in which case that branch is simply skipped and a content-drag can still resolve against a hotbar slot as before.</summary>
+    /// <summary>Needed only to build a DragDropContext for _dragDropResolvers -- null in test setups that don't wire one, in which case a content-drag can still resolve against a hotbar slot as before, since the entity-resolution branch never runs without it.</summary>
     private readonly ComponentManager? _componentManager;
 
-    /// <summary>See _componentManager -- passed straight through to InventoryActions' capacity check for a non-player transfer destination.</summary>
+    /// <summary>See _componentManager -- passed to PlainInventoryDragDropResolver/ShopDragDropResolver/TradeDragDropResolver, which pass it straight through to InventoryActions' capacity check for a non-player transfer destination.</summary>
     private readonly IPlayerQuery? _playerQuery;
 
-    /// <summary>Needed only for a content-drag whose origin or destination is a shop (see ResolveContentDrag's ShopActions.TryBuyFromShop/TrySellToShop branch) -- null in test setups that don't wire one, in which case such a drag simply falls through to the plain, non-priced InventoryActions.TryTransferStack.</summary>
+    /// <summary>Needed only by ShopDragDropResolver/TradeDragDropResolver for the actual buy/sell step (ShopActions.TryBuyFromShop/TrySellToShop) -- null in test setups that don't wire one, in which case ShopDragDropResolver declines a shop-touching drag entirely (falling through to the plain, non-priced InventoryActions.TryTransferStack), while TradeDragDropResolver still claims a trade-touching one but skips its direct-sell/direct-buy branches specifically.</summary>
     private readonly ItemCatalog? _itemCatalog;
 
     /// <summary>Derived from _componentManager, not a separate constructor parameter -- same conditional-registration convention as every other optional pool in this codebase. Null whenever ShopComponent isn't registered at all (e.g. most test setups), in which case no drag ever reads as touching a shop.</summary>
     private readonly PackedComponentPool<ShopComponent>? _shopPool;
 
+    /// <summary>
+    /// Every feature's own drag-drop resolution strategy, tried in this fixed priority order by
+    /// ResolveContentDrag until one claims the drag -- see IDragDropResolver's own doc comment. Trade
+    /// before Shop (a trade-offer entity must never reach ShopDragDropResolver -- see
+    /// TradeDragDropResolver's own doc comment on why); PlainInventoryDragDropResolver always last,
+    /// always claims. Built once here rather than a dynamic registration API -- matches
+    /// Presentation's existing fixed-service-set convention (PresentationBootstrapper has no module
+    /// system either); a future feature (Magic Menu, Equipment slots) adds its own resolver to this
+    /// list without UiInputController itself learning anything new.
+    /// </summary>
+    private readonly IReadOnlyList<IDragDropResolver> _dragDropResolvers;
+
     /// <summary>Needed only to check MapViewState.OpenShopEntityId -- while a shop is open, TryStartContentDrag refuses to pick up a cell InventoryGridContent has already marked CellCompareState.Ineligible (see InventoryGridContent.UpdateShopEligibilityState), the same "can't drag what you can't trade" gate BuildItemContextMenu applies to Give/Take. Null in test setups that don't wire one, in which case a content-drag never reads as shop-gated.</summary>
     private readonly MapViewState? _mapViewState;
 
-    /// <summary>Needed only so a direct currency drag dropped onto a shop can publish GoldGivenToShopEvent through ShopActions.TryGiveCurrencyToShop (see ResolveContentDrag's plain-currency branch) -- the same "Angel Investor" trigger CurrencyRowContent's own Give/Give All already routes through. Null in test setups that don't wire one, in which case such a drag still transfers the currency, it just never publishes.</summary>
+    /// <summary>Needed only so PlainInventoryDragDropResolver's direct currency drag dropped onto a shop can publish GoldGivenToShopEvent through ShopActions.TryGiveCurrencyToShop -- the same "Angel Investor" trigger CurrencyRowContent's own Give/Give All already routes through. Null in test setups that don't wire one, in which case such a drag still transfers the currency, it just never publishes.</summary>
     private readonly EventBus? _eventBus;
 
     /// <summary>Owns the single shared ContextMenu popup -- null in test setups that don't build one, in which case right-click context menus simply never open and an already-open one (there can't be, without this) never needs dismissing.</summary>
@@ -239,11 +253,39 @@ public sealed class UiInputController
         _mapViewState = mapViewState;
         _eventBus = eventBus;
         _shopPool = componentManager?.IsRegistered<ShopComponent>() == true ? componentManager.GetPackedPool<ShopComponent>() : null;
+        _dragDropResolvers = BuildDragDropResolvers();
 
         // Subscribing is safe to do unconditionally and permanently -- SDL simply never raises
         // SDL_TEXTINPUT while text input is stopped (see SetFocus's Start/StopTextInput calls
         // below), so this just never fires until a TextBox is actually focused.
         TextInputEXT.TextInput += OnTextInput;
+    }
+
+    /// <summary>
+    /// Registers TradeDragDropResolver only when MapViewState was wired (it needs
+    /// MapViewState.ReservedEntityIds/OpenShopEntityId to mean anything) and ShopDragDropResolver
+    /// only when _shopPool was wired (mirrors _shopPool's own conditional-registration convention) --
+    /// a test setup that doesn't wire one simply never registers the resolver for it, same as today's
+    /// null-tolerant _shopPool?.Has()/_mapViewState? checks. PlainInventoryDragDropResolver is always
+    /// present as the unconditional fallback.
+    /// </summary>
+    private List<IDragDropResolver> BuildDragDropResolvers()
+    {
+        var resolvers = new List<IDragDropResolver>();
+
+        if (_mapViewState is not null)
+        {
+            resolvers.Add(new TradeDragDropResolver(_mapViewState, _shopPool, _itemCatalog, _playerQuery));
+        }
+
+        if (_shopPool is not null)
+        {
+            resolvers.Add(new ShopDragDropResolver(_shopPool, _itemCatalog, _playerQuery));
+        }
+
+        resolvers.Add(new PlainInventoryDragDropResolver(_playerQuery, _shopPool, _eventBus));
+
+        return resolvers;
     }
 
     /// <summary>Internal, not private, so tests can simulate a typed character without a real OS text-input event -- the subscribed TextInputEXT.TextInput handler in real use otherwise.</summary>
@@ -996,60 +1038,18 @@ public sealed class UiInputController
             if (_componentManager is { } componentManager && _contentDragOriginEntityId is { } originEntityId &&
                 FindDropTargetEntityId(dropInteraction.Element, releasePosition, isCurrencyDrag: _contentDragCurrencyType is not null) is { } destinationEntityId)
             {
-                var originIsShop = _shopPool?.Has(originEntityId) == true;
-                var destinationIsShop = _shopPool?.Has(destinationEntityId) == true;
-                var originIsTrade = IsTradeOfferEntity(originEntityId);
-                var destinationIsTrade = IsTradeOfferEntity(destinationEntityId);
-
-                if (_contentDragItemStackInstanceId is { } stackInstanceId)
+                // What the drop means depends on who the two entities are (a shop, a trade-offer
+                // column, an ordinary inventory) -- each feature owns that eligibility logic itself
+                // via its own IDragDropResolver (see _dragDropResolvers' own doc comment) rather than
+                // UiInputController accumulating every feature's rules inline. This method's own job
+                // stays gesture recognition + hit-testing + dispatch, the same shape it already uses
+                // for hotbar binding just below.
+                var context = new DragDropContext(componentManager, originEntityId, destinationEntityId, _contentDragItemStackInstanceId, _contentDragMergedItemDefinitionId, _contentDragCurrencyType);
+                foreach (var resolver in _dragDropResolvers)
                 {
-                    if (originIsTrade || destinationIsTrade)
+                    if (resolver.TryResolve(context))
                     {
-                        ResolveTradeAwareItemDrag(componentManager, originEntityId, destinationEntityId, stackInstanceId, originIsShop, destinationIsShop);
-                    }
-                    else if (originIsShop && _itemCatalog is { } buyCatalog)
-                    {
-                        // Dragged out of the shop's own grid, into the player's -- a purchase (see ShopActions.TryBuyFromShop).
-                        ShopActions.TryBuyFromShop(componentManager, buyCatalog, destinationEntityId, originEntityId, stackInstanceId, _playerQuery);
-                    }
-                    else if (destinationIsShop && _itemCatalog is { } sellCatalog)
-                    {
-                        // Dragged out of the player's own grid, into the shop's -- a sale (see ShopActions.TrySellToShop).
-                        ShopActions.TrySellToShop(componentManager, sellCatalog, originEntityId, destinationEntityId, stackInstanceId, _playerQuery);
-                    }
-                    else
-                    {
-                        InventoryActions.TryTransferStack(componentManager, originEntityId, destinationEntityId, stackInstanceId, _playerQuery);
-                    }
-                }
-                else if (_contentDragMergedItemDefinitionId is { } itemDefinitionId && !originIsShop && !destinationIsShop && !originIsTrade && !destinationIsTrade)
-                {
-                    // Shop stock never diverges (ShopStock.GrantRandomStock only ever calls
-                    // InventoryActions.AddItem, which merges same-item stacks -- see its own doc
-                    // comment), so a Merged Stack drag touching a shop shouldn't normally arise;
-                    // refusing it outright rather than falling through to an unpriced batch
-                    // transfer keeps that guarantee even if it ever did. A trade-offer entity is
-                    // refused the same way -- PLAN-trade-window.md's eligibility rules are only
-                    // worked out for single, StackInstanceId-tracked stacks.
-                    InventoryActions.TryTransferAllStacksOfItem(componentManager, originEntityId, destinationEntityId, itemDefinitionId, _playerQuery);
-                }
-                else if (_contentDragCurrencyType is { } currencyType)
-                {
-                    if (originIsTrade || destinationIsTrade)
-                    {
-                        ResolveTradeAwareCurrencyDrag(componentManager, originEntityId, destinationEntityId, currencyType);
-                    }
-                    else if (!originIsShop)
-                    {
-                        // A shop-origin drag reaches here only when TryStartContentDrag let it
-                        // through for staging into the trade-shop column (see its own doc comment)
-                        // -- if it landed anywhere else instead (dropped directly on the player, a
-                        // corpse, missed the trade window entirely), that would be a direct Take,
-                        // never allowed regardless of where a shop's Gold started its journey.
-                        // Routed through ShopActions.TryGiveCurrencyToShop rather than a plain
-                        // CurrencyActions.TryTransfer so dragging currency straight onto a shop
-                        // publishes GoldGivenToShopEvent the same as the context menu's Give/Give All.
-                        ShopActions.TryGiveCurrencyToShop(componentManager, _shopPool, _eventBus, originEntityId, destinationEntityId, currencyType);
+                        break;
                     }
                 }
 
@@ -1098,140 +1098,6 @@ public sealed class UiInputController
             _contentDragOriginEntityId = null;
             _contentDragHeldFrames = 0;
             SetHotbarDragHighlight(false);
-        }
-    }
-
-    /// <summary>True for either of the two reserved trade-offer entities (see MapViewState.ReservedEntityIds.TradeOfferPlayerEntityId/TradeOfferShopEntityId) -- false (never a false positive) whenever no trade window was ever wired, or entityId is any ordinary entity.</summary>
-    private bool IsTradeOfferEntity(int entityId) =>
-        _mapViewState?.ReservedEntityIds?.TradeOfferPlayerEntityId == entityId || _mapViewState?.ReservedEntityIds?.TradeOfferShopEntityId == entityId;
-
-    /// <summary>
-    /// The trade-window-aware branch of ResolveContentDrag's item-stack-drag resolution -- called
-    /// instead of the ordinary originIsShop/destinationIsShop check whenever either endpoint is a
-    /// trade-offer entity, since that check would otherwise misfire on one: a trade-offer entity is
-    /// never itself shop-registered, but ShopActions.TryBuyFromShop/TrySellToShop debit/credit
-    /// whichever entity id they're given directly, so calling either against a trade-offer entity
-    /// would try to move Gold through that entity's own, always-empty CurrencyComponent instead of
-    /// the real player's or the real shop's. Implements PLAN-trade-window.md's own "Drag-drop
-    /// eligibility" table -- each branch below is one named row/column of it, in the same order.
-    /// </summary>
-    private void ResolveTradeAwareItemDrag(ComponentManager componentManager, int originEntityId, int destinationEntityId, Guid stackInstanceId, bool originIsShop, bool destinationIsShop)
-    {
-        var isOriginTradePlayer = _mapViewState?.ReservedEntityIds?.TradeOfferPlayerEntityId == originEntityId;
-        var isOriginTradeShop = _mapViewState?.ReservedEntityIds?.TradeOfferShopEntityId == originEntityId;
-        var isDestinationTradePlayer = _mapViewState?.ReservedEntityIds?.TradeOfferPlayerEntityId == destinationEntityId;
-        var isDestinationTradeShop = _mapViewState?.ReservedEntityIds?.TradeOfferShopEntityId == destinationEntityId;
-
-        // Trade: player column <-> Trade: shop column, either direction -- never allowed; the two
-        // columns only ever gain/lose stacks via the real player/shop grids, never each other.
-        if ((isOriginTradePlayer && isDestinationTradeShop) || (isOriginTradeShop && isDestinationTradePlayer))
-        {
-            return;
-        }
-
-        // Shop grid -> Trade: player column: not allowed -- only the real shop's own stock may
-        // populate the shop column (Shop grid -> Trade: shop column, just below), never the
-        // player's. The reverse (Player Inventory -> Trade: shop column) is caught later by the
-        // isDestinationTradeShop safety net, since there's no equivalent originIsPlayer flag to
-        // check symmetrically here.
-        if (originIsShop && isDestinationTradePlayer)
-        {
-            return;
-        }
-
-        // Shop grid <-> Trade: shop column, either direction -- a free offer/restock shuffle, not
-        // a real transaction, even though destinationIsShop/originIsShop reads true for the real
-        // shop side of it; force a plain transfer instead of falling into TryBuyFromShop/
-        // TrySellToShop below.
-        if ((originIsShop && isDestinationTradeShop) || (isOriginTradeShop && destinationIsShop))
-        {
-            InventoryActions.TryTransferStack(componentManager, originEntityId, destinationEntityId, stackInstanceId, _playerQuery);
-            return;
-        }
-
-        // Trade: player column -> Shop grid: direct sell. Composed from a remove-from-trade
-        // transfer (the stack must land back in the real player's own inventory first -- see this
-        // method's own doc comment for why TrySellToShop can't just take the trade entity id
-        // directly) followed by the ordinary sell action, preserving stackInstanceId throughout;
-        // undone (moved back into the trade column) if the sale itself fails, so a failed sale
-        // never just vanishes the stack into the player's real inventory instead.
-        if (isOriginTradePlayer && destinationIsShop)
-        {
-            if (_itemCatalog is { } sellCatalog && _playerQuery is { } sellerQuery)
-            {
-                var realPlayerEntityId = sellerQuery.PlayerEntityId;
-                if (InventoryActions.TryTransferStack(componentManager, originEntityId, realPlayerEntityId, stackInstanceId, _playerQuery) &&
-                    !ShopActions.TrySellToShop(componentManager, sellCatalog, realPlayerEntityId, destinationEntityId, stackInstanceId, _playerQuery))
-                {
-                    InventoryActions.TryTransferStack(componentManager, realPlayerEntityId, originEntityId, stackInstanceId, _playerQuery);
-                }
-            }
-
-            return;
-        }
-
-        // Trade: shop column -> Player Inventory (or any other non-shop, non-trade destination):
-        // direct buy, the mirror of direct sell above -- return the stack to the real shop first,
-        // then the ordinary buy action pays with (and delivers into) destinationEntityId exactly
-        // as an ordinary Shop grid -> Player Inventory drag already does; undone if the purchase
-        // itself fails.
-        if (isOriginTradeShop && _mapViewState?.OpenShopEntityId is { } realShopEntityId && _itemCatalog is { } buyCatalog)
-        {
-            if (InventoryActions.TryTransferStack(componentManager, originEntityId, realShopEntityId, stackInstanceId, _playerQuery) &&
-                !ShopActions.TryBuyFromShop(componentManager, buyCatalog, destinationEntityId, realShopEntityId, stackInstanceId, _playerQuery))
-            {
-                InventoryActions.TryTransferStack(componentManager, realShopEntityId, originEntityId, stackInstanceId, _playerQuery);
-            }
-
-            return;
-        }
-
-        // Anything else still touching the shop column at this point (Player Inventory -> Trade:
-        // shop column, Shop grid -> Trade: player column, and the reverse of each -- plus the
-        // degenerate case just above where no shop was actually open, or no ItemCatalog was
-        // wired) is not allowed -- only the real shop's own stock may ever populate the shop
-        // column, and only a plain inventory may ever populate the player column.
-        if (isDestinationTradeShop || isOriginTradeShop)
-        {
-            return;
-        }
-
-        // Whatever's left is a plain stage/unstage between a trade column and an ordinary,
-        // non-shop inventory (Player Inventory <-> Trade: player column) -- no transaction, just a
-        // stack moving between two entities' own InventoryItemStackComponent pools.
-        InventoryActions.TryTransferStack(componentManager, originEntityId, destinationEntityId, stackInstanceId, _playerQuery);
-    }
-
-    /// <summary>
-    /// The trade-window-aware branch of ResolveContentDrag's currency-drag resolution -- called
-    /// whenever either drag endpoint is one of the two reserved trade-offer entities. Unlike an
-    /// item stack, currency has no buy/sell price against itself, so there is no "direct give/take"
-    /// analog to ResolveTradeAwareItemDrag's composed direct-sell/direct-buy: a trade column's own
-    /// currency only ever stages/unstages against its own real owner (Player &lt;-&gt; Trade: player
-    /// column, Shop &lt;-&gt; Trade: shop column), a plain CurrencyActions.TryTransfer either
-    /// direction. Crossing between the trade window's own two columns, or between a trade column
-    /// and the *other* real entity, is refused -- the same "no direct drag between the trade
-    /// window's own two columns" rule PLAN-trade-window.md's own item eligibility table already
-    /// established, extended to currency for consistency even though no pricing forces it here.
-    /// </summary>
-    private void ResolveTradeAwareCurrencyDrag(ComponentManager componentManager, int originEntityId, int destinationEntityId, CurrencyType currencyType)
-    {
-        var isOriginTradePlayer = _mapViewState?.ReservedEntityIds?.TradeOfferPlayerEntityId == originEntityId;
-        var isOriginTradeShop = _mapViewState?.ReservedEntityIds?.TradeOfferShopEntityId == originEntityId;
-        var isDestinationTradePlayer = _mapViewState?.ReservedEntityIds?.TradeOfferPlayerEntityId == destinationEntityId;
-        var isDestinationTradeShop = _mapViewState?.ReservedEntityIds?.TradeOfferShopEntityId == destinationEntityId;
-
-        var realPlayerEntityId = _playerQuery?.PlayerEntityId;
-        var isPlayerStageUnstage = (originEntityId == realPlayerEntityId && isDestinationTradePlayer) ||
-            (isOriginTradePlayer && destinationEntityId == realPlayerEntityId);
-
-        var realShopEntityId = _mapViewState?.OpenShopEntityId;
-        var isShopStageUnstage = (originEntityId == realShopEntityId && isDestinationTradeShop) ||
-            (isOriginTradeShop && destinationEntityId == realShopEntityId);
-
-        if (isPlayerStageUnstage || isShopStageUnstage)
-        {
-            CurrencyActions.TryTransfer(componentManager, originEntityId, destinationEntityId, currencyType);
         }
     }
 
