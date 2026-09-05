@@ -17,6 +17,9 @@ namespace Presentation.UI.Looting;
 /// closes it (a toggle, matching this codebase's re-press-to-confirm/cancel convention elsewhere
 /// -- e.g. the hotbar). Deliberately owns no knowledge of what's being looted beyond an entity id
 /// -- SecondaryInventoryWindow itself owns any target-specific display (name/killer/died-tick).
+/// The toggle/replace/cascade-position/context-menu shape itself lives in TargetedWindowLifecycle,
+/// shared with ShopWindowController -- this controller supplies only the LootedComponent marking
+/// and SecondaryInventoryWindow's own ElementOptions/Configure.
 /// </summary>
 public sealed class SecondaryInventoryWindowController(
     ElementPoolService elementPoolService,
@@ -26,15 +29,13 @@ public sealed class SecondaryInventoryWindowController(
     MapWindow mapWindow,
     TooltipController tooltipController)
 {
-    private UiLayerStack _layers = null!;
-    private SecondaryInventoryWindow? _window;
-    private int _currentTargetEntityId = -1;
+    private TargetedWindowLifecycle<SecondaryInventoryWindow> _slot = null!;
 
     /// <summary>The currently-open secondary/corpse window's own target entity id, if any -- lets InventoryWindowController's own GetSecondaryTargetEntityId (wired by ShellBootstrapper) answer "is a secondary window open, and for whom" for the player's own inventory grid's Give/Take menu, without that grid needing a direct reference to this controller.</summary>
-    public int? OpenTargetEntityId => _window is null ? null : _currentTargetEntityId;
+    public int? OpenTargetEntityId => _slot.OpenTargetEntityId;
 
     /// <summary>The currently-open corpse/secondary window's own bounds, if any -- Rectangle.Empty (never contains a click) when nothing is open. Lets ItemDetailsWindowController's own outside-click-close check treat this window as "still inside," the same way it already does for the player's own InventoryManagementWindow.</summary>
-    public Rectangle Rectangle => _window?.Rectangle ?? Rectangle.Empty;
+    public Rectangle Rectangle => _slot.Rectangle;
 
     /// <summary>Settable late-bound callback for "the player clicked a real single-stack item cell in this corpse/secondary grid" -- see InventoryWindowController.OnItemSelected, wired by ShellBootstrapper to the same ItemDetailsWindowController.Open. Threaded into every corpse window's own Configure call.</summary>
     public Action<int, Guid>? OnItemSelected { get; set; }
@@ -43,11 +44,11 @@ public sealed class SecondaryInventoryWindowController(
     public Action<int, Guid>? OnCompareRequested { get; set; }
 
     /// <summary>Closes whichever corpse/container window is currently open, if any -- a no-op otherwise. Lets ShellBootstrapper enforce "a corpse/container window and a shop window are never open at once" (both cascade off the same player-inventory-window position, so two open together would overlap) without this controller needing any awareness of ShopWindowController.</summary>
-    public void CloseIfOpen() => _window?.Close();
+    public void CloseIfOpen() => _slot.CloseIfOpen();
 
     public void Initialize(UiLayerStack layers)
     {
-        _layers = layers;
+        _slot = new TargetedWindowLifecycle<SecondaryInventoryWindow>(inventoryWindowController, layers, contextMenuController, () => { });
     }
 
     /// <summary>
@@ -57,24 +58,16 @@ public sealed class SecondaryInventoryWindowController(
     /// SecondaryInventoryWindow for targetEntityId -- replacing whichever target was previously open,
     /// if any -- and marks it looted.
     /// </summary>
-    public void OpenLoot(int targetEntityId)
+    public void OpenLoot(int targetEntityId) => _slot.OpenOrToggle(targetEntityId, playerWindow =>
     {
-        if (_window is not null && _currentTargetEntityId == targetEntityId)
-        {
-            _window.Close();
-            return;
-        }
-
-        _window?.Close();
-
-        inventoryWindowController.OpenInventoryWindow();
-        if (inventoryWindowController.PlayerInventoryWindow is not { } playerWindow)
-        {
-            return; // Disabled inventory -- nothing to loot alongside (see InventoryWindowController.IsInventoryDisabled).
-        }
-
+        // Only marked once the player's own Inventory window is confirmed open (TargetedWindowLifecycle's
+        // own guard) -- no window, no loot actually shown, so nothing should be marked looted either.
         componentManager.Merge(targetEntityId, new LootedComponent());
+        return CreateSecondaryInventoryWindow(targetEntityId, playerWindow);
+    });
 
+    private SecondaryInventoryWindow CreateSecondaryInventoryWindow(int targetEntityId, InventoryManagementWindow playerWindow)
+    {
         var window = elementPoolService.CreateElement<SecondaryInventoryWindow>(null, new ElementOptions
         {
             Hierarchy = new ElementHierarchyOptions { CanContainChildren = true },
@@ -100,21 +93,6 @@ public sealed class SecondaryInventoryWindowController(
             Content = new ElementContentOptions { ContentColor = WindowPalette.PanelBackgroundColor },
         });
         window.Configure(targetEntityId, tooltipController, (entityId, stackInstanceId) => OnItemSelected?.Invoke(entityId, stackInstanceId), (entityId, stackInstanceId) => OnCompareRequested?.Invoke(entityId, stackInstanceId));
-        window.Closed += HandleClosed;
-        window.OnRightClicked = position => contextMenuController.Open(new Vector2(position.X, position.Y), DynamicHudContextMenus.BuildCloseMenu(window, _layers));
-        window.Initialize();
-        _layers.Add(UiLayer.DynamicHud, window);
-        _layers.OpenMenuWindow(window); // A corpse window is Menu Mode, same as the player's own Inventory window.
-
-        _window = window;
-        _currentTargetEntityId = targetEntityId;
-    }
-
-    private void HandleClosed(Element closedWindow)
-    {
-        _layers.Remove(UiLayer.DynamicHud, closedWindow);
-        _layers.CloseMenuWindow(closedWindow);
-        _window = null;
-        _currentTargetEntityId = -1;
+        return window;
     }
 }

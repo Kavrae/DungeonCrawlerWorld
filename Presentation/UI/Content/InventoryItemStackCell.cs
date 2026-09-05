@@ -169,9 +169,33 @@ public class InventoryItemStackCell(FontService fontService, ElementPoolService 
     {
         var spriteBatch = ElementPoolService.SpriteBatch;
         var unitRectangle = ElementPoolService.UnitRectangle;
-
         var bounds = new Rectangle((int)ContentAbsolutePosition.X, (int)ContentAbsolutePosition.Y, (int)ContentSize.X, (int)ContentSize.Y);
 
+        DrawBaseAndIcon(spriteBatch, unitRectangle, bounds, ContentSize);
+
+        ItemIconRenderer.DrawQuantityBadge(spriteBatch, _quantityFont, _quantity, ContentAbsolutePosition, ContentSize);
+
+        if (MergedStackBadgeVisible)
+        {
+            var badgeSize = _badgeFont.MeasureString("+");
+            var badgePosition = new Vector2(ContentAbsolutePosition.X + ContentSize.X - badgeSize.X, ContentAbsolutePosition.Y);
+            ContrastTextRenderer.Draw(spriteBatch, _badgeFont, "+", badgePosition);
+        }
+
+        DrawGroupBorder(spriteBatch, unitRectangle);
+    }
+
+    /// <summary>
+    /// Shared grid-square base + state overlay + compare-eligible glow + sprite-or-glyph icon draw
+    /// every cell in this family starts with -- ShopItemStackCell/TradeItemStackCell's own
+    /// DrawContent overrides call this too (with their own iconSize -- ShopItemStackCell's own
+    /// left-aligned sprite square is smaller than the cell itself, unlike this class's own
+    /// full-ContentSize icon), then draw only whatever comes after it that's actually unique to
+    /// their own layout. Returns isGreyedOut so a caller's own trailing text (name/price/quantity)
+    /// can match this same disabled/ineligible tint without recomputing the same condition itself.
+    /// </summary>
+    protected bool DrawBaseAndIcon(SpriteBatch spriteBatch, Texture2D unitRectangle, Rectangle bounds, Vector2 iconSize)
+    {
         GridSquareRenderer.DrawBase(spriteBatch, unitRectangle, bounds);
         GridSquareRenderer.DrawStateOverlay(spriteBatch, unitRectangle, bounds, IsSelected ? GridSquareState.Selected : IsHovered ? GridSquareState.Hovered : GridSquareState.Normal);
 
@@ -186,18 +210,9 @@ public class InventoryItemStackCell(FontService fontService, ElementPoolService 
         var spriteTint = isGreyedOut ? Color.Gray : Color.White;
         var glyphColor = isGreyedOut ? Color.Gray : _glyphColor;
 
-        SpriteOrGlyphRenderer.Draw(spriteBatch, spriteSheetService, spriteRenderer, LabelRenderer, sprite, _iconGlyphFont, _glyph, glyphColor, ContentAbsolutePosition, ContentSize, spriteTint);
+        SpriteOrGlyphRenderer.Draw(spriteBatch, spriteSheetService, spriteRenderer, LabelRenderer, sprite, _iconGlyphFont, _glyph, glyphColor, ContentAbsolutePosition, iconSize, spriteTint);
 
-        ItemIconRenderer.DrawQuantityBadge(spriteBatch, _quantityFont, _quantity, ContentAbsolutePosition, ContentSize);
-
-        if (MergedStackBadgeVisible)
-        {
-            var badgeSize = _badgeFont.MeasureString("+");
-            var badgePosition = new Vector2(ContentAbsolutePosition.X + ContentSize.X - badgeSize.X, ContentAbsolutePosition.Y);
-            ContrastTextRenderer.Draw(spriteBatch, _badgeFont, "+", badgePosition);
-        }
-
-        DrawGroupBorder(spriteBatch, unitRectangle);
+        return isGreyedOut;
     }
 
     /// <summary>

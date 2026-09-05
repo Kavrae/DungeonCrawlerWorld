@@ -105,25 +105,10 @@ public class ShopItemStackCell(FontService fontService, ElementPoolService eleme
     {
         var spriteBatch = ElementPoolService.SpriteBatch;
         var unitRectangle = ElementPoolService.UnitRectangle;
-
         var bounds = new Rectangle((int)ContentAbsolutePosition.X, (int)ContentAbsolutePosition.Y, (int)ContentSize.X, (int)ContentSize.Y);
-
-        GridSquareRenderer.DrawBase(spriteBatch, unitRectangle, bounds);
-        GridSquareRenderer.DrawStateOverlay(spriteBatch, unitRectangle, bounds, IsSelected ? GridSquareState.Selected : IsHovered ? GridSquareState.Hovered : GridSquareState.Normal);
-
-        if (CompareState == CellCompareState.Eligible)
-        {
-            GlowRenderer.Draw(spriteBatch, unitRectangle, bounds, CompareEligibleGlowColor, GlowMode.ExteriorFade);
-            GlowRenderer.Draw(spriteBatch, unitRectangle, bounds, CompareEligibleGlowColor, GlowMode.InteriorFade);
-        }
-
-        var isGreyedOut = _isDisabled || CompareState == CellCompareState.Ineligible;
         var spriteSize = new Vector2(ContentSize.Y, ContentSize.Y);
 
-        SpriteComponent? sprite = _spriteName is not null && SpriteManifest.TryGet(_spriteName, out var spriteComponent) ? spriteComponent : null;
-        var spriteTint = isGreyedOut ? Color.Gray : Color.White;
-        var glyphColor = isGreyedOut ? Color.Gray : _glyphColor;
-        SpriteOrGlyphRenderer.Draw(spriteBatch, spriteSheetService, spriteRenderer, LabelRenderer, sprite, _iconGlyphFont, _glyph, glyphColor, ContentAbsolutePosition, spriteSize, spriteTint);
+        var isGreyedOut = DrawBaseAndIcon(spriteBatch, unitRectangle, bounds, spriteSize);
 
         var textColor = isGreyedOut ? Color.Gray : Color.White;
         var textLeft = ContentAbsolutePosition.X + spriteSize.X + TextPadding;

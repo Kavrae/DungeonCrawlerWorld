@@ -104,7 +104,7 @@ public sealed class AbilityScoreWindowController(
         });
         window.Configure(world.PlayerEntityId, tooltipController);
         window.Closed += _ => tooltipController.Hide(window); // Closing the Stats window mid-hover shouldn't leave the popup stranded.
-        window.OnRightClicked = position => contextMenuController.Open(new Vector2(position.X, position.Y), DynamicHudContextMenus.BuildCloseMenu(window, _layers));
+        DynamicHudContextMenus.WireCloseContextMenu(window, contextMenuController, _layers);
         return window;
     }
 }

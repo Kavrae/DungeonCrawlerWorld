@@ -132,7 +132,7 @@ public sealed class InventoryWindowController(
             (entityId, stackInstanceId) => OnItemSelected?.Invoke(entityId, stackInstanceId),
             (entityId, stackInstanceId) => OnCompareRequested?.Invoke(entityId, stackInstanceId),
             (entityId, stackInstanceId) => OnActivateRequested?.Invoke(entityId, stackInstanceId));
-        window.OnRightClicked = position => contextMenuController.Open(new Vector2(position.X, position.Y), DynamicHudContextMenus.BuildCloseMenu(window, _uiLayers));
+        DynamicHudContextMenus.WireCloseContextMenu(window, contextMenuController, _uiLayers);
         return window;
     }
 }

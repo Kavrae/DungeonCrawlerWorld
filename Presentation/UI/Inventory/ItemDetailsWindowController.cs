@@ -180,7 +180,7 @@ public sealed class ItemDetailsWindowController(
         });
         window.Configure(entityId, stackInstanceId, definition, playerWindow.ContentSize.X);
         window.Closed += HandleClosed;
-        window.OnRightClicked = position => contextMenuController.Open(new Vector2(position.X, position.Y), DynamicHudContextMenus.BuildCloseMenu(window, _layers));
+        DynamicHudContextMenus.WireCloseContextMenu(window, contextMenuController, _layers);
         window.OnCompareRequested = (compareEntityId, compareStackInstanceId) => OnCompareRequested?.Invoke(compareEntityId, compareStackInstanceId);
         window.Initialize();
         _layers.Add(UiLayer.DynamicHud, window);

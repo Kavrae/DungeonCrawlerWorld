@@ -36,24 +36,9 @@ public sealed class TradeItemStackCell(FontService fontService, ElementPoolServi
     {
         var spriteBatch = ElementPoolService.SpriteBatch;
         var unitRectangle = ElementPoolService.UnitRectangle;
-
         var bounds = new Rectangle((int)ContentAbsolutePosition.X, (int)ContentAbsolutePosition.Y, (int)ContentSize.X, (int)ContentSize.Y);
 
-        GridSquareRenderer.DrawBase(spriteBatch, unitRectangle, bounds);
-        GridSquareRenderer.DrawStateOverlay(spriteBatch, unitRectangle, bounds, IsSelected ? GridSquareState.Selected : IsHovered ? GridSquareState.Hovered : GridSquareState.Normal);
-
-        if (CompareState == CellCompareState.Eligible)
-        {
-            GlowRenderer.Draw(spriteBatch, unitRectangle, bounds, CompareEligibleGlowColor, GlowMode.ExteriorFade);
-            GlowRenderer.Draw(spriteBatch, unitRectangle, bounds, CompareEligibleGlowColor, GlowMode.InteriorFade);
-        }
-
-        var isGreyedOut = _isDisabled || CompareState == CellCompareState.Ineligible;
-
-        SpriteComponent? sprite = _spriteName is not null && SpriteManifest.TryGet(_spriteName, out var spriteComponent) ? spriteComponent : null;
-        var spriteTint = isGreyedOut ? Color.Gray : Color.White;
-        var glyphColor = isGreyedOut ? Color.Gray : _glyphColor;
-        SpriteOrGlyphRenderer.Draw(spriteBatch, spriteSheetService, spriteRenderer, LabelRenderer, sprite, _iconGlyphFont, _glyph, glyphColor, ContentAbsolutePosition, ContentSize, spriteTint);
+        DrawBaseAndIcon(spriteBatch, unitRectangle, bounds, ContentSize);
 
         if (_quantity <= 0)
         {
