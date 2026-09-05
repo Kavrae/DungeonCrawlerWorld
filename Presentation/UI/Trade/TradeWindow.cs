@@ -99,15 +99,8 @@ public sealed class TradeWindow(
     private readonly PackedComponentPool<CurrencyComponent>? _currencyPool = componentManager.IsRegistered<CurrencyComponent>() ? componentManager.GetPackedPool<CurrencyComponent>() : null;
     private readonly MultiComponentPool<InventoryItemStackComponent> _stacks = componentManager.GetMultiPool<InventoryItemStackComponent>();
 
-    /// <summary>
-    /// One Tooltip per column, not one shared between both -- see TradeWindowController.Initialize's
-    /// own doc comment for the confirmed-live "whichever grid updates second stomps the other's
-    /// ShowNear/Hide" bug this avoids (the same reason InventoryWindowController and
-    /// AbilityScoreWindowController already keep their own hover popups separate).
-    /// </summary>
-    private Tooltip _playerColumnHoverPopup = null!;
-
-    private Tooltip _shopColumnHoverPopup = null!;
+    /// <summary>The one shared TooltipController every hover-popup consumer in the app shows/hides through -- see its own doc comment. Both columns' own InventoryGridContent instances are given the same instance; each is already a distinct owner (see TooltipController.Show/Hide's own doc comment), so whichever column's Update happens to run second in a frame can never stomp the other's tooltip.</summary>
+    private TooltipController _tooltipController = null!;
 
     /// <summary>Recomputed every Update by ComputeColumnValueText -- "0G" only until the first Update ever runs, or while no shop is open. Public for testability, same reasoning as ShopItemStackCell.TotalPrice/StockStatus.</summary>
     public string PlayerValueText => _playerValueText;
@@ -136,13 +129,12 @@ public sealed class TradeWindow(
     public Action? OnCompleteClicked { get; set; }
 
     /// <summary>Must be called after CreateElement but before Initialize -- same contract ShopWindow.Configure follows.</summary>
-    public void Configure(int playerSideEntityId, int shopSideEntityId, int shopEntityId, Tooltip playerColumnHoverPopup, Tooltip shopColumnHoverPopup)
+    public void Configure(int playerSideEntityId, int shopSideEntityId, int shopEntityId, TooltipController tooltipController)
     {
         _playerSideEntityId = playerSideEntityId;
         _shopSideEntityId = shopSideEntityId;
         _shopEntityId = shopEntityId;
-        _playerColumnHoverPopup = playerColumnHoverPopup;
-        _shopColumnHoverPopup = shopColumnHoverPopup;
+        _tooltipController = tooltipController;
     }
 
     /// <summary>
@@ -439,10 +431,9 @@ public sealed class TradeWindow(
         // trade-grid drag/context-menu behavior (Add to trade, direct sell/buy, right-click-removes)
         // isn't wired yet, see this class's own doc comment. tradeGridIsShopSide: isShopSide picks
         // TradeItemStackCell and the correct buy/sell pricing direction for this column -- see
-        // InventoryGridContent's own doc comment on that parameter. Each column gets its own
-        // dedicated hover popup, not a shared one -- see _playerColumnHoverPopup's own doc comment.
-        var hoverPopup = isShopSide ? _shopColumnHoverPopup : _playerColumnHoverPopup;
-        gridWindow.SetContent(new InventoryGridContent(world, componentManager, itemCatalog, ElementPoolService, FontService, LabelRenderer, spriteSheetService, spriteRenderer, contextMenuController, entityId, filterTag: null, hoverPopup, static () => null, mapViewState, static (_, _) => { }, static (_, _) => { }, isShopSide));
+        // InventoryGridContent's own doc comment on that parameter. Both columns are given the same
+        // _tooltipController -- see its own doc comment for why that's safe now.
+        gridWindow.SetContent(new InventoryGridContent(world, componentManager, itemCatalog, ElementPoolService, FontService, LabelRenderer, spriteSheetService, spriteRenderer, contextMenuController, entityId, filterTag: null, _tooltipController, static () => null, mapViewState, static (_, _) => { }, static (_, _) => { }, isShopSide));
         AddChild(gridWindow);
 
         var footerWindow = ElementPoolService.CreateElement<Window>(this, new ElementOptions

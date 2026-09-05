@@ -1,5 +1,4 @@
 using Microsoft.Xna.Framework;
-using Presentation.UI.Chrome;
 using Presentation.UI.ColorPalettes;
 using Presentation.UI.Inventory;
 using Presentation.UI.Shops;
@@ -41,7 +40,8 @@ public sealed class TradeWindowController(
     ShopWindowController shopWindowController,
     MapWindow mapWindow,
     int tradeOfferPlayerEntityId,
-    int tradeOfferShopEntityId)
+    int tradeOfferShopEntityId,
+    TooltipController tooltipController)
 {
     /// <summary>
     /// Which of the four ways this window can close is currently in flight -- read (and reset back
@@ -68,45 +68,13 @@ public sealed class TradeWindowController(
     }
 
     private UiLayerStack _layers = null!;
-    private Tooltip _playerColumnHoverPopup = null!;
-    private Tooltip _shopColumnHoverPopup = null!;
     private TradeWindow? _window;
     private InventoryManagementWindow? _subscribedInventoryWindow;
     private CloseReason _pendingCloseReason = CloseReason.Direct;
 
-    /// <summary>
-    /// Two separate Tooltip instances, not one shared between both columns -- confirmed live the
-    /// exact bug InventoryWindowController's/AbilityScoreWindowController's own separate _hoverPopup
-    /// fields already exist to avoid ("both windows self-poll the mouse independently every frame, and
-    /// sharing one popup would let whichever window updates second stomp the other's ShowNear/Hide
-    /// call"): TradeWindow._children updates the shop-side column's InventoryGridContent after the
-    /// player-side one every frame, so a shared popup meant the shop-side grid's own Hide() (fired
-    /// whenever nothing under it is hovered) permanently overwrote whatever the player-side grid
-    /// had just tried to show that same frame -- reproducing as "the tooltip never appears" until
-    /// something reordered TradeWindow's own _children (e.g. clicking empty space inside that grid
-    /// window directly, raising it past its sibling), at which point the previously-losing column's
-    /// own Update call started running last instead, and its own decision finally stuck.
-    /// </summary>
     public void Initialize(UiLayerStack layers)
     {
         _layers = layers;
-
-        _playerColumnHoverPopup = CreateHoverPopup();
-        layers.Add(UiLayer.Tooltip, _playerColumnHoverPopup);
-
-        _shopColumnHoverPopup = CreateHoverPopup();
-        layers.Add(UiLayer.Tooltip, _shopColumnHoverPopup);
-    }
-
-    private Tooltip CreateHoverPopup()
-    {
-        var popup = elementPoolService.CreateElement<Tooltip>(null, new ElementOptions
-        {
-            Layout = new ElementLayoutOptions { RelativePosition = Vector2.Zero, MaximumSize = PopupChrome.CorpseLootHoverPopupMaximumSize, DisplayMode = ElementDisplayMode.WrapContent, IsVisible = false },
-            Chrome = new ElementChromeOptions { ShowBorder = true, ShowTitle = true, CanUserFocus = false, CanUserClose = false },
-        });
-        popup.Initialize();
-        return popup;
     }
 
     /// <summary>
@@ -142,7 +110,7 @@ public sealed class TradeWindowController(
             },
             Content = new ElementContentOptions { ContentColor = WindowPalette.PanelBackgroundColor },
         });
-        window.Configure(tradeOfferPlayerEntityId, tradeOfferShopEntityId, shopEntityId, _playerColumnHoverPopup, _shopColumnHoverPopup);
+        window.Configure(tradeOfferPlayerEntityId, tradeOfferShopEntityId, shopEntityId, tooltipController);
         window.OnCancelClicked = HandleCancelClicked;
         window.OnCompleteClicked = HandleCompleteClicked;
         window.Closed += HandleWindowClosed;
@@ -232,8 +200,6 @@ public sealed class TradeWindowController(
 
         _layers.Remove(UiLayer.DynamicHud, closedWindow);
         _layers.CloseMenuWindow(closedWindow);
-        _playerColumnHoverPopup.Hide();
-        _shopColumnHoverPopup.Hide();
 
         var inventoryWindow = _subscribedInventoryWindow;
         if (inventoryWindow is not null)

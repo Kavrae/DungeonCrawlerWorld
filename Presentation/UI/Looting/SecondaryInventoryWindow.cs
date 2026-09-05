@@ -68,16 +68,16 @@ public sealed class SecondaryInventoryWindow(
     private readonly PackedComponentPool<DeadComponent> _deadPool = componentManager.GetPackedPool<DeadComponent>();
 
     private int _entityId;
-    private Tooltip _hoverPopup = null!;
+    private TooltipController _tooltipController = null!;
     private Action<int, Guid> _onItemSelected = static (_, _) => { };
     private Action<int, Guid> _onCompareRequested = static (_, _) => { };
     private CurrencyRowContent _currencyRowContent = null!;
 
     /// <summary>Must be called after CreateElement but before Initialize -- same contract InventoryManagementWindow/AbilityScoreWindow's own Configure follow. Constructs and registers the currency row here too (not OnChildrenInitialized) -- SetFooterContent only needs to record FooterHeight, which must already be set before this window's own first MeasureAndArrange for ContentSize to come out correctly shrunk (see Window.SetFooterContent's own doc comment).</summary>
-    public void Configure(int entityId, Tooltip hoverPopup, Action<int, Guid> onItemSelected, Action<int, Guid> onCompareRequested)
+    public void Configure(int entityId, TooltipController tooltipController, Action<int, Guid> onItemSelected, Action<int, Guid> onCompareRequested)
     {
         _entityId = entityId;
-        _hoverPopup = hoverPopup;
+        _tooltipController = tooltipController;
         _onItemSelected = onItemSelected;
         _onCompareRequested = onCompareRequested;
 
@@ -208,7 +208,7 @@ public sealed class SecondaryInventoryWindow(
         // once), so its own grid's Give/Take menu only ever needs to offer "Take," never query
         // anything external (contrast InventoryManagementWindow's own callback, which has to ask
         // whether a secondary window is open at all).
-        gridWindow.SetContent(new InventoryGridContent(world, componentManager, itemCatalog, ElementPoolService, FontService, LabelRenderer, spriteSheetService, spriteRenderer, contextMenuController, _entityId, filterTag: null, _hoverPopup, () => _entityId, mapViewState, _onItemSelected, _onCompareRequested));
+        gridWindow.SetContent(new InventoryGridContent(world, componentManager, itemCatalog, ElementPoolService, FontService, LabelRenderer, spriteSheetService, spriteRenderer, contextMenuController, _entityId, filterTag: null, _tooltipController, () => _entityId, mapViewState, _onItemSelected, _onCompareRequested));
         AddChild(gridWindow); // Initializes gridWindow, which in turn Initializes (and builds the cells of) its InventoryGridContent -- see Window.OnChildrenInitialized/AddChild's own doc comment on why Initialize is never called explicitly here.
     }
 

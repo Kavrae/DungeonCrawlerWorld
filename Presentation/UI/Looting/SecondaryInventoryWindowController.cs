@@ -1,7 +1,6 @@
 using Engine.ECS.Components;
 using Game.Modules.Death.Components;
 using Microsoft.Xna.Framework;
-using Presentation.UI.Chrome;
 using Presentation.UI.ColorPalettes;
 using Presentation.UI.Inventory;
 
@@ -24,10 +23,10 @@ public sealed class SecondaryInventoryWindowController(
     ComponentManager componentManager,
     InventoryWindowController inventoryWindowController,
     ContextMenuController contextMenuController,
-    MapWindow mapWindow)
+    MapWindow mapWindow,
+    TooltipController tooltipController)
 {
     private UiLayerStack _layers = null!;
-    private Tooltip _hoverPopup = null!;
     private SecondaryInventoryWindow? _window;
     private int _currentTargetEntityId = -1;
 
@@ -49,16 +48,6 @@ public sealed class SecondaryInventoryWindowController(
     public void Initialize(UiLayerStack layers)
     {
         _layers = layers;
-
-        // Created once and shared across every open of a corpse window, the same persistent/
-        // toggled-via-IsVisible lifecycle InventoryWindowController's own hover popups use.
-        _hoverPopup = elementPoolService.CreateElement<Tooltip>(null, new ElementOptions
-        {
-            Layout = new ElementLayoutOptions { RelativePosition = Vector2.Zero, MaximumSize = PopupChrome.CorpseLootHoverPopupMaximumSize, DisplayMode = ElementDisplayMode.WrapContent, IsVisible = false },
-            Chrome = new ElementChromeOptions { ShowBorder = true, ShowTitle = true, CanUserFocus = false, CanUserClose = false },
-        });
-        _hoverPopup.Initialize();
-        layers.Add(UiLayer.Tooltip, _hoverPopup);
     }
 
     /// <summary>
@@ -110,7 +99,7 @@ public sealed class SecondaryInventoryWindowController(
             },
             Content = new ElementContentOptions { ContentColor = WindowPalette.PanelBackgroundColor },
         });
-        window.Configure(targetEntityId, _hoverPopup, (entityId, stackInstanceId) => OnItemSelected?.Invoke(entityId, stackInstanceId), (entityId, stackInstanceId) => OnCompareRequested?.Invoke(entityId, stackInstanceId));
+        window.Configure(targetEntityId, tooltipController, (entityId, stackInstanceId) => OnItemSelected?.Invoke(entityId, stackInstanceId), (entityId, stackInstanceId) => OnCompareRequested?.Invoke(entityId, stackInstanceId));
         window.Closed += HandleClosed;
         window.OnRightClicked = position => contextMenuController.Open(new Vector2(position.X, position.Y), DynamicHudContextMenus.BuildCloseMenu(window, _layers));
         window.Initialize();
@@ -125,7 +114,6 @@ public sealed class SecondaryInventoryWindowController(
     {
         _layers.Remove(UiLayer.DynamicHud, closedWindow);
         _layers.CloseMenuWindow(closedWindow);
-        _hoverPopup.Hide(); // Closing mid-hover shouldn't leave the popup stranded -- mirrors InventoryWindowController's own window Closed handlers.
         _window = null;
         _currentTargetEntityId = -1;
     }

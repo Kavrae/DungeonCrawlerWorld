@@ -24,8 +24,9 @@ namespace Presentation.UI.AbilityScores;
 /// on close, same lifecycle as InventoryManagementWindow. Also self-polls Mouse.GetState() every
 /// Update (see UpdateHover),
 /// the same idiom MapWindow uses for its own tile hover, to drive a header/modifier-row hover
-/// popup -- kept self-contained here rather than routed through UiInputController since nothing
-/// else needs to know about it.
+/// popup shown/hidden through the shared TooltipController (see its own doc comment) -- kept
+/// self-contained here rather than routed through UiInputController since nothing else needs to
+/// know about it.
 /// </summary>
 public sealed class AbilityScoreWindow(FontService fontService, ElementPoolService elementPoolService, LabelRenderer labelRenderer, ComponentManager componentManager)
     : Window(fontService, elementPoolService, labelRenderer)
@@ -61,7 +62,7 @@ public sealed class AbilityScoreWindow(FontService fontService, ElementPoolServi
     private readonly VersionWatcher _statModifierVersionWatcher = new();
 
     private int _entityId;
-    private Tooltip _hoverPopup = null!;
+    private TooltipController _tooltipController = null!;
 
     private Element? _hoveredCandidate;
     private int _hoveredFrames;
@@ -69,11 +70,11 @@ public sealed class AbilityScoreWindow(FontService fontService, ElementPoolServi
     /// <summary>Mirrors GlobalState.IsAdminModeOn as of the last BuildColumns -- Update rebuilds (not just refreshes) whenever this goes stale, since toggling admin mode changes the column *count*, not just their contents.</summary>
     private bool _lastAdminModeOn;
 
-    /// <summary>Just records entityId/the shared popup -- must be called after CreateElement but before Initialize, same contract as InventoryManagementWindow.Configure. Column-building itself waits for Initialize (see its own doc comment for why). hoverPopup is owned by AbilityScoreWindowController (created once, top-level, shared across opens) rather than a child of this window -- see Tooltip's own doc comment for why a nested child can't work here.</summary>
-    public void Configure(int entityId, Tooltip hoverPopup)
+    /// <summary>Just records entityId/the shared TooltipController -- must be called after CreateElement but before Initialize, same contract as InventoryManagementWindow.Configure. Column-building itself waits for Initialize (see its own doc comment for why).</summary>
+    public void Configure(int entityId, TooltipController tooltipController)
     {
         _entityId = entityId;
-        _hoverPopup = hoverPopup;
+        _tooltipController = tooltipController;
     }
 
     /// <summary>
@@ -176,19 +177,19 @@ public sealed class AbilityScoreWindow(FontService fontService, ElementPoolServi
 
         if (candidate is null || _hoveredFrames < HudChrome.HoverTooltipDelayFrames)
         {
-            _hoverPopup.Hide();
+            _tooltipController.Hide(this);
             return;
         }
 
         if (candidate is AbilityScoreColumnHeader header2)
         {
-            _hoverPopup.ShowNear(header2.Rectangle, PopupAnchor.East, PopupChrome.AbilityScorePopupGap, AbilityScoreDescriptions.Get(header2.Type));
+            _tooltipController.Show(this, header2.Rectangle, PopupAnchor.East, PopupChrome.AbilityScorePopupGap, PopupChrome.HoverPopupMaximumSize, AbilityScoreDescriptions.Get(header2.Type));
         }
         else if (candidate is AbilityScoreModifierRow row)
         {
             var title = ModifierDisplayFormatting.DescribeSource(componentManager, row.Source!.Value);
             var body = $"{row.ModifierText}\n{ModifierDisplayFormatting.FormatDuration(row.RemainingDurationFrames)}";
-            _hoverPopup.ShowNear(row.Rectangle, PopupAnchor.East, PopupChrome.AbilityScorePopupGap, body, title);
+            _tooltipController.Show(this, row.Rectangle, PopupAnchor.East, PopupChrome.AbilityScorePopupGap, PopupChrome.HoverPopupMaximumSize, body, title);
         }
     }
 

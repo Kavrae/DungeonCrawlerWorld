@@ -8,40 +8,21 @@ using Presentation.UI.Content;
 namespace Presentation.UI;
 
 /// <summary>
-/// Manages the Armed Hotkey Summary popup (a plain Tooltip this class owns and drives directly
-/// -- see UpdateSummary; no dedicated Element subclass, since deciding what to show is the only
+/// Manages the Armed Hotkey Summary popup (shown/hidden through the shared TooltipController --
+/// see UpdateSummary; no dedicated Element subclass, since deciding what to show is the only
 /// thing that was ever specific to it, and this class already had everything UpdateSummary needs)
 /// and handles hotbar slot interactions.
 /// </summary>
 /// <cleanupVersion>1</cleanupVersion>
-public sealed class HotbarController(MapViewState mapViewState, HotbarContent hotbarContent, ActionTargetingController actionTargeting)
+public sealed class HotbarController(MapViewState mapViewState, HotbarContent hotbarContent, ActionTargetingController actionTargeting, TooltipController tooltipController)
 {
+    /// <summary>Fixed width for the Armed Hotkey Summary popup; effectively-unbounded height cap -- passed to TooltipController.Show on every call, since the shared Tooltip has no fixed size of its own anymore (see TooltipController.Show's own doc comment on why maximumSize is required, not defaulted).</summary>
+    private static readonly Vector2 SummaryMaximumSize = new(HotbarContent.SummaryWidth, 10000f);
+
     private HotkeySlot? _pressedSlot;
     private HotkeySlot? _hoveredSlot;
     private int _hoveredSlotFrames;
     private HotkeySlot? _displayedSummarySlot;
-    private Tooltip _summaryWindow = null!;
-
-    /// <summary>Initializes the hotbar controller with the specified services and windows.</summary>
-    /// <param name="elementPoolService">The service for managing UI element pools.</param>
-    /// <param name="layers">The shell's UI layer stack -- the summary popup is added to UiLayer.Tooltip, not DynamicHud, so it always draws above whatever window it's summarizing.</param>
-    public void Initialize(ElementPoolService elementPoolService, UiLayerStack layers)
-    {
-        _summaryWindow = elementPoolService.CreateElement<Tooltip>(null, new ElementOptions
-        {
-            Layout = new ElementLayoutOptions
-            {
-                RelativePosition = Vector2.Zero, // Repositioned every frame by UpdateSummary once something's armed or hovered.
-                MaximumSize = new Vector2(HotbarContent.SummaryWidth, 10000f), // Fixed width; effectively-unbounded height cap.
-                DisplayMode = ElementDisplayMode.WrapContent,
-                IsVisible = false,
-            },
-            Chrome = new ElementChromeOptions { ShowBorder = true, ShowTitle = true, CanUserFocus = false, CanUserClose = false },
-        });
-        _summaryWindow.UseFixedWidth = true;
-        _summaryWindow.Initialize();
-        layers.Add(UiLayer.Tooltip, _summaryWindow);
-    }
 
     /// <summary>Called by UiInputController.HandleMousePress when the press lands on a hotbar slot.</summary>
     public void OnSlotPressed(HotkeySlot slot) => _pressedSlot = slot;
@@ -97,10 +78,10 @@ public sealed class HotbarController(MapViewState mapViewState, HotbarContent ho
 
         if (slotToShow is not { } slot || !hotbarContent.TryGetSlotSummary(slot, out var title, out var summary))
         {
-            _summaryWindow.Hide();
+            tooltipController.Hide(this);
             return;
         }
 
-        _summaryWindow.ShowNear(hotbarContent.GetSlotBounds(slot), PopupAnchor.North, PopupChrome.HotbarSummaryGap, summary, title);
+        tooltipController.Show(this, hotbarContent.GetSlotBounds(slot), PopupAnchor.North, PopupChrome.HotbarSummaryGap, SummaryMaximumSize, summary, title, useFixedWidth: true);
     }
 }

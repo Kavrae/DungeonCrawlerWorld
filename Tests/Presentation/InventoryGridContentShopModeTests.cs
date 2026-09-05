@@ -61,14 +61,10 @@ public sealed class InventoryGridContentShopModeTests
         itemCatalog.Register(new ItemDefinition(PotionItemId, "Test Potion", null, "p", Color.White, Tags: [Tag.Potion], Effects: [], GoldValue: PotionValue));
         itemCatalog.Register(new ItemDefinition(ToolItemId, "Test Tool", null, "t", Color.White, Tags: [Tag.Tool], Effects: [], GoldValue: ToolValue));
 
-        var hoverPopup = windowService.CreateElement<Tooltip>(null, new ElementOptions
-        {
-            Layout = new ElementLayoutOptions { RelativePosition = Vector2.Zero, MaximumSize = new Vector2(220, 220), DisplayMode = ElementDisplayMode.WrapContent, IsVisible = false },
-            Chrome = new ElementChromeOptions { ShowBorder = true, ShowTitle = true, CanUserFocus = false, CanUserClose = false },
-        });
-        hoverPopup.Initialize();
+        var tooltipController = new TooltipController();
+        tooltipController.Initialize(windowService, new UiLayerStack());
 
-        var grid = new InventoryGridContent(world, componentManager, itemCatalog, windowService, fontService, labelRenderer, spriteSheetService, spriteRenderer, contextMenuController, gridEntityId, filterTag: null, hoverPopup, static () => null, mapViewState, static (_, _) => { }, static (_, _) => { });
+        var grid = new InventoryGridContent(world, componentManager, itemCatalog, windowService, fontService, labelRenderer, spriteSheetService, spriteRenderer, contextMenuController, gridEntityId, filterTag: null, tooltipController, static () => null, mapViewState, static (_, _) => { }, static (_, _) => { });
 
         var hostWindow = windowService.CreateElement<Window>(null, new ElementOptions
         {
@@ -262,14 +258,10 @@ public sealed class InventoryGridContentShopModeTests
         componentManager.Merge(ShopEntityId, new CurrencyComponent(gold: 1000, credits: 0));
         var mapViewState = new MapViewState { OpenShopEntityId = ShopEntityId };
 
-        var hoverPopup = windowService.CreateElement<Tooltip>(null, new ElementOptions
-        {
-            Layout = new ElementLayoutOptions { RelativePosition = Vector2.Zero, MaximumSize = new Vector2(220, 220), DisplayMode = ElementDisplayMode.WrapContent, IsVisible = false },
-            Chrome = new ElementChromeOptions { ShowBorder = true, ShowTitle = true, CanUserFocus = false, CanUserClose = false },
-        });
-        hoverPopup.Initialize();
+        var tooltipController = new TooltipController();
+        tooltipController.Initialize(windowService, new UiLayerStack());
 
-        var grid = new InventoryGridContent(world, componentManager, itemCatalog, windowService, fontService, labelRenderer, spriteSheetService, spriteRenderer, contextMenuController, PlayerEntityId, filterTag: null, hoverPopup, static () => null, mapViewState, static (_, _) => { }, static (_, _) => { });
+        var grid = new InventoryGridContent(world, componentManager, itemCatalog, windowService, fontService, labelRenderer, spriteSheetService, spriteRenderer, contextMenuController, PlayerEntityId, filterTag: null, tooltipController, static () => null, mapViewState, static (_, _) => { }, static (_, _) => { });
 
         var hostWindow = windowService.CreateElement<Window>(null, new ElementOptions
         {
@@ -476,14 +468,10 @@ public sealed class InventoryGridContentShopModeTests
         itemCatalog.Register(new ItemDefinition(PotionItemId, "Test Potion", null, "p", Color.White, Tags: [Tag.Potion], Effects: [], GoldValue: PotionValue));
         itemCatalog.Register(new ItemDefinition(ToolItemId, "Test Tool", null, "t", Color.White, Tags: [Tag.Tool], Effects: [], GoldValue: ToolValue));
 
-        var hoverPopup = windowService.CreateElement<Tooltip>(null, new ElementOptions
-        {
-            Layout = new ElementLayoutOptions { RelativePosition = Vector2.Zero, MaximumSize = new Vector2(220, 220), DisplayMode = ElementDisplayMode.WrapContent, IsVisible = false },
-            Chrome = new ElementChromeOptions { ShowBorder = true, ShowTitle = true, CanUserFocus = false, CanUserClose = false },
-        });
-        hoverPopup.Initialize();
+        var tooltipController = new TooltipController();
+        tooltipController.Initialize(windowService, new UiLayerStack());
 
-        var grid = new InventoryGridContent(world, componentManager, itemCatalog, windowService, fontService, labelRenderer, spriteSheetService, spriteRenderer, contextMenuController, gridEntityId, filterTag: null, hoverPopup, getSecondaryTargetEntityId, mapViewState, static (_, _) => { }, static (_, _) => { }, tradeGridIsShopSide);
+        var grid = new InventoryGridContent(world, componentManager, itemCatalog, windowService, fontService, labelRenderer, spriteSheetService, spriteRenderer, contextMenuController, gridEntityId, filterTag: null, tooltipController, getSecondaryTargetEntityId, mapViewState, static (_, _) => { }, static (_, _) => { }, tradeGridIsShopSide);
 
         var hostWindow = windowService.CreateElement<Window>(null, new ElementOptions
         {
@@ -787,14 +775,10 @@ public sealed class InventoryGridContentShopModeTests
         var itemCatalog = new ItemCatalog();
         itemCatalog.Register(new ItemDefinition(PotionItemId, "Test Potion", null, "p", Color.White, Tags: [Tag.Potion], Effects: [], GoldValue: PotionValue));
 
-        var hoverPopup = windowService.CreateElement<Tooltip>(null, new ElementOptions
-        {
-            Layout = new ElementLayoutOptions { RelativePosition = Vector2.Zero, MaximumSize = new Vector2(220, 220), DisplayMode = ElementDisplayMode.WrapContent, IsVisible = false },
-            Chrome = new ElementChromeOptions { ShowBorder = true, ShowTitle = true, CanUserFocus = false, CanUserClose = false },
-        });
-        hoverPopup.Initialize();
+        var tooltipController = new TooltipController();
+        tooltipController.Initialize(windowService, new UiLayerStack());
 
-        var grid = new InventoryGridContent(world, componentManager, itemCatalog, windowService, fontService, labelRenderer, spriteSheetService, spriteRenderer, contextMenuController, ShopEntityId, filterTag: null, hoverPopup, static () => null, mapViewState, static (_, _) => { }, static (_, _) => { });
+        var grid = new InventoryGridContent(world, componentManager, itemCatalog, windowService, fontService, labelRenderer, spriteSheetService, spriteRenderer, contextMenuController, ShopEntityId, filterTag: null, tooltipController, static () => null, mapViewState, static (_, _) => { }, static (_, _) => { });
 
         var hostWindow = windowService.CreateElement<Window>(null, new ElementOptions
         {

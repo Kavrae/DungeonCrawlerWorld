@@ -19,8 +19,8 @@ public static class PopupChrome
     /// </summary>
     public static Vector2 ContextMenuMaximumSize = new(600, 2000);
 
-    /// <summary>Fixed width cap for the corpse grid's own item hover popup; height auto-grows with content -- see Tooltip, mirroring InventoryChrome's own hover popup sizing.</summary>
-    public static Vector2 CorpseLootHoverPopupMaximumSize = new(220, 10000f);
+    /// <summary>Fixed width cap for the shared TooltipController's own Tooltip (every grid/ability hover popup); height auto-grows with content. The single value every one of those consumers now passes to TooltipController.Show, replacing what used to be several near-identical per-consumer constants (220-225px) back when each owned a private Tooltip.</summary>
+    public static Vector2 HoverPopupMaximumSize = new(225, 10000f);
 
     /// <summary>The Armed Hotkey Summary popup's bottom edge sits exactly this far above the summarized slot's top edge.</summary>
     public static Vector2 HotbarSummaryGap = new(0, 1);

@@ -462,26 +462,6 @@ the global bounds.
 Read-only view, tabs, drag-onto-hotbar, and click-to-inspect all landed (`IMPLEMENTATION-NOTES.md`).
 Still open: dragging one grid cell onto another to reorder -- blocked on Standard widget set below.
 
-#### Consolidate all tooltips into a single global tooltip
-
-Every hover-popup consumer today creates its own dedicated `Tooltip` instance and self-polls
-`Mouse.GetState()` independently to decide when to show/hide it -- `InventoryWindowController`'s
-and `AbilityScoreWindowController`'s own, `ShopWindowController`'s own,
-`SecondaryInventoryWindowController`'s own, `HotbarController`'s Armed Hotkey Summary popup, and now
-`TradeWindowController`'s `_playerColumnHoverPopup`/`_shopColumnHoverPopup` -- one dedicated instance
-per independently-polling grid, no exceptions anywhere in the codebase. This isn't just instance
-sprawl: sharing one `Tooltip` between two simultaneously-open, independently-polling consumers is an
-active bug, not just wasteful, confirmed live in the trade window (see its own "Fixes since first
-landed" in `PLAN-trade-window.md`) -- whichever consumer's own `Update` happens to run later in a
-given frame calls `Hide()`/`ShowNear()` last and wins, silently stomping the other's decision, with
-no coordination between them at all. Since only one thing can ever be hovered by the mouse at once,
-a single global tooltip -- owned by a central arbiter that decides which one grid (if any) is "the"
-hovered one this frame and routes its content there -- would need only one instance ever, system-wide,
-and structurally could not reproduce this race. This is a real rewrite of the hover model across
-every current consumer (self-polling replaced by a shared arbiter, likely living in or alongside
-`UiInputController`), not a small patch -- scoped as its own item rather than folded into whatever
-feature next needs a hover popup.
-
 #### Stack Controls and Partial Stacks
 
 Supersedes the former "Manual stack splitting and merging" entry -- broader scope. Today every

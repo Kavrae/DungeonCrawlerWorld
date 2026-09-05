@@ -16,7 +16,4 @@ public static class AbilityScoreChrome
 
     /// <summary>Same shape as InventoryChrome/HealthWindowChrome's own button -- the three HUD-trigger buttons read as one consistent vertical stack.</summary>
     public static Vector2 ButtonSize = new(HudChrome.EntrySize.Y, HudChrome.EntrySize.Y);
-
-    /// <summary>Fixed width cap for the Ability Score hover popup; height auto-grows with content -- see Tooltip.</summary>
-    public static Vector2 HoverPopupMaximumSize = new(220, 10000f);
 }

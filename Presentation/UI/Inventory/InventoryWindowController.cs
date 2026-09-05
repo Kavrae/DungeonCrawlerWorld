@@ -29,13 +29,13 @@ public sealed class InventoryWindowController(
     SpriteRenderer spriteRenderer,
     ItemCatalog itemCatalog,
     MapWindow mapWindow,
-    ContextMenuController contextMenuController)
+    ContextMenuController contextMenuController,
+    TooltipController tooltipController)
 {
     private readonly PackedComponentPool<InventoryDisabledComponent> _disabledPool = componentManager.GetPackedPool<InventoryDisabledComponent>();
 
     private Button _button = null!;
     private WindowLifecycle<InventoryManagementWindow> _slot = null!;
-    private Tooltip _hoverPopup = null!;
     private UiLayerStack _layers = null!;
 
     /// <summary>The player's own currently-open InventoryManagementWindow, if any -- lets SecondaryInventoryWindowController/ShopWindowController/TradeWindowController/ItemDetailsWindowController/ItemComparisonController/AbilityScoreWindowController position a window relative to it without any of them owning a second instance of their own.</summary>
@@ -67,14 +67,6 @@ public sealed class InventoryWindowController(
     {
         _layers = layers;
         _slot = new WindowLifecycle<InventoryManagementWindow>(CreateInventoryWindow, IsInventoryDisabled, layers, () => { });
-
-        _hoverPopup = elementPoolService.CreateElement<Tooltip>(null, new ElementOptions
-        {
-            Layout = new ElementLayoutOptions { RelativePosition = Vector2.Zero, MaximumSize = InventoryChrome.InventoryHoverPopupMaximumSize, DisplayMode = ElementDisplayMode.WrapContent, IsVisible = false },
-            Chrome = new ElementChromeOptions { ShowBorder = true, ShowTitle = true, CanUserFocus = false, CanUserClose = false },
-        });
-        _hoverPopup.Initialize();
-        layers.Add(UiLayer.Tooltip, _hoverPopup);
 
         _button = elementPoolService.CreateElement<Button>(null, new ElementOptions
         {
@@ -127,8 +119,7 @@ public sealed class InventoryWindowController(
             },
             Content = new ElementContentOptions { ContentColor = WindowPalette.PanelBackgroundColor },
         });
-        window.Configure(world.PlayerEntityId, _hoverPopup, () => GetSecondaryTargetEntityId?.Invoke(), (entityId, stackInstanceId) => OnItemSelected?.Invoke(entityId, stackInstanceId), (entityId, stackInstanceId) => OnCompareRequested?.Invoke(entityId, stackInstanceId));
-        window.Closed += _ => _hoverPopup.Hide(); // Closing the Inventory window mid-hover shouldn't leave the popup stranded.
+        window.Configure(world.PlayerEntityId, tooltipController, () => GetSecondaryTargetEntityId?.Invoke(), (entityId, stackInstanceId) => OnItemSelected?.Invoke(entityId, stackInstanceId), (entityId, stackInstanceId) => OnCompareRequested?.Invoke(entityId, stackInstanceId));
         window.OnRightClicked = position => contextMenuController.Open(new Vector2(position.X, position.Y), DynamicHudContextMenus.BuildCloseMenu(window, _layers));
         return window;
     }

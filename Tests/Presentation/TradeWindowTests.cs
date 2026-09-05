@@ -82,18 +82,8 @@ public sealed class TradeWindowTests
 
         windowService.RegisterFactory<TradeWindow>(() => new TradeWindow(fontService, windowService, labelRenderer, componentManager, itemCatalog, spriteSheetService, spriteRenderer, world, contextMenuController, mapViewState, eventBus));
 
-        var playerPopup = windowService.CreateElement<Tooltip>(null, new ElementOptions
-        {
-            Layout = new ElementLayoutOptions { RelativePosition = Vector2.Zero, MaximumSize = new Vector2(220, 220), DisplayMode = ElementDisplayMode.WrapContent, IsVisible = false },
-            Chrome = new ElementChromeOptions { ShowBorder = true, ShowTitle = true, CanUserFocus = false, CanUserClose = false },
-        });
-        playerPopup.Initialize();
-        var shopPopup = windowService.CreateElement<Tooltip>(null, new ElementOptions
-        {
-            Layout = new ElementLayoutOptions { RelativePosition = Vector2.Zero, MaximumSize = new Vector2(220, 220), DisplayMode = ElementDisplayMode.WrapContent, IsVisible = false },
-            Chrome = new ElementChromeOptions { ShowBorder = true, ShowTitle = true, CanUserFocus = false, CanUserClose = false },
-        });
-        shopPopup.Initialize();
+        var tooltipController = new TooltipController();
+        tooltipController.Initialize(windowService, new UiLayerStack());
 
         var window = windowService.CreateElement<TradeWindow>(null, new ElementOptions
         {
@@ -101,7 +91,7 @@ public sealed class TradeWindowTests
             Layout = new ElementLayoutOptions { RelativePosition = Vector2.Zero, DisplayMode = ElementDisplayMode.Fixed },
             Chrome = new ElementChromeOptions { ShowTitle = true, TitleText = "Trade", ShowBorder = true, CanUserClose = true, CanUserMove = true, CanUserResize = false, CanUserFocus = true },
         });
-        window.Configure(TradePlayerEntityId, TradeShopEntityId, ShopEntityId, playerPopup, shopPopup);
+        window.Configure(TradePlayerEntityId, TradeShopEntityId, ShopEntityId, tooltipController);
         window.Initialize();
 
         return (window, componentManager, mapViewState);
@@ -470,12 +460,8 @@ public sealed class TradeWindowTests
         itemCatalog.Register(new ItemDefinition(PotionItemId, "Test Potion", null, "p", Color.White, Tags: [Tag.Potion], Effects: [], GoldValue: 10));
         InventoryActions.AddItem(componentManager, PlayerEntityId, PotionItemId, quantity: 1);
 
-        var hoverPopup = windowService.CreateElement<Tooltip>(null, new ElementOptions
-        {
-            Layout = new ElementLayoutOptions { RelativePosition = Vector2.Zero, MaximumSize = new Vector2(220, 220), DisplayMode = ElementDisplayMode.WrapContent, IsVisible = false },
-            Chrome = new ElementChromeOptions { ShowBorder = true, ShowTitle = true, CanUserFocus = false, CanUserClose = false },
-        });
-        hoverPopup.Initialize();
+        var tooltipController = new TooltipController();
+        tooltipController.Initialize(windowService, new UiLayerStack());
 
         // Positioned well away from the trade window (which sits at/near the origin, RelativePosition
         // Vector2.Zero, no parent) so the two never overlap on screen.
@@ -485,7 +471,7 @@ public sealed class TradeWindowTests
             Layout = new ElementLayoutOptions { RelativePosition = new Vector2(500, 500), Size = new Vector2(200, 200), DisplayMode = ElementDisplayMode.Fixed },
             Chrome = new ElementChromeOptions { ShowBorder = true, CanUserFocus = false },
         });
-        playerGridWindow.SetContent(new InventoryGridContent(world, componentManager, itemCatalog, windowService, fontService, labelRenderer, spriteSheetService, spriteRenderer, contextMenuController, PlayerEntityId, filterTag: null, hoverPopup, static () => null, mapViewState, static (_, _) => { }, static (_, _) => { }));
+        playerGridWindow.SetContent(new InventoryGridContent(world, componentManager, itemCatalog, windowService, fontService, labelRenderer, spriteSheetService, spriteRenderer, contextMenuController, PlayerEntityId, filterTag: null, tooltipController, static () => null, mapViewState, static (_, _) => { }, static (_, _) => { }));
         playerGridWindow.Initialize();
 
         var layers = new UiLayerStack();
@@ -542,12 +528,8 @@ public sealed class TradeWindowTests
         itemCatalog.Register(new ItemDefinition(PotionItemId, "Test Potion", null, "p", Color.White, Tags: [Tag.Potion], Effects: [], GoldValue: 10));
         InventoryActions.AddItem(componentManager, PlayerEntityId, PotionItemId, quantity: 1);
 
-        var hoverPopup = windowService.CreateElement<Tooltip>(null, new ElementOptions
-        {
-            Layout = new ElementLayoutOptions { RelativePosition = Vector2.Zero, MaximumSize = new Vector2(220, 220), DisplayMode = ElementDisplayMode.WrapContent, IsVisible = false },
-            Chrome = new ElementChromeOptions { ShowBorder = true, ShowTitle = true, CanUserFocus = false, CanUserClose = false },
-        });
-        hoverPopup.Initialize();
+        var tooltipController = new TooltipController();
+        tooltipController.Initialize(windowService, new UiLayerStack());
 
         var playerGridWindow = windowService.CreateElement<Window>(null, new ElementOptions
         {
@@ -555,7 +537,7 @@ public sealed class TradeWindowTests
             Layout = new ElementLayoutOptions { RelativePosition = new Vector2(500, 500), Size = new Vector2(200, 200), DisplayMode = ElementDisplayMode.Fixed },
             Chrome = new ElementChromeOptions { ShowBorder = true, CanUserFocus = false },
         });
-        playerGridWindow.SetContent(new InventoryGridContent(world, componentManager, itemCatalog, windowService, fontService, labelRenderer, spriteSheetService, spriteRenderer, contextMenuController, PlayerEntityId, filterTag: null, hoverPopup, static () => null, mapViewState, static (_, _) => { }, static (_, _) => { }));
+        playerGridWindow.SetContent(new InventoryGridContent(world, componentManager, itemCatalog, windowService, fontService, labelRenderer, spriteSheetService, spriteRenderer, contextMenuController, PlayerEntityId, filterTag: null, tooltipController, static () => null, mapViewState, static (_, _) => { }, static (_, _) => { }));
         playerGridWindow.Initialize();
 
         var layers = new UiLayerStack();

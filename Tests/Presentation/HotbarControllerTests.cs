@@ -90,7 +90,7 @@ public sealed class HotbarControllerTests
 
         var fontService = TestFonts.Shared;
         var hotbarContent = new HotbarContent(world, mapViewState, componentManager, new EventBus(), actionCatalog, itemCatalog, fontService, new SpriteSheetService(null, "Spritesheets"), new SpriteRenderer(), new Vector2(1920, 1080));
-        var hotbarController = new HotbarController(mapViewState, hotbarContent, actionTargeting);
+        var hotbarController = new HotbarController(mapViewState, hotbarContent, actionTargeting, new TooltipController());
 
         return (hotbarController, mapViewState, componentManager);
     }

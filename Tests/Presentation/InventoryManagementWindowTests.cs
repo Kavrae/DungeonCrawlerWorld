@@ -60,12 +60,8 @@ public sealed class InventoryManagementWindowTests
         windowService.RegisterFactory<InventoryManagementWindow>(() => new InventoryManagementWindow(
             fontService, windowService, labelRenderer, spriteSheetService, spriteRenderer, componentManager, itemCatalog, world, contextMenuController, mapViewState));
 
-        var hoverPopup = windowService.CreateElement<Tooltip>(null, new ElementOptions
-        {
-            Layout = new ElementLayoutOptions { RelativePosition = Vector2.Zero, MaximumSize = new Vector2(220, 220), DisplayMode = ElementDisplayMode.WrapContent, IsVisible = false },
-            Chrome = new ElementChromeOptions { ShowBorder = true, ShowTitle = true, CanUserFocus = false, CanUserClose = false },
-        });
-        hoverPopup.Initialize();
+        var tooltipController = new TooltipController();
+        tooltipController.Initialize(windowService, new UiLayerStack());
 
         var window = windowService.CreateElement<InventoryManagementWindow>(null, new ElementOptions
         {
@@ -73,7 +69,7 @@ public sealed class InventoryManagementWindowTests
             Layout = new ElementLayoutOptions { RelativePosition = new Vector2(0, 0), Size = new Vector2(300, 300), DisplayMode = ElementDisplayMode.Fixed },
             Chrome = new ElementChromeOptions { ShowBorder = true, ShowTitle = true, CanUserFocus = false },
         });
-        window.Configure(EntityId, hoverPopup, static () => null, static (_, _) => { }, static (_, _) => { });
+        window.Configure(EntityId, tooltipController, static () => null, static (_, _) => { }, static (_, _) => { });
         window.Initialize();
 
         return (window, componentManager, firstItemId, secondItemId, scrollItemId);

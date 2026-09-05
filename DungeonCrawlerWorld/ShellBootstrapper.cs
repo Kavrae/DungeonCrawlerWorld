@@ -87,16 +87,19 @@ public static class ShellBootstrapper
 
         contextMenuController.Initialize(uiLayers);
 
+        var tooltipController = new TooltipController();
+        tooltipController.Initialize(presentation.ElementPoolService, uiLayers);
+
         var mapWindow = BuildBaseWindows(presentation, ecsContext, screenSize, diagnostics, mapViewState, uiLayers);
         var (questTriggerWindow, hotbarContent, inspectionWindow) = BuildStaticHudWindows(presentation, world, ecsContext, actionCatalog, itemCatalog, statusEffectDisplays, screenSize, mapViewState, uiLayers);
-        var (notificationCenter, inventoryController) = BuildDynamicHudWindows(presentation, world, ecsContext, itemCatalog, mapWindow, contextMenuController, uiLayers);
-        var hotbarController = BuildHotbarController(presentation, mapViewState, hotbarContent, actionTargetingController, uiLayers);
+        var (notificationCenter, inventoryController) = BuildDynamicHudWindows(presentation, world, ecsContext, itemCatalog, mapWindow, contextMenuController, uiLayers, tooltipController);
+        var hotbarController = BuildHotbarController(mapViewState, hotbarContent, actionTargetingController, tooltipController);
         BuildUserWindows(presentation, cursorTextContent, dragGhostContent, uiLayers);
 
-        var abilityScoreController = BuildAbilityScoreWindowController(presentation, world, ecsContext, inventoryController, mapWindow, contextMenuController, uiLayers);
-        var secondaryInventoryController = BuildSecondaryInventoryWindowController(presentation, ecsContext, inventoryController, contextMenuController, mapWindow, uiLayers);
-        var shopWindowController = BuildShopWindowController(presentation, mapViewState, inventoryController, contextMenuController, mapWindow, uiLayers);
-        var tradeWindowController = BuildTradeWindowController(presentation, inventoryController, shopWindowController, mapWindow, uiLayers, worldSession.ReservedEntityIds);
+        var abilityScoreController = BuildAbilityScoreWindowController(presentation, world, ecsContext, inventoryController, mapWindow, contextMenuController, uiLayers, tooltipController);
+        var secondaryInventoryController = BuildSecondaryInventoryWindowController(presentation, ecsContext, inventoryController, contextMenuController, mapWindow, uiLayers, tooltipController);
+        var shopWindowController = BuildShopWindowController(presentation, mapViewState, inventoryController, contextMenuController, mapWindow, uiLayers, tooltipController);
+        var tradeWindowController = BuildTradeWindowController(presentation, inventoryController, shopWindowController, mapWindow, uiLayers, worldSession.ReservedEntityIds, tooltipController);
         shopWindowController.OnOpened = tradeWindowController.Open;
         shopWindowController.OnClosed = tradeWindowController.CloseForShopClosed;
 
@@ -370,8 +373,8 @@ public static class ShellBootstrapper
         return (questTriggerWindow, hotbarContent, inspectionWindow);
     }
 
-    /// <summary>DynamicHUD tier: NotificationCenter owns/populates its own folder+popups, and InventoryWindowController does the same for its own button+window (both add to UiLayer.DynamicHud specifically; their two Tooltip-family hover popups go to UiLayer.Tooltip instead) -- see UiLayer's own doc comment for what each tier means. Build also passes the same layer stack into OpenQuestComposer later, since that popup belongs in DynamicHud too. Every pooled type either of these creates is already registered by the time this runs -- see Build's ElementFactoryRegistry.RegisterAll call.</summary>
-    private static (NotificationCenter NotificationCenter, InventoryWindowController Inventory) BuildDynamicHudWindows(PresentationContext presentation, World world, EcsContext ecsContext, ItemCatalog itemCatalog, MapWindow mapWindow, ContextMenuController contextMenuController, UiLayerStack layers)
+    /// <summary>DynamicHUD tier: NotificationCenter owns/populates its own folder+popups, and InventoryWindowController does the same for its own button+window (both add to UiLayer.DynamicHud specifically; hover popups instead show/hide through the one shared TooltipController -- see its own doc comment) -- see UiLayer's own doc comment for what each tier means. Build also passes the same layer stack into OpenQuestComposer later, since that popup belongs in DynamicHud too. Every pooled type either of these creates is already registered by the time this runs -- see Build's ElementFactoryRegistry.RegisterAll call.</summary>
+    private static (NotificationCenter NotificationCenter, InventoryWindowController Inventory) BuildDynamicHudWindows(PresentationContext presentation, World world, EcsContext ecsContext, ItemCatalog itemCatalog, MapWindow mapWindow, ContextMenuController contextMenuController, UiLayerStack layers, TooltipController tooltipController)
     {
         var notificationCenter = new NotificationCenter(presentation.ElementPoolService, ecsContext.EventBus, layers, contextMenuController);
         notificationCenter.Initialize();
@@ -386,7 +389,7 @@ public static class ShellBootstrapper
 
         var inventory = new InventoryWindowController(
             presentation.ElementPoolService, world, ecsContext.ComponentManager, presentation.FontService, presentation.LabelRenderer,
-            presentation.SpriteSheetService, presentation.SpriteRenderer, itemCatalog, mapWindow, contextMenuController);
+            presentation.SpriteSheetService, presentation.SpriteRenderer, itemCatalog, mapWindow, contextMenuController, tooltipController);
         inventory.Initialize(layers);
 
         return (notificationCenter, inventory);
@@ -394,45 +397,41 @@ public static class ShellBootstrapper
 
     /// <summary>Built after InventoryWindowController (whose PlayerInventoryWindow accessor this abilityScoreController reads to cascade its own window beside a live Inventory window -- see AbilityScoreWindowController.CreateAbilityScoreWindow) and MapWindow.</summary>
     private static AbilityScoreWindowController BuildAbilityScoreWindowController(
-        PresentationContext presentation, World world, EcsContext ecsContext, InventoryWindowController inventory, MapWindow mapWindow, ContextMenuController contextMenuController, UiLayerStack layers)
+        PresentationContext presentation, World world, EcsContext ecsContext, InventoryWindowController inventory, MapWindow mapWindow, ContextMenuController contextMenuController, UiLayerStack layers, TooltipController tooltipController)
     {
-        var abilityScoreController = new AbilityScoreWindowController(presentation.ElementPoolService, world, ecsContext.ComponentManager, inventory, mapWindow, contextMenuController);
+        var abilityScoreController = new AbilityScoreWindowController(presentation.ElementPoolService, world, ecsContext.ComponentManager, inventory, mapWindow, contextMenuController, tooltipController);
         abilityScoreController.Initialize(layers);
         return abilityScoreController;
     }
 
-    /// <summary>Constructs HotbarController and lets it add the Armed Hotkey Summary window into UiLayer.Tooltip -- mirrors NotificationCenter/InventoryWindowController's own Initialize(uiLayers) call shape above. Needs mapViewState/hotbarContent (from BuildStaticHudWindows) and actionTargetingController (constructed at the top of Build, shared with MapWindow's own factory).</summary>
+    /// <summary>Constructs HotbarController -- its Armed Hotkey Summary popup is shown/hidden through the shared TooltipController (built once at the top of Build), not a window of its own. Needs mapViewState/hotbarContent (from BuildStaticHudWindows) and actionTargetingController (constructed at the top of Build, shared with MapWindow's own factory).</summary>
     private static HotbarController BuildHotbarController(
-        PresentationContext presentation, MapViewState mapViewState, HotbarContent hotbarContent, ActionTargetingController actionTargeting, UiLayerStack layers)
-    {
-        var hotbarController = new HotbarController(mapViewState, hotbarContent, actionTargeting);
-        hotbarController.Initialize(presentation.ElementPoolService, layers);
-        return hotbarController;
-    }
+        MapViewState mapViewState, HotbarContent hotbarContent, ActionTargetingController actionTargeting, TooltipController tooltipController) =>
+        new(mapViewState, hotbarContent, actionTargeting, tooltipController);
 
     /// <summary>Built after InventoryWindowController (which it reuses the player's own inventoryController window through, see PlayerInventoryWindow/OpenInventoryWindow) and after MapWindow exists (whose OnCorpseClicked Build wires to this abilityScoreController's OpenLoot right after this call returns).</summary>
     private static SecondaryInventoryWindowController BuildSecondaryInventoryWindowController(
-        PresentationContext presentation, EcsContext ecsContext, InventoryWindowController inventory, ContextMenuController contextMenuController, MapWindow mapWindow, UiLayerStack layers)
+        PresentationContext presentation, EcsContext ecsContext, InventoryWindowController inventory, ContextMenuController contextMenuController, MapWindow mapWindow, UiLayerStack layers, TooltipController tooltipController)
     {
-        var controller = new SecondaryInventoryWindowController(presentation.ElementPoolService, ecsContext.ComponentManager, inventory, contextMenuController, mapWindow);
+        var controller = new SecondaryInventoryWindowController(presentation.ElementPoolService, ecsContext.ComponentManager, inventory, contextMenuController, mapWindow, tooltipController);
         controller.Initialize(layers);
         return controller;
     }
 
     /// <summary>Same construction shape as BuildSecondaryInventoryWindowController above -- built after InventoryWindowController and MapWindow for the same reasons.</summary>
     private static ShopWindowController BuildShopWindowController(
-        PresentationContext presentation, MapViewState mapViewState, InventoryWindowController inventory, ContextMenuController contextMenuController, MapWindow mapWindow, UiLayerStack layers)
+        PresentationContext presentation, MapViewState mapViewState, InventoryWindowController inventory, ContextMenuController contextMenuController, MapWindow mapWindow, UiLayerStack layers, TooltipController tooltipController)
     {
-        var controller = new ShopWindowController(presentation.ElementPoolService, mapViewState, inventory, contextMenuController, mapWindow);
+        var controller = new ShopWindowController(presentation.ElementPoolService, mapViewState, inventory, contextMenuController, mapWindow, tooltipController);
         controller.Initialize(layers);
         return controller;
     }
 
     /// <summary>Built after ShopWindowController (which it re-anchors, see ShopWindowController.SetPosition) and InventoryWindowController -- see PLAN-trade-window.md. Wiring to ShopWindowController.OnOpened/OnClosed happens in Build itself, right after both controllers exist.</summary>
     private static TradeWindowController BuildTradeWindowController(
-        PresentationContext presentation, InventoryWindowController inventory, ShopWindowController shopWindowController, MapWindow mapWindow, UiLayerStack layers, ReservedEntityIds reservedEntityIds)
+        PresentationContext presentation, InventoryWindowController inventory, ShopWindowController shopWindowController, MapWindow mapWindow, UiLayerStack layers, ReservedEntityIds reservedEntityIds, TooltipController tooltipController)
     {
-        var controller = new TradeWindowController(presentation.ElementPoolService, inventory, shopWindowController, mapWindow, reservedEntityIds.TradeOfferPlayerEntityId, reservedEntityIds.TradeOfferShopEntityId);
+        var controller = new TradeWindowController(presentation.ElementPoolService, inventory, shopWindowController, mapWindow, reservedEntityIds.TradeOfferPlayerEntityId, reservedEntityIds.TradeOfferShopEntityId, tooltipController);
         controller.Initialize(layers);
         return controller;
     }

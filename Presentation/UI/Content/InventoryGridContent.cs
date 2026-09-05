@@ -13,6 +13,7 @@ using Microsoft.Xna.Framework.Input;
 using Presentation.Fonts;
 using Presentation.Rendering;
 using Presentation.UI.Chrome;
+using Presentation.UI.ColorPalettes;
 
 namespace Presentation.UI.Content;
 
@@ -29,7 +30,10 @@ namespace Presentation.UI.Content;
 /// changes, or SortOrder/NameFilter/HideDisabled actually changes. Also self-polls
 /// Mouse.GetState() every Update (see UpdateHover), the same idiom AbilityScoreWindow uses for
 /// its own hover popup -- kept self-contained here rather than routed through UiInputController
-/// since nothing else needs to know about it.
+/// since nothing else needs to know about it. Shows/hides through the shared TooltipController
+/// (see its own doc comment) rather than owning a private Tooltip -- this instance itself is what
+/// TooltipController.Show/Hide's owner identity is, since a specific InventoryGridContent instance
+/// is already exactly "one independent poller" (one per tab, or per Trade column).
 /// </summary>
 public sealed class InventoryGridContent(
     World world,
@@ -43,7 +47,7 @@ public sealed class InventoryGridContent(
     ContextMenuController contextMenuController,
     int entityId,
     Tag? filterTag,
-    Tooltip hoverPopup,
+    TooltipController tooltipController,
     Func<int?> getSecondaryTargetEntityId,
     MapViewState mapViewState,
     Action<int, Guid> onItemSelected,
@@ -92,6 +96,7 @@ public sealed class InventoryGridContent(
 
     private InventoryItemStackCell? _hoveredCell;
     private int _hoveredFrames;
+    private bool _closeHookupSubscribed;
 
     private InventorySortOrder _sortOrder = InventorySortOrder.NameAscending;
     private string _nameFilter = string.Empty;
@@ -228,6 +233,28 @@ public sealed class InventoryGridContent(
         // UiInputController's content-drag drop resolution) still identify "this window hosts
         // entityId's inventory grid" regardless of which of the two hosting patterns built it.
         hostWindow.Tag = this;
+
+        // hostWindow itself may only be an inner child (e.g. one of TradeWindow's two column grid
+        // windows, or a tab body inside InventoryManagementWindow's TabbedContent) -- Window.Close()
+        // only invokes Closed on the exact window it's called on, and a child torn down as part of
+        // its parent's own recursive close (ElementPoolService.CloseAllChildren) never fires its
+        // own Closed at all. Walking up to whichever ancestor genuinely has no Window parent finds
+        // the one that's actually .Close()'d directly, so the tooltip still hides itself the moment
+        // the real top-level window closes, regardless of how deep this grid is nested inside it.
+        // Guarded to run once per instance -- TabbedContent re-Initializes the same instance every
+        // time the player switches back to its tab (see this method's own doc comment), which would
+        // otherwise pile up one duplicate subscription per switch.
+        if (!_closeHookupSubscribed)
+        {
+            _closeHookupSubscribed = true;
+            var root = hostWindow;
+            while (root.ParentElement is Window parentWindow)
+            {
+                root = parentWindow;
+            }
+
+            root.Closed += _ => tooltipController.Hide(this);
+        }
 
         _isShopMode = mapViewState.OpenShopEntityId is not null;
         RebuildCells();
@@ -441,7 +468,7 @@ public sealed class InventoryGridContent(
 
         if (candidate is null || _hoveredFrames < HudChrome.HoverTooltipDelayFrames)
         {
-            hoverPopup.Hide();
+            tooltipController.Hide(this);
             return;
         }
 
@@ -488,9 +515,7 @@ public sealed class InventoryGridContent(
         // Shop mode's band table needs a guaranteed-wide-enough box for its range-annotated rows
         // (e.g. "Understocked (10-14)") -- a plain description tooltip still shrinks to content as
         // before.
-        hoverPopup.UseFixedWidth = rows is not null;
-
-        hoverPopup.ShowNear(candidate.Rectangle, PopupAnchor.East, PopupGap, summary, definition.Name, rows);
+        tooltipController.Show(this, candidate.Rectangle, PopupAnchor.East, PopupGap, PopupChrome.HoverPopupMaximumSize, summary, definition.Name, rows, useFixedWidth: rows is not null);
     }
 
     /// <summary>
@@ -527,7 +552,7 @@ public sealed class InventoryGridContent(
         }
 
         var isThisGridTheShop = IsThisGridTheShop(shopEntityId);
-        var neutralColor = hoverPopup.TextColor;
+        var neutralColor = WindowPalette.TitleTextColor; // The shared Tooltip's own default TextColor (see Tooltip.Build) -- no caller overrides it.
 
         var effectiveStock = EffectiveStockForThisGrid(shopEntityId, definition.Id);
 
@@ -616,7 +641,7 @@ public sealed class InventoryGridContent(
         _hoveredCell = null;
         _hoveredFrames = 0;
         _expandedItemDefinitionId = null;
-        hoverPopup.Hide();
+        tooltipController.Hide(this);
     }
 
     private void OnHostWindowResized(Element _) => RebuildCells();

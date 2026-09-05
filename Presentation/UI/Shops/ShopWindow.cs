@@ -54,16 +54,16 @@ public sealed class ShopWindow(
     private readonly DirectComponentPool<DisplayTextComponent> _displayTextPool = componentManager.GetDirectPool<DisplayTextComponent>();
 
     private int _entityId;
-    private Tooltip _hoverPopup = null!;
+    private TooltipController _tooltipController = null!;
     private Action<int, Guid> _onItemSelected = static (_, _) => { };
     private Action<int, Guid> _onCompareRequested = static (_, _) => { };
     private CurrencyRowContent _currencyRowContent = null!;
 
     /// <summary>Must be called after CreateElement but before Initialize -- same contract SecondaryInventoryWindow.Configure follows.</summary>
-    public void Configure(int entityId, Tooltip hoverPopup, Action<int, Guid> onItemSelected, Action<int, Guid> onCompareRequested)
+    public void Configure(int entityId, TooltipController tooltipController, Action<int, Guid> onItemSelected, Action<int, Guid> onCompareRequested)
     {
         _entityId = entityId;
-        _hoverPopup = hoverPopup;
+        _tooltipController = tooltipController;
         _onItemSelected = onItemSelected;
         _onCompareRequested = onCompareRequested;
 
@@ -173,7 +173,7 @@ public sealed class ShopWindow(
         // See SecondaryInventoryWindow.BuildGrid's own doc comment -- same flush-content fix for the same clipped-bottom-row bug.
         gridWindow.ContentPadding = Vector2.Zero;
 
-        gridWindow.SetContent(new InventoryGridContent(world, componentManager, itemCatalog, ElementPoolService, FontService, LabelRenderer, spriteSheetService, spriteRenderer, contextMenuController, _entityId, filterTag: null, _hoverPopup, () => _entityId, mapViewState, _onItemSelected, _onCompareRequested));
+        gridWindow.SetContent(new InventoryGridContent(world, componentManager, itemCatalog, ElementPoolService, FontService, LabelRenderer, spriteSheetService, spriteRenderer, contextMenuController, _entityId, filterTag: null, _tooltipController, () => _entityId, mapViewState, _onItemSelected, _onCompareRequested));
         AddChild(gridWindow);
     }
 

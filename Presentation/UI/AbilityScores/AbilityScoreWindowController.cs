@@ -26,27 +26,19 @@ public sealed class AbilityScoreWindowController(
     ComponentManager componentManager,
     InventoryWindowController inventory,
     MapWindow mapWindow,
-    ContextMenuController contextMenuController)
+    ContextMenuController contextMenuController,
+    TooltipController tooltipController)
 {
     private readonly PackedComponentPool<InventoryDisabledComponent> _disabledPool = componentManager.GetPackedPool<InventoryDisabledComponent>();
 
     private Button _button = null!;
     private WindowLifecycle<AbilityScoreWindow> _slot = null!;
-    private Tooltip _hoverPopup = null!;
     private UiLayerStack _layers = null!;
 
     public void Initialize(UiLayerStack layers)
     {
         _layers = layers;
         _slot = new WindowLifecycle<AbilityScoreWindow>(CreateAbilityScoreWindow, IsInventoryDisabled, layers, () => { });
-
-        _hoverPopup = elementPoolService.CreateElement<Tooltip>(null, new ElementOptions
-        {
-            Layout = new ElementLayoutOptions { RelativePosition = Vector2.Zero, MaximumSize = AbilityScoreChrome.HoverPopupMaximumSize, DisplayMode = ElementDisplayMode.WrapContent, IsVisible = false },
-            Chrome = new ElementChromeOptions { ShowBorder = true, ShowTitle = true, CanUserFocus = false, CanUserClose = false },
-        });
-        _hoverPopup.Initialize();
-        layers.Add(UiLayer.Tooltip, _hoverPopup);
 
         _button = elementPoolService.CreateElement<Button>(null, new ElementOptions
         {
@@ -107,8 +99,8 @@ public sealed class AbilityScoreWindowController(
             },
             Content = new ElementContentOptions { ContentColor = WindowPalette.PanelBackgroundColor },
         });
-        window.Configure(world.PlayerEntityId, _hoverPopup);
-        window.Closed += _ => _hoverPopup.Hide(); // Closing the Stats window mid-hover shouldn't leave the popup stranded.
+        window.Configure(world.PlayerEntityId, tooltipController);
+        window.Closed += _ => tooltipController.Hide(window); // Closing the Stats window mid-hover shouldn't leave the popup stranded.
         window.OnRightClicked = position => contextMenuController.Open(new Vector2(position.X, position.Y), DynamicHudContextMenus.BuildCloseMenu(window, _layers));
         return window;
     }
