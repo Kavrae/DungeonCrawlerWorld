@@ -36,7 +36,7 @@ public sealed class ShopWindow(
     World world,
     ContextMenuController contextMenuController,
     MapViewState mapViewState)
-    : Window(fontService, elementPoolService, labelRenderer)
+    : Window(fontService, elementPoolService, labelRenderer), IWholeWindowDropTarget
 {
     private static readonly Vector2 IconSize = new(48, 48);
     private const float Padding = 8f;
@@ -75,6 +75,12 @@ public sealed class ShopWindow(
         _currencyRowContent = new CurrencyRowContent(entityId, componentManager, world, contextMenuController, ElementPoolService, FontService, LabelRenderer, spriteSheetService, spriteRenderer, () => _entityId);
         SetFooterContent(_currencyRowContent, CurrencyRowContent.Height);
     }
+
+    /// <summary>IWholeWindowDropTarget -- this window represents exactly one entity (the shop itself), so both resolvers just return _entityId unconditionally regardless of where within the window the drop landed.</summary>
+    public int ResolveItemDropEntityId(Point dropPosition) => _entityId;
+
+    /// <summary>See ResolveItemDropEntityId -- identical, since this entity's own inventory and currency balance are the same one.</summary>
+    public int ResolveCurrencyDropEntityId(Point dropPosition) => _entityId;
 
     /// <summary>See SecondaryInventoryWindow.OnChildrenInitialized's own doc comment for why children are built here, not in Configure.</summary>
     protected override void OnChildrenInitialized()

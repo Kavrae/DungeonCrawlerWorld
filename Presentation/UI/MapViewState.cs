@@ -1,4 +1,5 @@
 using Engine.Math;
+using Game.Floors;
 using Game.Modules.Actions;
 using Game.Modules.Core.Components;
 using Microsoft.Xna.Framework;
@@ -62,6 +63,23 @@ public sealed class MapViewState
 
     /// <summary>The currently-open shop's own entity id, if any -- set/cleared by ShopWindowController.OpenShop/its own Closed handler, the same shared cross-window flag CompareRequiredActivatorType above already is. Not yet read by anything (a future pass switches both the shop's own grid and the player's own inventory grid to the wider, price-showing ShopItemStackCell layout while this is set).</summary>
     public int? OpenShopEntityId;
+
+    /// <summary>
+    /// Every entity id FloorBuilder reserves up front for a session (currently just the two
+    /// trade-offer placeholders -- see FloorBuilder.ReserveTradeOfferEntities) -- set once by
+    /// ShellBootstrapper right after this MapViewState is constructed and never changed again for
+    /// the rest of the session (unlike OpenShopEntityId, these aren't "currently open" state, just
+    /// fixed ids). A single reference to the one record WorldSessionContext already carries,
+    /// rather than each reserved id copied onto its own MapViewState field, so a future reserved
+    /// id shows up here for free instead of needing a matching new field plus a new
+    /// ShellBootstrapper wiring line every time one's added. Read by UiInputController.
+    /// ResolveContentDrag to recognize a drag touching either trade column so it can apply
+    /// PLAN-trade-window.md's own eligibility rules instead of the ordinary shop-pool check, which
+    /// would otherwise misfire on a trade-offer entity (it's never itself shop-registered). Null in
+    /// test setups that don't wire a trade window at all, in which case no drag ever reads as
+    /// touching one.
+    /// </summary>
+    public ReservedEntityIds? ReservedEntityIds;
 }
 
 /// <summary>

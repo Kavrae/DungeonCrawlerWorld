@@ -1,5 +1,6 @@
 using Engine.Diagnostics;
 using Engine.ECS.Context;
+using Game.Floors;
 using Game.Modules.AbilityScores.Components;
 using Game.Modules.Actions;
 using Game.Modules.Actions.Components;
@@ -16,12 +17,14 @@ using Microsoft.Xna.Framework.Graphics;
 using Presentation.Bootstrap;
 using Presentation.Input;
 using Presentation.UI;
+using Presentation.UI.AbilityScores;
 using Presentation.UI.Chrome;
 using Presentation.UI.Content;
 using Presentation.UI.Inventory;
 using Presentation.UI.Looting;
 using Presentation.UI.Notifications;
 using Presentation.UI.Shops;
+using Presentation.UI.Trade;
 using System.Diagnostics;
 
 namespace DungeonCrawlerWorld;
@@ -49,11 +52,11 @@ public static class ShellBootstrapper
         var itemCatalog = worldSession.ItemCatalog;
         var statusEffectDisplays = worldSession.StatusEffectDisplays;
 
-        var layers = new UiLayerStack();
+        var uiLayers = new UiLayerStack();
         var componentManager = ecsContext.ComponentManager;
-        var mapViewState = new MapViewState();
+        var mapViewState = new MapViewState { ReservedEntityIds = worldSession.ReservedEntityIds };
         var camera = new MapCamera(world);
-        var actionTargeting = new ActionTargetingController(
+        var actionTargetingController = new ActionTargetingController(
             world,
             mapViewState,
             camera,
@@ -70,7 +73,7 @@ public static class ShellBootstrapper
             componentManager.GetPackedPool<ActionLockComponent>(),
             componentManager.GetPackedPool<ManaComponent>(),
             componentManager.GetMultiPool<AbilityScoreComponent>());
-        var playerMovement = new PlayerMovementController(
+        var playerMovementController = new PlayerMovementController(
             world,
             componentManager.GetDirectPool<TransformComponent>(),
             componentManager.GetPackedPool<MovementComponent>());
@@ -80,18 +83,22 @@ public static class ShellBootstrapper
         var dragGhostContent = new DragGhostContent(world, actionCatalog, itemCatalog, componentManager.GetMultiPool<InventoryItemStackComponent>(), presentation.FontService, presentation.SpriteSheetService, presentation.SpriteRenderer, presentation.LabelRenderer);
         var contextMenuController = new ContextMenuController(presentation.ElementPoolService);
 
-        ElementFactoryRegistry.RegisterAll(presentation, ecsContext, actionCatalog, itemCatalog, statusEffectDisplays, world, mapViewState, camera, actionTargeting, playerMovement, cursorTextContent, contextMenuController);
+        ElementFactoryRegistry.RegisterAll(presentation, ecsContext, actionCatalog, itemCatalog, statusEffectDisplays, world, mapViewState, camera, actionTargetingController, playerMovementController, cursorTextContent, contextMenuController);
 
-        contextMenuController.Initialize(layers);
+        contextMenuController.Initialize(uiLayers);
 
-        var mapWindow = BuildBaseWindows(presentation, ecsContext, screenSize, diagnostics, mapViewState, layers);
-        var (questTriggerWindow, hotbarContent, inspectionWindow) = BuildStaticHudWindows(presentation, world, ecsContext, actionCatalog, itemCatalog, statusEffectDisplays, screenSize, mapViewState, layers);
-        var (notificationCenter, inventory) = BuildDynamicHudWindows(presentation, world, ecsContext, itemCatalog, mapWindow, contextMenuController, layers);
-        var hotbarController = BuildHotbarController(presentation, mapViewState, hotbarContent, actionTargeting, layers);
-        BuildUserWindows(presentation, cursorTextContent, dragGhostContent, layers);
+        var mapWindow = BuildBaseWindows(presentation, ecsContext, screenSize, diagnostics, mapViewState, uiLayers);
+        var (questTriggerWindow, hotbarContent, inspectionWindow) = BuildStaticHudWindows(presentation, world, ecsContext, actionCatalog, itemCatalog, statusEffectDisplays, screenSize, mapViewState, uiLayers);
+        var (notificationCenter, inventoryController) = BuildDynamicHudWindows(presentation, world, ecsContext, itemCatalog, mapWindow, contextMenuController, uiLayers);
+        var hotbarController = BuildHotbarController(presentation, mapViewState, hotbarContent, actionTargetingController, uiLayers);
+        BuildUserWindows(presentation, cursorTextContent, dragGhostContent, uiLayers);
 
-        var secondaryInventory = BuildSecondaryInventoryWindowController(presentation, ecsContext, inventory, contextMenuController, mapWindow, layers);
-        var shopWindowController = BuildShopWindowController(presentation, mapViewState, inventory, contextMenuController, mapWindow, layers);
+        var abilityScoreController = BuildAbilityScoreWindowController(presentation, world, ecsContext, inventoryController, mapWindow, contextMenuController, uiLayers);
+        var secondaryInventoryController = BuildSecondaryInventoryWindowController(presentation, ecsContext, inventoryController, contextMenuController, mapWindow, uiLayers);
+        var shopWindowController = BuildShopWindowController(presentation, mapViewState, inventoryController, contextMenuController, mapWindow, uiLayers);
+        var tradeWindowController = BuildTradeWindowController(presentation, inventoryController, shopWindowController, mapWindow, uiLayers, worldSession.ReservedEntityIds);
+        shopWindowController.OnOpened = tradeWindowController.Open;
+        shopWindowController.OnClosed = tradeWindowController.CloseForShopClosed;
 
         // A corpse/container window and a shop window are never open together -- both cascade off
         // the same player-inventory-window position (see WindowCascadePlacement.ComputePosition in
@@ -100,57 +107,57 @@ public static class ShellBootstrapper
         mapWindow.OnCorpseClicked = entityId =>
         {
             shopWindowController.CloseIfOpen();
-            secondaryInventory.OpenLoot(entityId);
+            secondaryInventoryController.OpenLoot(entityId);
         };
         mapWindow.OnShopClicked = entityId =>
         {
-            secondaryInventory.CloseIfOpen();
+            secondaryInventoryController.CloseIfOpen();
             shopWindowController.OpenShop(entityId);
         };
 
         // OpenTargetEntityId is null on whichever of the two ISN'T currently open (mutual
         // exclusion above guarantees at most one ever is), so this is never ambiguous.
-        inventory.GetSecondaryTargetEntityId = () => secondaryInventory.OpenTargetEntityId ?? shopWindowController.OpenTargetEntityId;
+        inventoryController.GetSecondaryTargetEntityId = () => secondaryInventoryController.OpenTargetEntityId ?? shopWindowController.OpenTargetEntityId;
         mapWindow.OnInspectionOpened = () => inspectionWindow.SetDisplayMode(ElementDisplayMode.Fixed);
 
-        var itemDetails = new ItemDetailsWindowController(presentation.ElementPoolService, componentManager, itemCatalog, inventory, contextMenuController, mapViewState, mapWindow);
-        itemDetails.Initialize(layers);
-        itemDetails.GetSecondaryInventoryWindowRectangle = () => secondaryInventory.Rectangle != Rectangle.Empty ? secondaryInventory.Rectangle : shopWindowController.Rectangle;
+        var itemDetailsController = new ItemDetailsWindowController(presentation.ElementPoolService, componentManager, itemCatalog, inventoryController, contextMenuController, mapViewState, mapWindow);
+        itemDetailsController.Initialize(uiLayers);
+        itemDetailsController.GetSecondaryInventoryWindowRectangle = () => secondaryInventoryController.Rectangle != Rectangle.Empty ? secondaryInventoryController.Rectangle : shopWindowController.Rectangle;
 
         // Built after ItemDetailsWindowController (whose single pane it always uses as the
         // comparison's own anchor -- see ItemComparisonController.Arm) -- one-directional
         // reference, no construction cycle, the same shape SecondaryInventoryWindowController
-        // already has on InventoryFolderController.
-        var itemComparison = new ItemComparisonController(presentation.ElementPoolService, componentManager, itemCatalog, actionCatalog, inventory, contextMenuController, mapWindow, mapViewState, itemDetails, cursorTextContent);
-        itemComparison.Initialize(layers);
-        itemDetails.GetComparisonColumnRectangles = () => itemComparison.ColumnRectangles;
-        itemDetails.OnClosed = itemComparison.ClearComparison;
-        itemDetails.OnCompareRequested = itemComparison.Arm; // The anchor pane's own Compare title button -- the second entry point into the same arm flow the "Compare" context-menu option already uses.
-        inventory.OnCompareRequested = itemComparison.Arm;
-        secondaryInventory.OnCompareRequested = itemComparison.Arm;
-        shopWindowController.OnCompareRequested = itemComparison.Arm;
+        // already has on InventoryWindowController.
+        var itemComparisonController = new ItemComparisonController(presentation.ElementPoolService, componentManager, itemCatalog, actionCatalog, inventoryController, contextMenuController, mapWindow, mapViewState, itemDetailsController, cursorTextContent);
+        itemComparisonController.Initialize(uiLayers);
+        itemDetailsController.GetComparisonColumnRectangles = () => itemComparisonController.ColumnRectangles;
+        itemDetailsController.OnClosed = itemComparisonController.ClearComparison;
+        itemDetailsController.OnCompareRequested = itemComparisonController.Arm; // The anchor pane's own Compare title button -- the second entry point into the same arm flow the "Compare" context-menu option already uses.
+        inventoryController.OnCompareRequested = itemComparisonController.Arm;
+        secondaryInventoryController.OnCompareRequested = itemComparisonController.Arm;
+        shopWindowController.OnCompareRequested = itemComparisonController.Arm;
 
-        // The inventory's own "a real single-stack item cell was clicked" callback now branches
+        // Every grid's own "a real single-stack item cell was clicked" callback now branches
         // on whether Item Details Comparison is currently armed, instead of always opening the
         // Item Details pane directly -- see ItemComparisonController.IsArmed/AddOrToggle.
         void OnItemClicked(int entityId, Guid stackInstanceId)
         {
-            if (itemComparison.IsArmed)
+            if (itemComparisonController.IsArmed)
             {
-                itemComparison.AddOrToggle(entityId, stackInstanceId);
+                itemComparisonController.AddOrToggle(entityId, stackInstanceId);
             }
             else
             {
-                itemComparison.ClearIfAnchorChanging(entityId, stackInstanceId);
-                itemDetails.Open(entityId, stackInstanceId);
+                itemComparisonController.ClearIfAnchorChanging(entityId, stackInstanceId);
+                itemDetailsController.Open(entityId, stackInstanceId);
             }
         }
 
-        inventory.OnItemSelected = OnItemClicked;
-        secondaryInventory.OnItemSelected = OnItemClicked;
+        inventoryController.OnItemSelected = OnItemClicked;
+        secondaryInventoryController.OnItemSelected = OnItemClicked;
         shopWindowController.OnItemSelected = OnItemClicked;
 
-        var inputController = new UiInputController(layers, screenSize, hotbarController, componentManager, world, contextMenuController, itemDetails, itemComparison, itemCatalog, mapViewState);
+        var inputController = new UiInputController(uiLayers, screenSize, hotbarController, componentManager, world, contextMenuController, itemDetailsController, itemComparisonController, itemCatalog, mapViewState, ecsContext.EventBus);
         inputController.SetDefaultFocusElement(mapWindow);
         inputController.FocusElement(mapWindow);
 
@@ -184,9 +191,9 @@ public static class ShellBootstrapper
         // always-visible StaticHUD panels) isn't guaranteed to stay above a map click while it's
         // open -- DynamicHUD tier, the same tier NotificationCenter's own popups already use,
         // not Base/StaticHUD.
-        questTriggerWindow.Clicked += _ => inputController.FocusElement(OpenQuestComposer(presentation.ElementPoolService, notificationCenter, layers));
+        questTriggerWindow.Clicked += _ => inputController.FocusElement(OpenQuestComposer(presentation.ElementPoolService, notificationCenter, uiLayers));
 
-        return new ShellContext(mapWindow, notificationCenter, inventory, layers, inputController);
+        return new ShellContext(mapWindow, notificationCenter, inventoryController, abilityScoreController, uiLayers, inputController);
     }
 
     /// <summary>Base tier: the map itself plus the debug stats footer directly beneath it -- see UiInputController's own doc comment for what each of the four tiers means. MapWindow's own factory (and every other pooled type's) is already registered by the time this runs -- see Build's ElementFactoryRegistry.RegisterAll call.</summary>
@@ -363,21 +370,21 @@ public static class ShellBootstrapper
         return (questTriggerWindow, hotbarContent, inspectionWindow);
     }
 
-    /// <summary>DynamicHUD tier: NotificationCenter owns/populates its own folder+popups, and InventoryFolderController does the same for its own folder+window (both add to UiLayer.DynamicHud specifically; their two Tooltip-family hover popups go to UiLayer.Tooltip instead) -- see UiLayer's own doc comment for what each tier means. Build also passes the same layer stack into OpenQuestComposer later, since that popup belongs in DynamicHud too. Every pooled type either of these creates is already registered by the time this runs -- see Build's ElementFactoryRegistry.RegisterAll call.</summary>
-    private static (NotificationCenter NotificationCenter, InventoryFolderController Inventory) BuildDynamicHudWindows(PresentationContext presentation, World world, EcsContext ecsContext, ItemCatalog itemCatalog, MapWindow mapWindow, ContextMenuController contextMenuController, UiLayerStack layers)
+    /// <summary>DynamicHUD tier: NotificationCenter owns/populates its own folder+popups, and InventoryWindowController does the same for its own button+window (both add to UiLayer.DynamicHud specifically; their two Tooltip-family hover popups go to UiLayer.Tooltip instead) -- see UiLayer's own doc comment for what each tier means. Build also passes the same layer stack into OpenQuestComposer later, since that popup belongs in DynamicHud too. Every pooled type either of these creates is already registered by the time this runs -- see Build's ElementFactoryRegistry.RegisterAll call.</summary>
+    private static (NotificationCenter NotificationCenter, InventoryWindowController Inventory) BuildDynamicHudWindows(PresentationContext presentation, World world, EcsContext ecsContext, ItemCatalog itemCatalog, MapWindow mapWindow, ContextMenuController contextMenuController, UiLayerStack layers)
     {
         var notificationCenter = new NotificationCenter(presentation.ElementPoolService, ecsContext.EventBus, layers, contextMenuController);
         notificationCenter.Initialize();
 
-        // Built before InventoryFolderController, which reads this controller's own
+        // Built before InventoryWindowController, which reads this abilityScoreController's own
         // ButtonPosition/ButtonSize (static fields, resolved independently of construction order)
-        // to sit its own Folder directly beneath this button -- see FolderPosition's own doc
-        // comment. No actual construction-order dependency between the two controllers; built in
-        // this order simply because it reads naturally top-to-bottom.
+        // to sit its own button directly beneath this one -- see InventoryChrome.ButtonPosition's
+        // own doc comment. No actual construction-order dependency between the two controllers;
+        // built in this order simply because it reads naturally top-to-bottom.
         var health = new HealthWindowController(presentation.ElementPoolService, world, ecsContext.ComponentManager, presentation.FontService, presentation.LabelRenderer);
         health.Initialize(layers);
 
-        var inventory = new InventoryFolderController(
+        var inventory = new InventoryWindowController(
             presentation.ElementPoolService, world, ecsContext.ComponentManager, presentation.FontService, presentation.LabelRenderer,
             presentation.SpriteSheetService, presentation.SpriteRenderer, itemCatalog, mapWindow, contextMenuController);
         inventory.Initialize(layers);
@@ -385,7 +392,16 @@ public static class ShellBootstrapper
         return (notificationCenter, inventory);
     }
 
-    /// <summary>Constructs HotbarController and lets it add the Armed Hotkey Summary window into UiLayer.Tooltip -- mirrors NotificationCenter/InventoryFolderController's own Initialize(layers) call shape above. Needs mapViewState/hotbarContent (from BuildStaticHudWindows) and actionTargeting (constructed at the top of Build, shared with MapWindow's own factory).</summary>
+    /// <summary>Built after InventoryWindowController (whose PlayerInventoryWindow accessor this abilityScoreController reads to cascade its own window beside a live Inventory window -- see AbilityScoreWindowController.CreateAbilityScoreWindow) and MapWindow.</summary>
+    private static AbilityScoreWindowController BuildAbilityScoreWindowController(
+        PresentationContext presentation, World world, EcsContext ecsContext, InventoryWindowController inventory, MapWindow mapWindow, ContextMenuController contextMenuController, UiLayerStack layers)
+    {
+        var abilityScoreController = new AbilityScoreWindowController(presentation.ElementPoolService, world, ecsContext.ComponentManager, inventory, mapWindow, contextMenuController);
+        abilityScoreController.Initialize(layers);
+        return abilityScoreController;
+    }
+
+    /// <summary>Constructs HotbarController and lets it add the Armed Hotkey Summary window into UiLayer.Tooltip -- mirrors NotificationCenter/InventoryWindowController's own Initialize(uiLayers) call shape above. Needs mapViewState/hotbarContent (from BuildStaticHudWindows) and actionTargetingController (constructed at the top of Build, shared with MapWindow's own factory).</summary>
     private static HotbarController BuildHotbarController(
         PresentationContext presentation, MapViewState mapViewState, HotbarContent hotbarContent, ActionTargetingController actionTargeting, UiLayerStack layers)
     {
@@ -394,20 +410,29 @@ public static class ShellBootstrapper
         return hotbarController;
     }
 
-    /// <summary>Built after InventoryFolderController (which it reuses the player's own inventory window through, see PlayerInventoryWindow/OpenInventoryWindow) and after MapWindow exists (whose OnCorpseClicked Build wires to this controller's OpenLoot right after this call returns).</summary>
+    /// <summary>Built after InventoryWindowController (which it reuses the player's own inventoryController window through, see PlayerInventoryWindow/OpenInventoryWindow) and after MapWindow exists (whose OnCorpseClicked Build wires to this abilityScoreController's OpenLoot right after this call returns).</summary>
     private static SecondaryInventoryWindowController BuildSecondaryInventoryWindowController(
-        PresentationContext presentation, EcsContext ecsContext, InventoryFolderController inventory, ContextMenuController contextMenuController, MapWindow mapWindow, UiLayerStack layers)
+        PresentationContext presentation, EcsContext ecsContext, InventoryWindowController inventory, ContextMenuController contextMenuController, MapWindow mapWindow, UiLayerStack layers)
     {
         var controller = new SecondaryInventoryWindowController(presentation.ElementPoolService, ecsContext.ComponentManager, inventory, contextMenuController, mapWindow);
         controller.Initialize(layers);
         return controller;
     }
 
-    /// <summary>Same construction shape as BuildSecondaryInventoryWindowController above -- built after InventoryFolderController and MapWindow for the same reasons.</summary>
+    /// <summary>Same construction shape as BuildSecondaryInventoryWindowController above -- built after InventoryWindowController and MapWindow for the same reasons.</summary>
     private static ShopWindowController BuildShopWindowController(
-        PresentationContext presentation, MapViewState mapViewState, InventoryFolderController inventory, ContextMenuController contextMenuController, MapWindow mapWindow, UiLayerStack layers)
+        PresentationContext presentation, MapViewState mapViewState, InventoryWindowController inventory, ContextMenuController contextMenuController, MapWindow mapWindow, UiLayerStack layers)
     {
         var controller = new ShopWindowController(presentation.ElementPoolService, mapViewState, inventory, contextMenuController, mapWindow);
+        controller.Initialize(layers);
+        return controller;
+    }
+
+    /// <summary>Built after ShopWindowController (which it re-anchors, see ShopWindowController.SetPosition) and InventoryWindowController -- see PLAN-trade-window.md. Wiring to ShopWindowController.OnOpened/OnClosed happens in Build itself, right after both controllers exist.</summary>
+    private static TradeWindowController BuildTradeWindowController(
+        PresentationContext presentation, InventoryWindowController inventory, ShopWindowController shopWindowController, MapWindow mapWindow, UiLayerStack layers, ReservedEntityIds reservedEntityIds)
+    {
+        var controller = new TradeWindowController(presentation.ElementPoolService, inventory, shopWindowController, mapWindow, reservedEntityIds.TradeOfferPlayerEntityId, reservedEntityIds.TradeOfferShopEntityId);
         controller.Initialize(layers);
         return controller;
     }
@@ -466,7 +491,7 @@ public static class ShellBootstrapper
         layers.Add(UiLayer.DynamicHud, popup);
 
         // Pooled and reused for the next "New Quest" click (see WindowService) -- must detach
-        // itself and remove the closed instance from layers, the same cleanup
+        // itself and remove the closed instance from uiLayers, the same cleanup
         // NotificationCenter.OnActiveNotificationClosed already does for its own popups, or a
         // reopened composer would eventually add the same recycled instance to
         // UiLayer.DynamicHud twice.
@@ -507,7 +532,8 @@ public static class ShellBootstrapper
 public sealed record ShellContext(
     MapWindow MapWindow,
     NotificationCenter NotificationCenter,
-    InventoryFolderController Inventory,
+    InventoryWindowController Inventory,
+    AbilityScoreWindowController AbilityScore,
     UiLayerStack Layers,
     UiInputController InputController)
 {
@@ -583,15 +609,17 @@ public sealed record ShellContext(
     }
 
     /// <summary>
-    /// The window tree's own per-frame Update, plus Inventory's (its folder's IsDisabled flag
-    /// depends on player state EcsContext.Update can change -- see InventoryFolderController.Update
-    /// -- so it belongs here, after simulation, not in PreSimulationUpdate) -- deliberately run
-    /// after GameLoop's own EcsContext.Update, so windows reflect this frame's simulation results
-    /// rather than last frame's.
+    /// The window tree's own per-frame Update, plus Inventory's/AbilityScore's own (their button's
+    /// Enabled state depends on player state EcsContext.Update can change -- see
+    /// InventoryWindowController.Update/AbilityScoreWindowController.Update -- so it belongs here,
+    /// after simulation, not in PreSimulationUpdate) -- deliberately run after GameLoop's own
+    /// EcsContext.Update, so windows reflect this frame's simulation results rather than last
+    /// frame's.
     /// </summary>
     public void Update(GameTime gameTime)
     {
         Inventory.Update(gameTime);
+        AbilityScore.Update(gameTime);
 
         foreach (var layer in UiLayerStack.LayersAscending())
         {
@@ -599,7 +627,7 @@ public sealed record ShellContext(
         }
     }
 
-    /// <summary>Drawn bottom-to-top, UiLayer's own declaration order -- see its doc comment for what each tier holds. User (topmost) draws last and unconditionally, so drag feedback is never occluded by whatever it's passing over on its way to a drop target. A dim overlay is drawn immediately beneath Layers.BottommostMenuWindow, if menu mode is currently active -- see UiLayerStack's own doc comment on OpenMenuWindow/CloseMenuWindow. Every element UiLayerStack.IsMenuModeExempt opted in (the hotbar, the Notification/Inventory folder tiles) is pulled out of its ordinary draw slot and redrawn immediately above that same dim quad instead (see FindMenuModeExemptElements) -- they stay reachable for input while menu mode is active (UiInputController.TryHitTestInteraction), so they need to read as visually usable too, not look identical to the rest of the dimmed HUD.</summary>
+    /// <summary>Drawn bottom-to-top, UiLayer's own declaration order -- see its doc comment for what each tier holds. User (topmost) draws last and unconditionally, so drag feedback is never occluded by whatever it's passing over on its way to a drop target. A dim overlay is drawn immediately beneath Layers.BottommostMenuWindow, if menu mode is currently active -- see UiLayerStack's own doc comment on OpenMenuWindow/CloseMenuWindow. Every element UiLayerStack.IsMenuModeExempt opted in (the hotbar, the Notification folder, the Health/Inventory/Ability Score buttons) is pulled out of its ordinary draw slot and redrawn immediately above that same dim quad instead (see FindMenuModeExemptElements) -- they stay reachable for input while menu mode is active (UiInputController.TryHitTestInteraction), so they need to read as visually usable too, not look identical to the rest of the dimmed HUD.</summary>
     public void Draw(GameTime gameTime)
     {
         _bottommostMenuWindow = Layers.BottommostMenuWindow;

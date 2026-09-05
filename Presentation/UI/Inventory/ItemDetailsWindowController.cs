@@ -10,11 +10,11 @@ namespace Presentation.UI.Inventory;
 /// <summary>
 /// Owns the single, persistent Item Details window -- shows whatever item stack was last clicked
 /// in either the player's own inventory grid or an open secondary/corpse grid (see
-/// InventoryFolderController.OnItemSelected/SecondaryInventoryWindowController.OnItemSelected,
+/// InventoryWindowController.OnItemSelected/SecondaryInventoryWindowController.OnItemSelected,
 /// both wired here by ShellBootstrapper). Clicking a different item updates this same window in
 /// place rather than opening a second one -- mirrors SecondaryInventoryWindowController's own
 /// "one target at a time" shape, but for item selection instead of a loot target. Always opens
-/// next to the player's own InventoryManagementWindow (InventoryFolderController.PlayerInventoryWindow),
+/// next to the player's own InventoryManagementWindow (InventoryWindowController.PlayerInventoryWindow),
 /// even when the click that opened it came from a secondary/corpse grid -- matches the literal
 /// "next to the Inventory Menu" spec rather than whichever grid happened to be clicked. Also
 /// drives MapViewState.SelectedItemStackInstanceId, which InventoryGridContent and HotbarContent
@@ -24,7 +24,7 @@ public sealed class ItemDetailsWindowController(
     ElementPoolService elementPoolService,
     ComponentManager componentManager,
     ItemCatalog itemCatalog,
-    InventoryFolderController inventoryFolderController,
+    InventoryWindowController inventoryWindowController,
     ContextMenuController contextMenuController,
     MapViewState mapViewState,
     MapWindow mapWindow)
@@ -46,7 +46,7 @@ public sealed class ItemDetailsWindowController(
 
     public Guid? CurrentStackInstanceId { get; private set; }
 
-    /// <summary>Settable late-bound query for the currently-open secondary/corpse inventory window's own bounds, if any -- wired by ShellBootstrapper to SecondaryInventoryWindowController.Rectangle once that controller exists (built after this one -- same construction-order reason InventoryFolderController.GetSecondaryTargetEntityId is wired the same way). Rectangle.Empty (never "inside"), not null, when nothing is open or this is never wired (e.g. test setups).</summary>
+    /// <summary>Settable late-bound query for the currently-open secondary/corpse inventory window's own bounds, if any -- wired by ShellBootstrapper to SecondaryInventoryWindowController.Rectangle once that controller exists (built after this one -- same construction-order reason InventoryWindowController.GetSecondaryTargetEntityId is wired the same way). Rectangle.Empty (never "inside"), not null, when nothing is open or this is never wired (e.g. test setups).</summary>
     public Func<Rectangle>? GetSecondaryInventoryWindowRectangle { get; set; }
 
     /// <summary>Settable late-bound query for every currently-open Item Details Comparison column's own bounds -- without this, a click on a comparison column would look "outside" this window and wrongly close it, since IsOutsideClick has no other way to know those windows exist.</summary>
@@ -73,7 +73,7 @@ public sealed class ItemDetailsWindowController(
             return false;
         }
 
-        if (inventoryFolderController.PlayerInventoryWindow is { } playerWindow && playerWindow.Rectangle.Contains(clickPosition))
+        if (inventoryWindowController.PlayerInventoryWindow is { } playerWindow && playerWindow.Rectangle.Contains(clickPosition))
         {
             return false;
         }
@@ -115,7 +115,7 @@ public sealed class ItemDetailsWindowController(
             return;
         }
 
-        if (inventoryFolderController.PlayerInventoryWindow is not { } playerWindow)
+        if (inventoryWindowController.PlayerInventoryWindow is not { } playerWindow)
         {
             return;
         }
@@ -196,7 +196,7 @@ public sealed class ItemDetailsWindowController(
     public void UpdateComparedAgainst(IReadOnlyList<ItemDefinition> comparedAgainst)
     {
         if (_window is not { } window || CurrentDefinition is not { } definition || CurrentEntityId is not { } entityId ||
-            CurrentStackInstanceId is not { } stackInstanceId || inventoryFolderController.PlayerInventoryWindow is not { } playerWindow)
+            CurrentStackInstanceId is not { } stackInstanceId || inventoryWindowController.PlayerInventoryWindow is not { } playerWindow)
         {
             return;
         }

@@ -343,6 +343,31 @@ exists yet to swap on. Once one does, reroll a shop's stock (`ShopStock.GrantRan
 shop the player has drained doesn't stay unable to buy anything forever. Today a shop's stock is
 rolled once at spawn and never refreshes.
 
+#### Preferred stock for items added to shops
+
+`ShopStockPreferenceComponent`/`EnsurePreferredStockLevel` (`PLAN-stock-based-shop-pricing.md`) is
+only ever assigned by `ShopStock.GrantRandomStock` at spawn-time stocking. A player selling a shop an
+item type it has never stocked before -- via ordinary drag-sell today, or the trade window once it
+lands -- silently falls back to `ShopStockPricing.DefaultPreferredStockLevel` (20) regardless of what
+the item actually is, rather than a hand-tuned value the way spawn-stocked items get. Give a sold-in
+item type a sensible preferred level the first time it lands in a shop that's never carried it (a flat
+default scaled off the sold quantity, an item-tag-based table, or similar) instead of always silently
+defaulting to 20.
+
+#### CVS (Cosmic Value Shop) general store
+
+A "General Store" shop blueprint themed as a CVS ("Cosmic Value Shop") parody -- larger than average
+buy/sell margins vs. a normal `GeneralShop`. First use grants an achievement whose reward is a "CVS
+Receipt" item, its description text unusually long and generated from the actual items/currency
+traded that session (the joke being real CVS receipts). Also enrolls the player in a newsletter
+delivered via floor mail each floor -- needs floor mail as a delivery channel (no mail system exists
+yet) and depends on achievement rewards being deliverable (see Lootbox delivery above, mostly landed).
+
+Also add a CVS Rewards currency, worth 10% of a Gold in trades (`ShopActions` pricing math would need
+a real conversion-rate concept, not just another flat `CurrencyType` enum value). Blocked on making
+`CurrencyRowContent` support more than its current hardcoded Gold/Credits pair -- it needs to become a
+dynamic/expandable list before a third currency can show up in it at all.
+
 #### Crawler TV show
 
 Interacting with a television object at specific times of day plays an in-universe "show" -- flavor
@@ -432,24 +457,63 @@ min/max should only ever narrow that global range, never escape it -- needs vali
 whichever point an element's own min/max gets set, so a caller can't accidentally configure one outside
 the global bounds.
 
-#### Split InventoryFolderController into InventoryController, FolderController, AbilityScoreController
-
-Currently owns the folder/tile shell + opening/closing both `InventoryManagementWindow` and
-`AbilityScoreWindow` at once. Split into three classes; `SecondaryInventoryWindowController` depends on
-`OpenInventoryWindow()`/`PlayerInventoryWindow` moving to the new `InventoryController`. Alongside:
-change hover to open the folder, click to pin it open (today a click is the only way in).
-
 #### Inventory management -- grid cell reorder still open
 
 Read-only view, tabs, drag-onto-hotbar, and click-to-inspect all landed (`IMPLEMENTATION-NOTES.md`).
 Still open: dragging one grid cell onto another to reorder -- blocked on Standard widget set below.
 
-#### Manual stack splitting and merging
+#### Consolidate all tooltips into a single global tooltip
 
-Player-initiated (shift-drag to peel a chosen quantity; drag onto a compatible stack to merge) --
-distinct from the automatic exact-match splitting/merging that already exists. Blocked on grid
-drag-to-reorder (above) and a quantity-prompt UI (needs Context menu / mouse button coverage's
-remaining scope).
+Every hover-popup consumer today creates its own dedicated `Tooltip` instance and self-polls
+`Mouse.GetState()` independently to decide when to show/hide it -- `InventoryWindowController`'s
+and `AbilityScoreWindowController`'s own, `ShopWindowController`'s own,
+`SecondaryInventoryWindowController`'s own, `HotbarController`'s Armed Hotkey Summary popup, and now
+`TradeWindowController`'s `_playerColumnHoverPopup`/`_shopColumnHoverPopup` -- one dedicated instance
+per independently-polling grid, no exceptions anywhere in the codebase. This isn't just instance
+sprawl: sharing one `Tooltip` between two simultaneously-open, independently-polling consumers is an
+active bug, not just wasteful, confirmed live in the trade window (see its own "Fixes since first
+landed" in `PLAN-trade-window.md`) -- whichever consumer's own `Update` happens to run later in a
+given frame calls `Hide()`/`ShowNear()` last and wins, silently stomping the other's decision, with
+no coordination between them at all. Since only one thing can ever be hovered by the mouse at once,
+a single global tooltip -- owned by a central arbiter that decides which one grid (if any) is "the"
+hovered one this frame and routes its content there -- would need only one instance ever, system-wide,
+and structurally could not reproduce this race. This is a real rewrite of the hover model across
+every current consumer (self-polling replaced by a shared arbiter, likely living in or alongside
+`UiInputController`), not a small patch -- scoped as its own item rather than folded into whatever
+feature next needs a hover popup.
+
+#### Stack Controls and Partial Stacks
+
+Supersedes the former "Manual stack splitting and merging" entry -- broader scope. Today every
+stack-moving interaction (mouse drag, context menu Give/Take/Sell/Buy, the trade window's Add/Remove)
+is all-or-nothing: the whole stack moves or none of it. Needs a single, consistent control scheme --
+across both mouse actions (drag gestures, modifier keys) and context-menu options -- covering all
+three: move the whole stack, move half (rounded down), and move a player-chosen exact amount (a
+quantity-prompt UI, still not built). Whatever scheme is chosen must work identically in *any* item
+grid (player inventory, corpse/chest loot, shop, trade window), not be special-cased per window.
+Splitting also needs a real primitive: peeling part of a stack off into a new, separate stack instead
+of only being able to move a stack as a whole. And the reverse -- combining two stacks of the same
+item (respecting divergence: only stacks with equivalent Override/IsDivergent state can merge, per
+`InventoryActions.AreEquivalentOverrides`) into one, which today only happens automatically as a
+side effect of `AddItem`/`AddItemWithOverride`'s own capacity-driven merging, never player-initiated.
+Investigate how other games solve this (Minecraft's right-click-half/right-click-drag-spread and
+shift-click quick-transfer; WoW's vendor shift-click quantity popup; Path of Exile's shift-click-drag
+quantity slider) before settling on this game's own scheme -- see the industry-standard interface
+investigation in this session's transcript for a starting comparison. Blocked on grid drag-to-reorder
+(above) and a quantity-prompt UI (needs Context menu / mouse button coverage's remaining scope).
+
+#### Fix Compare in shop mode
+
+`InventoryGridContent.UpdateCompareState` makes shop mode and Compare mode mutually exclusive by
+design -- while a shop is open, every cell's `CompareState` reflects shop trade eligibility instead of
+compare eligibility, on the reasoning that the two "never both meaningfully active." In practice nothing
+actually disarms `ItemComparisonController`/clears `MapViewState.CompareRequiredActivatorType` when a
+shop opens, so a player who armed Compare right before (or manages to arm it while a shop is open, since
+`BuildItemContextMenu`'s "Compare" option is offered unconditionally in shop mode) ends up with Compare
+still armed but every cell showing shop pricing/eligibility instead of compare highlighting -- a real
+functional inconsistency, not just a cosmetic one, since the player has no visual cue for what a click
+will actually do. Fix by either disarming Compare when a shop opens, or suppressing/graying the
+"Compare" context-menu option while shop mode is active, whichever reads more predictably to the player.
 
 #### Equipped-item comparison
 
@@ -522,6 +586,27 @@ future Magic Menu; (2) right-click context menus (arm/drop/inspect) on cells in 
 Context menu coverage's remaining scope; (3) click-to-arm/cast directly from a menu cell -- today only
 the hotbar can arm an action/item.
 
+#### Extract UiInputController.ResolveContentDrag's drag-drop resolution into something self-contained
+
+`ResolveContentDrag` (`Presentation/Input/UiInputController.cs`) is the single dispatch point every
+content-drag release goes through -- item stack, Merged Stack, action, and currency drags alike -- and
+it's grown a new branch with every drop-target-aware feature added so far: plain inventory-to-inventory
+transfer, shop buy/sell (`ShopActions.TryBuyFromShop`/`TrySellToShop`), hotbar binding, and now the whole
+trade window, which needed two more dedicated methods on this same class
+(`ResolveTradeAwareItemDrag`/`ResolveTradeAwareCurrencyDrag`) just to hold PLAN-trade-window.md's own
+drag-drop eligibility table. Each of those methods already encodes another feature's business rules
+(shop pricing eligibility, trade eligibility per column, hotbar bind rules) directly inside the input
+layer, rather than that feature owning its own drag-resolution logic -- `UiInputController` has to know
+about `ShopActions`/trade-offer entities/hotbar slots all at once instead of just recognizing "a drag
+ended here" and asking someone else what that means. The next drop-target-aware feature (Magic Menu,
+Equipment slots, grid cell reorder) will add yet another branch/method here rather than being
+self-contained. Needs a real design pass, not a mechanical split: something like a pluggable per-
+drop-target-kind resolver that `ResolveContentDrag` looks up and delegates to, so each feature registers
+its own drag-resolution strategy instead of `UiInputController` accumulating every feature's rules
+inline. Scope the design before touching code -- this method is load-bearing (every stack/currency/
+action move in the game routes through it) and already has real regression coverage
+(`UiInputControllerTests.cs`) that any refactor must keep passing.
+
 ### Medium Priority
 
 #### TextDivider label clipping and right-line spacing
@@ -567,7 +652,7 @@ scale) visibility store, keyed like `AuraGrid`/`MapTintGrid`'s flat-index dictio
 
 #### Magic Menu
 
-Spell-equivalent of the inventory menu, mirroring `InventoryFolderController`'s Folder+pooled-Window+
+Spell-equivalent of the inventory menu, mirroring `InventoryWindowController`'s Button+pooled-Window+
 `TabbedContent` pattern. "Known spells" isn't a tracked concept -- just a `MultiComponentPool<ActionInstanceComponent>`
 query filtered by `Tag.Spell` (same drift risk as Tag.Spell above).
 

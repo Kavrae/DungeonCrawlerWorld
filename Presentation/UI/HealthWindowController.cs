@@ -8,12 +8,11 @@ using Presentation.UI.ColorPalettes;
 namespace Presentation.UI;
 
 /// <summary>
-/// Owns the Health button and the HealthWindow it opens/closes -- the single-button counterpart
-/// to InventoryFolderController's Folder+two-window shape (see that class's own doc comment for
-/// why it's scoped to just Inventory/Ability Score): Health is a sibling trigger, not a third
-/// Folder tile, so it gets its own minimal controller instead of growing InventoryFolderController
-/// past its own stated scope. A plain Button, not a Folder -- there's only ever one thing to open,
-/// so there's nothing to expand into.
+/// Owns the Health button and the HealthWindow it opens/closes -- the original template for the
+/// single-button-per-window shape InventoryWindowController and AbilityScoreWindowController now
+/// both follow too (Folders have been proven out and removed from both -- see
+/// InventoryWindowController's own doc comment). A plain Button, not a Folder -- there's only
+/// ever one thing to open, so there's nothing to expand into.
 /// </summary>
 public sealed class HealthWindowController(
     ElementPoolService elementPoolService,
@@ -42,7 +41,7 @@ public sealed class HealthWindowController(
         _button.Clicked += _ => _slot.Toggle();
         layers.Add(UiLayer.DynamicHud, _button);
 
-        // Same reasoning as InventoryFolderController's own folder tile -- opening the Health
+        // Same reasoning as InventoryWindowController's own button -- opening the Health
         // window from this button while another menu window is already open is a normal part of
         // the workflow menu mode exists to support, not something it should block (see
         // UiLayerStack.MarkMenuModeExempt's own doc comment).

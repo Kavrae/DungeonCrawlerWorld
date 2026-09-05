@@ -113,6 +113,13 @@ so a shop reads better as a scannable vertical list than a wide grid.
 (`AchievementTriggerContext.SubscribeUntilTriggered`), `Lootbox: null`/`RewardText: ""` (temporary,
 per the original ask).
 
+**Updated (Trade Window, iteration 3):** `GoldGivenToShopEvent` publishing moved into one shared
+chokepoint, `ShopActions.TryGiveCurrencyToShop` -- originally only `CurrencyRowContent`'s own
+context-menu Give/Give All published it (confirmed live gap). Every "give currency to a shop"
+gesture now routes through it: the context menu, a direct currency drag dropped straight onto a
+shop, and completing a trade whose player side offers Gold (with or without items). See
+`PLAN-trade-window.md`'s own "Currency footer" section for the fix's full detail.
+
 ## Live-testing fixes
 
 Several bugs only surfaced once the feature was actually running:

@@ -134,7 +134,7 @@ public sealed class CurrencyRowContentTests
     }
 
     [TestMethod]
-    public void RightClickPlayerRow_SecondaryTargetIsShop_OffersGiveButNotTake()
+    public void RightClickPlayerRow_SecondaryTargetIsShop_OffersOnlyGiveAllNotGiveOrTake()
     {
         var (goldElement, componentManager, contextMenuController) = BuildForGiveTake(PlayerEntityId, ShopEntityId);
         componentManager.Merge(ShopEntityId, new ShopComponent(allowedTags: null, buyMultiplier: 1.2f, sellMultiplier: 0.8f));
@@ -143,8 +143,10 @@ public sealed class CurrencyRowContentTests
 
         Assert.IsTrue(contextMenuController.IsOpen);
         var labels = contextMenuController.Menu.ChildElements.OfType<Button>().Select(button => button.LeftText).ToList();
-        CollectionAssert.Contains(labels, "Give");
+        CollectionAssert.DoesNotContain(labels, "Give", "A shop only ever offers \"Give All\" -- see CurrencyRowContent.BuildCurrencyContextMenu's own ShopComponent check.");
         CollectionAssert.Contains(labels, "Give All");
+        CollectionAssert.DoesNotContain(labels, "Take");
+        CollectionAssert.DoesNotContain(labels, "Take All");
     }
 
     [TestMethod]
@@ -159,7 +161,7 @@ public sealed class CurrencyRowContentTests
     }
 
     [TestMethod]
-    public void GiveGoldToShop_PublishesGoldGivenToShopEventWithTheAmountGiven()
+    public void GiveAllGoldToShop_PublishesGoldGivenToShopEventWithTheAmountGiven()
     {
         var eventBus = new EventBus();
         var (goldElement, componentManager, contextMenuController) = BuildForGiveTake(PlayerEntityId, ShopEntityId, eventBus);
@@ -170,14 +172,14 @@ public sealed class CurrencyRowContentTests
         eventBus.Subscribe<GoldGivenToShopEvent>(e => published = e);
 
         goldElement.OnRightClicked!.Invoke(Point.Zero);
-        var giveButton = contextMenuController.Menu.ChildElements.OfType<Button>().Single(button => button.LeftText == "Give");
-        contextMenuController.Menu.HandleClick(giveButton.Rectangle.Center);
+        var giveAllButton = contextMenuController.Menu.ChildElements.OfType<Button>().Single(button => button.LeftText == "Give All");
+        contextMenuController.Menu.HandleClick(giveAllButton.Rectangle.Center);
 
         Assert.IsNotNull(published);
         Assert.AreEqual(PlayerEntityId, published!.Value.PlayerEntityId);
         Assert.AreEqual(ShopEntityId, published.Value.ShopEntityId);
         Assert.AreEqual(42, published.Value.Amount);
-        Assert.AreEqual(0, componentManager.GetPackedPool<CurrencyComponent>().GetReadonly(PlayerEntityId).Gold, "The whole balance moved -- Give (not Give All) still moves the entire Gold amount today, see CurrencyActions.TryTransfer's own doc comment.");
+        Assert.AreEqual(0, componentManager.GetPackedPool<CurrencyComponent>().GetReadonly(PlayerEntityId).Gold, "The whole Gold balance moved -- a shop only ever offers Give All (see BuildCurrencyContextMenu's own ShopComponent check), which still moves the entire amount per currency type, same as CurrencyActions.TryTransfer's own doc comment.");
     }
 
     [TestMethod]

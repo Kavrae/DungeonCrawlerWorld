@@ -19,10 +19,10 @@ namespace Presentation.UI.AbilityScores;
 /// centered name/total header (non-scrolling) above an independently-scrolling list of
 /// "Base : N" plus each active modifier (see AbilityScoreModifierFormatter). Builds its own
 /// children directly via AddChild -- no
-/// IElementContent/TabbedContent needed, since there's nothing to tab between (mirrors how
-/// Folder.Initialize builds its own tiles directly). Created fresh by InventoryFolderController
-/// each time it's opened and returned to ElementPoolService's pool on close, same lifecycle as
-/// InventoryManagementWindow. Also self-polls Mouse.GetState() every Update (see UpdateHover),
+/// IElementContent/TabbedContent needed, since there's nothing to tab between. Created fresh by
+/// AbilityScoreWindowController each time it's opened and returned to ElementPoolService's pool
+/// on close, same lifecycle as InventoryManagementWindow. Also self-polls Mouse.GetState() every
+/// Update (see UpdateHover),
 /// the same idiom MapWindow uses for its own tile hover, to drive a header/modifier-row hover
 /// popup -- kept self-contained here rather than routed through UiInputController since nothing
 /// else needs to know about it.
@@ -69,7 +69,7 @@ public sealed class AbilityScoreWindow(FontService fontService, ElementPoolServi
     /// <summary>Mirrors GlobalState.IsAdminModeOn as of the last BuildColumns -- Update rebuilds (not just refreshes) whenever this goes stale, since toggling admin mode changes the column *count*, not just their contents.</summary>
     private bool _lastAdminModeOn;
 
-    /// <summary>Just records entityId/the shared popup -- must be called after CreateElement but before Initialize, same contract as InventoryManagementWindow.Configure. Column-building itself waits for Initialize (see its own doc comment for why). hoverPopup is owned by InventoryFolderController (created once, top-level, shared across opens) rather than a child of this window -- see Tooltip's own doc comment for why a nested child can't work here.</summary>
+    /// <summary>Just records entityId/the shared popup -- must be called after CreateElement but before Initialize, same contract as InventoryManagementWindow.Configure. Column-building itself waits for Initialize (see its own doc comment for why). hoverPopup is owned by AbilityScoreWindowController (created once, top-level, shared across opens) rather than a child of this window -- see Tooltip's own doc comment for why a nested child can't work here.</summary>
     public void Configure(int entityId, Tooltip hoverPopup)
     {
         _entityId = entityId;
@@ -258,7 +258,7 @@ public sealed class AbilityScoreWindow(FontService fontService, ElementPoolServi
         SetSize(new Vector2(targetOuterWidth, CurrentSize.Y));
 
         // A window that grows to the right could otherwise end up partly off-screen -- the same
-        // clamp InventoryFolderController's own initial placement already applies.
+        // clamp AbilityScoreWindowController's own initial placement already applies.
         var screenBounds = elementPoolService.GraphicsDevice.Viewport.Bounds;
         SetRelativePosition(ScreenBoundsClamp.Clamp(RelativePosition, CurrentSize, new Vector2(screenBounds.Width, screenBounds.Height)));
     }

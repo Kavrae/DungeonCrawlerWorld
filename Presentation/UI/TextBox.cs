@@ -853,7 +853,7 @@ public sealed class TextBox(FontService fontService, ElementPoolService elementP
             // does, rather than assuming every ghost-text box is single-line. No caret to draw
             // here either way -- ghost text only shows while unfocused.
             var origin = RequiresContentViewport ? Vector2.Zero : ContentAbsolutePosition;
-            spriteBatch.DrawString(ContentFont, GhostText, origin + new Vector2(LinePadding, LinePadding), GhostTextColor);
+            LabelRenderer.Draw(spriteBatch, ContentFont, GhostText, origin + new Vector2(LinePadding, LinePadding), GhostTextColor);
             return;
         }
 
@@ -867,7 +867,7 @@ public sealed class TextBox(FontService fontService, ElementPoolService elementP
         {
             var maximumWidth = _contentState.Size.X - ContentPadding.X * 2;
             var visibleText = GetVisibleWindowText(DisplayText.FormattedText, _visibleStartIndex, maximumWidth);
-            spriteBatch.DrawString(ContentFont, visibleText, ContentAbsolutePosition + new Vector2(LinePadding, LinePadding), TextColor);
+            LabelRenderer.Draw(spriteBatch, ContentFont, visibleText, ContentAbsolutePosition + new Vector2(LinePadding, LinePadding), TextColor);
         }
 
         DrawCaretIfFocused(spriteBatch, unitRectangle);

@@ -548,8 +548,8 @@ public class Element
             //
             // Root elements are deliberately NOT covered by this -- see
             // ShellContext.UpdateWindowLayer, which still calls Update on every root window
-            // regardless of IsVisible. This codebase's persistent Tooltip popups (AbilityScoreWindow's,
-            // InventoryFolderController's, HotbarController's Armed Hotkey Summary) are toggled
+            // regardless of IsVisible. This codebase's persistent Tooltip popups (AbilityScoreWindowController's,
+            // InventoryWindowController's, HotbarController's Armed Hotkey Summary) are toggled
             // via IsVisible while remaining in UiLayer.Tooltip's root list, but are driven
             // entirely externally now (whatever owns the hover state calls ShowNear/Hide
             // directly) -- their own Update is a harmless no-op regardless of visibility, not a
@@ -1143,7 +1143,7 @@ public class Element
     /// Arrange pass per call into a single pass when the returned scope is disposed -- the same
     /// problem SetBounds already solves for the narrower SetSize+SetRelativePosition case,
     /// generalized to any number of AddChild/RemoveChild calls (e.g. NotificationCenter building
-    /// one count window per category, InventoryFolderController building its tiles). Reentrant:
+    /// one count window per category). Reentrant:
     /// nested batches on the same element collapse into the outermost one, so a helper method
     /// that opens its own batch still composes correctly when called from within a caller's
     /// batch. Opt-in rather than automatic -- every AddChild/RemoveChild call outside a batch

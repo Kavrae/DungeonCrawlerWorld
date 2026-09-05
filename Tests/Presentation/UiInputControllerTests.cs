@@ -1,13 +1,17 @@
 ﻿using Engine.ECS.Components;
+using Engine.ECS.Components.Stores;
 using Engine.Events;
 using Engine.Math;
+using Game.Floors;
 using Game.Modules.Actions;
 using Game.Modules.Actions.Activators;
 using Game.Modules.Actions.Components;
 using Game.Modules.Core.Components;
 using Game.Modules.Inventory;
 using Game.Modules.Inventory.Components;
+using Game.Modules.Currency;
 using Game.Modules.Mana.Components;
+using Game.Modules.Shops;
 using Game.World;
 using Microsoft.Xna.Framework;
 using Microsoft.Xna.Framework.Graphics;
@@ -58,7 +62,7 @@ public sealed class UiInputControllerTests
     /// </summary>
     private static UiInputController CreateController(
         IReadOnlyList<Element> baseElements, IReadOnlyList<Element> staticHudElements, IReadOnlyList<Element> dynamicHudElements, IReadOnlyList<Element> userElements,
-        Vector2 screenSize, HotbarController? hotbarController = null, ComponentManager? componentManager = null, IPlayerQuery? playerQuery = null, ItemCatalog? itemCatalog = null, MapViewState? mapViewState = null)
+        Vector2 screenSize, HotbarController? hotbarController = null, ComponentManager? componentManager = null, IPlayerQuery? playerQuery = null, ItemCatalog? itemCatalog = null, MapViewState? mapViewState = null, EventBus? eventBus = null)
     {
         var layers = new UiLayerStack();
         foreach (var element in baseElements)
@@ -77,7 +81,7 @@ public sealed class UiInputControllerTests
         {
             layers.Add(UiLayer.User, element);
         }
-        return new UiInputController(layers, screenSize, hotbarController, componentManager, playerQuery, itemCatalog: itemCatalog, mapViewState: mapViewState);
+        return new UiInputController(layers, screenSize, hotbarController, componentManager, playerQuery, itemCatalog: itemCatalog, mapViewState: mapViewState, eventBus: eventBus);
     }
 
     /// <summary>Records HandleRightDragStart/HandleRightDrag calls, so UiInputController's right-button wiring (hit-test on press, total-delta-since-start on every held frame) can be verified end-to-end without a real MapWindow.</summary>
@@ -2172,7 +2176,7 @@ public sealed class UiInputControllerTests
             Layout = new ElementLayoutOptions { RelativePosition = new Vector2(0, 0), Size = new Vector2(24, 24), DisplayMode = ElementDisplayMode.Fixed },
             Chrome = new ElementChromeOptions { ShowBorder = true, CanUserFocus = false },
         });
-        cell.Configure(playerEntityId, itemId, stackInstanceId, null, "t", Color.White, quantity: 1, chargeText: null, isDisabled: false, isDivergent: false, mergedStackBadgeVisible: false, cellSize: new Vector2(24, 24));
+        cell.Configure(playerEntityId, itemId, stackInstanceId, null, "t", Color.White, quantity: 1, isDisabled: false, isDivergent: false, mergedStackBadgeVisible: false, cellSize: new Vector2(24, 24));
         cell.Initialize();
 
         var hotbar = new HotbarContent(
@@ -2223,7 +2227,7 @@ public sealed class UiInputControllerTests
             Layout = new ElementLayoutOptions { RelativePosition = new Vector2(0, 0), Size = new Vector2(24, 24), DisplayMode = ElementDisplayMode.Fixed },
             Chrome = new ElementChromeOptions { ShowBorder = true, CanUserFocus = false },
         });
-        cell.Configure(corpseEntityId, itemId, stackInstanceId, null, "t", Color.White, quantity: 1, chargeText: null, isDisabled: false, isDivergent: false, mergedStackBadgeVisible: false, cellSize: new Vector2(24, 24));
+        cell.Configure(corpseEntityId, itemId, stackInstanceId, null, "t", Color.White, quantity: 1, isDisabled: false, isDivergent: false, mergedStackBadgeVisible: false, cellSize: new Vector2(24, 24));
         cell.Initialize();
 
         var hotbar = new HotbarContent(
@@ -2658,6 +2662,556 @@ public sealed class UiInputControllerTests
 
         Assert.AreEqual(InventoryGridContent.CellSize.Y, controller.ContentDragSourceSize.X, "The drag ghost must stay a square icon at the cell's own height, not stretch to its 4x width.");
         Assert.AreEqual(InventoryGridContent.CellSize.Y, controller.ContentDragSourceSize.Y);
+    }
+
+    /// <summary>
+    /// Four grid windows -- real player inventory, real shop, and the trade window's own two
+    /// reserved trade-offer entities (see MapViewState.ReservedEntityIds.TradeOfferPlayerEntityId/
+    /// TradeOfferShopEntityId) -- for exercising UiInputController.ResolveTradeAwareItemDrag's
+    /// own eligibility rules (PLAN-trade-window.md's "Drag-drop eligibility" table). Both trade
+    /// columns start already holding one unit of potionItemId, as if a prior "add to trade" drag
+    /// had already staged it there, so the remove-from-trade/direct-sell/direct-buy tests below
+    /// have something to move back out; the real player/shop grids start with none at all, so a
+    /// test needing one there calls SeedPotion itself right before dragging -- letting the base
+    /// harness pre-seed those too would skew ShopStockPricing's stock-band math for the direct-
+    /// sell/direct-buy price assertions (an extra unit already sitting on the shop shifts which
+    /// band a sale/purchase prices against). Both the player and the shop start with 1000 Gold --
+    /// comfortably affording a sale in either direction, so UpdateShopEligibilityState never marks
+    /// a cell Ineligible for being unaffordable and TryStartContentDrag's own "can't drag what you
+    /// can't trade" gate never spuriously blocks a drag this harness needs to actually start.
+    /// world (an IPlayerQuery, PlayerEntityId == playerEntityId) is returned as playerQuery -- the
+    /// composed direct-sell/direct-buy branches need a real IPlayerQuery to resolve the trade-
+    /// player column back to an actual player entity id, unlike BuildShopDragHarness's tests,
+    /// which never wire one at all.
+    /// </summary>
+    private static (Window PlayerGridWindow, Window ShopGridWindow, Window TradePlayerGridWindow, Window TradeShopGridWindow, ComponentManager ComponentManager, MapViewState MapViewState, ItemCatalog ItemCatalog, IPlayerQuery World, Guid PotionItemId, int PlayerEntityId, int ShopEntityId, int TradePlayerEntityId, int TradeShopEntityId) BuildTradeDragHarness()
+    {
+        const int playerEntityId = 1;
+        const int shopEntityId = 2;
+        const int tradePlayerEntityId = 3;
+        const int tradeShopEntityId = 4;
+
+        var componentManager = new ComponentManager(initialEntityCapacity: 20, initialComponentCapacity: 20);
+        componentManager.RegisterMultiPool<InventoryItemStackComponent>();
+        componentManager.RegisterPackedPool<InventoryComponent>(static (ref existing, incoming) => existing = incoming);
+        componentManager.RegisterPackedPool<Game.Modules.Shops.Components.ShopComponent>(static (ref existing, incoming) => existing = incoming);
+        componentManager.RegisterMultiPool<Game.Modules.Shops.Components.ShopStockPreferenceComponent>();
+        componentManager.RegisterPackedPool<Game.Modules.Currency.Components.CurrencyComponent>(static (ref existing, incoming) => existing = incoming);
+
+        var potionItemId = Guid.NewGuid();
+        var itemCatalog = new ItemCatalog();
+        itemCatalog.Register(new ItemDefinition(potionItemId, "Test Potion", null, "p", Color.White, Tags: [Game.Modules.Tag.Potion], Effects: [], GoldValue: 10));
+
+        InventoryActions.AddItem(componentManager, tradePlayerEntityId, potionItemId, quantity: 1);
+        InventoryActions.AddItem(componentManager, tradeShopEntityId, potionItemId, quantity: 1);
+
+        componentManager.Merge(shopEntityId, new Game.Modules.Shops.Components.ShopComponent(allowedTags: [Game.Modules.Tag.Potion], buyMultiplier: 1.10f, sellMultiplier: 0.90f));
+        componentManager.GetMultiPool<Game.Modules.Shops.Components.ShopStockPreferenceComponent>().Add(shopEntityId, new Game.Modules.Shops.Components.ShopStockPreferenceComponent(potionItemId, preferredStockLevel: 0));
+        componentManager.Merge(shopEntityId, new Game.Modules.Currency.Components.CurrencyComponent(gold: 1000, credits: 0));
+        componentManager.Merge(playerEntityId, new Game.Modules.Currency.Components.CurrencyComponent(gold: 1000, credits: 0));
+        componentManager.Merge(tradePlayerEntityId, new Game.Modules.Currency.Components.CurrencyComponent(gold: 0, credits: 0));
+        componentManager.Merge(tradeShopEntityId, new Game.Modules.Currency.Components.CurrencyComponent(gold: 0, credits: 0));
+
+        var fontService = TestFonts.Shared;
+        var labelRenderer = new LabelRenderer();
+        var windowService = TestElementPoolServiceFactory.Create(fontService, labelRenderer);
+        var spriteSheetService = new SpriteSheetService(null, "Spritesheets");
+        var spriteRenderer = new SpriteRenderer();
+        windowService.RegisterFactory<InventoryItemStackCell>(() => new InventoryItemStackCell(fontService, windowService, labelRenderer, spriteSheetService, spriteRenderer));
+        windowService.RegisterFactory<ShopItemStackCell>(() => new ShopItemStackCell(fontService, windowService, labelRenderer, spriteSheetService, spriteRenderer));
+        windowService.RegisterFactory<TradeItemStackCell>(() => new TradeItemStackCell(fontService, windowService, labelRenderer, spriteSheetService, spriteRenderer));
+        windowService.RegisterFactory<EmptyTradeSlotCell>(() => new EmptyTradeSlotCell(fontService, windowService, labelRenderer));
+        windowService.RegisterFactory<Tooltip>(() => new Tooltip(fontService, windowService, labelRenderer));
+        var hoverPopup = windowService.CreateElement<Tooltip>(null, new ElementOptions
+        {
+            Layout = new ElementLayoutOptions { RelativePosition = Vector2.Zero, MaximumSize = new Vector2(220, 220), DisplayMode = ElementDisplayMode.WrapContent, IsVisible = false },
+            Chrome = new ElementChromeOptions { ShowBorder = true, ShowTitle = true, CanUserFocus = false, CanUserClose = false },
+        });
+        hoverPopup.Initialize();
+
+        var world = new Game.World.World(new Game.World.Map(new Vector3Int(10, 10, 1))) { PlayerEntityId = playerEntityId };
+        var contextMenuController = TestElementPoolServiceFactory.CreateContextMenuController(windowService, new UiLayerStack());
+        var mapViewState = new MapViewState { OpenShopEntityId = shopEntityId, ReservedEntityIds = new ReservedEntityIds(tradePlayerEntityId, tradeShopEntityId) };
+
+        Window BuildGridWindow(int entityId, Vector2 position, bool? tradeGridIsShopSide)
+        {
+            var window = windowService.CreateElement<Window>(null, new ElementOptions
+            {
+                Hierarchy = new ElementHierarchyOptions { CanContainChildren = true },
+                Layout = new ElementLayoutOptions { RelativePosition = position, Size = new Vector2(200, 200), DisplayMode = ElementDisplayMode.Fixed },
+                Chrome = new ElementChromeOptions { ShowBorder = true, CanUserFocus = false },
+            });
+            window.SetContent(new InventoryGridContent(world, componentManager, itemCatalog, windowService, fontService, labelRenderer, spriteSheetService, spriteRenderer, contextMenuController, entityId, filterTag: null, hoverPopup, static () => null, mapViewState, static (_, _) => { }, static (_, _) => { }, tradeGridIsShopSide));
+            window.Initialize();
+            return window;
+        }
+
+        var playerGridWindow = BuildGridWindow(playerEntityId, new Vector2(0, 0), tradeGridIsShopSide: null);
+        var shopGridWindow = BuildGridWindow(shopEntityId, new Vector2(500, 0), tradeGridIsShopSide: null);
+        var tradePlayerGridWindow = BuildGridWindow(tradePlayerEntityId, new Vector2(1000, 0), tradeGridIsShopSide: false);
+        var tradeShopGridWindow = BuildGridWindow(tradeShopEntityId, new Vector2(1500, 0), tradeGridIsShopSide: true);
+
+        ((InventoryGridContent)playerGridWindow.Tag!).Update(new GameTime());
+        ((InventoryGridContent)shopGridWindow.Tag!).Update(new GameTime());
+        ((InventoryGridContent)tradePlayerGridWindow.Tag!).Update(new GameTime());
+        ((InventoryGridContent)tradeShopGridWindow.Tag!).Update(new GameTime());
+
+        return (playerGridWindow, shopGridWindow, tradePlayerGridWindow, tradeShopGridWindow, componentManager, mapViewState, itemCatalog, world, potionItemId, playerEntityId, shopEntityId, tradePlayerEntityId, tradeShopEntityId);
+    }
+
+    /// <summary>Adds one potionItemId unit directly to entityId's own inventory, then refreshes gridWindow's InventoryGridContent so the new cell actually exists before a test presses it -- RebuildCells only runs from Update, not as a side effect of InventoryActions.AddItem itself.</summary>
+    private static void SeedPotion(Window gridWindow, ComponentManager componentManager, int entityId, Guid potionItemId)
+    {
+        InventoryActions.AddItem(componentManager, entityId, potionItemId, quantity: 1);
+        ((InventoryGridContent)gridWindow.Tag!).Update(new GameTime());
+    }
+
+    /// <summary>Drags whatever single potionItemId cell exists in fromWindow onto toWindow's own content area, mirroring the press/drag/release sequence every other content-drag test in this file already uses.</summary>
+    private static void DragPotionCell(UiInputController controller, Window fromWindow, Window toWindow)
+    {
+        var cell = fromWindow.ChildElements.OfType<InventoryItemStackCell>().Single();
+        var pressPoint = cell.ContentRectangle.Center;
+        controller.Update(NoKeys, MouseAt(pressPoint.X, pressPoint.Y, ButtonState.Released));
+        controller.Update(NoKeys, MouseAt(pressPoint.X, pressPoint.Y, ButtonState.Pressed));
+
+        var dropPoint = toWindow.ContentRectangle.Center;
+        controller.Update(NoKeys, MouseAt(dropPoint.X, dropPoint.Y, ButtonState.Released));
+    }
+
+    [TestMethod]
+    public void Drag_PlayerInventoryToTradePlayerColumn_AddsToTradeAsAPlainTransfer()
+    {
+        var (playerGridWindow, shopGridWindow, tradePlayerGridWindow, tradeShopGridWindow, componentManager, mapViewState, itemCatalog, world, potionItemId, playerEntityId, shopEntityId, tradePlayerEntityId, tradeShopEntityId) = BuildTradeDragHarness();
+        SeedPotion(playerGridWindow, componentManager, playerEntityId, potionItemId);
+        var controller = CreateController([playerGridWindow, shopGridWindow, tradePlayerGridWindow, tradeShopGridWindow], [], [], [], LargeScreenSize, componentManager: componentManager, playerQuery: world, itemCatalog: itemCatalog, mapViewState: mapViewState);
+
+        DragPotionCell(controller, playerGridWindow, tradePlayerGridWindow);
+
+        var stacks = componentManager.GetMultiPool<InventoryItemStackComponent>();
+        Assert.IsFalse(InventoryQueries.TryGetStack(stacks, playerEntityId, potionItemId, out _));
+        Assert.AreEqual(2, CountStacksOfItem(stacks, tradePlayerEntityId, potionItemId), "The trade-player column already started with one unit -- this drag adds a second, separate stack.");
+        Assert.AreEqual(1000, componentManager.GetPackedPool<Game.Modules.Currency.Components.CurrencyComponent>().GetReadonly(playerEntityId).Gold, "No real transaction -- just staging a stack, no Gold should move.");
+    }
+
+    [TestMethod]
+    public void Drag_TradePlayerColumnToPlayerInventory_RemovesFromTradeAsAPlainTransfer()
+    {
+        var (playerGridWindow, _, tradePlayerGridWindow, tradeShopGridWindow, componentManager, mapViewState, itemCatalog, world, potionItemId, playerEntityId, _, tradePlayerEntityId, _) = BuildTradeDragHarness();
+        var controller = CreateController([playerGridWindow, tradePlayerGridWindow, tradeShopGridWindow], [], [], [], LargeScreenSize, componentManager: componentManager, playerQuery: world, itemCatalog: itemCatalog, mapViewState: mapViewState);
+
+        DragPotionCell(controller, tradePlayerGridWindow, playerGridWindow);
+
+        var stacks = componentManager.GetMultiPool<InventoryItemStackComponent>();
+        Assert.IsFalse(InventoryQueries.TryGetStack(stacks, tradePlayerEntityId, potionItemId, out _));
+        Assert.AreEqual(1, CountStacksOfItem(stacks, playerEntityId, potionItemId));
+        Assert.AreEqual(1000, componentManager.GetPackedPool<Game.Modules.Currency.Components.CurrencyComponent>().GetReadonly(playerEntityId).Gold, "No real transaction -- just unstaging a stack, no Gold should move.");
+    }
+
+    [TestMethod]
+    public void Drag_ShopGridToTradeShopColumn_AddsToTradeWithoutCharging()
+    {
+        var (_, shopGridWindow, tradePlayerGridWindow, tradeShopGridWindow, componentManager, mapViewState, itemCatalog, world, potionItemId, _, shopEntityId, _, tradeShopEntityId) = BuildTradeDragHarness();
+        SeedPotion(shopGridWindow, componentManager, shopEntityId, potionItemId);
+        var controller = CreateController([shopGridWindow, tradePlayerGridWindow, tradeShopGridWindow], [], [], [], LargeScreenSize, componentManager: componentManager, playerQuery: world, itemCatalog: itemCatalog, mapViewState: mapViewState);
+
+        DragPotionCell(controller, shopGridWindow, tradeShopGridWindow);
+
+        var stacks = componentManager.GetMultiPool<InventoryItemStackComponent>();
+        Assert.IsFalse(InventoryQueries.TryGetStack(stacks, shopEntityId, potionItemId, out _));
+        Assert.AreEqual(2, CountStacksOfItem(stacks, tradeShopEntityId, potionItemId));
+        Assert.AreEqual(1000, componentManager.GetPackedPool<Game.Modules.Currency.Components.CurrencyComponent>().GetReadonly(shopEntityId).Gold, "Offering stock for trade isn't a sale -- the shop's own starting Gold must be untouched.");
+    }
+
+    [TestMethod]
+    public void Drag_TradeShopColumnToShopGrid_RemovesFromTradeWithoutCharging()
+    {
+        var (_, shopGridWindow, tradePlayerGridWindow, tradeShopGridWindow, componentManager, mapViewState, itemCatalog, world, potionItemId, _, shopEntityId, _, tradeShopEntityId) = BuildTradeDragHarness();
+        var controller = CreateController([shopGridWindow, tradePlayerGridWindow, tradeShopGridWindow], [], [], [], LargeScreenSize, componentManager: componentManager, playerQuery: world, itemCatalog: itemCatalog, mapViewState: mapViewState);
+
+        DragPotionCell(controller, tradeShopGridWindow, shopGridWindow);
+
+        var stacks = componentManager.GetMultiPool<InventoryItemStackComponent>();
+        Assert.IsFalse(InventoryQueries.TryGetStack(stacks, tradeShopEntityId, potionItemId, out _));
+        Assert.AreEqual(1, CountStacksOfItem(stacks, shopEntityId, potionItemId));
+        Assert.AreEqual(1000, componentManager.GetPackedPool<Game.Modules.Currency.Components.CurrencyComponent>().GetReadonly(shopEntityId).Gold, "Withdrawing an unsold offer isn't a purchase -- the shop's own starting Gold must be untouched.");
+    }
+
+    [TestMethod]
+    public void Drag_TradePlayerColumnToShopGrid_DirectlySellsAtTheShopsPrice()
+    {
+        var (playerGridWindow, shopGridWindow, tradePlayerGridWindow, tradeShopGridWindow, componentManager, mapViewState, itemCatalog, world, potionItemId, playerEntityId, shopEntityId, tradePlayerEntityId, _) = BuildTradeDragHarness();
+        var controller = CreateController([playerGridWindow, shopGridWindow, tradePlayerGridWindow, tradeShopGridWindow], [], [], [], LargeScreenSize, componentManager: componentManager, playerQuery: world, itemCatalog: itemCatalog, mapViewState: mapViewState);
+
+        DragPotionCell(controller, tradePlayerGridWindow, shopGridWindow);
+
+        var stacks = componentManager.GetMultiPool<InventoryItemStackComponent>();
+        Assert.IsFalse(InventoryQueries.TryGetStack(stacks, tradePlayerEntityId, potionItemId, out _), "The stack must have left the trade column entirely -- not merely bounced back into it after a successful sale.");
+        Assert.AreEqual(1, CountStacksOfItem(stacks, shopEntityId, potionItemId));
+
+        var currencies = componentManager.GetPackedPool<Game.Modules.Currency.Components.CurrencyComponent>();
+        Assert.AreEqual(1009, currencies.GetReadonly(playerEntityId).Gold, "1000 starting Gold plus 9 (10 GoldValue * 0.90 SellMultiplier), paid to the real player, not the trade-offer entity.");
+        Assert.AreEqual(0, currencies.GetReadonly(tradePlayerEntityId).Gold, "The trade-offer entity's own Gold must stay untouched -- the sale pays the real player, not it.");
+    }
+
+    [TestMethod]
+    public void Drag_TradeShopColumnToPlayerInventory_DirectlyBuysAtTheShopsPrice()
+    {
+        var (playerGridWindow, shopGridWindow, tradePlayerGridWindow, tradeShopGridWindow, componentManager, mapViewState, itemCatalog, world, potionItemId, playerEntityId, shopEntityId, _, tradeShopEntityId) = BuildTradeDragHarness();
+        var controller = CreateController([playerGridWindow, shopGridWindow, tradePlayerGridWindow, tradeShopGridWindow], [], [], [], LargeScreenSize, componentManager: componentManager, playerQuery: world, itemCatalog: itemCatalog, mapViewState: mapViewState);
+
+        DragPotionCell(controller, tradeShopGridWindow, playerGridWindow);
+
+        var stacks = componentManager.GetMultiPool<InventoryItemStackComponent>();
+        Assert.IsFalse(InventoryQueries.TryGetStack(stacks, tradeShopEntityId, potionItemId, out _), "The stack must have left the trade column entirely -- not merely bounced back into it after a successful purchase.");
+        Assert.AreEqual(1, CountStacksOfItem(stacks, playerEntityId, potionItemId));
+
+        // Not the flat 11 (10 GoldValue * 1.10 BuyMultiplier) -- the composed direct-buy's own
+        // step 1 has already returned the stack to the real shop's inventory by the time
+        // ShopStockPricing prices the purchase (the same "still physically on the shop entity at
+        // pricing time" timing an ordinary Shop grid -> Player Inventory drag already has), so the
+        // shop's own current stock reads 1, not 0 -- and with preferredStockLevel 0 (see
+        // BuildTradeDragHarness's own ShopStockPreferenceComponent setup), any stock at all
+        // already reads as overstocked relative to preferred, pricing this purchase cheaper than
+        // the flat rate.
+        var currencies = componentManager.GetPackedPool<Game.Modules.Currency.Components.CurrencyComponent>();
+        Assert.AreEqual(994, currencies.GetReadonly(playerEntityId).Gold, "1000 starting Gold minus 6 -- see this test's own comment above for why it isn't the flat 11.");
+        Assert.AreEqual(0, currencies.GetReadonly(tradeShopEntityId).Gold, "The trade-offer entity's own Gold must stay untouched -- the purchase is paid by the real player.");
+    }
+
+    /// <summary>
+    /// A shop item the player can't currently afford (right tag, but insufficient Gold) reads
+    /// CompareState Ineligible (greyed out) and refuses a direct buy, exactly as before -- but must
+    /// still be draggable into the trade window to stage (InventoryItemStackCell.CanStageInTrade,
+    /// tag match only, ignores affordability). Confirmed live requirement: an unaffordable item can
+    /// still be offered up for trade (e.g. bartered against other items/Gold), it just can't be
+    /// bought outright yet.
+    /// </summary>
+    [TestMethod]
+    public void Drag_UnaffordableShopItem_CanStillBeStagedInTrade_ButNotDirectlyBought()
+    {
+        var (playerGridWindow, shopGridWindow, tradePlayerGridWindow, tradeShopGridWindow, componentManager, mapViewState, itemCatalog, world, potionItemId, playerEntityId, shopEntityId, _, tradeShopEntityId) = BuildTradeDragHarness();
+        // Gold set to 0 *before* SeedPotion -- SeedPotion's own Update() call recomputes shop
+        // eligibility against whatever Gold the player has at that moment, so this must land first.
+        componentManager.Merge(playerEntityId, new Game.Modules.Currency.Components.CurrencyComponent(gold: 0, credits: 0));
+        SeedPotion(shopGridWindow, componentManager, shopEntityId, potionItemId);
+        var controller = CreateController([playerGridWindow, shopGridWindow, tradePlayerGridWindow, tradeShopGridWindow], [], [], [], LargeScreenSize, componentManager: componentManager, playerQuery: world, itemCatalog: itemCatalog, mapViewState: mapViewState);
+
+        var shopCell = shopGridWindow.ChildElements.OfType<InventoryItemStackCell>().Single();
+        Assert.AreEqual(CellCompareState.Ineligible, shopCell.CompareState, "Sanity check: 0 Gold can't afford this item, so it must read Ineligible/greyed-out.");
+        Assert.IsTrue(shopCell.CanStageInTrade, "Sanity check: the item's own tag still matches the shop, so it must remain stageable despite being unaffordable.");
+
+        var stacks = componentManager.GetMultiPool<InventoryItemStackComponent>();
+
+        // A direct buy (Shop grid -> Player Inventory) the player can't afford must still fail --
+        // no Gold, no state changed, unaffected by CanStageInTrade.
+        DragPotionCell(controller, shopGridWindow, playerGridWindow);
+        Assert.IsTrue(InventoryQueries.TryGetStack(stacks, shopEntityId, potionItemId, out _), "A direct buy the player can't afford must leave the stack on the shop.");
+        Assert.IsFalse(InventoryQueries.TryGetStack(stacks, playerEntityId, potionItemId, out _));
+
+        // Staging it into the trade window (Shop grid -> Trade: shop column) must still succeed --
+        // no money changes hands yet, so affordability doesn't matter for this gesture.
+        DragPotionCell(controller, shopGridWindow, tradeShopGridWindow);
+        Assert.IsFalse(InventoryQueries.TryGetStack(stacks, shopEntityId, potionItemId, out _));
+        Assert.AreEqual(2, CountStacksOfItem(stacks, tradeShopEntityId, potionItemId), "The trade-shop column already started with one unit (see BuildTradeDragHarness) -- this stages a second.");
+    }
+
+    /// <summary>
+    /// Bug repro: a multi-unit stack staged in the trade-shop column priced its own hover
+    /// total/cell price as if only 1 unit existed to buy, because InventoryGridContent derived
+    /// "the shop's current stock" from the real shop entity alone -- which reads 0 once the whole
+    /// stack has physically moved off it into the trade-offer entity (see
+    /// InventoryGridContent.GetEffectiveShopStock's own doc comment). Fixed by adding back whatever
+    /// the trade-shop column itself currently holds of the same item when computing that stock.
+    /// This asserts against ShopItemStackCell.TotalPrice (TradeItemStackCell's own inherited,
+    /// SetPrice-populated total) rather than the tooltip's hover rows, since the tooltip's own rows
+    /// aren't publicly readable -- both read through the exact same InventoryGridContent.
+    /// ComputeShopTotalPrice/GetEffectiveShopStock path the bug lived in.
+    /// </summary>
+    [TestMethod]
+    public void TradeShopColumnCell_MultiUnitStack_PricesTheWholeStackNotJustOneUnit()
+    {
+        var (_, shopGridWindow, _, tradeShopGridWindow, componentManager, mapViewState, itemCatalog, world, potionItemId, _, shopEntityId, _, tradeShopEntityId) = BuildTradeDragHarness();
+
+        // Bump the trade-shop column's already-staged 1-unit stack (see BuildTradeDragHarness's own
+        // doc comment) up to 5, as if the player had staged a whole 5-unit stack pulled from the
+        // shop -- the reported repro's own "5 scrolls of torch" scenario.
+        var stacks = componentManager.GetMultiPool<InventoryItemStackComponent>();
+        var denseIndex = stacks.GetFirstDenseIndex(tradeShopEntityId);
+        stacks.UpdateByDenseIndex(denseIndex, (ushort)5, static (ref InventoryItemStackComponent stack, ushort qty) => stack.Quantity = qty);
+        ((InventoryGridContent)tradeShopGridWindow.Tag!).Update(new GameTime());
+
+        var cell = (TradeItemStackCell)tradeShopGridWindow.ChildElements.OfType<InventoryItemStackCell>().Single();
+
+        var shop = componentManager.GetPackedPool<Game.Modules.Shops.Components.ShopComponent>().GetReadonly(shopEntityId);
+        itemCatalog.TryGet(potionItemId, out var definition);
+        // preferredStockLevel 0 (BuildTradeDragHarness's own setup) -- effective stock 5 (nothing
+        // left on the real shop, all 5 staged) is what the shop's current stock truly still is.
+        var correctTotal = ShopStockPricing.ComputeBulkBuyPrice(currentStock: 5, preferredStockLevel: 0, shop, definition!, quantity: 5);
+        var buggedTotal = ShopStockPricing.ComputeBulkBuyPrice(currentStock: 0, preferredStockLevel: 0, shop, definition!, quantity: 1);
+
+        Assert.AreEqual(correctTotal, cell.TotalPrice);
+        Assert.AreNotEqual(buggedTotal, correctTotal, "Sanity check the bugged and correct totals actually differ here, or this test wouldn't catch a regression.");
+    }
+
+    /// <summary>Every entity's own potionItemId stack count, snapshotted so a disallowed-drag test can assert nothing moved anywhere at all (not even bounced through some other entity along the way).</summary>
+    private static Dictionary<int, int> SnapshotStackCounts(MultiComponentPool<InventoryItemStackComponent> stacks, Guid itemDefinitionId, params int[] entityIds) =>
+        entityIds.ToDictionary(id => id, id => CountStacksOfItem(stacks, id, itemDefinitionId));
+
+    private static int CountStacksOfItem(MultiComponentPool<InventoryItemStackComponent> stacks, int entityId, Guid itemDefinitionId)
+    {
+        var matches = new List<InventoryItemStackComponent>();
+        InventoryQueries.CopyStacksForEntity(stacks, entityId, matches);
+        return matches.Count(stack => stack.ItemDefinitionId == itemDefinitionId);
+    }
+
+    private static void AssertNoTradeStackMoved(UiInputController controller, Window fromWindow, Window toWindow, ComponentManager componentManager, Guid potionItemId, int playerEntityId, int shopEntityId, int tradePlayerEntityId, int tradeShopEntityId)
+    {
+        var stacks = componentManager.GetMultiPool<InventoryItemStackComponent>();
+        var countsBefore = SnapshotStackCounts(stacks, potionItemId, playerEntityId, shopEntityId, tradePlayerEntityId, tradeShopEntityId);
+
+        DragPotionCell(controller, fromWindow, toWindow);
+
+        foreach (var (entityId, countBefore) in countsBefore)
+        {
+            Assert.AreEqual(countBefore, CountStacksOfItem(stacks, entityId, potionItemId), $"Entity {entityId}'s own stack count must be unchanged -- this drag is not one of the allowed combinations.");
+        }
+    }
+
+    [TestMethod]
+    public void Drag_TradePlayerColumnToTradeShopColumn_IsNotAllowed()
+    {
+        var (playerGridWindow, shopGridWindow, tradePlayerGridWindow, tradeShopGridWindow, componentManager, mapViewState, itemCatalog, world, potionItemId, playerEntityId, shopEntityId, tradePlayerEntityId, tradeShopEntityId) = BuildTradeDragHarness();
+        var controller = CreateController([playerGridWindow, shopGridWindow, tradePlayerGridWindow, tradeShopGridWindow], [], [], [], LargeScreenSize, componentManager: componentManager, playerQuery: world, itemCatalog: itemCatalog, mapViewState: mapViewState);
+
+        AssertNoTradeStackMoved(controller, tradePlayerGridWindow, tradeShopGridWindow, componentManager, potionItemId, playerEntityId, shopEntityId, tradePlayerEntityId, tradeShopEntityId);
+    }
+
+    [TestMethod]
+    public void Drag_TradeShopColumnToTradePlayerColumn_IsNotAllowed()
+    {
+        var (playerGridWindow, shopGridWindow, tradePlayerGridWindow, tradeShopGridWindow, componentManager, mapViewState, itemCatalog, world, potionItemId, playerEntityId, shopEntityId, tradePlayerEntityId, tradeShopEntityId) = BuildTradeDragHarness();
+        var controller = CreateController([playerGridWindow, shopGridWindow, tradePlayerGridWindow, tradeShopGridWindow], [], [], [], LargeScreenSize, componentManager: componentManager, playerQuery: world, itemCatalog: itemCatalog, mapViewState: mapViewState);
+
+        AssertNoTradeStackMoved(controller, tradeShopGridWindow, tradePlayerGridWindow, componentManager, potionItemId, playerEntityId, shopEntityId, tradePlayerEntityId, tradeShopEntityId);
+    }
+
+    [TestMethod]
+    public void Drag_ShopGridToTradePlayerColumn_IsNotAllowed()
+    {
+        var (playerGridWindow, shopGridWindow, tradePlayerGridWindow, tradeShopGridWindow, componentManager, mapViewState, itemCatalog, world, potionItemId, playerEntityId, shopEntityId, tradePlayerEntityId, tradeShopEntityId) = BuildTradeDragHarness();
+        SeedPotion(shopGridWindow, componentManager, shopEntityId, potionItemId);
+        var controller = CreateController([playerGridWindow, shopGridWindow, tradePlayerGridWindow, tradeShopGridWindow], [], [], [], LargeScreenSize, componentManager: componentManager, playerQuery: world, itemCatalog: itemCatalog, mapViewState: mapViewState);
+
+        AssertNoTradeStackMoved(controller, shopGridWindow, tradePlayerGridWindow, componentManager, potionItemId, playerEntityId, shopEntityId, tradePlayerEntityId, tradeShopEntityId);
+    }
+
+    [TestMethod]
+    public void Drag_PlayerInventoryToTradeShopColumn_IsNotAllowed()
+    {
+        var (playerGridWindow, shopGridWindow, tradePlayerGridWindow, tradeShopGridWindow, componentManager, mapViewState, itemCatalog, world, potionItemId, playerEntityId, shopEntityId, tradePlayerEntityId, tradeShopEntityId) = BuildTradeDragHarness();
+        SeedPotion(playerGridWindow, componentManager, playerEntityId, potionItemId);
+        var controller = CreateController([playerGridWindow, shopGridWindow, tradePlayerGridWindow, tradeShopGridWindow], [], [], [], LargeScreenSize, componentManager: componentManager, playerQuery: world, itemCatalog: itemCatalog, mapViewState: mapViewState);
+
+        AssertNoTradeStackMoved(controller, playerGridWindow, tradeShopGridWindow, componentManager, potionItemId, playerEntityId, shopEntityId, tradePlayerEntityId, tradeShopEntityId);
+    }
+
+    /// <summary>
+    /// Four CurrencyRowContent windows -- real player, real shop, and the trade window's own two
+    /// reserved trade-offer entities -- for exercising UiInputController.ResolveTradeAwareCurrencyDrag.
+    /// Unlike BuildTradeDragHarness, every entity starts with its own Gold already set by each test
+    /// (no shared default), since a currency drag always moves the *whole* balance
+    /// (CurrencyActions.TryTransfer's own 3-arg overload) and different tests want different
+    /// starting amounts on different sides.
+    /// </summary>
+    private static (Window PlayerCurrencyWindow, Window ShopCurrencyWindow, Window TradePlayerCurrencyWindow, Window TradeShopCurrencyWindow, ComponentManager ComponentManager, MapViewState MapViewState, IPlayerQuery World, int PlayerEntityId, int ShopEntityId, int TradePlayerEntityId, int TradeShopEntityId) BuildTradeCurrencyDragHarness()
+    {
+        const int playerEntityId = 1;
+        const int shopEntityId = 2;
+        const int tradePlayerEntityId = 3;
+        const int tradeShopEntityId = 4;
+
+        var componentManager = new ComponentManager(initialEntityCapacity: 20, initialComponentCapacity: 20);
+        componentManager.RegisterPackedPool<Game.Modules.Shops.Components.ShopComponent>(static (ref existing, incoming) => existing = incoming);
+        componentManager.RegisterPackedPool<Game.Modules.Currency.Components.CurrencyComponent>(static (ref existing, incoming) => existing = incoming);
+
+        componentManager.Merge(shopEntityId, new Game.Modules.Shops.Components.ShopComponent(allowedTags: null, buyMultiplier: 1.10f, sellMultiplier: 0.90f));
+        componentManager.Merge(playerEntityId, new Game.Modules.Currency.Components.CurrencyComponent(gold: 0, credits: 0));
+        componentManager.Merge(shopEntityId, new Game.Modules.Currency.Components.CurrencyComponent(gold: 0, credits: 0));
+        componentManager.Merge(tradePlayerEntityId, new Game.Modules.Currency.Components.CurrencyComponent(gold: 0, credits: 0));
+        componentManager.Merge(tradeShopEntityId, new Game.Modules.Currency.Components.CurrencyComponent(gold: 0, credits: 0));
+
+        var fontService = TestFonts.Shared;
+        var labelRenderer = new LabelRenderer();
+        var windowService = TestElementPoolServiceFactory.Create(fontService, labelRenderer);
+        var spriteSheetService = new SpriteSheetService(null, "Spritesheets");
+        var spriteRenderer = new SpriteRenderer();
+        windowService.RegisterFactory<CurrencyElement>(() => new CurrencyElement(fontService, windowService, labelRenderer, spriteSheetService, spriteRenderer));
+
+        var world = new Game.World.World(new Game.World.Map(new Vector3Int(10, 10, 1))) { PlayerEntityId = playerEntityId };
+        var contextMenuController = TestElementPoolServiceFactory.CreateContextMenuController(windowService, new UiLayerStack());
+        var mapViewState = new MapViewState { OpenShopEntityId = shopEntityId, ReservedEntityIds = new ReservedEntityIds(tradePlayerEntityId, tradeShopEntityId) };
+
+        Window BuildCurrencyWindow(int entityId, Vector2 position)
+        {
+            var content = new CurrencyRowContent(entityId, componentManager, world, contextMenuController, windowService, fontService, labelRenderer, spriteSheetService, spriteRenderer, static () => null);
+            var window = windowService.CreateElement<Window>(null, new ElementOptions
+            {
+                Hierarchy = new ElementHierarchyOptions { CanContainChildren = true },
+                Layout = new ElementLayoutOptions { RelativePosition = position, Size = new Vector2(100, CurrencyRowContent.Height), DisplayMode = ElementDisplayMode.Fixed },
+            });
+            window.ContentPadding = Vector2.Zero;
+            window.SetContent(content);
+            window.Initialize();
+            return window;
+        }
+
+        var playerWindow = BuildCurrencyWindow(playerEntityId, new Vector2(0, 0));
+        var shopWindow = BuildCurrencyWindow(shopEntityId, new Vector2(500, 0));
+        var tradePlayerWindow = BuildCurrencyWindow(tradePlayerEntityId, new Vector2(1000, 0));
+        var tradeShopWindow = BuildCurrencyWindow(tradeShopEntityId, new Vector2(1500, 0));
+
+        return (playerWindow, shopWindow, tradePlayerWindow, tradeShopWindow, componentManager, mapViewState, world, playerEntityId, shopEntityId, tradePlayerEntityId, tradeShopEntityId);
+    }
+
+    /// <summary>Drags fromWindow's own Gold CurrencyElement onto toWindow's content area, mirroring the press/drag/release sequence every other content-drag test in this file already uses.</summary>
+    private static void DragGoldElement(UiInputController controller, Window fromWindow, Window toWindow)
+    {
+        var goldElement = fromWindow.ChildElements.OfType<CurrencyElement>().Single(e => e.Type == CurrencyType.Gold);
+        var pressPoint = goldElement.Rectangle.Center;
+        controller.Update(NoKeys, MouseAt(pressPoint.X, pressPoint.Y, ButtonState.Released));
+        controller.Update(NoKeys, MouseAt(pressPoint.X, pressPoint.Y, ButtonState.Pressed));
+
+        var dropPoint = toWindow.ContentRectangle.Center;
+        controller.Update(NoKeys, MouseAt(dropPoint.X, dropPoint.Y, ButtonState.Released));
+    }
+
+    private static int ReadGold(ComponentManager componentManager, int entityId) =>
+        componentManager.GetPackedPool<Game.Modules.Currency.Components.CurrencyComponent>().GetReadonly(entityId).Gold;
+
+    [TestMethod]
+    public void Drag_PlayerGoldToTradePlayerColumn_StagesTheWholeBalance()
+    {
+        var (playerWindow, shopWindow, tradePlayerWindow, tradeShopWindow, componentManager, mapViewState, world, playerEntityId, shopEntityId, tradePlayerEntityId, tradeShopEntityId) = BuildTradeCurrencyDragHarness();
+        componentManager.Merge(playerEntityId, new Game.Modules.Currency.Components.CurrencyComponent(gold: 100, credits: 0));
+        var controller = CreateController([playerWindow, shopWindow, tradePlayerWindow, tradeShopWindow], [], [], [], LargeScreenSize, componentManager: componentManager, playerQuery: world, mapViewState: mapViewState);
+
+        DragGoldElement(controller, playerWindow, tradePlayerWindow);
+
+        Assert.AreEqual(0, ReadGold(componentManager, playerEntityId));
+        Assert.AreEqual(100, ReadGold(componentManager, tradePlayerEntityId));
+    }
+
+    [TestMethod]
+    public void Drag_TradePlayerColumnGoldToPlayer_UnstagesTheWholeBalance()
+    {
+        var (playerWindow, shopWindow, tradePlayerWindow, tradeShopWindow, componentManager, mapViewState, world, playerEntityId, shopEntityId, tradePlayerEntityId, tradeShopEntityId) = BuildTradeCurrencyDragHarness();
+        componentManager.Merge(playerEntityId, new Game.Modules.Currency.Components.CurrencyComponent(gold: 100, credits: 0));
+        componentManager.Merge(tradePlayerEntityId, new Game.Modules.Currency.Components.CurrencyComponent(gold: 50, credits: 0));
+        var controller = CreateController([playerWindow, shopWindow, tradePlayerWindow, tradeShopWindow], [], [], [], LargeScreenSize, componentManager: componentManager, playerQuery: world, mapViewState: mapViewState);
+
+        DragGoldElement(controller, tradePlayerWindow, playerWindow);
+
+        Assert.AreEqual(0, ReadGold(componentManager, tradePlayerEntityId));
+        Assert.AreEqual(150, ReadGold(componentManager, playerEntityId));
+    }
+
+    [TestMethod]
+    public void Drag_TradeShopColumnGoldToShop_UnstagesTheWholeBalance()
+    {
+        var (playerWindow, shopWindow, tradePlayerWindow, tradeShopWindow, componentManager, mapViewState, world, playerEntityId, shopEntityId, tradePlayerEntityId, tradeShopEntityId) = BuildTradeCurrencyDragHarness();
+        componentManager.Merge(shopEntityId, new Game.Modules.Currency.Components.CurrencyComponent(gold: 1000, credits: 0));
+        componentManager.Merge(tradeShopEntityId, new Game.Modules.Currency.Components.CurrencyComponent(gold: 50, credits: 0));
+        var controller = CreateController([playerWindow, shopWindow, tradePlayerWindow, tradeShopWindow], [], [], [], LargeScreenSize, componentManager: componentManager, playerQuery: world, mapViewState: mapViewState);
+
+        DragGoldElement(controller, tradeShopWindow, shopWindow);
+
+        Assert.AreEqual(0, ReadGold(componentManager, tradeShopEntityId));
+        Assert.AreEqual(1050, ReadGold(componentManager, shopEntityId));
+    }
+
+    [TestMethod]
+    public void Drag_TradePlayerColumnGoldToTradeShopColumn_IsNotAllowed()
+    {
+        var (playerWindow, shopWindow, tradePlayerWindow, tradeShopWindow, componentManager, mapViewState, world, playerEntityId, shopEntityId, tradePlayerEntityId, tradeShopEntityId) = BuildTradeCurrencyDragHarness();
+        componentManager.Merge(tradePlayerEntityId, new Game.Modules.Currency.Components.CurrencyComponent(gold: 50, credits: 0));
+        var controller = CreateController([playerWindow, shopWindow, tradePlayerWindow, tradeShopWindow], [], [], [], LargeScreenSize, componentManager: componentManager, playerQuery: world, mapViewState: mapViewState);
+
+        DragGoldElement(controller, tradePlayerWindow, tradeShopWindow);
+
+        Assert.AreEqual(50, ReadGold(componentManager, tradePlayerEntityId), "Not one of the allowed combinations -- nothing must move.");
+        Assert.AreEqual(0, ReadGold(componentManager, tradeShopEntityId));
+    }
+
+    [TestMethod]
+    public void Drag_PlayerGoldToTradeShopColumn_IsNotAllowed()
+    {
+        var (playerWindow, shopWindow, tradePlayerWindow, tradeShopWindow, componentManager, mapViewState, world, playerEntityId, shopEntityId, tradePlayerEntityId, tradeShopEntityId) = BuildTradeCurrencyDragHarness();
+        componentManager.Merge(playerEntityId, new Game.Modules.Currency.Components.CurrencyComponent(gold: 100, credits: 0));
+        var controller = CreateController([playerWindow, shopWindow, tradePlayerWindow, tradeShopWindow], [], [], [], LargeScreenSize, componentManager: componentManager, playerQuery: world, mapViewState: mapViewState);
+
+        DragGoldElement(controller, playerWindow, tradeShopWindow);
+
+        Assert.AreEqual(100, ReadGold(componentManager, playerEntityId), "Not one of the allowed combinations -- nothing must move.");
+        Assert.AreEqual(0, ReadGold(componentManager, tradeShopEntityId));
+    }
+
+    [TestMethod]
+    public void Drag_ShopGoldToTradeShopColumn_StagesTheWholeBalance()
+    {
+        var (playerWindow, shopWindow, tradePlayerWindow, tradeShopWindow, componentManager, mapViewState, world, playerEntityId, shopEntityId, tradePlayerEntityId, tradeShopEntityId) = BuildTradeCurrencyDragHarness();
+        componentManager.Merge(shopEntityId, new Game.Modules.Currency.Components.CurrencyComponent(gold: 1000, credits: 0));
+        var controller = CreateController([playerWindow, shopWindow, tradePlayerWindow, tradeShopWindow], [], [], [], LargeScreenSize, componentManager: componentManager, playerQuery: world, mapViewState: mapViewState);
+
+        DragGoldElement(controller, shopWindow, tradeShopWindow);
+
+        Assert.AreEqual(0, ReadGold(componentManager, shopEntityId));
+        Assert.AreEqual(1000, ReadGold(componentManager, tradeShopEntityId));
+    }
+
+    /// <summary>
+    /// Dragging the player's own Gold straight onto the real shop's currency row (no trade window
+    /// involved at all) must publish GoldGivenToShopEvent -- the "Angel Investor" achievement's own
+    /// trigger -- the same as the currency context menu's Give/Give All already does. Confirmed live
+    /// gap this closes: before ResolveContentDrag's plain-currency branch routed through
+    /// ShopActions.TryGiveCurrencyToShop, a direct drag moved the Gold but never published anything.
+    /// </summary>
+    [TestMethod]
+    public void Drag_PlayerGoldDirectlyToShop_PublishesGoldGivenToShopEvent()
+    {
+        var (playerWindow, shopWindow, tradePlayerWindow, tradeShopWindow, componentManager, mapViewState, world, playerEntityId, shopEntityId, tradePlayerEntityId, tradeShopEntityId) = BuildTradeCurrencyDragHarness();
+        componentManager.Merge(playerEntityId, new Game.Modules.Currency.Components.CurrencyComponent(gold: 75, credits: 0));
+        var eventBus = new EventBus();
+        GoldGivenToShopEvent? published = null;
+        eventBus.Subscribe<GoldGivenToShopEvent>(e => published = e);
+        var controller = CreateController([playerWindow, shopWindow, tradePlayerWindow, tradeShopWindow], [], [], [], LargeScreenSize, componentManager: componentManager, playerQuery: world, mapViewState: mapViewState, eventBus: eventBus);
+
+        DragGoldElement(controller, playerWindow, shopWindow);
+
+        Assert.AreEqual(0, ReadGold(componentManager, playerEntityId));
+        Assert.AreEqual(75, ReadGold(componentManager, shopEntityId));
+        Assert.IsNotNull(published);
+        Assert.AreEqual(playerEntityId, published!.Value.PlayerEntityId);
+        Assert.AreEqual(shopEntityId, published.Value.ShopEntityId);
+        Assert.AreEqual(75, published.Value.Amount);
+    }
+
+    /// <summary>
+    /// A shop's own Gold must still never be directly Takeable by the player -- TryStartContentDrag
+    /// now lets a shop-origin currency drag start at all (see its own doc comment), purely so it can
+    /// reach the trade-shop column, but dropping it anywhere else (here, straight onto the player's
+    /// own currency row, bypassing the trade window entirely) must still fail with no state changed.
+    /// </summary>
+    [TestMethod]
+    public void Drag_ShopGoldDirectlyToPlayer_IsStillNotAllowed()
+    {
+        var (playerWindow, shopWindow, tradePlayerWindow, tradeShopWindow, componentManager, mapViewState, world, playerEntityId, shopEntityId, tradePlayerEntityId, tradeShopEntityId) = BuildTradeCurrencyDragHarness();
+        componentManager.Merge(shopEntityId, new Game.Modules.Currency.Components.CurrencyComponent(gold: 1000, credits: 0));
+        var controller = CreateController([playerWindow, shopWindow, tradePlayerWindow, tradeShopWindow], [], [], [], LargeScreenSize, componentManager: componentManager, playerQuery: world, mapViewState: mapViewState);
+
+        DragGoldElement(controller, shopWindow, playerWindow);
+
+        Assert.AreEqual(1000, ReadGold(componentManager, shopEntityId), "A direct Take must never succeed, regardless of TryStartContentDrag now letting the drag itself start.");
+        Assert.AreEqual(0, ReadGold(componentManager, playerEntityId));
     }
 
     /// <summary>

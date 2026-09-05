@@ -73,7 +73,7 @@ public sealed class TextDivider(FontService fontService, ElementPoolService elem
         // descender sliced off by the column's own scroll clamp; only the earlier body-part
         // dividers happened to sit ABOVE that boundary, not fixed themselves).
         var textY = ContentAbsolutePosition.Y + (ContentSize.Y - _font.LineHeight) / 2f;
-        ElementPoolService.SpriteBatch.DrawString(_font, _text, new Vector2(ContentAbsolutePosition.X + textStart, textY), _color);
+        LabelRenderer.Draw(ElementPoolService.SpriteBatch, _font, _text, new Vector2(ContentAbsolutePosition.X + textStart, textY), _color);
     }
 
     private void DrawLine(float startX, float width, float y)

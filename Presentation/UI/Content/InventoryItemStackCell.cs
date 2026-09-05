@@ -19,7 +19,9 @@ public enum CellCompareState
 
 /// <summary>
 /// One square in the inventory grid: an item stack's sprite-else-glyph icon, plus its quantity
-/// in the bottom-right corner when greater than 1. A plain Element (not Window) -- no title/
+/// in the bottom-left corner when greater than 1 -- bottom-left, not bottom-right, for consistency
+/// with ShopItemStackCell/TradeItemStackCell's own quantity placement, both of which reserve the
+/// bottom-right corner for price. A plain Element (not Window) -- no title/
 /// chrome needed, same reasoning Folder/Button use. IsDisabled gray-tints the icon, mirroring
 /// Folder's own disabled tint and MapWindow's dead-entity tint (all three now share the same
 /// SpriteOrGlyphRenderer draw primitive). ItemDefinitionId is exposed publicly so
@@ -59,7 +61,6 @@ public class InventoryItemStackCell(FontService fontService, ElementPoolService 
     protected string _glyph = string.Empty;
     protected Color _glyphColor;
     private int _quantity;
-    private string? _chargeText;
     protected bool _isDisabled;
     private bool _groupBorderTop;
     private bool _groupBorderBottom;
@@ -105,6 +106,19 @@ public class InventoryItemStackCell(FontService fontService, ElementPoolService 
     public CellCompareState CompareState { get; set; }
 
     /// <summary>
+    /// Shop mode only, set alongside CompareState by InventoryGridContent.UpdateShopEligibilityState
+    /// -- true whenever this item's tags actually match the open shop's own AllowedTags
+    /// (ShopActions.CanTrade), regardless of whether the paying side can currently afford it. An
+    /// unaffordable-but-tradeable item still reads CompareState Ineligible (greyed out, same visual,
+    /// still blocked from a direct buy/sell -- ShopActions.TryBuyFromShop/TrySellToShop's own
+    /// affordability check refuses it with no state changed either way) but CanStageInTrade true, so
+    /// TryStartContentDrag/BuildItemContextMenu's "Add to trade" can still let it be picked up and
+    /// staged in the trade window -- only a wrong-tag item (CanTrade false) or a Merged Stack (no
+    /// single stack to trade) is ever fully blocked from that. False outside shop mode entirely.
+    /// </summary>
+    public bool CanStageInTrade { get; set; }
+
+    /// <summary>
     /// cellSize is the caller's known fixed cell size (see InventoryGridContent), not ContentSize
     /// -- Configure runs immediately after CreateElement, before this cell's own layout has
     /// necessarily settled. Unconditionally clears any group-border edges left over from a
@@ -114,7 +128,7 @@ public class InventoryItemStackCell(FontService fontService, ElementPoolService 
     /// this way). SetGroupBorderEdges, called separately afterward, is the only thing that turns
     /// any of them back on for this Configure's cell.
     /// </summary>
-    public void Configure(int entityId, Guid itemDefinitionId, Guid? stackInstanceId, string? spriteName, string glyph, Color glyphColor, int quantity, string? chargeText, bool isDisabled, bool isDivergent, bool mergedStackBadgeVisible, Vector2 cellSize)
+    public void Configure(int entityId, Guid itemDefinitionId, Guid? stackInstanceId, string? spriteName, string glyph, Color glyphColor, int quantity, bool isDisabled, bool isDivergent, bool mergedStackBadgeVisible, Vector2 cellSize)
     {
         EntityId = entityId;
         ItemDefinitionId = itemDefinitionId;
@@ -125,7 +139,6 @@ public class InventoryItemStackCell(FontService fontService, ElementPoolService 
         _glyph = glyph;
         _glyphColor = glyphColor;
         _quantity = quantity;
-        _chargeText = chargeText;
         _isDisabled = isDisabled;
         _groupBorderTop = false;
         _groupBorderBottom = false;
@@ -175,7 +188,7 @@ public class InventoryItemStackCell(FontService fontService, ElementPoolService 
 
         SpriteOrGlyphRenderer.Draw(spriteBatch, spriteSheetService, spriteRenderer, LabelRenderer, sprite, _iconGlyphFont, _glyph, glyphColor, ContentAbsolutePosition, ContentSize, spriteTint);
 
-        ItemIconRenderer.DrawQuantityBadge(spriteBatch, _quantityFont, _quantity, _chargeText, ContentAbsolutePosition, ContentSize);
+        ItemIconRenderer.DrawQuantityBadge(spriteBatch, _quantityFont, _quantity, ContentAbsolutePosition, ContentSize);
 
         if (MergedStackBadgeVisible)
         {

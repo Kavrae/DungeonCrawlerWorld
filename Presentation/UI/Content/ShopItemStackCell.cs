@@ -22,9 +22,12 @@ namespace Presentation.UI.Content;
 /// pricing), not "detailed," which would read as easily confusable with the separate Item Details
 /// window. Configure (inherited) still drives everything but the price/name text -- SetItemName/
 /// SetPrice/SetStockStatus are the extra setters InventoryGridContent calls right after it when
-/// building a shop-mode cell.
+/// building a shop-mode cell. Not sealed -- TradeItemStackCell subclasses this for the trade
+/// window's own grids (small-square icon+quantity+price layout instead of this class's own wide
+/// name+price row), reusing Configure/SetPrice/SetStockStatus/the favorable-price coloring via its
+/// own DrawContent override. See that class's own doc comment.
 /// </summary>
-public sealed class ShopItemStackCell(FontService fontService, ElementPoolService elementPoolService, LabelRenderer labelRenderer, SpriteSheetService spriteSheetService, SpriteRenderer spriteRenderer)
+public class ShopItemStackCell(FontService fontService, ElementPoolService elementPoolService, LabelRenderer labelRenderer, SpriteSheetService spriteSheetService, SpriteRenderer spriteRenderer)
     : InventoryItemStackCell(fontService, elementPoolService, labelRenderer, spriteSheetService, spriteRenderer)
 {
     private const float TextPadding = 4f;
@@ -32,18 +35,29 @@ public sealed class ShopItemStackCell(FontService fontService, ElementPoolServic
     /// <summary>The name line's own top inset, distinct from TextPadding (the sprite-to-text gap) -- without it the name sat flush against the cell's own top edge, overlapping the eligible-glow ring drawn there (confirmed live; bumped once more after 3px still wasn't enough clearance).</summary>
     private const float NameTopPadding = 6f;
 
-    /// <summary>Halfway between _quantityFont's own 0.5 fraction (see FontChrome.InventoryStackQuantityFontFraction, the original, too-large price size) and this cell's first attempt at shrinking it (0.25, confirmed too small live) -- 0.375.</summary>
-    private static readonly float PriceFontSizeFraction = FontChrome.InventoryStackQuantityFontFraction * 0.75f;
+    /// <summary>
+    /// Halfway between _quantityFont's own 0.5 fraction (see FontChrome.InventoryStackQuantityFontFraction,
+    /// the original, too-large price size) and this cell's first attempt at shrinking it (0.25,
+    /// confirmed too small live) -- 0.375. Named for what it's for generically, not "price"
+    /// specifically -- protected, not private, so TradeItemStackCell's own DrawContent can reuse
+    /// this same smaller size for its *quantity* text (confirmed live that _quantityFont, correctly
+    /// sized for the plain inventory cell's lone quantity badge, is too large once that cell's own
+    /// small square needs to fit a 3-digit-or-more number legibly).
+    /// </summary>
+    protected static readonly float CompactStatFontSizeFraction = FontChrome.InventoryStackQuantityFontFraction * 0.75f;
 
-    /// <summary>Same Better/Worse pair ItemDetailsWindow already uses -- reused here so a favorable price and an unfavorable one read with the same color language elsewhere in the UI. See PLAN-stock-based-shop-pricing.md and PriceIsFavorable/PriceIsUnfavorable's own doc comment for which StockStatus counts as which, per grid.</summary>
-    private static readonly Color FavorableColor = Color.LightGreen;
+    /// <summary>Same Better/Worse pair ItemDetailsWindow already uses -- reused here so a favorable price and an unfavorable one read with the same color language elsewhere in the UI. See PLAN-stock-based-shop-pricing.md and PriceIsFavorable/PriceIsUnfavorable's own doc comment for which StockStatus counts as which, per grid. protected, not private -- TradeItemStackCell's own small-square layout reuses this same color pair for its price text.</summary>
+    protected static readonly Color FavorableColor = Color.LightGreen;
 
     /// <summary>LightCoral, not IndianRed -- see ItemDetailsWindow.WorseColor's own doc comment for why (confirmed live too dark/muted here as well, same near-black panel background).</summary>
-    private static readonly Color UnfavorableColor = Color.LightCoral;
+    protected static readonly Color UnfavorableColor = Color.LightCoral;
 
     private string _itemName = string.Empty;
-    private int _totalPrice;
-    private int _quantity;
+
+    /// <summary>protected, not private -- TradeItemStackCell's own DrawContent override reads these directly (its small-square quantity/price layout replaces this class's own wide name+price row entirely, but reuses the same SetPrice-populated data).</summary>
+    protected int _totalPrice;
+
+    protected int _quantity;
     private FontStashTextMeasurer? _nameFontMeasurer;
 
     /// <summary>Set right after Configure -- Configure has no notion of an item's display Name (it only ever carried SpriteName/Glyph), so this is the one extra piece of data this subclass needs beyond what the base setter already captures.</summary>
@@ -58,6 +72,9 @@ public sealed class ShopItemStackCell(FontService fontService, ElementPoolServic
         _totalPrice = totalPrice;
         _quantity = quantity;
     }
+
+    /// <summary>Public for testability, same reasoning as StockStatus below -- what SetPrice last set, the real bulk-priced total for this cell's whole stack (see InventoryGridContent.ComputeShopTotalPrice).</summary>
+    public int TotalPrice => _totalPrice;
 
     /// <summary>Mirrors CompareState's own public-for-testability shape (see InventoryItemStackCell) -- what SetStockStatus below last set. See ShopStockPricing.GetStockStatus -- always the shop's own status regardless of which grid this cell belongs to.</summary>
     public StockStatus StockStatus { get; private set; }
@@ -118,7 +135,7 @@ public sealed class ShopItemStackCell(FontService fontService, ElementPoolServic
 
         var priceColor = isGreyedOut ? Color.Gray : PriceIsFavorable ? FavorableColor : PriceIsUnfavorable ? UnfavorableColor : textColor;
 
-        var priceFont = fontService.GetFont((int)(ContentSize.Y * PriceFontSizeFraction));
+        var priceFont = fontService.GetFont((int)(ContentSize.Y * CompactStatFontSizeFraction));
         var priceRowPosition = new Vector2(textLeft, ContentAbsolutePosition.Y + halfHeight);
         var priceRowSize = new Vector2(textWidth, halfHeight);
 

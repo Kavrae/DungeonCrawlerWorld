@@ -1,4 +1,6 @@
 using Engine.ECS.Components;
+using Engine.ECS.Components.Stores;
+using Engine.Events;
 using Game.Modules.Currency;
 using Game.Modules.Currency.Components;
 using Game.Modules.Inventory;
@@ -120,6 +122,44 @@ public static class ShopActions
         {
             CurrencyActions.TryTransfer(componentManager, playerEntityId, shopEntityId, CurrencyType.Gold, totalPrice);
             return false;
+        }
+
+        return true;
+    }
+
+    /// <summary>
+    /// Moves sourceEntityId's whole balance of currencyType to destinationEntityId (the same
+    /// whole-balance CurrencyActions.TryTransfer overload every "give" gesture already uses),
+    /// publishing GoldGivenToShopEvent afterward if Gold actually moved, there was some to give,
+    /// and destinationEntityId genuinely carries a ShopComponent. This is the one chokepoint every
+    /// currency-to-a-shop gesture -- context-menu Give/Give All, a direct currency drag dropped on
+    /// the shop, and Complete swapping a trade's player-side Gold to the real shop -- should route
+    /// through, so the "Angel Investor" achievement's own trigger never depends on which specific
+    /// UI gesture the player used to give it (confirmed live gap: only the context menu published
+    /// this before). shopPool/eventBus null are both tolerated (transfers normally either way, just
+    /// never publishes) for callers that don't wire one -- shopPool is passed in rather than
+    /// resolved here since every caller already has it cached as its own field.
+    ///
+    /// eventPlayerEntityId defaults to sourceEntityId -- true for the context-menu and direct-drag
+    /// callers, where the real player's own Gold is what's moving. TradeWindow.CompleteTrade is the
+    /// one caller that must override it: its own sourceEntityId is the trade-offer player column
+    /// (a reserved placeholder entity, never the real player -- see TradeWindow's own doc comment on
+    /// _playerSideEntityId), so GoldGivenToShopEvent.PlayerEntityId would otherwise report that
+    /// placeholder instead of the real player.
+    /// </summary>
+    public static bool TryGiveCurrencyToShop(ComponentManager componentManager, PackedComponentPool<ShopComponent>? shopPool, EventBus? eventBus, int sourceEntityId, int destinationEntityId, CurrencyType currencyType, int? eventPlayerEntityId = null)
+    {
+        componentManager.GetPackedPool<CurrencyComponent>().TryGetReadonly(sourceEntityId, out var sourceCurrencyBefore);
+        var amountBefore = currencyType == CurrencyType.Gold ? sourceCurrencyBefore.Gold : sourceCurrencyBefore.Credits;
+
+        if (!CurrencyActions.TryTransfer(componentManager, sourceEntityId, destinationEntityId, currencyType))
+        {
+            return false;
+        }
+
+        if (currencyType == CurrencyType.Gold && amountBefore > 0 && eventBus is not null && shopPool?.Has(destinationEntityId) == true)
+        {
+            eventBus.Publish(new GoldGivenToShopEvent(eventPlayerEntityId ?? sourceEntityId, destinationEntityId, amountBefore));
         }
 
         return true;

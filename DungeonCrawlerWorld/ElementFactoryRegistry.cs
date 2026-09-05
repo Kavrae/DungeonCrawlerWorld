@@ -13,6 +13,7 @@ using Presentation.UI.Content;
 using Presentation.UI.Inventory;
 using Presentation.UI.Looting;
 using Presentation.UI.Shops;
+using Presentation.UI.Trade;
 
 namespace DungeonCrawlerWorld;
 
@@ -43,7 +44,7 @@ public static class ElementFactoryRegistry
             => pool.RegisterFactory(() => factory(presentation.FontService, pool, presentation.LabelRenderer));
 
         Register<Window>((font, elements, glyph) => new Window(font, elements, glyph));
-        Register<Button>((font, elements, glyph) => new Button(font, elements, glyph));
+        Register<Button>((font, elements, glyph) => new Button(font, elements, glyph, presentation.SpriteSheetService, presentation.SpriteRenderer));
         Register<ContextMenu>((font, elements, glyph) => new ContextMenu(font, elements, glyph));
         Register<TextWindow>((font, elements, glyph) => new TextWindow(font, elements, glyph));
         Register<TextBox>((font, elements, glyph) => new TextBox(font, elements, glyph, cursorTextContent, contextMenuController));
@@ -77,6 +78,8 @@ public static class ElementFactoryRegistry
             componentManager, itemCatalog, world, contextMenuController, mapViewState, ecsContext.EventBus));
         Register<InventoryItemStackCell>((font, elements, glyph) => new InventoryItemStackCell(font, elements, glyph, presentation.SpriteSheetService, presentation.SpriteRenderer));
         Register<ShopItemStackCell>((font, elements, glyph) => new ShopItemStackCell(font, elements, glyph, presentation.SpriteSheetService, presentation.SpriteRenderer));
+        Register<TradeItemStackCell>((font, elements, glyph) => new TradeItemStackCell(font, elements, glyph, presentation.SpriteSheetService, presentation.SpriteRenderer));
+        Register<EmptyTradeSlotCell>((font, elements, glyph) => new EmptyTradeSlotCell(font, elements, glyph));
         Register<GridControl>((font, elements, glyph) => new GridControl(font, elements, glyph));
         Register<Toggle>((font, elements, glyph) => new Toggle(font, elements, glyph));
 
@@ -96,6 +99,10 @@ public static class ElementFactoryRegistry
         pool.RegisterFactory<ShopWindow>(() => new ShopWindow(
             presentation.FontService, pool, presentation.LabelRenderer, componentManager,
             presentation.SpriteSheetService, presentation.SpriteRenderer, itemCatalog, world, contextMenuController, mapViewState));
+        pool.RegisterFactory<TradeWindow>(() => new TradeWindow(
+            presentation.FontService, pool, presentation.LabelRenderer, componentManager,
+            itemCatalog, presentation.SpriteSheetService, presentation.SpriteRenderer, world, contextMenuController, mapViewState,
+            ecsContext.EventBus));
         Register<EntityIconElement>((font, elements, glyph) => new EntityIconElement(
             font, elements, glyph, presentation.SpriteSheetService, presentation.SpriteRenderer,
             componentManager.GetDirectPool<SpriteComponent>(), componentManager.GetDirectPool<GlyphComponent>()));

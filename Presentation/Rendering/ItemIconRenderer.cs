@@ -4,7 +4,7 @@ using Microsoft.Xna.Framework.Graphics;
 
 namespace Presentation.Rendering;
 
-/// <summary>Shared "item stack quantity, bottom-right corner, shadowed for legibility over any background" draw primitive -- InventoryItemStackCell (the inventory grid) and HotbarContent (a bound item slot) both stack the same items and need to show the same count the same way.</summary>
+/// <summary>Shared "item stack quantity, bottom-left corner, shadowed for legibility over any background" draw primitive -- bottom-left for consistency with ShopItemStackCell/TradeItemStackCell's own quantity placement, both of which reserve the bottom-right corner for price. InventoryItemStackCell is the one remaining consumer today (HotbarContent moved to its own bottom-center "x{n}" badge, see HotbarContent's own doc comment).</summary>
 public static class ItemIconRenderer
 {
     private static readonly Color QuantityShadowColor = Color.Black;
@@ -12,25 +12,29 @@ public static class ItemIconRenderer
     private static readonly Vector2 QuantityShadowOffset = new(-1, -1);
     private static readonly Vector2 QuantityTextPadding = new(0, 0);
 
-    /// <summary>
-    /// chargeText, when non-null, replaces the plain quantity number outright (e.g. "5/6" for a
-    /// wand's remaining/max charges) rather than showing alongside it -- see this parameter's own
-    /// callers for why: the moment an item's first charge is ever consumed, its Quantity stops
-    /// meaning "how many I have" for that specific stack (a wand's own charge count is what
-    /// actually matters once it's diverged), so showing both at once would read as contradictory.
-    /// No-ops when there's nothing to show at all: no chargeText and quantity &lt;= 1.
-    /// </summary>
-    public static void DrawQuantityBadge(SpriteBatch spriteBatch, SpriteFontBase quantityFont, int quantity, string? chargeText, Vector2 contentPosition, Vector2 contentSize)
+    /// <summary>No-ops at quantity &lt;= 1 -- a lone stack doesn't need a number. A wand's own remaining/max charges used to replace this outright ("5/6" instead of the plain count) but that's shown in the hover tooltip now instead -- every item's badge is just its plain Quantity, charges or not.</summary>
+    public static void DrawQuantityBadge(SpriteBatch spriteBatch, SpriteFontBase quantityFont, int quantity, Vector2 contentPosition, Vector2 contentSize)
     {
-        var text = chargeText ?? (quantity > 1 ? quantity.ToString() : null);
-        if (text is null)
+        if (quantity <= 1)
         {
             return;
         }
 
-        var textSize = quantityFont.MeasureString(text);
-        var textPosition = contentPosition + contentSize - textSize - QuantityTextPadding;
-        spriteBatch.DrawString(quantityFont, text, textPosition, QuantityShadowColor);
-        spriteBatch.DrawString(quantityFont, text, textPosition + QuantityShadowOffset, QuantityTextColor);
+        DrawBottomAligned(spriteBatch, quantityFont, quantity.ToString(), contentPosition, contentSize, alignRight: false, QuantityTextColor);
+    }
+
+    /// <summary>
+    /// Same shadowed-for-legibility-over-any-background styling DrawQuantityBadge already uses,
+    /// generalized to either bottom corner and a caller-chosen text color -- TradeItemStackCell's
+    /// own bottom-left quantity / bottom-right total-price pair (the price colored favorable/
+    /// unfavorable, the same way ShopItemStackCell's own price line already is).
+    /// </summary>
+    public static void DrawBottomAligned(SpriteBatch spriteBatch, SpriteFontBase font, string text, Vector2 contentPosition, Vector2 contentSize, bool alignRight, Color textColor)
+    {
+        var textSize = font.MeasureString(text);
+        var x = alignRight ? contentPosition.X + contentSize.X - textSize.X - QuantityTextPadding.X : contentPosition.X + QuantityTextPadding.X;
+        var textPosition = new Vector2(x, contentPosition.Y + contentSize.Y - textSize.Y - QuantityTextPadding.Y);
+        spriteBatch.DrawString(font, text, textPosition, QuantityShadowColor);
+        spriteBatch.DrawString(font, text, textPosition + QuantityShadowOffset, textColor);
     }
 }

@@ -26,8 +26,8 @@ namespace Presentation.UI.Inventory;
 /// in or out reset the active tab's toggles every time). Each tab's own InventoryGridContent
 /// already refreshes its displayed stacks independently via its own version watcher regardless of
 /// whether SetTabs runs, so skipping it here only skips the tab *list* rebuild, never the grid
-/// contents. Close-only (no minimize) -- created fresh by InventoryFolderController each time the
-/// Inventory folder is opened and returned to ElementPoolService's pool on close, mirroring
+/// contents. Close-only (no minimize) -- created fresh by InventoryWindowController each time the
+/// Inventory button is clicked open and returned to ElementPoolService's pool on close, mirroring
 /// NotificationCenter's active-notification-popup lifecycle rather than staying a permanently-
 /// existing hidden window. A dedicated Window subclass (rather than a plain Window hosting
 /// TabbedContent via SetContent) purely so Configure/Update have somewhere to live -- the
@@ -48,7 +48,7 @@ public sealed class InventoryManagementWindow(
     World world,
     ContextMenuController contextMenuController,
     MapViewState mapViewState,
-    EventBus? eventBus = null) : Window(fontService, elementPoolService, labelRenderer)
+    EventBus? eventBus = null) : Window(fontService, elementPoolService, labelRenderer), IWholeWindowDropTarget
 {
     private TabbedContent _tabbedContent = null!;
     private CurrencyRowContent _currencyRowContent = null!;
@@ -61,7 +61,7 @@ public sealed class InventoryManagementWindow(
     private readonly VersionWatcher _tagVersionWatcher = new();
     private HashSet<Tag> _currentTags = [];
 
-    /// <summary>Builds this window's content for entityId's inventory. Must be called after CreateElement but before Initialize (see Window.SetContent's own doc comment) -- a fresh TabbedContent per open, since entityId varies across opens of a pooled/reused window instance. hoverPopup is owned by InventoryFolderController (created once, top-level, shared across opens) rather than a child of this window -- see Tooltip's own doc comment for why a nested child can't work here. getSecondaryTargetEntityId lets each grid's own item context menu (see InventoryGridContent.BuildItemContextMenu) ask "is a secondary/corpse window currently open, and for whom" without this window needing a direct SecondaryInventoryWindowController reference -- see InventoryFolderController.GetSecondaryTargetEntityId, the actual settable source this is expected to be wired to. onItemSelected/onCompareRequested mirror that same settable-delegate shape for ItemDetailsWindowController.Open/ItemComparisonController.Arm -- see InventoryFolderController.OnItemSelected/OnCompareRequested.</summary>
+    /// <summary>Builds this window's content for entityId's inventory. Must be called after CreateElement but before Initialize (see Window.SetContent's own doc comment) -- a fresh TabbedContent per open, since entityId varies across opens of a pooled/reused window instance. hoverPopup is owned by InventoryWindowController (created once, top-level, shared across opens) rather than a child of this window -- see Tooltip's own doc comment for why a nested child can't work here. getSecondaryTargetEntityId lets each grid's own item context menu (see InventoryGridContent.BuildItemContextMenu) ask "is a secondary/corpse window currently open, and for whom" without this window needing a direct SecondaryInventoryWindowController reference -- see InventoryWindowController.GetSecondaryTargetEntityId, the actual settable source this is expected to be wired to. onItemSelected/onCompareRequested mirror that same settable-delegate shape for ItemDetailsWindowController.Open/ItemComparisonController.Arm -- see InventoryWindowController.OnItemSelected/OnCompareRequested.</summary>
     public void Configure(int entityId, Tooltip hoverPopup, Func<int?> getSecondaryTargetEntityId, Action<int, Guid> onItemSelected, Action<int, Guid> onCompareRequested)
     {
         _entityId = entityId;
@@ -79,6 +79,12 @@ public sealed class InventoryManagementWindow(
 
         _tagVersionWatcher.HasChanged(CurrentInventoryVersion()); // Primes the baseline so the next Update doesn't immediately rebuild against the list just built above.
     }
+
+    /// <summary>IWholeWindowDropTarget -- a whole-window drop always means this same entity, regardless of which of its tabs happens to be active or where exactly within the window the drop landed.</summary>
+    public int ResolveItemDropEntityId(Point dropPosition) => _entityId;
+
+    /// <summary>See ResolveItemDropEntityId -- identical, since this entity's own inventory and currency balance are the same one.</summary>
+    public int ResolveCurrencyDropEntityId(Point dropPosition) => _entityId;
 
     public override void Update(GameTime gameTime)
     {

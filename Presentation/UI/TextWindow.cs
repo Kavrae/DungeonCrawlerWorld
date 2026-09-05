@@ -38,6 +38,7 @@ public class TextWindow(FontService fontService, ElementPoolService elementPoolS
         _canContainChildren = false;
     }
 
+    /// <summary>See LabelRenderer.Draw's own doc comment for why this routes through it (which rounds to a whole pixel before drawing) instead of calling SpriteBatch.DrawString directly, as it used to -- the fix for the same "bottom of the text is cut off" bug every other UI text draw already gets from that method.</summary>
     public override void DrawContent(GameTime gameTime)
     {
         if (string.IsNullOrWhiteSpace(DisplayText.FormattedText))
@@ -49,10 +50,10 @@ public class TextWindow(FontService fontService, ElementPoolService elementPoolS
 
         if (Bold)
         {
-            ElementPoolService.SpriteBatch.DrawString(ContentFont, DisplayText.FormattedText, origin + new Vector2(1, 0), TextColor);
+            LabelRenderer.Draw(ElementPoolService.SpriteBatch, ContentFont, DisplayText.FormattedText, origin + new Vector2(1, 0), TextColor);
         }
 
-        ElementPoolService.SpriteBatch.DrawString(ContentFont, DisplayText.FormattedText, origin, TextColor);
+        LabelRenderer.Draw(ElementPoolService.SpriteBatch, ContentFont, DisplayText.FormattedText, origin, TextColor);
     }
 
     protected override void RecalculateFixedSize()

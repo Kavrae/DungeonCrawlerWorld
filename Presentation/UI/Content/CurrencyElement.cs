@@ -36,6 +36,12 @@ public sealed class CurrencyElement(FontService fontService, ElementPoolService 
     /// <summary>Drives a translucent highlight overlay -- see CurrencyRowContent's own hover polling. Mirrors InventoryItemStackCell.IsHovered exactly.</summary>
     public bool IsHovered { get; set; }
 
+    /// <summary>True (the default) draws "Gold : 10" -- Configure's own showLabel param sets this false for just "10" instead, for CurrencyRowContent's trade-window callers, the column being too narrow to spare the label (PLAN-trade-window.md's own currency footer). Set in Configure, not a bare settable property, so a pooled-and-reused element can't carry a stale value from its previous consumer.</summary>
+    private bool _showLabel = true;
+
+    /// <summary>Null (the default) draws WindowPalette.BodyTextColor, same as every other consumer -- Configure's own textColor param overrides this for the trade window's own two currency footers (PLAN-trade-window.md), whose trade grid sits on a transparent background too dark for the shared BodyTextColor to read against. Set in Configure, not a bare settable property, for the same pool-reuse-staleness reason _showLabel is.</summary>
+    private Color? _textColorOverride;
+
     /// <summary>The square icon's own on-screen size -- what UiInputController.TryStartContentDrag reads as the drag ghost's size, not CurrentSize (this element's full "Gold : 10 [sprite]" bounds, much wider than tall): drawing the ghost at the whole element's size stretched the sprite horizontally.</summary>
     public Vector2 IconSize => new(ContentSize.Y, ContentSize.Y);
 
@@ -48,10 +54,12 @@ public sealed class CurrencyElement(FontService fontService, ElementPoolService 
     };
 
     /// <summary>elementSize sizes the sprite/glyph-fallback font -- same "known fixed size, not ContentSize" reasoning InventoryItemStackCell.Configure documents (this runs immediately after CreateElement, before layout has necessarily settled).</summary>
-    public void Configure(int entityId, CurrencyType type, Vector2 elementSize)
+    public void Configure(int entityId, CurrencyType type, Vector2 elementSize, bool showLabel = true, Color? textColor = null)
     {
         EntityId = entityId;
         Type = type;
+        _showLabel = showLabel;
+        _textColorOverride = textColor;
         _textFont = fontService.GetFont(FontChrome.DefaultFontSize);
         _glyphFont = fontService.GetFont((int)(elementSize.Y * FontChrome.IconGlyphFontFraction));
     }
@@ -70,10 +78,10 @@ public sealed class CurrencyElement(FontService fontService, ElementPoolService 
 
         var (label, spriteName, glyph, glyphColor) = TypeDisplay;
 
-        var text = $"{label} : {_amount}";
+        var text = _showLabel ? $"{label} : {_amount}" : $"{_amount}";
         var textSize = _textFont.MeasureString(text);
         var textPosition = ContentAbsolutePosition + new Vector2(0, (ContentSize.Y - textSize.Y) / 2f);
-        spriteBatch.DrawString(_textFont, text, textPosition, WindowPalette.BodyTextColor);
+        LabelRenderer.Draw(spriteBatch, _textFont, text, textPosition, _textColorOverride ?? WindowPalette.BodyTextColor);
 
         // Sits IconGap past the text's own measured width, not pinned to the element's right edge --
         // "Gold : 10" then the sprite immediately after, not stranded at the far side of the row.

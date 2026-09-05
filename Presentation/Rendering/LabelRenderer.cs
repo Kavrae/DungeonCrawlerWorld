@@ -19,16 +19,40 @@ public sealed class LabelRenderer
     // one-time cost per distinct glyph the game ever actually uses.
     private readonly Dictionary<(SpriteFontBase Font, string Glyph), Vector2> _inkCenterCache = [];
 
-    /// <summary>outline defaults false -- plain UI text (buttons, tabs, toggles, context menus, ...) sits on its own window background and doesn't need it. Map-drawn glyphs (entities, terrain, layer badges) pass true so they stay legible against whatever color terrain tile is underneath.</summary>
+    /// <summary>
+    /// outline defaults false -- plain UI text (buttons, tabs, toggles, context menus, ...) sits on
+    /// its own window background and doesn't need it. Map-drawn glyphs (entities, terrain, layer
+    /// badges) pass true so they stay legible against whatever color terrain tile is underneath.
+    ///
+    /// position is rounded to the nearest whole pixel before drawing -- the actual root cause of
+    /// the "bottom of the text is cut off" bug chased across several call sites (Tooltip, ability
+    /// score rows, the trade window's own header labels): every render pass in this codebase uses
+    /// SamplerState.PointClamp (see ElementPoolService.ResetRenderState), and point/nearest-neighbor
+    /// sampling of a font atlas texture crops or shifts a glyph by roughly a texel whenever it's
+    /// drawn at a fractional pixel position -- exactly what GetLeftAlignedPosition/
+    /// GetRightAlignedPosition's own `/ 2f` centering math produces the moment the footprint's
+    /// height-minus-LineHeight difference is odd. This is why routing a window through
+    /// RequiresContentViewport's own pushed Viewport (Vector2.Zero + an integer LinePadding
+    /// constant -- always an exact whole pixel) "fixed" it before: not the viewport/scissor
+    /// mechanism itself, but the accidental side effect of drawing at an integer position instead
+    /// of Element.ContentAbsolutePosition's own accumulated float sum, which is essentially never
+    /// guaranteed to land on a whole pixel. Rounding once, here, fixes every consumer of this
+    /// method at the source instead of requiring each one to separately discover the same
+    /// workaround (CanUserScrollVertical = true) -- see TextWindow.DrawContent for the other half
+    /// of this fix, the one direct SpriteBatch.DrawString call in the UI layer that doesn't route
+    /// through this method.
+    /// </summary>
     public void Draw(SpriteBatch spriteBatch, SpriteFontBase font, string glyph, Vector2 position, Color color, bool outline = false)
     {
+        var roundedPosition = new Vector2(MathF.Round(position.X), MathF.Round(position.Y));
+
         if (outline)
         {
-            ContrastTextRenderer.Draw(spriteBatch, font, glyph, position, fillColor: color);
+            ContrastTextRenderer.Draw(spriteBatch, font, glyph, roundedPosition, fillColor: color);
         }
         else
         {
-            spriteBatch.DrawString(font, glyph, position, color);
+            spriteBatch.DrawString(font, glyph, roundedPosition, color);
         }
     }
 

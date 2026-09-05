@@ -99,11 +99,11 @@ public sealed class HealthWindowControllerTests
     }
 
     [TestMethod]
-    public void FolderPosition_ShiftedBelowHealthButton_NoOverlap()
+    public void InventoryButtonPosition_ShiftedBelowHealthButton_NoOverlap()
     {
         var buttonBottom = HealthWindowChrome.ButtonPosition.Y + HealthWindowChrome.ButtonSize.Y;
 
-        Assert.IsGreaterThanOrEqualTo(buttonBottom, InventoryChrome.FolderPosition.Y, "The Inventory Folder must sit at or below the Health button's own bottom edge -- no overlap.");
-        Assert.AreEqual(HealthWindowChrome.ButtonPosition.X, InventoryChrome.FolderPosition.X, "Both stay left-aligned under HudChrome.Margin.");
+        Assert.IsGreaterThanOrEqualTo(buttonBottom, InventoryChrome.ButtonPosition.Y, "The Inventory button must sit at or below the Health button's own bottom edge -- no overlap.");
+        Assert.AreEqual(HealthWindowChrome.ButtonPosition.X, InventoryChrome.ButtonPosition.X, "Both stay left-aligned under HudChrome.Margin.");
     }
 }

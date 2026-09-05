@@ -1,4 +1,6 @@
 using FontStashSharp;
+using Game.Blueprints;
+using Game.Modules.Core.Components;
 using Microsoft.Xna.Framework;
 using Presentation.Fonts;
 using Presentation.Rendering;
@@ -17,8 +19,16 @@ namespace Presentation.UI;
 /// separate path). Both the hover highlight and the Outset/Inset press-bevel always apply,
 /// everywhere -- there is no per-instance toggle for either; IsHovered/IsPressed are both driven
 /// externally by UiInputController (see PressedButton/HoveredButton there), not self-polled.
+///
+/// spriteSheetService/spriteRenderer are optional -- null for the overwhelming majority of
+/// Buttons (title-bar chrome, context-menu rows), which never set ElementOptions.Button and so
+/// never reach the sprite-drawing branch of DrawContent below. Set only by the one shared
+/// ElementFactoryRegistry registration, so a caller that does want an icon (e.g.
+/// InventoryWindowController/AbilityScoreWindowController's own HUD-trigger buttons, mirroring
+/// Folder's own sprite-or-glyph icon) can opt in via ElementOptions.Button.SpriteName without
+/// every other Button consumer needing to thread two services it will never use.
 /// </summary>
-public sealed class Button(FontService fontService, ElementPoolService elementPoolService, LabelRenderer labelRenderer)
+public sealed class Button(FontService fontService, ElementPoolService elementPoolService, LabelRenderer labelRenderer, SpriteSheetService? spriteSheetService = null, SpriteRenderer? spriteRenderer = null)
     : Element(fontService, elementPoolService, labelRenderer)
 {
     public SpriteFontBase ContentFont { get; set; } = fontService.GetFont(FontChrome.DefaultFontSize);
@@ -52,6 +62,9 @@ public sealed class Button(FontService fontService, ElementPoolService elementPo
 
     private BorderStyle _restingBorderStyle;
 
+    /// <summary>Set via ElementOptions.Button.SpriteName -- null (the default) means this button draws its ordinary Left/RightText, never the sprite-or-glyph icon branch below. Reset on every Build, same as every other field here, so a pooled-and-reused Button can't carry a stale icon from its previous consumer.</summary>
+    private string? _spriteName;
+
     public override void Build(Element? parent, ElementOptions options)
     {
         base.Build(parent, options);
@@ -69,6 +82,7 @@ public sealed class Button(FontService fontService, ElementPoolService elementPo
         IsHovered = false;
         IsPressed = false;
         LeftAlign = false;
+        _spriteName = options.Button?.SpriteName;
 
         _restingBorderStyle = options.Chrome?.BorderStyle ?? BorderStyle.Outset;
         BorderStyle = _restingBorderStyle;
@@ -144,6 +158,20 @@ public sealed class Button(FontService fontService, ElementPoolService elementPo
         }
 
         var textColor = Enabled ? TextColor : Color.Gray;
+
+        // Icon mode -- LeftText/RightText's own draw below is for a plain text-only Button
+        // (title-bar chrome, context-menu rows); a caller that opted into ElementOptions.Button.
+        // SpriteName instead gets the same sprite-or-glyph icon Folder's own header draws,
+        // centered across the whole content area, with LeftText read as the fallback glyph if
+        // the sprite name isn't found in the manifest (or spriteSheetService/spriteRenderer were
+        // never wired -- see this class's own doc comment on why they're optional).
+        if (_spriteName is not null && spriteSheetService is not null && spriteRenderer is not null)
+        {
+            SpriteComponent? sprite = SpriteManifest.TryGet(_spriteName, out var spriteComponent) ? spriteComponent : null;
+            var spriteTint = Enabled ? Color.White : Color.Gray;
+            SpriteOrGlyphRenderer.Draw(spriteBatch, spriteSheetService, spriteRenderer, LabelRenderer, sprite, ContentFont, LeftText, textColor, ContentAbsolutePosition, ContentSize, spriteTint);
+            return;
+        }
 
         if (string.IsNullOrEmpty(RightText) && !LeftAlign)
         {

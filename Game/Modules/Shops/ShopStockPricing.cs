@@ -93,11 +93,11 @@ public static class ShopStockPricing
     /// </summary>
     public static (int E1, int E2, int E3, int E4) GetBandEdges(byte preferredStockLevel, int maximumShopStock)
     {
-        var e1 = (int)MathF.Floor(preferredStockLevel * 0.50f);
-        var e2 = (int)MathF.Floor(preferredStockLevel * 0.75f);
-        var e3 = System.Math.Min(maximumShopStock, (int)MathF.Ceiling(preferredStockLevel * 1.25f));
-        var e4 = System.Math.Min(maximumShopStock, (int)MathF.Ceiling(preferredStockLevel * 1.50f));
-        return (e1, e2, e3, e4);
+        var stockBandEdge1 = (int)MathF.Floor(preferredStockLevel * 0.50f);
+        var stockBandEdge2 = (int)MathF.Floor(preferredStockLevel * 0.75f);
+        var stockBandEdge3 = System.Math.Min(maximumShopStock, (int)MathF.Ceiling(preferredStockLevel * 1.25f));
+        var stockBandEdge4 = System.Math.Min(maximumShopStock, (int)MathF.Ceiling(preferredStockLevel * 1.50f));
+        return (stockBandEdge1, stockBandEdge2, stockBandEdge3, stockBandEdge4);
     }
 
     public static StockStatus GetStockStatus(int stock, int e1, int e2, int e3, int e4)
@@ -120,15 +120,11 @@ public static class ShopStockPricing
         return stock <= e4 ? StockStatus.Overstocked : StockStatus.Flooded;
     }
 
-    /// <summary>Convenience overload resolving currentStock/edges from the shop's own components -- what UI code (ShopItemStackCell, InventoryGridContent's hover tooltip) calls.</summary>
-    public static StockStatus GetStockStatus(ComponentManager componentManager, int shopEntityId, ItemDefinition item)
+    /// <summary>Same 5-edge lookup as the (stock, stockBandEdge1, stockBandEdge2, stockBandEdge3, stockBandEdge4) overload, but from a preferredStockLevel/maximumShopStock pair rather than already-computed edges -- what InventoryGridContent.ComputeShopStockStatus calls with its own effective (trade-column-aware) stock level, mirroring the explicit-stock overloads ComputeBulkBuyPrice/ComputeBulkSellPrice already have for the identical reason.</summary>
+    public static StockStatus GetStockStatus(int currentStock, byte preferredStockLevel, int maximumShopStock)
     {
-        var maximumShopStock = item.MaximumShopStock ?? DefaultMaximumShopStock;
-        var currentStock = GetTotalStock(componentManager, shopEntityId, item.Id);
-        var preferredStockLevel = GetPreferredStockLevel(componentManager, shopEntityId, item.Id);
-        var (e1, e2, e3, e4) = GetBandEdges(preferredStockLevel, maximumShopStock);
-
-        return GetStockStatus(currentStock, e1, e2, e3, e4);
+        var (stockBandEdge1, stockBandEdge2, stockBandEdge3, stockBandEdge4) = GetBandEdges(preferredStockLevel, maximumShopStock);
+        return GetStockStatus(currentStock, stockBandEdge1, stockBandEdge2, stockBandEdge3, stockBandEdge4);
     }
 
     /// <summary>The flat multiplier for one band -- shared by buy and sell, see this class's own doc comment for why.</summary>
@@ -159,11 +155,32 @@ public static class ShopStockPricing
 
     /// <summary>Total Gold for buying quantity units from the shop -- bracket pricing, each unit priced at the band the stock level it actually leaves at falls into, as the shop's stock depletes. See this class's own doc comment.</summary>
     public static int ComputeBulkBuyPrice(ComponentManager componentManager, int shopEntityId, ShopComponent shop, ItemDefinition item, ushort quantity) =>
-        ComputeBulkPrice(componentManager, shopEntityId, shop.BuyMultiplier, item, quantity, ascending: false);
+        ComputeBulkBuyPrice(GetTotalStock(componentManager, shopEntityId, item.Id), GetPreferredStockLevel(componentManager, shopEntityId, item.Id), shop, item, quantity);
+
+    /// <summary>
+    /// Same as the ComponentManager/shopEntityId overload, but for a caller that already knows the
+    /// *effective* current stock level it wants banding computed against, rather than "however much
+    /// is literally sitting on shopEntityId's own component pool right now" -- the trade window's
+    /// own trade-shop column needs this: a stack staged there has already physically moved off the
+    /// real shop entity (a plain InventoryActions.TryTransferStack, see UiInputController.
+    /// ResolveTradeAwareItemDrag's "Shop grid &lt;-&gt; Trade: shop column" branch), but hasn't
+    /// actually left the shop's *true* ownership yet -- no Gold has changed hands, the trade could
+    /// still be cancelled. Deriving currentStock from shopEntityId alone would undercount it (down
+    /// to 0 once the whole stack has moved), clamping the bulk-price walk in ComputeBulkPrice below
+    /// to a single stock level and pricing only 1 unit regardless of the stack's real Quantity --
+    /// confirmed live as the trade window's own "buying 5 scrolls back out of the trade column only
+    /// charges for 1" bug.
+    /// </summary>
+    public static int ComputeBulkBuyPrice(int currentStock, byte preferredStockLevel, ShopComponent shop, ItemDefinition item, ushort quantity) =>
+        ComputeBulkPrice(currentStock, preferredStockLevel, shop.BuyMultiplier, item, quantity, ascending: false);
 
     /// <summary>Total Gold for selling quantity units to the shop -- bracket pricing, each unit priced at the band the stock level it actually arrives at falls into, as the shop's stock builds. See this class's own doc comment.</summary>
     public static int ComputeBulkSellPrice(ComponentManager componentManager, int shopEntityId, ShopComponent shop, ItemDefinition item, ushort quantity) =>
-        ComputeBulkPrice(componentManager, shopEntityId, shop.SellMultiplier, item, quantity, ascending: true);
+        ComputeBulkSellPrice(GetTotalStock(componentManager, shopEntityId, item.Id), GetPreferredStockLevel(componentManager, shopEntityId, item.Id), shop, item, quantity);
+
+    /// <summary>See the explicit-stock ComputeBulkBuyPrice overload's own doc comment -- identical reasoning, sell direction.</summary>
+    public static int ComputeBulkSellPrice(int currentStock, byte preferredStockLevel, ShopComponent shop, ItemDefinition item, ushort quantity) =>
+        ComputeBulkPrice(currentStock, preferredStockLevel, shop.SellMultiplier, item, quantity, ascending: true);
 
     /// <summary>
     /// Closed form, not a per-unit loop: every unit within one band shares the same flat
@@ -173,7 +190,7 @@ public static class ShopStockPricing
     /// regardless of quantity (up to a few hundred units in practice), where the old continuous
     /// curve needed one loop iteration per unit.
     /// </summary>
-    private static int ComputeBulkPrice(ComponentManager componentManager, int shopEntityId, float shopMultiplier, ItemDefinition item, ushort quantity, bool ascending)
+    private static int ComputeBulkPrice(int currentStock, byte preferredStockLevel, float shopMultiplier, ItemDefinition item, ushort quantity, bool ascending)
     {
         if (quantity == 0)
         {
@@ -181,8 +198,6 @@ public static class ShopStockPricing
         }
 
         var maximumShopStock = item.MaximumShopStock ?? DefaultMaximumShopStock;
-        var currentStock = GetTotalStock(componentManager, shopEntityId, item.Id);
-        var preferredStockLevel = GetPreferredStockLevel(componentManager, shopEntityId, item.Id);
         var (e1, e2, e3, e4) = GetBandEdges(preferredStockLevel, maximumShopStock);
 
         // The set of stock levels this trade actually walks -- a contiguous range regardless of
@@ -214,11 +229,19 @@ public static class ShopStockPricing
 
     /// <summary>Same total ComputeBulkBuyPrice returns, broken out one entry per band actually crossed, in the order the trade actually walks them (highest stock first, since buying depletes it) -- what the per-trade bracket receipt UI reads for a specific hovered stack's own Quantity.</summary>
     public static IReadOnlyList<BulkPriceBand> ComputeBulkBuyBreakdown(ComponentManager componentManager, int shopEntityId, ShopComponent shop, ItemDefinition item, ushort quantity) =>
-        ComputeBulkBreakdown(componentManager, shopEntityId, shop.BuyMultiplier, item, quantity, ascending: false);
+        ComputeBulkBuyBreakdown(GetTotalStock(componentManager, shopEntityId, item.Id), GetPreferredStockLevel(componentManager, shopEntityId, item.Id), shop, item, quantity);
+
+    /// <summary>See ComputeBulkBuyPrice's own explicit-stock overload doc comment -- identical reasoning, breakdown form.</summary>
+    public static IReadOnlyList<BulkPriceBand> ComputeBulkBuyBreakdown(int currentStock, byte preferredStockLevel, ShopComponent shop, ItemDefinition item, ushort quantity) =>
+        ComputeBulkBreakdown(currentStock, preferredStockLevel, shop.BuyMultiplier, item, quantity, ascending: false);
 
     /// <summary>Same total ComputeBulkSellPrice returns, broken out one entry per band actually crossed, in the order the trade actually walks them (lowest stock first, since selling builds it) -- what the per-trade bracket receipt UI reads for a specific hovered stack's own Quantity.</summary>
     public static IReadOnlyList<BulkPriceBand> ComputeBulkSellBreakdown(ComponentManager componentManager, int shopEntityId, ShopComponent shop, ItemDefinition item, ushort quantity) =>
-        ComputeBulkBreakdown(componentManager, shopEntityId, shop.SellMultiplier, item, quantity, ascending: true);
+        ComputeBulkSellBreakdown(GetTotalStock(componentManager, shopEntityId, item.Id), GetPreferredStockLevel(componentManager, shopEntityId, item.Id), shop, item, quantity);
+
+    /// <summary>See ComputeBulkBuyPrice's own explicit-stock overload doc comment -- identical reasoning, breakdown form.</summary>
+    public static IReadOnlyList<BulkPriceBand> ComputeBulkSellBreakdown(int currentStock, byte preferredStockLevel, ShopComponent shop, ItemDefinition item, ushort quantity) =>
+        ComputeBulkBreakdown(currentStock, preferredStockLevel, shop.SellMultiplier, item, quantity, ascending: true);
 
     /// <summary>
     /// Same band-overlap logic ComputeBulkPrice's own loop uses, kept as a separate method (rather
@@ -227,7 +250,7 @@ public static class ShopStockPricing
     /// never allocates a list just to immediately sum it away -- this one's for the UI, called once
     /// per hovered item per frame, not once per trade.
     /// </summary>
-    private static IReadOnlyList<BulkPriceBand> ComputeBulkBreakdown(ComponentManager componentManager, int shopEntityId, float shopMultiplier, ItemDefinition item, ushort quantity, bool ascending)
+    private static IReadOnlyList<BulkPriceBand> ComputeBulkBreakdown(int currentStock, byte preferredStockLevel, float shopMultiplier, ItemDefinition item, ushort quantity, bool ascending)
     {
         if (quantity == 0)
         {
@@ -235,8 +258,6 @@ public static class ShopStockPricing
         }
 
         var maximumShopStock = item.MaximumShopStock ?? DefaultMaximumShopStock;
-        var currentStock = GetTotalStock(componentManager, shopEntityId, item.Id);
-        var preferredStockLevel = GetPreferredStockLevel(componentManager, shopEntityId, item.Id);
         var (e1, e2, e3, e4) = GetBandEdges(preferredStockLevel, maximumShopStock);
 
         var low = ascending ? currentStock : System.Math.Max(0, currentStock - quantity + 1);

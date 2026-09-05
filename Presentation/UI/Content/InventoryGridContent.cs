@@ -47,7 +47,16 @@ public sealed class InventoryGridContent(
     Func<int?> getSecondaryTargetEntityId,
     MapViewState mapViewState,
     Action<int, Guid> onItemSelected,
-    Action<int, Guid> onCompareRequested) : IElementContent, IInventoryDropTarget
+    Action<int, Guid> onCompareRequested,
+    // Null (every non-trade caller) -- this grid's own pricing direction/cell type derive from
+    // mapViewState.OpenShopEntityId/entityId as they always have. Non-null only for the trade
+    // window's own two columns (PLAN-trade-window.md), which need TradeItemStackCell instead of
+    // Shop/InventoryItemStackCell and a pricing direction that entityId == shopEntityId can never
+    // express (neither trade-offer entity is ever the real shop) -- true for the shop-side column
+    // (buy pricing, same direction the real shop grid uses), false for the player-side column
+    // (sell pricing, same direction the real player grid uses). See IsThisGridTheShop's own use
+    // below for every place this substitutes for the ordinary entity-id check.
+    bool? tradeGridIsShopSide = null) : IElementContent, IInventoryDropTarget
 {
     /// <summary>50% larger than the original (24,24) for readability. internal, not private -- SecondaryInventoryWindow/ShopWindow both derive their own fixed grid width from this and CellGap rather than hand-duplicating the numbers (see their own doc comments on why that duplication was a landmine).</summary>
     public static readonly Vector2 CellSize = new(36, 36);
@@ -99,18 +108,17 @@ public sealed class InventoryGridContent(
     /// sort order compares against, and is deliberately the *group's* total for every member of a
     /// currently-expanded group (not each member's own Quantity) so they sort to the same key and
     /// land contiguously in the final layout regardless of active SortOrder -- see RebuildCells'
-    /// own border-drawing pass, which assumes exactly that adjacency. ChargeText is null except
-    /// for a cell resolving to exactly one stack (StackInstanceId set, never a Merged Stack) whose
-    /// effective item's Activator is a WandActivator -- see BuildCellEntries' own doc comment for
-    /// why charges take priority over Quantity in that one case, replacing it rather than showing
-    /// alongside it. SortFirstAcquiredUtcTicks mirrors SortQuantity's own group-key behavior: one
-    /// stack's own InventoryItemStackComponent.FirstAcquiredUtcTicks normally, but the *newest*
-    /// value across every member for a currently-expanded group's own member cells (same
-    /// contiguity reasoning as SortQuantity) and for a merged badge cell (the "newest FirstAcquired
-    /// of the item stacks in the merged stack" rule InventorySortOrder.RecentlyAcquiredDescending
-    /// sorts by).
+    /// own border-drawing pass, which assumes exactly that adjacency. No charge-count field --
+    /// a wand's remaining/max charges used to replace this cell's own quantity badge outright, but
+    /// that's shown in the hover tooltip now (see UpdateHover's own "Charges: {n}/{max}" line), so
+    /// the badge just shows the plain Quantity, the same as any other item, charges or not.
+    /// SortFirstAcquiredUtcTicks mirrors SortQuantity's own group-key behavior: one stack's own
+    /// InventoryItemStackComponent.FirstAcquiredUtcTicks normally, but the *newest* value across
+    /// every member for a currently-expanded group's own member cells (same contiguity reasoning
+    /// as SortQuantity) and for a merged badge cell (the "newest FirstAcquired of the item stacks
+    /// in the merged stack" rule InventorySortOrder.RecentlyAcquiredDescending sorts by).
     /// </summary>
-    private readonly record struct CellEntry(ItemDefinition Definition, Guid? StackInstanceId, ushort Quantity, ushort SortQuantity, long SortFirstAcquiredUtcTicks, string? ChargeText, bool IsDisabled, bool IsDivergent, bool MergedStackBadgeVisible);
+    private readonly record struct CellEntry(ItemDefinition Definition, Guid? StackInstanceId, ushort Quantity, ushort SortQuantity, long SortFirstAcquiredUtcTicks, bool IsDisabled, bool IsDivergent, bool MergedStackBadgeVisible);
 
     /// <summary>Defaults to NameAscending, reproducing this class's original always-alphabetical behavior exactly. Setting to the same value is a no-op -- doesn't force a rebuild.</summary>
     public InventorySortOrder SortOrder
@@ -229,7 +237,61 @@ public sealed class InventoryGridContent(
     /// <summary>Whichever cell type/size is currently active -- ShopItemStackCell at 4x width while a shop is open (see MapViewState.OpenShopEntityId), plain InventoryItemStackCell at CellSize otherwise. Read by both this grid's own layout (RebuildCells/ComputeColumnCount) and, transiently, by whatever triggered the mode change.</summary>
     private bool _isShopMode;
 
-    private Vector2 ActiveCellSize => _isShopMode ? new Vector2(CellSize.X * ShopCellWidthMultiplier, CellSize.Y) : CellSize;
+    /// <summary>TradeItemStackCell stays a plain CellSize square -- unlike ShopItemStackCell, it has no name to make room for (see TradeItemStackCell's own doc comment), so it doesn't need the extra width.</summary>
+    private Vector2 ActiveCellSize => tradeGridIsShopSide is not null ? CellSize : _isShopMode ? new Vector2(CellSize.X * ShopCellWidthMultiplier, CellSize.Y) : CellSize;
+
+    /// <summary>True when this grid represents the shop's own side of a buy/sell (BuyMultiplier pricing), false for the paying side (SellMultiplier pricing) -- ordinarily entityId == shopEntityId, but tradeGridIsShopSide overrides this for the trade window's own two columns, neither of which is ever the real shop entity. See tradeGridIsShopSide's own doc comment (constructor parameter list).</summary>
+    private bool IsThisGridTheShop(int shopEntityId) => tradeGridIsShopSide ?? entityId == shopEntityId;
+
+    /// <summary>
+    /// shopEntityId's own current stock of itemDefinitionId, plus whatever's currently staged in
+    /// the trade window's shop-side column for that same item (if a trade window even exists) --
+    /// what a trade grid's own cells (this file, via EffectiveStockForThisGrid below) and
+    /// TradeWindow's own Header: Player Value/Shop Value computation both price against, instead of
+    /// a bare ShopStockPricing.GetTotalStock(shopEntityId, ...) call. A stack staged in the
+    /// trade-shop column has already physically moved off the real shop entity (a plain
+    /// InventoryActions.TryTransferStack, see UiInputController.ResolveTradeAwareItemDrag's "Shop
+    /// grid &lt;-&gt; Trade: shop column" branch), but hasn't actually left the shop's *true*
+    /// ownership yet -- no Gold has changed hands, the trade could still be cancelled. Without this,
+    /// a stack that has entirely left the shop's own pool reads as 0 stock, which
+    /// ShopStockPricing.ComputeBulkPrice/ComputeBulkBreakdown clamp down to a single stock level --
+    /// pricing only 1 unit of a bulk stack regardless of its real Quantity (confirmed live as the
+    /// trade window's own "buying 5 scrolls back out of the trade column only charges for 1" bug).
+    /// A no-op (equal to the plain GetTotalStock call) whenever no trade window exists at all, or
+    /// shopEntityId somehow already *is* the trade-shop entity (never true in practice, just
+    /// defensive). Static and internal, not an instance method here -- TradeWindow's own Header
+    /// computation needs the identical correction without owning an InventoryGridContent instance
+    /// of its own. Deliberately NOT used for the real shop's own grid or the player's own grid while
+    /// shop mode is active outside a trade column (see EffectiveStockForThisGrid) -- ShopActions.
+    /// TryBuyFromShop/TrySellToShop, the methods that actually charge/cap a direct buy or sell, only
+    /// ever read the shop's plain physical stock, so pricing/gating those two grids against the
+    /// trade-inclusive total here would let the displayed price and eligibility disagree with what
+    /// a direct Buy All/Sell All (or a plain drag, bypassing the trade window entirely) actually
+    /// charges.
+    /// </summary>
+    internal static int GetEffectiveShopStock(ComponentManager componentManager, MapViewState mapViewState, int shopEntityId, Guid itemDefinitionId)
+    {
+        var stock = ShopStockPricing.GetTotalStock(componentManager, shopEntityId, itemDefinitionId);
+        if (mapViewState.ReservedEntityIds?.TradeOfferShopEntityId is { } tradeShopEntityId && tradeShopEntityId != shopEntityId)
+        {
+            stock += ShopStockPricing.GetTotalStock(componentManager, tradeShopEntityId, itemDefinitionId);
+        }
+
+        return stock;
+    }
+
+    /// <summary>
+    /// The stock level THIS grid's own pricing/eligibility/status reads should walk -- GetEffectiveShopStock's
+    /// trade-inclusive total only while this grid genuinely is one of the trade window's own two
+    /// columns (tradeGridIsShopSide is not null), the shop's plain physical stock otherwise (the
+    /// real shop's own grid, or the player's own grid while shop mode is active but no trade column
+    /// is involved). See GetEffectiveShopStock's own doc comment for why the two grids must not
+    /// share the trade-inclusive number.
+    /// </summary>
+    private int EffectiveStockForThisGrid(int shopEntityId, Guid itemDefinitionId) =>
+        tradeGridIsShopSide is not null
+            ? GetEffectiveShopStock(componentManager, mapViewState, shopEntityId, itemDefinitionId)
+            : ShopStockPricing.GetTotalStock(componentManager, shopEntityId, itemDefinitionId);
 
     public void Update(GameTime gameTime)
     {
@@ -278,6 +340,8 @@ public sealed class InventoryGridContent(
 
         foreach (var cell in _cells)
         {
+            cell.CanStageInTrade = false; // Never meaningful outside shop mode -- see its own doc comment.
+
             if (mapViewState.CompareRequiredActivatorType is not { } requiredType)
             {
                 cell.CompareState = CellCompareState.None;
@@ -302,9 +366,12 @@ public sealed class InventoryGridContent(
     /// the player's Gold (a purchase), the player's own grid checks the shop's Gold (a sale). A
     /// Merged Stack cell (no single stack to price) is always Ineligible, same as compare mode's
     /// own handling. Ineligible cells grey out (existing isGreyedOut logic) and refuse to drag/
-    /// Give/Take (see UiInputController.TryStartContentDrag and BuildItemContextMenu below) --
-    /// closes the currency-drain-style exploit a naive reuse of plain Give/Take would otherwise
-    /// open for wrong-tag or unaffordable trades.
+    /// Give/Take/Sell All/Buy All (see UiInputController.TryStartContentDrag and
+    /// BuildItemContextMenu below) -- closes the currency-drain-style exploit a naive reuse of
+    /// plain Give/Take would otherwise open for wrong-tag or unaffordable trades. CanStageInTrade
+    /// is set independently (tag match only, ignoring affordability) -- see its own doc comment for
+    /// why an unaffordable item can still be greyed out here yet still draggable into the trade
+    /// window.
     /// </summary>
     private void UpdateShopEligibilityState(int shopEntityId)
     {
@@ -313,12 +380,13 @@ public sealed class InventoryGridContent(
             foreach (var cell in _cells)
             {
                 cell.CompareState = CellCompareState.Ineligible;
+                cell.CanStageInTrade = false;
             }
 
             return;
         }
 
-        var isThisGridTheShop = entityId == shopEntityId;
+        var isThisGridTheShop = IsThisGridTheShop(shopEntityId);
         var payerEntityId = isThisGridTheShop ? world.PlayerEntityId : shopEntityId;
         _currencyPool.TryGetReadonly(payerEntityId, out var payerCurrency);
 
@@ -330,12 +398,17 @@ public sealed class InventoryGridContent(
                 !ShopActions.CanTrade(shop, definition))
             {
                 cell.CompareState = CellCompareState.Ineligible;
+                cell.CanStageInTrade = false;
                 continue;
             }
 
+            cell.CanStageInTrade = true;
+
+            var effectiveStock = EffectiveStockForThisGrid(shopEntityId, definition.Id);
+            var preferredStockLevel = ShopStockPricing.GetPreferredStockLevel(componentManager, shopEntityId, definition.Id);
             var totalPrice = isThisGridTheShop
-                ? ShopStockPricing.ComputeBulkBuyPrice(componentManager, shopEntityId, shop, definition, stack.Quantity)
-                : ShopStockPricing.ComputeBulkSellPrice(componentManager, shopEntityId, shop, definition, stack.Quantity);
+                ? ShopStockPricing.ComputeBulkBuyPrice(effectiveStock, preferredStockLevel, shop, definition, stack.Quantity)
+                : ShopStockPricing.ComputeBulkSellPrice(effectiveStock, preferredStockLevel, shop, definition, stack.Quantity);
             cell.CompareState = payerCurrency.Gold >= totalPrice ? CellCompareState.Eligible : CellCompareState.Ineligible;
         }
     }
@@ -453,14 +526,15 @@ public sealed class InventoryGridContent(
             return null;
         }
 
-        var isThisGridTheShop = entityId == shopEntityId;
+        var isThisGridTheShop = IsThisGridTheShop(shopEntityId);
         var neutralColor = hoverPopup.TextColor;
+
+        var effectiveStock = EffectiveStockForThisGrid(shopEntityId, definition.Id);
 
         if (!isThisGridTheShop)
         {
             var maximumShopStock = definition.MaximumShopStock ?? ShopStockPricing.DefaultMaximumShopStock;
-            var currentStock = ShopStockPricing.GetTotalStock(componentManager, shopEntityId, definition.Id);
-            if (!ShopActions.CanTrade(shop, definition) || currentStock >= maximumShopStock)
+            if (!ShopActions.CanTrade(shop, definition) || effectiveStock >= maximumShopStock)
             {
                 return [TooltipRow.Divider(neutralColor), new TooltipRow("Shop will not buy", string.Empty, UnfavorableStatusColor)];
             }
@@ -469,8 +543,7 @@ public sealed class InventoryGridContent(
         var preferredStockLevel = ShopStockPricing.GetPreferredStockLevel(componentManager, shopEntityId, definition.Id);
         var maxStock = definition.MaximumShopStock ?? ShopStockPricing.DefaultMaximumShopStock;
         var (e1, e2, e3, e4) = ShopStockPricing.GetBandEdges(preferredStockLevel, maxStock);
-        var currentStockLevel = ShopStockPricing.GetTotalStock(componentManager, shopEntityId, definition.Id);
-        var currentBand = ShopStockPricing.GetStockStatus(currentStockLevel, e1, e2, e3, e4);
+        var currentBand = ShopStockPricing.GetStockStatus(effectiveStock, e1, e2, e3, e4);
         var shopMultiplier = isThisGridTheShop ? shop.BuyMultiplier : shop.SellMultiplier;
 
         var rows = new List<TooltipRow> { TooltipRow.Divider(neutralColor) };
@@ -486,8 +559,8 @@ public sealed class InventoryGridContent(
         if (stackQuantity is { } quantity)
         {
             var breakdown = isThisGridTheShop
-                ? ShopStockPricing.ComputeBulkBuyBreakdown(componentManager, shopEntityId, shop, definition, quantity)
-                : ShopStockPricing.ComputeBulkSellBreakdown(componentManager, shopEntityId, shop, definition, quantity);
+                ? ShopStockPricing.ComputeBulkBuyBreakdown(effectiveStock, preferredStockLevel, shop, definition, quantity)
+                : ShopStockPricing.ComputeBulkSellBreakdown(effectiveStock, preferredStockLevel, shop, definition, quantity);
 
             rows.Add(TooltipRow.Divider(neutralColor));
 
@@ -590,16 +663,20 @@ public sealed class InventoryGridContent(
 
     /// <summary>
     /// "Compare" (arms Item Details Comparison against this stack -- see ItemComparisonController.
-    /// Arm), plus "Give" (this grid's own entity -> the currently-open secondary target) or "Take"
-    /// (the currently-open secondary target -> this grid's own entity) -- never both of the latter
-    /// two, and neither if no secondary window is currently open (getSecondaryTargetEntityId
-    /// returns null). Every option here is guarded on the clicked cell not being a Merged Stack
-    /// (no single StackInstanceId to compare/transfer, the same restriction InventoryItemStackCell.
-    /// CanBindToHotbar already enforces for drag-binding). For SecondaryInventoryWindow's own grid,
-    /// getSecondaryTargetEntityId always returns that corpse's own entityId (it *is* the secondary
-    /// target for as long as it exists), so its cells only ever offer "Take"; for the player's own
-    /// grid, it queries whatever's actually open right now (see InventoryFolderController.
-    /// GetSecondaryTargetEntityId), so "Give" only appears while a secondary window is open.
+    /// Arm), "Add to trade" (this grid's own entity -> the matching trade-offer entity, only while a
+    /// shop -- and so a trade window -- is open, see below), plus "Give"/"Sell All" (this grid's own
+    /// entity -> the currently-open secondary target) or "Take"/"Buy All" (the currently-open
+    /// secondary target -> this grid's own entity) -- never both of the latter two, and neither if
+    /// no secondary window is currently open (getSecondaryTargetEntityId returns null). Every option
+    /// here is guarded on the clicked cell not being a Merged Stack (no single StackInstanceId to
+    /// compare/transfer, the same restriction InventoryItemStackCell.CanBindToHotbar already
+    /// enforces for drag-binding). For SecondaryInventoryWindow's own grid, getSecondaryTargetEntityId
+    /// always returns that corpse's own entityId (it *is* the secondary target for as long as it
+    /// exists), so its cells only ever offer "Take"; for the player's own grid, it queries whatever's
+    /// actually open right now (see InventoryWindowController.GetSecondaryTargetEntityId), so "Give"
+    /// only appears while a secondary window is open. Trade-grid cells never reach this method at all
+    /// (see this grid's own OnRightClicked wiring in RebuildCells) -- PLAN-trade-window.md's own
+    /// "Context menu changes" section makes right-click there remove the stack immediately instead.
     /// </summary>
     private List<ContextMenuOption> BuildItemContextMenu(InventoryItemStackCell cell)
     {
@@ -618,17 +695,45 @@ public sealed class InventoryGridContent(
         // style exploit a naive reuse of plain Give/Take would otherwise open.
         var isShopIneligible = mapViewState.OpenShopEntityId is not null && cell.CompareState == CellCompareState.Ineligible;
 
+        // "Add to trade" -- gated on CanStageInTrade (tag match only, see its own doc comment), not
+        // the stricter isShopIneligible (tag match AND affordability) Sell All/Buy All below use --
+        // an unaffordable item can still be staged in the trade window even though it can't be
+        // directly bought/sold there or on the shop's own grid; it just stays greyed out. Only on
+        // the player's own grid (-> ReservedEntityIds.TradeOfferPlayerEntityId) or the real shop's
+        // own grid (-> ReservedEntityIds.TradeOfferShopEntityId), never a corpse/container grid; a shop being open implies the
+        // trade window is too (TradeWindowController opens in lockstep with ShopWindowController,
+        // see its own doc comment), so OpenShopEntityId alone is enough to gate this without
+        // separately checking the trade window exists.
+        if (cell.CanStageInTrade && mapViewState.OpenShopEntityId is { } shopEntityId)
+        {
+            var tradeTargetEntityId = cell.EntityId == world.PlayerEntityId
+                ? mapViewState.ReservedEntityIds?.TradeOfferPlayerEntityId
+                : cell.EntityId == shopEntityId
+                    ? mapViewState.ReservedEntityIds?.TradeOfferShopEntityId
+                    : null;
+
+            if (tradeTargetEntityId is { } tradeTarget)
+            {
+                options.Add(new ContextMenuOption("Add to trade", null, Enabled: true, () =>
+                    InventoryActions.TryTransferStack(componentManager, cell.EntityId, tradeTarget, stackInstanceId, world)));
+            }
+        }
+
         if (!isShopIneligible && getSecondaryTargetEntityId() is { } secondaryTargetEntityId)
         {
             // A shop endpoint routes the same Give/Take gesture through ShopActions instead of a
-            // plain transfer -- "Give" to a shop is a sale (ShopActions.TrySellToShop), "Take"
-            // from a shop is a purchase (ShopActions.TryBuyFromShop), both moving Gold the
-            // opposite direction at the shop's own price.
+            // plain transfer -- "Give" to a shop is a sale (ShopActions.TrySellToShop, relabeled
+            // "Sell All"), "Take" from a shop is a purchase (ShopActions.TryBuyFromShop, relabeled
+            // "Buy All"), both moving Gold the opposite direction at the shop's own price. A
+            // non-shop secondary target (a corpse/container) keeps the plain "Give"/"Take" labels --
+            // there's no price to speak of, just a transfer.
+            var isShopSecondary = _shopPool?.Has(secondaryTargetEntityId) == true;
+
             if (cell.EntityId == world.PlayerEntityId && secondaryTargetEntityId != world.PlayerEntityId)
             {
-                options.Add(new ContextMenuOption("Give", null, Enabled: true, () =>
+                options.Add(new ContextMenuOption(isShopSecondary ? "Sell All" : "Give", null, Enabled: true, () =>
                 {
-                    if (_shopPool?.Has(secondaryTargetEntityId) == true)
+                    if (isShopSecondary)
                     {
                         ShopActions.TrySellToShop(componentManager, itemCatalog, world.PlayerEntityId, secondaryTargetEntityId, stackInstanceId, world);
                     }
@@ -640,9 +745,9 @@ public sealed class InventoryGridContent(
             }
             else if (cell.EntityId == secondaryTargetEntityId && secondaryTargetEntityId != world.PlayerEntityId)
             {
-                options.Add(new ContextMenuOption("Take", null, Enabled: true, () =>
+                options.Add(new ContextMenuOption(isShopSecondary ? "Buy All" : "Take", null, Enabled: true, () =>
                 {
-                    if (_shopPool?.Has(secondaryTargetEntityId) == true)
+                    if (isShopSecondary)
                     {
                         ShopActions.TryBuyFromShop(componentManager, itemCatalog, world.PlayerEntityId, secondaryTargetEntityId, stackInstanceId, world);
                     }
@@ -655,6 +760,28 @@ public sealed class InventoryGridContent(
         }
 
         return options;
+    }
+
+    /// <summary>
+    /// Trade-grid cells' own right-click action, wired in place of BuildItemContextMenu/a context
+    /// menu entirely (see that method's own doc comment) -- removes the clicked stack from the
+    /// trade immediately, moving it back to whichever real entity it came from (the real player for
+    /// the player-side column, the real shop for the shop-side column), the same transfer "Add to
+    /// trade" performs in reverse. A no-op for a Merged Stack cell (no single StackInstanceId) or if
+    /// isTradeShopSide's own real owner (OpenShopEntityId) is somehow unset.
+    /// </summary>
+    private void RemoveFromTrade(InventoryItemStackCell cell, bool isTradeShopSide)
+    {
+        if (cell.StackInstanceId is not { } stackInstanceId)
+        {
+            return;
+        }
+
+        var realOwnerEntityId = isTradeShopSide ? mapViewState.OpenShopEntityId : world.PlayerEntityId;
+        if (realOwnerEntityId is { } destination)
+        {
+            InventoryActions.TryTransferStack(componentManager, cell.EntityId, destination, stackInstanceId, world);
+        }
     }
 
     private void RebuildCells()
@@ -717,28 +844,32 @@ public sealed class InventoryGridContent(
                 Content = new ElementContentOptions { ContentColor = Color.Transparent },
             };
 
-            InventoryItemStackCell cell = _isShopMode
-                ? elementPoolService.CreateElement<ShopItemStackCell>(_hostWindow, options)
-                : elementPoolService.CreateElement<InventoryItemStackCell>(_hostWindow, options);
+            InventoryItemStackCell cell = tradeGridIsShopSide is not null
+                ? elementPoolService.CreateElement<TradeItemStackCell>(_hostWindow, options)
+                : _isShopMode
+                    ? elementPoolService.CreateElement<ShopItemStackCell>(_hostWindow, options)
+                    : elementPoolService.CreateElement<InventoryItemStackCell>(_hostWindow, options);
 
-            cell.Configure(entityId, entry.Definition.Id, entry.StackInstanceId, entry.Definition.SpriteName, entry.Definition.Glyph, entry.Definition.GlyphColor, entry.Quantity, entry.ChargeText, entry.IsDisabled, entry.IsDivergent, entry.MergedStackBadgeVisible, cellSize);
+            cell.Configure(entityId, entry.Definition.Id, entry.StackInstanceId, entry.Definition.SpriteName, entry.Definition.Glyph, entry.Definition.GlyphColor, entry.Quantity, entry.IsDisabled, entry.IsDivergent, entry.MergedStackBadgeVisible, cellSize);
 
             if (cell is ShopItemStackCell shopCell)
             {
                 shopCell.SetItemName(entry.Definition.Name);
                 shopCell.SetPrice(ComputeShopTotalPrice(entry.Definition, entry.Quantity), entry.Quantity);
-                shopCell.SetStockStatus(ComputeShopStockStatus(entry.Definition), mapViewState.OpenShopEntityId == entityId);
+                shopCell.SetStockStatus(ComputeShopStockStatus(entry.Definition), tradeGridIsShopSide ?? mapViewState.OpenShopEntityId == entityId);
             }
 
             cell.Clicked += OnCellClicked;
-            cell.OnRightClicked = position =>
-            {
-                var options = BuildItemContextMenu(cell);
-                if (options.Count > 0)
+            cell.OnRightClicked = tradeGridIsShopSide is { } isTradeShopSide
+                ? _ => RemoveFromTrade(cell, isTradeShopSide)
+                : position =>
                 {
-                    contextMenuController.Open(new Vector2(position.X, position.Y), options);
-                }
-            };
+                    var options = BuildItemContextMenu(cell);
+                    if (options.Count > 0)
+                    {
+                        contextMenuController.Open(new Vector2(position.X, position.Y), options);
+                    }
+                };
             _hostWindow.AddChild(cell);
             _cells.Add(cell);
 
@@ -754,6 +885,37 @@ public sealed class InventoryGridContent(
                 var left = column == 0 || !IsExpandedMemberAt(i - 1);
                 var right = column == columns - 1 || !IsExpandedMemberAt(i + 1);
                 cell.SetGroupBorderEdges(top, bottom, left, right);
+            }
+        }
+
+        // Trade grids are fixed-size (InventoryCapacity.MaxNonPlayerStackCount, never scrolling --
+        // see PLAN-trade-window.md's own "Trade grid capacity" section) and otherwise the only
+        // grids in the game with visibly empty space below/beside their real items -- every other
+        // grid either scrolls (no unused space to speak of) or is the shop's own grid (whose stock
+        // is what it is). Filling the remainder with a pure decoration (never a real, interactable
+        // cell -- see EmptyTradeSlotCell's own doc comment) makes it visually obvious the player can
+        // still drop more in, not just that the grid happens to be smaller than 20 slots today.
+        // Continues the same column/row math the real-cell loop above just used, so a placeholder
+        // always lands in the next free slot after the last real item, never gets tracked in
+        // _cells (never hoverable/selectable/compare-stated), and is destroyed and freshly
+        // recreated every rebuild exactly like every real cell already is (see
+        // elementPoolService.CloseAllChildren at the top of this method).
+        if (tradeGridIsShopSide is not null)
+        {
+            for (var i = _reusableCellEntries.Count; i < InventoryCapacity.MaxNonPlayerStackCount; i++)
+            {
+                var column = i % columns;
+                var row = i / columns;
+                var position = new Vector2(column * (cellSize.X + CellGap), row * (cellSize.Y + CellGap));
+
+                var emptyCell = elementPoolService.CreateElement<EmptyTradeSlotCell>(_hostWindow, new ElementOptions
+                {
+                    Hierarchy = new ElementHierarchyOptions { CanContainChildren = false },
+                    Layout = new ElementLayoutOptions { RelativePosition = position, Size = cellSize, DisplayMode = ElementDisplayMode.Fixed },
+                    Chrome = new ElementChromeOptions { ShowBorder = false, CanUserFocus = false },
+                    Content = new ElementContentOptions { ContentColor = Color.Transparent },
+                });
+                _hostWindow.AddChild(emptyCell);
             }
         }
 
@@ -799,21 +961,37 @@ public sealed class InventoryGridContent(
             return 0;
         }
 
-        var isThisGridTheShop = entityId == shopEntityId;
+        var isThisGridTheShop = IsThisGridTheShop(shopEntityId);
+        var effectiveStock = EffectiveStockForThisGrid(shopEntityId, definition.Id);
+        var preferredStockLevel = ShopStockPricing.GetPreferredStockLevel(componentManager, shopEntityId, definition.Id);
         return isThisGridTheShop
-            ? ShopStockPricing.ComputeBulkBuyPrice(componentManager, shopEntityId, shop, definition, (ushort)quantity)
-            : ShopStockPricing.ComputeBulkSellPrice(componentManager, shopEntityId, shop, definition, (ushort)quantity);
+            ? ShopStockPricing.ComputeBulkBuyPrice(effectiveStock, preferredStockLevel, shop, definition, (ushort)quantity)
+            : ShopStockPricing.ComputeBulkSellPrice(effectiveStock, preferredStockLevel, shop, definition, (ushort)quantity);
     }
 
     /// <summary>
     /// The shop's own stock status for definition -- always keyed off the shop entity regardless of
     /// which grid is being built (the shop's own grid or the player's own grid while shop mode is
-    /// active both describe the same shop's stock, see ComputeShopPrices' own doc comment for the
-    /// matching isThisGridTheShop direction rule). Normal (no color) outside shop mode or when the
-    /// open shop's own ShopComponent can't be resolved -- same fallback ComputeShopPrices uses.
+    /// active both describe the same shop's stock, see ComputeShopTotalPrice's own doc comment for
+    /// the matching isThisGridTheShop direction rule). Normal (no color) outside shop mode or when
+    /// the open shop's own ShopComponent can't be resolved -- same fallback ComputeShopTotalPrice
+    /// uses.
     /// </summary>
-    private StockStatus ComputeShopStockStatus(ItemDefinition definition) =>
-        mapViewState.OpenShopEntityId is { } shopEntityId ? ShopStockPricing.GetStockStatus(componentManager, shopEntityId, definition) : StockStatus.Normal;
+    private StockStatus ComputeShopStockStatus(ItemDefinition definition)
+    {
+        if (mapViewState.OpenShopEntityId is not { } shopEntityId)
+        {
+            return StockStatus.Normal;
+        }
+
+        // The explicit-stock GetStockStatus overload, not the plain GetTotalStock-driven lookup --
+        // this grid's own EffectiveStockForThisGrid may be the trade-inclusive total (see its own
+        // doc comment), which a bare shopEntityId-only lookup would undercount.
+        var maximumShopStock = definition.MaximumShopStock ?? ShopStockPricing.DefaultMaximumShopStock;
+        var effectiveStock = EffectiveStockForThisGrid(shopEntityId, definition.Id);
+        var preferredStockLevel = ShopStockPricing.GetPreferredStockLevel(componentManager, shopEntityId, definition.Id);
+        return ShopStockPricing.GetStockStatus(effectiveStock, preferredStockLevel, maximumShopStock);
+    }
 
     /// <summary>
     /// Groups _reusableVisibleEntries by ItemDefinitionId when GroupDivergedStacks is on --
@@ -840,7 +1018,7 @@ public sealed class InventoryGridContent(
         {
             foreach (var (stack, definition) in _reusableVisibleEntries)
             {
-                _reusableCellEntries.Add(new CellEntry(definition, stack.StackInstanceId, stack.Quantity, stack.Quantity, stack.FirstAcquiredUtcTicks, ComputeChargeText(definition), stack.IsDisabled, stack.IsDivergent, MergedStackBadgeVisible: false));
+                _reusableCellEntries.Add(new CellEntry(definition, stack.StackInstanceId, stack.Quantity, stack.Quantity, stack.FirstAcquiredUtcTicks, stack.IsDisabled, stack.IsDivergent, MergedStackBadgeVisible: false));
             }
 
             return;
@@ -864,7 +1042,7 @@ public sealed class InventoryGridContent(
             if (indices.Count == 1)
             {
                 var (stack, definition) = _reusableVisibleEntries[indices[0]];
-                _reusableCellEntries.Add(new CellEntry(definition, stack.StackInstanceId, stack.Quantity, stack.Quantity, stack.FirstAcquiredUtcTicks, ComputeChargeText(definition), stack.IsDisabled, stack.IsDivergent, MergedStackBadgeVisible: false));
+                _reusableCellEntries.Add(new CellEntry(definition, stack.StackInstanceId, stack.Quantity, stack.Quantity, stack.FirstAcquiredUtcTicks, stack.IsDisabled, stack.IsDivergent, MergedStackBadgeVisible: false));
                 continue;
             }
 
@@ -888,23 +1066,19 @@ public sealed class InventoryGridContent(
                 foreach (var index in indices)
                 {
                     var (stack, definition) = _reusableVisibleEntries[index];
-                    _reusableCellEntries.Add(new CellEntry(definition, stack.StackInstanceId, stack.Quantity, groupTotal, newestFirstAcquiredUtcTicks, ComputeChargeText(definition), stack.IsDisabled, stack.IsDivergent, MergedStackBadgeVisible: false));
+                    _reusableCellEntries.Add(new CellEntry(definition, stack.StackInstanceId, stack.Quantity, groupTotal, newestFirstAcquiredUtcTicks, stack.IsDisabled, stack.IsDivergent, MergedStackBadgeVisible: false));
                 }
 
                 continue;
             }
 
-            // A Merged Stack cell always shows its summed Quantity, never charges -- its members
-            // can each carry a different charge count, so there is no single number to show (see
-            // CellEntry's own doc comment).
+            // A Merged Stack cell always shows its summed Quantity -- its members could each carry
+            // a different charge count (now shown per-stack in the hover tooltip, not this badge),
+            // but the quantity itself is exactly the sum regardless.
             var first = _reusableVisibleEntries[indices[0]];
-            _reusableCellEntries.Add(new CellEntry(first.Definition, StackInstanceId: null, groupTotal, groupTotal, newestFirstAcquiredUtcTicks, ChargeText: null, allDisabled, IsDivergent: false, MergedStackBadgeVisible: anyDivergent));
+            _reusableCellEntries.Add(new CellEntry(first.Definition, StackInstanceId: null, groupTotal, groupTotal, newestFirstAcquiredUtcTicks, allDisabled, IsDivergent: false, MergedStackBadgeVisible: anyDivergent));
         }
     }
-
-    /// <summary>"{Charges}/{MaxCharges}" for a WandActivator item, else null -- the one case where a stack's remaining-uses count isn't its Quantity (see CellEntry's own doc comment for why the two never show together).</summary>
-    private static string? ComputeChargeText(ItemDefinition definition) =>
-        definition.Activator is WandActivator wandActivator ? $"{wandActivator.Charges}/{wandActivator.MaxCharges}" : null;
 
     /// <summary>Sorts by SortQuantity, not each entry's own Quantity, so an expanded group's members (all sharing the same SortQuantity -- the group's total) land contiguously regardless of active SortOrder; ties (including two entries with genuinely equal Quantity/Name) always break by ItemDefinitionId, both for determinism and so a coincidental tie with an unrelated item can never split an expanded group apart.</summary>
     private void SortCellEntries()

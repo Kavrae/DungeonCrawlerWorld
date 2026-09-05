@@ -50,6 +50,7 @@ public static class WorldSessionBootstrapper
         var ecsContext = bootstrapResult.EcsContext;
 
         var playerEntityId = FloorBuilder.ReservePlayerEntity(ecsContext);
+        var reservedEntityIds = FloorBuilder.ReserveTradeOfferEntities(ecsContext);
 
         diagnostics.AttachEcsContext(ecsContext.ComponentManager, ecsContext.EntityManager);
         ecsContext.SystemManager.Profiler = diagnostics.FrameCostRecorder;
@@ -91,6 +92,6 @@ public static class WorldSessionBootstrapper
             ecsContext.EventBus.Publish(new FloorEnteredEvent(floorNumber));
         }
 
-        return new WorldSessionContext(world, ecsContext, mathUtility, bootstrapResult.MovedEntities, crawlerNumberAllocator, bootstrapResult.ActionCatalog, bootstrapResult.ItemCatalog, playerActivityLog, bootstrapResult.StatusEffectDisplays);
+        return new WorldSessionContext(world, ecsContext, mathUtility, bootstrapResult.MovedEntities, crawlerNumberAllocator, bootstrapResult.ActionCatalog, bootstrapResult.ItemCatalog, playerActivityLog, bootstrapResult.StatusEffectDisplays, reservedEntityIds);
     }
 }

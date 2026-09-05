@@ -271,7 +271,7 @@ public static class InventoryActions
             static (ref stack, state) => stack.IsDisabled = state.disabled);
     }
 
-    /// <summary>Disables/enables an entity's whole inventory -- items still exist and can still be granted while disabled, but the management window can't be opened (see InventoryFolderController).</summary>
+    /// <summary>Disables/enables an entity's whole inventory -- items still exist and can still be granted while disabled, but the management window can't be opened (see InventoryWindowController).</summary>
     public static void SetInventoryDisabled(ComponentManager componentManager, int entityId, bool disabled) =>
         componentManager.Merge(entityId, new InventoryDisabledComponent(disabled));
 

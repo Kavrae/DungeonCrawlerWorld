@@ -11,9 +11,9 @@ namespace Presentation.UI.Looting;
 /// Opens a second inventory-grid window next to the player's own InventoryManagementWindow,
 /// targeting some other entity -- corpses and containers (treasure chests, lootable while alive
 /// or destroyed) today, a shop later reusing this same controller rather than growing its own
-/// (see TODO.md's Corpse looting entry, and the InventoryFolderController split entry --
-/// deliberately kept separate from InventoryFolderController itself since that class is about the
-/// player's own folder/windows and is slated for its own breakup). One target at a time: opening
+/// (see TODO.md's Corpse looting entry) -- deliberately kept separate from
+/// InventoryWindowController itself, which owns only the player's own Inventory button/window.
+/// One target at a time: opening
 /// a different target replaces whichever window is currently open; opening the same one again
 /// closes it (a toggle, matching this codebase's re-press-to-confirm/cancel convention elsewhere
 /// -- e.g. the hotbar). Deliberately owns no knowledge of what's being looted beyond an entity id
@@ -22,7 +22,7 @@ namespace Presentation.UI.Looting;
 public sealed class SecondaryInventoryWindowController(
     ElementPoolService elementPoolService,
     ComponentManager componentManager,
-    InventoryFolderController inventoryFolderController,
+    InventoryWindowController inventoryWindowController,
     ContextMenuController contextMenuController,
     MapWindow mapWindow)
 {
@@ -31,16 +31,16 @@ public sealed class SecondaryInventoryWindowController(
     private SecondaryInventoryWindow? _window;
     private int _currentTargetEntityId = -1;
 
-    /// <summary>The currently-open secondary/corpse window's own target entity id, if any -- lets InventoryFolderController's own GetSecondaryTargetEntityId (wired by ShellBootstrapper) answer "is a secondary window open, and for whom" for the player's own inventory grid's Give/Take menu, without that grid needing a direct reference to this controller.</summary>
+    /// <summary>The currently-open secondary/corpse window's own target entity id, if any -- lets InventoryWindowController's own GetSecondaryTargetEntityId (wired by ShellBootstrapper) answer "is a secondary window open, and for whom" for the player's own inventory grid's Give/Take menu, without that grid needing a direct reference to this controller.</summary>
     public int? OpenTargetEntityId => _window is null ? null : _currentTargetEntityId;
 
     /// <summary>The currently-open corpse/secondary window's own bounds, if any -- Rectangle.Empty (never contains a click) when nothing is open. Lets ItemDetailsWindowController's own outside-click-close check treat this window as "still inside," the same way it already does for the player's own InventoryManagementWindow.</summary>
     public Rectangle Rectangle => _window?.Rectangle ?? Rectangle.Empty;
 
-    /// <summary>Settable late-bound callback for "the player clicked a real single-stack item cell in this corpse/secondary grid" -- see InventoryFolderController.OnItemSelected, wired by ShellBootstrapper to the same ItemDetailsWindowController.Open. Threaded into every corpse window's own Configure call.</summary>
+    /// <summary>Settable late-bound callback for "the player clicked a real single-stack item cell in this corpse/secondary grid" -- see InventoryWindowController.OnItemSelected, wired by ShellBootstrapper to the same ItemDetailsWindowController.Open. Threaded into every corpse window's own Configure call.</summary>
     public Action<int, Guid>? OnItemSelected { get; set; }
 
-    /// <summary>Settable late-bound callback for "the player chose Compare from this corpse/secondary grid's own item context menu" -- see InventoryFolderController.OnCompareRequested, wired by ShellBootstrapper to the same ItemComparisonController.Arm.</summary>
+    /// <summary>Settable late-bound callback for "the player chose Compare from this corpse/secondary grid's own item context menu" -- see InventoryWindowController.OnCompareRequested, wired by ShellBootstrapper to the same ItemComparisonController.Arm.</summary>
     public Action<int, Guid>? OnCompareRequested { get; set; }
 
     /// <summary>Closes whichever corpse/container window is currently open, if any -- a no-op otherwise. Lets ShellBootstrapper enforce "a corpse/container window and a shop window are never open at once" (both cascade off the same player-inventory-window position, so two open together would overlap) without this controller needing any awareness of ShopWindowController.</summary>
@@ -51,7 +51,7 @@ public sealed class SecondaryInventoryWindowController(
         _layers = layers;
 
         // Created once and shared across every open of a corpse window, the same persistent/
-        // toggled-via-IsVisible lifecycle InventoryFolderController's own hover popups use.
+        // toggled-via-IsVisible lifecycle InventoryWindowController's own hover popups use.
         _hoverPopup = elementPoolService.CreateElement<Tooltip>(null, new ElementOptions
         {
             Layout = new ElementLayoutOptions { RelativePosition = Vector2.Zero, MaximumSize = PopupChrome.CorpseLootHoverPopupMaximumSize, DisplayMode = ElementDisplayMode.WrapContent, IsVisible = false },
@@ -78,10 +78,10 @@ public sealed class SecondaryInventoryWindowController(
 
         _window?.Close();
 
-        inventoryFolderController.OpenInventoryWindow();
-        if (inventoryFolderController.PlayerInventoryWindow is not { } playerWindow)
+        inventoryWindowController.OpenInventoryWindow();
+        if (inventoryWindowController.PlayerInventoryWindow is not { } playerWindow)
         {
-            return; // Disabled inventory -- nothing to loot alongside (see InventoryFolderController.IsInventoryDisabled).
+            return; // Disabled inventory -- nothing to loot alongside (see InventoryWindowController.IsInventoryDisabled).
         }
 
         componentManager.Merge(targetEntityId, new LootedComponent());
@@ -125,7 +125,7 @@ public sealed class SecondaryInventoryWindowController(
     {
         _layers.Remove(UiLayer.DynamicHud, closedWindow);
         _layers.CloseMenuWindow(closedWindow);
-        _hoverPopup.Hide(); // Closing mid-hover shouldn't leave the popup stranded -- mirrors InventoryFolderController's own window Closed handlers.
+        _hoverPopup.Hide(); // Closing mid-hover shouldn't leave the popup stranded -- mirrors InventoryWindowController's own window Closed handlers.
         _window = null;
         _currentTargetEntityId = -1;
     }

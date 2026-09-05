@@ -89,7 +89,7 @@ public sealed class TabbedContent(IReadOnlyList<TabbedContent.TabDefinition> tab
     /// subscription below either -- ElementPoolService.CloseElement clears every event on hostWindow
     /// (Resized included) when it's closed at the end of the previous open, and a new open never
     /// reaches Initialize without going through Close first (see WindowLifecycle.Open in
-    /// InventoryFolderController).
+    /// InventoryWindowController).
     /// </summary>
     public void Initialize(Window hostWindow)
     {

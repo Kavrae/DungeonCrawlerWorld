@@ -2,9 +2,10 @@ namespace Presentation.UI;
 
 /// <summary>
 /// Generic "one pooled window a controller can open/close/toggle" lifecycle -- shared shape behind
-/// InventoryManagementWindow and AbilityScoreWindow (InventoryFolderController), and HealthWindow
-/// (HealthWindowController), which otherwise differ only in their own ElementOptions
-/// (createAndConfigure) and disabled predicate. Pooled and reused for a future open (see
+/// InventoryManagementWindow (InventoryWindowController), AbilityScoreWindow
+/// (AbilityScoreWindowController), and HealthWindow (HealthWindowController), which otherwise
+/// differ only in their own ElementOptions (createAndConfigure) and disabled predicate. Pooled and
+/// reused for a future open (see
 /// ElementPoolService) -- ElementPoolService.CloseElement clears every event on a pooled Element
 /// (Closed included) before it goes back into its pool, so HandleClosed's own subscription can't
 /// outlive the reuse cycle without detaching itself.

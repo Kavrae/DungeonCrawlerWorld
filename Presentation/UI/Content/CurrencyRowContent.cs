@@ -33,7 +33,14 @@ public sealed class CurrencyRowContent(
     SpriteSheetService spriteSheetService,
     SpriteRenderer spriteRenderer,
     Func<int?> getSecondaryTargetEntityId,
-    EventBus? eventBus = null) : IElementContent, IInventoryDropTarget
+    EventBus? eventBus = null,
+    // False for the trade window's own two currency footers (PLAN-trade-window.md) -- "10 [sprite]"
+    // instead of "Gold : 10 [sprite]", the column being too narrow to spare the label.
+    bool showLabels = true,
+    // Null (every non-trade caller) -- CurrencyElement.Configure's own default (WindowPalette.
+    // BodyTextColor). White for the trade window's own two currency footers, whose trade grid sits
+    // on a transparent background too dark for the shared BodyTextColor to read against.
+    Color? textColor = null) : IElementContent, IInventoryDropTarget
 {
     public const float Height = 24f;
 
@@ -88,7 +95,7 @@ public sealed class CurrencyRowContent(
             Chrome = new ElementChromeOptions { ShowBorder = false, ShowTitle = false, CanUserFocus = false },
             Content = new ElementContentOptions { ContentColor = Color.Transparent },
         });
-        element.Configure(entityId, type, size);
+        element.Configure(entityId, type, size, showLabels, textColor);
         _hostWindow.AddChild(element);
         element.OnRightClicked = clickPosition =>
         {
@@ -132,7 +139,7 @@ public sealed class CurrencyRowContent(
         _creditsElement!.SetAmount(credits);
     }
 
-    /// <summary>Mirrors InventoryGridContent.BuildItemContextMenu's exact Give/Take decision logic. "Give"/"Take" move only the clicked element's own currency; "Give All"/"Take All" move both regardless of which element was right-clicked. A shop never offers "Take"/"Take All" -- a player can Give Gold to a shop but never take it back out (see this class's own doc comment).</summary>
+    /// <summary>Mirrors InventoryGridContent.BuildItemContextMenu's exact Give/Take decision logic. "Give"/"Take" move only the clicked element's own currency; "Give All"/"Take All" move both regardless of which element was right-clicked. A shop never offers "Take"/"Take All" -- a player can Give Gold to a shop but never take it back out (see this class's own doc comment). A shop also never offers plain "Give": giving one currency type at a time isn't a meaningful shop gesture, so only "Give All" is shown once the secondary target carries a ShopComponent -- a corpse/container still gets both.</summary>
     private List<ContextMenuOption> BuildCurrencyContextMenu(CurrencyElement element)
     {
         List<ContextMenuOption> options = [];
@@ -142,12 +149,18 @@ public sealed class CurrencyRowContent(
             return options;
         }
 
+        var secondaryIsShop = _shopPool?.Has(secondaryTargetEntityId) == true;
+
         if (element.EntityId == world.PlayerEntityId && secondaryTargetEntityId != world.PlayerEntityId)
         {
-            options.Add(new ContextMenuOption("Give", null, Enabled: true, () => TransferOne(element, world.PlayerEntityId, secondaryTargetEntityId)));
+            if (!secondaryIsShop)
+            {
+                options.Add(new ContextMenuOption("Give", null, Enabled: true, () => TransferOne(element, world.PlayerEntityId, secondaryTargetEntityId)));
+            }
+
             options.Add(new ContextMenuOption("Give All", null, Enabled: true, () => TransferAll(world.PlayerEntityId, secondaryTargetEntityId)));
         }
-        else if (element.EntityId == secondaryTargetEntityId && secondaryTargetEntityId != world.PlayerEntityId && _shopPool?.Has(secondaryTargetEntityId) != true)
+        else if (element.EntityId == secondaryTargetEntityId && secondaryTargetEntityId != world.PlayerEntityId && !secondaryIsShop)
         {
             options.Add(new ContextMenuOption("Take", null, Enabled: true, () => TransferOne(element, secondaryTargetEntityId, world.PlayerEntityId)));
             options.Add(new ContextMenuOption("Take All", null, Enabled: true, () => CurrencyActions.TryTransferAll(componentManager, secondaryTargetEntityId, world.PlayerEntityId)));
@@ -156,33 +169,16 @@ public sealed class CurrencyRowContent(
         return options;
     }
 
-    /// <summary>Moves one currency type's whole balance -- publishes GoldGivenToShopEvent (the "Angel Investor" achievement's own trigger) afterward whenever the destination is a shop and there was actually Gold to give. Take never reaches the shop branch: destinationEntityId is always world.PlayerEntityId on that path, which never carries ShopComponent.</summary>
-    private void TransferOne(CurrencyElement element, int sourceEntityId, int destinationEntityId)
-    {
-        var goldBeforeTransfer = ReadGold(sourceEntityId);
-        if (CurrencyActions.TryTransfer(componentManager, sourceEntityId, destinationEntityId, element.Type) && element.Type == CurrencyType.Gold)
-        {
-            PublishGoldGivenToShopIfApplicable(sourceEntityId, destinationEntityId, goldBeforeTransfer);
-        }
-    }
+    /// <summary>Moves one currency type's whole balance through ShopActions.TryGiveCurrencyToShop -- the shared chokepoint every "give currency to a shop" gesture (this context menu, a direct currency drag, or completing a trade) routes through, so GoldGivenToShopEvent (the "Angel Investor" achievement's own trigger) fires the same way regardless of which gesture the player used. Take never reaches the shop branch: destinationEntityId is always world.PlayerEntityId on that path, which never carries ShopComponent.</summary>
+    private void TransferOne(CurrencyElement element, int sourceEntityId, int destinationEntityId) =>
+        ShopActions.TryGiveCurrencyToShop(componentManager, _shopPool, eventBus, sourceEntityId, destinationEntityId, element.Type);
 
-    /// <summary>"Give All" -- same GoldGivenToShopEvent trigger as TransferOne, regardless of whether Credits also moved alongside the Gold.</summary>
+    /// <summary>"Give All" -- same chokepoint as TransferOne, once per CurrencyType (mirrors CurrencyActions.TryTransferAll's own "iterate every type" shape) so Credits still move even when there's no Gold to trigger the achievement.</summary>
     private void TransferAll(int sourceEntityId, int destinationEntityId)
     {
-        var goldBeforeTransfer = ReadGold(sourceEntityId);
-        if (CurrencyActions.TryTransferAll(componentManager, sourceEntityId, destinationEntityId))
+        foreach (var type in Enum.GetValues<CurrencyType>())
         {
-            PublishGoldGivenToShopIfApplicable(sourceEntityId, destinationEntityId, goldBeforeTransfer);
-        }
-    }
-
-    private int ReadGold(int entityId) => _currencyPool?.TryGetReadonly(entityId, out var currency) == true ? currency.Gold : 0;
-
-    private void PublishGoldGivenToShopIfApplicable(int sourceEntityId, int destinationEntityId, int goldAmount)
-    {
-        if (goldAmount > 0 && eventBus is not null && _shopPool?.Has(destinationEntityId) == true)
-        {
-            eventBus.Publish(new GoldGivenToShopEvent(sourceEntityId, destinationEntityId, goldAmount));
+            ShopActions.TryGiveCurrencyToShop(componentManager, _shopPool, eventBus, sourceEntityId, destinationEntityId, type);
         }
     }
 }

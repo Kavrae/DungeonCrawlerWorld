@@ -1204,6 +1204,26 @@ public sealed class MapWindowTests
         Assert.IsFalse(mapWindow.ContextMenuController.IsOpen);
     }
 
+    /// <summary>A destroyed shop still has ShopComponent/ContainerComponent (ContainerDestructionSystem only renames it and clears its stock -- see AddEntityGroup's own doc comment), so isShop alone can't distinguish it from a live one; DeadComponent is what actually does, the same component DeathSystem adds to any dying SimpleHealthComponent entity regardless of type.</summary>
+    [TestMethod]
+    public void TryOpenEntityContextMenuAt_DestroyedShop_OffersLootNotShop()
+    {
+        var (world, mapViewState, mapWindow, componentManager) = BuildMapWindowWithPlayer(300, 300, 1, new Vector3Int(100, 100, 0));
+        mapWindow.OnCorpseClicked = _ => { };
+        mapWindow.OnShopClicked = _ => { };
+        var shopPosition = new Vector3Int(101, 100, 0);
+        PlaceShop(world, componentManager, shopPosition);
+        componentManager.Merge(ShopEntityId, new DeadComponent(KilledByEntityId: null, DiedAtFrame: 0));
+
+        mapWindow.TryOpenEntityContextMenuAt(ComputeScreenPositionForMapPosition(mapWindow, mapViewState, shopPosition));
+
+        Assert.IsTrue(mapWindow.ContextMenuController.IsOpen);
+        var rows = mapWindow.ContextMenuController.Menu.ChildElements;
+        Assert.HasCount(3, rows, "[0] header, [1] Loot, [2] Inspect -- no Shop for a destroyed one.");
+        var lootButton = (Button)rows[1];
+        Assert.AreEqual("Loot", lootButton.LeftText);
+    }
+
     [TestMethod]
     public void TryOpenEntityContextMenuAt_NonBlockingCorpse_StillOffersInspect()
     {

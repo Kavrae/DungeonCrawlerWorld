@@ -32,9 +32,6 @@ public sealed class Folder : Element
     private SpriteFontBase _fallbackGlyphFont = null!;
     private Color _backgroundColor;
 
-    /// <summary>Gray-tints the icon when true (e.g. InventoryFolderController reflecting the entity's InventoryDisabledComponent) -- purely visual, doesn't affect whether the folder can still be clicked/expanded.</summary>
-    public bool IsDisabled { get; set; }
-
     public Folder(FontService fontService, ElementPoolService elementPoolService, LabelRenderer labelRenderer, SpriteSheetService spriteSheetService, SpriteRenderer spriteRenderer)
         : base(fontService, elementPoolService, labelRenderer)
     {
@@ -115,7 +112,7 @@ public sealed class Folder : Element
             : ElementDisplayMode.Minimized);
     }
 
-    /// <summary>Background fill, then sprite-else-glyph icon via the shared SpriteOrGlyphRenderer -- IsDisabled gray-tints either form, mirroring MapWindow's dead-entity tint.</summary>
+    /// <summary>Background fill, then sprite-else-glyph icon via the shared SpriteOrGlyphRenderer.</summary>
     protected override void DrawHeader(GameTime gameTime)
     {
         var spriteBatch = ElementPoolService.SpriteBatch;
@@ -133,9 +130,7 @@ public sealed class Folder : Element
         var iconTopLeft = HeaderAbsolutePosition + (HeaderSize - _iconSize) / 2f;
 
         SpriteComponent? sprite = _spriteName is not null && SpriteManifest.TryGet(_spriteName, out var spriteComponent) ? spriteComponent : null;
-        var spriteTint = IsDisabled ? Color.Gray : Color.White;
-        var glyphColor = IsDisabled ? Color.Gray : Color.Black;
 
-        SpriteOrGlyphRenderer.Draw(spriteBatch, _spriteSheetService, _spriteRenderer, LabelRenderer, sprite, _fallbackGlyphFont, _fallbackGlyph, glyphColor, iconTopLeft, _iconSize, spriteTint);
+        SpriteOrGlyphRenderer.Draw(spriteBatch, _spriteSheetService, _spriteRenderer, LabelRenderer, sprite, _fallbackGlyphFont, _fallbackGlyph, Color.Black, iconTopLeft, _iconSize, Color.White);
     }
 }

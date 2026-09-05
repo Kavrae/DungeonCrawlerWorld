@@ -24,7 +24,7 @@ public sealed class ItemComparisonController(
     ComponentManager componentManager,
     ItemCatalog itemCatalog,
     ActionCatalog actionCatalog,
-    InventoryFolderController inventoryFolderController,
+    InventoryWindowController inventoryWindowController,
     ContextMenuController contextMenuController,
     MapWindow mapWindow,
     MapViewState mapViewState,
@@ -257,7 +257,7 @@ public sealed class ItemComparisonController(
     /// <summary>OnCompareRequested is deliberately never set here -- comparison columns get a Close button but no Compare button of their own (see ItemDetailsWindow.OnChildrenInitialized's own doc comment on why attachment is opt-in per instance).</summary>
     private ItemDetailsWindow? CreateColumn(int entityId, Guid stackInstanceId, ItemDefinition definition, Rectangle anchorRectangle, int siblingIndex, IReadOnlyList<ItemDefinition> comparedAgainst)
     {
-        if (inventoryFolderController.PlayerInventoryWindow is not { } playerWindow)
+        if (inventoryWindowController.PlayerInventoryWindow is not { } playerWindow)
         {
             return null;
         }

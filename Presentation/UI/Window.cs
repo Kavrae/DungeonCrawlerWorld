@@ -309,7 +309,10 @@ public class Window : Element
         var availableTextWidth = HeaderSize.X - TitlePadding.X * 2 - TotalTitleButtonsWidth();
         drawnTitleText = StringUtility.TruncateWithEllipsis(_titleFontMeasurer, drawnTitleText, availableTextWidth);
 
-        spriteBatch.DrawString(TitleFont, drawnTitleText, HeaderAbsolutePosition + TitlePadding, _titleTextColor);
+        // Routed through LabelRenderer.Draw, not a direct DrawString call, so the title bar gets
+        // the same whole-pixel-rounding fix every other UI text draw does -- see its own doc
+        // comment for the "bottom of the text is cut off" bug this closes.
+        LabelRenderer.Draw(spriteBatch, TitleFont, drawnTitleText, HeaderAbsolutePosition + TitlePadding, _titleTextColor);
 
         foreach (var button in _titleButtons)
         {

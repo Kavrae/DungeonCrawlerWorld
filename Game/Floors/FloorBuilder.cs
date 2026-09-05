@@ -68,6 +68,18 @@ public static class FloorBuilder
     /// </remarks>
     public static int ReservePlayerEntity(EcsContext ecsContext) => ecsContext.EntityManager.CreateEntity();
 
+    /// <summary>
+    /// Mints the two trade-offer entities' ids -- see PLAN-trade-window.md's own "Entity model"
+    /// section. Reserved once, right alongside the player (before PopulateFloor, for the same
+    /// low-id reasoning ReservePlayerEntity's own doc comment gives), and reused for the life of
+    /// the game -- a trade never destroys/recreates these, it only ever moves stacks/currency into
+    /// and back out of them. Neither entity is ever given a TransformComponent or placed on the
+    /// map; both stay bare until InventoryActions/CurrencyActions lazily provision an inventory/
+    /// currency component on first write, same as any other entity.
+    /// </summary>
+    public static ReservedEntityIds ReserveTradeOfferEntities(EcsContext ecsContext) =>
+        new(ecsContext.EntityManager.CreateEntity(), ecsContext.EntityManager.CreateEntity());
+
     /// <summary>Builds and places the Player entity, using an id already reserved via ReservePlayerEntity.</summary>
     /// <remarks>
     /// Still runs after PopulateFloor, unlike the id reservation above -- the free-cell search

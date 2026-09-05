@@ -4,7 +4,7 @@ namespace Presentation.UI;
 /// Owns every root Element the shell draws/updates/hit-tests, grouped by UiLayer -- replaces
 /// what used to be four independently-hardcoded List&lt;Element&gt; fields (Base/StaticHud/
 /// DynamicHud/User) threaded individually through ShellBootstrapper/UiInputController/
-/// NotificationCenter/InventoryFolderController/HotbarController with one structure keyed by an
+/// NotificationCenter/InventoryWindowController/HotbarController with one structure keyed by an
 /// enum whose declaration order defines z-order. A window is now added by naming its UiLayer
 /// (layers.Add(UiLayer.DynamicHud, window)) rather than a caller being handed a reference to
 /// whichever specific list happens to represent that tier.

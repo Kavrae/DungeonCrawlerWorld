@@ -141,6 +141,42 @@ public sealed class ShopStockPricingTests
         Assert.AreEqual(2 * 8 + 1 * 11, ShopStockPricing.ComputeBulkBuyPrice(manager, ShopEntityId, shop, item, quantity: 3));
     }
 
+    /// <summary>
+    /// Reproduces the trade window's own "buying 5 scrolls back out of the trade column only
+    /// charges for 1" bug: the entity-based overload derives currentStock from whatever's literally
+    /// on shopEntityId's own component pool, which reads 0 once a whole stack has physically moved
+    /// off it (see InventoryGridContent.GetEffectiveShopStock's own doc comment) -- clamping the
+    /// bulk-price walk down to a single stock level and pricing only 1 unit regardless of quantity.
+    /// The explicit-stock overload, fed the correct effective stock (as if the stack had never
+    /// left), must price the same as if it genuinely were still sitting on the shop.
+    /// </summary>
+    [TestMethod]
+    public void ComputeBulkBuyPrice_ExplicitStockOverload_MatchesEntityOverloadWhenStockNeverLeftTheShop()
+    {
+        var manager = BuildManager();
+        manager.GetMultiPool<ShopStockPreferenceComponent>().Add(ShopEntityId, new ShopStockPreferenceComponent(ItemId, preferredStockLevel: 50));
+        manager.GetMultiPool<InventoryItemStackComponent>().Add(ShopEntityId, new InventoryItemStackComponent(ItemId, quantity: 5));
+
+        var shop = new ShopComponent(allowedTags: null, buyMultiplier: 1.10f, sellMultiplier: 0.90f);
+        var item = CreateItem(goldValue: 10);
+
+        // Ground truth: the stack is still physically on the shop entity, so the entity-based
+        // overload (deriving currentStock straight from it) prices the real, un-bugged total.
+        var groundTruthTotal = ShopStockPricing.ComputeBulkBuyPrice(manager, ShopEntityId, shop, item, quantity: 5);
+
+        // The fix: an explicit effective stock of 5 (as if the stack never left the shop) must
+        // price identically to that ground truth.
+        var fixedTotal = ShopStockPricing.ComputeBulkBuyPrice(currentStock: 5, preferredStockLevel: 50, shop, item, quantity: 5);
+        Assert.AreEqual(groundTruthTotal, fixedTotal);
+
+        // The bug this overload exists to let InventoryGridContent avoid: if currentStock were
+        // instead (wrongly) derived from the shop entity alone after the whole stack had already
+        // physically left it (reads 0), the walk clamps down to a single stock level regardless of
+        // quantity -- pricing far less than what buying 5 real units actually costs.
+        var buggedTotal = ShopStockPricing.ComputeBulkBuyPrice(currentStock: 0, preferredStockLevel: 50, shop, item, quantity: 5);
+        Assert.IsTrue(buggedTotal < fixedTotal, $"The bugged reading ({buggedTotal}G) must undercount relative to the correct 5-unit total ({fixedTotal}G), or this test wouldn't catch a regression.");
+    }
+
     [TestMethod]
     public void GetAllBands_ReturnsAllFiveInDeclarationOrder()
     {

@@ -1009,15 +1009,25 @@ public sealed class MapWindow : Window
 
         var isShop = _shopPool?.Has(entityId) == true;
 
+        // A shop that's died goes through the same EntityDiedEvent -> DeadComponent pipeline as any
+        // other SimpleHealthComponent entity (DeathSystem doesn't special-case containers/shops out
+        // of it -- see its own doc comment), even though ContainerDestructionSystem's own handling
+        // for the same event leaves its ShopComponent/ContainerComponent in place (renaming it
+        // "Destroyed" and clearing its stock, not removing the components). So isShop alone can't
+        // tell a live shop apart from a destroyed one -- isDestroyed does.
+        var isDestroyed = _deadPool?.Has(entityId) == true;
+
         // A shop is still a ContainerComponent (see Shop's own doc comment), but gets its own
-        // "Shop" verb instead of the generic corpse/chest "Loot" one -- excluded here so a shop
-        // never offers both.
-        if ((_deadPool?.Has(entityId) == true || (_containerPool?.Has(entityId) == true && !isShop)) && OnCorpseClicked is { } onCorpseClicked)
+        // "Shop" verb instead of the generic corpse/chest "Loot" one while it's alive -- excluded
+        // here so a live shop never offers both. A destroyed shop is the opposite: "Shop" no longer
+        // makes sense (nothing left to trade), so it falls through to the plain "Loot" a dead
+        // creature or a destroyed chest already gets.
+        if ((isDestroyed || (_containerPool?.Has(entityId) == true && !isShop)) && OnCorpseClicked is { } onCorpseClicked)
         {
             options.Add(new ContextMenuOption("Loot", null, IsAdjacentToPlayer(entityId), () => onCorpseClicked.Invoke(entityId)));
         }
 
-        if (isShop && OnShopClicked is { } onShopClicked)
+        if (isShop && !isDestroyed && OnShopClicked is { } onShopClicked)
         {
             options.Add(new ContextMenuOption("Shop", null, IsAdjacentToPlayer(entityId), () => onShopClicked.Invoke(entityId)));
         }

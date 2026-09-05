@@ -291,5 +291,17 @@
         "CellHeight": 16
       }
     ]
+  },
+  {
+    "Name": "AbilityScore",
+    "Cells": [
+      {
+        "SheetPath": "Pixel Crawler - Free Pack/Environment/Props/Static/Esoteric.png",
+        "Column": 2,
+        "Row": 8,
+        "CellWidth": 16,
+        "CellHeight": 16
+      }
+    ]
   }
 ]

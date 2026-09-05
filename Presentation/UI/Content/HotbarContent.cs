@@ -661,7 +661,7 @@ public sealed class HotbarContent(
         ContrastTextRenderer.Draw(spriteBatch, _overlayFont, text, position, alpha);
     }
 
-    /// <summary>Bottom-center -- an item stack's quantity as "x{n}", only ever called when quantity > 1. Replaces the old bottom-right ItemIconRenderer.DrawQuantityBadge call -- ItemIconRenderer itself is untouched, InventoryGridContent/InventoryItemStackCell still use it for the inventory grid's own cells.</summary>
+    /// <summary>Bottom-center -- an item stack's quantity as "x{n}", only ever called when quantity > 1. Replaces the old ItemIconRenderer.DrawQuantityBadge call this element used to make (that method has since moved to the bottom-left corner instead, for consistency with Shop/TradeItemStackCell's own quantity placement -- InventoryItemStackCell is its one remaining consumer, unaffected by this element's own bottom-center choice).</summary>
     private void DrawBottomCenterText(SpriteBatch spriteBatch, Rectangle bounds, string text, float alpha)
     {
         var textSize = _overlayFont.MeasureString(text);

@@ -1,5 +1,6 @@
 using Engine.ECS.Components;
 using Engine.Math;
+using Game.Floors;
 using Game.Modules;
 using Game.Modules.Currency.Components;
 using Game.Modules.Inventory;
@@ -435,5 +436,395 @@ public sealed class InventoryGridContentShopModeTests
         Assert.AreEqual(StockStatus.Overstocked, cell.StockStatus);
         Assert.IsFalse(cell.PriceIsFavorable);
         Assert.IsTrue(cell.PriceIsUnfavorable);
+    }
+
+    /// <summary>
+    /// Same shape as Build, but parameterized on getSecondaryTargetEntityId/tradeGridIsShopSide and
+    /// returning the ContextMenuController/World too -- what BuildItemContextMenu's own "Sell All"/
+    /// "Buy All"/"Add to trade" and the trade-grid right-click-removes-immediately tests below all
+    /// need, none of which Build's own callers (secondary target always null, never a trade column)
+    /// exercise.
+    /// </summary>
+    private static (InventoryGridContent Grid, Window HostWindow, ComponentManager ComponentManager, MapViewState MapViewState, ContextMenuController ContextMenuController, Game.World.World World) BuildForContextMenu(
+        int gridEntityId, Func<int?> getSecondaryTargetEntityId, bool? tradeGridIsShopSide = null)
+    {
+        var componentManager = new ComponentManager(initialEntityCapacity: 20, initialComponentCapacity: 20);
+        componentManager.RegisterMultiPool<InventoryItemStackComponent>();
+        componentManager.RegisterPackedPool<InventoryComponent>(static (ref existing, incoming) => existing = incoming);
+        componentManager.RegisterPackedPool<ShopComponent>(static (ref existing, incoming) => existing = incoming);
+        componentManager.RegisterMultiPool<ShopStockPreferenceComponent>();
+        componentManager.RegisterPackedPool<CurrencyComponent>(static (ref existing, incoming) => existing = incoming);
+
+        var fontService = TestFonts.Shared;
+        var labelRenderer = new LabelRenderer();
+        var windowService = TestElementPoolServiceFactory.Create(fontService, labelRenderer);
+        var spriteSheetService = new SpriteSheetService(null, "Spritesheets");
+        var spriteRenderer = new SpriteRenderer();
+        windowService.RegisterFactory<InventoryItemStackCell>(() => new InventoryItemStackCell(fontService, windowService, labelRenderer, spriteSheetService, spriteRenderer));
+        windowService.RegisterFactory<ShopItemStackCell>(() => new ShopItemStackCell(fontService, windowService, labelRenderer, spriteSheetService, spriteRenderer));
+        windowService.RegisterFactory<TradeItemStackCell>(() => new TradeItemStackCell(fontService, windowService, labelRenderer, spriteSheetService, spriteRenderer));
+        windowService.RegisterFactory<EmptyTradeSlotCell>(() => new EmptyTradeSlotCell(fontService, windowService, labelRenderer));
+        windowService.RegisterFactory<Tooltip>(() => new Tooltip(fontService, windowService, labelRenderer));
+        windowService.RegisterFactory<ContextMenu>(() => new ContextMenu(fontService, windowService, labelRenderer));
+
+        var world = new Game.World.World(new Game.World.Map(new Vector3Int(10, 10, 1))) { PlayerEntityId = PlayerEntityId };
+        var layers = new UiLayerStack();
+        var contextMenuController = TestElementPoolServiceFactory.CreateContextMenuController(windowService, layers);
+        var mapViewState = new MapViewState();
+
+        var itemCatalog = new ItemCatalog();
+        itemCatalog.Register(new ItemDefinition(PotionItemId, "Test Potion", null, "p", Color.White, Tags: [Tag.Potion], Effects: [], GoldValue: PotionValue));
+        itemCatalog.Register(new ItemDefinition(ToolItemId, "Test Tool", null, "t", Color.White, Tags: [Tag.Tool], Effects: [], GoldValue: ToolValue));
+
+        var hoverPopup = windowService.CreateElement<Tooltip>(null, new ElementOptions
+        {
+            Layout = new ElementLayoutOptions { RelativePosition = Vector2.Zero, MaximumSize = new Vector2(220, 220), DisplayMode = ElementDisplayMode.WrapContent, IsVisible = false },
+            Chrome = new ElementChromeOptions { ShowBorder = true, ShowTitle = true, CanUserFocus = false, CanUserClose = false },
+        });
+        hoverPopup.Initialize();
+
+        var grid = new InventoryGridContent(world, componentManager, itemCatalog, windowService, fontService, labelRenderer, spriteSheetService, spriteRenderer, contextMenuController, gridEntityId, filterTag: null, hoverPopup, getSecondaryTargetEntityId, mapViewState, static (_, _) => { }, static (_, _) => { }, tradeGridIsShopSide);
+
+        var hostWindow = windowService.CreateElement<Window>(null, new ElementOptions
+        {
+            Hierarchy = new ElementHierarchyOptions { CanContainChildren = true },
+            Layout = new ElementLayoutOptions { Size = new Vector2(400, 200), DisplayMode = ElementDisplayMode.Fixed },
+        });
+        hostWindow.ContentPadding = Vector2.Zero;
+        hostWindow.Initialize();
+        grid.Initialize(hostWindow);
+
+        return (grid, hostWindow, componentManager, mapViewState, contextMenuController, world);
+    }
+
+    private static string[] MenuLabels(ContextMenuController contextMenuController) =>
+        contextMenuController.Menu.ChildElements.OfType<Button>().Select(b => b.LeftText).ToArray();
+
+    [TestMethod]
+    public void RightClick_PlayerCellWithShopSecondaryTarget_ShowsSellAllNotGive()
+    {
+        var (grid, hostWindow, componentManager, mapViewState, contextMenuController, _) = BuildForContextMenu(PlayerEntityId, () => ShopEntityId);
+        InventoryActions.AddItem(componentManager, PlayerEntityId, PotionItemId, quantity: 1);
+        componentManager.Merge(ShopEntityId, new ShopComponent(allowedTags: [Tag.Potion], buyMultiplier: 1.10f, sellMultiplier: 0.90f));
+        componentManager.Merge(ShopEntityId, new CurrencyComponent(gold: 1000, credits: 0));
+        mapViewState.OpenShopEntityId = ShopEntityId;
+        grid.Update(new GameTime());
+
+        var cell = hostWindow.ChildElements.OfType<InventoryItemStackCell>().Single();
+        cell.OnRightClicked!.Invoke(Point.Zero);
+
+        Assert.IsTrue(contextMenuController.IsOpen);
+        CollectionAssert.Contains(MenuLabels(contextMenuController), "Sell All");
+        CollectionAssert.DoesNotContain(MenuLabels(contextMenuController), "Give");
+    }
+
+    [TestMethod]
+    public void RightClick_ShopCellWithShopSecondaryTarget_ShowsBuyAllNotTake()
+    {
+        var (grid, hostWindow, componentManager, mapViewState, contextMenuController, _) = BuildForContextMenu(ShopEntityId, () => ShopEntityId);
+        InventoryActions.AddItem(componentManager, ShopEntityId, PotionItemId, quantity: 1);
+        componentManager.Merge(ShopEntityId, new ShopComponent(allowedTags: [Tag.Potion], buyMultiplier: 1.10f, sellMultiplier: 0.90f));
+        componentManager.Merge(ShopEntityId, new CurrencyComponent(gold: 1000, credits: 0));
+        componentManager.Merge(PlayerEntityId, new CurrencyComponent(gold: 1000, credits: 0));
+        mapViewState.OpenShopEntityId = ShopEntityId;
+        grid.Update(new GameTime());
+
+        var cell = hostWindow.ChildElements.OfType<InventoryItemStackCell>().Single();
+        cell.OnRightClicked!.Invoke(Point.Zero);
+
+        Assert.IsTrue(contextMenuController.IsOpen);
+        CollectionAssert.Contains(MenuLabels(contextMenuController), "Buy All");
+        CollectionAssert.DoesNotContain(MenuLabels(contextMenuController), "Take");
+    }
+
+    [TestMethod]
+    public void RightClick_PlayerCellWithNonShopSecondaryTarget_KeepsGiveLabel()
+    {
+        const int corpseEntityId = 99;
+        var (grid, hostWindow, componentManager, _, contextMenuController, _) = BuildForContextMenu(PlayerEntityId, () => corpseEntityId);
+        InventoryActions.AddItem(componentManager, PlayerEntityId, PotionItemId, quantity: 1);
+        grid.Update(new GameTime());
+
+        var cell = hostWindow.ChildElements.OfType<InventoryItemStackCell>().Single();
+        cell.OnRightClicked!.Invoke(Point.Zero);
+
+        Assert.IsTrue(contextMenuController.IsOpen);
+        CollectionAssert.Contains(MenuLabels(contextMenuController), "Give");
+        CollectionAssert.DoesNotContain(MenuLabels(contextMenuController), "Sell All");
+    }
+
+    [TestMethod]
+    public void RightClick_PlayerCellWhileShopOpen_OffersAddToTradeAndMovesStackThere()
+    {
+        const int tradePlayerEntityId = 50;
+        var (grid, hostWindow, componentManager, mapViewState, contextMenuController, _) = BuildForContextMenu(PlayerEntityId, () => null);
+        InventoryActions.AddItem(componentManager, PlayerEntityId, PotionItemId, quantity: 1);
+        componentManager.Merge(ShopEntityId, new ShopComponent(allowedTags: [Tag.Potion], buyMultiplier: 1.10f, sellMultiplier: 0.90f));
+        componentManager.Merge(ShopEntityId, new CurrencyComponent(gold: 1000, credits: 0));
+        mapViewState.OpenShopEntityId = ShopEntityId;
+        mapViewState.ReservedEntityIds = new ReservedEntityIds(tradePlayerEntityId, -1);
+        grid.Update(new GameTime());
+
+        var cell = hostWindow.ChildElements.OfType<InventoryItemStackCell>().Single();
+        cell.OnRightClicked!.Invoke(Point.Zero);
+
+        Assert.IsTrue(contextMenuController.IsOpen);
+        CollectionAssert.Contains(MenuLabels(contextMenuController), "Add to trade");
+
+        var addToTradeButton = contextMenuController.Menu.ChildElements.OfType<Button>().Single(b => b.LeftText == "Add to trade");
+        addToTradeButton.HandleClick(addToTradeButton.Rectangle.Center);
+
+        var stacks = componentManager.GetMultiPool<InventoryItemStackComponent>();
+        Assert.IsFalse(InventoryQueries.TryGetStack(stacks, PlayerEntityId, PotionItemId, out _));
+        Assert.IsTrue(InventoryQueries.TryGetStack(stacks, tradePlayerEntityId, PotionItemId, out _));
+    }
+
+    /// <summary>
+    /// PLAN-trade-window.md's own last open item on this: "Add to trade" was never explicitly
+    /// capped, relying entirely on InventoryActions.TryTransferStack's own
+    /// InventoryCapacity.HasRoomForNewStack check (the same 20-stack, non-player cap every other
+    /// transfer destination already respects) -- this confirms that generic check actually holds
+    /// for a trade-offer entity specifically, refusing a 21st stack rather than silently exceeding
+    /// the grid's own fixed 20-slot layout (InventoryCapacity.MaxNonPlayerStackCount).
+    /// </summary>
+    [TestMethod]
+    public void RightClick_AddToTrade_RefusesA21stStackOnceTradeColumnIsFull()
+    {
+        const int tradePlayerEntityId = 50;
+        var (grid, hostWindow, componentManager, mapViewState, contextMenuController, _) = BuildForContextMenu(PlayerEntityId, () => null);
+        InventoryActions.AddItem(componentManager, PlayerEntityId, PotionItemId, quantity: 1);
+        componentManager.Merge(ShopEntityId, new ShopComponent(allowedTags: [Tag.Potion], buyMultiplier: 1.10f, sellMultiplier: 0.90f));
+        componentManager.Merge(ShopEntityId, new CurrencyComponent(gold: 1000, credits: 0));
+        mapViewState.OpenShopEntityId = ShopEntityId;
+        mapViewState.ReservedEntityIds = new ReservedEntityIds(tradePlayerEntityId, -1);
+
+        var stacks = componentManager.GetMultiPool<InventoryItemStackComponent>();
+        for (var i = 0; i < InventoryCapacity.MaxNonPlayerStackCount; i++)
+        {
+            stacks.Add(tradePlayerEntityId, new InventoryItemStackComponent(PotionItemId, quantity: 1));
+        }
+
+        grid.Update(new GameTime());
+        var cell = hostWindow.ChildElements.OfType<InventoryItemStackCell>().Single();
+        cell.OnRightClicked!.Invoke(Point.Zero);
+
+        Assert.IsTrue(contextMenuController.IsOpen);
+        var addToTradeButton = contextMenuController.Menu.ChildElements.OfType<Button>().Single(b => b.LeftText == "Add to trade");
+        addToTradeButton.HandleClick(addToTradeButton.Rectangle.Center);
+
+        Assert.IsTrue(InventoryQueries.TryGetStack(stacks, PlayerEntityId, PotionItemId, out _), "The item must still be in the player's own inventory -- the transfer must have been refused.");
+        Assert.AreEqual(InventoryCapacity.MaxNonPlayerStackCount, stacks.CountForEntity(tradePlayerEntityId), "The trade column must still hold exactly its pre-seeded 20 stacks, not 21.");
+    }
+
+    [TestMethod]
+    public void RightClick_ShopCellWhileShopOpen_OffersAddToTradeAndMovesStackThere()
+    {
+        const int tradeShopEntityId = 51;
+        var (grid, hostWindow, componentManager, mapViewState, contextMenuController, _) = BuildForContextMenu(ShopEntityId, () => null);
+        InventoryActions.AddItem(componentManager, ShopEntityId, PotionItemId, quantity: 1);
+        componentManager.Merge(ShopEntityId, new ShopComponent(allowedTags: [Tag.Potion], buyMultiplier: 1.10f, sellMultiplier: 0.90f));
+        componentManager.Merge(ShopEntityId, new CurrencyComponent(gold: 1000, credits: 0));
+        componentManager.Merge(PlayerEntityId, new CurrencyComponent(gold: 1000, credits: 0));
+        mapViewState.OpenShopEntityId = ShopEntityId;
+        mapViewState.ReservedEntityIds = new ReservedEntityIds(-1, tradeShopEntityId);
+        grid.Update(new GameTime());
+
+        var cell = hostWindow.ChildElements.OfType<InventoryItemStackCell>().Single();
+        cell.OnRightClicked!.Invoke(Point.Zero);
+
+        Assert.IsTrue(contextMenuController.IsOpen);
+        CollectionAssert.Contains(MenuLabels(contextMenuController), "Add to trade");
+
+        var addToTradeButton = contextMenuController.Menu.ChildElements.OfType<Button>().Single(b => b.LeftText == "Add to trade");
+        addToTradeButton.HandleClick(addToTradeButton.Rectangle.Center);
+
+        var stacks = componentManager.GetMultiPool<InventoryItemStackComponent>();
+        Assert.IsFalse(InventoryQueries.TryGetStack(stacks, ShopEntityId, PotionItemId, out _));
+        Assert.IsTrue(InventoryQueries.TryGetStack(stacks, tradeShopEntityId, PotionItemId, out _));
+    }
+
+    /// <summary>
+    /// An unaffordable-but-right-tag item (0 Gold, Potion vs. a Potion-only shop) must still offer
+    /// "Add to trade" (CanStageInTrade, tag match only -- see its own doc comment) but must NOT
+    /// offer "Buy All" (gated by the stricter isShopIneligible, tag match AND affordability) --
+    /// confirmed live requirement: an unaffordable item can still be staged for a trade/barter, just
+    /// not bought outright.
+    /// </summary>
+    [TestMethod]
+    public void RightClick_UnaffordableShopCell_OffersAddToTradeButNotBuyAll()
+    {
+        const int tradeShopEntityId = 51;
+        var (grid, hostWindow, componentManager, mapViewState, contextMenuController, _) = BuildForContextMenu(ShopEntityId, () => ShopEntityId);
+        InventoryActions.AddItem(componentManager, ShopEntityId, PotionItemId, quantity: 1);
+        componentManager.Merge(ShopEntityId, new ShopComponent(allowedTags: [Tag.Potion], buyMultiplier: 1.10f, sellMultiplier: 0.90f));
+        componentManager.Merge(ShopEntityId, new CurrencyComponent(gold: 1000, credits: 0));
+        componentManager.Merge(PlayerEntityId, new CurrencyComponent(gold: 0, credits: 0));
+        mapViewState.OpenShopEntityId = ShopEntityId;
+        mapViewState.ReservedEntityIds = new ReservedEntityIds(-1, tradeShopEntityId);
+        grid.Update(new GameTime());
+
+        var cell = hostWindow.ChildElements.OfType<InventoryItemStackCell>().Single();
+        Assert.AreEqual(CellCompareState.Ineligible, cell.CompareState, "Sanity check: 0 Gold can't afford this item.");
+        Assert.IsTrue(cell.CanStageInTrade, "Sanity check: the item's own tag still matches the shop.");
+
+        cell.OnRightClicked!.Invoke(Point.Zero);
+
+        Assert.IsTrue(contextMenuController.IsOpen);
+        CollectionAssert.Contains(MenuLabels(contextMenuController), "Add to trade");
+        CollectionAssert.DoesNotContain(MenuLabels(contextMenuController), "Buy All");
+    }
+
+    [TestMethod]
+    public void RightClick_TradePlayerColumnCell_RemovesFromTradeImmediatelyWithNoMenu()
+    {
+        const int tradePlayerEntityId = 50;
+        var (grid, hostWindow, componentManager, _, contextMenuController, _) = BuildForContextMenu(tradePlayerEntityId, () => null, tradeGridIsShopSide: false);
+        InventoryActions.AddItem(componentManager, tradePlayerEntityId, PotionItemId, quantity: 1);
+        grid.Update(new GameTime());
+
+        var cell = hostWindow.ChildElements.OfType<InventoryItemStackCell>().Single();
+        cell.OnRightClicked!.Invoke(Point.Zero);
+
+        Assert.IsFalse(contextMenuController.IsOpen, "Trade-grid cells never open a context menu -- right-click removes the stack immediately instead.");
+        var stacks = componentManager.GetMultiPool<InventoryItemStackComponent>();
+        Assert.IsFalse(InventoryQueries.TryGetStack(stacks, tradePlayerEntityId, PotionItemId, out _));
+        Assert.IsTrue(InventoryQueries.TryGetStack(stacks, PlayerEntityId, PotionItemId, out _));
+    }
+
+    [TestMethod]
+    public void RightClick_TradeShopColumnCell_RemovesFromTradeImmediatelyWithNoMenu()
+    {
+        const int tradeShopEntityId = 51;
+        var (grid, hostWindow, componentManager, mapViewState, contextMenuController, _) = BuildForContextMenu(tradeShopEntityId, () => null, tradeGridIsShopSide: true);
+        InventoryActions.AddItem(componentManager, tradeShopEntityId, PotionItemId, quantity: 1);
+        mapViewState.OpenShopEntityId = ShopEntityId;
+        grid.Update(new GameTime());
+
+        var cell = hostWindow.ChildElements.OfType<InventoryItemStackCell>().Single();
+        cell.OnRightClicked!.Invoke(Point.Zero);
+
+        Assert.IsFalse(contextMenuController.IsOpen, "Trade-grid cells never open a context menu -- right-click removes the stack immediately instead.");
+        var stacks = componentManager.GetMultiPool<InventoryItemStackComponent>();
+        Assert.IsFalse(InventoryQueries.TryGetStack(stacks, tradeShopEntityId, PotionItemId, out _));
+        Assert.IsTrue(InventoryQueries.TryGetStack(stacks, ShopEntityId, PotionItemId, out _));
+    }
+
+    [TestMethod]
+    public void TradeGrid_Empty_FillsAllSlotsWithEmptySlotCells()
+    {
+        const int tradePlayerEntityId = 50;
+        var (grid, hostWindow, _, _, _, _) = BuildForContextMenu(tradePlayerEntityId, () => null, tradeGridIsShopSide: false);
+
+        grid.Update(new GameTime());
+
+        Assert.AreEqual(InventoryCapacity.MaxNonPlayerStackCount, hostWindow.ChildElements.OfType<EmptyTradeSlotCell>().Count());
+        Assert.IsFalse(hostWindow.ChildElements.OfType<InventoryItemStackCell>().Any(), "An empty grid has no real cells at all -- InventoryItemStackCell also matches TradeItemStackCell (its subclass), so this alone rules out both.");
+    }
+
+    /// <summary>Confirms the fill count tracks *displayed* cells, not raw physical stacks -- two distinct items here produce exactly two real cells (no merging, since they're different ItemDefinitionIds), so the count formula (capacity minus displayed cells) generalizes beyond the all-empty case above.</summary>
+    [TestMethod]
+    public void TradeGrid_SomeStacks_FillsOnlyTheRemainderWithEmptySlotCells()
+    {
+        const int tradeShopEntityId = 51;
+        var (grid, hostWindow, componentManager, mapViewState, _, _) = BuildForContextMenu(tradeShopEntityId, () => null, tradeGridIsShopSide: true);
+        mapViewState.OpenShopEntityId = ShopEntityId;
+        InventoryActions.AddItem(componentManager, tradeShopEntityId, PotionItemId, quantity: 1);
+        InventoryActions.AddItem(componentManager, tradeShopEntityId, ToolItemId, quantity: 1);
+
+        grid.Update(new GameTime());
+
+        Assert.AreEqual(2, hostWindow.ChildElements.OfType<InventoryItemStackCell>().Count(), "Sanity check: two distinct items, no merging.");
+        Assert.AreEqual(InventoryCapacity.MaxNonPlayerStackCount - 2, hostWindow.ChildElements.OfType<EmptyTradeSlotCell>().Count());
+        Assert.AreEqual(2, grid.VisibleItemCount, "Decoration cells must never count as real, visible items.");
+    }
+
+    /// <summary>Only the trade window's own two columns get this treatment -- an ordinary shop-mode grid (the real shop's own, or the player's own while shop mode is active) never fills its unused space with decoration, empty or not.</summary>
+    [TestMethod]
+    public void NonTradeGrid_Empty_NeverGetsEmptySlotCells()
+    {
+        var (grid, hostWindow, _, mapViewState) = Build(PlayerEntityId);
+        mapViewState.OpenShopEntityId = ShopEntityId;
+
+        grid.Update(new GameTime());
+
+        Assert.IsFalse(hostWindow.ChildElements.OfType<EmptyTradeSlotCell>().Any());
+    }
+
+    /// <summary>
+    /// Regression test for a confirmed bug fixed this session: with part of an item's stock staged
+    /// in the trade window's own shop-side column (MapViewState.ReservedEntityIds.TradeOfferShopEntityId), the price
+    /// this grid shows for the *remaining* physical stack on the real shop's own grid used to be
+    /// computed against the trade-inclusive "effective" stock (more stock -> a cheaper buy band for
+    /// the same quantity), while ShopActions.TryBuyFromShop -- what actually charges Gold for a
+    /// direct purchase -- only ever reads the shop's plain physical stock. See
+    /// InventoryGridContent.EffectiveStockForThisGrid's own doc comment for why the real shop's own
+    /// grid must price off the same number TryBuyFromShop does. Sets up its own World/ItemCatalog
+    /// (Build's own helper doesn't expose either) the same way Initialize_ShopModeAlreadyActiveWith
+    /// AffordableItem_CellIsEligibleWithNoUpdateCall above already does.
+    /// </summary>
+    [TestMethod]
+    public void ShopGridPrice_MatchesActualChargeFromTryBuyFromShop_EvenWithStockStagedInTradeWindow()
+    {
+        var componentManager = new ComponentManager(initialEntityCapacity: 20, initialComponentCapacity: 20);
+        componentManager.RegisterMultiPool<InventoryItemStackComponent>();
+        componentManager.RegisterPackedPool<InventoryComponent>(static (ref existing, incoming) => existing = incoming);
+        componentManager.RegisterPackedPool<ShopComponent>(static (ref existing, incoming) => existing = incoming);
+        componentManager.RegisterMultiPool<ShopStockPreferenceComponent>();
+        componentManager.RegisterPackedPool<CurrencyComponent>(static (ref existing, incoming) => existing = incoming);
+
+        var fontService = TestFonts.Shared;
+        var labelRenderer = new LabelRenderer();
+        var windowService = TestElementPoolServiceFactory.Create(fontService, labelRenderer);
+        var spriteSheetService = new SpriteSheetService(null, "Spritesheets");
+        var spriteRenderer = new SpriteRenderer();
+        windowService.RegisterFactory<ShopItemStackCell>(() => new ShopItemStackCell(fontService, windowService, labelRenderer, spriteSheetService, spriteRenderer));
+        windowService.RegisterFactory<Tooltip>(() => new Tooltip(fontService, windowService, labelRenderer));
+
+        var world = new Game.World.World(new Game.World.Map(new Vector3Int(10, 10, 1))) { PlayerEntityId = PlayerEntityId };
+        var contextMenuController = TestElementPoolServiceFactory.CreateContextMenuController(windowService, new UiLayerStack());
+        var mapViewState = new MapViewState();
+
+        var itemCatalog = new ItemCatalog();
+        itemCatalog.Register(new ItemDefinition(PotionItemId, "Test Potion", null, "p", Color.White, Tags: [Tag.Potion], Effects: [], GoldValue: PotionValue));
+
+        var hoverPopup = windowService.CreateElement<Tooltip>(null, new ElementOptions
+        {
+            Layout = new ElementLayoutOptions { RelativePosition = Vector2.Zero, MaximumSize = new Vector2(220, 220), DisplayMode = ElementDisplayMode.WrapContent, IsVisible = false },
+            Chrome = new ElementChromeOptions { ShowBorder = true, ShowTitle = true, CanUserFocus = false, CanUserClose = false },
+        });
+        hoverPopup.Initialize();
+
+        var grid = new InventoryGridContent(world, componentManager, itemCatalog, windowService, fontService, labelRenderer, spriteSheetService, spriteRenderer, contextMenuController, ShopEntityId, filterTag: null, hoverPopup, static () => null, mapViewState, static (_, _) => { }, static (_, _) => { });
+
+        var hostWindow = windowService.CreateElement<Window>(null, new ElementOptions
+        {
+            Hierarchy = new ElementHierarchyOptions { CanContainChildren = true },
+            Layout = new ElementLayoutOptions { Size = new Vector2(400, 200), DisplayMode = ElementDisplayMode.Fixed },
+        });
+        hostWindow.ContentPadding = Vector2.Zero;
+        hostWindow.Initialize();
+        grid.Initialize(hostWindow);
+
+        const int tradeShopEntityId = 99;
+        InventoryActions.AddItem(componentManager, ShopEntityId, PotionItemId, quantity: 5); // still physically on the shop
+        InventoryActions.AddItem(componentManager, tradeShopEntityId, PotionItemId, quantity: 5); // staged in the trade window's shop-side column
+
+        componentManager.Merge(ShopEntityId, new ShopComponent(allowedTags: [Tag.Potion], buyMultiplier: 1.10f, sellMultiplier: 0.90f));
+        componentManager.Merge(ShopEntityId, new CurrencyComponent(gold: 0, credits: 0));
+        componentManager.Merge(PlayerEntityId, new CurrencyComponent(gold: 1000, credits: 0));
+
+        mapViewState.OpenShopEntityId = ShopEntityId;
+        mapViewState.ReservedEntityIds = new ReservedEntityIds(-1, tradeShopEntityId);
+        grid.Update(new GameTime());
+
+        var shopCell = hostWindow.ChildElements.OfType<ShopItemStackCell>().Single();
+        var displayedPrice = shopCell.TotalPrice;
+        var stackInstanceId = shopCell.StackInstanceId!.Value;
+
+        var goldBefore = componentManager.GetPackedPool<CurrencyComponent>().GetReadonly(PlayerEntityId).Gold;
+        Assert.IsTrue(ShopActions.TryBuyFromShop(componentManager, itemCatalog, PlayerEntityId, ShopEntityId, stackInstanceId, world));
+        var goldAfter = componentManager.GetPackedPool<CurrencyComponent>().GetReadonly(PlayerEntityId).Gold;
+
+        Assert.AreEqual(displayedPrice, goldBefore - goldAfter, "The price the real shop grid displayed must equal what TryBuyFromShop actually charged -- staged trade stock must not change the real grid's own price.");
     }
 }

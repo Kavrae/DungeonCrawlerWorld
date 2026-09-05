@@ -16,7 +16,7 @@ namespace Presentation.UI.Shops;
 public sealed class ShopWindowController(
     ElementPoolService elementPoolService,
     MapViewState mapViewState,
-    InventoryFolderController inventoryFolderController,
+    InventoryWindowController inventoryWindowController,
     ContextMenuController contextMenuController,
     MapWindow mapWindow)
 {
@@ -25,7 +25,7 @@ public sealed class ShopWindowController(
     private ShopWindow? _window;
     private int _currentTargetEntityId = -1;
 
-    /// <summary>The currently-open shop window's own target entity id, if any -- lets InventoryFolderController.GetSecondaryTargetEntityId answer "is a secondary window open, and for whom" for the player's own inventory grid's Give/Take menu, the same role SecondaryInventoryWindowController.OpenTargetEntityId already plays for corpses/containers.</summary>
+    /// <summary>The currently-open shop window's own target entity id, if any -- lets InventoryWindowController.GetSecondaryTargetEntityId answer "is a secondary window open, and for whom" for the player's own inventory grid's Give/Take menu, the same role SecondaryInventoryWindowController.OpenTargetEntityId already plays for corpses/containers.</summary>
     public int? OpenTargetEntityId => _window is null ? null : _currentTargetEntityId;
 
     public Rectangle Rectangle => _window?.Rectangle ?? Rectangle.Empty;
@@ -36,8 +36,17 @@ public sealed class ShopWindowController(
     /// <summary>Settable late-bound callback for "the player chose Compare from this shop's own item context menu" -- see SecondaryInventoryWindowController.OnCompareRequested's own doc comment.</summary>
     public Action<int, Guid>? OnCompareRequested { get; set; }
 
+    /// <summary>Settable late-bound callback fired with the target entity id right after a shop genuinely finishes opening a *new* window -- not on the toggle-closed or disabled-inventory early-return paths in OpenShop below. Wired by ShellBootstrapper to TradeWindowController.Open (PLAN-trade-window.md) so the trade window opens exactly when, and only when, a real shop window did.</summary>
+    public Action<int>? OnOpened { get; set; }
+
+    /// <summary>Settable late-bound callback fired at the end of HandleClosed, after every other cleanup -- wired by ShellBootstrapper to TradeWindowController's own close-and-unwind, so an open trade never survives its shop window closing (X, Escape, or opening a different shop).</summary>
+    public Action? OnClosed { get; set; }
+
     /// <summary>Closes the currently-open shop window, if any -- a no-op otherwise. See SecondaryInventoryWindowController.CloseIfOpen's own doc comment for why ShellBootstrapper needs this (mutual exclusion with a corpse/container window).</summary>
     public void CloseIfOpen() => _window?.Close();
+
+    /// <summary>Repositions the currently-open shop window, if any -- a no-op otherwise. Lets TradeWindowController re-anchor the shop window beside the trade window once the trade window's own final size is known (PLAN-trade-window.md's "Window layout" section) without this controller needing to expose the Window instance itself.</summary>
+    public void SetPosition(Vector2 position) => _window?.SetRelativePosition(position);
 
     public void Initialize(UiLayerStack layers)
     {
@@ -68,10 +77,10 @@ public sealed class ShopWindowController(
 
         _window?.Close();
 
-        inventoryFolderController.OpenInventoryWindow();
-        if (inventoryFolderController.PlayerInventoryWindow is not { } playerWindow)
+        inventoryWindowController.OpenInventoryWindow();
+        if (inventoryWindowController.PlayerInventoryWindow is not { } playerWindow)
         {
-            return; // Disabled inventory -- nothing to shop alongside (see InventoryFolderController.IsInventoryDisabled).
+            return; // Disabled inventory -- nothing to shop alongside (see InventoryWindowController.IsInventoryDisabled).
         }
 
         var window = elementPoolService.CreateElement<ShopWindow>(null, new ElementOptions
@@ -104,6 +113,7 @@ public sealed class ShopWindowController(
         _window = window;
         _currentTargetEntityId = targetEntityId;
         mapViewState.OpenShopEntityId = targetEntityId;
+        OnOpened?.Invoke(targetEntityId);
     }
 
     private void HandleClosed(Element closedWindow)
@@ -114,5 +124,6 @@ public sealed class ShopWindowController(
         _window = null;
         _currentTargetEntityId = -1;
         mapViewState.OpenShopEntityId = null;
+        OnClosed?.Invoke();
     }
 }

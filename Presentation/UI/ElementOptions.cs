@@ -16,4 +16,6 @@ public sealed class ElementOptions
     public TextOptions? Text { get; set; }
 
     public FolderOptions? Folder { get; set; }
+
+    public ButtonOptions? Button { get; set; }
 }

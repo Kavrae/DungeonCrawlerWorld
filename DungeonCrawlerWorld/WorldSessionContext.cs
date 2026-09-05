@@ -2,6 +2,7 @@ using Engine.ECS.Context;
 using Engine.ECS.Systems;
 using Engine.Math;
 using Game.Diagnostics;
+using Game.Floors;
 using Game.Modules.Actions;
 using Game.Modules.Inventory;
 using Game.Modules.StatusEffects;
@@ -34,4 +35,5 @@ public sealed record WorldSessionContext(
     ActionCatalog ActionCatalog,
     ItemCatalog ItemCatalog,
     PlayerActivityLog PlayerActivityLog,
-    StatusEffectDisplayRegistry StatusEffectDisplays);
+    StatusEffectDisplayRegistry StatusEffectDisplays,
+    ReservedEntityIds ReservedEntityIds);
