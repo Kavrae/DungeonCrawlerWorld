@@ -252,6 +252,8 @@ public sealed class TradeWindow(
             return 0;
         }
 
+        shop = ShopMarginPricing.ResolveEffectiveShop(componentManager, shop, world.PlayerEntityId);
+
         var groupedQuantities = new Dictionary<Guid, (ItemDefinition Definition, int Quantity)>();
         for (var denseIndex = _stacks.GetFirstDenseIndex(tradeEntityId); denseIndex != -1; denseIndex = _stacks.GetNextDenseIndex(denseIndex))
         {

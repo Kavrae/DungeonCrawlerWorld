@@ -149,9 +149,30 @@ public static class ShopStockPricing
         _ => throw new ArgumentOutOfRangeException(nameof(status)),
     };
 
-    /// <summary>One unit's price in one band, at the shop's own flat buy/sell multiplier -- what the band-table UI shows per row, and the same per-unit formula ComputeBulkPrice's own loop below uses for each band it crosses.</summary>
-    public static int GetBandPricePerUnit(ItemDefinition item, float shopMultiplier, StockStatus band) =>
-        (int)MathF.Round(item.GoldValue * shopMultiplier * GetBandMultiplier(band));
+    /// <summary>
+    /// One unit's price in one band, at the shop's own flat buy/sell multiplier -- what the
+    /// band-table UI shows per row, and the same per-unit formula ComputeBulkPrice's own loop below
+    /// uses for each band it crosses. If a Charisma/shopping-skill margin reduction (see
+    /// ShopMarginPricing) has narrowed BuyMultiplier/SellMultiplier enough that they'd round to the
+    /// *same* price in this band, the buy side is pushed up by 1 and the sell side down by 1 so the
+    /// two are never equal, in every band -- a same-shop buy-then-sell-back round trip must never
+    /// break even, let alone turn a profit, regardless of which band it trades through.
+    /// </summary>
+    public static int GetBandPricePerUnit(ItemDefinition item, ShopComponent shop, StockStatus band, bool isBuyPrice)
+    {
+        var bandMultiplier = GetBandMultiplier(band);
+        var thisMultiplier = isBuyPrice ? shop.BuyMultiplier : shop.SellMultiplier;
+        var thisPrice = (int)MathF.Round(item.GoldValue * thisMultiplier * bandMultiplier);
+
+        var otherMultiplier = isBuyPrice ? shop.SellMultiplier : shop.BuyMultiplier;
+        var otherPrice = (int)MathF.Round(item.GoldValue * otherMultiplier * bandMultiplier);
+        if (thisPrice != otherPrice)
+        {
+            return thisPrice;
+        }
+
+        return isBuyPrice ? thisPrice + 1 : thisPrice - 1;
+    }
 
     /// <summary>Total Gold for buying quantity units from the shop -- bracket pricing, each unit priced at the band the stock level it actually leaves at falls into, as the shop's stock depletes. See this class's own doc comment.</summary>
     public static int ComputeBulkBuyPrice(ComponentManager componentManager, int shopEntityId, ShopComponent shop, ItemDefinition item, ushort quantity) =>
@@ -172,7 +193,7 @@ public static class ShopStockPricing
     /// charges for 1" bug.
     /// </summary>
     public static int ComputeBulkBuyPrice(int currentStock, byte preferredStockLevel, ShopComponent shop, ItemDefinition item, ushort quantity) =>
-        ComputeBulkPrice(currentStock, preferredStockLevel, shop.BuyMultiplier, item, quantity, ascending: false);
+        ComputeBulkPrice(currentStock, preferredStockLevel, shop, item, quantity, ascending: false);
 
     /// <summary>Total Gold for selling quantity units to the shop -- bracket pricing, each unit priced at the band the stock level it actually arrives at falls into, as the shop's stock builds. See this class's own doc comment.</summary>
     public static int ComputeBulkSellPrice(ComponentManager componentManager, int shopEntityId, ShopComponent shop, ItemDefinition item, ushort quantity) =>
@@ -180,7 +201,7 @@ public static class ShopStockPricing
 
     /// <summary>See the explicit-stock ComputeBulkBuyPrice overload's own doc comment -- identical reasoning, sell direction.</summary>
     public static int ComputeBulkSellPrice(int currentStock, byte preferredStockLevel, ShopComponent shop, ItemDefinition item, ushort quantity) =>
-        ComputeBulkPrice(currentStock, preferredStockLevel, shop.SellMultiplier, item, quantity, ascending: true);
+        ComputeBulkPrice(currentStock, preferredStockLevel, shop, item, quantity, ascending: true);
 
     /// <summary>
     /// Closed form, not a per-unit loop: every unit within one band shares the same flat
@@ -190,7 +211,7 @@ public static class ShopStockPricing
     /// regardless of quantity (up to a few hundred units in practice), where the old continuous
     /// curve needed one loop iteration per unit.
     /// </summary>
-    private static int ComputeBulkPrice(int currentStock, byte preferredStockLevel, float shopMultiplier, ItemDefinition item, ushort quantity, bool ascending)
+    private static int ComputeBulkPrice(int currentStock, byte preferredStockLevel, ShopComponent shop, ItemDefinition item, ushort quantity, bool ascending)
     {
         if (quantity == 0)
         {
@@ -218,7 +239,7 @@ public static class ShopStockPricing
                 continue;
             }
 
-            total += unitsInBand * GetBandPricePerUnit(item, shopMultiplier, status);
+            total += unitsInBand * GetBandPricePerUnit(item, shop, status, isBuyPrice: !ascending);
         }
 
         return total;
@@ -233,7 +254,7 @@ public static class ShopStockPricing
 
     /// <summary>See ComputeBulkBuyPrice's own explicit-stock overload doc comment -- identical reasoning, breakdown form.</summary>
     public static IReadOnlyList<BulkPriceBand> ComputeBulkBuyBreakdown(int currentStock, byte preferredStockLevel, ShopComponent shop, ItemDefinition item, ushort quantity) =>
-        ComputeBulkBreakdown(currentStock, preferredStockLevel, shop.BuyMultiplier, item, quantity, ascending: false);
+        ComputeBulkBreakdown(currentStock, preferredStockLevel, shop, item, quantity, ascending: false);
 
     /// <summary>Same total ComputeBulkSellPrice returns, broken out one entry per band actually crossed, in the order the trade actually walks them (lowest stock first, since selling builds it) -- what the per-trade bracket receipt UI reads for a specific hovered stack's own Quantity.</summary>
     public static IReadOnlyList<BulkPriceBand> ComputeBulkSellBreakdown(ComponentManager componentManager, int shopEntityId, ShopComponent shop, ItemDefinition item, ushort quantity) =>
@@ -241,7 +262,7 @@ public static class ShopStockPricing
 
     /// <summary>See ComputeBulkBuyPrice's own explicit-stock overload doc comment -- identical reasoning, breakdown form.</summary>
     public static IReadOnlyList<BulkPriceBand> ComputeBulkSellBreakdown(int currentStock, byte preferredStockLevel, ShopComponent shop, ItemDefinition item, ushort quantity) =>
-        ComputeBulkBreakdown(currentStock, preferredStockLevel, shop.SellMultiplier, item, quantity, ascending: true);
+        ComputeBulkBreakdown(currentStock, preferredStockLevel, shop, item, quantity, ascending: true);
 
     /// <summary>
     /// Same band-overlap logic ComputeBulkPrice's own loop uses, kept as a separate method (rather
@@ -250,7 +271,7 @@ public static class ShopStockPricing
     /// never allocates a list just to immediately sum it away -- this one's for the UI, called once
     /// per hovered item per frame, not once per trade.
     /// </summary>
-    private static IReadOnlyList<BulkPriceBand> ComputeBulkBreakdown(int currentStock, byte preferredStockLevel, float shopMultiplier, ItemDefinition item, ushort quantity, bool ascending)
+    private static IReadOnlyList<BulkPriceBand> ComputeBulkBreakdown(int currentStock, byte preferredStockLevel, ShopComponent shop, ItemDefinition item, ushort quantity, bool ascending)
     {
         if (quantity == 0)
         {
@@ -279,7 +300,7 @@ public static class ShopStockPricing
                 continue;
             }
 
-            var perUnitPrice = GetBandPricePerUnit(item, shopMultiplier, status);
+            var perUnitPrice = GetBandPricePerUnit(item, shop, status, isBuyPrice: !ascending);
             results.Add(new BulkPriceBand(status, unitsInBand, perUnitPrice, unitsInBand * perUnitPrice));
         }
 

@@ -185,6 +185,8 @@ public sealed class ShopStockPricingTests
             (System.Collections.ICollection)ShopStockPricing.GetAllBands());
     }
 
+    private static readonly ShopComponent StandardShop = new(allowedTags: null, buyMultiplier: 1.10f, sellMultiplier: 0.90f);
+
     [TestMethod]
     [DataRow(StockStatus.Desperate, 16)]
     [DataRow(StockStatus.Understocked, 14)]
@@ -195,7 +197,66 @@ public sealed class ShopStockPricingTests
     {
         var item = CreateItem(goldValue: 10);
 
-        Assert.AreEqual(expectedPrice, ShopStockPricing.GetBandPricePerUnit(item, shopMultiplier: 1.10f, band));
+        Assert.AreEqual(expectedPrice, ShopStockPricing.GetBandPricePerUnit(item, StandardShop, band, isBuyPrice: true));
+    }
+
+    [TestMethod]
+    public void GetBandPricePerUnit_UntiedPrices_PassThroughUnchanged()
+    {
+        // BuyMultiplier 1.10 and SellMultiplier 0.90 round to clearly different Normal-band prices
+        // (11 vs 9) -- no tie, so neither side should be nudged.
+        var item = CreateItem(goldValue: 10);
+
+        Assert.AreEqual(11, ShopStockPricing.GetBandPricePerUnit(item, StandardShop, StockStatus.Normal, isBuyPrice: true));
+        Assert.AreEqual(9, ShopStockPricing.GetBandPricePerUnit(item, StandardShop, StockStatus.Normal, isBuyPrice: false));
+    }
+
+    [TestMethod]
+    public void GetBandPricePerUnit_TiedPrices_BuyNudgedUpAndSellNudgedDown()
+    {
+        // 10 * 1.02 = 10.2 -> 10, and 10 * 0.98 = 9.8 -> 10 -- both round to the same Normal-band
+        // price. This is what a heavily Charisma/skill-reduced margin can produce; buy and sell must
+        // never come out equal, or a same-shop buy-then-sell-back round trip breaks even instead of
+        // losing.
+        var item = CreateItem(goldValue: 10);
+        var nearlyCollapsedShop = new ShopComponent(allowedTags: null, buyMultiplier: 1.02f, sellMultiplier: 0.98f);
+
+        Assert.AreEqual(11, ShopStockPricing.GetBandPricePerUnit(item, nearlyCollapsedShop, StockStatus.Normal, isBuyPrice: true));
+        Assert.AreEqual(9, ShopStockPricing.GetBandPricePerUnit(item, nearlyCollapsedShop, StockStatus.Normal, isBuyPrice: false));
+    }
+
+    [TestMethod]
+    public void GetBandPricePerUnit_FullyCollapsedMargin_StillNeverTiesEvenAtVeryHighItemValues()
+    {
+        // Items can be worth up to at least 1,000,000 Gold. A fully collapsed margin (BuyMultiplier
+        // and SellMultiplier both exactly 1.0 -- e.g. max Charisma plus a maxed future shopping
+        // skill) would price both sides at exactly GoldValue; the tie-break must still separate them.
+        var item = CreateItem(goldValue: 1_000_000);
+        var fullyCollapsedShop = new ShopComponent(allowedTags: null, buyMultiplier: 1.0f, sellMultiplier: 1.0f);
+
+        Assert.AreEqual(1_000_001, ShopStockPricing.GetBandPricePerUnit(item, fullyCollapsedShop, StockStatus.Normal, isBuyPrice: true));
+        Assert.AreEqual(999_999, ShopStockPricing.GetBandPricePerUnit(item, fullyCollapsedShop, StockStatus.Normal, isBuyPrice: false));
+    }
+
+    [TestMethod]
+    [DataRow(StockStatus.Desperate)]
+    [DataRow(StockStatus.Understocked)]
+    [DataRow(StockStatus.Normal)]
+    [DataRow(StockStatus.Overstocked)]
+    [DataRow(StockStatus.Flooded)]
+    public void GetBandPricePerUnit_TiedPrices_AreNudgedApartInEveryBand(StockStatus band)
+    {
+        // A fully collapsed margin ties buy and sell in every band, not just Normal (each band still
+        // applies the same multiplier to both sides). The tie-break must reach every one of them --
+        // buy and sell must never come out equal regardless of which band a trade happens to be in.
+        var item = CreateItem(goldValue: 10);
+        var fullyCollapsedShop = new ShopComponent(allowedTags: null, buyMultiplier: 1.0f, sellMultiplier: 1.0f);
+
+        var buyPrice = ShopStockPricing.GetBandPricePerUnit(item, fullyCollapsedShop, band, isBuyPrice: true);
+        var sellPrice = ShopStockPricing.GetBandPricePerUnit(item, fullyCollapsedShop, band, isBuyPrice: false);
+
+        Assert.AreNotEqual(buyPrice, sellPrice);
+        Assert.IsTrue(buyPrice > sellPrice);
     }
 
     [TestMethod]

@@ -422,6 +422,8 @@ public sealed class InventoryGridContent(
             return;
         }
 
+        shop = ShopMarginPricing.ResolveEffectiveShop(componentManager, shop, world.PlayerEntityId);
+
         var isThisGridTheShop = IsThisGridTheShop(shopEntityId);
         var payerEntityId = isThisGridTheShop ? world.PlayerEntityId : shopEntityId;
         _currencyPool.TryGetReadonly(payerEntityId, out var payerCurrency);
@@ -560,6 +562,8 @@ public sealed class InventoryGridContent(
             return null;
         }
 
+        shop = ShopMarginPricing.ResolveEffectiveShop(componentManager, shop, world.PlayerEntityId);
+
         var isThisGridTheShop = IsThisGridTheShop(shopEntityId);
         var neutralColor = WindowPalette.TitleTextColor; // The shared Tooltip's own default TextColor (see Tooltip.Build) -- no caller overrides it.
 
@@ -578,14 +582,13 @@ public sealed class InventoryGridContent(
         var maxStock = definition.MaximumShopStock ?? ShopStockPricing.DefaultMaximumShopStock;
         var (e1, e2, e3, e4) = ShopStockPricing.GetBandEdges(preferredStockLevel, maxStock);
         var currentBand = ShopStockPricing.GetStockStatus(effectiveStock, e1, e2, e3, e4);
-        var shopMultiplier = isThisGridTheShop ? shop.BuyMultiplier : shop.SellMultiplier;
 
         var rows = new List<TooltipRow> { TooltipRow.Divider(neutralColor) };
         foreach (var band in ShopStockPricing.GetAllBands())
         {
             var (low, high) = ShopStockPricing.GetBandRange(band, e1, e2, e3, e4);
             var rangeText = band == StockStatus.Flooded ? $"{low}+" : $"{low}-{high}";
-            var perUnitPrice = ShopStockPricing.GetBandPricePerUnit(definition, shopMultiplier, band);
+            var perUnitPrice = ShopStockPricing.GetBandPricePerUnit(definition, shop, band, isBuyPrice: isThisGridTheShop);
             var glowColor = band == currentBand ? GlowColorFor(band) : (Color?)null;
             rows.Add(new TooltipRow(band.ToString(), $"{perUnitPrice}G", neutralColor, GlowColor: glowColor, MiddleText: rangeText));
         }
@@ -1058,6 +1061,8 @@ public sealed class InventoryGridContent(
         {
             return 0;
         }
+
+        shop = ShopMarginPricing.ResolveEffectiveShop(componentManager, shop, world.PlayerEntityId);
 
         var isThisGridTheShop = IsThisGridTheShop(shopEntityId);
         var effectiveStock = EffectiveStockForThisGrid(shopEntityId, definition.Id);

@@ -1,5 +1,7 @@
 using Engine.ECS.Components;
 using Game.Modules;
+using Game.Modules.AbilityScores;
+using Game.Modules.AbilityScores.Components;
 using Game.Modules.Currency;
 using Game.Modules.Currency.Components;
 using Game.Modules.Inventory;
@@ -273,5 +275,50 @@ public sealed class ShopActionsTests
         var result = ShopActions.TrySellToShop(manager, catalog, PlayerEntityId, ShopEntityId, stackId, NoEntityIsThePlayer);
 
         Assert.IsTrue(result);
+    }
+
+    [TestMethod]
+    public void TryBuyFromShop_HighCharismaPlayer_ChargesTheMarginReducedPrice()
+    {
+        var (manager, catalog) = BuildManager();
+        manager.RegisterMultiPool<AbilityScoreComponent>();
+        manager.GetMultiPool<AbilityScoreComponent>().Add(PlayerEntityId, new AbilityScoreComponent(AbilityScoreType.Charisma, baseValue: 300, total: 300));
+        manager.Merge(ShopEntityId, GeneralShop);
+        manager.Merge(ShopEntityId, new CurrencyComponent(gold: 0, credits: 0));
+        manager.Merge(PlayerEntityId, new CurrencyComponent(gold: 1000, credits: 0));
+        // PreferredStockLevel 1 puts a lone unit squarely in the Normal band (no stock skew), so the
+        // only thing moving the price off GeneralShop's raw 20 * 1.20 = 24 is Charisma's own margin
+        // reduction, not the stock-based bracket curve.
+        manager.GetMultiPool<ShopStockPreferenceComponent>().Add(ShopEntityId, new ShopStockPreferenceComponent(ToolItemId, preferredStockLevel: 1));
+        var stackId = InventoryActions.AddItem(manager, ShopEntityId, ToolItemId, quantity: 1);
+
+        var result = ShopActions.TryBuyFromShop(manager, catalog, PlayerEntityId, ShopEntityId, stackId, NoEntityIsThePlayer);
+
+        Assert.IsTrue(result);
+        // Charisma 300 halves the margin: BuyMultiplier 1.20's own (1.20 - 1) margin becomes 0.10,
+        // so 20 * 1.10 = 22 -- not the raw 24 a Charisma-1 player would pay.
+        Assert.AreEqual(1000 - 22, manager.GetPackedPool<CurrencyComponent>().GetReadonly(PlayerEntityId).Gold);
+    }
+
+    [TestMethod]
+    public void TrySellToShop_HighCharismaPlayer_PaysTheMarginReducedPrice()
+    {
+        var (manager, catalog) = BuildManager();
+        manager.RegisterMultiPool<AbilityScoreComponent>();
+        manager.GetMultiPool<AbilityScoreComponent>().Add(PlayerEntityId, new AbilityScoreComponent(AbilityScoreType.Charisma, baseValue: 300, total: 300));
+        manager.Merge(ShopEntityId, GeneralShop);
+        manager.Merge(ShopEntityId, new CurrencyComponent(gold: 1000, credits: 0));
+        manager.Merge(PlayerEntityId, new CurrencyComponent(gold: 0, credits: 0));
+        // PreferredStockLevel 1 keeps a shop with zero of this item on hand still in the Normal band
+        // rather than Understocked, isolating Charisma's own effect from the stock-based curve.
+        manager.GetMultiPool<ShopStockPreferenceComponent>().Add(ShopEntityId, new ShopStockPreferenceComponent(ToolItemId, preferredStockLevel: 1));
+        var stackId = InventoryActions.AddItem(manager, PlayerEntityId, ToolItemId, quantity: 1);
+
+        var result = ShopActions.TrySellToShop(manager, catalog, PlayerEntityId, ShopEntityId, stackId, NoEntityIsThePlayer);
+
+        Assert.IsTrue(result);
+        // Charisma 300 halves the margin: SellMultiplier 0.80's own (1 - 0.80) margin becomes 0.10,
+        // so 20 * 0.90 = 18 -- not the raw 16 a Charisma-1 player would receive.
+        Assert.AreEqual(18, manager.GetPackedPool<CurrencyComponent>().GetReadonly(PlayerEntityId).Gold);
     }
 }

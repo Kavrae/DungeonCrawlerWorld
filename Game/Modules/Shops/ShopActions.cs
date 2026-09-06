@@ -48,6 +48,8 @@ public static class ShopActions
             return false;
         }
 
+        shop = ShopMarginPricing.ResolveEffectiveShop(componentManager, shop, playerEntityId);
+
         var stacks = componentManager.GetMultiPool<InventoryItemStackComponent>();
         if (!InventoryQueries.TryFindByStackInstanceId(stacks, shopEntityId, stackInstanceId, out var stack) ||
             !InventoryQueries.TryResolveEffectiveItem(itemCatalog, in stack, out var item) ||
@@ -94,6 +96,8 @@ public static class ShopActions
         {
             return false;
         }
+
+        shop = ShopMarginPricing.ResolveEffectiveShop(componentManager, shop, playerEntityId);
 
         var stacks = componentManager.GetMultiPool<InventoryItemStackComponent>();
         if (!InventoryQueries.TryFindByStackInstanceId(stacks, playerEntityId, stackInstanceId, out var stack) ||
