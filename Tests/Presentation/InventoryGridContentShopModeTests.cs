@@ -2,6 +2,8 @@ using Engine.ECS.Components;
 using Engine.Math;
 using Game.Floors;
 using Game.Modules;
+using Game.Modules.Actions;
+using Game.Modules.Actions.Activators;
 using Game.Modules.Currency.Components;
 using Game.Modules.Inventory;
 using Game.Modules.Inventory.Components;
@@ -19,9 +21,9 @@ namespace Tests.Presentation;
 /// <summary>
 /// Shop-mode coverage for InventoryGridContent -- toggling MapViewState.OpenShopEntityId switches
 /// between plain InventoryItemStackCell and the wider, price-showing ShopItemStackCell (see
-/// InventoryGridContent.ActiveCellSize/RebuildCells), and drives per-cell CompareState off shop
-/// trade eligibility (tag match + the paying side's own Gold) rather than Item Details Comparison
-/// while a shop is open (see UpdateShopEligibilityState).
+/// InventoryGridContent.ActiveCellSize/RebuildCells), and drives per-cell ShopTradeEligible off shop
+/// trade eligibility (tag match + the paying side's own Gold, see UpdateShopEligibilityState) --
+/// independent of, and computed alongside, CompareState's own Item Details Comparison eligibility.
 /// </summary>
 [TestClass]
 [DoNotParallelize]
@@ -34,6 +36,8 @@ public sealed class InventoryGridContentShopModeTests
     private static readonly Guid ToolItemId = Guid.NewGuid();
     private const int PotionValue = 10;
     private const int ToolValue = 20;
+
+    private static readonly PotionActivator TestPotionActivator = new(new TargetingSpec(TargetShape.Self, Range: 0, AreaSize: 0), new ActionTiming(ActionTimingCategory.Immediate, 60, null));
 
     private static (InventoryGridContent Grid, Window HostWindow, ComponentManager ComponentManager, MapViewState MapViewState) Build(int gridEntityId)
     {
@@ -58,7 +62,9 @@ public sealed class InventoryGridContentShopModeTests
         var mapViewState = new MapViewState();
 
         var itemCatalog = new ItemCatalog();
-        itemCatalog.Register(new ItemDefinition(PotionItemId, "Test Potion", null, "p", Color.White, Tags: [Tag.Potion], Effects: [], GoldValue: PotionValue));
+        // Activator: TestPotionActivator -- lets tests arm Item Details Comparison against this item
+        // (MapViewState.CompareRequiredActivatorType) alongside shop mode, see the coexistence test below.
+        itemCatalog.Register(new ItemDefinition(PotionItemId, "Test Potion", null, "p", Color.White, Tags: [Tag.Potion], Effects: [], Activator: TestPotionActivator, GoldValue: PotionValue));
         itemCatalog.Register(new ItemDefinition(ToolItemId, "Test Tool", null, "t", Color.White, Tags: [Tag.Tool], Effects: [], GoldValue: ToolValue));
 
         var tooltipController = new TooltipController();
@@ -145,7 +151,7 @@ public sealed class InventoryGridContentShopModeTests
         var playerCells = hostWindow.ChildElements.OfType<ShopItemStackCell>().ToList();
         Assert.HasCount(2, playerCells, "Two separate physical stacks must render as two separate cells, not one Merged Stack badge.");
         Assert.IsTrue(playerCells.All(cell => cell.StackInstanceId is not null), "Every shop-mode cell must have a real StackInstanceId -- a Merged Stack (null) can never be priced, given, taken, or dragged.");
-        Assert.IsTrue(playerCells.All(cell => cell.CompareState == CellCompareState.Eligible), "Both stacks are Potion-tagged and the shop can easily afford to buy either back.");
+        Assert.IsTrue(playerCells.All(cell => cell.ShopTradeEligible), "Both stacks are Potion-tagged and the shop can easily afford to buy either back.");
     }
 
     [TestMethod]
@@ -180,7 +186,7 @@ public sealed class InventoryGridContentShopModeTests
         grid.Update(new GameTime());
 
         var cell = hostWindow.ChildElements.OfType<ShopItemStackCell>().Single();
-        Assert.AreEqual(CellCompareState.Ineligible, cell.CompareState);
+        Assert.IsFalse(cell.ShopTradeEligible);
     }
 
     [TestMethod]
@@ -195,7 +201,37 @@ public sealed class InventoryGridContentShopModeTests
         grid.Update(new GameTime());
 
         var cell = hostWindow.ChildElements.OfType<ShopItemStackCell>().Single();
-        Assert.AreEqual(CellCompareState.Eligible, cell.CompareState);
+        Assert.IsTrue(cell.ShopTradeEligible);
+    }
+
+    /// <summary>
+    /// Regression coverage for the "Fix Compare in shop mode" fix -- CompareState (Item Details
+    /// Comparison) and ShopTradeEligible (shop trade eligibility) must be computed independently on
+    /// the same cell, neither one overwriting the other, so arming Compare while a shop is open (or
+    /// vice versa) renders both cues correctly instead of one silently winning.
+    /// </summary>
+    [TestMethod]
+    public void ComparisonAndShopEligibility_BothArmedTogether_AreComputedIndependently()
+    {
+        var (grid, hostWindow, componentManager, mapViewState) = Build(PlayerEntityId);
+        InventoryActions.AddItem(componentManager, PlayerEntityId, PotionItemId, quantity: 1); // shop-eligible (Potion tag, shop can afford), comparison-eligible (Activator matches).
+        InventoryActions.AddItem(componentManager, PlayerEntityId, ToolItemId, quantity: 1); // shop-ineligible (wrong tag), comparison-ineligible (no Activator).
+        componentManager.Merge(ShopEntityId, new ShopComponent(allowedTags: [Tag.Potion], buyMultiplier: 1.10f, sellMultiplier: 0.90f));
+        componentManager.Merge(ShopEntityId, new CurrencyComponent(gold: 1000, credits: 0));
+
+        mapViewState.OpenShopEntityId = ShopEntityId;
+        mapViewState.CompareRequiredActivatorType = typeof(PotionActivator);
+        grid.Update(new GameTime());
+
+        var cells = hostWindow.ChildElements.OfType<ShopItemStackCell>().ToList();
+        var potionCell = cells.Single(c => c.ItemDefinitionId == PotionItemId);
+        var toolCell = cells.Single(c => c.ItemDefinitionId == ToolItemId);
+
+        Assert.IsTrue(potionCell.ShopTradeEligible, "Potion is tag-matched and affordable -- shop eligibility must still work with Compare armed.");
+        Assert.AreEqual(CellCompareState.Eligible, potionCell.CompareState, "Potion's Activator matches the armed comparison type.");
+
+        Assert.IsFalse(toolCell.ShopTradeEligible, "Tool doesn't match the shop's AllowedTags.");
+        Assert.AreEqual(CellCompareState.Ineligible, toolCell.CompareState, "Tool has no Activator at all, so it can never match the armed comparison type.");
     }
 
     [TestMethod]
@@ -210,7 +246,7 @@ public sealed class InventoryGridContentShopModeTests
         grid.Update(new GameTime());
 
         var cell = hostWindow.ChildElements.OfType<ShopItemStackCell>().Single();
-        Assert.AreEqual(CellCompareState.Ineligible, cell.CompareState);
+        Assert.IsFalse(cell.ShopTradeEligible);
     }
 
     /// <summary>
@@ -274,7 +310,7 @@ public sealed class InventoryGridContentShopModeTests
         grid.Initialize(hostWindow); // No grid.Update(...) call anywhere in this test.
 
         var cell = hostWindow.ChildElements.OfType<ShopItemStackCell>().Single();
-        Assert.AreEqual(CellCompareState.Eligible, cell.CompareState);
+        Assert.IsTrue(cell.ShopTradeEligible);
     }
 
     [TestMethod]
@@ -289,7 +325,7 @@ public sealed class InventoryGridContentShopModeTests
         grid.Update(new GameTime());
 
         var cell = hostWindow.ChildElements.OfType<ShopItemStackCell>().Single();
-        Assert.AreEqual(CellCompareState.Eligible, cell.CompareState);
+        Assert.IsTrue(cell.ShopTradeEligible);
     }
 
     [TestMethod]
@@ -652,7 +688,7 @@ public sealed class InventoryGridContentShopModeTests
         grid.Update(new GameTime());
 
         var cell = hostWindow.ChildElements.OfType<InventoryItemStackCell>().Single();
-        Assert.AreEqual(CellCompareState.Ineligible, cell.CompareState, "Sanity check: 0 Gold can't afford this item.");
+        Assert.IsFalse(cell.ShopTradeEligible, "Sanity check: 0 Gold can't afford this item.");
         Assert.IsTrue(cell.CanStageInTrade, "Sanity check: the item's own tag still matches the shop.");
 
         cell.OnRightClicked!.Invoke(Point.Zero);

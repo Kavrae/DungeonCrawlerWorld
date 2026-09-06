@@ -1005,10 +1005,17 @@ public sealed class UiInputController
     /// </summary>
     private void HandleMouseRelease(MouseState mouseState)
     {
-        // A completed text-selection drag (see HandleTextSelectionDrag) skips the ordinary
-        // content-click -- OnContentClickAction's plain-click branch would otherwise collapse the
-        // selection the drag just made right back down to a bare caret at the release position.
-        if (!_textSelectionDragExceededTapThreshold)
+        // A completed text-selection drag (see HandleTextSelectionDrag) or a completed content
+        // drag (see ExceededContentDragTapThreshold) both skip the ordinary content-click --
+        // otherwise a cell/slot dragged and dropped elsewhere would ALSO fire its own origin
+        // Clicked handler on release (e.g. opening/toggling Item Details for the dragged item, or
+        // adding it to Item Details Comparison) purely because _activeInteraction.Element still
+        // refers to the pressed cell, never updated for wherever the drag actually landed --
+        // confirmed live as a click-and-drag spuriously opening the single-click Item Details
+        // window. ResolveContentDrag below makes this exact same tap-vs-drag distinction
+        // independently for its own purposes; this just applies it one step earlier, before the
+        // click fires at all, rather than after the fact.
+        if (!_textSelectionDragExceededTapThreshold && !ExceededContentDragTapThreshold(new Point(mouseState.X, mouseState.Y)))
         {
             DispatchClick(_activeInteraction.Element, new Point(mouseState.X, mouseState.Y));
         }
@@ -1126,6 +1133,24 @@ public sealed class UiInputController
     /// missed drag never leaves the hotbar glowing or a stale payload behind for the next press
     /// to accidentally inherit.
     /// </summary>
+    /// <summary>
+    /// True while a content-drag payload is captured (see TryStartContentDrag) AND the mouse has
+    /// moved at least ContentDragTapThresholdPixels since the press that captured it -- the same
+    /// tap-vs-drag distinction ResolveContentDrag makes for its own purposes, exposed separately so
+    /// HandleMouseRelease can skip the ordinary content-click for a release this method would
+    /// itself go on to treat as a genuine drop, not a plain click.
+    /// </summary>
+    private bool ExceededContentDragTapThreshold(Point releasePosition)
+    {
+        if (_contentDragItemStackInstanceId is null && _contentDragActionId is null && _contentDragMergedItemDefinitionId is null && _contentDragCurrencyType is null)
+        {
+            return false;
+        }
+
+        var releaseVector = new Vector2(releasePosition.X, releasePosition.Y);
+        return Vector2.Distance(_contentDragStartMousePosition, releaseVector) >= ContentDragTapThresholdPixels;
+    }
+
     private void ResolveContentDrag(Point releasePosition)
     {
         if (_contentDragItemStackInstanceId is null && _contentDragActionId is null && _contentDragMergedItemDefinitionId is null && _contentDragCurrencyType is null)

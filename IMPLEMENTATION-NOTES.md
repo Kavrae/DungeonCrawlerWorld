@@ -347,6 +347,28 @@ single mode (entity- vs body-part-burning) is currently hazard-relevant, which w
   only, `TextWindow` has no per-substring styling. Columns anchor to a fixed point +
   `WindowCascadePlacement` (fixed a bug where a 3rd+ column could spawn off-screen).
 - Equipped-item comparison still open (blocked on Equipment).
+- Comparison now works in shop mode and across the trade window: `InventoryItemStackCell.CompareState`
+  (comparison eligibility) and the new `ShopTradeEligible` bool (shop trade eligibility) are computed
+  independently every frame (`InventoryGridContent.UpdateCompareState`/`UpdateShopEligibilityState`)
+  instead of one overwriting the other -- the green eligible-glow is comparison-only now, a
+  shop-eligible item shows no glow, just its own price-line coloring. `TradeWindow`'s two columns are
+  wired into the same comparison-aware click dispatch (`onItemSelected`) every other inventory grid
+  uses -- `ItemDetailsWindowController` gained a `GetTradeWindowRectangle` hook, checked as its own
+  independent `if` in `IsOutsideClick`, NOT folded into the pre-existing
+  `GetSecondaryInventoryWindowRectangle` fallback chain -- confirmed live as a real bug: the shop and
+  trade windows are open *simultaneously* (unlike corpse-vs-shop, which really are mutually
+  exclusive), so a single "pick whichever one's open" `Func<Rectangle>` made the shop window's own
+  rectangle invisible the moment a trade session started, reading every click on the shop's own item
+  grid as "outside" and closing/clearing the anchor (or the whole comparison) instead of selecting the
+  shop item.
+- `UiInputController.HandleMouseRelease` also gained `ExceededContentDragTapThreshold`, mirrored off
+  `ResolveContentDrag`'s own existing tap-vs-drag distance check: a genuine content-drag (release past
+  `ContentDragTapThresholdPixels` from press) now skips `DispatchClick` for the origin element --
+  confirmed live as a second real bug, unrelated to the one above: `_activeInteraction.Element` still
+  refers to the pressed cell for the whole gesture, so dragging an item cell anywhere used to ALSO
+  fire that cell's own ordinary click on release (opening/toggling Item Details, or silently adding
+  the dragged item to an armed comparison) purely as a side effect of the drop, not because the player
+  clicked it.
 
 ### Action/item ToString formatting
 

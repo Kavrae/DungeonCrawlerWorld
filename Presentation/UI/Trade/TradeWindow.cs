@@ -81,6 +81,8 @@ public sealed class TradeWindow(
 
     private int _playerSideEntityId;
     private int _shopSideEntityId;
+    private Action<int, Guid> _onItemSelected = static (_, _) => { };
+    private Action<int, Guid> _onCompareRequested = static (_, _) => { };
 
     /// <summary>
     /// The *real* shop entity, captured once at Configure time -- not re-read from
@@ -128,13 +130,22 @@ public sealed class TradeWindow(
     /// <summary>Settable late-bound callback fired after CompleteTrade has already swapped everything -- TradeWindowController uses this (not a direct Close() call here) so it can mark the resulting close as CloseReason.Complete, the one close path that must NOT also run ReturnEverythingToOwners (the swap already happened).</summary>
     public Action? OnCompleteClicked { get; set; }
 
-    /// <summary>Must be called after CreateElement but before Initialize -- same contract ShopWindow.Configure follows.</summary>
-    public void Configure(int playerSideEntityId, int shopSideEntityId, int shopEntityId, TooltipController tooltipController)
+    /// <summary>
+    /// Must be called after CreateElement but before Initialize -- same contract ShopWindow.Configure
+    /// follows. onItemSelected/onCompareRequested mirror ShopWindow.Configure's own two callbacks
+    /// (see ShopWindowController.OnItemSelected/OnCompareRequested's own doc comments) -- routed by
+    /// TradeWindowController into the shared comparison-aware click dispatch every other inventory
+    /// grid already uses (ShellBootstrapper's own OnItemClicked), so a real item cell in either trade
+    /// column can anchor or be added to Item Details Comparison exactly like any other grid's cell.
+    /// </summary>
+    public void Configure(int playerSideEntityId, int shopSideEntityId, int shopEntityId, TooltipController tooltipController, Action<int, Guid> onItemSelected, Action<int, Guid> onCompareRequested)
     {
         _playerSideEntityId = playerSideEntityId;
         _shopSideEntityId = shopSideEntityId;
         _shopEntityId = shopEntityId;
         _tooltipController = tooltipController;
+        _onItemSelected = onItemSelected;
+        _onCompareRequested = onCompareRequested;
     }
 
     /// <summary>
@@ -427,13 +438,18 @@ public sealed class TradeWindow(
         // clipped-bottom-row bug.
         gridWindow.ContentPadding = Vector2.Zero;
 
-        // getSecondaryTargetEntityId/onItemSelected/onCompareRequested are all no-ops for now --
-        // trade-grid drag/context-menu behavior (Add to trade, direct sell/buy, right-click-removes)
-        // isn't wired yet, see this class's own doc comment. tradeGridIsShopSide: isShopSide picks
-        // TradeItemStackCell and the correct buy/sell pricing direction for this column -- see
+        // getSecondaryTargetEntityId/onActivateRequested stay no-ops -- trade-offer entities can
+        // never be a "secondary target" (see InventoryGridContent.GetSecondaryTargetEntityId's own
+        // callers) and can never satisfy CanActivate's cellEntityId == world.PlayerEntityId check.
+        // onItemSelected is the real, wired comparison-aware dispatch (see Configure's own doc
+        // comment) -- onCompareRequested stays a no-op since a trade cell's OnRightClicked is
+        // hardcoded below to RemoveFromTrade, never BuildItemContextMenu's "Compare" option; arming
+        // Compare from a trade-column item instead goes through that item's own Item Details anchor
+        // (opened via onItemSelected), the same as any other grid. tradeGridIsShopSide: isShopSide
+        // picks TradeItemStackCell and the correct buy/sell pricing direction for this column -- see
         // InventoryGridContent's own doc comment on that parameter. Both columns are given the same
         // _tooltipController -- see its own doc comment for why that's safe now.
-        gridWindow.SetContent(new InventoryGridContent(world, componentManager, itemCatalog, ElementPoolService, FontService, LabelRenderer, spriteSheetService, spriteRenderer, contextMenuController, entityId, filterTag: null, _tooltipController, static () => null, mapViewState, static (_, _) => { }, static (_, _) => { }, static (_, _) => { }, isShopSide));
+        gridWindow.SetContent(new InventoryGridContent(world, componentManager, itemCatalog, ElementPoolService, FontService, LabelRenderer, spriteSheetService, spriteRenderer, contextMenuController, entityId, filterTag: null, _tooltipController, static () => null, mapViewState, _onItemSelected, _onCompareRequested, static (_, _) => { }, isShopSide));
         AddChild(gridWindow);
 
         var footerWindow = ElementPoolService.CreateElement<Window>(this, new ElementOptions

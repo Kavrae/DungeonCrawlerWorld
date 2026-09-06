@@ -128,6 +128,12 @@ public static class ShellBootstrapper
         itemDetailsController.Initialize(uiLayers);
         itemDetailsController.GetSecondaryInventoryWindowRectangle = () => secondaryInventoryController.Rectangle != Rectangle.Empty ? secondaryInventoryController.Rectangle : shopWindowController.Rectangle;
 
+        // Separate from the fallback above (not folded into it) -- the trade window opens
+        // alongside the shop window, not instead of it, so both need to be independently
+        // recognized as "inside" at once. See GetTradeWindowRectangle's own doc comment for the
+        // live bug this fixes.
+        itemDetailsController.GetTradeWindowRectangle = () => tradeWindowController.Rectangle;
+
         // Built after ItemDetailsWindowController (whose single pane it always uses as the
         // comparison's own anchor -- see ItemComparisonController.Arm) -- one-directional
         // reference, no construction cycle, the same shape SecondaryInventoryWindowController
@@ -160,6 +166,7 @@ public static class ShellBootstrapper
         inventoryController.OnItemSelected = OnItemClicked;
         secondaryInventoryController.OnItemSelected = OnItemClicked;
         shopWindowController.OnItemSelected = OnItemClicked;
+        tradeWindowController.OnItemSelected = OnItemClicked;
 
         inventoryController.OnActivateRequested = (_, stackInstanceId) => actionTargetingController.ArmItemFromStack(stackInstanceId);
 

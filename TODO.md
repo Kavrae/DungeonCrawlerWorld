@@ -482,19 +482,6 @@ quantity slider) before settling on this game's own scheme -- see the industry-s
 investigation in this session's transcript for a starting comparison. Blocked on grid drag-to-reorder
 (above) and a quantity-prompt UI (needs Context menu / mouse button coverage's remaining scope).
 
-#### Fix Compare in shop mode
-
-`InventoryGridContent.UpdateCompareState` makes shop mode and Compare mode mutually exclusive by
-design -- while a shop is open, every cell's `CompareState` reflects shop trade eligibility instead of
-compare eligibility, on the reasoning that the two "never both meaningfully active." In practice nothing
-actually disarms `ItemComparisonController`/clears `MapViewState.CompareRequiredActivatorType` when a
-shop opens, so a player who armed Compare right before (or manages to arm it while a shop is open, since
-`BuildItemContextMenu`'s "Compare" option is offered unconditionally in shop mode) ends up with Compare
-still armed but every cell showing shop pricing/eligibility instead of compare highlighting -- a real
-functional inconsistency, not just a cosmetic one, since the player has no visual cue for what a click
-will actually do. Fix by either disarming Compare when a shop opens, or suppressing/graying the
-"Compare" context-menu option while shop mode is active, whichever reads more predictably to the player.
-
 #### Equipped-item comparison
 
 Blocked on Equipment existing (Game + Presentation). See Item Details Comparison in

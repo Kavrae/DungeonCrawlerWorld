@@ -44,7 +44,8 @@ public sealed class TradeWindowTests
     /// <summary>PreferredStockLevel 50 keeps every stock level this file's tests touch (well under 25, the Desperate/Understocked boundary -- see ShopStockPricingTests' own precedent) inside a single, easy-to-hand-verify band, avoiding the preferredStockLevel-0 "any stock reads as Flooded" edge case UiInputControllerTests' own trade harness deliberately exercises instead.</summary>
     private const byte PreferredStockLevel = 50;
 
-    private static (TradeWindow Window, ComponentManager ComponentManager, MapViewState MapViewState) Build(EventBus? eventBus = null)
+    private static (TradeWindow Window, ComponentManager ComponentManager, MapViewState MapViewState) Build(
+        EventBus? eventBus = null, Action<int, Guid>? onItemSelected = null, Action<int, Guid>? onCompareRequested = null)
     {
         var componentManager = new ComponentManager(initialEntityCapacity: 20, initialComponentCapacity: 20);
         componentManager.RegisterMultiPool<InventoryItemStackComponent>();
@@ -91,10 +92,44 @@ public sealed class TradeWindowTests
             Layout = new ElementLayoutOptions { RelativePosition = Vector2.Zero, DisplayMode = ElementDisplayMode.Fixed },
             Chrome = new ElementChromeOptions { ShowTitle = true, TitleText = "Trade", ShowBorder = true, CanUserClose = true, CanUserMove = true, CanUserResize = false, CanUserFocus = true },
         });
-        window.Configure(TradePlayerEntityId, TradeShopEntityId, ShopEntityId, tooltipController);
+        Action<int, Guid> resolvedOnItemSelected = onItemSelected ?? (static (_, _) => { });
+        Action<int, Guid> resolvedOnCompareRequested = onCompareRequested ?? (static (_, _) => { });
+        window.Configure(TradePlayerEntityId, TradeShopEntityId, ShopEntityId, tooltipController, resolvedOnItemSelected, resolvedOnCompareRequested);
         window.Initialize();
 
         return (window, componentManager, mapViewState);
+    }
+
+    /// <summary>
+    /// Regression coverage for wiring the trade window's two grids into the same comparison-aware
+    /// click dispatch every other inventory grid already uses (see TradeWindowController.OnItemSelected/
+    /// TradeWindow.Configure) -- clicking a real item cell in either trade column must invoke the
+    /// caller-supplied onItemSelected with that cell's own entity/stack id, not silently do nothing
+    /// (the old, hardcoded no-op behavior this replaces).
+    /// </summary>
+    [TestMethod]
+    public void ClickingATradeColumnCell_InvokesOnItemSelected()
+    {
+        int? selectedEntityId = null;
+        Guid? selectedStackInstanceId = null;
+        var (window, componentManager, _) = Build(onItemSelected: (entityId, stackInstanceId) =>
+        {
+            selectedEntityId = entityId;
+            selectedStackInstanceId = stackInstanceId;
+        });
+        InventoryActions.AddItem(componentManager, TradePlayerEntityId, PotionItemId, quantity: 1);
+        window.Update(new GameTime());
+
+        var stacks = componentManager.GetMultiPool<InventoryItemStackComponent>();
+        InventoryQueries.TryGetStack(stacks, TradePlayerEntityId, PotionItemId, out var stack);
+
+        var cell = window.ChildElements.OfType<Window>()
+            .SelectMany(childWindow => childWindow.ChildElements.OfType<TradeItemStackCell>())
+            .Single(c => c.StackInstanceId == stack.StackInstanceId);
+        cell.HandleClick(cell.Rectangle.Center);
+
+        Assert.AreEqual(TradePlayerEntityId, selectedEntityId);
+        Assert.AreEqual(stack.StackInstanceId, selectedStackInstanceId);
     }
 
     [TestMethod]

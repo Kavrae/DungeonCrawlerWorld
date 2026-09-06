@@ -351,27 +351,20 @@ public sealed class InventoryGridContent(
     }
 
     /// <summary>
-    /// Direct per-cell field set every frame, no rebuild -- mirrors UpdateSelection exactly. Shop
-    /// mode takes priority over Item Details Comparison (the two are never both meaningfully
-    /// active for the same grid in practice, and a shop's own buy/sell eligibility is the more
-    /// urgent signal while one is open): while MapViewState.OpenShopEntityId is set, every cell's
-    /// CompareState instead reflects shop trade eligibility (see UpdateShopEligibilityState).
-    /// Otherwise None (not compare-armed) for every cell when MapViewState.CompareRequiredActivatorType
-    /// is null; Ineligible for a Merged Stack cell (no single stack to add) or one whose effective
-    /// item's Activator concrete type doesn't match, Eligible when it does.
+    /// Direct per-cell field set every frame, no rebuild -- mirrors UpdateSelection exactly.
+    /// Comparison and shop-trade eligibility are independent per-cell signals, always both computed
+    /// here regardless of mode (see InventoryItemStackCell.CompareState/ShopTradeEligible's own doc
+    /// comments) -- CompareState is None (comparison not armed) for every cell when MapViewState.
+    /// CompareRequiredActivatorType is null; Ineligible for a Merged Stack cell (no single stack to
+    /// add) or one whose effective item's Activator concrete type doesn't match, Eligible when it
+    /// does. ShopTradeEligible/CanStageInTrade stay at their meaningless-outside-shop-mode defaults
+    /// (true/false respectively) unless MapViewState.OpenShopEntityId is set, in which case
+    /// UpdateShopEligibilityState computes them for real.
     /// </summary>
     private void UpdateCompareState()
     {
-        if (mapViewState.OpenShopEntityId is { } shopEntityId)
-        {
-            UpdateShopEligibilityState(shopEntityId);
-            return;
-        }
-
         foreach (var cell in _cells)
         {
-            cell.CanStageInTrade = false; // Never meaningful outside shop mode -- see its own doc comment.
-
             if (mapViewState.CompareRequiredActivatorType is not { } requiredType)
             {
                 cell.CompareState = CellCompareState.None;
@@ -388,20 +381,33 @@ public sealed class InventoryGridContent(
 
             cell.CompareState = definition.Activator?.GetType() == requiredType ? CellCompareState.Eligible : CellCompareState.Ineligible;
         }
+
+        if (mapViewState.OpenShopEntityId is { } shopEntityId)
+        {
+            UpdateShopEligibilityState(shopEntityId);
+            return;
+        }
+
+        foreach (var cell in _cells)
+        {
+            cell.ShopTradeEligible = true; // Meaningless outside shop mode -- see its own doc comment.
+            cell.CanStageInTrade = false; // Never meaningful outside shop mode -- see its own doc comment.
+        }
     }
 
     /// <summary>
-    /// Eligible when this cell's item can be traded with shopEntityId's own ShopComponent (tag
-    /// match) AND whichever side would be paying Gold can afford it -- the shop's own grid checks
-    /// the player's Gold (a purchase), the player's own grid checks the shop's Gold (a sale). A
-    /// Merged Stack cell (no single stack to price) is always Ineligible, same as compare mode's
-    /// own handling. Ineligible cells grey out (existing isGreyedOut logic) and refuse to drag/
-    /// Give/Take/Sell All/Buy All (see UiInputController.TryStartContentDrag and
-    /// BuildItemContextMenu below) -- closes the currency-drain-style exploit a naive reuse of
-    /// plain Give/Take would otherwise open for wrong-tag or unaffordable trades. CanStageInTrade
-    /// is set independently (tag match only, ignoring affordability) -- see its own doc comment for
-    /// why an unaffordable item can still be greyed out here yet still draggable into the trade
-    /// window.
+    /// ShopTradeEligible true when this cell's item can be traded with shopEntityId's own
+    /// ShopComponent (tag match) AND whichever side would be paying Gold can afford it -- the
+    /// shop's own grid checks the player's Gold (a purchase), the player's own grid checks the
+    /// shop's Gold (a sale). A Merged Stack cell (no single stack to price) is always false. False
+    /// cells grey out (existing isGreyedOut logic) and refuse to drag/Give/Take/Sell All/Buy All
+    /// (see UiInputController.TryStartContentDrag and BuildItemContextMenu below) -- closes the
+    /// currency-drain-style exploit a naive reuse of plain Give/Take would otherwise open for
+    /// wrong-tag or unaffordable trades. Computed entirely independently of CompareState (Item
+    /// Details Comparison's own eligibility, above) -- the two coexist on the same cell rather than
+    /// one overwriting the other. CanStageInTrade is set independently (tag match only, ignoring
+    /// affordability) -- see its own doc comment for why an unaffordable item can still be greyed
+    /// out here yet still draggable into the trade window.
     /// </summary>
     private void UpdateShopEligibilityState(int shopEntityId)
     {
@@ -409,7 +415,7 @@ public sealed class InventoryGridContent(
         {
             foreach (var cell in _cells)
             {
-                cell.CompareState = CellCompareState.Ineligible;
+                cell.ShopTradeEligible = false;
                 cell.CanStageInTrade = false;
             }
 
@@ -427,7 +433,7 @@ public sealed class InventoryGridContent(
                 !InventoryQueries.TryResolveEffectiveItem(itemCatalog, in stack, out var definition) ||
                 !ShopActions.CanTrade(shop, definition))
             {
-                cell.CompareState = CellCompareState.Ineligible;
+                cell.ShopTradeEligible = false;
                 cell.CanStageInTrade = false;
                 continue;
             }
@@ -439,7 +445,7 @@ public sealed class InventoryGridContent(
             var totalPrice = isThisGridTheShop
                 ? ShopStockPricing.ComputeBulkBuyPrice(effectiveStock, preferredStockLevel, shop, definition, stack.Quantity)
                 : ShopStockPricing.ComputeBulkSellPrice(effectiveStock, preferredStockLevel, shop, definition, stack.Quantity);
-            cell.CompareState = payerCurrency.Gold >= totalPrice ? CellCompareState.Eligible : CellCompareState.Ineligible;
+            cell.ShopTradeEligible = payerCurrency.Gold >= totalPrice;
         }
     }
 
@@ -769,11 +775,11 @@ public sealed class InventoryGridContent(
 
         options.Add(new ContextMenuOption("Compare", null, Enabled: true, () => onCompareRequested(cell.EntityId, stackInstanceId)));
 
-        // While a shop is open, every cell's CompareState instead reflects shop trade eligibility
-        // (see UpdateShopEligibilityState) -- Ineligible (wrong tag, or the paying side can't
-        // afford it) means Give/Take must not even be offered, closing the same currency-drain-
-        // style exploit a naive reuse of plain Give/Take would otherwise open.
-        var isShopIneligible = mapViewState.OpenShopEntityId is not null && cell.CompareState == CellCompareState.Ineligible;
+        // While a shop is open, every cell's ShopTradeEligible reflects shop trade eligibility
+        // (see UpdateShopEligibilityState) -- false (wrong tag, or the paying side can't afford
+        // it) means Give/Take must not even be offered, closing the same currency-drain-style
+        // exploit a naive reuse of plain Give/Take would otherwise open.
+        var isShopIneligible = mapViewState.OpenShopEntityId is not null && !cell.ShopTradeEligible;
 
         // "Add to trade" -- gated on CanStageInTrade (tag match only, see its own doc comment), not
         // the stricter isShopIneligible (tag match AND affordability) Sell All/Buy All below use --

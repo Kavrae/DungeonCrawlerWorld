@@ -102,16 +102,34 @@ public class InventoryItemStackCell(FontService fontService, ElementPoolService 
     /// <summary>Drives GridSquareRenderer's own gold inner+outer selected glow (see DrawStateOverlay, the same treatment HotbarContent's own ArmedSlot glow uses) -- true when this cell's StackInstanceId matches MapViewState.SelectedItemStackInstanceId, the item currently shown in the Item Details window. Set every frame alongside IsHovered -- see InventoryGridContent's own per-frame sync, not a rebuild-driven Configure parameter, since selection changes independently of any grid rebuild.</summary>
     public bool IsSelected { get; set; }
 
-    /// <summary>Item Details Comparison's own per-frame state, set alongside IsSelected -- Eligible glows green (this item shares the anchor's Activator type, so clicking it would add it), Ineligible grey-tints the icon the same way IsDisabled already does, None (outside compare mode) draws neither.</summary>
+    /// <summary>Item Details Comparison's own per-frame state, set alongside IsSelected, independent of shop mode -- Eligible glows green (this item shares the anchor's Activator type, so clicking it would add it), Ineligible grey-tints the icon the same way IsDisabled already does, None (comparison not armed) draws neither. Comparison and shop-trade eligibility (ShopTradeEligible below) are computed and rendered independently -- a shop-ineligible item that's still comparison-eligible shows both cues at once (greyed icon, green comparison glow).</summary>
     public CellCompareState CompareState { get; set; }
 
     /// <summary>
-    /// Shop mode only, set alongside CompareState by InventoryGridContent.UpdateShopEligibilityState
+    /// Shop mode only (true, the meaningless-outside-shop-mode default, otherwise), set alongside
+    /// CompareState by InventoryGridContent.UpdateShopEligibilityState -- true when this item can be
+    /// traded with the open shop (ShopActions.CanTrade tag match) AND whichever side would be paying
+    /// Gold can currently afford it. False greys the icon out (see DrawBaseAndIcon) and blocks a
+    /// direct drag/Give/Take/Sell All/Buy All (see UiInputController.TryStartContentDrag and
+    /// BuildItemContextMenu's isShopIneligible) -- closes the currency-drain-style exploit a naive
+    /// reuse of plain Give/Take would otherwise open for wrong-tag or unaffordable trades. Distinct
+    /// from CanStageInTrade (tag match only, ignoring affordability, see its own doc comment) -- an
+    /// unaffordable-but-tradeable item still reads ShopTradeEligible false (greyed out, still blocked
+    /// from a direct buy/sell) but CanStageInTrade true, so it can still be dragged into the trade
+    /// window to stage. Deliberately never drives the green eligible-glow (see DrawBaseAndIcon) --
+    /// that glow is Item Details Comparison's own cue exclusively, so a shop-eligible item reads with
+    /// no special highlight beyond its own price-line favorable/unfavorable coloring (ShopItemStackCell.
+    /// PriceIsFavorable/PriceIsUnfavorable).
+    /// </summary>
+    public bool ShopTradeEligible { get; set; } = true;
+
+    /// <summary>
+    /// Shop mode only, set alongside ShopTradeEligible by InventoryGridContent.UpdateShopEligibilityState
     /// -- true whenever this item's tags actually match the open shop's own AllowedTags
     /// (ShopActions.CanTrade), regardless of whether the paying side can currently afford it. An
-    /// unaffordable-but-tradeable item still reads CompareState Ineligible (greyed out, same visual,
-    /// still blocked from a direct buy/sell -- ShopActions.TryBuyFromShop/TrySellToShop's own
-    /// affordability check refuses it with no state changed either way) but CanStageInTrade true, so
+    /// unaffordable-but-tradeable item still reads ShopTradeEligible false (greyed out, still blocked
+    /// from a direct buy/sell -- ShopActions.TryBuyFromShop/TrySellToShop's own affordability check
+    /// refuses it with no state changed either way) but CanStageInTrade true, so
     /// TryStartContentDrag/BuildItemContextMenu's "Add to trade" can still let it be picked up and
     /// staged in the trade window -- only a wrong-tag item (CanTrade false) or a Merged Stack (no
     /// single stack to trade) is ever fully blocked from that. False outside shop mode entirely.
@@ -140,6 +158,7 @@ public class InventoryItemStackCell(FontService fontService, ElementPoolService 
         _glyphColor = glyphColor;
         _quantity = quantity;
         _isDisabled = isDisabled;
+        ShopTradeEligible = true;
         _groupBorderTop = false;
         _groupBorderBottom = false;
         _groupBorderLeft = false;
@@ -205,7 +224,7 @@ public class InventoryItemStackCell(FontService fontService, ElementPoolService 
             GlowRenderer.Draw(spriteBatch, unitRectangle, bounds, CompareEligibleGlowColor, GlowMode.InteriorFade);
         }
 
-        var isGreyedOut = _isDisabled || CompareState == CellCompareState.Ineligible;
+        var isGreyedOut = _isDisabled || CompareState == CellCompareState.Ineligible || !ShopTradeEligible;
         SpriteComponent? sprite = _spriteName is not null && SpriteManifest.TryGet(_spriteName, out var spriteComponent) ? spriteComponent : null;
         var spriteTint = isGreyedOut ? Color.Gray : Color.White;
         var glyphColor = isGreyedOut ? Color.Gray : _glyphColor;

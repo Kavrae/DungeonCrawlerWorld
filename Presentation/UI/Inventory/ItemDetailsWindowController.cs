@@ -46,8 +46,20 @@ public sealed class ItemDetailsWindowController(
 
     public Guid? CurrentStackInstanceId { get; private set; }
 
-    /// <summary>Settable late-bound query for the currently-open secondary/corpse inventory window's own bounds, if any -- wired by ShellBootstrapper to SecondaryInventoryWindowController.Rectangle once that controller exists (built after this one -- same construction-order reason InventoryWindowController.GetSecondaryTargetEntityId is wired the same way). Rectangle.Empty (never "inside"), not null, when nothing is open or this is never wired (e.g. test setups).</summary>
+    /// <summary>Settable late-bound query for the currently-open secondary/corpse-or-shop inventory window's own bounds, if any -- wired by ShellBootstrapper to SecondaryInventoryWindowController.Rectangle/ShopWindowController.Rectangle once those controllers exist (built after this one -- same construction-order reason InventoryWindowController.GetSecondaryTargetEntityId is wired the same way). A single Func is safe here because a corpse/container window and a shop window are never open together (see ShellBootstrapper's own mutual-exclusion comment) -- unlike the trade window below, which IS open at the same time as the shop, so it needs its own independent hook rather than sharing this one. Rectangle.Empty (never "inside"), not null, when nothing is open or this is never wired (e.g. test setups).</summary>
     public Func<Rectangle>? GetSecondaryInventoryWindowRectangle { get; set; }
+
+    /// <summary>
+    /// Settable late-bound query for the currently-open Trade window's own bounds, if any -- wired
+    /// by ShellBootstrapper to TradeWindowController.Rectangle. Deliberately separate from
+    /// GetSecondaryInventoryWindowRectangle above, not folded into the same fallback chain: the
+    /// trade window and the shop window are open simultaneously (TradeWindowController.Open runs
+    /// off ShopWindowController.OnOpened), so a single "pick whichever one's open" Func would hide
+    /// the shop window's own rectangle the moment a trade session starts -- confirmed live as a
+    /// real bug (a click on the shop's own item grid, or on a comparison-armed shop item, read as
+    /// "outside" and closed/cleared the Item Details anchor instead of selecting the shop item).
+    /// </summary>
+    public Func<Rectangle>? GetTradeWindowRectangle { get; set; }
 
     /// <summary>Settable late-bound query for every currently-open Item Details Comparison column's own bounds -- without this, a click on a comparison column would look "outside" this window and wrongly close it, since IsOutsideClick has no other way to know those windows exist.</summary>
     public Func<IReadOnlyList<Rectangle>>? GetComparisonColumnRectangles { get; set; }
@@ -79,6 +91,11 @@ public sealed class ItemDetailsWindowController(
         }
 
         if (GetSecondaryInventoryWindowRectangle?.Invoke().Contains(clickPosition) == true)
+        {
+            return false;
+        }
+
+        if (GetTradeWindowRectangle?.Invoke().Contains(clickPosition) == true)
         {
             return false;
         }

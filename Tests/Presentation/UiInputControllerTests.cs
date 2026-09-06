@@ -2429,7 +2429,7 @@ public sealed class UiInputControllerTests
     /// entities, one item stack granted to SourceEntityId, positioned far enough apart that any
     /// press-then-release pair between them exceeds ContentDragTapThresholdPixels.
     /// </summary>
-    private static (Window SourceGridWindow, Window DestinationGridWindow, InventoryItemStackCell Cell, ComponentManager ComponentManager, Guid ItemId, int SourceEntityId, int DestinationEntityId) BuildInventoryToInventoryDragHarness()
+    private static (Window SourceGridWindow, Window DestinationGridWindow, InventoryItemStackCell Cell, ComponentManager ComponentManager, Guid ItemId, int SourceEntityId, int DestinationEntityId) BuildInventoryToInventoryDragHarness(Action<int, Guid>? onItemSelected = null)
     {
         const int sourceEntityId = 1;
         const int destinationEntityId = 2;
@@ -2456,6 +2456,7 @@ public sealed class UiInputControllerTests
         var world = new Game.World.World(new Game.World.Map(new Vector3Int(10, 10, 1)));
         var contextMenuController = TestElementPoolServiceFactory.CreateContextMenuController(windowService, new UiLayerStack());
         var mapViewState = new MapViewState();
+        Action<int, Guid> resolvedOnItemSelected = onItemSelected ?? (static (_, _) => { });
 
         Window BuildGridWindow(int entityId, Vector2 position)
         {
@@ -2465,7 +2466,7 @@ public sealed class UiInputControllerTests
                 Layout = new ElementLayoutOptions { RelativePosition = position, Size = new Vector2(200, 200), DisplayMode = ElementDisplayMode.Fixed },
                 Chrome = new ElementChromeOptions { ShowBorder = true, CanUserFocus = false },
             });
-            window.SetContent(new InventoryGridContent(world, componentManager, itemCatalog, windowService, fontService, labelRenderer, spriteSheetService, spriteRenderer, contextMenuController, entityId, filterTag: null, tooltipController, static () => null, mapViewState, static (_, _) => { }, static (_, _) => { }, static (_, _) => { }));
+            window.SetContent(new InventoryGridContent(world, componentManager, itemCatalog, windowService, fontService, labelRenderer, spriteSheetService, spriteRenderer, contextMenuController, entityId, filterTag: null, tooltipController, static () => null, mapViewState, resolvedOnItemSelected, static (_, _) => { }, static (_, _) => { }));
             window.Initialize();
             return window;
         }
@@ -2493,6 +2494,56 @@ public sealed class UiInputControllerTests
         var stacks = componentManager.GetMultiPool<InventoryItemStackComponent>();
         Assert.AreEqual(0, stacks.CountForEntity(sourceEntityId));
         Assert.IsTrue(InventoryQueries.TryGetStack(stacks, destinationEntityId, itemId, out _));
+    }
+
+    /// <summary>
+    /// Regression test for a confirmed live bug: dragging an item cell to another grid ALSO fired
+    /// the origin cell's own ordinary Clicked handler on release (e.g. opening/toggling Item
+    /// Details for the dragged item) purely because _activeInteraction.Element still referred to
+    /// the pressed cell, with nothing suppressing the click just because a genuine drag-and-drop
+    /// happened. A real drag (release past ContentDragTapThresholdPixels away) must not also invoke
+    /// onItemSelected for the origin cell.
+    /// </summary>
+    [TestMethod]
+    public void Drag_FromInventoryCellToAnotherEntitysGrid_DoesNotAlsoInvokeOnItemSelected()
+    {
+        var selectedCount = 0;
+        var (sourceGridWindow, destinationGridWindow, cell, componentManager, _, _, _) = BuildInventoryToInventoryDragHarness(onItemSelected: (_, _) => selectedCount++);
+        var controller = CreateController([sourceGridWindow, destinationGridWindow], [], [], [], LargeScreenSize, componentManager: componentManager, playerQuery: null);
+
+        var pressPoint = cell.ContentRectangle.Center;
+        controller.Update(NoKeys, MouseAt(pressPoint.X, pressPoint.Y, ButtonState.Released));
+        controller.Update(NoKeys, MouseAt(pressPoint.X, pressPoint.Y, ButtonState.Pressed));
+
+        var dropPoint = destinationGridWindow.ContentRectangle.Center;
+        controller.Update(NoKeys, MouseAt(dropPoint.X, dropPoint.Y, ButtonState.Released));
+
+        Assert.AreEqual(0, selectedCount, "A genuine drag-and-drop must not also fire the origin cell's own click.");
+    }
+
+    /// <summary>Sanity counterpart to the regression test above -- a plain click (press and release at the same position, well under ContentDragTapThresholdPixels) must still invoke onItemSelected exactly once.</summary>
+    [TestMethod]
+    public void Click_OnInventoryCellWithNoMovement_StillInvokesOnItemSelected()
+    {
+        var selectedCount = 0;
+        int? selectedEntityId = null;
+        var (sourceGridWindow, _, cell, componentManager, itemId, sourceEntityId, _) = BuildInventoryToInventoryDragHarness(onItemSelected: (entityId, _) =>
+        {
+            selectedCount++;
+            selectedEntityId = entityId;
+        });
+        var controller = CreateController([sourceGridWindow], [], [], [], LargeScreenSize, componentManager: componentManager, playerQuery: null);
+
+        var pressPoint = cell.ContentRectangle.Center;
+        controller.Update(NoKeys, MouseAt(pressPoint.X, pressPoint.Y, ButtonState.Released));
+        controller.Update(NoKeys, MouseAt(pressPoint.X, pressPoint.Y, ButtonState.Pressed));
+        controller.Update(NoKeys, MouseAt(pressPoint.X, pressPoint.Y, ButtonState.Released));
+
+        Assert.AreEqual(1, selectedCount);
+        Assert.AreEqual(sourceEntityId, selectedEntityId);
+
+        var stacks = componentManager.GetMultiPool<InventoryItemStackComponent>();
+        Assert.IsTrue(InventoryQueries.TryGetStack(stacks, sourceEntityId, itemId, out _), "A plain click must never move the stack.");
     }
 
     [TestMethod]
@@ -2584,9 +2635,9 @@ public sealed class UiInputControllerTests
         var playerGridWindow = BuildGridWindow(playerEntityId, new Vector2(0, 0));
         var shopGridWindow = BuildGridWindow(shopEntityId, new Vector2(500, 0));
 
-        // A fresh Update resolves this frame's eligibility (CompareState) against the just-merged
-        // ShopComponent/CurrencyComponent -- RebuildCells alone (run by Initialize) never sets
-        // CompareState, only UpdateShopEligibilityState (run from Update) does.
+        // A fresh Update resolves this frame's eligibility (ShopTradeEligible) against the
+        // just-merged ShopComponent/CurrencyComponent -- RebuildCells alone (run by Initialize)
+        // never sets ShopTradeEligible, only UpdateShopEligibilityState (run from Update) does.
         ((InventoryGridContent)playerGridWindow.Tag!).Update(new GameTime());
         ((InventoryGridContent)shopGridWindow.Tag!).Update(new GameTime());
 
@@ -2600,7 +2651,7 @@ public sealed class UiInputControllerTests
         var controller = CreateController([playerGridWindow, shopGridWindow], [], [], [], LargeScreenSize, componentManager: componentManager, playerQuery: null, itemCatalog: itemCatalog, mapViewState: mapViewState);
 
         var toolCell = playerGridWindow.ChildElements.OfType<InventoryItemStackCell>().Single(c => c.ItemDefinitionId == toolItemId);
-        Assert.AreEqual(CellCompareState.Ineligible, toolCell.CompareState, "Sanity check: a Tool-tagged item must read Ineligible against a Potion-only shop before the drag itself is attempted.");
+        Assert.IsFalse(toolCell.ShopTradeEligible, "Sanity check: a Tool-tagged item must read shop-ineligible against a Potion-only shop before the drag itself is attempted.");
 
         var pressPoint = toolCell.ContentRectangle.Center;
         controller.Update(NoKeys, MouseAt(pressPoint.X, pressPoint.Y, ButtonState.Released));
@@ -2621,7 +2672,7 @@ public sealed class UiInputControllerTests
         var controller = CreateController([playerGridWindow, shopGridWindow], [], [], [], LargeScreenSize, componentManager: componentManager, playerQuery: null, itemCatalog: itemCatalog, mapViewState: mapViewState);
 
         var potionCell = playerGridWindow.ChildElements.OfType<InventoryItemStackCell>().Single(c => c.ItemDefinitionId == potionItemId);
-        Assert.AreEqual(CellCompareState.Eligible, potionCell.CompareState, "Sanity check: a Potion-tagged item must read Eligible against a Potion-only shop -- the shop can always afford to buy since it starts with 1000 Gold.");
+        Assert.IsTrue(potionCell.ShopTradeEligible, "Sanity check: a Potion-tagged item must read shop-eligible against a Potion-only shop -- the shop can always afford to buy since it starts with 1000 Gold.");
 
         var pressPoint = potionCell.ContentRectangle.Center;
         controller.Update(NoKeys, MouseAt(pressPoint.X, pressPoint.Y, ButtonState.Released));
@@ -2868,7 +2919,7 @@ public sealed class UiInputControllerTests
 
     /// <summary>
     /// A shop item the player can't currently afford (right tag, but insufficient Gold) reads
-    /// CompareState Ineligible (greyed out) and refuses a direct buy, exactly as before -- but must
+    /// ShopTradeEligible false (greyed out) and refuses a direct buy, exactly as before -- but must
     /// still be draggable into the trade window to stage (InventoryItemStackCell.CanStageInTrade,
     /// tag match only, ignores affordability). Confirmed live requirement: an unaffordable item can
     /// still be offered up for trade (e.g. bartered against other items/Gold), it just can't be
@@ -2885,7 +2936,7 @@ public sealed class UiInputControllerTests
         var controller = CreateController([playerGridWindow, shopGridWindow, tradePlayerGridWindow, tradeShopGridWindow], [], [], [], LargeScreenSize, componentManager: componentManager, playerQuery: world, itemCatalog: itemCatalog, mapViewState: mapViewState);
 
         var shopCell = shopGridWindow.ChildElements.OfType<InventoryItemStackCell>().Single();
-        Assert.AreEqual(CellCompareState.Ineligible, shopCell.CompareState, "Sanity check: 0 Gold can't afford this item, so it must read Ineligible/greyed-out.");
+        Assert.IsFalse(shopCell.ShopTradeEligible, "Sanity check: 0 Gold can't afford this item, so it must read shop-ineligible/greyed-out.");
         Assert.IsTrue(shopCell.CanStageInTrade, "Sanity check: the item's own tag still matches the shop, so it must remain stageable despite being unaffordable.");
 
         var stacks = componentManager.GetMultiPool<InventoryItemStackComponent>();
