@@ -1,4 +1,3 @@
-using Engine.ECS.Components;
 using Engine.ECS.Components.Stores;
 using Engine.ECS.Systems;
 using Engine.Math;
@@ -51,7 +50,13 @@ namespace Game.Modules.NpcBehavior.Systems;
 /// </summary>
 public sealed class TestCombatBehaviorSystem : ISystem
 {
-    private const byte StripeCountValue = 1;
+    // Matches MovementSystem's StripeCount (both wired to the same MovementComponent pool,
+    // both incrementing their stripe index once per frame from the same 0-start -- see
+    // SystemManager -- so entities stay decided and moved on the same frame as before, just
+    // spread over 15 frames instead of every frame). Previously 1, meaning this system
+    // processed its entire population every frame while MovementSystem only processed 1/15th
+    // -- the actual cause of the ~2fps slowdown investigated via TODO.md's "Very slow" note.
+    private const byte StripeCountValue = 15;
 
     public byte StripeCount => StripeCountValue;
 
@@ -116,6 +121,11 @@ public sealed class TestCombatBehaviorSystem : ISystem
                 continue;
             }
 
+            if (!_transformPool.TryGetReadonly(entityId, out var transform))
+            {
+                continue;
+            }
+
             ref readonly var movement = ref _movementPool.GetReadonly(entityId);
             if (movement.MovementMode != MovementMode.Random)
             {
@@ -124,11 +134,16 @@ public sealed class TestCombatBehaviorSystem : ISystem
 
             if (movement.FramesToWait > 0)
             {
-                _movementPool.TryUpdate(entityId, static (ref MovementComponent m) => m.FramesToWait = MathUtility.DecrementClamped(m.FramesToWait, 1));
+                // Decrement by StripeCountValue, not 1 -- this entity is only visited once every
+                // StripeCount real frames (see MovementSystem's identical FramesToWait decrement
+                // for the same reason), so a per-visit decrement of 1 would stretch every wait
+                // duration (e.g. MovementCandidates.FramesToWaitIfNoOptions) out to StripeCount
+                // times its intended real-time length.
+                _movementPool.TryUpdate(entityId, static (ref MovementComponent m) => m.FramesToWait = MathUtility.DecrementClamped(m.FramesToWait, StripeCountValue));
                 continue;
             }
 
-            if (ActionLockGate.IsBlocked(_actionLocks, entityId) || !_transformPool.TryGetReadonly(entityId, out var transform))
+            if (ActionLockGate.IsBlocked(_actionLocks, entityId) )
             {
                 continue;
             }

@@ -1,3 +1,25 @@
+### Combat Overhaul : Dodge
+# Clean these up
+Keep Movement, QuickAttack, and magic missle as immediate actions, Dodge as the only QuickCast action, and change all others to delayed. Immediate and QuickCast actions should be rare. 
+All delayed actions keep the target shape drawn on the map (so enemies show their attack target area) until they activate. Adjust the colors to make it clear which are enemy vs player. Red for enemy target shapes that cannot be dodged and yellow for ones that can be dodged. Light green for player arm and dark green for player target.
+While an entity is charging an action/item, put that action/item's sprite as a badge above their sprite on the map.
+This allows quick cast action like dodge, block, parry, counterspell, etc to have a purpose and timing.
+This makes combat slower and more deliberate instead of spamming actions. Shifting to more of a 2d souls-like game
+Lower enemy count to make this more deliberate and punishing combat style work.
+Give every entity three default core actions. QuickAttack, PowerAttack, and Dodge.
+	QuickAttack is an immediate adjacent-target action (so can't be dodged) with low damage. No cooldown besides global. This replaces Punch on the F key.
+	PowerAttack is a delayed adjacent-target action with a 0.5 second delay (so can be dodged) with high damage. No cooldown besides global. Default to the R key.
+	Dodge is a QuickCast action to avoid attacks. No additional cooldown, but impose double the normal global cooldown, to prevent Dodge from being used as a safer form of movement. Default to the V key. Not all attacks can be dodged; such as auto-targeting attacks like Magic Missile or AOE attacks like explosions. Mark PowerAttack as CanBeDodged (find a better name for this). After dodge is armed (adjacent+self), it can be activated with the same key, click, or directional movement key. Same key or clicking on the player will dodge in-place. Directional movement or clicking an adjacent tile will dodge while moving to that tile (if not occupied. If occupied, the entity will dodge in place). After activating Dodge, any action or item with CanBeDodged will not affect the dodging entity.
+Dexterity increases dodge's activation time from 0.5 seconds at dexterity 1 to 1 second at dexterity 300. Check the values used by games like Dark Souls 3, and other games with a dodge mechanic, to validate these activation times.
+Block (such as via a shield) will be added later as another QuickAction with a longer duration but does not fully block damage and effects.
+Counterspell will be added later as another QuickAction that will attempt to cancel delayedAction spells. Determine a way to make this fair for both the source and target.
+
+### Stances and Toggles
+Stances. A set of toggle actions that boost one specialty in exchange for weakening another. Add a visual element to toggle actions/items to indicate when they're toggled on. A rotating glow is standard.
+Stance 1 = Lower charge up times for delay actions in exchange for longer global cooldowns.
+Stance 2 = Improved magic effects at the cost of melee. 
+Should toggle be a separate action type?
+
 # Long-Term TODOs
 
 Non-urgent architectural items worth revisiting later. Organized by layer (Engine, Game, Presentation,

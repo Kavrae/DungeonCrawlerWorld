@@ -121,7 +121,7 @@ public sealed class TestMapBuilder(EntityManager entityManager, ComponentManager
                 {
                     BuildTerrainFromBlueprint(
                         world,
-                        mathUtility.Next(0, 5) == 0
+                        mathUtility.Next(0, 20) == 0
                             ? _lava
                             : _dirt,
                         column,
