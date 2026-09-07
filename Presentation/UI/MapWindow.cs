@@ -6,6 +6,8 @@ using Engine.Utilities;
 using FontStashSharp;
 using Game.Blueprints;
 using Game.Modules.Actions;
+using Game.Modules.Actions.Components;
+using Game.Modules.Actions.Definitions.DirectActions;
 using Game.Modules.Containers.Components;
 using Game.Modules.Core;
 using Game.Modules.Core.Components;
@@ -52,6 +54,15 @@ public sealed class MapWindow : Window
     private const float LootBagBadgeSizeFraction = 0.4f;
     private const string LootBagSpriteName = "LootBag-Red";
 
+    /// <summary>Color of a dodging entity's own inner-fade glow -- Combat Overhaul: Dodge.</summary>
+    private static readonly Color DodgingGlowColor = Color.LightGreen;
+
+    /// <summary>Boosts GlowRenderer's own 50%-at-the-edge default toward fully opaque -- see the call site's own doc comment for why the un-boosted default read as invisible.</summary>
+    private const float DodgingGlowAlphaMultiplier = 2f;
+
+    /// <summary>Fraction of a tile's own size the charging-action badge renders at, matching LootBagBadgeSizeFraction's own scale.</summary>
+    private const float ChargingBadgeSizeFraction = 0.4f;
+
     private readonly World _world;
     private readonly MapViewState _mapViewState;
     private readonly MapCamera _camera;
@@ -74,14 +85,18 @@ public sealed class MapWindow : Window
     private readonly PackedComponentPool<ShopComponent>? _shopPool;
     private readonly PackedComponentPool<ActionLockComponent> _actionLockPool;
     private readonly DirectComponentPool<DisplayTextComponent> _displayTextPool;
+    private readonly PackedComponentPool<PendingDelayedActionComponent> _pendingDelayedActions;
+    private readonly PackedComponentPool<DodgingComponent> _dodgingEntities;
+    private readonly ActionCatalog _actionCatalog;
+
+    /// <summary>This frame's "an earlier hotkey handler already used this key" set -- cleared and repopulated every OnHotkeysAction call, before PlayerMovementController.HandleInput reads it. See that class's own doc comment for why this exists (today: Dodge's directional confirm claiming WASD ahead of plain movement).</summary>
+    private readonly HashSet<Keys> _claimedKeysThisFrame = [];
 
     private readonly TileRenderer _tileRenderer;
     private readonly LabelRenderer _labelRenderer;
     private readonly SpriteSheetService _spriteSheetService;
     private readonly SpriteRenderer _spriteRenderer;
 
-    private static readonly Color TargetableTileBorderColor = Color.White;
-    private static readonly Color HoveredTargetTileBorderColor = Color.Red;
     private const float TargetSelectionMaskAlpha = 0.5f;
 
     /// <summary>Halves MapTintGrid's own already-falloff-scaled Factor so a full-strength aura glow (Factor 1) still lets whatever's standing on that tile -- terrain, an occupant sprite/glyph -- read through, rather than washing it out at the source tile itself.</summary>
@@ -207,6 +222,9 @@ public sealed class MapWindow : Window
             : null;
         _actionLockPool = actionLockPool;
         _displayTextPool = componentManager.GetDirectPool<DisplayTextComponent>();
+        _pendingDelayedActions = componentManager.GetPackedPool<PendingDelayedActionComponent>();
+        _dodgingEntities = componentManager.GetPackedPool<DodgingComponent>();
+        _actionCatalog = actionCatalog;
         _tileRenderer = tileRenderer;
         _labelRenderer = labelRenderer;
         _spriteSheetService = spriteSheetService;
@@ -390,8 +408,13 @@ public sealed class MapWindow : Window
     /// nothing left to aim), but the player benefits from still seeing exactly which tiles are
     /// about to be hit once the windup ends -- so this falls back to highlighting
     /// ActionTargetingController.PendingDelayedActionTargetTiles (the already-resolved,
-    /// locked-in footprint) in the same red used for a confirmed hover target, for as long as
-    /// that pending action exists.
+    /// locked-in footprint) in the same dark green used for a confirmed hover target, for as long
+    /// as that pending action exists. Separately (and unconditionally, every frame, regardless of
+    /// the player's own armed/pending state above), every OTHER entity's own in-flight Delayed
+    /// windup is telegraphed too, in red or yellow depending on whether it's Dodgeable -- see
+    /// CombatTargetPalette and ActionTargetingController.AllPendingDelayedActionTargets. This is
+    /// the "delayed actions keep the target shape drawn on the map... until they activate" half of
+    /// Combat Overhaul: Dodge (TODO.md).
     /// </summary>
     private void DrawTargetingHighlights(SpriteBatch spriteBatch, Texture2D unitRectangle)
     {
@@ -399,7 +422,7 @@ public sealed class MapWindow : Window
         {
             foreach (var tile in targetableTiles)
             {
-                var borderColor = _actionTargeting.HoveredFootprintContains(tile) ? HoveredTargetTileBorderColor : TargetableTileBorderColor;
+                var borderColor = _actionTargeting.HoveredFootprintContains(tile) ? CombatTargetPalette.PlayerTargetColor : CombatTargetPalette.PlayerArmColor;
                 DrawMaskedTileHighlight(spriteBatch, unitRectangle, tile.X, tile.Y, borderColor);
             }
 
@@ -407,19 +430,70 @@ public sealed class MapWindow : Window
             {
                 if (!targetableTiles.Contains(tile))
                 {
-                    DrawMaskedTileHighlight(spriteBatch, unitRectangle, tile.X, tile.Y, HoveredTargetTileBorderColor);
+                    DrawMaskedTileHighlight(spriteBatch, unitRectangle, tile.X, tile.Y, CombatTargetPalette.PlayerTargetColor);
                 }
             }
-
-            return;
         }
-
-        if (_actionTargeting.PendingDelayedActionTargetTiles is { } pendingTargetTiles)
+        else if (_actionTargeting.PendingDelayedActionTargetTiles is { } pendingTargetTiles)
         {
             foreach (var tile in pendingTargetTiles)
             {
-                DrawMaskedTileHighlight(spriteBatch, unitRectangle, tile.X, tile.Y, HoveredTargetTileBorderColor);
+                DrawMaskedTileHighlight(spriteBatch, unitRectangle, tile.X, tile.Y, CombatTargetPalette.PlayerTargetColor);
             }
+        }
+
+        // Every OTHER entity's own Delayed-action telegraph -- red (undodgeable) or yellow
+        // (Dodgeable), per Combat Overhaul: Dodge. The player's own is already drawn above (dark
+        // green, "player target"), so it's skipped here to avoid drawing it twice.
+        foreach (var (entityId, targetTiles, isDodgeable) in _actionTargeting.AllPendingDelayedActionTargets())
+        {
+            if (entityId == _world.PlayerEntityId)
+            {
+                continue;
+            }
+
+            var borderColor = isDodgeable ? CombatTargetPalette.EnemyDodgeableColor : CombatTargetPalette.EnemyUndodgeableColor;
+            foreach (var tile in targetTiles)
+            {
+                DrawMaskedTileHighlight(spriteBatch, unitRectangle, tile.X, tile.Y, borderColor);
+            }
+        }
+
+        DrawDodgeDirectionalHints(spriteBatch);
+    }
+
+    /// <summary>WASD's own screen-direction offsets from the player -- matches ActionTargetingController.TryClaimDodgeDirectionalKey's identical mapping.</summary>
+    private static readonly (Vector3Int Offset, string Label)[] DodgeDirectionalHints =
+    [
+        (new Vector3Int(0, -1, 0), "W"),
+        (new Vector3Int(0, 1, 0), "S"),
+        (new Vector3Int(-1, 0, 0), "A"),
+        (new Vector3Int(1, 0, 0), "D"),
+    ];
+
+    /// <summary>
+    /// While Dodge is armed, labels each of its four cardinal reachable tiles with the WASD key
+    /// that confirms toward it -- the only action whose confirm can come from a movement key
+    /// instead of its own hotkey (ActionTargetingController.TryClaimDodgeDirectionalKey), so it
+    /// needs its own affordance the player wouldn't otherwise expect. Diagonal neighbors are still
+    /// reachable (click, or same-key-then-click), just not via a single key -- no hint drawn there.
+    /// </summary>
+    private void DrawDodgeDirectionalHints(SpriteBatch spriteBatch)
+    {
+        if (_mapViewState.ArmedActionId != DodgeAction.Id || !_transformPool.TryGetReadonly(_world.PlayerEntityId, out var transform))
+        {
+            return;
+        }
+
+        foreach (var (offset, label) in DodgeDirectionalHints)
+        {
+            var tile = transform.Position + offset;
+            if (!TryGetTileRectangle(tile.X, tile.Y, out var tileRectangle))
+            {
+                continue;
+            }
+
+            _labelRenderer.DrawCentered(spriteBatch, _badgeFont, label, new Vector2(tileRectangle.X, tileRectangle.Y), new Vector2(tileRectangle.Width, tileRectangle.Height), Color.White, outline: true);
         }
     }
 
@@ -672,6 +746,25 @@ public sealed class MapWindow : Window
 
         TryDrawEntityVisual(spriteBatch, entityId, FontForSize(transformComponent.Size.X), footprintTopLeft, footprintSize);
         DrawEntityIcons(spriteBatch, unitRectangle, entityId, footprintTopLeft, footprintSize);
+
+        // Unlike DrawEntityIcons (health bar/loot badge), the charging badge must show for the
+        // player too -- drawn here, directly, rather than inside DrawEntityIcons' own early
+        // player-skip guard.
+        DrawChargingBadge(spriteBatch, entityId, footprintTopLeft, footprintSize);
+
+        // Dodging is a temporary, brief immunity window (Combat Overhaul: Dodge) -- an inner-fade
+        // glow framing the entity's own footprint on top of its sprite (the same GlowMode.InteriorFade
+        // ring technique DrawSelectedTileGlow already uses), not a sprite-opacity fade: a translucent
+        // sprite read as the entity vanishing outright rather than as a status cue (confirmed live).
+        // GlowRenderer's own default rings top out at 50% alpha on the outermost ring, fading to 10%
+        // on the innermost -- tuned for a tile-selection cue looked at at leisure, not a fast, brief
+        // (as little as 0.5s at low Dexterity) combat status cue -- DodgingGlowAlphaMultiplier boosts
+        // the outer rings toward fully opaque so the fade is still visible at a glance, confirmed live
+        // as too subtle to notice at the un-boosted default.
+        if (_dodgingEntities.Has(entityId))
+        {
+            GlowRenderer.Draw(spriteBatch, unitRectangle, new Rectangle((int)footprintTopLeft.X, (int)footprintTopLeft.Y, (int)footprintSize.X, (int)footprintSize.Y), DodgingGlowColor, GlowMode.InteriorFade, DodgingGlowAlphaMultiplier);
+        }
     }
 
     /// <summary>
@@ -753,6 +846,36 @@ public sealed class MapWindow : Window
         var badgePosition = new Vector2(footprintTopLeft.X + footprintSize.X - badgeSize.X, footprintTopLeft.Y);
 
         SpriteOrGlyphRenderer.Draw(spriteBatch, _spriteSheetService, _spriteRenderer, _labelRenderer, lootBagSprite, _badgeFont, string.Empty, tint, badgePosition, badgeSize, tint, outline: true);
+    }
+
+    /// <summary>
+    /// While entityId is mid-windup on a Delayed action (PendingDelayedActionComponent), draws
+    /// that action's own sprite/glyph as a small badge centered above its footprint -- "put that
+    /// action/item's sprite as a badge above their sprite on the map" (Combat Overhaul: Dodge,
+    /// TODO.md). Positioned a full badge-height above footprintTopLeft.Y (not flush with it) so it
+    /// never collides with DrawHealthBar's own bar, which sits inside the footprint's top edge.
+    /// Item-charging badges are out of scope: no delayed/charging item activation exists anywhere
+    /// today (every consumable is Immediate) -- revisit if one is ever introduced. Called directly
+    /// from DrawPrimaryOccupant, not from DrawEntityIcons, since the player must see their own
+    /// charging badge too and DrawEntityIcons deliberately skips the player entirely.
+    /// </summary>
+    private void DrawChargingBadge(SpriteBatch spriteBatch, int entityId, Vector2 footprintTopLeft, Vector2 footprintSize)
+    {
+        if (!_pendingDelayedActions.TryGetReadonly(entityId, out var pending) || !_actionCatalog.TryGet(pending.ActionId, out var action))
+        {
+            return;
+        }
+
+        SpriteComponent? sprite = null;
+        if (action.SpriteName is { } spriteName && SpriteManifest.TryGet(spriteName, out var resolvedSprite))
+        {
+            sprite = resolvedSprite;
+        }
+
+        var badgeSize = new Vector2(_camera.CurrentTileSize.X, _camera.CurrentTileSize.Y) * ChargingBadgeSizeFraction;
+        var badgePosition = new Vector2(footprintTopLeft.X + (footprintSize.X - badgeSize.X) / 2f, footprintTopLeft.Y - badgeSize.Y);
+
+        SpriteOrGlyphRenderer.Draw(spriteBatch, _spriteSheetService, _spriteRenderer, _labelRenderer, sprite, _badgeFont, action.Glyph, action.GlyphColor, badgePosition, badgeSize, Color.White, outline: true);
     }
 
     private void DrawEntityIcons(SpriteBatch spriteBatch, Texture2D unitRectangle, int entityId, Vector2 footprintTopLeft, Vector2 footprintSize)
@@ -1085,7 +1208,9 @@ public sealed class MapWindow : Window
 
         if (!IsPaused)
         {
-            _playerMovement.HandleInput(keyboardState);
+            _claimedKeysThisFrame.Clear();
+            _actionTargeting.TryClaimDodgeDirectionalKey(keyboardState, previousKeyboardState, _claimedKeysThisFrame);
+            _playerMovement.HandleInput(keyboardState, _claimedKeysThisFrame);
             _actionTargeting.HandleHotbarHotkeys(keyboardState, previousKeyboardState);
         }
     }

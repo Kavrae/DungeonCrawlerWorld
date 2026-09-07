@@ -22,23 +22,24 @@ namespace Game.Modules.NpcBehavior.Systems;
 /// <summary>
 /// Temporary, deliberately generic priority-chain decision-maker for MovementMode.Random
 /// entities: below-half-health-with-a-potion -> self-heal; adjacent to the player or a Fairy ->
-/// melee (Punch); otherwise -> wander, the same coin-flip-idle-or-move logic MovementSystem's own
-/// Random-mode branch used to own before this system replaced it (see MovementSystem's own doc
-/// comment on why it's purely reactive now). Runs before MovementSystem every frame (see
-/// GameBootstrapper's module order) so a heal/attack decision this tick actually prevents
-/// MovementSystem from also moving the same entity the same frame -- MovementSystem checks for a
-/// queued Pending*ActivationComponent before it executes anything.
+/// melee (randomly QuickAttack or PowerAttack, see TryDecideMeleeAttack); otherwise -> wander, the
+/// same coin-flip-idle-or-move logic MovementSystem's own Random-mode branch used to own before
+/// this system replaced it (see MovementSystem's own doc comment on why it's purely reactive now).
+/// Runs before MovementSystem every frame (see GameBootstrapper's module order) so a heal/attack
+/// decision this tick actually prevents MovementSystem from also moving the same entity the same
+/// frame -- MovementSystem checks for a queued Pending*ActivationComponent before it executes
+/// anything.
 ///
 /// Not goblin-specific by name or by filter, despite currently only being exercised by Goblins
-/// (the only race with both Punch and, per Goblin's starting-kit change, potions) -- it runs for
-/// any Random-mode entity, and each branch is a no-op unless the entity actually carries the
-/// components it needs (no Punch ActionInstanceComponent -> the attack branch never fires; no
-/// potion stack -> the heal branch never fires). That's what avoids needing a new system class
-/// per NPC race: a future race that wants this exact temporary loadout just needs the same
-/// components granted, not a new system.
+/// (the only race with both QuickAttack/PowerAttack and, per Goblin's starting-kit change,
+/// potions) -- it runs for any Random-mode entity, and each branch is a no-op unless the entity
+/// actually carries the components it needs (no QuickAttack ActionInstanceComponent -> the attack
+/// branch never fires; no potion stack -> the heal branch never fires). That's what avoids needing
+/// a new system class per NPC race: a future race that wants this exact temporary loadout just
+/// needs the same components granted, not a new system.
 ///
 /// One accepted consequence of that generic filter, worth being explicit about: Fairies also
-/// carry a Punch ActionInstanceComponent, so a Fairy adjacent to *another* Fairy will also
+/// carry a QuickAttack ActionInstanceComponent, so a Fairy adjacent to *another* Fairy will also
 /// attack it under this system's plain "player or Fairy" attackable-check -- nothing here
 /// excludes "an entity of my own race." This is a real, visible quirk of the generic design, not
 /// a bug -- see TODO.md's entry on composing entity behavior from smaller, race-configurable
@@ -180,15 +181,19 @@ public sealed class TestCombatBehaviorSystem : ISystem
     }
 
     /// <summary>
-    /// Only fires if this entity was actually granted Punch. Queues the whole resolved Adjacent
-    /// footprint (now excluding the entity's own tiles, see TargetShapeResolver) rather than a
-    /// single target tile -- ActionEffectResolver figures out who's actually there, the same
-    /// "let the resolver sort it out" pattern ActionTargetingController.TryActivateWithAutoTarget
-    /// already uses for player-driven Adjacent actions.
+    /// Only fires if this entity was actually granted QuickAttack (every race grants QuickAttack
+    /// and PowerAttack as a pair -- see the race blueprints -- so QuickAttack's presence gates the
+    /// whole branch). Randomly picks QuickAttack or PowerAttack per attack so NPCs actually
+    /// exercise PowerAttack's telegraph/Dodge interaction too, not just the player (Combat
+    /// Overhaul: Dodge, TODO.md). Queues the whole resolved Adjacent footprint (now excluding the
+    /// entity's own tiles, see TargetShapeResolver) rather than a single target tile --
+    /// ActionEffectResolver figures out who's actually there, the same "let the resolver sort it
+    /// out" pattern ActionTargetingController.TryActivateWithAutoTarget already uses for
+    /// player-driven Adjacent actions.
     /// </summary>
     private bool TryDecideMeleeAttack(int entityId, TransformComponent transform)
     {
-        if (!ActionInstanceQueries.TryGet(_actionInstances, entityId, PunchAction.Id, out _))
+        if (!ActionInstanceQueries.TryGet(_actionInstances, entityId, QuickAttackAction.Id, out _))
         {
             return false;
         }
@@ -200,7 +205,8 @@ public sealed class TestCombatBehaviorSystem : ISystem
             return false;
         }
 
-        _pendingActivations.Merge(entityId, new PendingActionActivationComponent(PunchAction.Id, _adjacentTilesBuffer.ToArray()));
+        var actionId = _mathUtility.Next(0, 2) == 0 ? QuickAttackAction.Id : PowerAttackAction.Id;
+        _pendingActivations.Merge(entityId, new PendingActionActivationComponent(actionId, _adjacentTilesBuffer.ToArray()));
         return true;
     }
 

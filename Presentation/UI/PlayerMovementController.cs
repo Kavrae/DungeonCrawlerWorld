@@ -15,6 +15,13 @@ namespace Presentation.UI;
 /// the ability/item arm-target-confirm state machine beyond both being "what does this frame's
 /// input do to the player entity" -- MapWindow.OnHotkeysAction calls both every frame, movement
 /// first (matches this class's original per-frame hotkey ordering, from before the split).
+///
+/// claimedKeys (see HandleInput) is MapWindow's small per-frame "an earlier handler already used
+/// this key" set -- today its only claimant is ActionTargetingController.TryClaimDodgeDirectionalKey
+/// (a WASD press while Dodge is armed confirms a directional dodge instead of moving), but the
+/// mechanism is general: any future handler needing to intercept a movement key before this class
+/// sees it can claim it the same way, without this class ever needing to know what claimed it or
+/// why.
 /// </summary>
 public sealed class PlayerMovementController(
     World world,
@@ -25,7 +32,7 @@ public sealed class PlayerMovementController(
 
     private int _playerMoveCooldownFrames;
 
-    public void HandleInput(KeyboardState keyboardState)
+    public void HandleInput(KeyboardState keyboardState, IReadOnlySet<Keys> claimedKeys)
     {
         if (_playerMoveCooldownFrames > 0)
         {
@@ -33,19 +40,19 @@ public sealed class PlayerMovementController(
         }
 
         var delta = new Vector3Int();
-        if (keyboardState.IsKeyDown(Keys.W))
+        if (keyboardState.IsKeyDown(Keys.W) && !claimedKeys.Contains(Keys.W))
         {
             delta.Y -= 1;
         }
-        if (keyboardState.IsKeyDown(Keys.S))
+        if (keyboardState.IsKeyDown(Keys.S) && !claimedKeys.Contains(Keys.S))
         {
             delta.Y += 1;
         }
-        if (keyboardState.IsKeyDown(Keys.A))
+        if (keyboardState.IsKeyDown(Keys.A) && !claimedKeys.Contains(Keys.A))
         {
             delta.X -= 1;
         }
-        if (keyboardState.IsKeyDown(Keys.D))
+        if (keyboardState.IsKeyDown(Keys.D) && !claimedKeys.Contains(Keys.D))
         {
             delta.X += 1;
         }

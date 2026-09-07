@@ -108,6 +108,7 @@ public sealed class MapWindowTests
         componentManager.RegisterPackedPool<PendingActionActivationComponent>(static (ref existing, incoming) => existing = incoming);
         componentManager.RegisterPackedPool<PendingConsumableActivationComponent>(static (ref existing, incoming) => existing = incoming);
         componentManager.RegisterPackedPool<PendingDelayedActionComponent>(static (ref existing, incoming) => existing = incoming);
+        componentManager.RegisterPackedPool<DodgingComponent>(static (ref existing, incoming) => existing = incoming);
         componentManager.RegisterPackedPool<ActionLockComponent>(static (ref existing, incoming) => existing = incoming);
         componentManager.RegisterPackedPool<DeadComponent>(static (ref existing, incoming) => existing = incoming);
         componentManager.RegisterPackedPool<ShopComponent>(static (ref existing, incoming) => existing = incoming);
@@ -139,7 +140,8 @@ public sealed class MapWindowTests
             componentManager.GetPackedPool<PendingActionActivationComponent>(),
             componentManager.GetPackedPool<PendingConsumableActivationComponent>(),
             componentManager.GetPackedPool<PendingDelayedActionComponent>(),
-            componentManager.GetPackedPool<ActionLockComponent>());
+            componentManager.GetPackedPool<ActionLockComponent>(),
+            componentManager.GetPackedPool<MovementComponent>());
         var playerMovement = new PlayerMovementController(
             world,
             componentManager.GetDirectPool<TransformComponent>(),

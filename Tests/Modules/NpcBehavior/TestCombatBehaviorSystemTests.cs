@@ -115,28 +115,35 @@ public sealed class TestCombatBehaviorSystemTests
         return new Fixture(system, mapQuery, movementPool, transformPool, actionLockPool, healthPool, bodyParts, inventoryStacks, actionInstances, raceComponents, pendingActivations, pendingConsumableActivations, math);
     }
 
-    private static void PlaceGoblin(Fixture fixture, int entityId, short currentHealth = 200, short maximumHealth = 200, bool grantPunch = true)
+    /// <summary>Grants both QuickAttack and PowerAttack, matching every real race blueprint's paired grant -- TryDecideMeleeAttack gates on QuickAttack's presence but randomly picks either for the actual attack.</summary>
+    private static void GrantMeleeActions(Fixture fixture, int entityId)
+    {
+        fixture.ActionInstances.Add(entityId, new ActionInstanceComponent(QuickAttackAction.Id, ActionOverrideEffects.OverrideFlatDamage(QuickAttackAction.Build(), 10), cooldownFramesRemaining: 0));
+        fixture.ActionInstances.Add(entityId, new ActionInstanceComponent(PowerAttackAction.Id, ActionOverrideEffects.OverrideFlatDamage(PowerAttackAction.Build(), 20), cooldownFramesRemaining: 0));
+    }
+
+    private static void PlaceGoblin(Fixture fixture, int entityId, short currentHealth = 200, short maximumHealth = 200, bool grantMeleeActions = true)
     {
         fixture.TransformPool.Add(entityId, new TransformComponent(GoblinPosition, SingleTile));
         fixture.MovementPool.Add(entityId, new MovementComponent(MovementMode.Random, null, null));
         fixture.ActionLockPool.Add(entityId, new ActionLockComponent(standardLockFrames: 10, currentLockTotalFrames: 0, currentLockFramesRemaining: 0));
         fixture.HealthPool.Add(entityId, new SimpleHealthComponent(currentHealth, maximumHealth));
-        if (grantPunch)
+        if (grantMeleeActions)
         {
-            fixture.ActionInstances.Add(entityId, new ActionInstanceComponent(PunchAction.Id, ActionOverrideEffects.OverrideFlatDamage(PunchAction.Build(), 10), cooldownFramesRemaining: 0));
+            GrantMeleeActions(fixture, entityId);
         }
     }
 
     /// <summary>Complex-health counterpart to PlaceGoblin -- grants BodyPartComponents instead of a SimpleHealthComponent, same shape a Human-race entity would carry.</summary>
-    private static void PlaceComplexEntity(Fixture fixture, int entityId, float headCurrent, float headMaximum, bool grantPunch = true)
+    private static void PlaceComplexEntity(Fixture fixture, int entityId, float headCurrent, float headMaximum, bool grantMeleeActions = true)
     {
         fixture.TransformPool.Add(entityId, new TransformComponent(GoblinPosition, SingleTile));
         fixture.MovementPool.Add(entityId, new MovementComponent(MovementMode.Random, null, null));
         fixture.ActionLockPool.Add(entityId, new ActionLockComponent(standardLockFrames: 10, currentLockTotalFrames: 0, currentLockFramesRemaining: 0));
         fixture.BodyParts.Add(entityId, new BodyPartComponent("Head", BodyPartType.Head, 0, 0, headCurrent, headMaximum, isVital: true));
-        if (grantPunch)
+        if (grantMeleeActions)
         {
-            fixture.ActionInstances.Add(entityId, new ActionInstanceComponent(PunchAction.Id, ActionOverrideEffects.OverrideFlatDamage(PunchAction.Build(), 10), cooldownFramesRemaining: 0));
+            GrantMeleeActions(fixture, entityId);
         }
     }
 
@@ -189,7 +196,7 @@ public sealed class TestCombatBehaviorSystemTests
     }
 
     [TestMethod]
-    public void Update_FullHealthAdjacentToPlayer_QueuesPunchAgainstWholeAdjacentFootprint()
+    public void Update_FullHealthAdjacentToPlayer_QueuesMeleeAttackAgainstWholeAdjacentFootprint()
     {
         var fixture = Build();
         PlaceGoblin(fixture, GoblinEntityId);
@@ -199,7 +206,7 @@ public sealed class TestCombatBehaviorSystemTests
 
         Assert.IsTrue(fixture.PendingActivations.Has(GoblinEntityId));
         var pending = fixture.PendingActivations.GetReadonly(GoblinEntityId);
-        Assert.AreEqual(PunchAction.Id, pending.ActionId);
+        Assert.IsTrue(pending.ActionId == QuickAttackAction.Id || pending.ActionId == PowerAttackAction.Id, "Randomly one or the other -- see TryDecideMeleeAttack's own doc comment.");
         Assert.HasCount(8, pending.TargetTiles, "The whole resolved Adjacent footprint is queued, not just the occupied tile -- ActionEffectResolver sorts out who's actually there.");
         CollectionAssert.Contains(pending.TargetTiles, AdjacentTile);
         CollectionAssert.DoesNotContain(pending.TargetTiles, GoblinPosition);

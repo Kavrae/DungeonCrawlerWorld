@@ -72,6 +72,7 @@ public static class ShellBootstrapper
             componentManager.GetPackedPool<PendingConsumableActivationComponent>(),
             componentManager.GetPackedPool<PendingDelayedActionComponent>(),
             componentManager.GetPackedPool<ActionLockComponent>(),
+            componentManager.GetPackedPool<MovementComponent>(),
             componentManager.GetPackedPool<ManaComponent>(),
             componentManager.GetMultiPool<AbilityScoreComponent>());
         var playerMovementController = new PlayerMovementController(

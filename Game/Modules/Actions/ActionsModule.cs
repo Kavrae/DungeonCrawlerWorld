@@ -70,6 +70,8 @@ public sealed class ActionsModule : IGameModule
         componentManager.RegisterMultiPool<ActionInstanceComponent>();
         componentManager.RegisterPackedPool<PendingDelayedActionComponent>(
             static (ref PendingDelayedActionComponent existing, PendingDelayedActionComponent incoming) => existing = incoming);
+        componentManager.RegisterPackedPool<DodgingComponent>(
+            static (ref DodgingComponent existing, DodgingComponent incoming) => existing = incoming);
         componentManager.RegisterPackedPool<PendingActionActivationComponent>(
             static (ref PendingActionActivationComponent existing, PendingActionActivationComponent incoming) => existing = incoming);
         // Player-only, 24 hotkey slots total -- small entity-index seed, dense capacity matches the slot count.
@@ -104,6 +106,9 @@ public sealed class ActionsModule : IGameModule
         var hotkeyExpansionUnlocks = componentManager.GetPackedPool<HotkeyExpansionUnlockComponent>();
         var bodyParts = componentManager.GetOptionalMultiPool<BodyPartComponent>();
         var meleeDisabled = componentManager.GetOptionalPackedPool<MeleeDisabledComponent>();
+        var dodgingEntities = componentManager.GetPackedPool<DodgingComponent>();
+
+        systemManager.Register(new DodgeExpirySystem(dodgingEntities));
 
         systemManager.Register(new DelayedActionSystem(
             componentManager.GetPackedPool<PendingDelayedActionComponent>(),
@@ -122,7 +127,8 @@ public sealed class ActionsModule : IGameModule
             abilityScores,
             auraSources,
             hotkeyExpansionUnlocks,
-            bodyParts));
+            bodyParts,
+            dodgingEntities));
 
         systemManager.Register(new ActionActivationSystem(
             componentManager.GetPackedPool<PendingActionActivationComponent>(),
@@ -144,6 +150,7 @@ public sealed class ActionsModule : IGameModule
             auraSources,
             hotkeyExpansionUnlocks,
             bodyParts,
-            meleeDisabled));
+            meleeDisabled,
+            dodgingEntities));
     }
 }

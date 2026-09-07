@@ -63,9 +63,11 @@ public sealed class Human(MathUtility mathUtility) : IBlueprint
             AbilityScoreEffects.Grant(componentManager, entityId, abilityScoreType, RollAbilityScoreBaseValue());
         }
 
-        // overrideDefinition: null -- no per-instance override, so Punch rolls its catalog DirectDamage's
-        // own MinFlatDamage..MaxFlatDamage range (18-22) instead of a fixed number.
-        ActionGrantEffects.Grant(componentManager, entityId, PunchAction.Id, manaCost: 0, overrideDefinition: null, cooldownFramesRemaining: 0);
+        // overrideDefinition: null -- no per-instance override, so QuickAttack/PowerAttack roll
+        // their catalog DirectDamage's own Min/MaxFlatDamage range instead of a fixed number.
+        ActionGrantEffects.Grant(componentManager, entityId, QuickAttackAction.Id, manaCost: 0, overrideDefinition: null, cooldownFramesRemaining: 0);
+        ActionGrantEffects.Grant(componentManager, entityId, PowerAttackAction.Id, manaCost: 0, overrideDefinition: null, cooldownFramesRemaining: 0);
+        ActionGrantEffects.Grant(componentManager, entityId, DodgeAction.Id, manaCost: 0, overrideDefinition: null, cooldownFramesRemaining: 0);
     }
 
     /// <summary>Two Next(1,6) rolls summed -- range [2,10] per the spec, clustering around the middle rather than uniform across the whole range. Exact shape isn't load-bearing since level-up moves these later.</summary>

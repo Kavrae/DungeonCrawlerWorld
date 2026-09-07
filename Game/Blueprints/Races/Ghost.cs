@@ -28,7 +28,10 @@ public sealed class Ghost(MathUtility mathUtility) : IBlueprint
     private static readonly string[] DisplayNames = DisplayNameCache.BuildDisplayNames(PersonalNameOptions, RaceName);
 
     /// <summary>Hardcoded stopgap until the Additive/Multiplicative bonuses system exists -- see TODO.md.</summary>
-    private const ushort PunchDamage = 5;
+    private const ushort QuickAttackDamage = 5;
+
+    /// <summary>Roughly double QuickAttackDamage, matching PowerAttackAction's own catalog ratio -- see TODO.md's Combat Overhaul: Dodge.</summary>
+    private const ushort PowerAttackDamage = 10;
 
     /// <summary>Flat default for every NPC race, adjustable in a later balance pass -- see TODO.md's Stats entry.</summary>
     private const ushort DefaultAbilityScoreBaseValue = 5;
@@ -49,8 +52,13 @@ public sealed class Ghost(MathUtility mathUtility) : IBlueprint
     new Vector3Int(0, 0, (int)MapLayer.Ground), new Vector2Byte(1, 1)));
 
         componentManager.Merge(entityId, new NonBlockingComponent(NonBlockingKind.Phasing));
-        var punchOverride = ActionOverrideEffects.OverrideFlatDamage(PunchAction.Build(), PunchDamage);
-        componentManager.Merge(entityId, new ActionInstanceComponent(PunchAction.Id, punchOverride, cooldownFramesRemaining: 0));
+        var quickAttackOverride = ActionOverrideEffects.OverrideFlatDamage(QuickAttackAction.Build(), QuickAttackDamage);
+        componentManager.Merge(entityId, new ActionInstanceComponent(QuickAttackAction.Id, quickAttackOverride, cooldownFramesRemaining: 0));
+
+        var powerAttackOverride = ActionOverrideEffects.OverrideFlatDamage(PowerAttackAction.Build(), PowerAttackDamage);
+        componentManager.Merge(entityId, new ActionInstanceComponent(PowerAttackAction.Id, powerAttackOverride, cooldownFramesRemaining: 0));
+
+        componentManager.Merge(entityId, new ActionInstanceComponent(DodgeAction.Id, overrideDefinition: null, cooldownFramesRemaining: 0));
 
         TemporaryNpcLootGrant.GrantRandomStartingLoot(componentManager, entityId, mathUtility);
 

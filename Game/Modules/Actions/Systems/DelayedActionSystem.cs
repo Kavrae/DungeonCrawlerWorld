@@ -40,6 +40,7 @@ public sealed class DelayedActionSystem : ISystem
     private readonly MultiComponentPool<StatusEffectAuraSourceComponent>? _auraSources;
     private readonly PackedComponentPool<HotkeyExpansionUnlockComponent>? _hotkeyExpansionUnlocks;
     private readonly MultiComponentPool<BodyPartComponent>? _bodyParts;
+    private readonly PackedComponentPool<DodgingComponent>? _dodgingEntities;
     private readonly EntityStripeSet _stripeSet;
 
     public DelayedActionSystem(
@@ -59,7 +60,8 @@ public sealed class DelayedActionSystem : ISystem
         MultiComponentPool<AbilityScoreComponent>? abilityScores = null,
         MultiComponentPool<StatusEffectAuraSourceComponent>? auraSources = null,
         PackedComponentPool<HotkeyExpansionUnlockComponent>? hotkeyExpansionUnlocks = null,
-        MultiComponentPool<BodyPartComponent>? bodyParts = null)
+        MultiComponentPool<BodyPartComponent>? bodyParts = null,
+        PackedComponentPool<DodgingComponent>? dodgingEntities = null)
     {
         _pendingActions = pendingActions;
         _actionLocks = actionLocks;
@@ -78,6 +80,7 @@ public sealed class DelayedActionSystem : ISystem
         _auraSources = auraSources;
         _hotkeyExpansionUnlocks = hotkeyExpansionUnlocks;
         _bodyParts = bodyParts;
+        _dodgingEntities = dodgingEntities;
 
         _stripeSet = EntityStripeSet.CreateAndWire(StripeCount, pendingActions);
     }
@@ -109,7 +112,7 @@ public sealed class DelayedActionSystem : ISystem
             if (ActionInstanceQueries.TryGet(_actionInstances, entityId, pending.ActionId, out var instance) &&
                 ActionInstanceQueries.TryResolveEffectiveAction(_actionCatalog, instance, out var action))
             {
-                ActionEffectResolver.Apply(action, entityId, pending.TargetTiles, _mapQuery, _health, _eventBus, _mathUtility, _playerQuery, _statusEffectAppliers, _componentManager, _statModifiers, _deadEntities, _abilityScores, _auraSources, _hotkeyExpansionUnlocks, _bodyParts);
+                ActionEffectResolver.Apply(action, entityId, pending.TargetTiles, _mapQuery, _health, _eventBus, _mathUtility, _playerQuery, _statusEffectAppliers, _componentManager, _statModifiers, _deadEntities, _abilityScores, _auraSources, _hotkeyExpansionUnlocks, _bodyParts, _dodgingEntities);
             }
 
             _pendingActions.Remove(entityId);

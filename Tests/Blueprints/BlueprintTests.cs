@@ -369,7 +369,7 @@ public sealed class BlueprintTests
         Assert.IsTrue(ecsContext.ComponentManager.GetPackedPool<ActionLockComponent>().Has(entityId));
         Assert.IsTrue(ecsContext.ComponentManager.GetDirectPool<TransformComponent>().Has(entityId));
 
-        Assert.IsTrue(ActionInstanceQueries.TryGet(ecsContext.ComponentManager.GetMultiPool<ActionInstanceComponent>(), entityId, PunchAction.Id, out var punch));
+        Assert.IsTrue(ActionInstanceQueries.TryGet(ecsContext.ComponentManager.GetMultiPool<ActionInstanceComponent>(), entityId, QuickAttackAction.Id, out var punch));
         Assert.AreEqual((short)10, GetOverrideFlatDamage(punch));
 
         AssertHasRandomStartingGoldAndCredits(ecsContext.ComponentManager, entityId);
@@ -439,10 +439,10 @@ public sealed class BlueprintTests
         Assert.IsTrue(ecsContext.ComponentManager.GetPackedPool<CrawlerComponent>().Has(entityId));
 
         var abilityInstances = ecsContext.ComponentManager.GetMultiPool<ActionInstanceComponent>();
-        // No per-instance Override -- unlike every other race's Punch grant -- so the player's
-        // Punch rolls its catalog DirectDamage's own MinFlatDamage..MaxFlatDamage range instead
-        // of a fixed number (see ActionInstanceComponent.Override's own doc comment).
-        Assert.IsTrue(ActionInstanceQueries.TryGet(abilityInstances, entityId, PunchAction.Id, out var punch));
+        // No per-instance Override -- unlike every other race's QuickAttack grant -- so the
+        // player's QuickAttack rolls its catalog DirectDamage's own MinFlatDamage..MaxFlatDamage
+        // range instead of a fixed number (see ActionInstanceComponent.Override's own doc comment).
+        Assert.IsTrue(ActionInstanceQueries.TryGet(abilityInstances, entityId, QuickAttackAction.Id, out var punch));
         Assert.IsNull(punch.Override);
         Assert.IsTrue(ActionInstanceQueries.TryGet(abilityInstances, entityId, MagicMissileAction.Id, out var magicMissile));
         Assert.AreEqual((short)5, GetOverrideFlatDamage(magicMissile));
@@ -536,7 +536,7 @@ public sealed class BlueprintTests
         Assert.IsTrue(ecsContext.ComponentManager.GetPackedPool<ActionLockComponent>().Has(entityId));
         Assert.IsTrue(ecsContext.ComponentManager.GetDirectPool<TransformComponent>().Has(entityId));
 
-        Assert.IsTrue(ActionInstanceQueries.TryGet(ecsContext.ComponentManager.GetMultiPool<ActionInstanceComponent>(), entityId, PunchAction.Id, out var punch));
+        Assert.IsTrue(ActionInstanceQueries.TryGet(ecsContext.ComponentManager.GetMultiPool<ActionInstanceComponent>(), entityId, QuickAttackAction.Id, out var punch));
         Assert.AreEqual((short)3, GetOverrideFlatDamage(punch));
 
         AssertHasRandomStartingGoldAndCredits(ecsContext.ComponentManager, entityId);

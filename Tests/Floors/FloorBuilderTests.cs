@@ -22,6 +22,7 @@ using Game.Modules.Inventory;
 using Game.Modules.Mana;
 using Game.Modules.Movement;
 using Game.Modules.Movement.Components;
+using Game.Modules.NpcBehavior;
 using Game.Modules.Poison;
 using Game.Modules.ProcessingTier;
 using Game.Modules.Race;
@@ -92,6 +93,9 @@ public sealed class FloorBuilderTests
         var shopModule = new ShopModule();
         shopModule.Configure(context);
 
+        var npcBehaviorModule = new NpcBehaviorModule();
+        npcBehaviorModule.Configure(context);
+
         IReadOnlyList<IModule> modules =
         [
             coreModule,
@@ -116,6 +120,7 @@ public sealed class FloorBuilderTests
             new CurrencyModule(),
             containersModule,
             shopModule,
+            npcBehaviorModule,
         ];
 
         return Bootstrapper.Build(modules, initialEntityCapacity: 5000, initialComponentCapacity: 5000);

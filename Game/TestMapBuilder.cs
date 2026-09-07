@@ -28,14 +28,18 @@ namespace Game;
 /// </summary>
 public sealed class TestMapBuilder(EntityManager entityManager, ComponentManager componentManager, MathUtility mathUtility, UniqueNumberAllocator crawlerNumberAllocator, FrameEventBuffer<EntityMovedEvent> movedEntities)
 {
-    // TEMPORARY: halved from the original values below (10/5/5) to reduce the creature
+    // TEMPORARY: halved once already from the original values (10/5/5) to reduce the creature
     // population -- Movement/HealthRegen/ContactDamage/StatusEffectAura all iterate this
     // population every frame, and at the original density the game was effectively
-    // unplayable (5-10fps) for manual testing. Revert once the performance investigation
-    // these values are standing in for (see TODO.md) lands a real fix.
-    private const int GroundPopulationPercent = 5;
-    private const int UnderGroundGhostPercent = 3;
-    private const int FlyingFairyPercent = 3;
+    // unplayable (5-10fps) for manual testing. Revert that half once the performance
+    // investigation these values are standing in for (see TODO.md) lands a real fix. Halved
+    // again on top of that for Combat Overhaul: Dodge (TODO.md) -- the new deliberate, telegraphed
+    // combat style (windups to react to, a Dodge with a real cooldown cost) wants noticeably fewer
+    // simultaneous attackers than the old spam-actions style did; this second halving is a
+    // playtesting-tunable starting point, not a measured target.
+    private const int GroundPopulationPercent = 3;
+    private const int UnderGroundGhostPercent = 2;
+    private const int FlyingFairyPercent = 2;
 
     /// <summary>Chance any given rolled NPC (see BuildRaceEntity) is also a Crawler -- deliberately small; most NPCs are not.</summary>
     private const int CrawlerPercent = 2;

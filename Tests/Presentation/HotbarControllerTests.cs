@@ -87,6 +87,7 @@ public sealed class HotbarControllerTests
             componentManager.GetPackedPool<PendingConsumableActivationComponent>(),
             componentManager.GetPackedPool<PendingDelayedActionComponent>(),
             componentManager.GetPackedPool<ActionLockComponent>(),
+            componentManager.GetPackedPool<MovementComponent>(),
             componentManager.GetPackedPool<ManaComponent>());
 
         var fontService = TestFonts.Shared;

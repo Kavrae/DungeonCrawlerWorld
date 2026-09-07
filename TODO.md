@@ -1,18 +1,27 @@
+### Next
+Some type of timing indicator for when a charged attack will land. Tile equivalent of the radial fill that counts it down?
+This would also be a good time to start drawing damage numbers and new status effect stacks appearing above the damaged entity. Research industry standards for best visibility.
+
 ### Combat Overhaul : Dodge
+
+**Core mechanic landed** -- see `IMPLEMENTATION-NOTES.md`'s own "Combat Overhaul: Dodge" section for
+what's built. Still open below: Block, Counterspell, the AdvancedDodge buff (Low Priority, this file),
+and independently validating the 0.5s-1.0s window against Dark Souls 3/other games' dodge timings.
+
 # Clean these up
-Keep Movement, QuickAttack, and magic missle as immediate actions, Dodge as the only QuickCast action, and change all others to delayed. Immediate and QuickCast actions should be rare. 
+Keep Movement, QuickAttack, and magic missle as immediate actions, Dodge as the only FreeCast action, and change all others to delayed. Immediate and FreeCast actions should be rare. 
 All delayed actions keep the target shape drawn on the map (so enemies show their attack target area) until they activate. Adjust the colors to make it clear which are enemy vs player. Red for enemy target shapes that cannot be dodged and yellow for ones that can be dodged. Light green for player arm and dark green for player target.
 While an entity is charging an action/item, put that action/item's sprite as a badge above their sprite on the map.
-This allows quick cast action like dodge, block, parry, counterspell, etc to have a purpose and timing.
+This allows FreeCast actions like dodge, block, parry, counterspell, etc to have a purpose and timing.
 This makes combat slower and more deliberate instead of spamming actions. Shifting to more of a 2d souls-like game
 Lower enemy count to make this more deliberate and punishing combat style work.
 Give every entity three default core actions. QuickAttack, PowerAttack, and Dodge.
-	QuickAttack is an immediate adjacent-target action (so can't be dodged) with low damage. No cooldown besides global. This replaces Punch on the F key.
-	PowerAttack is a delayed adjacent-target action with a 0.5 second delay (so can be dodged) with high damage. No cooldown besides global. Default to the R key.
-	Dodge is a QuickCast action to avoid attacks. No additional cooldown, but impose double the normal global cooldown, to prevent Dodge from being used as a safer form of movement. Default to the V key. Not all attacks can be dodged; such as auto-targeting attacks like Magic Missile or AOE attacks like explosions. Mark PowerAttack as CanBeDodged (find a better name for this). After dodge is armed (adjacent+self), it can be activated with the same key, click, or directional movement key. Same key or clicking on the player will dodge in-place. Directional movement or clicking an adjacent tile will dodge while moving to that tile (if not occupied. If occupied, the entity will dodge in place). After activating Dodge, any action or item with CanBeDodged will not affect the dodging entity.
+	QuickAttack is an immediate adjacent-target action (so can't be dodged) with low damage. No cooldown besides global. This replaces Punch, defaulting to the R key.
+	PowerAttack is a delayed adjacent-target action with a 1 second delay (so can be dodged) with high damage. No cooldown besides global. Default to the Q key.
+	Dodge is a FreeCast action to avoid attacks. Its own flat 4 second cooldown (not an increased global cooldown) prevents Dodge from being used as a safer form of movement. Default to the F key. Not all attacks can be dodged; such as auto-targeting attacks like Magic Missile or AOE attacks like explosions. Mark PowerAttack as CanBeDodged (find a better name for this). After dodge is armed (adjacent+self), it can be activated with the same key, click, or directional movement key. Same key or clicking on the player will dodge in-place. Directional movement or clicking an adjacent tile will dodge while moving to that tile (if not occupied. If occupied, the entity will dodge in place). After activating Dodge, any action or item with CanBeDodged will not affect the dodging entity.
 Dexterity increases dodge's activation time from 0.5 seconds at dexterity 1 to 1 second at dexterity 300. Check the values used by games like Dark Souls 3, and other games with a dodge mechanic, to validate these activation times.
-Block (such as via a shield) will be added later as another QuickAction with a longer duration but does not fully block damage and effects.
-Counterspell will be added later as another QuickAction that will attempt to cancel delayedAction spells. Determine a way to make this fair for both the source and target.
+Block (such as via a shield) will be added later as another FreeCast action with a longer duration but does not fully block damage and effects.
+Counterspell will be added later as another FreeCast action that will attempt to cancel delayedAction spells. Determine a way to make this fair for both the source and target.
 
 ### Stances and Toggles
 Stances. A set of toggle actions that boost one specialty in exchange for weakening another. Add a visual element to toggle actions/items to indicate when they're toggled on. A rotating glow is standard.
@@ -154,6 +163,12 @@ effect entry's `Apply`, even with no real `StatModifierTarget` consumer yet, so 
 source can hook in by granting a modifier alone. Calling-convention change, not a new stat.
 
 ### Low Priority
+
+#### AdvancedDodge buff
+
+A buff/upgrade that increases Dodge's movement distance beyond one adjacent tile and extends the
+duration of its dodging-immunity window. Follow-up to Combat Overhaul: Dodge (this file's own entry
+above).
 
 #### Repair destroyed items
 
@@ -563,6 +578,13 @@ No checkbox, radio button, dropdown, slider, list box, or tree view (`Toggle` co
 windows still want list/grid controls beyond what exists.
 
 ### Medium Priority
+
+#### Lerp movement animation between tiles
+
+Entities currently teleport instantly between tiles on-screen. Lerp the sprite's rendered position
+across the move's `ActionLockComponent`-driven frame count instead. Purely visual -- grid
+position/occupancy still change instantly on the same frame as today; only the rendered
+interpolation is smoothed.
 
 #### TextDivider label clipping and right-line spacing
 

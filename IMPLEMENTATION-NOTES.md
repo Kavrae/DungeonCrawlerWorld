@@ -13,8 +13,10 @@ topics; don't duplicate what a `PLAN-*.md` already records in full (link to it i
   `ChainedEffect`, `AuraSourceGrant`) + `IActionActivator` (`PotionActivator`/`ScrollActivator`/
   `WandActivator`/`SpellActivator`) replaced the old `AbilityEffect`/`ConsumableEffect` split. Full
   design: `PLAN-action-effect-activator.md`.
-- `TargetShape.AdjacentWithSelf` = Adjacent's ring + the caster's own tile, added so a `Tag.Self`
-  scroll/spell can resolve a manual click on the caster's own tile (plain `Adjacent` excludes it).
+- `TargetShape.Adjacent | TargetShape.Self` = Adjacent's ring + the caster's own tile, used so a
+  `Tag.Self` scroll/spell can resolve a manual click on the caster's own tile (plain `Adjacent`
+  excludes it). `TargetShape` is a `[Flags]` enum specifically so this composes instead of needing
+  a dedicated `AdjacentWithSelf` value (retired) -- see `TargetShapeResolver`'s own doc comment.
 - `ScrollScalingEffects` scales Range/AreaSize/duration by caster Intelligence (100% @1 -> 400% @300).
 - `ScrollMasteryEffects`: 200 uses of scrolls sharing a `SpellId` permanently grants that spell
   (`ActionCatalog` lookup, else synthesized from the scroll's `ItemDefinition`).
@@ -48,7 +50,114 @@ confirm/double-tap path, keyed by `StackInstanceId`. Click-and-drag assignment f
 
 Shares `ActionLockComponent` with movement (tactical move-vs-attack tradeoff). Targets any entity in
 Adjacent's footprint including non-Blocking (Tiny/Phasing, no-health) -- enables status effects on
-otherwise-immortal entities. Punch is the concrete case; Goblins use it via `TestCombatBehaviorSystem`.
+otherwise-immortal entities. `QuickAttackAction` (renamed from `PunchAction`) is the concrete case;
+every race uses it via `TestCombatBehaviorSystem`, which now also randomly picks `PowerAttackAction`
+instead (see Combat Overhaul: Dodge below).
+
+### Combat Overhaul: Dodge
+
+Core mechanic landed per `TODO.md`'s own section (still open there: Block/Counterspell, the
+AdvancedDodge buff, and independently validating the 0.5s-1.0s window against Dark Souls 3/other
+games' own dodge timings -- the numbers used are TODO.md's own, not independently researched).
+
+- Three default actions every race grants (`Game/Modules/Actions/Definitions/DirectActions/`):
+  `QuickAttackAction` (Immediate, replaces `PunchAction` in place, same catalog `Id`, default R key),
+  `PowerAttackAction` (new, `Delayed`, 1s windup, default Q key), `DodgeAction` (new, `FreeCast`, own
+  flat 4s `CooldownFrames`, default F key). All three tagged `Dodgeable` except Magic Missile/AOE-style
+  effects, which stay untagged (undodgeable) -- `Tag.Dodgeable` gates `ActionEffectResolver.Apply`'s
+  per-occupant skip against a target holding `DodgingComponent`. Dodge is gated by its own cooldown, not
+  an increased shared-lock multiplier -- a `FreeCastLockMultiplier` seam on `ActionTiming` was tried and
+  removed; `ActionTiming.CooldownFrames` (already shared by every other `FreeCast` action) covers this
+  with no new mechanism needed.
+- `DodgingComponent`/`DodgeExpirySystem` (`Game/Modules/Actions/Components|Systems/`): a short,
+  Dexterity-scaled immunity window (`DodgeEffects.ComputeWindowFrames`, 0.5s @ Dex 1 -> 1.0s @ Dex 300,
+  `AbilityScoreMath.Lerp` low-to-high since more Dexterity is the benefit here) granted by
+  `DodgeActivation` (`DodgeAction`'s sole effect). Rendered as a light green inner-fade glow framing
+  the entity's own footprint (`MapWindow`, `GlowRenderer.Draw(..., GlowMode.InteriorFade,
+  alphaMultiplier: 2)` -- boosted past the default ring alpha, which read as too subtle for a
+  status cue this brief -- the same ring technique `DrawSelectedTileGlow` already uses) while active
+  -- a sprite-opacity fade was tried first and read as the entity vanishing outright rather than as a
+  status cue (confirmed live). A third, deeper bug briefly made the glow not appear *at all* even
+  after the opacity->glow switch, for directional dodges specifically: `ActionEffectResolver.Apply`
+  only ever invokes an action's effects against entities `IMapQuery.GetOccupantEntityIdsAt` finds
+  occupying the *resolved target tile* -- but `TryRelocateForDodge` only queues the caster's move via
+  `MovementComponent.NextMapPosition` (see below), so at the moment `ActionActivationSystem` processes
+  the FreeCast activation, that destination tile is still empty; the occupant loop found nobody there
+  and `DodgeActivation` never ran, so `DodgingComponent` was never granted (self-dodge in place was
+  unaffected, since its target tile is always the caster's own current, occupied tile). Fixed with two
+  changes: `ActionTargetingController.QueueActionActivation` now stores the caster's own *current*
+  tile as `PendingActionActivationComponent.TargetTiles` for Dodge specifically (guaranteed occupied),
+  while `TryRelocateForDodge` still separately decides the actual movement destination; and
+  `DodgeActivation.Apply` now reads/writes `context.SourceEntityId` instead of `context.TargetEntityId`
+  so the grant always lands on the actual caster even if another entity happens to share that tile
+  (e.g. a co-located Tiny/Phasing occupant).
+- `Engine/Math/TargetShape` is now `[Flags]` (`AdjacentWithSelf` retired -> `Adjacent | Self`, see the
+  Actions section above) and `TargetingSpec` gained `Metric: DistanceMetric` (Manhattan/Chebyshev,
+  `SingleTarget`-only). `DodgeAction`'s own targeting -- `SingleTarget` + `Metric.Chebyshev` + `Range: 1`
+  -- is "pick exactly one tile out of the caster's own 3x3 block," resolved at confirm time by
+  `ActionTargetingController.TryRelocateForDodge`, which *queues* the move via `MovementComponent.
+  NextMapPosition` -- the exact same path `PlayerMovementController` uses for ordinary WASD movement --
+  rather than applying it directly. Two confirmed bugs both came from an earlier version that called
+  `World.MoveEntity` directly instead: (1) `World.MoveEntity`/`MoveEntityUnchecked` only ever update
+  `Map`'s own occupancy index, never the mover's `TransformComponent.Position` (that's the caller's own
+  job; `MovementSystem.TryMoveToNextMapPosition` does this itself, separately) -- skipping it desynced
+  the two and made the player's sprite vanish entirely after a directional Dodge (`MapWindow.
+  DrawPrimaryOccupant` only draws from the tile `TransformComponent.Position` still names). (2) calling
+  `World.MoveEntity` directly bypassed `NextMapPosition` entirely, so any *already*-queued ordinary-
+  movement destination (e.g. mid-stride from rapid WASD just before dodging) went stale and unresolved --
+  `MovementSystem` would later "catch up" on it and move the player right back, reading as the dodge
+  silently reverting. Routing through the one shared `NextMapPosition` queue instead of a second,
+  uncoordinated move path fixes both: there is only ever one pending destination, whichever was set most
+  recently, and `MovementSystem`'s own occupancy/wall/diagonal-corner validation covers "dodge in place
+  if occupied" for free. Trade-off: the actual relocation, like any other queued move, waits for the
+  shared `ActionLock` to clear if the entity is already locked -- `DodgeActivation`'s own immunity grant
+  still applies instantly regardless, since `FreeCast` never gates on the lock. `TargetShapeResolver
+  .Resolve` also gained a verified redundant-resolve shortcut (`SingleTarget <= Line <= Cone` for the
+  same origin/cursorTile/Range, once `ResolveCone`'s extent check moved from Euclidean to Chebyshev) and
+  de-duplicates combined-flag results.
+- Dodge confirms via the same hotkey (self, in place -- generalized off `Tag.Self`, which also fixed a
+  latent bug where re-pressing any Self-shaped action's hotkey only worked if the cursor happened to be
+  hovering the caster), a click (self or an adjacent tile), or a fresh WASD press while armed
+  (`ActionTargetingController.TryClaimDodgeDirectionalKey`) -- the last of which claims the key in a
+  small per-frame set (`MapWindow._claimedKeysThisFrame`) so `PlayerMovementController.HandleInput`
+  skips it that frame instead of also moving normally.
+- A confirmed bug: double-tapping Dodge's hotkey read as it silently cancelling instead of activating.
+  `TryActivateWithAutoTarget` (the double-tap path) filters the reachable set down to *occupied* tiles
+  before picking one via `ClosestPointSelector` -- exactly what QuickAttack/PowerAttack/ToxicStrike/
+  MagicMissile want (double-tap = auto-attack the nearest enemy), but Dodge's own reachable 3x3 block is
+  normally all-empty, so the filter found no candidate, queued nothing, and the caller's own "now that
+  it fired, disarm" cleanup then read as a cancel. Fixed by giving `TryActivateWithAutoTarget` the same
+  `Tag.Self` special case the single-press re-confirm path (`HandleActionSlotPress`) already has: a
+  `Tag.Self` action (Heal, Dodge) always auto-targets the caster's own tile directly, bypassing the
+  occupied-tile hunt entirely rather than needing an occupant to exist.
+- `MapWindow` telegraphs every entity's (not just the player's) in-flight `PendingDelayedActionComponent`
+  every frame (`ActionTargetingController.AllPendingDelayedActionTargets`, a small `PackedComponentPool`
+  -- dense iteration, no spatial index needed): dark green for the player's own, red/yellow for an
+  enemy's depending on `Tag.Dodgeable` (`CombatTargetPalette`). A charging entity (player included) also
+  gets its action's sprite/glyph badged above its footprint (`MapWindow.DrawChargingBadge`) -- item
+  windups are out of scope, nothing today has a delayed/charging item activation. While Dodge is armed,
+  its four cardinal reachable tiles are labeled with their WASD key (`DrawDodgeDirectionalHints`).
+- `TestDummyBlueprint`/`TestDummyComponent`/`TestDummyAttackSystem` (`Game/Blueprints/NPCs/Generic/`,
+  `Game/Modules/NpcBehavior/`): a stationary, high-regen (`Constitution` 300) practice target spawned a
+  few tiles from the player, unconditionally re-firing `PowerAttackAction` against its own Adjacent ring
+  whenever its `ActionLockComponent` clears -- no engage/chase logic, unlike `TestCombatBehaviorSystem`.
+  Grants its own `PowerAttackAction` override adding a flat `CooldownFrames` (windup + 3s) on top of the
+  base action's, so it idles 3s after the attack actually *lands*, not from windup start (`ActionInstanceComponent
+  .CooldownFramesRemaining` starts counting the instant activation begins, not once `DelayedActionSystem`
+  later applies the effect). Also explicitly grants `ProcessingTierComponent(Local)` -- a real, confirmed
+  bug otherwise: `ProcessingTierSystem`'s own membership is driven off `MovementComponent` (see its own
+  doc comment), so a `MovementComponent`-less entity like this one is never visited by it and never gets
+  a real tier computed, permanently reading as the `Beyond` fallback to every *other* tiered consumer
+  (`ProcessingTierWiring`'s "fail open to Beyond" default for "no component yet"). `ActionLockSystem`/
+  `ActionCooldownSystem`/`SimpleHealthRegenSystem` are all tiered off this component and each decrements
+  its own countdown by a flat per-visit amount sized for `Local`'s cadence -- at `Beyond`'s 8x-less-frequent
+  cadence (`ProcessingTierDivisors.ByTierIndex`), that same flat decrement ran every one of those
+  countdowns (this dummy's own windup/cooldown/regen) roughly 8x slower than intended. Hardcoding `Local`
+  (this dummy always spawns beside the player and never moves, so it's never actually wrong) sidesteps
+  the whole bug class without granting a real `MovementComponent` purely to be tracked.
+- `TestMapBuilder`'s population percentages (`GroundPopulationPercent`/`UnderGroundGhostPercent`/
+  `FlyingFairyPercent`) halved again (5/3/3 -> 3/2/2) for the new deliberate, telegraphed combat pace --
+  on top of, not instead of, the earlier FPS-driven halving already there.
 
 ### Body parts / Complex health
 

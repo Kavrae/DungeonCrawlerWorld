@@ -2,6 +2,7 @@
 using Engine.ECS.Systems;
 using Engine.Math;
 using Game.Blueprints;
+using Game.Blueprints.NPCs.Generic;
 using Game.Modules.AbilityScores;
 using Game.Modules.Core.Components;
 using Game.Modules.Poison;
@@ -126,6 +127,24 @@ public static class FloorBuilder
         // PlayerActivityLog's existing spawn-time log line is preserved unchanged.
         movedEntities.Record(new EntityMovedEvent(entityId, spawnPosition, spawnPosition, transform.Size));
         ecsContext.EventBus.Publish(new EntityMovedEvent(entityId, spawnPosition, spawnPosition, transform.Size));
+
+        SpawnTestDummy(world, ecsContext, spawnPosition, movedEntities);
+    }
+
+    /// <summary>TEMPORARY test seeding, alongside the Poison/ability-score seeding above -- a dedicated Dodge-practice target a few tiles from the player's own spawn. See TestDummyBlueprint/TestDummyAttackSystem.</summary>
+    private const int TestDummySpawnOffsetColumns = 3;
+
+    private static void SpawnTestDummy(Game.World.World world, EcsContext ecsContext, Vector3Int playerSpawnPosition, FrameEventBuffer<EntityMovedEvent> movedEntities)
+    {
+        var entityId = ecsContext.EntityManager.CreateEntity();
+        new TestDummyBlueprint().Build(ecsContext.ComponentManager, entityId);
+
+        var origin = new Vector3Int(playerSpawnPosition.X + TestDummySpawnOffsetColumns, playerSpawnPosition.Y, playerSpawnPosition.Z);
+        var spawnPosition = FindFreeGroundCellNear(world, origin);
+        ref var transform = ref ecsContext.ComponentManager.GetDirectPool<TransformComponent>().Get(entityId);
+        world.PlaceEntityOnMap(entityId, spawnPosition, ref transform);
+
+        movedEntities.Record(new EntityMovedEvent(entityId, spawnPosition, spawnPosition, transform.Size));
     }
 
     /// <summary>

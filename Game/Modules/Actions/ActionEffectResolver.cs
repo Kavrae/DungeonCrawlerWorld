@@ -24,6 +24,10 @@ namespace Game.Modules.Actions;
 /// (ActionInstanceQueries.TryResolveEffectiveAction, not a raw ActionCatalog lookup) so a
 /// per-instance Override -- e.g. a flat damage number, see ActionInstanceComponent's own doc
 /// comment -- is already baked into action.Effects by the time this runs.
+///
+/// dodgingEntities, when wired, gates a whole target skip -- not a per-effect-entry concern, so it
+/// stays a resolver-level check rather than a new ActionEffectContext field every IActionEffectEntry
+/// would otherwise need to know about. See DodgingComponent's own doc comment.
 /// </summary>
 public static class ActionEffectResolver
 {
@@ -43,7 +47,8 @@ public static class ActionEffectResolver
         MultiComponentPool<AbilityScoreComponent>? abilityScores = null,
         MultiComponentPool<StatusEffectAuraSourceComponent>? auraSources = null,
         PackedComponentPool<HotkeyExpansionUnlockComponent>? hotkeyExpansionUnlocks = null,
-        MultiComponentPool<BodyPartComponent>? bodyParts = null)
+        MultiComponentPool<BodyPartComponent>? bodyParts = null,
+        PackedComponentPool<DodgingComponent>? dodgingEntities = null)
     {
         eventBus.Publish(new ActionActivatedEvent(sourceEntityId, action.Id));
 
@@ -65,10 +70,17 @@ public static class ActionEffectResolver
             BodyParts: bodyParts,
             PlayerQuery: playerQuery);
 
+        var isDodgeable = action.Tags.Contains(Tag.Dodgeable);
+
         foreach (var tile in targetTiles)
         {
             foreach (var targetEntityId in mapQuery.GetOccupantEntityIdsAt(tile))
             {
+                if (isDodgeable && dodgingEntities?.Has(targetEntityId) == true)
+                {
+                    continue;
+                }
+
                 ActionEffectSequence.Apply(action.Effects, context with { TargetEntityId = targetEntityId });
             }
         }

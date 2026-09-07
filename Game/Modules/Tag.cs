@@ -22,6 +22,9 @@ public enum Tag : byte
     Wand,
     Fire,
 
+    /// <summary>Marks an action whose effects are skipped against a target currently holding DodgingComponent (see ActionEffectResolver.Apply) -- granted on PowerAttack/QuickAttack, withheld from auto-targeting/AOE effects (Magic Missile, explosions) per the Combat Overhaul: Dodge design.</summary>
+    Dodgeable,
+
     /// <summary>Carried as the damageTags/activeTags on Poison's own DoT tick (PoisonSystem.Tick) -- lets a ConditionTag: Tag.Poison-scoped IncomingDamage modifier reduce poison damage specifically, the same generic mechanism Tag.Fire already gives Burning.</summary>
     Poison,
 

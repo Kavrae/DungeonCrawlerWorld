@@ -313,4 +313,62 @@ public sealed class ActionEffectResolverTests
 
         Assert.IsEmpty(applier.AppliedCalls);
     }
+
+    private static readonly ActionDefinition DodgeableAction = new(
+        Guid.NewGuid(), "Test Dodgeable Attack", null, "#", default, [Tag.Dodgeable],
+        Effects: [new ActionEffect([new DirectDamage(MinFlatDamage: 15, MaxFlatDamage: 15)])],
+        Activator: new SpellActivator(new TargetingSpec(TargetShape.SingleTarget, Range: 10), new ActionTiming(ActionTimingCategory.Immediate, ActionLockFrames: 30, CooldownFrames: null)));
+
+    [TestMethod]
+    public void Apply_DodgeableAction_SkipsTargetCurrentlyDodging()
+    {
+        var (mapQuery, health, eventBus, mathUtility, statusEffectAppliers, componentManager) = Build();
+        mapQuery.SetBlockingOccupant(TargetTile, BlockingTargetEntityId);
+        health.Add(BlockingTargetEntityId, new SimpleHealthComponent(100, 100));
+        var dodgingEntities = new PackedComponentPool<DodgingComponent>(maximumEntityCount: 10, initialCapacity: 10, static (ref existing, incoming) => existing = incoming);
+        dodgingEntities.Add(BlockingTargetEntityId, new DodgingComponent(framesRemaining: 30));
+
+        ActionEffectResolver.Apply(DodgeableAction, SourceEntityId, [TargetTile], mapQuery, health, eventBus, mathUtility, playerQuery: null, statusEffectAppliers, componentManager, dodgingEntities: dodgingEntities);
+
+        Assert.AreEqual(100, health.GetReadonly(BlockingTargetEntityId).CurrentHealth, "A Dodgeable action must not affect a target currently holding DodgingComponent.");
+    }
+
+    [TestMethod]
+    public void Apply_NonDodgeableAction_StillAffectsTargetCurrentlyDodging()
+    {
+        var (mapQuery, health, eventBus, mathUtility, statusEffectAppliers, componentManager) = Build();
+        mapQuery.SetBlockingOccupant(TargetTile, BlockingTargetEntityId);
+        health.Add(BlockingTargetEntityId, new SimpleHealthComponent(100, 100));
+        var dodgingEntities = new PackedComponentPool<DodgingComponent>(maximumEntityCount: 10, initialCapacity: 10, static (ref existing, incoming) => existing = incoming);
+        dodgingEntities.Add(BlockingTargetEntityId, new DodgingComponent(framesRemaining: 30));
+
+        ActionEffectResolver.Apply(Action, SourceEntityId, [TargetTile], mapQuery, health, eventBus, mathUtility, playerQuery: null, statusEffectAppliers, componentManager, dodgingEntities: dodgingEntities);
+
+        Assert.AreEqual(85, health.GetReadonly(BlockingTargetEntityId).CurrentHealth, "Only Dodgeable-tagged actions are affected by DodgingComponent -- everything else lands as normal.");
+    }
+
+    [TestMethod]
+    public void Apply_DodgeableAction_TargetNotDodging_AffectsNormally()
+    {
+        var (mapQuery, health, eventBus, mathUtility, statusEffectAppliers, componentManager) = Build();
+        mapQuery.SetBlockingOccupant(TargetTile, BlockingTargetEntityId);
+        health.Add(BlockingTargetEntityId, new SimpleHealthComponent(100, 100));
+        var dodgingEntities = new PackedComponentPool<DodgingComponent>(maximumEntityCount: 10, initialCapacity: 10, static (ref existing, incoming) => existing = incoming);
+
+        ActionEffectResolver.Apply(DodgeableAction, SourceEntityId, [TargetTile], mapQuery, health, eventBus, mathUtility, playerQuery: null, statusEffectAppliers, componentManager, dodgingEntities: dodgingEntities);
+
+        Assert.AreEqual(85, health.GetReadonly(BlockingTargetEntityId).CurrentHealth);
+    }
+
+    [TestMethod]
+    public void Apply_DodgeableAction_NullDodgingEntitiesPool_BehavesExactlyAsToday_NoCrash()
+    {
+        var (mapQuery, health, eventBus, mathUtility, statusEffectAppliers, componentManager) = Build();
+        mapQuery.SetBlockingOccupant(TargetTile, BlockingTargetEntityId);
+        health.Add(BlockingTargetEntityId, new SimpleHealthComponent(100, 100));
+
+        ActionEffectResolver.Apply(DodgeableAction, SourceEntityId, [TargetTile], mapQuery, health, eventBus, mathUtility, playerQuery: null, statusEffectAppliers, componentManager);
+
+        Assert.AreEqual(85, health.GetReadonly(BlockingTargetEntityId).CurrentHealth);
+    }
 }

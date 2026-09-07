@@ -85,10 +85,15 @@ public sealed class PlayerBlueprint(MathUtility mathUtility, UniqueNumberAllocat
         ActionGrantEffects.Grant(componentManager, entityId, MagicMissileAction.Id, MagicMissileAction.ManaCost, overrideDefinition: magicMissileOverride, cooldownFramesRemaining: 0);
         ActionGrantEffects.Grant(componentManager, entityId, ToxicStrikeAction.Id, manaCost: 0, overrideDefinition: null, cooldownFramesRemaining: 0);
 
-        componentManager.Merge(entityId, new ActionHotkeyBindingComponent(HotkeySlot.DefaultAttack, PunchAction.Id));
-        componentManager.Merge(entityId, new ActionHotkeyBindingComponent(HotkeySlot.Base1, HealAction.Id));
+        // F/Q/R are the defaults for Dodge/PowerAttack/QuickAttack (Combat Overhaul: Dodge,
+        // TODO.md) -- hotkey slots are never dedicated, only defaulted when available, so this
+        // simply replaces whatever a slot previously defaulted to. Base1 (Q) previously defaulted
+        // to HealAction -- still granted to the player above, just no longer hotkey-bound by
+        // default until a rebind UI exists.
+        componentManager.Merge(entityId, new ActionHotkeyBindingComponent(HotkeySlot.DefaultAttack, DodgeAction.Id));
+        componentManager.Merge(entityId, new ActionHotkeyBindingComponent(HotkeySlot.Base1, PowerAttackAction.Id));
         componentManager.Merge(entityId, new ActionHotkeyBindingComponent(HotkeySlot.Base2, MagicMissileAction.Id));
-        componentManager.Merge(entityId, new ActionHotkeyBindingComponent(HotkeySlot.Base3, ToxicStrikeAction.Id));
+        componentManager.Merge(entityId, new ActionHotkeyBindingComponent(HotkeySlot.Base3, QuickAttackAction.Id));
         componentManager.Merge(entityId, new HotkeyExpansionUnlockComponent(unlockedSlotCount: DefaultUnlockedExpansionSlots));
 
         componentManager.Merge(entityId, new CrawlerComponent(crawlerNumberAllocator.Allocate()));

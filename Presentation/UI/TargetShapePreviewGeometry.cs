@@ -25,7 +25,7 @@ public static class TargetShapePreviewGeometry
     /// <summary>
     /// Relative (X, Y) tile offsets from the caster -- (0,0) is the caster's own tile, whether or
     /// not it's actually among the results (see TargetShape's own per-shape doc comments --
-    /// Self/AdjacentWithSelf include it, everything else doesn't). Cone/Line have no real cursor
+    /// Self (alone or combined, e.g. Adjacent | Self) includes it, everything else doesn't). Cone/Line have no real cursor
     /// in a static preview, so both resolve against one fixed "north" direction (negative Y) --
     /// a display convention, not a claim about real facing.
     /// </summary>
@@ -36,7 +36,7 @@ public static class TargetShapePreviewGeometry
             : SentinelOrigin;
 
         var results = new List<Vector3Int>();
-        TargetShapeResolver.Resolve(spec.Shape, SentinelOrigin, SingleTileFootprint, cursorTile, spec.Range, spec.AreaSize, SentinelMapSize, results);
+        TargetShapeResolver.Resolve(spec.Shape, SentinelOrigin, SingleTileFootprint, cursorTile, spec.Range, spec.AreaSize, SentinelMapSize, results, spec.Metric);
 
         var offsets = new List<Point>(results.Count);
         foreach (var tile in results)

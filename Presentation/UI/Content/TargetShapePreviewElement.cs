@@ -93,7 +93,7 @@ public sealed class TargetShapePreviewElement(FontService fontService, ElementPo
         LabelRenderer.DrawCentered(spriteBatch, _numberFont, text, cellOrigin, new Vector2(outerSize, outerSize), DistanceNumberColor);
     }
 
-    /// <summary>The caster's own cell (0,0) -- always present, whether or not it's also one of the targeted _offsets (Self/AdjacentWithSelf target it, most other shapes don't; either way the circle marks it).</summary>
+    /// <summary>The caster's own cell (0,0) -- always present, whether or not it's also one of the targeted _offsets (Self, alone or combined e.g. Adjacent | Self, targets it; most other shapes don't; either way the circle marks it).</summary>
     private void DrawPlayerMarker(SpriteBatch spriteBatch, Texture2D unitRectangle)
     {
         var cellOrigin = ContentAbsolutePosition + new Vector2((0 - _minX) * _cellSize, (0 - _minY) * _cellSize);
