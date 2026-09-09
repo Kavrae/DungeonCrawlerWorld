@@ -159,6 +159,79 @@ games' own dodge timings -- the numbers used are TODO.md's own, not independentl
   `FlyingFairyPercent`) halved again (5/3/3 -> 3/2/2) for the new deliberate, telegraphed combat pace --
   on top of, not instead of, the earlier FPS-driven halving already there.
 
+### Enemy Attack Indicator + follow-up combat/performance work
+
+Full record: `PLAN-charge-attack-fill-indicator.md` (four addenda -- smoothing, an O(D*A) prune bug,
+Local-tier scoping, and moving that scoping upstream into `ActionTargetingController
+.AllPendingDelayedActionTargets`). The charge-fill indicator itself: TODO.md's own top-priority
+"Enemy Attack Indicator" -- a bottom-up per-tile fill (`Presentation/Rendering/TileFillRenderer.cs`)
+showing a Delayed action's windup progress (0% at charge start -> 100% at activation), layered over
+the existing flat telegraph wash from Combat Overhaul: Dodge above. Two further fixes landed
+alongside it, found while chasing the framerate regressions that surfaced during that work:
+
+- **`TestCombatBehaviorSystem`'s `IsAttackable`** (`Game/Modules/NpcBehavior/Systems/`) no longer
+  allowlists "the player or a Fairy" -- it now compares real `RaceComponent` values, attackable iff
+  the candidate carries a race different from the attacker's own (and isn't dead, checked first). A
+  raceless candidate (a shop, a container, any non-creature prop) is never attackable -- nothing to
+  compare. This also fixes two real bugs the old allowlist had: a dead Fairy's corpse (stays fully
+  populated and occupying its tile for future looting, `DeathSystem` never destroys it) used to
+  still read as a valid target; and a Fairy adjacent to another Fairy used to attack it too, since
+  nothing excluded "an entity of my own race." Both are gone now as a natural consequence of the
+  real comparison, not a special case. `_playerQuery`/`IsFairy` became dead code and were removed
+  (from `TestCombatBehaviorSystem` and its owning `NpcBehaviorModule`) -- the player is "a different
+  race" the ordinary way, by being Human (`PLAN-human-race.md`), no special-casing needed.
+- **`DelayedActionSystem`** (`Game/Modules/Actions/Systems/`) was the single biggest framerate
+  contributor found via the `phase-performance-testing` skill: a live diagnostics capture showed
+  `PendingDelayedActionComponent.Count` over 10,000 map-wide during ordinary NPC-vs-NPC combat, and
+  this system -- alone -- costing ~79ms of a 1000ms/sec budget, because unlike every sibling
+  countdown system (`ActionLockSystem`/`ActionCooldownSystem`/`StatModifierExpirySystem`/
+  `BurningSystem`, all `TieredEntityStripeSet`) it used a flat, untiered `StripeCount = 1` -- visiting
+  every single pending entity, every single frame, forever. Now tiered off `ProcessingTierComponent`
+  via `ProcessingTierWiring.CreateAndWire`, `StripeCountValue = 10` matching `ActionLockSystem`'s own
+  (the two need to visit a given entity on the same cadence -- see below). Measured result: 78.95ms/sec
+  -> 13.53ms/sec, -82.9%. Deliberately did *not* also adopt the older, independent `ITickCountdown`/
+  `CountdownTicker` proposal TODO.md used to carry for this: `DelayedActionSystem` still reads
+  `ActionLockComponent.CurrentLockFramesRemaining` directly rather than owning a second, separate
+  timer, specifically because two independently-tiered clocks for the same entity could drift out of
+  sync (one system's own tiered cadence lagging or leading the other's), delaying -- or worse, racing
+  ahead of -- exactly when the lock actually clears. That exact invariant (the lock reaching 0 and the
+  action resolving happen in the same tick, always) is what `MapWindow`'s own charge-fill telegraph
+  depends on for correctness. Sharing one clock, tiered identically, keeps both the resolution timing
+  and the UI's own progress reading consistent, at the cost of the same bounded, self-correcting
+  staleness every other tiered consumer here already accepts.
+- **`TestDummyBlueprint`'s own `ProcessingTierComponent(Local)` grant was in the wrong order.**
+  Reported live: the charge-fill indicator drew smoothly for every entity except the TestDummy,
+  visibly choppy (catch-up-then-pause) there specifically. Root cause: `Build` merged
+  `ActionLockComponent`/`SimpleHealthComponent` *before* `ProcessingTierComponent(Local)` --
+  `ActionLockSystem`'s/`SimpleHealthRegenSystem`'s own `TieredEntityStripeSet` each read this
+  entity's tier exactly once, the instant their own driving component was merged, and cache it
+  permanently (`ProcessingTierSystem` never revisits a `MovementComponent`-less entity to correct
+  it later). Both read no `ProcessingTierComponent` yet at that point and defaulted to Beyond --
+  the exact misclassification the Local grant exists to prevent, just still happening for those two
+  systems specifically, because it landed a few lines too late to matter. Fixed by moving the
+  `ProcessingTierComponent(Local)` merge to be the first line in `Build`, before anything else --
+  see that blueprint's own doc comment for the full mechanism. Confirms this class of bug is about
+  grant *order*, not just grant *presence*, for any future stationary fixture following the same
+  pattern.
+- **Every indicator completed at ~80-90%, never full -- the fraction source itself, not the
+  smoothing.** Reported after the TestDummy fix above: consistent for every entity, not just the
+  previously-broken dummy. `DelayedActionSystem` resolves an action and removes
+  `PendingDelayedActionComponent` in the exact same tiered visit that finally observes
+  `ActionLockComponent.CurrentLockFramesRemaining == 0` -- so that raw value is *never actually
+  observable at 0* from `MapWindow`; the last frame an entity is ever seen pending, it's frozen at
+  whatever `CurrentLockFramesRemaining` held after the second-to-last decrement (up to
+  `ActionLockSystem`'s own `StripeCountValue - 1` frames short of true completion), then the entity
+  vanishes. For `PowerAttackAction`'s 60-frame windup (decrementing by 10 each visit), the last
+  observable state is `remaining=10`, i.e. `50/60 ≈ 83%` -- matching the reported figure closely.
+  Fixed by dropping `CurrentLockFramesRemaining` from the fraction entirely: `MapWindow
+  .TrackChargeElapsedFraction` (renamed from `SmoothChargeFraction`) now accumulates real elapsed
+  frames since each charge was first observed and divides by `CurrentLockTotalFrames` directly,
+  reaching exactly 1 at `totalFrames` elapsed regardless of the stepped countdown's own granularity
+  -- safe only because the Local-tier filtering above already excludes anything whose real
+  resolution could meaningfully lag its nominal duration, the exact case the old "never exceed the
+  raw target" clamp existed to guard against. Full record: `PLAN-charge-attack-fill-indicator.md`'s
+  own Addendum 7.
+
 ### Body parts / Complex health
 
 Full record: `PLAN-body-parts.md`.

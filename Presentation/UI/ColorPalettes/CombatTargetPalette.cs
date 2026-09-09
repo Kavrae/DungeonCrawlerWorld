@@ -3,11 +3,7 @@ using Microsoft.Xna.Framework;
 namespace Presentation.UI.ColorPalettes;
 
 /// <summary>
-/// MapWindow's targeting/telegraph highlight colors -- Combat Overhaul: Dodge (TODO.md): light
-/// green for the player's own reachable/armed tiles, dark green for the player's own confirmed/
-/// hovered target or in-flight Delayed windup, red for an enemy's telegraphed action that cannot
-/// be dodged, yellow for one that can. Shared by every Delayed action's telegraph, not just Dodge's
-/// own targeting -- see MapWindow.DrawTargetingHighlights.
+/// MapWindow's targeting/telegraph highlight colors
 /// </summary>
 internal static class CombatTargetPalette
 {

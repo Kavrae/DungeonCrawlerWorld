@@ -31,13 +31,11 @@ public sealed class NpcBehaviorModule : IGameModule
 
     private IMapQuery _mapQuery = null!;
     private MathUtility _mathUtility = null!;
-    private IPlayerQuery? _playerQuery;
 
     public void Configure(GameModuleContext context)
     {
         _mapQuery = context.MapQuery;
         _mathUtility = context.MathUtility;
-        _playerQuery = context.PlayerQuery;
     }
 
     public void RegisterComponents(ComponentManager componentManager) =>
@@ -71,7 +69,6 @@ public sealed class NpcBehaviorModule : IGameModule
             componentManager.GetPackedPool<PendingConsumableActivationComponent>(),
             _mapQuery,
             _mathUtility,
-            _playerQuery,
             deadEntities));
 
         systemManager.Register(new TestDummyAttackSystem(

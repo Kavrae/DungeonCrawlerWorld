@@ -122,6 +122,8 @@ public sealed class ActionsModule : IGameModule
             _playerQuery,
             _statusEffectAppliers,
             componentManager,
+            componentManager.GetDirectPool<ProcessingTierComponent>(),
+            _processingTierEvents,
             statModifiers,
             deadEntities,
             abilityScores,

@@ -1,4 +1,6 @@
 using Engine.ECS.Components;
+using Engine.ECS.Components.Stores;
+using Engine.ECS.Systems;
 using Engine.Events;
 using Engine.Math;
 using Game.Modules.Actions;
@@ -9,6 +11,8 @@ using Game.Modules.Actions.Systems;
 using Game.Modules.Core.Components;
 using Game.Modules.Death.Components;
 using Game.Modules.Health.Components;
+using Game.Modules.ProcessingTier;
+using Game.Modules.ProcessingTier.Components;
 using Game.Modules.StatusEffects;
 using Game.World;
 
@@ -17,7 +21,11 @@ namespace Tests.Modules.Actions;
 [TestClass]
 public sealed class DelayedActionSystemTests
 {
-    private const int CasterEntityId = 1;
+    // Entity 0 lands in stripe-bucket 0 for every tier (entityId % StripeCount) -- bucket 0 is
+    // always due at FrameCount 0 (0 % anything == 0), the same convention ActionLockSystemTests
+    // uses for its own "immediate" tests, so system.Update(default, 0) reaches it without needing
+    // to seed a ProcessingTierComponent first.
+    private const int CasterEntityId = 0;
     private const int TargetEntityId = 2;
     private static readonly Guid ActionId = new("11111111-1111-1111-1111-111111111111");
     private static readonly Vector3Int TargetTile = new(5, 5, 0);
@@ -48,7 +56,7 @@ public sealed class DelayedActionSystemTests
         public void GetEntityIdsInBox(CubeInt box, Span<int> entityIds) { }
     }
 
-    private static (DelayedActionSystem System, ComponentManager ComponentManager, FakeMapQuery MapQuery, EventBus EventBus, ActionCatalog ActionCatalog) Build()
+    private static (DelayedActionSystem System, ComponentManager ComponentManager, FakeMapQuery MapQuery, EventBus EventBus, ActionCatalog ActionCatalog, DirectComponentPool<ProcessingTierComponent> ProcessingTiers) Build()
     {
         var componentManager = new ComponentManager(initialEntityCapacity: 20, initialComponentCapacity: 10);
         componentManager.RegisterPackedPool<PendingDelayedActionComponent>(static (ref existing, incoming) => existing = incoming);
@@ -56,10 +64,12 @@ public sealed class DelayedActionSystemTests
         componentManager.RegisterMultiPool<ActionInstanceComponent>();
         componentManager.RegisterPackedPool<SimpleHealthComponent>(static (ref existing, incoming) => existing = incoming);
         componentManager.RegisterPackedPool<DeadComponent>(static (ref existing, incoming) => existing = incoming);
+        componentManager.RegisterDirectPool<ProcessingTierComponent>(static (ref existing, incoming) => existing = incoming);
 
         var mapQuery = new FakeMapQuery();
         var eventBus = new EventBus();
         var mathUtility = new MathUtility(new NeverCritRandom());
+        var processingTiers = componentManager.GetDirectPool<ProcessingTierComponent>();
 
         var actionCatalog = new ActionCatalog();
         actionCatalog.Register(new ActionDefinition(
@@ -79,10 +89,12 @@ public sealed class DelayedActionSystemTests
             playerQuery: null,
             new StatusEffectAuraApplierRegistry(),
             componentManager,
+            processingTiers,
+            new ProcessingTierEvents(),
             statModifiers: null,
             componentManager.GetPackedPool<DeadComponent>());
 
-        return (system, componentManager, mapQuery, eventBus, actionCatalog);
+        return (system, componentManager, mapQuery, eventBus, actionCatalog, processingTiers);
     }
 
     private static float HealthOf(ComponentManager componentManager, int entityId) =>
@@ -98,7 +110,7 @@ public sealed class DelayedActionSystemTests
     [TestMethod]
     public void LockStillCounting_EffectIsNotResolved()
     {
-        var (system, componentManager, mapQuery, _, actionCatalog) = Build();
+        var (system, componentManager, mapQuery, _, actionCatalog, _) = Build();
         mapQuery.SetOccupant(TargetTile, TargetEntityId);
         componentManager.Merge(TargetEntityId, new SimpleHealthComponent(100, 100));
         componentManager.Merge(CasterEntityId, FixedDamageInstance(actionCatalog, ActionId, 15, cooldownFramesRemaining: 0));
@@ -114,7 +126,7 @@ public sealed class DelayedActionSystemTests
     [TestMethod]
     public void LockReachesZero_ResolvesEffectAndClearsPending()
     {
-        var (system, componentManager, mapQuery, _, actionCatalog) = Build();
+        var (system, componentManager, mapQuery, _, actionCatalog, _) = Build();
         mapQuery.SetOccupant(TargetTile, TargetEntityId);
         componentManager.Merge(TargetEntityId, new SimpleHealthComponent(100, 100));
         componentManager.Merge(CasterEntityId, FixedDamageInstance(actionCatalog, ActionId, 15, cooldownFramesRemaining: 0));
@@ -130,7 +142,7 @@ public sealed class DelayedActionSystemTests
     [TestMethod]
     public void LockReachesZero_CasterIsDead_DoesNotResolveEffect()
     {
-        var (system, componentManager, mapQuery, _, actionCatalog) = Build();
+        var (system, componentManager, mapQuery, _, actionCatalog, _) = Build();
         mapQuery.SetOccupant(TargetTile, TargetEntityId);
         componentManager.Merge(TargetEntityId, new SimpleHealthComponent(100, 100));
         componentManager.Merge(CasterEntityId, FixedDamageInstance(actionCatalog, ActionId, 15, cooldownFramesRemaining: 0));
@@ -147,12 +159,54 @@ public sealed class DelayedActionSystemTests
     [TestMethod]
     public void NoPendingAction_DoesNothing()
     {
-        var (system, componentManager, mapQuery, _, actionCatalog) = Build();
+        var (system, componentManager, mapQuery, _, actionCatalog, _) = Build();
         mapQuery.SetOccupant(TargetTile, TargetEntityId);
         componentManager.Merge(TargetEntityId, new SimpleHealthComponent(100, 100));
 
         system.Update(default, 0);
 
         Assert.AreEqual(100, HealthOf(componentManager, TargetEntityId));
+    }
+
+    /// <summary>
+    /// A Neighborhood-tiered entity (StripeCount 10 * divisor 2 = 20) lands in bucket
+    /// entityId % 20 -- for CasterEntityId (0), that's bucket 0, due only when
+    /// FrameCount % 20 == 0. The tier must be seeded before PendingDelayedActionComponent is
+    /// merged, since TieredEntityStripeSet reads an entity's current tier at membership-add time
+    /// (the pool's own EntityAdded event, fired by that Merge call) -- same requirement
+    /// ActionLockSystemTests' own identical-shaped tests document.
+    /// </summary>
+    [TestMethod]
+    public void LockReachesZero_ThrottledEntity_OffCycle_DoesNotResolveYet()
+    {
+        var (system, componentManager, mapQuery, _, actionCatalog, processingTiers) = Build();
+        mapQuery.SetOccupant(TargetTile, TargetEntityId);
+        componentManager.Merge(TargetEntityId, new SimpleHealthComponent(100, 100));
+        processingTiers.Add(CasterEntityId, new ProcessingTierComponent(ProcessingTierLevel.Neighborhood));
+        componentManager.Merge(CasterEntityId, FixedDamageInstance(actionCatalog, ActionId, 15, cooldownFramesRemaining: 0));
+        componentManager.Merge(CasterEntityId, new ActionLockComponent(standardLockFrames: ActionLockGate.StandardLockFrames, currentLockTotalFrames: 30, currentLockFramesRemaining: 0));
+        componentManager.Merge(CasterEntityId, new PendingDelayedActionComponent(ActionId, [TargetTile]));
+
+        system.Update(new EngineTime(default, default, false, FrameCount: 1), 0);
+
+        Assert.AreEqual(100, HealthOf(componentManager, TargetEntityId), "Off this entity's own tiered cycle -- not visited yet, even though its lock already reached 0.");
+        Assert.IsTrue(componentManager.GetPackedPool<PendingDelayedActionComponent>().Has(CasterEntityId));
+    }
+
+    [TestMethod]
+    public void LockReachesZero_ThrottledEntity_OnEligibleCycle_ResolvesEffect()
+    {
+        var (system, componentManager, mapQuery, _, actionCatalog, processingTiers) = Build();
+        mapQuery.SetOccupant(TargetTile, TargetEntityId);
+        componentManager.Merge(TargetEntityId, new SimpleHealthComponent(100, 100));
+        processingTiers.Add(CasterEntityId, new ProcessingTierComponent(ProcessingTierLevel.Neighborhood));
+        componentManager.Merge(CasterEntityId, FixedDamageInstance(actionCatalog, ActionId, 15, cooldownFramesRemaining: 0));
+        componentManager.Merge(CasterEntityId, new ActionLockComponent(standardLockFrames: ActionLockGate.StandardLockFrames, currentLockTotalFrames: 30, currentLockFramesRemaining: 0));
+        componentManager.Merge(CasterEntityId, new PendingDelayedActionComponent(ActionId, [TargetTile]));
+
+        system.Update(new EngineTime(default, default, false, FrameCount: 20), 0);
+
+        Assert.AreEqual(85, HealthOf(componentManager, TargetEntityId));
+        Assert.IsFalse(componentManager.GetPackedPool<PendingDelayedActionComponent>().Has(CasterEntityId));
     }
 }

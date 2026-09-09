@@ -1,6 +1,30 @@
-### Next
-Some type of timing indicator for when a charged attack will land. Tile equivalent of the radial fill that counts it down?
-This would also be a good time to start drawing damage numbers and new status effect stacks appearing above the damaged entity. Research industry standards for best visibility.
+# Next (top priority)
+### Enemy Attack Indicator
+Charge attack timing indicator. New type of tile glow effect : fills from bottom-up per tile in the target area. 
+Start of charge attack = 0% fill. Attack activation = 100% fill.
+Works on both player and enemy delayed actions.
+Naming investigation : Should these still be considered glow effects or are they closer to shaders, masks, fill effect, or a different type of visual effect? Should there be a separation of glow effects and whatever this is renamed to?
+
+### Floating Combat Text
+Combat text whenever an entity is damaged, healed, or given a status effect.
+Research industry standard
+Appear above the entity at 50% opacity, move up the distance of a single tile fading to 100% opacity, then move while fading to 0 opacity. Damage and status effect text moves up while "Dodge" and "Immune" text moves down. Remove the text at 0 opacity.
+Text should start with a randomized horizontal offset (half of a tile width in either direction) to improve readability by reducing stacking.
+Text should move diagonally, rather than directly up/down, to futher improve readability. Randomly chosen between negative vertical speed and positive vertical speed.
+Start with 2 second duration.
+Draw order is oldest (bottom) to newest (top)
+Bordered text.
+Red numbers for direct damage
+Orange numbers for status effect damage
+Green numbers for direct healing
+Light green for health regen
+Bolt for critical hits
+Sprite + number of stacks when status effect stacks are added
+"Dodge" whenever an action fails due to a dodgeComponent.
+"Immune" whenever an action fails due to immunity.
+Since multiple sources of damage and effects can happen simultaneously, which would be difficult to read, buffer them into a damage list and a status effect list. Each frame, display the oldest damage/healing number (drawn on left) and oldest status effect(drawn on right) in the list . This will result in a "waterfall" of text.
+Should this feature go through the eventBus (for entities on the screen) rather than directly passed to whatever controls the floating combat text?
+The text creation, movement, fade in/out, and removal combination of mechanics is similar to many game particle effects. Should this be generalized into a particle effect with text as the UI piece of it?
 
 ### Combat Overhaul : Dodge
 
@@ -24,10 +48,11 @@ Block (such as via a shield) will be added later as another FreeCast action with
 Counterspell will be added later as another FreeCast action that will attempt to cancel delayedAction spells. Determine a way to make this fair for both the source and target.
 
 ### Stances and Toggles
-Stances. A set of toggle actions that boost one specialty in exchange for weakening another. Add a visual element to toggle actions/items to indicate when they're toggled on. A rotating glow is standard.
-Stance 1 = Lower charge up times for delay actions in exchange for longer global cooldowns.
-Stance 2 = Improved magic effects at the cost of melee. 
-Should toggle be a separate action type?
+Stances: a set of toggle actions that boost one specialty while weakening another. 
+Add a visual element to toggle actions/items to indicate when they're toggled on. Compare a rotating inner-fade glow to industry standard.
+Stance 1 = Power Stance = Lower charge up times for delay actions in exchange for longer global cooldowns.
+Stance 2 = Mage Stance = Improved magic effects at the cost of melee. 
+Should toggle be a separate activator type or a different part of an action? Items (torch), spells (buff aura), and direct actions (stances) can all have toggles with various effects that can be manually activated and deactivated by the owning entity.
 
 # Long-Term TODOs
 
@@ -58,6 +83,30 @@ primitive. Companion to the Game/Presentation equipment items below.
 ## Game
 
 ### High Priority
+
+#### Simplify non-local combat for performance
+
+A Delayed action's windup/telegraph/badge exist for player-visible tactical value -- an off-screen
+entity's own windup buys it nothing (nothing is watching it) but still costs the same
+`ActionLockComponent`/`PendingDelayedActionComponent`/`DelayedActionSystem` bookkeeping as an
+on-screen one. Confirmed expensive at this game's real population scale: a live diagnostics capture
+showed over 10,000 entities map-wide simultaneously mid-windup during ordinary NPC-vs-NPC combat
+(`DelayedActionSystem` alone cost ~79ms of a 1000ms/sec budget before it was tiered -- see
+`IMPLEMENTATION-NOTES.md`'s "Enemy Attack Indicator + follow-up combat/performance work" for that
+fix, already landed; tiering cut the per-frame *visit* cost, this entry is about shrinking the
+*population* that ever needs a windup in the first place).
+
+For an entity outside Local processing tier (`ProcessingTierLevel.Local` -- `ActionTargetingController
+.AllPendingDelayedActionTargets` already treats this as the visibility boundary for its own
+telegraph), resolve its actions immediately instead of queuing a Delayed windup at all: skip
+`ActionLockGate.Lock`/`PendingDelayedActionComponent` and call `ActionEffectResolver.Apply` right
+away, the same as an `Immediate` action. Shrinks `DelayedActionSystem`'s/`ActionLockSystem`'s own
+per-frame population directly, without touching on-screen combat's telegraph/timing at all. Open
+question: check tier at decision time (`TestCombatBehaviorSystem.TryDecideMeleeAttack`, cheaper --
+never queues a windup for an already-non-Local entity) vs. at activation time
+(`ActionActivationSystem.TryActivateDelayed`, also covers an entity that starts Local and drifts out
+mid-windup). Whether Dodge/Block eligibility should get the same non-Local-entities-skip-it
+treatment is a related, separate question worth deciding alongside this.
 
 #### Inventory management rules
 
@@ -445,16 +494,6 @@ addition (new spatial index, insert/remove/move bookkeeping, a genuine correctne
 boundary-band width) -- only worth it once profiling actually confirms this as a bottleneck (one past
 pass was inconclusive, coincided with unrelated Paralysis load).
 
-#### DelayedActionSystem polls every pending action every frame, untiered
-
-Unlike its siblings (`ActionLockSystem`/`ActionCooldownSystem`/`StatModifierExpirySystem`/
-`BurningSystem`, all `TieredEntityStripeSet`), uses a flat `StripeCount = 1` and borrows
-`ActionLockComponent.LockFramesRemaining` instead of owning a countdown. Not a measured problem today
-(no Delayed action has a long windup). If it becomes one: give `PendingDelayedActionComponent` its own
-`ITickCountdown` via `CountdownTicker.Tick`, and a `TieredEntityStripeSet` like its siblings. (A
-callback on `ActionLockComponent` itself was considered and rejected -- would pull Actions-specific
-knowledge into a generic Core primitive.)
-
 #### Entity displacement with damage
 
 `World.MoveEntity`/`PlaceEntityOnMap` no-op when a Blocking destination is occupied -- too blunt for
@@ -709,6 +748,18 @@ shape, differing only in backing component/palette). Tolerable at two copies -- 
 generic element if a third shows up (e.g. Soul Essence). `MapWindow.DrawHealthBar` is arguably a lighter
 third instance already (same fraction math, no ticks, per-any-entity) -- include it in scope if this is
 ever picked up.
+
+#### Hotbar insufficient-mana indicator
+
+A small blue fill bar on a hotbar slot for an action/spell whose `ManaCost` exceeds the player's
+current `ManaComponent` pool -- a glanceable "you can't afford this right now" without opening a
+tooltip. Precedent: `RadialFillRenderer`'s existing cooldown-sweep mask, already drawn on
+`HotbarContent`'s ability slots (`ActionLockContent`'s own HUD wheel is the other consumer today) --
+this would be a second, independent fill/tint on the same slot, not a replacement, since cooldown and
+affordability are two separate reasons a slot can't be used right now and both are worth signaling at
+once. Blocked on Mana costs actually being enforced on activation -- this file's own "Mana" entry
+(Game, Medium Priority) notes every `ManaCost` is unenforced today ("both free today"); this
+indicator has nothing real to check until that lands.
 
 #### Context menu amount picker
 

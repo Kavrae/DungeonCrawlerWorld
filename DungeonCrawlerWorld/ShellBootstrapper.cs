@@ -9,6 +9,7 @@ using Game.Modules.Inventory;
 using Game.Modules.Inventory.Components;
 using Game.Modules.Mana.Components;
 using Game.Modules.Movement.Components;
+using Game.Modules.ProcessingTier.Components;
 using Game.Modules.StatusEffects;
 using Game.Notifications;
 using Game.World;
@@ -74,7 +75,8 @@ public static class ShellBootstrapper
             componentManager.GetPackedPool<ActionLockComponent>(),
             componentManager.GetPackedPool<MovementComponent>(),
             componentManager.GetPackedPool<ManaComponent>(),
-            componentManager.GetMultiPool<AbilityScoreComponent>());
+            componentManager.GetMultiPool<AbilityScoreComponent>(),
+            componentManager.GetDirectPool<ProcessingTierComponent>());
         var playerMovementController = new PlayerMovementController(
             world,
             componentManager.GetDirectPool<TransformComponent>(),

@@ -8,6 +8,8 @@ using Game.Modules.Actions.Components;
 using Game.Modules.Core.Components;
 using Game.Modules.Death.Components;
 using Game.Modules.Health.Components;
+using Game.Modules.ProcessingTier;
+using Game.Modules.ProcessingTier.Components;
 using Game.Modules.StatModifiers.Components;
 using Game.Modules.StatusEffectAura.Components;
 using Game.Modules.StatusEffects;
@@ -15,11 +17,36 @@ using Game.World;
 
 namespace Game.Modules.Actions.Systems;
 
-/// <summary>Consumes pending delayed actions and resolves their effects when the action lock is released.</summary>
+/// <summary>
+/// Consumes pending delayed actions and resolves their effects when the action lock is released.
+/// </summary>
+/// <remarks>
+/// Tiered off ProcessingTierComponent (TieredEntityStripeSet, matching ActionLockSystem's own
+/// StripeCountValue so both stay in sync for the same entity) rather than a flat, untiered
+/// EntityStripeSet -- confirmed a real cost at this game's actual population scale
+/// (`phase-performance-testing` skill, PLAN-charge-attack-fill-indicator.md's own Addendum 4):
+/// PendingDelayedActionComponent.Count over 10,000 map-wide during ordinary NPC-vs-NPC combat, this
+/// system alone costing ~79ms of a 1000ms/sec budget visiting every one of them every single frame.
+/// Deliberately still reads ActionLockComponent.CurrentLockFramesRemaining directly rather than
+/// owning an independent ITickCountdown/CountdownTicker-driven timer of its own (an earlier TODO.md
+/// proposal) -- a separate countdown ticked on its own tiered cadence could drift out of sync with
+/// ActionLockSystem's own tiered decrement of the same entity, delaying (or, worse, racing ahead
+/// of) exactly when the lock visually/logically clears. Reading the same ActionLockComponent both
+/// systems already share, tiered off the same ProcessingTierComponent with the same StripeCount,
+/// keeps them visiting this entity on the same cadence -- this system just checks whatever
+/// ActionLockSystem already decremented, with only the same bounded, self-correcting staleness
+/// every other tiered consumer in this codebase already accepts, never a second, independently-
+/// drifting clock. This is also the exact invariant MapWindow's charge-fill telegraph
+/// (DrawChargeFillHighlight) depends on for correctness -- see PLAN-charge-attack-fill-
+/// indicator.md's own Design section.
+/// </remarks>
 /// <cleanupVersion>1</cleanupVersion>
 public sealed class DelayedActionSystem : ISystem
 {
-    private const byte StripeCountValue = 1;
+    // Matches ActionLockSystem's own StripeCountValue -- both are tiered off the same
+    // ProcessingTierComponent, so a given entity is visited by both on the same cadence (see this
+    // class's own remarks on why that matters).
+    private const byte StripeCountValue = 10;
 
     public byte StripeCount => StripeCountValue;
 
@@ -41,7 +68,7 @@ public sealed class DelayedActionSystem : ISystem
     private readonly PackedComponentPool<HotkeyExpansionUnlockComponent>? _hotkeyExpansionUnlocks;
     private readonly MultiComponentPool<BodyPartComponent>? _bodyParts;
     private readonly PackedComponentPool<DodgingComponent>? _dodgingEntities;
-    private readonly EntityStripeSet _stripeSet;
+    private readonly TieredEntityStripeSet _tieredStripeSet;
 
     public DelayedActionSystem(
         PackedComponentPool<PendingDelayedActionComponent> pendingActions,
@@ -55,6 +82,8 @@ public sealed class DelayedActionSystem : ISystem
         IPlayerQuery? playerQuery,
         StatusEffectAuraApplierRegistry statusEffectAppliers,
         ComponentManager componentManager,
+        DirectComponentPool<ProcessingTierComponent> processingTiers,
+        ProcessingTierEvents processingTierEvents,
         MultiComponentPool<StatModifierComponent>? statModifiers = null,
         PackedComponentPool<DeadComponent>? deadEntities = null,
         MultiComponentPool<AbilityScoreComponent>? abilityScores = null,
@@ -82,19 +111,19 @@ public sealed class DelayedActionSystem : ISystem
         _bodyParts = bodyParts;
         _dodgingEntities = dodgingEntities;
 
-        _stripeSet = EntityStripeSet.CreateAndWire(StripeCount, pendingActions);
+        _tieredStripeSet = ProcessingTierWiring.CreateAndWire(StripeCount, pendingActions, processingTiers, processingTierEvents);
     }
 
-    /// <summary>Updates the delayed actions for the entities in the specified entity stripe</summary>
+    /// <summary>Updates the delayed actions for whichever entities are due this frame, across every tier.</summary>
     /// <remarks>
     /// Delayed actions are resolved when the action lock is released.
     /// Each delayed action sets its own action lock duration.
     /// </remarks>
     /// <param name="time">The current engine time</param>
-    /// <param name="stripeIndex">The index of the entity stripe to update</param>
+    /// <param name="stripeIndex">Unused -- TieredEntityStripeSet.GetDueEntities computes its own per-tier due bucket from time.FrameCount directly (see ActionLockSystem's identical shape), not from SystemManager's own rotating stripeIndex.</param>
     public void Update(EngineTime time, byte stripeIndex)
     {
-        foreach (var entityId in _stripeSet.GetBucket(stripeIndex))
+        foreach (var entityId in _tieredStripeSet.GetDueEntities(time.FrameCount))
         {
             if (_deadEntities?.Has(entityId) == true)
             {

@@ -63,6 +63,9 @@ public sealed class MapWindow : Window
     /// <summary>Fraction of a tile's own size the charging-action badge renders at, matching LootBagBadgeSizeFraction's own scale.</summary>
     private const float ChargingBadgeSizeFraction = 0.4f;
 
+    /// <summary>Fraction of TargetSelectionMaskAlpha used for the always-visible full-tile backdrop drawn under the growing charge fill -- keeps a multi-tile Delayed action's whole target shape legible from the first frame of the windup, not just once each tile's own fill has grown enough to be seen.</summary>
+    private const float ChargeBackdropAlphaFraction = 0.3f;
+
     private readonly World _world;
     private readonly MapViewState _mapViewState;
     private readonly MapCamera _camera;
@@ -91,6 +94,15 @@ public sealed class MapWindow : Window
 
     /// <summary>This frame's "an earlier hotkey handler already used this key" set -- cleared and repopulated every OnHotkeysAction call, before PlayerMovementController.HandleInput reads it. See that class's own doc comment for why this exists (today: Dodge's directional confirm claiming WASD ahead of plain movement).</summary>
     private readonly HashSet<Keys> _claimedKeysThisFrame = [];
+
+    /// <summary>Per-entity real-elapsed-frames-since-charge-started, backing TrackChargeElapsedFraction -- see that method's own doc comment for why this counts elapsed time rather than reading ActionLockComponent's own stepped countdown. Pruned every DrawTargetingHighlights call by PruneChargeFillSmoothingState.</summary>
+    private readonly Dictionary<int, float> _chargeFillElapsedFrames = [];
+
+    /// <summary>Reused by PruneChargeFillSmoothingState -- avoids a per-frame allocation to collect the entity ids to remove while iterating _chargeFillElapsedFrames' own keys (can't Remove mid-iteration).</summary>
+    private readonly List<int> _staleChargeFillEntityIdsBuffer = [];
+
+    /// <summary>Reused by PruneChargeFillSmoothingState -- the current frame's charging-entity ids, built once so membership checks are O(1) instead of a linear re-scan per stale-candidate.</summary>
+    private readonly HashSet<int> _activeChargingEntityIdsBuffer = [];
 
     private readonly TileRenderer _tileRenderer;
     private readonly LabelRenderer _labelRenderer;
@@ -333,7 +345,7 @@ public sealed class MapWindow : Window
         _tileRenderer.DrawBackgrounds(spriteBatch, unitRectangle, _backgroundCache.Colors, _camera.TileColumns, _camera.TileRows, _camera.CurrentTileSize, _camera.RenderPixelOffset);
         DrawGlyphs(spriteBatch, unitRectangle);
         DrawGlowOverlay(spriteBatch, unitRectangle);
-        DrawTargetingHighlights(spriteBatch, unitRectangle);
+        DrawTargetingHighlights(spriteBatch, unitRectangle, gameTime);
 
         if (_mapViewState.InspectionMode == InspectionMode.Detail)
         {
@@ -416,8 +428,11 @@ public sealed class MapWindow : Window
     /// the "delayed actions keep the target shape drawn on the map... until they activate" half of
     /// Combat Overhaul: Dodge (TODO.md).
     /// </summary>
-    private void DrawTargetingHighlights(SpriteBatch spriteBatch, Texture2D unitRectangle)
+    private void DrawTargetingHighlights(SpriteBatch spriteBatch, Texture2D unitRectangle, GameTime gameTime)
     {
+        var elapsedSimulationFrames = (float)(gameTime.ElapsedGameTime.TotalSeconds * GameTiming.FramesPerSecond);
+        _activeChargingEntityIdsBuffer.Clear();
+
         if (_mapViewState.TargetableTiles is { Count: > 0 } targetableTiles)
         {
             foreach (var tile in targetableTiles)
@@ -436,15 +451,22 @@ public sealed class MapWindow : Window
         }
         else if (_actionTargeting.PendingDelayedActionTargetTiles is { } pendingTargetTiles)
         {
+            // The player is always eligible regardless of tier -- it's the camera anchor, always
+            // relevant -- so it's tracked here unconditionally rather than through the Local-tier
+            // check below, which only applies to every OTHER entity.
+            _activeChargingEntityIdsBuffer.Add(_world.PlayerEntityId);
+            var fillFraction = TryGetChargeFraction(_world.PlayerEntityId, elapsedSimulationFrames);
             foreach (var tile in pendingTargetTiles)
             {
-                DrawMaskedTileHighlight(spriteBatch, unitRectangle, tile.X, tile.Y, CombatTargetPalette.PlayerTargetColor);
+                DrawChargeFillHighlight(spriteBatch, unitRectangle, tile.X, tile.Y, CombatTargetPalette.PlayerTargetColor, fillFraction);
             }
         }
 
         // Every OTHER entity's own Delayed-action telegraph -- red (undodgeable) or yellow
         // (Dodgeable), per Combat Overhaul: Dodge. The player's own is already drawn above (dark
         // green, "player target"), so it's skipped here to avoid drawing it twice.
+        // AllPendingDelayedActionTargets itself already scopes this to Local processing tier (see
+        // that method's own doc comment) -- MapWindow doesn't need its own second tier check here.
         foreach (var (entityId, targetTiles, isDodgeable) in _actionTargeting.AllPendingDelayedActionTargets())
         {
             if (entityId == _world.PlayerEntityId)
@@ -452,12 +474,17 @@ public sealed class MapWindow : Window
                 continue;
             }
 
+            _activeChargingEntityIdsBuffer.Add(entityId);
+
             var borderColor = isDodgeable ? CombatTargetPalette.EnemyDodgeableColor : CombatTargetPalette.EnemyUndodgeableColor;
+            var fillFraction = TryGetChargeFraction(entityId, elapsedSimulationFrames);
             foreach (var tile in targetTiles)
             {
-                DrawMaskedTileHighlight(spriteBatch, unitRectangle, tile.X, tile.Y, borderColor);
+                DrawChargeFillHighlight(spriteBatch, unitRectangle, tile.X, tile.Y, borderColor, fillFraction);
             }
         }
+
+        PruneChargeFillSmoothingState();
 
         DrawDodgeDirectionalHints(spriteBatch);
     }
@@ -554,6 +581,127 @@ public sealed class MapWindow : Window
         }
 
         spriteBatch.Draw(unitRectangle, tileRectangle, borderColor * TargetSelectionMaskAlpha);
+    }
+
+    /// <summary>
+    /// 0 at charge start -&gt; 1 at activation, inverted from ActionLockContent's own remaining/
+    /// total framing, per the Enemy Attack Indicator TODO's own wording. Guards
+    /// CurrentLockTotalFrames == 0 (no lock) the same way ActionLockContent.Update does.
+    /// </summary>
+    /// <remarks>
+    /// This does NOT read CurrentLockFramesRemaining -- it deliberately never did smoothly, and
+    /// briefly did via a "climb toward the raw stepped value, never exceed it" design that turned
+    /// out to hide a real bug: DelayedActionSystem resolves and removes
+    /// PendingDelayedActionComponent in the exact same tiered visit that finally observes
+    /// CurrentLockFramesRemaining == 0, so the raw value is NEVER actually observable at 0 --
+    /// the last frame this entity is ever seen pending, it's frozen at whatever
+    /// CurrentLockFramesRemaining held after the second-to-last decrement (up to
+    /// ActionLockSystem's own StripeCountValue - 1 frames short of the true end), then the entity
+    /// simply vanishes. Confirmed live: every indicator completed at roughly 80-90% and never
+    /// higher. See TrackChargeElapsedFraction below for the fix (elapsed real time since this
+    /// charge started, not the stepped countdown at all).
+    /// </remarks>
+    private float TryGetChargeFraction(int entityId, float elapsedSimulationFrames)
+    {
+        if (!_actionLockPool.TryGetReadonly(entityId, out var actionLock) || actionLock.CurrentLockTotalFrames <= 0)
+        {
+            return 0f;
+        }
+
+        return TrackChargeElapsedFraction(entityId, actionLock.CurrentLockTotalFrames, elapsedSimulationFrames);
+    }
+
+    /// <summary>
+    /// Fraction of CurrentLockTotalFrames elapsed since this specific charge was first observed,
+    /// accumulated from real elapsed time (elapsedSimulationFrames, via GameTiming.FramesPerSecond
+    /// -- robust to any Draw/Update cadence mismatch) rather than derived from
+    /// ActionLockComponent's own stepped countdown at all -- see TryGetChargeFraction's own remarks
+    /// for why reading that countdown directly caps the fill short of 100%. Reaching exactly 1
+    /// right at totalFrames means this can show "done" a few frames before DelayedActionSystem's
+    /// own next tiered visit actually resolves the effect (the same up-to-StripeCountValue-1-frame
+    /// slop already inherent to the countdown this mirrors) -- a brief, barely-perceptible "full and
+    /// waiting" instead of a perpetual shortfall. Safe to never reconcile against the real
+    /// CurrentLockFramesRemaining because AllPendingDelayedActionTargets/
+    /// PendingDelayedActionTargetTiles already scope every caller of this method to Local tier --
+    /// nothing slower-than-nominal (see the old TestDummyBlueprint mis-tiering bug this codebase
+    /// already hit once) ever reaches this code to begin with.
+    /// </summary>
+    private float TrackChargeElapsedFraction(int entityId, ushort totalFrames, float elapsedSimulationFrames)
+    {
+        if (!_chargeFillElapsedFrames.TryGetValue(entityId, out var elapsedFrames))
+        {
+            // First observation of this entity's charge always starts counting from 0, even if
+            // the real windup is already partway through -- correct for the overwhelmingly common
+            // case (a Local-tier entity's charge starts the same frame PendingDelayedActionComponent
+            // is created, so tracking begins at the very first Draw call after that, effectively
+            // elapsed 0 already). The one known gap: an entity that crosses INTO Local tier
+            // mid-charge (player closing distance on an already-charging, previously-untracked
+            // entity) would restart its visible fill from 0% instead of resuming from its true
+            // progress -- accepted as narrow and self-correcting (one full totalFrames-long fill
+            // later, it reads correctly), not worth threading the real elapsed time through for.
+            elapsedFrames = 0f;
+        }
+
+        elapsedFrames = Math.Min(elapsedFrames + elapsedSimulationFrames, totalFrames);
+        _chargeFillElapsedFrames[entityId] = elapsedFrames;
+        return elapsedFrames / totalFrames;
+    }
+
+    /// <summary>
+    /// Drops smoothing state for any entity DrawTargetingHighlights didn't see charging this
+    /// frame -- otherwise every entity that ever charged a Delayed action during the session
+    /// would keep an entry forever. _activeChargingEntityIdsBuffer is DrawTargetingHighlights'
+    /// own already-built set (player included when charging, every Local-tier-or-closer other
+    /// entity), not a second pool scan.
+    /// </summary>
+    /// <remarks>
+    /// O(D + A) (D = _chargeFillElapsedFrames.Count, A = _activeChargingEntityIdsBuffer.Count,
+    /// both already bounded to Local tier by the caller) via HashSet.Contains, not O(D * A) -- an
+    /// earlier version linear-scanned a plain list per stale-candidate, which is fine for a
+    /// couple of entities but becomes the exact "unstriped, full-population scan every single
+    /// Draw call" anti-pattern TestCombatBehaviorSystem's own doc comment already flags as this
+    /// codebase's prior ~2fps incident, once enough entities across the map are simultaneously
+    /// mid-windup at once.
+    /// </remarks>
+    private void PruneChargeFillSmoothingState()
+    {
+        if (_chargeFillElapsedFrames.Count == 0)
+        {
+            return;
+        }
+
+        _staleChargeFillEntityIdsBuffer.Clear();
+        foreach (var entityId in _chargeFillElapsedFrames.Keys)
+        {
+            if (!_activeChargingEntityIdsBuffer.Contains(entityId))
+            {
+                _staleChargeFillEntityIdsBuffer.Add(entityId);
+            }
+        }
+
+        foreach (var staleEntityId in _staleChargeFillEntityIdsBuffer)
+        {
+            _chargeFillElapsedFrames.Remove(staleEntityId);
+        }
+    }
+
+    /// <summary>
+    /// A charging Delayed action's own per-tile telegraph -- an always-visible, dim full-tile
+    /// backdrop (ChargeBackdropAlphaFraction of DrawMaskedTileHighlight's own alpha, so a
+    /// multi-tile target shape still reads as one coherent zone from the first frame of the
+    /// windup) plus a brighter bottom-up fill on top that grows with fillFraction, reaching
+    /// DrawMaskedTileHighlight's own full alpha -- and its own full-tile coverage -- exactly as
+    /// the action activates. See PLAN-charge-attack-fill-indicator.md.
+    /// </summary>
+    private void DrawChargeFillHighlight(SpriteBatch spriteBatch, Texture2D unitRectangle, int mapNodeX, int mapNodeY, Color fillColor, float fillFraction)
+    {
+        if (!TryGetTileRectangle(mapNodeX, mapNodeY, out var tileRectangle))
+        {
+            return;
+        }
+
+        spriteBatch.Draw(unitRectangle, tileRectangle, fillColor * TargetSelectionMaskAlpha * ChargeBackdropAlphaFraction);
+        TileFillRenderer.DrawBottomUpFill(spriteBatch, unitRectangle, tileRectangle, fillFraction, fillColor * TargetSelectionMaskAlpha);
     }
 
     /// <summary>The inspector's own "this tile is selected" highlight -- a light-blue interior-fade glow (see GridSquareRenderer's own use of the same GlowMode.InteriorFade for inventory cells, so the two read as the same visual language) rather than DrawMaskedTileHighlight's flat wash, so terrain/sprites underneath stay fully legible through the ring gaps instead of being tinted.</summary>

@@ -23,19 +23,32 @@ namespace Game.Blueprints.NPCs.Generic;
 /// this pairs with (deliberately not TestCombatBehaviorSystem's engage/chase logic, which a
 /// stationary dummy has no use for).
 ///
-/// Explicitly granted ProcessingTierComponent(Local): ProcessingTierSystem's own membership is
-/// driven off MovementComponent (see its own doc comment) -- an entity with none, like this one,
-/// is *never* visited by it and so never gets a real tier computed at all, permanently reading as
-/// the Beyond fallback (ProcessingTierWiring's own "fail open to Beyond" default for "no component
-/// yet") to every *other* tiered consumer. That's a real, confirmed bug: ActionLockSystem/
-/// ActionCooldownSystem/SimpleHealthRegenSystem are all tiered off this same component, and each
-/// decrements its own countdown by a flat per-visit amount that assumes Local's cadence -- at
-/// Beyond's 8x-longer-between-visits cadence (ProcessingTierDivisors.ByTierIndex), the same flat
-/// decrement makes every one of those countdowns (Power Attack's own windup/cooldown, this dummy's
-/// own regen) run roughly 8x slower than intended. Hardcoding Local here (this dummy always spawns
-/// right next to the player and never moves, so it's never wrong in practice) sidesteps the whole
-/// class of bug rather than granting a MovementComponent purely to be tracked, which would pull in
-/// MovementSystem/TestCombatBehaviorSystem machinery this stationary fixture has no use for.
+/// Explicitly granted ProcessingTierComponent(Local), first in Build (order matters -- see below):
+/// ProcessingTierSystem's own membership is driven off MovementComponent (see its own doc comment)
+/// -- an entity with none, like this one, is *never* visited by it and so never gets a real tier
+/// computed at all, permanently reading as the Beyond fallback (ProcessingTierWiring's own "fail
+/// open to Beyond" default for "no component yet") to every *other* tiered consumer. That's a real,
+/// confirmed bug: ActionLockSystem/ActionCooldownSystem/SimpleHealthRegenSystem are all tiered off
+/// this same component, and each decrements its own countdown by a flat per-visit amount that
+/// assumes Local's cadence -- at Beyond's 8x-longer-between-visits cadence (ProcessingTierDivisors
+/// .ByTierIndex), the same flat decrement makes every one of those countdowns (Power Attack's own
+/// windup/cooldown, this dummy's own regen) run roughly 8x slower than intended. Hardcoding Local
+/// here (this dummy always spawns right next to the player and never moves, so it's never wrong in
+/// practice) sidesteps the whole class of bug rather than granting a MovementComponent purely to be
+/// tracked, which would pull in MovementSystem/TestCombatBehaviorSystem machinery this stationary
+/// fixture has no use for.
+///
+/// Ordering within Build is load-bearing, confirmed by a real regression: each of those tiered
+/// systems' own TieredEntityStripeSet reads this entity's current ProcessingTierComponent exactly
+/// once, the instant its own driving component (ActionLockComponent for ActionLockSystem,
+/// SimpleHealthComponent for SimpleHealthRegenSystem, ...) is merged, and caches that tier
+/// permanently -- nothing re-triggers the read later, since ProcessingTierSystem never visits this
+/// entity at all. Granting ProcessingTierComponent *after* ActionLockComponent/SimpleHealthComponent
+/// (an earlier version of this method did) silently reintroduces the exact Beyond-tier
+/// misclassification this grant exists to prevent, for those two systems specifically, regardless of
+/// the Local value landing correctly a few lines later -- observed live as a visibly choppy,
+/// catch-up-then-pause charge-fill indicator on this dummy (its lock's own countdown only actually
+/// advancing at Beyond's cadence). See Build's own comment for the fix.
 /// </summary>
 public sealed class TestDummyBlueprint : IBlueprint
 {
@@ -61,13 +74,24 @@ public sealed class TestDummyBlueprint : IBlueprint
 
     public void Build(ComponentManager componentManager, int entityId)
     {
+        // Granted first, deliberately -- every TieredEntityStripeSet-consuming system (ActionLockSystem/
+        // SimpleHealthRegenSystem/...) reads ProcessingTierComponent exactly once, the instant its
+        // own driving component (ActionLockComponent/SimpleHealthComponent/...) is merged below,
+        // and caches that tier permanently (nothing re-triggers it later -- ProcessingTierSystem
+        // itself never visits this MovementComponent-less entity). Granting this any later than
+        // first would silently reintroduce the exact Beyond-tier misclassification this component
+        // exists to prevent, for whichever driving components happened to be merged first -- a real
+        // regression once observed live (a visibly choppy, catch-up-then-pause charge-fill
+        // indicator on this dummy specifically, its own countdown only actually advancing at
+        // Beyond's 8x-slower cadence despite this grant).
+        componentManager.Merge(entityId, new ProcessingTierComponent(ProcessingTierLevel.Local));
+
         componentManager.Merge(entityId, new DisplayTextComponent( Name, Description));
         componentManager.Merge(entityId, new GlyphComponent(Glyph, Color.Purple));
         componentManager.Merge(entityId, new SimpleHealthComponent(MaximumHealth, MaximumHealth));
         componentManager.Merge(entityId, new ActionLockComponent(standardLockFrames: StandardLockFrames, currentLockTotalFrames: 0, currentLockFramesRemaining: 0));
         componentManager.Merge(entityId, new TransformComponent(new Vector3Int(-1, -1, (int)MapLayer.Ground), new Vector2Byte(1, 1)));
         componentManager.Merge(entityId, new TestDummyComponent());
-        componentManager.Merge(entityId, new ProcessingTierComponent(ProcessingTierLevel.Local));
 
         foreach (var abilityScoreType in Enum.GetValues<AbilityScoreType>())
         {

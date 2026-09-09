@@ -12,6 +12,7 @@ using Game.Modules.Inventory;
 using Game.Modules.Inventory.Components;
 using Game.Modules.Mana.Components;
 using Game.Modules.Movement.Components;
+using Game.Modules.ProcessingTier.Components;
 using Game.World;
 using Microsoft.Xna.Framework;
 using Microsoft.Xna.Framework.Input;
@@ -43,7 +44,8 @@ public sealed class ActionTargetingController(
     PackedComponentPool<ActionLockComponent> actionLocks,
     PackedComponentPool<MovementComponent> movementPool,
     PackedComponentPool<ManaComponent>? manaPool = null,
-    MultiComponentPool<AbilityScoreComponent>? abilityScores = null)
+    MultiComponentPool<AbilityScoreComponent>? abilityScores = null,
+    DirectComponentPool<ProcessingTierComponent>? processingTiers = null)
 {
     /// <summary>A second press of the same slot within this many frames of the first is a double-tap (auto-target the closest candidate, see HandleHotkeySlotPress), as opposed to a slower second press (confirm against the cursor, same as a click). Reads UiInputController's own shared click/double-click window rather than an independently tuned value, so mouse double-click and keyboard double-tap always agree.</summary>
     private static readonly int DoubleTapWindowFrames = UiInputController.DoubleClickWindowFrames;
@@ -104,14 +106,26 @@ public sealed class ActionTargetingController(
     private readonly List<(int EntityId, Vector3Int[] TargetTiles, bool IsDodgeable)> _pendingDelayedActionTargetsBuffer = [];
 
     /// <summary>
-    /// Every entity (player included) currently mid-windup on a Delayed action, with its
+    /// Every entity (player included) currently mid-windup on a Delayed action AND within Local
+    /// processing tier (or the player, always included regardless of tier -- see below), with its
     /// already-resolved target tiles and whether that action is Dodgeable -- generalizes
     /// PendingDelayedActionTargetTiles beyond just the player so MapWindow can telegraph an
     /// enemy's incoming attack too (red/yellow, see CombatTargetPalette), not only the player's own
     /// (dark green). pendingDelayedActions is a small PackedComponentPool -- direct dense
-    /// iteration via EntityIds/Components, no new spatial index needed, since the number of
-    /// entities ever mid-windup at once is small and bounded. Reads the catalog definition
-    /// directly rather than resolving a per-instance Override: ActionOverrideEffects.
+    /// iteration via EntityIds/Components, no new spatial index needed -- but "the number of
+    /// entities ever mid-windup at once is small and bounded" (this method's own earlier
+    /// assumption) turned out false at this game's real population scale: a live diagnostics
+    /// capture showed over 10,000 concurrently-pending entities map-wide (PLAN-charge-attack-fill-
+    /// indicator.md's own addenda has the full incident). Local-tier filtering happens HERE, before
+    /// the catalog/Tag lookup below, specifically so an off-screen entity costs one
+    /// ProcessingTierComponent read and nothing more -- filtering only in MapWindow after this
+    /// method already built a tuple (and ran the catalog/Tag lookup) for all ~10,000 would still
+    /// pay that cost for entities the caller immediately discards. processingTiers is optional
+    /// (null in test fixtures that don't wire it, e.g. MapWindowTests/ActionTargetingControllerDodgeTests/
+    /// HotbarControllerTests) -- null means "no tier data available," so every pending entity
+    /// passes, matching this method's own pre-tier-filtering behavior exactly (safe default, not a
+    /// silent behavior change for callers that never asked for tier scoping). Reads the catalog
+    /// definition directly rather than resolving a per-instance Override: ActionOverrideEffects.
     /// OverrideFlatDamage (the only Override producer today) never touches Tags, so the catalog's
     /// own Tags are always correct here regardless of any per-race damage override.
     /// </summary>
@@ -121,10 +135,18 @@ public sealed class ActionTargetingController(
 
         var entityIds = pendingDelayedActions.EntityIds;
         var components = pendingDelayedActions.Components;
+        var playerEntityId = world.PlayerEntityId;
         for (var denseIndex = 0; denseIndex < pendingDelayedActions.Count; denseIndex++)
         {
+            var entityId = entityIds[denseIndex];
+            if (entityId != playerEntityId && processingTiers is not null &&
+                (!processingTiers.TryGetReadonly(entityId, out var tier) || tier.Tier != ProcessingTierLevel.Local))
+            {
+                continue;
+            }
+
             var isDodgeable = actionCatalog.TryGet(components[denseIndex].ActionId, out var action) && action.Tags.Contains(Tag.Dodgeable);
-            _pendingDelayedActionTargetsBuffer.Add((entityIds[denseIndex], components[denseIndex].TargetTiles, isDodgeable));
+            _pendingDelayedActionTargetsBuffer.Add((entityId, components[denseIndex].TargetTiles, isDodgeable));
         }
 
         return _pendingDelayedActionTargetsBuffer;

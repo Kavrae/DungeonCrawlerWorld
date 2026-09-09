@@ -1,7 +1,6 @@
 using Engine.ECS.Components.Stores;
 using Engine.ECS.Systems;
 using Engine.Math;
-using Game.Blueprints.Races;
 using Game.Modules.Actions;
 using Game.Modules.Actions.Components;
 using Game.Modules.Actions.Definitions.DirectActions;
@@ -21,14 +20,14 @@ namespace Game.Modules.NpcBehavior.Systems;
 
 /// <summary>
 /// Temporary, deliberately generic priority-chain decision-maker for MovementMode.Random
-/// entities: below-half-health-with-a-potion -> self-heal; adjacent to the player or a Fairy ->
-/// melee (randomly QuickAttack or PowerAttack, see TryDecideMeleeAttack); otherwise -> wander, the
-/// same coin-flip-idle-or-move logic MovementSystem's own Random-mode branch used to own before
-/// this system replaced it (see MovementSystem's own doc comment on why it's purely reactive now).
-/// Runs before MovementSystem every frame (see GameBootstrapper's module order) so a heal/attack
-/// decision this tick actually prevents MovementSystem from also moving the same entity the same
-/// frame -- MovementSystem checks for a queued Pending*ActivationComponent before it executes
-/// anything.
+/// entities: below-half-health-with-a-potion -> self-heal; adjacent to an entity of a different
+/// race -> melee (randomly QuickAttack or PowerAttack, see TryDecideMeleeAttack); otherwise ->
+/// wander, the same coin-flip-idle-or-move logic MovementSystem's own Random-mode branch used to
+/// own before this system replaced it (see MovementSystem's own doc comment on why it's purely
+/// reactive now). Runs before MovementSystem every frame (see GameBootstrapper's module order) so
+/// a heal/attack decision this tick actually prevents MovementSystem from also moving the same
+/// entity the same frame -- MovementSystem checks for a queued Pending*ActivationComponent before
+/// it executes anything.
 ///
 /// Not goblin-specific by name or by filter, despite currently only being exercised by Goblins
 /// (the only race with both QuickAttack/PowerAttack and, per Goblin's starting-kit change,
@@ -38,13 +37,15 @@ namespace Game.Modules.NpcBehavior.Systems;
 /// a new system class per NPC race: a future race that wants this exact temporary loadout just
 /// needs the same components granted, not a new system.
 ///
-/// One accepted consequence of that generic filter, worth being explicit about: Fairies also
-/// carry a QuickAttack ActionInstanceComponent, so a Fairy adjacent to *another* Fairy will also
-/// attack it under this system's plain "player or Fairy" attackable-check -- nothing here
-/// excludes "an entity of my own race." This is a real, visible quirk of the generic design, not
-/// a bug -- see TODO.md's entry on composing entity behavior from smaller, race-configurable
-/// pieces (aggressive/cowardly/prefers-melee/prefers-potions/...), which is where "don't attack
-/// my own kind" belongs once it exists, rather than hardcoding it into this temporary stand-in.
+/// "Different race" (IsAttackable) is a real RaceComponent comparison, not a name/id allowlist --
+/// an entity with no RaceComponent at all is never attackable (nothing to compare), and two
+/// entities sharing the same race never attack each other (a Fairy adjacent to another Fairy no
+/// longer does, unlike this system's earlier player-or-Fairy-only check). The player counts as
+/// "a different race" the ordinary way, by actually being Human (PLAN-human-race.md) -- no
+/// explicit player special-case needed. See TODO.md's entry on composing entity behavior from
+/// smaller, race-configurable pieces (aggressive/cowardly/prefers-melee/prefers-potions/...) for
+/// where finer-grained targeting (e.g. faction alliances that aren't just "same race or not")
+/// belongs once it exists, rather than hardcoding it into this temporary stand-in.
 ///
 /// This class is explicitly a stand-in for that future composite-behavior system, not the real
 /// thing -- named "Test" deliberately so nothing mistakes it for a permanent design.
@@ -73,7 +74,6 @@ public sealed class TestCombatBehaviorSystem : ISystem
     private readonly PackedComponentPool<PendingConsumableActivationComponent> _pendingConsumableActivations;
     private readonly IMapQuery _mapQuery;
     private readonly MathUtility _mathUtility;
-    private readonly IPlayerQuery? _playerQuery;
     private readonly PackedComponentPool<DeadComponent>? _deadEntities;
     private readonly EntityStripeSet _stripeSet;
 
@@ -92,7 +92,6 @@ public sealed class TestCombatBehaviorSystem : ISystem
         PackedComponentPool<PendingConsumableActivationComponent> pendingConsumableActivations,
         IMapQuery mapQuery,
         MathUtility mathUtility,
-        IPlayerQuery? playerQuery,
         PackedComponentPool<DeadComponent>? deadEntities = null)
     {
         _movementPool = movementPool;
@@ -107,7 +106,6 @@ public sealed class TestCombatBehaviorSystem : ISystem
         _pendingConsumableActivations = pendingConsumableActivations;
         _mapQuery = mapQuery;
         _mathUtility = mathUtility;
-        _playerQuery = playerQuery;
         _deadEntities = deadEntities;
 
         _stripeSet = EntityStripeSet.CreateAndWire(StripeCount, movementPool);
@@ -198,9 +196,17 @@ public sealed class TestCombatBehaviorSystem : ISystem
             return false;
         }
 
+        // No race, no notion of "a different race" to attack -- bail before even resolving the
+        // footprint. Every real race blueprint grants a RaceComponent, so this only ever fires
+        // defensively (this system explicitly isn't goblin-specific, see its own doc comment).
+        if (!TryGetRaceId(entityId, out var attackerRaceId))
+        {
+            return false;
+        }
+
         TargetShapeResolver.Resolve(TargetShape.Adjacent, transform.Position, transform.Size, transform.Position, range: 0, areaSize: 0, _mapQuery.MapSize, _adjacentTilesBuffer);
 
-        if (!HasAttackableNeighbor(_adjacentTilesBuffer))
+        if (!HasAttackableNeighbor(_adjacentTilesBuffer, attackerRaceId))
         {
             return false;
         }
@@ -215,13 +221,13 @@ public sealed class TestCombatBehaviorSystem : ISystem
     /// Blocking targets only, so a non-Blocking Fairy/player sharing an adjacent tile still
     /// counts.
     /// </summary>
-    private bool HasAttackableNeighbor(List<Vector3Int> adjacentTiles)
+    private bool HasAttackableNeighbor(List<Vector3Int> adjacentTiles, Guid attackerRaceId)
     {
         foreach (var tile in adjacentTiles)
         {
             foreach (var occupantEntityId in _mapQuery.GetOccupantEntityIdsAt(tile))
             {
-                if (IsAttackable(occupantEntityId))
+                if (IsAttackable(occupantEntityId, attackerRaceId))
                 {
                     return true;
                 }
@@ -231,19 +237,30 @@ public sealed class TestCombatBehaviorSystem : ISystem
         return false;
     }
 
-    private bool IsAttackable(int candidateEntityId) =>
-        candidateEntityId == _playerQuery?.PlayerEntityId || IsFairy(candidateEntityId);
+    /// <summary>
+    /// Excludes a dead candidate first -- a corpse stays fully populated and occupying its tile
+    /// for future looting (DeathSystem never calls EntityManager.DestroyEntity, see this repo's
+    /// own IMPLEMENTATION-NOTES.md). Then requires the candidate to actually carry a RaceComponent
+    /// of a race different from the attacker's own -- a raceless entity (a shop, a container, any
+    /// non-creature prop) is never attackable, and two entities of the same race never attack each
+    /// other (see this class's own doc comment on why that's now a real comparison, not a
+    /// player-or-Fairy allowlist).
+    /// </summary>
+    private bool IsAttackable(int candidateEntityId, Guid attackerRaceId) =>
+        _deadEntities?.Has(candidateEntityId) != true &&
+        TryGetRaceId(candidateEntityId, out var candidateRaceId) &&
+        candidateRaceId != attackerRaceId;
 
-    private bool IsFairy(int entityId)
+    /// <summary>First RaceComponent found for entityId (a real entity carries exactly one), or false if it has none.</summary>
+    private bool TryGetRaceId(int entityId, out Guid raceId)
     {
         for (var denseIndex = _raceComponents.GetFirstDenseIndex(entityId); denseIndex != -1; denseIndex = _raceComponents.GetNextDenseIndex(denseIndex))
         {
-            if (_raceComponents.GetReadonlyByDenseIndex(denseIndex).Id == Fairy.RaceId)
-            {
-                return true;
-            }
+            raceId = _raceComponents.GetReadonlyByDenseIndex(denseIndex).Id;
+            return true;
         }
 
+        raceId = default;
         return false;
     }
 
