@@ -19,6 +19,7 @@ namespace DungeonCrawlerWorld;
 /// </summary>
 public static class WorldSessionBootstrapper
 {
+    /// <param name="randomSeed">Seed for the shared MathUtility this session's entire simulation draws from -- see RandomSeed and the body's own note on what it does and does not cover.</param>
     public static WorldSessionContext Build(
         int floorNumber,
         string modsDirectory,
@@ -27,11 +28,12 @@ public static class WorldSessionBootstrapper
         int minCrawlerNumber,
         int maxCrawlerNumber,
         string playerActivityLogFilePath,
-        DiagnosticsEngine diagnostics)
+        DiagnosticsEngine diagnostics,
+        int randomSeed)
     {
         ArgumentNullException.ThrowIfNull(diagnostics);
 
-        var mathUtility = new MathUtility();
+        var mathUtility = new MathUtility(new Random(randomSeed));
         var crawlerNumberAllocator = new UniqueNumberAllocator(mathUtility, minCrawlerNumber, maxCrawlerNumber);
 
         World world;
@@ -83,6 +85,6 @@ public static class WorldSessionBootstrapper
             ecsContext.EventBus.Publish(new FloorEnteredEvent(floorNumber));
         }
 
-        return new WorldSessionContext(world, ecsContext, mathUtility, bootstrapResult.MovedEntities, crawlerNumberAllocator, bootstrapResult.ActionCatalog, bootstrapResult.ItemCatalog, playerActivityLog, bootstrapResult.StatusEffectDisplays, reservedEntityIds);
+        return new WorldSessionContext(world, ecsContext, mathUtility, bootstrapResult.MovedEntities, crawlerNumberAllocator, bootstrapResult.ActionCatalog, bootstrapResult.ItemCatalog, playerActivityLog, bootstrapResult.StatusEffectDisplays, reservedEntityIds, bootstrapResult.LocalTierRoster);
     }
 }

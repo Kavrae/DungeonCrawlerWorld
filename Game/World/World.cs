@@ -1,5 +1,6 @@
 using Engine.ECS.Components.Stores;
 using Engine.ECS.Entities;
+using Engine.Events;
 using Engine.Math;
 using Game.Modules.Core.Components;
 
@@ -27,6 +28,9 @@ public sealed class World(Map map) : IMapQuery, IPlayerQuery
     /// <summary>Used by PlaceTerrainOnMap to destroy any terrain entity it replaces.</summary>
     /// <remarks>World is constructed before Bootstrapper.Build produces an EntityManager (see NonBlockingComponents/ForceBlockingComponents above for why), so this can't be a constructor dependency either -- wired up the same way, post-construction.</remarks>
     public EntityManager? EntityManager { get; set; }
+
+    /// <summary>Used by PlaceTerrainOnMap to publish TerrainChangedEvent. Optional and post-construction for exactly the same reason as EntityManager above -- and null-tolerant for the same reason too: a World built directly (tests, TestMapBuilder before Bootstrapper.Build has run) simply publishes nothing, which is correct, since nothing has subscribed at that point either.</summary>
+    public EventBus? EventBus { get; set; }
 
     /// <summary> Moves entityId's map-index presence from transformComponent.Position to newPosition.</summary>
     /// <remarks>
@@ -299,6 +303,10 @@ public sealed class World(Map map) : IMapQuery, IPlayerQuery
 
         Map.SetTerrainEntityId(x, y, terrainLayer, entityId);
         transformComponent.Position = new Vector3Int(x, y, (int)terrainLayer);
+
+        // Published after the store is actually updated, so a subscriber that re-reads the cell
+        // (MapTerrainCache does, on its next rebuild) sees the new terrain rather than the old.
+        EventBus?.Publish(new TerrainChangedEvent(x, y, terrainLayer));
     }
 
     public bool IsOnMap(Vector3Int coordinates) =>
@@ -324,9 +332,13 @@ public sealed class World(Map map) : IMapQuery, IPlayerQuery
     /// <inheritdoc cref="IMapQuery"/>
     public IReadOnlyList<int> GetOccupantEntityIdsAt(Vector3Int position) => Map.GetOccupantEntityIdsAt(position);
 
+    /// <summary>The allocation-free span form of GetOccupantEntityIdsAt, for the per-frame draw path -- see Map.GetOccupantEntityIdSpanAt for why it exists and what invalidates the span. Not on IMapQuery: that interface is implemented by test doubles, and a span-returning member can't be expressed by every one of them as cheaply as this concrete pass-through.</summary>
+    /// <param name="position">The position to query.</param>
+    public ReadOnlySpan<int> GetOccupantEntityIdSpanAt(Vector3Int position) => Map.GetOccupantEntityIdSpanAt(position);
+
     /// <inheritdoc cref="IMapQuery"/>
     /// <remarks>Explicitly implemented rather than left as IMapQuery's own default -- a default interface method is only callable through an IMapQuery-typed reference, not a concrete World one, and MapWindow (this method's first caller) holds World directly.</remarks>
-    public bool IsPositionOccupied(Vector3Int position) => Map.GetOccupantEntityIdsAt(position).Count > 0;
+    public bool IsPositionOccupied(Vector3Int position) => Map.HasOccupantAt(position);
 
     /// <inheritdoc cref="IMapQuery"/>
     public int GetTerrainEntityIdAt(Vector3Int position) =>

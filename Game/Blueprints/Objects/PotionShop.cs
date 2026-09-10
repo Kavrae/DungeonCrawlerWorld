@@ -18,7 +18,7 @@ public sealed class PotionShop(MathUtility mathUtility) : IBlueprint
     private const string DisplayName = "Potion Shop";
 
     private readonly CompositeBlueprint _composite = new(
-        [new Shop(), new PotionShopStock(mathUtility)],
+        [new Shop(mathUtility), new PotionShopStock(mathUtility)],
         static (componentManager, entityId) =>
             componentManager.TryUpdate(entityId, static (ref DisplayTextComponent displayText) => displayText.Name = DisplayName));
 

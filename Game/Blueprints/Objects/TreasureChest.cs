@@ -60,7 +60,7 @@ public sealed class TreasureChest(MathUtility mathUtility) : IBlueprint
     {
         componentManager.Merge(entityId, new DisplayTextComponent(Name, Description));
         componentManager.Merge(entityId, new GlyphComponent("T", Color.Gold));
-        if (SpriteManifest.TryGet("Inventory", out var sprite))
+        if (SpriteManifest.TryGetRandom("Inventory", mathUtility, out var sprite))
         {
             componentManager.Merge(entityId, sprite);
         }

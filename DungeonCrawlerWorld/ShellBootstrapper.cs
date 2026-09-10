@@ -1,4 +1,4 @@
-using Engine.Diagnostics;
+﻿using Engine.Diagnostics;
 using Engine.ECS.Context;
 using Game.Floors;
 using Game.Modules.AbilityScores.Components;
@@ -76,7 +76,7 @@ public static class ShellBootstrapper
             componentManager.GetPackedPool<MovementComponent>(),
             componentManager.GetPackedPool<ManaComponent>(),
             componentManager.GetMultiPool<AbilityScoreComponent>(),
-            componentManager.GetDirectPool<ProcessingTierComponent>());
+            worldSession.LocalTierRoster);
         var playerMovementController = new PlayerMovementController(
             world,
             componentManager.GetDirectPool<TransformComponent>(),

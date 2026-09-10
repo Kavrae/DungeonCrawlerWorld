@@ -51,11 +51,6 @@ public sealed class ActionActivationSystemTests
     }
 
     /// <summary>Never rolls a crit -- NextDouble always returns 1.0, comfortably above any crit chance -- so damage-amount assertions here stay deterministic.</summary>
-    private sealed class NeverCritRandom : Random
-    {
-        public override double NextDouble() => 1.0;
-    }
-
     private static (ActionActivationSystem System, ComponentManager ComponentManager, ActionCatalog Catalog, FakeMapQuery MapQuery) Build()
     {
         var componentManager = new ComponentManager(initialEntityCapacity: 20, initialComponentCapacity: 10);
@@ -69,7 +64,7 @@ public sealed class ActionActivationSystemTests
 
         var mapQuery = new FakeMapQuery();
         var eventBus = new EventBus();
-        var mathUtility = new MathUtility(new NeverCritRandom());
+        var mathUtility = new MathUtility();
         var damageEffects = new ActionEffect[] { new([new DirectDamage(MinFlatDamage: 0, MaxFlatDamage: 0)]) };
         var targeting = new TargetingSpec(TargetShape.SingleTarget, Range: 10);
 
@@ -156,7 +151,7 @@ public sealed class ActionActivationSystemTests
 
         system.Update(default, 0);
 
-        Assert.AreEqual(85, HealthOf(componentManager, TargetEntityId));
+        DamageAssert.HealthAfterDamage(startingHealth: 100, expectedNormalDamage: 15, HealthOf(componentManager, TargetEntityId));
         Assert.AreEqual(30, componentManager.GetPackedPool<ActionLockComponent>().GetReadonly(CasterEntityId).CurrentLockFramesRemaining);
         Assert.IsFalse(componentManager.GetPackedPool<PendingActionActivationComponent>().Has(CasterEntityId));
     }
@@ -223,7 +218,7 @@ public sealed class ActionActivationSystemTests
 
         system.Update(default, 0);
 
-        Assert.AreEqual(85, HealthOf(componentManager, TargetEntityId));
+        DamageAssert.HealthAfterDamage(startingHealth: 100, expectedNormalDamage: 15, HealthOf(componentManager, TargetEntityId));
         Assert.AreEqual(10, componentManager.GetPackedPool<ActionLockComponent>().GetReadonly(CasterEntityId).CurrentLockFramesRemaining, "The short shared ActionLock.");
         Assert.AreEqual((ushort?)200, CooldownOf(componentManager, CasterEntityId, ImmediateWithCooldownActionId), "The action's own, much longer cooldown -- outlives the shared lock.");
     }
@@ -290,7 +285,7 @@ public sealed class ActionActivationSystemTests
 
         system.Update(default, 0);
 
-        Assert.AreEqual(80, HealthOf(componentManager, TargetEntityId), "FreeCast must fire even though the shared ActionLock is still counting down.");
+        DamageAssert.HealthAfterDamage(startingHealth: 100, expectedNormalDamage: 20, HealthOf(componentManager, TargetEntityId), "FreeCast must fire even though the shared ActionLock is still counting down.");
         Assert.AreEqual(30, componentManager.GetPackedPool<ActionLockComponent>().GetReadonly(CasterEntityId).CurrentLockFramesRemaining, "FreeCast must not touch the shared lock at all.");
         Assert.AreEqual((ushort?)40, CooldownOf(componentManager, CasterEntityId, FreeCastActionId));
     }
@@ -342,7 +337,7 @@ public sealed class ActionActivationSystemTests
 
         system.Update(default, 0);
 
-        Assert.AreEqual(85, HealthOf(componentManager, TargetEntityId));
+        DamageAssert.HealthAfterDamage(startingHealth: 100, expectedNormalDamage: 15, HealthOf(componentManager, TargetEntityId));
         Assert.AreEqual(0, ManaOf(componentManager, CasterEntityId), "Exactly enough -- spent down to 0.");
         Assert.AreEqual(30, componentManager.GetPackedPool<ActionLockComponent>().GetReadonly(CasterEntityId).CurrentLockFramesRemaining);
     }
@@ -374,7 +369,7 @@ public sealed class ActionActivationSystemTests
 
         system.Update(default, 0);
 
-        Assert.AreEqual(85, HealthOf(componentManager, TargetEntityId), "ManaCost 0 (the default) -- no ManaComponent needed at all, same as Punch.");
+        DamageAssert.HealthAfterDamage(startingHealth: 100, expectedNormalDamage: 15, HealthOf(componentManager, TargetEntityId), "ManaCost 0 (the default) -- no ManaComponent needed at all, same as Punch.");
     }
 
     [TestMethod]
@@ -432,7 +427,7 @@ public sealed class ActionActivationSystemTests
 
         var mapQuery = new FakeMapQuery();
         mapQuery.SetOccupant(TargetTile, TargetEntityId);
-        var mathUtility = new MathUtility(new NeverCritRandom());
+        var mathUtility = new MathUtility();
         var meleeActionId = new Guid("88888888-8888-8888-8888-888888888888");
         var actionCatalog = new ActionCatalog();
         actionCatalog.Register(new ActionDefinition(

@@ -6,7 +6,7 @@ using Microsoft.Xna.Framework;
 namespace Game.Blueprints.Terrain;
 
 /// <summary>A patch of ordinary dirt terrain.</summary>
-public sealed class Dirt : IBlueprint
+public sealed class Dirt(MathUtility mathUtility) : IBlueprint
 {
     public void Build(ComponentManager componentManager, int entityId)
     {
@@ -14,7 +14,7 @@ public sealed class Dirt : IBlueprint
         componentManager.Merge(entityId, new DisplayTextComponent("Dirt", "Ordinary dirt. Nothing special."));
         componentManager.Merge(entityId, new TransformComponent(
             new Vector3Int(0, 0, (int)MapLayer.Ground), new Vector2Byte(1, 1)));
-        if (SpriteManifest.TryGet("Dirt", out var sprite))
+        if (SpriteManifest.TryGetRandom("Dirt", mathUtility, out var sprite))
         {
             componentManager.Merge(entityId, sprite);
         }

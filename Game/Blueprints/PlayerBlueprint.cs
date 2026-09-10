@@ -60,7 +60,7 @@ public sealed class PlayerBlueprint(MathUtility mathUtility, UniqueNumberAllocat
             glyph.Glyph = "@";
             glyph.GlyphColor = Color.White;
         });
-        if (SpriteManifest.TryGet("Player", out var sprite))
+        if (SpriteManifest.TryGetRandom("Player", mathUtility, out var sprite))
         {
             componentManager.Merge(entityId, sprite);
         }

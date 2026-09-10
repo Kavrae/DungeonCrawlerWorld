@@ -22,21 +22,30 @@ public sealed class ProcessingTierModule : IGameModule
 
     private IPlayerQuery? _playerQuery;
     private ProcessingTierEvents _events = null!;
+    private LocalTierRoster _localTierRoster = null!;
 
     public void Configure(GameModuleContext context)
     {
         _playerQuery = context.PlayerQuery;
         _events = context.ProcessingTierEvents;
+        _localTierRoster = context.LocalTierRoster;
     }
 
     public void RegisterComponents(ComponentManager componentManager) =>
         componentManager.RegisterDirectPool<ProcessingTierComponent>(static (ref existing, incoming) => existing = incoming);
 
-    public void RegisterSystems(SystemManager systemManager, ComponentManager componentManager) =>
+    /// <summary>Wires LocalTierRoster to the same MovementComponent pool ProcessingTierSystem tiers, so the two can never disagree about who is Local -- see LocalTierRoster.Wire's own parameter note on why the driving pool has to match.</summary>
+    public void RegisterSystems(SystemManager systemManager, ComponentManager componentManager)
+    {
+        var movementComponents = componentManager.GetPackedPool<MovementComponent>();
+
+        _localTierRoster.Wire(movementComponents, _events);
+
         systemManager.Register(new ProcessingTierSystem(
             componentManager.GetDirectPool<TransformComponent>(),
-            componentManager.GetPackedPool<MovementComponent>(),
+            movementComponents,
             componentManager.GetDirectPool<ProcessingTierComponent>(),
             _playerQuery,
             _events));
+    }
 }

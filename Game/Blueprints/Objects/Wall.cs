@@ -6,13 +6,13 @@ using Microsoft.Xna.Framework;
 namespace Game.Blueprints.Objects;
 
 /// <summary>A basic wall object.</summary>
-public sealed class Wall : IBlueprint
+public sealed class Wall(MathUtility mathUtility) : IBlueprint
 {
     public void Build(ComponentManager componentManager, int entityId)
     {
         componentManager.Merge(entityId, new DisplayTextComponent("Wall", "Basic wall. Default implementation."));
         componentManager.Merge(entityId, new GlyphComponent("[][]", Color.DarkGray));
-        if (SpriteManifest.TryGet("Wall", out var sprite))
+        if (SpriteManifest.TryGetRandom("Wall", mathUtility, out var sprite))
         {
             componentManager.Merge(entityId, sprite);
         }

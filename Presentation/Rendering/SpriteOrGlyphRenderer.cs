@@ -8,7 +8,7 @@ namespace Presentation.Rendering;
 /// <summary>
 /// The sprite-vs-glyph decision, shared by every per-icon draw site: MapWindow (map entities),
 /// Folder (HUD icons), and inventory item cells. sprite is already resolved -- callers decide
-/// how (an ECS pool lookup for map entities, SpriteManifest.TryGet by name for HUD/item icons)
+/// how (an ECS pool lookup for map entities, SpriteManifest.TryGetFirst by name for HUD/item icons)
 /// -- so this stays ignorant of where sprite data comes from, which is the only real difference
 /// between call sites. Which tint/glyphColor to pass (e.g. gray for dead/disabled) is each
 /// caller's own decision too -- kept out of here so this stays a pure draw primitive.

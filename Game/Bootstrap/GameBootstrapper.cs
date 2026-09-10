@@ -123,8 +123,9 @@ public static class GameBootstrapper
         world.NonBlockingComponents = ecsContext.ComponentManager.GetMultiPool<NonBlockingComponent>();
         world.ForceBlockingComponents = ecsContext.ComponentManager.GetMultiPool<ForceBlockingComponent>();
         world.EntityManager = ecsContext.EntityManager;
+        world.EventBus = ecsContext.EventBus;
 
-        return new GameBootstrapResult(ecsContext, failures, context.Actions, context.MovedEntities, context.Items, context.StatusEffectDisplays);
+        return new GameBootstrapResult(ecsContext, failures, context.Actions, context.MovedEntities, context.Items, context.StatusEffectDisplays, context.LocalTierRoster);
     }
 
     /// <summary>

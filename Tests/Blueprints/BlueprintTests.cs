@@ -132,7 +132,7 @@ public sealed class BlueprintTests
         var ecsContext = BuildEcsContext();
         var entityId = ecsContext.EntityManager.CreateEntity();
 
-        new Wall().Build(ecsContext.ComponentManager, entityId);
+        new Wall(new MathUtility(new Random(1))).Build(ecsContext.ComponentManager, entityId);
 
         Assert.IsTrue(ecsContext.ComponentManager.GetDirectPool<DisplayTextComponent>().Has(entityId));
         Assert.IsTrue(ecsContext.ComponentManager.GetDirectPool<GlyphComponent>().Has(entityId));
@@ -187,7 +187,7 @@ public sealed class BlueprintTests
         var ecsContext = BuildEcsContext();
         var entityId = ecsContext.EntityManager.CreateEntity();
 
-        new Shop().Build(ecsContext.ComponentManager, entityId);
+        new Shop(new MathUtility(new Random(1))).Build(ecsContext.ComponentManager, entityId);
 
         var displayText = ecsContext.ComponentManager.GetDirectPool<DisplayTextComponent>().GetReadonly(entityId);
         Assert.AreEqual("Shop", displayText.Name);
@@ -284,7 +284,7 @@ public sealed class BlueprintTests
         var ecsContext = BuildEcsContext();
         var entityId = ecsContext.EntityManager.CreateEntity();
 
-        new Dirt().Build(ecsContext.ComponentManager, entityId);
+        new Dirt(new MathUtility(new Random(1))).Build(ecsContext.ComponentManager, entityId);
 
         Assert.IsTrue(ecsContext.ComponentManager.GetDirectPool<BackgroundComponent>().Has(entityId));
         Assert.IsTrue(ecsContext.ComponentManager.GetDirectPool<DisplayTextComponent>().Has(entityId));
@@ -297,7 +297,7 @@ public sealed class BlueprintTests
         var ecsContext = BuildEcsContext();
         var entityId = ecsContext.EntityManager.CreateEntity();
 
-        new Grass().Build(ecsContext.ComponentManager, entityId);
+        new Grass(new MathUtility(new Random(1))).Build(ecsContext.ComponentManager, entityId);
 
         Assert.IsTrue(ecsContext.ComponentManager.GetDirectPool<BackgroundComponent>().Has(entityId));
         Assert.IsTrue(ecsContext.ComponentManager.GetDirectPool<DisplayTextComponent>().Has(entityId));

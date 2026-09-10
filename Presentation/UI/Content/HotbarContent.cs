@@ -609,7 +609,7 @@ public sealed class HotbarContent(
     /// <summary>The one place a SlotVisual actually gets drawn -- radial fill/icon, then its badge (mana cost bottom-left, or stack count bottom-center) and countdown, if any. Shared by both BuildActionVisual and BuildItemVisual outputs, regardless of which kind produced them.</summary>
     private void DrawSlotVisual(SpriteBatch spriteBatch, Texture2D unitRectangle, Rectangle bounds, Rectangle contentBounds, SlotVisual visual, float alpha)
     {
-        _radialFill.Sprite = visual.SpriteName is not null && SpriteManifest.TryGet(visual.SpriteName, out var sprite) ? sprite : null;
+        _radialFill.Sprite = visual.SpriteName is not null && SpriteManifest.TryGetFirst(visual.SpriteName, out var sprite) ? sprite : null;
         _radialFill.SpriteTint = Color.White;
         _radialFill.Glyph = visual.Glyph;
         _radialFill.GlyphColor = visual.GlyphColor;

@@ -59,4 +59,14 @@ public sealed record GameModuleContext(IMapQuery MapQuery, MathUtility MathUtili
     /// ProcessingTierEvents' own doc comment.
     /// </summary>
     public ProcessingTierEvents ProcessingTierEvents { get; init; } = new();
+
+    /// <summary>
+    /// The live Local-tier membership set, for consumers that act on only the Local population
+    /// rather than throttling their visit cadence by tier -- see LocalTierRoster's own doc
+    /// comment for why that needs its own shape rather than reusing TieredEntityStripeSet. Wired
+    /// to ProcessingTierEvents above (and to the same driving pool ProcessingTierSystem tiers) by
+    /// ProcessingTierModule.RegisterSystems; until that runs it is simply empty, which reads as
+    /// "nothing is Local yet" -- the same safe default an untiered entity already gets.
+    /// </summary>
+    public LocalTierRoster LocalTierRoster { get; init; } = new();
 }

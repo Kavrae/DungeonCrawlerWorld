@@ -493,7 +493,7 @@ public sealed class ConsumableActivationSystemTests
 
         system.Update(default, 0);
 
-        Assert.AreEqual(10, HealthOf(componentManager, TargetEntityId));
+        DamageAssert.HealthAfterDamage(startingHealth: 20, expectedNormalDamage: 10, HealthOf(componentManager, TargetEntityId));
         Assert.AreEqual(60, componentManager.GetPackedPool<ActionLockComponent>().GetReadonly(CasterEntityId).CurrentLockFramesRemaining);
         Assert.IsFalse(componentManager.GetPackedPool<PendingConsumableActivationComponent>().Has(CasterEntityId));
 
@@ -539,7 +539,7 @@ public sealed class ConsumableActivationSystemTests
 
         system.Update(default, 0);
 
-        Assert.AreEqual(10, HealthOf(componentManager, TargetEntityId), "The last charge still fires its effect.");
+        DamageAssert.HealthAfterDamage(startingHealth: 20, expectedNormalDamage: 10, HealthOf(componentManager, TargetEntityId), "The last charge still fires its effect.");
         Assert.AreEqual(0, componentManager.GetMultiPool<InventoryItemStackComponent>().CountForEntity(CasterEntityId), "The wand must be destroyed outright, not left behind as a permanent Charges: 0 stack.");
     }
 

@@ -31,11 +31,6 @@ public sealed class DelayedActionSystemTests
     private static readonly Vector3Int TargetTile = new(5, 5, 0);
 
     /// <summary>Never rolls a crit -- NextDouble always returns 1.0, comfortably above any crit chance -- so damage-amount assertions here stay deterministic.</summary>
-    private sealed class NeverCritRandom : Random
-    {
-        public override double NextDouble() => 1.0;
-    }
-
     private sealed class FakeMapQuery : IMapQuery
     {
         private readonly Dictionary<(int, int, int), int> _occupantByPosition = [];
@@ -68,7 +63,7 @@ public sealed class DelayedActionSystemTests
 
         var mapQuery = new FakeMapQuery();
         var eventBus = new EventBus();
-        var mathUtility = new MathUtility(new NeverCritRandom());
+        var mathUtility = new MathUtility();
         var processingTiers = componentManager.GetDirectPool<ProcessingTierComponent>();
 
         var actionCatalog = new ActionCatalog();
@@ -135,7 +130,7 @@ public sealed class DelayedActionSystemTests
 
         system.Update(default, 0);
 
-        Assert.AreEqual(85, HealthOf(componentManager, TargetEntityId));
+        DamageAssert.HealthAfterDamage(startingHealth: 100, expectedNormalDamage: 15, HealthOf(componentManager, TargetEntityId));
         Assert.IsFalse(componentManager.GetPackedPool<PendingDelayedActionComponent>().Has(CasterEntityId), "Resolved -- the pending action must be cleared so it isn't resolved again next visit.");
     }
 
@@ -206,7 +201,7 @@ public sealed class DelayedActionSystemTests
 
         system.Update(new EngineTime(default, default, false, FrameCount: 20), 0);
 
-        Assert.AreEqual(85, HealthOf(componentManager, TargetEntityId));
+        DamageAssert.HealthAfterDamage(startingHealth: 100, expectedNormalDamage: 15, HealthOf(componentManager, TargetEntityId));
         Assert.IsFalse(componentManager.GetPackedPool<PendingDelayedActionComponent>().Has(CasterEntityId));
     }
 }

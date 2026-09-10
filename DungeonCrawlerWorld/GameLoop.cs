@@ -1,4 +1,5 @@
 using Engine.Diagnostics;
+using Engine.Math;
 using Engine.ECS.Systems;
 using Engine.Utilities;
 using Microsoft.Xna.Framework;
@@ -39,6 +40,12 @@ public sealed class GameLoop : Microsoft.Xna.Framework.Game
     private readonly DiagnosticsEngine _diagnostics;
     private int _frameCount;
 
+    /// <summary>
+    /// The seed this session's whole simulation was generated from -- map layout, blueprint rolls,
+    /// damage variance, crits, everything drawing on the shared MathUtility.
+    /// </summary>
+    private readonly int _randomSeed;
+
     /// <summary>FNA/SDL's own default window title is empty at the point Initialize() runs (nothing else in this codebase sets one), so the OS title bar is set explicitly here rather than captured. See _lastAdminModeOn.</summary>
     private const string BaseWindowTitle = "Dungeon Crawler World";
 
@@ -46,8 +53,11 @@ public sealed class GameLoop : Microsoft.Xna.Framework.Game
     private bool _lastAdminModeOn;
 
     /// <param name="diagnosticsFeatures">Which Diagnostics engine features to enable -- opt-in, defaults to None. See DiagnosticsFeaturesParser (Program.cs passes --diagnostics= here).</param>
-    public GameLoop(DiagnosticsFeatures diagnosticsFeatures = DiagnosticsFeatures.None)
+    /// <param name="randomSeed">Seed for the shared MathUtility every system and blueprint draws from -- see RandomSeed. Defaults to a generated one so a caller that doesn't care (tests constructing a GameLoop directly) still gets a reproducible, reportable session rather than an unseeded one.</param>
+    public GameLoop(DiagnosticsFeatures diagnosticsFeatures = DiagnosticsFeatures.None, int? randomSeed = null)
     {
+        _randomSeed = randomSeed ?? RandomSeed.Generate();
+
         // Constructed here, not in Initialize(), so its FrameBudget/Startup trackers' clocks
         // (and Startup's Phase("Module Load") wrap around WorldSessionBootstrapper.Build below)
         // start as close to process start as this class can observe -- Initialize() itself is
@@ -71,7 +81,7 @@ public sealed class GameLoop : Microsoft.Xna.Framework.Game
         var playerActivityLogFilePath = Path.Combine(FindProjectRoot(), "Log", "player-activity.log");
         using (_diagnostics.StartupProfiler?.Phase("World Session Setup"))
         {
-            _worldSession = WorldSessionBootstrapper.Build(FloorNumber, modsDirectory, InitialEntityCapacity, InitialComponentCapacity, MinCrawlerNumber, MaxCrawlerNumber, playerActivityLogFilePath, _diagnostics);
+            _worldSession = WorldSessionBootstrapper.Build(FloorNumber, modsDirectory, InitialEntityCapacity, InitialComponentCapacity, MinCrawlerNumber, MaxCrawlerNumber, playerActivityLogFilePath, _diagnostics, _randomSeed);
         }
 
         using (_diagnostics.StartupProfiler?.Phase("Presentation Bootstrap"))
@@ -85,7 +95,7 @@ public sealed class GameLoop : Microsoft.Xna.Framework.Game
             _shell = ShellBootstrapper.Build(_presentation, _worldSession, screenSize, _diagnostics);
         }
 
-        Window.Title = BaseWindowTitle;
+        Window.Title = TitleWithSeed();
 
         base.Initialize();
     }
@@ -139,8 +149,11 @@ public sealed class GameLoop : Microsoft.Xna.Framework.Game
         }
 
         _lastAdminModeOn = GlobalState.IsAdminModeOn;
-        Window.Title = _lastAdminModeOn ? $"{BaseWindowTitle} - ADMIN" : BaseWindowTitle;
+        Window.Title = _lastAdminModeOn ? $"{TitleWithSeed()} - ADMIN" : TitleWithSeed();
     }
+
+    /// <summary>The window title with this session's seed appended -- see _randomSeed for why it is shown rather than only logged.</summary>
+    private string TitleWithSeed() => $"{BaseWindowTitle} [seed {_randomSeed}]";
 
     protected override void Draw(GameTime gameTime)
     {

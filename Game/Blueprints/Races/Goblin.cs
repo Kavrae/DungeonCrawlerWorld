@@ -66,7 +66,7 @@ public sealed class Goblin(MathUtility mathUtility) : IBlueprint
         componentManager.Merge(entityId, new DisplayTextComponent(DisplayNames[mathUtility.Next(0, DisplayNames.Length)], Description));
 
         componentManager.Merge(entityId, new GlyphComponent("g", Color.DarkGreen));
-        if (SpriteManifest.TryGet("Goblin", out var sprite))
+        if (SpriteManifest.TryGetRandom("Goblin", mathUtility, out var sprite))
         {
             componentManager.Merge(entityId, sprite);
         }

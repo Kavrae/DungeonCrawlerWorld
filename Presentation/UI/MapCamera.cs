@@ -65,14 +65,29 @@ public sealed class MapCamera
     public Vector2 TileOrigin(int columnIndex, int rowIndex) =>
         new Vector2(columnIndex * _currentTileSize.X, rowIndex * _currentTileSize.Y) - _renderPixelOffset;
 
-    public void CenterCameraOn(Vector3Int position)
+    /// <summary>Centres the viewport on position, returning how much the scroll position actually moved.</summary>
+    /// <remarks>
+    /// Returns the applied delta for the same reason UpdateScrollPosition/ApplyDrag/EndDrag do:
+    /// the caller caches per-visible-tile state and needs to know exactly how far the grid shifted
+    /// to update it incrementally rather than rebuilding wholesale. That matters most here --
+    /// camera-follow calls this on every single player step, and a one-tile step used to trigger a
+    /// full re-resolve of every visible cell's background. Clamping means the answer is often
+    /// Point.Zero (the camera is already against the map edge, or the player moved along it), in
+    /// which case the caller has nothing to do at all.
+    /// </remarks>
+    /// <param name="position">The map position to centre on.</param>
+    /// <returns>The change actually applied to the scroll position, in tiles.</returns>
+    public Point CenterCameraOn(Vector3Int position)
     {
+        var previousScrollPosition = _currentScrollPosition;
         var desiredScroll = new Point(position.X - _tileColumns / 2, position.Y - _tileRows / 2);
         _currentScrollPosition = new Point(
             MathUtility.ClampInt(desiredScroll.X, 0, _maxScrollPosition.X),
             MathUtility.ClampInt(desiredScroll.Y, 0, _maxScrollPosition.Y));
 
         _renderPixelOffset = Vector2.Zero;
+
+        return new Point(_currentScrollPosition.X - previousScrollPosition.X, _currentScrollPosition.Y - previousScrollPosition.Y);
     }
 
     public void UpdateZoomLevel(ZoomLevel newZoomLevel, Vector2 contentSize)

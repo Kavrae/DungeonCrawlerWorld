@@ -48,10 +48,10 @@ public sealed class TestMapBuilder(EntityManager entityManager, ComponentManager
         "ThisIsAReallyLongDescriptionToTestTheWordWrapCapabilitiesAroundHyphenatingLongWordsMultipleTimes";
 
     private readonly StoneFloor _stoneFloor = new();
-    private readonly Wall _wall = new();
-    private readonly Dirt _dirt = new();
+    private readonly Wall _wall = new(mathUtility);
+    private readonly Dirt _dirt = new(mathUtility);
     private readonly Lava _lava = new();
-    private readonly Grass _grass = new();
+    private readonly Grass _grass = new(mathUtility);
     private readonly Goblin _goblin = new(mathUtility);
     private readonly Fairy _fairy = new(mathUtility);
     private readonly Ghost _ghost = new(mathUtility);

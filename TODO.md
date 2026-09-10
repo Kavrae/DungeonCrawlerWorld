@@ -1,10 +1,3 @@
-# Next (top priority)
-### Enemy Attack Indicator
-Charge attack timing indicator. New type of tile glow effect : fills from bottom-up per tile in the target area. 
-Start of charge attack = 0% fill. Attack activation = 100% fill.
-Works on both player and enemy delayed actions.
-Naming investigation : Should these still be considered glow effects or are they closer to shaders, masks, fill effect, or a different type of visual effect? Should there be a separation of glow effects and whatever this is renamed to?
-
 ### Floating Combat Text
 Combat text whenever an entity is damaged, healed, or given a status effect.
 Research industry standard

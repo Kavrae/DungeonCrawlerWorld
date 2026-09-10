@@ -12,7 +12,7 @@ using Game.Modules.Inventory;
 using Game.Modules.Inventory.Components;
 using Game.Modules.Mana.Components;
 using Game.Modules.Movement.Components;
-using Game.Modules.ProcessingTier.Components;
+using Game.Modules.ProcessingTier;
 using Game.World;
 using Microsoft.Xna.Framework;
 using Microsoft.Xna.Framework.Input;
@@ -45,7 +45,7 @@ public sealed class ActionTargetingController(
     PackedComponentPool<MovementComponent> movementPool,
     PackedComponentPool<ManaComponent>? manaPool = null,
     MultiComponentPool<AbilityScoreComponent>? abilityScores = null,
-    DirectComponentPool<ProcessingTierComponent>? processingTiers = null)
+    LocalTierRoster? localTierRoster = null)
 {
     /// <summary>A second press of the same slot within this many frames of the first is a double-tap (auto-target the closest candidate, see HandleHotkeySlotPress), as opposed to a slower second press (confirm against the cursor, same as a click). Reads UiInputController's own shared click/double-click window rather than an independently tuned value, so mouse double-click and keyboard double-tap always agree.</summary>
     private static readonly int DoubleTapWindowFrames = UiInputController.DoubleClickWindowFrames;
@@ -111,45 +111,90 @@ public sealed class ActionTargetingController(
     /// already-resolved target tiles and whether that action is Dodgeable -- generalizes
     /// PendingDelayedActionTargetTiles beyond just the player so MapWindow can telegraph an
     /// enemy's incoming attack too (red/yellow, see CombatTargetPalette), not only the player's own
-    /// (dark green). pendingDelayedActions is a small PackedComponentPool -- direct dense
-    /// iteration via EntityIds/Components, no new spatial index needed -- but "the number of
-    /// entities ever mid-windup at once is small and bounded" (this method's own earlier
-    /// assumption) turned out false at this game's real population scale: a live diagnostics
-    /// capture showed over 10,000 concurrently-pending entities map-wide (PLAN-charge-attack-fill-
-    /// indicator.md's own addenda has the full incident). Local-tier filtering happens HERE, before
-    /// the catalog/Tag lookup below, specifically so an off-screen entity costs one
-    /// ProcessingTierComponent read and nothing more -- filtering only in MapWindow after this
-    /// method already built a tuple (and ran the catalog/Tag lookup) for all ~10,000 would still
-    /// pay that cost for entities the caller immediately discards. processingTiers is optional
-    /// (null in test fixtures that don't wire it, e.g. MapWindowTests/ActionTargetingControllerDodgeTests/
-    /// HotbarControllerTests) -- null means "no tier data available," so every pending entity
-    /// passes, matching this method's own pre-tier-filtering behavior exactly (safe default, not a
-    /// silent behavior change for callers that never asked for tier scoping). Reads the catalog
-    /// definition directly rather than resolving a per-instance Override: ActionOverrideEffects.
-    /// OverrideFlatDamage (the only Override producer today) never touches Tags, so the catalog's
-    /// own Tags are always correct here regardless of any per-race damage override.
+    /// (dark green).
     /// </summary>
+    /// <remarks>
+    /// Iterates the SMALL side. "The number of entities ever mid-windup at once is small and
+    /// bounded" (this method's own original assumption) turned out false at this game's real
+    /// population scale: a live diagnostics capture showed over 10,000 concurrently-pending
+    /// entities map-wide (PLAN-charge-attack-fill-indicator.md's own addenda has the full
+    /// incident). Walking pendingDelayedActions' own dense arrays and rejecting each non-Local
+    /// entity therefore cost ~10,000 scattered ProcessingTierComponent reads on EVERY Draw call --
+    /// paid in full whether or not anything was actually on screen, and by far the largest single
+    /// per-frame cost in MapWindow's draw path.
+    ///
+    /// LocalTierRoster inverts that: Local is a Chebyshev radius of 80 on the player's own Z, so
+    /// it holds on the order of a thousand entities against that pool's tens of thousands. Probing
+    /// pendingDelayedActions.TryGetReadonly per roster member is the same kind of lookup, just
+    /// roughly an order of magnitude fewer of them, and it drops the separate tier read entirely
+    /// (roster membership IS the tier answer). See LocalTierRoster's own doc comment for why that
+    /// needs a different shape from the TieredEntityStripeSet every consuming *system* uses.
+    ///
+    /// localTierRoster is optional (null in test fixtures that don't wire it, e.g. MapWindowTests/
+    /// ActionTargetingControllerDodgeTests/HotbarControllerTests) -- null means "no tier data
+    /// available," so every pending entity passes via the full-pool fallback below, matching this
+    /// method's own pre-tier-filtering behavior exactly. That is a safe default rather than a
+    /// silent behavior change for callers that never asked for tier scoping.
+    ///
+    /// The player is always included regardless of tier -- it's the camera anchor, always relevant,
+    /// and cheap to add unconditionally. It is also the one entity the roster genuinely might not
+    /// hold: roster membership follows ProcessingTierSystem's own MovementComponent-driven
+    /// population, and nothing guarantees the player's own tier is ever recomputed relative to
+    /// itself.
+    ///
+    /// Reads the catalog definition directly rather than resolving a per-instance Override:
+    /// ActionOverrideEffects.OverrideFlatDamage (the only Override producer today) never touches
+    /// Tags, so the catalog's own Tags are always correct here regardless of any per-race damage
+    /// override.
+    /// </remarks>
     public IReadOnlyList<(int EntityId, Vector3Int[] TargetTiles, bool IsDodgeable)> AllPendingDelayedActionTargets()
     {
         _pendingDelayedActionTargetsBuffer.Clear();
 
-        var entityIds = pendingDelayedActions.EntityIds;
-        var components = pendingDelayedActions.Components;
         var playerEntityId = world.PlayerEntityId;
-        for (var denseIndex = 0; denseIndex < pendingDelayedActions.Count; denseIndex++)
+
+        // Walk whichever population is actually smaller this frame, since which one that is
+        // genuinely flips: mid-brawl the pending pool runs to five figures against a roster of
+        // ~1,000, but during quiet exploration almost nothing is winding up and the pending pool
+        // is nearly empty. Both directions produce identical output; only the probe count differs.
+        if (localTierRoster is null || pendingDelayedActions.Count <= localTierRoster.Count)
         {
-            var entityId = entityIds[denseIndex];
-            if (entityId != playerEntityId && processingTiers is not null &&
-                (!processingTiers.TryGetReadonly(entityId, out var tier) || tier.Tier != ProcessingTierLevel.Local))
+            var entityIds = pendingDelayedActions.EntityIds;
+            var components = pendingDelayedActions.Components;
+            for (var denseIndex = 0; denseIndex < pendingDelayedActions.Count; denseIndex++)
             {
-                continue;
+                var entityId = entityIds[denseIndex];
+                if (entityId == playerEntityId || localTierRoster is null || localTierRoster.IsLocal(entityId))
+                {
+                    AddPendingTarget(entityId, components[denseIndex]);
+                }
             }
 
-            var isDodgeable = actionCatalog.TryGet(components[denseIndex].ActionId, out var action) && action.Tags.Contains(Tag.Dodgeable);
-            _pendingDelayedActionTargetsBuffer.Add((entityId, components[denseIndex].TargetTiles, isDodgeable));
+            return _pendingDelayedActionTargetsBuffer;
+        }
+
+        if (pendingDelayedActions.TryGetReadonly(playerEntityId, out var playerPending))
+        {
+            AddPendingTarget(playerEntityId, playerPending);
+        }
+
+        foreach (var entityId in localTierRoster.LocalEntityIds)
+        {
+            // The player is already added above, unconditionally -- skip it here so a player that
+            // IS in the roster doesn't get telegraphed twice.
+            if (entityId != playerEntityId && pendingDelayedActions.TryGetReadonly(entityId, out var pending))
+            {
+                AddPendingTarget(entityId, pending);
+            }
         }
 
         return _pendingDelayedActionTargetsBuffer;
+    }
+
+    private void AddPendingTarget(int entityId, PendingDelayedActionComponent pending)
+    {
+        var isDodgeable = actionCatalog.TryGet(pending.ActionId, out var action) && action.Tags.Contains(Tag.Dodgeable);
+        _pendingDelayedActionTargetsBuffer.Add((entityId, pending.TargetTiles, isDodgeable));
     }
 
     /// <summary>Advances the double-tap frame clock -- called once per MapWindow.Update, before anything else this class does that frame.</summary>

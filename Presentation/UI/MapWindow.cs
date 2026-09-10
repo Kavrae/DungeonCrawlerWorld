@@ -73,6 +73,16 @@ public sealed class MapWindow : Window
     private readonly PlayerMovementController _playerMovement;
     private readonly ContextMenuController _contextMenuController;
     private readonly MapBackgroundCache _backgroundCache;
+
+    /// <summary>Null until the first Update that finds a GraphicsDevice on ElementPoolService, and permanently null for a headless MapWindow that never gets one -- DrawContent's own fallback paths cover both cases. See Update for why these can't be built in Initialize.</summary>
+    private MapTileLayerCache? _terrainCache;
+
+    /// <summary>The aura glow overlay's own cached rendering -- a separate texture from _terrainCache rather than the same one because it is blitted on the other side of the occupants (see DrawGlowOverlay).</summary>
+    private MapTileLayerCache? _glowCache;
+
+    /// <summary>The MapTintGrid.Version _glowCache was last rendered against -- the glow texture depends on the tint grid's contents as well as on the camera, so a source appearing, moving or expiring has to invalidate it even though nothing about the camera changed.</summary>
+    private int _renderedGlowVersion = -1;
+
     private readonly MapTintGrid _tintGrid;
     private readonly DirectComponentPool<TransformComponent> _transformPool;
     private readonly DirectComponentPool<GlyphComponent> _glyphPool;
@@ -121,6 +131,19 @@ public sealed class MapWindow : Window
     private SpriteFontBase _hugeFont = null!;
     private SpriteFontBase _tinyFont = null!;
     private SpriteFontBase _badgeFont = null!;
+
+    /// <summary>
+    /// LootBag-Red resolved once, not per badge per frame -- SpriteManifest.TryGetFirst is a
+    /// string-keyed dictionary lookup, and repeating it for every corpse badge of every frame is
+    /// needless work on the draw path. TryGetFirst rather than TryGetRandom because a badge has to
+    /// look the same on every corpse: rolling among LootBag-Red's candidate cells here would bake
+    /// one arbitrary variant in per session, which is invisible only while that entry has exactly
+    /// one cell.
+    /// </summary>
+    private SpriteComponent? _lootBagSprite;
+
+    /// <summary>This tile's Phasing occupants, collected during DrawUnderlayOccupants' single walk and drawn by DrawPhasingOverlay once the Blocking occupant is down. A field rather than a local so it isn't reallocated for every visible tile of every frame; cleared at the start of each tile.</summary>
+    private readonly List<int> _phasingOccupantsBuffer = [];
 
     private readonly int _tileDepth;
 
@@ -253,6 +276,12 @@ public sealed class MapWindow : Window
             componentManager.GetDirectPool<BackgroundComponent>(),
             _camera);
 
+        // Terrain is the one thing MapWindow draws that a rare, explicit event can invalidate
+        // rather than per-frame change -- see MapTileLayerCache. Nothing publishes this today
+        // (World.PlaceTerrainOnMap has only ever been called at population time), but subscribing
+        // now is what keeps the first terrain-changing action from shipping with a stale-image bug.
+        eventBus.Subscribe<TerrainChangedEvent>(_ => InvalidateTerrainCaches());
+
         _tileDepth = _world.Map.Size.Z;
     }
 
@@ -271,6 +300,8 @@ public sealed class MapWindow : Window
         _camera.Initialize(ContentSize);
         _backgroundCache.Resize();
 
+        _lootBagSprite = SpriteManifest.TryGetFirst(LootBagSpriteName, out var lootBagSprite) ? lootBagSprite : null;
+
         SetCurrentMapLayer(_mapViewState.CurrentMapLayer);
 
         if (_transformPool.TryGetReadonly(_world.PlayerEntityId, out var playerTransform))
@@ -280,7 +311,7 @@ public sealed class MapWindow : Window
         }
         else
         {
-            _backgroundCache.Reset();
+            InvalidateTerrainCaches();
         }
     }
 
@@ -309,6 +340,56 @@ public sealed class MapWindow : Window
 
         var mouseState = Mouse.GetState();
         UpdateHoveredTile(new Point(mouseState.X, mouseState.Y));
+
+        // Constructed on first use rather than in Initialize: ElementPoolService only receives a
+        // GraphicsDevice in GameLoop.LoadContent, which MonoGame runs AFTER Initialize -- so
+        // checking there silently left this null forever and every frame fell back to the uncached
+        // path. Staying null is still the correct outcome for a headless MapWindow built directly
+        // in a test, which never gets a device at all.
+        if (_terrainCache is null && ElementPoolService.GraphicsDevice is { } graphicsDevice)
+        {
+            _terrainCache = new MapTileLayerCache(graphicsDevice);
+            _glowCache = new MapTileLayerCache(graphicsDevice);
+        }
+
+        if (_renderedGlowVersion != _tintGrid.Version)
+        {
+            _renderedGlowVersion = _tintGrid.Version;
+            _glowCache?.Invalidate();
+        }
+
+        // Deliberately here and not in DrawContent: rendering into MapTileLayerCache's own texture
+        // means swapping render targets, and by DrawContent GameLoop has already begun the shared
+        // SpriteBatch pass that ElementPoolService's render-state stack owns. Update runs before
+        // any of that, with no batch active. Runs after this method's camera-follow above, so a
+        // frame that re-centres the camera rebuilds against the new scroll position rather than
+        // blitting the old image once before catching up.
+        _terrainCache?.EnsureRendered(
+            ElementPoolService.SpriteBatch,
+            _camera.TileColumns,
+            _camera.TileRows,
+            _camera.CurrentTileSize,
+            DrawTerrainAndBackgroundsIntoCache);
+
+        _glowCache?.EnsureRendered(
+            ElementPoolService.SpriteBatch,
+            _camera.TileColumns,
+            _camera.TileRows,
+            _camera.CurrentTileSize,
+            DrawGlowOverlayIntoCache);
+    }
+
+    /// <summary>
+    /// The single place both terrain-derived caches are invalidated together. They have identical
+    /// dependencies -- scroll position, zoom, current map layer, and the terrain itself -- so
+    /// invalidating them as a pair is what stops the background wash and the terrain image from
+    /// ever disagreeing about which cells they describe.
+    /// </summary>
+    private void InvalidateTerrainCaches()
+    {
+        _backgroundCache.Reset();
+        _terrainCache?.Invalidate();
+        _glowCache?.Invalidate();
     }
 
     /// <summary>
@@ -334,7 +415,18 @@ public sealed class MapWindow : Window
     }
 
     /// <summary>Draws one frame of the map viewport: background, tile backgrounds, glyphs/sprites, glow overlay, then targeting/selection highlights, in that order.</summary>
-    /// <remarks>Draw order is significant, not incidental -- each pass lands on top of the previous one with no depth buffer (SpriteSortMode.Deferred submits in call order), so highlights/glow have to come after the glyphs/sprites they're meant to sit on top of, and the flat background wash has to come first so everything else has something to draw over.</remarks>
+    /// <remarks>
+    /// Draw order is significant, not incidental -- each pass lands on top of the previous one with
+    /// no depth buffer (SpriteSortMode.Deferred submits in call order), so highlights/glow have to
+    /// come after the glyphs/sprites they're meant to sit on top of, and the flat background wash
+    /// has to come first so everything else has something to draw over.
+    ///
+    /// The first two of those passes (tile backgrounds, then terrain) come from MapTileLayerCache as
+    /// a single blit rather than being re-submitted tile-by-tile -- see that class for why terrain
+    /// is the one thing here that can be cached as an image. DrawTerrainAndBackgroundsDirectly is
+    /// the fallback for the frame or two before the cache's first render lands (and for a headless
+    /// MapWindow that never got a GraphicsDevice), producing byte-identical output at the old cost.
+    /// </remarks>
     public override void DrawContent(GameTime gameTime)
     {
         var spriteBatch = ElementPoolService.SpriteBatch;
@@ -342,9 +434,18 @@ public sealed class MapWindow : Window
 
         spriteBatch.Draw(unitRectangle, new Rectangle(0, 0, _camera.TileColumns * _camera.CurrentTileSize.X, _camera.TileRows * _camera.CurrentTileSize.Y), MapBackgroundColor);
 
-        _tileRenderer.DrawBackgrounds(spriteBatch, unitRectangle, _backgroundCache.Colors, _camera.TileColumns, _camera.TileRows, _camera.CurrentTileSize, _camera.RenderPixelOffset);
-        DrawGlyphs(spriteBatch, unitRectangle);
-        DrawGlowOverlay(spriteBatch, unitRectangle);
+        if (_terrainCache?.Draw(spriteBatch, -_camera.RenderPixelOffset) != true)
+        {
+            DrawTerrainAndBackgroundsDirectly(spriteBatch, _camera.RenderPixelOffset);
+        }
+
+        DrawOccupants(spriteBatch, unitRectangle);
+
+        if (_glowCache?.Draw(spriteBatch, -_camera.RenderPixelOffset) != true)
+        {
+            DrawGlowOverlay(spriteBatch, unitRectangle, _camera.RenderPixelOffset);
+        }
+
         DrawTargetingHighlights(spriteBatch, unitRectangle, gameTime);
 
         if (_mapViewState.InspectionMode == InspectionMode.Detail)
@@ -367,7 +468,11 @@ public sealed class MapWindow : Window
     /// translucent rect on top means it shows over a sprite exactly the way it used to show
     /// over a flat background color.
     /// </summary>
-    private void DrawGlowOverlay(SpriteBatch spriteBatch, Texture2D unitRectangle)
+    /// <summary>Renders the glow overlay at whole-tile positions with no sub-tile offset, for MapTileLayerCache to capture -- the caller applies the offset once when blitting.</summary>
+    private void DrawGlowOverlayIntoCache(SpriteBatch spriteBatch) =>
+        DrawGlowOverlay(spriteBatch, ElementPoolService.UnitRectangle, Vector2.Zero);
+
+    private void DrawGlowOverlay(SpriteBatch spriteBatch, Texture2D unitRectangle, Vector2 pixelOffset)
     {
         var currentMapLayer = _mapViewState.CurrentMapLayer;
 
@@ -383,7 +488,7 @@ public sealed class MapWindow : Window
                     continue;
                 }
 
-                var tileOrigin = TileOrigin(columnIndex, rowIndex);
+                var tileOrigin = new Vector2(columnIndex * _camera.CurrentTileSize.X, rowIndex * _camera.CurrentTileSize.Y) - pixelOffset;
                 var destination = new Rectangle((int)tileOrigin.X, (int)tileOrigin.Y, _camera.CurrentTileSize.X, _camera.CurrentTileSize.Y);
                 spriteBatch.Draw(unitRectangle, destination, tint.Color * tint.Factor * GlowOpacityMultiplier);
             }
@@ -743,24 +848,32 @@ public sealed class MapWindow : Window
     public void ChangeLayer(int delta)
     {
         SetCurrentMapLayer(_mapViewState.CurrentMapLayer + delta);
-        _backgroundCache.Reset();
+        InvalidateTerrainCaches();
     }
 
     /// <summary>
-    /// Two full passes over the visible grid, not one interleaved pass -- a multi-tile
-    /// entity's sprite/glyph is drawn once, from its origin tile (see DrawPrimaryOccupant),
-    /// covering every tile in its footprint. With a single per-tile pass, a neighboring
-    /// column/row's terrain draw (a later loop iteration, since SpriteSortMode.Deferred
-    /// submits in call order with no depth buffer) would land on top of that already-drawn
-    /// footprint, covering part of it -- visible now that terrain renders as an opaque
-    /// full-tile sprite rather than a small, mostly-transparent glyph. Drawing all terrain
-    /// first, then all occupants, guarantees occupants are always on top regardless of
-    /// footprint size or the entity's position within it.
+    /// Renders the tile backgrounds and terrain at whole-tile positions with no sub-tile offset,
+    /// for MapTileLayerCache to capture into its texture -- the caller applies the offset once when
+    /// blitting that texture instead of every tile applying it individually.
     /// </summary>
-    private void DrawGlyphs(SpriteBatch spriteBatch, Texture2D unitRectangle)
+    /// <remarks>
+    /// Terrain is drawn as its own full pass, ahead of every occupant, and that ordering is
+    /// load-bearing rather than incidental: a multi-tile entity's sprite is drawn once from its
+    /// origin tile covering its whole footprint, so a neighbouring tile's terrain draw -- a later
+    /// call, and SpriteSortMode.Deferred submits in call order with no depth buffer -- would
+    /// otherwise land on top of part of that footprint. Now that terrain lives in its own texture
+    /// blitted before any occupant, that separation is structural rather than something the loop
+    /// order has to keep getting right.
+    /// </remarks>
+    private void DrawTerrainAndBackgroundsIntoCache(SpriteBatch spriteBatch) =>
+        DrawTerrainAndBackgroundsDirectly(spriteBatch, Vector2.Zero);
+
+    /// <summary>The uncached path: the same backgrounds-then-terrain output MapTileLayerCache captures, drawn straight to the screen at the given sub-tile offset. Used to render into the cache (offset zero) and as DrawContent's fallback before the cache's first render lands.</summary>
+    private void DrawTerrainAndBackgroundsDirectly(SpriteBatch spriteBatch, Vector2 pixelOffset)
     {
-        var currentMapLayer = _mapViewState.CurrentMapLayer;
-        var terrainLayer = Map.TerrainLayerFor(currentMapLayer);
+        var terrainLayer = Map.TerrainLayerFor(_mapViewState.CurrentMapLayer);
+
+        _tileRenderer.DrawBackgrounds(spriteBatch, ElementPoolService.UnitRectangle, _backgroundCache.Colors, _camera.TileColumns, _camera.TileRows, _camera.CurrentTileSize, pixelOffset);
 
         for (var columnIndex = 0; columnIndex < _camera.TileColumns; columnIndex++)
         {
@@ -774,9 +887,34 @@ public sealed class MapWindow : Window
                     continue;
                 }
 
-                DrawTerrainGlyph(spriteBatch, terrainLayer, mapNodeX, mapNodeY, TileOrigin(columnIndex, rowIndex));
+                var tileOrigin = new Vector2(columnIndex * _camera.CurrentTileSize.X, rowIndex * _camera.CurrentTileSize.Y) - pixelOffset;
+                DrawTerrainGlyph(spriteBatch, terrainLayer, mapNodeX, mapNodeY, tileOrigin);
             }
         }
+    }
+
+    /// <summary>Every occupant of the visible grid, drawn on top of MapTileLayerCache's already-blitted terrain -- corpses, the Tiny sub-grid, the Blocking occupant, Phasing overlays, and the tile's own up/down layer badges.</summary>
+    /// <remarks>
+    /// Column-outer, row-inner. Map's per-cell arrays are indexed X-fastest (see
+    /// Vector3Int.FlatIndex), so this nesting strides the flat index by a whole map row per
+    /// iteration and a row-major walk looks like it should read far better. Measured within a
+    /// single frame, against the same warm cache, it makes no difference: the visible grid touches
+    /// only a few dozen rows of each array and stays resident either way, and an A/B that walked
+    /// both orders per frame showed whichever ran SECOND winning by the same margin regardless of
+    /// which one it was. Left as-is rather than reordered, since changing it would resettle the
+    /// submission order of overlapping occupants (SpriteSortMode.Deferred draws in call order,
+    /// with no depth buffer) for no measured gain.
+    /// </remarks>
+    private void DrawOccupants(SpriteBatch spriteBatch, Texture2D unitRectangle)
+    {
+        var currentMapLayer = _mapViewState.CurrentMapLayer;
+
+        // Which Map.GetOccupiedLayerMask bits count as "above" and "below" the layer being drawn.
+        // Depends only on currentMapLayer, so it's computed once per frame here rather than
+        // re-derived per tile inside DrawLayerBadges.
+        var allLayersMask = (1 << _tileDepth) - 1;
+        var higherLayerMask = allLayersMask & ~((1 << (currentMapLayer + 1)) - 1);
+        var lowerLayerMask = (1 << currentMapLayer) - 1;
 
         for (var columnIndex = 0; columnIndex < _camera.TileColumns; columnIndex++)
         {
@@ -791,13 +929,13 @@ public sealed class MapWindow : Window
                 }
 
                 var tileOrigin = TileOrigin(columnIndex, rowIndex);
-                var occupantsHere = _world.GetOccupantEntityIdsAt(new Vector3Int(mapNodeX, mapNodeY, currentMapLayer));
+                var blockingEntityId = _world.Map.GetBlockingEntityId(new Vector3Int(mapNodeX, mapNodeY, currentMapLayer));
+                var occupantsHere = _world.Map.GetOccupantEntityIdSpanAt(new Vector3Int(mapNodeX, mapNodeY, currentMapLayer));
 
-                DrawCorpses(spriteBatch, occupantsHere, mapNodeX, mapNodeY, tileOrigin);
-                DrawTinyGrid(spriteBatch, occupantsHere, tileOrigin);
-                DrawPrimaryOccupant(spriteBatch, unitRectangle, currentMapLayer, mapNodeX, mapNodeY, columnIndex, rowIndex);
-                DrawPhasingGlyphs(spriteBatch, occupantsHere, tileOrigin);
-                DrawLayerBadges(spriteBatch, currentMapLayer, mapNodeX, mapNodeY, tileOrigin);
+                DrawUnderlayOccupants(spriteBatch, occupantsHere, blockingEntityId, mapNodeX, mapNodeY, tileOrigin);
+                DrawPrimaryOccupant(spriteBatch, unitRectangle, blockingEntityId, mapNodeX, mapNodeY, columnIndex, rowIndex);
+                DrawPhasingOverlay(spriteBatch, tileOrigin);
+                DrawLayerBadges(spriteBatch, higherLayerMask, lowerLayerMask, mapNodeX, mapNodeY, tileOrigin);
             }
         }
     }
@@ -807,12 +945,121 @@ public sealed class MapWindow : Window
     {
         var isDead = _deadPool?.Has(entityId) == true;
 
-        SpriteComponent? sprite = _spritePool.TryGetReadonly(entityId, out var spriteComponent) ? spriteComponent : null;
-        var glyph = _glyphPool.TryGetReadonly(entityId, out var glyphComponent) ? glyphComponent.Glyph : string.Empty;
-        var glyphColor = isDead ? Color.Gray : glyphComponent.GlyphColor;
-        var spriteTint = isDead ? Color.Gray : Color.White;
+        // The glyph pool is only consulted when there is no sprite. SpriteOrGlyphRenderer returns
+        // on the sprite branch without ever looking at the glyph, so resolving both unconditionally
+        // (as this used to) meant one wasted scattered read into an entity-indexed array for every
+        // sprite-backed entity, every frame -- and every entity that draws at all is on this path.
+        if (_spritePool.TryGetReadonly(entityId, out var spriteComponent))
+        {
+            return SpriteOrGlyphRenderer.Draw(spriteBatch, _spriteSheetService, _spriteRenderer, _labelRenderer, spriteComponent, font, string.Empty, Color.White, footprintTopLeft, footprintSize, isDead ? Color.Gray : Color.White, alphaMultiplier, outline: true);
+        }
 
-        return SpriteOrGlyphRenderer.Draw(spriteBatch, _spriteSheetService, _spriteRenderer, _labelRenderer, sprite, font, glyph, glyphColor, footprintTopLeft, footprintSize, spriteTint, alphaMultiplier, outline: true);
+        if (!_glyphPool.TryGetReadonly(entityId, out var glyphComponent))
+        {
+            return false;
+        }
+
+        return SpriteOrGlyphRenderer.Draw(spriteBatch, _spriteSheetService, _spriteRenderer, _labelRenderer, null, font, glyphComponent.Glyph, isDead ? Color.Gray : glyphComponent.GlyphColor, footprintTopLeft, footprintSize, Color.White, alphaMultiplier, outline: true);
+    }
+
+    /// <summary>
+    /// Every non-Blocking occupant that draws UNDER the tile's Blocking occupant -- corpses at
+    /// their full footprint, then the Tiny 3x3 sub-grid -- in one walk of the occupant list.
+    /// Phasing occupants are collected here but drawn afterwards by DrawPhasingOverlay, since
+    /// they have to land on top of the Blocking occupant, not beneath it.
+    /// </summary>
+    /// <remarks>
+    /// One pass, not three. This used to be DrawCorpses, DrawTinyGrid and DrawPhasingGlyphs each
+    /// walking the same list independently, and each independently re-deriving the same two facts
+    /// about every occupant: whether it is Blocking, and its combined NonBlockingKind. Both are
+    /// scattered reads into entity-indexed arrays sized to this game's whole entity population, so
+    /// a single occupant cost roughly seven of them to answer two questions. Computing each once
+    /// and dispatching on the result cuts that to about three.
+    ///
+    /// "Is this the Blocking occupant" is answered by comparing against the tile's own Blocking
+    /// entity id rather than by calling World.IsBlocking. That is cheaper (a register compare
+    /// instead of two multi-pool lookups) and also more correct for what the check is actually
+    /// for: these skips exist to avoid drawing the entity DrawPrimaryOccupant already drew, and
+    /// DrawPrimaryOccupant sources that entity from the map's Blocking index, not from IsBlocking.
+    /// The two can disagree if anything ever adds a NonBlockingComponent without routing through
+    /// World.ConvertToNonBlocking (see World.RemoveFootprint's own note on that gap), and when
+    /// they do, the map index is the one that decides what actually got drawn.
+    /// </remarks>
+    private void DrawUnderlayOccupants(SpriteBatch spriteBatch, ReadOnlySpan<int> occupants, int blockingEntityId, int mapNodeX, int mapNodeY, Vector2 tileOrigin)
+    {
+        _phasingOccupantsBuffer.Clear();
+
+        if (occupants.IsEmpty)
+        {
+            return;
+        }
+
+        var subCellSize = new Point(_camera.CurrentTileSize.X / TinyGridDimension, _camera.CurrentTileSize.Y / TinyGridDimension);
+        var tinyDrawnCount = 0;
+
+        foreach (var entityId in occupants)
+        {
+            var isBlockingHere = entityId == blockingEntityId;
+            var kind = NonBlockingQueries.CombinedKind(_nonBlockingPool, entityId);
+
+            if (!isBlockingHere && (kind & NonBlockingKind.Phasing) != 0)
+            {
+                _phasingOccupantsBuffer.Add(entityId);
+            }
+
+            if (!isBlockingHere && (kind & NonBlockingKind.Tiny) != 0 && tinyDrawnCount < MaxTinyEntitiesDrawn)
+            {
+                var subColumn = tinyDrawnCount % TinyGridDimension;
+                var subRow = tinyDrawnCount / TinyGridDimension;
+                var subCellTopLeft = new Vector2(tileOrigin.X + subColumn * subCellSize.X, tileOrigin.Y + subRow * subCellSize.Y);
+
+                if (TryDrawEntityVisual(spriteBatch, entityId, _tinyFont, subCellTopLeft, new Vector2(subCellSize.X, subCellSize.Y)))
+                {
+                    tinyDrawnCount++;
+                }
+
+                continue;
+            }
+
+            // A corpse with no NonBlockingKind flag at all -- one that used to be Blocking and no
+            // longer holds that slot (see DeathSystem / World.ConvertToNonBlocking). A corpse that
+            // was ALREADY non-Blocking when it died (a Phasing Ghost, a Tiny creature) is drawn by
+            // whichever branch above matches its Kind instead, greyed by TryDrawEntityVisual's own
+            // DeadComponent check either way. Deliberately not gated on isBlockingHere, matching
+            // the behaviour this replaced.
+            if ((kind & (NonBlockingKind.Tiny | NonBlockingKind.Phasing)) == 0 &&
+                _deadPool?.Has(entityId) == true &&
+                _transformPool.TryGetReadonly(entityId, out var corpseTransform) &&
+                corpseTransform.Position.X == mapNodeX && corpseTransform.Position.Y == mapNodeY)
+            {
+                var footprintSize = new Vector2(corpseTransform.Size.X * _camera.CurrentTileSize.X, corpseTransform.Size.Y * _camera.CurrentTileSize.Y);
+
+                TryDrawEntityVisual(spriteBatch, entityId, FontForSize(corpseTransform.Size.X), tileOrigin, footprintSize);
+                DrawLootBagBadgeIfCarryingItems(spriteBatch, entityId, tileOrigin, footprintSize);
+            }
+        }
+    }
+
+    /// <summary>
+    /// Every Phasing occupant DrawUnderlayOccupants collected for this tile, at 50% alpha and
+    /// stacked -- SpriteBatchRenderer already begins with BlendState.AlphaBlend. Drawn after
+    /// DrawPrimaryOccupant rather than with the rest of the occupant walk, because a Phasing
+    /// entity sharing a tile with a Blocking one has to read as translucently in front of it; an
+    /// opaque full-tile sprite drawn afterwards would hide it completely.
+    /// </summary>
+    private void DrawPhasingOverlay(SpriteBatch spriteBatch, Vector2 tileOrigin)
+    {
+        foreach (var entityId in _phasingOccupantsBuffer)
+        {
+            if (!_transformPool.TryGetReadonly(entityId, out var transformComponent))
+            {
+                continue;
+            }
+
+            var footprintSize = new Vector2(transformComponent.Size.X * _camera.CurrentTileSize.X, transformComponent.Size.Y * _camera.CurrentTileSize.Y);
+
+            TryDrawEntityVisual(spriteBatch, entityId, FontForSize(transformComponent.Size.X), tileOrigin, footprintSize, alphaMultiplier: 0.5f);
+        }
     }
 
     private void DrawTerrainGlyph(SpriteBatch spriteBatch, TerrainLayer? terrainLayer, int mapNodeX, int mapNodeY, Vector2 tileOrigin)
@@ -832,44 +1079,10 @@ public sealed class MapWindow : Window
         TryDrawEntityVisual(spriteBatch, terrainEntityId, _mediumFont, tileOrigin, footprintSize);
     }
 
-    /// <summary>
-    /// Up to 9 Tiny entities in a 3x3 sub-grid, each &lt;= 1/3 tile size; extras beyond 9 are
-    /// simply not drawn. Skips a currently-Blocking entity even if it also carries a Tiny
-    /// NonBlockingComponent (a ForceBlockingComponent override, e.g. a Phasing Ghost forced
-    /// solid) -- occupants now includes the tile's Blocking occupant (see World's
-    /// GetOccupantEntityIdsAt), and DrawPrimaryOccupant already draws that entity at full size.
-    /// </summary>
-    private void DrawTinyGrid(SpriteBatch spriteBatch, IReadOnlyList<int> occupants, Vector2 tileOrigin)
+
+    /// <summary>entityId is the tile's Blocking occupant, already read by the caller -- DrawUnderlayOccupants needs the same value to decide which occupants DrawPrimaryOccupant is about to cover, so it is fetched once per tile and passed to both rather than read twice.</summary>
+    private void DrawPrimaryOccupant(SpriteBatch spriteBatch, Texture2D unitRectangle, int entityId, int mapNodeX, int mapNodeY, int columnIndex, int rowIndex)
     {
-        var subCellSize = new Point(_camera.CurrentTileSize.X / TinyGridDimension, _camera.CurrentTileSize.Y / TinyGridDimension);
-        var drawnCount = 0;
-
-        foreach (var entityId in occupants)
-        {
-            if (drawnCount >= MaxTinyEntitiesDrawn)
-            {
-                break;
-            }
-
-            if (_world.IsBlocking(entityId) || (NonBlockingQueries.CombinedKind(_nonBlockingPool, entityId) & NonBlockingKind.Tiny) == 0)
-            {
-                continue;
-            }
-
-            var subColumn = drawnCount % TinyGridDimension;
-            var subRow = drawnCount / TinyGridDimension;
-            var subCellTopLeft = new Vector2(tileOrigin.X + subColumn * subCellSize.X, tileOrigin.Y + subRow * subCellSize.Y);
-
-            if (TryDrawEntityVisual(spriteBatch, entityId, _tinyFont, subCellTopLeft, new Vector2(subCellSize.X, subCellSize.Y)))
-            {
-                drawnCount++;
-            }
-        }
-    }
-
-    private void DrawPrimaryOccupant(SpriteBatch spriteBatch, Texture2D unitRectangle, int currentMapLayer, int mapNodeX, int mapNodeY, int columnIndex, int rowIndex)
-    {
-        var entityId = _world.Map.GetBlockingEntityId(new Vector3Int(mapNodeX, mapNodeY, currentMapLayer));
         if (entityId == -1)
         {
             return;
@@ -915,50 +1128,6 @@ public sealed class MapWindow : Window
         }
     }
 
-    /// <summary>
-    /// Draws each corpse (DeadComponent-marked occupant in the non-Blocking index) at its own
-    /// full footprint -- the same treatment DrawPrimaryOccupant gives the single Blocking
-    /// occupant, just sourced from the non-Blocking list instead: a corpse that used to be
-    /// Blocking no longer holds that slot (see DeathSystem/World.ConvertToNonBlocking), and
-    /// TryDrawEntityVisual's own DeadComponent check is what actually grey-tints it. A corpse
-    /// that was already non-Blocking when it died (e.g. a Phasing Ghost) is drawn by whichever
-    /// existing path already handles its Kind (DrawTinyGrid/DrawPhasingGlyphs), not here --
-    /// this only covers the "no NonBlockingKind flag" case those two paths don't draw at all.
-    ///
-    /// A corpse carrying one or more items draws the LootBag-Red badge after (on top of) the
-    /// corpse's own grey-tinted draw call, at full color if its loot window has never been
-    /// opened, or grey-tinted itself once it has -- the same "already looted, no need to check
-    /// again" cue, just an explicit tint rather than a draw-order trick (an earlier before/after-
-    /// draw-order version was too easily fully hidden by the corpse's own opaque sprite instead
-    /// of reading as dimmed). See DrawLootBagBadgeIfCarryingItems -- the same badge/tint also
-    /// draws for a live container (DrawEntityIcons), not just a dead creature here.
-    /// </summary>
-    private void DrawCorpses(SpriteBatch spriteBatch, IReadOnlyList<int> occupants, int mapNodeX, int mapNodeY, Vector2 tileOrigin)
-    {
-        if (_deadPool is null)
-        {
-            return;
-        }
-
-        foreach (var entityId in occupants)
-        {
-            if (!_deadPool.Has(entityId) || (NonBlockingQueries.CombinedKind(_nonBlockingPool, entityId) & (NonBlockingKind.Tiny | NonBlockingKind.Phasing)) != 0)
-            {
-                continue;
-            }
-
-            if (!_transformPool.TryGetReadonly(entityId, out var transformComponent) ||
-                transformComponent.Position.X != mapNodeX || transformComponent.Position.Y != mapNodeY)
-            {
-                continue;
-            }
-
-            var footprintSize = new Vector2(transformComponent.Size.X * _camera.CurrentTileSize.X, transformComponent.Size.Y * _camera.CurrentTileSize.Y);
-
-            TryDrawEntityVisual(spriteBatch, entityId, FontForSize(transformComponent.Size.X), tileOrigin, footprintSize);
-            DrawLootBagBadgeIfCarryingItems(spriteBatch, entityId, tileOrigin, footprintSize);
-        }
-    }
 
     /// <summary>
     /// Shared by DrawCorpses (a dead creature) and DrawEntityIcons (a live, still-Blocking
@@ -985,7 +1154,7 @@ public sealed class MapWindow : Window
     /// </summary>
     private void DrawLootBagBadge(SpriteBatch spriteBatch, Vector2 footprintTopLeft, Vector2 footprintSize, Color tint)
     {
-        if (!SpriteManifest.TryGet(LootBagSpriteName, out var lootBagSprite))
+        if (_lootBagSprite is not { } lootBagSprite)
         {
             return;
         }
@@ -1015,7 +1184,7 @@ public sealed class MapWindow : Window
         }
 
         SpriteComponent? sprite = null;
-        if (action.SpriteName is { } spriteName && SpriteManifest.TryGet(spriteName, out var resolvedSprite))
+        if (action.SpriteName is { } spriteName && SpriteManifest.TryGetFirst(spriteName, out var resolvedSprite))
         {
             sprite = resolvedSprite;
         }
@@ -1082,27 +1251,6 @@ public sealed class MapWindow : Window
         _ => _hugeFont,
     };
 
-    /// <summary>
-    /// Every Phasing entity here draws at 50% alpha, stacked -- SpriteBatchRenderer already
-    /// begins with BlendState.AlphaBlend. Skips a currently-Blocking entity for the same
-    /// ForceBlockingComponent-override reason DrawTinyGrid does.
-    /// </summary>
-    private void DrawPhasingGlyphs(SpriteBatch spriteBatch, IReadOnlyList<int> occupants, Vector2 tileOrigin)
-    {
-        foreach (var entityId in occupants)
-        {
-            if (_world.IsBlocking(entityId) ||
-                (NonBlockingQueries.CombinedKind(_nonBlockingPool, entityId) & NonBlockingKind.Phasing) == 0 ||
-                !_transformPool.TryGetReadonly(entityId, out var transformComponent))
-            {
-                continue;
-            }
-
-            var footprintSize = new Vector2(transformComponent.Size.X * _camera.CurrentTileSize.X, transformComponent.Size.Y * _camera.CurrentTileSize.Y);
-
-            TryDrawEntityVisual(spriteBatch, entityId, FontForSize(transformComponent.Size.X), tileOrigin, footprintSize, alphaMultiplier: 0.5f);
-        }
-    }
 
     /// <summary>
     /// Blue up-arrow (top-right) if any layer above the current one is occupied; brown
@@ -1110,27 +1258,27 @@ public sealed class MapWindow : Window
     /// DrawEntityIcons, this describes the tile's other layers, not the Blocking occupant
     /// drawn on it.
     /// </summary>
-    private void DrawLayerBadges(SpriteBatch spriteBatch, int currentMapLayer, int mapNodeX, int mapNodeY, Vector2 tileOrigin)
+    /// <remarks>
+    /// One Map.GetOccupiedLayerMask read plus two bit tests, rather than the per-layer
+    /// IsPositionOccupied walk this used to do. That walk was Size.Z - 1 dictionary lookups on
+    /// essentially every visible tile every frame, and at this game's real layer density it found
+    /// nothing the overwhelming majority of the time -- measured at 17.4ms/sec, the single
+    /// largest item in this window's whole draw path. The two masks are precomputed once per
+    /// frame by the caller (see DrawGlyphs) since they depend only on the current layer, not on
+    /// which tile is being drawn.
+    /// </remarks>
+    /// <param name="higherLayerMask">Bits for every layer above the current one -- see DrawGlyphs.</param>
+    /// <param name="lowerLayerMask">Bits for every layer below the current one.</param>
+    private void DrawLayerBadges(SpriteBatch spriteBatch, int higherLayerMask, int lowerLayerMask, int mapNodeX, int mapNodeY, Vector2 tileOrigin)
     {
-        var hasHigherLayer = false;
-        for (var layer = currentMapLayer + 1; layer < _tileDepth; layer++)
+        var occupiedLayers = _world.Map.GetOccupiedLayerMask(mapNodeX, mapNodeY);
+        if (occupiedLayers == 0)
         {
-            if (_world.IsPositionOccupied(new Vector3Int(mapNodeX, mapNodeY, layer)))
-            {
-                hasHigherLayer = true;
-                break;
-            }
+            return;
         }
 
-        var hasLowerLayer = false;
-        for (var layer = currentMapLayer - 1; layer >= 0; layer--)
-        {
-            if (_world.IsPositionOccupied(new Vector3Int(mapNodeX, mapNodeY, layer)))
-            {
-                hasLowerLayer = true;
-                break;
-            }
-        }
+        var hasHigherLayer = (occupiedLayers & higherLayerMask) != 0;
+        var hasLowerLayer = (occupiedLayers & lowerLayerMask) != 0;
 
         if (hasHigherLayer)
         {
@@ -1152,14 +1300,14 @@ public sealed class MapWindow : Window
     {
         _camera.UpdateZoomLevel(newZoomLevel, ContentSize);
         _backgroundCache.Resize();
-        _backgroundCache.Reset();
+        InvalidateTerrainCaches();
     }
 
     private void CycleZoom(int direction)
     {
         _camera.CycleZoom(direction, ContentSize);
         _backgroundCache.Resize();
-        _backgroundCache.Reset();
+        InvalidateTerrainCaches();
     }
 
     /// <summary>Scrolls the camera by scrollChange tiles, keeping the background cache in sync.</summary>
@@ -1168,7 +1316,32 @@ public sealed class MapWindow : Window
     public void UpdateScrollPosition(Point scrollChange)
     {
         var appliedDelta = _camera.UpdateScrollPosition(scrollChange);
+        ApplyCameraScrollToCaches(appliedDelta);
+    }
+
+    /// <summary>
+    /// Shifts the per-visible-tile caches by a scroll delta the camera has already applied --
+    /// shared by every camera move (drag, drag-end snap, and camera-follow's own re-centre), so
+    /// they all get the same incremental treatment rather than one of them rebuilding wholesale.
+    /// </summary>
+    /// <remarks>
+    /// The background cache shifts its known cells and re-resolves only what scrolled into view.
+    /// The two render-target caches can't do that -- their content is a texture, not an array of
+    /// resolved values -- so they simply rebuild, but only when the camera genuinely moved. A
+    /// no-op delta (the common case while standing still, and every step taken along a map edge)
+    /// leaves all three untouched.
+    /// </remarks>
+    /// <param name="appliedDelta">The scroll change the camera actually applied, in tiles.</param>
+    private void ApplyCameraScrollToCaches(Point appliedDelta)
+    {
+        if (appliedDelta == Point.Zero)
+        {
+            return;
+        }
+
         _backgroundCache.ApplyScroll(appliedDelta.X, appliedDelta.Y);
+        _terrainCache?.Invalidate();
+        _glowCache?.Invalidate();
     }
 
     /// <summary>Sets MapViewState.SelectedMapNodePosition to whatever map tile mousePosition resolves to, if any.</summary>
@@ -1363,10 +1536,24 @@ public sealed class MapWindow : Window
         }
     }
 
+    /// <summary>
+    /// Re-centres the camera and brings the per-visible-tile caches with it -- incrementally when
+    /// the camera actually moved, and not at all when it didn't.
+    /// </summary>
+    /// <remarks>
+    /// Camera-follow calls this on every player step, so this is the hottest invalidation path in
+    /// the window. It used to unconditionally call MapBackgroundCache.Reset -- a full re-resolve of
+    /// every visible cell, each costing an IsOnMap check plus up to two BackgroundComponent pool
+    /// reads -- for what is almost always a one-tile shift, while the very same class already had
+    /// ApplyScroll for exactly this case. Routing through UpdateScrollPosition instead means a
+    /// player step shifts the known cells and re-resolves only the newly-exposed row or column, and
+    /// a step that doesn't move the camera at all (against a map edge, or the follow already
+    /// centred) costs nothing.
+    /// </remarks>
     private void CenterCameraOn(Vector3Int position)
     {
-        _camera.CenterCameraOn(position);
-        _backgroundCache.Reset();
+        var appliedDelta = _camera.CenterCameraOn(position);
+        ApplyCameraScrollToCaches(appliedDelta);
     }
 
     /// <summary>Snapshots the scroll position the moment a right-mouse-drag starts, so OnRightDragAction always has a fixed anchor to measure the drag against.</summary>

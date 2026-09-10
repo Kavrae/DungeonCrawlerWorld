@@ -41,11 +41,6 @@ public sealed class ActionEffectResolverTests
     }
 
     /// <summary>Never rolls a crit -- NextDouble always returns 1.0, comfortably above any crit chance -- so damage-amount assertions in these orchestration tests stay deterministic.</summary>
-    private sealed class NeverCritRandom : Random
-    {
-        public override double NextDouble() => 1.0;
-    }
-
     /// <summary>Minimal IMapQuery test double supporting both the Blocking slot and the general occupant index -- everything else is unused by ActionEffectResolver.Apply.</summary>
     private sealed class FakeMapQuery : IMapQuery
     {
@@ -88,7 +83,7 @@ public sealed class ActionEffectResolverTests
         var mapQuery = new FakeMapQuery();
         var health = new PackedComponentPool<SimpleHealthComponent>(maximumEntityCount: 10, initialCapacity: 10, static (ref existing, incoming) => existing = incoming);
         var eventBus = new EventBus();
-        var mathUtility = new MathUtility(new NeverCritRandom());
+        var mathUtility = new MathUtility();
         var statusEffectAppliers = new StatusEffectAuraApplierRegistry();
         var componentManager = new ComponentManager(initialEntityCapacity: 10, initialComponentCapacity: 10);
 
@@ -104,7 +99,7 @@ public sealed class ActionEffectResolverTests
 
         ActionEffectResolver.Apply(Action, SourceEntityId, [TargetTile], mapQuery, health, eventBus, mathUtility, playerQuery: null, statusEffectAppliers, componentManager);
 
-        Assert.AreEqual(85, health.GetReadonly(BlockingTargetEntityId).CurrentHealth);
+        DamageAssert.HealthAfterDamage(startingHealth: 100, expectedNormalDamage: 15, health.GetReadonly(BlockingTargetEntityId).CurrentHealth);
     }
 
     /// <summary>The requirement this test guards: a tile-targeted action must hit Tiny/Phasing entities too, not just the single Blocking occupant Map's own array can answer for.</summary>
@@ -117,7 +112,7 @@ public sealed class ActionEffectResolverTests
 
         ActionEffectResolver.Apply(Action, SourceEntityId, [TargetTile], mapQuery, health, eventBus, mathUtility, playerQuery: null, statusEffectAppliers, componentManager);
 
-        Assert.AreEqual(85, health.GetReadonly(NonBlockingTargetEntityId).CurrentHealth);
+        DamageAssert.HealthAfterDamage(startingHealth: 100, expectedNormalDamage: 15, health.GetReadonly(NonBlockingTargetEntityId).CurrentHealth);
     }
 
     /// <summary>Stacked non-Blocking entities (e.g. several Tiny goblins sharing a cell) must all be hit by the same activation, not just the first.</summary>
@@ -132,8 +127,8 @@ public sealed class ActionEffectResolverTests
 
         ActionEffectResolver.Apply(Action, SourceEntityId, [TargetTile], mapQuery, health, eventBus, mathUtility, playerQuery: null, statusEffectAppliers, componentManager);
 
-        Assert.AreEqual(85, health.GetReadonly(NonBlockingTargetEntityId).CurrentHealth);
-        Assert.AreEqual(85, health.GetReadonly(SecondNonBlockingTargetEntityId).CurrentHealth);
+        DamageAssert.HealthAfterDamage(startingHealth: 100, expectedNormalDamage: 15, health.GetReadonly(NonBlockingTargetEntityId).CurrentHealth);
+        DamageAssert.HealthAfterDamage(startingHealth: 100, expectedNormalDamage: 15, health.GetReadonly(SecondNonBlockingTargetEntityId).CurrentHealth);
     }
 
     /// <summary>A Blocking occupant and a Phasing entity can legitimately overlap the same tile -- both must be damaged by one activation, not just one or the other.</summary>
@@ -148,8 +143,8 @@ public sealed class ActionEffectResolverTests
 
         ActionEffectResolver.Apply(Action, SourceEntityId, [TargetTile], mapQuery, health, eventBus, mathUtility, playerQuery: null, statusEffectAppliers, componentManager);
 
-        Assert.AreEqual(85, health.GetReadonly(BlockingTargetEntityId).CurrentHealth);
-        Assert.AreEqual(85, health.GetReadonly(NonBlockingTargetEntityId).CurrentHealth);
+        DamageAssert.HealthAfterDamage(startingHealth: 100, expectedNormalDamage: 15, health.GetReadonly(BlockingTargetEntityId).CurrentHealth);
+        DamageAssert.HealthAfterDamage(startingHealth: 100, expectedNormalDamage: 15, health.GetReadonly(NonBlockingTargetEntityId).CurrentHealth);
     }
 
     [TestMethod]
@@ -180,7 +175,7 @@ public sealed class ActionEffectResolverTests
         ActionEffectResolver.Apply(StrengthTaggedAction, SourceEntityId, [TargetTile], mapQuery, health, eventBus, mathUtility, playerQuery: null, statusEffectAppliers, componentManager, statModifiers: null, deadEntities: null, abilityScores: abilityScores);
 
         // 15 base damage + 8 Strength Total = 23.
-        Assert.AreEqual(77, health.GetReadonly(BlockingTargetEntityId).CurrentHealth);
+        DamageAssert.HealthAfterDamage(startingHealth: 100, expectedNormalDamage: 23, health.GetReadonly(BlockingTargetEntityId).CurrentHealth);
     }
 
     [TestMethod]
@@ -192,7 +187,7 @@ public sealed class ActionEffectResolverTests
 
         ActionEffectResolver.Apply(StrengthTaggedAction, SourceEntityId, [TargetTile], mapQuery, health, eventBus, mathUtility, playerQuery: null, statusEffectAppliers, componentManager);
 
-        Assert.AreEqual(85, health.GetReadonly(BlockingTargetEntityId).CurrentHealth);
+        DamageAssert.HealthAfterDamage(startingHealth: 100, expectedNormalDamage: 15, health.GetReadonly(BlockingTargetEntityId).CurrentHealth);
     }
 
     [TestMethod]
@@ -207,7 +202,7 @@ public sealed class ActionEffectResolverTests
 
         ActionEffectResolver.Apply(StrengthTaggedAction, SourceEntityId, [TargetTile], mapQuery, health, eventBus, mathUtility, playerQuery: null, statusEffectAppliers, componentManager, statModifiers: null, deadEntities: null, abilityScores: abilityScores);
 
-        Assert.AreEqual(85, health.GetReadonly(BlockingTargetEntityId).CurrentHealth);
+        DamageAssert.HealthAfterDamage(startingHealth: 100, expectedNormalDamage: 15, health.GetReadonly(BlockingTargetEntityId).CurrentHealth);
     }
 
     private static readonly ActionDefinition ActionWithStatusEffect = new(
@@ -344,7 +339,7 @@ public sealed class ActionEffectResolverTests
 
         ActionEffectResolver.Apply(Action, SourceEntityId, [TargetTile], mapQuery, health, eventBus, mathUtility, playerQuery: null, statusEffectAppliers, componentManager, dodgingEntities: dodgingEntities);
 
-        Assert.AreEqual(85, health.GetReadonly(BlockingTargetEntityId).CurrentHealth, "Only Dodgeable-tagged actions are affected by DodgingComponent -- everything else lands as normal.");
+        DamageAssert.HealthAfterDamage(startingHealth: 100, expectedNormalDamage: 15, health.GetReadonly(BlockingTargetEntityId).CurrentHealth, "Only Dodgeable-tagged actions are affected by DodgingComponent -- everything else lands as normal.");
     }
 
     [TestMethod]
@@ -357,7 +352,7 @@ public sealed class ActionEffectResolverTests
 
         ActionEffectResolver.Apply(DodgeableAction, SourceEntityId, [TargetTile], mapQuery, health, eventBus, mathUtility, playerQuery: null, statusEffectAppliers, componentManager, dodgingEntities: dodgingEntities);
 
-        Assert.AreEqual(85, health.GetReadonly(BlockingTargetEntityId).CurrentHealth);
+        DamageAssert.HealthAfterDamage(startingHealth: 100, expectedNormalDamage: 15, health.GetReadonly(BlockingTargetEntityId).CurrentHealth);
     }
 
     [TestMethod]
@@ -369,6 +364,6 @@ public sealed class ActionEffectResolverTests
 
         ActionEffectResolver.Apply(DodgeableAction, SourceEntityId, [TargetTile], mapQuery, health, eventBus, mathUtility, playerQuery: null, statusEffectAppliers, componentManager);
 
-        Assert.AreEqual(85, health.GetReadonly(BlockingTargetEntityId).CurrentHealth);
+        DamageAssert.HealthAfterDamage(startingHealth: 100, expectedNormalDamage: 15, health.GetReadonly(BlockingTargetEntityId).CurrentHealth);
     }
 }

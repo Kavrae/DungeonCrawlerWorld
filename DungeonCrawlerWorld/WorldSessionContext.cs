@@ -1,10 +1,11 @@
-using Engine.ECS.Context;
+﻿using Engine.ECS.Context;
 using Engine.ECS.Systems;
 using Engine.Math;
 using Game.Diagnostics;
 using Game.Floors;
 using Game.Modules.Actions;
 using Game.Modules.Inventory;
+using Game.Modules.ProcessingTier;
 using Game.Modules.StatusEffects;
 using Game.World;
 
@@ -36,4 +37,5 @@ public sealed record WorldSessionContext(
     ItemCatalog ItemCatalog,
     PlayerActivityLog PlayerActivityLog,
     StatusEffectDisplayRegistry StatusEffectDisplays,
-    ReservedEntityIds ReservedEntityIds);
+    ReservedEntityIds ReservedEntityIds,
+    LocalTierRoster LocalTierRoster);
