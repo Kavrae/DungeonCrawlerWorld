@@ -14,9 +14,14 @@ public sealed class ActionLockSystemTests
         new(maximumEntityCount: 10, initialCapacity: 4,
             static (ref existing, incoming) => existing = incoming);
 
-    private static DirectComponentPool<ProcessingTierComponent> CreateTiersPool() =>
-        new(initialCapacity: 10,
+    /// <summary>Seeds entity 0's tier explicitly -- an entity with no ProcessingTierComponent resolves to Beyond, not Local (see ProcessingTierWiring), so leaving it absent put entity 0 in a StripeCount 10 * 8 = 80 bucket while these tests read as if it were Local.</summary>
+    private static DirectComponentPool<ProcessingTierComponent> CreateTiersPool(ProcessingTierLevel tier = ProcessingTierLevel.Local)
+    {
+        var pool = new DirectComponentPool<ProcessingTierComponent>(initialCapacity: 10,
             static (ref existing, incoming) => existing = incoming);
+        pool.Add(0, new ProcessingTierComponent(tier));
+        return pool;
+    }
 
     [TestMethod]
     public void Update_DecrementsLockFramesRemainingByStripeCount()
@@ -97,9 +102,13 @@ public sealed class ActionLockSystemTests
         Assert.AreEqual(versionBeforeUpdate, pool.GetVersion(0));
     }
 
+    /// <summary>Frames-per-visit for a Neighborhood-tiered entity of the given system -- derived from ProcessingTierDivisors rather than hardcoded, so re-tuning the divisors doesn't silently invalidate these tests' arithmetic (it did once already).</summary>
+    private static int NeighborhoodFramesPerVisit(ISystem system) =>
+        system.StripeCount * ProcessingTierDivisors.ByTierIndex[(int)ProcessingTierLevel.Neighborhood];
+
     /// <summary>
-    /// A Neighborhood-tiered entity (StripeCount 10 * divisor 2 = 20) lands in bucket
-    /// entityId % 20 -- for entity 0, that's bucket 0, due only when FrameCount % 20 == 0.
+    /// A Neighborhood-tiered entity lands in bucket entityId % (StripeCount * divisor) -- for
+    /// entity 0, that's bucket 0, due only when FrameCount is a multiple of that product.
     /// The tier must be seeded into the pool before construction, since TieredEntityStripeSet
     /// reads an entity's current tier at membership-add time (during the constructor).
     /// </summary>
@@ -107,9 +116,8 @@ public sealed class ActionLockSystemTests
     public void Update_ThrottledEntity_OffCycle_DoesNotDecrement()
     {
         var pool = CreatePool();
-        var tiers = CreateTiersPool();
+        var tiers = CreateTiersPool(ProcessingTierLevel.Neighborhood);
         pool.Add(0, new ActionLockComponent(standardLockFrames: ActionLockGate.StandardLockFrames, currentLockTotalFrames: 25, currentLockFramesRemaining: 25));
-        tiers.Add(0, new ProcessingTierComponent(ProcessingTierLevel.Neighborhood));
         var system = new ActionLockSystem(pool, tiers, new ProcessingTierEvents());
 
         system.Update(new EngineTime(default, default, false, FrameCount: 1), 0);
@@ -121,13 +129,16 @@ public sealed class ActionLockSystemTests
     public void Update_ThrottledEntity_OnEligibleCycle_Decrements()
     {
         var pool = CreatePool();
-        var tiers = CreateTiersPool();
+        var tiers = CreateTiersPool(ProcessingTierLevel.Neighborhood);
         pool.Add(0, new ActionLockComponent(standardLockFrames: ActionLockGate.StandardLockFrames, currentLockTotalFrames: 25, currentLockFramesRemaining: 25));
-        tiers.Add(0, new ProcessingTierComponent(ProcessingTierLevel.Neighborhood));
         var system = new ActionLockSystem(pool, tiers, new ProcessingTierEvents());
+        var framesPerVisit = NeighborhoodFramesPerVisit(system);
 
-        system.Update(new EngineTime(default, default, false, FrameCount: 20), 0);
+        system.Update(new EngineTime(default, default, false, FrameCount: framesPerVisit), 0);
 
-        Assert.AreEqual(15, pool.GetReadonly(0).CurrentLockFramesRemaining);
+        // Burns off the whole span it was absent for, not the base StripeCount -- a Neighborhood
+        // entity is only visited every StripeCount * divisor frames. See ActionLockSystem.Update's
+        // own remarks. Clamped at 0 once that span exceeds the lock itself.
+        Assert.AreEqual(System.Math.Max(0, 25 - framesPerVisit), pool.GetReadonly(0).CurrentLockFramesRemaining);
     }
 }

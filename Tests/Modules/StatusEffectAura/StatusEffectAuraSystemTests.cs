@@ -529,7 +529,7 @@ public sealed class StatusEffectAuraSystemTests
         componentManager.GetDirectPool<ProcessingTierComponent>().Add(ObserverEntityId, new ProcessingTierComponent(ProcessingTierLevel.Neighborhood));
         componentManager.GetMultiPool<StatusEffectAuraExposureComponent>().Add(ObserverEntityId, new StatusEffectAuraExposureComponent(StatusEffectType.Burning, AuraEffects.TickIntervalFrames));
 
-        // ObserverEntityId (0), Neighborhood-tiered (StripeCount 15 * divisor 2 = 30), lands in
+        // ObserverEntityId (0), Neighborhood-tiered (StripeCount * the Neighborhood divisor) lands in
         // bucket 0 -- due only when FrameCount % 30 == 0.
         system.Update(new EngineTime(default, default, false, FrameCount: 1), 0);
 
@@ -543,12 +543,18 @@ public sealed class StatusEffectAuraSystemTests
         AddSource(componentManager, SourceEntityId, SourcePosition, StatusEffectType.Burning, strength: 8);
         componentManager.Merge(ObserverEntityId, new TransformComponent(SourcePosition, UnitSize));
         componentManager.GetDirectPool<ProcessingTierComponent>().Add(ObserverEntityId, new ProcessingTierComponent(ProcessingTierLevel.Neighborhood));
-        componentManager.GetMultiPool<StatusEffectAuraExposureComponent>().Add(ObserverEntityId, new StatusEffectAuraExposureComponent(StatusEffectType.Burning, AuraEffects.TickIntervalFrames));
+
+        // Derived from ProcessingTierDivisors, and seeded longer than one visit's span, so this
+        // stays on the decrement path -- see BurningSystemTests'
+        // Update_ThrottledEntity_OnEligibleCycle_DecrementsCountdown for the same reasoning.
+        var framesPerVisit = system.StripeCount * ProcessingTierDivisors.ByTierIndex[(int)ProcessingTierLevel.Neighborhood];
+        var startingCountdown = (ushort)(framesPerVisit + AuraEffects.TickIntervalFrames);
+        componentManager.GetMultiPool<StatusEffectAuraExposureComponent>().Add(ObserverEntityId, new StatusEffectAuraExposureComponent(StatusEffectType.Burning, startingCountdown));
 
         system.Update(new EngineTime(default, default, false, FrameCount: 0), 0);
 
-        // Decremented by the Neighborhood tier's own framesPerVisit (StripeCount 15 * divisor 2 = 30), not the base StripeCount.
-        Assert.AreEqual(AuraEffects.TickIntervalFrames - (system.StripeCount * 2), FramesUntilNextTickOf(componentManager, ObserverEntityId, StatusEffectType.Burning));
+        // Decremented by the Neighborhood tier's own framesPerVisit, not the base StripeCount.
+        Assert.AreEqual(startingCountdown - framesPerVisit, FramesUntilNextTickOf(componentManager, ObserverEntityId, StatusEffectType.Burning));
     }
 
     /// <summary>

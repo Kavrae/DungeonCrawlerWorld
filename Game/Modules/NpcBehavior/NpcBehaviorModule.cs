@@ -9,6 +9,8 @@ using Game.Modules.Inventory.Components;
 using Game.Modules.Movement.Components;
 using Game.Modules.NpcBehavior.Components;
 using Game.Modules.NpcBehavior.Systems;
+using Game.Modules.ProcessingTier;
+using Game.Modules.ProcessingTier.Components;
 using Game.Modules.Race.Components;
 using Game.World;
 
@@ -31,11 +33,13 @@ public sealed class NpcBehaviorModule : IGameModule
 
     private IMapQuery _mapQuery = null!;
     private MathUtility _mathUtility = null!;
+    private ProcessingTierEvents _processingTierEvents = null!;
 
     public void Configure(GameModuleContext context)
     {
         _mapQuery = context.MapQuery;
         _mathUtility = context.MathUtility;
+        _processingTierEvents = context.ProcessingTierEvents;
     }
 
     public void RegisterComponents(ComponentManager componentManager) =>
@@ -69,6 +73,8 @@ public sealed class NpcBehaviorModule : IGameModule
             componentManager.GetPackedPool<PendingConsumableActivationComponent>(),
             _mapQuery,
             _mathUtility,
+            componentManager.GetDirectPool<ProcessingTierComponent>(),
+            _processingTierEvents,
             deadEntities));
 
         systemManager.Register(new TestDummyAttackSystem(

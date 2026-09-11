@@ -29,8 +29,13 @@ public sealed class BurningSystemTests
     private static PackedComponentPool<SimpleHealthComponent> CreateHealthPool() =>
         new(maximumEntityCount: 10, initialCapacity: 4, static (ref existing, incoming) => existing = incoming);
 
-    private static DirectComponentPool<ProcessingTierComponent> CreateTiersPool() =>
-        new(initialCapacity: 10, static (ref existing, incoming) => existing = incoming);
+    /// <summary>Seeds entity 0's tier explicitly -- see ContactDamageSystemTests.CreateTiersPool's own note. Tests wanting another tier Merge over it rather than Add, since Add throws on an entity that already has one.</summary>
+    private static DirectComponentPool<ProcessingTierComponent> CreateTiersPool(ProcessingTierLevel tier = ProcessingTierLevel.Local)
+    {
+        var pool = new DirectComponentPool<ProcessingTierComponent>(initialCapacity: 10, static (ref existing, incoming) => existing = incoming);
+        pool.Add(0, new ProcessingTierComponent(tier));
+        return pool;
+    }
 
     /// <summary>
     /// BurningSystem is striped (see its own doc comment), so CountdownTicker.Tick decrements
@@ -38,7 +43,7 @@ public sealed class BurningSystemTests
     /// timer would take TickIntervalFrames * StripeCount real frames to fire instead of
     /// TickIntervalFrames. Pinned to Local (framesPerVisit == base StripeCount exactly, no tier
     /// divisor on top) since that's what this test is verifying -- untiered would fail open to
-    /// Beyond's divisor-8 framesPerVisit instead, which is a different (and separately tested,
+    /// Beyond's much coarser framesPerVisit instead, which is a different (and separately tested,
     /// see Update_ThrottledEntity_*) concern.
     /// </summary>
     [TestMethod]
@@ -48,7 +53,7 @@ public sealed class BurningSystemTests
         var health = CreateHealthPool();
         var tiers = CreateTiersPool();
         timers.Add(0, new BurningTimerComponent(60, stackCount: 1, StatusEffectSource.Admin));
-        tiers.Add(0, new ProcessingTierComponent(ProcessingTierLevel.Local));
+        tiers.Merge(0, new ProcessingTierComponent(ProcessingTierLevel.Local));
         var system = new BurningSystem(timers, health, new EventBus(), new FakePlayerQuery(0), tiers, new ProcessingTierEvents(), new MathUtility());
 
         system.Update(default, 0);
@@ -217,10 +222,10 @@ public sealed class BurningSystemTests
         var health = CreateHealthPool();
         var tiers = CreateTiersPool();
         timers.Add(0, new BurningTimerComponent(60, stackCount: 1, StatusEffectSource.Admin));
-        tiers.Add(0, new ProcessingTierComponent(ProcessingTierLevel.Neighborhood));
+        tiers.Merge(0, new ProcessingTierComponent(ProcessingTierLevel.Neighborhood));
         var system = new BurningSystem(timers, health, new EventBus(), new FakePlayerQuery(0), tiers, new ProcessingTierEvents(), new MathUtility());
 
-        // Entity 0, Neighborhood-tiered (StripeCount 15 * divisor 2 = 30), lands in bucket 0 -- due only when FrameCount % 30 == 0.
+        // Entity 0, Neighborhood-tiered (StripeCount * the Neighborhood divisor) lands in bucket 0 -- due only when FrameCount is a multiple of that product.
         system.Update(new EngineTime(default, default, false, FrameCount: 1), 0);
 
         Assert.AreEqual(60, timers.GetReadonly(0).FramesUntilNextTick);
@@ -231,14 +236,23 @@ public sealed class BurningSystemTests
     {
         var timers = CreateTimerPool();
         var health = CreateHealthPool();
-        var tiers = CreateTiersPool();
-        timers.Add(0, new BurningTimerComponent(60, stackCount: 1, StatusEffectSource.Admin));
-        tiers.Add(0, new ProcessingTierComponent(ProcessingTierLevel.Neighborhood));
+        var tiers = CreateTiersPool(ProcessingTierLevel.Neighborhood);
         var system = new BurningSystem(timers, health, new EventBus(), new FakePlayerQuery(0), tiers, new ProcessingTierEvents(), new MathUtility());
+
+        // Derived, not hardcoded, so re-tuning ProcessingTierDivisors doesn't invalidate this.
+        // The timer is seeded longer than one visit's span deliberately: this test covers the
+        // decrement path, and a countdown shorter than framesPerVisit would instead fire (and,
+        // at stackCount 1, remove the component outright) -- that catch-up behaviour is
+        // CountdownTicker's own concern, covered separately. Added after construction because
+        // the stripe set tracks the driving pool's EntityAdded, so membership and tier still
+        // resolve correctly.
+        var framesPerVisit = system.StripeCount * ProcessingTierDivisors.ByTierIndex[(int)ProcessingTierLevel.Neighborhood];
+        var startingCountdown = (ushort)(framesPerVisit + 60);
+        timers.Add(0, new BurningTimerComponent(startingCountdown, stackCount: 1, StatusEffectSource.Admin));
 
         system.Update(new EngineTime(default, default, false, FrameCount: 0), 0);
 
-        // Decremented by the Neighborhood tier's own framesPerVisit (StripeCount 15 * divisor 2 = 30), not the base StripeCount.
-        Assert.AreEqual(60 - (system.StripeCount * 2), timers.GetReadonly(0).FramesUntilNextTick);
+        // Decremented by the Neighborhood tier's own framesPerVisit, not the base StripeCount.
+        Assert.AreEqual(startingCountdown - framesPerVisit, timers.GetReadonly(0).FramesUntilNextTick);
     }
 }

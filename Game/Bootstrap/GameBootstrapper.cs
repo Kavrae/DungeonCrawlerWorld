@@ -26,6 +26,7 @@ using Game.Modules.NpcBehavior;
 using Game.Modules.Paralysis;
 using Game.Modules.Poison;
 using Game.Modules.ProcessingTier;
+using Game.Modules.ProcessingTier.Components;
 using Game.Modules.Race;
 using Game.Modules.Shops;
 using Game.Modules.StatModifiers;
@@ -125,7 +126,17 @@ public static class GameBootstrapper
         world.EntityManager = ecsContext.EntityManager;
         world.EventBus = ecsContext.EventBus;
 
-        return new GameBootstrapResult(ecsContext, failures, context.Actions, context.MovedEntities, context.Items, context.StatusEffectDisplays, context.LocalTierRoster);
+        // Every placement through World gets a correct tier without its caller having to ask -- the
+        // catch-all behind ProcessingTierResolver.CreateEntityAt. See that class's own remarks.
+        world.EntityPlaced += context.ProcessingTierResolver.EnsureTiered;
+
+        // Which processing tiers are simulated at all, for every ITieredSystem. Every tier today.
+        // This is the single point P2 ("only Local and Neighborhood are simulated; Borough and
+        // beyond spawn in and wait") changes -- to 2 -- rather than an edit to each system. Engine
+        // only ever sees a count; what the tiers mean stays here.
+        ecsContext.SystemManager.SimulatedTierCount = ProcessingTierDivisors.ByTierIndex.Length;
+
+        return new GameBootstrapResult(ecsContext, failures, context.Actions, context.MovedEntities, context.Items, context.StatusEffectDisplays, context.LocalTierRoster, context.ProcessingTierResolver);
     }
 
     /// <summary>

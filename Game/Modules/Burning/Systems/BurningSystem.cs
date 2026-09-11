@@ -22,7 +22,7 @@ namespace Game.Modules.Burning.Systems;
 /// PoisonSystem/ContactDamageSystem/StatusEffectAuraSystem -- this class only supplies the
 /// entity-id source and what "ticking" actually does.
 /// </summary>
-public sealed class BurningSystem : ISystem
+public sealed class BurningSystem : ITieredSystem
 {
     /// <summary>Passed as HealthDamage.Apply's damageTags on every tick -- lets a ConditionTag: Tag.Fire-scoped IncomingDamage modifier reduce burning damage specifically. Cached once rather than allocated fresh per tick.</summary>
     private static readonly Tag[] BurningDamageTags = [Tag.Fire];
@@ -69,13 +69,13 @@ public sealed class BurningSystem : ISystem
         _tieredStripeSet = ProcessingTierWiring.CreateAndWire(StripeCount, timers, processingTiers, processingTierEvents);
     }
 
-    public void Update(EngineTime time, byte stripeIndex)
-    {
-        for (var tierIndex = 0; tierIndex < _tieredStripeSet.TierCount; tierIndex++)
-        {
-            CountdownTicker.Tick(_timers, _tieredStripeSet.GetTierBucket(tierIndex, time.FrameCount), _pendingTimerRemovals, _tick, _tieredStripeSet.GetTierFramesPerVisit(tierIndex));
-        }
-    }
+    public void Update(EngineTime time, byte stripeIndex) => TieredSystemRunner.Run(this, time);
+
+    public TieredEntityStripeSet Tiers => _tieredStripeSet;
+
+    /// <summary>Advances each due entity's countdown by framesPerVisit -- see ITieredSystem.UpdateBucket.</summary>
+    public void UpdateBucket(EngineTime time, ReadOnlySpan<int> entityIds, ushort framesPerVisit) =>
+        CountdownTicker.Tick(_timers, entityIds, _pendingTimerRemovals, _tick, framesPerVisit);
 
     /// <summary>Returns whether the timer should be removed entirely (stacks fully decayed) -- see CountdownTicker.Tick's own doc comment for the contract.</summary>
     private bool Tick(int entityId, BurningTimerComponent timer)

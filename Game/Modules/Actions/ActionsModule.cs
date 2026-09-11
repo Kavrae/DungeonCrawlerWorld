@@ -91,7 +91,10 @@ public sealed class ActionsModule : IGameModule
             componentManager.GetDirectPool<ProcessingTierComponent>(),
             _processingTierEvents));
 
-        systemManager.Register(new PotionCooldownSystem(componentManager.GetPackedPool<PotionCooldownComponent>()));
+        systemManager.Register(new PotionCooldownSystem(
+            componentManager.GetPackedPool<PotionCooldownComponent>(),
+            componentManager.GetDirectPool<ProcessingTierComponent>(),
+            _processingTierEvents));
 
         if (!componentManager.IsRegistered<SimpleHealthComponent>())
         {

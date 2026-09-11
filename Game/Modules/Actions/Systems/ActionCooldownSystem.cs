@@ -9,7 +9,7 @@ namespace Game.Modules.Actions.Systems;
 
 /// <summary>Manages the active cooldowns for each entity's actions.</summary>
 /// <cleanupVersion>1</cleanupVersion>
-public sealed class ActionCooldownSystem : ISystem
+public sealed class ActionCooldownSystem : ITieredSystem
 {
     private const byte StripeCountValue = 10;
 
@@ -25,21 +25,28 @@ public sealed class ActionCooldownSystem : ISystem
         _tieredStripeSet = ProcessingTierWiring.CreateAndWire(StripeCount, actionInstances, processingTiers, processingTierEvents);
     }
 
-    /// <summary>Updates the cooldowns for the entities in the specified entity stripe</summary>
-    /// <remarks>Cooldowns are reduced by the stripeCountValue to account for the number of ticks between updates for the updated entity stripe.</remarks>
-    /// <param name="time"></param>
-    /// <param name="stripeIndex"></param>
-    public void Update(EngineTime time, byte stripeIndex)
+    public TieredEntityStripeSet Tiers => _tieredStripeSet;
+
+    /// <summary>Runs every tier -- see ITieredSystem's own remarks. SystemManager does not call this.</summary>
+    public void Update(EngineTime time, byte stripeIndex) => TieredSystemRunner.Run(this, time);
+
+    /// <summary>
+    /// Reduces each due entity's cooldowns by framesPerVisit, not the base StripeCountValue -- a
+    /// coarse-tier entity is only visited every StripeCount * divisor frames. Decrementing by
+    /// StripeCountValue regardless of tier (as this used to) meant a Beyond-tier entity's
+    /// cooldowns ran at an eighth of real time.
+    /// </summary>
+    public void UpdateBucket(EngineTime time, ReadOnlySpan<int> entityIds, ushort framesPerVisit)
     {
-        foreach (var entityId in _tieredStripeSet.GetDueEntities(time.FrameCount))
+        foreach (var entityId in entityIds)
         {
             for (var denseIndex = _actionInstances.GetFirstDenseIndex(entityId); denseIndex != -1; denseIndex = _actionInstances.GetNextDenseIndex(denseIndex))
             {
                 if (_actionInstances.GetReadonlyByDenseIndex(denseIndex).CooldownFramesRemaining > 0)
                 {
-                    _actionInstances.UpdateByDenseIndex(denseIndex, static (ref ActionInstanceComponent instance) =>
+                    _actionInstances.UpdateByDenseIndex(denseIndex, framesPerVisit, static (ref ActionInstanceComponent instance, ushort frames) =>
                     {
-                        instance.CooldownFramesRemaining = MathUtility.DecrementClamped(instance.CooldownFramesRemaining, StripeCountValue);
+                        instance.CooldownFramesRemaining = MathUtility.DecrementClamped(instance.CooldownFramesRemaining, frames);
                     });
                 }
             }

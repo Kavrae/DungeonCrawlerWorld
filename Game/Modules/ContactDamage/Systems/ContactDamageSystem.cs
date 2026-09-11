@@ -35,7 +35,7 @@ namespace Game.Modules.ContactDamage.Systems;
 /// publishes EntityDamagedEvent through it, an unrelated, low-frequency event this redesign doesn't
 /// touch.
 /// </summary>
-public sealed class ContactDamageSystem : ISystem
+public sealed class ContactDamageSystem : ITieredSystem
 {
     public byte StripeCount => 1;
 
@@ -127,21 +127,28 @@ public sealed class ContactDamageSystem : ISystem
         }
     }
 
-    public void Update(EngineTime time, byte stripeIndex)
+    public void Update(EngineTime time, byte stripeIndex) => TieredSystemRunner.Run(this, time);
+
+    public TieredEntityStripeSet Tiers => _tieredStripeSet;
+
+    /// <summary>
+    /// Drains this frame's moves before any tier runs. NOT tier-gated -- see StatusEffectAuraSystem's
+    /// own Update comment for why (already self-limiting to entities that moved this exact frame).
+    /// Only the periodic re-check pass in UpdateBucket is throttled. Lives here rather than in Update
+    /// because SystemManager runs a tiered system through TieredSystemRunner and never calls its
+    /// Update -- see ITieredSystem's remarks.
+    /// </summary>
+    public void BeginFrame(EngineTime time)
     {
         foreach (var moved in _movedEntities.Items)
         {
             OnEntityMoved(moved);
         }
-
-        // The buffer drain above is NOT tier-gated -- see StatusEffectAuraSystem's own Update
-        // comment for why (already self-limiting to entities that moved this exact frame).
-        // Only the periodic re-check pass below is throttled.
-        for (var tierIndex = 0; tierIndex < _tieredStripeSet.TierCount; tierIndex++)
-        {
-            CountdownTicker.Tick(_exposures, _tieredStripeSet.GetTierBucket(tierIndex, time.FrameCount), _pendingRemovals, _tick, _tieredStripeSet.GetTierFramesPerVisit(tierIndex));
-        }
     }
+
+    /// <summary>Advances each due exposure's re-check countdown by framesPerVisit -- see ITieredSystem.UpdateBucket.</summary>
+    public void UpdateBucket(EngineTime time, ReadOnlySpan<int> entityIds, ushort framesPerVisit) =>
+        CountdownTicker.Tick(_exposures, entityIds, _pendingRemovals, _tick, framesPerVisit);
 
     /// <summary>Always returns false (never removes here -- see this class's own doc comment for why); see CountdownTicker.Tick's own doc comment for the contract.</summary>
     private bool Tick(int entityId, ContactDamageExposureComponent exposure)

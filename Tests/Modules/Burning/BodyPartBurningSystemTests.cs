@@ -24,8 +24,13 @@ public sealed class BodyPartBurningSystemTests
     private static PackedComponentPool<SimpleHealthComponent> CreateHealthPool() =>
         new(maximumEntityCount: 10, initialCapacity: 4, static (ref existing, incoming) => existing = incoming);
 
-    private static DirectComponentPool<ProcessingTierComponent> CreateTiersPool() =>
-        new(initialCapacity: 10, static (ref existing, incoming) => existing = incoming);
+    /// <summary>Seeds entity 0's tier explicitly -- see ContactDamageSystemTests.CreateTiersPool's own note.</summary>
+    private static DirectComponentPool<ProcessingTierComponent> CreateTiersPool(ProcessingTierLevel tier = ProcessingTierLevel.Local)
+    {
+        var pool = new DirectComponentPool<ProcessingTierComponent>(initialCapacity: 10, static (ref existing, incoming) => existing = incoming);
+        pool.Add(0, new ProcessingTierComponent(tier));
+        return pool;
+    }
 
     [TestMethod]
     public void Update_AtTickFrame_DamagesOnlyItsOwnNamedPart()

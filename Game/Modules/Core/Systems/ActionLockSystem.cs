@@ -9,7 +9,7 @@ namespace Game.Modules.Core.Systems;
 
 /// <summary>Passively counts every entity's shared action lock down toward 0, once per stripe cycle.</summary>
 /// <cleanupVersion>1</cleanupVersion>
-public sealed class ActionLockSystem : ISystem
+public sealed class ActionLockSystem : ITieredSystem
 {
     private const byte StripeCountValue = 10;
 
@@ -25,19 +25,29 @@ public sealed class ActionLockSystem : ISystem
         _tieredStripeSet = ProcessingTierWiring.CreateAndWire(StripeCount, actionLocks, processingTiers, processingTierEvents);
     }
 
+    public TieredEntityStripeSet Tiers => _tieredStripeSet;
+
+    /// <summary>Runs every tier -- see ITieredSystem's own remarks. SystemManager does not call this.</summary>
+    public void Update(EngineTime time, byte stripeIndex) => TieredSystemRunner.Run(this, time);
+
     /// <summary>Decrements the lock frames remaining for each due entity.</summary>
-    /// <remarks>CurrentLockFramesRemaining is decremented by StripeCountValue to account for the number of ticks between updates for this entity stripe.</remarks>
-    /// <param name="time"></param>
-    /// <param name="stripeIndex"></param>
-    public void Update(EngineTime time, byte stripeIndex)
+    /// <remarks>
+    /// By framesPerVisit, not the base StripeCountValue. This used to decrement by
+    /// StripeCountValue regardless of tier, which was correct only for Local: a Beyond-tier entity
+    /// is visited every StripeCount * divisor frames but had its lock reduced by StripeCount, so
+    /// its action lock ticked down at a fraction of real time and it acted that many times less
+    /// often than intended. That class of defect is why ITieredSystem hands framesPerVisit in as a
+    /// parameter.
+    /// </remarks>
+    public void UpdateBucket(EngineTime time, ReadOnlySpan<int> entityIds, ushort framesPerVisit)
     {
-        foreach (var entityId in _tieredStripeSet.GetDueEntities(time.FrameCount))
+        foreach (var entityId in entityIds)
         {
             if (_actionLocks.TryGetReadonly(entityId, out var actionLock) && actionLock.CurrentLockFramesRemaining != 0)
             {
-                _actionLocks.TryUpdate(entityId, static (ref ActionLockComponent actionLockComponent) =>
+                _actionLocks.TryUpdate(entityId, framesPerVisit, static (ref ActionLockComponent actionLockComponent, ushort frames) =>
                 {
-                    actionLockComponent.CurrentLockFramesRemaining = MathUtility.DecrementClamped(actionLockComponent.CurrentLockFramesRemaining, StripeCountValue);
+                    actionLockComponent.CurrentLockFramesRemaining = MathUtility.DecrementClamped(actionLockComponent.CurrentLockFramesRemaining, frames);
                 });
             }
         }

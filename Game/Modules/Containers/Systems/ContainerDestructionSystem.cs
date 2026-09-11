@@ -20,6 +20,11 @@ namespace Game.Modules.Containers.Systems;
 /// is overwritten to "Destroyed" -- a creature's corpse keeps its name/inventory intact, a
 /// destroyed container does not.
 /// </summary>
+/// <remarks>
+/// Neither striped nor tiered, deliberately: it has no per-entity population to iterate at all --
+/// it drains an event-driven queue of entities that died this frame, so its cost is proportional
+/// to deaths, not to entity count. Same shape and same reasoning as DeathSystem.
+/// </remarks>
 public sealed class ContainerDestructionSystem : ISystem
 {
     public byte StripeCount => 1;

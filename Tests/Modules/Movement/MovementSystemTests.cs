@@ -572,8 +572,25 @@ public sealed class MovementSystemTests
         Assert.AreEqual(new Vector3Int(3, 3, 0), transformPool.GetReadonly(0).Position, "One flank still open -- the diagonal move must succeed.");
     }
 
-    private static DirectComponentPool<ProcessingTierComponent> CreateProcessingTierPool(int capacity = 10) =>
-        new(capacity, static (ref existing, incoming) => existing = incoming);
+    /// <summary>
+    /// Seeds entity 0's tier explicitly. An entity with no ProcessingTierComponent resolves to
+    /// Beyond, not Local (see ProcessingTierWiring's own doc), which put entity 0 in a
+    /// StripeCount 15 * 8 = 120 bucket while these tests read as if it were Local -- harmless
+    /// while MovementSystem decremented FramesToWait by the base StripeCount regardless of tier,
+    /// but not once that was corrected to the tier's own frames-per-visit.
+    /// </summary>
+    /// <param name="tier">null leaves entity 0 untiered, for the tests that deliberately exercise the fails-open-to-Beyond default.</param>
+    private static DirectComponentPool<ProcessingTierComponent> CreateProcessingTierPool(int capacity = 10, ProcessingTierLevel? tier = ProcessingTierLevel.Local)
+    {
+        var pool = new DirectComponentPool<ProcessingTierComponent>(capacity, static (ref existing, incoming) => existing = incoming);
+
+        if (tier is { } seededTier)
+        {
+            pool.Add(0, new ProcessingTierComponent(seededTier));
+        }
+
+        return pool;
+    }
 
     /// <summary>Entity 0's (entityId + FrameCount) % CycleDivisor is 1 % 2 != 0 -- an off cycle for a Neighborhood-tiered entity, so it must be skipped even with a valid target already queued.</summary>
     [TestMethod]
@@ -582,7 +599,7 @@ public sealed class MovementSystemTests
         var transformPool = CreateTransformPool();
         var actionLockPool = CreateActionLockPool();
         var movementPool = CreateMovementPool();
-        var processingTiers = CreateProcessingTierPool();
+        var processingTiers = CreateProcessingTierPool(tier: ProcessingTierLevel.Neighborhood);
         var mapQuery = new FakeMapQuery(new Vector3Int(5, 5, 1));
         var entityMoveSync = new RecordingEntityMoveSync();
 
@@ -590,9 +607,8 @@ public sealed class MovementSystemTests
         transformPool.Add(0, new TransformComponent(startPosition, new Vector2Byte(1, 1)));
         actionLockPool.Add(0, new ActionLockComponent(standardLockFrames: 10, currentLockTotalFrames: 0, currentLockFramesRemaining: 0));
         movementPool.Add(0, new MovementComponent(MovementMode.Random, null, new Vector3Int(3, 2, 0)));
-        processingTiers.Add(0, new ProcessingTierComponent(ProcessingTierLevel.Neighborhood));
 
-        // Entity 0, Neighborhood-tiered (StripeCount 15 * divisor 2 = 30), lands in bucket 0 -- due only when FrameCount % 30 == 0.
+        // Entity 0, Neighborhood-tiered (StripeCount * the Neighborhood divisor) lands in bucket 0 -- due only when FrameCount is a multiple of that product.
         var system = new MovementSystem(transformPool, actionLockPool, movementPool, mapQuery, new EventBus(), entityMoveSync, new FrameEventBuffer<EntityMovedEvent>(), null, processingTiers, new ProcessingTierEvents());
         system.Update(new EngineTime(default, default, false, FrameCount: 1), 0);
 
@@ -607,7 +623,7 @@ public sealed class MovementSystemTests
         var transformPool = CreateTransformPool();
         var actionLockPool = CreateActionLockPool();
         var movementPool = CreateMovementPool();
-        var processingTiers = CreateProcessingTierPool();
+        var processingTiers = CreateProcessingTierPool(tier: ProcessingTierLevel.Neighborhood);
         var mapQuery = new FakeMapQuery(new Vector3Int(5, 5, 1));
         var entityMoveSync = new RecordingEntityMoveSync();
 
@@ -615,7 +631,6 @@ public sealed class MovementSystemTests
         transformPool.Add(0, new TransformComponent(startPosition, new Vector2Byte(1, 1)));
         actionLockPool.Add(0, new ActionLockComponent(standardLockFrames: 10, currentLockTotalFrames: 0, currentLockFramesRemaining: 0));
         movementPool.Add(0, new MovementComponent(MovementMode.Random, null, new Vector3Int(3, 2, 0)));
-        processingTiers.Add(0, new ProcessingTierComponent(ProcessingTierLevel.Neighborhood));
 
         var system = new MovementSystem(transformPool, actionLockPool, movementPool, mapQuery, new EventBus(), entityMoveSync, new FrameEventBuffer<EntityMovedEvent>(), null, processingTiers, new ProcessingTierEvents());
         system.Update(new EngineTime(default, default, false, FrameCount: 0), 0);
@@ -629,9 +644,9 @@ public sealed class MovementSystemTests
     /// has never been visited by ProcessingTierSystem, so it has no ProcessingTierComponent yet
     /// -- must fail open to Beyond (the slowest cadence, see ProcessingTierWiring's own doc
     /// comment on why), not Local. Entity 0's stripe bucket is always 0 (entityId % StripeCount
-    /// == 0 for entity 0, regardless of StripeCount), and MovementSystem's own base StripeCount
-    /// is 15, so Beyond's divisor-8 EntityStripeSet has StripeCount 120: due at FrameCount 120,
-    /// not due at FrameCount 15 (which would only be due under the old, incorrect Local default).
+    /// == 0 for entity 0, regardless of StripeCount), and Beyond's EntityStripeSet has StripeCount
+    /// base * the Beyond divisor -- so a FrameCount equal to the base StripeCount alone is NOT
+    /// due, which it would be under the old, incorrect Local default.
     /// </summary>
     [TestMethod]
     public void Update_ProcessingTierPoolWiredButEntityUntiered_FailsOpenToBeyond_NotDueAtLocalCadence()
@@ -639,7 +654,10 @@ public sealed class MovementSystemTests
         var transformPool = CreateTransformPool();
         var actionLockPool = CreateActionLockPool();
         var movementPool = CreateMovementPool();
-        var processingTiers = CreateProcessingTierPool();
+
+        // tier: null -- this test is the one that deliberately leaves entity 0 untiered, which is
+        // the whole behaviour under test.
+        var processingTiers = CreateProcessingTierPool(tier: null);
         var mapQuery = new FakeMapQuery(new Vector3Int(5, 5, 1));
         var entityMoveSync = new RecordingEntityMoveSync();
 
@@ -654,14 +672,20 @@ public sealed class MovementSystemTests
         Assert.AreEqual(startPosition, transformPool.GetReadonly(0).Position);
     }
 
-    /// <summary>Same setup as above, but at FrameCount 120 -- genuinely due under the Beyond default (StripeCount 15 * divisor 8), not just the FrameCount-0 case every StripeCount is trivially due at.</summary>
+    /// <summary>
+    /// Same setup as above, but at a frame that is genuinely due under the Beyond default rather
+    /// than the FrameCount-0 case every stripe count is trivially due at. Both the untiered pool
+    /// (tier: null) and the frame count are load-bearing: seeding a tier here, or hardcoding a
+    /// frame that only happens to be a multiple of the Local cadence, makes this pass without
+    /// exercising the Beyond default at all.
+    /// </summary>
     [TestMethod]
     public void Update_ProcessingTierPoolWiredButEntityUntiered_ProcessesOnBeyondCadence()
     {
         var transformPool = CreateTransformPool();
         var actionLockPool = CreateActionLockPool();
         var movementPool = CreateMovementPool();
-        var processingTiers = CreateProcessingTierPool();
+        var processingTiers = CreateProcessingTierPool(tier: null);
         var mapQuery = new FakeMapQuery(new Vector3Int(5, 5, 1));
         var entityMoveSync = new RecordingEntityMoveSync();
 
@@ -670,7 +694,9 @@ public sealed class MovementSystemTests
         actionLockPool.Add(0, new ActionLockComponent(standardLockFrames: 10, currentLockTotalFrames: 0, currentLockFramesRemaining: 0));
         movementPool.Add(0, new MovementComponent(MovementMode.Random, null, new Vector3Int(3, 2, 0)));
         var system = new MovementSystem(transformPool, actionLockPool, movementPool, mapQuery, new EventBus(), entityMoveSync, new FrameEventBuffer<EntityMovedEvent>(), null, processingTiers, new ProcessingTierEvents());
-        system.Update(new EngineTime(default, default, false, FrameCount: 120), 0);
+
+        var beyondFramesPerVisit = system.StripeCount * ProcessingTierDivisors.ByTierIndex[(int)ProcessingTierLevel.Beyond];
+        system.Update(new EngineTime(default, default, false, FrameCount: beyondFramesPerVisit), 0);
 
         Assert.IsNotNull(entityMoveSync.LastSynced);
         Assert.AreNotEqual(startPosition, transformPool.GetReadonly(0).Position);

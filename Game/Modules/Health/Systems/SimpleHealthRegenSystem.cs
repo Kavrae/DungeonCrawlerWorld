@@ -16,7 +16,7 @@ namespace Game.Modules.Health.Systems;
 
 /// <summary>Regenerates entity current and maximum health, adjusting for ability scores, modifiers, and processing tier.</summary>
 /// <cleanupVersion>1</cleanupVersion>
-public sealed class SimpleHealthRegenSystem : ISystem
+public sealed class SimpleHealthRegenSystem : ITieredSystem
 {
     public byte StripeCount => (byte)GameTiming.FramesPerSecond;
 
@@ -27,7 +27,6 @@ public sealed class SimpleHealthRegenSystem : ISystem
     private const float MaxHealthRegenPerSecond = 6f;
 
     private readonly PackedComponentPool<SimpleHealthComponent> _healthComponents;
-    private readonly DirectComponentPool<ProcessingTierComponent> _processingTiers;
     private readonly MultiComponentPool<StatModifierComponent>? _statModifiers;
     private readonly PackedComponentPool<DeadComponent>? _deadEntities;
     private readonly MultiComponentPool<AbilityScoreComponent>? _abilityScores;
@@ -46,7 +45,6 @@ public sealed class SimpleHealthRegenSystem : ISystem
         IPlayerQuery? playerQuery = null)
     {
         _healthComponents = healthComponents;
-        _processingTiers = processingTiers;
         _statModifiers = statModifiers;
         _deadEntities = deadEntities;
         _abilityScores = abilityScores;
@@ -59,9 +57,16 @@ public sealed class SimpleHealthRegenSystem : ISystem
     /// <summary>Updates the current health of all entities in the current stripe by the regen amount, routed through HealthHeal.Apply (sourceEntityId: entityId, a self-heal) so a regen tick carries Outgoing/IncomingHealing modifiers the same way any other heal does.</summary>
     /// <param name="time"></param>
     /// <param name="stripeIndex"></param>
-    public void Update(EngineTime time, byte stripeIndex)
+    public void Update(EngineTime time, byte stripeIndex) => TieredSystemRunner.Run(this, time);
+
+    public TieredEntityStripeSet Tiers => _tieredStripeSet;
+
+    /// <summary>One tier's due entities, scaled by that tier's framesPerVisit -- see ITieredSystem.UpdateBucket.</summary>
+    public void UpdateBucket(EngineTime time, ReadOnlySpan<int> entityIds, ushort framesPerVisit)
     {
-        foreach (var entityId in _tieredStripeSet.GetDueEntities(time.FrameCount))
+        var secondsPerVisit = framesPerVisit / (float)GameTiming.FramesPerSecond;
+
+        foreach (var entityId in entityIds)
         {
             // A corpse shouldn't regenerate back above 0.
             if (_deadEntities?.Has(entityId) == true)
@@ -76,10 +81,6 @@ public sealed class SimpleHealthRegenSystem : ISystem
             {
                 continue;
             }
-
-            var tier = _processingTiers.TryGetReadonly(entityId, out var processingTier) ? processingTier.Tier : ProcessingTierLevel.Local;
-            var framesPerVisit = StripeCount * ProcessingTierDivisors.ByTierIndex[(int)tier];
-            var secondsPerVisit = framesPerVisit / (float)GameTiming.FramesPerSecond;
 
             var amountPerSecond = AbilityScoreMath.Lerp(constitution.Total, MinHealthRegenPerSecond, MaxHealthRegenPerSecond);
             var rawAmount = amountPerSecond * secondsPerVisit;

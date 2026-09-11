@@ -27,7 +27,7 @@ namespace Game.Modules.Burning.Systems;
 /// StatusEffectAuraSystem's own TickExposures for the same "several due entries per entity in one
 /// visit" reason.
 /// </summary>
-public sealed class BodyPartBurningSystem : ISystem
+public sealed class BodyPartBurningSystem : ITieredSystem
 {
     /// <summary>Passed as StatModifierMath.GetEffectiveValue's activeTags below -- lets a ConditionTag: Tag.Fire-scoped IncomingDamage modifier reduce burning damage specifically, the same as BurningSystem's own entity-scoped tick. Cached once rather than allocated fresh per tick.</summary>
     private static readonly Tag[] BurningDamageTags = [Tag.Fire];
@@ -74,18 +74,13 @@ public sealed class BodyPartBurningSystem : ISystem
         _tieredStripeSet = ProcessingTierWiring.CreateAndWire(StripeCount, timers, processingTiers, processingTierEvents);
     }
 
-    public void Update(EngineTime time, byte stripeIndex)
-    {
-        for (var tierIndex = 0; tierIndex < _tieredStripeSet.TierCount; tierIndex++)
-        {
-            MultiCountdownTicker.Tick(
-                _timers,
-                _tieredStripeSet.GetTierBucket(tierIndex, time.FrameCount),
-                _pendingTimerRemovals,
-                _tick,
-                _tieredStripeSet.GetTierFramesPerVisit(tierIndex));
-        }
-    }
+    public void Update(EngineTime time, byte stripeIndex) => TieredSystemRunner.Run(this, time);
+
+    public TieredEntityStripeSet Tiers => _tieredStripeSet;
+
+    /// <summary>Advances each due entity's per-part countdowns by framesPerVisit -- see ITieredSystem.UpdateBucket.</summary>
+    public void UpdateBucket(EngineTime time, ReadOnlySpan<int> entityIds, ushort framesPerVisit) =>
+        MultiCountdownTicker.Tick(_timers, entityIds, _pendingTimerRemovals, _tick, framesPerVisit);
 
     /// <summary>Returns whether this specific part's timer entry should be removed entirely (stacks fully decayed) -- see MultiCountdownTicker.Tick's own doc comment for the contract. Only mutates the entry (via TryUpdateFirst) on the non-removal path, so a removal's own equality-based match still finds the original, untouched snapshot.</summary>
     private bool Tick(int entityId, BodyPartBurningTimerComponent timer)

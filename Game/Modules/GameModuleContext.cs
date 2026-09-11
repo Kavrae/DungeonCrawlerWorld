@@ -69,4 +69,13 @@ public sealed record GameModuleContext(IMapQuery MapQuery, MathUtility MathUtili
     /// "nothing is Local yet" -- the same safe default an untiered entity already gets.
     /// </summary>
     public LocalTierRoster LocalTierRoster { get; init; } = new();
+
+    /// <summary>
+    /// The single place an entity's tier is decided and written -- see ProcessingTierResolver's own
+    /// doc comment. Shared here, rather than owned privately by ProcessingTierSystem, because the
+    /// spawn sequence needs it *before* the first system update: it sets the reference position
+    /// ahead of population and creates entities through it so they are born correctly tiered.
+    /// Wired by ProcessingTierModule.RegisterSystems.
+    /// </summary>
+    public ProcessingTierResolver ProcessingTierResolver { get; init; } = new();
 }

@@ -105,9 +105,21 @@ public sealed class TestCombatBehaviorSystemTests
         var mapQuery = new FakeMapQuery();
         var math = mathUtility ?? new MathUtility();
 
+        // Every id these tests use is seeded Local up front, because TieredEntityStripeSet
+        // resolves an entity's tier at the moment it joins the driving pool -- and entities join
+        // later here, when PlaceGoblin adds their MovementComponent. An entity with no
+        // ProcessingTierComponent resolves to Beyond (see ProcessingTierWiring's own doc), whose
+        // far coarser cadence would make these single-Update tests silently stop reaching their
+        // subject.
+        var processingTiers = new DirectComponentPool<ProcessingTierComponent>(10, static (ref existing, incoming) => existing = incoming);
+        for (var entityId = 0; entityId < 10; entityId++)
+        {
+            processingTiers.Add(entityId, new ProcessingTierComponent(ProcessingTierLevel.Local));
+        }
+
         var system = new TestCombatBehaviorSystem(
             movementPool, transformPool, actionLockPool, healthPool, bodyParts, inventoryStacks, actionInstances, raceComponents,
-            pendingActivations, pendingConsumableActivations, mapQuery, math, deadEntities);
+            pendingActivations, pendingConsumableActivations, mapQuery, math, processingTiers, new ProcessingTierEvents(), deadEntities);
 
         return new Fixture(system, mapQuery, movementPool, transformPool, actionLockPool, healthPool, bodyParts, inventoryStacks, actionInstances, raceComponents, pendingActivations, pendingConsumableActivations, deadEntities, math);
     }

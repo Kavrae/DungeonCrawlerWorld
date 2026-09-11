@@ -34,17 +34,36 @@ public static class MultiCountdownTicker
         {
             for (var denseIndex = pool.GetFirstDenseIndex(entityId); denseIndex != -1; denseIndex = pool.GetNextDenseIndex(denseIndex))
             {
-                var component = pool.GetReadonlyByDenseIndex(denseIndex);
+                var remainingFrames = framesPerVisit;
 
-                if ((uint)component.FramesUntilNextTick > framesPerVisit)
+                // Multi-period catch-up, same reasoning as CountdownTicker.Tick's own loop --
+                // framesPerVisit can span several of this countdown's periods at a coarse
+                // processing tier, and firing once regardless under-applied the effect by
+                // roughly the tier divisor.
+                while (true)
                 {
-                    pool.UpdateByDenseIndex(denseIndex, framesPerVisit, static (ref T c, uint frames) => c.FramesUntilNextTick -= (ushort)frames);
-                    continue;
-                }
+                    var component = pool.GetReadonlyByDenseIndex(denseIndex);
 
-                if (onTick(entityId, component))
-                {
-                    pendingRemovals.Add((entityId, component));
+                    if ((uint)component.FramesUntilNextTick > remainingFrames)
+                    {
+                        pool.UpdateByDenseIndex(denseIndex, remainingFrames, static (ref T c, uint frames) => c.FramesUntilNextTick -= (ushort)frames);
+                        break;
+                    }
+
+                    remainingFrames -= component.FramesUntilNextTick;
+
+                    if (onTick(entityId, component))
+                    {
+                        pendingRemovals.Add((entityId, component));
+                        break;
+                    }
+
+                    // See CountdownTicker.Tick's own note: a consumer that neither removes nor
+                    // re-arms would spin here forever.
+                    if (pool.GetReadonlyByDenseIndex(denseIndex).FramesUntilNextTick == 0)
+                    {
+                        break;
+                    }
                 }
             }
         }

@@ -21,6 +21,14 @@ public sealed class ActionCooldownSystemTests
         componentManager.RegisterMultiPool<ActionInstanceComponent>();
         componentManager.RegisterDirectPool<ProcessingTierComponent>(static (ref existing, incoming) => existing = incoming);
 
+        // Seeded before the system is constructed (and so before any test's own Merge adds
+        // EntityId to the stripe set) because ProcessingTierWiring resolves an entity's tier at
+        // the moment it joins, and an entity with no ProcessingTierComponent resolves to Beyond,
+        // not Local -- see that class's own doc comment. Leaving it absent put EntityId in the
+        // Beyond bucket (StripeCount 10 * the Beyond divisor) while these tests read as if it were
+        // Local.
+        componentManager.GetDirectPool<ProcessingTierComponent>().Add(EntityId, new ProcessingTierComponent(ProcessingTierLevel.Local));
+
         var system = new ActionCooldownSystem(componentManager.GetMultiPool<ActionInstanceComponent>(), componentManager.GetDirectPool<ProcessingTierComponent>(), new ProcessingTierEvents());
 
         return (system, componentManager);
@@ -53,7 +61,7 @@ public sealed class ActionCooldownSystemTests
         return null;
     }
 
-    // Entity 1, Local-tiered (no ProcessingTierComponent, base StripeCount 10 * divisor 1 = 10), lands in bucket 1 -- due only when FrameCount % 10 == 1. stripeIndex no longer drives iteration (TieredEntityStripeSet derives "due" purely from FrameCount), so it's passed as 0 throughout.
+    // Entity 1, Local-tiered (explicitly, via Build -- see its own note; base StripeCount 10 * divisor 1 = 10), lands in bucket 1 -- due only when FrameCount % 10 == 1. stripeIndex no longer drives iteration (TieredEntityStripeSet derives "due" purely from FrameCount), so it's passed as 0 throughout.
     [TestMethod]
     public void CooldownTicksDownByStripeCountPerVisit()
     {
@@ -102,8 +110,8 @@ public sealed class ActionCooldownSystemTests
     }
 
     /// <summary>
-    /// A Neighborhood-tiered entity (StripeCount 10 * divisor 2 = 20) lands in bucket
-    /// entityId % 20 -- for entity 1, that's bucket 1, due only when FrameCount % 20 == 1. The
+    /// A Neighborhood-tiered entity (StripeCount * the Neighborhood divisor) lands in bucket
+    /// entityId % that product -- for entity 1, that is bucket 1, due only when FrameCount leaves the same remainder. The
     /// tier must be seeded into the pool before ActionInstanceComponent is merged, since
     /// TieredEntityStripeSet reads an entity's current tier at membership-add time (fired by
     /// the EntityAdded event Merge raises).
@@ -129,6 +137,12 @@ public sealed class ActionCooldownSystemTests
 
         system.Update(new EngineTime(default, default, false, FrameCount: 1), (byte)(EntityId % 10));
 
-        Assert.AreEqual((ushort?)15, CooldownOf(componentManager, EntityId, FirstActionId));
+        // Burns off the whole StripeCount * divisor span, not the base StripeCount: a
+        // Neighborhood entity is only visited every that-many frames, so one visit owes all of
+        // them. Decrementing by the base regardless of tier (the previous behaviour) made a
+        // throttled entity's cooldowns run at a fraction of real time. Derived from
+        // ProcessingTierDivisors so re-tuning the divisors doesn't invalidate this arithmetic.
+        var framesPerVisit = system.StripeCount * ProcessingTierDivisors.ByTierIndex[(int)ProcessingTierLevel.Neighborhood];
+        Assert.AreEqual((ushort?)System.Math.Max(0, 25 - framesPerVisit), CooldownOf(componentManager, EntityId, FirstActionId));
     }
 }

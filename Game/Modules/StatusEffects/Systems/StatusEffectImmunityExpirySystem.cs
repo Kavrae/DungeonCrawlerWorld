@@ -18,7 +18,7 @@ namespace Game.Modules.StatusEffects.Systems;
 /// enough that visiting every immunity-holding entity directly is fine, the same reasoning
 /// ComplexHealthRegenSystem/BurningSystem already apply to their own pools.
 /// </summary>
-public sealed class StatusEffectImmunityExpirySystem : ISystem
+public sealed class StatusEffectImmunityExpirySystem : ITieredSystem
 {
     private const byte StripeCountValue = 1;
 
@@ -37,16 +37,30 @@ public sealed class StatusEffectImmunityExpirySystem : ISystem
         _tieredStripeSet = ProcessingTierWiring.CreateAndWire(StripeCount, immunities, processingTiers, processingTierEvents);
     }
 
-    public void Update(EngineTime time, byte stripeIndex)
+    /// <summary>
+    /// Driven per tier by TieredSystemRunner, which hands UpdateBucket that tier's actual
+    /// frames-per-visit, so the duration is reduced by the span the entity was really absent for. This used to decrement by exactly 1 per
+    /// visit regardless of tier -- correct only at Local, where base StripeCount 1 means one visit
+    /// per frame. A coarse-tier entity is visited every StripeCount * divisor frames and lost a
+    /// single frame of immunity each time, so its immunity outlasted its authored duration by that
+    /// divisor. Same correction as StatModifierExpirySystem, which had the identical defect.
+    /// </summary>
+    public void Update(EngineTime time, byte stripeIndex) => TieredSystemRunner.Run(this, time);
+
+    public TieredEntityStripeSet Tiers => _tieredStripeSet;
+
+    /// <summary>One tier's due entities, scaled by that tier's framesPerVisit -- see ITieredSystem.UpdateBucket.</summary>
+    public void UpdateBucket(EngineTime time, ReadOnlySpan<int> entityIds, ushort framesPerVisit)
     {
-        foreach (var entityId in _tieredStripeSet.GetDueEntities(time.FrameCount))
+        foreach (var entityId in entityIds)
         {
             for (var denseIndex = _immunities.GetFirstDenseIndex(entityId); denseIndex != -1; denseIndex = _immunities.GetNextDenseIndex(denseIndex))
             {
                 ref readonly var immunity = ref _immunities.GetReadonlyByDenseIndex(denseIndex);
                 if (immunity.RemainingDurationFrames > 0)
                 {
-                    _immunities.UpdateByDenseIndex(denseIndex, static (ref StatusEffectImmunityComponent immunity) => immunity.RemainingDurationFrames--);
+                    _immunities.UpdateByDenseIndex(denseIndex, framesPerVisit, static (ref StatusEffectImmunityComponent immunity, ushort frames) =>
+                        immunity.RemainingDurationFrames = (ushort)System.Math.Max(0, immunity.RemainingDurationFrames!.Value - frames));
                 }
             }
 

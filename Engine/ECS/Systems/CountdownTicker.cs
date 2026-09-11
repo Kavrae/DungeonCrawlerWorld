@@ -27,20 +27,46 @@ public static class CountdownTicker
 
         foreach (var entityId in entityIds)
         {
-            if (!pool.TryGetReadonly(entityId, out var component))
-            {
-                continue;
-            }
+            var remainingFrames = framesPerVisit;
 
-            if ((uint)component.FramesUntilNextTick > framesPerVisit)
+            // Loops rather than firing once, because framesPerVisit can span several of this
+            // countdown's own periods: a 60-frame burning tick on an entity visited every 960
+            // frames (base StripeCount 15 at the Beyond tier's divisor) owes 16 ticks, not one.
+            // Firing once regardless -- the previous behaviour -- under-applied every
+            // damage/heal-over-time effect by roughly the entity's tier divisor, so how much
+            // total damage a burning entity took depended on how far it happened to be standing
+            // from the player. onTick's signature is deliberately unchanged: each call still
+            // means exactly one period, so no consumer has to learn about catch-up.
+            while (true)
             {
-                pool.TryUpdate(entityId, framesPerVisit, static (ref T c, uint frames) => c.FramesUntilNextTick -= (ushort)frames);
-                continue;
-            }
+                // Re-read every iteration: onTick can remove the component outright, and it is
+                // what re-arms FramesUntilNextTick for the next period.
+                if (!pool.TryGetReadonly(entityId, out var component))
+                {
+                    break;
+                }
 
-            if (onTick(entityId, component))
-            {
-                pendingRemovals.Add(entityId);
+                if ((uint)component.FramesUntilNextTick > remainingFrames)
+                {
+                    pool.TryUpdate(entityId, remainingFrames, static (ref T c, uint frames) => c.FramesUntilNextTick -= (ushort)frames);
+                    break;
+                }
+
+                remainingFrames -= component.FramesUntilNextTick;
+
+                if (onTick(entityId, component))
+                {
+                    pendingRemovals.Add(entityId);
+                    break;
+                }
+
+                // A consumer whose onTick returns false without re-arming would otherwise spin
+                // here forever, since remainingFrames would stop decreasing. Breaking out treats
+                // it as "nothing further is owed this visit" rather than hanging the frame.
+                if (!pool.TryGetReadonly(entityId, out var rearmed) || rearmed.FramesUntilNextTick == 0)
+                {
+                    break;
+                }
             }
         }
 

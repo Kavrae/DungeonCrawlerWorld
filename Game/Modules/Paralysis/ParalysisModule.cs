@@ -4,6 +4,8 @@ using Engine.Events;
 using Game.Modules.Core.Components;
 using Game.Modules.Paralysis.Components;
 using Game.Modules.Paralysis.Systems;
+using Game.Modules.ProcessingTier;
+using Game.Modules.ProcessingTier.Components;
 using Game.Modules.StatusEffects;
 using Game.World;
 
@@ -27,11 +29,13 @@ public sealed class ParalysisModule : IGameModule
 
     private EventBus _eventBus = null!;
     private IPlayerQuery? _playerQuery;
+    private ProcessingTierEvents _processingTierEvents = null!;
 
     public void Configure(GameModuleContext context)
     {
         _eventBus = context.EventBus;
         _playerQuery = context.PlayerQuery;
+        _processingTierEvents = context.ProcessingTierEvents;
 
         context.StatusEffectAuraAppliers.Register(new TimerBasedAuraApplier<ParalysisTimerComponent>(
             StatusEffectType.Paralysis,
@@ -51,6 +55,8 @@ public sealed class ParalysisModule : IGameModule
         }
 
         systemManager.Register(new ParalysisSystem(
-            componentManager.GetPackedPool<ParalysisTimerComponent>()));
+            componentManager.GetPackedPool<ParalysisTimerComponent>(),
+            componentManager.GetDirectPool<ProcessingTierComponent>(),
+            _processingTierEvents));
     }
 }

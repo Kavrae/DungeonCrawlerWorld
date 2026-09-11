@@ -8,6 +8,7 @@ using Game.Modules.Core.Components;
 using Game.Modules.Poison;
 using Game.Modules.StatModifiers;
 using Game.World;
+using Game.Modules.ProcessingTier;
 
 namespace Game.Floors;
 
@@ -29,8 +30,32 @@ public static class FloorBuilder
 
     public static Game.World.Map CreateMap(int floorNumber) => new(TestMapSize);
 
-    public static void PopulateFloor(Game.World.World world, EcsContext ecsContext, MathUtility mathUtility, UniqueNumberAllocator crawlerNumberAllocator, FrameEventBuffer<EntityMovedEvent> movedEntities) =>
-        new TestMapBuilder(ecsContext.EntityManager, ecsContext.ComponentManager, mathUtility, crawlerNumberAllocator, movedEntities).Populate(world);
+    /// <param name="tierResolver">
+    /// When supplied -- and its reference position already set to <see cref="PlayerSpawnOrigin"/>
+    /// -- every bulk entity is created through it and born with its processing tier as its first
+    /// component, so no tiered consumer ever has to migrate it. Optional because omitting it costs
+    /// events, not correctness: World.EntityPlaced tiers any placed entity after the fact, via
+    /// ProcessingTierResolver.EnsureTiered. See PLAN-processing-tier-rework.md.
+    /// </param>
+    public static void PopulateFloor(Game.World.World world, EcsContext ecsContext, MathUtility mathUtility, UniqueNumberAllocator crawlerNumberAllocator, FrameEventBuffer<EntityMovedEvent> movedEntities, ProcessingTierResolver? tierResolver = null) =>
+        new TestMapBuilder(ecsContext.EntityManager, ecsContext.ComponentManager, mathUtility, crawlerNumberAllocator, movedEntities, tierResolver).Populate(world);
+
+    /// <summary>
+    /// Where the player is aimed at spawning -- the actual cell is the nearest free Ground cell to
+    /// this (see CreatePlayer). Exposed separately so the spawn sequence can set the tier reference
+    /// position to it <b>before</b> population, and terrain and NPCs are born correctly tiered
+    /// rather than fixed up afterwards. If the player lands a few cells away, ProcessingTierSystem's
+    /// first update treats that as an ordinary player move from here to there and walks the Local
+    /// boundary, so the small difference reconciles itself.
+    /// </summary>
+    /// <remarks>
+    /// TEMPORARY: beside TestMapBuilder's column-16 wall corridor (a fixed column regardless of
+    /// map size) rather than the map centre, so the sprite migration's Wall sprite
+    /// (SpriteManifest.Wall) is immediately visible on spawn without scrolling ~480 tiles to the
+    /// nearest wall. Revert to the map centre once that has been visually confirmed in-game.
+    /// </remarks>
+    public static Vector3Int PlayerSpawnOrigin(Game.World.World world) =>
+        new(17, world.Map.Size.Y / 2, (int)MapLayer.Ground);
 
     // TEMPORARY test seeding -- exercises Poison until a real in-game source exists. Remove
     // once one does. 10 applications of a 5-tick duration each: since ApplyStack takes the
@@ -87,8 +112,11 @@ public static class FloorBuilder
     /// below (FindFreeGroundCellNear) reads live map occupancy, so it genuinely needs the floor
     /// already populated, not just the id already minted.
     /// </remarks>
-    public static void CreatePlayer(Game.World.World world, EcsContext ecsContext, MathUtility mathUtility, FrameEventBuffer<EntityMovedEvent> movedEntities, UniqueNumberAllocator crawlerNumberAllocator, int entityId)
+    /// <param name="tierResolver">When supplied, the player is pinned Local before its blueprint is built, so every tiered pool it joins sees Local from the start and the player is never recomputed afterwards -- including while off the map. Optional for the same reason as PopulateFloor's: ProcessingTierSystem pins the player on its first update if nothing did here.</param>
+    public static void CreatePlayer(Game.World.World world, EcsContext ecsContext, MathUtility mathUtility, FrameEventBuffer<EntityMovedEvent> movedEntities, UniqueNumberAllocator crawlerNumberAllocator, int entityId, ProcessingTierResolver? tierResolver = null)
     {
+        tierResolver?.PinLocalAndNotify(entityId);
+
         new PlayerBlueprint(mathUtility, crawlerNumberAllocator).Build(ecsContext.ComponentManager, entityId);
 
         for (var i = 0; i < TestPoisonStackCount; i++)
@@ -108,14 +136,7 @@ public static class FloorBuilder
                 canModify: true, seed.NegativeMultiplier, durationFrames: null, StatusEffectSource.Admin);
         }
 
-        // TEMPORARY: spawn beside TestMapBuilder's column-16 wall corridor (a fixed column
-        // regardless of map size, unlike the map-size-relative exact center below) instead of
-        // FindFreeGroundCellNearCenter's usual target, so the sprite migration's Wall sprite
-        // (SpriteManifest.Wall) is immediately visible on spawn without scrolling ~480 tiles
-        // to the nearest wall. Revert to FindFreeGroundCellNearCenter(world) once that's been
-        // visually confirmed in-game.
-        var wallAdjacentOrigin = new Vector3Int(17, world.Map.Size.Y / 2, (int)MapLayer.Ground);
-        var spawnPosition = FindFreeGroundCellNear(world, wallAdjacentOrigin);
+        var spawnPosition = FindFreeGroundCellNear(world, PlayerSpawnOrigin(world));
         ref var transform = ref ecsContext.ComponentManager.GetDirectPool<TransformComponent>().Get(entityId);
         world.PlaceEntityOnMap(entityId, spawnPosition, ref transform);
 

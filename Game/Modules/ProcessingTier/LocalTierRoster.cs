@@ -18,11 +18,12 @@ namespace Game.Modules.ProcessingTier;
 /// rest"), which that shape can't express. Both are driven off the exact same signals, so they
 /// can't disagree about who is Local.
 ///
-/// Maintained incrementally from three events, never by scanning: ProcessingTierEvents.
-/// TierChanged (raised by ProcessingTierSystem on an entity's first computation as well as on
-/// every later change, so a newly-tiered entity lands here without any bootstrap pass), plus the
-/// driving pool's own EntityAdded/EntityRemoved so a destroyed entity -- or one that loses the
-/// driving component -- leaves immediately rather than lingering as a stale id.
+/// Maintained incrementally from three events, never by scanning: the driving pool's EntityAdded
+/// (entities are born already tiered -- ProcessingTierResolver.CreateEntityAt writes the tier as
+/// their first component -- so a mover born Local is admitted here, when it gains
+/// MovementComponent, without any TierChanged ever firing for it), ProcessingTierEvents.TierChanged
+/// for every later change, and the driving pool's EntityRemoved so a destroyed entity -- or one
+/// that loses the driving component -- leaves immediately rather than lingering as a stale id.
 ///
 /// Sizing is what makes materializing this worthwhile: Local is a Chebyshev radius of 80 on the
 /// player's own Z only (see ProcessingTierSystem), so at this game's real population density it
@@ -33,12 +34,12 @@ namespace Game.Modules.ProcessingTier;
 ///
 /// Two limits worth knowing before adding a consumer:
 ///
-/// Membership is whatever ProcessingTierSystem itself tiers, which today is MovementComponent
-/// (see that system's own closing note). A stationary entity -- a shop, a container, a future
-/// hazard emitter -- never gains a ProcessingTierComponent at all and therefore never appears
-/// here, no matter how close the player stands to it. Fine for every consumer so far (only
-/// movers queue windups), but this is a ceiling on the roster, not a bug in it: widening it
-/// means widening ProcessingTierSystem's membership, and this class follows automatically.
+/// Membership is movers only, by choice. Every positioned entity is now tiered (see
+/// ProcessingTierSystem), so a stationary entity -- a shop, a container, lava -- does have a correct
+/// tier, but it is deliberately kept out of this roster: the roster's whole value is being the small
+/// side, and the terrain alone within the Local radius would make it roughly fifty times larger.
+/// Fine for every consumer so far (only movers queue windups). A consumer that needs stationary
+/// Local entities should read their ProcessingTierComponent directly rather than widen this.
 ///
 /// Local is not "on screen." Local's radius is 80 tiles; the Team-zoom viewport is roughly 27
 /// tiles from centre, so this set covers several times the area the player can actually see.
@@ -87,19 +88,44 @@ public sealed class LocalTierRoster
         }
     }
 
+    private IEntityMembershipPool? _drivingPool;
+    private IReadOnlyComponentPool<ProcessingTierComponent>? _tiers;
+
     /// <summary>Subscribes this roster to a driving pool's membership and to tier changes -- mirrors ProcessingTierWiring.CreateAndWire's role for TieredEntityStripeSet, kept as a method on the roster itself since (unlike a stripe set) there is exactly one of these per game rather than one per consuming system.</summary>
-    /// <param name="drivingPool">The pool whose membership defines which entities can ever be tiered -- must be the same pool ProcessingTierSystem tiers, or this roster will retain ids that system never updates.</param>
+    /// <param name="drivingPool">The pool whose members this roster tracks -- MovementComponent. Tiering itself now covers every positioned entity (see ProcessingTierSystem), but this roster deliberately stays scoped to movers: it exists to be the small side of "Local AND pending something", and admitting the terrain within the Local radius would make it roughly fifty times larger and defeat that.</param>
+    /// <param name="tiers">Read when an entity joins the driving pool -- see OnEntityAdded.</param>
     /// <param name="processingTierEvents">The shared tier-change event source.</param>
-    public void Wire(IEntityMembershipPool drivingPool, ProcessingTierEvents processingTierEvents)
+    public void Wire(IEntityMembershipPool drivingPool, IReadOnlyComponentPool<ProcessingTierComponent> tiers, ProcessingTierEvents processingTierEvents)
     {
         ArgumentNullException.ThrowIfNull(drivingPool);
+        ArgumentNullException.ThrowIfNull(tiers);
         ArgumentNullException.ThrowIfNull(processingTierEvents);
 
+        _drivingPool = drivingPool;
+        _tiers = tiers;
+
+        drivingPool.EntityAdded += OnEntityAdded;
         drivingPool.EntityRemoved += OnEntityRemoved;
         processingTierEvents.TierChanged += OnTierChanged;
     }
 
-    /// <summary>No EntityAdded counterpart: a newly-added entity has no tier yet, and adding it here would assert the very "unknown means Local" default IsLocal's own doc comment rejects. It enters this set (if it belongs) the moment ProcessingTierSystem's first computation raises TierChanged for it.</summary>
+    /// <summary>
+    /// Entities now arrive already tiered: ProcessingTierResolver.CreateEntityAt writes the tier as
+    /// an entity's first component, silently, before its blueprint adds MovementComponent. So a new
+    /// mover that is born Local never raises TierChanged, and the only moment this roster can learn
+    /// about it is here, when it joins the driving pool. (This used to have no EntityAdded handler at
+    /// all, on the grounds that a newly-added entity had no tier yet -- true of the old periodic
+    /// scan, false under tier-first.) An entity that genuinely has no tier yet still stays out,
+    /// matching IsLocal's "unknown is not Local".
+    /// </summary>
+    private void OnEntityAdded(int entityId)
+    {
+        if (_tiers!.TryGetReadonly(entityId, out var tier) && tier.Tier == ProcessingTierLevel.Local && _localEntityIds.Add(entityId))
+        {
+            _snapshotStale = true;
+        }
+    }
+
     private void OnEntityRemoved(int entityId)
     {
         if (_localEntityIds.Remove(entityId))
@@ -108,11 +134,18 @@ public sealed class LocalTierRoster
         }
     }
 
+    /// <summary>TierChanged now fires for every positioned entity, terrain included, so this filters to driving-pool members -- see Wire's own note on why the roster stays movers-only.</summary>
     private void OnTierChanged(int entityId, ProcessingTierLevel tier)
     {
-        var changed = tier == ProcessingTierLevel.Local
-            ? _localEntityIds.Add(entityId)
-            : _localEntityIds.Remove(entityId);
+        bool changed;
+        if (tier == ProcessingTierLevel.Local)
+        {
+            changed = _drivingPool!.Has(entityId) && _localEntityIds.Add(entityId);
+        }
+        else
+        {
+            changed = _localEntityIds.Remove(entityId);
+        }
 
         if (changed)
         {

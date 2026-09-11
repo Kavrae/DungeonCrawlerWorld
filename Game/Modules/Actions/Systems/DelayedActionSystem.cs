@@ -41,7 +41,7 @@ namespace Game.Modules.Actions.Systems;
 /// indicator.md's own Design section.
 /// </remarks>
 /// <cleanupVersion>1</cleanupVersion>
-public sealed class DelayedActionSystem : ISystem
+public sealed class DelayedActionSystem : ITieredSystem
 {
     // Matches ActionLockSystem's own StripeCountValue -- both are tiered off the same
     // ProcessingTierComponent, so a given entity is visited by both on the same cadence (see this
@@ -120,10 +120,15 @@ public sealed class DelayedActionSystem : ISystem
     /// Each delayed action sets its own action lock duration.
     /// </remarks>
     /// <param name="time">The current engine time</param>
-    /// <param name="stripeIndex">Unused -- TieredEntityStripeSet.GetDueEntities computes its own per-tier due bucket from time.FrameCount directly (see ActionLockSystem's identical shape), not from SystemManager's own rotating stripeIndex.</param>
-    public void Update(EngineTime time, byte stripeIndex)
+    /// <param name="stripeIndex">Unused -- TieredSystemRunner selects each tier.s due bucket from time.FrameCount, not from SystemManager.s rotating stripeIndex.</param>
+    public void Update(EngineTime time, byte stripeIndex) => TieredSystemRunner.Run(this, time);
+
+    public TieredEntityStripeSet Tiers => _tieredStripeSet;
+
+    /// <summary>One tier's due entities. Takes framesPerVisit and ignores it: this system owns no countdown of its own -- see ITieredSystem.UpdateBucket.</summary>
+    public void UpdateBucket(EngineTime time, ReadOnlySpan<int> entityIds, ushort framesPerVisit)
     {
-        foreach (var entityId in _tieredStripeSet.GetDueEntities(time.FrameCount))
+        foreach (var entityId in entityIds)
         {
             if (_deadEntities?.Has(entityId) == true)
             {

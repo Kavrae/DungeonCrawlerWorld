@@ -1,4 +1,7 @@
 using Engine.ECS.Components.Stores;
+using Engine.ECS.Systems;
+using Game.Modules.ProcessingTier;
+using Game.Modules.ProcessingTier.Components;
 using Engine.Events;
 using Game.Modules.StatusEffectAura;
 using Game.Modules.StatusEffectAura.Components;
@@ -18,18 +21,26 @@ public sealed class AuraSourceExpirySystemTests
         var expiries = new PackedComponentPool<AuraSourceExpiryComponent>(maximumEntityCount: 10, initialCapacity: 4, static (ref existing, incoming) => existing = incoming);
         var sources = new MultiComponentPool<StatusEffectAuraSourceComponent>(maximumEntityCount: 10, initialCapacity: 4);
         var eventBus = new EventBus();
-        return (new AuraSourceExpirySystem(expiries, sources, eventBus), expiries, sources, eventBus);
+
+        // EntityId seeded Local -- an entity with no ProcessingTierComponent resolves to Beyond
+        // (see ProcessingTierWiring), whose far coarser cadence no single-Update test would reach.
+        var processingTiers = new DirectComponentPool<ProcessingTierComponent>(initialCapacity: 10, static (ref existing, incoming) => existing = incoming);
+        processingTiers.Add(EntityId, new ProcessingTierComponent(ProcessingTierLevel.Local));
+
+        return (new AuraSourceExpirySystem(expiries, sources, eventBus, processingTiers, new ProcessingTierEvents()), expiries, sources, eventBus);
     }
 
     [TestMethod]
-    public void Update_TicksFramesUntilNextTickDownByOne()
+    public void Update_TicksFramesUntilNextTickDownByFramesPerVisit()
     {
         var (system, expiries, _, _) = Build();
         expiries.Add(EntityId, new AuraSourceExpiryComponent(StatusEffectType.Light, framesUntilNextTick: 100));
 
-        system.Update(default, 0);
+        // EntityId is 1, so it lands in bucket 1 and is only due when FrameCount leaves
+        // remainder 1 -- FrameCount 0 reaches bucket 0 instead.
+        system.Update(new EngineTime(default, default, false, FrameCount: EntityId), 0);
 
-        Assert.AreEqual(99, expiries.GetReadonly(EntityId).FramesUntilNextTick);
+        Assert.AreEqual(100 - system.StripeCount, expiries.GetReadonly(EntityId).FramesUntilNextTick);
     }
 
     [TestMethod]
@@ -39,7 +50,7 @@ public sealed class AuraSourceExpirySystemTests
         AuraSourceEffects.Apply(sources, eventBus, EntityId, StatusEffectType.Light, auraAndGlowStrength: 8, Color.White);
         expiries.Add(EntityId, new AuraSourceExpiryComponent(StatusEffectType.Light, framesUntilNextTick: 1));
 
-        system.Update(default, 0);
+        system.Update(new EngineTime(default, default, false, FrameCount: EntityId), 0);
 
         Assert.IsFalse(expiries.Has(EntityId));
         Assert.IsFalse(sources.Has(EntityId));
@@ -54,7 +65,7 @@ public sealed class AuraSourceExpirySystemTests
         AuraSourceEffects.Toggle(sources, eventBus, EntityId, StatusEffectType.Poison, auraAndGlowStrength: 5, Color.Purple);
         expiries.Add(EntityId, new AuraSourceExpiryComponent(StatusEffectType.Light, framesUntilNextTick: 1));
 
-        system.Update(default, 0);
+        system.Update(new EngineTime(default, default, false, FrameCount: EntityId), 0);
 
         Assert.AreEqual(1, sources.CountForEntity(EntityId));
     }

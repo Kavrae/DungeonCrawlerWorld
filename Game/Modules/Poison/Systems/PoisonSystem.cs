@@ -5,6 +5,8 @@ using Engine.Math;
 using Game.Modules.Health;
 using Game.Modules.Health.Components;
 using Game.Modules.Poison.Components;
+using Game.Modules.ProcessingTier;
+using Game.Modules.ProcessingTier.Components;
 using Game.Modules.StatModifiers.Components;
 using Game.Modules.StatusEffects;
 using Game.World;
@@ -19,9 +21,16 @@ namespace Game.Modules.Poison.Systems;
 /// ContactDamageSystem/StatusEffectAuraSystem -- this class only supplies the entity-id
 /// source and what "ticking" actually does.
 /// </summary>
-public sealed class PoisonSystem : ISystem
+/// <remarks>
+/// Was StripeCount 1 and untiered, scanning every live PoisonTimerComponent every frame. Tiered
+/// now, matching BurningSystem -- the two are the same shape (a stacking damage-over-time timer
+/// driven through CountdownTicker) and had no reason to differ.
+/// </remarks>
+public sealed class PoisonSystem : ITieredSystem
 {
-    public byte StripeCount => 1;
+    private const byte StripeCountValue = 15;
+
+    public byte StripeCount => StripeCountValue;
 
     /// <summary>Passed as HealthDamage.Apply's damageTags on every tick -- lets a ConditionTag: Tag.Poison-scoped IncomingDamage modifier reduce poison damage specifically. Cached once rather than allocated fresh per tick.</summary>
     private static readonly Tag[] PoisonDamageTags = [Tag.Poison];
@@ -34,6 +43,7 @@ public sealed class PoisonSystem : ISystem
     private readonly MathUtility _mathUtility;
     private readonly MultiComponentPool<BodyPartComponent>? _bodyParts;
     private readonly List<int> _pendingTimerRemovals = [];
+    private readonly TieredEntityStripeSet _tieredStripeSet;
 
     // Cached once instead of passing the Tick method group at the CountdownTicker.Tick call
     // site every Update -- see ContactDamageSystem's own field for why this matters (an
@@ -46,6 +56,8 @@ public sealed class PoisonSystem : ISystem
         EventBus eventBus,
         IPlayerQuery? playerQuery,
         MathUtility mathUtility,
+        DirectComponentPool<ProcessingTierComponent> processingTiers,
+        ProcessingTierEvents processingTierEvents,
         MultiComponentPool<StatModifierComponent>? statModifiers = null,
         MultiComponentPool<BodyPartComponent>? bodyParts = null)
     {
@@ -57,10 +69,17 @@ public sealed class PoisonSystem : ISystem
         _mathUtility = mathUtility;
         _bodyParts = bodyParts;
         _tick = Tick;
+
+        _tieredStripeSet = ProcessingTierWiring.CreateAndWire(StripeCount, timers, processingTiers, processingTierEvents);
     }
 
-    public void Update(EngineTime time, byte stripeIndex) =>
-        CountdownTicker.Tick(_timers, _timers.EntityIds, _pendingTimerRemovals, _tick);
+    public void Update(EngineTime time, byte stripeIndex) => TieredSystemRunner.Run(this, time);
+
+    public TieredEntityStripeSet Tiers => _tieredStripeSet;
+
+    /// <summary>Advances each due entity's countdown by framesPerVisit -- see ITieredSystem.UpdateBucket.</summary>
+    public void UpdateBucket(EngineTime time, ReadOnlySpan<int> entityIds, ushort framesPerVisit) =>
+        CountdownTicker.Tick(_timers, entityIds, _pendingTimerRemovals, _tick, framesPerVisit);
 
     /// <summary>Returns whether the timer should be removed entirely (duration expired) -- see CountdownTicker.Tick's own doc comment for the contract. Removing the timer component alone is enough to end the effect (StackCount lives on it, not a separate pool).</summary>
     private bool Tick(int entityId, PoisonTimerComponent timer)

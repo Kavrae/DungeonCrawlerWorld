@@ -1,3 +1,4 @@
+using Engine.Utilities;
 using Engine.ECS.Components.Stores;
 using Engine.ECS.Systems;
 using Game.Modules.AbilityScores;
@@ -21,11 +22,16 @@ public sealed class ManaRegenSystemTests
         new(maximumEntityCount: 10, initialCapacity: 4,
             static (ref existing, incoming) => existing = incoming);
 
-    private static DirectComponentPool<ProcessingTierComponent> CreateTiersPool() =>
-        new(initialCapacity: 10,
+    /// <summary>Seeds entity 0's tier explicitly -- see SimpleHealthRegenSystemTests.CreateTiersPool's own note on why leaving it absent silently tested the Beyond cadence.</summary>
+    private static DirectComponentPool<ProcessingTierComponent> CreateTiersPool(ProcessingTierLevel tier = ProcessingTierLevel.Local)
+    {
+        var pool = new DirectComponentPool<ProcessingTierComponent>(initialCapacity: 10,
             static (ref existing, incoming) => existing = incoming);
+        pool.Add(0, new ProcessingTierComponent(tier));
+        return pool;
+    }
 
-    /// <summary>Intelligence total 300 -- ManaRegenSystem's MaxManaRegenPerSecond, a flat 0.3 MP/sec -- so any entity regens a clean 0.3/visit at Local tier (StripeCount is a full second's worth of frames), or 0.6/visit at Neighborhood (120-frame/2-second cadence: 0.3 * 120/60 = 0.6).</summary>
+    /// <summary>Intelligence total 300 -- ManaRegenSystem's MaxManaRegenPerSecond, a flat 0.3 MP/sec -- so any entity regens a clean 0.3/visit at Local tier (StripeCount is a full second's worth of frames), and proportionally more per visit at a coarser tier (the visit covers StripeCount * divisor frames -- see ProcessingTierDivisors).</summary>
     private static MultiComponentPool<AbilityScoreComponent> CreateAbilityScoresPoolWithMaxIntelligence(int entityId)
     {
         var pool = new MultiComponentPool<AbilityScoreComponent>(maximumEntityCount: 10, initialCapacity: 4);
@@ -145,9 +151,8 @@ public sealed class ManaRegenSystemTests
     public void Update_ThrottledEntity_OffCycle_DoesNotRegenerate()
     {
         var pool = CreatePool();
-        var tiers = CreateTiersPool();
+        var tiers = CreateTiersPool(ProcessingTierLevel.Neighborhood);
         pool.Add(0, new ManaComponent(currentMana: 50, maximumMana: 200));
-        tiers.Add(0, new ProcessingTierComponent(ProcessingTierLevel.Neighborhood));
         var system = new ManaRegenSystem(pool, tiers, new ProcessingTierEvents(), abilityScores: CreateAbilityScoresPoolWithMaxIntelligence(0));
 
         system.Update(new EngineTime(default, default, false, FrameCount: 1), 0);
@@ -159,13 +164,18 @@ public sealed class ManaRegenSystemTests
     public void Update_ThrottledEntity_OnEligibleCycle_Regenerates()
     {
         var pool = CreatePool();
-        var tiers = CreateTiersPool();
+        var tiers = CreateTiersPool(ProcessingTierLevel.Neighborhood);
         pool.Add(0, new ManaComponent(currentMana: 50, maximumMana: 200));
-        tiers.Add(0, new ProcessingTierComponent(ProcessingTierLevel.Neighborhood));
         var system = new ManaRegenSystem(pool, tiers, new ProcessingTierEvents(), abilityScores: CreateAbilityScoresPoolWithMaxIntelligence(0));
 
         system.Update(new EngineTime(default, default, false, FrameCount: 0), 0);
 
-        Assert.AreEqual(50.6f, pool.GetReadonly(0).CurrentMana, 0.0001f);
+        // Derived from ProcessingTierDivisors -- see SimpleHealthRegenSystemTests' own
+        // Update_ThrottledEntity_OnEligibleCycle_Regenerates for the reasoning.
+        const float regenPerSecond = 0.3f; // MaxManaRegenPerSecond -- see CreateAbilityScoresPoolWithMaxIntelligence.
+        var framesPerVisit = system.StripeCount * ProcessingTierDivisors.ByTierIndex[(int)ProcessingTierLevel.Neighborhood];
+        var expected = 50f + (regenPerSecond * framesPerVisit / GameTiming.FramesPerSecond);
+
+        Assert.AreEqual(expected, pool.GetReadonly(0).CurrentMana, 0.0001f);
     }
 }

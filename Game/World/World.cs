@@ -17,6 +17,16 @@ public sealed class World(Map map) : IMapQuery, IPlayerQuery
     /// <remarks>Defaults to -1 as the standard sentinel</remarks>
     public int PlayerEntityId { get; set; } = -1;
 
+    /// <summary>
+    /// Raised after an entity is successfully placed on the map -- PlaceEntityOnMap or
+    /// PlaceTerrainOnMap -- with the position it landed at. Generic by design: World knows nothing
+    /// about processing tiers. GameBootstrapper subscribes ProcessingTierResolver.EnsureTiered, so
+    /// every placement path gets a correct tier without its caller having to ask for one. Carries the
+    /// position rather than letting a subscriber re-read the TransformComponent, because callers pass
+    /// the transform by ref and not every caller's ref points into the pool.
+    /// </summary>
+    public event Action<int, Vector3Int>? EntityPlaced;
+
     private static readonly Vector2Byte TransformSize1 = new(1, 1);
 
     /// <summary>Tracks the components that temporarily change a blocking entity to non-blocking</summary>
@@ -183,6 +193,8 @@ public sealed class World(Map map) : IMapQuery, IPlayerQuery
         }
 
         transformComponent.Position = newPosition;
+
+        EntityPlaced?.Invoke(entityId, newPosition);
     }
 
     /// <summary>Shared footprint iteration for a Blocking entity's placement/arrival -- every cell of its X/Y extent at the given Z, with a single-cell fast path for a 1x1 footprint instead of entering the loop.</summary>
@@ -303,6 +315,7 @@ public sealed class World(Map map) : IMapQuery, IPlayerQuery
 
         Map.SetTerrainEntityId(x, y, terrainLayer, entityId);
         transformComponent.Position = new Vector3Int(x, y, (int)terrainLayer);
+        EntityPlaced?.Invoke(entityId, transformComponent.Position);
 
         // Published after the store is actually updated, so a subscriber that re-reads the cell
         // (MapTerrainCache does, on its next rebuild) sees the new terrain rather than the old.

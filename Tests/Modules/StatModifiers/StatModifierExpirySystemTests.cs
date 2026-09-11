@@ -17,9 +17,14 @@ public sealed class StatModifierExpirySystemTests
 
     private static MultiComponentPool<ExpiringStatModifierComponent> CreateMarkersPool() => new(maximumEntityCount: 10, initialCapacity: 4);
 
-    private static DirectComponentPool<ProcessingTierComponent> CreateTiersPool() =>
-        new(initialCapacity: 10,
+    /// <summary>Seeds entity 0's tier explicitly -- see ContactDamageSystemTests.CreateTiersPool's own note. Tests wanting another tier Merge over it, since Add throws on a duplicate.</summary>
+    private static DirectComponentPool<ProcessingTierComponent> CreateTiersPool(ProcessingTierLevel tier = ProcessingTierLevel.Local)
+    {
+        var pool = new DirectComponentPool<ProcessingTierComponent>(initialCapacity: 10,
             static (ref existing, incoming) => existing = incoming);
+        pool.Add(0, new ProcessingTierComponent(tier));
+        return pool;
+    }
 
     private static StatModifierComponent Modifier(ushort? remainingDurationFrames) =>
         new(StatModifierTarget.HealthRegen, StatModifierOperation.Additive, StatModifierPolarity.Buff, canModify: false, magnitude: 1f, remainingDurationFrames, StatusEffectSource.Admin);
@@ -60,7 +65,7 @@ public sealed class StatModifierExpirySystemTests
         var tiers = CreateTiersPool();
         pool.Add(0, Modifier(5));
         markers.Add(0, new ExpiringStatModifierComponent());
-        tiers.Add(0, new ProcessingTierComponent(ProcessingTierLevel.Neighborhood));
+        tiers.Merge(0, new ProcessingTierComponent(ProcessingTierLevel.Neighborhood));
         var system = new StatModifierExpirySystem(pool, markers, tiers, new ProcessingTierEvents(), new EventBus());
 
         system.Update(new EngineTime(default, default, false, FrameCount: 1), 0);
@@ -74,14 +79,21 @@ public sealed class StatModifierExpirySystemTests
         var pool = CreatePool();
         var markers = CreateMarkersPool();
         var tiers = CreateTiersPool();
-        pool.Add(0, Modifier(5));
-        markers.Add(0, new ExpiringStatModifierComponent());
-        tiers.Add(0, new ProcessingTierComponent(ProcessingTierLevel.Neighborhood));
+        tiers.Merge(0, new ProcessingTierComponent(ProcessingTierLevel.Neighborhood));
         var system = new StatModifierExpirySystem(pool, markers, tiers, new ProcessingTierEvents(), new EventBus());
 
-        system.Update(new EngineTime(default, default, false, FrameCount: 2), 0);
+        // Derived from ProcessingTierDivisors, and seeded longer than one visit's span so this
+        // stays on the decrement path rather than expiring outright -- a Neighborhood visit now
+        // covers StripeCount * divisor frames of duration, not a single frame.
+        var framesPerVisit = system.StripeCount * ProcessingTierDivisors.ByTierIndex[(int)ProcessingTierLevel.Neighborhood];
+        var startingDuration = (ushort)(framesPerVisit + 5);
+        pool.Add(0, Modifier(startingDuration));
+        markers.Add(0, new ExpiringStatModifierComponent());
 
-        Assert.AreEqual((ushort?)4, pool.GetReadonlyByDenseIndex(pool.GetFirstDenseIndex(0)).RemainingDurationFrames);
+        // FrameCount 0 is due for bucket 0 at any divisor.
+        system.Update(new EngineTime(default, default, false, FrameCount: 0), 0);
+
+        Assert.AreEqual((ushort?)(startingDuration - framesPerVisit), pool.GetReadonlyByDenseIndex(pool.GetFirstDenseIndex(0)).RemainingDurationFrames);
     }
 
     [TestMethod]

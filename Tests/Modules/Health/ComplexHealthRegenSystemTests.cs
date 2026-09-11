@@ -33,8 +33,13 @@ public sealed class ComplexHealthRegenSystemTests
     private static PackedComponentPool<SimpleHealthComponent> CreateHealthPool() =>
         new(maximumEntityCount: 10, initialCapacity: 4, static (ref existing, incoming) => existing = incoming);
 
-    private static DirectComponentPool<ProcessingTierComponent> CreateTiersPool() =>
-        new(initialCapacity: 10, static (ref existing, incoming) => existing = incoming);
+    /// <summary>Seeds entity 0's tier explicitly -- see SimpleHealthRegenSystemTests.CreateTiersPool's own note on why leaving it absent silently tested the Beyond cadence.</summary>
+    private static DirectComponentPool<ProcessingTierComponent> CreateTiersPool(ProcessingTierLevel tier = ProcessingTierLevel.Local)
+    {
+        var pool = new DirectComponentPool<ProcessingTierComponent>(initialCapacity: 10, static (ref existing, incoming) => existing = incoming);
+        pool.Add(0, new ProcessingTierComponent(tier));
+        return pool;
+    }
 
     /// <summary>Constitution total 300 -- ComplexHealthRegenSystem's MaxHealthRegenPerSecond, a flat 6 HP/sec -- so a Local-tier visit (StripeCount is a full second's worth of frames) regens a clean 6.</summary>
     private static MultiComponentPool<AbilityScoreComponent> CreateAbilityScoresPoolWithMaxConstitution(int entityId)

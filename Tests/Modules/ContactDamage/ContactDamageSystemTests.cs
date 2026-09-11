@@ -55,8 +55,13 @@ public sealed class ContactDamageSystemTests
     private static PackedComponentPool<DeadComponent> CreateDeadPool() =>
         new(maximumEntityCount: 200, initialCapacity: 4, static (ref existing, incoming) => existing = incoming);
 
-    private static DirectComponentPool<ProcessingTierComponent> CreateTiersPool() =>
-        new(initialCapacity: 200, static (ref existing, incoming) => existing = incoming);
+    /// <summary>Seeds MoverEntityId's tier explicitly -- an entity with no ProcessingTierComponent resolves to Beyond (see ProcessingTierWiring), whose framesPerVisit now spans many tick periods, so leaving it absent made these tests catch up several ticks per visit instead of the one they describe.</summary>
+    private static DirectComponentPool<ProcessingTierComponent> CreateTiersPool(ProcessingTierLevel tier = ProcessingTierLevel.Local)
+    {
+        var pool = new DirectComponentPool<ProcessingTierComponent>(initialCapacity: 200, static (ref existing, incoming) => existing = incoming);
+        pool.Add(MoverEntityId, new ProcessingTierComponent(tier));
+        return pool;
+    }
 
     private static MultiComponentPool<BodyPartComponent> CreateBodyPartsPool() =>
         new(maximumEntityCount: 200, initialCapacity: 8);
@@ -158,7 +163,7 @@ public sealed class ContactDamageSystemTests
         // -- it's testing damage timing, not tier throttling (see the Update_ThrottledMover_*
         // tests below for that), so it shouldn't depend on whatever the untiered fail-open
         // default happens to be.
-        processingTiers.Add(MoverEntityId, new ProcessingTierComponent(ProcessingTierLevel.Local));
+        processingTiers.Merge(MoverEntityId, new ProcessingTierComponent(ProcessingTierLevel.Local));
 
         movedEntities.Record(new EntityMovedEvent(MoverEntityId, new Vector3Int(4, 5, 0), new Vector3Int(5, 5, 0), new Vector2Byte(1, 1)));
         SimulateFrame(system, movedEntities);
@@ -184,7 +189,7 @@ public sealed class ContactDamageSystemTests
     {
         var (system, _, _, health, _, movedEntities, _, processingTiers) = Build();
         // See SteppingOntoHazard_AddsExposureWithCountdownAlreadyTickedOnceThisFrame's own comment.
-        processingTiers.Add(MoverEntityId, new ProcessingTierComponent(ProcessingTierLevel.Local));
+        processingTiers.Merge(MoverEntityId, new ProcessingTierComponent(ProcessingTierLevel.Local));
         movedEntities.Record(new EntityMovedEvent(MoverEntityId, new Vector3Int(4, 5, 0), new Vector3Int(5, 5, 0), new Vector2Byte(1, 1)));
 
         // The first of these 60 frames both drains the buffer (adding the exposure and dealing
@@ -203,7 +208,7 @@ public sealed class ContactDamageSystemTests
     {
         var (system, _, _, health, _, movedEntities, _, processingTiers) = Build();
         // See SteppingOntoHazard_AddsExposureWithCountdownAlreadyTickedOnceThisFrame's own comment.
-        processingTiers.Add(MoverEntityId, new ProcessingTierComponent(ProcessingTierLevel.Local));
+        processingTiers.Merge(MoverEntityId, new ProcessingTierComponent(ProcessingTierLevel.Local));
         movedEntities.Record(new EntityMovedEvent(MoverEntityId, new Vector3Int(4, 5, 0), new Vector3Int(5, 5, 0), new Vector2Byte(1, 1)));
 
         for (var frame = 0; frame < 59; frame++)
@@ -253,7 +258,7 @@ public sealed class ContactDamageSystemTests
     {
         var (system, hazards, exposures, health, mapQuery, movedEntities, _, processingTiers) = Build();
         // See SteppingOntoHazard_AddsExposureWithCountdownAlreadyTickedOnceThisFrame's own comment.
-        processingTiers.Add(MoverEntityId, new ProcessingTierComponent(ProcessingTierLevel.Local));
+        processingTiers.Merge(MoverEntityId, new ProcessingTierComponent(ProcessingTierLevel.Local));
         const int secondTerrainEntityId = 101;
         hazards.Add(secondTerrainEntityId, new DamageOnContactComponent(damagePerTick: 10, tickIntervalFrames: 60));
         mapQuery.SetTerrain(new Vector3Int(6, 5, 0), secondTerrainEntityId);
@@ -276,10 +281,10 @@ public sealed class ContactDamageSystemTests
     public void Update_ThrottledMover_OffCycle_DoesNotDecrementExposureCountdown()
     {
         var (system, _, exposures, _, _, _, _, processingTiers) = Build();
-        processingTiers.Add(MoverEntityId, new ProcessingTierComponent(ProcessingTierLevel.Neighborhood));
+        processingTiers.Merge(MoverEntityId, new ProcessingTierComponent(ProcessingTierLevel.Neighborhood));
         exposures.Add(MoverEntityId, new ContactDamageExposureComponent(60, TerrainEntityId));
 
-        // MoverEntityId (0), Neighborhood-tiered (base StripeCount 1 * divisor 2 = 2), lands in bucket 0 -- due only when FrameCount % 2 == 0.
+        // MoverEntityId (0), Neighborhood-tiered (base StripeCount * the Neighborhood divisor) lands in bucket 0 -- due only when FrameCount is a multiple of that product.
         system.Update(new EngineTime(default, default, false, FrameCount: 1), 0);
 
         Assert.AreEqual(60, exposures.GetReadonly(MoverEntityId).FramesUntilNextTick);
@@ -289,13 +294,16 @@ public sealed class ContactDamageSystemTests
     public void Update_ThrottledMover_OnEligibleCycle_DecrementsExposureCountdown()
     {
         var (system, _, exposures, _, _, _, _, processingTiers) = Build();
-        processingTiers.Add(MoverEntityId, new ProcessingTierComponent(ProcessingTierLevel.Neighborhood));
+        processingTiers.Merge(MoverEntityId, new ProcessingTierComponent(ProcessingTierLevel.Neighborhood));
         exposures.Add(MoverEntityId, new ContactDamageExposureComponent(60, TerrainEntityId));
 
-        system.Update(new EngineTime(default, default, false, FrameCount: 2), 0);
+        // FrameCount 0 is due for bucket 0 at any divisor, so this stays valid if the divisors
+        // are re-tuned; the expectation derives from ProcessingTierDivisors for the same reason.
+        system.Update(new EngineTime(default, default, false, FrameCount: 0), 0);
 
-        // Decremented by the Neighborhood tier's own framesPerVisit (base StripeCount 1 * divisor 2 = 2).
-        Assert.AreEqual(58, exposures.GetReadonly(MoverEntityId).FramesUntilNextTick);
+        // Decremented by the Neighborhood tier's own framesPerVisit, not the base StripeCount.
+        var framesPerVisit = system.StripeCount * ProcessingTierDivisors.ByTierIndex[(int)ProcessingTierLevel.Neighborhood];
+        Assert.AreEqual(60 - framesPerVisit, exposures.GetReadonly(MoverEntityId).FramesUntilNextTick);
     }
 
     [TestMethod]

@@ -29,7 +29,7 @@ namespace Game.Modules.BodyPartEffects.Systems;
 /// MovementSystem/ActionActivationSystem check those directly, the same way they already check
 /// DeadComponent, so this stays the only place that reads BodyPartComponent for these effects.
 /// </remarks>
-public sealed class BodyPartEffectsSystem : ISystem
+public sealed class BodyPartEffectsSystem : ITieredSystem
 {
     /// <summary>Per-part multiplier at 0% HP -- 1x at 100% HP, compounding multiplicatively across every Leg/Foot the entity owns.</summary>
     private const float MaxMovementLockMultiplierPerPart = 2f;
@@ -60,9 +60,14 @@ public sealed class BodyPartEffectsSystem : ISystem
         _tieredStripeSet = ProcessingTierWiring.CreateAndWire(StripeCount, bodyParts, processingTiers, processingTierEvents);
     }
 
-    public void Update(EngineTime time, byte stripeIndex)
+    public void Update(EngineTime time, byte stripeIndex) => TieredSystemRunner.Run(this, time);
+
+    public TieredEntityStripeSet Tiers => _tieredStripeSet;
+
+    /// <summary>One tier's due entities. Takes framesPerVisit and ignores it: this system owns no countdown of its own -- see ITieredSystem.UpdateBucket.</summary>
+    public void UpdateBucket(EngineTime time, ReadOnlySpan<int> entityIds, ushort framesPerVisit)
     {
-        foreach (var entityId in _tieredStripeSet.GetDueEntities(time.FrameCount))
+        foreach (var entityId in entityIds)
         {
             SyncLegPenalty(entityId);
             SyncArmPenalty(entityId);

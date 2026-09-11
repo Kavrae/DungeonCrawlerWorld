@@ -13,6 +13,7 @@ using Game.Blueprints.Terrain;
 using Game.Modules.Core.Components;
 using Game.Modules.Crawler.Components;
 using Game.Modules.Movement.Components;
+using Game.Modules.ProcessingTier;
 using Game.World;
 
 namespace Game;
@@ -26,7 +27,7 @@ namespace Game;
 /// per PopulateFlyingFairy) -- plus a handful of standalone multi-trait fixtures, via the
 /// Blueprint composition system.
 /// </summary>
-public sealed class TestMapBuilder(EntityManager entityManager, ComponentManager componentManager, MathUtility mathUtility, UniqueNumberAllocator crawlerNumberAllocator, FrameEventBuffer<EntityMovedEvent> movedEntities)
+public sealed class TestMapBuilder(EntityManager entityManager, ComponentManager componentManager, MathUtility mathUtility, UniqueNumberAllocator crawlerNumberAllocator, FrameEventBuffer<EntityMovedEvent> movedEntities, ProcessingTierResolver? tierResolver = null)
 {
     // TEMPORARY: halved once already from the original values (10/5/5) to reduce the creature
     // population -- Movement/HealthRegen/ContactDamage/StatusEffectAura all iterate this
@@ -215,7 +216,8 @@ public sealed class TestMapBuilder(EntityManager entityManager, ComponentManager
     /// <summary>Builds a race blueprint entity at the given size/layer with a staggered action lock -- the shared path for every PopulateEntity roll outcome. A small percentage also become Crawlers (see CrawlerPercent).</summary>
     private void BuildRaceEntity(World.World world, IBlueprint blueprint, int column, int row, Vector2Byte size, MapLayer mapLayer)
     {
-        var entityId = entityManager.CreateEntity();
+        var position = new Vector3Int(column, row, (int)mapLayer);
+        var entityId = CreateEntityAt(position);
         blueprint.Build(componentManager, entityId);
 
         ref var transform = ref componentManager.GetDirectPool<TransformComponent>().Get(entityId);
@@ -227,7 +229,6 @@ public sealed class TestMapBuilder(EntityManager entityManager, ComponentManager
         }
 
         StaggerActionLock(entityId);
-        var position = new Vector3Int(column, row, (int)mapLayer);
         world.PlaceEntityOnMap(entityId, position, ref transform);
 
         // Spawning counts as a move (see FloorBuilder.CreatePlayer's identical reasoning) so a
@@ -256,11 +257,12 @@ public sealed class TestMapBuilder(EntityManager entityManager, ComponentManager
     /// <summary>Same as BuildFromBlueprint, but places at mapLayer instead of preserving whatever Z the blueprint itself set.</summary>
     private int BuildFromBlueprintAtLayer(World.World world, IBlueprint blueprint, int column, int row, MapLayer mapLayer)
     {
-        var entityId = entityManager.CreateEntity();
+        var position = new Vector3Int(column, row, (int)mapLayer);
+        var entityId = CreateEntityAt(position);
         blueprint.Build(componentManager, entityId);
 
         ref var transform = ref componentManager.GetDirectPool<TransformComponent>().Get(entityId);
-        world.PlaceEntityOnMap(entityId, new Vector3Int(column, row, (int)mapLayer), ref transform);
+        world.PlaceEntityOnMap(entityId, position, ref transform);
 
         return entityId;
     }
@@ -272,7 +274,9 @@ public sealed class TestMapBuilder(EntityManager entityManager, ComponentManager
     /// </summary>
     private void BuildTerrainFromBlueprint(World.World world, IBlueprint blueprint, int column, int row, TerrainLayer terrainLayer)
     {
-        var entityId = entityManager.CreateEntity();
+        // Terrain Z is the TerrainLayer value, which lines up with MapLayer (both UnderGround = 0,
+        // Ground = 1) -- see World.PlaceTerrainOnMap, which writes exactly this position.
+        var entityId = CreateEntityAt(new Vector3Int(column, row, (int)terrainLayer));
         blueprint.Build(componentManager, entityId);
 
         ref var transform = ref componentManager.GetDirectPool<TransformComponent>().Get(entityId);
@@ -422,6 +426,24 @@ public sealed class TestMapBuilder(EntityManager entityManager, ComponentManager
     /// Places an already-built entity at the given grid column/row, preserving the Z height
     /// (map layer) its blueprint already set -- a blueprint's own X/Y is just a placeholder.
     /// </summary>
+    /// <summary>
+    /// Creates an entity born with its processing tier as its first component, for the position it
+    /// is about to be placed at -- see ProcessingTierResolver.CreateEntityAt. Used by the three bulk
+    /// paths whose final position is known before the blueprint is built (race entities, terrain,
+    /// layer-explicit walls), which is ~all of the ~2.6M entities and so where silent tier-first
+    /// assignment pays for itself.
+    /// </summary>
+    /// <remarks>
+    /// The PlaceAt paths below (fixtures, shops, Ground walls, tiny goblins) deliberately still use
+    /// a plain CreateEntity: their Z comes from the blueprint (PlaceAt keeps whatever
+    /// transform.Position.Z the blueprint set), so the final position is not known until after
+    /// Build. They are tiered by World.EntityPlaced -> ProcessingTierResolver.EnsureTiered instead,
+    /// which raises a TierChanged per entity -- a few thousand events at population, against the
+    /// ~700k tier-first avoids. Without a resolver (unit tests), this is a plain CreateEntity.
+    /// </remarks>
+    private int CreateEntityAt(Vector3Int plannedPosition) =>
+        tierResolver?.CreateEntityAt(entityManager, plannedPosition) ?? entityManager.CreateEntity();
+
     private void PlaceAt(World.World world, int entityId, int column, int row)
     {
         ref var transform = ref componentManager.GetDirectPool<TransformComponent>().Get(entityId);

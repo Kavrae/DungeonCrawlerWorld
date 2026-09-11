@@ -71,14 +71,22 @@ public static class WorldSessionBootstrapper
         var playerActivityLog = new PlayerActivityLog(world, ecsContext.ComponentManager, ecsContext.EventBus, playerActivityLogFilePath);
         Console.WriteLine($"[PlayerActivityLog] Writing to {playerActivityLogFilePath}");
 
+        // The tier reference is set to where the player is aimed at spawning BEFORE population, so
+        // terrain and NPCs are born with their processing tier as their first component instead of
+        // being tiered and then migrated. The player lands on the nearest free cell to this after
+        // population; ProcessingTierSystem's first update treats any difference as an ordinary
+        // player move and walks the Local boundary. See PLAN-processing-tier-rework.md.
+        var tierResolver = bootstrapResult.ProcessingTierResolver;
+        tierResolver.SetReferencePosition(FloorBuilder.PlayerSpawnOrigin(world));
+
         using (diagnostics.StartupProfiler?.Phase("Entity Population"))
         {
-            FloorBuilder.PopulateFloor(world, ecsContext, mathUtility, crawlerNumberAllocator, bootstrapResult.MovedEntities);
+            FloorBuilder.PopulateFloor(world, ecsContext, mathUtility, crawlerNumberAllocator, bootstrapResult.MovedEntities, tierResolver);
         }
 
         using (diagnostics.StartupProfiler?.Phase("Player Spawn"))
         {
-            FloorBuilder.CreatePlayer(world, ecsContext, mathUtility, bootstrapResult.MovedEntities, crawlerNumberAllocator, playerEntityId);
+            FloorBuilder.CreatePlayer(world, ecsContext, mathUtility, bootstrapResult.MovedEntities, crawlerNumberAllocator, playerEntityId, tierResolver);
             world.PlayerEntityId = playerEntityId;
 
             ecsContext.EventBus.Publish(new EnteredDungeonEvent());

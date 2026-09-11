@@ -54,7 +54,8 @@ public sealed class GameLoop : Microsoft.Xna.Framework.Game
 
     /// <param name="diagnosticsFeatures">Which Diagnostics engine features to enable -- opt-in, defaults to None. See DiagnosticsFeaturesParser (Program.cs passes --diagnostics= here).</param>
     /// <param name="randomSeed">Seed for the shared MathUtility every system and blueprint draws from -- see RandomSeed. Defaults to a generated one so a caller that doesn't care (tests constructing a GameLoop directly) still gets a reproducible, reportable session rather than an unseeded one.</param>
-    public GameLoop(DiagnosticsFeatures diagnosticsFeatures = DiagnosticsFeatures.None, int? randomSeed = null)
+    /// <param name="benchmarkFrameRange">Simulation frames to benchmark, or null -- see FrameRangeBenchmark (Program.cs passes --benchmark-frames= here).</param>
+    public GameLoop(DiagnosticsFeatures diagnosticsFeatures = DiagnosticsFeatures.None, int? randomSeed = null, BenchmarkFrameRange? benchmarkFrameRange = null)
     {
         _randomSeed = randomSeed ?? RandomSeed.Generate();
 
@@ -64,7 +65,7 @@ public sealed class GameLoop : Microsoft.Xna.Framework.Game
         // one of the things being timed. Memory/LeakDetection can't start this early (they need
         // ComponentManager/EntityManager, which don't exist yet) -- see AttachEcsContext, called
         // from within WorldSessionBootstrapper.Build.
-        _diagnostics = new DiagnosticsEngine(diagnosticsFeatures);
+        _diagnostics = new DiagnosticsEngine(diagnosticsFeatures, _randomSeed, benchmarkFrameRange);
 
         _graphics = new GraphicsDeviceManager(this)
         {
@@ -125,6 +126,7 @@ public sealed class GameLoop : Microsoft.Xna.Framework.Game
         {
             _frameCount++;
             _worldSession.PlayerActivityLog.BeginFrame(_frameCount, DateTime.Now);
+            _diagnostics.BeginSimulationFrame(_frameCount);
 
             var ecsUpdateStart = Stopwatch.GetTimestamp();
             _worldSession.EcsContext.Update(new EngineTime(gameTime.TotalGameTime, gameTime.ElapsedGameTime, gameTime.IsRunningSlowly, _frameCount));

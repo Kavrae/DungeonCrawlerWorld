@@ -5,6 +5,8 @@ using Engine.Math;
 using Game.Modules.Health.Components;
 using Game.Modules.Poison.Components;
 using Game.Modules.Poison.Systems;
+using Game.Modules.ProcessingTier;
+using Game.Modules.ProcessingTier.Components;
 using Game.Modules.StatModifiers.Components;
 using Game.Modules.StatusEffects;
 using Game.World;
@@ -39,12 +41,14 @@ public sealed class PoisonModule : IGameModule
     private EventBus _eventBus = null!;
     private IPlayerQuery? _playerQuery;
     private MathUtility _mathUtility = null!;
+    private ProcessingTierEvents _processingTierEvents = null!;
 
     public void Configure(GameModuleContext context)
     {
         _eventBus = context.EventBus;
         _playerQuery = context.PlayerQuery;
         _mathUtility = context.MathUtility;
+        _processingTierEvents = context.ProcessingTierEvents;
         context.StatusEffectAuraAppliers.Register(new TimerBasedAuraApplier<PoisonTimerComponent>(
             StatusEffectType.Poison,
             (componentManager, entityId, source) => PoisonEffects.ApplyStack(componentManager, entityId, source, AuraDurationTicks, _eventBus, _playerQuery)));
@@ -75,6 +79,8 @@ public sealed class PoisonModule : IGameModule
             _eventBus,
             _playerQuery,
             _mathUtility,
+            componentManager.GetDirectPool<ProcessingTierComponent>(),
+            _processingTierEvents,
             statModifiers,
             bodyParts));
     }

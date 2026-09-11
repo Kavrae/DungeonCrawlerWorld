@@ -66,6 +66,12 @@ public sealed class DelayedActionSystemTests
         var mathUtility = new MathUtility();
         var processingTiers = componentManager.GetDirectPool<ProcessingTierComponent>();
 
+        // Seeded Local before anything adds CasterEntityId to the stripe set: an entity with no
+        // ProcessingTierComponent resolves to Beyond (see ProcessingTierWiring), whose
+        // framesPerVisit is now large enough to change what a single Update does. Tests wanting
+        // another tier Merge over this rather than Add, since Add throws on a duplicate.
+        processingTiers.Add(CasterEntityId, new ProcessingTierComponent(ProcessingTierLevel.Local));
+
         var actionCatalog = new ActionCatalog();
         actionCatalog.Register(new ActionDefinition(
             ActionId, "Test Delayed Attack", null, "#", default, [],
@@ -164,7 +170,7 @@ public sealed class DelayedActionSystemTests
     }
 
     /// <summary>
-    /// A Neighborhood-tiered entity (StripeCount 10 * divisor 2 = 20) lands in bucket
+    /// A Neighborhood-tiered entity (StripeCount * the Neighborhood divisor) lands in bucket
     /// entityId % 20 -- for CasterEntityId (0), that's bucket 0, due only when
     /// FrameCount % 20 == 0. The tier must be seeded before PendingDelayedActionComponent is
     /// merged, since TieredEntityStripeSet reads an entity's current tier at membership-add time
@@ -177,7 +183,7 @@ public sealed class DelayedActionSystemTests
         var (system, componentManager, mapQuery, _, actionCatalog, processingTiers) = Build();
         mapQuery.SetOccupant(TargetTile, TargetEntityId);
         componentManager.Merge(TargetEntityId, new SimpleHealthComponent(100, 100));
-        processingTiers.Add(CasterEntityId, new ProcessingTierComponent(ProcessingTierLevel.Neighborhood));
+        processingTiers.Merge(CasterEntityId, new ProcessingTierComponent(ProcessingTierLevel.Neighborhood));
         componentManager.Merge(CasterEntityId, FixedDamageInstance(actionCatalog, ActionId, 15, cooldownFramesRemaining: 0));
         componentManager.Merge(CasterEntityId, new ActionLockComponent(standardLockFrames: ActionLockGate.StandardLockFrames, currentLockTotalFrames: 30, currentLockFramesRemaining: 0));
         componentManager.Merge(CasterEntityId, new PendingDelayedActionComponent(ActionId, [TargetTile]));
@@ -194,12 +200,16 @@ public sealed class DelayedActionSystemTests
         var (system, componentManager, mapQuery, _, actionCatalog, processingTiers) = Build();
         mapQuery.SetOccupant(TargetTile, TargetEntityId);
         componentManager.Merge(TargetEntityId, new SimpleHealthComponent(100, 100));
-        processingTiers.Add(CasterEntityId, new ProcessingTierComponent(ProcessingTierLevel.Neighborhood));
+        processingTiers.Merge(CasterEntityId, new ProcessingTierComponent(ProcessingTierLevel.Neighborhood));
         componentManager.Merge(CasterEntityId, FixedDamageInstance(actionCatalog, ActionId, 15, cooldownFramesRemaining: 0));
         componentManager.Merge(CasterEntityId, new ActionLockComponent(standardLockFrames: ActionLockGate.StandardLockFrames, currentLockTotalFrames: 30, currentLockFramesRemaining: 0));
         componentManager.Merge(CasterEntityId, new PendingDelayedActionComponent(ActionId, [TargetTile]));
 
-        system.Update(new EngineTime(default, default, false, FrameCount: 20), 0);
+        // FrameCount 0: CasterEntityId is 0, so it lands in bucket 0 of whatever tier bucket it
+        // is in, and bucket 0 is due whenever FrameCount is a multiple of that bucket's stripe
+        // count -- true at 0 for any divisor. A hardcoded nonzero frame here only worked while
+        // the Neighborhood divisor happened to be 2.
+        system.Update(new EngineTime(default, default, false, FrameCount: 0), 0);
 
         DamageAssert.HealthAfterDamage(startingHealth: 100, expectedNormalDamage: 15, HealthOf(componentManager, TargetEntityId));
         Assert.IsFalse(componentManager.GetPackedPool<PendingDelayedActionComponent>().Has(CasterEntityId));

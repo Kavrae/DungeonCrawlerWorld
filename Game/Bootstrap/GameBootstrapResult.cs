@@ -9,4 +9,4 @@ using Game.World;
 
 namespace Game.Bootstrap;
 
-public sealed record GameBootstrapResult(EcsContext EcsContext, IReadOnlyList<ModuleFailure> Failures, ActionCatalog ActionCatalog, FrameEventBuffer<EntityMovedEvent> MovedEntities, ItemCatalog ItemCatalog, StatusEffectDisplayRegistry StatusEffectDisplays, LocalTierRoster LocalTierRoster);
+public sealed record GameBootstrapResult(EcsContext EcsContext, IReadOnlyList<ModuleFailure> Failures, ActionCatalog ActionCatalog, FrameEventBuffer<EntityMovedEvent> MovedEntities, ItemCatalog ItemCatalog, StatusEffectDisplayRegistry StatusEffectDisplays, LocalTierRoster LocalTierRoster, ProcessingTierResolver ProcessingTierResolver);

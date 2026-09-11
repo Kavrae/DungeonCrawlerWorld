@@ -26,7 +26,7 @@ namespace Game.Modules.Movement.Systems;
 /// Player movement is queued externally (Presentation input) while NPC wandering is decided upstream by TestCombatBehaviorSystem, which runs before this system each frame. This system only handles the actual movement and action lock timing.
 /// </remarks>
 /// <cleanupVersion>1</cleanupVersion>
-public sealed class MovementSystem : ISystem
+public sealed class MovementSystem : ITieredSystem
 {
     private const byte StripeCountValue = 15;
 
@@ -96,57 +96,79 @@ public sealed class MovementSystem : ISystem
     /// </remarks>
     /// <param name="time">The engine time.</param>
     /// <param name="stripeIndex">The index of the entity stripe to update.</param>
-    public void Update(EngineTime time, byte stripeIndex)
+    public void Update(EngineTime time, byte stripeIndex) => TieredSystemRunner.Run(this, time);
+
+    public TieredEntityStripeSet Tiers => _tieredStripeSet;
+
+    public void UpdateBucket(EngineTime time, ReadOnlySpan<int> entityIds, ushort framesPerVisit)
     {
-        foreach (var entityId in _tieredStripeSet.GetDueEntities(time.FrameCount))
+        foreach (var entityId in entityIds)
         {
-            if (_deadEntities?.Has(entityId) == true || _movementDisabled?.Has(entityId) == true)
-            {
-                continue;
-            }
+            UpdateEntity(entityId, framesPerVisit);
+        }
+    }
 
-            ref readonly var movementComponent = ref _movementComponents.GetReadonly(entityId);
+    /// <summary>
+    /// One due entity's movement step. Split out of Update so that method can walk each tier's
+    /// own bucket and hand down that tier's actual frames-per-visit -- FramesToWait used to be
+    /// decremented by the base StripeCountValue regardless of tier, which meant a Beyond-tier
+    /// entity (visited every StripeCount * 8 frames) burned off its wait at an eighth of real
+    /// time and so moved eight times less often than intended. See ActionLockSystem.Update's own
+    /// remarks; this is the same correction.
+    /// </summary>
+    private void UpdateEntity(int entityId, ushort framesPerVisit)
+    {
+        if (_deadEntities?.Has(entityId) == true || _movementDisabled?.Has(entityId) == true)
+        {
+            return;
+        }
 
-            if (movementComponent.FramesToWait > 0)
-            {
-                _movementComponents.TryUpdate(entityId, static (ref MovementComponent movementComponent) =>
-                {
-                    movementComponent.FramesToWait = MathUtility.DecrementClamped(movementComponent.FramesToWait, StripeCountValue);
-                });
-                continue;
-            }
+        ref readonly var movementComponent = ref _movementComponents.GetReadonly(entityId);
 
-            if (ActionLockGate.IsBlocked(_actionLocks, entityId) ||
-                !_transformComponents.TryGetReadonly(entityId, out var transformComponent))
+        // The sole owner of the FramesToWait countdown. TestCombatBehaviorSystem sets it (via
+        // MovementCandidates.FramesToWaitIfNoOptions) and reads it as a gate, but no longer
+        // decrements it -- both systems used to, on the same entity on the same frame, so every
+        // wait elapsed at twice its intended rate. See that system's own note at the matching
+        // gate.
+        if (movementComponent.FramesToWait > 0)
+        {
+            _movementComponents.TryUpdate(entityId, framesPerVisit, static (ref MovementComponent movementComponent, ushort frames) =>
             {
-                continue;
-            }
+                movementComponent.FramesToWait = MathUtility.DecrementClamped(movementComponent.FramesToWait, frames);
+            });
+            return;
+        }
 
-            if (!_mapQuery.IsOnMap(transformComponent.Position))
-            {
-                continue;
-            }
+        if (ActionLockGate.IsBlocked(_actionLocks, entityId) ||
+            !_transformComponents.TryGetReadonly(entityId, out var transformComponent))
+        {
+            return;
+        }
 
-            // Something upstream (TestCombatBehaviorSystem) already decided this entity's turn
-            // this frame via a queued action/consumable activation -- don't also try to move
-            // it. Requires TestCombatBehaviorSystem to run earlier in the frame (see
-            // GameBootstrapper's module order) so this check sees the same-frame request.
-            //TEMPORARY replace with a more generic mechanics
-            if (_pendingActionActivations?.Has(entityId) == true || _pendingConsumableActivations?.Has(entityId) == true)
-            {
-                continue;
-            }
+        if (!_mapQuery.IsOnMap(transformComponent.Position))
+        {
+            return;
+        }
 
-            var justSelected = movementComponent.NextMapPosition == null || transformComponent.Position == movementComponent.NextMapPosition.Value;
-            if (justSelected)
-            {
-                ClearArrivedDestinationIfIdle(entityId);
-            }
+        // Something upstream (TestCombatBehaviorSystem) already decided this entity's turn
+        // this frame via a queued action/consumable activation -- don't also try to move
+        // it. Requires TestCombatBehaviorSystem to run earlier in the frame (see
+        // GameBootstrapper's module order) so this check sees the same-frame request.
+        //TEMPORARY replace with a more generic mechanics
+        if (_pendingActionActivations?.Has(entityId) == true || _pendingConsumableActivations?.Has(entityId) == true)
+        {
+            return;
+        }
 
-            if (movementComponent.NextMapPosition != null)
-            {
-                TryMoveToNextMapPosition(entityId, movementComponent, transformComponent);
-            }
+        var justSelected = movementComponent.NextMapPosition == null || transformComponent.Position == movementComponent.NextMapPosition.Value;
+        if (justSelected)
+        {
+            ClearArrivedDestinationIfIdle(entityId);
+        }
+
+        if (movementComponent.NextMapPosition != null)
+        {
+            TryMoveToNextMapPosition(entityId, movementComponent, transformComponent);
         }
     }
 

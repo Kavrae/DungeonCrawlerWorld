@@ -27,7 +27,7 @@ namespace Game.Modules.Health.Systems;
 /// BodyPartComponent chain once to decrement any nonzero RegenLockoutFramesRemaining, regardless
 /// of whether a part was selected for healing this tick.
 /// </remarks>
-public sealed class ComplexHealthRegenSystem : ISystem
+public sealed class ComplexHealthRegenSystem : ITieredSystem
 {
     public byte StripeCount => (byte)GameTiming.FramesPerSecond;
 
@@ -39,7 +39,6 @@ public sealed class ComplexHealthRegenSystem : ISystem
 
     private readonly MultiComponentPool<BodyPartComponent> _bodyParts;
     private readonly PackedComponentPool<SimpleHealthComponent> _health;
-    private readonly DirectComponentPool<ProcessingTierComponent> _processingTiers;
     private readonly MultiComponentPool<StatModifierComponent>? _statModifiers;
     private readonly PackedComponentPool<DeadComponent>? _deadEntities;
     private readonly MultiComponentPool<AbilityScoreComponent>? _abilityScores;
@@ -62,7 +61,6 @@ public sealed class ComplexHealthRegenSystem : ISystem
     {
         _bodyParts = bodyParts;
         _health = health;
-        _processingTiers = processingTiers;
         _statModifiers = statModifiers;
         _deadEntities = deadEntities;
         _abilityScores = abilityScores;
@@ -76,18 +74,22 @@ public sealed class ComplexHealthRegenSystem : ISystem
     /// <summary>Updates the selected body part's current health, and decrements every part's regen lockout, for all entities in the current stripe.</summary>
     /// <param name="time"></param>
     /// <param name="stripeIndex"></param>
-    public void Update(EngineTime time, byte stripeIndex)
+    public void Update(EngineTime time, byte stripeIndex) => TieredSystemRunner.Run(this, time);
+
+    public TieredEntityStripeSet Tiers => _tieredStripeSet;
+
+    /// <summary>One tier's due entities, scaled by that tier's framesPerVisit -- see ITieredSystem.UpdateBucket.</summary>
+    public void UpdateBucket(EngineTime time, ReadOnlySpan<int> entityIds, ushort framesPerVisit)
     {
-        foreach (var entityId in _tieredStripeSet.GetDueEntities(time.FrameCount))
+        var secondsPerVisit = framesPerVisit / (float)GameTiming.FramesPerSecond;
+
+        foreach (var entityId in entityIds)
         {
             // A corpse shouldn't regenerate back above 0.
             if (_deadEntities?.Has(entityId) == true)
             {
                 continue;
             }
-
-            var tier = _processingTiers.TryGetReadonly(entityId, out var processingTier) ? processingTier.Tier : ProcessingTierLevel.Local;
-            var framesPerVisit = StripeCount * ProcessingTierDivisors.ByTierIndex[(int)tier];
 
             DecrementLockouts(entityId, framesPerVisit);
 
@@ -99,7 +101,6 @@ public sealed class ComplexHealthRegenSystem : ISystem
                 continue;
             }
 
-            var secondsPerVisit = framesPerVisit / (float)GameTiming.FramesPerSecond;
             var amountPerSecond = AbilityScoreMath.Lerp(constitution.Total, MinHealthRegenPerSecond, MaxHealthRegenPerSecond);
             var rawAmount = amountPerSecond * secondsPerVisit;
             var effectiveRegen = StatModifierMath.GetEffectiveValue(_statModifiers, entityId, StatModifierTarget.HealthRegen, rawAmount);

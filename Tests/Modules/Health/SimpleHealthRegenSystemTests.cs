@@ -1,3 +1,4 @@
+using Engine.Utilities;
 using Engine.ECS.Components.Stores;
 using Engine.ECS.Systems;
 using Game.Modules.AbilityScores;
@@ -20,11 +21,21 @@ public sealed class SimpleHealthRegenSystemTests
         new(maximumEntityCount: 10, initialCapacity: 4,
             static (ref existing, incoming) => existing = incoming);
 
-    private static DirectComponentPool<ProcessingTierComponent> CreateTiersPool() =>
-        new(initialCapacity: 10,
+    /// <summary>
+    /// Seeds entity 0's tier explicitly rather than leaving it absent. An entity with no
+    /// ProcessingTierComponent is bucketed as Beyond (see ProcessingTierWiring's own doc on why
+    /// unknown fails open to the cheapest tier), so leaving it out meant these tests were
+    /// exercising an 8x-divisor cadence while reading as if they tested the default one.
+    /// </summary>
+    private static DirectComponentPool<ProcessingTierComponent> CreateTiersPool(ProcessingTierLevel tier = ProcessingTierLevel.Local)
+    {
+        var pool = new DirectComponentPool<ProcessingTierComponent>(initialCapacity: 10,
             static (ref existing, incoming) => existing = incoming);
+        pool.Add(0, new ProcessingTierComponent(tier));
+        return pool;
+    }
 
-    /// <summary>Constitution total 300 -- SimpleHealthRegenSystem's MaxHealthRegenPerSecond, a flat 6 HP/sec -- so any entity regens a clean 6/visit at Local tier (StripeCount is a full second's worth of frames), or 12/visit at Neighborhood (120-frame/2-second cadence: 6 * 120/60 = 12).</summary>
+    /// <summary>Constitution total 300 -- SimpleHealthRegenSystem's MaxHealthRegenPerSecond, a flat 6 HP/sec -- so any entity regens a clean 6/visit at Local tier (StripeCount is a full second's worth of frames), and proportionally more per visit at a coarser tier (the visit covers StripeCount * divisor frames -- see ProcessingTierDivisors).</summary>
     private static MultiComponentPool<AbilityScoreComponent> CreateAbilityScoresPoolWithMaxConstitution(int entityId)
     {
         var pool = new MultiComponentPool<AbilityScoreComponent>(maximumEntityCount: 10, initialCapacity: 4);
@@ -123,12 +134,11 @@ public sealed class SimpleHealthRegenSystemTests
     public void Update_ThrottledEntity_OffCycle_DoesNotRegenerate()
     {
         var pool = CreatePool();
-        var tiers = CreateTiersPool();
+        var tiers = CreateTiersPool(ProcessingTierLevel.Neighborhood);
         pool.Add(0, new SimpleHealthComponent(currentHealth: 50, maximumHealth: 200));
-        tiers.Add(0, new ProcessingTierComponent(ProcessingTierLevel.Neighborhood));
         var system = new SimpleHealthRegenSystem(pool, tiers, new ProcessingTierEvents(), abilityScores: CreateAbilityScoresPoolWithMaxConstitution(0));
 
-        // Entity 0, Neighborhood-tiered (StripeCount 60 * divisor 2 = 120), lands in bucket 0 -- due only when FrameCount % 120 == 0.
+        // Entity 0, Neighborhood-tiered (StripeCount * the Neighborhood divisor) lands in bucket 0 -- due only when FrameCount is a multiple of that product.
         system.Update(new EngineTime(default, default, false, FrameCount: 1), 0);
 
         Assert.AreEqual(50, pool.GetReadonly(0).CurrentHealth);
@@ -154,16 +164,20 @@ public sealed class SimpleHealthRegenSystemTests
     public void Update_ThrottledEntity_OnEligibleCycle_Regenerates()
     {
         var pool = CreatePool();
-        var tiers = CreateTiersPool();
+        var tiers = CreateTiersPool(ProcessingTierLevel.Neighborhood);
         pool.Add(0, new SimpleHealthComponent(currentHealth: 50, maximumHealth: 200));
-        tiers.Add(0, new ProcessingTierComponent(ProcessingTierLevel.Neighborhood));
         var system = new SimpleHealthRegenSystem(pool, tiers, new ProcessingTierEvents(), abilityScores: CreateAbilityScoresPoolWithMaxConstitution(0));
 
-        // Neighborhood cadence is twice Local's (120 frames/2 seconds vs 60 frames/1 second), so
-        // the per-visit amount is proportionally larger too: 6 * 120/60 = 12, not the 6 a
-        // Local-tier visit gets.
+        // A Neighborhood visit covers StripeCount * divisor frames rather than Local's
+        // StripeCount, so the per-visit amount is proportionally larger -- the same total rate
+        // over time, just delivered in coarser instalments. Derived from ProcessingTierDivisors
+        // rather than hardcoded so re-tuning the divisors doesn't silently invalidate this.
         system.Update(new EngineTime(default, default, false, FrameCount: 0), 0);
 
-        Assert.AreEqual(62, pool.GetReadonly(0).CurrentHealth);
+        const float regenPerSecond = 6f; // MaxHealthRegenPerSecond -- see CreateAbilityScoresPoolWithMaxConstitution.
+        var framesPerVisit = system.StripeCount * ProcessingTierDivisors.ByTierIndex[(int)ProcessingTierLevel.Neighborhood];
+        var expected = 50f + (regenPerSecond * framesPerVisit / GameTiming.FramesPerSecond);
+
+        Assert.AreEqual(expected, pool.GetReadonly(0).CurrentHealth, 0.0001f);
     }
 }

@@ -13,6 +13,8 @@ using Game.Modules.Inventory.Components;
 using Game.Modules.Inventory.Definitions;
 using Game.Modules.Movement;
 using Game.Modules.Movement.Components;
+using Game.Modules.ProcessingTier;
+using Game.Modules.ProcessingTier.Components;
 using Game.Modules.Race.Components;
 using Game.World;
 
@@ -50,14 +52,15 @@ namespace Game.Modules.NpcBehavior.Systems;
 /// This class is explicitly a stand-in for that future composite-behavior system, not the real
 /// thing -- named "Test" deliberately so nothing mistakes it for a permanent design.
 /// </summary>
-public sealed class TestCombatBehaviorSystem : ISystem
+public sealed class TestCombatBehaviorSystem : ITieredSystem
 {
-    // Matches MovementSystem's StripeCount (both wired to the same MovementComponent pool,
-    // both incrementing their stripe index once per frame from the same 0-start -- see
-    // SystemManager -- so entities stay decided and moved on the same frame as before, just
-    // spread over 15 frames instead of every frame). Previously 1, meaning this system
-    // processed its entire population every frame while MovementSystem only processed 1/15th
-    // -- the actual cause of the ~2fps slowdown investigated via TODO.md's "Very slow" note.
+    // Matches MovementSystem's StripeCount, and (since this system became tiered too) its tier
+    // divisors: both are wired to the same MovementComponent pool via ProcessingTierWiring and
+    // both derive "due" from EngineTime.FrameCount, so an entity lands in the same bucket of the
+    // same tier in both and is still decided and moved on the same frame. Previously 1, meaning
+    // this system processed its entire population every frame while MovementSystem only processed
+    // 1/15th -- the actual cause of the ~2fps slowdown investigated via TODO.md's "Very slow"
+    // note.
     private const byte StripeCountValue = 15;
 
     public byte StripeCount => StripeCountValue;
@@ -75,7 +78,7 @@ public sealed class TestCombatBehaviorSystem : ISystem
     private readonly IMapQuery _mapQuery;
     private readonly MathUtility _mathUtility;
     private readonly PackedComponentPool<DeadComponent>? _deadEntities;
-    private readonly EntityStripeSet _stripeSet;
+    private readonly TieredEntityStripeSet _tieredStripeSet;
 
     private readonly List<Vector3Int> _adjacentTilesBuffer = [];
 
@@ -92,6 +95,8 @@ public sealed class TestCombatBehaviorSystem : ISystem
         PackedComponentPool<PendingConsumableActivationComponent> pendingConsumableActivations,
         IMapQuery mapQuery,
         MathUtility mathUtility,
+        DirectComponentPool<ProcessingTierComponent> processingTiers,
+        ProcessingTierEvents processingTierEvents,
         PackedComponentPool<DeadComponent>? deadEntities = null)
     {
         _movementPool = movementPool;
@@ -108,57 +113,84 @@ public sealed class TestCombatBehaviorSystem : ISystem
         _mathUtility = mathUtility;
         _deadEntities = deadEntities;
 
-        _stripeSet = EntityStripeSet.CreateAndWire(StripeCount, movementPool);
+        _tieredStripeSet = ProcessingTierWiring.CreateAndWire(StripeCount, movementPool, processingTiers, processingTierEvents);
     }
 
-    public void Update(EngineTime time, byte stripeIndex)
+    /// <summary>
+    /// Driven per processing tier by TieredSystemRunner, so a distant entity's decision-making runs at its
+    /// tier's cadence rather than at the flat base one every entity used to share. This was the
+    /// single largest per-frame cost in the game (measured at 146ms/sec of a 438ms/sec simulation
+    /// budget), and the overwhelming majority of it was spent deciding, for entities nowhere near
+    /// the player, that they had nothing to do -- the priority chain below reads seven-plus
+    /// entity-indexed pools before most entities reach a no-op branch.
+    ///
+    /// Keyed off FrameCount rather than the stripeIndex parameter, matching MovementSystem: both
+    /// are wired to the same MovementComponent pool with the same base StripeCount and the same
+    /// tier divisors, so they still bucket identically and an entity is still decided and moved
+    /// on the same frame -- which is what makes this system's ordering ahead of MovementSystem
+    /// (see NpcBehaviorModule) meaningful. stripeIndex is accepted for ISystem compliance and
+    /// otherwise unused, the same way StatusEffectAuraSystem already treats it.
+    /// </summary>
+    public void Update(EngineTime time, byte stripeIndex) => TieredSystemRunner.Run(this, time);
+
+    public TieredEntityStripeSet Tiers => _tieredStripeSet;
+
+    public void UpdateBucket(EngineTime time, ReadOnlySpan<int> entityIds, ushort framesPerVisit)
     {
-        foreach (var entityId in _stripeSet.GetBucket(stripeIndex))
+        foreach (var entityId in entityIds)
         {
-            if (_deadEntities?.Has(entityId) == true)
-            {
-                continue;
-            }
-
-            if (!_transformPool.TryGetReadonly(entityId, out var transform))
-            {
-                continue;
-            }
-
-            ref readonly var movement = ref _movementPool.GetReadonly(entityId);
-            if (movement.MovementMode != MovementMode.Random)
-            {
-                continue;
-            }
-
-            if (movement.FramesToWait > 0)
-            {
-                // Decrement by StripeCountValue, not 1 -- this entity is only visited once every
-                // StripeCount real frames (see MovementSystem's identical FramesToWait decrement
-                // for the same reason), so a per-visit decrement of 1 would stretch every wait
-                // duration (e.g. MovementCandidates.FramesToWaitIfNoOptions) out to StripeCount
-                // times its intended real-time length.
-                _movementPool.TryUpdate(entityId, static (ref MovementComponent m) => m.FramesToWait = MathUtility.DecrementClamped(m.FramesToWait, StripeCountValue));
-                continue;
-            }
-
-            if (ActionLockGate.IsBlocked(_actionLocks, entityId) )
-            {
-                continue;
-            }
-
-            if (movement.NextMapPosition is { } pending && pending != transform.Position)
-            {
-                continue; // Still mid-move from a previous decision -- nothing new to decide yet.
-            }
-
-            if (TryDecideSelfHeal(entityId, transform) || TryDecideMeleeAttack(entityId, transform))
-            {
-                continue;
-            }
-
-            DecideWander(entityId, transform);
+            DecideForEntity(entityId);
         }
+    }
+
+    /// <summary>One due entity's decision step. Takes no frames-per-visit: this system owns no countdown -- FramesToWait belongs to MovementSystem and is only read here, as a gate.</summary>
+    private void DecideForEntity(int entityId)
+    {
+        if (_deadEntities?.Has(entityId) == true)
+        {
+            return;
+        }
+
+        if (!_transformPool.TryGetReadonly(entityId, out var transform))
+        {
+            return;
+        }
+
+        ref readonly var movement = ref _movementPool.GetReadonly(entityId);
+        if (movement.MovementMode != MovementMode.Random)
+        {
+            return;
+        }
+
+        // A pure gate: MovementSystem owns the FramesToWait countdown, this system only refuses
+        // to decide while it is running. Both used to decrement it, and because the two are wired
+        // to the same pool with the same stripe count and divisors -- and SystemManager derives
+        // stripeIndex as FrameCount % StripeCount -- they visited the same entity on the same
+        // frame and each took a full span off, so every wait elapsed at twice its intended rate.
+        // MovementSystem is the right owner despite being "purely reactive" about destinations:
+        // FramesToWait gates movement execution, and a single owner is what stops the two from
+        // drifting again.
+        if (movement.FramesToWait > 0)
+        {
+            return;
+        }
+
+        if (ActionLockGate.IsBlocked(_actionLocks, entityId) )
+        {
+            return;
+        }
+
+        if (movement.NextMapPosition is { } pending && pending != transform.Position)
+        {
+            return; // Still mid-move from a previous decision -- nothing new to decide yet.
+        }
+
+        if (TryDecideSelfHeal(entityId, transform) || TryDecideMeleeAttack(entityId, transform))
+        {
+            return;
+        }
+
+        DecideWander(entityId, transform);
     }
 
     /// <summary>Below half health and holding at least one Health Potion -> drink it. Deliberately simple (a fixed 50% threshold, no smarter "how urgent is this" weighing) -- see this class's own doc comment on why.</summary>

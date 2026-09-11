@@ -1009,3 +1009,96 @@ guard with today's hardcoded value as the non-Windows fallback. Scoped to the mo
 `ActionTargetingController`'s separate keyboard hotbar double-tap window is a different gesture and
 wouldn't read from this. Open question if picked up: does the current +25% buffer on top of the base
 value still make sense once the base is the user's own real OS setting rather than a fixed guess.
+
+### HIGH PRIORITY : Distant simulation fidelity -- research industry approaches
+
+Raising `ProcessingTierDivisors` to `[1, 16, 32, 64]` made coarse-tier entities cheap, and
+`CountdownTicker`/`MultiCountdownTicker` now catch up the full span of a visit rather than firing
+once (so a distant entity's damage-over-time totals are correct again). But correct *totals* are
+not the same as correct *outcomes*, and the current shape has a real gameplay flaw:
+
+**Bulk ticks resolve in isolation, so an entity can die to a lump of DoT that fine-grained
+simulation would never have killed.** A burning entity visited every 960 frames takes 16 ticks of
+burn damage in one go, all resolved before its own regen system next visits it. Interleaved at
+1-frame granularity, the heal-over-time would have offset each damage tick as it landed and the
+entity would have survived. Health-vs-damage races (burning, poison, contact damage, bleeding,
+regen, body-part regen lockouts) all have this property: the *order and granularity* of
+application changes who lives.
+
+This gets worse, not better, with the planned map growth: at Borough map size the bulk of entities
+sit at divisor 32, and at 4x Borough at 64, so bulk resolution becomes the normal case rather than
+an edge one.
+
+Research how other games solve distant/background simulation before picking a design:
+- Dwarf Fortress / RimWorld: off-screen and abstracted-region simulation fidelity.
+- Factorio: what it deliberately does NOT simulate outside active chunks, and why that is safe.
+- Modern MMOs / Kenshi / Mount & Blade: "simulate the summary, not the entity" approaches.
+- Roguelike convention generally: whether distant actors are simulated at all, or frozen until
+  the player approaches.
+
+Candidate directions to weigh against that research:
+- Resolve competing over-time effects together per visit (net damage-vs-heal per elapsed period)
+  instead of each system independently applying its own lump.
+- Do not resolve *lethal* outcomes at coarse tiers at all -- clamp distant entities above zero
+  and settle the result when they are next promoted to a fine tier.
+- Statistical/abstracted resolution for coarse tiers, with exact simulation only near the player.
+- Freeze coarse tiers outright (no DoT progression) and accept that distant time does not pass.
+
+Note the related open question in `PLAN-optimization-priorities.md` (P2): `CountdownTicker` is
+still a full-pool scan-and-decrement per visit, and the countdown family is a large share of
+simulation cost. A deadline/timer-wheel rewrite and this fidelity question touch the same code and
+should probably be designed together.
+
+### HIGH PRIORITY : Investigate StatusEffectAuraExposureComponent growth
+
+The diagnostics leak detector flags this pool: `StatusEffectAuraExposureComponent pool grew 100%
+(0 -> 19,799) while live entity count grew 0% -- components may not be getting removed when their
+owning entity is.`
+
+~19,800 live exposures against ~59,000 lava tiles and ~70,000 movers is plausible on its face --
+an exposure is granted per (entity, effect type) in range of an aura source, and lava is dense --
+so this may be legitimate steady-state population rather than a leak. What makes it worth
+checking:
+
+- The detector's heuristic compares pool growth against *live entity count* growth, which is 0
+  after population finishes. That produces a false positive for any pool that legitimately fills
+  during play. `ProcessingTierComponent` trips the same heuristic for exactly that reason and is
+  almost certainly fine. So the first question is whether the detector is even measuring the right
+  thing here.
+- The real test is whether exposures are *removed* when an entity leaves an aura's radius or dies.
+  `StatusEffectAuraSystem` maintains exposures incrementally (see its own doc comment on
+  ReEvaluateExposuresNear); a missed removal path would accumulate silently, and the symptom would
+  be steady growth over a long session rather than a plateau.
+- Cheap way to settle it: run a long session and sample the count repeatedly. A plateau means
+  steady state, continued growth means a real leak. If it grows, the suspect paths are entity
+  death (does anything drop exposures for a dead entity?) and a source being removed/moved rather
+  than the observer moving out of range.
+
+Note the same detector output flags `ProcessingTierComponent` growing 1 -> 70,267; that one is the
+startup tiering sweep filling a pool that starts empty, not a leak.
+
+### MEDIUM PRIORITY : Third Pause modality -- per-map pause
+
+Today pause is global: `GameLoop.Update` skips `EcsContext.Update` entirely when
+`MapWindow.IsPaused` or menu mode is active, so every map stops together.
+
+Wanted: pause everything on a specific map *without* pausing the sub-map the player is currently
+on. The player explores a sub-map at full speed while the map they came from is frozen rather than
+running unobserved.
+
+Notes for whoever picks this up:
+
+- This is a third state, not a boolean. The existing two are "everything runs" and "nothing runs";
+  the new one is "this map runs, those maps are frozen", which means pause stops being a property
+  of the game loop and becomes a property of a map.
+- It overlaps heavily with the tier rework (`PLAN-processing-tier-rework.md`) and with P2's
+  spawn-in-and-wait direction: a frozen map and a Beyond-tier region are close to the same idea
+  expressed at different granularity, and it would be a shame to build two mechanisms for it. The
+  tier system already carries "this entity is on a different MapLayer, therefore Beyond".
+- Interacts with the off-map player reference point: while the player is on a sub-map, other maps'
+  entities are tiered against the player's last on-map position. If those maps are frozen anyway,
+  the reference point matters less -- but a frozen map still needs a defined tier state for when it
+  unfreezes.
+- Decide what "frozen" means precisely: no `ISystem.Update` visits at all (Minecraft's simulation
+  distance model), or visits that are skipped per-entity. The former is cheaper and easier to
+  reason about.

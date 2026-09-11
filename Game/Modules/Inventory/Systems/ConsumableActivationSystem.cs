@@ -63,6 +63,15 @@ namespace Game.Modules.Inventory.Systems;
 /// mechanic, no Intelligence duration-scaling (that's scroll-specific) -- charges were already
 /// fixed once, at grant time (see Game.Modules.Inventory.WandGrantEffects).
 /// </summary>
+/// <remarks>
+/// Striped, not tiered, and deliberately so: this drains a queue of activations already committed
+/// to this frame (PendingConsumableActivationComponent, queued by the player's own input or by
+/// TestCombatBehaviorSystem's self-heal branch), so deferring one to a coarse tier's cadence would
+/// leave a drink the player already pressed sitting unresolved for up to a divisor's worth of
+/// frames. The population is bounded by "activations queued right now", not by entity count, so
+/// there is nothing for tiering to save. Same reasoning as ActionActivationSystem, which drains
+/// the equivalent queue for actions.
+/// </remarks>
 public sealed class ConsumableActivationSystem : ISystem
 {
     private const byte StripeCountValue = 1;

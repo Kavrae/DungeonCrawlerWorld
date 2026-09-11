@@ -79,6 +79,8 @@ public sealed class StatusEffectAuraModule : IGameModule
         systemManager.Register(new AuraSourceExpirySystem(
             componentManager.GetPackedPool<AuraSourceExpiryComponent>(),
             componentManager.GetMultiPool<StatusEffectAuraSourceComponent>(),
-            _eventBus));
+            _eventBus,
+            componentManager.GetDirectPool<ProcessingTierComponent>(),
+            _processingTierEvents));
     }
 }
