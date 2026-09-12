@@ -42,7 +42,7 @@ public sealed class Shop(MathUtility mathUtility) : IBlueprint
         componentManager.Merge(entityId, new CurrencyComponent(StartingGold, credits: 0));
 
         var immunities = componentManager.GetMultiPool<StatusEffectImmunityComponent>();
-        immunities.Add(entityId, new StatusEffectImmunityComponent(StatusEffectType.Poison, remainingDurationFrames: null));
-        immunities.Add(entityId, new StatusEffectImmunityComponent(StatusEffectType.Paralysis, remainingDurationFrames: null));
+        StatusEffectImmunityEffects.GrantPermanent(immunities, entityId, StatusEffectType.Poison);
+        StatusEffectImmunityEffects.GrantPermanent(immunities, entityId, StatusEffectType.Paralysis);
     }
 }

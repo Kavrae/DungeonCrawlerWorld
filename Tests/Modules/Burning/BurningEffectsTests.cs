@@ -1,3 +1,4 @@
+using Engine.ECS.Systems;
 using Engine.ECS.Components;
 using Game.Modules.Burning;
 using Game.Modules.Burning.Components;
@@ -22,7 +23,7 @@ public sealed class BurningEffectsTests
     {
         var displays = new StatusEffectDisplayRegistry();
         displays.Register(new TimerBasedStatusEffectDisplay<BurningTimerComponent>(StatusEffectType.Burning, BurningEffects.Glyph,
-            burning => burning.FramesUntilNextTick + (burning.StackCount - 1) * BurningEffects.TickIntervalFrames));
+            (burning, now) => FrameDeadline.Remaining(burning.NextTickFrame, now) + (burning.StackCount - 1) * BurningEffects.TickIntervalFrames));
         return displays;
     }
 
@@ -31,9 +32,9 @@ public sealed class BurningEffectsTests
     {
         var componentManager = CreateComponentManager();
         componentManager.RegisterMultiPool<StatusEffectImmunityComponent>();
-        componentManager.GetMultiPool<StatusEffectImmunityComponent>().Add(0, new StatusEffectImmunityComponent(StatusEffectType.Burning, remainingDurationFrames: null));
+        componentManager.GetMultiPool<StatusEffectImmunityComponent>().Add(0, new StatusEffectImmunityComponent(StatusEffectType.Burning, expiresAtFrame: FrameDeadline.Never));
 
-        BurningEffects.ApplyStack(componentManager, 0, StatusEffectSource.Admin);
+        BurningEffects.ApplyStack(componentManager, 0, StatusEffectSource.Admin, now: 0);
 
         Assert.AreEqual(0, StatusEffectQueries.CountStacks(CreateStatusEffectDisplays(), componentManager, 0, StatusEffectType.Burning));
         Assert.IsFalse(componentManager.GetPackedPool<BurningTimerComponent>().Has(0));
@@ -44,9 +45,9 @@ public sealed class BurningEffectsTests
     {
         var componentManager = CreateComponentManager();
         componentManager.RegisterMultiPool<StatusEffectImmunityComponent>();
-        componentManager.GetMultiPool<StatusEffectImmunityComponent>().Add(0, new StatusEffectImmunityComponent(StatusEffectType.Poison, remainingDurationFrames: null));
+        componentManager.GetMultiPool<StatusEffectImmunityComponent>().Add(0, new StatusEffectImmunityComponent(StatusEffectType.Poison, expiresAtFrame: FrameDeadline.Never));
 
-        BurningEffects.ApplyStack(componentManager, 0, StatusEffectSource.Admin);
+        BurningEffects.ApplyStack(componentManager, 0, StatusEffectSource.Admin, now: 0);
 
         Assert.AreEqual(1, StatusEffectQueries.CountStacks(CreateStatusEffectDisplays(), componentManager, 0, StatusEffectType.Burning));
     }
@@ -56,7 +57,7 @@ public sealed class BurningEffectsTests
     {
         var componentManager = CreateComponentManager();
 
-        BurningEffects.ApplyStack(componentManager, 0, StatusEffectSource.Admin);
+        BurningEffects.ApplyStack(componentManager, 0, StatusEffectSource.Admin, now: 0);
 
         Assert.AreEqual(1, StatusEffectQueries.CountStacks(CreateStatusEffectDisplays(), componentManager, 0, StatusEffectType.Burning));
     }
@@ -66,10 +67,10 @@ public sealed class BurningEffectsTests
     {
         var componentManager = CreateComponentManager();
 
-        BurningEffects.ApplyStack(componentManager, 0, StatusEffectSource.Admin);
+        BurningEffects.ApplyStack(componentManager, 0, StatusEffectSource.Admin, now: 0);
 
         var timer = componentManager.GetPackedPool<BurningTimerComponent>().GetReadonly(0);
-        Assert.AreEqual(BurningEffects.TickIntervalFrames, timer.FramesUntilNextTick);
+        Assert.AreEqual(BurningEffects.TickIntervalFrames, timer.NextTickFrame);
     }
 
     [TestMethod]
@@ -79,7 +80,7 @@ public sealed class BurningEffectsTests
 
         for (var i = 0; i < BurningEffects.MaxStacks + 5; i++)
         {
-            BurningEffects.ApplyStack(componentManager, 0, StatusEffectSource.Admin);
+            BurningEffects.ApplyStack(componentManager, 0, StatusEffectSource.Admin, now: 0);
         }
 
         Assert.AreEqual(BurningEffects.MaxStacks, StatusEffectQueries.CountStacks(CreateStatusEffectDisplays(), componentManager, 0, StatusEffectType.Burning));
@@ -89,13 +90,13 @@ public sealed class BurningEffectsTests
     public void ApplyStack_WhileAlreadyBurning_DoesNotResetCountdown()
     {
         var componentManager = CreateComponentManager();
-        BurningEffects.ApplyStack(componentManager, 0, StatusEffectSource.Admin);
-        componentManager.GetPackedPool<BurningTimerComponent>().TryUpdate(0, static (ref BurningTimerComponent t) => t.FramesUntilNextTick = 5);
+        BurningEffects.ApplyStack(componentManager, 0, StatusEffectSource.Admin, now: 0);
+        componentManager.GetPackedPool<BurningTimerComponent>().TryUpdate(0, static (ref BurningTimerComponent t) => t.NextTickFrame = 5);
 
-        BurningEffects.ApplyStack(componentManager, 0, StatusEffectSource.Admin);
+        BurningEffects.ApplyStack(componentManager, 0, StatusEffectSource.Admin, now: 0);
 
         var timer = componentManager.GetPackedPool<BurningTimerComponent>().GetReadonly(0);
-        Assert.AreEqual(5, timer.FramesUntilNextTick);
+        Assert.AreEqual(5u, timer.NextTickFrame);
     }
 
     /// <summary>
@@ -107,9 +108,9 @@ public sealed class BurningEffectsTests
     public void ApplyStack_SecondApplicationFromDifferentSource_DoesNotChangeSource()
     {
         var componentManager = CreateComponentManager();
-        BurningEffects.ApplyStack(componentManager, 0, StatusEffectSource.Admin);
+        BurningEffects.ApplyStack(componentManager, 0, StatusEffectSource.Admin, now: 0);
 
-        BurningEffects.ApplyStack(componentManager, 0, StatusEffectSource.FromEntity(42));
+        BurningEffects.ApplyStack(componentManager, 0, StatusEffectSource.FromEntity(42), now: 0);
 
         var timer = componentManager.GetPackedPool<BurningTimerComponent>().GetReadonly(0);
         Assert.AreEqual(StatusEffectSource.Admin, timer.Source);

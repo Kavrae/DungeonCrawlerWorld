@@ -1,3 +1,4 @@
+using Engine.ECS.Systems;
 ﻿using Engine.ECS.Components;
 using Engine.Events;
 using Engine.Math;
@@ -39,7 +40,7 @@ public sealed class ConsumableActivationSystemTests
     {
         var displays = new StatusEffectDisplayRegistry();
         displays.Register(new TimerBasedStatusEffectDisplay<PoisonTimerComponent>(StatusEffectType.Poison, PoisonEffects.Glyph,
-            poison => poison.FramesUntilNextTick + (poison.RemainingDurationTicks - 1) * PoisonEffects.TickIntervalFrames));
+            (poison, now) => FrameDeadline.Remaining(poison.NextTickFrame, now) + (poison.RemainingDurationTicks - 1) * PoisonEffects.TickIntervalFrames));
         return displays;
     }
 
@@ -203,7 +204,7 @@ public sealed class ConsumableActivationSystemTests
         componentManager.Merge(TargetEntityId, new SimpleHealthComponent(currentHealth: 20, maximumHealth: 100));
         var stackInstanceId = InventoryActions.AddItem(componentManager, CasterEntityId, PotionId, quantity: 1);
         componentManager.Merge(CasterEntityId, new PendingConsumableActivationComponent(stackInstanceId, [TargetTile]));
-        componentManager.Merge(CasterEntityId, new ActionLockComponent(standardLockFrames: ActionLockGate.StandardLockFrames, currentLockTotalFrames: 0, currentLockFramesRemaining: 0));
+        componentManager.Merge(CasterEntityId, new ActionLockComponent(standardLockFrames: ActionLockGate.StandardLockFrames, currentLockTotalFrames: 0, unlockedAtFrame: 0));
 
         system.Update(default, 0);
 
@@ -220,7 +221,7 @@ public sealed class ConsumableActivationSystemTests
         componentManager.GetMultiPool<BodyPartComponent>().Add(TargetEntityId, new BodyPartComponent("Torso", BodyPartType.Torso, 0, 0, currentHealth: 40, maximumHealth: 160, isVital: true));
         var stackInstanceId = InventoryActions.AddItem(componentManager, CasterEntityId, PotionId, quantity: 1);
         componentManager.Merge(CasterEntityId, new PendingConsumableActivationComponent(stackInstanceId, [TargetTile]));
-        componentManager.Merge(CasterEntityId, new ActionLockComponent(standardLockFrames: ActionLockGate.StandardLockFrames, currentLockTotalFrames: 0, currentLockFramesRemaining: 0));
+        componentManager.Merge(CasterEntityId, new ActionLockComponent(standardLockFrames: ActionLockGate.StandardLockFrames, currentLockTotalFrames: 0, unlockedAtFrame: 0));
 
         system.Update(default, 0);
 
@@ -238,7 +239,7 @@ public sealed class ConsumableActivationSystemTests
         // -> stays 40. Torso: 40 + 50 = 90, under its max of 160 -> 90. Total: 40 + 90 = 130.
         Assert.AreEqual(130f, totalCurrent);
         var cooldown = componentManager.GetPackedPool<PotionCooldownComponent>().GetReadonly(TargetEntityId);
-        Assert.AreEqual(PotionCooldownEffects.DurationFrames, cooldown.FramesRemaining, "The potion must still land -- cooldown resets the same as a Simple target's would.");
+        Assert.AreEqual(PotionCooldownEffects.DurationFrames, PotionCooldownEffects.FramesRemaining(cooldown, now: 0), "The potion must still land -- cooldown resets the same as a Simple target's would.");
     }
 
     [TestMethod]
@@ -250,7 +251,7 @@ public sealed class ConsumableActivationSystemTests
         componentManager.Merge(TargetEntityId, new ManaComponent(currentMana: 3, maximumMana: 10));
         var stackInstanceId = InventoryActions.AddItem(componentManager, CasterEntityId, ManaPotionId, quantity: 1);
         componentManager.Merge(CasterEntityId, new PendingConsumableActivationComponent(stackInstanceId, [TargetTile]));
-        componentManager.Merge(CasterEntityId, new ActionLockComponent(standardLockFrames: ActionLockGate.StandardLockFrames, currentLockTotalFrames: 0, currentLockFramesRemaining: 0));
+        componentManager.Merge(CasterEntityId, new ActionLockComponent(standardLockFrames: ActionLockGate.StandardLockFrames, currentLockTotalFrames: 0, unlockedAtFrame: 0));
 
         system.Update(default, 0);
 
@@ -267,14 +268,14 @@ public sealed class ConsumableActivationSystemTests
         componentManager.Merge(TargetEntityId, new SimpleHealthComponent(currentHealth: 20, maximumHealth: 100));
         var stackInstanceId = InventoryActions.AddItem(componentManager, CasterEntityId, ManaPotionId, quantity: 1);
         componentManager.Merge(CasterEntityId, new PendingConsumableActivationComponent(stackInstanceId, [TargetTile]));
-        componentManager.Merge(CasterEntityId, new ActionLockComponent(standardLockFrames: ActionLockGate.StandardLockFrames, currentLockTotalFrames: 0, currentLockFramesRemaining: 0));
+        componentManager.Merge(CasterEntityId, new ActionLockComponent(standardLockFrames: ActionLockGate.StandardLockFrames, currentLockTotalFrames: 0, unlockedAtFrame: 0));
 
         system.Update(default, 0);
 
         Assert.IsFalse(componentManager.GetPackedPool<ManaComponent>().Has(TargetEntityId));
         Assert.AreEqual(-1, StackQuantity(componentManager, CasterEntityId, ManaPotionId), "The single potion was consumed -- StackQuantity's -1 sentinel means no stack found at all, per InventoryActions.ConsumeItem's own doc comment.");
         var cooldown = componentManager.GetPackedPool<PotionCooldownComponent>().GetReadonly(TargetEntityId);
-        Assert.AreEqual(PotionCooldownEffects.DurationFrames, cooldown.FramesRemaining);
+        Assert.AreEqual(PotionCooldownEffects.DurationFrames, PotionCooldownEffects.FramesRemaining(cooldown, now: 0));
     }
 
     [TestMethod]
@@ -285,12 +286,12 @@ public sealed class ConsumableActivationSystemTests
         componentManager.Merge(TargetEntityId, new SimpleHealthComponent(currentHealth: 20, maximumHealth: 100));
         var stackInstanceId = InventoryActions.AddItem(componentManager, CasterEntityId, PotionId, quantity: 3);
         componentManager.Merge(CasterEntityId, new PendingConsumableActivationComponent(stackInstanceId, [TargetTile]));
-        componentManager.Merge(CasterEntityId, new ActionLockComponent(standardLockFrames: ActionLockGate.StandardLockFrames, currentLockTotalFrames: 0, currentLockFramesRemaining: 0));
+        componentManager.Merge(CasterEntityId, new ActionLockComponent(standardLockFrames: ActionLockGate.StandardLockFrames, currentLockTotalFrames: 0, unlockedAtFrame: 0));
 
         system.Update(default, 0);
 
         Assert.AreEqual(2, StackQuantity(componentManager, CasterEntityId, PotionId));
-        Assert.AreEqual(60, componentManager.GetPackedPool<ActionLockComponent>().GetReadonly(CasterEntityId).CurrentLockFramesRemaining);
+        Assert.AreEqual(60u, componentManager.GetPackedPool<ActionLockComponent>().GetReadonly(CasterEntityId).UnlockedAtFrame);
         Assert.IsFalse(componentManager.GetPackedPool<PendingConsumableActivationComponent>().Has(CasterEntityId));
     }
 
@@ -303,12 +304,12 @@ public sealed class ConsumableActivationSystemTests
         componentManager.Merge(TargetEntityId, new SimpleHealthComponent(currentHealth: 20, maximumHealth: 100));
         var stackInstanceId = InventoryActions.AddItem(componentManager, CasterEntityId, PotionId, quantity: 1);
         componentManager.Merge(CasterEntityId, new PendingConsumableActivationComponent(stackInstanceId, [TargetTile]));
-        componentManager.Merge(CasterEntityId, new ActionLockComponent(standardLockFrames: ActionLockGate.StandardLockFrames, currentLockTotalFrames: 0, currentLockFramesRemaining: 0));
+        componentManager.Merge(CasterEntityId, new ActionLockComponent(standardLockFrames: ActionLockGate.StandardLockFrames, currentLockTotalFrames: 0, unlockedAtFrame: 0));
 
         system.Update(default, 0);
 
         var cooldown = componentManager.GetPackedPool<PotionCooldownComponent>().GetReadonly(TargetEntityId);
-        Assert.AreEqual(PotionCooldownEffects.DurationFrames, cooldown.FramesRemaining);
+        Assert.AreEqual(PotionCooldownEffects.DurationFrames, PotionCooldownEffects.FramesRemaining(cooldown, now: 0));
         Assert.AreEqual(PotionCooldownEffects.DurationFrames, cooldown.TotalFrames);
         Assert.IsFalse(componentManager.GetPackedPool<PotionCooldownComponent>().Has(CasterEntityId), "Throwing at another entity must not touch the thrower's own cooldown.");
     }
@@ -322,12 +323,12 @@ public sealed class ConsumableActivationSystemTests
         componentManager.Merge(CasterEntityId, new SimpleHealthComponent(currentHealth: 20, maximumHealth: 100));
         var stackInstanceId = InventoryActions.AddItem(componentManager, CasterEntityId, PotionId, quantity: 1);
         componentManager.Merge(CasterEntityId, new PendingConsumableActivationComponent(stackInstanceId, [selfTile]));
-        componentManager.Merge(CasterEntityId, new ActionLockComponent(standardLockFrames: ActionLockGate.StandardLockFrames, currentLockTotalFrames: 0, currentLockFramesRemaining: 0));
+        componentManager.Merge(CasterEntityId, new ActionLockComponent(standardLockFrames: ActionLockGate.StandardLockFrames, currentLockTotalFrames: 0, unlockedAtFrame: 0));
 
         system.Update(default, 0);
 
         var cooldown = componentManager.GetPackedPool<PotionCooldownComponent>().GetReadonly(CasterEntityId);
-        Assert.AreEqual(PotionCooldownEffects.DurationFrames, cooldown.FramesRemaining);
+        Assert.AreEqual(PotionCooldownEffects.DurationFrames, PotionCooldownEffects.FramesRemaining(cooldown, now: 0));
     }
 
     [TestMethod]
@@ -339,12 +340,12 @@ public sealed class ConsumableActivationSystemTests
         componentManager.GetMultiPool<AbilityScoreComponent>().Add(TargetEntityId, new AbilityScoreComponent(AbilityScoreType.Constitution, baseValue: 300, total: 300));
         var stackInstanceId = InventoryActions.AddItem(componentManager, CasterEntityId, PotionId, quantity: 1);
         componentManager.Merge(CasterEntityId, new PendingConsumableActivationComponent(stackInstanceId, [TargetTile]));
-        componentManager.Merge(CasterEntityId, new ActionLockComponent(standardLockFrames: ActionLockGate.StandardLockFrames, currentLockTotalFrames: 0, currentLockFramesRemaining: 0));
+        componentManager.Merge(CasterEntityId, new ActionLockComponent(standardLockFrames: ActionLockGate.StandardLockFrames, currentLockTotalFrames: 0, unlockedAtFrame: 0));
 
         system.Update(default, 0);
 
         var cooldown = componentManager.GetPackedPool<PotionCooldownComponent>().GetReadonly(TargetEntityId);
-        Assert.AreEqual(PotionCooldownEffects.MinDurationFrames, cooldown.FramesRemaining);
+        Assert.AreEqual(PotionCooldownEffects.MinDurationFrames, PotionCooldownEffects.FramesRemaining(cooldown, now: 0));
         Assert.AreEqual(PotionCooldownEffects.MinDurationFrames, cooldown.TotalFrames);
     }
 
@@ -356,8 +357,8 @@ public sealed class ConsumableActivationSystemTests
         componentManager.Merge(TargetEntityId, new SimpleHealthComponent(currentHealth: 20, maximumHealth: 100));
         var stackInstanceId = InventoryActions.AddItem(componentManager, CasterEntityId, PotionId, quantity: 1);
         componentManager.Merge(CasterEntityId, new PendingConsumableActivationComponent(stackInstanceId, [TargetTile]));
-        componentManager.Merge(CasterEntityId, new ActionLockComponent(standardLockFrames: ActionLockGate.StandardLockFrames, currentLockTotalFrames: 0, currentLockFramesRemaining: 0));
-        componentManager.GetPackedPool<PotionCooldownComponent>().Add(TargetEntityId, new PotionCooldownComponent(totalFrames: 1200, framesRemaining: 500));
+        componentManager.Merge(CasterEntityId, new ActionLockComponent(standardLockFrames: ActionLockGate.StandardLockFrames, currentLockTotalFrames: 0, unlockedAtFrame: 0));
+        componentManager.GetPackedPool<PotionCooldownComponent>().Add(TargetEntityId, new PotionCooldownComponent(totalFrames: 1200, expiresAtFrame: 500));
 
         PotionCooldownAbusedEvent? published = null;
         eventBus.Subscribe<PotionCooldownAbusedEvent>(e => published = e);
@@ -379,7 +380,7 @@ public sealed class ConsumableActivationSystemTests
         componentManager.Merge(TargetEntityId, new SimpleHealthComponent(currentHealth: 20, maximumHealth: 100));
         var stackInstanceId = InventoryActions.AddItem(componentManager, CasterEntityId, PotionId, quantity: 1);
         componentManager.Merge(CasterEntityId, new PendingConsumableActivationComponent(stackInstanceId, [TargetTile]));
-        componentManager.Merge(CasterEntityId, new ActionLockComponent(standardLockFrames: ActionLockGate.StandardLockFrames, currentLockTotalFrames: 0, currentLockFramesRemaining: 0));
+        componentManager.Merge(CasterEntityId, new ActionLockComponent(standardLockFrames: ActionLockGate.StandardLockFrames, currentLockTotalFrames: 0, unlockedAtFrame: 0));
 
         var published = false;
         eventBus.Subscribe<PotionCooldownAbusedEvent>(_ => published = true);
@@ -425,7 +426,7 @@ public sealed class ConsumableActivationSystemTests
         componentManager.Merge(TargetEntityId, new SimpleHealthComponent(currentHealth: 20, maximumHealth: 100));
         var stackInstanceId = InventoryActions.AddItem(componentManager, CasterEntityId, PotionId, quantity: 1);
         componentManager.Merge(CasterEntityId, new PendingConsumableActivationComponent(stackInstanceId, [TargetTile]));
-        componentManager.Merge(CasterEntityId, new ActionLockComponent(standardLockFrames: ActionLockGate.StandardLockFrames, currentLockTotalFrames: 30, currentLockFramesRemaining: 30));
+        componentManager.Merge(CasterEntityId, new ActionLockComponent(standardLockFrames: ActionLockGate.StandardLockFrames, currentLockTotalFrames: 30, unlockedAtFrame: 30));
 
         system.Update(default, 0);
 
@@ -458,7 +459,7 @@ public sealed class ConsumableActivationSystemTests
         componentManager.GetPackedPool<HotkeyExpansionUnlockComponent>().Add(TargetEntityId, new HotkeyExpansionUnlockComponent(unlockedSlotCount: 10));
         var stackInstanceId = InventoryActions.AddItem(componentManager, CasterEntityId, HotkeyExpansionPotionId, quantity: 1);
         componentManager.Merge(CasterEntityId, new PendingConsumableActivationComponent(stackInstanceId, [TargetTile]));
-        componentManager.Merge(CasterEntityId, new ActionLockComponent(standardLockFrames: ActionLockGate.StandardLockFrames, currentLockTotalFrames: 0, currentLockFramesRemaining: 0));
+        componentManager.Merge(CasterEntityId, new ActionLockComponent(standardLockFrames: ActionLockGate.StandardLockFrames, currentLockTotalFrames: 0, unlockedAtFrame: 0));
 
         system.Update(default, 0);
 
@@ -474,7 +475,7 @@ public sealed class ConsumableActivationSystemTests
         componentManager.GetPackedPool<HotkeyExpansionUnlockComponent>().Add(TargetEntityId, new HotkeyExpansionUnlockComponent(unlockedSlotCount: 18));
         var stackInstanceId = InventoryActions.AddItem(componentManager, CasterEntityId, HotkeyExpansionPotionId, quantity: 1);
         componentManager.Merge(CasterEntityId, new PendingConsumableActivationComponent(stackInstanceId, [TargetTile]));
-        componentManager.Merge(CasterEntityId, new ActionLockComponent(standardLockFrames: ActionLockGate.StandardLockFrames, currentLockTotalFrames: 0, currentLockFramesRemaining: 0));
+        componentManager.Merge(CasterEntityId, new ActionLockComponent(standardLockFrames: ActionLockGate.StandardLockFrames, currentLockTotalFrames: 0, unlockedAtFrame: 0));
 
         system.Update(default, 0);
 
@@ -489,12 +490,12 @@ public sealed class ConsumableActivationSystemTests
         componentManager.Merge(TargetEntityId, new SimpleHealthComponent(currentHealth: 20, maximumHealth: 100));
         var originalStackInstanceId = GrantWandAndGetStackInstanceId(componentManager, CasterEntityId, charges: 3, maxCharges: 3);
         componentManager.Merge(CasterEntityId, new PendingConsumableActivationComponent(originalStackInstanceId, [TargetTile]));
-        componentManager.Merge(CasterEntityId, new ActionLockComponent(standardLockFrames: ActionLockGate.StandardLockFrames, currentLockTotalFrames: 0, currentLockFramesRemaining: 0));
+        componentManager.Merge(CasterEntityId, new ActionLockComponent(standardLockFrames: ActionLockGate.StandardLockFrames, currentLockTotalFrames: 0, unlockedAtFrame: 0));
 
         system.Update(default, 0);
 
         DamageAssert.HealthAfterDamage(startingHealth: 20, expectedNormalDamage: 10, HealthOf(componentManager, TargetEntityId));
-        Assert.AreEqual(60, componentManager.GetPackedPool<ActionLockComponent>().GetReadonly(CasterEntityId).CurrentLockFramesRemaining);
+        Assert.AreEqual(60u, componentManager.GetPackedPool<ActionLockComponent>().GetReadonly(CasterEntityId).UnlockedAtFrame);
         Assert.IsFalse(componentManager.GetPackedPool<PendingConsumableActivationComponent>().Has(CasterEntityId));
 
         var stacks = componentManager.GetMultiPool<InventoryItemStackComponent>();
@@ -518,7 +519,7 @@ public sealed class ConsumableActivationSystemTests
         var bindings = componentManager.GetMultiPool<ItemHotkeyBindingComponent>();
         bindings.Add(CasterEntityId, new ItemHotkeyBindingComponent(HotkeySlot.Slot1, originalStackInstanceId));
         componentManager.Merge(CasterEntityId, new PendingConsumableActivationComponent(originalStackInstanceId, [TargetTile]));
-        componentManager.Merge(CasterEntityId, new ActionLockComponent(standardLockFrames: ActionLockGate.StandardLockFrames, currentLockTotalFrames: 0, currentLockFramesRemaining: 0));
+        componentManager.Merge(CasterEntityId, new ActionLockComponent(standardLockFrames: ActionLockGate.StandardLockFrames, currentLockTotalFrames: 0, unlockedAtFrame: 0));
 
         system.Update(default, 0);
 
@@ -535,7 +536,7 @@ public sealed class ConsumableActivationSystemTests
         componentManager.Merge(TargetEntityId, new SimpleHealthComponent(currentHealth: 20, maximumHealth: 100));
         var stackInstanceId = GrantWandAndGetStackInstanceId(componentManager, CasterEntityId, charges: 1, maxCharges: 3);
         componentManager.Merge(CasterEntityId, new PendingConsumableActivationComponent(stackInstanceId, [TargetTile]));
-        componentManager.Merge(CasterEntityId, new ActionLockComponent(standardLockFrames: ActionLockGate.StandardLockFrames, currentLockTotalFrames: 0, currentLockFramesRemaining: 0));
+        componentManager.Merge(CasterEntityId, new ActionLockComponent(standardLockFrames: ActionLockGate.StandardLockFrames, currentLockTotalFrames: 0, unlockedAtFrame: 0));
 
         system.Update(default, 0);
 
@@ -551,7 +552,7 @@ public sealed class ConsumableActivationSystemTests
         componentManager.Merge(TargetEntityId, new SimpleHealthComponent(currentHealth: 20, maximumHealth: 100));
         var stackInstanceId = GrantWandAndGetStackInstanceId(componentManager, CasterEntityId, charges: 0, maxCharges: 3);
         componentManager.Merge(CasterEntityId, new PendingConsumableActivationComponent(stackInstanceId, [TargetTile]));
-        componentManager.Merge(CasterEntityId, new ActionLockComponent(standardLockFrames: ActionLockGate.StandardLockFrames, currentLockTotalFrames: 0, currentLockFramesRemaining: 0));
+        componentManager.Merge(CasterEntityId, new ActionLockComponent(standardLockFrames: ActionLockGate.StandardLockFrames, currentLockTotalFrames: 0, unlockedAtFrame: 0));
 
         system.Update(default, 0);
 
@@ -568,7 +569,7 @@ public sealed class ConsumableActivationSystemTests
         componentManager.Merge(TargetEntityId, new SimpleHealthComponent(currentHealth: 20, maximumHealth: 100));
         var stackInstanceId = GrantWandAndGetStackInstanceId(componentManager, CasterEntityId, charges: 3, maxCharges: 3);
         componentManager.Merge(CasterEntityId, new PendingConsumableActivationComponent(stackInstanceId, [TargetTile]));
-        componentManager.Merge(CasterEntityId, new ActionLockComponent(standardLockFrames: ActionLockGate.StandardLockFrames, currentLockTotalFrames: 30, currentLockFramesRemaining: 30));
+        componentManager.Merge(CasterEntityId, new ActionLockComponent(standardLockFrames: ActionLockGate.StandardLockFrames, currentLockTotalFrames: 30, unlockedAtFrame: 30));
 
         system.Update(default, 0);
 

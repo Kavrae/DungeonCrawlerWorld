@@ -1,5 +1,6 @@
 using Engine.ECS.Components;
 using Engine.ECS.Components.Stores;
+using Engine.ECS.Systems;
 using Engine.Events;
 using Engine.Math;
 using Engine.Utilities;
@@ -36,7 +37,8 @@ public static class PoisonEffects
     /// reapplying a long duration repeatedly keeps refreshing it, while a short reapplication after
     /// a longer one already landed does nothing to the timer.
     /// </summary>
-    public static void ApplyStack(ComponentManager componentManager, int entityId, StatusEffectSource source, ushort durationInTicks, EventBus? eventBus = null, IPlayerQuery? playerQuery = null)
+    /// <param name="now">The simulation frame the stack lands on. A new poisoning's first tick is TickIntervalFrames after it; a re-application leaves the running tick alone.</param>
+    public static void ApplyStack(ComponentManager componentManager, int entityId, StatusEffectSource source, ushort durationInTicks, long now, EventBus? eventBus = null, IPlayerQuery? playerQuery = null)
     {
         if (StatusEffectImmunity.IsImmune(componentManager, entityId, StatusEffectType.Poison, source, eventBus, playerQuery))
         {
@@ -63,7 +65,7 @@ public static class PoisonEffects
         }
         else
         {
-            timers.Add(entityId, new PoisonTimerComponent(TickIntervalFrames, stackCount: 1, remainingDurationTicks: scaledDuration, source));
+            timers.Add(entityId, new PoisonTimerComponent(FrameDeadline.After(now, TickIntervalFrames), stackCount: 1, remainingDurationTicks: scaledDuration, source));
         }
     }
 

@@ -1,117 +1,132 @@
 using Engine.ECS.Components.Stores;
 using Engine.ECS.Systems;
 using Engine.Events;
-using Game.Modules.ProcessingTier;
-using Game.Modules.ProcessingTier.Components;
 using Game.Modules.StatModifiers.Components;
 
 namespace Game.Modules.StatModifiers.Systems;
 
 /// <summary>
-/// Ticks every active StatModifierComponent's RemainingDurationFrames down toward 0 and removes
-/// it once it gets there -- a permanent modifier (RemainingDurationFrames == null)
-/// never enters the decrement branch and never equals 0, so it's untouched forever. Because of
-/// that, this system's TieredEntityStripeSet is driven off ExpiringStatModifierComponent
-/// membership, not StatModifierComponent membership directly -- an entity holding only permanent
-/// modifiers (most of the game's population, e.g. every Goblin's racial damage reduction) is
-/// never due at all, rather than being visited every cycle just to find nothing to do. See
-/// ExpiringStatModifierComponent's own doc comment for the full reasoning. Base StripeCount 1, so
-/// a Local-tier entity is visited every real frame. A throttled (Neighborhood/Borough/Beyond)
-/// entity is visited every StripeCount * divisor frames, and each visit deducts that whole span
-/// (framesPerVisit, via ITieredSystem.UpdateBucket), so its remaining duration still progresses
-/// in real time -- only the granularity is coarser. This used to deduct a single frame per visit
-/// regardless of tier, so a far-from-player buff or debuff outlasted its authored duration by the
-/// tier's divisor; that was a defect, not the deliberate fidelity tradeoff this comment once
-/// described it as.
+/// Removes each StatModifierComponent on the exact frame it expires, at every processing tier,
+/// and publishes StatModifierExpiredEvent for what it removed -- generic (any module can
+/// subscribe), not just for AbilityScoresModule's benefit.
 ///
-/// Two passes, not one, because RemoveFirst/RemoveByDenseIndex compact the *whole pool's* dense
-/// array (swap-last-into-slot), which would corrupt an in-progress GetNextDenseIndex chain walk
-/// if a removal happened mid-walk -- the same hazard CountdownTicker.Tick defers removals to
-/// avoid, just not reusable here directly since CountdownTicker is PackedComponentPool-only and
-/// this pool is Multi (several independent expiries per entity). Pass 1 only mutates in place
-/// (UpdateByDenseIndex never moves entries) so it's safe to run the whole chain walk -- it also
-/// collects the Target of any modifier about to hit 0 (RemainingDurationFrames == 1, i.e. this
-/// decrement is its last) into a reused per-visit buffer, since pass 2's removal doesn't report
-/// what it removed. Pass 2 then removes whatever hit 0, one at a time via RemoveFirst, mirroring
-/// PoisonSystem's own RemoveAllStacks loop; StatModifierExpiredEvent is published afterward, once
-/// removal is safely done, for each collected Target -- generic (any module can subscribe), not
-/// just for AbilityScoresModule's benefit.
+/// Scheduling is per entity, not per modifier: an entity's earliest deadline lives in its own
+/// ExpiringStatModifierComponent (see that component for why), which is the only thing on the
+/// timer wheel. This system keeps it up to date itself, from the StatModifierComponent pool's
+/// change notification -- so a timed modifier granted by any path at all is scheduled, including
+/// the action-effect path (StatModifierGrant) that writes the pool directly. A permanent modifier
+/// (FrameDeadline.Never) is never scheduled, so an entity holding only permanent modifiers -- most
+/// of the population -- costs nothing, which is what the old tiered walk needed a separate
+/// membership marker to approximate.
+///
+/// A firing sweeps that one entity's chain in two passes, not one, because RemoveFirst compacts
+/// the *whole pool's* dense array (swap-last-into-slot), which would corrupt an in-progress
+/// GetNextDenseIndex chain walk if a removal happened mid-walk: pass 1 collects the Targets that
+/// are due (removal itself doesn't report what it removed), pass 2 removes them. Events are
+/// published after the removals are safely done, and the next deadline is computed after that --
+/// a subscriber that grants a fresh modifier in response is then already accounted for, rather
+/// than being clobbered by a deadline computed before it existed.
 /// </summary>
-public sealed class StatModifierExpirySystem : ITieredSystem
+public sealed class StatModifierExpirySystem : ISystem
 {
-    private const byte StripeCountValue = 1;
-
-    public byte StripeCount => StripeCountValue;
+    /// <summary>Every frame; the wheel only touches entities with a modifier actually due.</summary>
+    public byte StripeCount => 1;
 
     private readonly MultiComponentPool<StatModifierComponent> _statModifiers;
-    private readonly MultiComponentPool<ExpiringStatModifierComponent> _expiringMarkers;
+    private readonly PackedComponentPool<ExpiringStatModifierComponent> _expiries;
     private readonly EventBus _eventBus;
-    private readonly TieredEntityStripeSet _tieredStripeSet;
+    private readonly PackedTimerWheel<ExpiringStatModifierComponent> _wheel;
     private readonly List<StatModifierTarget> _pendingExpirations = [];
+
+    // Cached once instead of passing the method group every Update -- an instance method group
+    // conversion allocates a fresh delegate every evaluation.
+    private readonly TimerFired<ExpiringStatModifierComponent> _tick;
 
     public StatModifierExpirySystem(
         MultiComponentPool<StatModifierComponent> statModifiers,
-        MultiComponentPool<ExpiringStatModifierComponent> expiringMarkers,
-        DirectComponentPool<ProcessingTierComponent> processingTiers,
-        ProcessingTierEvents processingTierEvents,
+        PackedComponentPool<ExpiringStatModifierComponent> expiries,
         EventBus eventBus)
     {
         _statModifiers = statModifiers;
-        _expiringMarkers = expiringMarkers;
+        _expiries = expiries;
         _eventBus = eventBus;
+        _tick = Tick;
+        _wheel = new PackedTimerWheel<ExpiringStatModifierComponent>(expiries);
 
-        // Driven off expiringMarkers, not statModifiers -- see ExpiringStatModifierComponent's
-        // own doc comment. statModifiers is still what Update actually walks below (a due
-        // entity's permanent and temporary modifiers live in the same chain), this just
-        // controls which entities are ever due at all.
-        _tieredStripeSet = ProcessingTierWiring.CreateAndWire(StripeCount, expiringMarkers, processingTiers, processingTierEvents);
+        // Modifiers already granted before this system existed (a blueprint-built entity, a test
+        // that populates first) get the same treatment as one granted a moment later -- the
+        // notification below only covers writes from here on.
+        for (var denseIndex = 0; denseIndex < statModifiers.Count; denseIndex++)
+        {
+            OnModifierChanged(statModifiers.GetEntityIdByDenseIndex(denseIndex), denseIndex);
+        }
+
+        statModifiers.ComponentChanged += OnModifierChanged;
     }
 
-    public void Update(EngineTime time, byte stripeIndex) => TieredSystemRunner.Run(this, time);
+    public void Update(EngineTime time, byte stripeIndex) => _wheel.Tick(time.FrameCount, _tick);
 
-    public TieredEntityStripeSet Tiers => _tieredStripeSet;
-
-    /// <summary>One tier's due entities, scaled by that tier's framesPerVisit -- see ITieredSystem.UpdateBucket.</summary>
-    public void UpdateBucket(EngineTime time, ReadOnlySpan<int> entityIds, ushort framesPerVisit)
+    /// <summary>Keeps the entity's expiry timer no later than this modifier's own deadline. The pool's merge policy keeps the earlier of the two (see StatModifiersModule), so this is safe to call for every write, and writing it at all is what puts the entity on the wheel.</summary>
+    private void OnModifierChanged(int entityId, int denseIndex)
     {
-        foreach (var entityId in entityIds)
+        var deadline = _statModifiers.GetReadonlyByDenseIndex(denseIndex).ExpiresAtFrame;
+        if (deadline == FrameDeadline.Never)
         {
-            _pendingExpirations.Clear();
+            return;
+        }
 
-            for (var denseIndex = _statModifiers.GetFirstDenseIndex(entityId); denseIndex != -1; denseIndex = _statModifiers.GetNextDenseIndex(denseIndex))
+        _expiries.Merge(entityId, new ExpiringStatModifierComponent(deadline));
+    }
+
+    /// <summary>Returns whether the entity's expiry timer itself should be removed -- true once nothing expiring is left on it. See TimerFired's contract.</summary>
+    private bool Tick(int entityId, ExpiringStatModifierComponent expiry, long now)
+    {
+        _pendingExpirations.Clear();
+
+        for (var denseIndex = _statModifiers.GetFirstDenseIndex(entityId); denseIndex != -1; denseIndex = _statModifiers.GetNextDenseIndex(denseIndex))
+        {
+            ref readonly var modifier = ref _statModifiers.GetReadonlyByDenseIndex(denseIndex);
+            if (IsDue(modifier.ExpiresAtFrame, now))
             {
-                ref readonly var modifier = ref _statModifiers.GetReadonlyByDenseIndex(denseIndex);
-                if (modifier.RemainingDurationFrames > 0)
-                {
-                    // "<= framesPerVisit", not "== 1": this visit covers that whole span, so any
-                    // modifier with no more than that left is expiring now.
-                    if (modifier.RemainingDurationFrames <= framesPerVisit)
-                    {
-                        _pendingExpirations.Add(modifier.Target);
-                    }
-
-                    _statModifiers.UpdateByDenseIndex(denseIndex, framesPerVisit, static (ref StatModifierComponent modifier, ushort frames) =>
-                        modifier.RemainingDurationFrames = (ushort)System.Math.Max(0, modifier.RemainingDurationFrames!.Value - frames));
-                }
-            }
-
-            while (_statModifiers.RemoveFirst(entityId, static (ref readonly StatModifierComponent modifier) => modifier.RemainingDurationFrames == 0))
-            {
-            }
-
-            // One marker per modifier that just expired -- _pendingExpirations was collected
-            // above from entries with no more than this visit's own span left, which are exactly
-            // the non-permanent ones the while loop just removed (a permanent modifier's null
-            // never satisfies either condition), so the counts line up 1:1.
-            for (var i = 0; i < _pendingExpirations.Count; i++)
-            {
-                _expiringMarkers.RemoveFirst(entityId, static (ref readonly ExpiringStatModifierComponent _) => true);
-            }
-
-            foreach (var target in _pendingExpirations)
-            {
-                _eventBus.Publish(new StatModifierExpiredEvent(entityId, target));
+                _pendingExpirations.Add(modifier.Target);
             }
         }
+
+        while (_statModifiers.RemoveFirst(entityId, now, static (ref readonly StatModifierComponent modifier, long frame) => IsDue(modifier.ExpiresAtFrame, frame)))
+        {
+        }
+
+        foreach (var target in _pendingExpirations)
+        {
+            _eventBus.Publish(new StatModifierExpiredEvent(entityId, target));
+        }
+
+        var nextDeadline = EarliestDeadline(entityId);
+        if (nextDeadline == FrameDeadline.Never)
+        {
+            return true;
+        }
+
+        // Re-armed to the real deadline even when this frame has already reached it -- a subscriber
+        // above can grant a modifier expiring now or earlier. The wheel schedules any deadline
+        // written from inside a firing, this one included, and sweeps a reached one on the next
+        // frame (late, never lost), so there is nothing to round up to here and the component
+        // carries the deadline it actually has.
+        _expiries.TryUpdate(entityId, nextDeadline, static (ref ExpiringStatModifierComponent e, uint deadline) => e.NextTickFrame = deadline);
+        return false;
+    }
+
+    private static bool IsDue(uint expiresAtFrame, long now) => expiresAtFrame != FrameDeadline.Never && FrameDeadline.IsReached(expiresAtFrame, now);
+
+    /// <summary>The earliest deadline still pending on the entity, or FrameDeadline.Never when nothing of its remaining modifiers ever expires.</summary>
+    private uint EarliestDeadline(int entityId)
+    {
+        var earliest = FrameDeadline.Never;
+        for (var denseIndex = _statModifiers.GetFirstDenseIndex(entityId); denseIndex != -1; denseIndex = _statModifiers.GetNextDenseIndex(denseIndex))
+        {
+            earliest = System.Math.Min(earliest, _statModifiers.GetReadonlyByDenseIndex(denseIndex).ExpiresAtFrame);
+        }
+
+        return earliest;
     }
 }

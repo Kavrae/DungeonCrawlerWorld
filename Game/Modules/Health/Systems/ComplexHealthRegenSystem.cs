@@ -23,9 +23,9 @@ namespace Game.Modules.Health.Systems;
 /// Requires a SimpleHealthComponent pool purely to satisfy HealthHeal.Apply's Simple-vs-Complex
 /// dispatch check -- every entity this system's own stripe set drives owns BodyPartComponent, so
 /// that check always resolves to the Complex branch, mirroring ComplexHealthDamage.Apply's
-/// identical requirement. Every visit to a due entity also walks that entity's own
-/// BodyPartComponent chain once to decrement any nonzero RegenLockoutFramesRemaining, regardless
-/// of whether a part was selected for healing this tick.
+/// identical requirement. The regen lockout costs this system nothing per visit: it is a deadline
+/// on each part (BodyPartComponent.RegenLockedUntilFrame), consulted only when a part is being
+/// considered for healing, rather than a countdown this system had to walk every part to advance.
 /// </remarks>
 public sealed class ComplexHealthRegenSystem : ITieredSystem
 {
@@ -91,7 +91,9 @@ public sealed class ComplexHealthRegenSystem : ITieredSystem
                 continue;
             }
 
-            DecrementLockouts(entityId, framesPerVisit);
+            // No per-part lockout walk here any more: the lockout is a deadline that
+            // BodyPartSelection.PickLowestPercentage compares against the current frame, so nothing
+            // has to visit a part for its lockout to end (PLAN-timer-wheel.md step 8).
 
             // No AbilityScoresModule loaded, or this entity never got a Constitution score --
             // 0 regen, same as SimpleHealthRegenSystem's own effectiveRegen == 0 skip below, just
@@ -110,23 +112,7 @@ public sealed class ComplexHealthRegenSystem : ITieredSystem
                 continue;
             }
 
-            HealthHeal.Apply(_health, entityId, percentOfMaxHealth: 0f, _statModifiers, _bodyParts, flatAmount: effectiveRegen, sourceEntityId: entityId, targetMode: BodyPartTargetMode.LowestPercentage, bodyPartBurningTimers: _bodyPartBurningTimers, eventBus: _eventBus, playerQuery: _playerQuery, healType: "Regeneration");
-        }
-    }
-
-    /// <summary>Walks entityId's own BodyPartComponent chain once, decrementing any nonzero RegenLockoutFramesRemaining by framesPerVisit (clamped at 0) -- mutated in place via UpdateByDenseIndex, never removed, so walking and updating the same chain in one pass is safe.</summary>
-    private void DecrementLockouts(int entityId, int framesPerVisit)
-    {
-        for (var denseIndex = _bodyParts.GetFirstDenseIndex(entityId); denseIndex != -1; denseIndex = _bodyParts.GetNextDenseIndex(denseIndex))
-        {
-            ref readonly var part = ref _bodyParts.GetReadonlyByDenseIndex(denseIndex);
-            if (part.RegenLockoutFramesRemaining == 0)
-            {
-                continue;
-            }
-
-            var decrementAmount = (ushort)System.Math.Min((int)part.RegenLockoutFramesRemaining, framesPerVisit);
-            _bodyParts.UpdateByDenseIndex(denseIndex, decrementAmount, static (ref BodyPartComponent p, ushort amount) => p.RegenLockoutFramesRemaining -= amount);
+            HealthHeal.Apply(_health, entityId, percentOfMaxHealth: 0f, time.FrameCount, _statModifiers, _bodyParts, flatAmount: effectiveRegen, sourceEntityId: entityId, targetMode: BodyPartTargetMode.LowestPercentage, bodyPartBurningTimers: _bodyPartBurningTimers, eventBus: _eventBus, playerQuery: _playerQuery, healType: "Regeneration");
         }
     }
 }

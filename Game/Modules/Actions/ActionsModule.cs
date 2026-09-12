@@ -86,15 +86,10 @@ public sealed class ActionsModule : IGameModule
 
     public void RegisterSystems(SystemManager systemManager, ComponentManager componentManager)
     {
-        systemManager.Register(new ActionCooldownSystem(
-            componentManager.GetMultiPool<ActionInstanceComponent>(),
-            componentManager.GetDirectPool<ProcessingTierComponent>(),
-            _processingTierEvents));
+        // No cooldown system: an action's cooldown is a deadline (ActionInstanceComponent.
+        // CooldownReadyAtFrame), read against the current frame rather than walked down.
 
-        systemManager.Register(new PotionCooldownSystem(
-            componentManager.GetPackedPool<PotionCooldownComponent>(),
-            componentManager.GetDirectPool<ProcessingTierComponent>(),
-            _processingTierEvents));
+        systemManager.Register(new PotionCooldownSystem(componentManager.GetPackedPool<PotionCooldownComponent>()));
 
         if (!componentManager.IsRegistered<SimpleHealthComponent>())
         {
@@ -115,7 +110,6 @@ public sealed class ActionsModule : IGameModule
 
         systemManager.Register(new DelayedActionSystem(
             componentManager.GetPackedPool<PendingDelayedActionComponent>(),
-            componentManager.GetPackedPool<ActionLockComponent>(),
             componentManager.GetMultiPool<ActionInstanceComponent>(),
             componentManager.GetPackedPool<SimpleHealthComponent>(),
             _actionCatalog,
@@ -125,8 +119,6 @@ public sealed class ActionsModule : IGameModule
             _playerQuery,
             _statusEffectAppliers,
             componentManager,
-            componentManager.GetDirectPool<ProcessingTierComponent>(),
-            _processingTierEvents,
             statModifiers,
             deadEntities,
             abilityScores,

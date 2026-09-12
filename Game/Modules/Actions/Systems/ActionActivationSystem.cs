@@ -134,7 +134,7 @@ public sealed class ActionActivationSystem : ISystem
                 continue;
             }
 
-            if (instance.CooldownFramesRemaining > 0)
+            if (ActionInstanceQueries.IsOnCooldown(instance, time.FrameCount))
             {
                 continue;
             }
@@ -157,50 +157,58 @@ public sealed class ActionActivationSystem : ISystem
             switch (action.Activator.Timing.Category)
             {
                 case ActionTimingCategory.Immediate:
-                    activationWasSuccessful = TryActivateImmediate(entityId, action, request.TargetTiles);
+                    activationWasSuccessful = TryActivateImmediate(entityId, action, request.TargetTiles, time.FrameCount);
                     break;
                 case ActionTimingCategory.Delayed:
-                    activationWasSuccessful = TryActivateDelayed(entityId, action, request.TargetTiles);
+                    activationWasSuccessful = TryActivateDelayed(entityId, action, request.TargetTiles, time.FrameCount);
                     break;
                 case ActionTimingCategory.FreeCast:
-                    activationWasSuccessful = TryActivateFreeCast(entityId, action, request.TargetTiles);
+                    activationWasSuccessful = TryActivateFreeCast(entityId, action, request.TargetTiles, time.FrameCount);
                     break;
             }
             if (activationWasSuccessful)
             {
                 SpendManaIfAny(entityId, manaCost);
-                StartCooldownIfAny(entityId, action);
+                StartCooldownIfAny(entityId, action, time.FrameCount);
             }
         }
     }
 
-    private bool TryActivateImmediate(int entityId, ActionDefinition action, Vector3Int[] targetTiles)
+    private bool TryActivateImmediate(int entityId, ActionDefinition action, Vector3Int[] targetTiles, long now)
     {
-        if (ActionLockGate.IsBlocked(_actionLocks, entityId))
+        if (ActionLockGate.IsBlocked(_actionLocks, entityId, now))
         {
             return false;
         }
 
-        ActionEffectResolver.Apply(action, entityId, targetTiles, _mapQuery, _health, _eventBus, _mathUtility, _playerQuery, _statusEffectAppliers, _componentManager, _statModifiers, _deadEntities, _abilityScores, _auraSources, _hotkeyExpansionUnlocks, _bodyParts, _dodgingEntities);
-        ActionLockGate.Lock(_actionLocks, entityId, action.Activator.Timing.ActionLockFrames);
+        ActionEffectResolver.Apply(action, entityId, targetTiles, _mapQuery, _health, _eventBus, _mathUtility, _playerQuery, _statusEffectAppliers, _componentManager, now, _statModifiers, _deadEntities, _abilityScores, _auraSources, _hotkeyExpansionUnlocks, _bodyParts, _dodgingEntities);
+        ActionLockGate.Lock(_actionLocks, entityId, now, action.Activator.Timing.ActionLockFrames);
         return true;
     }
 
-    private bool TryActivateDelayed(int entityId, ActionDefinition action, Vector3Int[] targetTiles)
+    /// <summary>The windup's end is the lock's own deadline, read straight back off the component this just locked -- so the pending action and the lock can never disagree about when it resolves.</summary>
+    private bool TryActivateDelayed(int entityId, ActionDefinition action, Vector3Int[] targetTiles, long now)
     {
-        if (ActionLockGate.IsBlocked(_actionLocks, entityId))
+        if (ActionLockGate.IsBlocked(_actionLocks, entityId, now))
         {
             return false;
         }
 
-        ActionLockGate.Lock(_actionLocks, entityId, action.Activator.Timing.ActionLockFrames);
-        _pendingDelayedActions.Merge(entityId, new PendingDelayedActionComponent(action.Id, targetTiles));
+        ActionLockGate.Lock(_actionLocks, entityId, now, action.Activator.Timing.ActionLockFrames);
+
+        // The fallback is unreachable in practice -- an entity with no ActionLockComponent reads as
+        // blocked above, so it never gets here -- but it keeps the deadline honest if that ever changes.
+        var readyAtFrame = _actionLocks.TryGetReadonly(entityId, out var actionLock)
+            ? actionLock.UnlockedAtFrame
+            : FrameDeadline.After(now, action.Activator.Timing.ActionLockFrames ?? 0);
+
+        _pendingDelayedActions.Merge(entityId, new PendingDelayedActionComponent(action.Id, targetTiles, readyAtFrame));
         return true;
     }
 
-    private bool TryActivateFreeCast(int entityId, ActionDefinition action, Vector3Int[] targetTiles)
+    private bool TryActivateFreeCast(int entityId, ActionDefinition action, Vector3Int[] targetTiles, long now)
     {
-        ActionEffectResolver.Apply(action, entityId, targetTiles, _mapQuery, _health, _eventBus, _mathUtility, _playerQuery, _statusEffectAppliers, _componentManager, _statModifiers, _deadEntities, _abilityScores, _auraSources, _hotkeyExpansionUnlocks, _bodyParts, _dodgingEntities);
+        ActionEffectResolver.Apply(action, entityId, targetTiles, _mapQuery, _health, _eventBus, _mathUtility, _playerQuery, _statusEffectAppliers, _componentManager, now, _statModifiers, _deadEntities, _abilityScores, _auraSources, _hotkeyExpansionUnlocks, _bodyParts, _dodgingEntities);
         return true;
     }
 
@@ -223,11 +231,11 @@ public sealed class ActionActivationSystem : ISystem
         }
     }
 
-    private void StartCooldownIfAny(int entityId, ActionDefinition action)
+    private void StartCooldownIfAny(int entityId, ActionDefinition action, long now)
     {
         if (action.Activator.Timing.CooldownFrames is { } cooldownFrames)
         {
-            ActionInstanceQueries.TrySetCooldown(_actionInstances, entityId, action.Id, cooldownFrames);
+            ActionInstanceQueries.TrySetCooldown(_actionInstances, entityId, action.Id, cooldownFrames, now);
         }
     }
 }

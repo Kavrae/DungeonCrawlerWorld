@@ -1,4 +1,5 @@
 using Engine.ECS.Components;
+using Engine.ECS.Systems;
 using Engine.Events;
 using Engine.Utilities;
 using Game.Modules.Burning.Components;
@@ -19,7 +20,8 @@ public static class BurningEffects
     public const string Glyph = "🔥";
 
     /// <summary>No-ops entirely if entityId is currently immune to Burning (StatusEffectImmunity), or once MaxStacks is reached.</summary>
-    public static void ApplyStack(ComponentManager componentManager, int entityId, StatusEffectSource source, EventBus? eventBus = null, IPlayerQuery? playerQuery = null)
+    /// <param name="now">The simulation frame the stack lands on. A new burn's first tick is TickIntervalFrames after it; a top-off leaves the running tick alone.</param>
+    public static void ApplyStack(ComponentManager componentManager, int entityId, StatusEffectSource source, long now, EventBus? eventBus = null, IPlayerQuery? playerQuery = null)
     {
         if (StatusEffectImmunity.IsImmune(componentManager, entityId, StatusEffectType.Burning, source, eventBus, playerQuery))
         {
@@ -39,7 +41,7 @@ public static class BurningEffects
         }
         else
         {
-            timers.Add(entityId, new BurningTimerComponent(TickIntervalFrames, stackCount: 1, source));
+            timers.Add(entityId, new BurningTimerComponent(FrameDeadline.After(now, TickIntervalFrames), stackCount: 1, source));
         }
     }
 }

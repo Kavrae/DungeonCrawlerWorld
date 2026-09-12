@@ -1,4 +1,4 @@
-﻿using Engine.ECS.Context;
+using Engine.ECS.Context;
 using Engine.ECS.Systems;
 using Engine.Math;
 using Game.Blueprints;
@@ -121,19 +121,19 @@ public static class FloorBuilder
 
         for (var i = 0; i < TestPoisonStackCount; i++)
         {
-            PoisonEffects.ApplyStack(ecsContext.ComponentManager, entityId, StatusEffectSource.Admin, TestPoisonDurationTicks, ecsContext.EventBus, world);
+            PoisonEffects.ApplyStack(ecsContext.ComponentManager, entityId, StatusEffectSource.Admin, TestPoisonDurationTicks, ecsContext.SystemManager.Clock.CurrentFrame, ecsContext.EventBus, world);
         }
 
         foreach (var seed in TestAbilityScoreModifierSeeds)
         {
             AbilityScoreEffects.GrantModifier(ecsContext.ComponentManager, entityId, seed.Type, StatModifierOperation.Additive, StatModifierPolarity.Buff,
-                canModify: true, seed.PositiveFlat, durationFrames: null, StatusEffectSource.Admin);
+                canModify: true, seed.PositiveFlat, expiresAtFrame: FrameDeadline.Never, StatusEffectSource.Admin);
             AbilityScoreEffects.GrantModifier(ecsContext.ComponentManager, entityId, seed.Type, StatModifierOperation.Additive, StatModifierPolarity.Debuff,
-                canModify: true, seed.NegativeFlat, durationFrames: null, StatusEffectSource.AI);
+                canModify: true, seed.NegativeFlat, expiresAtFrame: FrameDeadline.Never, StatusEffectSource.AI);
             AbilityScoreEffects.GrantModifier(ecsContext.ComponentManager, entityId, seed.Type, StatModifierOperation.Multiplicative, StatModifierPolarity.Buff,
-                canModify: true, seed.PositiveMultiplier, durationFrames: null, StatusEffectSource.FromEntity(entityId));
+                canModify: true, seed.PositiveMultiplier, expiresAtFrame: FrameDeadline.Never, StatusEffectSource.FromEntity(entityId));
             AbilityScoreEffects.GrantModifier(ecsContext.ComponentManager, entityId, seed.Type, StatModifierOperation.Multiplicative, StatModifierPolarity.Debuff,
-                canModify: true, seed.NegativeMultiplier, durationFrames: null, StatusEffectSource.Admin);
+                canModify: true, seed.NegativeMultiplier, expiresAtFrame: FrameDeadline.Never, StatusEffectSource.Admin);
         }
 
         var spawnPosition = FindFreeGroundCellNear(world, PlayerSpawnOrigin(world));

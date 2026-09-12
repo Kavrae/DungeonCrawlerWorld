@@ -1,6 +1,6 @@
+using Engine.ECS.Systems;
 using Engine.Math;
 using Game.Modules.StatModifiers;
-using Game.Modules.StatModifiers.Components;
 using Game.World;
 
 namespace Game.Modules.Actions.Effects;
@@ -13,13 +13,13 @@ namespace Game.Modules.Actions.Effects;
 /// own doc comment for the identical reasoning). No-op when context.StatModifiers isn't wired.
 /// DurationFrames is scaled by context.DurationScaleMultiplier (a ScrollActivator activation sets
 /// this off the caster's Intelligence -- see ScrollScalingEffects; every other activator leaves
-/// it at the default 1.0, a no-op) -- guarded so DurationFrames' own Permanent sentinel (-1, see
-/// StatModifierComponent) is never multiplied into a meaningless negative number. Then, still
-/// guarded the same way, scaled through StatModifierMath against the caster's own
-/// Outgoing{Buff,Debuff}Duration (context.SourceEntityId) and then the target's own
-/// Incoming{Buff,Debuff}Duration (context.TargetEntityId) -- Polarity picks which of the two
-/// pairs applies, both tag-conditional via context.ActivatorTags, exactly like DirectDamage's own
-/// OutgoingDamage step.
+/// it at the default 1.0, a no-op) -- guarded so a permanent (null) duration is never multiplied
+/// into a meaningless number. Then, still guarded the same way, scaled through StatModifierMath
+/// against the caster's own Outgoing{Buff,Debuff}Duration (context.SourceEntityId) and then the
+/// target's own Incoming{Buff,Debuff}Duration (context.TargetEntityId) -- Polarity picks which of
+/// the two pairs applies, both tag-conditional via context.ActivatorTags, exactly like
+/// DirectDamage's own OutgoingDamage step. The scaled result becomes an absolute deadline from
+/// context.Now.
 /// </summary>
 public sealed record StatModifierGrant(
     StatModifierTarget Target,
@@ -38,9 +38,10 @@ public sealed record StatModifierGrant(
         }
 
         var durationFrames = ScaleDurationFrames(context, DurationFrames, Polarity);
+        var expiresAtFrame = durationFrames is { } frames ? FrameDeadline.After(context.Now, frames) : FrameDeadline.Never;
 
-        context.StatModifiers.Add(context.TargetEntityId, new StatModifierComponent(
-            Target, Operation, Polarity, CanModify, Magnitude, durationFrames, StatusEffectSource.FromEntity(context.SourceEntityId), ConditionTag));
+        StatModifierEffects.Apply(context.ComponentManager, context.TargetEntityId, Target, Operation, Polarity, CanModify, Magnitude,
+            expiresAtFrame, StatusEffectSource.FromEntity(context.SourceEntityId), ConditionTag);
     }
 
     /// <summary>Shared by StatModifierGrant and StatusEffectImmunityGrant (granting immunity is unambiguously a Buff) -- context.DurationScaleMultiplier first, then Outgoing/IncomingBuffDuration or Outgoing/IncomingDebuffDuration (picked by polarity), both tag-conditional via context.ActivatorTags. A null or already-permanent (<= 0) durationFrames is returned unscaled, same guard as before.</summary>

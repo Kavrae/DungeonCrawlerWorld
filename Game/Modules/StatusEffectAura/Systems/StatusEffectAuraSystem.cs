@@ -19,13 +19,12 @@ namespace Game.Modules.StatusEffectAura.Systems;
 /// gameplay-demo profiling investigation found that pattern, multiplied across every
 /// subscriber and the full moving population, a measured hotspot; see FrameEventBuffer's own
 /// doc comment) and ticks ongoing exposure via the same Update, combined in one class since
-/// both operate on the same StatusEffectAuraExposureComponent pool. Striped like MovementSystem
-/// (see EntityStripeSet), not StripeCount 1 -- lava covers 10% of ground terrain (see the Lava
-/// blueprint) with an aura radius wide enough to blanket most of a wandering population, so the
-/// exposed population isn't the "stays small" case ContactDamageSystem's own doc comment
-/// describes; profiling a gameplay demo showed this system costing as much wall-clock time as
-/// BurningSystem, both un-striped, combined exceeding MovementSystem's own (already-striped)
-/// cost.
+/// both operate on the same StatusEffectAuraExposureComponent pool. Exposure re-grants sit on a
+/// timer wheel (PLAN-timer-wheel.md): each (entity, EffectType) exposure fires on its own exact
+/// frame, and only exposures actually due are touched -- lava covers 10% of ground terrain with
+/// an aura radius wide enough to blanket most of a wandering population, so walking every
+/// exposure every visit was a measured cost. StripeCount now only paces the tiered
+/// moving-source catch-up pass (see ResyncSourceIfStale).
 ///
 /// All range checks go through a single lazily-built AuraGrid (O(1) per lookup, keyed by both
 /// cell and StatusEffectType internally -- see its own doc comment for why one shared sparse
@@ -103,16 +102,30 @@ public sealed class StatusEffectAuraSystem : ISystem
     private readonly FrameEventBuffer<EntityMovedEvent> _movedEntities;
     private readonly PackedComponentPool<DeadComponent>? _deadEntities;
     private readonly DirectComponentPool<ProcessingTierComponent> _processingTiers;
-    private readonly TieredEntityStripeSet _tieredStripeSet;
     private readonly TieredEntityStripeSet _sourceTieredStripeSet;
+    private readonly SimulationClock _clock;
 
-    private readonly List<(int EntityId, StatusEffectAuraExposureComponent Component)> _pendingExposureRemovals = [];
+    /// <summary>
+    /// Each exposure type's re-grant tick, keyed by EffectType (see
+    /// StatusEffectAuraExposureComponent). Only exposures due this frame are touched, on their
+    /// exact frame at every processing tier -- PLAN-timer-wheel.md.
+    /// </summary>
+    private readonly MultiTimerWheel<StatusEffectAuraExposureComponent> _exposureWheel;
+
     private readonly List<StatusEffectType> _staleExposureTypesScratch = [];
 
-    // Cached once instead of passing the Tick method group at the MultiCountdownTicker.Tick call
-    // site every visit -- see ContactDamageSystem's own field for why this matters (an instance
-    // method group conversion allocates a fresh delegate every evaluation).
-    private readonly Func<int, StatusEffectAuraExposureComponent, bool> _tick;
+    /// <summary>
+    /// The simulation frame the current entry point is running on -- set first thing by each one
+    /// (Update from its EngineTime; the AuraSourceAdded/Removed handlers from the clock, since
+    /// they fire from the EventBus outside this system's own Update: during population, or during
+    /// another system's turn). Every timer this system starts -- an exposure, a status-effect
+    /// stack through an applier -- is scheduled from it.
+    /// </summary>
+    private long _now;
+
+    // Cached once instead of passing the Tick method group every Update -- an instance method
+    // group conversion allocates a fresh delegate every evaluation.
+    private readonly TimerFired<StatusEffectAuraExposureComponent> _tick;
 
     private readonly AuraGrid _auraGrid;
     private readonly HashSet<StatusEffectType> _effectTypesInUse = [];
@@ -134,6 +147,7 @@ public sealed class StatusEffectAuraSystem : ISystem
         FrameEventBuffer<EntityMovedEvent> movedEntities,
         DirectComponentPool<ProcessingTierComponent> processingTiers,
         ProcessingTierEvents processingTierEvents,
+        SimulationClock simulationClock,
         PackedComponentPool<DeadComponent>? deadEntities = null)
     {
         _componentManager = componentManager;
@@ -145,16 +159,17 @@ public sealed class StatusEffectAuraSystem : ISystem
         _movedEntities = movedEntities;
         _deadEntities = deadEntities;
         _processingTiers = processingTiers;
+        _clock = simulationClock;
 
         _auraGrid = new AuraGrid(mapQuery.MapSize);
 
         eventBus.Subscribe<AuraSourceAddedEvent>(OnSourceAdded);
         eventBus.Subscribe<AuraSourceRemovedEvent>(OnSourceRemoved);
 
-        _tieredStripeSet = ProcessingTierWiring.CreateAndWire(StripeCount, exposures, processingTiers, processingTierEvents);
         _sourceTieredStripeSet = ProcessingTierWiring.CreateAndWire(StripeCount, sources, processingTiers, processingTierEvents);
 
         _tick = Tick;
+        _exposureWheel = new MultiTimerWheel<StatusEffectAuraExposureComponent>(exposures);
     }
 
     /// <summary>
@@ -258,6 +273,8 @@ public sealed class StatusEffectAuraSystem : ISystem
     /// </summary>
     private void OnSourceAdded(AuraSourceAddedEvent added)
     {
+        _now = _clock.CurrentFrame;
+
         if (!_gridBuilt || !_transforms.TryGetReadonly(added.EntityId, out var transform))
         {
             return;
@@ -274,6 +291,7 @@ public sealed class StatusEffectAuraSystem : ISystem
     /// <summary>Unsplats a source that was removed outside of blueprint-time population (toggle-off, or DeathSystem retracting a corpse's still-active aura). Same _gridBuilt guard as OnSourceAdded, for the same reason. Also immediately re-checks nearby exposures (ReEvaluateExposuresNear, the same removal-only pass a moving source's old position already gets) so toggling off reads as instant, not laggy until each affected entity's own next tick.</summary>
     private void OnSourceRemoved(AuraSourceRemovedEvent removed)
     {
+        _now = _clock.CurrentFrame;
         _lastSyncedSourcePosition.Remove(removed.EntityId);
 
         if (!_gridBuilt || !_transforms.TryGetReadonly(removed.EntityId, out var transform))
@@ -325,6 +343,8 @@ public sealed class StatusEffectAuraSystem : ISystem
 
     public void Update(EngineTime time, byte stripeIndex)
     {
+        _now = time.FrameCount;
+
         // The buffer drain itself is NOT ProcessingTier-gated -- it only ever processes
         // entities that actually moved this exact frame (already self-limiting, unlike the
         // periodic passes below), and a fresh entry into an aura's range is a one-time
@@ -340,10 +360,7 @@ public sealed class StatusEffectAuraSystem : ISystem
         // grid to exist.
         EnsureGrid();
 
-        for (var tierIndex = 0; tierIndex < _tieredStripeSet.TierCount; tierIndex++)
-        {
-            TickExposures(_tieredStripeSet.GetTierBucket(tierIndex, time.FrameCount), _tieredStripeSet.GetTierFramesPerVisit(tierIndex));
-        }
+        _exposureWheel.Tick(time.FrameCount, _tick);
 
         // Catches up any non-Local source OnEntityMoved deferred (see ResyncSourceIfStale) --
         // a no-op for a Local source (already resynced on every move) or a source that hasn't
@@ -356,14 +373,9 @@ public sealed class StatusEffectAuraSystem : ISystem
         }
     }
 
-    /// <summary>Per-tier decrement-or-tick pass over _exposures.</summary>
-    /// <remarks>Delegates to the shared MultiCountdownTicker (see its own doc comment for the dense-chain-walk/deferred-removal mechanics) -- Tick below is the only per-effect-specific piece.</remarks>
-    private void TickExposures(ReadOnlySpan<int> dueEntityIds, uint framesPerVisit) =>
-        MultiCountdownTicker.Tick(_exposures, dueEntityIds, _pendingExposureRemovals, _tick, framesPerVisit);
-
-    /// <summary>Returns whether this specific (entity, EffectType) exposure entry should be removed entirely.</summary>
-    /// <remarks>True when no longer in range of this type, or the entity's own position can't be found. False re-arms the exposure's own countdown itself (via TryUpdateFirst, matched by EffectType) rather than leaving that to the caller -- see MultiCountdownTicker.Tick's onTick contract.</remarks>
-    private bool Tick(int entityId, StatusEffectAuraExposureComponent exposure)
+    /// <summary>Returns whether this specific (entity, EffectType) exposure entry should be removed entirely -- the wheel removes that one instance by EffectType.</summary>
+    /// <remarks>True when no longer in range of this type, or the entity's own position can't be found. False re-arms the exposure's own next tick itself (via TryUpdateFirst, matched by EffectType) -- see TimerFired's contract.</remarks>
+    private bool Tick(int entityId, StatusEffectAuraExposureComponent exposure, long now)
     {
         if (!_transforms.TryGetReadonly(entityId, out var transform) || !TryGrantSingleType(entityId, transform.Position, exposure.EffectType))
         {
@@ -372,7 +384,7 @@ public sealed class StatusEffectAuraSystem : ISystem
 
         _exposures.TryUpdateFirst(entityId, exposure.EffectType,
             static (ref readonly StatusEffectAuraExposureComponent e, StatusEffectType type) => e.EffectType == type,
-            static (ref StatusEffectAuraExposureComponent e, StatusEffectType type) => e.FramesUntilNextTick = AuraEffects.TickIntervalFrames);
+            static (ref StatusEffectAuraExposureComponent e, StatusEffectType type) => e.RepeatEvery(AuraEffects.TickIntervalFrames));
 
         return false;
     }
@@ -384,7 +396,7 @@ public sealed class StatusEffectAuraSystem : ISystem
         {
             if (TryGrantSingleType(entityId, position, effectType) && !HasExposure(entityId, effectType))
             {
-                _exposures.Add(entityId, new StatusEffectAuraExposureComponent(effectType, AuraEffects.TickIntervalFrames));
+                _exposures.Add(entityId, new StatusEffectAuraExposureComponent(effectType, FrameDeadline.After(_now, AuraEffects.TickIntervalFrames)));
             }
         }
     }
@@ -480,7 +492,7 @@ public sealed class StatusEffectAuraSystem : ISystem
         // FloorBuilder's old temporary seeding used it, for a non-entity-specific source.
         for (var i = 0; i < stacksToGrant; i++)
         {
-            applier.ApplyStack(_componentManager, entityId, StatusEffectSource.Admin);
+            applier.ApplyStack(_componentManager, entityId, StatusEffectSource.Admin, _now);
         }
 
         return true;

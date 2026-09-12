@@ -136,6 +136,11 @@ public static class GameBootstrapper
         // only ever sees a count; what the tiers mean stays here.
         ecsContext.SystemManager.SimulatedTierCount = ProcessingTierDivisors.ByTierIndex.Length;
 
+        // The clock modules were configured against (and captured) becomes the one SystemManager
+        // advances, so every deadline reader sees the same "now". Presentation reaches it as
+        // EcsContext.SystemManager.Clock.
+        ecsContext.SystemManager.Clock = context.SimulationClock;
+
         return new GameBootstrapResult(ecsContext, failures, context.Actions, context.MovedEntities, context.Items, context.StatusEffectDisplays, context.LocalTierRoster, context.ProcessingTierResolver);
     }
 

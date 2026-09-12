@@ -9,16 +9,25 @@ namespace Game.Modules.StatusEffectAura.Components;
 /// on leaving (see StatusEffectAuraSystem). Mirrors StatusEffectAuraSourceComponent's own
 /// per-type-instance shape (a MultiComponentPool keyed by entity, EffectType as a field found
 /// via a dense-chain walk) rather than one shared flag per entity: an entity can be in range of
-/// several different effect types at once, each with its own independent tick countdown, so a
+/// several different effect types at once, each with its own independent tick timer, so a
 /// newly-in-range type is never gated behind whether some OTHER type already has a running
 /// exposure. StatusEffectAuraSystem always re-resolves "how many stacks" fresh from AuraGrid
 /// rather than trusting a stale snapshot -- this component exists purely to drive each type's
-/// own tick countdown.
+/// own re-grant tick.
 /// </summary>
-public struct StatusEffectAuraExposureComponent(StatusEffectType effectType, ushort framesUntilNextTick) : ITickCountdown
+/// <remarks>A keyed timer-wheel timer (IKeyedScheduledTimer), keyed by EffectType.</remarks>
+public struct StatusEffectAuraExposureComponent(StatusEffectType effectType, uint nextTickFrame) : IKeyedScheduledTimer
 {
-    public StatusEffectType EffectType { get; set; } = effectType;
-    public ushort FramesUntilNextTick { get; set; } = framesUntilNextTick;
+    private uint _timerWheelMark;
 
-    public override readonly string ToString() => $"EffectType : {EffectType}\nFramesUntilNextTick : {FramesUntilNextTick}";
+    public StatusEffectType EffectType { get; set; } = effectType;
+
+    /// <summary>The simulation frame of this type's next re-grant tick (FrameDeadline).</summary>
+    public uint NextTickFrame { get; set; } = nextTickFrame;
+
+    readonly int IKeyedScheduledTimer.TimerKey => (int)EffectType;
+
+    uint IScheduledTimer.TimerWheelMark { readonly get => _timerWheelMark; set => _timerWheelMark = value; }
+
+    public override readonly string ToString() => $"EffectType : {EffectType}\nNextTickFrame : {NextTickFrame}";
 }

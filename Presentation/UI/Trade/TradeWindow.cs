@@ -48,7 +48,8 @@ public sealed class TradeWindow(
     MapViewState mapViewState,
     // Null in test setups that don't wire one -- CompleteTrade's own player-to-shop Gold transfer
     // simply never publishes GoldGivenToShopEvent in that case (see CompleteTrade's own doc comment).
-    EventBus? eventBus = null)
+    EventBus? eventBus = null,
+    Engine.ECS.Systems.SimulationClock? simulationClock = null)
     : Window(fontService, elementPoolService, labelRenderer), IWholeWindowDropTarget
 {
     /// <summary>2x10 -- the confirmed 20-stacks-per-side cap, arranged so every slot is visible with no scrolling required (see InventoryCapacity.MaxNonPlayerStackCount, which already enforces this same 20 for free -- see PLAN-trade-window.md's own "Trade grid capacity" section).</summary>
@@ -451,7 +452,7 @@ public sealed class TradeWindow(
         // picks TradeItemStackCell and the correct buy/sell pricing direction for this column -- see
         // InventoryGridContent's own doc comment on that parameter. Both columns are given the same
         // _tooltipController -- see its own doc comment for why that's safe now.
-        gridWindow.SetContent(new InventoryGridContent(world, componentManager, itemCatalog, ElementPoolService, FontService, LabelRenderer, spriteSheetService, spriteRenderer, contextMenuController, entityId, filterTag: null, _tooltipController, static () => null, mapViewState, _onItemSelected, _onCompareRequested, static (_, _) => { }, isShopSide));
+        gridWindow.SetContent(new InventoryGridContent(world, componentManager, itemCatalog, ElementPoolService, FontService, LabelRenderer, spriteSheetService, spriteRenderer, contextMenuController, entityId, filterTag: null, _tooltipController, static () => null, mapViewState, _onItemSelected, _onCompareRequested, static (_, _) => { }, isShopSide, simulationClock: simulationClock));
         AddChild(gridWindow);
 
         var footerWindow = ElementPoolService.CreateElement<Window>(this, new ElementOptions

@@ -87,10 +87,11 @@ public sealed class MovementSystem : ITieredSystem
         _tieredStripeSet = ProcessingTierWiring.CreateAndWire(StripeCount, movementComponents, processingTiers, processingTierEvents);
     }
 
-    /// <summary>Decrements an entity's movement frames to wait or attempts to execute the movement if a destination is set</summary>
+    /// <summary>Attempts to execute the movement if a destination is set and nothing is gating the entity</summary>
     /// <remarks>
-    /// All movement is gated by the ActionLock. Random movement is further gated by the FramesToWait to account for a small waiting period 
-    /// when a move fails due to a lack of available tiles.
+    /// All movement is gated by the ActionLock. Random movement is further gated by MovementComponent.WaitUntilFrame,
+    /// a retry backoff for when a move fails due to a lack of available tiles. Both are deadlines -- this system
+    /// compares them against the current frame and advances neither.
     /// 
     /// Entities that are currently off the map cannot move and must instead be placed on the map by another system or event.
     /// </remarks>
@@ -104,19 +105,20 @@ public sealed class MovementSystem : ITieredSystem
     {
         foreach (var entityId in entityIds)
         {
-            UpdateEntity(entityId, framesPerVisit);
+            UpdateEntity(entityId, framesPerVisit, time.FrameCount);
         }
     }
 
     /// <summary>
-    /// One due entity's movement step. Split out of Update so that method can walk each tier's
-    /// own bucket and hand down that tier's actual frames-per-visit -- FramesToWait used to be
-    /// decremented by the base StripeCountValue regardless of tier, which meant a Beyond-tier
-    /// entity (visited every StripeCount * 8 frames) burned off its wait at an eighth of real
-    /// time and so moved eight times less often than intended. See ActionLockSystem.Update's own
-    /// remarks; this is the same correction.
+    /// One due entity's movement step. Neither thing gating it is a countdown any more: the retry
+    /// backoff is MovementComponent.WaitUntilFrame and the shared lock is ActionLockComponent
+    /// .UnlockedAtFrame, both absolute frames compared against `now`. That retires this method's
+    /// original reason for taking framesPerVisit -- the wait used to be decremented by the base
+    /// StripeCountValue regardless of tier, so a Beyond-tier entity (visited every StripeCount * 8
+    /// frames) burned it off at an eighth of real time and moved that much less often than
+    /// intended. A deadline cannot drift that way at any tier.
     /// </summary>
-    private void UpdateEntity(int entityId, ushort framesPerVisit)
+    private void UpdateEntity(int entityId, ushort framesPerVisit, long now)
     {
         if (_deadEntities?.Has(entityId) == true || _movementDisabled?.Has(entityId) == true)
         {
@@ -125,21 +127,15 @@ public sealed class MovementSystem : ITieredSystem
 
         ref readonly var movementComponent = ref _movementComponents.GetReadonly(entityId);
 
-        // The sole owner of the FramesToWait countdown. TestCombatBehaviorSystem sets it (via
-        // MovementCandidates.FramesToWaitIfNoOptions) and reads it as a gate, but no longer
-        // decrements it -- both systems used to, on the same entity on the same frame, so every
-        // wait elapsed at twice its intended rate. See that system's own note at the matching
-        // gate.
-        if (movementComponent.FramesToWait > 0)
+        // The retry backoff is a deadline now (MovementComponent.WaitUntilFrame), so this is a pure
+        // read -- no owner, nothing to advance, and no way for two systems to burn it down twice as
+        // fast as intended the way they once did (see TestCombatBehaviorSystem's matching gate).
+        if (movementComponent.IsWaiting(now))
         {
-            _movementComponents.TryUpdate(entityId, framesPerVisit, static (ref MovementComponent movementComponent, ushort frames) =>
-            {
-                movementComponent.FramesToWait = MathUtility.DecrementClamped(movementComponent.FramesToWait, frames);
-            });
             return;
         }
 
-        if (ActionLockGate.IsBlocked(_actionLocks, entityId) ||
+        if (ActionLockGate.IsBlocked(_actionLocks, entityId, now) ||
             !_transformComponents.TryGetReadonly(entityId, out var transformComponent))
         {
             return;
@@ -168,7 +164,7 @@ public sealed class MovementSystem : ITieredSystem
 
         if (movementComponent.NextMapPosition != null)
         {
-            TryMoveToNextMapPosition(entityId, movementComponent, transformComponent);
+            TryMoveToNextMapPosition(entityId, movementComponent, transformComponent, now);
         }
     }
 
@@ -183,7 +179,8 @@ public sealed class MovementSystem : ITieredSystem
     /// <param name="entityId">The ID of the entity.</param>
     /// <param name="movementComponent">The movement component of the entity.</param>
     /// <param name="transformComponent">The transform component of the entity.</param>
-    private void TryMoveToNextMapPosition(int entityId, MovementComponent movementComponent, TransformComponent transformComponent)
+    /// <param name="now">The current simulation frame -- a completed move locks the entity until a deadline measured from it.</param>
+    private void TryMoveToNextMapPosition(int entityId, MovementComponent movementComponent, TransformComponent transformComponent, long now)
     {
         var newPosition = movementComponent.NextMapPosition!.Value;
         var oldPosition = transformComponent.Position;
@@ -211,7 +208,7 @@ public sealed class MovementSystem : ITieredSystem
                 ? (ushort)MathF.Round(standardLockFrames * DiagonalActionLockMultiplier)
                 : standardLockFrames;
 
-            ActionLockGate.Lock(_actionLocks, entityId, lockFrames);
+            ActionLockGate.Lock(_actionLocks, entityId, now, lockFrames);
 
             var entityMovedEvent = new EntityMovedEvent(entityId, oldPosition, newPosition, transformComponent.Size);
             _entityMoveSync.SyncMove(entityMovedEvent, isBlocking);

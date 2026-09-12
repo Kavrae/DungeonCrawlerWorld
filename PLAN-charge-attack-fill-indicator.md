@@ -44,6 +44,16 @@ ActionLockContent.cs:50-52`) already computes for the player's own HUD wheel:
 ```csharp
 remainingFraction = CurrentLockTotalFrames > 0 ? (float)CurrentLockFramesRemaining / CurrentLockTotalFrames : 0f;
 ```
+
+> **Superseded 2026-09-11 (`PLAN-timer-wheel.md` step 7).** The lock is a deadline now:
+> `ActionLockComponent.UnlockedAtFrame`, with `CurrentLockTotalFrames` kept only as this fraction's
+> denominator, and `ActionLockGate.FramesRemaining(actionLock, now)` in place of the stored
+> countdown. `ActionLockSystem` is deleted -- nothing decrements anything. The bracketing property
+> this section relies on is now stronger rather than incidental: `PendingDelayedActionComponent`
+> carries `ReadyAtFrame`, copied from that same `UnlockedAtFrame` when the action is queued, and
+> `DelayedActionSystem` fires off that deadline, so the windup's end and the lock's end are one
+> value that cannot drift. Everything below about *what* to draw still holds; only the source field
+> changed.
 That's a *depletion* fraction (1.0 at charge start -> 0.0 at activation, matching the radial mask's
 own "shrinks to reveal" behavior). This feature wants the inverse framing (0% at start -> 100% at
 activation, per the TODO's own wording), so `chargeFraction = 1f - remainingFraction`.
@@ -257,6 +267,12 @@ Presentation/UI change by running the game" convention, not pixel-asserted.
    into `DrawTargetingHighlights`'s two charging-tile branches. Verify per the Test plan above.
 
 ## Addendum: smoothing the raw ActionLockComponent-derived fraction
+
+> **The cause described here no longer exists (2026-09-11, `PLAN-timer-wheel.md` step 7).** The
+> stepped countdown this addendum works around was `ActionLockSystem` decrementing by a whole
+> `StripeCountValue` per tiered visit. That system is gone and the lock is an absolute deadline, so
+> `ActionLockGate.FramesRemaining` is exact on every frame at every tier. `TrackChargeElapsedFraction`
+> (Addendum 7's replacement, which reads elapsed real time instead) is what ships and is unaffected.
 
 Landed and visually confirmed working per the Test plan above. Follow-up found by playing it:
 `ActionLockComponent.CurrentLockFramesRemaining` -- the source `TryGetChargeFraction` reads every
@@ -497,6 +513,12 @@ entity simply vanishes. For `PowerAttackAction`'s 60-frame windup, decrementing 
 the reported ~80-90% almost exactly. Addendum 1's own "climb toward the raw stepped value, never
 exceed it" smoothing design was working exactly as built; the raw value it was climbing toward
 simply never reached 1.
+
+> **Follow-up (2026-09-11, `PLAN-timer-wheel.md` step 7):** the underlying hazard is gone too. The
+> lock no longer has an unobservable last step -- it is a deadline, and `DelayedActionSystem` fires
+> off that same deadline rather than off a countdown it happens to observe at 0 -- so a fraction
+> derived from the lock would now reach 1 honestly. The elapsed-time fraction below is kept anyway:
+> it needs no per-frame component read at all, and it is already proven in play.
 
 Fixed by dropping `CurrentLockFramesRemaining` from the fraction entirely.
 `TrackChargeElapsedFraction` (renamed from `SmoothChargeFraction`) now accumulates real elapsed

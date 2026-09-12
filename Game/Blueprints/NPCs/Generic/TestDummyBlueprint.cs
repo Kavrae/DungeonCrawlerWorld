@@ -28,7 +28,7 @@ namespace Game.Blueprints.NPCs.Generic;
 /// -- an entity with none, like this one, is *never* visited by it and so never gets a real tier
 /// computed at all, permanently reading as the Beyond fallback (ProcessingTierWiring's own "fail
 /// open to Beyond" default for "no component yet") to every *other* tiered consumer. That's a real,
-/// confirmed bug: ActionLockSystem/ActionCooldownSystem/SimpleHealthRegenSystem are all tiered off
+/// confirmed bug: ActionLockSystem/SimpleHealthRegenSystem (and, before cooldowns became deadlines, ActionCooldownSystem) are all tiered off
 /// this same component, and each decrements its own countdown by a flat per-visit amount that
 /// assumes Local's cadence -- at Beyond's 8x-longer-between-visits cadence (ProcessingTierDivisors
 /// .ByTierIndex), the same flat decrement makes every one of those countdowns (Power Attack's own
@@ -89,7 +89,7 @@ public sealed class TestDummyBlueprint : IBlueprint
         componentManager.Merge(entityId, new DisplayTextComponent( Name, Description));
         componentManager.Merge(entityId, new GlyphComponent(Glyph, Color.Purple));
         componentManager.Merge(entityId, new SimpleHealthComponent(MaximumHealth, MaximumHealth));
-        componentManager.Merge(entityId, new ActionLockComponent(standardLockFrames: StandardLockFrames, currentLockTotalFrames: 0, currentLockFramesRemaining: 0));
+        componentManager.Merge(entityId, new ActionLockComponent(standardLockFrames: StandardLockFrames, currentLockTotalFrames: 0, unlockedAtFrame: 0));
         componentManager.Merge(entityId, new TransformComponent(new Vector3Int(-1, -1, (int)MapLayer.Ground), new Vector2Byte(1, 1)));
         componentManager.Merge(entityId, new TestDummyComponent());
 
@@ -99,11 +99,11 @@ public sealed class TestDummyBlueprint : IBlueprint
                 abilityScoreType == AbilityScoreType.Constitution ? HighRegenConstitutionBaseValue : DefaultAbilityScoreBaseValue);
         }
 
-        ActionGrantEffects.Grant(componentManager, entityId, PowerAttackAction.Id, manaCost: 0, overrideDefinition: BuildPowerAttackWithIdleCooldown(), cooldownFramesRemaining: 0);
+        ActionGrantEffects.Grant(componentManager, entityId, PowerAttackAction.Id, manaCost: 0, overrideDefinition: BuildPowerAttackWithIdleCooldown());
     }
 
     /// <summary>
-    /// ActionInstanceComponent.CooldownFramesRemaining starts counting the instant activation
+    /// ActionInstanceComponent.CooldownReadyAtFrame starts counting the instant activation
     /// begins (ActionActivationSystem.StartCooldownIfAny fires the same tick TryActivateDelayed
     /// sets the windup lock, not once DelayedActionSystem later applies the effect) -- so granting
     /// PowerAttack's own CooldownFrames as just IdleSecondsAfterAttack would only leave

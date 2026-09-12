@@ -1,4 +1,4 @@
-﻿using Engine.ECS.Components.Stores;
+using Engine.ECS.Components.Stores;
 using Engine.ECS.Systems;
 using Game.Modules.AbilityScores;
 using Game.Modules.AbilityScores.Components;
@@ -28,6 +28,9 @@ public sealed class ComplexHealthRegenSystemTests
 {
     private static MultiComponentPool<BodyPartComponent> CreateBodyPartsPool() =>
         new(maximumEntityCount: 10, initialCapacity: 8);
+
+    /// <summary>StripeCount is a full second of frames and entity 0 sits in bucket 0, so any frame that is a multiple of it is a due visit -- 0 and 120 both are.</summary>
+    private static EngineTime Frame(long frame) => new(default, default, false, frame);
 
     /// <summary>Always empty -- ComplexHealthRegenSystem only needs this to satisfy HealthHeal.Apply's Simple-vs-Complex dispatch check, which always resolves to the Complex branch for the body-parts-only entities this system drives.</summary>
     private static PackedComponentPool<SimpleHealthComponent> CreateHealthPool() =>
@@ -63,13 +66,13 @@ public sealed class ComplexHealthRegenSystemTests
         throw new InvalidOperationException($"No part named {name} for entity {entityId}.");
     }
 
-    private static void SetLockout(MultiComponentPool<BodyPartComponent> bodyParts, int entityId, string name, ushort framesRemaining)
+    private static void SetLockout(MultiComponentPool<BodyPartComponent> bodyParts, int entityId, string name, uint lockedUntilFrame)
     {
         for (var denseIndex = bodyParts.GetFirstDenseIndex(entityId); denseIndex != -1; denseIndex = bodyParts.GetNextDenseIndex(denseIndex))
         {
             if (bodyParts.GetReadonlyByDenseIndex(denseIndex).Name == name)
             {
-                bodyParts.UpdateByDenseIndex(denseIndex, framesRemaining, static (ref BodyPartComponent part, ushort frames) => part.RegenLockoutFramesRemaining = frames);
+                bodyParts.UpdateByDenseIndex(denseIndex, lockedUntilFrame, static (ref BodyPartComponent part, uint frames) => part.RegenLockedUntilFrame = frames);
                 return;
             }
         }
@@ -94,7 +97,7 @@ public sealed class ComplexHealthRegenSystemTests
         var bodyParts = CreateBodyPartsPool();
         var statModifiers = new MultiComponentPool<StatModifierComponent>(maximumEntityCount: 10, initialCapacity: 4);
         statModifiers.Add(0, new StatModifierComponent(StatModifierTarget.IncomingHealing, StatModifierOperation.Multiplicative, StatModifierPolarity.Buff,
-            canModify: false, magnitude: 0.5f, remainingDurationFrames: null, StatusEffectSource.Admin));
+            canModify: false, magnitude: 0.5f, expiresAtFrame: FrameDeadline.Never, StatusEffectSource.Admin));
         var system = new ComplexHealthRegenSystem(bodyParts, CreateHealthPool(), CreateTiersPool(), new ProcessingTierEvents(), statModifiers, abilityScores: CreateAbilityScoresPoolWithMaxConstitution(0));
         bodyParts.Add(0, new BodyPartComponent("Torso", BodyPartType.Torso, 0, 0, currentHealth: 50, maximumHealth: 200, isVital: true));
 
@@ -168,38 +171,41 @@ public sealed class ComplexHealthRegenSystemTests
         Assert.AreEqual(90f, GetPart(bodyParts, 0, "Torso").CurrentHealth, "An unselected part must not also regen this same visit.");
     }
 
+    /// <summary>Nothing advances the lockout any more -- it is a deadline (BodyPartComponent.RegenLockedUntilFrame), so a visit while it is still running leaves the part exactly as it found it.</summary>
     [TestMethod]
-    public void Update_LockedOutPart_CountdownStillDecrementsEvenWhenNotSelected()
+    public void Update_LockedOutPart_IsSkippedAndLeftUntouched()
     {
         var bodyParts = CreateBodyPartsPool();
-        var system = new ComplexHealthRegenSystem(bodyParts, CreateHealthPool(), CreateTiersPool(), new ProcessingTierEvents());
+        var system = new ComplexHealthRegenSystem(bodyParts, CreateHealthPool(), CreateTiersPool(), new ProcessingTierEvents(), abilityScores: CreateAbilityScoresPoolWithMaxConstitution(0));
         bodyParts.Add(0, new BodyPartComponent("Head", BodyPartType.Head, 0, 0, currentHealth: 5, maximumHealth: 100, isVital: true)); // Lowest %, but locked out.
         bodyParts.Add(0, new BodyPartComponent("Torso", BodyPartType.Torso, 0, 0, currentHealth: 50, maximumHealth: 100, isVital: true));
         SetLockout(bodyParts, 0, "Head", 100);
 
-        system.Update(default, 0);
+        system.Update(Frame(0), 0);
 
-        Assert.AreEqual(40, GetPart(bodyParts, 0, "Head").RegenLockoutFramesRemaining, "A locked-out part's own countdown must still decrement by this visit's framesPerVisit even though it wasn't selected for healing.");
-        Assert.AreEqual(5f, GetPart(bodyParts, 0, "Head").CurrentHealth, "No AbilityScoresModule wired -- neither part should have actually regenerated.");
-        Assert.AreEqual(50f, GetPart(bodyParts, 0, "Torso").CurrentHealth);
+        Assert.AreEqual(100u, GetPart(bodyParts, 0, "Head").RegenLockedUntilFrame, "The lockout is a deadline -- this visit must not change it.");
+        Assert.AreEqual(5f, GetPart(bodyParts, 0, "Head").CurrentHealth, "Locked out, so it must not be the part that regenerates.");
+        Assert.AreEqual(56f, GetPart(bodyParts, 0, "Torso").CurrentHealth, "The next-lowest eligible part regenerates instead.");
     }
 
+    /// <summary>
+    /// The lockout ends because the simulation reached its frame, not because anything visited the
+    /// part -- so a single Update on the far side of the deadline finds it selectable, however many
+    /// visits did or didn't happen in between.
+    /// </summary>
     [TestMethod]
-    public void Update_PartExitsLockoutAfterEnoughTicks_BecomesSelectableAgain()
+    public void Update_PastItsLockoutFrame_PartIsSelectableAgain()
     {
         var bodyParts = CreateBodyPartsPool();
         var system = new ComplexHealthRegenSystem(bodyParts, CreateHealthPool(), CreateTiersPool(), new ProcessingTierEvents(), abilityScores: CreateAbilityScoresPoolWithMaxConstitution(0));
         bodyParts.Add(0, new BodyPartComponent("Torso", BodyPartType.Torso, 0, 0, currentHealth: 50, maximumHealth: 200, isVital: true));
         SetLockout(bodyParts, 0, "Torso", 120);
 
-        system.Update(default, 0); // Lockout 120 -> 60 (still > 0): skipped, no regen this visit.
-
-        Assert.AreEqual(60, GetPart(bodyParts, 0, "Torso").RegenLockoutFramesRemaining);
+        system.Update(Frame(119), 0); // Still locked out: skipped, no regen.
         Assert.AreEqual(50f, GetPart(bodyParts, 0, "Torso").CurrentHealth);
 
-        system.Update(default, 0); // Lockout 60 -> 0: eligible again, regens this same visit.
+        system.Update(Frame(120), 0); // Its own frame: eligible again, regens this visit.
 
-        Assert.AreEqual(0, GetPart(bodyParts, 0, "Torso").RegenLockoutFramesRemaining);
         Assert.AreEqual(56f, GetPart(bodyParts, 0, "Torso").CurrentHealth);
     }
 

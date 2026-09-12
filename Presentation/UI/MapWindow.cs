@@ -1,5 +1,6 @@
 using Engine.ECS.Components;
 using Engine.ECS.Components.Stores;
+using Engine.ECS.Systems;
 using Engine.Events;
 using Engine.Math;
 using Engine.Utilities;
@@ -97,6 +98,9 @@ public sealed class MapWindow : Window
     private readonly PackedComponentPool<ContainerComponent>? _containerPool;
     private readonly PackedComponentPool<ShopComponent>? _shopPool;
     private readonly PackedComponentPool<ActionLockComponent> _actionLockPool;
+
+    /// <summary>"Now" for every action-lock read -- the lock is a deadline (see ActionLockGate), so "is the player locked" only has an answer relative to the simulation's current frame.</summary>
+    private readonly SimulationClock _simulationClock;
     private readonly DirectComponentPool<DisplayTextComponent> _displayTextPool;
     private readonly PackedComponentPool<PendingDelayedActionComponent> _pendingDelayedActions;
     private readonly PackedComponentPool<DodgingComponent> _dodgingEntities;
@@ -211,7 +215,8 @@ public sealed class MapWindow : Window
         ActionTargetingController actionTargeting,
         PlayerMovementController playerMovement,
         ContextMenuController contextMenuController,
-        PackedComponentPool<ActionLockComponent> actionLockPool) : base(fontService, elementPoolService, labelRenderer)
+        PackedComponentPool<ActionLockComponent> actionLockPool,
+        SimulationClock simulationClock) : base(fontService, elementPoolService, labelRenderer)
     {
         ArgumentNullException.ThrowIfNull(world);
         ArgumentNullException.ThrowIfNull(mapViewState);
@@ -228,7 +233,9 @@ public sealed class MapWindow : Window
         ArgumentNullException.ThrowIfNull(playerMovement);
         ArgumentNullException.ThrowIfNull(contextMenuController);
         ArgumentNullException.ThrowIfNull(actionLockPool);
+        ArgumentNullException.ThrowIfNull(simulationClock);
 
+        _simulationClock = simulationClock;
         _world = world;
         _mapViewState = mapViewState;
         _transformPool = componentManager.GetDirectPool<TransformComponent>();
@@ -1476,7 +1483,7 @@ public sealed class MapWindow : Window
             options.Add(new ContextMenuOption("Shop", null, IsAdjacentToPlayer(entityId), () => onShopClicked.Invoke(entityId)));
         }
 
-        options.Add(new ContextMenuOption("Inspect", null, !ActionLockGate.IsBlocked(_actionLockPool, _world.PlayerEntityId), () => InspectEntity(entityId)));
+        options.Add(new ContextMenuOption("Inspect", null, !ActionLockGate.IsBlocked(_actionLockPool, _world.PlayerEntityId, _simulationClock.CurrentFrame), () => InspectEntity(entityId)));
     }
 
     private string ResolveName(int entityId) => _displayTextPool.TryGetReadonly(entityId, out var displayText) ? displayText.Name : "Unknown";
@@ -1486,7 +1493,7 @@ public sealed class MapWindow : Window
     {
         _mapViewState.InspectionMode = GlobalState.IsAdminModeOn ? InspectionMode.Admin : InspectionMode.Detail;
         _mapViewState.InspectedEntityId = entityId;
-        ActionLockGate.Lock(_actionLockPool, _world.PlayerEntityId);
+        ActionLockGate.Lock(_actionLockPool, _world.PlayerEntityId, _simulationClock.CurrentFrame);
         OnInspectionOpened?.Invoke();
     }
 

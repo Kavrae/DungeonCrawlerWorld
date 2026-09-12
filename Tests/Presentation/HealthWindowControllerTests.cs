@@ -1,3 +1,4 @@
+using Engine.ECS.Systems;
 using Engine.ECS.Components;
 using Engine.ECS.Components.Stores;
 using Engine.Math;
@@ -51,11 +52,11 @@ public sealed class HealthWindowControllerTests
 
         var statusEffectDisplays = new StatusEffectDisplayRegistry();
         statusEffectDisplays.Register(new TimerBasedStatusEffectDisplay<PoisonTimerComponent>(StatusEffectType.Poison, PoisonEffects.Glyph,
-            poison => poison.FramesUntilNextTick + (poison.RemainingDurationTicks - 1) * PoisonEffects.TickIntervalFrames));
+            (poison, now) => FrameDeadline.Remaining(poison.NextTickFrame, now) + (poison.RemainingDurationTicks - 1) * PoisonEffects.TickIntervalFrames));
         statusEffectDisplays.Register(new TimerBasedStatusEffectDisplay<BurningTimerComponent>(StatusEffectType.Burning, BurningEffects.Glyph,
-            burning => burning.FramesUntilNextTick + (burning.StackCount - 1) * BurningEffects.TickIntervalFrames));
+            (burning, now) => FrameDeadline.Remaining(burning.NextTickFrame, now) + (burning.StackCount - 1) * BurningEffects.TickIntervalFrames));
         statusEffectDisplays.Register(new TimerBasedStatusEffectDisplay<ParalysisTimerComponent>(StatusEffectType.Paralysis, ParalysisEffects.Glyph,
-            paralysis => paralysis.FramesUntilNextTick));
+            (paralysis, now) => FrameDeadline.Remaining(paralysis.ExpiresAtFrame, now)));
 
         var itemCatalog = new ItemCatalog();
 

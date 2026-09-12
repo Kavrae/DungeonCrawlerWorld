@@ -1,4 +1,5 @@
 using Engine.ECS.Components;
+using Engine.ECS.Systems;
 using Game.Modules.StatModifiers;
 using Game.Modules.StatModifiers.Components;
 using Game.World;
@@ -15,40 +16,59 @@ public sealed class StatModifierEffectsTests
         return manager;
     }
 
-    [TestMethod]
-    public void Apply_PermanentDuration_DoesNotAddExpiringMarker()
+    private static StatModifierComponent FirstModifier(ComponentManager manager, int entityId)
     {
-        var manager = CreateRegisteredManager();
-
-        StatModifierEffects.Apply(manager, 0, StatModifierTarget.IncomingDamage, StatModifierOperation.Additive, StatModifierPolarity.Buff,
-            canModify: true, magnitude: -1f, durationFrames: null, StatusEffectSource.Admin);
-
-        Assert.IsFalse(manager.GetMultiPool<ExpiringStatModifierComponent>().Has(0));
-        Assert.IsTrue(manager.GetMultiPool<StatModifierComponent>().Has(0));
+        var pool = manager.GetMultiPool<StatModifierComponent>();
+        var denseIndex = pool.GetFirstDenseIndex(entityId);
+        Assert.AreNotEqual(-1, denseIndex, "Expected a StatModifierComponent to have been granted.");
+        return pool.GetReadonlyByDenseIndex(denseIndex);
     }
 
     [TestMethod]
-    public void Apply_FiniteDuration_AddsExpiringMarker()
+    public void Apply_PermanentDuration_StoresTheNeverDeadline()
     {
         var manager = CreateRegisteredManager();
 
         StatModifierEffects.Apply(manager, 0, StatModifierTarget.IncomingDamage, StatModifierOperation.Additive, StatModifierPolarity.Buff,
-            canModify: true, magnitude: -1f, durationFrames: 30, StatusEffectSource.Admin);
+            canModify: true, magnitude: -1f, expiresAtFrame: FrameDeadline.Never, StatusEffectSource.Admin);
 
-        Assert.IsTrue(manager.GetMultiPool<ExpiringStatModifierComponent>().Has(0));
+        Assert.AreEqual(FrameDeadline.Never, FirstModifier(manager, 0).ExpiresAtFrame);
     }
 
     [TestMethod]
-    public void Apply_OnePermanentAndOneFiniteGrant_MarkerCountReflectsOnlyTheFiniteOne()
+    public void Apply_FiniteDuration_StoresTheDeadlineItWasGiven()
     {
         var manager = CreateRegisteredManager();
 
         StatModifierEffects.Apply(manager, 0, StatModifierTarget.IncomingDamage, StatModifierOperation.Additive, StatModifierPolarity.Buff,
-            canModify: true, magnitude: -1f, durationFrames: null, StatusEffectSource.Admin);
+            canModify: true, magnitude: -1f, expiresAtFrame: FrameDeadline.After(now: 100, frames: 30), StatusEffectSource.Admin);
+
+        Assert.AreEqual(130u, FirstModifier(manager, 0).ExpiresAtFrame);
+    }
+
+    /// <summary>Grants always stack rather than replacing -- two modifiers on one entity, each with its own deadline (StatModifierExpirySystem is what later removes each on its own frame).</summary>
+    [TestMethod]
+    public void Apply_TwoGrants_BothStoredSeparately()
+    {
+        var manager = CreateRegisteredManager();
+
+        StatModifierEffects.Apply(manager, 0, StatModifierTarget.IncomingDamage, StatModifierOperation.Additive, StatModifierPolarity.Buff,
+            canModify: true, magnitude: -1f, expiresAtFrame: FrameDeadline.Never, StatusEffectSource.Admin);
         StatModifierEffects.Apply(manager, 0, StatModifierTarget.OutgoingDamage, StatModifierOperation.Additive, StatModifierPolarity.Buff,
-            canModify: true, magnitude: 2f, durationFrames: 10, StatusEffectSource.Admin);
+            canModify: true, magnitude: 2f, expiresAtFrame: 10, StatusEffectSource.Admin);
 
         Assert.AreEqual(2, manager.GetMultiPool<StatModifierComponent>().CountForEntity(0));
-        Assert.AreEqual(1, manager.GetMultiPool<ExpiringStatModifierComponent>().CountForEntity(0));
+    }
+
+    /// <summary>Nothing writes the entity's expiry timer at grant time -- StatModifierExpirySystem maintains it from the pool's own change notification, so granting without that system registered is still valid (this manager has no systems at all).</summary>
+    [TestMethod]
+    public void Apply_WithNoExpirySystemRegistered_DoesNotWriteAnExpiryTimer()
+    {
+        var manager = CreateRegisteredManager();
+
+        StatModifierEffects.Apply(manager, 0, StatModifierTarget.IncomingDamage, StatModifierOperation.Additive, StatModifierPolarity.Buff,
+            canModify: true, magnitude: -1f, expiresAtFrame: 30, StatusEffectSource.Admin);
+
+        Assert.IsFalse(manager.GetPackedPool<ExpiringStatModifierComponent>().Has(0));
     }
 }

@@ -101,13 +101,13 @@ public sealed class AbilityScoresModuleTests
         var (ecsContext, entityId) = BuildAndGrantStrength(baseValue: 5);
 
         AbilityScoreEffects.GrantModifier(ecsContext.ComponentManager, entityId, AbilityScoreType.Strength, StatModifierOperation.Additive, StatModifierPolarity.Buff,
-            canModify: true, magnitude: 3f, durationFrames: 1, StatusEffectSource.Admin);
+            canModify: true, magnitude: 3f, expiresAtFrame: 0, StatusEffectSource.Admin);
         Assert.AreEqual((ushort)8, GetStrength(ecsContext, entityId).Total);
 
-        // StatModifierExpirySystem has StripeCount 1 (visits every entity every real frame), so
-        // one Update call ticks the 1-frame modifier to 0 and removes it, publishing
-        // StatModifierExpiredEvent -- which AbilityScoresModule's subscription should react to
-        // by recomputing Total back down.
+        // The modifier's deadline is frame 0, which is the frame this Update runs, so
+        // StatModifierExpirySystem fires it immediately: removed, and StatModifierExpiredEvent
+        // published -- which AbilityScoresModule's subscription should react to by recomputing
+        // Total back down.
         ecsContext.Update(default);
 
         Assert.AreEqual((ushort)5, GetStrength(ecsContext, entityId).Total);

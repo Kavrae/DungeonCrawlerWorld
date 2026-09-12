@@ -1,3 +1,4 @@
+using Engine.ECS.Systems;
 using Engine.ECS.Components;
 using Engine.Math;
 using Game.Modules.AbilityScores;
@@ -72,18 +73,18 @@ public sealed class Goblin(MathUtility mathUtility) : IBlueprint
         }
         ComplexHealthEffects.GrantBodyParts(componentManager, entityId, mathUtility, BodyParts);
         componentManager.Merge(entityId, new MovementComponent(MovementMode.Random, null, null));
-        componentManager.Merge(entityId, new ActionLockComponent(standardLockFrames: 54, currentLockTotalFrames: 0, currentLockFramesRemaining: 0));
+        componentManager.Merge(entityId, new ActionLockComponent(standardLockFrames: 54, currentLockTotalFrames: 0, unlockedAtFrame: 0));
 
         componentManager.Merge(entityId, new TransformComponent(
             new Vector3Int(-1, -1, (int)MapLayer.Ground), new Vector2Byte(1, 1)));
 
         var quickAttackOverride = ActionOverrideEffects.OverrideFlatDamage(QuickAttackAction.Build(), QuickAttackDamage);
-        componentManager.Merge(entityId, new ActionInstanceComponent(QuickAttackAction.Id, quickAttackOverride, cooldownFramesRemaining: 0));
+        componentManager.Merge(entityId, new ActionInstanceComponent(QuickAttackAction.Id, quickAttackOverride));
 
         var powerAttackOverride = ActionOverrideEffects.OverrideFlatDamage(PowerAttackAction.Build(), PowerAttackDamage);
-        componentManager.Merge(entityId, new ActionInstanceComponent(PowerAttackAction.Id, powerAttackOverride, cooldownFramesRemaining: 0));
+        componentManager.Merge(entityId, new ActionInstanceComponent(PowerAttackAction.Id, powerAttackOverride));
 
-        componentManager.Merge(entityId, new ActionInstanceComponent(DodgeAction.Id, overrideDefinition: null, cooldownFramesRemaining: 0));
+        componentManager.Merge(entityId, new ActionInstanceComponent(DodgeAction.Id, overrideDefinition: null));
 
         TemporaryNpcLootGrant.GrantRandomStartingLoot(componentManager, entityId, mathUtility);
         StartingCurrencyGrant.GrantRandomStartingGoldAndCredits(componentManager, entityId, mathUtility);
@@ -91,6 +92,6 @@ public sealed class Goblin(MathUtility mathUtility) : IBlueprint
         AbilityScoreEffects.GrantDefaults(componentManager, entityId, DefaultAbilityScoreBaseValue);
 
         StatModifierEffects.Apply(componentManager, entityId, StatModifierTarget.IncomingDamage, StatModifierOperation.Additive, StatModifierPolarity.Buff,
-            canModify: true, magnitude: DamageReductionAmount, durationFrames: null, StatusEffectSource.Admin);
+            canModify: true, magnitude: DamageReductionAmount, expiresAtFrame: FrameDeadline.Never, StatusEffectSource.Admin);
     }
 }

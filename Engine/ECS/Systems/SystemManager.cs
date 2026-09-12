@@ -21,6 +21,14 @@ public sealed class SystemManager
     /// </summary>
     public int SimulatedTierCount { get; set; } = int.MaxValue;
 
+    /// <summary>
+    /// Advanced to each update's EngineTime.FrameCount before any system runs, so everything that
+    /// reads it during or after that frame sees the frame being simulated. The game replaces this
+    /// default with the instance its modules were configured against (GameBootstrapper) -- the same
+    /// injected-policy shape as SimulatedTierCount. See SimulationClock's own remarks.
+    /// </summary>
+    public SimulationClock Clock { get; set; } = new();
+
     /// <summary>Register a system to be updated each frame.</summary>
     /// <param name="system">The system to register.</param>
     /// <exception cref="ArgumentException">Thrown when the system's StripeCount is zero.</exception>
@@ -46,6 +54,8 @@ public sealed class SystemManager
 
     public void Update(EngineTime time)
     {
+        Clock.Advance(time.FrameCount);
+
         for (var i = 0; i < _systems.Count; i++)
         {
             var (system, stripeIndex) = _systems[i];

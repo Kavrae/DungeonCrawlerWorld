@@ -1,4 +1,4 @@
-﻿using Engine.ECS.Components.Stores;
+using Engine.ECS.Components.Stores;
 using Engine.Events;
 using Game.Modules.Health;
 using Game.Modules.Health.Components;
@@ -23,7 +23,7 @@ public sealed class HealthHealTests
         var pool = CreatePool();
         pool.Add(0, new SimpleHealthComponent(currentHealth: 50, maximumHealth: 100));
 
-        HealthHeal.Apply(pool, 0, 0.1f);
+        HealthHeal.Apply(pool, 0, 0.1f, now: 0);
 
         Assert.AreEqual(60, pool.GetReadonly(0).CurrentHealth);
     }
@@ -34,7 +34,7 @@ public sealed class HealthHealTests
         var pool = CreatePool();
         pool.Add(0, new SimpleHealthComponent(currentHealth: 95, maximumHealth: 100));
 
-        HealthHeal.Apply(pool, 0, 0.5f);
+        HealthHeal.Apply(pool, 0, 0.5f, now: 0);
 
         Assert.AreEqual(100, pool.GetReadonly(0).CurrentHealth);
     }
@@ -44,7 +44,7 @@ public sealed class HealthHealTests
     {
         var pool = CreatePool();
 
-        HealthHeal.Apply(pool, 0, 0.1f);
+        HealthHeal.Apply(pool, 0, 0.1f, now: 0);
     }
 
     [TestMethod]
@@ -54,7 +54,7 @@ public sealed class HealthHealTests
         var bodyParts = new MultiComponentPool<BodyPartComponent>(maximumEntityCount: 10, initialCapacity: 4);
         bodyParts.Add(0, new BodyPartComponent("Torso", BodyPartType.Torso, 0, 0, currentHealth: 50, maximumHealth: 100, isVital: true));
 
-        HealthHeal.Apply(pool, 0, 0.25f, bodyParts: bodyParts);
+        HealthHeal.Apply(pool, 0, 0.25f, bodyParts: bodyParts, now: 0);
 
         Assert.AreEqual(75, bodyParts.GetReadonlyByDenseIndex(bodyParts.GetFirstDenseIndex(0)).CurrentHealth);
     }
@@ -65,7 +65,7 @@ public sealed class HealthHealTests
         var pool = CreatePool();
         var bodyParts = new MultiComponentPool<BodyPartComponent>(maximumEntityCount: 10, initialCapacity: 4);
 
-        HealthHeal.Apply(pool, 0, 0.1f, bodyParts: bodyParts);
+        HealthHeal.Apply(pool, 0, 0.1f, bodyParts: bodyParts, now: 0);
     }
 
     [TestMethod]
@@ -77,7 +77,7 @@ public sealed class HealthHealTests
         EntityHealedEvent? published = null;
         eventBus.Subscribe<EntityHealedEvent>(e => published = e);
 
-        HealthHeal.Apply(pool, 0, 0.1f, eventBus: eventBus, playerQuery: new FakePlayerQuery(0));
+        HealthHeal.Apply(pool, 0, 0.1f, eventBus: eventBus, playerQuery: new FakePlayerQuery(0), now: 0);
 
         Assert.IsNotNull(published);
         Assert.AreEqual(10f, published.Value.Amount);
@@ -94,7 +94,7 @@ public sealed class HealthHealTests
         var published = false;
         eventBus.Subscribe<EntityHealedEvent>(_ => published = true);
 
-        HealthHeal.Apply(pool, 1, 0.1f, sourceEntityId: 2, eventBus: eventBus, playerQuery: new FakePlayerQuery(0));
+        HealthHeal.Apply(pool, 1, 0.1f, sourceEntityId: 2, eventBus: eventBus, playerQuery: new FakePlayerQuery(0), now: 0);
 
         Assert.IsFalse(published);
     }
@@ -105,7 +105,7 @@ public sealed class HealthHealTests
         var pool = CreatePool();
         pool.Add(0, new SimpleHealthComponent(currentHealth: 50, maximumHealth: 100));
 
-        HealthHeal.Apply(pool, 0, 0.1f);
+        HealthHeal.Apply(pool, 0, 0.1f, now: 0);
 
         Assert.AreEqual(60f, pool.GetReadonly(0).CurrentHealth);
     }

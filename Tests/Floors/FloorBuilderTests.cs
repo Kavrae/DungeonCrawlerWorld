@@ -1,4 +1,4 @@
-﻿using Engine.Bootstrap;
+using Engine.Bootstrap;
 using Engine.ECS.Context;
 using Engine.ECS.Systems;
 using Engine.Events;
@@ -87,7 +87,6 @@ public sealed class FloorBuilderTests
         coreItemsModule.Configure(context);
 
         var statusEffectsModule = new StatusEffectsModule();
-        statusEffectsModule.Configure(context);
 
         var containersModule = new ContainersModule();
         containersModule.Configure(context);

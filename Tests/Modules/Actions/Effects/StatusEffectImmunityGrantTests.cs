@@ -1,3 +1,4 @@
+using Engine.ECS.Systems;
 using Engine.ECS.Components;
 using Engine.Events;
 using Engine.Math;
@@ -26,7 +27,7 @@ public sealed class StatusEffectImmunityGrantTests
         MathUtility: new MathUtility(),
         ComponentManager: componentManager,
         ActivatorName: "Test",
-        ActivatorTags: [],
+        ActivatorTags: [], Now: 0,
         StatModifiers: componentManager.GetMultiPool<StatModifierComponent>(),
         DurationScaleMultiplier: durationScaleMultiplier);
 
@@ -57,7 +58,7 @@ public sealed class StatusEffectImmunityGrantTests
 
         var immunity = GetGrantedImmunity(componentManager);
         Assert.AreEqual(StatusEffectType.Burning, immunity.EffectType);
-        Assert.AreEqual((ushort?)100, immunity.RemainingDurationFrames);
+        Assert.AreEqual(100u, immunity.ExpiresAtFrame);
     }
 
     [TestMethod]
@@ -68,7 +69,7 @@ public sealed class StatusEffectImmunityGrantTests
 
         entry.Apply(BuildContext(componentManager));
 
-        Assert.IsNull(GetGrantedImmunity(componentManager).RemainingDurationFrames);
+        Assert.AreEqual(FrameDeadline.Never, GetGrantedImmunity(componentManager).ExpiresAtFrame, "Permanent.");
     }
 
     [TestMethod]
@@ -79,7 +80,7 @@ public sealed class StatusEffectImmunityGrantTests
 
         entry.Apply(BuildContext(componentManager, durationScaleMultiplier: 4.0f));
 
-        Assert.AreEqual((ushort?)400, GetGrantedImmunity(componentManager).RemainingDurationFrames);
+        Assert.AreEqual(400u, GetGrantedImmunity(componentManager).ExpiresAtFrame);
     }
 
     [TestMethod]
@@ -87,11 +88,11 @@ public sealed class StatusEffectImmunityGrantTests
     {
         var componentManager = Build();
         componentManager.GetMultiPool<StatModifierComponent>().Add(TargetEntityId, new StatModifierComponent(
-            StatModifierTarget.IncomingBuffDuration, StatModifierOperation.Multiplicative, StatModifierPolarity.Buff, canModify: false, magnitude: 0.5f, remainingDurationFrames: null, StatusEffectSource.FromEntity(TargetEntityId)));
+            StatModifierTarget.IncomingBuffDuration, StatModifierOperation.Multiplicative, StatModifierPolarity.Buff, canModify: false, magnitude: 0.5f, expiresAtFrame: FrameDeadline.Never, StatusEffectSource.FromEntity(TargetEntityId)));
         var entry = new StatusEffectImmunityGrant(StatusEffectType.Burning, DurationFrames: 100);
 
         entry.Apply(BuildContext(componentManager));
 
-        Assert.AreEqual((ushort?)150, GetGrantedImmunity(componentManager).RemainingDurationFrames, "100 * (1 + 0.5) = 150 -- immunity is a Buff, so IncomingBuffDuration applies (not IncomingDebuffDuration).");
+        Assert.AreEqual(150u, GetGrantedImmunity(componentManager).ExpiresAtFrame, "100 * (1 + 0.5) = 150 -- immunity is a Buff, so IncomingBuffDuration applies (not IncomingDebuffDuration).");
     }
 }

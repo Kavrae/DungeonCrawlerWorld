@@ -27,7 +27,7 @@ namespace Game.Modules.Health;
 /// none wired in is a no-op, unlike HealthDamage.Apply's hard throw -- heal's default mode is All,
 /// which never needs it, so mathUtility is optional here rather than a real construction bug.
 /// Both apply-to-part paths clear IsDisabled the instant a part's CurrentHealth ticks back above
-/// 0, and never check RegenLockoutFramesRemaining -- that lockout only ever gates passive regen,
+/// 0, and never check RegenLockedUntilFrame -- that lockout only ever gates passive regen,
 /// never an active heal. Each publishes one aggregate EntityHealedEvent for the whole heal (via
 /// HealthHeal.PublishHealEvent, reusing HealthQueries.TryGetTotals for the entity's real summed
 /// current/max) rather than one per part.
@@ -81,12 +81,13 @@ public static class ComplexHealthHeal
         BodyPartTargetRule? targetRule,
         BodyPartTargetMode targetMode,
         MathUtility? mathUtility,
+        long now,
         MultiComponentPool<BodyPartBurningTimerComponent>? bodyPartBurningTimers = null,
         EventBus? eventBus = null,
         IPlayerQuery? playerQuery = null,
         string healType = "Heal")
     {
-        var denseIndex = ResolveDenseIndex(bodyParts, entityId, statModifiers, targetRule, targetMode, mathUtility, bodyPartBurningTimers);
+        var denseIndex = ResolveDenseIndex(bodyParts, entityId, statModifiers, targetRule, targetMode, mathUtility, now, bodyPartBurningTimers);
         if (denseIndex == -1 || !HealthQueries.TryGetEffectiveMaximum(health, bodyParts, statModifiers, entityId, out var effectiveMaximumHealth))
         {
             return;
@@ -98,11 +99,11 @@ public static class ComplexHealthHeal
         PublishAggregateHealEvent(bodyParts, health, eventBus, playerQuery, entityId, sourceEntityId, amount, healType, statModifiers);
     }
 
-    private static int ResolveDenseIndex(MultiComponentPool<BodyPartComponent> bodyParts, int entityId, MultiComponentPool<StatModifierComponent>? statModifiers, BodyPartTargetRule? targetRule, BodyPartTargetMode targetMode, MathUtility? mathUtility, MultiComponentPool<BodyPartBurningTimerComponent>? bodyPartBurningTimers)
+    private static int ResolveDenseIndex(MultiComponentPool<BodyPartComponent> bodyParts, int entityId, MultiComponentPool<StatModifierComponent>? statModifiers, BodyPartTargetRule? targetRule, BodyPartTargetMode targetMode, MathUtility? mathUtility, long now, MultiComponentPool<BodyPartBurningTimerComponent>? bodyPartBurningTimers)
     {
         if (targetMode == BodyPartTargetMode.LowestPercentage)
         {
-            return BodyPartSelection.PickLowestPercentage(bodyParts, entityId, statModifiers, bodyPartBurningTimers);
+            return BodyPartSelection.PickLowestPercentage(bodyParts, entityId, now, statModifiers, bodyPartBurningTimers);
         }
 
         if (mathUtility is null)

@@ -4,17 +4,23 @@ using Game.Modules.StatusEffects;
 namespace Game.Modules.Paralysis.Components;
 
 /// <summary>
-/// Present on an entity only while Paralysis is active -- added on grant, removed once the
-/// countdown reaches 0 (see ParalysisSystem). FramesUntilNextTick doubles as "frames until
-/// Paralysis expires": unlike Burning/Poison there's no repeating action to fire partway
-/// through, so CountdownTicker.Tick's onTick fires exactly once, at expiry, and always returns
-/// true (remove).
+/// Present on an entity only while Paralysis is active -- added on grant, removed on the frame it
+/// expires (see ParalysisSystem). Unlike Burning/Poison there's no repeating action partway
+/// through, so its one timer-wheel firing is the expiry.
 /// </summary>
-public struct ParalysisTimerComponent(ushort framesUntilNextTick) : ITickCountdown, IStatusEffectStackCount
+/// <param name="expiresAtFrame">The simulation frame Paralysis ends on -- FrameDeadline.After(now, duration).</param>
+public struct ParalysisTimerComponent(uint expiresAtFrame) : IScheduledTimer, IStatusEffectStackCount
 {
-    public ushort FramesUntilNextTick { get; set; } = framesUntilNextTick;
+    private uint _timerWheelMark;
+
+    /// <summary>The simulation frame Paralysis ends on.</summary>
+    public uint ExpiresAtFrame { get; set; } = expiresAtFrame;
 
     public readonly byte StackCount => 1;
 
-    public override readonly string ToString() => $"FramesUntilNextTick : {FramesUntilNextTick}\nStackCount : {StackCount}";
+    uint IScheduledTimer.NextTickFrame { readonly get => ExpiresAtFrame; set => ExpiresAtFrame = value; }
+
+    uint IScheduledTimer.TimerWheelMark { readonly get => _timerWheelMark; set => _timerWheelMark = value; }
+
+    public override readonly string ToString() => $"ExpiresAtFrame : {ExpiresAtFrame}\nStackCount : {StackCount}";
 }

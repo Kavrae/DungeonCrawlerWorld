@@ -1,6 +1,4 @@
 using Engine.ECS.Components.Stores;
-using Game.Modules.ProcessingTier;
-using Game.Modules.ProcessingTier.Components;
 using Engine.ECS.Systems;
 using Game.Modules.Actions.Activators;
 using Game.Modules.Actions.Systems;
@@ -12,67 +10,76 @@ public sealed class PotionCooldownSystemTests
 {
     private const int EntityId = 1;
 
+    private static EngineTime Frame(long frame) => new(default, default, false, frame);
+
     private static (PotionCooldownSystem System, PackedComponentPool<PotionCooldownComponent> Cooldowns) Build()
     {
         var cooldowns = new PackedComponentPool<PotionCooldownComponent>(maximumEntityCount: 10, initialCapacity: 4, static (ref existing, incoming) => existing = incoming);
-        // Every id these tests use, seeded Local -- an entity with no ProcessingTierComponent
-        // resolves to Beyond (see ProcessingTierWiring), whose far coarser cadence would put it in
-        // a bucket no single-Update test reaches.
-        var processingTiers = new DirectComponentPool<ProcessingTierComponent>(initialCapacity: 10, static (ref existing, incoming) => existing = incoming);
-        for (var entityId = 0; entityId < 10; entityId++)
-        {
-            processingTiers.Add(entityId, new ProcessingTierComponent(ProcessingTierLevel.Local));
-        }
-        return (new PotionCooldownSystem(cooldowns, processingTiers, new ProcessingTierEvents()), cooldowns);
-    }
-
-    /// <summary>EntityId is 1, so it lands in bucket 1 and is only due when FrameCount leaves remainder 1 -- FrameCount 0 (the `default` EngineTime other tests here use) reaches bucket 0 instead. This system was StripeCount 1 and untiered until it turned out to be one of the largest costs in the simulation; see its own doc comment.</summary>
-    [TestMethod]
-    public void Update_TicksFramesRemainingDownByFramesPerVisit()
-    {
-        var (system, cooldowns) = Build();
-        cooldowns.Add(EntityId, new PotionCooldownComponent(totalFrames: 1200, framesRemaining: 1200));
-
-        system.Update(new EngineTime(default, default, false, FrameCount: EntityId), 0);
-
-        Assert.AreEqual(1200 - system.StripeCount, cooldowns.GetReadonly(EntityId).FramesRemaining);
+        return (new PotionCooldownSystem(cooldowns), cooldowns);
     }
 
     [TestMethod]
-    public void Update_FramesRemainingReachesZero_RemovesTheComponent()
+    public void BeforeItsExpiryFrame_CooldownStays()
     {
         var (system, cooldowns) = Build();
-        cooldowns.Add(EntityId, new PotionCooldownComponent(totalFrames: 1200, framesRemaining: 1));
+        cooldowns.Add(EntityId, new PotionCooldownComponent(totalFrames: 1200, expiresAtFrame: 1200));
 
-        system.Update(new EngineTime(default, default, false, FrameCount: EntityId), 0);
+        system.Update(Frame(1199), 0);
+
+        Assert.IsTrue(cooldowns.Has(EntityId));
+        Assert.AreEqual(1, PotionCooldownEffects.FramesRemaining(cooldowns.GetReadonly(EntityId), now: 1199));
+    }
+
+    [TestMethod]
+    public void OnItsExpiryFrame_CooldownIsRemoved()
+    {
+        var (system, cooldowns) = Build();
+        cooldowns.Add(EntityId, new PotionCooldownComponent(totalFrames: 1200, expiresAtFrame: 1200));
+
+        system.Update(Frame(1200), 0);
 
         Assert.IsFalse(cooldowns.Has(EntityId));
     }
 
     [TestMethod]
-    public void Update_NoEntitiesWithCooldown_DoesNotThrow()
+    public void NoEntitiesWithCooldown_DoesNotThrow()
     {
         var (system, _) = Build();
 
         system.Update(default, 0);
     }
 
+    /// <summary>Each cooldown ends on its own frame, independent of any other -- no stripe buckets, no shared cadence.</summary>
     [TestMethod]
-    /// <summary>Entities 1 and 2 land in different stripe buckets now that this system is tiered, so each needs its own due frame -- one Update no longer reaches both. The independence being asserted (each countdown advancing only on its own visits) is unchanged.</summary>
-    public void Update_MultipleEntities_EachTickedIndependently()
+    public void MultipleEntities_EachEndsOnItsOwnFrame()
     {
         var (system, cooldowns) = Build();
-        cooldowns.Add(1, new PotionCooldownComponent(totalFrames: 1200, framesRemaining: 500));
-        cooldowns.Add(2, new PotionCooldownComponent(totalFrames: 1200, framesRemaining: 1));
+        cooldowns.Add(1, new PotionCooldownComponent(totalFrames: 1200, expiresAtFrame: 500));
+        cooldowns.Add(2, new PotionCooldownComponent(totalFrames: 1200, expiresAtFrame: 2));
 
-        system.Update(new EngineTime(default, default, false, FrameCount: 1), 0);
+        system.Update(Frame(2), 0);
 
-        Assert.AreEqual(500 - system.StripeCount, cooldowns.GetReadonly(1).FramesRemaining);
-        Assert.IsTrue(cooldowns.Has(2), "Entity 2 is in a different bucket -- frame 1 is not its due frame.");
-
-        system.Update(new EngineTime(default, default, false, FrameCount: 2), 0);
-
-        Assert.AreEqual(500 - system.StripeCount, cooldowns.GetReadonly(1).FramesRemaining, "Entity 1 must not advance on entity 2's due frame.");
+        Assert.IsTrue(cooldowns.Has(1));
         Assert.IsFalse(cooldowns.Has(2));
+
+        system.Update(Frame(500), 0);
+
+        Assert.IsFalse(cooldowns.Has(1));
+    }
+
+    /// <summary>Drinking again resets the cooldown through a Merge -- the system follows the new frame on its own, and the superseded one doesn't remove the fresh cooldown early.</summary>
+    [TestMethod]
+    public void ResetMidway_EndsAtTheNewFrameOnly()
+    {
+        var (system, cooldowns) = Build();
+        cooldowns.Add(EntityId, new PotionCooldownComponent(totalFrames: 1200, expiresAtFrame: 300));
+        system.Update(Frame(100), 0);
+
+        cooldowns.Merge(EntityId, new PotionCooldownComponent(totalFrames: 1200, expiresAtFrame: 1300));
+        system.Update(Frame(300), 0);
+        Assert.IsTrue(cooldowns.Has(EntityId));
+
+        system.Update(Frame(1300), 0);
+        Assert.IsFalse(cooldowns.Has(EntityId));
     }
 }

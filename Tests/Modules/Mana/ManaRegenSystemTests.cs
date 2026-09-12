@@ -112,7 +112,7 @@ public sealed class ManaRegenSystemTests
         abilityScores.Add(0, new AbilityScoreComponent(AbilityScoreType.Intelligence, baseValue: 1, total: 1));
         var statModifiers = new MultiComponentPool<StatModifierComponent>(maximumEntityCount: 10, initialCapacity: 4);
         statModifiers.Add(0, new StatModifierComponent(StatModifierTarget.ManaRegen, StatModifierOperation.Additive, StatModifierPolarity.Debuff,
-            canModify: false, magnitude: -100000f, remainingDurationFrames: null, StatusEffectSource.Admin));
+            canModify: false, magnitude: -100000f, expiresAtFrame: FrameDeadline.Never, StatusEffectSource.Admin));
         var system = new ManaRegenSystem(pool, CreateTiersPool(), new ProcessingTierEvents(), statModifiers: statModifiers, abilityScores: abilityScores);
 
         system.Update(default, 0);

@@ -18,19 +18,19 @@ public sealed class GameLoop : Microsoft.Xna.Framework.Game
     // grown via doubling. EntityManager/ComponentManager both grow automatically on demand,
     // but at this scale that's dozens of full-array reallocate-and-copy passes during
     // Populate instead of (close to) none.
-    private const int InitialEntityCapacity = 2_600_000;
-    private const int InitialComponentCapacity = 220_000;
+    internal const int InitialEntityCapacity = 2_600_000;
+    internal const int InitialComponentCapacity = 220_000;
 
     // Floor 1 of (eventually) 18 -- floors are strictly sequential, no skipping or
     // backtracking. There's no advance trigger yet (that needs a win-condition system that
     // doesn't exist), so this stays a constant rather than tracked state until something
     // actually needs to change it.
-    private const int FloorNumber = 1;
+    internal const int FloorNumber = 1;
 
     // Range for CrawlerComponent.CrawlerNumber -- GameLoop's choice, not UniqueNumberAllocator's
     // own (a generic Engine.Math utility), since that range is Crawler-specific.
-    private const int MinCrawlerNumber = 1;
-    private const int MaxCrawlerNumber = 13_000_000;
+    internal const int MinCrawlerNumber = 1;
+    internal const int MaxCrawlerNumber = 13_000_000;
 
     private readonly GraphicsDeviceManager _graphics;
 
@@ -173,7 +173,7 @@ public sealed class GameLoop : Microsoft.Xna.Framework.Game
         base.Draw(gameTime);
     }
 
-    private static string FindProjectRoot()
+    internal static string FindProjectRoot()
     {
         var directory = new DirectoryInfo(AppContext.BaseDirectory);
         while (directory is not null && !File.Exists(Path.Combine(directory.FullName, "DungeonCrawlerWorld.sln")))

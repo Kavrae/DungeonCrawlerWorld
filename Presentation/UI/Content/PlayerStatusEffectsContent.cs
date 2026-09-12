@@ -1,5 +1,6 @@
 using Engine.ECS.Components;
 using Engine.ECS.Components.Stores;
+using Engine.ECS.Systems;
 using FontStashSharp;
 using Game.Modules.Actions.Activators;
 using Game.Modules.Inventory;
@@ -28,8 +29,11 @@ namespace Presentation.UI.Content;
 /// (not overlaid on top of it -- that read as visual clutter against the glyph) instead of a
 /// stack count.
 /// </summary>
-public sealed class PlayerStatusEffectsContent(World world, ComponentManager componentManager, ItemCatalog itemCatalog, FontService fontService, StatusEffectDisplayRegistry statusEffectDisplays) : IElementContent
+public sealed class PlayerStatusEffectsContent(World world, ComponentManager componentManager, ItemCatalog itemCatalog, FontService fontService, StatusEffectDisplayRegistry statusEffectDisplays, SimulationClock? simulationClock = null) : IElementContent
 {
+    /// <summary>"Now" for the potion cooldown's remaining seconds -- it stores an absolute deadline. Optional only so tests needn't build one; the shell always passes the simulation's real clock.</summary>
+    private readonly SimulationClock _simulationClock = simulationClock ?? new SimulationClock();
+
     public static readonly Vector2 Size = new(PlayerHealthBarContent.Size.X, HudChrome.EntrySize.Y / 2f * 1.5f);
 
     private const float IconSpacing = 1f;
@@ -44,7 +48,7 @@ public sealed class PlayerStatusEffectsContent(World world, ComponentManager com
     private readonly Dictionary<StatusEffectType, int> _stackCountsByType = [];
 
     private bool _hasPotionCooldown;
-    private ushort _potionCooldownFramesRemaining;
+    private int _potionCooldownFramesRemaining;
 
     private Window _hostWindow = null!;
     private SpriteFontBase _font = null!;
@@ -83,8 +87,10 @@ public sealed class PlayerStatusEffectsContent(World world, ComponentManager com
             }
         }
 
-        _hasPotionCooldown = _potionCooldowns.TryGetReadonly(playerEntityId, out var potionCooldown) && potionCooldown.FramesRemaining > 0;
-        _potionCooldownFramesRemaining = _hasPotionCooldown ? potionCooldown.FramesRemaining : (ushort)0;
+        _potionCooldownFramesRemaining = _potionCooldowns.TryGetReadonly(playerEntityId, out var potionCooldown)
+            ? PotionCooldownEffects.FramesRemaining(potionCooldown, _simulationClock.CurrentFrame)
+            : 0;
+        _hasPotionCooldown = _potionCooldownFramesRemaining > 0;
     }
 
     public void DrawContent(GameTime gameTime)
@@ -124,7 +130,7 @@ public sealed class PlayerStatusEffectsContent(World world, ComponentManager com
         }
     }
 
-    private void DrawPotionCooldownIcon(SpriteBatch spriteBatch, Texture2D unitRectangle, Vector2 origin, Vector2 size, ushort framesRemaining)
+    private void DrawPotionCooldownIcon(SpriteBatch spriteBatch, Texture2D unitRectangle, Vector2 origin, Vector2 size, int framesRemaining)
     {
         DrawIconBackground(spriteBatch, unitRectangle, origin, size);
 

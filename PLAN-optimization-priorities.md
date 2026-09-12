@@ -372,6 +372,15 @@ A full sweep found three more defects of the same family as A/E and closed them.
   `ActionLockSystem` owns and decrements. Reading a countdown is not owning one.
 - `ProcessingTierSystem` -- pure tier recompute.
 
+> **This inventory is a snapshot from before `PLAN-timer-wheel.md`.** Of the systems listed above,
+> `ActionCooldownSystem` and `ActionLockSystem` no longer exist (both are deadlines now), and
+> `AuraSourceExpirySystem`, `BodyPartBurningSystem`, `BurningSystem`, `ContactDamageSystem`,
+> `DelayedActionSystem`, `ParalysisSystem`, `PoisonSystem`, `PotionCooldownSystem`,
+> `StatModifierExpirySystem`, `StatusEffectImmunityExpirySystem` and `StatusEffectAuraSystem`'s
+> exposure pass are all plain `ISystem`s on timer wheels, fired by deadline rather than visited on a
+> tier cadence. The frames-per-visit compensation rule still governs whatever remains tiered
+> (`MovementSystem`, `ComplexHealthRegenSystem`, the regen systems, `TestCombatBehaviorSystem`).
+
 **Deliberately not tiered (6), each now documented at its own site:**
 - `DodgeExpirySystem` -- flat StripeCount 1. Dodge is a 0.5-1s precision window; coarse steps
   would blur the thing it measures. The one timed system left untiered.
@@ -410,6 +419,11 @@ A full sweep found three more defects of the same family as A/E and closed them.
 
 Not a performance item on its own, but it is what makes P2 and P3 hard to reason about.
 
+> **Resolved by `PLAN-timer-wheel.md` (step 9, 2026-09-11).** Both mechanisms named below are
+> deleted. Every timer is a deadline now: one that fires goes on a timer wheel, one that merely
+> stops gating is a plain field comparison. The "two countdown mechanisms, three scheduling
+> mechanisms" problem this section describes no longer exists.
+
 **Two countdown mechanisms.** `CountdownTicker`/`MultiCountdownTicker` is used by 8 systems.
 Five others hand-roll the same logic with `MathUtility.DecrementClamped`: `ActionCooldownSystem`,
 `ActionLockSystem`, `DodgeExpirySystem`, `MovementSystem`, `TestCombatBehaviorSystem`. The two
@@ -429,6 +443,20 @@ audit the 27 systems against it. The table produced while researching this docum
 having it maintained rather than re-derived is most of the value.
 
 **Payoff:** none directly; unblocks P2 and P3. **Risk:** none.
+
+### DONE (2026-09-11): both halves
+
+- **Scheduling:** `ITieredSystem`, with the tier loop owned by `SystemManager`; the decision rule
+  is in CLAUDE.md and the scheduling audit above.
+- **Countdowns:** converged onto two Engine helpers split by what reaching 0 means --
+  `RestingCountdown` (`IRestingCountdown`: ActionLock, ActionCooldown, Movement `FramesToWait`,
+  body-part regen lockout) and `CountdownTicker`/`MultiCountdownTicker` (`ITickCountdown`, now
+  including Dodge). `StatModifierExpirySystem` and `StatusEffectImmunityExpirySystem` still
+  hand-rolled theirs (nullable durations) at the time; both were converted to absolute deadlines on
+  the timer wheel at step 6 of `PLAN-timer-wheel.md`, and neither is tiered any more.
+- **P2 item 3 answered:** ActionLock and ActionCooldown visit the *same* ~300 entities/frame; cost
+  tracks entities visited plus writes, not instance count, and ActionCooldown's visits find a
+  running cooldown 0.01% of the time. P2 proper continues in `PLAN-timer-wheel.md`.
 
 ---
 

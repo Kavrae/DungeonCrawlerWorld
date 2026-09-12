@@ -70,7 +70,8 @@ public static class BodyPartSelection
 
     /// <summary>Picks entityId's body part with the lowest CurrentHealth/effective-MaximumHealth fraction, skipping any part still inside its post-disable lockout window or currently burning (bodyPartBurningTimers).</summary>
     /// <remarks>
-    /// The yo-yo-prevention case RegenLockoutFramesRemaining exists for. Its only caller is
+    /// The yo-yo-prevention case RegenLockedUntilFrame exists for -- a deadline compared against
+    /// `now` here, which is the only place in the game that consults it. Its only caller is
     /// ComplexHealthRegenSystem's own passive-regen tick -- an active heal (potion/scroll) never
     /// goes through this method at all, see ComplexHealthHeal.ApplyFractionToAllParts, which heals
     /// every part at once rather than picking one, so there is no "should this ignore the lockout"
@@ -89,6 +90,7 @@ public static class BodyPartSelection
     public static int PickLowestPercentage(
         MultiComponentPool<BodyPartComponent> bodyParts,
         int entityId,
+        long now,
         MultiComponentPool<StatModifierComponent>? statModifiers = null,
         MultiComponentPool<BodyPartBurningTimerComponent>? bodyPartBurningTimers = null)
     {
@@ -98,7 +100,7 @@ public static class BodyPartSelection
         for (var denseIndex = bodyParts.GetFirstDenseIndex(entityId); denseIndex != -1; denseIndex = bodyParts.GetNextDenseIndex(denseIndex))
         {
             ref readonly var part = ref bodyParts.GetReadonlyByDenseIndex(denseIndex);
-            if (part.RegenLockoutFramesRemaining > 0)
+            if (part.IsRegenLockedOut(now))
             {
                 continue;
             }

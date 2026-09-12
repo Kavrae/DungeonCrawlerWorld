@@ -93,7 +93,6 @@ public sealed class BlueprintTests
         coreItemsModule.Configure(context);
 
         var statusEffectsModule = new StatusEffectsModule();
-        statusEffectsModule.Configure(context);
 
         var containersModule = new ContainersModule();
         containersModule.Configure(context);
@@ -564,7 +563,7 @@ public sealed class BlueprintTests
         var ecsContext = BuildEcsContext();
         var entityId = ecsContext.EntityManager.CreateEntity();
         ecsContext.ComponentManager.GetPackedPool<MovementComponent>().Add(entityId, new MovementComponent(MovementMode.Random, null, null));
-        ecsContext.ComponentManager.GetPackedPool<ActionLockComponent>().Add(entityId, new ActionLockComponent(standardLockFrames: 15, currentLockTotalFrames: 0, currentLockFramesRemaining: 0));
+        ecsContext.ComponentManager.GetPackedPool<ActionLockComponent>().Add(entityId, new ActionLockComponent(standardLockFrames: 15, currentLockTotalFrames: 0, unlockedAtFrame: 0));
 
         new Engineer().Build(ecsContext.ComponentManager, entityId);
 
@@ -585,7 +584,7 @@ public sealed class BlueprintTests
         // nothing -- the class still functions when composed (or used) without a race.
         var actionLock = ecsContext.ComponentManager.GetPackedPool<ActionLockComponent>().GetReadonly(entityId);
         Assert.AreEqual((ushort)60, actionLock.StandardLockFrames);
-        Assert.AreEqual((ushort)0, actionLock.CurrentLockFramesRemaining);
+        Assert.AreEqual(0u, actionLock.UnlockedAtFrame);
         Assert.IsTrue(ecsContext.ComponentManager.GetMultiPool<ClassComponent>().Has(entityId));
     }
 

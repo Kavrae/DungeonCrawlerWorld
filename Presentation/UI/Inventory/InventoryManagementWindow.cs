@@ -48,7 +48,8 @@ public sealed class InventoryManagementWindow(
     World world,
     ContextMenuController contextMenuController,
     MapViewState mapViewState,
-    EventBus? eventBus = null) : Window(fontService, elementPoolService, labelRenderer), IWholeWindowDropTarget
+    EventBus? eventBus = null,
+    Engine.ECS.Systems.SimulationClock? simulationClock = null) : Window(fontService, elementPoolService, labelRenderer), IWholeWindowDropTarget
 {
     private TabbedContent _tabbedContent = null!;
     private CurrencyRowContent _currencyRowContent = null!;
@@ -138,7 +139,7 @@ public sealed class InventoryManagementWindow(
 
     private InventoryTabContent CreateTabContent(Tag? filterTag)
     {
-        var gridContent = new InventoryGridContent(world, componentManager, itemCatalog, elementPoolService, fontService, labelRenderer, spriteSheetService, spriteRenderer, contextMenuController, _entityId, filterTag, _tooltipController, _getSecondaryTargetEntityId, mapViewState, _onItemSelected, _onCompareRequested, _onActivateRequested);
+        var gridContent = new InventoryGridContent(world, componentManager, itemCatalog, elementPoolService, fontService, labelRenderer, spriteSheetService, spriteRenderer, contextMenuController, _entityId, filterTag, _tooltipController, _getSecondaryTargetEntityId, mapViewState, _onItemSelected, _onCompareRequested, _onActivateRequested, simulationClock: simulationClock);
         return new InventoryTabContent(elementPoolService, fontService, labelRenderer, gridContent);
     }
 }

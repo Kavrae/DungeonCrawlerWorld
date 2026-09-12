@@ -45,18 +45,18 @@ public sealed class Fairy(MathUtility mathUtility) : IBlueprint
         componentManager.Merge(entityId, new GlyphComponent("f", Color.DeepPink));
         componentManager.Merge(entityId, new SimpleHealthComponent((ushort)mathUtility.Next(1, MaximumHealth + 1), MaximumHealth));
         componentManager.Merge(entityId, new MovementComponent(MovementMode.Random, null, null));
-        componentManager.Merge(entityId, new ActionLockComponent(standardLockFrames: 48, currentLockTotalFrames: 0, currentLockFramesRemaining: 0));
+        componentManager.Merge(entityId, new ActionLockComponent(standardLockFrames: 48, currentLockTotalFrames: 0, unlockedAtFrame: 0));
 
         componentManager.Merge(entityId, new TransformComponent(
             new Vector3Int(0, 0, (int)MapLayer.Flying), new Vector2Byte(1, 1)));
 
         var quickAttackOverride = ActionOverrideEffects.OverrideFlatDamage(QuickAttackAction.Build(), QuickAttackDamage);
-        componentManager.Merge(entityId, new ActionInstanceComponent(QuickAttackAction.Id, quickAttackOverride, cooldownFramesRemaining: 0));
+        componentManager.Merge(entityId, new ActionInstanceComponent(QuickAttackAction.Id, quickAttackOverride));
 
         var powerAttackOverride = ActionOverrideEffects.OverrideFlatDamage(PowerAttackAction.Build(), PowerAttackDamage);
-        componentManager.Merge(entityId, new ActionInstanceComponent(PowerAttackAction.Id, powerAttackOverride, cooldownFramesRemaining: 0));
+        componentManager.Merge(entityId, new ActionInstanceComponent(PowerAttackAction.Id, powerAttackOverride));
 
-        componentManager.Merge(entityId, new ActionInstanceComponent(DodgeAction.Id, overrideDefinition: null, cooldownFramesRemaining: 0));
+        componentManager.Merge(entityId, new ActionInstanceComponent(DodgeAction.Id, overrideDefinition: null));
 
         TemporaryNpcLootGrant.GrantRandomStartingLoot(componentManager, entityId, mathUtility);
         StartingCurrencyGrant.GrantRandomStartingGoldAndCredits(componentManager, entityId, mathUtility);

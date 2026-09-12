@@ -55,7 +55,7 @@ public sealed class Human(MathUtility mathUtility) : IBlueprint
         ComplexHealthEffects.GrantBodyParts(componentManager, entityId, mathUtility, BodyParts);
 
         componentManager.Merge(entityId, new MovementComponent(MovementMode.Random, null, null));
-        componentManager.Merge(entityId, new ActionLockComponent(standardLockFrames: 30, currentLockTotalFrames: 0, currentLockFramesRemaining: 0));
+        componentManager.Merge(entityId, new ActionLockComponent(standardLockFrames: 30, currentLockTotalFrames: 0, unlockedAtFrame: 0));
         componentManager.Merge(entityId, new TransformComponent(new Vector3Int(-1, -1, (int)MapLayer.Ground), new Vector2Byte(1, 1)));
 
         foreach (var abilityScoreType in Enum.GetValues<AbilityScoreType>())
@@ -65,9 +65,9 @@ public sealed class Human(MathUtility mathUtility) : IBlueprint
 
         // overrideDefinition: null -- no per-instance override, so QuickAttack/PowerAttack roll
         // their catalog DirectDamage's own Min/MaxFlatDamage range instead of a fixed number.
-        ActionGrantEffects.Grant(componentManager, entityId, QuickAttackAction.Id, manaCost: 0, overrideDefinition: null, cooldownFramesRemaining: 0);
-        ActionGrantEffects.Grant(componentManager, entityId, PowerAttackAction.Id, manaCost: 0, overrideDefinition: null, cooldownFramesRemaining: 0);
-        ActionGrantEffects.Grant(componentManager, entityId, DodgeAction.Id, manaCost: 0, overrideDefinition: null, cooldownFramesRemaining: 0);
+        ActionGrantEffects.Grant(componentManager, entityId, QuickAttackAction.Id, manaCost: 0, overrideDefinition: null);
+        ActionGrantEffects.Grant(componentManager, entityId, PowerAttackAction.Id, manaCost: 0, overrideDefinition: null);
+        ActionGrantEffects.Grant(componentManager, entityId, DodgeAction.Id, manaCost: 0, overrideDefinition: null);
     }
 
     /// <summary>Two Next(1,6) rolls summed -- range [2,10] per the spec, clustering around the middle rather than uniform across the whole range. Exact shape isn't load-bearing since level-up moves these later.</summary>

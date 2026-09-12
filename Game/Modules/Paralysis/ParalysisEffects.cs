@@ -1,4 +1,5 @@
 using Engine.ECS.Components;
+using Engine.ECS.Systems;
 using Engine.Events;
 using Engine.Utilities;
 using Game.Modules.Core.Components;
@@ -30,11 +31,12 @@ public static class ParalysisEffects
 
     /// <summary>
     /// No-ops entirely if entityId is currently immune to Paralysis (StatusEffectImmunity).
-    /// Otherwise not a stacking effect -- reapplying while already active refreshes
-    /// FramesUntilNextTick to the greater of what it already was and DurationFrames (never
-    /// additive, same rule PoisonEffects.ApplyStack uses for its own duration).
+    /// Otherwise not a stacking effect -- reapplying while already active pushes the expiry out to
+    /// the later of what it already was and DurationFrames from now (never additive, same rule
+    /// PoisonEffects.ApplyStack uses for its own duration).
     /// </summary>
-    public static void Apply(ComponentManager componentManager, int entityId, StatusEffectSource source, EventBus? eventBus = null, IPlayerQuery? playerQuery = null)
+    /// <param name="now">The simulation frame Paralysis is applied on.</param>
+    public static void Apply(ComponentManager componentManager, int entityId, StatusEffectSource source, long now, EventBus? eventBus = null, IPlayerQuery? playerQuery = null)
     {
         if (StatusEffectImmunity.IsImmune(componentManager, entityId, StatusEffectType.Paralysis, source, eventBus, playerQuery))
         {
@@ -42,17 +44,18 @@ public static class ParalysisEffects
         }
 
         var timers = componentManager.GetPackedPool<ParalysisTimerComponent>();
+        var expiresAtFrame = FrameDeadline.After(now, DurationFrames);
 
         if (timers.Has(entityId))
         {
-            timers.TryUpdate(entityId, static (ref ParalysisTimerComponent t) =>
-                t.FramesUntilNextTick = Math.Max(t.FramesUntilNextTick, DurationFrames));
+            timers.TryUpdate(entityId, expiresAtFrame, static (ref ParalysisTimerComponent t, uint expires) =>
+                t.ExpiresAtFrame = Math.Max(t.ExpiresAtFrame, expires));
         }
         else
         {
-            timers.Add(entityId, new ParalysisTimerComponent(DurationFrames));
+            timers.Add(entityId, new ParalysisTimerComponent(expiresAtFrame));
         }
 
-        ActionLockGate.Lock(componentManager.GetPackedPool<ActionLockComponent>(), entityId, DurationFrames);
+        ActionLockGate.Lock(componentManager.GetPackedPool<ActionLockComponent>(), entityId, now, DurationFrames);
     }
 }

@@ -1,5 +1,6 @@
 using Engine.ECS.Components;
 using Engine.ECS.Components.Stores;
+using Engine.ECS.Systems;
 using Engine.Utilities;
 using FontStashSharp;
 using Game.Modules;
@@ -50,10 +51,16 @@ public sealed class HealthWindow(
     LabelRenderer labelRenderer,
     ComponentManager componentManager,
     StatusEffectDisplayRegistry statusEffectDisplays,
-    ItemCatalog itemCatalog)
+    ItemCatalog itemCatalog,
+    SimulationClock? simulationClock = null)
     : Window(fontService, elementPoolService, labelRenderer)
 {
     private static readonly Color BodyTextColor = Color.White;
+
+    /// <summary>"Now" for every remaining-duration line -- timers store absolute deadlines. Optional only so tests that never show a duration needn't build one; the shell always passes the simulation's real clock.</summary>
+    private readonly SimulationClock _simulationClock = simulationClock ?? new SimulationClock();
+
+    private long Now => _simulationClock.CurrentFrame;
 
     private const float RowHeight = 18f;
     private const float BarHeight = 14f;
@@ -163,10 +170,10 @@ public sealed class HealthWindow(
         BuildColumns();
         RebuildContent();
         StatusEffectQueries.GetActiveEffectTypes(statusEffectDisplays, componentManager, _entityId, _previousActiveEffectTypes);
-        BuildBurningPartIds(_previousActiveBurningPartIds, _bodyParts, _bodyPartBurningTimers, _entityId);
+        BuildBurningPartIds(_previousActiveBurningPartIds, _bodyParts, _bodyPartBurningTimers, _entityId, Now);
         BuildModifierSignature(_previousModifierSignature, _entityId, _statModifiers);
         BuildActiveImmunityTypes(_previousActiveImmunityTypes, _entityId, _statusEffectImmunities);
-        _previousHasPotionCooldown = TryGetPotionCooldownLine(_potionCooldowns, itemCatalog, _entityId, out _, out _);
+        _previousHasPotionCooldown = TryGetPotionCooldownLine(_potionCooldowns, itemCatalog, _entityId, Now, out _, out _);
     }
 
     /// <summary>
@@ -251,10 +258,10 @@ public sealed class HealthWindow(
         base.Update(gameTime);
 
         StatusEffectQueries.GetActiveEffectTypes(statusEffectDisplays, componentManager, _entityId, _activeEffectTypesScratch);
-        BuildBurningPartIds(_activeBurningPartIdsScratch, _bodyParts, _bodyPartBurningTimers, _entityId);
+        BuildBurningPartIds(_activeBurningPartIdsScratch, _bodyParts, _bodyPartBurningTimers, _entityId, Now);
         BuildModifierSignature(_activeModifierSignatureScratch, _entityId, _statModifiers);
         BuildActiveImmunityTypes(_activeImmunityTypesScratch, _entityId, _statusEffectImmunities);
-        var hasPotionCooldownNow = TryGetPotionCooldownLine(_potionCooldowns, itemCatalog, _entityId, out _, out _);
+        var hasPotionCooldownNow = TryGetPotionCooldownLine(_potionCooldowns, itemCatalog, _entityId, Now, out _, out _);
 
         var statusEffectsChanged = !SequenceEqual(_activeEffectTypesScratch, _previousActiveEffectTypes);
         var bodyPartStatusEffectsChanged = !SequenceEqual(_activeBurningPartIdsScratch, _previousActiveBurningPartIds);
@@ -308,7 +315,7 @@ public sealed class HealthWindow(
     }
 
     /// <summary>Fills destination with the PartId of every body part currently showing an active body-part-scoped Burning line -- the per-part-section counterpart to StatusEffectQueries.GetActiveEffectTypes, in the same stable (dense body-part-chain) order every call, so Update's own frame-to-frame comparison only reports a change on a genuine appear/disappear, not on an ordinary tick's stack-count decrement.</summary>
-    private static void BuildBurningPartIds(List<byte> destination, MultiComponentPool<BodyPartComponent> bodyParts, MultiComponentPool<BodyPartBurningTimerComponent>? bodyPartBurningTimers, int entityId)
+    private static void BuildBurningPartIds(List<byte> destination, MultiComponentPool<BodyPartComponent> bodyParts, MultiComponentPool<BodyPartBurningTimerComponent>? bodyPartBurningTimers, int entityId, long now)
     {
         destination.Clear();
 
@@ -320,7 +327,7 @@ public sealed class HealthWindow(
         for (var denseIndex = bodyParts.GetFirstDenseIndex(entityId); denseIndex != -1; denseIndex = bodyParts.GetNextDenseIndex(denseIndex))
         {
             var partId = bodyParts.GetReadonlyByDenseIndex(denseIndex).PartId;
-            if (TryGetBodyPartBurningLine(bodyPartBurningTimers, entityId, partId, out _, out _))
+            if (TryGetBodyPartBurningLine(bodyPartBurningTimers, entityId, partId, now, out _, out _))
             {
                 destination.Add(partId);
             }
@@ -356,8 +363,8 @@ public sealed class HealthWindow(
     /// </summary>
     private void BuildBuffSection(Window parent)
     {
-        BuildModifierRows(_buffRows, _entityId, _statModifiers, StatModifierPolarity.Buff);
-        BuildImmunityRows(_immunityRows, _entityId, _statusEffectImmunities);
+        BuildModifierRows(_buffRows, _entityId, _statModifiers, StatModifierPolarity.Buff, Now);
+        BuildImmunityRows(_immunityRows, _entityId, _statusEffectImmunities, Now);
         if (_buffRows.Count == 0 && _immunityRows.Count == 0)
         {
             return;
@@ -379,7 +386,7 @@ public sealed class HealthWindow(
     /// <summary>Right column, second section -- same shape as BuildBuffSection, filtered to Polarity.Debuff instead.</summary>
     private void BuildDebuffSection(Window parent)
     {
-        BuildModifierRows(_debuffRows, _entityId, _statModifiers, StatModifierPolarity.Debuff);
+        BuildModifierRows(_debuffRows, _entityId, _statModifiers, StatModifierPolarity.Debuff, Now);
         if (_debuffRows.Count == 0)
         {
             return;
@@ -395,8 +402,8 @@ public sealed class HealthWindow(
 
     private void BuildStatusEffectSection(Window parent)
     {
-        BuildStatusEffectRows(_statusEffectRows, _activeEffectTypesScratch, _entityId, statusEffectDisplays, componentManager);
-        var hasPotionCooldown = TryGetPotionCooldownLine(_potionCooldowns, itemCatalog, _entityId, out var potionCooldownText, out var potionCooldownColor);
+        BuildStatusEffectRows(_statusEffectRows, _activeEffectTypesScratch, _entityId, statusEffectDisplays, componentManager, Now);
+        var hasPotionCooldown = TryGetPotionCooldownLine(_potionCooldowns, itemCatalog, _entityId, Now, out var potionCooldownText, out var potionCooldownColor);
         if (_statusEffectRows.Count == 0 && !hasPotionCooldown)
         {
             return;
@@ -423,7 +430,7 @@ public sealed class HealthWindow(
             BuildDivider(parent, width, row.Name, extraSpacingBefore: index > 0 ? BodyPartSpacing : 0f, spacingAfter: BodyPartBarTopSpacing);
             _bodyPartBars.Add(AddBarRow(parent, width, ComputeFraction(row)));
 
-            _bodyPartStatusEffectRowWindows.Add(TryGetBodyPartBurningLine(_bodyPartBurningTimers, _entityId, row.PartId, out var text, out var color)
+            _bodyPartStatusEffectRowWindows.Add(TryGetBodyPartBurningLine(_bodyPartBurningTimers, _entityId, row.PartId, Now, out var text, out var color)
                 ? AddTextRow(parent, text, color)
                 : null);
         }
@@ -440,39 +447,39 @@ public sealed class HealthWindow(
 
             if (index < _bodyPartStatusEffectRowWindows.Count
                 && _bodyPartStatusEffectRowWindows[index] is { } bodyPartStatusEffectRow
-                && TryGetBodyPartBurningLine(_bodyPartBurningTimers, _entityId, _bodyPartRows[index].PartId, out var text, out _))
+                && TryGetBodyPartBurningLine(_bodyPartBurningTimers, _entityId, _bodyPartRows[index].PartId, Now, out var text, out _))
             {
                 bodyPartStatusEffectRow.UpdateText(text);
             }
         }
 
-        BuildStatusEffectRows(_statusEffectRows, _activeEffectTypesScratch, _entityId, statusEffectDisplays, componentManager);
+        BuildStatusEffectRows(_statusEffectRows, _activeEffectTypesScratch, _entityId, statusEffectDisplays, componentManager, Now);
         var statusEffectCount = System.Math.Min(_statusEffectRows.Count, _statusEffectRowWindows.Count);
         for (var index = 0; index < statusEffectCount; index++)
         {
             _statusEffectRowWindows[index].UpdateText(FormatStatusEffectRow(_statusEffectRows[index]));
         }
 
-        if (_potionCooldownRowWindow is { } potionCooldownRow && TryGetPotionCooldownLine(_potionCooldowns, itemCatalog, _entityId, out var potionCooldownText, out _))
+        if (_potionCooldownRowWindow is { } potionCooldownRow && TryGetPotionCooldownLine(_potionCooldowns, itemCatalog, _entityId, Now, out var potionCooldownText, out _))
         {
             potionCooldownRow.UpdateText(potionCooldownText);
         }
 
-        BuildModifierRows(_buffRows, _entityId, _statModifiers, StatModifierPolarity.Buff);
+        BuildModifierRows(_buffRows, _entityId, _statModifiers, StatModifierPolarity.Buff, Now);
         var buffCount = System.Math.Min(_buffRows.Count, _buffRowWindows.Count);
         for (var index = 0; index < buffCount; index++)
         {
             _buffRowWindows[index].UpdateText(FormatModifierRow(_buffRows[index]));
         }
 
-        BuildModifierRows(_debuffRows, _entityId, _statModifiers, StatModifierPolarity.Debuff);
+        BuildModifierRows(_debuffRows, _entityId, _statModifiers, StatModifierPolarity.Debuff, Now);
         var debuffCount = System.Math.Min(_debuffRows.Count, _debuffRowWindows.Count);
         for (var index = 0; index < debuffCount; index++)
         {
             _debuffRowWindows[index].UpdateText(FormatModifierRow(_debuffRows[index]));
         }
 
-        BuildImmunityRows(_immunityRows, _entityId, _statusEffectImmunities);
+        BuildImmunityRows(_immunityRows, _entityId, _statusEffectImmunities, Now);
         var immunityCount = System.Math.Min(_immunityRows.Count, _immunityRowWindows.Count);
         for (var index = 0; index < immunityCount; index++)
         {
@@ -784,7 +791,7 @@ public sealed class HealthWindow(
     /// that interface's GetRemainingDurationFrames takes no partId. bodyPartBurningTimers is
     /// nullable -- BurningModule might not be loaded at all (see this class's own field doc comment).
     /// </remarks>
-    internal static bool TryGetBodyPartBurningLine(MultiComponentPool<BodyPartBurningTimerComponent>? bodyPartBurningTimers, int entityId, byte partId, out string text, out Color color)
+    internal static bool TryGetBodyPartBurningLine(MultiComponentPool<BodyPartBurningTimerComponent>? bodyPartBurningTimers, int entityId, byte partId, long now, out string text, out Color color)
     {
         text = string.Empty;
         color = BodyTextColor;
@@ -802,7 +809,7 @@ public sealed class HealthWindow(
                 continue;
             }
 
-            var remainingFrames = timer.FramesUntilNextTick + (timer.StackCount - 1) * BurningEffects.TickIntervalFrames;
+            var remainingFrames = BurningModule.RemainingFrames(timer.NextTickFrame, timer.StackCount, now);
             var remainingSeconds = (int)System.Math.Ceiling(remainingFrames / (float)GameTiming.FramesPerSecond);
             text = $"{BurningEffects.Glyph} {StatusEffectType.Burning}: {remainingSeconds}s";
             color = GetColor(StatusEffectType.Burning);
@@ -821,12 +828,18 @@ public sealed class HealthWindow(
     /// PlayerStatusEffectsContent.DrawPotionCooldownIcon already makes (the cooldown is shared
     /// across every PotionActivator, not per-potion).
     /// </summary>
-    internal static bool TryGetPotionCooldownLine(PackedComponentPool<PotionCooldownComponent>? potionCooldowns, ItemCatalog itemCatalog, int entityId, out string text, out Color color)
+    internal static bool TryGetPotionCooldownLine(PackedComponentPool<PotionCooldownComponent>? potionCooldowns, ItemCatalog itemCatalog, int entityId, long now, out string text, out Color color)
     {
         text = string.Empty;
         color = BodyTextColor;
 
-        if (potionCooldowns is null || !potionCooldowns.TryGetReadonly(entityId, out var cooldown) || cooldown.FramesRemaining == 0)
+        if (potionCooldowns is null || !potionCooldowns.TryGetReadonly(entityId, out var cooldown))
+        {
+            return false;
+        }
+
+        var framesRemaining = PotionCooldownEffects.FramesRemaining(cooldown, now);
+        if (framesRemaining == 0)
         {
             return false;
         }
@@ -834,7 +847,7 @@ public sealed class HealthWindow(
         var hasHealthPotion = itemCatalog.TryGet(HealthPotion.Id, out var healthPotion);
         var glyph = hasHealthPotion ? healthPotion.Glyph : "?";
         color = hasHealthPotion ? healthPotion.GlyphColor : BodyTextColor;
-        text = $"{glyph} Potion Cooldown: {PotionCooldownEffects.RemainingSeconds(cooldown.FramesRemaining)}s";
+        text = $"{glyph} Potion Cooldown: {PotionCooldownEffects.RemainingSeconds(framesRemaining)}s";
         return true;
     }
 
@@ -844,7 +857,8 @@ public sealed class HealthWindow(
         List<StatusEffectType> activeTypesScratch,
         int entityId,
         StatusEffectDisplayRegistry statusEffectDisplays,
-        ComponentManager componentManager)
+        ComponentManager componentManager,
+        long now)
     {
         StatusEffectQueries.GetActiveEffectTypes(statusEffectDisplays, componentManager, entityId, activeTypesScratch);
 
@@ -852,7 +866,7 @@ public sealed class HealthWindow(
         foreach (var effectType in activeTypesScratch)
         {
             var display = statusEffectDisplays.TryGet(effectType, out var foundDisplay) ? foundDisplay : null;
-            var remainingFrames = display?.GetRemainingDurationFrames(componentManager, entityId);
+            var remainingFrames = display?.GetRemainingDurationFrames(componentManager, entityId, now);
             var remainingSeconds = remainingFrames is { } frames ? (int)System.Math.Ceiling(frames / (float)GameTiming.FramesPerSecond) : (int?)null;
             var stackCount = display?.GetStackCount(componentManager, entityId) ?? 0;
             destination.Add(new StatusEffectRow(effectType, remainingSeconds, stackCount));
@@ -860,7 +874,7 @@ public sealed class HealthWindow(
     }
 
     /// <summary>Pure data assembly, no rendering -- see BuildBodyPartRows' own doc comment for why. One row per active StatModifierComponent instance matching polarity (not grouped by Target the way Status Effects groups by type) -- statModifiers is nullable the same way it is everywhere else in this class (StatModifiersModule might not be registered). Excludes any modifier targeting an ability score -- AbilityScoreMath.FromStatModifierTarget returning non-null is exactly AbilityScoreWindow's own test for "this is one of the 7 ability score targets" (see AbilityScoreModifierFormatter), which already shows these; duplicating them here would be redundant.</summary>
-    internal static void BuildModifierRows(List<ModifierRow> destination, int entityId, MultiComponentPool<StatModifierComponent>? statModifiers, StatModifierPolarity polarity)
+    internal static void BuildModifierRows(List<ModifierRow> destination, int entityId, MultiComponentPool<StatModifierComponent>? statModifiers, StatModifierPolarity polarity, long now)
     {
         destination.Clear();
 
@@ -877,7 +891,9 @@ public sealed class HealthWindow(
                 continue;
             }
 
-            var remainingSeconds = modifier.RemainingDurationFrames is { } frames ? (int)System.Math.Ceiling(frames / (float)GameTiming.FramesPerSecond) : (int?)null;
+            var remainingSeconds = modifier.ExpiresAtFrame == FrameDeadline.Never
+                ? (int?)null
+                : (int)System.Math.Ceiling(FrameDeadline.Remaining(modifier.ExpiresAtFrame, now) / (float)GameTiming.FramesPerSecond);
             destination.Add(new ModifierRow(modifier.Target, modifier.Operation, modifier.Polarity, modifier.Magnitude, modifier.ConditionTag, remainingSeconds));
         }
     }
@@ -905,7 +921,7 @@ public sealed class HealthWindow(
     }
 
     /// <summary>Pure data assembly, no rendering -- see BuildBodyPartRows' own doc comment for why. One row per active StatusEffectImmunityComponent (an entity is either immune to a type or it isn't -- no polarity/magnitude to filter or format beyond which type and how long). statusEffectImmunities is nullable the same way every other optional pool in this class is (StatusEffectsModule might not register it).</summary>
-    internal static void BuildImmunityRows(List<ImmunityRow> destination, int entityId, MultiComponentPool<StatusEffectImmunityComponent>? statusEffectImmunities)
+    internal static void BuildImmunityRows(List<ImmunityRow> destination, int entityId, MultiComponentPool<StatusEffectImmunityComponent>? statusEffectImmunities, long now)
     {
         destination.Clear();
 
@@ -917,7 +933,9 @@ public sealed class HealthWindow(
         for (var denseIndex = statusEffectImmunities.GetFirstDenseIndex(entityId); denseIndex != -1; denseIndex = statusEffectImmunities.GetNextDenseIndex(denseIndex))
         {
             ref readonly var immunity = ref statusEffectImmunities.GetReadonlyByDenseIndex(denseIndex);
-            var remainingSeconds = immunity.RemainingDurationFrames is { } frames ? (int)System.Math.Ceiling(frames / (float)GameTiming.FramesPerSecond) : (int?)null;
+            var remainingSeconds = immunity.ExpiresAtFrame == FrameDeadline.Never
+                ? (int?)null
+                : (int)System.Math.Ceiling(FrameDeadline.Remaining(immunity.ExpiresAtFrame, now) / (float)GameTiming.FramesPerSecond);
             destination.Add(new ImmunityRow(immunity.EffectType, remainingSeconds));
         }
     }

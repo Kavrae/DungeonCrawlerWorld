@@ -1,5 +1,6 @@
 using Engine.ECS.Components;
 using Engine.ECS.Components.Stores;
+using Engine.ECS.Systems;
 using Engine.Events;
 using Engine.Math;
 using Game.Modules.Burning.Components;
@@ -59,7 +60,7 @@ public sealed class BurningAuraApplier(MathUtility mathUtility, EventBus? eventB
         return _entityTimers!.TryGetReadonly(entityId, out var timer) ? timer.StackCount : 0;
     }
 
-    public void ApplyStack(ComponentManager componentManager, int entityId, StatusEffectSource source)
+    public void ApplyStack(ComponentManager componentManager, int entityId, StatusEffectSource source, long now)
     {
         EnsurePools(componentManager);
 
@@ -68,12 +69,12 @@ public sealed class BurningAuraApplier(MathUtility mathUtility, EventBus? eventB
             var partId = ResolveTargetPartId(entityId, preferredType);
             if (partId is { } resolvedPartId)
             {
-                ApplyBodyPartScopedStack(componentManager, entityId, resolvedPartId, source);
+                ApplyBodyPartScopedStack(componentManager, entityId, resolvedPartId, source, now);
                 return;
             }
         }
 
-        BurningEffects.ApplyStack(componentManager, entityId, source, eventBus, playerQuery);
+        BurningEffects.ApplyStack(componentManager, entityId, source, now, eventBus, playerQuery);
     }
 
     private void EnsurePools(ComponentManager componentManager)
@@ -133,7 +134,7 @@ public sealed class BurningAuraApplier(MathUtility mathUtility, EventBus? eventB
     }
 
     /// <summary>Grants (or tops off) one Burning stack on entityId's partId -- mirrors BurningEffects.ApplyStack's own grant-or-top-off-capped-at-MaxStacks (and immunity) shape, scoped to the one part instead of the whole entity.</summary>
-    private void ApplyBodyPartScopedStack(ComponentManager componentManager, int entityId, byte partId, StatusEffectSource source)
+    private void ApplyBodyPartScopedStack(ComponentManager componentManager, int entityId, byte partId, StatusEffectSource source, long now)
     {
         if (StatusEffectImmunity.IsImmune(componentManager, entityId, StatusEffectType.Burning, source, eventBus, playerQuery))
         {
@@ -152,7 +153,7 @@ public sealed class BurningAuraApplier(MathUtility mathUtility, EventBus? eventB
         }
         else
         {
-            _bodyPartTimers!.Add(entityId, new BodyPartBurningTimerComponent(partId, stackCount: 1, BurningEffects.TickIntervalFrames, source));
+            _bodyPartTimers!.Add(entityId, new BodyPartBurningTimerComponent(partId, stackCount: 1, FrameDeadline.After(now, BurningEffects.TickIntervalFrames), source));
         }
     }
 

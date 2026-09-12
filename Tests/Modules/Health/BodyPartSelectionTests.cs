@@ -1,4 +1,5 @@
-﻿using Engine.ECS.Components.Stores;
+using Engine.ECS.Systems;
+using Engine.ECS.Components.Stores;
 using Engine.Math;
 using Game.Modules.Health;
 using Game.Modules.Health.Components;
@@ -51,7 +52,7 @@ public sealed class BodyPartSelectionTests
         pool.Add(0, new BodyPartComponent("Torso", BodyPartType.Torso, 0, 0, currentHealth: 5, maximumHealth: 20, isVital: true)); // 25%
         pool.Add(0, new BodyPartComponent("Arm", BodyPartType.Arm, 0, 0, currentHealth: 10, maximumHealth: 15, isVital: false)); // ~67%
 
-        var denseIndex = BodyPartSelection.PickLowestPercentage(pool, 0);
+        var denseIndex = BodyPartSelection.PickLowestPercentage(pool, 0, now: 0);
 
         Assert.AreEqual("Torso", pool.GetReadonlyByDenseIndex(denseIndex).Name);
     }
@@ -65,9 +66,9 @@ public sealed class BodyPartSelectionTests
         pool.Add(0, new BodyPartComponent("Torso", BodyPartType.Torso, 0, 0, currentHealth: 5, maximumHealth: 20, isVital: true)); // 25%, locked out below.
 
         var torsoDenseIndex = FindDenseIndexByName(pool, 0, "Torso");
-        pool.UpdateByDenseIndex(torsoDenseIndex, static (ref BodyPartComponent part) => part.RegenLockoutFramesRemaining = 100);
+        pool.UpdateByDenseIndex(torsoDenseIndex, static (ref BodyPartComponent part) => part.RegenLockedUntilFrame = 100);
 
-        var denseIndex = BodyPartSelection.PickLowestPercentage(pool, 0);
+        var denseIndex = BodyPartSelection.PickLowestPercentage(pool, 0, now: 0);
 
         Assert.AreEqual("Arm", pool.GetReadonlyByDenseIndex(denseIndex).Name);
     }
@@ -92,9 +93,9 @@ public sealed class BodyPartSelectionTests
         pool.Add(0, new BodyPartComponent("Head", BodyPartType.Head, 0, 0, currentHealth: 10, maximumHealth: 10, isVital: true)); // Full.
         pool.Add(0, new BodyPartComponent("Torso", BodyPartType.Torso, 0, 0, currentHealth: 5, maximumHealth: 20, isVital: true)); // Damaged but locked out.
         var lockedDenseIndex = pool.GetFirstDenseIndex(0);
-        pool.UpdateByDenseIndex(lockedDenseIndex, static (ref BodyPartComponent part) => part.RegenLockoutFramesRemaining = 50);
+        pool.UpdateByDenseIndex(lockedDenseIndex, static (ref BodyPartComponent part) => part.RegenLockedUntilFrame = 50);
 
-        var denseIndex = BodyPartSelection.PickLowestPercentage(pool, 0);
+        var denseIndex = BodyPartSelection.PickLowestPercentage(pool, 0, now: 0);
 
         Assert.AreEqual(-1, denseIndex);
     }
@@ -104,7 +105,7 @@ public sealed class BodyPartSelectionTests
     {
         var pool = CreatePool();
 
-        var denseIndex = BodyPartSelection.PickLowestPercentage(pool, 0);
+        var denseIndex = BodyPartSelection.PickLowestPercentage(pool, 0, now: 0);
 
         Assert.AreEqual(-1, denseIndex);
     }
@@ -118,9 +119,9 @@ public sealed class BodyPartSelectionTests
         pool.Add(0, new BodyPartComponent("Head", BodyPartType.Head, 0, 0, currentHealth: 40, maximumHealth: 40, isVital: true));
         var statModifiers = new MultiComponentPool<StatModifierComponent>(maximumEntityCount: 10, initialCapacity: 4);
         statModifiers.Add(0, new StatModifierComponent(StatModifierTarget.MaximumHealth, StatModifierOperation.Multiplicative, StatModifierPolarity.Buff,
-            canModify: true, magnitude: 0.5f, remainingDurationFrames: null, StatusEffectSource.Admin));
+            canModify: true, magnitude: 0.5f, expiresAtFrame: FrameDeadline.Never, StatusEffectSource.Admin));
 
-        var denseIndex = BodyPartSelection.PickLowestPercentage(pool, 0, statModifiers);
+        var denseIndex = BodyPartSelection.PickLowestPercentage(pool, 0, now: 0, statModifiers);
 
         Assert.AreEqual("Head", pool.GetReadonlyByDenseIndex(denseIndex).Name);
     }
@@ -133,9 +134,9 @@ public sealed class BodyPartSelectionTests
         pool.Add(0, new BodyPartComponent("Head", BodyPartType.Head, 0, 0, currentHealth: 60, maximumHealth: 40, isVital: true));
         var statModifiers = new MultiComponentPool<StatModifierComponent>(maximumEntityCount: 10, initialCapacity: 4);
         statModifiers.Add(0, new StatModifierComponent(StatModifierTarget.MaximumHealth, StatModifierOperation.Multiplicative, StatModifierPolarity.Buff,
-            canModify: true, magnitude: 0.5f, remainingDurationFrames: null, StatusEffectSource.Admin));
+            canModify: true, magnitude: 0.5f, expiresAtFrame: FrameDeadline.Never, StatusEffectSource.Admin));
 
-        var denseIndex = BodyPartSelection.PickLowestPercentage(pool, 0, statModifiers);
+        var denseIndex = BodyPartSelection.PickLowestPercentage(pool, 0, now: 0, statModifiers);
 
         Assert.AreEqual(-1, denseIndex);
     }
@@ -295,11 +296,11 @@ public sealed class BodyPartSelectionTests
         pool.Add(0, new BodyPartComponent("Left Foot", BodyPartType.Foot, partId: 0, verticalPosition: 0, currentHealth: 1, maximumHealth: 10, isVital: false)); // 10%, but burning.
         pool.Add(0, new BodyPartComponent("Right Foot", BodyPartType.Foot, partId: 1, verticalPosition: 0, currentHealth: 5, maximumHealth: 10, isVital: false)); // 50%, not burning.
         var burningTimers = new MultiComponentPool<BodyPartBurningTimerComponent>(maximumEntityCount: 10, initialCapacity: 4);
-        burningTimers.Add(0, new BodyPartBurningTimerComponent(partId: 0, stackCount: 1, framesUntilNextTick: 30, StatusEffectSource.Admin));
+        burningTimers.Add(0, new BodyPartBurningTimerComponent(partId: 0, stackCount: 1, nextTickFrame: 30, StatusEffectSource.Admin));
 
-        var denseIndex = BodyPartSelection.PickLowestPercentage(pool, 0, statModifiers: null, burningTimers);
+        var denseIndex = BodyPartSelection.PickLowestPercentage(pool, 0, now: 0, statModifiers: null, burningTimers);
 
-        Assert.AreEqual("Right Foot", pool.GetReadonlyByDenseIndex(denseIndex).Name, "Left Foot has the lowest fraction but is on fire -- it must be skipped even though its own RegenLockoutFramesRemaining is 0.");
+        Assert.AreEqual("Right Foot", pool.GetReadonlyByDenseIndex(denseIndex).Name, "Left Foot has the lowest fraction but is on fire -- it must be skipped even though its own RegenLockedUntilFrame is 0.");
     }
 
     [TestMethod]
@@ -308,7 +309,7 @@ public sealed class BodyPartSelectionTests
         var pool = CreatePool();
         pool.Add(0, new BodyPartComponent("Torso", BodyPartType.Torso, partId: 0, verticalPosition: 0, currentHealth: 5, maximumHealth: 20, isVital: true));
 
-        var denseIndex = BodyPartSelection.PickLowestPercentage(pool, 0);
+        var denseIndex = BodyPartSelection.PickLowestPercentage(pool, 0, now: 0);
 
         Assert.AreEqual("Torso", pool.GetReadonlyByDenseIndex(denseIndex).Name);
     }

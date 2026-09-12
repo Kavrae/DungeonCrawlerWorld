@@ -4,8 +4,6 @@ using Engine.Events;
 using Game.Modules.Core.Components;
 using Game.Modules.Paralysis.Components;
 using Game.Modules.Paralysis.Systems;
-using Game.Modules.ProcessingTier;
-using Game.Modules.ProcessingTier.Components;
 using Game.Modules.StatusEffects;
 using Game.World;
 
@@ -29,19 +27,17 @@ public sealed class ParalysisModule : IGameModule
 
     private EventBus _eventBus = null!;
     private IPlayerQuery? _playerQuery;
-    private ProcessingTierEvents _processingTierEvents = null!;
 
     public void Configure(GameModuleContext context)
     {
         _eventBus = context.EventBus;
         _playerQuery = context.PlayerQuery;
-        _processingTierEvents = context.ProcessingTierEvents;
 
         context.StatusEffectAuraAppliers.Register(new TimerBasedAuraApplier<ParalysisTimerComponent>(
             StatusEffectType.Paralysis,
-            (componentManager, entityId, source) => ParalysisEffects.Apply(componentManager, entityId, source, _eventBus, _playerQuery)));
+            (componentManager, entityId, source, now) => ParalysisEffects.Apply(componentManager, entityId, source, now, _eventBus, _playerQuery)));
         context.StatusEffectDisplays.Register(new TimerBasedStatusEffectDisplay<ParalysisTimerComponent>(StatusEffectType.Paralysis, ParalysisEffects.Glyph,
-            paralysis => paralysis.FramesUntilNextTick));
+            static (paralysis, now) => FrameDeadline.Remaining(paralysis.ExpiresAtFrame, now)));
     }
 
     public void RegisterComponents(ComponentManager componentManager) =>
@@ -54,9 +50,6 @@ public sealed class ParalysisModule : IGameModule
             return;
         }
 
-        systemManager.Register(new ParalysisSystem(
-            componentManager.GetPackedPool<ParalysisTimerComponent>(),
-            componentManager.GetDirectPool<ProcessingTierComponent>(),
-            _processingTierEvents));
+        systemManager.Register(new ParalysisSystem(componentManager.GetPackedPool<ParalysisTimerComponent>()));
     }
 }

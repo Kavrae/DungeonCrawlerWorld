@@ -1,5 +1,6 @@
 using Engine.ECS.Components;
 using Engine.ECS.Components.Stores;
+using Engine.ECS.Systems;
 using Game.Modules;
 using Game.Modules.Actions.Activators;
 using Game.Modules.Core.Components;
@@ -62,7 +63,11 @@ public sealed class InventoryGridContent(
     // (buy pricing, same direction the real shop grid uses), false for the player-side column
     // (sell pricing, same direction the real player grid uses). See IsThisGridTheShop's own use
     // below for every place this substitutes for the ordinary entity-id check.
-    bool? tradeGridIsShopSide = null) : IElementContent, IInventoryDropTarget
+    bool? tradeGridIsShopSide = null,
+    // "Now" for the shared action lock, which is a deadline (see ActionLockGate) -- only read by
+    // IsPlayerActionLocked below. Optional so the many tests that build a grid needn't supply one;
+    // every production caller passes the simulation's real clock.
+    SimulationClock? simulationClock = null) : IElementContent, IInventoryDropTarget
 {
     /// <summary>50% larger than the original (24,24) for readability. internal, not private -- SecondaryInventoryWindow/ShopWindow both derive their own fixed grid width from this and CellGap rather than hand-duplicating the numbers (see their own doc comments on why that duplication was a landmine).</summary>
     public static readonly Vector2 CellSize = new(36, 36);
@@ -87,6 +92,7 @@ public sealed class InventoryGridContent(
     private readonly PackedComponentPool<ShopComponent>? _shopPool = componentManager.IsRegistered<ShopComponent>() ? componentManager.GetPackedPool<ShopComponent>() : null;
     private readonly PackedComponentPool<CurrencyComponent>? _currencyPool = componentManager.IsRegistered<CurrencyComponent>() ? componentManager.GetPackedPool<CurrencyComponent>() : null;
     private readonly PackedComponentPool<ActionLockComponent>? _actionLockPool = componentManager.IsRegistered<ActionLockComponent>() ? componentManager.GetPackedPool<ActionLockComponent>() : null;
+    private readonly SimulationClock _simulationClock = simulationClock ?? new SimulationClock();
     private readonly List<InventoryItemStackComponent> _reusableStacks = [];
     private readonly List<(InventoryItemStackComponent Stack, ItemDefinition Definition)> _reusableVisibleEntries = [];
     private readonly Dictionary<Guid, List<int>> _reusableGroupIndices = [];
@@ -739,7 +745,7 @@ public sealed class InventoryGridContent(
         item.Activator is not null;
 
     /// <summary>Mirrors MapWindow's own "Inspect" context-menu option, the existing precedent for gating a UI action on the shared per-entity action lock (ActionLockGate.IsBlocked) -- null-safe the same way _shopPool/_currencyPool already are in this class, since ActionLockComponent isn't guaranteed registered in every test setup that builds an InventoryGridContent.</summary>
-    private bool IsPlayerActionLocked() => _actionLockPool is null || ActionLockGate.IsBlocked(_actionLockPool, world.PlayerEntityId);
+    private bool IsPlayerActionLocked() => _actionLockPool is null || ActionLockGate.IsBlocked(_actionLockPool, world.PlayerEntityId, _simulationClock.CurrentFrame);
 
     /// <summary>
     /// "Activate" (arms the item exactly as an ordinary hotbar press would -- see

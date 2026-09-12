@@ -1,4 +1,5 @@
 using Engine.ECS.Components.Stores;
+using Engine.ECS.Systems;
 using Engine.Math;
 using Game.Modules;
 using Game.Modules.AbilityScores;
@@ -45,8 +46,12 @@ public sealed class ActionTargetingController(
     PackedComponentPool<MovementComponent> movementPool,
     PackedComponentPool<ManaComponent>? manaPool = null,
     MultiComponentPool<AbilityScoreComponent>? abilityScores = null,
-    LocalTierRoster? localTierRoster = null)
+    LocalTierRoster? localTierRoster = null,
+    SimulationClock? simulationClock = null)
 {
+    /// <summary>"Now" for clearing the shared action lock on cancellation -- the lock is a deadline (see ActionLockGate). Optional only so a test needn't build one; the shell always passes the simulation's real clock.</summary>
+    private readonly SimulationClock _simulationClock = simulationClock ?? new SimulationClock();
+
     /// <summary>A second press of the same slot within this many frames of the first is a double-tap (auto-target the closest candidate, see HandleHotkeySlotPress), as opposed to a slower second press (confirm against the cursor, same as a click). Reads UiInputController's own shared click/double-click window rather than an independently tuned value, so mouse double-click and keyboard double-tap always agree.</summary>
     private static readonly int DoubleTapWindowFrames = UiInputController.DoubleClickWindowFrames;
 
@@ -326,7 +331,7 @@ public sealed class ActionTargetingController(
         var playerEntityId = world.PlayerEntityId;
         if (pendingDelayedActions.Remove(playerEntityId))
         {
-            ActionLockGate.Lock(actionLocks, playerEntityId, framesToWait: 0);
+            ActionLockGate.Lock(actionLocks, playerEntityId, _simulationClock.CurrentFrame, framesToWait: 0);
             return true;
         }
 

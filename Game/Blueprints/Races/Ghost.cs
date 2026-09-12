@@ -47,18 +47,18 @@ public sealed class Ghost(MathUtility mathUtility) : IBlueprint
 
         componentManager.Merge(entityId, new GlyphComponent(Glyph, Color.Blue));
         componentManager.Merge(entityId, new MovementComponent(MovementMode.Random, null, null));
-        componentManager.Merge(entityId, new ActionLockComponent(standardLockFrames: 48, currentLockTotalFrames: 0, currentLockFramesRemaining: 0));
+        componentManager.Merge(entityId, new ActionLockComponent(standardLockFrames: 48, currentLockTotalFrames: 0, unlockedAtFrame: 0));
         componentManager.Merge(entityId, new TransformComponent(
     new Vector3Int(0, 0, (int)MapLayer.Ground), new Vector2Byte(1, 1)));
 
         componentManager.Merge(entityId, new NonBlockingComponent(NonBlockingKind.Phasing));
         var quickAttackOverride = ActionOverrideEffects.OverrideFlatDamage(QuickAttackAction.Build(), QuickAttackDamage);
-        componentManager.Merge(entityId, new ActionInstanceComponent(QuickAttackAction.Id, quickAttackOverride, cooldownFramesRemaining: 0));
+        componentManager.Merge(entityId, new ActionInstanceComponent(QuickAttackAction.Id, quickAttackOverride));
 
         var powerAttackOverride = ActionOverrideEffects.OverrideFlatDamage(PowerAttackAction.Build(), PowerAttackDamage);
-        componentManager.Merge(entityId, new ActionInstanceComponent(PowerAttackAction.Id, powerAttackOverride, cooldownFramesRemaining: 0));
+        componentManager.Merge(entityId, new ActionInstanceComponent(PowerAttackAction.Id, powerAttackOverride));
 
-        componentManager.Merge(entityId, new ActionInstanceComponent(DodgeAction.Id, overrideDefinition: null, cooldownFramesRemaining: 0));
+        componentManager.Merge(entityId, new ActionInstanceComponent(DodgeAction.Id, overrideDefinition: null));
 
         TemporaryNpcLootGrant.GrantRandomStartingLoot(componentManager, entityId, mathUtility);
 

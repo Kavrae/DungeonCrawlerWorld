@@ -35,7 +35,8 @@ public sealed class ShopWindow(
     ItemCatalog itemCatalog,
     World world,
     ContextMenuController contextMenuController,
-    MapViewState mapViewState)
+    MapViewState mapViewState,
+    Engine.ECS.Systems.SimulationClock? simulationClock = null)
     : Window(fontService, elementPoolService, labelRenderer), IWholeWindowDropTarget
 {
     private static readonly Vector2 IconSize = new(48, 48);
@@ -173,7 +174,7 @@ public sealed class ShopWindow(
         // See SecondaryInventoryWindow.BuildGrid's own doc comment -- same flush-content fix for the same clipped-bottom-row bug.
         gridWindow.ContentPadding = Vector2.Zero;
 
-        gridWindow.SetContent(new InventoryGridContent(world, componentManager, itemCatalog, ElementPoolService, FontService, LabelRenderer, spriteSheetService, spriteRenderer, contextMenuController, _entityId, filterTag: null, _tooltipController, () => _entityId, mapViewState, _onItemSelected, _onCompareRequested, static (_, _) => { })); // Activate is player-inventory-only (see InventoryGridContent.CanActivate) -- never reached for a shop's own grid.
+        gridWindow.SetContent(new InventoryGridContent(world, componentManager, itemCatalog, ElementPoolService, FontService, LabelRenderer, spriteSheetService, spriteRenderer, contextMenuController, _entityId, filterTag: null, _tooltipController, () => _entityId, mapViewState, _onItemSelected, _onCompareRequested, static (_, _) => { }, simulationClock: simulationClock)); // Activate is player-inventory-only (see InventoryGridContent.CanActivate) -- never reached for a shop's own grid.
         AddChild(gridWindow);
     }
 

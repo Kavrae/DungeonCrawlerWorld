@@ -47,7 +47,9 @@ public sealed class MovementModule : IGameModule
         componentManager.RegisterPackedPool<MovementComponent>(static (ref existing, incoming) =>
         {
             existing.MovementMode = (MovementMode)Math.Max((byte)existing.MovementMode, (byte)incoming.MovementMode);
-            existing.FramesToWait = (ushort)((existing.FramesToWait + incoming.FramesToWait) / 2);
+            // The later deadline wins rather than averaging -- averaging two absolute frames would
+            // invent a moment neither part asked for, the same rule ActionLockComponent's own merge uses.
+            existing.WaitUntilFrame = Math.Max(existing.WaitUntilFrame, incoming.WaitUntilFrame);
             existing.NextMapPosition = incoming.NextMapPosition;
             existing.TargetMapPosition = incoming.TargetMapPosition;
         });

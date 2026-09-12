@@ -27,6 +27,9 @@ public sealed class MultiComponentPool<T> : IReadOnlyMultiComponentPool<T>, IIns
     private readonly int _denseGrowthAmount;
     private int _count;
 
+    /// <summary>Held by the single timer wheel driving this pool, if any -- see TimerWheelClaim for why there can only be one.</summary>
+    private TimerWheelClaim _timerWheelClaim;
+
     /// <summary> The type of component stored in this pool. </summary>
     public Type ComponentType => typeof(T);
 
@@ -65,13 +68,27 @@ public sealed class MultiComponentPool<T> : IReadOnlyMultiComponentPool<T>, IIns
     /// at once here. Mirrors PackedComponentPool's own EntityAdded/EntityRemoved (same purpose:
     /// letting an EntityStripeSet maintain incremental bucket membership), scoped to "does this
     /// entity have any instance at all" rather than "an instance changed," so a system striping
-    /// over this pool (e.g. ActionCooldownSystem) still gets exactly one bucket entry per entity
+    /// over this pool (e.g. ComplexHealthRegenSystem over BodyPartComponent) still gets exactly one bucket entry per entity
     /// regardless of how many instances that entity carries.
     /// </remarks>
     public event Action<int>? EntityAdded;
 
     /// <inheritdoc cref="EntityAdded"/>
     public event Action<int>? EntityRemoved;
+
+    /// <summary>
+    /// Opt-in: fired after every write to a component *instance* -- (entityId, denseIndex) -- at
+    /// exactly the points the pool bumps that instance's version: every Add (not just an entity's
+    /// first, unlike EntityAdded), UpdateByDenseIndex, TryUpdateFirst and
+    /// IncrementVersionByDenseIndex. Not fired by removals.
+    /// </summary>
+    /// <remarks>
+    /// Same purpose and contract as PackedComponentPool.ComponentChanged -- see its remarks. Per
+    /// instance rather than per entity is the point here: a second instance added to an entity
+    /// that already has one raises no EntityAdded, and that is precisely the case a timer wheel
+    /// must not miss. The dense index is only valid until the next removal from this pool.
+    /// </remarks>
+    public event Action<int, int>? ComponentChanged;
 
     /// <summary> Initializes a new instance of the <see cref="MultiComponentPool{T}"/> class with the specified capacities. </summary>
     /// <param name="maximumEntityCount">The maximum EntityId this pool can be indexed by.</param>
@@ -119,6 +136,10 @@ public sealed class MultiComponentPool<T> : IReadOnlyMultiComponentPool<T>, IIns
 
         _maximumEntityCount = newMaximumEntityCount;
     }
+
+    /// <summary>Claims this pool as the source for one MultiTimerWheel, throwing if a wheel already drives it.</summary>
+    /// <remarks>Called by the wheel's constructor. See TimerWheelClaim.</remarks>
+    internal void ClaimForTimerWheel() => _timerWheelClaim.Claim(typeof(T));
 
     /// <summary>True if entityId is within the pool's current entity-indexed capacity.</summary>
     /// <remarks>A rare/independently-sized pool (see ComponentManager.RegisterMultiPool's maximumEntityCount override) may be smaller than the world's full entity id space -- an out-of-bounds entityId simply has never had this component, not a bug. Add grows the pool on demand instead of assuming bounds.</remarks>
@@ -175,6 +196,8 @@ public sealed class MultiComponentPool<T> : IReadOnlyMultiComponentPool<T>, IIns
         {
             EntityAdded?.Invoke(entityId);
         }
+
+        ComponentChanged?.Invoke(entityId, newDenseIndex);
     }
 
     /// <summary> Removes every component instance the specified entity owns. </summary>
@@ -332,12 +355,15 @@ public sealed class MultiComponentPool<T> : IReadOnlyMultiComponentPool<T>, IIns
 
     /// <summary> Increments the version of a component instance, and its owning entity, by dense index. </summary>
     /// <param name="denseIndex">The dense index of the component instance.</param>
-    public void IncrementVersionByDenseIndex(int denseIndex)
+    public void IncrementVersionByDenseIndex(int denseIndex) => MarkChanged(_denseIndexToEntityIdMap[denseIndex], denseIndex);
+
+    /// <summary>Every in-place write's single exit: bumps the instance's and its entity's versions and tells ComponentChanged observers.</summary>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    private void MarkChanged(int entityId, int denseIndex)
     {
         _denseVersions[denseIndex]++;
-
-        var entityId = _denseIndexToEntityIdMap[denseIndex];
         _entityVersions[entityId]++;
+        ComponentChanged?.Invoke(entityId, denseIndex);
     }
 
     /// <summary> Updates a component instance in place by dense index using a custom update function. </summary>
@@ -348,10 +374,7 @@ public sealed class MultiComponentPool<T> : IReadOnlyMultiComponentPool<T>, IIns
         ArgumentNullException.ThrowIfNull(updater);
 
         updater(ref _denseComponents[denseIndex]);
-        _denseVersions[denseIndex]++;
-
-        var entityId = _denseIndexToEntityIdMap[denseIndex];
-        _entityVersions[entityId]++;
+        MarkChanged(_denseIndexToEntityIdMap[denseIndex], denseIndex);
     }
 
     /// <summary> Updates a component instance in place by dense index using a custom update function and state. </summary>
@@ -364,10 +387,7 @@ public sealed class MultiComponentPool<T> : IReadOnlyMultiComponentPool<T>, IIns
         ArgumentNullException.ThrowIfNull(updater);
 
         updater(ref _denseComponents[denseIndex], state);
-        _denseVersions[denseIndex]++;
-
-        var entityId = _denseIndexToEntityIdMap[denseIndex];
-        _entityVersions[entityId]++;
+        MarkChanged(_denseIndexToEntityIdMap[denseIndex], denseIndex);
     }
 
     /// <summary> Finds and updates the first of entityId's components matching predicate. </summary>
@@ -387,8 +407,7 @@ public sealed class MultiComponentPool<T> : IReadOnlyMultiComponentPool<T>, IIns
             if (predicate(ref component))
             {
                 updater(ref component);
-                _denseVersions[denseIndex]++;
-                _entityVersions[entityId]++;
+                MarkChanged(entityId, denseIndex);
                 return true;
             }
         }
@@ -418,8 +437,7 @@ public sealed class MultiComponentPool<T> : IReadOnlyMultiComponentPool<T>, IIns
             if (predicate(ref component, state))
             {
                 updater(ref component, state);
-                _denseVersions[denseIndex]++;
-                _entityVersions[entityId]++;
+                MarkChanged(entityId, denseIndex);
                 return true;
             }
         }

@@ -29,7 +29,7 @@ public sealed class Engineer : IBlueprint
         else
         {
             componentManager.Merge(entityId, new MovementComponent(MovementMode.Random, null, null));
-            componentManager.Merge(entityId, new ActionLockComponent(standardLockFrames: ActionLockGate.StandardLockFrames, currentLockTotalFrames: 0, currentLockFramesRemaining: 0));
+            componentManager.Merge(entityId, new ActionLockComponent(standardLockFrames: ActionLockGate.StandardLockFrames, currentLockTotalFrames: 0, unlockedAtFrame: 0));
         }
 
         componentManager.Merge(entityId, new DisplayTextComponent(ClassName, Description));

@@ -202,7 +202,7 @@ public sealed class BodyPartEffectsSystem : ITieredSystem
         }
 
         _statModifiers.Add(entityId, new StatModifierComponent(
-            target, StatModifierOperation.Multiplicative, StatModifierPolarity.Debuff, canModify: false, desiredMagnitude, remainingDurationFrames: null, StatusEffectSource.Admin, conditionTag));
+            target, StatModifierOperation.Multiplicative, StatModifierPolarity.Debuff, canModify: false, desiredMagnitude, expiresAtFrame: FrameDeadline.Never, StatusEffectSource.Admin, conditionTag));
     }
 
     private void RemoveModifier(int entityId, StatModifierTarget target, Tag? conditionTag = null)

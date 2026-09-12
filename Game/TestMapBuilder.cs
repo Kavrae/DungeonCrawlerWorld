@@ -419,7 +419,8 @@ public sealed class TestMapBuilder(EntityManager entityManager, ComponentManager
     {
         var framesToWait = (ushort)mathUtility.Next(0, MaximumStaggerFrames + 1);
 
-        ActionLockGate.Lock(_actionLocks, entityId, framesToWait);
+        // Population runs before the simulation's first frame, so the stagger is measured from 0.
+        ActionLockGate.Lock(_actionLocks, entityId, now: 0, framesToWait);
     }
 
     /// <summary>

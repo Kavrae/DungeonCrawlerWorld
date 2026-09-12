@@ -1,3 +1,4 @@
+using Engine.ECS.Systems;
 using Engine.ECS.Components;
 using Engine.Math;
 using Game.Blueprints.Races;
@@ -81,9 +82,9 @@ public sealed class PlayerBlueprint(MathUtility mathUtility, UniqueNumberAllocat
         InventoryActions.AddDivergentItem(componentManager, entityId, adjacentTargetingWand);
 
         var magicMissileOverride = ActionOverrideEffects.OverrideFlatDamage(MagicMissileAction.Build(), MagicMissileDamage);
-        ActionGrantEffects.Grant(componentManager, entityId, HealAction.Id, HealAction.ManaCost, overrideDefinition: null, cooldownFramesRemaining: 0);
-        ActionGrantEffects.Grant(componentManager, entityId, MagicMissileAction.Id, MagicMissileAction.ManaCost, overrideDefinition: magicMissileOverride, cooldownFramesRemaining: 0);
-        ActionGrantEffects.Grant(componentManager, entityId, ToxicStrikeAction.Id, manaCost: 0, overrideDefinition: null, cooldownFramesRemaining: 0);
+        ActionGrantEffects.Grant(componentManager, entityId, HealAction.Id, HealAction.ManaCost, overrideDefinition: null);
+        ActionGrantEffects.Grant(componentManager, entityId, MagicMissileAction.Id, MagicMissileAction.ManaCost, overrideDefinition: magicMissileOverride);
+        ActionGrantEffects.Grant(componentManager, entityId, ToxicStrikeAction.Id, manaCost: 0, overrideDefinition: null);
 
         // F/Q/R are the defaults for Dodge/PowerAttack/QuickAttack (Combat Overhaul: Dodge,
         // TODO.md) -- hotkey slots are never dedicated, only defaulted when available, so this
@@ -124,8 +125,8 @@ public sealed class PlayerBlueprint(MathUtility mathUtility, UniqueNumberAllocat
         componentManager.Merge(entityId, new ItemHotkeyBindingComponent(HotkeySlot.Slot6, toxicIdolStackId));
 
         StatModifierEffects.Apply(componentManager, entityId, StatModifierTarget.OutgoingDamage, StatModifierOperation.Additive, StatModifierPolarity.Buff,
-            canModify: true, magnitude: PermanentOutgoingDamageBonus, durationFrames: null, StatusEffectSource.Admin);
+            canModify: true, magnitude: PermanentOutgoingDamageBonus, expiresAtFrame: FrameDeadline.Never, StatusEffectSource.Admin);
         StatModifierEffects.Apply(componentManager, entityId, StatModifierTarget.MaximumHealth, StatModifierOperation.Multiplicative, StatModifierPolarity.Buff,
-            canModify: true, magnitude: PermanentMaximumHealthMultiplierBonus, durationFrames: null, StatusEffectSource.Admin);
+            canModify: true, magnitude: PermanentMaximumHealthMultiplierBonus, expiresAtFrame: FrameDeadline.Never, StatusEffectSource.Admin);
     }
 }

@@ -122,7 +122,7 @@ public sealed class SimpleHealthRegenSystemTests
         abilityScores.Add(0, new AbilityScoreComponent(AbilityScoreType.Constitution, baseValue: 1, total: 1));
         var statModifiers = new MultiComponentPool<StatModifierComponent>(maximumEntityCount: 10, initialCapacity: 4);
         statModifiers.Add(0, new StatModifierComponent(StatModifierTarget.HealthRegen, StatModifierOperation.Additive, StatModifierPolarity.Debuff,
-            canModify: false, magnitude: -100000f, remainingDurationFrames: null, StatusEffectSource.Admin));
+            canModify: false, magnitude: -100000f, expiresAtFrame: FrameDeadline.Never, StatusEffectSource.Admin));
         var system = new SimpleHealthRegenSystem(pool, CreateTiersPool(), new ProcessingTierEvents(), statModifiers: statModifiers, abilityScores: abilityScores);
 
         system.Update(default, 0);
@@ -152,7 +152,7 @@ public sealed class SimpleHealthRegenSystemTests
         pool.Add(0, new SimpleHealthComponent(currentHealth: 50, maximumHealth: 200));
         var statModifiers = new MultiComponentPool<StatModifierComponent>(maximumEntityCount: 10, initialCapacity: 4);
         statModifiers.Add(0, new StatModifierComponent(StatModifierTarget.IncomingHealing, StatModifierOperation.Multiplicative, StatModifierPolarity.Buff,
-            canModify: false, magnitude: 0.5f, remainingDurationFrames: null, StatusEffectSource.Admin));
+            canModify: false, magnitude: 0.5f, expiresAtFrame: FrameDeadline.Never, StatusEffectSource.Admin));
         var system = new SimpleHealthRegenSystem(pool, CreateTiersPool(), new ProcessingTierEvents(), statModifiers, abilityScores: CreateAbilityScoresPoolWithMaxConstitution(0));
 
         system.Update(default, 0);

@@ -37,7 +37,7 @@ public sealed class ActionGrantEffectsTests
         var manager = CreateRegisteredManager();
         var overrideDefinition = ActionOverrideEffects.OverrideFlatDamage(TestActionDefinition, flatDamage: 7);
 
-        ActionGrantEffects.Grant(manager, 0, ActionId, manaCost: 0, overrideDefinition, cooldownFramesRemaining: 0);
+        ActionGrantEffects.Grant(manager, 0, ActionId, manaCost: 0, overrideDefinition);
 
         Assert.IsTrue(ActionInstanceQueries.TryGet(manager.GetMultiPool<ActionInstanceComponent>(), 0, ActionId, out var instance));
         Assert.AreEqual(overrideDefinition, instance.Override);
@@ -49,7 +49,7 @@ public sealed class ActionGrantEffectsTests
         var manager = CreateRegisteredManager();
         AbilityScoreEffects.Grant(manager, 0, AbilityScoreType.Intelligence, baseValue: 42);
 
-        ActionGrantEffects.Grant(manager, 0, ActionId, manaCost: 0, overrideDefinition: null, cooldownFramesRemaining: 0);
+        ActionGrantEffects.Grant(manager, 0, ActionId, manaCost: 0, overrideDefinition: null);
 
         Assert.IsFalse(manager.GetPackedPool<ManaComponent>().Has(0));
     }
@@ -60,7 +60,7 @@ public sealed class ActionGrantEffectsTests
         var manager = CreateRegisteredManager();
         AbilityScoreEffects.Grant(manager, 0, AbilityScoreType.Intelligence, baseValue: 42);
 
-        ActionGrantEffects.Grant(manager, 0, ActionId, manaCost: 2, overrideDefinition: null, cooldownFramesRemaining: 0);
+        ActionGrantEffects.Grant(manager, 0, ActionId, manaCost: 2, overrideDefinition: null);
 
         var mana = manager.GetPackedPool<ManaComponent>().GetReadonly(0);
         Assert.AreEqual((short)42, mana.MaximumMana);
@@ -71,7 +71,7 @@ public sealed class ActionGrantEffectsTests
     {
         var manager = CreateRegisteredManager();
 
-        ActionGrantEffects.Grant(manager, 0, ActionId, manaCost: 2, overrideDefinition: null, cooldownFramesRemaining: 0);
+        ActionGrantEffects.Grant(manager, 0, ActionId, manaCost: 2, overrideDefinition: null);
 
         Assert.IsFalse(manager.GetPackedPool<ManaComponent>().Has(0));
     }

@@ -1,8 +1,6 @@
 using Engine.ECS.Components;
 using Engine.ECS.Systems;
 using Engine.Events;
-using Game.Modules.ProcessingTier;
-using Game.Modules.ProcessingTier.Components;
 using Game.Modules.StatModifiers.Components;
 using Game.Modules.StatModifiers.Systems;
 
@@ -21,26 +19,27 @@ public sealed class StatModifiersModule : IGameModule
 
     public IReadOnlyList<Type> Dependencies { get; } = [];
 
-    private ProcessingTierEvents _processingTierEvents = null!;
     private EventBus _eventBus = null!;
 
     public void Configure(GameModuleContext context)
     {
-        _processingTierEvents = context.ProcessingTierEvents;
         _eventBus = context.EventBus;
     }
 
     public void RegisterComponents(ComponentManager componentManager)
     {
         componentManager.RegisterMultiPool<StatModifierComponent>();
-        componentManager.RegisterMultiPool<ExpiringStatModifierComponent>();
+
+        // Merging keeps the EARLIER deadline: this is an entity's "next modifier to expire", so a
+        // newly granted modifier only ever pulls it forward, and one granted with a later deadline
+        // leaves the pending firing alone (StatModifierExpirySystem re-arms to it in due course).
+        componentManager.RegisterPackedPool<ExpiringStatModifierComponent>(static (ref existing, incoming) =>
+            existing.NextTickFrame = System.Math.Min(existing.NextTickFrame, incoming.NextTickFrame));
     }
 
     public void RegisterSystems(SystemManager systemManager, ComponentManager componentManager) =>
         systemManager.Register(new StatModifierExpirySystem(
             componentManager.GetMultiPool<StatModifierComponent>(),
-            componentManager.GetMultiPool<ExpiringStatModifierComponent>(),
-            componentManager.GetDirectPool<ProcessingTierComponent>(),
-            _processingTierEvents,
+            componentManager.GetPackedPool<ExpiringStatModifierComponent>(),
             _eventBus));
 }

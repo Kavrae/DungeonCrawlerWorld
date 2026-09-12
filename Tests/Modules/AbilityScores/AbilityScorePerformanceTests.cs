@@ -172,9 +172,9 @@ public sealed class AbilityScorePerformanceTests
         {
             var entityId = ecsContext.EntityManager.CreateEntity();
             entityIds[i] = entityId;
-            // Local, so the single tick below visits every entity. StatModifierExpirySystem is
-            // tiered, and an untiered entity fails open to Beyond -- visited once every 64 frames
-            // -- so without this the tick would expire ~1/64 of the modifiers and time that instead.
+            // Tier no longer affects expiry (StatModifierExpirySystem is on the timer wheel, so
+            // every modifier expires on its exact frame regardless), but the entity still has to be
+            // tiered for the other systems in this fixture.
             processingTiers.Add(entityId, new ProcessingTierComponent(ProcessingTierLevel.Local));
             AbilityScoreEffects.Grant(ecsContext.ComponentManager, entityId, AbilityScoreType.Strength, baseValue: 5);
         }
@@ -182,15 +182,15 @@ public sealed class AbilityScorePerformanceTests
         foreach (var entityId in entityIds)
         {
             AbilityScoreEffects.GrantModifier(ecsContext.ComponentManager, entityId, AbilityScoreType.Strength, StatModifierOperation.Additive, StatModifierPolarity.Buff,
-                canModify: true, magnitude: 3f, durationFrames: 1, StatusEffectSource.Admin);
+                canModify: true, magnitude: 3f, expiresAtFrame: 0, StatusEffectSource.Admin);
         }
 
         GC.Collect();
         GC.WaitForPendingFinalizers();
         GC.Collect();
 
-        // StatModifierExpirySystem has base StripeCount 1 and every entity is Local, so a single
-        // Update ticks every 1-frame modifier to 0, removes it, and publishes
+        // Every modifier's deadline is frame 0, so this single Update fires all of them at once,
+        // removes them, and publishes
         // StatModifierExpiredEvent for each, which AbilityScoresModule's subscription reacts to by
         // recomputing Total -- the hot path the event-driven design introduced.
         var stopwatch = Stopwatch.StartNew();
@@ -199,7 +199,7 @@ public sealed class AbilityScorePerformanceTests
 
         // Guards the measurement itself: if any modifier survived, the tick timed less work than
         // it claims to, and the ratio would compare two different fractions of the population.
-        Assert.AreEqual(0, ecsContext.ComponentManager.GetMultiPool<ExpiringStatModifierComponent>().Count, "Not every modifier expired in the measured tick.");
+        Assert.AreEqual(0, ecsContext.ComponentManager.GetPackedPool<ExpiringStatModifierComponent>().Count, "Not every modifier expired in the measured tick.");
 
         return stopwatch.Elapsed.TotalMilliseconds;
     }

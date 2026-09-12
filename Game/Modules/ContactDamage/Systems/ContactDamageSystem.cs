@@ -6,8 +6,6 @@ using Game.Modules.ContactDamage.Components;
 using Game.Modules.Death.Components;
 using Game.Modules.Health;
 using Game.Modules.Health.Components;
-using Game.Modules.ProcessingTier;
-using Game.Modules.ProcessingTier.Components;
 using Game.Modules.StatModifiers.Components;
 using Game.World;
 
@@ -19,15 +17,9 @@ namespace Game.Modules.ContactDamage.Systems;
 /// profiling investigation found that pattern, multiplied across every subscriber and the full
 /// moving population, a measured hotspot; see FrameEventBuffer's own doc comment) and ticks
 /// ongoing exposure via the same Update, combined in one class since both operate on the same
-/// ContactDamageExposureComponent pool. StripeCount is deliberately 1, not the 10
-/// SimpleHealthRegenSystem/ActionLockSystem use -- see BurningSystem's own doc comment for why:
-/// the population (entities currently standing on a hazard tile) is expected to stay small,
-/// and striping would stretch "every N frames" into "every N * StripeCount real frames." Still
-/// wrapped in a TieredEntityStripeSet despite base StripeCount 1, though (unlike the old plain
-/// EntityStripeSet this replaced) -- a Local-tier entity is visited every real frame same as
-/// before, but Neighborhood/Borough/Beyond-tier entities get their own coarser cadence on top of
-/// that base. The decrement-or-fire loop itself is Engine.ECS.Systems.CountdownTicker.Tick,
-/// shared with BurningSystem/PoisonSystem/StatusEffectAuraSystem.
+/// ContactDamageExposureComponent pool. Ongoing exposure is driven by a timer wheel
+/// (PackedTimerWheel): only exposures due a tick this frame are touched, on their exact frame at
+/// every processing tier (PLAN-timer-wheel.md).
 ///
 /// Per the literal spec, every buffered move landing on a hazard tile deals the immediate hit
 /// and resets the countdown -- including hazard-tile-to-hazard-tile moves, not just a fresh
@@ -35,8 +27,9 @@ namespace Game.Modules.ContactDamage.Systems;
 /// publishes EntityDamagedEvent through it, an unrelated, low-frequency event this redesign doesn't
 /// touch.
 /// </summary>
-public sealed class ContactDamageSystem : ITieredSystem
+public sealed class ContactDamageSystem : ISystem
 {
+    /// <summary>Every frame: this frame's moves must be drained this frame, and the wheel only touches exposures actually due.</summary>
     public byte StripeCount => 1;
 
     private readonly PackedComponentPool<DamageOnContactComponent> _hazards;
@@ -50,19 +43,13 @@ public sealed class ContactDamageSystem : ITieredSystem
     private readonly PackedComponentPool<DeadComponent>? _deadEntities;
     private readonly MultiComponentPool<BodyPartComponent>? _bodyParts;
     private readonly MathUtility _mathUtility;
-    private readonly TieredEntityStripeSet _tieredStripeSet;
+    private readonly PackedTimerWheel<ContactDamageExposureComponent> _wheel;
 
-    // CountdownTicker.Tick's contract needs a reused pendingRemovals list regardless -- this
-    // system just never actually populates it, since Update here never removes exposure
-    // (only OnEntityMoved does, on stepping off a hazard).
-    private readonly List<int> _pendingRemovals = [];
-
-    // Cached once instead of passing the Tick method group at the CountdownTicker.Tick call
-    // site every Update -- unlike a static method group, an instance method group conversion
-    // allocates a fresh delegate on every evaluation (the compiler can't cache a delegate that
-    // captures `this`), so passing `Tick` directly there would allocate one every frame for no
-    // reason: `this` never actually changes between calls.
-    private readonly Func<int, ContactDamageExposureComponent, bool> _tick;
+    // Cached once instead of passing the Tick method group every Update -- unlike a static
+    // method group, an instance method group conversion allocates a fresh delegate on every
+    // evaluation (the compiler can't cache a delegate that captures `this`), so passing `Tick`
+    // directly there would allocate one every frame for no reason.
+    private readonly TimerFired<ContactDamageExposureComponent> _tick;
 
     public ContactDamageSystem(
         PackedComponentPool<DamageOnContactComponent> hazards,
@@ -72,8 +59,6 @@ public sealed class ContactDamageSystem : ITieredSystem
         IMapQuery mapQuery,
         IPlayerQuery? playerQuery,
         FrameEventBuffer<EntityMovedEvent> movedEntities,
-        DirectComponentPool<ProcessingTierComponent> processingTiers,
-        ProcessingTierEvents processingTierEvents,
         MathUtility mathUtility,
         MultiComponentPool<StatModifierComponent>? statModifiers = null,
         PackedComponentPool<DeadComponent>? deadEntities = null,
@@ -91,11 +76,10 @@ public sealed class ContactDamageSystem : ITieredSystem
         _mathUtility = mathUtility;
         _bodyParts = bodyParts;
         _tick = Tick;
-
-        _tieredStripeSet = ProcessingTierWiring.CreateAndWire(StripeCount, exposures, processingTiers, processingTierEvents);
+        _wheel = new PackedTimerWheel<ContactDamageExposureComponent>(exposures);
     }
 
-    private void OnEntityMoved(EntityMovedEvent moved)
+    private void OnEntityMoved(EntityMovedEvent moved, long now)
     {
         if (_deadEntities?.Has(moved.EntityId) == true)
         {
@@ -106,19 +90,20 @@ public sealed class ContactDamageSystem : ITieredSystem
         if (terrainEntityId != -1 && _hazards.TryGetReadonly(terrainEntityId, out var hazard))
         {
             var targetRule = new BodyPartTargetRule(hazard.PreferredTargetType, BodyPartFallback.Bottommost);
-            HealthDamage.Apply(_health, _eventBus, moved.EntityId, hazard.DamagePerTick, StatusEffectSource.FromEntity(terrainEntityId), _playerQuery, "Contact", _statModifiers, _bodyParts, _mathUtility, _deadEntities, targetRule);
+            HealthDamage.Apply(_health, _eventBus, moved.EntityId, hazard.DamagePerTick, StatusEffectSource.FromEntity(terrainEntityId), _playerQuery, "Contact", now, _statModifiers, _bodyParts, _mathUtility, _deadEntities, targetRule);
 
+            var nextTickFrame = FrameDeadline.After(now, hazard.TickIntervalFrames);
             if (_exposures.Has(moved.EntityId))
             {
-                _exposures.TryUpdate(moved.EntityId, (hazard.TickIntervalFrames, terrainEntityId), static (ref ContactDamageExposureComponent exposure, (ushort TickIntervalFrames, int SourceEntityId) state) =>
+                _exposures.TryUpdate(moved.EntityId, (nextTickFrame, terrainEntityId), static (ref ContactDamageExposureComponent exposure, (uint NextTickFrame, int SourceEntityId) state) =>
                 {
-                    exposure.FramesUntilNextTick = state.TickIntervalFrames;
+                    exposure.NextTickFrame = state.NextTickFrame;
                     exposure.SourceEntityId = state.SourceEntityId;
                 });
             }
             else
             {
-                _exposures.Add(moved.EntityId, new ContactDamageExposureComponent(hazard.TickIntervalFrames, terrainEntityId));
+                _exposures.Add(moved.EntityId, new ContactDamageExposureComponent(nextTickFrame, terrainEntityId));
             }
         }
         else if (_exposures.Has(moved.EntityId))
@@ -127,52 +112,44 @@ public sealed class ContactDamageSystem : ITieredSystem
         }
     }
 
-    public void Update(EngineTime time, byte stripeIndex) => TieredSystemRunner.Run(this, time);
-
-    public TieredEntityStripeSet Tiers => _tieredStripeSet;
-
     /// <summary>
-    /// Drains this frame's moves before any tier runs. NOT tier-gated -- see StatusEffectAuraSystem's
+    /// Drains this frame's moves first (entering, re-entering or leaving a hazard), then fires every
+    /// exposure due a tick this frame. The drain is not tier-gated -- see StatusEffectAuraSystem's
     /// own Update comment for why (already self-limiting to entities that moved this exact frame).
-    /// Only the periodic re-check pass in UpdateBucket is throttled. Lives here rather than in Update
-    /// because SystemManager runs a tiered system through TieredSystemRunner and never calls its
-    /// Update -- see ITieredSystem's remarks.
     /// </summary>
-    public void BeginFrame(EngineTime time)
+    public void Update(EngineTime time, byte stripeIndex)
     {
         foreach (var moved in _movedEntities.Items)
         {
-            OnEntityMoved(moved);
+            OnEntityMoved(moved, time.FrameCount);
         }
+
+        _wheel.Tick(time.FrameCount, _tick);
     }
 
-    /// <summary>Advances each due exposure's re-check countdown by framesPerVisit -- see ITieredSystem.UpdateBucket.</summary>
-    public void UpdateBucket(EngineTime time, ReadOnlySpan<int> entityIds, ushort framesPerVisit) =>
-        CountdownTicker.Tick(_exposures, entityIds, _pendingRemovals, _tick, framesPerVisit);
-
-    /// <summary>Always returns false (never removes here -- see this class's own doc comment for why); see CountdownTicker.Tick's own doc comment for the contract.</summary>
-    private bool Tick(int entityId, ContactDamageExposureComponent exposure)
+    /// <summary>Always returns false (never removes here -- stepping off a hazard does that, in OnEntityMoved); see TimerFired's contract.</summary>
+    private bool Tick(int entityId, ContactDamageExposureComponent exposure, long now)
     {
         // A corpse stops taking further contact damage -- otherwise a dead entity standing in
-        // lava would keep re-triggering HealthDamage.Apply/EntityDamagedEvent forever. The stale
-        // exposure component is left in place but inert (matching the "never removes here"
-        // convention this method already follows), not cleared.
+        // lava would keep re-triggering HealthDamage.Apply/EntityDamagedEvent forever. Not
+        // re-armed, so the exposure rests inert (TimerFired: neither removed nor re-armed) rather
+        // than being cleared.
         if (_deadEntities?.Has(entityId) == true)
         {
             return false;
         }
 
         // Defensive only -- terrain is never removed once placed, so SourceEntityId should
-        // always still have DamageOnContactComponent.
+        // always still have DamageOnContactComponent. Rests, same as above.
         if (!_hazards.TryGetReadonly(exposure.SourceEntityId, out var hazard))
         {
             return false;
         }
 
         BodyPartTargetRule? targetRule = hazard.PreferredTargetType is { } type ? new BodyPartTargetRule(type, BodyPartFallback.Bottommost) : null;
-        HealthDamage.Apply(_health, _eventBus, entityId, hazard.DamagePerTick, StatusEffectSource.FromEntity(exposure.SourceEntityId), _playerQuery, "Contact", _statModifiers, _bodyParts, _mathUtility, _deadEntities, targetRule);
+        HealthDamage.Apply(_health, _eventBus, entityId, hazard.DamagePerTick, StatusEffectSource.FromEntity(exposure.SourceEntityId), _playerQuery, "Contact", now, _statModifiers, _bodyParts, _mathUtility, _deadEntities, targetRule);
 
-        _exposures.TryUpdate(entityId, hazard.TickIntervalFrames, static (ref ContactDamageExposureComponent e, ushort tickIntervalFrames) => e.FramesUntilNextTick = tickIntervalFrames);
+        _exposures.TryUpdate(entityId, hazard.TickIntervalFrames, static (ref ContactDamageExposureComponent e, ushort periodFrames) => e.RepeatEvery(periodFrames));
 
         return false;
     }

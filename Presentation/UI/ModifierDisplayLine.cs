@@ -20,7 +20,7 @@ namespace Presentation.UI;
 /// Operation is what lets a caller (e.g. AbilityScoreWindow) detect the Additive/Multiplicative
 /// group boundary to draw a separator at, without re-deriving it from Text.
 /// </summary>
-public readonly record struct ModifierDisplayLine(string Text, StatusEffectSource? Source, ushort? RemainingDurationFrames, string? ModifierText = null, StatModifierOperation? Operation = null);
+public readonly record struct ModifierDisplayLine(string Text, StatusEffectSource? Source, int? RemainingDurationFrames, string? ModifierText = null, StatModifierOperation? Operation = null);
 
 /// <summary>Shared formatting for ModifierDisplayLine's Source/RemainingDurationFrames -- one place so every consumer (AbilityScoreModifierFormatter today, Skills/Action-leveling formatters later) reads the same source name and duration text for the same underlying StatModifierComponent.</summary>
 public static class ModifierDisplayFormatting
@@ -39,8 +39,8 @@ public static class ModifierDisplayFormatting
             : $"Entity#{source.EntityId}";
     }
 
-    /// <summary>"Permanent" when null (StatModifierComponent.RemainingDurationFrames' own null-means-permanent convention), else "{n}s remaining" -- n = Ceiling(frames / GameTiming.FramesPerSecond), the same rounding convention PotionCooldownEffects.RemainingSeconds already uses.</summary>
-    public static string FormatDuration(ushort? remainingDurationFrames) =>
+    /// <summary>"Permanent" when null (a StatModifierComponent whose ExpiresAtFrame is FrameDeadline.Never), else "{n}s remaining" -- n = Ceiling(frames / GameTiming.FramesPerSecond), the same rounding convention PotionCooldownEffects.RemainingSeconds already uses.</summary>
+    public static string FormatDuration(int? remainingDurationFrames) =>
         remainingDurationFrames is not { } frames
             ? "Permanent"
             : $"{(int)System.Math.Ceiling(frames / (float)GameTiming.FramesPerSecond)}s remaining";

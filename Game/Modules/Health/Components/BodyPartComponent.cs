@@ -1,3 +1,4 @@
+using Engine.ECS.Systems;
 using Engine.Utilities;
 
 namespace Game.Modules.Health.Components;
@@ -28,15 +29,19 @@ public struct BodyPartComponent(string name, BodyPartType type, byte partId, byt
     public bool IsVital { get; set; } = isVital;
     public bool IsDisabled { get; set; }
 
-    /// <summary>Frames remaining before ComplexHealthRegenSystem may select this part again after it was disabled.</summary>
+    /// <summary>The simulation frame ComplexHealthRegenSystem may select this part again on, after it was disabled or burned. 0 means selectable.</summary>
     /// <remarks>
-    /// The yo-yo-prevention lockout, decremented directly by ComplexHealthRegenSystem's own
-    /// per-visit walk, not CountdownTicker -- CountdownTicker is PackedComponentPool-only (see
-    /// StatModifierExpirySystem's own doc comment for the same "not reusable here, this pool is
-    /// Multi" reasoning), and a per-part field updated in place via UpdateByDenseIndex needs no
-    /// separate ticking system regardless.
+    /// The yo-yo-prevention lockout, a deadline rather than a countdown (PLAN-timer-wheel.md step
+    /// 8): nothing advances it, and the one place that cares (BodyPartSelection.PickLowestPercentage)
+    /// compares it against the current frame. That removed a whole-chain walk of every body part of
+    /// every due entity from ComplexHealthRegenSystem's per-visit work, and with it the tier-cadence
+    /// class of bug -- a lockout now ends when it should at any tier. Not on a timer wheel: nothing
+    /// fires when it elapses, it simply stops excluding the part.
     /// </remarks>
-    public ushort RegenLockoutFramesRemaining { get; set; }
+    public uint RegenLockedUntilFrame { get; set; }
+
+    /// <summary>True while this part is still inside its regen lockout as of now.</summary>
+    public readonly bool IsRegenLockedOut(long now) => !FrameDeadline.IsReached(RegenLockedUntilFrame, now);
 
     public override readonly string ToString() =>
         MaximumHealth > 0

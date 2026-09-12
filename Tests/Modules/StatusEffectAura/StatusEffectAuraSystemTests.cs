@@ -97,21 +97,35 @@ public sealed class StatusEffectAuraSystemTests
     }
 
     /// <summary>
-    /// Update's periodic re-check pass is now gated by EngineTime.FrameCount (via
-    /// TieredEntityStripeSet), not by the stripeIndex parameter -- stripeIndex is accepted for
-    /// ISystem compliance but otherwise unused. A FrameCount of 1 never lands ObserverEntityId
-    /// (0, Local-tiered, StripeCount 15) on its own due bucket (0), so draining a just-recorded
-    /// move doesn't also consume one of the mover's own real tick opportunities that same call --
-    /// existing rotating-FrameCount loops elsewhere in these tests keep landing on the same tick
-    /// counts they always did.
+    /// The one simulation clock every Update and every AuraSource event handler in a test reads
+    /// -- the way SystemManager.Clock is in the real game. Exposures live on a timer wheel, which
+    /// needs time to only move forward, so every call goes through Step: one frame after the
+    /// last, never a frame number chosen per call.
     /// </summary>
-    private const long DrainOnlyFrameCount = 1;
+    private readonly SimulationClock _clock = new();
 
-    /// <summary>Comfortably covers a full cycle of every tier's own cadence (base StripeCount * the coarsest divisor, 8, times two) regardless of which bucket a given entityId happens to land in, without needing to compute the exact modulo -- used by tests proving the periodic catch-up pass (as opposed to an instant, same-call resync) eventually reaches a non-Local source.</summary>
+    /// <summary>Comfortably covers a full cycle of every tier's own cadence (base StripeCount * the coarsest divisor, 8, times two) regardless of which bucket a given entityId happens to land in, without needing to compute the exact modulo -- used by tests proving the source-resync catch-up pass (still tiered, unlike exposures) eventually reaches a non-Local source.</summary>
     private static int GenerousCatchUpFrameCount(StatusEffectAuraSystem system) => system.StripeCount * 8 * 2;
 
+    /// <summary>Advances the clock one frame and runs the system on it.</summary>
+    private void Step(StatusEffectAuraSystem system)
+    {
+        _clock.Advance(_clock.CurrentFrame + 1);
+        system.Update(new EngineTime(default, default, false, FrameCount: _clock.CurrentFrame), 0);
+    }
+
+    /// <summary>Runs frameCount consecutive frames, clearing the move buffer after each the way SystemManager does at the end of a real frame.</summary>
+    private void RunFrames(StatusEffectAuraSystem system, FrameEventBuffer<EntityMovedEvent> movedEntities, int frameCount)
+    {
+        for (var i = 0; i < frameCount; i++)
+        {
+            Step(system);
+            movedEntities.ClearFrame();
+        }
+    }
+
     /// <summary>Mirrors real game wiring (both BurningModule.Configure and PoisonModule.Configure registering their own applier into the same shared registry) -- the registry a caller can override via applierRegistry to exercise unsupported-effect-type behavior instead.</summary>
-    private static (StatusEffectAuraSystem System, ComponentManager ComponentManager, FakeMapQuery MapQuery, FrameEventBuffer<EntityMovedEvent> MovedEntities, EventBus EventBus) Build(StatusEffectAuraApplierRegistry? applierRegistry = null)
+    private (StatusEffectAuraSystem System, ComponentManager ComponentManager, FakeMapQuery MapQuery, FrameEventBuffer<EntityMovedEvent> MovedEntities, EventBus EventBus) Build(StatusEffectAuraApplierRegistry? applierRegistry = null)
     {
         var componentManager = new ComponentManager(initialEntityCapacity: 200, initialComponentCapacity: 50);
         componentManager.RegisterDirectPool<TransformComponent>(static (ref existing, incoming) => existing = incoming);
@@ -137,6 +151,7 @@ public sealed class StatusEffectAuraSystemTests
             movedEntities,
             componentManager.GetDirectPool<ProcessingTierComponent>(),
             new ProcessingTierEvents(),
+            _clock,
             componentManager.GetPackedPool<DeadComponent>());
 
         return (system, componentManager, mapQuery, movedEntities, eventBus);
@@ -145,8 +160,8 @@ public sealed class StatusEffectAuraSystemTests
     private static StatusEffectAuraApplierRegistry DefaultApplierRegistry()
     {
         var registry = new StatusEffectAuraApplierRegistry();
-        registry.Register(new TimerBasedAuraApplier<BurningTimerComponent>(StatusEffectType.Burning, (cm, id, source) => BurningEffects.ApplyStack(cm, id, source)));
-        registry.Register(new TimerBasedAuraApplier<PoisonTimerComponent>(StatusEffectType.Poison, (cm, id, source) => PoisonEffects.ApplyStack(cm, id, source, durationInTicks: 1)));
+        registry.Register(new TimerBasedAuraApplier<BurningTimerComponent>(StatusEffectType.Burning, (cm, id, source, now) => BurningEffects.ApplyStack(cm, id, source, now)));
+        registry.Register(new TimerBasedAuraApplier<PoisonTimerComponent>(StatusEffectType.Poison, (cm, id, source, now) => PoisonEffects.ApplyStack(cm, id, source, durationInTicks: 1, now)));
         return registry;
     }
 
@@ -158,19 +173,17 @@ public sealed class StatusEffectAuraSystemTests
     }
 
     /// <summary>
-    /// Records the move into the shared buffer and immediately drains it via a FrameCount that
-    /// can't touch the mover's own exposure timer -- see DrainOnlyFrameCount's own doc comment
-    /// for why this doesn't consume a real tick opportunity. Also clears the buffer afterward,
-    /// the same way SystemManager would at the end of a real frame's cycle (see FrameEventBuffer's
-    /// own doc comment) -- these tests construct StatusEffectAuraSystem directly, bypassing
-    /// SystemManager entirely, so without this the recorded move would still be sitting in the
-    /// buffer on every later Update call in these tests' own tick loops, getting silently
-    /// reprocessed (re-detecting the same move, over and over) instead of just once.
+    /// Records the move into the shared buffer and drains it on the next frame. Also clears the
+    /// buffer afterward, the same way SystemManager would at the end of a real frame's cycle (see
+    /// FrameEventBuffer's own doc comment) -- these tests construct StatusEffectAuraSystem
+    /// directly, bypassing SystemManager entirely, so without this the recorded move would still
+    /// be sitting in the buffer on every later Update call, getting silently reprocessed instead
+    /// of just once.
     /// </summary>
-    private static void MoveObserverTo(StatusEffectAuraSystem system, FrameEventBuffer<EntityMovedEvent> movedEntities, Vector3Int from, Vector3Int to, int entityId = ObserverEntityId)
+    private void MoveObserverTo(StatusEffectAuraSystem system, FrameEventBuffer<EntityMovedEvent> movedEntities, Vector3Int from, Vector3Int to, int entityId = ObserverEntityId)
     {
         movedEntities.Record(new EntityMovedEvent(entityId, from, to, UnitSize));
-        system.Update(new EngineTime(default, default, false, FrameCount: DrainOnlyFrameCount), 0);
+        Step(system);
         movedEntities.ClearFrame();
     }
 
@@ -195,7 +208,7 @@ public sealed class StatusEffectAuraSystemTests
         return false;
     }
 
-    private static int FramesUntilNextTickOf(ComponentManager componentManager, int entityId, StatusEffectType effectType)
+    private static uint NextTickFrameOf(ComponentManager componentManager, int entityId, StatusEffectType effectType)
     {
         var exposures = componentManager.GetMultiPool<StatusEffectAuraExposureComponent>();
         for (var denseIndex = exposures.GetFirstDenseIndex(entityId); denseIndex != -1; denseIndex = exposures.GetNextDenseIndex(denseIndex))
@@ -203,7 +216,7 @@ public sealed class StatusEffectAuraSystemTests
             var exposure = exposures.GetReadonlyByDenseIndex(denseIndex);
             if (exposure.EffectType == effectType)
             {
-                return exposure.FramesUntilNextTick;
+                return exposure.NextTickFrame;
             }
         }
 
@@ -266,15 +279,8 @@ public sealed class StatusEffectAuraSystemTests
         MoveObserverTo(system, movedEntities, new Vector3Int(0, 0, 0), SourcePosition);
         Assert.AreEqual(8, StackCountOf(componentManager, ObserverEntityId));
 
-        // Rotates stripeIndex across all of StatusEffectAuraSystem's stripes the same way
-        // SystemManager does in real play (see BurningSystemTests' equivalent regression test)
-        // -- ObserverEntityId (0) always lands in stripe 0 regardless of StripeCount, so a
-        // fixed-stripeIndex loop wouldn't actually exercise striping at all.
-        for (var frame = 0; frame < AuraEffects.TickIntervalFrames; frame++)
-        {
-            system.Update(new EngineTime(default, default, false, FrameCount: frame), (byte)(frame % system.StripeCount));
-            movedEntities.ClearFrame();
-        }
+        // One full tick interval -- the exposure's re-grant fires exactly once in here.
+        RunFrames(system, movedEntities, AuraEffects.TickIntervalFrames);
 
         Assert.AreEqual(8, StackCountOf(componentManager, ObserverEntityId));
     }
@@ -294,11 +300,7 @@ public sealed class StatusEffectAuraSystemTests
         // brought the stack count down since the last aura tick.
         componentManager.GetPackedPool<BurningTimerComponent>().TryUpdate(ObserverEntityId, static (ref BurningTimerComponent t) => t.StackCount = 5);
 
-        for (var frame = 0; frame < AuraEffects.TickIntervalFrames; frame++)
-        {
-            system.Update(new EngineTime(default, default, false, FrameCount: frame), (byte)(frame % system.StripeCount));
-            movedEntities.ClearFrame();
-        }
+        RunFrames(system, movedEntities, AuraEffects.TickIntervalFrames);
 
         Assert.AreEqual(8, StackCountOf(componentManager, ObserverEntityId), "Topped back up to the target (8), not added on top of the decayed value (5 + 8 = 13).");
     }
@@ -338,11 +340,7 @@ public sealed class StatusEffectAuraSystemTests
         // EntityMovedEvent itself -- must reflect where it actually ended up.
         componentManager.Merge(ObserverEntityId, new TransformComponent(farAwayPosition, UnitSize));
 
-        for (var frame = 0; frame < AuraEffects.TickIntervalFrames; frame++)
-        {
-            system.Update(new EngineTime(default, default, false, FrameCount: frame), (byte)(frame % system.StripeCount));
-            movedEntities.ClearFrame();
-        }
+        RunFrames(system, movedEntities, AuraEffects.TickIntervalFrames);
 
         Assert.IsFalse(HasExposure(componentManager, ObserverEntityId, StatusEffectType.Burning));
     }
@@ -356,23 +354,14 @@ public sealed class StatusEffectAuraSystemTests
     public void MovingOutAndBackInBeforeNextTick_DoesNotRegrantOrResetTimer()
     {
         var (system, componentManager, _, movedEntities, _) = Build();
-        // Pinned to Local so the two 30-frame loops' exact FramesUntilNextTick assertions below
-        // (framesPerVisit == base StripeCount, matching AuraEffects.TickIntervalFrames pacing)
-        // don't depend on whatever the untiered fail-open default happens to be -- this test is
-        // about regrant/reset behavior, not tier throttling.
-        componentManager.GetDirectPool<ProcessingTierComponent>().Add(ObserverEntityId, new ProcessingTierComponent(ProcessingTierLevel.Local));
         AddSource(componentManager, SourceEntityId, SourcePosition, StatusEffectType.Burning, strength: 8);
 
         MoveObserverTo(system, movedEntities, new Vector3Int(0, 0, 0), SourcePosition);
         Assert.AreEqual(8, StackCountOf(componentManager, ObserverEntityId));
+        var firstTickFrame = NextTickFrameOf(componentManager, ObserverEntityId, StatusEffectType.Burning);
+        Assert.AreEqual((uint)(_clock.CurrentFrame + AuraEffects.TickIntervalFrames), firstTickFrame, "The first re-grant is one interval after entry.");
 
-        for (var frame = 0; frame < 30; frame++)
-        {
-            system.Update(new EngineTime(default, default, false, FrameCount: frame), (byte)(frame % system.StripeCount));
-            movedEntities.ClearFrame();
-        }
-
-        Assert.AreEqual(30, FramesUntilNextTickOf(componentManager, ObserverEntityId, StatusEffectType.Burning));
+        RunFrames(system, movedEntities, 30);
 
         // Step out (still in range at distance 1 -- but exposure already exists, so this
         // must not grant) and back in, all before the original timer would naturally tick.
@@ -382,13 +371,9 @@ public sealed class StatusEffectAuraSystemTests
         componentManager.Merge(ObserverEntityId, new TransformComponent(SourcePosition, UnitSize));
 
         Assert.AreEqual(8, StackCountOf(componentManager, ObserverEntityId), "Stepping out and back in before the timer ticks must not grant again.");
-        Assert.AreEqual(30, FramesUntilNextTickOf(componentManager, ObserverEntityId, StatusEffectType.Burning), "...nor reset the timer.");
+        Assert.AreEqual(firstTickFrame, NextTickFrameOf(componentManager, ObserverEntityId, StatusEffectType.Burning), "...nor reset the timer.");
 
-        for (var frame = 0; frame < 30; frame++)
-        {
-            system.Update(new EngineTime(default, default, false, FrameCount: frame), (byte)(frame % system.StripeCount));
-            movedEntities.ClearFrame();
-        }
+        RunFrames(system, movedEntities, 30);
 
         Assert.AreEqual(8, StackCountOf(componentManager, ObserverEntityId), "The original timer reaching 0 re-evaluates based on the entity's current (in-range) position, topping off to the target rather than adding to it again.");
     }
@@ -519,42 +504,30 @@ public sealed class StatusEffectAuraSystemTests
             "An effect type with no registered applier grants nothing, so it must not create a phantom exposure either.");
     }
 
-    /// <summary>Only the periodic re-grant pass is ProcessingTier-gated, not the buffer drain -- see Update's own comment. Sets up an existing exposure directly (bypassing MoveObserverTo's fresh-entry grant) to exercise that pass in isolation.</summary>
+    /// <summary>
+    /// Exposures are not ProcessingTier-gated any more -- they sit on a timer wheel and re-grant on
+    /// their exact frame at every tier (PLAN-timer-wheel.md). Beyond is the coarsest tier, the one
+    /// that used to be visited least often. Sets up an existing exposure directly (bypassing
+    /// MoveObserverTo's fresh-entry grant), so the only thing that can grant stacks here is that
+    /// exposure's own tick.
+    /// </summary>
     [TestMethod]
-    public void Update_ThrottledObserver_OffCycle_DoesNotDecrementExposureCountdown()
+    [DataRow(ProcessingTierLevel.Local)]
+    [DataRow(ProcessingTierLevel.Beyond)]
+    public void ExposureAtAnyTier_ReGrantsOnItsExactFrame(ProcessingTierLevel tier)
     {
-        var (system, componentManager, _, _, _) = Build();
+        var (system, componentManager, _, movedEntities, _) = Build();
         AddSource(componentManager, SourceEntityId, SourcePosition, StatusEffectType.Burning, strength: 8);
         componentManager.Merge(ObserverEntityId, new TransformComponent(SourcePosition, UnitSize));
-        componentManager.GetDirectPool<ProcessingTierComponent>().Add(ObserverEntityId, new ProcessingTierComponent(ProcessingTierLevel.Neighborhood));
-        componentManager.GetMultiPool<StatusEffectAuraExposureComponent>().Add(ObserverEntityId, new StatusEffectAuraExposureComponent(StatusEffectType.Burning, AuraEffects.TickIntervalFrames));
+        componentManager.GetDirectPool<ProcessingTierComponent>().Add(ObserverEntityId, new ProcessingTierComponent(tier));
+        componentManager.GetMultiPool<StatusEffectAuraExposureComponent>().Add(ObserverEntityId, new StatusEffectAuraExposureComponent(StatusEffectType.Burning, nextTickFrame: 7));
 
-        // ObserverEntityId (0), Neighborhood-tiered (StripeCount * the Neighborhood divisor) lands in
-        // bucket 0 -- due only when FrameCount % 30 == 0.
-        system.Update(new EngineTime(default, default, false, FrameCount: 1), 0);
+        RunFrames(system, movedEntities, 6);
+        Assert.AreEqual(0, StackCountOf(componentManager, ObserverEntityId), "Not yet due.");
 
-        Assert.AreEqual(AuraEffects.TickIntervalFrames, FramesUntilNextTickOf(componentManager, ObserverEntityId, StatusEffectType.Burning));
-    }
-
-    [TestMethod]
-    public void Update_ThrottledObserver_OnEligibleCycle_DecrementsExposureCountdown()
-    {
-        var (system, componentManager, _, _, _) = Build();
-        AddSource(componentManager, SourceEntityId, SourcePosition, StatusEffectType.Burning, strength: 8);
-        componentManager.Merge(ObserverEntityId, new TransformComponent(SourcePosition, UnitSize));
-        componentManager.GetDirectPool<ProcessingTierComponent>().Add(ObserverEntityId, new ProcessingTierComponent(ProcessingTierLevel.Neighborhood));
-
-        // Derived from ProcessingTierDivisors, and seeded longer than one visit's span, so this
-        // stays on the decrement path -- see BurningSystemTests'
-        // Update_ThrottledEntity_OnEligibleCycle_DecrementsCountdown for the same reasoning.
-        var framesPerVisit = system.StripeCount * ProcessingTierDivisors.ByTierIndex[(int)ProcessingTierLevel.Neighborhood];
-        var startingCountdown = (ushort)(framesPerVisit + AuraEffects.TickIntervalFrames);
-        componentManager.GetMultiPool<StatusEffectAuraExposureComponent>().Add(ObserverEntityId, new StatusEffectAuraExposureComponent(StatusEffectType.Burning, startingCountdown));
-
-        system.Update(new EngineTime(default, default, false, FrameCount: 0), 0);
-
-        // Decremented by the Neighborhood tier's own framesPerVisit, not the base StripeCount.
-        Assert.AreEqual(startingCountdown - framesPerVisit, FramesUntilNextTickOf(componentManager, ObserverEntityId, StatusEffectType.Burning));
+        RunFrames(system, movedEntities, 1);
+        Assert.AreEqual(8, StackCountOf(componentManager, ObserverEntityId));
+        Assert.AreEqual(7u + AuraEffects.TickIntervalFrames, NextTickFrameOf(componentManager, ObserverEntityId, StatusEffectType.Burning), "Re-armed one interval after its tick.");
     }
 
     /// <summary>
@@ -570,8 +543,7 @@ public sealed class StatusEffectAuraSystemTests
 
         // Forces EnsureGrid to run once with no sources present -- the grid is "already built"
         // by the time the toggle below happens.
-        system.Update(new EngineTime(default, default, false, FrameCount: 0), 0);
-        movedEntities.ClearFrame();
+        RunFrames(system, movedEntities, 1);
 
         componentManager.Merge(SourceEntityId, new TransformComponent(SourcePosition, UnitSize));
         var sourcePool = componentManager.GetMultiPool<StatusEffectAuraSourceComponent>();
@@ -651,11 +623,7 @@ public sealed class StatusEffectAuraSystemTests
         componentManager.Merge(SourceEntityId, new TransformComponent(observerPosition, UnitSize));
         MoveObserverTo(system, movedEntities, SourcePosition, observerPosition, SourceEntityId);
 
-        for (var frame = 0; frame < AuraEffects.TickIntervalFrames; frame++)
-        {
-            system.Update(new EngineTime(default, default, false, FrameCount: frame), (byte)(frame % system.StripeCount));
-            movedEntities.ClearFrame();
-        }
+        RunFrames(system, movedEntities, AuraEffects.TickIntervalFrames);
 
         Assert.AreEqual(8, StackCountOf(componentManager, ObserverEntityId), "Burning contribution from the moved dual-typed source must register in the grid.");
         Assert.AreEqual(9, PoisonStackCountOf(componentManager, ObserverEntityId), "Poison from both sources (1 + 8) is additive -- the moved source's own Poison instance is correctly chain-walked too, not just its Burning one.");
@@ -687,8 +655,7 @@ public sealed class StatusEffectAuraSystemTests
         var (system, componentManager, mapQuery, movedEntities, eventBus) = Build();
 
         // Forces EnsureGrid to run once with no sources present -- the grid is "already built" by the time the toggle below happens, same setup as the sync-bug regression tests above.
-        system.Update(new EngineTime(default, default, false, FrameCount: 0), 0);
-        movedEntities.ClearFrame();
+        RunFrames(system, movedEntities, 1);
 
         componentManager.Merge(ObserverEntityId, new TransformComponent(SourcePosition, UnitSize));
         mapQuery.SetOccupant(SourcePosition, ObserverEntityId);
@@ -716,8 +683,7 @@ public sealed class StatusEffectAuraSystemTests
         var (system, componentManager, mapQuery, movedEntities, eventBus) = Build();
 
         // Forces EnsureGrid to run once with no sources present -- the grid is "already built" by the time the toggle below happens, same setup as the sync-bug regression tests above.
-        system.Update(new EngineTime(default, default, false, FrameCount: 0), 0);
-        movedEntities.ClearFrame();
+        RunFrames(system, movedEntities, 1);
 
         componentManager.Merge(ObserverEntityId, new TransformComponent(SourcePosition, UnitSize));
         mapQuery.SetNonBlockingOccupant(SourcePosition, ObserverEntityId);
@@ -769,8 +735,7 @@ public sealed class StatusEffectAuraSystemTests
         var farAwayStart = new Vector3Int(SourcePosition.X - 50, SourcePosition.Y, SourcePosition.Z);
         componentManager.Merge(SourceEntityId, new TransformComponent(farAwayStart, UnitSize));
         var sourcePool = componentManager.GetMultiPool<StatusEffectAuraSourceComponent>();
-        system.Update(new EngineTime(default, default, false, FrameCount: 0), 0);
-        movedEntities.ClearFrame();
+        RunFrames(system, movedEntities, 1);
         AuraSourceEffects.Toggle(sourcePool, eventBus, SourceEntityId, StatusEffectType.Burning, auraAndGlowStrength: 8, Color.Orange);
 
         // A stationary occupant standing where the source is about to walk to -- never itself moves.
@@ -801,8 +766,7 @@ public sealed class StatusEffectAuraSystemTests
         var farAwayStart = new Vector3Int(SourcePosition.X - 50, SourcePosition.Y, SourcePosition.Z);
         componentManager.Merge(SourceEntityId, new TransformComponent(farAwayStart, UnitSize));
         var sourcePool = componentManager.GetMultiPool<StatusEffectAuraSourceComponent>();
-        system.Update(new EngineTime(default, default, false, FrameCount: 0), 0);
-        movedEntities.ClearFrame();
+        RunFrames(system, movedEntities, 1);
         AuraSourceEffects.Toggle(sourcePool, eventBus, SourceEntityId, StatusEffectType.Burning, auraAndGlowStrength: 8, Color.Orange);
 
         componentManager.Merge(ObserverEntityId, new TransformComponent(SourcePosition, UnitSize));
@@ -824,8 +788,7 @@ public sealed class StatusEffectAuraSystemTests
         var farAwayStart = new Vector3Int(SourcePosition.X - 50, SourcePosition.Y, SourcePosition.Z);
         componentManager.Merge(SourceEntityId, new TransformComponent(farAwayStart, UnitSize));
         var sourcePool = componentManager.GetMultiPool<StatusEffectAuraSourceComponent>();
-        system.Update(new EngineTime(default, default, false, FrameCount: 0), 0);
-        movedEntities.ClearFrame();
+        RunFrames(system, movedEntities, 1);
         AuraSourceEffects.Toggle(sourcePool, eventBus, SourceEntityId, StatusEffectType.Burning, auraAndGlowStrength: 8, Color.Orange);
 
         componentManager.Merge(ObserverEntityId, new TransformComponent(SourcePosition, UnitSize));
@@ -835,11 +798,7 @@ public sealed class StatusEffectAuraSystemTests
         MoveObserverTo(system, movedEntities, farAwayStart, SourcePosition, SourceEntityId);
         Assert.AreEqual(0, StackCountOf(componentManager, ObserverEntityId), "Sanity check: still not resynced immediately after the move itself.");
 
-        for (var frame = 0; frame < GenerousCatchUpFrameCount(system); frame++)
-        {
-            system.Update(new EngineTime(default, default, false, FrameCount: frame), (byte)(frame % system.StripeCount));
-            movedEntities.ClearFrame();
-        }
+        RunFrames(system, movedEntities, GenerousCatchUpFrameCount(system));
 
         Assert.AreEqual(8, StackCountOf(componentManager, ObserverEntityId), "The periodic catch-up pass must eventually resync a non-Local source's stale grid contribution and grant the stationary occupant.");
     }
@@ -891,7 +850,7 @@ public sealed class StatusEffectAuraSystemTests
         AddSource(componentManager, SourceEntityId, SourcePosition, StatusEffectType.Burning, strength: 8);
 
         movedEntities.Record(new EntityMovedEvent(ObserverEntityId, SourcePosition, SourcePosition, UnitSize));
-        system.Update(new EngineTime(default, default, false, FrameCount: DrainOnlyFrameCount), 0);
+        Step(system);
 
         Assert.AreEqual(8, StackCountOf(componentManager, ObserverEntityId));
         Assert.IsTrue(HasExposure(componentManager, ObserverEntityId, StatusEffectType.Burning));

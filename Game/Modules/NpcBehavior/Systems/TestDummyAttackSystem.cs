@@ -54,7 +54,7 @@ public sealed class TestDummyAttackSystem : ISystem
     {
         foreach (var entityId in _stripeSet.GetBucket(stripeIndex))
         {
-            if (ActionLockGate.IsBlocked(_actionLocks, entityId) || !_transformPool.TryGetReadonly(entityId, out var transform))
+            if (ActionLockGate.IsBlocked(_actionLocks, entityId, time.FrameCount) || !_transformPool.TryGetReadonly(entityId, out var transform))
             {
                 continue;
             }

@@ -75,6 +75,9 @@ public sealed class DiagnosticsEngine
     /// <summary>Null unless DiagnosticsFeatures.FrameBudget is enabled or a benchmark range was given -- wire into SystemManager.Profiler/EventBus.Profiler/ShellContext when non-null. Feeds both when both are on.</summary>
     public IFrameCostRecorder? FrameCostRecorder { get; }
 
+    /// <summary>True once a benchmark range was given and its report has been written -- a headless run's signal to stop.</summary>
+    public bool IsBenchmarkComplete => _benchmark?.IsComplete ?? false;
+
     /// <summary>
     /// Call once per simulation frame, before that frame's EcsContext.Update, with the frame
     /// number it is about to run. Drives FrameRangeBenchmark's window and writes its one-shot

@@ -1,3 +1,4 @@
+using Engine.ECS.Systems;
 using Engine.ECS.Components;
 using Game.Modules.AbilityScores;
 using Game.Modules.Core;
@@ -22,7 +23,7 @@ public sealed class AbilityScoreModifierFormatterTests
 
     private static void GrantModifier(ComponentManager manager, int entityId, AbilityScoreType type, StatModifierOperation operation, float magnitude, StatusEffectSource source) =>
         AbilityScoreEffects.GrantModifier(manager, entityId, type, operation, StatModifierPolarity.Buff,
-            canModify: true, magnitude, durationFrames: null, source);
+            canModify: true, magnitude, expiresAtFrame: FrameDeadline.Never, source);
 
     [TestMethod]
     public void GetOrderedLines_NoModifiers_ReturnsOnlyUnsignedBaseLine()
@@ -30,7 +31,7 @@ public sealed class AbilityScoreModifierFormatterTests
         var manager = CreateRegisteredManager();
         AbilityScoreEffects.Grant(manager, 0, AbilityScoreType.Strength, 6);
 
-        var lines = AbilityScoreModifierFormatter.GetOrderedLines(manager, 0, AbilityScoreType.Strength);
+        var lines = AbilityScoreModifierFormatter.GetOrderedLines(manager, 0, AbilityScoreType.Strength, now: 0);
 
         CollectionAssert.AreEqual(new[] { "Base : 6" }, lines.Select(static line => line.Text).ToArray());
     }
@@ -43,7 +44,7 @@ public sealed class AbilityScoreModifierFormatterTests
         GrantModifier(manager, 0, AbilityScoreType.Strength, StatModifierOperation.Multiplicative, 0.5f, StatusEffectSource.Admin);
         GrantModifier(manager, 0, AbilityScoreType.Strength, StatModifierOperation.Additive, 2f, StatusEffectSource.AI);
 
-        var lines = AbilityScoreModifierFormatter.GetOrderedLines(manager, 0, AbilityScoreType.Strength);
+        var lines = AbilityScoreModifierFormatter.GetOrderedLines(manager, 0, AbilityScoreType.Strength, now: 0);
 
         Assert.AreEqual("Base : 5", lines[0].Text);
         Assert.AreEqual("AI : +2", lines[1].Text);
@@ -58,7 +59,7 @@ public sealed class AbilityScoreModifierFormatterTests
         GrantModifier(manager, 0, AbilityScoreType.Strength, StatModifierOperation.Additive, -1f, StatusEffectSource.AI);
         GrantModifier(manager, 0, AbilityScoreType.Strength, StatModifierOperation.Additive, 3f, StatusEffectSource.Admin);
 
-        var lines = AbilityScoreModifierFormatter.GetOrderedLines(manager, 0, AbilityScoreType.Strength);
+        var lines = AbilityScoreModifierFormatter.GetOrderedLines(manager, 0, AbilityScoreType.Strength, now: 0);
 
         Assert.AreEqual("Admin : +3", lines[1].Text);
         Assert.AreEqual("AI : -1", lines[2].Text);
@@ -74,7 +75,7 @@ public sealed class AbilityScoreModifierFormatterTests
         GrantModifier(manager, 0, AbilityScoreType.Strength, StatModifierOperation.Multiplicative, 0.25f, StatusEffectSource.Admin);
         GrantModifier(manager, 0, AbilityScoreType.Strength, StatModifierOperation.Additive, 2f, StatusEffectSource.Admin);
 
-        var lines = AbilityScoreModifierFormatter.GetOrderedLines(manager, 0, AbilityScoreType.Strength);
+        var lines = AbilityScoreModifierFormatter.GetOrderedLines(manager, 0, AbilityScoreType.Strength, now: 0);
 
         CollectionAssert.AreEqual(new[] { "Base : 5", "Admin : +2", "AI : -1", "Admin : +25%", "Admin : -10%" }, lines.Select(static line => line.Text).ToArray());
     }
@@ -86,7 +87,7 @@ public sealed class AbilityScoreModifierFormatterTests
         AbilityScoreEffects.Grant(manager, 0, AbilityScoreType.Strength, 5);
         GrantModifier(manager, 0, AbilityScoreType.Strength, StatModifierOperation.Additive, 2.6f, StatusEffectSource.Admin);
 
-        var lines = AbilityScoreModifierFormatter.GetOrderedLines(manager, 0, AbilityScoreType.Strength);
+        var lines = AbilityScoreModifierFormatter.GetOrderedLines(manager, 0, AbilityScoreType.Strength, now: 0);
 
         Assert.AreEqual("Admin : +3", lines[1].Text);
     }
@@ -98,7 +99,7 @@ public sealed class AbilityScoreModifierFormatterTests
         AbilityScoreEffects.Grant(manager, 0, AbilityScoreType.Strength, 5);
         GrantModifier(manager, 0, AbilityScoreType.Strength, StatModifierOperation.Multiplicative, -0.104f, StatusEffectSource.Admin);
 
-        var lines = AbilityScoreModifierFormatter.GetOrderedLines(manager, 0, AbilityScoreType.Strength);
+        var lines = AbilityScoreModifierFormatter.GetOrderedLines(manager, 0, AbilityScoreType.Strength, now: 0);
 
         Assert.AreEqual("Admin : -10%", lines[1].Text);
     }
@@ -111,7 +112,7 @@ public sealed class AbilityScoreModifierFormatterTests
         manager.Merge(1, new DisplayTextComponent("Iron Ring", "A plain iron ring."));
         GrantModifier(manager, 0, AbilityScoreType.Strength, StatModifierOperation.Additive, 1f, StatusEffectSource.FromEntity(1));
 
-        var lines = AbilityScoreModifierFormatter.GetOrderedLines(manager, 0, AbilityScoreType.Strength);
+        var lines = AbilityScoreModifierFormatter.GetOrderedLines(manager, 0, AbilityScoreType.Strength, now: 0);
 
         Assert.AreEqual("Iron Ring : +1", lines[1].Text);
     }
@@ -123,7 +124,7 @@ public sealed class AbilityScoreModifierFormatterTests
         AbilityScoreEffects.Grant(manager, 0, AbilityScoreType.Strength, 5);
         GrantModifier(manager, 0, AbilityScoreType.Strength, StatModifierOperation.Additive, 1f, StatusEffectSource.FromEntity(7));
 
-        var lines = AbilityScoreModifierFormatter.GetOrderedLines(manager, 0, AbilityScoreType.Strength);
+        var lines = AbilityScoreModifierFormatter.GetOrderedLines(manager, 0, AbilityScoreType.Strength, now: 0);
 
         Assert.AreEqual("Entity#7 : +1", lines[1].Text);
     }
@@ -136,7 +137,7 @@ public sealed class AbilityScoreModifierFormatterTests
         AbilityScoreEffects.Grant(manager, 0, AbilityScoreType.Dexterity, 4);
         GrantModifier(manager, 0, AbilityScoreType.Dexterity, StatModifierOperation.Additive, 9f, StatusEffectSource.Admin);
 
-        var lines = AbilityScoreModifierFormatter.GetOrderedLines(manager, 0, AbilityScoreType.Strength);
+        var lines = AbilityScoreModifierFormatter.GetOrderedLines(manager, 0, AbilityScoreType.Strength, now: 0);
 
         CollectionAssert.AreEqual(new[] { "Base : 5" }, lines.Select(static line => line.Text).ToArray());
     }

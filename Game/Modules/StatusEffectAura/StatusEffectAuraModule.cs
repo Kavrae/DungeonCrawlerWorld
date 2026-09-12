@@ -40,6 +40,7 @@ public sealed class StatusEffectAuraModule : IGameModule
     private StatusEffectAuraApplierRegistry _applierRegistry = null!;
     private FrameEventBuffer<EntityMovedEvent> _movedEntities = null!;
     private ProcessingTierEvents _processingTierEvents = null!;
+    private SimulationClock _simulationClock = null!;
 
     public void Configure(GameModuleContext context)
     {
@@ -48,6 +49,7 @@ public sealed class StatusEffectAuraModule : IGameModule
         _applierRegistry = context.StatusEffectAuraAppliers;
         _movedEntities = context.MovedEntities;
         _processingTierEvents = context.ProcessingTierEvents;
+        _simulationClock = context.SimulationClock;
     }
 
     public void RegisterComponents(ComponentManager componentManager)
@@ -74,13 +76,12 @@ public sealed class StatusEffectAuraModule : IGameModule
             _movedEntities,
             componentManager.GetDirectPool<ProcessingTierComponent>(),
             _processingTierEvents,
+            _simulationClock,
             deadEntities));
 
         systemManager.Register(new AuraSourceExpirySystem(
             componentManager.GetPackedPool<AuraSourceExpiryComponent>(),
             componentManager.GetMultiPool<StatusEffectAuraSourceComponent>(),
-            _eventBus,
-            componentManager.GetDirectPool<ProcessingTierComponent>(),
-            _processingTierEvents));
+            _eventBus));
     }
 }

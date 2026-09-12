@@ -1,4 +1,5 @@
 using Engine.ECS.Components.Stores;
+using Engine.ECS.Systems;
 using Game.Modules.Actions.Components;
 
 namespace Game.Modules.Actions;
@@ -42,16 +43,25 @@ public static class ActionInstanceQueries
         return actionCatalog.TryGet(instance.ActionId, out definition!);
     }
 
-    /// <summary>Tries to set the cooldown for a specific action instance.</summary>
+    /// <summary>Starts a specific action instance's cooldown: usable again cooldownFrames frames after now.</summary>
     /// <param name="instances">The pool of action instances</param>
     /// <param name="entityId">The ID of the entity for which to set the cooldown</param>
     /// <param name="actionId">The ID of the action for which to set the cooldown</param>
-    /// <param name="cooldownFramesRemaining">The number of cooldown frames remaining</param>
+    /// <param name="cooldownFrames">How many frames the cooldown lasts</param>
+    /// <param name="now">The current simulation frame</param>
     /// <returns>true if the cooldown was set; otherwise, false</returns>
-    public static bool TrySetCooldown(MultiComponentPool<ActionInstanceComponent> instances, int entityId, Guid actionId, ushort cooldownFramesRemaining) =>
+    public static bool TrySetCooldown(MultiComponentPool<ActionInstanceComponent> instances, int entityId, Guid actionId, ushort cooldownFrames, long now) =>
         instances.TryUpdateFirst(
             entityId,
-            (actionId, cooldownFramesRemaining),
-            static (ref readonly ActionInstanceComponent instance, (Guid ActionId, ushort CooldownFramesRemaining) state) => instance.ActionId == state.ActionId,
-            static (ref ActionInstanceComponent instance, (Guid ActionId, ushort CooldownFramesRemaining) state) => instance.CooldownFramesRemaining = state.CooldownFramesRemaining);
+            (actionId, ReadyAt: FrameDeadline.After(now, cooldownFrames)),
+            static (ref readonly ActionInstanceComponent instance, (Guid ActionId, uint ReadyAt) state) => instance.ActionId == state.ActionId,
+            static (ref ActionInstanceComponent instance, (Guid ActionId, uint ReadyAt) state) => instance.CooldownReadyAtFrame = state.ReadyAt);
+
+    /// <summary>True while the instance's cooldown is still running at frame now.</summary>
+    public static bool IsOnCooldown(in ActionInstanceComponent instance, long now) =>
+        !FrameDeadline.IsReached(instance.CooldownReadyAtFrame, now);
+
+    /// <summary>Frames left on the instance's cooldown at frame now; 0 when ready.</summary>
+    public static int CooldownFramesRemaining(in ActionInstanceComponent instance, long now) =>
+        FrameDeadline.Remaining(instance.CooldownReadyAtFrame, now);
 }

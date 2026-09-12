@@ -1,3 +1,4 @@
+using Engine.ECS.Systems;
 using Engine.ECS.Components;
 using Engine.Events;
 using Game.Modules.AbilityScores;
@@ -76,7 +77,7 @@ public sealed class AbilityScoreEffectsTests
         AbilityScoreEffects.Grant(manager, 0, AbilityScoreType.Strength, 5);
 
         AbilityScoreEffects.GrantModifier(manager, 0, AbilityScoreType.Strength, StatModifierOperation.Additive, StatModifierPolarity.Buff,
-            canModify: true, magnitude: 3f, durationFrames: null, StatusEffectSource.Admin);
+            canModify: true, magnitude: 3f, expiresAtFrame: FrameDeadline.Never, StatusEffectSource.Admin);
 
         Assert.AreEqual((ushort)8, GetAbilityScore(manager, 0, AbilityScoreType.Strength).Total);
     }
@@ -89,7 +90,7 @@ public sealed class AbilityScoreEffectsTests
         AbilityScoreEffects.Grant(manager, 0, AbilityScoreType.Dexterity, 5);
 
         AbilityScoreEffects.GrantModifier(manager, 0, AbilityScoreType.Strength, StatModifierOperation.Additive, StatModifierPolarity.Buff,
-            canModify: true, magnitude: 3f, durationFrames: null, StatusEffectSource.Admin);
+            canModify: true, magnitude: 3f, expiresAtFrame: FrameDeadline.Never, StatusEffectSource.Admin);
 
         Assert.AreEqual((ushort)5, GetAbilityScore(manager, 0, AbilityScoreType.Dexterity).Total);
     }
@@ -100,7 +101,7 @@ public sealed class AbilityScoreEffectsTests
         var manager = CreateRegisteredManager();
         AbilityScoreEffects.Grant(manager, 0, AbilityScoreType.Strength, 5);
         StatModifierEffects.Apply(manager, 0, StatModifierTarget.IncomingDamage, StatModifierOperation.Additive, StatModifierPolarity.Buff,
-            canModify: true, magnitude: -1f, durationFrames: null, StatusEffectSource.Admin);
+            canModify: true, magnitude: -1f, expiresAtFrame: FrameDeadline.Never, StatusEffectSource.Admin);
 
         AbilityScoreEffects.RecomputeIfAbilityScore(manager, 0, StatModifierTarget.IncomingDamage);
 

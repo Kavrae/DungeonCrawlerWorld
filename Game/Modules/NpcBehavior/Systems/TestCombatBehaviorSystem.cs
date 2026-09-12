@@ -139,12 +139,12 @@ public sealed class TestCombatBehaviorSystem : ITieredSystem
     {
         foreach (var entityId in entityIds)
         {
-            DecideForEntity(entityId);
+            DecideForEntity(entityId, time.FrameCount);
         }
     }
 
-    /// <summary>One due entity's decision step. Takes no frames-per-visit: this system owns no countdown -- FramesToWait belongs to MovementSystem and is only read here, as a gate.</summary>
-    private void DecideForEntity(int entityId)
+    /// <summary>One due entity's decision step. Takes no frames-per-visit: this system owns no countdown -- FramesToWait belongs to MovementSystem and is only read here, as a gate. `now` is for the shared action lock, which is a deadline (see ActionLockGate).</summary>
+    private void DecideForEntity(int entityId, long now)
     {
         if (_deadEntities?.Has(entityId) == true)
         {
@@ -162,20 +162,16 @@ public sealed class TestCombatBehaviorSystem : ITieredSystem
             return;
         }
 
-        // A pure gate: MovementSystem owns the FramesToWait countdown, this system only refuses
-        // to decide while it is running. Both used to decrement it, and because the two are wired
-        // to the same pool with the same stripe count and divisors -- and SystemManager derives
-        // stripeIndex as FrameCount % StripeCount -- they visited the same entity on the same
-        // frame and each took a full span off, so every wait elapsed at twice its intended rate.
-        // MovementSystem is the right owner despite being "purely reactive" about destinations:
-        // FramesToWait gates movement execution, and a single owner is what stops the two from
-        // drifting again.
-        if (movement.FramesToWait > 0)
+        // A pure gate, and now so is MovementSystem's matching one: the backoff is a deadline
+        // (MovementComponent.WaitUntilFrame), so neither system advances it and the "both
+        // decremented the same wait on the same frame, so it elapsed twice as fast" bug that
+        // forced a single-owner rule has nothing left to happen to.
+        if (movement.IsWaiting(now))
         {
             return;
         }
 
-        if (ActionLockGate.IsBlocked(_actionLocks, entityId) )
+        if (ActionLockGate.IsBlocked(_actionLocks, entityId, now))
         {
             return;
         }
@@ -190,7 +186,7 @@ public sealed class TestCombatBehaviorSystem : ITieredSystem
             return;
         }
 
-        DecideWander(entityId, transform);
+        DecideWander(entityId, transform, now);
     }
 
     /// <summary>Below half health and holding at least one Health Potion -> drink it. Deliberately simple (a fixed 50% threshold, no smarter "how urgent is this" weighing) -- see this class's own doc comment on why.</summary>
@@ -296,12 +292,12 @@ public sealed class TestCombatBehaviorSystem : ITieredSystem
         return false;
     }
 
-    /// <summary>The exact coin-flip-idle-or-move logic MovementSystem's own Random-mode branch used to run directly -- moved here unchanged, now writing NextMapPosition/FramesToWait as this system's own decision rather than MovementSystem deciding and executing in the same call.</summary>
-    private void DecideWander(int entityId, TransformComponent transform)
+    /// <summary>The exact coin-flip-idle-or-move logic MovementSystem's own Random-mode branch used to run directly -- moved here unchanged, now writing NextMapPosition/WaitUntilFrame as this system's own decision rather than MovementSystem deciding and executing in the same call.</summary>
+    private void DecideWander(int entityId, TransformComponent transform, long now)
     {
         if (_mathUtility.Next(0, 2) == 0)
         {
-            SetIdle(entityId);
+            SetIdle(entityId, now);
             return;
         }
 
@@ -312,9 +308,10 @@ public sealed class TestCombatBehaviorSystem : ITieredSystem
             return;
         }
 
-        SetIdle(entityId);
+        SetIdle(entityId, now);
     }
 
-    private void SetIdle(int entityId) =>
-        _movementPool.TryUpdate(entityId, static (ref MovementComponent m) => m.FramesToWait = MovementCandidates.FramesToWaitIfNoOptions);
+    private void SetIdle(int entityId, long now) =>
+        _movementPool.TryUpdate(entityId, FrameDeadline.After(now, MovementCandidates.FramesToWaitIfNoOptions),
+            static (ref MovementComponent m, uint waitUntil) => m.WaitUntilFrame = waitUntil);
 }

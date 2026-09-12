@@ -91,7 +91,7 @@ public sealed class SimpleHealthRegenSystem : ITieredSystem
                 continue;
             }
 
-            HealthHeal.Apply(_healthComponents, entityId, percentOfMaxHealth: 0f, _statModifiers, flatAmount: effectiveRegen, sourceEntityId: entityId, eventBus: _eventBus, playerQuery: _playerQuery, healType: "Regeneration");
+            HealthHeal.Apply(_healthComponents, entityId, percentOfMaxHealth: 0f, time.FrameCount, _statModifiers, flatAmount: effectiveRegen, sourceEntityId: entityId, eventBus: _eventBus, playerQuery: _playerQuery, healType: "Regeneration");
         }
     }
 }

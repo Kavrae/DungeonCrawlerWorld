@@ -1,3 +1,4 @@
+using Engine.ECS.Systems;
 using Game.Modules.AbilityScores;
 using Game.Modules.AbilityScores.Components;
 using Game.Modules.Actions.Activators;
@@ -39,6 +40,6 @@ public sealed record DodgeActivation : IActionEffectEntry
             windowFrames = DodgeEffects.ComputeWindowFrames(dexterity.Total);
         }
 
-        context.ComponentManager.Merge(context.SourceEntityId, new DodgingComponent(windowFrames));
+        context.ComponentManager.Merge(context.SourceEntityId, new DodgingComponent(FrameDeadline.After(context.Now, windowFrames)));
     }
 }

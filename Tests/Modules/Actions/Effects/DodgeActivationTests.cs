@@ -45,7 +45,7 @@ public sealed class DodgeActivationTests
             MathUtility: new MathUtility(new Random()),
             ComponentManager: componentManager,
             ActivatorName: "Dodge",
-            ActivatorTags: [],
+            ActivatorTags: [], Now: 0,
             AbilityScores: abilityScores);
 
         return (componentManager, context);
@@ -84,13 +84,13 @@ public sealed class DodgeActivationTests
             MathUtility: new MathUtility(new Random()),
             ComponentManager: componentManager,
             ActivatorName: "Dodge",
-            ActivatorTags: [],
+            ActivatorTags: [], Now: 0,
             AbilityScores: abilityScores);
 
         new DodgeActivation().Apply(context);
 
         var dodgingEntities = componentManager.GetPackedPool<DodgingComponent>();
-        Assert.AreEqual(DodgeEffects.MaxWindowFrames, dodgingEntities.GetReadonly(SourceEntityId).FramesRemaining,
+        Assert.AreEqual(DodgeEffects.MaxWindowFrames, dodgingEntities.GetReadonly(SourceEntityId).ExpiresAtFrame,
             "Dexterity total 300 must yield the maxed-out window -- proves the lookup used SourceEntityId, not TargetEntityId (which has no AbilityScoreComponent at all).");
     }
 
@@ -101,6 +101,6 @@ public sealed class DodgeActivationTests
 
         new DodgeActivation().Apply(context);
 
-        Assert.AreEqual(DodgeEffects.WindowFrames, componentManager.GetPackedPool<DodgingComponent>().GetReadonly(SourceEntityId).FramesRemaining);
+        Assert.AreEqual(DodgeEffects.WindowFrames, componentManager.GetPackedPool<DodgingComponent>().GetReadonly(SourceEntityId).ExpiresAtFrame);
     }
 }

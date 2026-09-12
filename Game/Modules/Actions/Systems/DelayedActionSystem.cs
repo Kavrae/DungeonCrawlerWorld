@@ -5,11 +5,8 @@ using Engine.Events;
 using Engine.Math;
 using Game.Modules.AbilityScores.Components;
 using Game.Modules.Actions.Components;
-using Game.Modules.Core.Components;
 using Game.Modules.Death.Components;
 using Game.Modules.Health.Components;
-using Game.Modules.ProcessingTier;
-using Game.Modules.ProcessingTier.Components;
 using Game.Modules.StatModifiers.Components;
 using Game.Modules.StatusEffectAura.Components;
 using Game.Modules.StatusEffects;
@@ -18,40 +15,33 @@ using Game.World;
 namespace Game.Modules.Actions.Systems;
 
 /// <summary>
-/// Consumes pending delayed actions and resolves their effects when the action lock is released.
+/// Resolves each pending delayed action on the exact frame its windup ends.
 /// </summary>
 /// <remarks>
-/// Tiered off ProcessingTierComponent (TieredEntityStripeSet, matching ActionLockSystem's own
-/// StripeCountValue so both stay in sync for the same entity) rather than a flat, untiered
-/// EntityStripeSet -- confirmed a real cost at this game's actual population scale
-/// (`phase-performance-testing` skill, PLAN-charge-attack-fill-indicator.md's own Addendum 4):
-/// PendingDelayedActionComponent.Count over 10,000 map-wide during ordinary NPC-vs-NPC combat, this
-/// system alone costing ~79ms of a 1000ms/sec budget visiting every one of them every single frame.
-/// Deliberately still reads ActionLockComponent.CurrentLockFramesRemaining directly rather than
-/// owning an independent ITickCountdown/CountdownTicker-driven timer of its own (an earlier TODO.md
-/// proposal) -- a separate countdown ticked on its own tiered cadence could drift out of sync with
-/// ActionLockSystem's own tiered decrement of the same entity, delaying (or, worse, racing ahead
-/// of) exactly when the lock visually/logically clears. Reading the same ActionLockComponent both
-/// systems already share, tiered off the same ProcessingTierComponent with the same StripeCount,
-/// keeps them visiting this entity on the same cadence -- this system just checks whatever
-/// ActionLockSystem already decremented, with only the same bounded, self-correcting staleness
-/// every other tiered consumer in this codebase already accepts, never a second, independently-
-/// drifting clock. This is also the exact invariant MapWindow's charge-fill telegraph
-/// (DrawChargeFillHighlight) depends on for correctness -- see PLAN-charge-attack-fill-
-/// indicator.md's own Design section.
+/// The windup's end is a deadline carried by PendingDelayedActionComponent itself, copied from the
+/// shared ActionLockComponent when the action was queued, and the component sits on a timer wheel
+/// keyed to it -- so this system touches only the actions actually resolving this frame, at any
+/// processing tier, instead of visiting every pending entity to ask "is the lock 0 yet?"
+/// (PendingDelayedActionComponent.Count was measured over 10,000 map-wide during ordinary
+/// NPC-vs-NPC combat, costing this system ~79ms of a 1000ms/sec budget before it was even tiered
+/// -- see PLAN-charge-attack-fill-indicator.md's Addendum 4).
+///
+/// The old "stay on the same tiered cadence as ActionLockSystem so the two can't drift" invariant
+/// this class used to defend is now structural: there is no second clock to drift, because the
+/// lock and the pending action hold the same deadline value, and nothing ticks either of them.
+/// MapWindow's charge-fill telegraph depends on that invariant (see PLAN-charge-attack-fill-
+/// indicator.md's own Design section) and is strictly better served by it.
+///
+/// A cancelled action (right-click tap / Escape) simply removes the component; its wheel entry is
+/// dropped as stale when the frame comes round (lazy cancellation, see PackedTimerWheel).
 /// </remarks>
 /// <cleanupVersion>1</cleanupVersion>
-public sealed class DelayedActionSystem : ITieredSystem
+public sealed class DelayedActionSystem : ISystem
 {
-    // Matches ActionLockSystem's own StripeCountValue -- both are tiered off the same
-    // ProcessingTierComponent, so a given entity is visited by both on the same cadence (see this
-    // class's own remarks on why that matters).
-    private const byte StripeCountValue = 10;
-
-    public byte StripeCount => StripeCountValue;
+    /// <summary>Every frame; the wheel only touches windups actually ending.</summary>
+    public byte StripeCount => 1;
 
     private readonly PackedComponentPool<PendingDelayedActionComponent> _pendingActions;
-    private readonly PackedComponentPool<ActionLockComponent> _actionLocks;
     private readonly MultiComponentPool<ActionInstanceComponent> _actionInstances;
     private readonly PackedComponentPool<SimpleHealthComponent> _health;
     private readonly MultiComponentPool<StatModifierComponent>? _statModifiers;
@@ -68,11 +58,14 @@ public sealed class DelayedActionSystem : ITieredSystem
     private readonly PackedComponentPool<HotkeyExpansionUnlockComponent>? _hotkeyExpansionUnlocks;
     private readonly MultiComponentPool<BodyPartComponent>? _bodyParts;
     private readonly PackedComponentPool<DodgingComponent>? _dodgingEntities;
-    private readonly TieredEntityStripeSet _tieredStripeSet;
+    private readonly PackedTimerWheel<PendingDelayedActionComponent> _wheel;
+
+    // Cached once instead of passing the method group every Update -- an instance method group
+    // conversion allocates a fresh delegate every evaluation.
+    private readonly TimerFired<PendingDelayedActionComponent> _resolve;
 
     public DelayedActionSystem(
         PackedComponentPool<PendingDelayedActionComponent> pendingActions,
-        PackedComponentPool<ActionLockComponent> actionLocks,
         MultiComponentPool<ActionInstanceComponent> actionInstances,
         PackedComponentPool<SimpleHealthComponent> health,
         ActionCatalog actionCatalog,
@@ -82,8 +75,6 @@ public sealed class DelayedActionSystem : ITieredSystem
         IPlayerQuery? playerQuery,
         StatusEffectAuraApplierRegistry statusEffectAppliers,
         ComponentManager componentManager,
-        DirectComponentPool<ProcessingTierComponent> processingTiers,
-        ProcessingTierEvents processingTierEvents,
         MultiComponentPool<StatModifierComponent>? statModifiers = null,
         PackedComponentPool<DeadComponent>? deadEntities = null,
         MultiComponentPool<AbilityScoreComponent>? abilityScores = null,
@@ -93,7 +84,6 @@ public sealed class DelayedActionSystem : ITieredSystem
         PackedComponentPool<DodgingComponent>? dodgingEntities = null)
     {
         _pendingActions = pendingActions;
-        _actionLocks = actionLocks;
         _actionInstances = actionInstances;
         _health = health;
         _statModifiers = statModifiers;
@@ -110,46 +100,28 @@ public sealed class DelayedActionSystem : ITieredSystem
         _hotkeyExpansionUnlocks = hotkeyExpansionUnlocks;
         _bodyParts = bodyParts;
         _dodgingEntities = dodgingEntities;
-
-        _tieredStripeSet = ProcessingTierWiring.CreateAndWire(StripeCount, pendingActions, processingTiers, processingTierEvents);
+        _resolve = Resolve;
+        _wheel = new PackedTimerWheel<PendingDelayedActionComponent>(pendingActions);
     }
 
-    /// <summary>Updates the delayed actions for whichever entities are due this frame, across every tier.</summary>
-    /// <remarks>
-    /// Delayed actions are resolved when the action lock is released.
-    /// Each delayed action sets its own action lock duration.
-    /// </remarks>
-    /// <param name="time">The current engine time</param>
-    /// <param name="stripeIndex">Unused -- TieredSystemRunner selects each tier.s due bucket from time.FrameCount, not from SystemManager.s rotating stripeIndex.</param>
-    public void Update(EngineTime time, byte stripeIndex) => TieredSystemRunner.Run(this, time);
+    public void Update(EngineTime time, byte stripeIndex) => _wheel.Tick(time.FrameCount, _resolve);
 
-    public TieredEntityStripeSet Tiers => _tieredStripeSet;
-
-    /// <summary>One tier's due entities. Takes framesPerVisit and ignores it: this system owns no countdown of its own -- see ITieredSystem.UpdateBucket.</summary>
-    public void UpdateBucket(EngineTime time, ReadOnlySpan<int> entityIds, ushort framesPerVisit)
+    /// <summary>Always returns true -- a windup resolves exactly once, so the pending action is removed either way (see TimerFired's contract).</summary>
+    private bool Resolve(int entityId, PendingDelayedActionComponent pending, long now)
     {
-        foreach (var entityId in entityIds)
+        // A corpse can't finish a windup. Removing it (rather than just skipping) is what keeps a
+        // dead entity from carrying a stale pending action forever -- nothing else clears it.
+        if (_deadEntities?.Has(entityId) == true)
         {
-            if (_deadEntities?.Has(entityId) == true)
-            {
-                _pendingActions.Remove(entityId);
-                continue;
-            }
-
-            if (!_pendingActions.TryGetReadonly(entityId, out var pending) ||
-                !_actionLocks.TryGetReadonly(entityId, out var actionLock) ||
-                actionLock.CurrentLockFramesRemaining > 0)
-            {
-                continue;
-            }
-
-            if (ActionInstanceQueries.TryGet(_actionInstances, entityId, pending.ActionId, out var instance) &&
-                ActionInstanceQueries.TryResolveEffectiveAction(_actionCatalog, instance, out var action))
-            {
-                ActionEffectResolver.Apply(action, entityId, pending.TargetTiles, _mapQuery, _health, _eventBus, _mathUtility, _playerQuery, _statusEffectAppliers, _componentManager, _statModifiers, _deadEntities, _abilityScores, _auraSources, _hotkeyExpansionUnlocks, _bodyParts, _dodgingEntities);
-            }
-
-            _pendingActions.Remove(entityId);
+            return true;
         }
+
+        if (ActionInstanceQueries.TryGet(_actionInstances, entityId, pending.ActionId, out var instance) &&
+            ActionInstanceQueries.TryResolveEffectiveAction(_actionCatalog, instance, out var action))
+        {
+            ActionEffectResolver.Apply(action, entityId, pending.TargetTiles, _mapQuery, _health, _eventBus, _mathUtility, _playerQuery, _statusEffectAppliers, _componentManager, now, _statModifiers, _deadEntities, _abilityScores, _auraSources, _hotkeyExpansionUnlocks, _bodyParts, _dodgingEntities);
+        }
+
+        return true;
     }
 }

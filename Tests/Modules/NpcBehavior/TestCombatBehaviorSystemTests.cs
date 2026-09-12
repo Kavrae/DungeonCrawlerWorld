@@ -1,4 +1,4 @@
-﻿using Engine.ECS.Components;
+using Engine.ECS.Components;
 using Engine.ECS.Components.Stores;
 using Engine.Math;
 using Game.Blueprints.Races;
@@ -127,15 +127,15 @@ public sealed class TestCombatBehaviorSystemTests
     /// <summary>Grants both QuickAttack and PowerAttack, matching every real race blueprint's paired grant -- TryDecideMeleeAttack gates on QuickAttack's presence but randomly picks either for the actual attack.</summary>
     private static void GrantMeleeActions(Fixture fixture, int entityId)
     {
-        fixture.ActionInstances.Add(entityId, new ActionInstanceComponent(QuickAttackAction.Id, ActionOverrideEffects.OverrideFlatDamage(QuickAttackAction.Build(), 10), cooldownFramesRemaining: 0));
-        fixture.ActionInstances.Add(entityId, new ActionInstanceComponent(PowerAttackAction.Id, ActionOverrideEffects.OverrideFlatDamage(PowerAttackAction.Build(), 20), cooldownFramesRemaining: 0));
+        fixture.ActionInstances.Add(entityId, new ActionInstanceComponent(QuickAttackAction.Id, ActionOverrideEffects.OverrideFlatDamage(QuickAttackAction.Build(), 10)));
+        fixture.ActionInstances.Add(entityId, new ActionInstanceComponent(PowerAttackAction.Id, ActionOverrideEffects.OverrideFlatDamage(PowerAttackAction.Build(), 20)));
     }
 
     private static void PlaceGoblin(Fixture fixture, int entityId, short currentHealth = 200, short maximumHealth = 200, bool grantMeleeActions = true)
     {
         fixture.TransformPool.Add(entityId, new TransformComponent(GoblinPosition, SingleTile));
         fixture.MovementPool.Add(entityId, new MovementComponent(MovementMode.Random, null, null));
-        fixture.ActionLockPool.Add(entityId, new ActionLockComponent(standardLockFrames: 10, currentLockTotalFrames: 0, currentLockFramesRemaining: 0));
+        fixture.ActionLockPool.Add(entityId, new ActionLockComponent(standardLockFrames: 10, currentLockTotalFrames: 0, unlockedAtFrame: 0));
         fixture.HealthPool.Add(entityId, new SimpleHealthComponent(currentHealth, maximumHealth));
         // IsAttackable now compares real races -- an attacker with no RaceComponent can never
         // decide anything is "a different race," so TryDecideMeleeAttack bails before even
@@ -152,7 +152,7 @@ public sealed class TestCombatBehaviorSystemTests
     {
         fixture.TransformPool.Add(entityId, new TransformComponent(GoblinPosition, SingleTile));
         fixture.MovementPool.Add(entityId, new MovementComponent(MovementMode.Random, null, null));
-        fixture.ActionLockPool.Add(entityId, new ActionLockComponent(standardLockFrames: 10, currentLockTotalFrames: 0, currentLockFramesRemaining: 0));
+        fixture.ActionLockPool.Add(entityId, new ActionLockComponent(standardLockFrames: 10, currentLockTotalFrames: 0, unlockedAtFrame: 0));
         fixture.BodyParts.Add(entityId, new BodyPartComponent("Head", BodyPartType.Head, 0, 0, headCurrent, headMaximum, isVital: true));
         if (grantMeleeActions)
         {
@@ -297,7 +297,7 @@ public sealed class TestCombatBehaviorSystemTests
         var fixture = Build();
         fixture.TransformPool.Add(GoblinEntityId, new TransformComponent(GoblinPosition, SingleTile));
         fixture.MovementPool.Add(GoblinEntityId, new MovementComponent(MovementMode.Random, null, null));
-        fixture.ActionLockPool.Add(GoblinEntityId, new ActionLockComponent(standardLockFrames: ActionLockGate.StandardLockFrames, currentLockTotalFrames: 30, currentLockFramesRemaining: 30));
+        fixture.ActionLockPool.Add(GoblinEntityId, new ActionLockComponent(standardLockFrames: ActionLockGate.StandardLockFrames, currentLockTotalFrames: 30, unlockedAtFrame: 30));
         // Deliberately no SimpleHealthComponent/InventoryItemStackComponent/ActionInstanceComponent
         // registered for this entity -- if the system tried to read any of them before checking
         // the action lock, this would throw or behave unexpectedly instead of just skipping.

@@ -1,55 +1,26 @@
 using Engine.ECS.Components.Stores;
 using Engine.ECS.Systems;
 using Game.Modules.Actions.Activators;
-using Game.Modules.ProcessingTier;
-using Game.Modules.ProcessingTier.Components;
 
 namespace Game.Modules.Actions.Systems;
 
-/// <summary>
-/// Passively counts every PotionCooldownComponent's FramesRemaining down toward 0, removing it
-/// entirely once it reaches 0 -- mirrors ActionLockSystem's shape. Drives the decrement/remove
-/// loop through the shared CountdownTicker (see PotionCooldownComponent's own ITickCountdown
-/// bridge) rather than hand-rolling it -- the same utility BurningSystem/PoisonSystem/
-/// ParalysisSystem/ContactDamageSystem already share; onTick always returns true since
-/// PotionCooldownComponent carries no other cleanup on expiry, the same "no re-arm" shape
-/// TorchMarkExpirySystem uses.
-/// </summary>
+/// <summary>Removes each PotionCooldownComponent on the frame it expires -- it carries no other cleanup.</summary>
 /// <remarks>
-/// Was StripeCount 1 and untiered, on the stated grounds that "only entities that have actually
-/// consumed a potion carry this component at all, so the population visited is already small
-/// regardless of distance from the player." Measurement contradicted that: a diagnostics memory
-/// capture showed 9,110 live PotionCooldownComponents, and this system -- scanning all of them
-/// every single frame -- was one of the largest costs in the simulation despite doing nothing but
-/// decrementing integers. Tiered now, like every other countdown system.
+/// Driven by a timer wheel (PackedTimerWheel): only cooldowns actually ending are touched, on their
+/// exact frame at every processing tier (PLAN-timer-wheel.md). This system was once one of the
+/// largest simulation costs while scanning every live cooldown (9,110 of them) every frame to
+/// decrement integers; tiering cut that, and the wheel removes the scan altogether.
+/// PotionCooldownEffects.Reset merging the component is all that schedules it.
 /// </remarks>
-public sealed class PotionCooldownSystem : ITieredSystem
+public sealed class PotionCooldownSystem(PackedComponentPool<PotionCooldownComponent> cooldowns) : ISystem
 {
-    private const byte StripeCountValue = 10;
+    /// <summary>The one firing is the expiry -- always remove.</summary>
+    private static readonly TimerFired<PotionCooldownComponent> RemoveOnExpiry = static (_, _, _) => true;
 
-    public byte StripeCount => StripeCountValue;
+    private readonly PackedTimerWheel<PotionCooldownComponent> _wheel = new(cooldowns);
 
-    private readonly PackedComponentPool<PotionCooldownComponent> _cooldowns;
-    private readonly TieredEntityStripeSet _tieredStripeSet;
-    private readonly List<int> _pendingRemovals = [];
-    private readonly Func<int, PotionCooldownComponent, bool> _tick;
+    /// <summary>Every frame; the wheel only touches cooldowns actually ending.</summary>
+    public byte StripeCount => 1;
 
-    public PotionCooldownSystem(
-        PackedComponentPool<PotionCooldownComponent> cooldowns,
-        DirectComponentPool<ProcessingTierComponent> processingTiers,
-        ProcessingTierEvents processingTierEvents)
-    {
-        _cooldowns = cooldowns;
-        _tick = static (_, _) => true;
-
-        _tieredStripeSet = ProcessingTierWiring.CreateAndWire(StripeCount, cooldowns, processingTiers, processingTierEvents);
-    }
-
-    public void Update(EngineTime time, byte stripeIndex) => TieredSystemRunner.Run(this, time);
-
-    public TieredEntityStripeSet Tiers => _tieredStripeSet;
-
-    /// <summary>Advances each due entity's countdown by framesPerVisit -- see ITieredSystem.UpdateBucket.</summary>
-    public void UpdateBucket(EngineTime time, ReadOnlySpan<int> entityIds, ushort framesPerVisit) =>
-        CountdownTicker.Tick(_cooldowns, entityIds, _pendingRemovals, _tick, framesPerVisit);
+    public void Update(EngineTime time, byte stripeIndex) => _wheel.Tick(time.FrameCount, RemoveOnExpiry);
 }

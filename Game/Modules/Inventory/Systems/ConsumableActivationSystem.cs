@@ -100,6 +100,9 @@ public sealed class ConsumableActivationSystem : ISystem
     private readonly MultiComponentPool<BodyPartComponent>? _bodyParts;
     private readonly EntityStripeSet _stripeSet;
 
+    /// <summary>The simulation frame of the Update in progress -- see Update.</summary>
+    private long _now;
+
     public ConsumableActivationSystem(
         PackedComponentPool<PendingConsumableActivationComponent> pendingActivations,
         PackedComponentPool<ActionLockComponent> actionLocks,
@@ -148,6 +151,10 @@ public sealed class ConsumableActivationSystem : ISystem
 
     public void Update(EngineTime time, byte stripeIndex)
     {
+        // The frame every activation this update happens on -- read by BuildContext and the timer
+        // writers below, rather than threaded through each private helper.
+        _now = time.FrameCount;
+
         foreach (var entityId in _stripeSet.GetBucket(stripeIndex))
         {
             if (_deadEntities?.Has(entityId) == true)
@@ -179,7 +186,7 @@ public sealed class ConsumableActivationSystem : ISystem
                     }
 
                     ActivatePotion(item, potionActivator, entityId, request.TargetTiles);
-                    ActionLockGate.Lock(_actionLocks, entityId, potionActivator.Timing.ActionLockFrames);
+                    ActionLockGate.Lock(_actionLocks, entityId, _now, potionActivator.Timing.ActionLockFrames);
                     break;
 
                 case ScrollActivator scrollActivator:
@@ -189,7 +196,7 @@ public sealed class ConsumableActivationSystem : ISystem
                     }
 
                     ActivateScroll(item, scrollActivator, entityId, request.TargetTiles);
-                    ActionLockGate.Lock(_actionLocks, entityId, scrollActivator.Timing.ActionLockFrames);
+                    ActionLockGate.Lock(_actionLocks, entityId, _now, scrollActivator.Timing.ActionLockFrames);
                     break;
 
                 case WandActivator wandActivator:
@@ -200,7 +207,7 @@ public sealed class ConsumableActivationSystem : ISystem
 
                     PeelWandCharge(entityId, stack, item, wandActivator);
                     ActivateWand(item, entityId, request.TargetTiles);
-                    ActionLockGate.Lock(_actionLocks, entityId, wandActivator.Timing.ActionLockFrames);
+                    ActionLockGate.Lock(_actionLocks, entityId, _now, wandActivator.Timing.ActionLockFrames);
                     break;
             }
         }
@@ -214,7 +221,7 @@ public sealed class ConsumableActivationSystem : ISystem
             return false;
         }
 
-        if (ActionLockGate.IsBlocked(_actionLocks, entityId))
+        if (ActionLockGate.IsBlocked(_actionLocks, entityId, _now))
         {
             return false;
         }
@@ -225,7 +232,7 @@ public sealed class ConsumableActivationSystem : ISystem
 
     /// <summary>Wand counterpart to TryBeginActivation -- no stack to consume yet (see PeelWandCharge, called separately once this passes), just the two gates: charges remaining, and the shared ActionLock isn't currently blocking.</summary>
     private bool TryBeginWandActivation(int entityId, ushort charges) =>
-        charges > 0 && !ActionLockGate.IsBlocked(_actionLocks, entityId);
+        charges > 0 && !ActionLockGate.IsBlocked(_actionLocks, entityId, _now);
 
     private void ActivatePotion(ItemDefinition item, PotionActivator potionActivator, int sourceEntityId, Vector3Int[] targetTiles)
     {
@@ -264,15 +271,15 @@ public sealed class ConsumableActivationSystem : ISystem
             ? PotionCooldownEffects.ComputeDurationFrames(constitution.Total)
             : PotionCooldownEffects.DurationFrames;
 
-        if (_potionCooldowns.TryGetReadonly(targetEntityId, out var cooldown) && cooldown.FramesRemaining > 0)
+        if (_potionCooldowns.TryGetReadonly(targetEntityId, out var cooldown) && PotionCooldownEffects.FramesRemaining(cooldown, _now) > 0)
         {
-            PoisonEffects.ApplyStack(_componentManager, targetEntityId, StatusEffectSource.FromEntity(targetEntityId), PotionCooldownEffects.ComputeAbusePoisonDurationTicks(durationFrames), _eventBus, _playerQuery);
+            PoisonEffects.ApplyStack(_componentManager, targetEntityId, StatusEffectSource.FromEntity(targetEntityId), PotionCooldownEffects.ComputeAbusePoisonDurationTicks(durationFrames), _now, _eventBus, _playerQuery);
             _eventBus.Publish(new PotionCooldownAbusedEvent(targetEntityId));
         }
 
         ActionEffectSequence.Apply(item.Effects, BuildContext(item, sourceEntityId, targetEntityId));
 
-        PotionCooldownEffects.Reset(_componentManager, targetEntityId, durationFrames);
+        PotionCooldownEffects.Reset(_componentManager, targetEntityId, durationFrames, _now);
     }
 
     private void ActivateScroll(ItemDefinition item, ScrollActivator scrollActivator, int sourceEntityId, Vector3Int[] targetTiles)
@@ -386,6 +393,7 @@ public sealed class ConsumableActivationSystem : ISystem
             ComponentManager: _componentManager,
             ActivatorName: item.Name,
             ActivatorTags: item.Tags,
+            Now: _now,
             StatModifiers: _statModifiers,
             AbilityScores: _abilityScores,
             Mana: _mana,

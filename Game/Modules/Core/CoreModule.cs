@@ -2,9 +2,6 @@ using Engine.ECS.Components;
 using Engine.ECS.Systems;
 using Engine.Math;
 using Game.Modules.Core.Components;
-using Game.Modules.Core.Systems;
-using Game.Modules.ProcessingTier;
-using Game.Modules.ProcessingTier.Components;
 using Microsoft.Xna.Framework;
 
 namespace Game.Modules.Core;
@@ -17,9 +14,10 @@ public sealed class CoreModule : IGameModule
 
     public IReadOnlyList<Type> Dependencies { get; } = [];
 
-    private ProcessingTierEvents _processingTierEvents = null!;
-
-    public void Configure(GameModuleContext context) => _processingTierEvents = context.ProcessingTierEvents;
+    /// <summary>Nothing to configure -- kept because IGameModule requires it, and because Core is still a game module by every other measure.</summary>
+    public void Configure(GameModuleContext context)
+    {
+    }
 
     /// <summary>Registers core components with their appropriate component pools.</summary>
     /// <remarks>For each component type, defines the merge action for combining two of those components.</remarks>
@@ -61,13 +59,20 @@ public sealed class CoreModule : IGameModule
         {
             existing.StandardLockFrames = MathUtility.ClampUShort(((existing.StandardLockFrames + incoming.StandardLockFrames) / 2), 0, ushort.MaxValue);
             existing.CurrentLockTotalFrames = MathUtility.ClampUShort(((existing.CurrentLockTotalFrames + incoming.CurrentLockTotalFrames) / 2), 0, ushort.MaxValue);
-            existing.CurrentLockFramesRemaining = MathUtility.ClampUShort(((existing.CurrentLockFramesRemaining + incoming.CurrentLockFramesRemaining) / 2), 0, ushort.MaxValue);
+
+            // The later deadline wins rather than averaging: averaging two absolute frames would
+            // invent a moment neither part asked for, and a merge must never shorten a lock that
+            // is already running.
+            existing.UnlockedAtFrame = System.Math.Max(existing.UnlockedAtFrame, incoming.UnlockedAtFrame);
         });
     }
 
-    public void RegisterSystems(SystemManager systemManager, ComponentManager componentManager) =>
-        systemManager.Register(new ActionLockSystem(
-            componentManager.GetPackedPool<ActionLockComponent>(),
-            componentManager.GetDirectPool<ProcessingTierComponent>(),
-            _processingTierEvents));
+    /// <summary>
+    /// No systems of its own any more. ActionLockSystem used to count every entity's lock down
+    /// here; the lock is a deadline now (see ActionLockComponent), so nothing has to visit an
+    /// entity for it to become unlocked -- PLAN-timer-wheel.md step 7.
+    /// </summary>
+    public void RegisterSystems(SystemManager systemManager, ComponentManager componentManager)
+    {
+    }
 }

@@ -1,3 +1,4 @@
+using Engine.ECS.Systems;
 using Engine.ECS.Components;
 using Engine.Events;
 using Game.Modules.StatusEffects;
@@ -18,7 +19,7 @@ public sealed class StatusEffectImmunityTests
     {
         var componentManager = new ComponentManager(initialEntityCapacity: 10, initialComponentCapacity: 10);
         componentManager.RegisterMultiPool<StatusEffectImmunityComponent>();
-        componentManager.GetMultiPool<StatusEffectImmunityComponent>().Add(entityId, new StatusEffectImmunityComponent(effectType, remainingDurationFrames: null));
+        componentManager.GetMultiPool<StatusEffectImmunityComponent>().Add(entityId, new StatusEffectImmunityComponent(effectType, expiresAtFrame: FrameDeadline.Never));
         return componentManager;
     }
 

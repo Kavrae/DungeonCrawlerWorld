@@ -7,8 +7,6 @@ using Game.Modules.ContactDamage.Systems;
 using Game.Modules.Death.Components;
 using Game.Modules.Health.Components;
 using Game.Modules.Movement;
-using Game.Modules.ProcessingTier;
-using Game.Modules.ProcessingTier.Components;
 using Game.Modules.StatModifiers.Components;
 using Game.World;
 
@@ -33,7 +31,6 @@ public sealed class ContactDamageModule : IGameModule
     private IMapQuery _mapQuery = null!;
     private IPlayerQuery? _playerQuery;
     private FrameEventBuffer<EntityMovedEvent> _movedEntities = null!;
-    private ProcessingTierEvents _processingTierEvents = null!;
     private MathUtility _mathUtility = null!;
 
     public void Configure(GameModuleContext context)
@@ -42,7 +39,6 @@ public sealed class ContactDamageModule : IGameModule
         _mapQuery = context.MapQuery;
         _playerQuery = context.PlayerQuery;
         _movedEntities = context.MovedEntities;
-        _processingTierEvents = context.ProcessingTierEvents;
         _mathUtility = context.MathUtility;
     }
 
@@ -77,8 +73,6 @@ public sealed class ContactDamageModule : IGameModule
             _mapQuery,
             _playerQuery,
             _movedEntities,
-            componentManager.GetDirectPool<ProcessingTierComponent>(),
-            _processingTierEvents,
             _mathUtility,
             statModifiers,
             deadEntities,

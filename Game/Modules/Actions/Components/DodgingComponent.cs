@@ -1,3 +1,5 @@
+using Engine.ECS.Components;
+
 namespace Game.Modules.Actions.Components;
 
 /// <summary>
@@ -7,9 +9,18 @@ namespace Game.Modules.Actions.Components;
 /// (a fresh Dodge simply refreshes the window via Merge's replace policy -- see ActionsModule's
 /// own registration).
 /// </summary>
-public struct DodgingComponent(ushort framesRemaining)
+/// <remarks>An expiring duration: a timer (IScheduledTimer) whose one firing removes it -- see DodgeExpirySystem.</remarks>
+/// <param name="expiresAtFrame">The simulation frame the window closes on -- FrameDeadline.After(now, windowFrames).</param>
+public struct DodgingComponent(uint expiresAtFrame) : IScheduledTimer
 {
-    public ushort FramesRemaining { get; set; } = framesRemaining;
+    private uint _timerWheelMark;
 
-    public override readonly string ToString() => $"FramesRemaining : {FramesRemaining}";
+    /// <summary>The simulation frame this dodge window closes on.</summary>
+    public uint ExpiresAtFrame { get; set; } = expiresAtFrame;
+
+    uint IScheduledTimer.NextTickFrame { readonly get => ExpiresAtFrame; set => ExpiresAtFrame = value; }
+
+    uint IScheduledTimer.TimerWheelMark { readonly get => _timerWheelMark; set => _timerWheelMark = value; }
+
+    public override readonly string ToString() => $"ExpiresAtFrame : {ExpiresAtFrame}";
 }

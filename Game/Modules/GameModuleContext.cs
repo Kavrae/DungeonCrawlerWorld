@@ -78,4 +78,12 @@ public sealed record GameModuleContext(IMapQuery MapQuery, MathUtility MathUtili
     /// Wired by ProcessingTierModule.RegisterSystems.
     /// </summary>
     public ProcessingTierResolver ProcessingTierResolver { get; init; } = new();
+
+    /// <summary>
+    /// The simulation's "now", for anything a module builds that reads a FrameDeadline outside a
+    /// system's own Update. Always a real instance, the same always-safe-default reasoning as
+    /// MovedEntities. GameBootstrapper hands this same instance to SystemManager.Clock, which is
+    /// what advances it.
+    /// </summary>
+    public SimulationClock SimulationClock { get; init; } = new();
 }

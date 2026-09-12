@@ -1,5 +1,6 @@
 using Engine.ECS.Components;
 using Engine.ECS.Components.Stores;
+using Engine.ECS.Systems;
 using Engine.Events;
 using FontStashSharp;
 using Game.Blueprints;
@@ -51,8 +52,12 @@ public sealed class HotbarContent(
     FontService fontService,
     SpriteSheetService spriteSheetService,
     SpriteRenderer spriteRenderer,
-    Vector2 screenSize) : IElementContent
+    Vector2 screenSize,
+    SimulationClock? simulationClock = null) : IElementContent
 {
+    /// <summary>"Now" for reading an action's cooldown deadline (see ActionInstanceQueries.CooldownFramesRemaining). Optional only so tests that never show a cooldown needn't build one; the shell always passes the simulation's real clock.</summary>
+    private readonly SimulationClock _simulationClock = simulationClock ?? new SimulationClock();
+
     public static readonly Vector2 SlotSize = new(HudChrome.EntrySize.Y * 2.25f, HudChrome.EntrySize.Y * 2.25f);
 
     /// <summary>Fallback only -- every real entity that can open a hotbar gets one from PlayerBlueprint. Matches Expansion's old fixed slot count, so a missing component still shows a sensible bar rather than an empty/degenerate one.</summary>
@@ -587,10 +592,12 @@ public sealed class HotbarContent(
     {
         var quantity = stack.Quantity;
 
-        var countdownSeconds = item.Activator is PotionActivator &&
-            _potionCooldowns.TryGetReadonly(playerEntityId, out var cooldown) && cooldown.FramesRemaining > 0
-                ? PotionCooldownEffects.RemainingSeconds(cooldown.FramesRemaining)
-                : (int?)null;
+        var cooldownFramesRemaining = item.Activator is PotionActivator && _potionCooldowns.TryGetReadonly(playerEntityId, out var cooldown)
+            ? PotionCooldownEffects.FramesRemaining(cooldown, _simulationClock.CurrentFrame)
+            : 0;
+        var countdownSeconds = cooldownFramesRemaining > 0
+            ? PotionCooldownEffects.RemainingSeconds(cooldownFramesRemaining)
+            : (int?)null;
 
         return new SlotVisual(
             SpriteName: item.SpriteName,
@@ -692,7 +699,7 @@ public sealed class HotbarContent(
             cooldownFrames > 0 &&
             ActionInstanceQueries.TryGet(_actionInstances, playerEntityId, action.Id, out var instance))
         {
-            cooldownFraction = (float)instance.CooldownFramesRemaining / cooldownFrames;
+            cooldownFraction = (float)ActionInstanceQueries.CooldownFramesRemaining(instance, _simulationClock.CurrentFrame) / cooldownFrames;
         }
 
         if (cooldownFraction > 0f)
@@ -704,7 +711,7 @@ public sealed class HotbarContent(
             _actionLocks.TryGetReadonly(playerEntityId, out var actionLock) &&
             actionLock.CurrentLockTotalFrames > 0)
         {
-            return (float)actionLock.CurrentLockFramesRemaining / actionLock.CurrentLockTotalFrames;
+            return (float)ActionLockGate.FramesRemaining(actionLock, _simulationClock.CurrentFrame) / actionLock.CurrentLockTotalFrames;
         }
 
         return 0f;
@@ -722,7 +729,7 @@ public sealed class HotbarContent(
     {
         if (_actionLocks.TryGetReadonly(playerEntityId, out var actionLock) && actionLock.CurrentLockTotalFrames > 0)
         {
-            return (float)actionLock.CurrentLockFramesRemaining / actionLock.CurrentLockTotalFrames;
+            return (float)ActionLockGate.FramesRemaining(actionLock, _simulationClock.CurrentFrame) / actionLock.CurrentLockTotalFrames;
         }
 
         return 0f;

@@ -199,6 +199,12 @@ alongside it, found while chasing the framerate regressions that surfaced during
   depends on for correctness. Sharing one clock, tiered identically, keeps both the resolution timing
   and the UI's own progress reading consistent, at the cost of the same bounded, self-correcting
   staleness every other tiered consumer here already accepts.
+  **Superseded 2026-09-11 (`PLAN-timer-wheel.md` step 7):** both systems are off tiers entirely.
+  `ActionLockSystem` is deleted (the lock is a deadline, `ActionLockComponent.UnlockedAtFrame`), and
+  `DelayedActionSystem` is a plain `ISystem` driven by a timer wheel over
+  `PendingDelayedActionComponent.ReadyAtFrame` -- a copy of that same lock deadline, taken when the
+  action is queued. The drift this paragraph guards against is now impossible by construction rather
+  than by keeping two cadences aligned, and the system touches only the windups ending this frame.
 - **`TestDummyBlueprint`'s own `ProcessingTierComponent(Local)` grant was in the wrong order.**
   Reported live: the charge-fill indicator drew smoothly for every entity except the TestDummy,
   visibly choppy (catch-up-then-pause) there specifically. Root cause: `Build` merged
@@ -229,7 +235,10 @@ alongside it, found while chasing the framerate regressions that surfaced during
   reaching exactly 1 at `totalFrames` elapsed regardless of the stepped countdown's own granularity
   -- safe only because the Local-tier filtering above already excludes anything whose real
   resolution could meaningfully lag its nominal duration, the exact case the old "never exceed the
-  raw target" clamp existed to guard against. Full record: `PLAN-charge-attack-fill-indicator.md`'s
+  raw target" clamp existed to guard against. (As of `PLAN-timer-wheel.md` step 7 the stepped source
+  itself is gone -- the lock is a deadline and nothing decrements it -- so no tier can lag its
+  nominal duration any more; the elapsed-time fraction is kept regardless, since it reads no
+  component per frame.) Full record: `PLAN-charge-attack-fill-indicator.md`'s
   own Addendum 7.
 
 ### Body parts / Complex health

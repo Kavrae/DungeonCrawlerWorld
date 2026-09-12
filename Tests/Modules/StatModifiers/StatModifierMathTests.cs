@@ -1,4 +1,5 @@
 using Engine.ECS.Components.Stores;
+using Engine.ECS.Systems;
 using Game.Modules.StatModifiers;
 using Game.Modules.StatModifiers.Components;
 using Game.World;
@@ -11,7 +12,7 @@ public sealed class StatModifierMathTests
     private static MultiComponentPool<StatModifierComponent> CreatePool() => new(maximumEntityCount: 10, initialCapacity: 4);
 
     private static StatModifierComponent Modifier(StatModifierTarget target, StatModifierOperation operation, float magnitude) =>
-        new(target, operation, StatModifierPolarity.Buff, canModify: false, magnitude, null, StatusEffectSource.Admin);
+        new(target, operation, StatModifierPolarity.Buff, canModify: false, magnitude, FrameDeadline.Never, StatusEffectSource.Admin);
 
     [TestMethod]
     public void GetEffectiveValues_NoPool_ReturnsBothBaseValuesUnchanged()

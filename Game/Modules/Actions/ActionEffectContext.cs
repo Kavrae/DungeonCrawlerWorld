@@ -25,6 +25,11 @@ namespace Game.Modules.Actions;
 /// it to a caster-Intelligence-derived value for a ScrollActivator activation (see
 /// ScrollScalingEffects) -- a duration-bearing entry (StatModifierGrant today) multiplies
 /// its own base duration by this rather than the System pre-computing an absolute frame count.
+///
+/// Now is the simulation frame the activation happens on -- required, not defaulted, because an
+/// entry that starts a timer (DodgeActivation, AuraSourceGrant, a status effect) writes an
+/// absolute deadline from it (FrameDeadline.After(context.Now, frames)), and a silently-wrong
+/// default would schedule that deadline from the wrong frame.
 /// </summary>
 public sealed record ActionEffectContext(
     int SourceEntityId,
@@ -35,6 +40,7 @@ public sealed record ActionEffectContext(
     ComponentManager ComponentManager,
     string ActivatorName,
     IReadOnlyList<Tag> ActivatorTags,
+    long Now,
     MultiComponentPool<StatModifierComponent>? StatModifiers = null,
     MultiComponentPool<AbilityScoreComponent>? AbilityScores = null,
     PackedComponentPool<ManaComponent>? Mana = null,
