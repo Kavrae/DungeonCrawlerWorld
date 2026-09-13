@@ -1,4 +1,5 @@
 using Engine.ECS.Components;
+using Engine.ECS.Systems;
 using Engine.Utilities;
 using Game.Modules.AbilityScores;
 using Game.Modules.Poison;
@@ -24,11 +25,15 @@ public static class PotionCooldownEffects
     /// <returns>The duration of the Poison stack in ticks.</returns>
     public static ushort ComputeAbusePoisonDurationTicks(ushort durationFrames) => (ushort)(durationFrames / PoisonEffects.TickIntervalFrames);
 
-    /// <summary>Resets (or starts) the cooldown to full -- called on every successful potion consumption, whether or not one was already ticking down.</summary>
-    public static void Reset(ComponentManager componentManager, int entityId, ushort durationFrames) =>
-        componentManager.Merge(entityId, new PotionCooldownComponent(durationFrames, durationFrames));
+    /// <summary>Resets (or starts) the cooldown to full from frame now -- called on every successful potion consumption, whether or not one was already running.</summary>
+    public static void Reset(ComponentManager componentManager, int entityId, ushort durationFrames, long now) =>
+        componentManager.Merge(entityId, new PotionCooldownComponent(durationFrames, FrameDeadline.After(now, durationFrames)));
 
-    /// <summary>Whole seconds remaining, rounded up -- so the displayed number only reaches 0 once FramesRemaining actually does, rather than a moment early. Shared by every Presentation display of this cooldown (PlayerStatusEffectsContent, HotbarContent) so they can't disagree with each other.</summary>
-    public static int RemainingSeconds(ushort framesRemaining) =>
+    /// <summary>Frames of cooldown left as of frame now; 0 once it has ended (even if PotionCooldownSystem hasn't removed the component yet this frame).</summary>
+    public static int FramesRemaining(in PotionCooldownComponent cooldown, long now) =>
+        FrameDeadline.Remaining(cooldown.ExpiresAtFrame, now);
+
+    /// <summary>Whole seconds remaining, rounded up -- so the displayed number only reaches 0 once the cooldown actually has, rather than a moment early. Shared by every Presentation display of this cooldown (PlayerStatusEffectsContent, HotbarContent, HealthWindow) so they can't disagree with each other.</summary>
+    public static int RemainingSeconds(int framesRemaining) =>
         (int)System.Math.Ceiling(framesRemaining / (float)GameTiming.FramesPerSecond);
 }

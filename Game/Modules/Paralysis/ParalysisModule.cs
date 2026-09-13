@@ -35,9 +35,9 @@ public sealed class ParalysisModule : IGameModule
 
         context.StatusEffectAuraAppliers.Register(new TimerBasedAuraApplier<ParalysisTimerComponent>(
             StatusEffectType.Paralysis,
-            (componentManager, entityId, source) => ParalysisEffects.Apply(componentManager, entityId, source, _eventBus, _playerQuery)));
+            (componentManager, entityId, source, now) => ParalysisEffects.Apply(componentManager, entityId, source, now, _eventBus, _playerQuery)));
         context.StatusEffectDisplays.Register(new TimerBasedStatusEffectDisplay<ParalysisTimerComponent>(StatusEffectType.Paralysis, ParalysisEffects.Glyph,
-            paralysis => paralysis.FramesUntilNextTick));
+            static (paralysis, now) => FrameDeadline.Remaining(paralysis.ExpiresAtFrame, now)));
     }
 
     public void RegisterComponents(ComponentManager componentManager) =>
@@ -50,7 +50,6 @@ public sealed class ParalysisModule : IGameModule
             return;
         }
 
-        systemManager.Register(new ParalysisSystem(
-            componentManager.GetPackedPool<ParalysisTimerComponent>()));
+        systemManager.Register(new ParalysisSystem(componentManager.GetPackedPool<ParalysisTimerComponent>()));
     }
 }

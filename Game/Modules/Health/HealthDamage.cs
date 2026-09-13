@@ -19,6 +19,11 @@ namespace Game.Modules.Health;
 /// degrading gracefully from (mirrors MovementModule.Configure's own still-null-dependency
 /// throw). Neither pool having entityId is today's existing no-op -- an "immortal" entity a
 /// status effect still applied to.
+///
+/// `now` is the simulation frame this damage lands on. Only the Complex path uses it -- disabling a
+/// body part locks it out of passive regen until a deadline measured from it (see
+/// BodyPartComponent.RegenLockedUntilFrame) -- but it is required rather than optional so no caller
+/// can silently pass "frame 0" and give a part a lockout that expired before it started.
 /// </remarks>
 public static class HealthDamage
 {
@@ -30,6 +35,7 @@ public static class HealthDamage
         StatusEffectSource source,
         IPlayerQuery? playerQuery,
         string damageType,
+        long now,
         MultiComponentPool<StatModifierComponent>? statModifiers = null,
         MultiComponentPool<BodyPartComponent>? bodyParts = null,
         MathUtility? mathUtility = null,
@@ -49,11 +55,11 @@ public static class HealthDamage
 
                 if (targetMode == BodyPartTargetMode.All)
                 {
-                    ComplexHealthDamage.ApplyToAllParts(health, bodyParts, eventBus, entityId, amount, source, playerQuery, damageType, statModifiers, deadEntities, damageTags);
+                    ComplexHealthDamage.ApplyToAllParts(health, bodyParts, eventBus, entityId, amount, source, playerQuery, damageType, statModifiers, deadEntities, now, damageTags);
                 }
                 else
                 {
-                    ComplexHealthDamage.Apply(health, bodyParts, eventBus, entityId, amount, source, playerQuery, damageType, statModifiers, mathUtility, deadEntities, targetRule, damageTags, targetMode);
+                    ComplexHealthDamage.Apply(health, bodyParts, eventBus, entityId, amount, source, playerQuery, damageType, statModifiers, mathUtility, deadEntities, now, targetRule, damageTags, targetMode);
                 }
             }
 

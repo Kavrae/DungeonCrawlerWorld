@@ -1,4 +1,5 @@
 using Engine.ECS.Components.Stores;
+using Engine.ECS.Systems;
 using Engine.Events;
 using Engine.Math;
 using Engine.Utilities;
@@ -14,10 +15,14 @@ namespace Game.Modules.Health;
 /// <summary>Shared per-part damage application, extracted so every damage source that already knows which one part it's hitting (ComplexHealthDamage.Apply, BodyPartBurningSystem's own DoT tick) applies the exact same clamp-and-disable and event-publishing rules instead of re-implementing them.</summary>
 public static class BodyPartDamageEffects
 {
-    /// <summary>Clamps denseIndex's CurrentHealth down by amount against its modifier-effective MaximumHealth, disabling the part (and resetting a fresh 10-second RegenLockoutFramesRemaining) the instant it lands at 0 -- re-armed on every hit that leaves it at 0, not only the first transition into 0.</summary>
-    public static void ApplyToPart(MultiComponentPool<BodyPartComponent> bodyParts, int denseIndex, MultiComponentPool<StatModifierComponent>? statModifiers, int entityId, ushort amount)
+    /// <summary>How long a part stays out of passive regen once it is disabled, or once a sustained affliction last ticked on it.</summary>
+    public const ushort RegenLockoutFrames = 10 * GameTiming.FramesPerSecond;
+
+    /// <summary>Clamps denseIndex's CurrentHealth down by amount against its modifier-effective MaximumHealth, disabling the part (and locking it out of regen for a fresh 10 seconds from now) the instant it lands at 0 -- re-armed on every hit that leaves it at 0, not only the first transition into 0.</summary>
+    /// <param name="now">The simulation frame this hit lands on -- the lockout is a deadline measured from it (see BodyPartComponent.RegenLockedUntilFrame).</param>
+    public static void ApplyToPart(MultiComponentPool<BodyPartComponent> bodyParts, int denseIndex, MultiComponentPool<StatModifierComponent>? statModifiers, int entityId, ushort amount, long now)
     {
-        bodyParts.UpdateByDenseIndex(denseIndex, (statModifiers, entityId, amount), static (ref BodyPartComponent part, (MultiComponentPool<StatModifierComponent>? StatModifiers, int EntityId, ushort Amount) state) =>
+        bodyParts.UpdateByDenseIndex(denseIndex, (statModifiers, entityId, amount, now), static (ref BodyPartComponent part, (MultiComponentPool<StatModifierComponent>? StatModifiers, int EntityId, ushort Amount, long Now) state) =>
         {
             var effectiveMaximumHealth = StatModifierMath.GetEffectiveValue(state.StatModifiers, state.EntityId, StatModifierTarget.MaximumHealth, part.MaximumHealth);
             part.CurrentHealth = MathHelper.Clamp(part.CurrentHealth - state.Amount, 0f, effectiveMaximumHealth);
@@ -25,12 +30,12 @@ public static class BodyPartDamageEffects
             if (part.CurrentHealth == 0)
             {
                 part.IsDisabled = true;
-                part.RegenLockoutFramesRemaining = (ushort)(10 * GameTiming.FramesPerSecond);
+                part.RegenLockedUntilFrame = FrameDeadline.After(state.Now, RegenLockoutFrames);
             }
         });
     }
 
-    /// <summary>Unconditionally refreshes denseIndex's RegenLockoutFramesRemaining to a fresh 10 seconds, regardless of whether this hit actually landed the part at 0.</summary>
+    /// <summary>Unconditionally pushes denseIndex's regen lockout out to a fresh 10 seconds from now, regardless of whether this hit actually landed the part at 0.</summary>
     /// <remarks>
     /// For an ongoing per-tick damage source (BodyPartBurningSystem) whose single tick often
     /// doesn't deal enough damage to zero out a small part (e.g. a 10 HP Foot against a
@@ -44,8 +49,8 @@ public static class BodyPartDamageEffects
     /// spells) -- a one-off hit that doesn't finish a part off shouldn't lock it out of regen for
     /// 10 seconds; only a sustained per-tick affliction should.
     /// </remarks>
-    public static void ResetRegenLockout(MultiComponentPool<BodyPartComponent> bodyParts, int denseIndex) =>
-        bodyParts.UpdateByDenseIndex(denseIndex, static (ref BodyPartComponent part) => part.RegenLockoutFramesRemaining = (ushort)(10 * GameTiming.FramesPerSecond));
+    public static void ResetRegenLockout(MultiComponentPool<BodyPartComponent> bodyParts, int denseIndex, long now) =>
+        bodyParts.UpdateByDenseIndex(denseIndex, now, static (ref BodyPartComponent part, long frame) => part.RegenLockedUntilFrame = FrameDeadline.After(frame, RegenLockoutFrames));
 
     /// <summary>Publishes EntityDiedEvent (on a Vital part's own wasAlive-to-0 transition) and, for player-involved damage, EntityDamagedEvent with the entity's real summed totals -- the same post-clamp bookkeeping ComplexHealthDamage.Apply always did inline, now shared with BodyPartBurningSystem's own tick.</summary>
     public static void PublishDamageEvents(

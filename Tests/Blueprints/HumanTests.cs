@@ -92,7 +92,7 @@ public sealed class HumanTests
     }
 
     [TestMethod]
-    public void Build_GrantsRaceGlyphBodyPartsMovementActionLockTransformAbilityScoresAndPunch()
+    public void Build_GrantsRaceGlyphBodyPartsMovementActionLockTransformAbilityScoresAndQuickAttack()
     {
         var ecsContext = BuildEcsContext();
         var entityId = ecsContext.EntityManager.CreateEntity();
@@ -121,7 +121,7 @@ public sealed class HumanTests
             Assert.IsTrue(AbilityScoreQueries.TryGetComponent(ecsContext.ComponentManager.GetMultiPool<AbilityScoreComponent>(), entityId, abilityScoreType, out _), $"Missing ability score: {abilityScoreType}");
         }
 
-        Assert.IsTrue(ActionInstanceQueries.TryGet(ecsContext.ComponentManager.GetMultiPool<ActionInstanceComponent>(), entityId, PunchAction.Id, out _));
+        Assert.IsTrue(ActionInstanceQueries.TryGet(ecsContext.ComponentManager.GetMultiPool<ActionInstanceComponent>(), entityId, QuickAttackAction.Id, out _));
 
         var expectedPartsByName = new Dictionary<string, (BodyPartType Type, ushort MinimumHealth, ushort MaximumHealth, bool IsVital)>
         {

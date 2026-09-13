@@ -108,6 +108,7 @@ public sealed class MapWindowTests
         componentManager.RegisterPackedPool<PendingActionActivationComponent>(static (ref existing, incoming) => existing = incoming);
         componentManager.RegisterPackedPool<PendingConsumableActivationComponent>(static (ref existing, incoming) => existing = incoming);
         componentManager.RegisterPackedPool<PendingDelayedActionComponent>(static (ref existing, incoming) => existing = incoming);
+        componentManager.RegisterPackedPool<DodgingComponent>(static (ref existing, incoming) => existing = incoming);
         componentManager.RegisterPackedPool<ActionLockComponent>(static (ref existing, incoming) => existing = incoming);
         componentManager.RegisterPackedPool<DeadComponent>(static (ref existing, incoming) => existing = incoming);
         componentManager.RegisterPackedPool<ShopComponent>(static (ref existing, incoming) => existing = incoming);
@@ -139,7 +140,8 @@ public sealed class MapWindowTests
             componentManager.GetPackedPool<PendingActionActivationComponent>(),
             componentManager.GetPackedPool<PendingConsumableActivationComponent>(),
             componentManager.GetPackedPool<PendingDelayedActionComponent>(),
-            componentManager.GetPackedPool<ActionLockComponent>());
+            componentManager.GetPackedPool<ActionLockComponent>(),
+            componentManager.GetPackedPool<MovementComponent>());
         var playerMovement = new PlayerMovementController(
             world,
             componentManager.GetDirectPool<TransformComponent>(),
@@ -150,7 +152,7 @@ public sealed class MapWindowTests
         windowService.RegisterFactory<MapWindow>(() => new MapWindow(
             fontService, windowService, world, mapViewState, componentManager, new EventBus(), resolvedActionCatalog, resolvedItemCatalog, new TileRenderer(), new LabelRenderer(),
             new SpriteSheetService(null, "Spritesheets"), new SpriteRenderer(), camera, actionTargeting, playerMovement, contextMenuController,
-            componentManager.GetPackedPool<ActionLockComponent>()));
+            componentManager.GetPackedPool<ActionLockComponent>(), new Engine.ECS.Systems.SimulationClock()));
 
         var mapWindow = windowService.CreateElement<MapWindow>(null, new ElementOptions
         {
@@ -581,7 +583,7 @@ public sealed class MapWindowTests
     {
         var (_, mapViewState, mapWindow, componentManager, actionCatalog) = BuildMapWindowWithPlayerAndActions(300, 300, 1, new Vector3Int(100, 100, 0));
         RegisterTestAdjacentAction(actionCatalog);
-        componentManager.Merge(PlayerEntityId, new ActionInstanceComponent(TestActionId, overrideDefinition: null, cooldownFramesRemaining: 0));
+        componentManager.Merge(PlayerEntityId, new ActionInstanceComponent(TestActionId, overrideDefinition: null));
         componentManager.Merge(PlayerEntityId, new ActionHotkeyBindingComponent(HotkeySlot.Slot4, TestActionId));
 
         mapWindow.HandleHotkeys(new KeyboardState(Keys.D4), new KeyboardState());
@@ -596,7 +598,7 @@ public sealed class MapWindowTests
     {
         var (_, mapViewState, mapWindow, componentManager, actionCatalog) = BuildMapWindowWithPlayerAndActions(300, 300, 1, new Vector3Int(100, 100, 0));
         RegisterTestAdjacentAction(actionCatalog);
-        componentManager.Merge(PlayerEntityId, new ActionInstanceComponent(TestActionId, overrideDefinition: null, cooldownFramesRemaining: 0));
+        componentManager.Merge(PlayerEntityId, new ActionInstanceComponent(TestActionId, overrideDefinition: null));
         componentManager.Merge(PlayerEntityId, new ActionHotkeyBindingComponent(HotkeySlot.Slot4, TestActionId));
 
         mapWindow.HandleHotkeys(new KeyboardState(Keys.D4), new KeyboardState());
@@ -626,7 +628,7 @@ public sealed class MapWindowTests
     {
         var (_, mapViewState, mapWindow, componentManager, actionCatalog) = BuildMapWindowWithPlayerAndActions(300, 300, 1, new Vector3Int(100, 100, 0));
         RegisterTestAdjacentAction(actionCatalog);
-        componentManager.Merge(PlayerEntityId, new ActionInstanceComponent(TestActionId, overrideDefinition: null, cooldownFramesRemaining: 0));
+        componentManager.Merge(PlayerEntityId, new ActionInstanceComponent(TestActionId, overrideDefinition: null));
         componentManager.Merge(PlayerEntityId, new ActionHotkeyBindingComponent(HotkeySlot.Slot4, TestActionId));
 
         mapWindow.HandleHotkeys(new KeyboardState(Keys.D4), new KeyboardState());
@@ -676,7 +678,7 @@ public sealed class MapWindowTests
     {
         var (_, mapViewState, mapWindow, componentManager, actionCatalog) = BuildMapWindowWithPlayerAndActions(300, 300, 1, new Vector3Int(100, 100, 0));
         RegisterTestAdjacentAction(actionCatalog);
-        componentManager.Merge(PlayerEntityId, new ActionInstanceComponent(TestActionId, overrideDefinition: null, cooldownFramesRemaining: 0));
+        componentManager.Merge(PlayerEntityId, new ActionInstanceComponent(TestActionId, overrideDefinition: null));
         componentManager.Merge(PlayerEntityId, new ActionHotkeyBindingComponent(HotkeySlot.Slot4, TestActionId));
 
         mapWindow.HandleHotkeys(new KeyboardState(Keys.D4), new KeyboardState());
@@ -704,7 +706,7 @@ public sealed class MapWindowTests
             rangedActionId, "Test Ranged", null, "*", default, [],
             Effects: [ActionEffect.None],
             Activator: new DirectAction(new TargetingSpec(TargetShape.SingleTarget, Range: 10), new ActionTiming(ActionTimingCategory.Immediate, ActionLockFrames: 30, CooldownFrames: null))));
-        componentManager.Merge(PlayerEntityId, new ActionInstanceComponent(rangedActionId, overrideDefinition: null, cooldownFramesRemaining: 0));
+        componentManager.Merge(PlayerEntityId, new ActionInstanceComponent(rangedActionId, overrideDefinition: null));
         componentManager.Merge(PlayerEntityId, new ActionHotkeyBindingComponent(HotkeySlot.Slot5, rangedActionId));
 
         var targetPosition = new Vector3Int(105, 100, 0);
@@ -733,7 +735,7 @@ public sealed class MapWindowTests
             rangedActionId, "Test Ranged", null, "*", default, [],
             Effects: [ActionEffect.None],
             Activator: new DirectAction(new TargetingSpec(TargetShape.SingleTarget, Range: 10), new ActionTiming(ActionTimingCategory.Immediate, ActionLockFrames: 30, CooldownFrames: null))));
-        componentManager.Merge(PlayerEntityId, new ActionInstanceComponent(rangedActionId, overrideDefinition: null, cooldownFramesRemaining: 0));
+        componentManager.Merge(PlayerEntityId, new ActionInstanceComponent(rangedActionId, overrideDefinition: null));
         componentManager.Merge(PlayerEntityId, new ActionHotkeyBindingComponent(HotkeySlot.Slot5, rangedActionId));
 
         mapWindow.HandleHotkeys(new KeyboardState(Keys.D5), new KeyboardState());
@@ -793,7 +795,7 @@ public sealed class MapWindowTests
     {
         var (_, mapViewState, mapWindow, componentManager, actionCatalog) = BuildMapWindowWithPlayerAndActions(300, 300, 1, new Vector3Int(100, 100, 0));
         RegisterTestAdjacentAction(actionCatalog);
-        componentManager.Merge(PlayerEntityId, new ActionInstanceComponent(TestActionId, overrideDefinition: null, cooldownFramesRemaining: 0));
+        componentManager.Merge(PlayerEntityId, new ActionInstanceComponent(TestActionId, overrideDefinition: null));
         componentManager.Merge(PlayerEntityId, new ActionHotkeyBindingComponent(HotkeySlot.Slot4, TestActionId));
 
         mapWindow.HandleHotkeys(new KeyboardState(Keys.D4), new KeyboardState());
@@ -811,7 +813,7 @@ public sealed class MapWindowTests
         var (_, mapViewState, mapWindow, componentManager, actionCatalog) = BuildMapWindowWithPlayerAndActions(300, 300, 1, new Vector3Int(100, 100, 0));
         var rangedActionId = Guid.NewGuid();
         actionCatalog.Register(new ActionDefinition(rangedActionId, "Test Ranged", null, "*", default, [], Effects: [ActionEffect.None], Activator: new DirectAction(new TargetingSpec(TargetShape.SingleTarget, Range: 10), new ActionTiming(ActionTimingCategory.Immediate, ActionLockFrames: 30, CooldownFrames: null))));
-        componentManager.Merge(PlayerEntityId, new ActionInstanceComponent(rangedActionId, overrideDefinition: null, cooldownFramesRemaining: 0));
+        componentManager.Merge(PlayerEntityId, new ActionInstanceComponent(rangedActionId, overrideDefinition: null));
         componentManager.Merge(PlayerEntityId, new ActionHotkeyBindingComponent(HotkeySlot.Slot5, rangedActionId));
 
         mapWindow.HandleHotkeys(new KeyboardState(Keys.D5), new KeyboardState());
@@ -833,7 +835,7 @@ public sealed class MapWindowTests
     {
         var (_, mapViewState, mapWindow, componentManager, actionCatalog) = BuildMapWindowWithPlayerAndActions(300, 300, 1, new Vector3Int(100, 100, 0));
         RegisterTestAdjacentAction(actionCatalog);
-        componentManager.Merge(PlayerEntityId, new ActionInstanceComponent(TestActionId, overrideDefinition: null, cooldownFramesRemaining: 0));
+        componentManager.Merge(PlayerEntityId, new ActionInstanceComponent(TestActionId, overrideDefinition: null));
         componentManager.Merge(PlayerEntityId, new ActionHotkeyBindingComponent(HotkeySlot.Slot4, TestActionId));
         var transformPool = componentManager.GetDirectPool<TransformComponent>();
 
@@ -859,7 +861,7 @@ public sealed class MapWindowTests
     {
         var (_, mapViewState, mapWindow, componentManager, actionCatalog) = BuildMapWindowWithPlayerAndActions(300, 300, 1, new Vector3Int(100, 100, 0));
         RegisterTestAdjacentAction(actionCatalog);
-        componentManager.Merge(PlayerEntityId, new ActionInstanceComponent(TestActionId, overrideDefinition: null, cooldownFramesRemaining: 0));
+        componentManager.Merge(PlayerEntityId, new ActionInstanceComponent(TestActionId, overrideDefinition: null));
         componentManager.Merge(PlayerEntityId, new ActionHotkeyBindingComponent(HotkeySlot.Slot4, TestActionId));
 
         mapWindow.HandleHotkeys(new KeyboardState(Keys.D4), new KeyboardState());
@@ -888,7 +890,7 @@ public sealed class MapWindowTests
         var (_, mapViewState, mapWindow, componentManager, actionCatalog) = BuildMapWindowWithPlayerAndActions(300, 300, 1, new Vector3Int(100, 100, 0));
         var rangedActionId = Guid.NewGuid();
         actionCatalog.Register(new ActionDefinition(rangedActionId, "Test Ranged", null, "*", default, [], Effects: [ActionEffect.None], Activator: new DirectAction(new TargetingSpec(TargetShape.SingleTarget, Range: 10), new ActionTiming(ActionTimingCategory.Immediate, ActionLockFrames: 30, CooldownFrames: null))));
-        componentManager.Merge(PlayerEntityId, new ActionInstanceComponent(rangedActionId, overrideDefinition: null, cooldownFramesRemaining: 0));
+        componentManager.Merge(PlayerEntityId, new ActionInstanceComponent(rangedActionId, overrideDefinition: null));
         componentManager.Merge(PlayerEntityId, new ActionHotkeyBindingComponent(HotkeySlot.Slot5, rangedActionId));
 
         mapWindow.HandleHotkeys(new KeyboardState(Keys.D5), new KeyboardState());
@@ -905,7 +907,7 @@ public sealed class MapWindowTests
         var (_, mapViewState, mapWindow, componentManager, actionCatalog) = BuildMapWindowWithPlayerAndActions(300, 300, 1, new Vector3Int(100, 100, 0));
         var rangedActionId = Guid.NewGuid();
         actionCatalog.Register(new ActionDefinition(rangedActionId, "Test Ranged", null, "*", default, [], Effects: [ActionEffect.None], Activator: new DirectAction(new TargetingSpec(TargetShape.SingleTarget, Range: 10), new ActionTiming(ActionTimingCategory.Immediate, ActionLockFrames: 30, CooldownFrames: null))));
-        componentManager.Merge(PlayerEntityId, new ActionInstanceComponent(rangedActionId, overrideDefinition: null, cooldownFramesRemaining: 0));
+        componentManager.Merge(PlayerEntityId, new ActionInstanceComponent(rangedActionId, overrideDefinition: null));
         componentManager.Merge(PlayerEntityId, new ActionHotkeyBindingComponent(HotkeySlot.Slot5, rangedActionId));
 
         mapWindow.HandleHotkeys(new KeyboardState(Keys.D5), new KeyboardState());
@@ -920,7 +922,7 @@ public sealed class MapWindowTests
     {
         var (_, mapViewState, mapWindow, componentManager, actionCatalog) = BuildMapWindowWithPlayerAndActions(300, 300, 1, new Vector3Int(100, 100, 0));
         RegisterTestAdjacentAction(actionCatalog);
-        componentManager.Merge(PlayerEntityId, new ActionInstanceComponent(TestActionId, overrideDefinition: null, cooldownFramesRemaining: 0));
+        componentManager.Merge(PlayerEntityId, new ActionInstanceComponent(TestActionId, overrideDefinition: null));
         componentManager.Merge(PlayerEntityId, new ActionHotkeyBindingComponent(HotkeySlot.Slot4, TestActionId));
 
         mapWindow.HandleHotkeys(new KeyboardState(Keys.D4), new KeyboardState());
@@ -935,7 +937,7 @@ public sealed class MapWindowTests
     {
         var (_, mapViewState, mapWindow, componentManager, actionCatalog) = BuildMapWindowWithPlayerAndActions(300, 300, 1, new Vector3Int(100, 100, 0));
         RegisterTestAdjacentAction(actionCatalog);
-        componentManager.Merge(PlayerEntityId, new ActionInstanceComponent(TestActionId, overrideDefinition: null, cooldownFramesRemaining: 0));
+        componentManager.Merge(PlayerEntityId, new ActionInstanceComponent(TestActionId, overrideDefinition: null));
         componentManager.Merge(PlayerEntityId, new ActionHotkeyBindingComponent(HotkeySlot.Slot4, TestActionId));
         mapWindow.HandleHotkeys(new KeyboardState(Keys.D4), new KeyboardState());
 
@@ -957,7 +959,7 @@ public sealed class MapWindowTests
     {
         var (_, mapViewState, mapWindow, componentManager, actionCatalog) = BuildMapWindowWithPlayerAndActions(300, 300, 1, new Vector3Int(100, 100, 0));
         RegisterTestAdjacentAction(actionCatalog);
-        componentManager.Merge(PlayerEntityId, new ActionInstanceComponent(TestActionId, overrideDefinition: null, cooldownFramesRemaining: 0));
+        componentManager.Merge(PlayerEntityId, new ActionInstanceComponent(TestActionId, overrideDefinition: null));
         componentManager.Merge(PlayerEntityId, new ActionHotkeyBindingComponent(HotkeySlot.Slot4, TestActionId));
         mapWindow.HandleHotkeys(new KeyboardState(Keys.D4), new KeyboardState());
 
@@ -975,7 +977,7 @@ public sealed class MapWindowTests
         var (_, mapViewState, mapWindow, componentManager, actionCatalog) = BuildMapWindowWithPlayerAndActions(300, 300, 1, new Vector3Int(100, 100, 0));
         var lineActionId = Guid.NewGuid();
         actionCatalog.Register(new ActionDefinition(lineActionId, "Test Line", null, "#", default, [], Effects: [ActionEffect.None], Activator: new DirectAction(new TargetingSpec(TargetShape.Line, Range: 2), new ActionTiming(ActionTimingCategory.Immediate, ActionLockFrames: 30, CooldownFrames: null))));
-        componentManager.Merge(PlayerEntityId, new ActionInstanceComponent(lineActionId, overrideDefinition: null, cooldownFramesRemaining: 0));
+        componentManager.Merge(PlayerEntityId, new ActionInstanceComponent(lineActionId, overrideDefinition: null));
         componentManager.Merge(PlayerEntityId, new ActionHotkeyBindingComponent(HotkeySlot.Slot4, lineActionId));
         mapWindow.HandleHotkeys(new KeyboardState(Keys.D4), new KeyboardState());
 
@@ -996,7 +998,7 @@ public sealed class MapWindowTests
         var (_, mapViewState, mapWindow, componentManager, actionCatalog) = BuildMapWindowWithPlayerAndActions(300, 300, 1, new Vector3Int(100, 100, 0));
         var burstActionId = Guid.NewGuid();
         actionCatalog.Register(new ActionDefinition(burstActionId, "Test Burst", null, "*", default, [], Effects: [ActionEffect.None], Activator: new DirectAction(new TargetingSpec(TargetShape.Burst, Range: 10, AreaSize: 1), new ActionTiming(ActionTimingCategory.Immediate, ActionLockFrames: 30, CooldownFrames: null))));
-        componentManager.Merge(PlayerEntityId, new ActionInstanceComponent(burstActionId, overrideDefinition: null, cooldownFramesRemaining: 0));
+        componentManager.Merge(PlayerEntityId, new ActionInstanceComponent(burstActionId, overrideDefinition: null));
         componentManager.Merge(PlayerEntityId, new ActionHotkeyBindingComponent(HotkeySlot.Slot5, burstActionId));
         mapWindow.HandleHotkeys(new KeyboardState(Keys.D5), new KeyboardState());
 
@@ -1018,7 +1020,7 @@ public sealed class MapWindowTests
     {
         var (_, mapViewState, mapWindow, componentManager, actionCatalog) = BuildMapWindowWithPlayerAndActions(300, 300, 1, new Vector3Int(100, 100, 0));
         RegisterTestAdjacentAction(actionCatalog);
-        componentManager.Merge(PlayerEntityId, new ActionInstanceComponent(TestActionId, overrideDefinition: null, cooldownFramesRemaining: 0));
+        componentManager.Merge(PlayerEntityId, new ActionInstanceComponent(TestActionId, overrideDefinition: null));
         componentManager.Merge(PlayerEntityId, new ActionHotkeyBindingComponent(HotkeySlot.Slot4, TestActionId));
         mapWindow.HandleHotkeys(new KeyboardState(Keys.D4), new KeyboardState());
 
@@ -1034,7 +1036,7 @@ public sealed class MapWindowTests
     {
         var (_, mapViewState, mapWindow, componentManager, actionCatalog) = BuildMapWindowWithPlayerAndActions(300, 300, 1, new Vector3Int(100, 100, 0));
         RegisterTestAdjacentAction(actionCatalog);
-        componentManager.Merge(PlayerEntityId, new ActionInstanceComponent(TestActionId, overrideDefinition: null, cooldownFramesRemaining: 0));
+        componentManager.Merge(PlayerEntityId, new ActionInstanceComponent(TestActionId, overrideDefinition: null));
         componentManager.Merge(PlayerEntityId, new ActionHotkeyBindingComponent(HotkeySlot.Slot4, TestActionId));
         mapWindow.HandleHotkeys(new KeyboardState(Keys.D4), new KeyboardState());
 
@@ -1049,26 +1051,26 @@ public sealed class MapWindowTests
     public void HandleRightClickTap_NothingArmed_PendingDelayedAction_CancelsItAndZeroesTheActionLock()
     {
         var (_, _, mapWindow, componentManager, _) = BuildMapWindowWithPlayerAndActions(300, 300, 1, new Vector3Int(100, 100, 0));
-        componentManager.Merge(PlayerEntityId, new PendingDelayedActionComponent(Guid.NewGuid(), [new Vector3Int(101, 100, 0)]));
-        componentManager.Merge(PlayerEntityId, new ActionLockComponent(standardLockFrames: ActionLockGate.StandardLockFrames, currentLockTotalFrames: 60, currentLockFramesRemaining: 45));
+        componentManager.Merge(PlayerEntityId, new PendingDelayedActionComponent(Guid.NewGuid(), [new Vector3Int(101, 100, 0)], readyAtFrame: 60));
+        componentManager.Merge(PlayerEntityId, new ActionLockComponent(standardLockFrames: ActionLockGate.StandardLockFrames, currentLockTotalFrames: 60, unlockedAtFrame: 45));
 
         mapWindow.HandleRightClickTap(new Point(0, 0));
 
         Assert.IsFalse(componentManager.GetPackedPool<PendingDelayedActionComponent>().Has(PlayerEntityId));
-        Assert.AreEqual((ushort?)0, componentManager.GetPackedPool<ActionLockComponent>().GetReadonly(PlayerEntityId).CurrentLockFramesRemaining);
+        Assert.AreEqual(0u, componentManager.GetPackedPool<ActionLockComponent>().GetReadonly(PlayerEntityId).UnlockedAtFrame);
     }
 
     [TestMethod]
     public void HandleEscape_NothingArmed_PendingDelayedAction_CancelsItAndZeroesTheActionLock()
     {
         var (_, _, mapWindow, componentManager, _) = BuildMapWindowWithPlayerAndActions(300, 300, 1, new Vector3Int(100, 100, 0));
-        componentManager.Merge(PlayerEntityId, new PendingDelayedActionComponent(Guid.NewGuid(), [new Vector3Int(101, 100, 0)]));
-        componentManager.Merge(PlayerEntityId, new ActionLockComponent(standardLockFrames: ActionLockGate.StandardLockFrames, currentLockTotalFrames: 60, currentLockFramesRemaining: 45));
+        componentManager.Merge(PlayerEntityId, new PendingDelayedActionComponent(Guid.NewGuid(), [new Vector3Int(101, 100, 0)], readyAtFrame: 60));
+        componentManager.Merge(PlayerEntityId, new ActionLockComponent(standardLockFrames: ActionLockGate.StandardLockFrames, currentLockTotalFrames: 60, unlockedAtFrame: 45));
 
         mapWindow.HandleEscape();
 
         Assert.IsFalse(componentManager.GetPackedPool<PendingDelayedActionComponent>().Has(PlayerEntityId));
-        Assert.AreEqual((ushort?)0, componentManager.GetPackedPool<ActionLockComponent>().GetReadonly(PlayerEntityId).CurrentLockFramesRemaining);
+        Assert.AreEqual(0u, componentManager.GetPackedPool<ActionLockComponent>().GetReadonly(PlayerEntityId).UnlockedAtFrame);
     }
 
     [TestMethod]
@@ -1276,7 +1278,7 @@ public sealed class MapWindowTests
     public void ContextMenuInspectOption_Selected_SetsDetailInspectionAndLocksPlayer()
     {
         var (world, mapViewState, mapWindow, componentManager) = BuildMapWindowWithPlayer(300, 300, 1, new Vector3Int(100, 100, 0));
-        componentManager.Merge(PlayerEntityId, new ActionLockComponent(standardLockFrames: 20, currentLockTotalFrames: 0, currentLockFramesRemaining: 0));
+        componentManager.Merge(PlayerEntityId, new ActionLockComponent(standardLockFrames: 20, currentLockTotalFrames: 0, unlockedAtFrame: 0));
         var targetPosition = new Vector3Int(101, 100, 0);
         var transform = new TransformComponent(targetPosition, new Vector2Byte(1, 1));
         componentManager.Merge(CorpseEntityId, transform);
@@ -1289,7 +1291,7 @@ public sealed class MapWindowTests
 
         Assert.AreEqual(InspectionMode.Detail, mapViewState.InspectionMode);
         Assert.AreEqual(CorpseEntityId, mapViewState.InspectedEntityId);
-        Assert.IsTrue(ActionLockGate.IsBlocked(componentManager.GetPackedPool<ActionLockComponent>(), PlayerEntityId));
+        Assert.IsTrue(ActionLockGate.IsBlocked(componentManager.GetPackedPool<ActionLockComponent>(), PlayerEntityId, now: 0));
     }
 
     [TestMethod]
@@ -1302,7 +1304,7 @@ public sealed class MapWindowTests
         try
         {
             var (world, mapViewState, mapWindow, componentManager) = BuildMapWindowWithPlayer(300, 300, 1, new Vector3Int(100, 100, 0));
-            componentManager.Merge(PlayerEntityId, new ActionLockComponent(standardLockFrames: 20, currentLockTotalFrames: 0, currentLockFramesRemaining: 0));
+            componentManager.Merge(PlayerEntityId, new ActionLockComponent(standardLockFrames: 20, currentLockTotalFrames: 0, unlockedAtFrame: 0));
             var targetPosition = new Vector3Int(101, 100, 0);
             var transform = new TransformComponent(targetPosition, new Vector2Byte(1, 1));
             componentManager.Merge(CorpseEntityId, transform);
@@ -1556,7 +1558,7 @@ public sealed class MapWindowTests
         RegisterTestPotion(itemCatalog);
         var (_, mapViewState, mapWindow, componentManager) = BuildMapWindowCore(300, 300, 1, new Vector3Int(100, 100, 0), actionCatalog, itemCatalog);
         var stackInstanceId = InventoryActions.AddItem(componentManager, PlayerEntityId, TestPotionId, quantity: 1);
-        componentManager.Merge(PlayerEntityId, new ActionInstanceComponent(TestActionId, overrideDefinition: null, cooldownFramesRemaining: 0));
+        componentManager.Merge(PlayerEntityId, new ActionInstanceComponent(TestActionId, overrideDefinition: null));
         componentManager.Merge(PlayerEntityId, new ActionHotkeyBindingComponent(HotkeySlot.Slot4, TestActionId));
         componentManager.Merge(PlayerEntityId, new ItemHotkeyBindingComponent(HotkeySlot.Slot1, stackInstanceId));
 
@@ -1577,7 +1579,7 @@ public sealed class MapWindowTests
         RegisterTestPotion(itemCatalog);
         var (_, mapViewState, mapWindow, componentManager) = BuildMapWindowCore(300, 300, 1, new Vector3Int(100, 100, 0), actionCatalog, itemCatalog);
         var stackInstanceId = InventoryActions.AddItem(componentManager, PlayerEntityId, TestPotionId, quantity: 1);
-        componentManager.Merge(PlayerEntityId, new ActionInstanceComponent(TestActionId, overrideDefinition: null, cooldownFramesRemaining: 0));
+        componentManager.Merge(PlayerEntityId, new ActionInstanceComponent(TestActionId, overrideDefinition: null));
         componentManager.Merge(PlayerEntityId, new ActionHotkeyBindingComponent(HotkeySlot.Slot4, TestActionId));
         componentManager.Merge(PlayerEntityId, new ItemHotkeyBindingComponent(HotkeySlot.Slot1, stackInstanceId));
 

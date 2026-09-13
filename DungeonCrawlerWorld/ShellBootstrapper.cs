@@ -1,4 +1,4 @@
-using Engine.Diagnostics;
+﻿using Engine.Diagnostics;
 using Engine.ECS.Context;
 using Game.Floors;
 using Game.Modules.AbilityScores.Components;
@@ -9,6 +9,7 @@ using Game.Modules.Inventory;
 using Game.Modules.Inventory.Components;
 using Game.Modules.Mana.Components;
 using Game.Modules.Movement.Components;
+using Game.Modules.ProcessingTier.Components;
 using Game.Modules.StatusEffects;
 using Game.Notifications;
 using Game.World;
@@ -72,8 +73,11 @@ public static class ShellBootstrapper
             componentManager.GetPackedPool<PendingConsumableActivationComponent>(),
             componentManager.GetPackedPool<PendingDelayedActionComponent>(),
             componentManager.GetPackedPool<ActionLockComponent>(),
+            componentManager.GetPackedPool<MovementComponent>(),
             componentManager.GetPackedPool<ManaComponent>(),
-            componentManager.GetMultiPool<AbilityScoreComponent>());
+            componentManager.GetMultiPool<AbilityScoreComponent>(),
+            worldSession.LocalTierRoster,
+            ecsContext.SystemManager.Clock);
         var playerMovementController = new PlayerMovementController(
             world,
             componentManager.GetDirectPool<TransformComponent>(),
@@ -295,7 +299,7 @@ public static class ShellBootstrapper
             },
             Chrome = new ElementChromeOptions { ShowTitle = false, ShowBorder = true, BorderStyle = BorderStyle.Outset, CanUserFocus = false },
         });
-        actionLockWindow.SetContent(new ActionLockContent(world, ecsContext.ComponentManager, presentation.FontService));
+        actionLockWindow.SetContent(new ActionLockContent(world, ecsContext.ComponentManager, presentation.FontService, ecsContext.SystemManager.Clock));
         actionLockWindow.Initialize();
         layers.Add(UiLayer.StaticHud, actionLockWindow);
 
@@ -310,7 +314,7 @@ public static class ShellBootstrapper
             },
             Chrome = new ElementChromeOptions { ShowTitle = false, ShowBorder = false, CanUserFocus = false },
         });
-        playerStatusEffectsWindow.SetContent(new PlayerStatusEffectsContent(world, ecsContext.ComponentManager, itemCatalog, presentation.FontService, statusEffectDisplays));
+        playerStatusEffectsWindow.SetContent(new PlayerStatusEffectsContent(world, ecsContext.ComponentManager, itemCatalog, presentation.FontService, statusEffectDisplays, ecsContext.SystemManager.Clock));
         playerStatusEffectsWindow.Initialize();
         layers.Add(UiLayer.StaticHud, playerStatusEffectsWindow);
 
@@ -345,7 +349,7 @@ public static class ShellBootstrapper
         // player's currently-unlocked Expansion slot count, so it's constructed first and its own
         // Size read to size/position this window -- see HotbarContent.RefreshLayoutIfChanged for
         // how it keeps itself bottom-anchored/horizontally-centered as that Size changes later.
-        var hotbarContent = new HotbarContent(world, mapViewState, ecsContext.ComponentManager, ecsContext.EventBus, actionCatalog, itemCatalog, presentation.FontService, presentation.SpriteSheetService, presentation.SpriteRenderer, screenSize);
+        var hotbarContent = new HotbarContent(world, mapViewState, ecsContext.ComponentManager, ecsContext.EventBus, actionCatalog, itemCatalog, presentation.FontService, presentation.SpriteSheetService, presentation.SpriteRenderer, screenSize, ecsContext.SystemManager.Clock);
         var hotbarSize = hotbarContent.Size;
         var hotbarWindow = presentation.ElementPoolService.CreateElement<Window>(null, new ElementOptions
         {

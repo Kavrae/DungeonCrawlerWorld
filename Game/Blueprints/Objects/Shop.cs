@@ -20,7 +20,7 @@ namespace Game.Blueprints.Objects;
 /// wouldn't. Being ContainerComponent-marked, a destroyed shop gets the same "inventory wiped,
 /// renamed 'Destroyed'" behavior as a chest for free via ContainerDestructionSystem.
 /// </summary>
-public sealed class Shop : IBlueprint
+public sealed class Shop(MathUtility mathUtility) : IBlueprint
 {
     private const string Name = "Shop";
     private const string Description = "A place of business.";
@@ -32,7 +32,7 @@ public sealed class Shop : IBlueprint
     {
         componentManager.Merge(entityId, new DisplayTextComponent(Name, Description));
         componentManager.Merge(entityId, new GlyphComponent("S", Color.DarkBlue));
-        if (SpriteManifest.TryGet("Shop-1x1", out var sprite))
+        if (SpriteManifest.TryGetRandom("Shop-1x1", mathUtility, out var sprite))
         {
             componentManager.Merge(entityId, sprite);
         }
@@ -42,7 +42,7 @@ public sealed class Shop : IBlueprint
         componentManager.Merge(entityId, new CurrencyComponent(StartingGold, credits: 0));
 
         var immunities = componentManager.GetMultiPool<StatusEffectImmunityComponent>();
-        immunities.Add(entityId, new StatusEffectImmunityComponent(StatusEffectType.Poison, remainingDurationFrames: null));
-        immunities.Add(entityId, new StatusEffectImmunityComponent(StatusEffectType.Paralysis, remainingDurationFrames: null));
+        StatusEffectImmunityEffects.GrantPermanent(immunities, entityId, StatusEffectType.Poison);
+        StatusEffectImmunityEffects.GrantPermanent(immunities, entityId, StatusEffectType.Paralysis);
     }
 }

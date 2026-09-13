@@ -1,4 +1,5 @@
 using Engine.ECS.Components.Stores;
+using Engine.ECS.Systems;
 using Engine.Math;
 using Game.Modules;
 using Game.Modules.AbilityScores;
@@ -6,10 +7,13 @@ using Game.Modules.AbilityScores.Components;
 using Game.Modules.Actions;
 using Game.Modules.Actions.Activators;
 using Game.Modules.Actions.Components;
+using Game.Modules.Actions.Definitions.DirectActions;
 using Game.Modules.Core.Components;
 using Game.Modules.Inventory;
 using Game.Modules.Inventory.Components;
 using Game.Modules.Mana.Components;
+using Game.Modules.Movement.Components;
+using Game.Modules.ProcessingTier;
 using Game.World;
 using Microsoft.Xna.Framework;
 using Microsoft.Xna.Framework.Input;
@@ -39,9 +43,15 @@ public sealed class ActionTargetingController(
     PackedComponentPool<PendingConsumableActivationComponent> pendingConsumableActivations,
     PackedComponentPool<PendingDelayedActionComponent> pendingDelayedActions,
     PackedComponentPool<ActionLockComponent> actionLocks,
+    PackedComponentPool<MovementComponent> movementPool,
     PackedComponentPool<ManaComponent>? manaPool = null,
-    MultiComponentPool<AbilityScoreComponent>? abilityScores = null)
+    MultiComponentPool<AbilityScoreComponent>? abilityScores = null,
+    LocalTierRoster? localTierRoster = null,
+    SimulationClock? simulationClock = null)
 {
+    /// <summary>"Now" for clearing the shared action lock on cancellation -- the lock is a deadline (see ActionLockGate). Optional only so a test needn't build one; the shell always passes the simulation's real clock.</summary>
+    private readonly SimulationClock _simulationClock = simulationClock ?? new SimulationClock();
+
     /// <summary>A second press of the same slot within this many frames of the first is a double-tap (auto-target the closest candidate, see HandleHotkeySlotPress), as opposed to a slower second press (confirm against the cursor, same as a click). Reads UiInputController's own shared click/double-click window rather than an independently tuned value, so mouse double-click and keyboard double-tap always agree.</summary>
     private static readonly int DoubleTapWindowFrames = UiInputController.DoubleClickWindowFrames;
 
@@ -97,6 +107,101 @@ public sealed class ActionTargetingController(
     internal Vector3Int[]? PendingDelayedActionTargetTiles =>
         pendingDelayedActions.TryGetReadonly(world.PlayerEntityId, out var pending) ? pending.TargetTiles : null;
 
+    /// <summary>Reused across AllPendingDelayedActionTargets calls -- see that method's own doc comment for why it can't be a plain iterator (yield return can't cross a ReadOnlySpan-typed local, and PackedComponentPool.EntityIds/Components are both spans).</summary>
+    private readonly List<(int EntityId, Vector3Int[] TargetTiles, bool IsDodgeable)> _pendingDelayedActionTargetsBuffer = [];
+
+    /// <summary>
+    /// Every entity (player included) currently mid-windup on a Delayed action AND within Local
+    /// processing tier (or the player, always included regardless of tier -- see below), with its
+    /// already-resolved target tiles and whether that action is Dodgeable -- generalizes
+    /// PendingDelayedActionTargetTiles beyond just the player so MapWindow can telegraph an
+    /// enemy's incoming attack too (red/yellow, see CombatTargetPalette), not only the player's own
+    /// (dark green).
+    /// </summary>
+    /// <remarks>
+    /// Iterates the SMALL side. "The number of entities ever mid-windup at once is small and
+    /// bounded" (this method's own original assumption) turned out false at this game's real
+    /// population scale: a live diagnostics capture showed over 10,000 concurrently-pending
+    /// entities map-wide (PLAN-charge-attack-fill-indicator.md's own addenda has the full
+    /// incident). Walking pendingDelayedActions' own dense arrays and rejecting each non-Local
+    /// entity therefore cost ~10,000 scattered ProcessingTierComponent reads on EVERY Draw call --
+    /// paid in full whether or not anything was actually on screen, and by far the largest single
+    /// per-frame cost in MapWindow's draw path.
+    ///
+    /// LocalTierRoster inverts that: Local is a Chebyshev radius of 80 on the player's own Z, so
+    /// it holds on the order of a thousand entities against that pool's tens of thousands. Probing
+    /// pendingDelayedActions.TryGetReadonly per roster member is the same kind of lookup, just
+    /// roughly an order of magnitude fewer of them, and it drops the separate tier read entirely
+    /// (roster membership IS the tier answer). See LocalTierRoster's own doc comment for why that
+    /// needs a different shape from the TieredEntityStripeSet every consuming *system* uses.
+    ///
+    /// localTierRoster is optional (null in test fixtures that don't wire it, e.g. MapWindowTests/
+    /// ActionTargetingControllerDodgeTests/HotbarControllerTests) -- null means "no tier data
+    /// available," so every pending entity passes via the full-pool fallback below, matching this
+    /// method's own pre-tier-filtering behavior exactly. That is a safe default rather than a
+    /// silent behavior change for callers that never asked for tier scoping.
+    ///
+    /// The player is always included regardless of tier -- it's the camera anchor, always relevant,
+    /// and cheap to add unconditionally. It is also the one entity the roster genuinely might not
+    /// hold: roster membership follows ProcessingTierSystem's own MovementComponent-driven
+    /// population, and nothing guarantees the player's own tier is ever recomputed relative to
+    /// itself.
+    ///
+    /// Reads the catalog definition directly rather than resolving a per-instance Override:
+    /// ActionOverrideEffects.OverrideFlatDamage (the only Override producer today) never touches
+    /// Tags, so the catalog's own Tags are always correct here regardless of any per-race damage
+    /// override.
+    /// </remarks>
+    public IReadOnlyList<(int EntityId, Vector3Int[] TargetTiles, bool IsDodgeable)> AllPendingDelayedActionTargets()
+    {
+        _pendingDelayedActionTargetsBuffer.Clear();
+
+        var playerEntityId = world.PlayerEntityId;
+
+        // Walk whichever population is actually smaller this frame, since which one that is
+        // genuinely flips: mid-brawl the pending pool runs to five figures against a roster of
+        // ~1,000, but during quiet exploration almost nothing is winding up and the pending pool
+        // is nearly empty. Both directions produce identical output; only the probe count differs.
+        if (localTierRoster is null || pendingDelayedActions.Count <= localTierRoster.Count)
+        {
+            var entityIds = pendingDelayedActions.EntityIds;
+            var components = pendingDelayedActions.Components;
+            for (var denseIndex = 0; denseIndex < pendingDelayedActions.Count; denseIndex++)
+            {
+                var entityId = entityIds[denseIndex];
+                if (entityId == playerEntityId || localTierRoster is null || localTierRoster.IsLocal(entityId))
+                {
+                    AddPendingTarget(entityId, components[denseIndex]);
+                }
+            }
+
+            return _pendingDelayedActionTargetsBuffer;
+        }
+
+        if (pendingDelayedActions.TryGetReadonly(playerEntityId, out var playerPending))
+        {
+            AddPendingTarget(playerEntityId, playerPending);
+        }
+
+        foreach (var entityId in localTierRoster.LocalEntityIds)
+        {
+            // The player is already added above, unconditionally -- skip it here so a player that
+            // IS in the roster doesn't get telegraphed twice.
+            if (entityId != playerEntityId && pendingDelayedActions.TryGetReadonly(entityId, out var pending))
+            {
+                AddPendingTarget(entityId, pending);
+            }
+        }
+
+        return _pendingDelayedActionTargetsBuffer;
+    }
+
+    private void AddPendingTarget(int entityId, PendingDelayedActionComponent pending)
+    {
+        var isDodgeable = actionCatalog.TryGet(pending.ActionId, out var action) && action.Tags.Contains(Tag.Dodgeable);
+        _pendingDelayedActionTargetsBuffer.Add((entityId, pending.TargetTiles, isDodgeable));
+    }
+
     /// <summary>Advances the double-tap frame clock -- called once per MapWindow.Update, before anything else this class does that frame.</summary>
     public void Tick() => _frameCounter++;
 
@@ -135,7 +240,7 @@ public sealed class ActionTargetingController(
         var hoveredTile = new Vector3Int(hoveredColumnRow.X, hoveredColumnRow.Y, playerTransform.Position.Z);
         mapViewState.HoveredTile = hoveredTile;
 
-        TargetShapeResolver.Resolve(targeting.Shape, playerTransform.Position, playerTransform.Size, hoveredTile, targeting.Range, targeting.AreaSize, world.Map.Size, _hoveredFootprintBuffer);
+        TargetShapeResolver.Resolve(targeting.Shape, playerTransform.Position, playerTransform.Size, hoveredTile, targeting.Range, targeting.AreaSize, world.Map.Size, _hoveredFootprintBuffer, targeting.Metric);
         foreach (var tile in _hoveredFootprintBuffer)
         {
             _hoveredFootprintSet.Add(tile);
@@ -200,7 +305,7 @@ public sealed class ActionTargetingController(
             return;
         }
 
-        TargetShapeResolver.Resolve(targeting.Shape, transform.Position, transform.Size, targetTile, targeting.Range, targeting.AreaSize, world.Map.Size, _finalTargetTilesBuffer);
+        TargetShapeResolver.Resolve(targeting.Shape, transform.Position, transform.Size, targetTile, targeting.Range, targeting.AreaSize, world.Map.Size, _finalTargetTilesBuffer, targeting.Metric);
         QueueArmedActivation(world.PlayerEntityId, _finalTargetTilesBuffer);
         Disarm();
     }
@@ -226,7 +331,7 @@ public sealed class ActionTargetingController(
         var playerEntityId = world.PlayerEntityId;
         if (pendingDelayedActions.Remove(playerEntityId))
         {
-            ActionLockGate.Lock(actionLocks, playerEntityId, framesToWait: 0);
+            ActionLockGate.Lock(actionLocks, playerEntityId, _simulationClock.CurrentFrame, framesToWait: 0);
             return true;
         }
 
@@ -244,6 +349,42 @@ public sealed class ActionTargetingController(
     /// directly (alongside, and after, PlayerMovementController.HandleInput -- see that class's
     /// own doc comment for the ordering).
     /// </summary>
+    /// <summary>WASD-to-direction offsets Dodge confirms toward -- diagonals aren't reachable by a single key today (see MapWindow's own WASD hint glyph, which only ever marks these four cardinal tiles), matching this same set.</summary>
+    private static readonly (Keys Key, Vector3Int Direction)[] DodgeDirectionalKeys =
+    [
+        (Keys.W, new Vector3Int(0, -1, 0)),
+        (Keys.S, new Vector3Int(0, 1, 0)),
+        (Keys.A, new Vector3Int(-1, 0, 0)),
+        (Keys.D, new Vector3Int(1, 0, 0)),
+    ];
+
+    /// <summary>
+    /// While Dodge is armed, a freshly-pressed WASD key confirms Dodge toward that direction
+    /// instead of moving normally -- adds the key to claimedKeys so PlayerMovementController.
+    /// HandleInput skips it this frame (see that class's own doc comment on the claimed-keys
+    /// mechanism). Called by MapWindow.OnHotkeysAction before PlayerMovementController.HandleInput,
+    /// every frame, whether or not Dodge is actually armed -- a no-op the rest of the time.
+    /// </summary>
+    public void TryClaimDodgeDirectionalKey(KeyboardState keyboardState, KeyboardState previousKeyboardState, HashSet<Keys> claimedKeys)
+    {
+        if (mapViewState.ArmedActionId != DodgeAction.Id || !transformPool.TryGetReadonly(world.PlayerEntityId, out var transform))
+        {
+            return;
+        }
+
+        foreach (var (key, direction) in DodgeDirectionalKeys)
+        {
+            if (!Window.WasKeyPressed(keyboardState, previousKeyboardState, key))
+            {
+                continue;
+            }
+
+            claimedKeys.Add(key);
+            TryConfirmActivationAtTile(transform.Position + direction);
+            return;
+        }
+    }
+
     public void HandleHotbarHotkeys(KeyboardState keyboardState, KeyboardState previousKeyboardState)
     {
         var shiftHeld = keyboardState.IsKeyDown(Keys.LeftShift) || keyboardState.IsKeyDown(Keys.RightShift);
@@ -309,8 +450,14 @@ public sealed class ActionTargetingController(
     /// double-tap within DoubleTapWindowFrames skips arming entirely and immediately activates
     /// against an auto-picked target (see TryActivateWithAutoTarget); a slower re-press confirms
     /// against wherever the cursor currently is (see TryConfirmActivationAtTile), the same as a
-    /// click would. Cancelling an armed slot is right-click/Escape's job now (see
-    /// CancelArmedOrPendingAction) -- re-pressing the same key always means "go," not "nevermind."
+    /// click would -- except a Tag.Self action (Heal, Dodge) always confirms on the caster's own
+    /// tile via the same key instead, regardless of where the cursor happens to be hovering (the
+    /// same "same key always means self" shortcut HandleItemSlotPress already gives a Tag.Self
+    /// item's double-tap; a plain re-press of a Self-shaped action's own TargetableTiles would
+    /// otherwise only ever contain its own tile, so a re-press only ever confirmed by coincidence
+    /// of the cursor already hovering exactly there). Cancelling an armed slot is right-click/
+    /// Escape's job now (see CancelArmedOrPendingAction) -- re-pressing the same key always means
+    /// "go," not "nevermind."
     /// An action the player can't currently afford (see HasEnoughMana) is inert, the same no-op
     /// an unbound slot already is -- HotbarContent greys it out the same way (see its own
     /// isUsable check), so "can't be armed" and "looks unusable" stay in sync, mirroring
@@ -340,6 +487,13 @@ public sealed class ActionTargetingController(
 
         if (mapViewState.ArmedSlot == slot)
         {
+            if (actionCatalog.TryGet(actionId, out var armedAction) && armedAction.Tags.Contains(Tag.Self) &&
+                transformPool.TryGetReadonly(world.PlayerEntityId, out var selfTransform))
+            {
+                TryConfirmActivationAtTile(selfTransform.Position);
+                return;
+            }
+
             if (mapViewState.HoveredTile is { } hoveredTile)
             {
                 TryConfirmActivationAtTile(hoveredTile);
@@ -554,24 +708,39 @@ public sealed class ActionTargetingController(
         mapViewState.TargetableTiles = _targetableTilesSet;
     }
 
+    /// <summary>Whether shape needs no cursor position at all to resolve its real footprint -- true exactly when it's built entirely from Adjacent/Self bits (both always caster-centered, regardless of what else is combined with them). Scales automatically as TargetShape gains flags later, instead of a hand-maintained "these specific shapes" list.</summary>
+    private static bool IsCursorIndependent(TargetShape shape) => (shape & ~(TargetShape.Adjacent | TargetShape.Self)) == 0;
+
     /// <summary>
     /// The full universe of tiles the given targeting could possibly be aimed at from
-    /// attackerPosition -- Adjacent/AdjacentWithSelf's fixed perimeter-around-the-attacker's-
-    /// footprint (plus, for AdjacentWithSelf, the footprint itself -- see TargetShapeResolver's
-    /// own doc comment), or every tile within Range for every cursor-directed shape
-    /// (SingleTarget/Burst/Line/Cone) via a Burst-shaped scatter, not the real Shape -- there's no
-    /// single "aim direction" yet at arm time, only a reachable area. Shared by Arm (for
-    /// highlighting) and TryActivateWithAutoTarget (for double-tap's candidate pool), so the two
-    /// never drift out of sync with each other. Also what makes a manual click on the caster's own
-    /// tile resolve at all for an AdjacentWithSelf item (e.g. Scroll of Healing) -- TargetableTiles
-    /// has to actually contain that tile before TryConfirmActivationAtTile's Tag.Self special case
-    /// (or the general resolve path) is ever reached.
+    /// attackerPosition -- a cursor-independent shape's (Adjacent and/or Self) fixed perimeter/
+    /// footprint around the attacker (see TargetShapeResolver's own doc comment), or every tile
+    /// within Range for every cursor-directed shape (SingleTarget/Burst/Line/Cone) via a
+    /// Burst-shaped scatter, not the real Shape -- there's no single "aim direction" yet at arm
+    /// time, only a reachable area. Shared by Arm (for highlighting) and TryActivateWithAutoTarget
+    /// (for double-tap's candidate pool), so the two never drift out of sync with each other. Also
+    /// what makes a manual click on the caster's own tile resolve at all for an Adjacent | Self item
+    /// (e.g. Scroll of Healing) -- TargetableTiles has to actually contain that tile before
+    /// TryConfirmActivationAtTile's Tag.Self special case (or the general resolve path) is ever
+    /// reached.
     /// </summary>
     private void ComputeTargetableTiles(Vector3Int attackerPosition, Vector2Byte attackerSize, TargetingSpec targeting, List<Vector3Int> buffer)
     {
-        if (targeting.Shape is TargetShape.Adjacent or TargetShape.AdjacentWithSelf)
+        if (IsCursorIndependent(targeting.Shape))
         {
             TargetShapeResolver.Resolve(targeting.Shape, attackerPosition, attackerSize, attackerPosition, range: 0, areaSize: 0, world.Map.Size, buffer);
+            return;
+        }
+
+        // SingleTarget + Chebyshev + Range 1 (Dodge's own targeting) is exactly Adjacent | Self's
+        // resolved footprint -- the self+8-neighbor block -- so reuse that exact resolve for the
+        // arm-time preview instead of the generic Manhattan-Burst approximation below, which would
+        // otherwise show the wrong 5-tile diamond (cardinal neighbors only) rather than the real
+        // 9-tile block. Not worth a general arbitrary-radius Chebyshev scatter until something
+        // besides Dodge needs Range > 1 here.
+        if (targeting.Shape == TargetShape.SingleTarget && targeting.Metric == DistanceMetric.Chebyshev && targeting.Range == 1)
+        {
+            TargetShapeResolver.Resolve(TargetShape.Adjacent | TargetShape.Self, attackerPosition, attackerSize, attackerPosition, range: 0, areaSize: 0, world.Map.Size, buffer);
             return;
         }
 
@@ -580,13 +749,22 @@ public sealed class ActionTargetingController(
 
     /// <summary>
     /// Resolves and queues a full action activation with no manual click-confirm at all -- the
-    /// double-tap path. Adjacent/AdjacentWithSelf's footprint never depends on a target choice
-    /// (it's always the caster's own tile plus its 8 surrounding neighbors, for AdjacentWithSelf
-    /// including the caster's own tile in the resolved set), so it's queued immediately. Every other
-    /// shape needs a target tile chosen first: ComputeTargetableTiles' reachable-area candidates
-    /// are filtered down to occupied tiles and handed to ClosestPointSelector.SelectClosest (cursor
-    /// as the primary point, attacker as the tiebreaker), using
-    /// MapViewState.HoveredTile as the cursor bias when one is already tracked (armed-and-then-
+    /// double-tap path. A Tag.Self action (Heal, Dodge) always confirms on the caster's own tile,
+    /// full stop -- same rule HandleActionSlotPress's single-press re-confirm already gives them,
+    /// applied here too. This matters for an action like Dodge whose Shape is SingleTarget (not
+    /// cursor-independent): without this check it fell through to the occupied-tile hunt below,
+    /// which QuickAttack/PowerAttack/ToxicStrike/MagicMissile actually want (double-tap = auto-
+    /// attack the nearest enemy) but Dodge never does -- Dodge's own reachable block is normally
+    /// all-empty (nothing to occupy an adjacent tile), so the hunt found no candidate, silently did
+    /// nothing, and the caller's own "now that it fired, disarm" cleanup then made a double-tap of
+    /// the Dodge key read as if it had just cancelled instead of activated (confirmed live). A
+    /// cursor-independent shape's footprint never depends on a target choice either (Adjacent is
+    /// always the caster's own tile's 8 surrounding neighbors; Self is always the caster's own
+    /// footprint; either combination resolves the same way regardless of cursor), so it's queued
+    /// immediately too. Every other shape needs a target tile chosen first: ComputeTargetableTiles'
+    /// reachable-area candidates are filtered down to occupied tiles and handed to
+    /// ClosestPointSelector.SelectClosest (cursor as the primary point, attacker as the tiebreaker),
+    /// using MapViewState.HoveredTile as the cursor bias when one is already tracked (armed-and-then-
     /// double-tapped in one motion means Update hasn't run with the arm in effect yet, so
     /// HoveredTile can still be stale/null on the very first pair -- attackerPosition is the
     /// fallback for exactly that case, which is also what makes "closest to cursor" degenerate
@@ -604,20 +782,18 @@ public sealed class ActionTargetingController(
         var mapSize = world.Map.Size;
         var targeting = action.Activator.Targeting;
 
-        if (targeting.Shape is TargetShape.Adjacent or TargetShape.AdjacentWithSelf)
+        if (action.Tags.Contains(Tag.Self))
         {
-            ComputeTargetableTiles(attackerPosition, attackerSize, targeting, _candidateTilesBuffer);
+            _candidateTilesBuffer.Clear();
+            _candidateTilesBuffer.Add(attackerPosition);
             QueueActionActivation(entityId, actionId, _candidateTilesBuffer);
             return;
         }
 
-        // Self's only candidate tile is the caster's own position, which the occupied-tile
-        // filter below would always exclude (it deliberately drops tiles occupied by the
-        // caster itself, meant for every *other* shape) -- so Self needs its own direct
-        // resolve/queue, the same as Adjacent above, rather than falling through into that filter.
-        if (targeting.Shape == TargetShape.Self)
+        if (IsCursorIndependent(targeting.Shape))
         {
-            QueueActionActivation(entityId, actionId, [attackerPosition]);
+            ComputeTargetableTiles(attackerPosition, attackerSize, targeting, _candidateTilesBuffer);
+            QueueActionActivation(entityId, actionId, _candidateTilesBuffer);
             return;
         }
 
@@ -639,7 +815,7 @@ public sealed class ActionTargetingController(
             return;
         }
 
-        TargetShapeResolver.Resolve(targeting.Shape, attackerPosition, attackerSize, chosenTile, targeting.Range, targeting.AreaSize, mapSize, _finalTargetTilesBuffer);
+        TargetShapeResolver.Resolve(targeting.Shape, attackerPosition, attackerSize, chosenTile, targeting.Range, targeting.AreaSize, mapSize, _finalTargetTilesBuffer, targeting.Metric);
         QueueActionActivation(entityId, actionId, _finalTargetTilesBuffer);
     }
 
@@ -662,8 +838,68 @@ public sealed class ActionTargetingController(
             return;
         }
 
+        var effectTargetTiles = targetTiles.ToArray();
+
+        if (actionId == DodgeAction.Id)
+        {
+            TryRelocateForDodge(entityId, targetTiles);
+
+            // DodgeActivation's own effect (DodgingComponent) always applies to the caster, not to
+            // "whoever occupies the resolved target tile" -- for a directional dodge that tile is the
+            // *destination*, which TryRelocateForDodge only just queued a move toward (MovementSystem
+            // hasn't actually placed the caster there yet, possibly for several more frames if the
+            // shared lock is still counting down) -- so ActionEffectResolver.Apply's own
+            // GetOccupantEntityIdsAt(destination) would find nobody there at all, and the effect would
+            // silently never run (confirmed live: no DodgingComponent ever granted for a directional
+            // dodge). Resolving the effect against the caster's own *current* tile instead guarantees
+            // an occupant is actually found there -- see DodgeActivation's own doc comment for why it
+            // also reads SourceEntityId rather than TargetEntityId, in case something else shares that
+            // tile.
+            if (transformPool.TryGetReadonly(entityId, out var casterTransform))
+            {
+                effectTargetTiles = [casterTransform.Position];
+            }
+        }
+
         uiLayers.CloseAllClosableWindows();
-        pendingActivations.Merge(entityId, new PendingActionActivationComponent(actionId, targetTiles.ToArray()));
+        pendingActivations.Merge(entityId, new PendingActionActivationComponent(actionId, effectTargetTiles));
+    }
+
+    /// <summary>
+    /// Dodge's own targeting (SingleTarget + Metric.Chebyshev, Range 1) resolves to exactly one
+    /// destination tile -- self, or one adjacent tile -- see DodgeAction's own doc comment for why
+    /// the actual relocation happens here in Presentation rather than inside the Game-layer effect
+    /// (which only ever sees the mod-safe, read-only IMapQuery, never a mutating move primitive).
+    ///
+    /// Queues MovementComponent.NextMapPosition -- the exact same mechanism PlayerMovementController
+    /// uses for ordinary WASD movement -- rather than calling World.MoveEntity directly. Two earlier,
+    /// confirmed bugs both came from that direct call bypassing this shared queue entirely: (1)
+    /// World.MoveEntity only ever updates Map's own occupancy index, never the mover's own
+    /// TransformComponent.Position (MovementSystem's own TryMoveToNextMapPosition updates that
+    /// separately, itself) -- skipping it desynced the two, and MapWindow.DrawPrimaryOccupant (which
+    /// only draws an entity from the tile its TransformComponent.Position still names) stopped
+    /// finding a match at either tile, so the player's sprite vanished entirely after a directional
+    /// Dodge. (2) Bypassing NextMapPosition entirely left whatever the *ordinary* movement queue
+    /// already held (e.g. mid-stride from rapid WASD movement just before dodging) stale and
+    /// unresolved -- MovementSystem would later "catch up" on that stale queued destination and move
+    /// the player again, right back toward it, reading as the dodge silently reverting. Routing
+    /// through the one shared queue instead of a second, uncoordinated move path fixes both at once:
+    /// there is only ever one pending destination for the entity, whichever was set most recently,
+    /// and MovementSystem's own occupancy/wall/diagonal-corner validation covers the "dodge in place
+    /// if occupied" fallback for free -- no separate check needed here. The trade-off is that the
+    /// actual relocation, like any other queued move, waits for the shared ActionLock to clear if the
+    /// entity happens to already be locked (e.g. just finished an ordinary move) -- DodgeActivation's
+    /// own immunity grant still applies instantly regardless, since FreeCast itself never gates on
+    /// the lock.
+    /// </summary>
+    private void TryRelocateForDodge(int entityId, List<Vector3Int> targetTiles)
+    {
+        if (targetTiles.Count != 1 || !transformPool.TryGetReadonly(entityId, out var transform) || targetTiles[0] == transform.Position)
+        {
+            return;
+        }
+
+        movementPool.TryUpdate(entityId, targetTiles[0], static (ref MovementComponent movement, Vector3Int destination) => movement.NextMapPosition = destination);
     }
 
     /// <summary>Item counterpart to QueueActionActivation -- ConsumableActivationSystem is the only thing that applies its gameplay effects. See QueueActionActivation's own doc comment for why it also closes every closable window here (catches TryActivateItemOnSelf's double-tap self-cast, which skips arming).</summary>

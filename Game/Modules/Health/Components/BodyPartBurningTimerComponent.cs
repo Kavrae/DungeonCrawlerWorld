@@ -10,18 +10,28 @@ namespace Game.Modules.Health.Components;
 /// needs to read this pool directly to exclude a burning part from regen -- Health never otherwise
 /// depends on an effect-specific component type, so keeping that direction one-way (Burning depends
 /// on Health, never the reverse) means the component itself has to sit on the Health side.
+///
+/// A keyed timer-wheel timer (IKeyedScheduledTimer): PartId names the instance, since an entity can
+/// have several parts burning at once.
 /// </remarks>
-public struct BodyPartBurningTimerComponent(byte partId, byte stackCount, ushort framesUntilNextTick, StatusEffectSource source) : ITickCountdown
+public struct BodyPartBurningTimerComponent(byte partId, byte stackCount, uint nextTickFrame, StatusEffectSource source) : IKeyedScheduledTimer
 {
-    /// <summary>The specific BodyPartComponent.PartId this timer is burning, re-located each tick via BodyPartSelection.FindByPartId rather than a dense index (which isn't a stable identity).</summary>
+    private uint _timerWheelMark;
+
+    /// <summary>The specific BodyPartComponent.PartId this timer is burning, re-located each tick via BodyPartSelection.FindByPartId rather than a dense index (which isn't a stable identity). Also this timer's TimerKey.</summary>
     public byte PartId { get; set; } = partId;
 
     public byte StackCount { get; set; } = stackCount;
 
-    public ushort FramesUntilNextTick { get; set; } = framesUntilNextTick;
+    /// <summary>The simulation frame of the next damage tick (FrameDeadline).</summary>
+    public uint NextTickFrame { get; set; } = nextTickFrame;
 
     /// <summary>Set once on the 0-to-1 transition (BurningAuraApplier.ApplyBodyPartScopedStack), never overwritten by a later top-off -- mirrors BurningTimerComponent's own Source field.</summary>
     public StatusEffectSource Source { get; set; } = source;
 
-    public override readonly string ToString() => $"PartId : {PartId}\nFramesUntilNextTick : {FramesUntilNextTick}\nStackCount : {StackCount}\nSource : {Source}";
+    readonly int IKeyedScheduledTimer.TimerKey => PartId;
+
+    uint IScheduledTimer.TimerWheelMark { readonly get => _timerWheelMark; set => _timerWheelMark = value; }
+
+    public override readonly string ToString() => $"PartId : {PartId}\nNextTickFrame : {NextTickFrame}\nStackCount : {StackCount}\nSource : {Source}";
 }

@@ -59,4 +59,31 @@ public sealed record GameModuleContext(IMapQuery MapQuery, MathUtility MathUtili
     /// ProcessingTierEvents' own doc comment.
     /// </summary>
     public ProcessingTierEvents ProcessingTierEvents { get; init; } = new();
+
+    /// <summary>
+    /// The live Local-tier membership set, for consumers that act on only the Local population
+    /// rather than throttling their visit cadence by tier -- see LocalTierRoster's own doc
+    /// comment for why that needs its own shape rather than reusing TieredEntityStripeSet. Wired
+    /// to ProcessingTierEvents above (and to the same driving pool ProcessingTierSystem tiers) by
+    /// ProcessingTierModule.RegisterSystems; until that runs it is simply empty, which reads as
+    /// "nothing is Local yet" -- the same safe default an untiered entity already gets.
+    /// </summary>
+    public LocalTierRoster LocalTierRoster { get; init; } = new();
+
+    /// <summary>
+    /// The single place an entity's tier is decided and written -- see ProcessingTierResolver's own
+    /// doc comment. Shared here, rather than owned privately by ProcessingTierSystem, because the
+    /// spawn sequence needs it *before* the first system update: it sets the reference position
+    /// ahead of population and creates entities through it so they are born correctly tiered.
+    /// Wired by ProcessingTierModule.RegisterSystems.
+    /// </summary>
+    public ProcessingTierResolver ProcessingTierResolver { get; init; } = new();
+
+    /// <summary>
+    /// The simulation's "now", for anything a module builds that reads a FrameDeadline outside a
+    /// system's own Update. Always a real instance, the same always-safe-default reasoning as
+    /// MovedEntities. GameBootstrapper hands this same instance to SystemManager.Clock, which is
+    /// what advances it.
+    /// </summary>
+    public SimulationClock SimulationClock { get; init; } = new();
 }

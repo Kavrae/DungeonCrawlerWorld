@@ -6,14 +6,14 @@ using Microsoft.Xna.Framework;
 namespace Game.Blueprints.Terrain;
 
 /// <summary>A patch of ordinary grass terrain.</summary>
-public sealed class Grass : IBlueprint
+public sealed class Grass(MathUtility mathUtility) : IBlueprint
 {
     public void Build(ComponentManager componentManager, int entityId)
     {
         componentManager.Merge(entityId, new BackgroundComponent(Color.ForestGreen));
         componentManager.Merge(entityId, new DisplayTextComponent("Grass", "Ordinary grass. Nothing special."));
         componentManager.Merge(entityId, new GlyphComponent(",", Color.LawnGreen));
-        if (SpriteManifest.TryGet("Grass", out var sprite))
+        if (SpriteManifest.TryGetRandom("Grass", mathUtility, out var sprite))
         {
             componentManager.Merge(entityId, sprite);
         }

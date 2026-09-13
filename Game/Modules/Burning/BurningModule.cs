@@ -6,8 +6,6 @@ using Game.Modules.Burning.Components;
 using Game.Modules.Burning.Systems;
 using Game.Modules.Death.Components;
 using Game.Modules.Health.Components;
-using Game.Modules.ProcessingTier;
-using Game.Modules.ProcessingTier.Components;
 using Game.Modules.StatModifiers.Components;
 using Game.Modules.StatusEffects;
 using Game.World;
@@ -31,19 +29,21 @@ public sealed class BurningModule : IGameModule
 
     private EventBus _eventBus = null!;
     private IPlayerQuery? _playerQuery;
-    private ProcessingTierEvents _processingTierEvents = null!;
     private MathUtility _mathUtility = null!;
 
     public void Configure(GameModuleContext context)
     {
         _eventBus = context.EventBus;
         _playerQuery = context.PlayerQuery;
-        _processingTierEvents = context.ProcessingTierEvents;
         _mathUtility = context.MathUtility;
         context.StatusEffectAuraAppliers.Register(new BurningAuraApplier(_mathUtility, _eventBus, _playerQuery));
         context.StatusEffectDisplays.Register(new TimerBasedStatusEffectDisplay<BurningTimerComponent>(StatusEffectType.Burning, BurningEffects.Glyph,
-            burning => burning.FramesUntilNextTick + (burning.StackCount - 1) * BurningEffects.TickIntervalFrames));
+            static (burning, now) => RemainingFrames(burning.NextTickFrame, burning.StackCount, now)));
     }
+
+    /// <summary>Frames until a burn at stackCount runs out: the running tick, then one tick per remaining stack. Shared by the entity-scoped display and HealthWindow's per-part line so the two can't disagree.</summary>
+    public static int RemainingFrames(uint nextTickFrame, byte stackCount, long now) =>
+        FrameDeadline.Remaining(nextTickFrame, now) + (stackCount - 1) * BurningEffects.TickIntervalFrames;
 
     public void RegisterComponents(ComponentManager componentManager)
     {
@@ -73,8 +73,6 @@ public sealed class BurningModule : IGameModule
             componentManager.GetPackedPool<SimpleHealthComponent>(),
             _eventBus,
             _playerQuery,
-            componentManager.GetDirectPool<ProcessingTierComponent>(),
-            _processingTierEvents,
             _mathUtility,
             statModifiers,
             bodyParts));
@@ -90,8 +88,6 @@ public sealed class BurningModule : IGameModule
             componentManager.GetPackedPool<SimpleHealthComponent>(),
             _eventBus,
             _playerQuery,
-            componentManager.GetDirectPool<ProcessingTierComponent>(),
-            _processingTierEvents,
             statModifiers,
             deadEntities));
     }

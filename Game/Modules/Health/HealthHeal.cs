@@ -28,6 +28,10 @@ namespace Game.Modules.Health;
 /// eventBus and playerQuery are supplied and the player is involved as either source or target --
 /// both are optional here (unlike HealthDamage.Apply's required eventBus) since most existing
 /// low-level callers/tests have no need to observe a heal landing.
+///
+/// `now` is the simulation frame this heal lands on. Only the Complex single-part path consults it,
+/// to skip a body part still inside its regen lockout (BodyPartComponent.RegenLockedUntilFrame);
+/// required rather than optional for the same reason HealthDamage.Apply's is.
 /// </remarks>
 public static class HealthHeal
 {
@@ -35,6 +39,7 @@ public static class HealthHeal
         PackedComponentPool<SimpleHealthComponent> health,
         int entityId,
         float percentOfMaxHealth,
+        long now,
         MultiComponentPool<StatModifierComponent>? statModifiers = null,
         MultiComponentPool<BodyPartComponent>? bodyParts = null,
         float flatAmount = 0f,
@@ -58,7 +63,7 @@ public static class HealthHeal
                 }
                 else
                 {
-                    ComplexHealthHeal.ApplyToSinglePart(bodyParts, health, entityId, percentOfMaxHealth, flatAmount, statModifiers, sourceEntityId, activatorTags, targetRule, targetMode, mathUtility, bodyPartBurningTimers, eventBus, playerQuery, healType);
+                    ComplexHealthHeal.ApplyToSinglePart(bodyParts, health, entityId, percentOfMaxHealth, flatAmount, statModifiers, sourceEntityId, activatorTags, targetRule, targetMode, mathUtility, now, bodyPartBurningTimers, eventBus, playerQuery, healType);
                 }
             }
 

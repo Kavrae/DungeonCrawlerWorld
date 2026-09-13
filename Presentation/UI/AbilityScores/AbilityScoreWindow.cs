@@ -1,4 +1,5 @@
 using Engine.ECS.Components;
+using Engine.ECS.Systems;
 using Engine.Utilities;
 using Game.Modules.AbilityScores;
 using Game.Modules.AbilityScores.Components;
@@ -28,7 +29,7 @@ namespace Presentation.UI.AbilityScores;
 /// self-contained here rather than routed through UiInputController since nothing else needs to
 /// know about it.
 /// </summary>
-public sealed class AbilityScoreWindow(FontService fontService, ElementPoolService elementPoolService, LabelRenderer labelRenderer, ComponentManager componentManager)
+public sealed class AbilityScoreWindow(FontService fontService, ElementPoolService elementPoolService, LabelRenderer labelRenderer, ComponentManager componentManager, SimulationClock simulationClock)
     : Window(fontService, elementPoolService, labelRenderer)
 {
     private const float HeaderHeight = 50f;
@@ -335,7 +336,7 @@ public sealed class AbilityScoreWindow(FontService fontService, ElementPoolServi
 
         _columnHeaders[index].Configure(type, GetTotal(type), new Vector2(listWindow.CurrentSize.X, HeaderHeight));
 
-        var lines = AbilityScoreModifierFormatter.GetOrderedLines(componentManager, _entityId, type);
+        var lines = AbilityScoreModifierFormatter.GetOrderedLines(componentManager, _entityId, type, simulationClock.CurrentFrame);
         for (var lineIndex = 0; lineIndex < lines.Count; lineIndex++)
         {
             if (NeedsSeparatorBefore(lines, lineIndex))

@@ -1,3 +1,52 @@
+### Floating Combat Text
+Combat text whenever an entity is damaged, healed, or given a status effect.
+Research industry standard
+Appear above the entity at 50% opacity, move up the distance of a single tile fading to 100% opacity, then move while fading to 0 opacity. Damage and status effect text moves up while "Dodge" and "Immune" text moves down. Remove the text at 0 opacity.
+Text should start with a randomized horizontal offset (half of a tile width in either direction) to improve readability by reducing stacking.
+Text should move diagonally, rather than directly up/down, to futher improve readability. Randomly chosen between negative vertical speed and positive vertical speed.
+Start with 2 second duration.
+Draw order is oldest (bottom) to newest (top)
+Bordered text.
+Red numbers for direct damage
+Orange numbers for status effect damage
+Green numbers for direct healing
+Light green for health regen
+Bolt for critical hits
+Sprite + number of stacks when status effect stacks are added
+"Dodge" whenever an action fails due to a dodgeComponent.
+"Immune" whenever an action fails due to immunity.
+Since multiple sources of damage and effects can happen simultaneously, which would be difficult to read, buffer them into a damage list and a status effect list. Each frame, display the oldest damage/healing number (drawn on left) and oldest status effect(drawn on right) in the list . This will result in a "waterfall" of text.
+Should this feature go through the eventBus (for entities on the screen) rather than directly passed to whatever controls the floating combat text?
+The text creation, movement, fade in/out, and removal combination of mechanics is similar to many game particle effects. Should this be generalized into a particle effect with text as the UI piece of it?
+
+### Combat Overhaul : Dodge
+
+**Core mechanic landed** -- see `IMPLEMENTATION-NOTES.md`'s own "Combat Overhaul: Dodge" section for
+what's built. Still open below: Block, Counterspell, the AdvancedDodge buff (Low Priority, this file),
+and independently validating the 0.5s-1.0s window against Dark Souls 3/other games' dodge timings.
+
+# Clean these up
+Keep Movement, QuickAttack, and magic missle as immediate actions, Dodge as the only FreeCast action, and change all others to delayed. Immediate and FreeCast actions should be rare. 
+All delayed actions keep the target shape drawn on the map (so enemies show their attack target area) until they activate. Adjust the colors to make it clear which are enemy vs player. Red for enemy target shapes that cannot be dodged and yellow for ones that can be dodged. Light green for player arm and dark green for player target.
+While an entity is charging an action/item, put that action/item's sprite as a badge above their sprite on the map.
+This allows FreeCast actions like dodge, block, parry, counterspell, etc to have a purpose and timing.
+This makes combat slower and more deliberate instead of spamming actions. Shifting to more of a 2d souls-like game
+Lower enemy count to make this more deliberate and punishing combat style work.
+Give every entity three default core actions. QuickAttack, PowerAttack, and Dodge.
+	QuickAttack is an immediate adjacent-target action (so can't be dodged) with low damage. No cooldown besides global. This replaces Punch, defaulting to the R key.
+	PowerAttack is a delayed adjacent-target action with a 1 second delay (so can be dodged) with high damage. No cooldown besides global. Default to the Q key.
+	Dodge is a FreeCast action to avoid attacks. Its own flat 4 second cooldown (not an increased global cooldown) prevents Dodge from being used as a safer form of movement. Default to the F key. Not all attacks can be dodged; such as auto-targeting attacks like Magic Missile or AOE attacks like explosions. Mark PowerAttack as CanBeDodged (find a better name for this). After dodge is armed (adjacent+self), it can be activated with the same key, click, or directional movement key. Same key or clicking on the player will dodge in-place. Directional movement or clicking an adjacent tile will dodge while moving to that tile (if not occupied. If occupied, the entity will dodge in place). After activating Dodge, any action or item with CanBeDodged will not affect the dodging entity.
+Dexterity increases dodge's activation time from 0.5 seconds at dexterity 1 to 1 second at dexterity 300. Check the values used by games like Dark Souls 3, and other games with a dodge mechanic, to validate these activation times.
+Block (such as via a shield) will be added later as another FreeCast action with a longer duration but does not fully block damage and effects.
+Counterspell will be added later as another FreeCast action that will attempt to cancel delayedAction spells. Determine a way to make this fair for both the source and target.
+
+### Stances and Toggles
+Stances: a set of toggle actions that boost one specialty while weakening another. 
+Add a visual element to toggle actions/items to indicate when they're toggled on. Compare a rotating inner-fade glow to industry standard.
+Stance 1 = Power Stance = Lower charge up times for delay actions in exchange for longer global cooldowns.
+Stance 2 = Mage Stance = Improved magic effects at the cost of melee. 
+Should toggle be a separate activator type or a different part of an action? Items (torch), spells (buff aura), and direct actions (stances) can all have toggles with various effects that can be manually activated and deactivated by the owning entity.
+
 # Long-Term TODOs
 
 Non-urgent architectural items worth revisiting later. Organized by layer (Engine, Game, Presentation,
@@ -27,6 +76,30 @@ primitive. Companion to the Game/Presentation equipment items below.
 ## Game
 
 ### High Priority
+
+#### Simplify non-local combat for performance
+
+A Delayed action's windup/telegraph/badge exist for player-visible tactical value -- an off-screen
+entity's own windup buys it nothing (nothing is watching it) but still costs the same
+`ActionLockComponent`/`PendingDelayedActionComponent`/`DelayedActionSystem` bookkeeping as an
+on-screen one. Confirmed expensive at this game's real population scale: a live diagnostics capture
+showed over 10,000 entities map-wide simultaneously mid-windup during ordinary NPC-vs-NPC combat
+(`DelayedActionSystem` alone cost ~79ms of a 1000ms/sec budget before it was tiered -- see
+`IMPLEMENTATION-NOTES.md`'s "Enemy Attack Indicator + follow-up combat/performance work" for that
+fix, already landed; tiering cut the per-frame *visit* cost, this entry is about shrinking the
+*population* that ever needs a windup in the first place).
+
+For an entity outside Local processing tier (`ProcessingTierLevel.Local` -- `ActionTargetingController
+.AllPendingDelayedActionTargets` already treats this as the visibility boundary for its own
+telegraph), resolve its actions immediately instead of queuing a Delayed windup at all: skip
+`ActionLockGate.Lock`/`PendingDelayedActionComponent` and call `ActionEffectResolver.Apply` right
+away, the same as an `Immediate` action. Shrinks `DelayedActionSystem`'s/`ActionLockSystem`'s own
+per-frame population directly, without touching on-screen combat's telegraph/timing at all. Open
+question: check tier at decision time (`TestCombatBehaviorSystem.TryDecideMeleeAttack`, cheaper --
+never queues a windup for an already-non-Local entity) vs. at activation time
+(`ActionActivationSystem.TryActivateDelayed`, also covers an entity that starts Local and drifts out
+mid-windup). Whether Dodge/Block eligibility should get the same non-Local-entities-skip-it
+treatment is a related, separate question worth deciding alongside this.
 
 #### Inventory management rules
 
@@ -91,6 +164,21 @@ Flat per-entity today (Goblin 54, Fairy/Ghost 48, Player 20, +Engineer 10%). Ler
 `AbilityScoreComponent.Total` (same shape as `PotionCooldownEffects.ComputeDurationFrames`). Must
 compose with, not replace, the racial baseline -- exact composition (multiply vs. replace) undecided.
 
+#### Faster player movement, much more frequent enemy movement
+
+Two tuning changes:
+- **Player slightly faster**: the player's step lock is Human's `StandardLockFrames` (30, via
+  `Human.cs` -- `PlayerBlueprint` doesn't override it; the Dexterity entry above still says "Player
+  20", which is out of date). That same field is also the post-attack global lock, so lowering it
+  speeds up attacks too. Use `StatModifierTarget.MovementLockFrames` instead (already applied in
+  `MovementSystem` on top of the base) for a movement-only change.
+- **Enemies move far more often**: `TestCombatBehaviorSystem.DecideWander` flips a coin every
+  decision, and the "don't move" side sets `FramesToWait = MovementCandidates.FramesToWaitIfNoOptions`
+  (120 frames). That constant was meant for "every direction blocked", not idling. Give idle its own
+  shorter wait and/or weight the roll toward moving. Performance check: more enemy moves means more
+  `EntityMovedEvent`s and more `ProcessingTierSystem`/aura exposure re-evaluation -- benchmark
+  before/after with the `phase-performance-testing` skill.
+
 #### Spell leveling
 
 Same rules as Skills (level 0-15/20, XP with use, never decreases) -- land after Skills so both share
@@ -132,6 +220,12 @@ effect entry's `Apply`, even with no real `StatModifierTarget` consumer yet, so 
 source can hook in by granting a modifier alone. Calling-convention change, not a new stat.
 
 ### Low Priority
+
+#### AdvancedDodge buff
+
+A buff/upgrade that increases Dodge's movement distance beyond one adjacent tile and extends the
+duration of its dodging-immunity window. Follow-up to Combat Overhaul: Dodge (this file's own entry
+above).
 
 #### Repair destroyed items
 
@@ -408,16 +502,6 @@ addition (new spatial index, insert/remove/move bookkeeping, a genuine correctne
 boundary-band width) -- only worth it once profiling actually confirms this as a bottleneck (one past
 pass was inconclusive, coincided with unrelated Paralysis load).
 
-#### DelayedActionSystem polls every pending action every frame, untiered
-
-Unlike its siblings (`ActionLockSystem`/`ActionCooldownSystem`/`StatModifierExpirySystem`/
-`BurningSystem`, all `TieredEntityStripeSet`), uses a flat `StripeCount = 1` and borrows
-`ActionLockComponent.LockFramesRemaining` instead of owning a countdown. Not a measured problem today
-(no Delayed action has a long windup). If it becomes one: give `PendingDelayedActionComponent` its own
-`ITickCountdown` via `CountdownTicker.Tick`, and a `TieredEntityStripeSet` like its siblings. (A
-callback on `ActionLockComponent` itself was considered and rejected -- would pull Actions-specific
-knowledge into a generic Core primitive.)
-
 #### Entity displacement with damage
 
 `World.MoveEntity`/`PlaceEntityOnMap` no-op when a Blocking destination is occupied -- too blunt for
@@ -540,7 +624,111 @@ No checkbox, radio button, dropdown, slider, list box, or tree view (`Toggle` co
 `IMPLEMENTATION-NOTES.md`). Tabs exist (`TabbedContent`). Inventory/spell hotbar and equipment/stats
 windows still want list/grid controls beyond what exists.
 
+#### Tile count and size closer to Dungeon Settlers
+
+Inspired by Dungeon Settlers. Match its on-screen tile size and how many tiles are visible at once
+more closely. Today `MapCamera.BaseTileSizePixels` is a fixed 36px at `ZoomLevel.Team` (18px
+Neighborhood, 9px Borough, all derived from it), and the visible tile count isn't set directly --
+`UpdateTileSizes` derives it from the map window's content size divided by tile size (+2 for partial
+edge tiles). So "tile count" is a function of tile size and the map window's layout in
+`ShellBootstrapper`, and both may need to change. Start by measuring Dungeon Settlers' visible
+columns x rows and tile pixel size at a common resolution, then decide whether to match size, count,
+or both. Things that scale with tile size and need a visual check afterward: sprite legibility (pairs
+with AI-generated sprites and Per-entity sprite scale), map fonts/badges, `HudMetrics`, and
+per-frame cost -- larger tiles means fewer visible tiles and a cheaper `DrawOccupants`; smaller means
+the reverse.
+
+#### Walking and action animations
+
+Inspired by Dungeon Settlers. Supersedes the former Medium "Lerp movement animation between tiles"
+entry. Two parts:
+- **Walking**: entities teleport between tiles on-screen today. Lerp the sprite's rendered position
+  across the move's `ActionLockComponent`-driven frame count, plus a walk-cycle frame sequence where
+  a sprite has one. Purely visual -- grid position/occupancy still change instantly on the same
+  frame as today.
+- **Actions**: a short per-action animation (windup during a Delayed action's charge, a strike on
+  activation). Could drive off the same elapsed-real-time tracking `MapWindow.TrackChargeElapsedFraction`
+  already does for the charge fill, not the stepped `CurrentLockFramesRemaining` (see that method's
+  own remarks for why the stepped value never reaches 0).
+
+Needs a frame-sequence concept `SpriteComponent`/`SpriteManifest` don't have yet (one cell per
+entity today, chosen once at build). Scope to Local tier -- nothing off-screen should pay for
+animation state. Pairs with the AI-generated sprite item (Medium, below), which would be the natural
+point to author walk/action frames.
+
+#### Sprites taller than one tile, and two-tile walls (front + top)
+
+Inspired by Dungeon Settlers. Two related wants: character sprites that extend above their own tile,
+and walls drawn as a front face on their own tile plus a top face on the tile above. Both need the
+map drawn top-down (row-outer), so a lower row's sprite overlaps the row above it rather than the
+other way round.
+
+Two things in `MapWindow` stand in the way today:
+- `DrawOccupants` walks column-outer, row-inner. Within a column that's already top-down, but column
+  c+1's row r-1 draws after column c's row r, so anything wider than one tile (see Per-entity sprite
+  scale, Low) gets overdrawn by its upper-right neighbour. Its own remarks say row-major measured no
+  performance difference and was only left alone because it would change overlap order for no gain.
+  This is that gain.
+- Walls are terrain (`Map`'s separate `TerrainLayer` array), rendered into the `MapTileLayerCache`
+  texture before any occupant. A wall's top face covering the tile above has to occlude an entity
+  standing behind it (north), so wall tops can't live in that cache -- they need to draw in the
+  row-ordered occupant pass, after the row above. That cache's remarks explain why terrain was pulled
+  out of the per-tile loop in the first place (multi-tile footprints), so this needs a real design,
+  not just moving the wall draw.
+
+Tall terrain goes semi-transparent while the player or the inspected entity is behind it: when
+either stands on a tile that a wall's top face (or any other tall terrain sprite) draws over, render
+that sprite at reduced alpha so the entity stays visible. "Inspected" is
+`MapViewState.InspectedEntityId` (Detail/Admin inspection's followed entity, the same one
+`DrawFollowedEntityHighlight` tracks), and it should cover every tile of that entity's footprint
+(`TransformComponent.Size`), not just its origin tile. The occupant draw path already carries an
+alpha multiplier (`TryDrawEntityVisual`'s `alphaMultiplier`, used for Phasing), so this is a
+per-tile "is the player or inspected entity under this sprite's overhang" check at draw time, once
+tall terrain draws in the occupant pass at all -- at most two entities to check, so no spatial index
+needed.
+
+Related: Per-entity sprite scale and Multi-tile sprites (both Low) -- a larger player sprite is the
+first real consumer of this.
+
+#### HP and mana numbers on the HUD bars
+
+Inspired by Dungeon Settlers. Draw "15 / 20" in white, centred on `PlayerHealthBarContent`'s and
+`PlayerManaBarContent`'s bars. `ResourceBarRenderer.Draw` only takes a fraction today, so either
+callers pass current/max through or the text draws separately on top. Health's max is the effective
+one (`StatModifierMath.GetEffectiveValue(..., MaximumHealth, ...)`), not the base, and current health
+is a float -- round it for display. `PlayerManaBarContent` has no `FontService` yet. Use an
+outlined/contrast draw (`ContrastTextRenderer`, or `LabelRenderer.DrawCentered(..., outline: true)`)
+so white text stays readable over a bright fill.
+
 ### Medium Priority
+
+#### AI-generated sprites with a hovered state
+
+Inspired by Dungeon Settlers. Generate a consistent sprite set with AI tools, replacing today's
+mixed assets and glyph fallbacks (Fairy/Ghost/Lava have no sprite -- see `SpriteManifest`). Every
+sprite also needs a "hovered" look: a white border around its silhouette. Better generated at draw
+time from the sprite's alpha (draw it offset in white on each side, then the sprite on top) than
+authored as a second cell per sprite. That keeps the manifest at one cell per sprite and works for
+anything added later. Same family of problem as mask-based recoloring (Low, below) -- one base
+sprite, many runtime variants. If walk/action frames get authored at the same time (see Walking and
+action animations, High), plan the sheet layout for them up front.
+
+#### Vertical status effect list under HP and mana
+
+Inspired by Dungeon Settlers. Supersedes the former Low "Status effect stack count on the player's
+status bar" entry. `PlayerStatusEffectsContent` draws one icon per effect type in a horizontal row
+under the health bar, with Poison/Burning stack counts (and the potion cooldown's seconds) drawn
+*below* each icon. As the number of effect types grows, switch to a vertical list below HP and mana:
+one row per effect, icon on the left, number to its right. That frees the number from the
+below-the-icon position and gives room for every effect's count, not just Poison/Burning's. The host
+window's fixed `Size` (one icon row tall) would need to grow with the active effect count.
+
+#### Party inventory UI -- compare Dungeon Settlers and Elden Ring
+
+Research item. Look at Dungeon Settlers' party inventory UI and Elden Ring's inventory/equipment
+screens, and note what's worth adopting for the Inventory window and the Equipment menu (Low,
+below). Check it against the still-open Stack Controls and Partial Stacks (High, above), which
+already calls for a similar industry comparison.
 
 #### TextDivider label clipping and right-line spacing
 
@@ -638,6 +826,16 @@ not error-prone -- low priority.
 `MapWindow.TryDrawEntityVisual` has no `DeadComponent` check -- a corpse looks identical to a
 just-motionless living entity. Draw a red X overlay when `DeadComponent` is present.
 
+#### Blood pool under dead entities
+
+A blood pool drawn under a corpse on every tile of its footprint (`TransformComponent.Size`, same
+per-tile loop `DrawFollowedEntityHighlight` uses), colored per entity. Nothing carries a blood color
+today -- add one per race blueprint (a field or small component, e.g. red for Human/Goblin), and
+decide what a Ghost leaves (none, or ectoplasm). Draw it under the corpse in the occupant pass
+(`DrawUnderlayOccupants`, before the corpse sprite), not after. Pairs with Red X marker above (both
+make a corpse read as dead) and Corpse decay/destruction (Game) -- the pool should go when the
+corpse does.
+
 #### Folder glow blink
 
 `Folder.SetGlow` (used by `NotificationCenter`'s unread-glow) is flat on/off. Make it pulse instead --
@@ -658,6 +856,16 @@ follow-up directions, worth deciding between rather than landing both: (1) add b
 border ring on top of the wash; (2) make the wash fainter and replace the ring with four opaque corner
 brackets instead of a full perimeter. No corner-mark geometry worked out for (2) yet.
 
+#### Circle selection under the entity instead of a tile border
+
+Inspired by Dungeon Settlers. `MapWindow.DrawSelectedTileGlow` marks the selected/followed tile with
+an interior-fade glow over the whole tile. Replace it with a circle (ellipse) on the ground under the
+entity, drawn *before* the entity sprite rather than on top. That needs it inside the occupant pass,
+not after it the way highlights draw today. Pairs with the tall-sprite item (High, above): once
+sprites extend past their own tile, a tile-shaped highlight stops lining up with the character. May
+settle the Highlighted-tile visual redesign above for selection specifically, but not for ability
+targeting. There's no circle primitive yet -- `unitRectangle` plus `GlowRenderer` are all the map has.
+
 #### Extract a shared tick-fraction HUD bar element
 
 `PlayerHealthBarContent`/`PlayerManaBarContent` are near-duplicates (same outline+inset-fill+tick-mark
@@ -665,6 +873,18 @@ shape, differing only in backing component/palette). Tolerable at two copies -- 
 generic element if a third shows up (e.g. Soul Essence). `MapWindow.DrawHealthBar` is arguably a lighter
 third instance already (same fraction math, no ticks, per-any-entity) -- include it in scope if this is
 ever picked up.
+
+#### Hotbar insufficient-mana indicator
+
+A small blue fill bar on a hotbar slot for an action/spell whose `ManaCost` exceeds the player's
+current `ManaComponent` pool -- a glanceable "you can't afford this right now" without opening a
+tooltip. Precedent: `RadialFillRenderer`'s existing cooldown-sweep mask, already drawn on
+`HotbarContent`'s ability slots (`ActionLockContent`'s own HUD wheel is the other consumer today) --
+this would be a second, independent fill/tint on the same slot, not a replacement, since cooldown and
+affordability are two separate reasons a slot can't be used right now and both are worth signaling at
+once. Blocked on Mana costs actually being enforced on activation -- this file's own "Mana" entry
+(Game, Medium Priority) notes every `ManaCost` is unenforced today ("both free today"); this
+indicator has nothing real to check until that lands.
 
 #### Context menu amount picker
 
@@ -698,12 +918,6 @@ always renders one sprite stretched to exactly one tile's own `CurrentTileSize`,
 sprite spanning the whole footprint. `Shop`'s own `Sprite = "Shop-1x1"` (`PLAN-shops.md`) is a
 deliberately-named 1x1 placeholder for this -- a real multi-tile shop sprite (e.g. "Shop-2x2") is
 the concrete first implementation once this lands.
-
-#### Status effect stack count on the player's status bar
-
-`PlayerStatusEffectsContent` shows one icon per effect type regardless of stack count. Overlay the
-current count (`StatusEffectQueries.CountStacks`), same corner-text treatment `InventoryItemStackCell`
-already uses.
 
 #### Player stats v2
 
@@ -921,3 +1135,124 @@ guard with today's hardcoded value as the non-Windows fallback. Scoped to the mo
 `ActionTargetingController`'s separate keyboard hotbar double-tap window is a different gesture and
 wouldn't read from this. Open question if picked up: does the current +25% buffer on top of the base
 value still make sense once the base is the user's own real OS setting rather than a fixed guess.
+
+### HIGH PRIORITY : Distant simulation fidelity -- research industry approaches
+
+Raising `ProcessingTierDivisors` to `[1, 16, 32, 64]` made coarse-tier entities cheap, and
+`CountdownTicker`/`MultiCountdownTicker` now catch up the full span of a visit rather than firing
+once (so a distant entity's damage-over-time totals are correct again). But correct *totals* are
+not the same as correct *outcomes*, and the current shape has a real gameplay flaw:
+
+**Bulk ticks resolve in isolation, so an entity can die to a lump of DoT that fine-grained
+simulation would never have killed.** A burning entity visited every 960 frames takes 16 ticks of
+burn damage in one go, all resolved before its own regen system next visits it. Interleaved at
+1-frame granularity, the heal-over-time would have offset each damage tick as it landed and the
+entity would have survived. Health-vs-damage races (burning, poison, contact damage, bleeding,
+regen, body-part regen lockouts) all have this property: the *order and granularity* of
+application changes who lives.
+
+This gets worse, not better, with the planned map growth: at Borough map size the bulk of entities
+sit at divisor 32, and at 4x Borough at 64, so bulk resolution becomes the normal case rather than
+an edge one.
+
+Research how other games solve distant/background simulation before picking a design:
+- Dwarf Fortress / RimWorld: off-screen and abstracted-region simulation fidelity.
+- Factorio: what it deliberately does NOT simulate outside active chunks, and why that is safe.
+- Modern MMOs / Kenshi / Mount & Blade: "simulate the summary, not the entity" approaches.
+- Roguelike convention generally: whether distant actors are simulated at all, or frozen until
+  the player approaches.
+
+Candidate directions to weigh against that research:
+- Resolve competing over-time effects together per visit (net damage-vs-heal per elapsed period)
+  instead of each system independently applying its own lump.
+- Do not resolve *lethal* outcomes at coarse tiers at all -- clamp distant entities above zero
+  and settle the result when they are next promoted to a fine tier.
+- Statistical/abstracted resolution for coarse tiers, with exact simulation only near the player.
+- Freeze coarse tiers outright (no DoT progression) and accept that distant time does not pass.
+
+Note the related open question in `PLAN-optimization-priorities.md` (P2): `CountdownTicker` is
+still a full-pool scan-and-decrement per visit, and the countdown family is a large share of
+simulation cost. A deadline/timer-wheel rewrite and this fidelity question touch the same code and
+should probably be designed together.
+
+### MEDIUM PRIORITY : Unsimulated-tier time -- research alternatives to freezing
+
+Decided 2026-09-11 as a temporary position: when P2 stops simulating Borough and beyond, entities
+there are **frozen** -- their timers stop and resume where they left off when they are next
+simulated (`PLAN-timer-wheel.md`, Decisions 2). That is the cheapest correct option, not
+necessarily the right one: from the player's point of view, time does not pass for anything they
+walked away from.
+
+Research how other games handle time for things outside the simulated area before committing to
+anything else. Starting points to verify, not settled facts:
+- Minecraft: chunks beyond simulation distance are frozen outright -- nothing ticks there.
+- Stardew Valley: much off-screen state advances in bulk at the day boundary rather than live.
+- Animal Crossing: catches up to the real-time clock on load.
+- Dwarf Fortress: off-site world simulated at a coarser, abstracted level ("world activity").
+- RimWorld: world-map caravans and settlements simulated abstractly, maps unloaded otherwise.
+- Catch-up on load: advance a region by the elapsed time in one bulk step when it comes back into
+  range (the approach that runs into the bulk-resolution problem in "Distant simulation
+  fidelity" above).
+
+Things to decide from that research: whether time passes at all, whether catch-up is exact, bulk,
+or statistical, and whether lethal outcomes may resolve while unobserved. Overlaps with "Distant
+simulation fidelity" and "Third Pause modality" -- all three are "what happens to time where the
+player isn't".
+
+### HIGH PRIORITY : Investigate StatusEffectAuraExposureComponent growth
+
+The diagnostics leak detector flags this pool: `StatusEffectAuraExposureComponent pool grew 100%
+(0 -> 19,799) while live entity count grew 0% -- components may not be getting removed when their
+owning entity is.`
+
+~19,800 live exposures against ~59,000 lava tiles and ~70,000 movers is plausible on its face --
+an exposure is granted per (entity, effect type) in range of an aura source, and lava is dense --
+so this may be legitimate steady-state population rather than a leak. What makes it worth
+checking:
+
+- The detector's heuristic compares pool growth against *live entity count* growth, which is 0
+  after population finishes. That produces a false positive for any pool that legitimately fills
+  during play. `ProcessingTierComponent` trips the same heuristic for exactly that reason and is
+  almost certainly fine. So the first question is whether the detector is even measuring the right
+  thing here.
+- The real test is whether exposures are *removed* when an entity leaves an aura's radius or dies.
+  `StatusEffectAuraSystem` maintains exposures incrementally (see its own doc comment on
+  ReEvaluateExposuresNear); a missed removal path would accumulate silently, and the symptom would
+  be steady growth over a long session rather than a plateau.
+- Cheap way to settle it: run a long session and sample the count repeatedly. A plateau means
+  steady state, continued growth means a real leak. If it grows, the suspect paths are entity
+  death (does anything drop exposures for a dead entity?) and a source being removed/moved rather
+  than the observer moving out of range.
+
+Note the same detector output flags `ProcessingTierComponent` growing 1 -> 70,267; that one is the
+startup tiering sweep filling a pool that starts empty, not a leak.
+
+### MEDIUM PRIORITY : Third Pause modality -- per-map pause
+
+Today pause is global: `GameLoop.Update` skips `EcsContext.Update` entirely when
+`MapWindow.IsPaused` or menu mode is active, so every map stops together.
+
+Wanted: pause everything on a specific map *without* pausing the sub-map the player is currently
+on. The player explores a sub-map at full speed while the map they came from is frozen rather than
+running unobserved.
+
+Notes for whoever picks this up:
+
+- This is a third state, not a boolean. The existing two are "everything runs" and "nothing runs";
+  the new one is "this map runs, those maps are frozen", which means pause stops being a property
+  of the game loop and becomes a property of a map.
+- It overlaps heavily with the tier rework (`PLAN-processing-tier-rework.md`) and with P2's
+  spawn-in-and-wait direction: a frozen map and a Beyond-tier region are close to the same idea
+  expressed at different granularity, and it would be a shame to build two mechanisms for it. The
+  tier system already carries "this entity is on a different MapLayer, therefore Beyond".
+- Interacts with the off-map player reference point: while the player is on a sub-map, other maps'
+  entities are tiered against the player's last on-map position. If those maps are frozen anyway,
+  the reference point matters less -- but a frozen map still needs a defined tier state for when it
+  unfreezes.
+- Decide what "frozen" means precisely: no `ISystem.Update` visits at all (Minecraft's simulation
+  distance model), or visits that are skipped per-entity. The former is cheaper and easier to
+  reason about.
+- Clocks: `PLAN-timer-wheel.md` starts with one simulation clock, passed explicitly to everything
+  that reads it (timer wheel or direct walk, whichever its prototype picks) so this is a wiring
+  change. A frozen map needs its own clock (or its deadlines parked the
+  same way unsimulated-tier entities are); decide which when the second map exists.

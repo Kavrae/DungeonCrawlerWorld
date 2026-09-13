@@ -34,7 +34,7 @@ public sealed class AbilityScoreModifierRow(FontService fontService, ElementPool
 
     public string? ModifierText { get; private set; }
 
-    public ushort? RemainingDurationFrames { get; private set; }
+    public int? RemainingDurationFrames { get; private set; }
 
     public bool IsHovered { get; set; }
 

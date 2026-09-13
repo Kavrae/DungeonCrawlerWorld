@@ -70,6 +70,8 @@ public sealed class ActionsModule : IGameModule
         componentManager.RegisterMultiPool<ActionInstanceComponent>();
         componentManager.RegisterPackedPool<PendingDelayedActionComponent>(
             static (ref PendingDelayedActionComponent existing, PendingDelayedActionComponent incoming) => existing = incoming);
+        componentManager.RegisterPackedPool<DodgingComponent>(
+            static (ref DodgingComponent existing, DodgingComponent incoming) => existing = incoming);
         componentManager.RegisterPackedPool<PendingActionActivationComponent>(
             static (ref PendingActionActivationComponent existing, PendingActionActivationComponent incoming) => existing = incoming);
         // Player-only, 24 hotkey slots total -- small entity-index seed, dense capacity matches the slot count.
@@ -84,10 +86,8 @@ public sealed class ActionsModule : IGameModule
 
     public void RegisterSystems(SystemManager systemManager, ComponentManager componentManager)
     {
-        systemManager.Register(new ActionCooldownSystem(
-            componentManager.GetMultiPool<ActionInstanceComponent>(),
-            componentManager.GetDirectPool<ProcessingTierComponent>(),
-            _processingTierEvents));
+        // No cooldown system: an action's cooldown is a deadline (ActionInstanceComponent.
+        // CooldownReadyAtFrame), read against the current frame rather than walked down.
 
         systemManager.Register(new PotionCooldownSystem(componentManager.GetPackedPool<PotionCooldownComponent>()));
 
@@ -104,10 +104,12 @@ public sealed class ActionsModule : IGameModule
         var hotkeyExpansionUnlocks = componentManager.GetPackedPool<HotkeyExpansionUnlockComponent>();
         var bodyParts = componentManager.GetOptionalMultiPool<BodyPartComponent>();
         var meleeDisabled = componentManager.GetOptionalPackedPool<MeleeDisabledComponent>();
+        var dodgingEntities = componentManager.GetPackedPool<DodgingComponent>();
+
+        systemManager.Register(new DodgeExpirySystem(dodgingEntities));
 
         systemManager.Register(new DelayedActionSystem(
             componentManager.GetPackedPool<PendingDelayedActionComponent>(),
-            componentManager.GetPackedPool<ActionLockComponent>(),
             componentManager.GetMultiPool<ActionInstanceComponent>(),
             componentManager.GetPackedPool<SimpleHealthComponent>(),
             _actionCatalog,
@@ -122,7 +124,8 @@ public sealed class ActionsModule : IGameModule
             abilityScores,
             auraSources,
             hotkeyExpansionUnlocks,
-            bodyParts));
+            bodyParts,
+            dodgingEntities));
 
         systemManager.Register(new ActionActivationSystem(
             componentManager.GetPackedPool<PendingActionActivationComponent>(),
@@ -144,6 +147,7 @@ public sealed class ActionsModule : IGameModule
             auraSources,
             hotkeyExpansionUnlocks,
             bodyParts,
-            meleeDisabled));
+            meleeDisabled,
+            dodgingEntities));
     }
 }

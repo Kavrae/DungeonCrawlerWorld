@@ -69,13 +69,14 @@ public static class ElementFactoryRegistry
             actionTargeting,
             playerMovement,
             contextMenuController,
-            componentManager.GetPackedPool<ActionLockComponent>()));
+            componentManager.GetPackedPool<ActionLockComponent>(),
+            ecsContext.SystemManager.Clock));
 
         Register<Folder>((font, elements, glyph) => new Folder(font, elements, glyph, presentation.SpriteSheetService, presentation.SpriteRenderer));
 
         pool.RegisterFactory<InventoryManagementWindow>(() => new InventoryManagementWindow(
             presentation.FontService, pool, presentation.LabelRenderer, presentation.SpriteSheetService, presentation.SpriteRenderer,
-            componentManager, itemCatalog, world, contextMenuController, mapViewState, ecsContext.EventBus));
+            componentManager, itemCatalog, world, contextMenuController, mapViewState, ecsContext.EventBus, simulationClock: ecsContext.SystemManager.Clock));
         Register<InventoryItemStackCell>((font, elements, glyph) => new InventoryItemStackCell(font, elements, glyph, presentation.SpriteSheetService, presentation.SpriteRenderer));
         Register<ShopItemStackCell>((font, elements, glyph) => new ShopItemStackCell(font, elements, glyph, presentation.SpriteSheetService, presentation.SpriteRenderer));
         Register<TradeItemStackCell>((font, elements, glyph) => new TradeItemStackCell(font, elements, glyph, presentation.SpriteSheetService, presentation.SpriteRenderer));
@@ -84,9 +85,9 @@ public static class ElementFactoryRegistry
         Register<Toggle>((font, elements, glyph) => new Toggle(font, elements, glyph));
 
         pool.RegisterFactory<AbilityScoreWindow>(() => new AbilityScoreWindow(
-            presentation.FontService, pool, presentation.LabelRenderer, componentManager));
+            presentation.FontService, pool, presentation.LabelRenderer, componentManager, ecsContext.SystemManager.Clock));
         pool.RegisterFactory<HealthWindow>(() => new HealthWindow(
-            presentation.FontService, pool, presentation.LabelRenderer, componentManager, statusEffectDisplays, itemCatalog));
+            presentation.FontService, pool, presentation.LabelRenderer, componentManager, statusEffectDisplays, itemCatalog, ecsContext.SystemManager.Clock));
         Register<AbilityScoreColumnHeader>((font, elements, glyph) => new AbilityScoreColumnHeader(font, elements, glyph));
         Register<AbilityScoreModifierRow>((font, elements, glyph) => new AbilityScoreModifierRow(font, elements, glyph));
         Register<SeparatorBar>((font, elements, glyph) => new SeparatorBar(font, elements, glyph));
@@ -95,14 +96,16 @@ public static class ElementFactoryRegistry
 
         pool.RegisterFactory<SecondaryInventoryWindow>(() => new SecondaryInventoryWindow(
             presentation.FontService, pool, presentation.LabelRenderer, componentManager,
-            presentation.SpriteSheetService, presentation.SpriteRenderer, itemCatalog, world, contextMenuController, mapViewState));
+            presentation.SpriteSheetService, presentation.SpriteRenderer, itemCatalog, world, contextMenuController, mapViewState,
+            simulationClock: ecsContext.SystemManager.Clock));
         pool.RegisterFactory<ShopWindow>(() => new ShopWindow(
             presentation.FontService, pool, presentation.LabelRenderer, componentManager,
-            presentation.SpriteSheetService, presentation.SpriteRenderer, itemCatalog, world, contextMenuController, mapViewState));
+            presentation.SpriteSheetService, presentation.SpriteRenderer, itemCatalog, world, contextMenuController, mapViewState,
+            simulationClock: ecsContext.SystemManager.Clock));
         pool.RegisterFactory<TradeWindow>(() => new TradeWindow(
             presentation.FontService, pool, presentation.LabelRenderer, componentManager,
             itemCatalog, presentation.SpriteSheetService, presentation.SpriteRenderer, world, contextMenuController, mapViewState,
-            ecsContext.EventBus));
+            ecsContext.EventBus, simulationClock: ecsContext.SystemManager.Clock));
         Register<EntityIconElement>((font, elements, glyph) => new EntityIconElement(
             font, elements, glyph, presentation.SpriteSheetService, presentation.SpriteRenderer,
             componentManager.GetDirectPool<SpriteComponent>(), componentManager.GetDirectPool<GlyphComponent>()));

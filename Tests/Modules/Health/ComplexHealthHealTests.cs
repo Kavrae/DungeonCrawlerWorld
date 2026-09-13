@@ -1,3 +1,4 @@
+using Engine.ECS.Systems;
 using Engine.ECS.Components.Stores;
 using Game.Modules.Health;
 using Game.Modules.Health.Components;
@@ -71,14 +72,14 @@ public sealed class ComplexHealthHealTests
         bodyParts.UpdateByDenseIndex(bodyParts.GetFirstDenseIndex(0), static (ref BodyPartComponent part) =>
         {
             part.IsDisabled = true;
-            part.RegenLockoutFramesRemaining = 600;
+            part.RegenLockedUntilFrame = 600;
         });
 
         ComplexHealthHeal.ApplyToAllParts(bodyParts, CreateHealthPool(), 0, percentOfMaxHealth: 0.5f);
 
         var part = bodyParts.GetReadonlyByDenseIndex(bodyParts.GetFirstDenseIndex(0));
         Assert.AreEqual(10f, part.CurrentHealth);
-        Assert.AreEqual(600, part.RegenLockoutFramesRemaining, "The lockout is never consulted or reset by an active heal.");
+        Assert.AreEqual(600u, part.RegenLockedUntilFrame, "The lockout is never consulted or reset by an active heal.");
     }
 
     [TestMethod]
@@ -101,7 +102,7 @@ public sealed class ComplexHealthHealTests
         bodyParts.Add(0, new BodyPartComponent("Head", BodyPartType.Head, 0, 0, currentHealth: 40, maximumHealth: 40, isVital: true));
         var statModifiers = new MultiComponentPool<StatModifierComponent>(maximumEntityCount: 10, initialCapacity: 4);
         statModifiers.Add(0, new StatModifierComponent(StatModifierTarget.MaximumHealth, StatModifierOperation.Multiplicative, StatModifierPolarity.Buff,
-            canModify: true, magnitude: 0.5f, remainingDurationFrames: null, StatusEffectSource.Admin));
+            canModify: true, magnitude: 0.5f, expiresAtFrame: FrameDeadline.Never, StatusEffectSource.Admin));
 
         // A part already at its raw maximum must still rise -- the true cap with a +50% buff
         // active is 60, not 40 (both for the total's own percent-of-max calculation and for the
@@ -155,7 +156,7 @@ public sealed class ComplexHealthHealTests
         bodyParts.Add(0, new BodyPartComponent("Head", BodyPartType.Head, 0, 0, currentHealth: 90, maximumHealth: 100, isVital: true)); // 90%
         bodyParts.Add(0, new BodyPartComponent("Leg", BodyPartType.Leg, 0, 0, currentHealth: 20, maximumHealth: 100, isVital: false)); // 20%, most damaged
 
-        ComplexHealthHeal.ApplyToSinglePart(bodyParts, CreateHealthPool(), 0, percentOfMaxHealth: 0.1f, flatAmount: 0f, statModifiers: null, sourceEntityId: null, activatorTags: null, targetRule: null, targetMode: BodyPartTargetMode.LowestPercentage, mathUtility: null);
+        ComplexHealthHeal.ApplyToSinglePart(bodyParts, CreateHealthPool(), 0, percentOfMaxHealth: 0.1f, flatAmount: 0f, statModifiers: null, sourceEntityId: null, activatorTags: null, targetRule: null, targetMode: BodyPartTargetMode.LowestPercentage, mathUtility: null, now: 0);
 
         // Total = 10% of the overall max (100+100=200) = 20, applied entirely to the Leg (lowest percentage).
         var parts = PartsByName(bodyParts, 0);

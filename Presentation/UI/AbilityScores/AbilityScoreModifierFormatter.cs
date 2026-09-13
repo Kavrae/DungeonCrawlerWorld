@@ -1,4 +1,5 @@
 using Engine.ECS.Components;
+using Engine.ECS.Systems;
 using Game.Modules.AbilityScores;
 using Game.Modules.AbilityScores.Components;
 using Game.Modules.StatModifiers;
@@ -17,7 +18,8 @@ namespace Presentation.UI.AbilityScores;
 /// </summary>
 public static class AbilityScoreModifierFormatter
 {
-    public static IReadOnlyList<ModifierDisplayLine> GetOrderedLines(ComponentManager componentManager, int entityId, AbilityScoreType type)
+    /// <param name="now">The current simulation frame -- each modifier stores an absolute expiry frame (StatModifierComponent.ExpiresAtFrame), so "how long is left" only exists relative to this.</param>
+    public static IReadOnlyList<ModifierDisplayLine> GetOrderedLines(ComponentManager componentManager, int entityId, AbilityScoreType type, long now)
     {
         var lines = new List<ModifierDisplayLine> { new($"Base : {GetBaseValue(componentManager, entityId, type)}", Source: null, RemainingDurationFrames: null) };
 
@@ -47,7 +49,7 @@ public static class AbilityScoreModifierFormatter
 
         foreach (var modifier in ordered)
         {
-            lines.Add(FormatModifierLine(componentManager, modifier));
+            lines.Add(FormatModifierLine(componentManager, modifier, now));
         }
 
         return lines;
@@ -58,14 +60,16 @@ public static class AbilityScoreModifierFormatter
             ? component.BaseValue
             : throw new InvalidOperationException($"No AbilityScoreComponent of type {type} for entity {entityId}.");
 
-    private static ModifierDisplayLine FormatModifierLine(ComponentManager componentManager, StatModifierComponent modifier)
+    private static ModifierDisplayLine FormatModifierLine(ComponentManager componentManager, StatModifierComponent modifier, long now)
     {
         var sourceName = ModifierDisplayFormatting.DescribeSource(componentManager, modifier.Source);
         var modifierText = modifier.Operation == StatModifierOperation.Additive
             ? FormatSigned((int)MathF.Round(modifier.Magnitude))
             : $"{FormatSigned((int)MathF.Round(modifier.Magnitude * 100))}%";
 
-        return new ModifierDisplayLine($"{sourceName} : {modifierText}", modifier.Source, modifier.RemainingDurationFrames, modifierText, modifier.Operation);
+        var remainingFrames = modifier.ExpiresAtFrame == FrameDeadline.Never ? (int?)null : FrameDeadline.Remaining(modifier.ExpiresAtFrame, now);
+
+        return new ModifierDisplayLine($"{sourceName} : {modifierText}", modifier.Source, remainingFrames, modifierText, modifier.Operation);
     }
 
     private static string FormatSigned(int value) => value >= 0 ? $"+{value}" : value.ToString();

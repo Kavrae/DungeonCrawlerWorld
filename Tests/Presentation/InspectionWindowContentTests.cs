@@ -1,4 +1,5 @@
-﻿using Engine.ECS.Components;
+using Engine.ECS.Systems;
+using Engine.ECS.Components;
 using Engine.ECS.Components.Stores;
 using Game.Modules.Health.Components;
 using Game.Modules.StatModifiers;
@@ -23,7 +24,7 @@ public sealed class InspectionWindowContentTests
     {
         var statModifiers = new MultiComponentPool<StatModifierComponent>(maximumEntityCount: 10, initialCapacity: 4);
         statModifiers.Add(EntityId, new StatModifierComponent(StatModifierTarget.MaximumHealth, StatModifierOperation.Multiplicative, StatModifierPolarity.Buff,
-            canModify: true, magnitude: magnitude, remainingDurationFrames: null, StatusEffectSource.Admin));
+            canModify: true, magnitude: magnitude, expiresAtFrame: FrameDeadline.Never, StatusEffectSource.Admin));
         return statModifiers;
     }
 

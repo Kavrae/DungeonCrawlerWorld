@@ -225,7 +225,7 @@ public class InventoryItemStackCell(FontService fontService, ElementPoolService 
         }
 
         var isGreyedOut = _isDisabled || CompareState == CellCompareState.Ineligible || !ShopTradeEligible;
-        SpriteComponent? sprite = _spriteName is not null && SpriteManifest.TryGet(_spriteName, out var spriteComponent) ? spriteComponent : null;
+        SpriteComponent? sprite = _spriteName is not null && SpriteManifest.TryGetFirst(_spriteName, out var spriteComponent) ? spriteComponent : null;
         var spriteTint = isGreyedOut ? Color.Gray : Color.White;
         var glyphColor = isGreyedOut ? Color.Gray : _glyphColor;
 

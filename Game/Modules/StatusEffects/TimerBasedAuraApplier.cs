@@ -17,10 +17,11 @@ public sealed class TimerBasedAuraApplier<T> : IStatusEffectAuraApplier where T 
 {
     public StatusEffectType EffectType { get; }
 
-    private readonly Action<ComponentManager, int, StatusEffectSource> _applyStack;
+    private readonly Action<ComponentManager, int, StatusEffectSource, long> _applyStack;
     private PackedComponentPool<T>? _timers;
 
-    public TimerBasedAuraApplier(StatusEffectType effectType, Action<ComponentManager, int, StatusEffectSource> applyStack)
+    /// <param name="applyStack">(componentManager, entityId, source, now) -- see IStatusEffectAuraApplier.ApplyStack.</param>
+    public TimerBasedAuraApplier(StatusEffectType effectType, Action<ComponentManager, int, StatusEffectSource, long> applyStack)
     {
         EffectType = effectType;
         _applyStack = applyStack;
@@ -33,6 +34,6 @@ public sealed class TimerBasedAuraApplier<T> : IStatusEffectAuraApplier where T 
         return _timers.TryGetReadonly(entityId, out var timer) ? timer.StackCount : 0;
     }
 
-    public void ApplyStack(ComponentManager componentManager, int entityId, StatusEffectSource source) =>
-        _applyStack(componentManager, entityId, source);
+    public void ApplyStack(ComponentManager componentManager, int entityId, StatusEffectSource source, long now) =>
+        _applyStack(componentManager, entityId, source, now);
 }

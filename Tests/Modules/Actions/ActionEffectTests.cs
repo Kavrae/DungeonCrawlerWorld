@@ -47,7 +47,7 @@ public sealed class ActionEffectTests
         EventBus eventBus,
         MathUtility mathUtility,
         MultiComponentPool<StatModifierComponent>? statModifiers = null) =>
-        new(SourceEntityId, TargetEntityId, health, eventBus, mathUtility, componentManager, "Test Action", ActivatorTags: [], StatModifiers: statModifiers);
+        new(SourceEntityId, TargetEntityId, health, eventBus, mathUtility, componentManager, "Test Action", ActivatorTags: [], Now: 0, StatModifiers: statModifiers);
 
     [TestMethod]
     public void DirectDamage_RollsWithinMinMaxRange_WhenNoOverride()

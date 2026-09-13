@@ -75,6 +75,16 @@ public sealed class MapTintGrid
         eventBus.Subscribe<EntityMovedEvent>(OnEntityMoved);
     }
 
+    /// <summary>
+    /// Bumped on every splat/unsplat, so a consumer that caches a rendering of this grid can tell
+    /// whether anything actually changed since it last looked instead of rebuilding on a timer or
+    /// every frame. See MapTileLayerCache -- MapWindow's glow overlay is one such cached
+    /// rendering, and at this game's real composition (sources are overwhelmingly Lava terrain,
+    /// which never moves) this counter is essentially constant, which is exactly what makes
+    /// caching the overlay worthwhile.
+    /// </summary>
+    public int Version { get; private set; }
+
     public bool TryGetTint(int mapNodeX, int mapNodeY, int mapLayer, out (Color Color, float Factor) tint)
     {
         if (!_weightedSumsByCellIndex.TryGetValue(new Vector3Int(mapNodeX, mapNodeY, mapLayer).FlatIndex(_mapSize), out var accumulated))
@@ -121,6 +131,8 @@ public sealed class MapTintGrid
     /// <summary>Scatters (sign: 1) or unscatters (sign: -1) source's own falloff-weighted contribution through DistanceFalloff.ScatterManhattan -- the same falloff shape StatusEffectAuraSystem/AuraGrid use on the gameplay side, defined in exactly one place, so glow always visually matches actual aura reach (both read the same AuraAndGlowStrength).</summary>
     private void Splat(Vector3Int sourcePosition, StatusEffectAuraSourceComponent source, int sign)
     {
+        Version++;
+
         DistanceFalloff.ScatterManhattan(sourcePosition, DistanceFalloff.MaxRadius(source.AuraAndGlowStrength), source.AuraAndGlowStrength, FalloffShape.Fading, _mapSize, (cellPosition, weight) =>
         {
             var index = cellPosition.FlatIndex(_mapSize);

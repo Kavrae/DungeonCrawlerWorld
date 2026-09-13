@@ -4,31 +4,23 @@ using Game.Modules.Actions.Activators;
 
 namespace Game.Modules.Actions.Systems;
 
-/// <summary>
-/// Passively counts every PotionCooldownComponent's FramesRemaining down toward 0, removing it
-/// entirely once it reaches 0 -- mirrors ActionLockSystem's shape, but StripeCount 1 (not
-/// tiered): only entities that have actually consumed a potion carry this component at all, so
-/// the population visited is already small regardless of distance from the player. Drives the
-/// decrement/remove loop through the shared CountdownTicker (see PotionCooldownComponent's own
-/// ITickCountdown bridge) rather than hand-rolling it -- the same utility BurningSystem/
-/// PoisonSystem/ParalysisSystem/ContactDamageSystem already share; onTick always returns true
-/// since PotionCooldownComponent carries no other cleanup on expiry, the same "no re-arm" shape
-/// TorchMarkExpirySystem uses.
-/// </summary>
-public sealed class PotionCooldownSystem : ISystem
+/// <summary>Removes each PotionCooldownComponent on the frame it expires -- it carries no other cleanup.</summary>
+/// <remarks>
+/// Driven by a timer wheel (PackedTimerWheel): only cooldowns actually ending are touched, on their
+/// exact frame at every processing tier (PLAN-timer-wheel.md). This system was once one of the
+/// largest simulation costs while scanning every live cooldown (9,110 of them) every frame to
+/// decrement integers; tiering cut that, and the wheel removes the scan altogether.
+/// PotionCooldownEffects.Reset merging the component is all that schedules it.
+/// </remarks>
+public sealed class PotionCooldownSystem(PackedComponentPool<PotionCooldownComponent> cooldowns) : ISystem
 {
+    /// <summary>The one firing is the expiry -- always remove.</summary>
+    private static readonly TimerFired<PotionCooldownComponent> RemoveOnExpiry = static (_, _, _) => true;
+
+    private readonly PackedTimerWheel<PotionCooldownComponent> _wheel = new(cooldowns);
+
+    /// <summary>Every frame; the wheel only touches cooldowns actually ending.</summary>
     public byte StripeCount => 1;
 
-    private readonly PackedComponentPool<PotionCooldownComponent> _cooldowns;
-    private readonly List<int> _pendingRemovals = [];
-    private readonly Func<int, PotionCooldownComponent, bool> _tick;
-
-    public PotionCooldownSystem(PackedComponentPool<PotionCooldownComponent> cooldowns)
-    {
-        _cooldowns = cooldowns;
-        _tick = static (_, _) => true;
-    }
-
-    public void Update(EngineTime time, byte stripeIndex) =>
-        CountdownTicker.Tick(_cooldowns, _cooldowns.EntityIds, _pendingRemovals, _tick);
+    public void Update(EngineTime time, byte stripeIndex) => _wheel.Tick(time.FrameCount, RemoveOnExpiry);
 }

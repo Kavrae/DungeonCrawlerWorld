@@ -24,20 +24,37 @@ public sealed class DiagnosticsEngine
     private readonly string _outputDirectory = DiagnosticsPaths.OutputDirectory;
     private readonly FrameBudgetTracker? _frameBudgetTracker;
     private readonly StartupProfiler? _startupProfiler;
+    private readonly FrameRangeBenchmark? _benchmark;
     private ComponentMemoryTracker? _componentMemoryTracker;
     private LeakDetector? _leakDetector;
 
     private DateTime _lastReportUtc = DateTime.MinValue;
 
     /// <param name="features">Which features to enable -- opt-in, defaults to None.</param>
-    public DiagnosticsEngine(DiagnosticsFeatures features)
+    /// <param name="randomSeed">The session's simulation seed, stamped on every report -- see RandomSeed.</param>
+    /// <param name="benchmarkFrameRange">Simulation frames to benchmark, or null for none -- see FrameRangeBenchmark. Independent of features: a benchmark records through the same instrumentation whether or not FrameBudget is also on.</param>
+    public DiagnosticsEngine(DiagnosticsFeatures features, int? randomSeed = null, BenchmarkFrameRange? benchmarkFrameRange = null)
     {
         Features = features;
+        RandomSeed = randomSeed;
 
         if (features.HasFlag(DiagnosticsFeatures.FrameBudget))
         {
             _frameBudgetTracker = new FrameBudgetTracker();
         }
+
+        if (benchmarkFrameRange is { } range)
+        {
+            _benchmark = new FrameRangeBenchmark(range);
+        }
+
+        FrameCostRecorder = (_frameBudgetTracker, _benchmark) switch
+        {
+            ({ } tracker, { } benchmark) => new CompositeFrameCostRecorder(tracker, benchmark),
+            ({ } tracker, null) => tracker,
+            (null, { } benchmark) => benchmark,
+            _ => null,
+        };
 
         if (features.HasFlag(DiagnosticsFeatures.Startup))
         {
@@ -47,8 +64,39 @@ public sealed class DiagnosticsEngine
 
     public DiagnosticsFeatures Features { get; }
 
-    /// <summary>Null unless DiagnosticsFeatures.FrameBudget is enabled -- wire into SystemManager.Profiler/EventBus.Profiler/ShellContext when non-null.</summary>
-    public IFrameCostRecorder? FrameCostRecorder => _frameBudgetTracker;
+    /// <summary>
+    /// The seed the session being measured was generated from, written into latest.json. Frame
+    /// cost depends on what the world is doing -- map layout, which NPCs meet, how fights go --
+    /// so two reports are only comparable when they ran the same seed; recording it lets a
+    /// consumer (the phase-performance-testing benchmark) verify that rather than assume it.
+    /// </summary>
+    public int? RandomSeed { get; }
+
+    /// <summary>Null unless DiagnosticsFeatures.FrameBudget is enabled or a benchmark range was given -- wire into SystemManager.Profiler/EventBus.Profiler/ShellContext when non-null. Feeds both when both are on.</summary>
+    public IFrameCostRecorder? FrameCostRecorder { get; }
+
+    /// <summary>True once a benchmark range was given and its report has been written -- a headless run's signal to stop.</summary>
+    public bool IsBenchmarkComplete => _benchmark?.IsComplete ?? false;
+
+    /// <summary>
+    /// Call once per simulation frame, before that frame's EcsContext.Update, with the frame
+    /// number it is about to run. Drives FrameRangeBenchmark's window and writes its one-shot
+    /// report the moment the window closes. No-op without a benchmark range.
+    /// </summary>
+    public void BeginSimulationFrame(long frameCount)
+    {
+        if (_benchmark is not { IsComplete: false } benchmark)
+        {
+            return;
+        }
+
+        benchmark.BeginSimulationFrame(frameCount);
+        if (benchmark.IsComplete)
+        {
+            var path = benchmark.WriteReport(_outputDirectory, RandomSeed);
+            Console.WriteLine($"[Benchmark] Frames {benchmark.Range.StartFrame}-{benchmark.Range.EndFrame} written to {path}");
+        }
+    }
 
     /// <summary>Null unless DiagnosticsFeatures.Startup is enabled -- wrap the composition root's own early steps with `using var _ = diagnostics.StartupProfiler?.Phase("...")`, and thread it into Bootstrapper.Build/GameBootstrapper.Build for their own per-module phases.</summary>
     public StartupProfiler? StartupProfiler => _startupProfiler;
@@ -89,7 +137,7 @@ public sealed class DiagnosticsEngine
     /// </summary>
     public void RecordSimulationTick(string groupName, string itemName, TimeSpan elapsed)
     {
-        _frameBudgetTracker?.Record(FrameCostCategory.Update, groupName, itemName, elapsed);
+        FrameCostRecorder?.Record(FrameCostCategory.Update, groupName, itemName, elapsed);
 
         if (_startupProfiler is { IsStable: false } startupProfiler)
         {
@@ -148,6 +196,6 @@ public sealed class DiagnosticsEngine
             return;
         }
 
-        DiagnosticsReportWriter.Write(_outputDirectory, Features, _frameBudgetTracker?.Snapshot, _componentMemoryTracker?.Snapshot, _leakDetector?.Findings);
+        DiagnosticsReportWriter.Write(_outputDirectory, Features, RandomSeed, _frameBudgetTracker?.Snapshot, _componentMemoryTracker?.Snapshot, _leakDetector?.Findings);
     }
 }

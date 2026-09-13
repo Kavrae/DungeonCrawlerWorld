@@ -1,3 +1,4 @@
+using Engine.ECS.Components;
 using Engine.Math;
 
 namespace Game.Modules.Actions.Components;
@@ -9,10 +10,27 @@ namespace Game.Modules.Actions.Components;
 /// activation can't happen while the shared ActionLock still blocks the entity, so this never
 /// needs to hold more than one pending action.
 /// </summary>
-public struct PendingDelayedActionComponent(Guid actionId, Vector3Int[] targetTiles)
+/// <remarks>
+/// A timer-wheel timer (IScheduledTimer) whose one firing resolves the action. ReadyAtFrame is
+/// copied from the shared ActionLockComponent's own UnlockedAtFrame when the action is queued, so
+/// the windup and the resolution read the same deadline and cannot drift apart -- the invariant
+/// DelayedActionSystem used to defend by sharing a tier cadence with ActionLockSystem, and the one
+/// MapWindow's charge-fill telegraph depends on (see PLAN-charge-attack-fill-indicator.md).
+/// </remarks>
+/// <param name="readyAtFrame">The frame the windup ends and the effect resolves -- the lock's own UnlockedAtFrame.</param>
+public struct PendingDelayedActionComponent(Guid actionId, Vector3Int[] targetTiles, uint readyAtFrame) : IScheduledTimer
 {
+    private uint _timerWheelMark;
+
     public Guid ActionId { get; set; } = actionId;
     public Vector3Int[] TargetTiles { get; set; } = targetTiles;
 
-    public override readonly string ToString() => $"ActionId : {ActionId}\nTargetTiles : [{string.Join(", ", TargetTiles)}]";
+    /// <summary>The frame this windup completes on.</summary>
+    public uint ReadyAtFrame { get; set; } = readyAtFrame;
+
+    uint IScheduledTimer.NextTickFrame { readonly get => ReadyAtFrame; set => ReadyAtFrame = value; }
+
+    uint IScheduledTimer.TimerWheelMark { readonly get => _timerWheelMark; set => _timerWheelMark = value; }
+
+    public override readonly string ToString() => $"ActionId : {ActionId}\nReadyAtFrame : {ReadyAtFrame}\nTargetTiles : [{string.Join(", ", TargetTiles)}]";
 }

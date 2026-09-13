@@ -7,20 +7,23 @@ using Game.Modules.Death.Components;
 using Game.Modules.Health.Components;
 using Game.Modules.Inventory.Components;
 using Game.Modules.Movement.Components;
+using Game.Modules.NpcBehavior.Components;
 using Game.Modules.NpcBehavior.Systems;
+using Game.Modules.ProcessingTier;
+using Game.Modules.ProcessingTier.Components;
 using Game.Modules.Race.Components;
 using Game.World;
 
 namespace Game.Modules.NpcBehavior;
 
 /// <summary>
-/// Owns TestCombatBehaviorSystem -- no dedicated home for it exists otherwise (RaceModule
+/// Owns TestCombatBehaviorSystem and TestDummyAttackSystem (plus TestDummyComponent, the only
+/// component either of them introduces) -- no dedicated home for either exists otherwise (RaceModule
 /// explicitly owns no systems of its own, and folding this into MovementModule/ActionsModule/
-/// InventoryModule would give each an unrelated coupling in the wrong direction). No components
-/// of its own -- reads/writes components every other built-in module already registers.
-/// Registered in GameBootstrapper.builtInModules *before* MovementModule specifically so
-/// TestCombatBehaviorSystem.Update runs before MovementSystem.Update every frame -- see
-/// TestCombatBehaviorSystem's own doc comment for why that ordering matters.
+/// InventoryModule would give each an unrelated coupling in the wrong direction). Registered in
+/// GameBootstrapper.builtInModules *before* MovementModule specifically so TestCombatBehaviorSystem.
+/// Update runs before MovementSystem.Update every frame -- see TestCombatBehaviorSystem's own doc
+/// comment for why that ordering matters.
 /// </summary>
 public sealed class NpcBehaviorModule : IGameModule
 {
@@ -30,19 +33,17 @@ public sealed class NpcBehaviorModule : IGameModule
 
     private IMapQuery _mapQuery = null!;
     private MathUtility _mathUtility = null!;
-    private IPlayerQuery? _playerQuery;
+    private ProcessingTierEvents _processingTierEvents = null!;
 
     public void Configure(GameModuleContext context)
     {
         _mapQuery = context.MapQuery;
         _mathUtility = context.MathUtility;
-        _playerQuery = context.PlayerQuery;
+        _processingTierEvents = context.ProcessingTierEvents;
     }
 
-    public void RegisterComponents(ComponentManager componentManager)
-    {
-        // No components of its own -- see class doc comment.
-    }
+    public void RegisterComponents(ComponentManager componentManager) =>
+        componentManager.RegisterPackedPool<TestDummyComponent>(static (ref existing, incoming) => existing = incoming);
 
     public void RegisterSystems(SystemManager systemManager, ComponentManager componentManager)
     {
@@ -72,7 +73,15 @@ public sealed class NpcBehaviorModule : IGameModule
             componentManager.GetPackedPool<PendingConsumableActivationComponent>(),
             _mapQuery,
             _mathUtility,
-            _playerQuery,
+            componentManager.GetDirectPool<ProcessingTierComponent>(),
+            _processingTierEvents,
             deadEntities));
+
+        systemManager.Register(new TestDummyAttackSystem(
+            componentManager.GetPackedPool<TestDummyComponent>(),
+            componentManager.GetDirectPool<TransformComponent>(),
+            componentManager.GetPackedPool<ActionLockComponent>(),
+            componentManager.GetPackedPool<PendingActionActivationComponent>(),
+            _mapQuery));
     }
 }

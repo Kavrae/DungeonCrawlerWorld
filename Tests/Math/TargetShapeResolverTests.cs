@@ -1,3 +1,4 @@
+using System.Linq;
 using Engine.Math;
 
 namespace Tests.Math;
@@ -86,7 +87,7 @@ public sealed class TargetShapeResolverTests
         var origin = new Vector3Int(10, 10, 0);
         var tiles = new List<Vector3Int>();
 
-        TargetShapeResolver.Resolve(TargetShape.AdjacentWithSelf, origin, SingleTile, cursorTile: origin, range: 0, areaSize: 0, MapSize, tiles);
+        TargetShapeResolver.Resolve(TargetShape.Adjacent | TargetShape.Self, origin, SingleTile, cursorTile: origin, range: 0, areaSize: 0, MapSize, tiles);
 
         Assert.HasCount(9, tiles);
         CollectionAssert.Contains(tiles, origin);
@@ -106,7 +107,7 @@ public sealed class TargetShapeResolverTests
         var origin = new Vector3Int(10, 10, 0);
         var tiles = new List<Vector3Int>();
 
-        TargetShapeResolver.Resolve(TargetShape.AdjacentWithSelf, origin, SingleTile, cursorTile: origin, range: 99, areaSize: 99, MapSize, tiles);
+        TargetShapeResolver.Resolve(TargetShape.Adjacent | TargetShape.Self, origin, SingleTile, cursorTile: origin, range: 99, areaSize: 99, MapSize, tiles);
 
         Assert.HasCount(9, tiles);
     }
@@ -118,7 +119,7 @@ public sealed class TargetShapeResolverTests
         var size = new Vector2Byte(2, 2);
         var tiles = new List<Vector3Int>();
 
-        TargetShapeResolver.Resolve(TargetShape.AdjacentWithSelf, origin, size, cursorTile: origin, range: 0, areaSize: 0, MapSize, tiles);
+        TargetShapeResolver.Resolve(TargetShape.Adjacent | TargetShape.Self, origin, size, cursorTile: origin, range: 0, areaSize: 0, MapSize, tiles);
 
         // 12-tile perimeter (see the plain-Adjacent equivalent test) plus the 4-tile footprint.
         Assert.HasCount(16, tiles);
@@ -407,5 +408,90 @@ public sealed class TargetShapeResolverTests
             }
         }
         Assert.IsGreaterThan(0, tiles.Count, "Sanity check: the cone should still resolve real tiles beyond the caster's own footprint.");
+    }
+
+    [TestMethod]
+    public void Cone_ChebyshevExtent_IncludesTheExactDiagonalCursorTileAtMaxRange()
+    {
+        // Direction is exactly 45 degrees (NE), placing the cursor tile itself at Chebyshev
+        // distance == range but Euclidean distance == range*sqrt(2) > range. The old Euclidean-disc
+        // bound excluded this (its own per-row maxOffsetXForRow collapses to 0 at |offsetY| ==
+        // range for a diagonal direction, so the cursor tile was never even a candidate) -- Cone
+        // must include the exact tile it's aimed at, at any range, in any direction. This is also
+        // what makes Line <= Cone provable for a diagonal Line (see TargetShapeResolver's own doc
+        // comment on the combined-flags shortcut).
+        var origin = new Vector3Int(10, 10, 0);
+        var cursorTile = new Vector3Int(13, 13, 0);
+        var tiles = new List<Vector3Int>();
+
+        TargetShapeResolver.Resolve(TargetShape.Cone, origin, SingleTile, cursorTile, range: 3, areaSize: 0, MapSize, tiles);
+
+        CollectionAssert.Contains(tiles, cursorTile);
+    }
+
+    [TestMethod]
+    public void ConeLineSingleTarget_Combined_ResolvesToExactlyConesOwnOutput()
+    {
+        // Off-axis, non-45-degree direction and a mid-sized range -- not a boundary case, just a
+        // representative check that the redundant-resolve shortcut (SingleTarget <= Line <= Cone)
+        // holds for both SingleTarget metrics, per TargetShapeResolver's own doc comment.
+        var origin = new Vector3Int(10, 10, 0);
+        var cursorTile = new Vector3Int(15, 13, 0);
+        const int range = 5;
+
+        var coneOnly = new List<Vector3Int>();
+        TargetShapeResolver.Resolve(TargetShape.Cone, origin, SingleTile, cursorTile, range, areaSize: 0, MapSize, coneOnly);
+
+        var combinedManhattan = new List<Vector3Int>();
+        TargetShapeResolver.Resolve(TargetShape.Cone | TargetShape.Line | TargetShape.SingleTarget, origin, SingleTile, cursorTile, range, areaSize: 0, MapSize, combinedManhattan, DistanceMetric.Manhattan);
+
+        var combinedChebyshev = new List<Vector3Int>();
+        TargetShapeResolver.Resolve(TargetShape.Cone | TargetShape.Line | TargetShape.SingleTarget, origin, SingleTile, cursorTile, range, areaSize: 0, MapSize, combinedChebyshev, DistanceMetric.Chebyshev);
+
+        CollectionAssert.AreEqual(coneOnly, combinedManhattan);
+        CollectionAssert.AreEqual(coneOnly, combinedChebyshev);
+    }
+
+    [TestMethod]
+    public void SingleTarget_ChebyshevMetric_AcceptsDiagonalNeighborRejectedByManhattanAtTheSameRange()
+    {
+        var origin = new Vector3Int(10, 10, 0);
+        var cursorTile = new Vector3Int(11, 11, 0); // Chebyshev distance 1, Manhattan distance 2
+        var chebyshevTiles = new List<Vector3Int>();
+        var manhattanTiles = new List<Vector3Int>();
+
+        TargetShapeResolver.Resolve(TargetShape.SingleTarget, origin, SingleTile, cursorTile, range: 1, areaSize: 0, MapSize, chebyshevTiles, DistanceMetric.Chebyshev);
+        TargetShapeResolver.Resolve(TargetShape.SingleTarget, origin, SingleTile, cursorTile, range: 1, areaSize: 0, MapSize, manhattanTiles);
+
+        Assert.HasCount(1, chebyshevTiles);
+        Assert.AreEqual(cursorTile, chebyshevTiles[0]);
+        Assert.IsEmpty(manhattanTiles, "Manhattan is the default metric -- every pre-existing SingleTarget caller must be unaffected by the new parameter.");
+    }
+
+    [TestMethod]
+    public void SingleTarget_ChebyshevMetric_RejectsTileBeyondRange()
+    {
+        var origin = new Vector3Int(10, 10, 0);
+        var cursorTile = new Vector3Int(12, 10, 0); // Chebyshev distance 2 > range 1
+        var tiles = new List<Vector3Int>();
+
+        TargetShapeResolver.Resolve(TargetShape.SingleTarget, origin, SingleTile, cursorTile, range: 1, areaSize: 0, MapSize, tiles, DistanceMetric.Chebyshev);
+
+        Assert.IsEmpty(tiles);
+    }
+
+    [TestMethod]
+    public void CombinedFlags_OverlappingGroups_DeduplicatesSharedTiles()
+    {
+        var origin = new Vector3Int(10, 10, 0);
+        var tiles = new List<Vector3Int>();
+
+        // SingleTarget contributes {origin} (cursor == origin, distance 0). Burst (areaSize 1)
+        // scatters a radius-1 diamond centered on that same cursor tile, which also includes origin
+        // itself -- exercising the exact overlap Resolve's own de-dup pass exists for.
+        TargetShapeResolver.Resolve(TargetShape.SingleTarget | TargetShape.Burst, origin, SingleTile, cursorTile: origin, range: 5, areaSize: 1, MapSize, tiles);
+
+        Assert.AreEqual(1, tiles.Count(tile => tile == origin), "origin is produced by both SingleTarget and Burst -- must appear exactly once after de-duplication.");
+        Assert.HasCount(5, tiles, "SingleTarget contributes nothing new (already inside Burst's own radius-1 diamond); total should just be Burst's own 5-tile diamond.");
     }
 }

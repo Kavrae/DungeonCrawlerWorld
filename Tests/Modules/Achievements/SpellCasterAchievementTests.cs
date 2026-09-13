@@ -75,7 +75,7 @@ public sealed class SpellCasterAchievementTests
         var playerEntityId = ecsContext.EntityManager.CreateEntity();
         world.PlayerEntityId = playerEntityId;
 
-        eventBus.Publish(new ActionActivatedEvent(playerEntityId, PunchAction.Id));
+        eventBus.Publish(new ActionActivatedEvent(playerEntityId, QuickAttackAction.Id));
 
         Assert.IsFalse(AchievementQueries.HasEarned(
             ecsContext.ComponentManager.GetMultiPool<AchievementUnlockedComponent>(),

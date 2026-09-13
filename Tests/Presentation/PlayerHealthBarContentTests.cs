@@ -1,4 +1,5 @@
-﻿using Engine.ECS.Components;
+using Engine.ECS.Systems;
+using Engine.ECS.Components;
 using Engine.ECS.Components.Stores;
 using Engine.Math;
 using Game.Modules.Core.Components;
@@ -197,7 +198,7 @@ public sealed class PlayerHealthBarContentTests
         bodyParts.Add(PlayerEntityId, new BodyPartComponent("Head", BodyPartType.Head, 0, verticalPosition: 0, currentHealth: 10, maximumHealth: 10, isVital: true));
         var statModifiers = new MultiComponentPool<StatModifierComponent>(maximumEntityCount: 10, initialCapacity: 4);
         statModifiers.Add(PlayerEntityId, new StatModifierComponent(StatModifierTarget.MaximumHealth, StatModifierOperation.Multiplicative, StatModifierPolarity.Buff,
-            canModify: true, magnitude: 0.5f, remainingDurationFrames: null, StatusEffectSource.Admin));
+            canModify: true, magnitude: 0.5f, expiresAtFrame: FrameDeadline.Never, StatusEffectSource.Admin));
         var world = new Game.World.World(new Game.World.Map(new Vector3Int(5, 5, 1))) { PlayerEntityId = PlayerEntityId };
         var hoverContent = new PlayerHealthHoverContent(world, bodyParts, TestFonts.Shared, statModifiers);
 

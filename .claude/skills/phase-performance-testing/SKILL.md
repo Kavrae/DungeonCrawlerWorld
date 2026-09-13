@@ -1,57 +1,71 @@
 ---
 name: phase-performance-testing
-description: Run a live wall-clock benchmark of DungeonCrawlerWorld's ECS systems using the built-in Diagnostics engine, save the per-system ms/sec results to a timestamped file, and diff them against the most recent prior run to surface regressions. Use this whenever the user asks to benchmark, profile, or performance-test the game (or specific systems), asks "how fast is X now", wants per-system or per-phase timing, mentions Log/diagnostics / the diagnostics engine / PerformanceProfile console output, or wants to check whether a recent change regressed frame cost -- even if they just say "run a benchmark" without naming the engine explicitly. Do not use this for the separate MSTest performance suite (`dotnet test --filter "TestCategory=Performance"`, e.g. AbilityScorePerformanceTests) -- that's a narrow unit-level check with its own hand-recorded baseline constants; this skill is for the live, whole-game, per-ECS-system profile.
+description: Run a live benchmark of DungeonCrawlerWorld's ECS systems using the built-in Diagnostics engine, measured over a fixed range of simulation frames on a fixed seed -- windowed, headless, or as a headless A/B of a saved baseline build against the current one -- save the per-system ms/frame results to a timestamped file, and diff them to surface regressions. Use this whenever the user asks to benchmark, profile, or performance-test the game (or specific systems), asks "how fast is X now", wants per-system or per-phase timing, mentions Log/diagnostics / the diagnostics engine / PerformanceProfile console output, or wants to check whether a recent change regressed frame cost -- even if they just say "run a benchmark" without naming the engine explicitly. Do not use this for the separate MSTest performance suite (`dotnet test --filter "TestCategory=Performance"`, e.g. AbilityScorePerformanceTests) -- that's a narrow unit-level check asserting how two code paths scale with entity count; this skill is for the live, whole-game, per-ECS-system profile.
 ---
 
 # Phase performance testing
 
-`Engine/Diagnostics/DiagnosticsEngine.cs` is opt-in via a `--diagnostics=` flag on the built exe (see `Program.cs`/`DiagnosticsFeaturesParser`). Once enabled, it writes a live per-system/per-window ms-per-second breakdown straight to `Log/diagnostics/latest.json` (plus a human-readable `latest.txt`), refreshed roughly every 5 real seconds while the game runs. This is the only way to see real per-system cost at the game's actual scale (`FloorBuilder.PopulateFloor` populates the same ~2.6M-entity TestMapBuilder map `GameLoop.InitialEntityCapacity` is sized for) -- the checked-in `AbilityScorePerformanceTests` only measures two isolated code paths, not the whole system graph under load.
+The game's `--benchmark-frames=START-END` flag (see `Program.cs`, `Engine/Diagnostics/BenchmarkFrameRange.cs`) makes `FrameRangeBenchmark` total every instrumented cost -- each system in `SystemManager`, each `EventBus` event, each window's Update/Draw -- across simulation frames `[START, END)`, then write one `Log/diagnostics/benchmark-<timestamp>-<pid>.json` the moment frame END begins. This is the only way to see real per-system cost at the game's actual scale (`FloorBuilder.PopulateFloor` populates the same ~2.6M-entity TestMapBuilder map `GameLoop.InitialEntityCapacity` is sized for) -- the checked-in `AbilityScorePerformanceTests` only measures two isolated code paths, not the whole system graph under load.
 
-This replaces an older console-scraping workflow (recoverable from git history if ever needed) -- the engine now writes structured JSON directly, so there's no `dotnet run` redirection workaround and no manual "wait ~60s then count console blocks" step to reason about.
+## Why frames and a seed, not wall-clock samples
 
-## Step 1 — build and launch with diagnostics enabled
+Frame cost depends on what the world is doing -- map layout, which NPCs meet, how fights go. Two things used to make runs incomparable:
+
+- **No seed.** Without `--seed=N`, `RandomSeed.Parse` picks a random one, so every run was a different world. Every benchmark before 2026-09-10 had this problem.
+- **Wall-clock sampling.** The old workflow polled `latest.json` (a rolling one-second window) every 5 real seconds. Startup time varies run to run, so those samples landed on different simulation frames. Two same-seed runs of the same code still differed by up to 57% per system (2026-09-11).
+
+A fixed seed makes the simulation repeat frame for frame; a fixed frame range makes the measurement cover exactly those frames. What's left is machine noise (GC, CPU clocks, other processes). **Update** costs are the comparable part. **Draw** costs per frame also depend on frame pacing -- a game that falls behind real time runs several Updates per Draw -- so the report records wall-clock time for the range and the script warns when the run fell behind.
+
+**Compare within one session, not across days.** Same code, same seed, same frames measured 4.05 ms/frame for `EcsContext.Update` on the evening of 2026-09-10 and 2.3-2.5 the next morning -- the machine itself (power plan, thermals, background load) moved everything ~40%, all systems together. Back-to-back runs agree within ~4% on the total and ~10% on individual mid-sized systems. So the saved "previous" run is only a valid baseline if it was recorded in the same sitting; to measure a change, record a fresh baseline immediately before it. A whole-table shift where every row moves by the same percentage is the machine, not the code. (`--diagnostics=frame` itself costs ~4%, measured the same morning.)
+
+`latest.json` (from `--diagnostics=frame`) still works for watching live costs while playing; it just isn't the benchmark.
+
+## Headless vs windowed
+
+`--headless` (see `DungeonCrawlerWorld/HeadlessBenchmark.cs`) builds the same world with the same seed and runs the simulation back to back with no window, no Presentation and no 60fps pacing, then exits.
+
+| | Windowed | Headless |
+|---|---|---|
+| Time per run (population + frames 600-3600) | ~65-75s | **~8s** |
+| Measures Draw / Presentation | yes | no |
+| Run-to-run spread, same session | ~4% total, up to ~12% | **~0.2-2.5% total, ~1-2% per system** |
+| Determinism check | no | **yes** (world fingerprint) |
+
+Headless numbers read **about half** the windowed ones for the same code (`EcsContext.Update` 1.12 vs 2.2-2.5 ms/frame, 2026-09-11) and some systems far more (ActionLock 0.046 vs 0.21). Likely causes: Draw between frames evicts simulation data from cache, and a paced game idles long enough for the CPU to downclock -- the ECS here is memory-latency-bound, so both hit it hard. Neither is proven. So: **headless for comparing simulation code, windowed for what the player actually pays.** Never compare a headless number with a windowed one; the script keeps them apart.
+
+Each headless run prints a fingerprint of the final world (entity count, pool sizes, every position, every health value). Same build + same seed must give the same fingerprint; the script warns if not, because then the runs measured different workloads.
+
+## Step 1 — build
 
 ```bash
 dotnet build DungeonCrawlerWorld.sln
 ```
 
-Then launch the built exe via the Bash tool with `run_in_background: true`:
+## Step 2 — pick the mode
 
-```
-DungeonCrawlerWorld/bin/Debug/net10.0/DungeonCrawlerWorld.exe --diagnostics=all
-```
-
-`--diagnostics=frame,startup` is the actual minimum this workflow needs -- `frame` for the benchmark itself, `startup` for Step 2's stability signal below. `all` additionally captures memory (per-component-type bytes) and leak-indicator data in the same run at negligible extra cost, which is usually worth having anyway -- see `latest.json`'s `memory`/`leaks` sections if the user's asking about either.
-
-## Step 2 — wait for real steady state, not a fixed sleep
-
-Population of a 2.6M-entity map takes real time before the game starts ticking, and JIT/GC warmup takes a bit longer after that before per-system costs settle. Rather than guessing a sleep duration, wait for the engine's own stability signal: `Log/diagnostics/startup-*.json` is written exactly once, the moment `StartupProfiler` detects steady state (real measured `EcsContext.Update` cost holding steady across several rolling windows -- see its own doc comment; deliberately not a raw gap between frames, which a fixed-timestep loop smooths out misleadingly).
-
-```bash
-until ls Log/diagnostics/startup-*.json 2>/dev/null; do sleep 2; done
-```
-
-Give this a generous timeout (2-3 minutes covers slow builds/population). As of a 2026-08-16 measurement (confirmed twice, same session) this settles in roughly 5 real seconds after the game starts responding -- much faster than an earlier ~50-55s figure measured before a round of perf/cleanup work landed. Don't trust either number indefinitely; if it looks off, re-derive it empirically (this step's own `startup-*.json` output tells you directly, via `TimeToStableMilliseconds`) rather than assuming.
-
-If the file never appears within the timeout, check `Get-Process -Id <pid> | select Responding, MainWindowTitle` -- if the window is open and responding but nothing's showing up, the game likely booted into a paused/blocking-notification state (`GameLoop.Update`'s `IsPaused || HasBlockingNotification || IsAnyWindowOpen` gate, which also gates `StartupProfiler.Tick`) rather than a tooling problem.
-
-## Step 3 — sample and average
-
-A single read of `latest.json` reflects only the last full second's snapshot, so it's still worth smoothing across a few samples the same way the old console-block averaging did. Run the bundled script, which polls `latest.json` several times a few seconds apart, averages each system/window's ms/sec across those samples, saves a timestamped JSON under `Log/phase-benchmarks/` (already gitignored), and diffs against the most recently saved file there:
+All modes run through one script (always with `-NoProfile`: without it the user's PowerShell profile can change the starting directory, and the script's relative paths then aren't found):
 
 ```powershell
-powershell -File .claude/skills/phase-performance-testing/scripts/Parse-DiagnosticsReport.ps1
+powershell -NoProfile -File .claude/skills/phase-performance-testing/scripts/Invoke-FrameBenchmark.ps1 [mode]
 ```
 
-Defaults to 8 samples, 5 seconds apart (~40s total, matching `latest.json`'s own ~5s refresh cadence so each poll sees fresh data) -- override with `-SampleCount`/`-SampleIntervalSeconds` for a longer/shorter measurement window. The printed table shows current vs. previous ms/sec, delta, delta%, and flags anything that grew by both ≥20% and ≥1ms as `REGRESSION` (tune with `-RegressionPercent`/`-RegressionMinMs`). If there's no prior file yet, it just prints the current results as the new baseline -- expected on the first run. Entries are named `Category.Group.Item` (e.g. `Update.SystemManager.MovementSystem`, `Draw.BaseWindows.MapWindow`), grouped first by Update vs Draw the same way `latest.json` itself is.
+**Before/after a change -- A/B (preferred).** Machine drift hits both sides equally, so this is the one comparison that holds up across a session:
+1. Build the *before* code, then `-SaveBaseline`. Copies the built `bin` folder to `Log/phase-benchmarks/baseline-build/` (gitignored), with its commit noted. No git commands involved.
+2. Make the change, rebuild, then `-Compare`. Runs baseline and current builds headless, interleaved (A B, B A, A B), 3 per side by default (~50s total), and prints per-system medians, delta %, and A's own run-to-run spread. `REGRESSION`/`IMPROVED` needs ≥10%, ≥0.02 ms/frame, **and** B's median outside A's min-max range. It also says whether A and B simulated the same world: if the change altered gameplay, the fingerprints differ and some rows differ because the game did different things. Saved as `Log/phase-benchmarks/ab-<timestamp>.json`.
 
-## Step 4 — clean up
+**"How fast is the simulation now" -- `-Headless`.** 5 runs (~40s), medians with per-row spread, diffed against the last saved headless run of the same seed and range.
 
-The game doesn't exit on its own. Kill it and confirm it's actually gone before wrapping up:
+**"What does the player pay" -- no flag (windowed).** One paced run with Draw included (~70s), diffed against the last saved windowed run. That saved run is only a valid baseline if made in the same sitting (see above) -- the script says so every time.
 
-```powershell
-Get-CimInstance Win32_Process -Filter "Name='DungeonCrawlerWorld.exe'" | ForEach-Object { Stop-Process -Id $_.ProcessId -Force }
-```
+**Debug or Release -- `-Configuration`.** Defaults to `Debug`; `-Configuration Release` measures `bin/Release` (build it first with `dotnet build DungeonCrawlerWorld.sln -c Release`). Release reads roughly half of Debug (headless `EcsContext.Update` 0.68 vs 1.23 ms/frame, 2026-09-11) and weights costs differently -- a tight sequential loop gains far more than scattered lookups -- so use Release for any decision about what ships. Results, previous-run lookups and saved baselines (`baseline-build-debug`/`baseline-build-release`) are kept per configuration and never compared across.
+
+Shared defaults: `-Seed 1`, `-StartFrame 600` (frames before it are JIT warm-up and the opening moves), `-EndFrame 3600` (3000 frames = 50 simulated seconds). Change them only deliberately -- a different seed or range starts a new baseline. `-Repeat N` sets runs per side. Units are **ms per simulation frame**; the frame budget at 60fps is 16.67ms.
+
+The script refuses to start if a `DungeonCrawlerWorld` is already running (it may be someone's session, and two instances skew each other), matches each report to *its own* process id so a stale file can't be picked up, and checks the report's seed and range match what it asked for. If a windowed run times out with the window open, the game is probably paused or showing a blocking notification -- simulation frames only advance while `GameLoop.Update`'s pause/menu gate is open.
+
+## Step 3 — confirm the game is gone
+
+The script closes the game in a `finally`, including on failure. Check anyway:
 
 ```bash
 tasklist | grep -i DungeonCrawler   # should print nothing
@@ -59,4 +73,4 @@ tasklist | grep -i DungeonCrawler   # should print nothing
 
 ## Reporting results
 
-Show the user the printed comparison table (or the baseline table on a first run), call out any flagged regressions by name with their current/previous ms/sec and %, and note the saved file path. If nothing regressed, say so plainly rather than just dumping the table -- "no regressions above threshold" is itself the useful answer most of the time.
+Show the user the printed comparison table (or the baseline table on a first run), call out any flagged regressions by name with their current/previous ms/frame and %, and note the saved file path. Say which mode it was (headless or windowed, A/B or against a saved run), and pass on any determinism or different-world warning -- those change what the numbers mean. If the script warned that a run fell behind real time, say Draw numbers aren't comparable for it. If nothing regressed, say so plainly rather than just dumping the table -- "no regressions above threshold" is itself the useful answer most of the time.

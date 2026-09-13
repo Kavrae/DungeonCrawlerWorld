@@ -93,7 +93,6 @@ public sealed class BlueprintTests
         coreItemsModule.Configure(context);
 
         var statusEffectsModule = new StatusEffectsModule();
-        statusEffectsModule.Configure(context);
 
         var containersModule = new ContainersModule();
         containersModule.Configure(context);
@@ -132,7 +131,7 @@ public sealed class BlueprintTests
         var ecsContext = BuildEcsContext();
         var entityId = ecsContext.EntityManager.CreateEntity();
 
-        new Wall().Build(ecsContext.ComponentManager, entityId);
+        new Wall(new MathUtility(new Random(1))).Build(ecsContext.ComponentManager, entityId);
 
         Assert.IsTrue(ecsContext.ComponentManager.GetDirectPool<DisplayTextComponent>().Has(entityId));
         Assert.IsTrue(ecsContext.ComponentManager.GetDirectPool<GlyphComponent>().Has(entityId));
@@ -187,7 +186,7 @@ public sealed class BlueprintTests
         var ecsContext = BuildEcsContext();
         var entityId = ecsContext.EntityManager.CreateEntity();
 
-        new Shop().Build(ecsContext.ComponentManager, entityId);
+        new Shop(new MathUtility(new Random(1))).Build(ecsContext.ComponentManager, entityId);
 
         var displayText = ecsContext.ComponentManager.GetDirectPool<DisplayTextComponent>().GetReadonly(entityId);
         Assert.AreEqual("Shop", displayText.Name);
@@ -284,7 +283,7 @@ public sealed class BlueprintTests
         var ecsContext = BuildEcsContext();
         var entityId = ecsContext.EntityManager.CreateEntity();
 
-        new Dirt().Build(ecsContext.ComponentManager, entityId);
+        new Dirt(new MathUtility(new Random(1))).Build(ecsContext.ComponentManager, entityId);
 
         Assert.IsTrue(ecsContext.ComponentManager.GetDirectPool<BackgroundComponent>().Has(entityId));
         Assert.IsTrue(ecsContext.ComponentManager.GetDirectPool<DisplayTextComponent>().Has(entityId));
@@ -297,7 +296,7 @@ public sealed class BlueprintTests
         var ecsContext = BuildEcsContext();
         var entityId = ecsContext.EntityManager.CreateEntity();
 
-        new Grass().Build(ecsContext.ComponentManager, entityId);
+        new Grass(new MathUtility(new Random(1))).Build(ecsContext.ComponentManager, entityId);
 
         Assert.IsTrue(ecsContext.ComponentManager.GetDirectPool<BackgroundComponent>().Has(entityId));
         Assert.IsTrue(ecsContext.ComponentManager.GetDirectPool<DisplayTextComponent>().Has(entityId));
@@ -369,7 +368,7 @@ public sealed class BlueprintTests
         Assert.IsTrue(ecsContext.ComponentManager.GetPackedPool<ActionLockComponent>().Has(entityId));
         Assert.IsTrue(ecsContext.ComponentManager.GetDirectPool<TransformComponent>().Has(entityId));
 
-        Assert.IsTrue(ActionInstanceQueries.TryGet(ecsContext.ComponentManager.GetMultiPool<ActionInstanceComponent>(), entityId, PunchAction.Id, out var punch));
+        Assert.IsTrue(ActionInstanceQueries.TryGet(ecsContext.ComponentManager.GetMultiPool<ActionInstanceComponent>(), entityId, QuickAttackAction.Id, out var punch));
         Assert.AreEqual((short)10, GetOverrideFlatDamage(punch));
 
         AssertHasRandomStartingGoldAndCredits(ecsContext.ComponentManager, entityId);
@@ -439,10 +438,10 @@ public sealed class BlueprintTests
         Assert.IsTrue(ecsContext.ComponentManager.GetPackedPool<CrawlerComponent>().Has(entityId));
 
         var abilityInstances = ecsContext.ComponentManager.GetMultiPool<ActionInstanceComponent>();
-        // No per-instance Override -- unlike every other race's Punch grant -- so the player's
-        // Punch rolls its catalog DirectDamage's own MinFlatDamage..MaxFlatDamage range instead
-        // of a fixed number (see ActionInstanceComponent.Override's own doc comment).
-        Assert.IsTrue(ActionInstanceQueries.TryGet(abilityInstances, entityId, PunchAction.Id, out var punch));
+        // No per-instance Override -- unlike every other race's QuickAttack grant -- so the
+        // player's QuickAttack rolls its catalog DirectDamage's own MinFlatDamage..MaxFlatDamage
+        // range instead of a fixed number (see ActionInstanceComponent.Override's own doc comment).
+        Assert.IsTrue(ActionInstanceQueries.TryGet(abilityInstances, entityId, QuickAttackAction.Id, out var punch));
         Assert.IsNull(punch.Override);
         Assert.IsTrue(ActionInstanceQueries.TryGet(abilityInstances, entityId, MagicMissileAction.Id, out var magicMissile));
         Assert.AreEqual((short)5, GetOverrideFlatDamage(magicMissile));
@@ -536,7 +535,7 @@ public sealed class BlueprintTests
         Assert.IsTrue(ecsContext.ComponentManager.GetPackedPool<ActionLockComponent>().Has(entityId));
         Assert.IsTrue(ecsContext.ComponentManager.GetDirectPool<TransformComponent>().Has(entityId));
 
-        Assert.IsTrue(ActionInstanceQueries.TryGet(ecsContext.ComponentManager.GetMultiPool<ActionInstanceComponent>(), entityId, PunchAction.Id, out var punch));
+        Assert.IsTrue(ActionInstanceQueries.TryGet(ecsContext.ComponentManager.GetMultiPool<ActionInstanceComponent>(), entityId, QuickAttackAction.Id, out var punch));
         Assert.AreEqual((short)3, GetOverrideFlatDamage(punch));
 
         AssertHasRandomStartingGoldAndCredits(ecsContext.ComponentManager, entityId);
@@ -564,7 +563,7 @@ public sealed class BlueprintTests
         var ecsContext = BuildEcsContext();
         var entityId = ecsContext.EntityManager.CreateEntity();
         ecsContext.ComponentManager.GetPackedPool<MovementComponent>().Add(entityId, new MovementComponent(MovementMode.Random, null, null));
-        ecsContext.ComponentManager.GetPackedPool<ActionLockComponent>().Add(entityId, new ActionLockComponent(standardLockFrames: 15, currentLockTotalFrames: 0, currentLockFramesRemaining: 0));
+        ecsContext.ComponentManager.GetPackedPool<ActionLockComponent>().Add(entityId, new ActionLockComponent(standardLockFrames: 15, currentLockTotalFrames: 0, unlockedAtFrame: 0));
 
         new Engineer().Build(ecsContext.ComponentManager, entityId);
 
@@ -585,7 +584,7 @@ public sealed class BlueprintTests
         // nothing -- the class still functions when composed (or used) without a race.
         var actionLock = ecsContext.ComponentManager.GetPackedPool<ActionLockComponent>().GetReadonly(entityId);
         Assert.AreEqual((ushort)60, actionLock.StandardLockFrames);
-        Assert.AreEqual((ushort)0, actionLock.CurrentLockFramesRemaining);
+        Assert.AreEqual(0u, actionLock.UnlockedAtFrame);
         Assert.IsTrue(ecsContext.ComponentManager.GetMultiPool<ClassComponent>().Has(entityId));
     }
 

@@ -86,7 +86,7 @@ public sealed class CurrencyElement(FontService fontService, ElementPoolService 
         // Sits IconGap past the text's own measured width, not pinned to the element's right edge --
         // "Gold : 10" then the sprite immediately after, not stranded at the far side of the row.
         var iconPosition = new Vector2(textPosition.X + textSize.X + IconGap, ContentAbsolutePosition.Y);
-        SpriteComponent? sprite = SpriteManifest.TryGet(spriteName, out var spriteComponent) ? spriteComponent : null;
+        SpriteComponent? sprite = SpriteManifest.TryGetFirst(spriteName, out var spriteComponent) ? spriteComponent : null;
         SpriteOrGlyphRenderer.Draw(spriteBatch, spriteSheetService, spriteRenderer, LabelRenderer, sprite, _glyphFont, glyph, glyphColor, iconPosition, IconSize, Color.White);
     }
 }

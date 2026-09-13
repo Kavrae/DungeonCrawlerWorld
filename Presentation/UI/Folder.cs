@@ -129,7 +129,7 @@ public sealed class Folder : Element
         // rect rather than stretched to fill it.
         var iconTopLeft = HeaderAbsolutePosition + (HeaderSize - _iconSize) / 2f;
 
-        SpriteComponent? sprite = _spriteName is not null && SpriteManifest.TryGet(_spriteName, out var spriteComponent) ? spriteComponent : null;
+        SpriteComponent? sprite = _spriteName is not null && SpriteManifest.TryGetFirst(_spriteName, out var spriteComponent) ? spriteComponent : null;
 
         SpriteOrGlyphRenderer.Draw(spriteBatch, _spriteSheetService, _spriteRenderer, LabelRenderer, sprite, _fallbackGlyphFont, _fallbackGlyph, Color.Black, iconTopLeft, _iconSize, Color.White);
     }

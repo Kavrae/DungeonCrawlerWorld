@@ -14,7 +14,7 @@ public static class MovementCandidates
 {
     private static readonly Vector2Byte TransformSize1 = new(1, 1);
 
-    /// <summary>How long a Random-mode entity waits before retrying after finding every direction blocked.</summary>
+    /// <summary>How long a Random-mode entity waits before retrying after finding every direction blocked -- turned into an absolute MovementComponent.WaitUntilFrame at the moment the search fails (see TestCombatBehaviorSystem.SetIdle).</summary>
     public const ushort FramesToWaitIfNoOptions = 120;
 
     /// <summary> Determines whether an entity of the given size could occupy the given position. </summary>

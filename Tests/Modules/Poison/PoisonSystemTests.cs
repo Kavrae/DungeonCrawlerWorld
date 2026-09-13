@@ -1,4 +1,5 @@
-﻿using Engine.ECS.Components.Stores;
+using Engine.ECS.Components.Stores;
+using Engine.ECS.Systems;
 using Engine.Events;
 using Engine.Math;
 using Game.Modules;
@@ -26,17 +27,23 @@ public sealed class PoisonSystemTests
     private static PackedComponentPool<SimpleHealthComponent> CreateHealthPool() =>
         new(maximumEntityCount: 10, initialCapacity: 4, static (ref existing, incoming) => existing = incoming);
 
+    private static EngineTime Frame(long frame) => new(default, default, false, frame);
+
     [TestMethod]
-    public void Update_CountdownDecrementsByOnePerCall()
+    public void Update_BeforeItsTickFrame_DealsNoDamage()
     {
         var timers = CreateTimerPool();
         var health = CreateHealthPool();
-        timers.Add(0, new PoisonTimerComponent(60, stackCount: 1, remainingDurationTicks: 5, StatusEffectSource.Admin));
+        health.Add(0, new SimpleHealthComponent(currentHealth: 100, maximumHealth: 100));
+        timers.Add(0, new PoisonTimerComponent(nextTickFrame: 60, stackCount: 1, remainingDurationTicks: 5, StatusEffectSource.Admin));
         var system = new PoisonSystem(timers, health, new EventBus(), new FakePlayerQuery(0), new MathUtility());
 
-        system.Update(default, 0);
+        for (var frame = 0; frame < 60; frame++)
+        {
+            system.Update(Frame(frame), 0);
+        }
 
-        Assert.AreEqual(59, timers.GetReadonly(0).FramesUntilNextTick);
+        Assert.AreEqual(100, health.GetReadonly(0).CurrentHealth);
     }
 
     [TestMethod]
@@ -48,7 +55,7 @@ public sealed class PoisonSystemTests
         timers.Add(0, new PoisonTimerComponent(1, stackCount: 7, remainingDurationTicks: 5, StatusEffectSource.Admin));
         var system = new PoisonSystem(timers, health, new EventBus(), new FakePlayerQuery(0), new MathUtility());
 
-        system.Update(default, 0);
+        system.Update(Frame(1), 0);
 
         Assert.AreEqual(93, health.GetReadonly(0).CurrentHealth);
     }
@@ -63,7 +70,7 @@ public sealed class PoisonSystemTests
         timers.Add(0, new PoisonTimerComponent(1, stackCount: 7, remainingDurationTicks: 5, StatusEffectSource.Admin));
         var system = new PoisonSystem(timers, health, new EventBus(), new FakePlayerQuery(0), new MathUtility());
 
-        system.Update(default, 0);
+        system.Update(Frame(1), 0);
 
         Assert.AreEqual(7, timers.GetReadonly(0).StackCount);
     }
@@ -77,7 +84,7 @@ public sealed class PoisonSystemTests
         timers.Add(0, new PoisonTimerComponent(1, stackCount: 3, remainingDurationTicks: 5, StatusEffectSource.Admin));
         var system = new PoisonSystem(timers, health, new EventBus(), new FakePlayerQuery(0), new MathUtility());
 
-        system.Update(default, 0);
+        system.Update(Frame(1), 0);
 
         Assert.AreEqual(4, timers.GetReadonly(0).RemainingDurationTicks);
     }
@@ -91,7 +98,7 @@ public sealed class PoisonSystemTests
         timers.Add(0, new PoisonTimerComponent(1, stackCount: 3, remainingDurationTicks: 1, StatusEffectSource.Admin));
         var system = new PoisonSystem(timers, health, new EventBus(), new FakePlayerQuery(0), new MathUtility());
 
-        system.Update(default, 0);
+        system.Update(Frame(1), 0);
 
         Assert.IsFalse(timers.Has(0));
     }
@@ -105,8 +112,8 @@ public sealed class PoisonSystemTests
         timers.Add(0, new PoisonTimerComponent(1, stackCount: 1, remainingDurationTicks: 1, StatusEffectSource.Admin));
         var system = new PoisonSystem(timers, health, new EventBus(), new FakePlayerQuery(0), new MathUtility());
 
-        system.Update(default, 0);
-        system.Update(default, 0);
+        system.Update(Frame(1), 0);
+        system.Update(Frame(2), 0);
     }
 
     [TestMethod]
@@ -118,16 +125,12 @@ public sealed class PoisonSystemTests
         timers.Add(0, new PoisonTimerComponent(1, stackCount: 5, remainingDurationTicks: 5, StatusEffectSource.Admin));
         var system = new PoisonSystem(timers, health, new EventBus(), new FakePlayerQuery(0), new MathUtility());
 
-        system.Update(default, 0);
+        system.Update(Frame(1), 0);
 
         Assert.AreEqual(0, health.GetReadonly(0).CurrentHealth);
     }
 
-    /// <summary>
-    /// Each tick only actually fires once every TickIntervalFrames real Update calls (see
-    /// BurningSystemTests' equivalent striping-cadence regression test) -- RunFullCycle drives
-    /// exactly one tick's worth of real frames between assertions.
-    /// </summary>
+    /// <summary>One tick per interval, each on its exact frame, same damage every tick (stacks aren't consumed) until the duration runs out.</summary>
     [TestMethod]
     public void Update_MultipleTicksBeforeExpiry_DealsSameDamageEachTickUntilDurationEnds()
     {
@@ -137,24 +140,26 @@ public sealed class PoisonSystemTests
         timers.Add(0, new PoisonTimerComponent(1, stackCount: 4, remainingDurationTicks: 3, StatusEffectSource.Admin));
         var system = new PoisonSystem(timers, health, new EventBus(), new FakePlayerQuery(0), new MathUtility());
 
-        system.Update(default, 0); // FramesUntilNextTick starts at 1 -- tick 1 fires immediately: duration 3 -> 2
+        system.Update(Frame(1), 0); // tick 1: duration 3 -> 2
         Assert.IsTrue(timers.Has(0));
         Assert.AreEqual(96, health.GetReadonly(0).CurrentHealth);
+        Assert.AreEqual(1u + PoisonEffects.TickIntervalFrames, timers.GetReadonly(0).NextTickFrame);
 
-        RunFullCycle(system); // tick 2: duration 2 -> 1, still alive
+        Run(system, 2, 1 + PoisonEffects.TickIntervalFrames); // tick 2: duration 2 -> 1, still alive
         Assert.IsTrue(timers.Has(0));
         Assert.AreEqual(92, health.GetReadonly(0).CurrentHealth);
 
-        RunFullCycle(system); // tick 3: duration 1 -> 0, expires
+        Run(system, 2 + PoisonEffects.TickIntervalFrames, 1 + 2 * PoisonEffects.TickIntervalFrames); // tick 3: duration 1 -> 0, expires
         Assert.IsFalse(timers.Has(0));
         Assert.AreEqual(88, health.GetReadonly(0).CurrentHealth);
     }
 
-    private static void RunFullCycle(PoisonSystem system)
+    /// <summary>Runs every frame from..to inclusive -- the way SystemManager drives it.</summary>
+    private static void Run(PoisonSystem system, long from, long to)
     {
-        for (var frame = 0; frame < PoisonEffects.TickIntervalFrames; frame++)
+        for (var frame = from; frame <= to; frame++)
         {
-            system.Update(default, 0);
+            system.Update(Frame(frame), 0);
         }
     }
 
@@ -170,7 +175,7 @@ public sealed class PoisonSystemTests
         eventBus.Subscribe<EntityDamagedEvent>(e => published = e);
         var system = new PoisonSystem(timers, health, eventBus, new FakePlayerQuery(0), new MathUtility());
 
-        system.Update(default, 0);
+        system.Update(Frame(1), 0);
 
         Assert.IsNotNull(published);
         Assert.AreEqual(1, published!.Value.Amount);
@@ -190,7 +195,7 @@ public sealed class PoisonSystemTests
         eventBus.Subscribe<EntityDamagedEvent>(_ => published = true);
         var system = new PoisonSystem(timers, health, eventBus, new FakePlayerQuery(playerEntityId: 0), new MathUtility());
 
-        system.Update(default, 0);
+        system.Update(Frame(1), 0);
 
         Assert.IsFalse(published);
     }
@@ -204,10 +209,10 @@ public sealed class PoisonSystemTests
         timers.Add(0, new PoisonTimerComponent(1, stackCount: 10, remainingDurationTicks: 5, StatusEffectSource.Admin));
         var statModifiers = new MultiComponentPool<StatModifierComponent>(maximumEntityCount: 10, initialCapacity: 4);
         statModifiers.Add(0, new StatModifierComponent(StatModifierTarget.IncomingDamage, StatModifierOperation.Multiplicative, StatModifierPolarity.Buff,
-            canModify: false, magnitude: -0.5f, remainingDurationFrames: null, StatusEffectSource.Admin, Tag.Poison));
+            canModify: false, magnitude: -0.5f, expiresAtFrame: FrameDeadline.Never, StatusEffectSource.Admin, Tag.Poison));
         var system = new PoisonSystem(timers, health, new EventBus(), new FakePlayerQuery(0), new MathUtility(), statModifiers);
 
-        system.Update(default, 0);
+        system.Update(Frame(1), 0);
 
         Assert.AreEqual(95, health.GetReadonly(0).CurrentHealth, "10 * 0.5 = 5 damage taken.");
     }
@@ -221,10 +226,10 @@ public sealed class PoisonSystemTests
         timers.Add(0, new PoisonTimerComponent(1, stackCount: 10, remainingDurationTicks: 5, StatusEffectSource.Admin));
         var statModifiers = new MultiComponentPool<StatModifierComponent>(maximumEntityCount: 10, initialCapacity: 4);
         statModifiers.Add(0, new StatModifierComponent(StatModifierTarget.IncomingDamage, StatModifierOperation.Multiplicative, StatModifierPolarity.Buff,
-            canModify: false, magnitude: -0.5f, remainingDurationFrames: null, StatusEffectSource.Admin));
+            canModify: false, magnitude: -0.5f, expiresAtFrame: FrameDeadline.Never, StatusEffectSource.Admin));
         var system = new PoisonSystem(timers, health, new EventBus(), new FakePlayerQuery(0), new MathUtility(), statModifiers);
 
-        system.Update(default, 0);
+        system.Update(Frame(1), 0);
 
         Assert.AreEqual(95, health.GetReadonly(0).CurrentHealth, "Unconditional IncomingDamage debuffs apply regardless of ConditionTag.");
     }
@@ -236,15 +241,15 @@ public sealed class PoisonSystemTests
         for (var seed = 0; seed < 10; seed++)
         {
             var timers = CreateTimerPool();
-                var health = CreateHealthPool();
+            var health = CreateHealthPool();
             var bodyParts = new MultiComponentPool<BodyPartComponent>(maximumEntityCount: 10, initialCapacity: 8);
             bodyParts.Add(0, new BodyPartComponent("Head", BodyPartType.Head, partId: 0, verticalPosition: 5, currentHealth: 40, maximumHealth: 40, isVital: true));
             bodyParts.Add(0, new BodyPartComponent("Torso", BodyPartType.Torso, partId: 1, verticalPosition: 4, currentHealth: 65, maximumHealth: 65, isVital: true));
             bodyParts.Add(0, new BodyPartComponent("Internal", BodyPartType.Internal, partId: 2, verticalPosition: 4, currentHealth: 15, maximumHealth: 15, isVital: true));
             timers.Add(0, new PoisonTimerComponent(1, stackCount: 3, remainingDurationTicks: 5, StatusEffectSource.Admin));
-            var system = new PoisonSystem(timers, health, new EventBus(), new FakePlayerQuery(0), new MathUtility(new Random(seed)), statModifiers: null, bodyParts);
+            var system = new PoisonSystem(timers, health, new EventBus(), new FakePlayerQuery(0), new MathUtility(new Random(seed)), statModifiers: null, bodyParts: bodyParts);
 
-            system.Update(default, 0);
+            system.Update(Frame(1), 0);
 
             Assert.AreEqual(40f, GetPartHealth(bodyParts, 0, "Head"), $"Seed {seed}: Head must be untouched.");
             Assert.AreEqual(65f, GetPartHealth(bodyParts, 0, "Torso"), $"Seed {seed}: Torso must be untouched.");

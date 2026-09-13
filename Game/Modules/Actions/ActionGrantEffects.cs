@@ -15,9 +15,10 @@ namespace Game.Modules.Actions;
 /// </summary>
 public static class ActionGrantEffects
 {
-    public static void Grant(ComponentManager componentManager, int entityId, Guid actionId, ushort manaCost, ActionDefinition? overrideDefinition, ushort cooldownFramesRemaining)
+    /// <remarks>A new grant is always ready to use -- its cooldown deadline starts at 0 (see ActionInstanceComponent.CooldownReadyAtFrame).</remarks>
+    public static void Grant(ComponentManager componentManager, int entityId, Guid actionId, ushort manaCost, ActionDefinition? overrideDefinition)
     {
-        componentManager.Merge(entityId, new ActionInstanceComponent(actionId, overrideDefinition, cooldownFramesRemaining));
+        componentManager.Merge(entityId, new ActionInstanceComponent(actionId, overrideDefinition));
 
         if (manaCost > 0)
         {

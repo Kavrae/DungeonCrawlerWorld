@@ -57,10 +57,10 @@ public static class AbilityScoreEffects
         StatModifierPolarity polarity,
         bool canModify,
         float magnitude,
-        ushort? durationFrames,
+        uint expiresAtFrame,
         StatusEffectSource source)
     {
-        StatModifierEffects.Apply(componentManager, entityId, AbilityScoreMath.ToStatModifierTarget(type), operation, polarity, canModify, magnitude, durationFrames, source);
+        StatModifierEffects.Apply(componentManager, entityId, AbilityScoreMath.ToStatModifierTarget(type), operation, polarity, canModify, magnitude, expiresAtFrame, source);
         RecomputeAbilityScore(componentManager, entityId, type);
     }
 

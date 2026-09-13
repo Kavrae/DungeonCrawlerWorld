@@ -17,6 +17,7 @@ internal static class DiagnosticsReportWriter
     public static void Write(
         string outputDirectory,
         DiagnosticsFeatures features,
+        int? randomSeed,
         IReadOnlyList<FrameCostEntry>? frameBudgetSnapshot,
         IReadOnlyList<ComponentMemoryEntry>? componentMemorySnapshot,
         IReadOnlyList<LeakFinding>? leakFindings)
@@ -26,6 +27,7 @@ internal static class DiagnosticsReportWriter
         var report = new DiagnosticsReport(
             DateTime.UtcNow,
             features.ToString(),
+            randomSeed,
             frameBudgetSnapshot is null ? null : BuildFrameBudgetSection(frameBudgetSnapshot),
             componentMemorySnapshot?.Select(static entry => new ComponentMemoryItem(entry.ComponentTypeName, entry.Count, entry.EstimatedBytes)).ToList(),
             leakFindings?.Select(static finding => new LeakFindingItem(finding.Subject, finding.Detail, finding.GrowthRatio)).ToList());
@@ -70,7 +72,7 @@ internal static class DiagnosticsReportWriter
 
     private static string BuildTextSummary(DiagnosticsReport report)
     {
-        var lines = new List<string> { $"[Diagnostics] {report.TimestampUtc:O} -- features: {report.Features}" };
+        var lines = new List<string> { $"[Diagnostics] {report.TimestampUtc:O} -- features: {report.Features}, seed: {report.RandomSeed?.ToString() ?? "unknown"}" };
 
         if (report.FrameBudget is { } frameBudget)
         {
@@ -117,7 +119,7 @@ internal static class DiagnosticsReportWriter
         }
     }
 
-    private sealed record DiagnosticsReport(DateTime TimestampUtc, string Features, FrameBudgetSection? FrameBudget, List<ComponentMemoryItem>? Memory, List<LeakFindingItem>? Leaks);
+    private sealed record DiagnosticsReport(DateTime TimestampUtc, string Features, int? RandomSeed, FrameBudgetSection? FrameBudget, List<ComponentMemoryItem>? Memory, List<LeakFindingItem>? Leaks);
 
     private sealed record FrameBudgetSection(Dictionary<string, List<FrameCostItem>> Update, Dictionary<string, List<FrameCostItem>> Draw);
 

@@ -1,3 +1,4 @@
+using Engine.ECS.Systems;
 using Engine.ECS.Components;
 using Game.Modules.Burning;
 using Game.Modules.Burning.Components;
@@ -21,7 +22,7 @@ public sealed class StatusEffectQueriesTests
     {
         var displays = new StatusEffectDisplayRegistry();
         displays.Register(new TimerBasedStatusEffectDisplay<BurningTimerComponent>(StatusEffectType.Burning, BurningEffects.Glyph,
-            burning => burning.FramesUntilNextTick + (burning.StackCount - 1) * BurningEffects.TickIntervalFrames));
+            (burning, now) => FrameDeadline.Remaining(burning.NextTickFrame, now) + (burning.StackCount - 1) * BurningEffects.TickIntervalFrames));
         return displays;
     }
 

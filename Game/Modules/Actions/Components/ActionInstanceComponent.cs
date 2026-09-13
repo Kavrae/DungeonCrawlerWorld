@@ -17,14 +17,22 @@ namespace Game.Modules.Actions.Components;
 /// null means "no per-instance override," so the granted action's own catalog Effects apply
 /// unmodified (e.g. PlayerBlueprint's Punch grant, which rolls DirectDamage's own
 /// MinFlatDamage..MaxFlatDamage range rather than a fixed number).
-/// CooldownFramesRemaining is meaningful for any action whose ActionTiming.CooldownFrames is
-/// set, regardless of ActionTimingCategory -- ticked by ActionCooldownSystem.
+///
+/// CooldownReadyAtFrame is a deadline (FrameDeadline), meaningful for any action whose
+/// ActionTiming.CooldownFrames is set, regardless of ActionTimingCategory. Nothing ticks it: it is
+/// written once when the action is used (ActionInstanceQueries.TrySetCooldown) and read against
+/// the current frame (ActionInstanceQueries.IsOnCooldown/CooldownFramesRemaining). It replaced a
+/// frames-remaining countdown that ActionCooldownSystem walked down every stripe visit -- 0.1
+/// ms/frame spent almost entirely confirming that no cooldown was running (PLAN-timer-wheel.md,
+/// "ActionLock vs ActionCooldown, measured"). A new grant starts at 0: ready immediately.
 /// </remarks>
-public struct ActionInstanceComponent(Guid actionId, ActionDefinition? overrideDefinition, ushort cooldownFramesRemaining)
+public struct ActionInstanceComponent(Guid actionId, ActionDefinition? overrideDefinition)
 {
     public Guid ActionId { get; } = actionId;
     public ActionDefinition? Override { get; set; } = overrideDefinition;
-    public ushort CooldownFramesRemaining { get; set; } = cooldownFramesRemaining;
 
-    public override readonly string ToString() => $"ActionId : {ActionId}\nOverride : {(Override is null ? "none" : Override.Name)}\nCooldownFramesRemaining : {CooldownFramesRemaining}";
+    /// <summary>The simulation frame from which this action can be used again. 0 (the default) = ready now.</summary>
+    public uint CooldownReadyAtFrame { get; set; }
+
+    public override readonly string ToString() => $"ActionId : {ActionId}\nOverride : {(Override is null ? "none" : Override.Name)}\nCooldownReadyAtFrame : {CooldownReadyAtFrame}";
 }

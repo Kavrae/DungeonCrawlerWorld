@@ -52,6 +52,6 @@ public sealed record DirectHeal(
         var healWithAbilityScoreScaling = baseHeal + AbilityScoreTagBonus.Compute(context.SourceEntityId, context.ActivatorTags, context.AbilityScores);
 
         BodyPartTargetRule? targetRule = TargetBodyPartType is { } type ? new BodyPartTargetRule(type, BodyPartFallback.Random) : null;
-        HealthHeal.Apply(context.Health, context.TargetEntityId, percentOfMaxHealth: 0f, context.StatModifiers, context.BodyParts, flatAmount: healWithAbilityScoreScaling, context.SourceEntityId, context.ActivatorTags, BodyPartTargetMode, targetRule, context.MathUtility, eventBus: context.EventBus, playerQuery: context.PlayerQuery, healType: context.ActivatorName);
+        HealthHeal.Apply(context.Health, context.TargetEntityId, percentOfMaxHealth: 0f, context.Now, context.StatModifiers, context.BodyParts, flatAmount: healWithAbilityScoreScaling, sourceEntityId: context.SourceEntityId, activatorTags: context.ActivatorTags, targetMode: BodyPartTargetMode, targetRule: targetRule, mathUtility: context.MathUtility, eventBus: context.EventBus, playerQuery: context.PlayerQuery, healType: context.ActivatorName);
     }
 }

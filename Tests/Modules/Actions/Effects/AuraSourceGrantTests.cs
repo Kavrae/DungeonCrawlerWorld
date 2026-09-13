@@ -25,7 +25,7 @@ public sealed class AuraSourceGrantTests
         MathUtility: new MathUtility(),
         ComponentManager: componentManager,
         ActivatorName: "Test",
-        ActivatorTags: [],
+        ActivatorTags: [], Now: 0,
         AuraSources: auraSources,
         DurationScaleMultiplier: durationScaleMultiplier);
 
@@ -96,7 +96,7 @@ public sealed class AuraSourceGrantTests
         Assert.IsTrue(auraSources.Has(TargetEntityId));
         var expiries = componentManager.GetPackedPool<AuraSourceExpiryComponent>();
         Assert.IsTrue(expiries.Has(TargetEntityId));
-        Assert.AreEqual(100, expiries.GetReadonly(TargetEntityId).FramesUntilNextTick);
+        Assert.AreEqual(100u, expiries.GetReadonly(TargetEntityId).ExpiresAtFrame);
         Assert.AreEqual(StatusEffectType.Light, expiries.GetReadonly(TargetEntityId).Type);
     }
 
@@ -108,7 +108,7 @@ public sealed class AuraSourceGrantTests
 
         entry.Apply(BuildContext(componentManager, auraSources, durationScaleMultiplier: 4.0f));
 
-        Assert.AreEqual(400, componentManager.GetPackedPool<AuraSourceExpiryComponent>().GetReadonly(TargetEntityId).FramesUntilNextTick);
+        Assert.AreEqual(400u, componentManager.GetPackedPool<AuraSourceExpiryComponent>().GetReadonly(TargetEntityId).ExpiresAtFrame);
     }
 
     /// <summary>The behavioral difference from permanent mode -- re-applying a timed grant before it expires must refresh it, not flip it off (a flip would extinguish an existing grant instead of renewing it).</summary>

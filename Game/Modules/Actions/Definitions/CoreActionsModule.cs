@@ -21,7 +21,9 @@ public sealed class CoreActionsModule : IGameModule
 
     private static readonly IReadOnlyList<Func<ActionDefinition>> Definitions = [
         HealAction.Build,
-        PunchAction.Build,
+        QuickAttackAction.Build,
+        PowerAttackAction.Build,
+        DodgeAction.Build,
         MagicMissileAction.Build,
         ToxicStrikeAction.Build,
     ];

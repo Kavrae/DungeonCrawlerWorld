@@ -1,5 +1,6 @@
 using Engine.ECS.Components;
 using Engine.ECS.Components.Stores;
+using Engine.ECS.Systems;
 using FontStashSharp;
 using Game.Modules.Core.Components;
 using Game.World;
@@ -10,8 +11,11 @@ using Presentation.UI.Chrome;
 
 namespace Presentation.UI.Content;
 
-public sealed class ActionLockContent(World world, ComponentManager componentManager, FontService fontService) : IElementContent
+public sealed class ActionLockContent(World world, ComponentManager componentManager, FontService fontService, SimulationClock? simulationClock = null) : IElementContent
 {
+    /// <summary>"Now" for the lock's remaining frames -- the lock is a deadline (see ActionLockGate). Optional only so a test needn't build one; the shell always passes the simulation's real clock.</summary>
+    private readonly SimulationClock _simulationClock = simulationClock ?? new SimulationClock();
+
     public static readonly Vector2 Size = new(HudChrome.EntrySize.Y * 1.5f, HudChrome.EntrySize.Y * 1.5f);
 
     private const int ContentInset = 2;
@@ -48,7 +52,7 @@ public sealed class ActionLockContent(World world, ComponentManager componentMan
         _glyph = glyphComponent.Glyph;
         _glyphColor = glyphComponent.GlyphColor;
         _fillPercentage = actionLock.CurrentLockTotalFrames > 0
-            ? (float)actionLock.CurrentLockFramesRemaining / actionLock.CurrentLockTotalFrames
+            ? (float)ActionLockGate.FramesRemaining(actionLock, _simulationClock.CurrentFrame) / actionLock.CurrentLockTotalFrames
             : 0f;
     }
 

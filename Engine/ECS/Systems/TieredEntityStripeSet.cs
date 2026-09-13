@@ -26,7 +26,12 @@ public sealed class TieredEntityStripeSet
         _tierBuckets = new EntityStripeSet[tierDivisors.Length];
         for (var i = 0; i < tierDivisors.Length; i++)
         {
-            _tierBuckets[i] = new EntityStripeSet((byte)(baseStripeCount * tierDivisors[i]), []);
+            // ushort, not byte: baseStripeCount * divisor exceeds 255 for realistic combinations
+            // (60 * 8 = 480 truncated to 224 while this cast was to byte, so a Beyond-tier entity
+            // was visited more than twice as often as its divisor claimed -- and systems scaling
+            // their per-visit effect by the untruncated product over-applied it by the same
+            // ratio). byte * byte tops out at 65,025, so this product always fits a ushort.
+            _tierBuckets[i] = new EntityStripeSet((ushort)(baseStripeCount * tierDivisors[i]), []);
         }
 
         foreach (var entityId in existingEntityIds)
@@ -82,13 +87,13 @@ public sealed class TieredEntityStripeSet
     public ReadOnlySpan<int> GetTierBucket(int tierIndex, long frameCount)
     {
         var bucket = _tierBuckets[tierIndex];
-        return bucket.GetBucket((byte)(frameCount % bucket.StripeCount));
+        return bucket.GetBucket((ushort)(frameCount % bucket.StripeCount));
     }
 
     /// <summary>Gets the number of frames between visits for a specific tier.</summary>
     /// <param name="tierIndex">The index of the tier.</param>
     /// <returns>The number of frames per visit for the specified tier.</returns>
-    public byte GetTierFramesPerVisit(int tierIndex) => _tierBuckets[tierIndex].StripeCount;
+    public ushort GetTierFramesPerVisit(int tierIndex) => _tierBuckets[tierIndex].StripeCount;
 
     /// <summary>Enumerates the entities due for processing this frame, chained across every tier's own current bucket.</summary>
     /// <remarks>
@@ -138,7 +143,7 @@ public sealed class TieredEntityStripeSet
                 }
 
                 var bucket = _tierBuckets[_tierIndex];
-                _currentSpan = bucket.GetBucket((byte)(_frameCount % bucket.StripeCount));
+                _currentSpan = bucket.GetBucket((ushort)(_frameCount % bucket.StripeCount));
                 _indexInSpan = -1;
             }
         }

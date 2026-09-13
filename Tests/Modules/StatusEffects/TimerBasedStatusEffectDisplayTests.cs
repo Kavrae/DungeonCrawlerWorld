@@ -1,3 +1,4 @@
+using Engine.ECS.Systems;
 using Engine.ECS.Components;
 using Game.Modules.Poison;
 using Game.Modules.Poison.Components;
@@ -20,7 +21,7 @@ public sealed class TimerBasedStatusEffectDisplayTests
 
     private static TimerBasedStatusEffectDisplay<PoisonTimerComponent> CreatePoisonDisplay() =>
         new(StatusEffectType.Poison, PoisonEffects.Glyph,
-            poison => poison.FramesUntilNextTick + (poison.RemainingDurationTicks - 1) * PoisonEffects.TickIntervalFrames);
+            (poison, now) => FrameDeadline.Remaining(poison.NextTickFrame, now) + (poison.RemainingDurationTicks - 1) * PoisonEffects.TickIntervalFrames);
 
     [TestMethod]
     public void GetRemainingDurationFrames_TimerNotPresent_ReturnsNull()
@@ -28,17 +29,17 @@ public sealed class TimerBasedStatusEffectDisplayTests
         var componentManager = CreateComponentManagerWithPoisonTimerPool();
         var display = CreatePoisonDisplay();
 
-        Assert.IsNull(display.GetRemainingDurationFrames(componentManager, EntityId));
+        Assert.IsNull(display.GetRemainingDurationFrames(componentManager, EntityId, now: 0));
     }
 
     [TestMethod]
     public void GetRemainingDurationFrames_TimerPresent_MatchesFormula()
     {
         var componentManager = CreateComponentManagerWithPoisonTimerPool();
-        componentManager.GetPackedPool<PoisonTimerComponent>().Add(EntityId, new PoisonTimerComponent(framesUntilNextTick: 30, stackCount: 1, remainingDurationTicks: 3, StatusEffectSource.Admin));
+        componentManager.GetPackedPool<PoisonTimerComponent>().Add(EntityId, new PoisonTimerComponent(nextTickFrame: 30, stackCount: 1, remainingDurationTicks: 3, StatusEffectSource.Admin));
         var display = CreatePoisonDisplay();
 
         // FramesUntilNextTick 30 + (RemainingDurationTicks 3 - 1) * TickIntervalFrames 60 = 150.
-        Assert.AreEqual(150, display.GetRemainingDurationFrames(componentManager, EntityId));
+        Assert.AreEqual(150, display.GetRemainingDurationFrames(componentManager, EntityId, now: 0));
     }
 }

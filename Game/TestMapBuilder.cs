@@ -13,6 +13,7 @@ using Game.Blueprints.Terrain;
 using Game.Modules.Core.Components;
 using Game.Modules.Crawler.Components;
 using Game.Modules.Movement.Components;
+using Game.Modules.ProcessingTier;
 using Game.World;
 
 namespace Game;
@@ -26,16 +27,20 @@ namespace Game;
 /// per PopulateFlyingFairy) -- plus a handful of standalone multi-trait fixtures, via the
 /// Blueprint composition system.
 /// </summary>
-public sealed class TestMapBuilder(EntityManager entityManager, ComponentManager componentManager, MathUtility mathUtility, UniqueNumberAllocator crawlerNumberAllocator, FrameEventBuffer<EntityMovedEvent> movedEntities)
+public sealed class TestMapBuilder(EntityManager entityManager, ComponentManager componentManager, MathUtility mathUtility, UniqueNumberAllocator crawlerNumberAllocator, FrameEventBuffer<EntityMovedEvent> movedEntities, ProcessingTierResolver? tierResolver = null)
 {
-    // TEMPORARY: halved from the original values below (10/5/5) to reduce the creature
+    // TEMPORARY: halved once already from the original values (10/5/5) to reduce the creature
     // population -- Movement/HealthRegen/ContactDamage/StatusEffectAura all iterate this
     // population every frame, and at the original density the game was effectively
-    // unplayable (5-10fps) for manual testing. Revert once the performance investigation
-    // these values are standing in for (see TODO.md) lands a real fix.
-    private const int GroundPopulationPercent = 5;
-    private const int UnderGroundGhostPercent = 3;
-    private const int FlyingFairyPercent = 3;
+    // unplayable (5-10fps) for manual testing. Revert that half once the performance
+    // investigation these values are standing in for (see TODO.md) lands a real fix. Halved
+    // again on top of that for Combat Overhaul: Dodge (TODO.md) -- the new deliberate, telegraphed
+    // combat style (windups to react to, a Dodge with a real cooldown cost) wants noticeably fewer
+    // simultaneous attackers than the old spam-actions style did; this second halving is a
+    // playtesting-tunable starting point, not a measured target.
+    private const int GroundPopulationPercent = 3;
+    private const int UnderGroundGhostPercent = 2;
+    private const int FlyingFairyPercent = 2;
 
     /// <summary>Chance any given rolled NPC (see BuildRaceEntity) is also a Crawler -- deliberately small; most NPCs are not.</summary>
     private const int CrawlerPercent = 2;
@@ -44,10 +49,10 @@ public sealed class TestMapBuilder(EntityManager entityManager, ComponentManager
         "ThisIsAReallyLongDescriptionToTestTheWordWrapCapabilitiesAroundHyphenatingLongWordsMultipleTimes";
 
     private readonly StoneFloor _stoneFloor = new();
-    private readonly Wall _wall = new();
-    private readonly Dirt _dirt = new();
+    private readonly Wall _wall = new(mathUtility);
+    private readonly Dirt _dirt = new(mathUtility);
     private readonly Lava _lava = new();
-    private readonly Grass _grass = new();
+    private readonly Grass _grass = new(mathUtility);
     private readonly Goblin _goblin = new(mathUtility);
     private readonly Fairy _fairy = new(mathUtility);
     private readonly Ghost _ghost = new(mathUtility);
@@ -121,7 +126,7 @@ public sealed class TestMapBuilder(EntityManager entityManager, ComponentManager
                 {
                     BuildTerrainFromBlueprint(
                         world,
-                        mathUtility.Next(0, 5) == 0
+                        mathUtility.Next(0, 20) == 0
                             ? _lava
                             : _dirt,
                         column,
@@ -211,7 +216,8 @@ public sealed class TestMapBuilder(EntityManager entityManager, ComponentManager
     /// <summary>Builds a race blueprint entity at the given size/layer with a staggered action lock -- the shared path for every PopulateEntity roll outcome. A small percentage also become Crawlers (see CrawlerPercent).</summary>
     private void BuildRaceEntity(World.World world, IBlueprint blueprint, int column, int row, Vector2Byte size, MapLayer mapLayer)
     {
-        var entityId = entityManager.CreateEntity();
+        var position = new Vector3Int(column, row, (int)mapLayer);
+        var entityId = CreateEntityAt(position);
         blueprint.Build(componentManager, entityId);
 
         ref var transform = ref componentManager.GetDirectPool<TransformComponent>().Get(entityId);
@@ -223,7 +229,6 @@ public sealed class TestMapBuilder(EntityManager entityManager, ComponentManager
         }
 
         StaggerActionLock(entityId);
-        var position = new Vector3Int(column, row, (int)mapLayer);
         world.PlaceEntityOnMap(entityId, position, ref transform);
 
         // Spawning counts as a move (see FloorBuilder.CreatePlayer's identical reasoning) so a
@@ -252,11 +257,12 @@ public sealed class TestMapBuilder(EntityManager entityManager, ComponentManager
     /// <summary>Same as BuildFromBlueprint, but places at mapLayer instead of preserving whatever Z the blueprint itself set.</summary>
     private int BuildFromBlueprintAtLayer(World.World world, IBlueprint blueprint, int column, int row, MapLayer mapLayer)
     {
-        var entityId = entityManager.CreateEntity();
+        var position = new Vector3Int(column, row, (int)mapLayer);
+        var entityId = CreateEntityAt(position);
         blueprint.Build(componentManager, entityId);
 
         ref var transform = ref componentManager.GetDirectPool<TransformComponent>().Get(entityId);
-        world.PlaceEntityOnMap(entityId, new Vector3Int(column, row, (int)mapLayer), ref transform);
+        world.PlaceEntityOnMap(entityId, position, ref transform);
 
         return entityId;
     }
@@ -268,7 +274,9 @@ public sealed class TestMapBuilder(EntityManager entityManager, ComponentManager
     /// </summary>
     private void BuildTerrainFromBlueprint(World.World world, IBlueprint blueprint, int column, int row, TerrainLayer terrainLayer)
     {
-        var entityId = entityManager.CreateEntity();
+        // Terrain Z is the TerrainLayer value, which lines up with MapLayer (both UnderGround = 0,
+        // Ground = 1) -- see World.PlaceTerrainOnMap, which writes exactly this position.
+        var entityId = CreateEntityAt(new Vector3Int(column, row, (int)terrainLayer));
         blueprint.Build(componentManager, entityId);
 
         ref var transform = ref componentManager.GetDirectPool<TransformComponent>().Get(entityId);
@@ -411,13 +419,32 @@ public sealed class TestMapBuilder(EntityManager entityManager, ComponentManager
     {
         var framesToWait = (ushort)mathUtility.Next(0, MaximumStaggerFrames + 1);
 
-        ActionLockGate.Lock(_actionLocks, entityId, framesToWait);
+        // Population runs before the simulation's first frame, so the stagger is measured from 0.
+        ActionLockGate.Lock(_actionLocks, entityId, now: 0, framesToWait);
     }
 
     /// <summary>
     /// Places an already-built entity at the given grid column/row, preserving the Z height
     /// (map layer) its blueprint already set -- a blueprint's own X/Y is just a placeholder.
     /// </summary>
+    /// <summary>
+    /// Creates an entity born with its processing tier as its first component, for the position it
+    /// is about to be placed at -- see ProcessingTierResolver.CreateEntityAt. Used by the three bulk
+    /// paths whose final position is known before the blueprint is built (race entities, terrain,
+    /// layer-explicit walls), which is ~all of the ~2.6M entities and so where silent tier-first
+    /// assignment pays for itself.
+    /// </summary>
+    /// <remarks>
+    /// The PlaceAt paths below (fixtures, shops, Ground walls, tiny goblins) deliberately still use
+    /// a plain CreateEntity: their Z comes from the blueprint (PlaceAt keeps whatever
+    /// transform.Position.Z the blueprint set), so the final position is not known until after
+    /// Build. They are tiered by World.EntityPlaced -> ProcessingTierResolver.EnsureTiered instead,
+    /// which raises a TierChanged per entity -- a few thousand events at population, against the
+    /// ~700k tier-first avoids. Without a resolver (unit tests), this is a plain CreateEntity.
+    /// </remarks>
+    private int CreateEntityAt(Vector3Int plannedPosition) =>
+        tierResolver?.CreateEntityAt(entityManager, plannedPosition) ?? entityManager.CreateEntity();
+
     private void PlaceAt(World.World world, int entityId, int column, int row)
     {
         ref var transform = ref componentManager.GetDirectPool<TransformComponent>().Get(entityId);

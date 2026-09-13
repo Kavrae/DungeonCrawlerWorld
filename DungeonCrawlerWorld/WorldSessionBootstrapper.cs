@@ -19,6 +19,7 @@ namespace DungeonCrawlerWorld;
 /// </summary>
 public static class WorldSessionBootstrapper
 {
+    /// <param name="randomSeed">Seed for the shared MathUtility this session's entire simulation draws from -- see RandomSeed and the body's own note on what it does and does not cover.</param>
     public static WorldSessionContext Build(
         int floorNumber,
         string modsDirectory,
@@ -27,11 +28,12 @@ public static class WorldSessionBootstrapper
         int minCrawlerNumber,
         int maxCrawlerNumber,
         string playerActivityLogFilePath,
-        DiagnosticsEngine diagnostics)
+        DiagnosticsEngine diagnostics,
+        int randomSeed)
     {
         ArgumentNullException.ThrowIfNull(diagnostics);
 
-        var mathUtility = new MathUtility();
+        var mathUtility = new MathUtility(new Random(randomSeed));
         var crawlerNumberAllocator = new UniqueNumberAllocator(mathUtility, minCrawlerNumber, maxCrawlerNumber);
 
         World world;
@@ -69,20 +71,28 @@ public static class WorldSessionBootstrapper
         var playerActivityLog = new PlayerActivityLog(world, ecsContext.ComponentManager, ecsContext.EventBus, playerActivityLogFilePath);
         Console.WriteLine($"[PlayerActivityLog] Writing to {playerActivityLogFilePath}");
 
+        // The tier reference is set to where the player is aimed at spawning BEFORE population, so
+        // terrain and NPCs are born with their processing tier as their first component instead of
+        // being tiered and then migrated. The player lands on the nearest free cell to this after
+        // population; ProcessingTierSystem's first update treats any difference as an ordinary
+        // player move and walks the Local boundary. See PLAN-processing-tier-rework.md.
+        var tierResolver = bootstrapResult.ProcessingTierResolver;
+        tierResolver.SetReferencePosition(FloorBuilder.PlayerSpawnOrigin(world));
+
         using (diagnostics.StartupProfiler?.Phase("Entity Population"))
         {
-            FloorBuilder.PopulateFloor(world, ecsContext, mathUtility, crawlerNumberAllocator, bootstrapResult.MovedEntities);
+            FloorBuilder.PopulateFloor(world, ecsContext, mathUtility, crawlerNumberAllocator, bootstrapResult.MovedEntities, tierResolver);
         }
 
         using (diagnostics.StartupProfiler?.Phase("Player Spawn"))
         {
-            FloorBuilder.CreatePlayer(world, ecsContext, mathUtility, bootstrapResult.MovedEntities, crawlerNumberAllocator, playerEntityId);
+            FloorBuilder.CreatePlayer(world, ecsContext, mathUtility, bootstrapResult.MovedEntities, crawlerNumberAllocator, playerEntityId, tierResolver);
             world.PlayerEntityId = playerEntityId;
 
             ecsContext.EventBus.Publish(new EnteredDungeonEvent());
             ecsContext.EventBus.Publish(new FloorEnteredEvent(floorNumber));
         }
 
-        return new WorldSessionContext(world, ecsContext, mathUtility, bootstrapResult.MovedEntities, crawlerNumberAllocator, bootstrapResult.ActionCatalog, bootstrapResult.ItemCatalog, playerActivityLog, bootstrapResult.StatusEffectDisplays, reservedEntityIds);
+        return new WorldSessionContext(world, ecsContext, mathUtility, bootstrapResult.MovedEntities, crawlerNumberAllocator, bootstrapResult.ActionCatalog, bootstrapResult.ItemCatalog, playerActivityLog, bootstrapResult.StatusEffectDisplays, reservedEntityIds, bootstrapResult.LocalTierRoster);
     }
 }

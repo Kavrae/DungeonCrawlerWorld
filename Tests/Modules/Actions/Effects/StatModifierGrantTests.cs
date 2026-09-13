@@ -1,3 +1,4 @@
+using Engine.ECS.Systems;
 using Engine.ECS.Components;
 using Engine.Events;
 using Engine.Math;
@@ -24,7 +25,7 @@ public sealed class StatModifierGrantTests
         MathUtility: new MathUtility(),
         ComponentManager: componentManager,
         ActivatorName: "Test",
-        ActivatorTags: [],
+        ActivatorTags: [], Now: 0,
         StatModifiers: componentManager.GetMultiPool<StatModifierComponent>(),
         DurationScaleMultiplier: durationScaleMultiplier);
 
@@ -52,7 +53,7 @@ public sealed class StatModifierGrantTests
 
         entry.Apply(BuildContext(componentManager, durationScaleMultiplier: 4.0f));
 
-        Assert.AreEqual((ushort?)400, GetGrantedModifier(componentManager).RemainingDurationFrames);
+        Assert.AreEqual(400u, GetGrantedModifier(componentManager).ExpiresAtFrame);
     }
 
     [TestMethod]
@@ -63,7 +64,7 @@ public sealed class StatModifierGrantTests
 
         entry.Apply(BuildContext(componentManager, durationScaleMultiplier: 1.0f));
 
-        Assert.AreEqual((ushort?)100, GetGrantedModifier(componentManager).RemainingDurationFrames);
+        Assert.AreEqual(100u, GetGrantedModifier(componentManager).ExpiresAtFrame);
     }
 
     [TestMethod]
@@ -74,7 +75,7 @@ public sealed class StatModifierGrantTests
 
         entry.Apply(BuildContext(componentManager, durationScaleMultiplier: 4.0f));
 
-        Assert.IsNull(GetGrantedModifier(componentManager).RemainingDurationFrames);
+        Assert.AreEqual(FrameDeadline.Never, GetGrantedModifier(componentManager).ExpiresAtFrame, "Permanent.");
     }
 
     [TestMethod]
@@ -82,12 +83,12 @@ public sealed class StatModifierGrantTests
     {
         var componentManager = Build();
         componentManager.GetMultiPool<StatModifierComponent>().Add(SourceEntityId, new StatModifierComponent(
-            StatModifierTarget.OutgoingDebuffDuration, StatModifierOperation.Multiplicative, StatModifierPolarity.Debuff, canModify: false, magnitude: 1.0f, remainingDurationFrames: null, StatusEffectSource.FromEntity(SourceEntityId)));
+            StatModifierTarget.OutgoingDebuffDuration, StatModifierOperation.Multiplicative, StatModifierPolarity.Debuff, canModify: false, magnitude: 1.0f, expiresAtFrame: FrameDeadline.Never, StatusEffectSource.FromEntity(SourceEntityId)));
         var entry = new StatModifierGrant(StatModifierTarget.IncomingDamage, StatModifierOperation.Multiplicative, StatModifierPolarity.Debuff, CanModify: false, Magnitude: 0.1f, DurationFrames: 100);
 
         entry.Apply(BuildContext(componentManager, durationScaleMultiplier: 1.0f));
 
-        Assert.AreEqual((ushort?)200, GetGrantedModifier(componentManager).RemainingDurationFrames, "100 * (1 + 1.0) = 200.");
+        Assert.AreEqual(200u, GetGrantedModifier(componentManager).ExpiresAtFrame, "100 * (1 + 1.0) = 200.");
     }
 
     [TestMethod]
@@ -95,12 +96,12 @@ public sealed class StatModifierGrantTests
     {
         var componentManager = Build();
         componentManager.GetMultiPool<StatModifierComponent>().Add(TargetEntityId, new StatModifierComponent(
-            StatModifierTarget.IncomingDebuffDuration, StatModifierOperation.Multiplicative, StatModifierPolarity.Debuff, canModify: false, magnitude: -0.5f, remainingDurationFrames: null, StatusEffectSource.FromEntity(TargetEntityId)));
+            StatModifierTarget.IncomingDebuffDuration, StatModifierOperation.Multiplicative, StatModifierPolarity.Debuff, canModify: false, magnitude: -0.5f, expiresAtFrame: FrameDeadline.Never, StatusEffectSource.FromEntity(TargetEntityId)));
         var entry = new StatModifierGrant(StatModifierTarget.IncomingDamage, StatModifierOperation.Multiplicative, StatModifierPolarity.Debuff, CanModify: false, Magnitude: 0.1f, DurationFrames: 100);
 
         entry.Apply(BuildContext(componentManager, durationScaleMultiplier: 1.0f));
 
-        Assert.AreEqual((ushort?)50, GetGrantedModifier(componentManager).RemainingDurationFrames, "100 * (1 - 0.5) = 50 -- debuffs against the target expire faster.");
+        Assert.AreEqual(50u, GetGrantedModifier(componentManager).ExpiresAtFrame, "100 * (1 - 0.5) = 50 -- debuffs against the target expire faster.");
     }
 
     [TestMethod]
@@ -109,13 +110,13 @@ public sealed class StatModifierGrantTests
         var componentManager = Build();
         // Scoped to Debuff -- must have zero effect on this Buff-polarity grant.
         componentManager.GetMultiPool<StatModifierComponent>().Add(TargetEntityId, new StatModifierComponent(
-            StatModifierTarget.IncomingDebuffDuration, StatModifierOperation.Multiplicative, StatModifierPolarity.Debuff, canModify: false, magnitude: -0.9f, remainingDurationFrames: null, StatusEffectSource.FromEntity(TargetEntityId)));
+            StatModifierTarget.IncomingDebuffDuration, StatModifierOperation.Multiplicative, StatModifierPolarity.Debuff, canModify: false, magnitude: -0.9f, expiresAtFrame: FrameDeadline.Never, StatusEffectSource.FromEntity(TargetEntityId)));
         componentManager.GetMultiPool<StatModifierComponent>().Add(TargetEntityId, new StatModifierComponent(
-            StatModifierTarget.IncomingBuffDuration, StatModifierOperation.Multiplicative, StatModifierPolarity.Buff, canModify: false, magnitude: 0.5f, remainingDurationFrames: null, StatusEffectSource.FromEntity(TargetEntityId)));
+            StatModifierTarget.IncomingBuffDuration, StatModifierOperation.Multiplicative, StatModifierPolarity.Buff, canModify: false, magnitude: 0.5f, expiresAtFrame: FrameDeadline.Never, StatusEffectSource.FromEntity(TargetEntityId)));
         var entry = new StatModifierGrant(StatModifierTarget.OutgoingDamage, StatModifierOperation.Additive, StatModifierPolarity.Buff, CanModify: true, Magnitude: 1f, DurationFrames: 100);
 
         entry.Apply(BuildContext(componentManager, durationScaleMultiplier: 1.0f));
 
-        Assert.AreEqual((ushort?)150, GetGrantedModifier(componentManager).RemainingDurationFrames, "100 * (1 + 0.5) = 150 -- the IncomingDebuffDuration modifier must not apply to a Buff grant.");
+        Assert.AreEqual(150u, GetGrantedModifier(componentManager).ExpiresAtFrame, "100 * (1 + 0.5) = 150 -- the IncomingDebuffDuration modifier must not apply to a Buff grant.");
     }
 }

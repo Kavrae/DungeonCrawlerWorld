@@ -1,3 +1,4 @@
+using Engine.ECS.Systems;
 using Game.Modules.StatusEffectAura;
 using Game.Modules.StatusEffectAura.Components;
 using Game.Modules.StatusEffects;
@@ -54,6 +55,6 @@ public sealed record AuraSourceGrant(
         var scaledDurationFrames = (ushort)Math.Round(durationFrames * context.DurationScaleMultiplier);
 
         AuraSourceEffects.Apply(context.AuraSources, context.EventBus, context.TargetEntityId, StatusEffectType, AuraAndGlowStrength, GlowColor);
-        context.ComponentManager.Merge(context.TargetEntityId, new AuraSourceExpiryComponent(StatusEffectType, scaledDurationFrames));
+        context.ComponentManager.Merge(context.TargetEntityId, new AuraSourceExpiryComponent(StatusEffectType, FrameDeadline.After(context.Now, scaledDurationFrames)));
     }
 }

@@ -8,7 +8,7 @@ namespace Game.World;
 /// Apply is called from deep inside other systems' own per-entity scans (BurningSystem.Tick,
 /// ContactDamageSystem.Tick, ActionEffectResolver), so an immediate publish that synchronously
 /// destroyed/mutated component pools mid-scan would corrupt whichever scan is currently
-/// in-flight -- the same hazard CountdownTicker.Tick's own deferred-removal contract exists to
+/// in-flight -- the same hazard PackedTimerWheel.Tick's own deferred-removal contract exists to
 /// avoid. Buffering defers actual handling (see DeathSystem) to a dedicated system's own
 /// Update(), never from inside another system's per-entity loop.
 /// </summary>

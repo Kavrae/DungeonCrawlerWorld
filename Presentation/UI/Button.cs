@@ -177,7 +177,7 @@ public sealed class Button(FontService fontService, ElementPoolService elementPo
         // never wired -- see this class's own doc comment on why they're optional).
         if (_spriteName is not null && spriteSheetService is not null && spriteRenderer is not null)
         {
-            SpriteComponent? sprite = SpriteManifest.TryGet(_spriteName, out var spriteComponent) ? spriteComponent : null;
+            SpriteComponent? sprite = SpriteManifest.TryGetFirst(_spriteName, out var spriteComponent) ? spriteComponent : null;
             var spriteTint = Enabled ? Color.White : Color.Gray;
             SpriteOrGlyphRenderer.Draw(spriteBatch, spriteSheetService, spriteRenderer, LabelRenderer, sprite, ContentFont, LeftText, textColor, ContentAbsolutePosition, ContentSize, spriteTint);
         }

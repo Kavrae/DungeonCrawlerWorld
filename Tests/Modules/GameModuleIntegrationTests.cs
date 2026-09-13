@@ -111,7 +111,7 @@ public sealed class GameModuleIntegrationTests
         var transform = new TransformComponent(new Vector3Int(2, 2, 0), new Vector2Byte(1, 1));
         ecsContext.ComponentManager.GetDirectPool<TransformComponent>().Add(entityId, transform);
         world.PlaceEntityOnMap(entityId, transform.Position, ref transform);
-        ecsContext.ComponentManager.GetPackedPool<ActionLockComponent>().Add(entityId, new ActionLockComponent(standardLockFrames: 10, currentLockTotalFrames: 0, currentLockFramesRemaining: 0));
+        ecsContext.ComponentManager.GetPackedPool<ActionLockComponent>().Add(entityId, new ActionLockComponent(standardLockFrames: 10, currentLockTotalFrames: 0, unlockedAtFrame: 0));
         ecsContext.ComponentManager.GetPackedPool<SimpleHealthComponent>().Add(entityId, new SimpleHealthComponent(100, 100));
         ecsContext.ComponentManager.GetPackedPool<MovementComponent>().Add(entityId, new MovementComponent(MovementMode.Random, null, null));
 

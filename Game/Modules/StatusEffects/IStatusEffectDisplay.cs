@@ -24,8 +24,9 @@ public interface IStatusEffectDisplay
     StatusEffectType EffectType { get; }
     string Glyph { get; }
 
-    /// <summary>This entity's current remaining duration for EffectType, in frames, or null if it isn't actually active on this entity (no timer component present).</summary>
-    int? GetRemainingDurationFrames(ComponentManager componentManager, int entityId);
+    /// <summary>This entity's remaining duration for EffectType as of frame now, in frames, or null if it isn't actually active on this entity (no timer component present).</summary>
+    /// <param name="now">The simulation frame to measure from -- timers store absolute deadlines, so "remaining" depends on when you ask.</param>
+    int? GetRemainingDurationFrames(ComponentManager componentManager, int entityId, long now);
 
     /// <summary>This entity's current stack count for EffectType, or 0 if it isn't active.</summary>
     int GetStackCount(ComponentManager componentManager, int entityId);

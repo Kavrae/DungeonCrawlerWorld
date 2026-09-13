@@ -133,7 +133,7 @@ public sealed class CompositeBlueprintTests
         var entityId = ecsContext.EntityManager.CreateEntity();
 
         // A "wall with magical properties" style composite: no race/class blueprint at all.
-        var magicalWall = new CompositeBlueprint([new Wall(), new MarkerBlueprint("Magical")]);
+        var magicalWall = new CompositeBlueprint([new Wall(new MathUtility(new Random(1))), new MarkerBlueprint("Magical")]);
         magicalWall.Build(ecsContext.ComponentManager, entityId);
 
         Assert.IsTrue(ecsContext.ComponentManager.GetDirectPool<GlyphComponent>().Has(entityId));

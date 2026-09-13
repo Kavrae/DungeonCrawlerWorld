@@ -18,6 +18,9 @@ public sealed class PackedComponentPool<T> : IReadOnlyComponentPool<T>, IInspect
 
     private int _count;
 
+    /// <summary>Held by the single timer wheel driving this pool, if any -- see TimerWheelClaim for why there can only be one.</summary>
+    private TimerWheelClaim _timerWheelClaim;
+
     /// <summary> The type of component stored in this pool. </summary>
     public Type ComponentType => typeof(T);
 
@@ -53,6 +56,21 @@ public sealed class PackedComponentPool<T> : IReadOnlyComponentPool<T>, IInspect
 
     /// <inheritdoc cref="EntityAdded"/>
     public event Action<int>? EntityRemoved;
+
+    /// <summary>
+    /// Opt-in: fired after every write to a component -- (entityId, denseIndex) -- at exactly the
+    /// points the pool bumps that component's version: Add, Merge, TrySet, TryUpdate,
+    /// SetByDenseIndex, UpdateByDenseIndex and IncrementVersionByDenseIndex. Not fired by Remove.
+    /// </summary>
+    /// <remarks>
+    /// Lets a consumer react to *every* change without each writer having to remember to tell it
+    /// -- the TimerWheel uses this to schedule a ticking countdown whenever its deadline is written,
+    /// wherever that write happens (PLAN-timer-wheel.md, design 2b). A pool nobody observes pays one
+    /// null check per write. The one write this can't see is a raw GetByDenseIndex ref mutation
+    /// without the IncrementVersionByDenseIndex that method's contract already requires.
+    /// The handler must not add to or remove from this pool.
+    /// </remarks>
+    public event Action<int, int>? ComponentChanged;
 
     /// <summary> Initializes a new instance of the <see cref="PackedComponentPool{T}"/> class with the specified capacities and merge implementation. </summary>
     /// <param name="maximumEntityCount">The maximum EntityId this pool can be indexed by.</param>
@@ -93,6 +111,10 @@ public sealed class PackedComponentPool<T> : IReadOnlyComponentPool<T>, IInspect
         _maxEntities = newMaximumEntityCount;
     }
 
+    /// <summary>Claims this pool as the source for one PackedTimerWheel, throwing if a wheel already drives it.</summary>
+    /// <remarks>Called by the wheel's constructor. See TimerWheelClaim.</remarks>
+    internal void ClaimForTimerWheel() => _timerWheelClaim.Claim(typeof(T));
+
     /// <summary>True if entityId is within the pool's current entity-indexed capacity.</summary>
     /// <remarks>A rare/independently-sized pool (see ComponentManager.RegisterPackedPool's maximumEntityCount override) may be smaller than the world's full entity id space -- an out-of-bounds entityId simply has never had this component, not a bug. Add grows the pool on demand instead of assuming bounds.</remarks>
     private bool IsInBounds(int entityId) => (uint)entityId < (uint)_maxEntities;
@@ -122,6 +144,7 @@ public sealed class PackedComponentPool<T> : IReadOnlyComponentPool<T>, IInspect
         _count++;
 
         EntityAdded?.Invoke(entityId);
+        ComponentChanged?.Invoke(entityId, _count - 1);
     }
 
     /// <summary> Merges a component with the existing component for the specified entity. </summary>
@@ -137,7 +160,7 @@ public sealed class PackedComponentPool<T> : IReadOnlyComponentPool<T>, IInspect
             if (denseIndex >= 0)
             {
                 _mergeImplementation(ref _denseComponents[denseIndex], newComponent);
-                _denseVersions[denseIndex]++;
+                MarkChanged(denseIndex);
                 return;
             }
         }
@@ -164,6 +187,10 @@ public sealed class PackedComponentPool<T> : IReadOnlyComponentPool<T>, IInspect
         component = _denseComponents[denseIndex];
         return true;
     }
+
+    /// <summary>The entity's current dense index, or -1 if it has no component here.</summary>
+    /// <remarks>Valid only until the next Remove from this pool (swap-with-last reshuffles dense indices) -- look it up, use it, drop it.</remarks>
+    public int GetDenseIndex(int entityId) => IsInBounds(entityId) ? _entityIdToDenseIndexMap[entityId] : -1;
 
     /// <summary>Gets a readonly reference to the component for the specified entity.</summary>
     /// <param name="entityId">The ID of the entity to check.</param>
@@ -225,7 +252,7 @@ public sealed class PackedComponentPool<T> : IReadOnlyComponentPool<T>, IInspect
         }
 
         _denseComponents[denseIndex] = value;
-        _denseVersions[denseIndex]++;
+        MarkChanged(denseIndex);
         return true;
     }
 
@@ -244,7 +271,7 @@ public sealed class PackedComponentPool<T> : IReadOnlyComponentPool<T>, IInspect
         }
 
         updater(ref _denseComponents[denseIndex]);
-        _denseVersions[denseIndex]++;
+        MarkChanged(denseIndex);
         return true;
     }
 
@@ -265,7 +292,7 @@ public sealed class PackedComponentPool<T> : IReadOnlyComponentPool<T>, IInspect
         }
 
         updater(ref _denseComponents[denseIndex], state);
-        _denseVersions[denseIndex]++;
+        MarkChanged(denseIndex);
         return true;
     }
 
@@ -296,7 +323,7 @@ public sealed class PackedComponentPool<T> : IReadOnlyComponentPool<T>, IInspect
     public void SetByDenseIndex(int denseIndex, T value)
     {
         _denseComponents[denseIndex] = value;
-        _denseVersions[denseIndex]++;
+        MarkChanged(denseIndex);
     }
 
     /// <summary> Updates the component at the given dense index using a custom update function. </summary>
@@ -307,7 +334,7 @@ public sealed class PackedComponentPool<T> : IReadOnlyComponentPool<T>, IInspect
         ArgumentNullException.ThrowIfNull(updater);
 
         updater(ref _denseComponents[denseIndex]);
-        _denseVersions[denseIndex]++;
+        MarkChanged(denseIndex);
     }
 
     /// <summary> Updates the component at the given dense index using a custom update function and state. </summary>
@@ -320,12 +347,21 @@ public sealed class PackedComponentPool<T> : IReadOnlyComponentPool<T>, IInspect
         ArgumentNullException.ThrowIfNull(updater);
 
         updater(ref _denseComponents[denseIndex], state);
-        _denseVersions[denseIndex]++;
+        MarkChanged(denseIndex);
     }
 
     /// <summary> Increments the version of the component at the given dense index. </summary>
+    /// <remarks>Also what a raw GetByDenseIndex mutation must call afterward -- it's how ComponentChanged observers see that write.</remarks>
     /// <param name="denseIndex">The dense index of the component.</param>
-    public void IncrementVersionByDenseIndex(int denseIndex) => _denseVersions[denseIndex]++;
+    public void IncrementVersionByDenseIndex(int denseIndex) => MarkChanged(denseIndex);
+
+    /// <summary>Every write's single exit: bumps the version and tells ComponentChanged observers. Add sets version 1 itself and fires ComponentChanged directly.</summary>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    private void MarkChanged(int denseIndex)
+    {
+        _denseVersions[denseIndex]++;
+        ComponentChanged?.Invoke(_denseIndexToEntityIdMap[denseIndex], denseIndex);
+    }
 
     /// <summary>Removes the component for the specified entity if it exists.</summary>
     /// <remarks>Swaps the last dense slot into the freed one to keep dense storage contiguous, then re-patches the moved entity's own index mapping -- see MultiComponentPool.RemoveDenseIndexInternal for the same approach with an added linked-chain relink step.</remarks>

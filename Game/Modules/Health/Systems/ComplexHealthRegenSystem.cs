@@ -23,11 +23,11 @@ namespace Game.Modules.Health.Systems;
 /// Requires a SimpleHealthComponent pool purely to satisfy HealthHeal.Apply's Simple-vs-Complex
 /// dispatch check -- every entity this system's own stripe set drives owns BodyPartComponent, so
 /// that check always resolves to the Complex branch, mirroring ComplexHealthDamage.Apply's
-/// identical requirement. Every visit to a due entity also walks that entity's own
-/// BodyPartComponent chain once to decrement any nonzero RegenLockoutFramesRemaining, regardless
-/// of whether a part was selected for healing this tick.
+/// identical requirement. The regen lockout costs this system nothing per visit: it is a deadline
+/// on each part (BodyPartComponent.RegenLockedUntilFrame), consulted only when a part is being
+/// considered for healing, rather than a countdown this system had to walk every part to advance.
 /// </remarks>
-public sealed class ComplexHealthRegenSystem : ISystem
+public sealed class ComplexHealthRegenSystem : ITieredSystem
 {
     public byte StripeCount => (byte)GameTiming.FramesPerSecond;
 
@@ -39,7 +39,6 @@ public sealed class ComplexHealthRegenSystem : ISystem
 
     private readonly MultiComponentPool<BodyPartComponent> _bodyParts;
     private readonly PackedComponentPool<SimpleHealthComponent> _health;
-    private readonly DirectComponentPool<ProcessingTierComponent> _processingTiers;
     private readonly MultiComponentPool<StatModifierComponent>? _statModifiers;
     private readonly PackedComponentPool<DeadComponent>? _deadEntities;
     private readonly MultiComponentPool<AbilityScoreComponent>? _abilityScores;
@@ -62,7 +61,6 @@ public sealed class ComplexHealthRegenSystem : ISystem
     {
         _bodyParts = bodyParts;
         _health = health;
-        _processingTiers = processingTiers;
         _statModifiers = statModifiers;
         _deadEntities = deadEntities;
         _abilityScores = abilityScores;
@@ -76,9 +74,16 @@ public sealed class ComplexHealthRegenSystem : ISystem
     /// <summary>Updates the selected body part's current health, and decrements every part's regen lockout, for all entities in the current stripe.</summary>
     /// <param name="time"></param>
     /// <param name="stripeIndex"></param>
-    public void Update(EngineTime time, byte stripeIndex)
+    public void Update(EngineTime time, byte stripeIndex) => TieredSystemRunner.Run(this, time);
+
+    public TieredEntityStripeSet Tiers => _tieredStripeSet;
+
+    /// <summary>One tier's due entities, scaled by that tier's framesPerVisit -- see ITieredSystem.UpdateBucket.</summary>
+    public void UpdateBucket(EngineTime time, ReadOnlySpan<int> entityIds, ushort framesPerVisit)
     {
-        foreach (var entityId in _tieredStripeSet.GetDueEntities(time.FrameCount))
+        var secondsPerVisit = framesPerVisit / (float)GameTiming.FramesPerSecond;
+
+        foreach (var entityId in entityIds)
         {
             // A corpse shouldn't regenerate back above 0.
             if (_deadEntities?.Has(entityId) == true)
@@ -86,10 +91,9 @@ public sealed class ComplexHealthRegenSystem : ISystem
                 continue;
             }
 
-            var tier = _processingTiers.TryGetReadonly(entityId, out var processingTier) ? processingTier.Tier : ProcessingTierLevel.Local;
-            var framesPerVisit = StripeCount * ProcessingTierDivisors.ByTierIndex[(int)tier];
-
-            DecrementLockouts(entityId, framesPerVisit);
+            // No per-part lockout walk here any more: the lockout is a deadline that
+            // BodyPartSelection.PickLowestPercentage compares against the current frame, so nothing
+            // has to visit a part for its lockout to end (PLAN-timer-wheel.md step 8).
 
             // No AbilityScoresModule loaded, or this entity never got a Constitution score --
             // 0 regen, same as SimpleHealthRegenSystem's own effectiveRegen == 0 skip below, just
@@ -99,7 +103,6 @@ public sealed class ComplexHealthRegenSystem : ISystem
                 continue;
             }
 
-            var secondsPerVisit = framesPerVisit / (float)GameTiming.FramesPerSecond;
             var amountPerSecond = AbilityScoreMath.Lerp(constitution.Total, MinHealthRegenPerSecond, MaxHealthRegenPerSecond);
             var rawAmount = amountPerSecond * secondsPerVisit;
             var effectiveRegen = StatModifierMath.GetEffectiveValue(_statModifiers, entityId, StatModifierTarget.HealthRegen, rawAmount);
@@ -109,23 +112,7 @@ public sealed class ComplexHealthRegenSystem : ISystem
                 continue;
             }
 
-            HealthHeal.Apply(_health, entityId, percentOfMaxHealth: 0f, _statModifiers, _bodyParts, flatAmount: effectiveRegen, sourceEntityId: entityId, targetMode: BodyPartTargetMode.LowestPercentage, bodyPartBurningTimers: _bodyPartBurningTimers, eventBus: _eventBus, playerQuery: _playerQuery, healType: "Regeneration");
-        }
-    }
-
-    /// <summary>Walks entityId's own BodyPartComponent chain once, decrementing any nonzero RegenLockoutFramesRemaining by framesPerVisit (clamped at 0) -- mutated in place via UpdateByDenseIndex, never removed, so walking and updating the same chain in one pass is safe.</summary>
-    private void DecrementLockouts(int entityId, int framesPerVisit)
-    {
-        for (var denseIndex = _bodyParts.GetFirstDenseIndex(entityId); denseIndex != -1; denseIndex = _bodyParts.GetNextDenseIndex(denseIndex))
-        {
-            ref readonly var part = ref _bodyParts.GetReadonlyByDenseIndex(denseIndex);
-            if (part.RegenLockoutFramesRemaining == 0)
-            {
-                continue;
-            }
-
-            var decrementAmount = (ushort)System.Math.Min((int)part.RegenLockoutFramesRemaining, framesPerVisit);
-            _bodyParts.UpdateByDenseIndex(denseIndex, decrementAmount, static (ref BodyPartComponent p, ushort amount) => p.RegenLockoutFramesRemaining -= amount);
+            HealthHeal.Apply(_health, entityId, percentOfMaxHealth: 0f, time.FrameCount, _statModifiers, _bodyParts, flatAmount: effectiveRegen, sourceEntityId: entityId, targetMode: BodyPartTargetMode.LowestPercentage, bodyPartBurningTimers: _bodyPartBurningTimers, eventBus: _eventBus, playerQuery: _playerQuery, healType: "Regeneration");
         }
     }
 }

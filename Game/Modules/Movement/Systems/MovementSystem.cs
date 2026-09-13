@@ -26,7 +26,7 @@ namespace Game.Modules.Movement.Systems;
 /// Player movement is queued externally (Presentation input) while NPC wandering is decided upstream by TestCombatBehaviorSystem, which runs before this system each frame. This system only handles the actual movement and action lock timing.
 /// </remarks>
 /// <cleanupVersion>1</cleanupVersion>
-public sealed class MovementSystem : ISystem
+public sealed class MovementSystem : ITieredSystem
 {
     private const byte StripeCountValue = 15;
 
@@ -87,66 +87,84 @@ public sealed class MovementSystem : ISystem
         _tieredStripeSet = ProcessingTierWiring.CreateAndWire(StripeCount, movementComponents, processingTiers, processingTierEvents);
     }
 
-    /// <summary>Decrements an entity's movement frames to wait or attempts to execute the movement if a destination is set</summary>
+    /// <summary>Attempts to execute the movement if a destination is set and nothing is gating the entity</summary>
     /// <remarks>
-    /// All movement is gated by the ActionLock. Random movement is further gated by the FramesToWait to account for a small waiting period 
-    /// when a move fails due to a lack of available tiles.
+    /// All movement is gated by the ActionLock. Random movement is further gated by MovementComponent.WaitUntilFrame,
+    /// a retry backoff for when a move fails due to a lack of available tiles. Both are deadlines -- this system
+    /// compares them against the current frame and advances neither.
     /// 
     /// Entities that are currently off the map cannot move and must instead be placed on the map by another system or event.
     /// </remarks>
     /// <param name="time">The engine time.</param>
     /// <param name="stripeIndex">The index of the entity stripe to update.</param>
-    public void Update(EngineTime time, byte stripeIndex)
+    public void Update(EngineTime time, byte stripeIndex) => TieredSystemRunner.Run(this, time);
+
+    public TieredEntityStripeSet Tiers => _tieredStripeSet;
+
+    public void UpdateBucket(EngineTime time, ReadOnlySpan<int> entityIds, ushort framesPerVisit)
     {
-        foreach (var entityId in _tieredStripeSet.GetDueEntities(time.FrameCount))
+        foreach (var entityId in entityIds)
         {
-            if (_deadEntities?.Has(entityId) == true || _movementDisabled?.Has(entityId) == true)
-            {
-                continue;
-            }
+            UpdateEntity(entityId, framesPerVisit, time.FrameCount);
+        }
+    }
 
-            ref readonly var movementComponent = ref _movementComponents.GetReadonly(entityId);
+    /// <summary>
+    /// One due entity's movement step. Neither thing gating it is a countdown any more: the retry
+    /// backoff is MovementComponent.WaitUntilFrame and the shared lock is ActionLockComponent
+    /// .UnlockedAtFrame, both absolute frames compared against `now`. That retires this method's
+    /// original reason for taking framesPerVisit -- the wait used to be decremented by the base
+    /// StripeCountValue regardless of tier, so a Beyond-tier entity (visited every StripeCount * 8
+    /// frames) burned it off at an eighth of real time and moved that much less often than
+    /// intended. A deadline cannot drift that way at any tier.
+    /// </summary>
+    private void UpdateEntity(int entityId, ushort framesPerVisit, long now)
+    {
+        if (_deadEntities?.Has(entityId) == true || _movementDisabled?.Has(entityId) == true)
+        {
+            return;
+        }
 
-            if (movementComponent.FramesToWait > 0)
-            {
-                _movementComponents.TryUpdate(entityId, static (ref MovementComponent movementComponent) =>
-                {
-                    movementComponent.FramesToWait = MathUtility.DecrementClamped(movementComponent.FramesToWait, StripeCountValue);
-                });
-                continue;
-            }
+        ref readonly var movementComponent = ref _movementComponents.GetReadonly(entityId);
 
-            if (ActionLockGate.IsBlocked(_actionLocks, entityId) ||
-                !_transformComponents.TryGetReadonly(entityId, out var transformComponent))
-            {
-                continue;
-            }
+        // The retry backoff is a deadline now (MovementComponent.WaitUntilFrame), so this is a pure
+        // read -- no owner, nothing to advance, and no way for two systems to burn it down twice as
+        // fast as intended the way they once did (see TestCombatBehaviorSystem's matching gate).
+        if (movementComponent.IsWaiting(now))
+        {
+            return;
+        }
 
-            if (!_mapQuery.IsOnMap(transformComponent.Position))
-            {
-                continue;
-            }
+        if (ActionLockGate.IsBlocked(_actionLocks, entityId, now) ||
+            !_transformComponents.TryGetReadonly(entityId, out var transformComponent))
+        {
+            return;
+        }
 
-            // Something upstream (TestCombatBehaviorSystem) already decided this entity's turn
-            // this frame via a queued action/consumable activation -- don't also try to move
-            // it. Requires TestCombatBehaviorSystem to run earlier in the frame (see
-            // GameBootstrapper's module order) so this check sees the same-frame request.
-            //TEMPORARY replace with a more generic mechanics
-            if (_pendingActionActivations?.Has(entityId) == true || _pendingConsumableActivations?.Has(entityId) == true)
-            {
-                continue;
-            }
+        if (!_mapQuery.IsOnMap(transformComponent.Position))
+        {
+            return;
+        }
 
-            var justSelected = movementComponent.NextMapPosition == null || transformComponent.Position == movementComponent.NextMapPosition.Value;
-            if (justSelected)
-            {
-                ClearArrivedDestinationIfIdle(entityId);
-            }
+        // Something upstream (TestCombatBehaviorSystem) already decided this entity's turn
+        // this frame via a queued action/consumable activation -- don't also try to move
+        // it. Requires TestCombatBehaviorSystem to run earlier in the frame (see
+        // GameBootstrapper's module order) so this check sees the same-frame request.
+        //TEMPORARY replace with a more generic mechanics
+        if (_pendingActionActivations?.Has(entityId) == true || _pendingConsumableActivations?.Has(entityId) == true)
+        {
+            return;
+        }
 
-            if (movementComponent.NextMapPosition != null)
-            {
-                TryMoveToNextMapPosition(entityId, movementComponent, transformComponent);
-            }
+        var justSelected = movementComponent.NextMapPosition == null || transformComponent.Position == movementComponent.NextMapPosition.Value;
+        if (justSelected)
+        {
+            ClearArrivedDestinationIfIdle(entityId);
+        }
+
+        if (movementComponent.NextMapPosition != null)
+        {
+            TryMoveToNextMapPosition(entityId, movementComponent, transformComponent, now);
         }
     }
 
@@ -161,7 +179,8 @@ public sealed class MovementSystem : ISystem
     /// <param name="entityId">The ID of the entity.</param>
     /// <param name="movementComponent">The movement component of the entity.</param>
     /// <param name="transformComponent">The transform component of the entity.</param>
-    private void TryMoveToNextMapPosition(int entityId, MovementComponent movementComponent, TransformComponent transformComponent)
+    /// <param name="now">The current simulation frame -- a completed move locks the entity until a deadline measured from it.</param>
+    private void TryMoveToNextMapPosition(int entityId, MovementComponent movementComponent, TransformComponent transformComponent, long now)
     {
         var newPosition = movementComponent.NextMapPosition!.Value;
         var oldPosition = transformComponent.Position;
@@ -189,7 +208,7 @@ public sealed class MovementSystem : ISystem
                 ? (ushort)MathF.Round(standardLockFrames * DiagonalActionLockMultiplier)
                 : standardLockFrames;
 
-            ActionLockGate.Lock(_actionLocks, entityId, lockFrames);
+            ActionLockGate.Lock(_actionLocks, entityId, now, lockFrames);
 
             var entityMovedEvent = new EntityMovedEvent(entityId, oldPosition, newPosition, transformComponent.Size);
             _entityMoveSync.SyncMove(entityMovedEvent, isBlocking);

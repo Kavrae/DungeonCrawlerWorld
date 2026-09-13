@@ -1,3 +1,4 @@
+using Engine.ECS.Systems;
 using Engine.ECS.Components;
 using Engine.ECS.Components.Stores;
 using Engine.Events;
@@ -39,7 +40,7 @@ public sealed class DirectHealTests
             MathUtility: new MathUtility(new Random()),
             ComponentManager: componentManager,
             ActivatorName: "Test",
-            ActivatorTags: activatorTags,
+            ActivatorTags: activatorTags, Now: 0,
             StatModifiers: componentManager.GetMultiPool<StatModifierComponent>(),
             AbilityScores: abilityScores);
 
@@ -67,7 +68,7 @@ public sealed class DirectHealTests
             MathUtility: new MathUtility(new Random()),
             ComponentManager: componentManager,
             ActivatorName: "Test",
-            ActivatorTags: activatorTags,
+            ActivatorTags: activatorTags, Now: 0,
             StatModifiers: componentManager.GetMultiPool<StatModifierComponent>(),
             BodyParts: bodyParts);
 
@@ -89,7 +90,7 @@ public sealed class DirectHealTests
     {
         var (componentManager, context) = Build([Tag.Healing]);
         componentManager.GetMultiPool<StatModifierComponent>().Add(SourceEntityId, new StatModifierComponent(
-            StatModifierTarget.OutgoingHealing, StatModifierOperation.Multiplicative, StatModifierPolarity.Buff, canModify: false, magnitude: 0.05f, remainingDurationFrames: null, StatusEffectSource.FromEntity(SourceEntityId)));
+            StatModifierTarget.OutgoingHealing, StatModifierOperation.Multiplicative, StatModifierPolarity.Buff, canModify: false, magnitude: 0.05f, expiresAtFrame: FrameDeadline.Never, StatusEffectSource.FromEntity(SourceEntityId)));
 
         new DirectHeal(PercentOfMaxHealth: 0.2f).Apply(context);
 
@@ -101,7 +102,7 @@ public sealed class DirectHealTests
     {
         var (componentManager, context) = Build([Tag.Healing]);
         componentManager.GetMultiPool<StatModifierComponent>().Add(TargetEntityId, new StatModifierComponent(
-            StatModifierTarget.IncomingHealing, StatModifierOperation.Multiplicative, StatModifierPolarity.Buff, canModify: false, magnitude: 0.20f, remainingDurationFrames: null, StatusEffectSource.FromEntity(TargetEntityId)));
+            StatModifierTarget.IncomingHealing, StatModifierOperation.Multiplicative, StatModifierPolarity.Buff, canModify: false, magnitude: 0.20f, expiresAtFrame: FrameDeadline.Never, StatusEffectSource.FromEntity(TargetEntityId)));
 
         new DirectHeal(PercentOfMaxHealth: 0.2f).Apply(context);
 

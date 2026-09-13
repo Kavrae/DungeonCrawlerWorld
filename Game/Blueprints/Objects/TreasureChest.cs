@@ -60,7 +60,7 @@ public sealed class TreasureChest(MathUtility mathUtility) : IBlueprint
     {
         componentManager.Merge(entityId, new DisplayTextComponent(Name, Description));
         componentManager.Merge(entityId, new GlyphComponent("T", Color.Gold));
-        if (SpriteManifest.TryGet("Inventory", out var sprite))
+        if (SpriteManifest.TryGetRandom("Inventory", mathUtility, out var sprite))
         {
             componentManager.Merge(entityId, sprite);
         }
@@ -72,8 +72,8 @@ public sealed class TreasureChest(MathUtility mathUtility) : IBlueprint
             mathUtility.Next(MinimumStartingCredits, MaximumStartingCredits + 1)));
 
         var immunities = componentManager.GetMultiPool<StatusEffectImmunityComponent>();
-        immunities.Add(entityId, new StatusEffectImmunityComponent(StatusEffectType.Poison, remainingDurationFrames: null));
-        immunities.Add(entityId, new StatusEffectImmunityComponent(StatusEffectType.Paralysis, remainingDurationFrames: null));
+        StatusEffectImmunityEffects.GrantPermanent(immunities, entityId, StatusEffectType.Poison);
+        StatusEffectImmunityEffects.GrantPermanent(immunities, entityId, StatusEffectType.Paralysis);
 
         var itemCount = mathUtility.Next(MinimumItemCount, MaximumItemCount + 1);
         for (var i = 0; i < itemCount; i++)

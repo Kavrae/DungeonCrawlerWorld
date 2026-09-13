@@ -16,7 +16,7 @@ namespace Game.Modules.Mana.Systems;
 
 /// <summary>Regenerates entity current and maximum mana, adjusting for ability scores, modifiers, and processing tier.</summary>
 /// <cleanupVersion>1</cleanupVersion>
-public sealed class ManaRegenSystem : ISystem
+public sealed class ManaRegenSystem : ITieredSystem
 {
     public byte StripeCount => (byte)GameTiming.FramesPerSecond;
 
@@ -24,7 +24,6 @@ public sealed class ManaRegenSystem : ISystem
     private const float MaxManaRegenPerSecond = 0.3f;
 
     private readonly PackedComponentPool<ManaComponent> _manaComponents;
-    private readonly DirectComponentPool<ProcessingTierComponent> _processingTiers;
     private readonly MultiComponentPool<StatModifierComponent>? _statModifiers;
     private readonly PackedComponentPool<DeadComponent>? _deadEntities;
     private readonly MultiComponentPool<AbilityScoreComponent>? _abilityScores;
@@ -39,7 +38,6 @@ public sealed class ManaRegenSystem : ISystem
         MultiComponentPool<AbilityScoreComponent>? abilityScores = null)
     {
         _manaComponents = manaComponents;
-        _processingTiers = processingTiers;
         _statModifiers = statModifiers;
         _deadEntities = deadEntities;
         _abilityScores = abilityScores;
@@ -47,14 +45,20 @@ public sealed class ManaRegenSystem : ISystem
         _tieredStripeSet = ProcessingTierWiring.CreateAndWire(StripeCount, manaComponents, processingTiers, processingTierEvents);
     }
 
-    public void Update(EngineTime time, byte stripeIndex)
+    public void Update(EngineTime time, byte stripeIndex) => TieredSystemRunner.Run(this, time);
+
+    public TieredEntityStripeSet Tiers => _tieredStripeSet;
+
+    /// <summary>One tier's due entities, scaled by that tier's framesPerVisit -- see ITieredSystem.UpdateBucket.</summary>
+    public void UpdateBucket(EngineTime time, ReadOnlySpan<int> entityIds, ushort framesPerVisit)
     {
-        // Reused across every due entity in this Update call, not re-stackalloc'd per entity --
-        // each iteration overwrites both entries before reading them.
+        // Reused across every due entity in this bucket, not re-stackalloc'd per entity -- each
+        // iteration overwrites both entries before reading them.
         Span<(StatModifierTarget Target, float BaseValue)> pairs = stackalloc (StatModifierTarget, float)[2];
         Span<float> effectiveValues = stackalloc float[2];
+        var secondsPerVisit = framesPerVisit / (float)GameTiming.FramesPerSecond;
 
-        foreach (var entityId in _tieredStripeSet.GetDueEntities(time.FrameCount))
+        foreach (var entityId in entityIds)
         {
             if (!_manaComponents.TryGetReadonly(entityId, out var currentManaComponent))
             {
@@ -70,10 +74,6 @@ public sealed class ManaRegenSystem : ISystem
             {
                 continue;
             }
-
-            var tier = _processingTiers.TryGetReadonly(entityId, out var processingTier) ? processingTier.Tier : ProcessingTierLevel.Local;
-            var framesPerVisit = StripeCount * ProcessingTierDivisors.ByTierIndex[(int)tier];
-            var secondsPerVisit = framesPerVisit / (float)GameTiming.FramesPerSecond;
 
             var amountPerSecond = AbilityScoreMath.Lerp(intelligence.Total, MinManaRegenPerSecond, MaxManaRegenPerSecond);
             var rawAmount = amountPerSecond * secondsPerVisit;

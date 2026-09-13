@@ -12,15 +12,17 @@ using Game.World;
 namespace Game.Modules.Poison.Systems;
 
 /// <summary>
-/// Ticks down each poisoned entity's countdown and, once it reaches 0, deals damage equal to
-/// the current stack count. RemainingDurationTicks (independent of stack count) counts down,
-/// and the whole effect is removed in one go once that reaches 0. The decrement-or-fire loop
-/// itself is Engine.ECS.Systems.CountdownTicker.Tick, shared with BurningSystem/
-/// ContactDamageSystem/StatusEffectAuraSystem -- this class only supplies the entity-id
-/// source and what "ticking" actually does.
+/// On each poisoned entity's tick, deals damage equal to the current stack count.
+/// RemainingDurationTicks (independent of stack count) counts ticks down, and the whole effect is
+/// removed in one go once that reaches 0.
 /// </summary>
+/// <remarks>
+/// Driven by a timer wheel (PackedTimerWheel), the same shape as BurningSystem: only poisonings due
+/// this frame are touched, on their exact frame at every processing tier (PLAN-timer-wheel.md).
+/// </remarks>
 public sealed class PoisonSystem : ISystem
 {
+    /// <summary>Every frame; the wheel only touches poisonings actually due.</summary>
     public byte StripeCount => 1;
 
     /// <summary>Passed as HealthDamage.Apply's damageTags on every tick -- lets a ConditionTag: Tag.Poison-scoped IncomingDamage modifier reduce poison damage specifically. Cached once rather than allocated fresh per tick.</summary>
@@ -33,12 +35,11 @@ public sealed class PoisonSystem : ISystem
     private readonly IPlayerQuery? _playerQuery;
     private readonly MathUtility _mathUtility;
     private readonly MultiComponentPool<BodyPartComponent>? _bodyParts;
-    private readonly List<int> _pendingTimerRemovals = [];
+    private readonly PackedTimerWheel<PoisonTimerComponent> _wheel;
 
-    // Cached once instead of passing the Tick method group at the CountdownTicker.Tick call
-    // site every Update -- see ContactDamageSystem's own field for why this matters (an
-    // instance method group conversion allocates a fresh delegate every evaluation).
-    private readonly Func<int, PoisonTimerComponent, bool> _tick;
+    // Cached once instead of passing the Tick method group every Update -- an instance method
+    // group conversion allocates a fresh delegate every evaluation.
+    private readonly TimerFired<PoisonTimerComponent> _tick;
 
     public PoisonSystem(
         PackedComponentPool<PoisonTimerComponent> timers,
@@ -57,20 +58,20 @@ public sealed class PoisonSystem : ISystem
         _mathUtility = mathUtility;
         _bodyParts = bodyParts;
         _tick = Tick;
+        _wheel = new PackedTimerWheel<PoisonTimerComponent>(timers);
     }
 
-    public void Update(EngineTime time, byte stripeIndex) =>
-        CountdownTicker.Tick(_timers, _timers.EntityIds, _pendingTimerRemovals, _tick);
+    public void Update(EngineTime time, byte stripeIndex) => _wheel.Tick(time.FrameCount, _tick);
 
-    /// <summary>Returns whether the timer should be removed entirely (duration expired) -- see CountdownTicker.Tick's own doc comment for the contract. Removing the timer component alone is enough to end the effect (StackCount lives on it, not a separate pool).</summary>
-    private bool Tick(int entityId, PoisonTimerComponent timer)
+    /// <summary>Returns whether the timer should be removed entirely (duration expired) -- see TimerFired's contract. Removing the timer component alone is enough to end the effect (StackCount lives on it, not a separate pool).</summary>
+    private bool Tick(int entityId, PoisonTimerComponent timer, long now)
     {
         if (timer.RemainingDurationTicks == 0)
         {
             return true;
         }
 
-        HealthDamage.Apply(_health, _eventBus, entityId, timer.StackCount, timer.Source, _playerQuery, StatusEffectDamageType.Describe(StatusEffectType.Poison), _statModifiers, _bodyParts, _mathUtility,
+        HealthDamage.Apply(_health, _eventBus, entityId, timer.StackCount, timer.Source, _playerQuery, StatusEffectDamageType.Describe(StatusEffectType.Poison), now, _statModifiers, _bodyParts, _mathUtility,
             targetRule: new BodyPartTargetRule(BodyPartType.Internal, BodyPartFallback.Random), damageTags: PoisonDamageTags);
 
         var remainingDuration = (ushort)(timer.RemainingDurationTicks - 1);
@@ -82,7 +83,7 @@ public sealed class PoisonSystem : ISystem
         _timers.TryUpdate(entityId, remainingDuration, static (ref PoisonTimerComponent t, ushort remaining) =>
         {
             t.RemainingDurationTicks = remaining;
-            t.FramesUntilNextTick = PoisonEffects.TickIntervalFrames;
+            t.RepeatEvery(PoisonEffects.TickIntervalFrames);
         });
 
         return false;

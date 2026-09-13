@@ -1,3 +1,4 @@
+using Engine.ECS.Systems;
 using Engine.ECS.Components;
 using Engine.ECS.Components.Stores;
 using Engine.Events;
@@ -43,7 +44,7 @@ public sealed class DirectDamageTests
             MathUtility: new MathUtility(new DeterministicRandom()),
             ComponentManager: componentManager,
             ActivatorName: "Test",
-            ActivatorTags: activatorTags,
+            ActivatorTags: activatorTags, Now: 0,
             StatModifiers: componentManager.GetMultiPool<StatModifierComponent>());
 
         return (componentManager, context);
@@ -71,7 +72,7 @@ public sealed class DirectDamageTests
             MathUtility: new MathUtility(new DeterministicRandom()),
             ComponentManager: componentManager,
             ActivatorName: "Test",
-            ActivatorTags: activatorTags,
+            ActivatorTags: activatorTags, Now: 0,
             StatModifiers: componentManager.GetMultiPool<StatModifierComponent>(),
             BodyParts: bodyParts);
 
@@ -93,13 +94,13 @@ public sealed class DirectDamageTests
     {
         var (melee, meleeContext) = Build([Tag.Melee, Tag.Attack]);
         melee.GetMultiPool<StatModifierComponent>().Add(SourceEntityId, new StatModifierComponent(
-            StatModifierTarget.OutgoingDamage, StatModifierOperation.Multiplicative, StatModifierPolarity.Buff, canModify: false, magnitude: 0.10f, remainingDurationFrames: null, StatusEffectSource.FromEntity(SourceEntityId), Tag.Melee));
+            StatModifierTarget.OutgoingDamage, StatModifierOperation.Multiplicative, StatModifierPolarity.Buff, canModify: false, magnitude: 0.10f, expiresAtFrame: FrameDeadline.Never, StatusEffectSource.FromEntity(SourceEntityId), Tag.Melee));
         new DirectDamage(MinFlatDamage: 20, MaxFlatDamage: 20).Apply(meleeContext);
         Assert.AreEqual(78f, melee.GetPackedPool<SimpleHealthComponent>().GetReadonly(TargetEntityId).CurrentHealth, "20 * 1.10 = 22 melee damage.");
 
         var (spell, spellContext) = Build([Tag.Spell, Tag.Attack]);
         spell.GetMultiPool<StatModifierComponent>().Add(SourceEntityId, new StatModifierComponent(
-            StatModifierTarget.OutgoingDamage, StatModifierOperation.Multiplicative, StatModifierPolarity.Buff, canModify: false, magnitude: 0.10f, remainingDurationFrames: null, StatusEffectSource.FromEntity(SourceEntityId), Tag.Melee));
+            StatModifierTarget.OutgoingDamage, StatModifierOperation.Multiplicative, StatModifierPolarity.Buff, canModify: false, magnitude: 0.10f, expiresAtFrame: FrameDeadline.Never, StatusEffectSource.FromEntity(SourceEntityId), Tag.Melee));
         new DirectDamage(MinFlatDamage: 20, MaxFlatDamage: 20).Apply(spellContext);
         Assert.AreEqual(80f, spell.GetPackedPool<SimpleHealthComponent>().GetReadonly(TargetEntityId).CurrentHealth, "A non-melee action must be untouched by the melee-only buff -- full 20 damage.");
     }
@@ -109,13 +110,13 @@ public sealed class DirectDamageTests
     {
         var (melee, meleeContext) = Build([Tag.Melee, Tag.Attack]);
         melee.GetMultiPool<StatModifierComponent>().Add(TargetEntityId, new StatModifierComponent(
-            StatModifierTarget.IncomingDamage, StatModifierOperation.Multiplicative, StatModifierPolarity.Buff, canModify: false, magnitude: -0.30f, remainingDurationFrames: null, StatusEffectSource.FromEntity(TargetEntityId), Tag.Melee));
+            StatModifierTarget.IncomingDamage, StatModifierOperation.Multiplicative, StatModifierPolarity.Buff, canModify: false, magnitude: -0.30f, expiresAtFrame: FrameDeadline.Never, StatusEffectSource.FromEntity(TargetEntityId), Tag.Melee));
         new DirectDamage(MinFlatDamage: 20, MaxFlatDamage: 20).Apply(meleeContext);
         Assert.AreEqual(86f, melee.GetPackedPool<SimpleHealthComponent>().GetReadonly(TargetEntityId).CurrentHealth, "20 * 0.70 = 14 melee damage taken.");
 
         var (spell, spellContext) = Build([Tag.Spell, Tag.Attack]);
         spell.GetMultiPool<StatModifierComponent>().Add(TargetEntityId, new StatModifierComponent(
-            StatModifierTarget.IncomingDamage, StatModifierOperation.Multiplicative, StatModifierPolarity.Buff, canModify: false, magnitude: -0.30f, remainingDurationFrames: null, StatusEffectSource.FromEntity(TargetEntityId), Tag.Melee));
+            StatModifierTarget.IncomingDamage, StatModifierOperation.Multiplicative, StatModifierPolarity.Buff, canModify: false, magnitude: -0.30f, expiresAtFrame: FrameDeadline.Never, StatusEffectSource.FromEntity(TargetEntityId), Tag.Melee));
         new DirectDamage(MinFlatDamage: 20, MaxFlatDamage: 20).Apply(spellContext);
         Assert.AreEqual(80f, spell.GetPackedPool<SimpleHealthComponent>().GetReadonly(TargetEntityId).CurrentHealth, "A non-melee hit must take the melee-only reduction's full, unreduced 20 damage.");
     }
@@ -125,13 +126,13 @@ public sealed class DirectDamageTests
     {
         var (melee, meleeContext) = Build([Tag.Melee, Tag.Attack]);
         melee.GetMultiPool<StatModifierComponent>().Add(TargetEntityId, new StatModifierComponent(
-            StatModifierTarget.IncomingDamage, StatModifierOperation.Multiplicative, StatModifierPolarity.Buff, canModify: false, magnitude: -0.05f, remainingDurationFrames: null, StatusEffectSource.FromEntity(TargetEntityId)));
+            StatModifierTarget.IncomingDamage, StatModifierOperation.Multiplicative, StatModifierPolarity.Buff, canModify: false, magnitude: -0.05f, expiresAtFrame: FrameDeadline.Never, StatusEffectSource.FromEntity(TargetEntityId)));
         new DirectDamage(MinFlatDamage: 20, MaxFlatDamage: 20).Apply(meleeContext);
         Assert.AreEqual(81f, melee.GetPackedPool<SimpleHealthComponent>().GetReadonly(TargetEntityId).CurrentHealth, "20 * 0.95 = 19 melee damage taken.");
 
         var (spell, spellContext) = Build([Tag.Spell, Tag.Attack]);
         spell.GetMultiPool<StatModifierComponent>().Add(TargetEntityId, new StatModifierComponent(
-            StatModifierTarget.IncomingDamage, StatModifierOperation.Multiplicative, StatModifierPolarity.Buff, canModify: false, magnitude: -0.05f, remainingDurationFrames: null, StatusEffectSource.FromEntity(TargetEntityId)));
+            StatModifierTarget.IncomingDamage, StatModifierOperation.Multiplicative, StatModifierPolarity.Buff, canModify: false, magnitude: -0.05f, expiresAtFrame: FrameDeadline.Never, StatusEffectSource.FromEntity(TargetEntityId)));
         new DirectDamage(MinFlatDamage: 20, MaxFlatDamage: 20).Apply(spellContext);
         Assert.AreEqual(81f, spell.GetPackedPool<SimpleHealthComponent>().GetReadonly(TargetEntityId).CurrentHealth, "Unconditional -- a non-melee hit is reduced the same way.");
     }
@@ -157,7 +158,7 @@ public sealed class DirectDamageTests
         var (componentManager, context) = Build([Tag.Melee, Tag.Attack]);
         // -50% multiplicative debuff scoped to Tag.Melee -- the same shape BodyPartEffectsSystem grants for a damaged arm.
         componentManager.GetMultiPool<StatModifierComponent>().Add(SourceEntityId, new StatModifierComponent(
-            StatModifierTarget.OutgoingDamage, StatModifierOperation.Multiplicative, StatModifierPolarity.Debuff, canModify: false, magnitude: -0.5f, remainingDurationFrames: null, StatusEffectSource.FromEntity(SourceEntityId), Tag.Melee));
+            StatModifierTarget.OutgoingDamage, StatModifierOperation.Multiplicative, StatModifierPolarity.Debuff, canModify: false, magnitude: -0.5f, expiresAtFrame: FrameDeadline.Never, StatusEffectSource.FromEntity(SourceEntityId), Tag.Melee));
 
         new DirectDamage(MinFlatDamage: 20, MaxFlatDamage: 20).Apply(context);
 
@@ -169,7 +170,7 @@ public sealed class DirectDamageTests
     {
         var (componentManager, context) = Build([Tag.Spell, Tag.Attack]);
         componentManager.GetMultiPool<StatModifierComponent>().Add(SourceEntityId, new StatModifierComponent(
-            StatModifierTarget.OutgoingDamage, StatModifierOperation.Multiplicative, StatModifierPolarity.Debuff, canModify: false, magnitude: -0.5f, remainingDurationFrames: null, StatusEffectSource.FromEntity(SourceEntityId), Tag.Melee));
+            StatModifierTarget.OutgoingDamage, StatModifierOperation.Multiplicative, StatModifierPolarity.Debuff, canModify: false, magnitude: -0.5f, expiresAtFrame: FrameDeadline.Never, StatusEffectSource.FromEntity(SourceEntityId), Tag.Melee));
 
         new DirectDamage(MinFlatDamage: 20, MaxFlatDamage: 20).Apply(context);
 
