@@ -116,7 +116,47 @@ public static class StatModifierMath
         }
     }
 
+    /// <summary>The entity's accumulated additive and multiplicative sums for one target, before any base value is folded in.</summary>
+    /// <remarks>
+    /// Two floats are enough to reproduce the target's effect on <i>any</i> base value, because
+    /// CalculateTotal is (base + additive) * (1 + multiplicative) and multiplicative modifiers are
+    /// summed rather than compounded. That is what lets a caller snapshot an entity's whole
+    /// modifier state for a target before changing it and reconstruct every affected value's old
+    /// result afterwards -- see MaximumHealthShift, which does exactly that across a body part list.
+    ///
+    /// Unconditional modifiers only: a ConditionTag modifier depends on the activation being
+    /// resolved, which a snapshot has no notion of.
+    /// </remarks>
+    public static void GetSums(MultiComponentPool<StatModifierComponent>? pool, int entityId, StatModifierTarget target, out float additiveSum, out float multiplicativeSum)
+    {
+        additiveSum = 0f;
+        multiplicativeSum = 0f;
+
+        if (pool is null)
+        {
+            return;
+        }
+
+        for (var denseIndex = pool.GetFirstDenseIndex(entityId); denseIndex != -1; denseIndex = pool.GetNextDenseIndex(denseIndex))
+        {
+            ref readonly var modifier = ref pool.GetReadonlyByDenseIndex(denseIndex);
+            if (modifier.Target != target || modifier.ConditionTag is not null)
+            {
+                continue;
+            }
+
+            if (modifier.Operation == StatModifierOperation.Additive)
+            {
+                additiveSum += modifier.Magnitude;
+            }
+            else
+            {
+                multiplicativeSum += modifier.Magnitude;
+            }
+        }
+    }
+
     /// <summary>Applies a base value's accumulated additive and multiplicative modifier sums.</summary>
     /// <remarks>Additive first, then multiplicative, per TODO.md's documented order -- see this class's own doc comment for the full formula rationale.</remarks>
-    private static float CalculateTotal(float baseValue, float additiveSum, float multiplicativeSum) => (baseValue + additiveSum) * (1f + multiplicativeSum);
+    public static float CalculateTotal(float baseValue, float additiveSum, float multiplicativeSum) => (baseValue + additiveSum) * (1f + multiplicativeSum);
 }

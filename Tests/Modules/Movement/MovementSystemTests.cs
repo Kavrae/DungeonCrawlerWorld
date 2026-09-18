@@ -38,13 +38,10 @@ public sealed class MovementSystemTests
     /// </summary>
     private sealed class FakeMapQuery(Vector3Int mapSize) : IMapQuery
     {
-        public Vector3Int MapSize { get; } = mapSize;
-        public bool IsOnMap(Vector3Int position) =>
-            position.X >= 0 && position.Y >= 0 && position.Z >= 0
-            && position.X < MapSize.X && position.Y < MapSize.Y && position.Z < MapSize.Z;
+        public MapBounds Bounds { get; } = MapBounds.FromSize(mapSize);
+        public bool IsOnMap(Vector3Int position) => Bounds.Contains(position);
         public int GetEntityIdAt(Vector3Int position) => -1;
         public bool IsBlocking(int entityId) => true;
-        public int GetTerrainEntityIdAt(Vector3Int position) => -1;
         public void GetEntityIdsInBox(CubeInt box, Span<int> entityIds) => entityIds.Fill(-1);
     }
 
@@ -64,6 +61,7 @@ public sealed class MovementSystemTests
     private sealed class FakePlayerQuery(int playerEntityId) : IPlayerQuery
     {
         public int PlayerEntityId { get; } = playerEntityId;
+        public Engine.ECS.Entities.EntityKey PlayerEntityKey { get; init; } = TestSources.KeyOf(playerEntityId);
     }
 
     private static DirectComponentPool<TransformComponent> CreateTransformPool(int capacity = 10) =>
@@ -129,7 +127,7 @@ public sealed class MovementSystemTests
         world.PlaceEntityOnMap(0, transform.Position, ref transform);
         actionLockPool.Add(0, new ActionLockComponent(standardLockFrames: 10, currentLockTotalFrames: 0, unlockedAtFrame: 0));
         movementPool.Add(0, new MovementComponent(MovementMode.Random, null, new Vector3Int(3, 2, 0)));
-        deadEntities.Add(0, new DeadComponent(KilledByEntityId: null, DiedAtFrame: 0));
+        deadEntities.Add(0, new DeadComponent(KilledBy: ActionSource.Admin, DiedAtFrame: 0));
 
         var system = new MovementSystem(transformPool, actionLockPool, movementPool, world, new EventBus(), new WorldEventSync(world), new FrameEventBuffer<EntityMovedEvent>(), null, CreateProcessingTierPool(), new ProcessingTierEvents(), deadEntities);
         system.Update(default, 0);
@@ -346,7 +344,7 @@ public sealed class MovementSystemTests
         var mapQuery = new FakeMapQuery(new Vector3Int(5, 5, 1));
         var statModifiers = new MultiComponentPool<StatModifierComponent>(maximumEntityCount: 10, initialCapacity: 4);
         // +100% (doubling) multiplicative debuff -- the same shape BodyPartEffectsSystem grants for a damaged leg.
-        statModifiers.Add(0, new StatModifierComponent(StatModifierTarget.MovementLockFrames, StatModifierOperation.Multiplicative, StatModifierPolarity.Debuff, canModify: false, magnitude: 1f, expiresAtFrame: FrameDeadline.Never, StatusEffectSource.Admin));
+        statModifiers.Add(0, new StatModifierComponent(StatModifierTarget.MovementLockFrames, StatModifierOperation.Multiplicative, StatModifierPolarity.Debuff, canModify: false, magnitude: 1f, expiresAtFrame: FrameDeadline.Never, ActionSource.Admin));
 
         var startPosition = new Vector3Int(2, 2, 0);
         var targetPosition = new Vector3Int(3, 2, 0);

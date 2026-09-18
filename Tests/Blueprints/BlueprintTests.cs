@@ -1,3 +1,4 @@
+using Engine.ECS.Entities;
 using Engine.Bootstrap;
 using Engine.ECS.Components;
 using Engine.ECS.Context;
@@ -9,7 +10,6 @@ using Game.Blueprints.Classes;
 using Game.Blueprints.NPCs.Generic;
 using Game.Blueprints.Objects;
 using Game.Blueprints.Races;
-using Game.Blueprints.Terrain;
 using Game.Modules;
 using Game.Modules.AbilityScores;
 using Game.Modules.Actions;
@@ -122,20 +122,7 @@ public sealed class BlueprintTests
             shopModule,
         ];
 
-        return Bootstrapper.Build(modules, initialEntityCapacity: 100, initialComponentCapacity: 50);
-    }
-
-    [TestMethod]
-    public void Wall_Build_SetsDisplayTextGlyphAndTransform()
-    {
-        var ecsContext = BuildEcsContext();
-        var entityId = ecsContext.EntityManager.CreateEntity();
-
-        new Wall(new MathUtility(new Random(1))).Build(ecsContext.ComponentManager, entityId);
-
-        Assert.IsTrue(ecsContext.ComponentManager.GetDirectPool<DisplayTextComponent>().Has(entityId));
-        Assert.IsTrue(ecsContext.ComponentManager.GetDirectPool<GlyphComponent>().Has(entityId));
-        Assert.IsTrue(ecsContext.ComponentManager.GetDirectPool<TransformComponent>().Has(entityId));
+        return Bootstrapper.Build(modules, initialEntityCapacity: 100, initialComponentCapacity: 50, entityKeys: context.EntityKeys);
     }
 
     [TestMethod]
@@ -278,46 +265,6 @@ public sealed class BlueprintTests
     }
 
     [TestMethod]
-    public void Dirt_Build_SetsBackgroundDisplayTextAndTransform()
-    {
-        var ecsContext = BuildEcsContext();
-        var entityId = ecsContext.EntityManager.CreateEntity();
-
-        new Dirt(new MathUtility(new Random(1))).Build(ecsContext.ComponentManager, entityId);
-
-        Assert.IsTrue(ecsContext.ComponentManager.GetDirectPool<BackgroundComponent>().Has(entityId));
-        Assert.IsTrue(ecsContext.ComponentManager.GetDirectPool<DisplayTextComponent>().Has(entityId));
-        Assert.IsTrue(ecsContext.ComponentManager.GetDirectPool<TransformComponent>().Has(entityId));
-    }
-
-    [TestMethod]
-    public void Grass_Build_SetsBackgroundDisplayTextGlyphAndTransform()
-    {
-        var ecsContext = BuildEcsContext();
-        var entityId = ecsContext.EntityManager.CreateEntity();
-
-        new Grass(new MathUtility(new Random(1))).Build(ecsContext.ComponentManager, entityId);
-
-        Assert.IsTrue(ecsContext.ComponentManager.GetDirectPool<BackgroundComponent>().Has(entityId));
-        Assert.IsTrue(ecsContext.ComponentManager.GetDirectPool<DisplayTextComponent>().Has(entityId));
-        Assert.IsTrue(ecsContext.ComponentManager.GetDirectPool<GlyphComponent>().Has(entityId));
-        Assert.IsTrue(ecsContext.ComponentManager.GetDirectPool<TransformComponent>().Has(entityId));
-    }
-
-    [TestMethod]
-    public void StoneFloor_Build_SetsBackgroundDisplayTextAndTransform()
-    {
-        var ecsContext = BuildEcsContext();
-        var entityId = ecsContext.EntityManager.CreateEntity();
-
-        new StoneFloor().Build(ecsContext.ComponentManager, entityId);
-
-        Assert.IsTrue(ecsContext.ComponentManager.GetDirectPool<BackgroundComponent>().Has(entityId));
-        Assert.IsTrue(ecsContext.ComponentManager.GetDirectPool<DisplayTextComponent>().Has(entityId));
-        Assert.IsTrue(ecsContext.ComponentManager.GetDirectPool<TransformComponent>().Has(entityId));
-    }
-
-    [TestMethod]
     public void Goblin_Build_SetsRaceBodyPartsMovementActionLockAndTransform()
     {
         var ecsContext = BuildEcsContext();
@@ -356,7 +303,7 @@ public sealed class BlueprintTests
             Assert.AreEqual(expected.Type, part.Type);
             Assert.AreEqual(expected.IsVital, part.IsVital);
             Assert.AreEqual((float)expected.MaximumHealth, part.MaximumHealth);
-            Assert.IsTrue(part.CurrentHealth >= expected.MinimumHealth && part.CurrentHealth <= expected.MaximumHealth);
+            Assert.AreEqual((float)expected.MaximumHealth, part.CurrentHealth, "A Goblin carries no MaximumHealth modifier, so it starts at its stored maximum exactly.");
             actualMaximumSum += part.MaximumHealth;
             actualCount++;
         }
@@ -380,7 +327,7 @@ public sealed class BlueprintTests
         var ecsContext = BuildEcsContext();
         var entityId = ecsContext.EntityManager.CreateEntity();
 
-        new PlayerBlueprint(new MathUtility(new Random(1)), new UniqueNumberAllocator(new MathUtility(new Random(1)), 1, 13_000_000)).Build(ecsContext.ComponentManager, entityId);
+        new PlayerBlueprint(new MathUtility(new Random(1)), new UniqueNumberAllocator(new MathUtility(new Random(1)), 1, 13_000_000), ecsContext.EntityManager.Keys).Build(ecsContext.ComponentManager, entityId);
 
         var glyph = ecsContext.ComponentManager.GetDirectPool<GlyphComponent>().GetReadonly(entityId);
         Assert.AreEqual("@", glyph.Glyph);
@@ -413,7 +360,10 @@ public sealed class BlueprintTests
             Assert.AreEqual(expected.Type, part.Type);
             Assert.AreEqual(expected.IsVital, part.IsVital);
             Assert.AreEqual((float)expected.MaximumHealth, part.MaximumHealth);
-            Assert.IsTrue(part.CurrentHealth >= expected.MinimumHealth && part.CurrentHealth <= expected.MaximumHealth);
+            // At or above the stored maximum: the player's MaximumHealth modifiers raise the cap above
+            // it, and the entity is built full against that raised cap. The exact value is
+            // PlayerBlueprint_Build_StartsEveryBodyPartAtItsEffectiveMaximum's business.
+            Assert.IsTrue(part.CurrentHealth >= expected.MaximumHealth);
             actualMaximumSum += part.MaximumHealth;
             actualCount++;
         }
@@ -428,11 +378,22 @@ public sealed class BlueprintTests
         Assert.IsTrue(ecsContext.ComponentManager.GetPackedPool<ActionLockComponent>().Has(entityId));
         Assert.IsTrue(ecsContext.ComponentManager.GetDirectPool<TransformComponent>().Has(entityId));
 
-        // Race: Human (via body-part composition), but no ClassComponent -- nothing needs the player to have one.
+        // Race: Human, class: Tank -- both composed in, both surfaced as their own component.
         var racePool = ecsContext.ComponentManager.GetMultiPool<RaceComponent>();
         Assert.IsTrue(racePool.Has(entityId));
         Assert.AreEqual(Human.RaceId, racePool.GetReadonlyByDenseIndex(racePool.GetFirstDenseIndex(entityId)).Id);
-        Assert.IsFalse(ecsContext.ComponentManager.GetMultiPool<ClassComponent>().Has(entityId));
+
+        var classPool = ecsContext.ComponentManager.GetMultiPool<ClassComponent>();
+        Assert.IsTrue(classPool.Has(entityId));
+        Assert.AreEqual("Tank", classPool.GetReadonlyByDenseIndex(classPool.GetFirstDenseIndex(entityId)).Name);
+        AssertHasHealthRegenBonusModifier(ecsContext.ComponentManager, entityId);
+
+        // Tank took its Complex-health path: a +10% MaximumHealth modifier on top of Human's body
+        // parts, rather than a SimpleHealthComponent that would have taken those parts out of play.
+        Assert.IsTrue(HasMaximumHealthBonusModifier(ecsContext.ComponentManager, entityId, 0.10f));
+
+        // The player's own DisplayText overrides Tank's rather than concatenating with it.
+        Assert.AreEqual("Player1", ecsContext.ComponentManager.GetDirectPool<DisplayTextComponent>().GetReadonly(entityId).Name);
 
         // The player is always a Crawler.
         Assert.IsTrue(ecsContext.ComponentManager.GetPackedPool<CrawlerComponent>().Has(entityId));
@@ -530,7 +491,7 @@ public sealed class BlueprintTests
 
         Assert.IsTrue(ecsContext.ComponentManager.GetMultiPool<RaceComponent>().Has(entityId));
         var health = ecsContext.ComponentManager.GetPackedPool<SimpleHealthComponent>().GetReadonly(entityId);
-        Assert.IsTrue(health.CurrentHealth >= 1 && health.CurrentHealth <= health.MaximumHealth);
+        Assert.AreEqual(health.MaximumHealth, health.CurrentHealth);
         Assert.IsTrue(ecsContext.ComponentManager.GetPackedPool<MovementComponent>().Has(entityId));
         Assert.IsTrue(ecsContext.ComponentManager.GetPackedPool<ActionLockComponent>().Has(entityId));
         Assert.IsTrue(ecsContext.ComponentManager.GetDirectPool<TransformComponent>().Has(entityId));
@@ -594,13 +555,14 @@ public sealed class BlueprintTests
         var ecsContext = BuildEcsContext();
         var entityId = ecsContext.EntityManager.CreateEntity();
 
-        new Tank(new MathUtility(new Random(1))).Build(ecsContext.ComponentManager, entityId);
+        new Tank(ecsContext.EntityManager.Keys).Build(ecsContext.ComponentManager, entityId);
 
         // No race ran first, so Tank merges its own baseline instead of silently doing
         // nothing -- the class still functions when composed (or used) without a race.
         var health = ecsContext.ComponentManager.GetPackedPool<SimpleHealthComponent>().GetReadonly(entityId);
-        Assert.AreEqual((ushort)100, health.MaximumHealth);
-        Assert.IsTrue(health.CurrentHealth >= 1 && health.CurrentHealth <= health.MaximumHealth);
+        Assert.AreEqual(100f, health.MaximumHealth, "The stored baseline, which the bonus modifier scales rather than rewrites.");
+        Assert.AreEqual(110f, health.CurrentHealth, 0.001f, "Built full against the bonus-effective maximum.");
+        Assert.IsTrue(HasMaximumHealthBonusModifier(ecsContext.ComponentManager, entityId, 0.10f));
         Assert.IsTrue(ecsContext.ComponentManager.GetMultiPool<ClassComponent>().Has(entityId));
         AssertHasHealthRegenBonusModifier(ecsContext.ComponentManager, entityId);
     }
@@ -636,11 +598,61 @@ public sealed class BlueprintTests
         var entityId = ecsContext.EntityManager.CreateEntity();
         ecsContext.ComponentManager.GetPackedPool<SimpleHealthComponent>().Add(entityId, new SimpleHealthComponent(50, 100));
 
-        new Tank(new MathUtility(new Random(1))).Build(ecsContext.ComponentManager, entityId);
+        new Tank(ecsContext.EntityManager.Keys).Build(ecsContext.ComponentManager, entityId);
 
+        // The bonus is a modifier, not a rewrite: the race's own stored maximum is untouched and
+        // every reader scales it through the modifier instead (see StatModifierComponent).
         var health = ecsContext.ComponentManager.GetPackedPool<SimpleHealthComponent>().GetReadonly(entityId);
-        Assert.AreEqual((short)110, health.MaximumHealth);
+        Assert.AreEqual(100f, health.MaximumHealth);
+        Assert.IsTrue(HasMaximumHealthBonusModifier(ecsContext.ComponentManager, entityId, 0.10f));
+        Assert.IsTrue(HealthQueries.TryGetEffectiveMaximum(
+            ecsContext.ComponentManager.GetPackedPool<SimpleHealthComponent>(),
+            ecsContext.ComponentManager.GetMultiPool<BodyPartComponent>(),
+            ecsContext.ComponentManager.GetMultiPool<StatModifierComponent>(),
+            entityId,
+            out var effectiveMaximum));
+        Assert.AreEqual(110f, effectiveMaximum, 0.001f);
+        Assert.AreEqual(60f, health.CurrentHealth, 0.001f, "50 short of 100 before, 50 short of 110 after.");
         AssertHasHealthRegenBonusModifier(ecsContext.ComponentManager, entityId);
+    }
+
+    /// <summary>A Complex-health entity has no MaximumHealth field for Tank to multiply in place, so its health bonus arrives as a StatModifier -- and critically not as a SimpleHealthComponent, which HealthDamage would dispatch on ahead of the entity's body parts.</summary>
+    [TestMethod]
+    public void Tank_Build_AppliesMaximumHealthModifierWhenBodyPartsPresent()
+    {
+        var ecsContext = BuildEcsContext();
+        var entityId = ecsContext.EntityManager.CreateEntity();
+        new Human(new MathUtility(new Random(1))).Build(ecsContext.ComponentManager, entityId);
+
+        new Tank(ecsContext.EntityManager.Keys).Build(ecsContext.ComponentManager, entityId);
+
+        Assert.IsFalse(ecsContext.ComponentManager.GetPackedPool<SimpleHealthComponent>().Has(entityId));
+        Assert.IsTrue(ecsContext.ComponentManager.GetMultiPool<BodyPartComponent>().Has(entityId));
+        Assert.IsTrue(HasMaximumHealthBonusModifier(ecsContext.ComponentManager, entityId, 0.10f));
+        AssertHasHealthRegenBonusModifier(ecsContext.ComponentManager, entityId);
+
+        Assert.IsTrue(HealthQueries.TryGetEffectiveMaximum(
+            ecsContext.ComponentManager.GetPackedPool<SimpleHealthComponent>(),
+            ecsContext.ComponentManager.GetMultiPool<BodyPartComponent>(),
+            ecsContext.ComponentManager.GetMultiPool<StatModifierComponent>(),
+            entityId,
+            out var effectiveMaximum));
+        Assert.AreEqual(250f * 1.10f, effectiveMaximum, 0.001f);
+    }
+
+    private static bool HasMaximumHealthBonusModifier(ComponentManager componentManager, int entityId, float magnitude)
+    {
+        var statModifiers = componentManager.GetMultiPool<StatModifierComponent>();
+        for (var denseIndex = statModifiers.GetFirstDenseIndex(entityId); denseIndex != -1; denseIndex = statModifiers.GetNextDenseIndex(denseIndex))
+        {
+            var modifier = statModifiers.GetReadonlyByDenseIndex(denseIndex);
+            if (modifier.Target == StatModifierTarget.MaximumHealth && modifier.Operation == StatModifierOperation.Multiplicative && modifier.Magnitude == magnitude)
+            {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     /// <summary>Regen has no stored field for Tank to have multiplied in place anymore (see SimpleHealthRegenSystem) -- its +10% bonus is a granted StatModifier instead, asserted here by presence/shape rather than by reading a SimpleHealthComponent field.</summary>
@@ -723,5 +735,73 @@ public sealed class BlueprintTests
         Assert.IsNotNull(ecsContext.ComponentManager.GetMultiPool<RaceComponent>());
         Assert.IsTrue(ecsContext.ComponentManager.IsRegistered<ClassComponent>());
         Assert.IsNotNull(ecsContext.ComponentManager.GetMultiPool<ClassComponent>());
+    }
+
+    /// <summary>
+    /// Every entity is built at full health, and "full" means the modifier-effective maximum, not
+    /// the stored one. The player is the case that catches a regression here: Human grants its
+    /// parts at their stored maximum, then Tank's +10% and the player's own +50% raise the cap
+    /// above it, so without the top-up the player spawns at 62.5%.
+    /// </summary>
+    [TestMethod]
+    public void PlayerBlueprint_Build_StartsEveryBodyPartAtItsEffectiveMaximum()
+    {
+        var ecsContext = BuildEcsContext();
+        var entityId = ecsContext.EntityManager.CreateEntity();
+
+        new PlayerBlueprint(new MathUtility(new Random(1)), new UniqueNumberAllocator(new MathUtility(new Random(1)), 1, 13_000_000), ecsContext.EntityManager.Keys).Build(ecsContext.ComponentManager, entityId);
+
+        var bodyParts = ecsContext.ComponentManager.GetMultiPool<BodyPartComponent>();
+        var statModifiers = ecsContext.ComponentManager.GetMultiPool<StatModifierComponent>();
+        var partCount = 0;
+        for (var denseIndex = bodyParts.GetFirstDenseIndex(entityId); denseIndex != -1; denseIndex = bodyParts.GetNextDenseIndex(denseIndex))
+        {
+            ref readonly var part = ref bodyParts.GetReadonlyByDenseIndex(denseIndex);
+            var effectiveMaximum = StatModifierMath.GetEffectiveValue(statModifiers, entityId, StatModifierTarget.MaximumHealth, part.MaximumHealth);
+
+            Assert.AreEqual(effectiveMaximum, part.CurrentHealth, 0.001f, $"{part.Name} did not start at its effective maximum.");
+            Assert.IsTrue(effectiveMaximum > part.MaximumHealth, $"{part.Name}'s effective maximum should exceed its stored one -- otherwise this test proves nothing.");
+            partCount++;
+        }
+
+        Assert.IsTrue(partCount > 0, "Expected the player to have body parts.");
+    }
+
+    /// <summary>The Complex branch of Tank's own bonus, without the player's extra modifier on top.</summary>
+    [TestMethod]
+    public void Tank_Build_OnComplexEntity_StartsEveryBodyPartAtItsEffectiveMaximum()
+    {
+        var ecsContext = BuildEcsContext();
+        var entityId = ecsContext.EntityManager.CreateEntity();
+
+        new Human(new MathUtility(new Random(1))).Build(ecsContext.ComponentManager, entityId);
+        new Tank(ecsContext.EntityManager.Keys).Build(ecsContext.ComponentManager, entityId);
+
+        var bodyParts = ecsContext.ComponentManager.GetMultiPool<BodyPartComponent>();
+        var statModifiers = ecsContext.ComponentManager.GetMultiPool<StatModifierComponent>();
+        for (var denseIndex = bodyParts.GetFirstDenseIndex(entityId); denseIndex != -1; denseIndex = bodyParts.GetNextDenseIndex(denseIndex))
+        {
+            ref readonly var part = ref bodyParts.GetReadonlyByDenseIndex(denseIndex);
+            var effectiveMaximum = StatModifierMath.GetEffectiveValue(statModifiers, entityId, StatModifierTarget.MaximumHealth, part.MaximumHealth);
+
+            Assert.AreEqual(effectiveMaximum, part.CurrentHealth, 0.001f, $"{part.Name} did not start at its effective maximum.");
+        }
+    }
+
+    /// <summary>Tank's Simple branch raises the cap in place, so current health has to move with it.</summary>
+    [TestMethod]
+    public void Tank_Build_OnSimpleEntity_StartsAtItsRaisedMaximum()
+    {
+        var ecsContext = BuildEcsContext();
+        var entityId = ecsContext.EntityManager.CreateEntity();
+
+        new Fairy(new MathUtility(new Random(1))).Build(ecsContext.ComponentManager, entityId);
+        new Tank(ecsContext.EntityManager.Keys).Build(ecsContext.ComponentManager, entityId);
+
+        var health = ecsContext.ComponentManager.GetPackedPool<SimpleHealthComponent>().GetReadonly(entityId);
+
+        Assert.AreEqual(100f, health.MaximumHealth, 0.001f, "Fairy's own maximum, left as it authored it.");
+        Assert.AreEqual(110f, health.CurrentHealth, 0.001f, "Full against the bonus-effective maximum.");
+        Assert.IsTrue(HasMaximumHealthBonusModifier(ecsContext.ComponentManager, entityId, 0.10f));
     }
 }

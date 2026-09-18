@@ -87,8 +87,9 @@ public static class ShellBootstrapper
         var cursorTextContent = new CursorTextContent(presentation.FontService, presentation.LabelRenderer);
         var dragGhostContent = new DragGhostContent(world, actionCatalog, itemCatalog, componentManager.GetMultiPool<InventoryItemStackComponent>(), presentation.FontService, presentation.SpriteSheetService, presentation.SpriteRenderer, presentation.LabelRenderer);
         var contextMenuController = new ContextMenuController(presentation.ElementPoolService);
+        var mapView = new Game.Views.MapViewQuery(world, componentManager, actionCatalog, worldSession.Terrain);
 
-        ElementFactoryRegistry.RegisterAll(presentation, ecsContext, actionCatalog, itemCatalog, statusEffectDisplays, world, mapViewState, camera, actionTargetingController, playerMovementController, cursorTextContent, contextMenuController);
+        ElementFactoryRegistry.RegisterAll(presentation, ecsContext, actionCatalog, itemCatalog, statusEffectDisplays, world, worldSession.Terrain, mapView, mapViewState, camera, actionTargetingController, playerMovementController, cursorTextContent, contextMenuController);
 
         contextMenuController.Initialize(uiLayers);
 
@@ -96,7 +97,7 @@ public static class ShellBootstrapper
         tooltipController.Initialize(presentation.ElementPoolService, uiLayers);
 
         var mapWindow = BuildBaseWindows(presentation, ecsContext, screenSize, diagnostics, mapViewState, uiLayers);
-        var (questTriggerWindow, hotbarContent, inspectionWindow) = BuildStaticHudWindows(presentation, world, ecsContext, actionCatalog, itemCatalog, statusEffectDisplays, screenSize, mapViewState, uiLayers);
+        var (questTriggerWindow, hotbarContent, inspectionWindow) = BuildStaticHudWindows(presentation, world, mapView, ecsContext, actionCatalog, itemCatalog, statusEffectDisplays, screenSize, mapViewState, uiLayers);
         var (notificationCenter, healthController, inventoryController) = BuildDynamicHudWindows(presentation, world, ecsContext, itemCatalog, mapWindow, contextMenuController, uiLayers, tooltipController);
         var hotbarController = BuildHotbarController(mapViewState, hotbarContent, actionTargetingController, tooltipController);
         BuildUserWindows(presentation, cursorTextContent, dragGhostContent, uiLayers);
@@ -137,6 +138,38 @@ public static class ShellBootstrapper
         // recognized as "inside" at once. See GetTradeWindowRectangle's own doc comment for the
         // live bug this fixes.
         itemDetailsController.GetTradeWindowRectangle = () => tradeWindowController.Rectangle;
+
+        mapWindow.NeighborhoodStreamer = worldSession.NeighborhoodStreamer;
+
+        // A destroyed entity's id is reused straight away, so nothing on screen may keep pointing at
+        // it: whatever it was selected in, or open for, lets go before the id means someone else.
+        ecsContext.EntityManager.EntityDestroying += entityId =>
+        {
+            if (mapViewState.InspectedEntityId == entityId)
+            {
+                mapViewState.InspectedEntityId = -1;
+            }
+
+            if (mapViewState.OpenShopEntityId == entityId)
+            {
+                mapViewState.OpenShopEntityId = null;
+            }
+
+            if (secondaryInventoryController.OpenTargetEntityId == entityId)
+            {
+                secondaryInventoryController.CloseIfOpen();
+            }
+
+            if (shopWindowController.OpenTargetEntityId == entityId)
+            {
+                shopWindowController.CloseIfOpen();
+            }
+
+            if (itemDetailsController.CurrentEntityId == entityId)
+            {
+                itemDetailsController.Close();
+            }
+        };
 
         // Built after ItemDetailsWindowController (whose single pane it always uses as the
         // comparison's own anchor -- see ItemComparisonController.Arm) -- one-directional
@@ -255,7 +288,7 @@ public static class ShellBootstrapper
 
     /// <summary>StaticHUD tier: the player health bar, action lock, status effects, InspectionWindow, the hotbar, and the quest trigger -- see UiInputController's own doc comment for what each of the four tiers means. questTriggerWindow is returned for Build, which wires its Clicked event once the DynamicHUD tier (needed by OpenQuestComposer) also exists. hotbarContent and inspectionWindow are returned too, for BuildHotbarController and Build's own OnInspectionOpened wiring respectively.</summary>
     private static (TextWindow QuestTriggerWindow, HotbarContent HotbarContent, InspectionWindow InspectionWindow) BuildStaticHudWindows(
-        PresentationContext presentation, World world, EcsContext ecsContext, ActionCatalog actionCatalog, ItemCatalog itemCatalog, StatusEffectDisplayRegistry statusEffectDisplays, Vector2 screenSize, MapViewState mapViewState, UiLayerStack layers)
+        PresentationContext presentation, World world, Game.Views.IMapViewQuery mapView, EcsContext ecsContext, ActionCatalog actionCatalog, ItemCatalog itemCatalog, StatusEffectDisplayRegistry statusEffectDisplays, Vector2 screenSize, MapViewState mapViewState, UiLayerStack layers)
     {
         var playerHealthBarWindow = presentation.ElementPoolService.CreateElement<Window>(null, new ElementOptions
         {
@@ -340,7 +373,7 @@ public static class ShellBootstrapper
                 CanUserScrollVertical = true,
             },
         });
-        inspectionWindow.SetContent(new InspectionWindowContent(world, mapViewState, ecsContext.ComponentManager, ecsContext.EntityManager, presentation.ElementPoolService));
+        inspectionWindow.SetContent(new InspectionWindowContent(world, mapView, mapViewState, ecsContext.ComponentManager, ecsContext.EntityManager, presentation.ElementPoolService));
         inspectionWindow.Initialize();
         layers.Add(UiLayer.StaticHud, inspectionWindow);
 
@@ -441,7 +474,7 @@ public static class ShellBootstrapper
         return controller;
     }
 
-    /// <summary>Built after ShopWindowController (which it re-anchors, see ShopWindowController.SetPosition) and InventoryWindowController -- see PLAN-trade-window.md. Wiring to ShopWindowController.OnOpened/OnClosed happens in Build itself, right after both controllers exist.</summary>
+    /// <summary>Built after ShopWindowController (which it re-anchors, see ShopWindowController.SetPosition) and InventoryWindowController. Wiring to ShopWindowController.OnOpened/OnClosed happens in Build itself, right after both controllers exist.</summary>
     private static TradeWindowController BuildTradeWindowController(
         PresentationContext presentation, InventoryWindowController inventory, ShopWindowController shopWindowController, MapWindow mapWindow, UiLayerStack layers, ReservedEntityIds reservedEntityIds, TooltipController tooltipController)
     {

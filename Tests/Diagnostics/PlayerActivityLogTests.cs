@@ -1,4 +1,5 @@
 ﻿using Engine.ECS.Components;
+using Engine.ECS.Entities;
 using Engine.Events;
 using Engine.Math;
 using Game.Diagnostics;
@@ -13,8 +14,19 @@ public sealed class PlayerActivityLogTests
 {
     private static string CreateTempLogPath() => Path.Combine(Path.GetTempPath(), $"player-activity-{Guid.NewGuid():N}.log");
 
+    /// <summary>Issues entity ids 0-9 their keys in order, so every EntityKeys built this way agrees on each id's key.</summary>
+    private static EntityKeys IssueKeys(EntityKeys keys)
+    {
+        for (var entityId = 0; entityId < 10; entityId++)
+        {
+            keys.Issue(entityId);
+        }
+
+        return keys;
+    }
+
     private static Game.World.World CreateWorld(int playerEntityId) =>
-        new(new Map(new Vector3Int(10, 10, 1))) { PlayerEntityId = playerEntityId };
+        new(new Map(new Vector3Int(10, 10, 1))) { PlayerEntityId = playerEntityId, EntityKeys = IssueKeys(new EntityKeys()) };
 
     private static ComponentManager CreateComponentManager()
     {
@@ -79,7 +91,7 @@ public sealed class PlayerActivityLogTests
             var log = new PlayerActivityLog(world, CreateComponentManager(), eventBus, logPath);
             log.BeginFrame(9, DateTime.Now);
 
-            eventBus.Publish(new EntityDamagedEvent(0, 7, StatusEffectSource.Admin, 93, 100, "Status Effect (Burning)"));
+            eventBus.Publish(new EntityDamagedEvent(0, 7, ActionSource.Admin, 93, 100, "Status Effect (Burning)"));
             log.Dispose();
 
             var contents = File.ReadAllText(logPath);
@@ -105,7 +117,7 @@ public sealed class PlayerActivityLogTests
             using var log = new PlayerActivityLog(world, CreateComponentManager(), eventBus, logPath);
             log.BeginFrame(1, DateTime.Now);
 
-            eventBus.Publish(new EntityDamagedEvent(1, 7, StatusEffectSource.Admin, 93, 100, "Status Effect (Burning)"));
+            eventBus.Publish(new EntityDamagedEvent(1, 7, ActionSource.Admin, 93, 100, "Status Effect (Burning)"));
 
             Assert.AreEqual(0L, new FileInfo(logPath).Length);
         }
@@ -127,7 +139,7 @@ public sealed class PlayerActivityLogTests
             var log = new PlayerActivityLog(world, CreateComponentManager(), eventBus, logPath);
             log.BeginFrame(3, DateTime.Now);
 
-            eventBus.Publish(new EntityDamagedEvent(5, 12, StatusEffectSource.FromEntity(0), 88, 100, "Default Attack"));
+            eventBus.Publish(new EntityDamagedEvent(5, 12, ActionSource.FromEntity(CreateComponentManager(), IssueKeys(new EntityKeys()), 0), 88, 100, "Default Attack"));
             log.Dispose();
 
             var contents = File.ReadAllText(logPath);
@@ -154,7 +166,7 @@ public sealed class PlayerActivityLogTests
             var log = new PlayerActivityLog(world, componentManager, eventBus, logPath);
             log.BeginFrame(4, DateTime.Now);
 
-            eventBus.Publish(new EntityDamagedEvent(5, 12, StatusEffectSource.FromEntity(0), 88, 100, "Default Attack"));
+            eventBus.Publish(new EntityDamagedEvent(5, 12, ActionSource.FromEntity(CreateComponentManager(), IssueKeys(new EntityKeys()), 0), 88, 100, "Default Attack"));
             log.Dispose();
 
             var contents = File.ReadAllText(logPath);
@@ -179,11 +191,11 @@ public sealed class PlayerActivityLogTests
             var log = new PlayerActivityLog(world, componentManager, eventBus, logPath);
             log.BeginFrame(4, DateTime.Now);
 
-            eventBus.Publish(new EntityDamagedEvent(5, 12, StatusEffectSource.FromEntity(0), 88, 100, "Default Attack"));
+            eventBus.Publish(new EntityDamagedEvent(5, 12, ActionSource.FromEntity(componentManager, IssueKeys(new EntityKeys()), 0), 88, 100, "Default Attack"));
             log.Dispose();
 
             var contents = File.ReadAllText(logPath);
-            StringAssert.Contains(contents, "source=PlayerOne (#0)");
+            StringAssert.Contains(contents, "source=PlayerOne");
         }
         finally
         {
@@ -202,7 +214,7 @@ public sealed class PlayerActivityLogTests
             var log = new PlayerActivityLog(world, CreateComponentManager(), eventBus, logPath);
             log.BeginFrame(9, DateTime.Now);
 
-            eventBus.Publish(new EntityHealedEvent(0, 12f, StatusEffectSource.Admin, 93f, 100f, "Regeneration"));
+            eventBus.Publish(new EntityHealedEvent(0, 12f, null, 93f, 100f, "Regeneration"));
             log.Dispose();
 
             var contents = File.ReadAllText(logPath);
@@ -228,7 +240,7 @@ public sealed class PlayerActivityLogTests
             using var log = new PlayerActivityLog(world, CreateComponentManager(), eventBus, logPath);
             log.BeginFrame(1, DateTime.Now);
 
-            eventBus.Publish(new EntityHealedEvent(1, 12f, StatusEffectSource.Admin, 93f, 100f, "Regeneration"));
+            eventBus.Publish(new EntityHealedEvent(1, 12f, null, 93f, 100f, "Regeneration"));
 
             Assert.AreEqual(0L, new FileInfo(logPath).Length);
         }
@@ -250,7 +262,7 @@ public sealed class PlayerActivityLogTests
             var log = new PlayerActivityLog(world, CreateComponentManager(), eventBus, logPath);
             log.BeginFrame(3, DateTime.Now);
 
-            eventBus.Publish(new EntityHealedEvent(5, 20f, StatusEffectSource.FromEntity(0), 88f, 100f, "Heal"));
+            eventBus.Publish(new EntityHealedEvent(5, 20f, 0, 88f, 100f, "Heal"));
             log.Dispose();
 
             var contents = File.ReadAllText(logPath);
@@ -275,7 +287,7 @@ public sealed class PlayerActivityLogTests
             var log = new PlayerActivityLog(world, CreateComponentManager(), eventBus, logPath);
             log.BeginFrame(9, DateTime.Now);
 
-            eventBus.Publish(new StatusEffectImmunityBlockedEvent(0, StatusEffectType.Burning, StatusEffectSource.FromEntity(7)));
+            eventBus.Publish(new StatusEffectImmunityBlockedEvent(0, StatusEffectType.Burning, ActionSource.FromEntity(CreateComponentManager(), IssueKeys(new EntityKeys()), 7)));
             log.Dispose();
 
             var contents = File.ReadAllText(logPath);
@@ -300,7 +312,7 @@ public sealed class PlayerActivityLogTests
             using var log = new PlayerActivityLog(world, CreateComponentManager(), eventBus, logPath);
             log.BeginFrame(1, DateTime.Now);
 
-            eventBus.Publish(new StatusEffectImmunityBlockedEvent(1, StatusEffectType.Poison, StatusEffectSource.Admin));
+            eventBus.Publish(new StatusEffectImmunityBlockedEvent(1, StatusEffectType.Poison, ActionSource.Admin));
 
             Assert.AreEqual(0L, new FileInfo(logPath).Length);
         }
@@ -322,7 +334,7 @@ public sealed class PlayerActivityLogTests
             var log = new PlayerActivityLog(world, CreateComponentManager(), eventBus, logPath);
             log.BeginFrame(3, DateTime.Now);
 
-            eventBus.Publish(new StatusEffectImmunityBlockedEvent(5, StatusEffectType.Poison, StatusEffectSource.FromEntity(0)));
+            eventBus.Publish(new StatusEffectImmunityBlockedEvent(5, StatusEffectType.Poison, ActionSource.FromEntity(CreateComponentManager(), IssueKeys(new EntityKeys()), 0)));
             log.Dispose();
 
             var contents = File.ReadAllText(logPath);

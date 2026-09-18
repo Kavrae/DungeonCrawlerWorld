@@ -9,4 +9,7 @@ namespace Game.World;
 public interface IPlayerQuery
 {
     int PlayerEntityId { get; }
+
+    /// <summary>The player's stable key -- what a stored ActionSource is compared against, since a source never holds a runtime id.</summary>
+    Engine.ECS.Entities.EntityKey PlayerEntityKey { get; }
 }

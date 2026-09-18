@@ -36,8 +36,7 @@ namespace Presentation.UI;
 /// plus, appended after them, an active potion cooldown (PotionCooldownComponent isn't a
 /// StatusEffectType/stacking status effect at all -- see PlayerStatusEffectsContent's own doc
 /// comment -- so it gets its own line, keyed to the Health Potion's glyph/color, rather than a
-/// StatusEffectRow); a body-part-scoped Burning (see
-/// PLAN-per-body-part-status-effects.md) instead shows its own line under that one part's own bar,
+/// StatusEffectRow); a body-part-scoped Burning instead shows its own line under that one part's own bar,
 /// not repeated under every part. Buffs/Debuffs list every active StatModifierComponent on the
 /// entity except one targeting an ability score -- those are AbilityScoreWindow's own territory
 /// (see AbilityScoreModifierFormatter), shown there instead of duplicated here. The Buffs section
@@ -745,7 +744,7 @@ public sealed class HealthWindow(
     internal readonly record struct ModifierRow(StatModifierTarget Target, StatModifierOperation Operation, StatModifierPolarity Polarity, float Magnitude, Tag? ConditionTag, int? RemainingSeconds);
 
     /// <summary>Identity used only to detect a modifier appearing/disappearing (see Update's own comment on why RemainingSeconds is excluded here -- ticking down every frame would otherwise look like a structural change every frame).</summary>
-    private readonly record struct ModifierSignature(StatModifierTarget Target, StatModifierOperation Operation, StatModifierPolarity Polarity, float Magnitude, Tag? ConditionTag, StatusEffectSource Source);
+    private readonly record struct ModifierSignature(StatModifierTarget Target, StatModifierOperation Operation, StatModifierPolarity Polarity, float Magnitude, Tag? ConditionTag, ActionSource Source);
 
     internal readonly record struct ImmunityRow(StatusEffectType EffectType, int? RemainingSeconds);
 

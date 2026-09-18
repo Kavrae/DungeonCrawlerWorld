@@ -32,7 +32,7 @@ public static class HealthDamage
         EventBus eventBus,
         int entityId,
         ushort amount,
-        StatusEffectSource source,
+        ActionSource source,
         IPlayerQuery? playerQuery,
         string damageType,
         long now,
@@ -106,7 +106,7 @@ public static class HealthDamage
         }
 
         var playerInvolved = entityId == playerQuery.PlayerEntityId
-            || (source.Kind == StatusEffectSourceKind.Entity && source.EntityId == playerQuery.PlayerEntityId);
+            || source.IsEntity(playerQuery.PlayerEntityKey);
         if (!playerInvolved)
         {
             return;

@@ -1,3 +1,4 @@
+using Engine.ECS.Entities;
 using Engine.Bootstrap;
 using Engine.ECS.Components;
 using Engine.ECS.Context;
@@ -72,7 +73,7 @@ public sealed class CompositeBlueprintTests
             new CurrencyModule(),
         ];
 
-        return Bootstrapper.Build(modules, initialEntityCapacity: 100, initialComponentCapacity: 50);
+        return Bootstrapper.Build(modules, initialEntityCapacity: 100, initialComponentCapacity: 50, entityKeys: context.EntityKeys);
     }
 
     /// <summary>Minimal IBlueprint that stamps a recognizable name/description, for tests that only care about composition order and shape, not real game components.</summary>
@@ -80,6 +81,12 @@ public sealed class CompositeBlueprintTests
     {
         public void Build(ComponentManager componentManager, int entityId) =>
             componentManager.Merge(entityId, new DisplayTextComponent(marker, marker));
+    }
+
+    private sealed class PropBlueprint : IBlueprint
+    {
+        public void Build(ComponentManager componentManager, int entityId) =>
+            componentManager.Merge(entityId, new GlyphComponent("#", Microsoft.Xna.Framework.Color.Gray));
     }
 
     [TestMethod]
@@ -132,9 +139,9 @@ public sealed class CompositeBlueprintTests
         var ecsContext = BuildEcsContext();
         var entityId = ecsContext.EntityManager.CreateEntity();
 
-        // A "wall with magical properties" style composite: no race/class blueprint at all.
-        var magicalWall = new CompositeBlueprint([new Wall(new MathUtility(new Random(1))), new MarkerBlueprint("Magical")]);
-        magicalWall.Build(ecsContext.ComponentManager, entityId);
+        // A "prop with magical properties" style composite: no race/class blueprint at all.
+        var magicalProp = new CompositeBlueprint([new PropBlueprint(), new MarkerBlueprint("Magical")]);
+        magicalProp.Build(ecsContext.ComponentManager, entityId);
 
         Assert.IsTrue(ecsContext.ComponentManager.GetDirectPool<GlyphComponent>().Has(entityId));
         Assert.IsFalse(ecsContext.ComponentManager.GetMultiPool<RaceComponent>().Has(entityId));

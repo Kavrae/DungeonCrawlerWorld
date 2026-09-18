@@ -9,6 +9,7 @@ using Game.Modules.ProcessingTier;
 using Game.Modules.ProcessingTier.Components;
 using Game.Modules.StatusEffectAura.Components;
 using Game.Modules.StatusEffects;
+using Game.Terrain;
 using Game.World;
 
 namespace Game.Modules.StatusEffectAura.Systems;
@@ -20,7 +21,7 @@ namespace Game.Modules.StatusEffectAura.Systems;
 /// subscriber and the full moving population, a measured hotspot; see FrameEventBuffer's own
 /// doc comment) and ticks ongoing exposure via the same Update, combined in one class since
 /// both operate on the same StatusEffectAuraExposureComponent pool. Exposure re-grants sit on a
-/// timer wheel (PLAN-timer-wheel.md): each (entity, EffectType) exposure fires on its own exact
+/// timer wheel: each (entity, EffectType) exposure fires on its own exact
 /// frame, and only exposures actually due are touched -- lava covers 10% of ground terrain with
 /// an aura radius wide enough to blanket most of a wandering population, so walking every
 /// exposure every visit was a measured cost. StripeCount now only paces the tiered
@@ -104,11 +105,12 @@ public sealed class StatusEffectAuraSystem : ISystem
     private readonly DirectComponentPool<ProcessingTierComponent> _processingTiers;
     private readonly TieredEntityStripeSet _sourceTieredStripeSet;
     private readonly SimulationClock _clock;
+    private readonly TerrainRegistry _terrain;
 
     /// <summary>
     /// Each exposure type's re-grant tick, keyed by EffectType (see
     /// StatusEffectAuraExposureComponent). Only exposures due this frame are touched, on their
-    /// exact frame at every processing tier -- PLAN-timer-wheel.md.
+    /// exact frame at every processing tier.
     /// </summary>
     private readonly MultiTimerWheel<StatusEffectAuraExposureComponent> _exposureWheel;
 
@@ -148,8 +150,11 @@ public sealed class StatusEffectAuraSystem : ISystem
         DirectComponentPool<ProcessingTierComponent> processingTiers,
         ProcessingTierEvents processingTierEvents,
         SimulationClock simulationClock,
-        PackedComponentPool<DeadComponent>? deadEntities = null)
+        TerrainRegistry terrain,
+        PackedComponentPool<DeadComponent>? deadEntities = null,
+        SimulationScope? simulationScope = null)
     {
+        _terrain = terrain;
         _componentManager = componentManager;
         _exposures = exposures;
         _sources = sources;
@@ -161,15 +166,38 @@ public sealed class StatusEffectAuraSystem : ISystem
         _processingTiers = processingTiers;
         _clock = simulationClock;
 
-        _auraGrid = new AuraGrid(mapQuery.MapSize);
+        _auraGrid = new AuraGrid(mapQuery);
 
         eventBus.Subscribe<AuraSourceAddedEvent>(OnSourceAdded);
         eventBus.Subscribe<AuraSourceRemovedEvent>(OnSourceRemoved);
+        eventBus.Subscribe<TerrainChangedEvent>(OnTerrainChanged);
+        eventBus.Subscribe<TerrainLoadedEvent>(OnTerrainLoaded);
+        eventBus.Subscribe<TerrainUnloadingEvent>(OnTerrainUnloading);
 
         _sourceTieredStripeSet = ProcessingTierWiring.CreateAndWire(StripeCount, sources, processingTiers, processingTierEvents);
 
         _tick = Tick;
-        _exposureWheel = new MultiTimerWheel<StatusEffectAuraExposureComponent>(exposures);
+        _exposureWheel = new MultiTimerWheel<StatusEffectAuraExposureComponent>(exposures, simulationScope);
+        if (simulationScope is not null)
+        {
+            simulationScope.EntityResumed += OnEntityResumed;
+        }
+    }
+
+    /// <summary>Moves each of the entity's exposures past every re-grant owed while it froze, granting none -- see SkipOwedExposureTicks.</summary>
+    /// <remarks>Runs after the wheel's own resume handler has rescheduled the stale deadline; rewriting it here reschedules again and leaves that earlier entry to be dropped as stale, the wheel's ordinary lazy cancellation.</remarks>
+    private void OnEntityResumed(int entityId) => SkipOwedExposureTicks(entityId, _clock.CurrentFrame);
+
+    /// <summary>Moves each of the entity's exposures past every re-grant owed while it was frozen, granting none: exposures do not accrue while frozen. Stacks already applied before it froze keep ticking through their own effect, which never stopped.</summary>
+    private void SkipOwedExposureTicks(int entityId, long now)
+    {
+        for (var denseIndex = _exposures.GetFirstDenseIndex(entityId); denseIndex != -1; denseIndex = _exposures.GetNextDenseIndex(denseIndex))
+        {
+            if (_exposures.GetReadonlyByDenseIndex(denseIndex).NextTickFrame <= now)
+            {
+                _exposures.UpdateByDenseIndex(denseIndex, now, static (ref StatusEffectAuraExposureComponent e, long frame) => e.SkipOwedPeriods(AuraEffects.TickIntervalFrames, frame));
+            }
+        }
     }
 
     /// <summary>
@@ -188,13 +216,63 @@ public sealed class StatusEffectAuraSystem : ISystem
 
         SourceSplatting.ScatterAll(_sources, TryGetTransformPosition, (entityId, source, position) =>
         {
-            _effectTypesInUse.Add(source.EffectType);
-            _auraGrid.AddSource(position, source.AuraAndGlowStrength, source.EffectType);
-            _maxScanRadius = Math.Max(_maxScanRadius, DistanceFalloff.MaxRadius(source.AuraAndGlowStrength));
+            AddToGrid(position, source);
             _lastSyncedSourcePosition[entityId] = position;
         });
 
+        TerrainAuraSources.ForEach(_mapQuery, _terrain, AddToGrid);
+
         _gridBuilt = true;
+    }
+
+    private void AddToGrid(Vector3Int position, StatusEffectAuraSourceComponent source)
+    {
+        _effectTypesInUse.Add(source.EffectType);
+        _auraGrid.AddSource(position, source.AuraAndGlowStrength, source.EffectType);
+        _maxScanRadius = Math.Max(_maxScanRadius, DistanceFalloff.MaxRadius(source.AuraAndGlowStrength));
+    }
+
+    /// <summary>Swaps a changed cell's terrain aura in the grid: unsplats the previous terrain's and drops exposures that no longer reach, then splats the new terrain's and grants to anyone now in range -- the same pair a moving source gets. Before the grid is built there is nothing to update; EnsureGrid's scan will see the new terrain.</summary>
+    private void OnTerrainChanged(TerrainChangedEvent changed)
+    {
+        if (!_gridBuilt)
+        {
+            return;
+        }
+
+        _now = _clock.CurrentFrame;
+        var position = new Vector3Int(changed.X, changed.Y, (int)changed.TerrainLayer);
+
+        if (TerrainAuraSources.TryGetAura(_terrain, changed.PreviousTypeId, out var previousAura))
+        {
+            _auraGrid.RemoveSource(position, previousAura.AuraAndGlowStrength, previousAura.EffectType);
+            ReEvaluateExposuresNear(position);
+        }
+
+        if (TerrainAuraSources.TryGetAura(_terrain, changed.TypeId, out var aura))
+        {
+            AddToGrid(position, aura);
+            GrantToOccupantsNear(position);
+        }
+    }
+
+    /// <summary>Splats a newly loaded area's terrain auras. Nothing to grant: the neighborhood's population is created after its terrain, and each creature's spawn is a move.</summary>
+    private void OnTerrainLoaded(TerrainLoadedEvent loaded)
+    {
+        if (_gridBuilt)
+        {
+            TerrainAuraSources.ForEach(_mapQuery, _terrain, loaded.Area, AddToGrid);
+        }
+    }
+
+    /// <summary>Unsplats an unloading area's terrain auras, which reach into loaded neighbors; exposures there re-evaluate on their next tick.</summary>
+    private void OnTerrainUnloading(TerrainUnloadingEvent unloading)
+    {
+        if (_gridBuilt)
+        {
+            TerrainAuraSources.ForEach(_mapQuery, _terrain, unloading.Area,
+                (position, aura) => _auraGrid.RemoveSource(position, aura.AuraAndGlowStrength, aura.EffectType));
+        }
     }
 
     private Vector3Int? TryGetTransformPosition(int entityId) =>
@@ -396,7 +474,7 @@ public sealed class StatusEffectAuraSystem : ISystem
         {
             if (TryGrantSingleType(entityId, position, effectType) && !HasExposure(entityId, effectType))
             {
-                _exposures.Add(entityId, new StatusEffectAuraExposureComponent(effectType, FrameDeadline.After(_now, AuraEffects.TickIntervalFrames)));
+                _exposures.Add(entityId, new StatusEffectAuraExposureComponent(effectType, FrameDeadline.AfterStaggered(_now, AuraEffects.TickIntervalFrames, entityId)));
             }
         }
     }
@@ -492,7 +570,7 @@ public sealed class StatusEffectAuraSystem : ISystem
         // FloorBuilder's old temporary seeding used it, for a non-entity-specific source.
         for (var i = 0; i < stacksToGrant; i++)
         {
-            applier.ApplyStack(_componentManager, entityId, StatusEffectSource.Admin, _now);
+            applier.ApplyStack(_componentManager, entityId, ActionSource.Admin, _now);
         }
 
         return true;

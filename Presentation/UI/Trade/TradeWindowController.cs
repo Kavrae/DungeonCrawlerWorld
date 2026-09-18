@@ -6,7 +6,7 @@ using Presentation.UI.Shops;
 namespace Presentation.UI.Trade;
 
 /// <summary>
-/// Opens the middle Trade Window alongside a shop -- see PLAN-trade-window.md. Wired by
+/// Opens the middle Trade Window alongside a shop. Wired by
 /// ShellBootstrapper to ShopWindowController.OnOpened/OnClosed (not called directly from
 /// MapWindow.OnShopClicked) so this only ever opens when a shop genuinely finished opening a new
 /// window, and always closes in lockstep with it.
@@ -88,9 +88,8 @@ public sealed class TradeWindowController(
 
     /// <summary>
     /// Opens the trade window centered on screen, then re-anchors the player's own inventory
-    /// window (left) and the just-opened shop window (right) beside it, top edges aligned -- see
-    /// PLAN-trade-window.md's "Window layout" section. Subscribes to the inventory window's own
-    /// Closed event in addition to relying on ShopWindowController.OnClosed: if the player's
+    /// window (left) and the just-opened shop window (right) beside it, top edges aligned. Subscribes
+    /// to the inventory window's own Closed event in addition to relying on ShopWindowController.OnClosed: if the player's
     /// inventory window could close and reopen fresh while a trade with one shop is still
     /// mid-flight, walking up to a second, different shop must never resume or get confused by
     /// stale trade state left over from the first -- closing either half of the pair always fully
@@ -114,7 +113,7 @@ public sealed class TradeWindowController(
                 ShowBorder = true,
                 CanUserClose = true, // See this class's own doc comment -- must be true, or Escape gives up entirely rather than falling through to the shop/inventory windows.
                 CanUserMove = true,
-                CanUserResize = false, // Confirmed -- see PLAN-trade-window.md.
+                CanUserResize = false,
                 CanUserFocus = true,
             },
             Content = new ElementContentOptions { ContentColor = WindowPalette.PanelBackgroundColor },

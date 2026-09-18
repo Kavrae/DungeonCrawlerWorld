@@ -1,12 +1,12 @@
-using Engine.ECS.Systems;
 using Engine.ECS.Components;
+using Engine.ECS.Systems;
 using Engine.Math;
+using Game.Blueprints.NPCs;
 using Game.Modules.AbilityScores;
 using Game.Modules.Actions;
 using Game.Modules.Actions.Components;
 using Game.Modules.Actions.Definitions.DirectActions;
 using Game.Modules.Core.Components;
-using Game.Blueprints.NPCs;
 using Game.Modules.Health;
 using Game.Modules.Health.Components;
 using Game.Modules.Movement.Components;
@@ -32,20 +32,20 @@ public sealed class Goblin(MathUtility mathUtility) : IBlueprint
 
     private static readonly string[] DisplayNames = DisplayNameCache.BuildDisplayNames(PersonalNameOptions, RaceName);
 
-    /// <summary>Head/Torso/Internal are Vital; sums to 200, matching the flat SimpleHealthComponent total this replaced so the split doesn't itself rebalance Goblin's overall toughness. 11 parts (Arm/Leg each split off a Hand/Foot, plus Internal for Poison's own always-hit target) -- not a final balance pass, see PLAN-targeted-body-part-damage.md/PLAN-per-body-part-status-effects.md. VerticalPosition: Head 5, Torso/Internal 4, Arm 3, Hand 2, Leg 1, Foot 0.</summary>
+    /// <summary>Head/Torso/Internal are Vital; sums to 200, matching the flat SimpleHealthComponent total this replaced so the split doesn't itself rebalance Goblin's overall toughness. 11 parts (Arm/Leg each split off a Hand/Foot, plus Internal for Poison's own always-hit target) -- not a final balance pass. VerticalPosition: Head 5, Torso/Internal 4, Arm 3, Hand 2, Leg 1, Foot 0.</summary>
     private static readonly BodyPartTemplate[] BodyParts =
     [
-        new BodyPartTemplate("Head", BodyPartType.Head, 5, 30, 30, IsVital: true),
-        new BodyPartTemplate("Torso", BodyPartType.Torso, 4, 50, 50, IsVital: true),
-        new BodyPartTemplate("Internal", BodyPartType.Internal, 4, 10, 10, IsVital: true),
-        new BodyPartTemplate("Left Arm", BodyPartType.Arm, 3, 15, 15, IsVital: false),
-        new BodyPartTemplate("Right Arm", BodyPartType.Arm, 3, 15, 15, IsVital: false),
-        new BodyPartTemplate("Left Hand", BodyPartType.Hand, 2, 5, 5, IsVital: false),
-        new BodyPartTemplate("Right Hand", BodyPartType.Hand, 2, 5, 5, IsVital: false),
-        new BodyPartTemplate("Left Leg", BodyPartType.Leg, 1, 25, 25, IsVital: false),
-        new BodyPartTemplate("Right Leg", BodyPartType.Leg, 1, 25, 25, IsVital: false),
-        new BodyPartTemplate("Left Foot", BodyPartType.Foot, 0, 10, 10, IsVital: false),
-        new BodyPartTemplate("Right Foot", BodyPartType.Foot, 0, 10, 10, IsVital: false),
+        new BodyPartTemplate("Head", BodyPartType.Head, 5, 30, IsVital: true),
+        new BodyPartTemplate("Torso", BodyPartType.Torso, 4, 50, IsVital: true),
+        new BodyPartTemplate("Internal", BodyPartType.Internal, 4, 10, IsVital: true),
+        new BodyPartTemplate("Left Arm", BodyPartType.Arm, 3, 15, IsVital: false),
+        new BodyPartTemplate("Right Arm", BodyPartType.Arm, 3, 15, IsVital: false),
+        new BodyPartTemplate("Left Hand", BodyPartType.Hand, 2, 5, IsVital: false),
+        new BodyPartTemplate("Right Hand", BodyPartType.Hand, 2, 5, IsVital: false),
+        new BodyPartTemplate("Left Leg", BodyPartType.Leg, 1, 25, IsVital: false),
+        new BodyPartTemplate("Right Leg", BodyPartType.Leg, 1, 25, IsVital: false),
+        new BodyPartTemplate("Left Foot", BodyPartType.Foot, 0, 10, IsVital: false),
+        new BodyPartTemplate("Right Foot", BodyPartType.Foot, 0, 10, IsVital: false),
     ];
 
     /// <summary>Flat default for every NPC race, adjustable in a later balance pass -- see TODO.md's Stats entry.</summary>
@@ -60,6 +60,12 @@ public sealed class Goblin(MathUtility mathUtility) : IBlueprint
     /// <summary>Permanent racial toughness -- reduces all damage this goblin takes by 1, regardless of source (melee, ranged, status effects, contact hazards -- see HealthDamage.Apply, the single chokepoint IncomingDamage is consumed at).</summary>
     private const float DamageReductionAmount = -1f;
 
+    /// <summary>One override shared by every creature of this race: an ActionDefinition is never changed in place, only replaced, and building it per creature was most of what a creature allocated.</summary>
+    private static readonly ActionDefinition QuickAttackOverride = ActionOverrideEffects.OverrideFlatDamage(QuickAttackAction.Build(), QuickAttackDamage);
+
+    /// <inheritdoc cref="QuickAttackOverride"/>
+    private static readonly ActionDefinition PowerAttackOverride = ActionOverrideEffects.OverrideFlatDamage(PowerAttackAction.Build(), PowerAttackDamage);
+
     public void Build(ComponentManager componentManager, int entityId)
     {
         componentManager.Merge(entityId, new RaceComponent(RaceId, RaceName, Description));
@@ -71,18 +77,14 @@ public sealed class Goblin(MathUtility mathUtility) : IBlueprint
         {
             componentManager.Merge(entityId, sprite);
         }
-        ComplexHealthEffects.GrantBodyParts(componentManager, entityId, mathUtility, BodyParts);
+        ComplexHealthEffects.GrantBodyParts(componentManager, entityId, BodyParts);
         componentManager.Merge(entityId, new MovementComponent(MovementMode.Random, null, null));
         componentManager.Merge(entityId, new ActionLockComponent(standardLockFrames: 54, currentLockTotalFrames: 0, unlockedAtFrame: 0));
 
-        componentManager.Merge(entityId, new TransformComponent(
-            new Vector3Int(-1, -1, (int)MapLayer.Ground), new Vector2Byte(1, 1)));
+        componentManager.Merge(entityId, new TransformComponent(TransformComponent.UnplacedOn(MapLayer.Ground), new Vector2Byte(1, 1)));
 
-        var quickAttackOverride = ActionOverrideEffects.OverrideFlatDamage(QuickAttackAction.Build(), QuickAttackDamage);
-        componentManager.Merge(entityId, new ActionInstanceComponent(QuickAttackAction.Id, quickAttackOverride));
-
-        var powerAttackOverride = ActionOverrideEffects.OverrideFlatDamage(PowerAttackAction.Build(), PowerAttackDamage);
-        componentManager.Merge(entityId, new ActionInstanceComponent(PowerAttackAction.Id, powerAttackOverride));
+        componentManager.Merge(entityId, new ActionInstanceComponent(QuickAttackAction.Id, QuickAttackOverride));
+        componentManager.Merge(entityId, new ActionInstanceComponent(PowerAttackAction.Id, PowerAttackOverride));
 
         componentManager.Merge(entityId, new ActionInstanceComponent(DodgeAction.Id, overrideDefinition: null));
 
@@ -92,6 +94,6 @@ public sealed class Goblin(MathUtility mathUtility) : IBlueprint
         AbilityScoreEffects.GrantDefaults(componentManager, entityId, DefaultAbilityScoreBaseValue);
 
         StatModifierEffects.Apply(componentManager, entityId, StatModifierTarget.IncomingDamage, StatModifierOperation.Additive, StatModifierPolarity.Buff,
-            canModify: true, magnitude: DamageReductionAmount, expiresAtFrame: FrameDeadline.Never, StatusEffectSource.Admin);
+            canModify: true, magnitude: DamageReductionAmount, expiresAtFrame: FrameDeadline.Never, ActionSource.Admin);
     }
 }

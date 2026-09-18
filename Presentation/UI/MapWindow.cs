@@ -1,25 +1,11 @@
 using Engine.ECS.Components;
-using Engine.ECS.Components.Stores;
-using Engine.ECS.Systems;
 using Engine.Events;
 using Engine.Math;
 using Engine.Utilities;
 using FontStashSharp;
-using Game.Blueprints;
-using Game.Modules.Actions;
-using Game.Modules.Actions.Components;
 using Game.Modules.Actions.Definitions.DirectActions;
-using Game.Modules.Containers.Components;
-using Game.Modules.Core;
 using Game.Modules.Core.Components;
-using Game.Modules.Death.Components;
-using Game.Modules.Health;
-using Game.Modules.Health.Components;
-using Game.Modules.Inventory;
-using Game.Modules.Inventory.Components;
-using Game.Modules.Shops.Components;
-using Game.Modules.StatModifiers;
-using Game.Modules.StatModifiers.Components;
+using Game.Views;
 using Game.World;
 using Microsoft.Xna.Framework;
 using Microsoft.Xna.Framework.Graphics;
@@ -39,6 +25,9 @@ namespace Presentation.UI;
 /// (per-tile background color), MapTintGrid (aura glow), ActionTargetingController (arm/target/
 /// confirm), PlayerMovementController (WASD movement). MapWindow itself should stay thin glue
 /// over those, not accumulate gameplay logic of its own.
+///
+/// Reads the world only through IMapViewQuery (PLAN-presentation-data-layer.md, Stage 2) -- never a
+/// component pool. MapWindowArchitectureTests enforces that.
 /// </remarks>
 /// <cleanupVersion>1</cleanupVersion>
 public sealed class MapWindow : Window
@@ -67,7 +56,8 @@ public sealed class MapWindow : Window
     /// <summary>Fraction of TargetSelectionMaskAlpha used for the always-visible full-tile backdrop drawn under the growing charge fill -- keeps a multi-tile Delayed action's whole target shape legible from the first frame of the windup, not just once each tile's own fill has grown enough to be seen.</summary>
     private const float ChargeBackdropAlphaFraction = 0.3f;
 
-    private readonly World _world;
+    private readonly IMapViewQuery _mapView;
+    private readonly PlayerActionGate _playerActionGate;
     private readonly MapViewState _mapViewState;
     private readonly MapCamera _camera;
     private readonly ActionTargetingController _actionTargeting;
@@ -85,26 +75,6 @@ public sealed class MapWindow : Window
     private int _renderedGlowVersion = -1;
 
     private readonly MapTintGrid _tintGrid;
-    private readonly DirectComponentPool<TransformComponent> _transformPool;
-    private readonly DirectComponentPool<GlyphComponent> _glyphPool;
-    private readonly DirectComponentPool<SpriteComponent> _spritePool;
-    private readonly MultiComponentPool<NonBlockingComponent> _nonBlockingPool;
-    private readonly PackedComponentPool<SimpleHealthComponent> _healthPool;
-    private readonly MultiComponentPool<BodyPartComponent> _bodyParts;
-    private readonly MultiComponentPool<StatModifierComponent>? _statModifiers;
-    private readonly PackedComponentPool<DeadComponent>? _deadPool;
-    private readonly MultiComponentPool<InventoryItemStackComponent>? _inventoryStacks;
-    private readonly PackedComponentPool<LootedComponent>? _lootedPool;
-    private readonly PackedComponentPool<ContainerComponent>? _containerPool;
-    private readonly PackedComponentPool<ShopComponent>? _shopPool;
-    private readonly PackedComponentPool<ActionLockComponent> _actionLockPool;
-
-    /// <summary>"Now" for every action-lock read -- the lock is a deadline (see ActionLockGate), so "is the player locked" only has an answer relative to the simulation's current frame.</summary>
-    private readonly SimulationClock _simulationClock;
-    private readonly DirectComponentPool<DisplayTextComponent> _displayTextPool;
-    private readonly PackedComponentPool<PendingDelayedActionComponent> _pendingDelayedActions;
-    private readonly PackedComponentPool<DodgingComponent> _dodgingEntities;
-    private readonly ActionCatalog _actionCatalog;
 
     /// <summary>This frame's "an earlier hotkey handler already used this key" set -- cleared and repopulated every OnHotkeysAction call, before PlayerMovementController.HandleInput reads it. See that class's own doc comment for why this exists (today: Dodge's directional confirm claiming WASD ahead of plain movement).</summary>
     private readonly HashSet<Keys> _claimedKeysThisFrame = [];
@@ -137,14 +107,12 @@ public sealed class MapWindow : Window
     private SpriteFontBase _badgeFont = null!;
 
     /// <summary>
-    /// LootBag-Red resolved once, not per badge per frame -- SpriteManifest.TryGetFirst is a
+    /// LootBag-Red resolved once, not per badge per frame -- a sprite lookup by name is a
     /// string-keyed dictionary lookup, and repeating it for every corpse badge of every frame is
-    /// needless work on the draw path. TryGetFirst rather than TryGetRandom because a badge has to
-    /// look the same on every corpse: rolling among LootBag-Red's candidate cells here would bake
-    /// one arbitrary variant in per session, which is invisible only while that entry has exactly
-    /// one cell.
+    /// needless work on the draw path. The first cell rather than a random one because a badge has
+    /// to look the same on every corpse.
     /// </summary>
-    private SpriteComponent? _lootBagSprite;
+    private SpriteView? _lootBagSprite;
 
     /// <summary>This tile's Phasing occupants, collected during DrawUnderlayOccupants' single walk and drawn by DrawPhasingOverlay once the Blocking occupant is down. A field rather than a local so it isn't reallocated for every visible tile of every frame; cleared at the start of each tile.</summary>
     private readonly List<int> _phasingOccupantsBuffer = [];
@@ -180,6 +148,9 @@ public sealed class MapWindow : Window
     /// <summary>Invoked with a shop's entity id when the player selects "Shop" from its right-click context menu (see AddEntityGroup) -- same settable-delegate shape as OnCorpseClicked, wired by ShellBootstrapper to ShopWindowController.OpenShop.</summary>
     public Action<int>? OnShopClicked { get; set; }
 
+    /// <summary>What Admin Mode's "Regenerate" context-menu option drives -- wired by ShellBootstrapper; null offers no such option.</summary>
+    public Game.Floors.NeighborhoodStreamer? NeighborhoodStreamer { get; set; }
+
     /// <summary>
     /// Invoked whenever a map-tile click sets Basic inspection (see SelectMapNodes) or the
     /// right-click "Inspect" option sets Detail inspection (see TryOpenEntityContextMenuAt) --
@@ -196,17 +167,18 @@ public sealed class MapWindow : Window
     /// MapTintGrid and MapBackgroundCache are constructed here, not injected, unlike every other
     /// dependency -- both are MapWindow-private derived state (a per-cell glow index, a per-cell
     /// background-color cache) with no other consumer, so there's nothing to gain from resolving
-    /// them through ShellBootstrapper the way the shared services above are.
+    /// them through ShellBootstrapper the way the shared services above are. MapTintGrid is the
+    /// exception, injected because it reads aura sources from their component pools, which
+    /// MapWindow itself doesn't.
     /// </remarks>
     public MapWindow(
         FontService fontService,
         ElementPoolService elementPoolService,
-        World world,
+        IMapViewQuery mapView,
+        PlayerActionGate playerActionGate,
         MapViewState mapViewState,
-        ComponentManager componentManager,
+        MapTintGrid tintGrid,
         EventBus eventBus,
-        ActionCatalog actionCatalog,
-        ItemCatalog itemCatalog,
         TileRenderer tileRenderer,
         LabelRenderer labelRenderer,
         SpriteSheetService spriteSheetService,
@@ -214,16 +186,13 @@ public sealed class MapWindow : Window
         MapCamera camera,
         ActionTargetingController actionTargeting,
         PlayerMovementController playerMovement,
-        ContextMenuController contextMenuController,
-        PackedComponentPool<ActionLockComponent> actionLockPool,
-        SimulationClock simulationClock) : base(fontService, elementPoolService, labelRenderer)
+        ContextMenuController contextMenuController) : base(fontService, elementPoolService, labelRenderer)
     {
-        ArgumentNullException.ThrowIfNull(world);
+        ArgumentNullException.ThrowIfNull(mapView);
+        ArgumentNullException.ThrowIfNull(playerActionGate);
         ArgumentNullException.ThrowIfNull(mapViewState);
-        ArgumentNullException.ThrowIfNull(componentManager);
+        ArgumentNullException.ThrowIfNull(tintGrid);
         ArgumentNullException.ThrowIfNull(eventBus);
-        ArgumentNullException.ThrowIfNull(actionCatalog);
-        ArgumentNullException.ThrowIfNull(itemCatalog);
         ArgumentNullException.ThrowIfNull(tileRenderer);
         ArgumentNullException.ThrowIfNull(labelRenderer);
         ArgumentNullException.ThrowIfNull(spriteSheetService);
@@ -232,41 +201,10 @@ public sealed class MapWindow : Window
         ArgumentNullException.ThrowIfNull(actionTargeting);
         ArgumentNullException.ThrowIfNull(playerMovement);
         ArgumentNullException.ThrowIfNull(contextMenuController);
-        ArgumentNullException.ThrowIfNull(actionLockPool);
-        ArgumentNullException.ThrowIfNull(simulationClock);
 
-        _simulationClock = simulationClock;
-        _world = world;
+        _mapView = mapView;
+        _playerActionGate = playerActionGate;
         _mapViewState = mapViewState;
-        _transformPool = componentManager.GetDirectPool<TransformComponent>();
-        _glyphPool = componentManager.GetDirectPool<GlyphComponent>();
-        _spritePool = componentManager.GetDirectPool<SpriteComponent>();
-        _nonBlockingPool = componentManager.GetMultiPool<NonBlockingComponent>();
-        _healthPool = componentManager.GetPackedPool<SimpleHealthComponent>();
-        _bodyParts = componentManager.GetMultiPool<BodyPartComponent>();
-        _statModifiers = componentManager.IsRegistered<StatModifierComponent>()
-            ? componentManager.GetMultiPool<StatModifierComponent>()
-            : null;
-        _deadPool = componentManager.IsRegistered<DeadComponent>()
-            ? componentManager.GetPackedPool<DeadComponent>()
-            : null;
-        _inventoryStacks = componentManager.IsRegistered<InventoryItemStackComponent>()
-            ? componentManager.GetMultiPool<InventoryItemStackComponent>()
-            : null;
-        _lootedPool = componentManager.IsRegistered<LootedComponent>()
-            ? componentManager.GetPackedPool<LootedComponent>()
-            : null;
-        _containerPool = componentManager.IsRegistered<ContainerComponent>()
-            ? componentManager.GetPackedPool<ContainerComponent>()
-            : null;
-        _shopPool = componentManager.IsRegistered<ShopComponent>()
-            ? componentManager.GetPackedPool<ShopComponent>()
-            : null;
-        _actionLockPool = actionLockPool;
-        _displayTextPool = componentManager.GetDirectPool<DisplayTextComponent>();
-        _pendingDelayedActions = componentManager.GetPackedPool<PendingDelayedActionComponent>();
-        _dodgingEntities = componentManager.GetPackedPool<DodgingComponent>();
-        _actionCatalog = actionCatalog;
         _tileRenderer = tileRenderer;
         _labelRenderer = labelRenderer;
         _spriteSheetService = spriteSheetService;
@@ -276,20 +214,18 @@ public sealed class MapWindow : Window
         _actionTargeting = actionTargeting;
         _playerMovement = playerMovement;
         _contextMenuController = contextMenuController;
-        _tintGrid = new MapTintGrid(componentManager, world.Map.Size, eventBus);
-        _backgroundCache = new MapBackgroundCache(
-            world,
-            mapViewState,
-            componentManager.GetDirectPool<BackgroundComponent>(),
-            _camera);
+        _tintGrid = tintGrid;
+        _backgroundCache = new MapBackgroundCache(mapView, mapViewState, _camera);
 
-        // Terrain is the one thing MapWindow draws that a rare, explicit event can invalidate
-        // rather than per-frame change -- see MapTileLayerCache. Nothing publishes this today
-        // (World.PlaceTerrainOnMap has only ever been called at population time), but subscribing
-        // now is what keeps the first terrain-changing action from shipping with a stale-image bug.
+        // Terrain and structures are what MapWindow draws that a rare, explicit event can invalidate
+        // rather than per-frame change -- see MapTileLayerCache. World.SetTerrain and
+        // World.SetStructure publish these for every runtime change.
         eventBus.Subscribe<TerrainChangedEvent>(_ => InvalidateTerrainCaches());
+        eventBus.Subscribe<StructureChangedEvent>(_ => InvalidateTerrainCaches());
+        eventBus.Subscribe<TerrainLoadedEvent>(loaded => InvalidateTerrainCachesIfVisible(loaded.Area));
+        eventBus.Subscribe<TerrainUnloadingEvent>(unloading => InvalidateTerrainCachesIfVisible(unloading.Area));
 
-        _tileDepth = _world.Map.Size.Z;
+        _tileDepth = mapView.Bounds.Depth;
     }
 
     /// <summary>One-time setup once this window's own content size is known -- font loading, camera/background-cache sizing, and the initial camera position.</summary>
@@ -307,20 +243,23 @@ public sealed class MapWindow : Window
         _camera.Initialize(ContentSize);
         _backgroundCache.Resize();
 
-        _lootBagSprite = SpriteManifest.TryGetFirst(LootBagSpriteName, out var lootBagSprite) ? lootBagSprite : null;
+        _lootBagSprite = SpriteViews.TryGetFirst(LootBagSpriteName, out var lootBagSprite) ? lootBagSprite : null;
 
         SetCurrentMapLayer(_mapViewState.CurrentMapLayer);
 
-        if (_transformPool.TryGetReadonly(_world.PlayerEntityId, out var playerTransform))
+        if (TryGetPlayerPosition(out var playerPosition))
         {
-            SnapCameraToPlayer(playerTransform.Position);
-            _camera.LastKnownPlayerPosition = playerTransform.Position;
+            SnapCameraToPlayer(playerPosition);
+            _camera.LastKnownPlayerPosition = playerPosition;
         }
         else
         {
             InvalidateTerrainCaches();
         }
     }
+
+    /// <summary>The map bounds the camera's scroll limits were last computed from -- the sliding window changes them as neighborhoods load and unload.</summary>
+    private MapBounds _scrollLimitBounds;
 
     /// <summary>Per-frame camera-follow and hover-tracking.</summary>
     /// <remarks>
@@ -335,13 +274,20 @@ public sealed class MapWindow : Window
 
         _actionTargeting.Tick();
 
-        if (_transformPool.TryGetReadonly(_world.PlayerEntityId, out var playerTransform) && playerTransform.Position != _camera.LastKnownPlayerPosition)
+        if (_mapView.Bounds != _scrollLimitBounds)
         {
-            _camera.LastKnownPlayerPosition = playerTransform.Position;
+            _scrollLimitBounds = _mapView.Bounds;
+            _camera.RefreshScrollLimits();
+            InvalidateTerrainCaches();
+        }
+
+        if (TryGetPlayerPosition(out var playerPosition) && playerPosition != _camera.LastKnownPlayerPosition)
+        {
+            _camera.LastKnownPlayerPosition = playerPosition;
 
             if (_camera.FollowsPlayer)
             {
-                CenterCameraOn(playerTransform.Position);
+                CenterCameraOn(playerPosition);
             }
         }
 
@@ -399,6 +345,16 @@ public sealed class MapWindow : Window
         _glowCache?.Invalidate();
     }
 
+    /// <summary>InvalidateTerrainCaches, only when area overlaps the tiles on screen: a neighborhood streams in a row at a time, mostly out of view.</summary>
+    private void InvalidateTerrainCachesIfVisible(MapBounds area)
+    {
+        var scroll = _camera.CurrentScrollPosition;
+        if (area.MinX < scroll.X + _camera.TileColumns && area.MaxX > scroll.X && area.MinY < scroll.Y + _camera.TileRows && area.MaxY > scroll.Y)
+        {
+            InvalidateTerrainCaches();
+        }
+    }
+
     /// <summary>
     /// Delegates to ActionTargetingController.UpdateHoveredTile -- kept as a method on MapWindow
     /// (internal, not private) since MapWindowTests exercises it directly the same way it does
@@ -408,6 +364,13 @@ public sealed class MapWindow : Window
 
     /// <summary>Read-only view of the armed ability's current hit-footprint -- see ActionTargetingController.HoveredFootprint.</summary>
     internal IReadOnlyList<Vector3Int> HoveredFootprint => _actionTargeting.HoveredFootprint;
+
+    private bool TryGetPlayerPosition(out Vector3Int position)
+    {
+        var found = _mapView.TryGetOccupant(_mapView.PlayerEntityId, out var player);
+        position = player.Position;
+        return found;
+    }
 
     private void SnapCameraToPlayer(Vector3Int position)
     {
@@ -490,7 +453,7 @@ public sealed class MapWindow : Window
                 var mapNodeX = columnIndex + _camera.CurrentScrollPosition.X;
                 var mapNodeY = rowIndex + _camera.CurrentScrollPosition.Y;
 
-                if (!_world.IsOnMap(new Vector3Int(mapNodeX, mapNodeY, 0)) || !_tintGrid.TryGetTint(mapNodeX, mapNodeY, currentMapLayer, out var tint))
+                if (!_mapView.IsOnMap(new Vector3Int(mapNodeX, mapNodeY, 0)) || !_tintGrid.TryGetTint(mapNodeX, mapNodeY, currentMapLayer, out var tint))
                 {
                     continue;
                 }
@@ -566,8 +529,8 @@ public sealed class MapWindow : Window
             // The player is always eligible regardless of tier -- it's the camera anchor, always
             // relevant -- so it's tracked here unconditionally rather than through the Local-tier
             // check below, which only applies to every OTHER entity.
-            _activeChargingEntityIdsBuffer.Add(_world.PlayerEntityId);
-            var fillFraction = TryGetChargeFraction(_world.PlayerEntityId, elapsedSimulationFrames);
+            _activeChargingEntityIdsBuffer.Add(_mapView.PlayerEntityId);
+            var fillFraction = TryGetChargeFraction(_mapView.PlayerEntityId, elapsedSimulationFrames);
             foreach (var tile in pendingTargetTiles)
             {
                 DrawChargeFillHighlight(spriteBatch, unitRectangle, tile.X, tile.Y, CombatTargetPalette.PlayerTargetColor, fillFraction);
@@ -581,7 +544,7 @@ public sealed class MapWindow : Window
         // that method's own doc comment) -- MapWindow doesn't need its own second tier check here.
         foreach (var (entityId, targetTiles, isDodgeable) in _actionTargeting.AllPendingDelayedActionTargets())
         {
-            if (entityId == _world.PlayerEntityId)
+            if (entityId == _mapView.PlayerEntityId)
             {
                 continue;
             }
@@ -619,14 +582,14 @@ public sealed class MapWindow : Window
     /// </summary>
     private void DrawDodgeDirectionalHints(SpriteBatch spriteBatch)
     {
-        if (_mapViewState.ArmedActionId != DodgeAction.Id || !_transformPool.TryGetReadonly(_world.PlayerEntityId, out var transform))
+        if (_mapViewState.ArmedActionId != DodgeAction.Id || !TryGetPlayerPosition(out var playerPosition))
         {
             return;
         }
 
         foreach (var (offset, label) in DodgeDirectionalHints)
         {
-            var tile = transform.Position + offset;
+            var tile = playerPosition + offset;
             if (!TryGetTileRectangle(tile.X, tile.Y, out var tileRectangle))
             {
                 continue;
@@ -661,16 +624,16 @@ public sealed class MapWindow : Window
     private void DrawFollowedEntityHighlight(SpriteBatch spriteBatch, Texture2D unitRectangle)
     {
         var entityId = _mapViewState.InspectedEntityId;
-        if (entityId == -1 || !_transformPool.TryGetReadonly(entityId, out var transform))
+        if (entityId == -1 || !_mapView.TryGetOccupant(entityId, out var followed))
         {
             return;
         }
 
-        for (var offsetX = 0; offsetX < transform.Size.X; offsetX++)
+        for (var offsetX = 0; offsetX < followed.Size.X; offsetX++)
         {
-            for (var offsetY = 0; offsetY < transform.Size.Y; offsetY++)
+            for (var offsetY = 0; offsetY < followed.Size.Y; offsetY++)
             {
-                DrawSelectedTileGlow(spriteBatch, unitRectangle, transform.Position.X + offsetX, transform.Position.Y + offsetY);
+                DrawSelectedTileGlow(spriteBatch, unitRectangle, followed.Position.X + offsetX, followed.Position.Y + offsetY);
             }
         }
     }
@@ -715,12 +678,8 @@ public sealed class MapWindow : Window
     /// </remarks>
     private float TryGetChargeFraction(int entityId, float elapsedSimulationFrames)
     {
-        if (!_actionLockPool.TryGetReadonly(entityId, out var actionLock) || actionLock.CurrentLockTotalFrames <= 0)
-        {
-            return 0f;
-        }
-
-        return TrackChargeElapsedFraction(entityId, actionLock.CurrentLockTotalFrames, elapsedSimulationFrames);
+        var totalFrames = _mapView.GetActionLockTotalFrames(entityId);
+        return totalFrames <= 0 ? 0f : TrackChargeElapsedFraction(entityId, totalFrames, elapsedSimulationFrames);
     }
 
     /// <summary>
@@ -738,7 +697,7 @@ public sealed class MapWindow : Window
     /// nothing slower-than-nominal (see the old TestDummyBlueprint mis-tiering bug this codebase
     /// already hit once) ever reaches this code to begin with.
     /// </summary>
-    private float TrackChargeElapsedFraction(int entityId, ushort totalFrames, float elapsedSimulationFrames)
+    private float TrackChargeElapsedFraction(int entityId, int totalFrames, float elapsedSimulationFrames)
     {
         if (!_chargeFillElapsedFrames.TryGetValue(entityId, out var elapsedFrames))
         {
@@ -803,7 +762,7 @@ public sealed class MapWindow : Window
     /// multi-tile target shape still reads as one coherent zone from the first frame of the
     /// windup) plus a brighter bottom-up fill on top that grows with fillFraction, reaching
     /// DrawMaskedTileHighlight's own full alpha -- and its own full-tile coverage -- exactly as
-    /// the action activates. See PLAN-charge-attack-fill-indicator.md.
+    /// the action activates.
     /// </summary>
     private void DrawChargeFillHighlight(SpriteBatch spriteBatch, Texture2D unitRectangle, int mapNodeX, int mapNodeY, Color fillColor, float fillFraction)
     {
@@ -878,7 +837,7 @@ public sealed class MapWindow : Window
     /// <summary>The uncached path: the same backgrounds-then-terrain output MapTileLayerCache captures, drawn straight to the screen at the given sub-tile offset. Used to render into the cache (offset zero) and as DrawContent's fallback before the cache's first render lands.</summary>
     private void DrawTerrainAndBackgroundsDirectly(SpriteBatch spriteBatch, Vector2 pixelOffset)
     {
-        var terrainLayer = Map.TerrainLayerFor(_mapViewState.CurrentMapLayer);
+        var currentMapLayer = _mapViewState.CurrentMapLayer;
 
         _tileRenderer.DrawBackgrounds(spriteBatch, ElementPoolService.UnitRectangle, _backgroundCache.Colors, _camera.TileColumns, _camera.TileRows, _camera.CurrentTileSize, pixelOffset);
 
@@ -889,13 +848,13 @@ public sealed class MapWindow : Window
                 var mapNodeX = columnIndex + _camera.CurrentScrollPosition.X;
                 var mapNodeY = rowIndex + _camera.CurrentScrollPosition.Y;
 
-                if (!_world.IsOnMap(new Vector3Int(mapNodeX, mapNodeY, 0)))
+                if (!_mapView.IsOnMap(new Vector3Int(mapNodeX, mapNodeY, 0)))
                 {
                     continue;
                 }
 
                 var tileOrigin = new Vector2(columnIndex * _camera.CurrentTileSize.X, rowIndex * _camera.CurrentTileSize.Y) - pixelOffset;
-                DrawTerrainGlyph(spriteBatch, terrainLayer, mapNodeX, mapNodeY, tileOrigin);
+                DrawTerrainGlyph(spriteBatch, currentMapLayer, mapNodeX, mapNodeY, tileOrigin);
             }
         }
     }
@@ -930,14 +889,15 @@ public sealed class MapWindow : Window
                 var mapNodeX = columnIndex + _camera.CurrentScrollPosition.X;
                 var mapNodeY = rowIndex + _camera.CurrentScrollPosition.Y;
 
-                if (!_world.IsOnMap(new Vector3Int(mapNodeX, mapNodeY, 0)))
+                if (!_mapView.IsOnMap(new Vector3Int(mapNodeX, mapNodeY, 0)))
                 {
                     continue;
                 }
 
                 var tileOrigin = TileOrigin(columnIndex, rowIndex);
-                var blockingEntityId = _world.Map.GetBlockingEntityId(new Vector3Int(mapNodeX, mapNodeY, currentMapLayer));
-                var occupantsHere = _world.Map.GetOccupantEntityIdSpanAt(new Vector3Int(mapNodeX, mapNodeY, currentMapLayer));
+                var tile = new Vector3Int(mapNodeX, mapNodeY, currentMapLayer);
+                var blockingEntityId = _mapView.GetBlockingEntityId(tile);
+                var occupantsHere = _mapView.GetOccupants(tile);
 
                 DrawUnderlayOccupants(spriteBatch, occupantsHere, blockingEntityId, mapNodeX, mapNodeY, tileOrigin);
                 DrawPrimaryOccupant(spriteBatch, unitRectangle, blockingEntityId, mapNodeX, mapNodeY, columnIndex, rowIndex);
@@ -947,27 +907,15 @@ public sealed class MapWindow : Window
         }
     }
 
-    /// <summary>Draws entityId's sprite if it has one, else falls back to its glyph -- the one place that decides sprite-vs-glyph, shared by every per-tile visual draw below. Returns whether anything was actually drawn. A corpse (DeadComponent) draws with a flat Color.Gray tint instead of its normal color -- a color-multiply override, not a true desaturation shader (no shader/Effect infrastructure exists here). Delegates the actual draw to SpriteOrGlyphRenderer, shared with Folder/inventory item cells -- this method's only job is resolving entityId's own sprite/glyph/dead-tint inputs.</summary>
-    private bool TryDrawEntityVisual(SpriteBatch spriteBatch, int entityId, SpriteFontBase font, Vector2 footprintTopLeft, Vector2 footprintSize, float alphaMultiplier = 1f)
-    {
-        var isDead = _deadPool?.Has(entityId) == true;
+    /// <summary>Draws entityId's sprite if it has one, else falls back to its glyph -- see DrawVisual. Returns whether anything was actually drawn.</summary>
+    private bool TryDrawEntityVisual(SpriteBatch spriteBatch, int entityId, SpriteFontBase font, Vector2 footprintTopLeft, Vector2 footprintSize, float alphaMultiplier = 1f) =>
+        _mapView.TryGetVisual(entityId, out var visual) && DrawVisual(spriteBatch, visual, font, footprintTopLeft, footprintSize, alphaMultiplier);
 
-        // The glyph pool is only consulted when there is no sprite. SpriteOrGlyphRenderer returns
-        // on the sprite branch without ever looking at the glyph, so resolving both unconditionally
-        // (as this used to) meant one wasted scattered read into an entity-indexed array for every
-        // sprite-backed entity, every frame -- and every entity that draws at all is on this path.
-        if (_spritePool.TryGetReadonly(entityId, out var spriteComponent))
-        {
-            return SpriteOrGlyphRenderer.Draw(spriteBatch, _spriteSheetService, _spriteRenderer, _labelRenderer, spriteComponent, font, string.Empty, Color.White, footprintTopLeft, footprintSize, isDead ? Color.Gray : Color.White, alphaMultiplier, outline: true);
-        }
-
-        if (!_glyphPool.TryGetReadonly(entityId, out var glyphComponent))
-        {
-            return false;
-        }
-
-        return SpriteOrGlyphRenderer.Draw(spriteBatch, _spriteSheetService, _spriteRenderer, _labelRenderer, null, font, glyphComponent.Glyph, isDead ? Color.Gray : glyphComponent.GlyphColor, footprintTopLeft, footprintSize, Color.White, alphaMultiplier, outline: true);
-    }
+    /// <summary>The one place that turns a resolved visual into a draw, shared by every per-tile visual draw below. A corpse draws with a flat Color.Gray tint instead of its normal color -- a color-multiply override, not a true desaturation shader (no shader/Effect infrastructure exists here). Delegates the actual draw to SpriteOrGlyphRenderer, shared with Folder/inventory item cells.</summary>
+    private bool DrawVisual(SpriteBatch spriteBatch, EntityVisualView visual, SpriteFontBase font, Vector2 footprintTopLeft, Vector2 footprintSize, float alphaMultiplier = 1f) =>
+        visual.Sprite is { } sprite
+            ? SpriteOrGlyphRenderer.Draw(spriteBatch, _spriteSheetService, _spriteRenderer, _labelRenderer, sprite, font, string.Empty, Color.White, footprintTopLeft, footprintSize, visual.IsDead ? Color.Gray : Color.White, alphaMultiplier, outline: true)
+            : SpriteOrGlyphRenderer.Draw(spriteBatch, _spriteSheetService, _spriteRenderer, _labelRenderer, (SpriteView?)null, font, visual.Glyph, visual.IsDead ? Color.Gray : visual.GlyphColor, footprintTopLeft, footprintSize, Color.White, alphaMultiplier, outline: true);
 
     /// <summary>
     /// Every non-Blocking occupant that draws UNDER the tile's Blocking occupant -- corpses at
@@ -1006,8 +954,13 @@ public sealed class MapWindow : Window
 
         foreach (var entityId in occupants)
         {
+            if (!_mapView.TryGetOccupant(entityId, out var occupant))
+            {
+                continue;
+            }
+
             var isBlockingHere = entityId == blockingEntityId;
-            var kind = NonBlockingQueries.CombinedKind(_nonBlockingPool, entityId);
+            var kind = occupant.Kind;
 
             if (!isBlockingHere && (kind & NonBlockingKind.Phasing) != 0)
             {
@@ -1031,18 +984,17 @@ public sealed class MapWindow : Window
             // A corpse with no NonBlockingKind flag at all -- one that used to be Blocking and no
             // longer holds that slot (see DeathSystem / World.ConvertToNonBlocking). A corpse that
             // was ALREADY non-Blocking when it died (a Phasing Ghost, a Tiny creature) is drawn by
-            // whichever branch above matches its Kind instead, greyed by TryDrawEntityVisual's own
-            // DeadComponent check either way. Deliberately not gated on isBlockingHere, matching
-            // the behaviour this replaced.
+            // whichever branch above matches its Kind instead, greyed by DrawVisual's own IsDead
+            // check either way. Deliberately not gated on isBlockingHere, matching the behaviour
+            // this replaced.
             if ((kind & (NonBlockingKind.Tiny | NonBlockingKind.Phasing)) == 0 &&
-                _deadPool?.Has(entityId) == true &&
-                _transformPool.TryGetReadonly(entityId, out var corpseTransform) &&
-                corpseTransform.Position.X == mapNodeX && corpseTransform.Position.Y == mapNodeY)
+                occupant.IsDead &&
+                occupant.Position.X == mapNodeX && occupant.Position.Y == mapNodeY)
             {
-                var footprintSize = new Vector2(corpseTransform.Size.X * _camera.CurrentTileSize.X, corpseTransform.Size.Y * _camera.CurrentTileSize.Y);
+                var footprintSize = new Vector2(occupant.Size.X * _camera.CurrentTileSize.X, occupant.Size.Y * _camera.CurrentTileSize.Y);
 
-                TryDrawEntityVisual(spriteBatch, entityId, FontForSize(corpseTransform.Size.X), tileOrigin, footprintSize);
-                DrawLootBagBadgeIfCarryingItems(spriteBatch, entityId, tileOrigin, footprintSize);
+                TryDrawEntityVisual(spriteBatch, entityId, FontForSize(occupant.Size.X), tileOrigin, footprintSize);
+                DrawLootBagBadge(spriteBatch, _mapView.GetStatus(entityId).LootBag, tileOrigin, footprintSize);
             }
         }
     }
@@ -1058,32 +1010,31 @@ public sealed class MapWindow : Window
     {
         foreach (var entityId in _phasingOccupantsBuffer)
         {
-            if (!_transformPool.TryGetReadonly(entityId, out var transformComponent))
+            if (!_mapView.TryGetOccupant(entityId, out var occupant))
             {
                 continue;
             }
 
-            var footprintSize = new Vector2(transformComponent.Size.X * _camera.CurrentTileSize.X, transformComponent.Size.Y * _camera.CurrentTileSize.Y);
+            var footprintSize = new Vector2(occupant.Size.X * _camera.CurrentTileSize.X, occupant.Size.Y * _camera.CurrentTileSize.Y);
 
-            TryDrawEntityVisual(spriteBatch, entityId, FontForSize(transformComponent.Size.X), tileOrigin, footprintSize, alphaMultiplier: 0.5f);
+            TryDrawEntityVisual(spriteBatch, entityId, FontForSize(occupant.Size.X), tileOrigin, footprintSize, alphaMultiplier: 0.5f);
         }
     }
 
-    private void DrawTerrainGlyph(SpriteBatch spriteBatch, TerrainLayer? terrainLayer, int mapNodeX, int mapNodeY, Vector2 tileOrigin)
+    /// <summary>The tile's terrain, then the structure standing on it -- both 1x1 cells, both static, so both belong in the cached terrain texture.</summary>
+    private void DrawTerrainGlyph(SpriteBatch spriteBatch, int mapLayer, int mapNodeX, int mapNodeY, Vector2 tileOrigin)
     {
-        if (terrainLayer is not { } layer)
+        var footprintSize = new Vector2(_camera.CurrentTileSize.X, _camera.CurrentTileSize.Y);
+
+        if (_mapView.TryGetTerrainVisual(mapNodeX, mapNodeY, mapLayer, out var terrain))
         {
-            return;
+            DrawVisual(spriteBatch, terrain, _mediumFont, tileOrigin, footprintSize);
         }
 
-        var terrainEntityId = _world.Map.GetTerrainEntityId(mapNodeX, mapNodeY, layer);
-        if (terrainEntityId == -1)
+        if (_mapView.TryGetStructureVisual(mapNodeX, mapNodeY, mapLayer, out var structure))
         {
-            return;
+            DrawVisual(spriteBatch, structure, _mediumFont, tileOrigin, footprintSize);
         }
-
-        var footprintSize = new Vector2(_camera.CurrentTileSize.X, _camera.CurrentTileSize.Y); // Terrain is always 1x1.
-        TryDrawEntityVisual(spriteBatch, terrainEntityId, _mediumFont, tileOrigin, footprintSize);
     }
 
 
@@ -1095,14 +1046,14 @@ public sealed class MapWindow : Window
             return;
         }
 
-        if (!_transformPool.TryGetReadonly(entityId, out var transformComponent))
+        if (!_mapView.TryGetOccupant(entityId, out var occupant))
         {
             return;
         }
 
         // Multi-tile glyph fix: only draw from the entity's top-left origin tile
         // to avoid drawing it once per occupied tile.
-        if (transformComponent.Position.X != mapNodeX || transformComponent.Position.Y != mapNodeY)
+        if (occupant.Position.X != mapNodeX || occupant.Position.Y != mapNodeY)
         {
             return;
         }
@@ -1110,10 +1061,11 @@ public sealed class MapWindow : Window
         // The footprint is Size tiles wide/tall, not 1 -- a 3x3 Huge entity's glyph must
         // center across all three tiles it actually occupies, not just the origin tile.
         var footprintTopLeft = TileOrigin(columnIndex, rowIndex);
-        var footprintSize = new Vector2(transformComponent.Size.X * _camera.CurrentTileSize.X, transformComponent.Size.Y * _camera.CurrentTileSize.Y);
+        var footprintSize = new Vector2(occupant.Size.X * _camera.CurrentTileSize.X, occupant.Size.Y * _camera.CurrentTileSize.Y);
+        var status = _mapView.GetStatus(entityId);
 
-        TryDrawEntityVisual(spriteBatch, entityId, FontForSize(transformComponent.Size.X), footprintTopLeft, footprintSize);
-        DrawEntityIcons(spriteBatch, unitRectangle, entityId, footprintTopLeft, footprintSize);
+        TryDrawEntityVisual(spriteBatch, entityId, FontForSize(occupant.Size.X), footprintTopLeft, footprintSize);
+        DrawEntityIcons(spriteBatch, unitRectangle, entityId, status, footprintTopLeft, footprintSize);
 
         // Unlike DrawEntityIcons (health bar/loot badge), the charging badge must show for the
         // player too -- drawn here, directly, rather than inside DrawEntityIcons' own early
@@ -1129,7 +1081,7 @@ public sealed class MapWindow : Window
         // (as little as 0.5s at low Dexterity) combat status cue -- DodgingGlowAlphaMultiplier boosts
         // the outer rings toward fully opaque so the fade is still visible at a glance, confirmed live
         // as too subtle to notice at the un-boosted default.
-        if (_dodgingEntities.Has(entityId))
+        if (status.IsDodging)
         {
             GlowRenderer.Draw(spriteBatch, unitRectangle, new Rectangle((int)footprintTopLeft.X, (int)footprintTopLeft.Y, (int)footprintSize.X, (int)footprintSize.Y), DodgingGlowColor, GlowMode.InteriorFade, DodgingGlowAlphaMultiplier);
         }
@@ -1137,35 +1089,21 @@ public sealed class MapWindow : Window
 
 
     /// <summary>
-    /// Shared by DrawCorpses (a dead creature) and DrawEntityIcons (a live, still-Blocking
-    /// container -- see ContainerComponent's own doc comment: lootable while alive, unlike a
-    /// corpse) -- draws the LootBag-Red badge only when the entity actually carries items, at
-    /// full color if its loot window has never been opened, or grey-tinted once it has (the same
-    /// LootedComponent-driven cue either way, regardless of which path called this).
+    /// The LootBag-Red badge, shared by a corpse (DrawUnderlayOccupants) and a live, still-Blocking
+    /// container (DrawEntityIcons -- lootable while alive, unlike a corpse). Nothing when the
+    /// entity carries no items; full color if its loot window has never been opened, grey once it
+    /// has. Small and single-tile-sized, anchored to the top-right corner of the entity's own full
+    /// footprint rather than its origin tile, so a multi-tile corpse gets its badge on its actual
+    /// top-right tile.
     /// </summary>
-    private void DrawLootBagBadgeIfCarryingItems(SpriteBatch spriteBatch, int entityId, Vector2 footprintTopLeft, Vector2 footprintSize)
+    private void DrawLootBagBadge(SpriteBatch spriteBatch, LootBagState lootBag, Vector2 footprintTopLeft, Vector2 footprintSize)
     {
-        if (_inventoryStacks?.CountForEntity(entityId) > 0)
-        {
-            var alreadyLooted = _lootedPool?.Has(entityId) == true;
-            DrawLootBagBadge(spriteBatch, footprintTopLeft, footprintSize, alreadyLooted ? Color.Gray : Color.White);
-        }
-    }
-
-    /// <summary>
-    /// Small, single-tile-sized badge anchored to the top-right corner of the entity's own full
-    /// footprint -- footprintTopLeft/footprintSize, not just the origin tile's own tileOrigin, so
-    /// a multi-tile (Huge) corpse gets its badge on its actual top-right tile rather than the
-    /// top-right corner of just its first (origin) tile. tint is Color.White (unlooted) or
-    /// Color.Gray (already looted) -- see DrawCorpses' own doc comment.
-    /// </summary>
-    private void DrawLootBagBadge(SpriteBatch spriteBatch, Vector2 footprintTopLeft, Vector2 footprintSize, Color tint)
-    {
-        if (_lootBagSprite is not { } lootBagSprite)
+        if (lootBag == LootBagState.None || _lootBagSprite is not { } lootBagSprite)
         {
             return;
         }
 
+        var tint = lootBag == LootBagState.Looted ? Color.Gray : Color.White;
         var badgeSize = new Vector2(_camera.CurrentTileSize.X, _camera.CurrentTileSize.Y) * LootBagBadgeSizeFraction;
         var badgePosition = new Vector2(footprintTopLeft.X + footprintSize.X - badgeSize.X, footprintTopLeft.Y);
 
@@ -1185,56 +1123,42 @@ public sealed class MapWindow : Window
     /// </summary>
     private void DrawChargingBadge(SpriteBatch spriteBatch, int entityId, Vector2 footprintTopLeft, Vector2 footprintSize)
     {
-        if (!_pendingDelayedActions.TryGetReadonly(entityId, out var pending) || !_actionCatalog.TryGet(pending.ActionId, out var action))
+        if (!_mapView.TryGetChargingAction(entityId, out var action))
         {
             return;
-        }
-
-        SpriteComponent? sprite = null;
-        if (action.SpriteName is { } spriteName && SpriteManifest.TryGetFirst(spriteName, out var resolvedSprite))
-        {
-            sprite = resolvedSprite;
         }
 
         var badgeSize = new Vector2(_camera.CurrentTileSize.X, _camera.CurrentTileSize.Y) * ChargingBadgeSizeFraction;
         var badgePosition = new Vector2(footprintTopLeft.X + (footprintSize.X - badgeSize.X) / 2f, footprintTopLeft.Y - badgeSize.Y);
 
-        SpriteOrGlyphRenderer.Draw(spriteBatch, _spriteSheetService, _spriteRenderer, _labelRenderer, sprite, _badgeFont, action.Glyph, action.GlyphColor, badgePosition, badgeSize, Color.White, outline: true);
+        SpriteOrGlyphRenderer.Draw(spriteBatch, _spriteSheetService, _spriteRenderer, _labelRenderer, action.Sprite, _badgeFont, action.Glyph, action.GlyphColor, badgePosition, badgeSize, Color.White, outline: true);
     }
 
-    private void DrawEntityIcons(SpriteBatch spriteBatch, Texture2D unitRectangle, int entityId, Vector2 footprintTopLeft, Vector2 footprintSize)
+    private void DrawEntityIcons(SpriteBatch spriteBatch, Texture2D unitRectangle, int entityId, EntityStatusView status, Vector2 footprintTopLeft, Vector2 footprintSize)
     {
-        if (entityId == _world.PlayerEntityId)
+        if (entityId == _mapView.PlayerEntityId)
         {
             return;
         }
 
-        DrawHealthBar(spriteBatch, unitRectangle, entityId, footprintTopLeft, footprintSize);
+        if (status.HealthFraction is { } healthFraction)
+        {
+            DrawHealthBar(spriteBatch, unitRectangle, healthFraction, footprintTopLeft, footprintSize);
+        }
 
         // A container is lootable while alive, unlike a creature (only lootable once dead, see
-        // DrawCorpses' own call to the same badge helper) -- gated on ContainerComponent, not
+        // DrawUnderlayOccupants' own call to the same badge helper) -- gated on IsContainer, not
         // just "carries items," since a live goblin/fairy/player also carries its own inventory
         // stacks and must not show a loot-bag badge for those.
-        if (_containerPool?.Has(entityId) == true)
+        if (status.IsContainer)
         {
-            DrawLootBagBadgeIfCarryingItems(spriteBatch, entityId, footprintTopLeft, footprintSize);
+            DrawLootBagBadge(spriteBatch, status.LootBag, footprintTopLeft, footprintSize);
         }
     }
 
-    /// <summary>Thin bar at the top of the entity's own footprint, above its glyph, hidden at full health. Black backdrop doubles as the outline and the "missing health" portion; the fill rect insets 1px and its width (not the outline's) scales with the health fraction.</summary>
-    private void DrawHealthBar(SpriteBatch spriteBatch, Texture2D unitRectangle, int entityId, Vector2 footprintTopLeft, Vector2 footprintSize)
+    /// <summary>Thin bar at the top of the entity's own footprint, above its glyph -- only drawn below full health (EntityStatusView.HealthFraction is null otherwise). Black backdrop doubles as the outline and the "missing health" portion; the fill rect insets 1px and its width (not the outline's) scales with the health fraction.</summary>
+    private void DrawHealthBar(SpriteBatch spriteBatch, Texture2D unitRectangle, float healthFraction, Vector2 footprintTopLeft, Vector2 footprintSize)
     {
-        if (!HealthQueries.TryGetTotals(_healthPool, _bodyParts, entityId, out var currentHealth, out var maximumHealth) || maximumHealth <= 0)
-        {
-            return;
-        }
-
-        var effectiveMaximumHealth = StatModifierMath.GetEffectiveValue(_statModifiers, entityId, StatModifierTarget.MaximumHealth, maximumHealth);
-        if (effectiveMaximumHealth <= 0 || currentHealth >= effectiveMaximumHealth)
-        {
-            return;
-        }
-
         var barWidth = footprintSize.X * HealthBarWidthFraction;
         var barX = footprintTopLeft.X + (footprintSize.X - barWidth) / 2f;
         var barY = footprintTopLeft.Y;
@@ -1242,7 +1166,6 @@ public sealed class MapWindow : Window
         var outerRectangle = new Rectangle((int)barX, (int)barY, (int)barWidth, HealthBarHeightPixels);
         spriteBatch.Draw(unitRectangle, outerRectangle, HealthBarPalette.OutlineColor);
 
-        var healthFraction = currentHealth / effectiveMaximumHealth;
         var innerWidth = (int)((outerRectangle.Width - 2) * healthFraction);
         if (innerWidth > 0)
         {
@@ -1278,7 +1201,7 @@ public sealed class MapWindow : Window
     /// <param name="lowerLayerMask">Bits for every layer below the current one.</param>
     private void DrawLayerBadges(SpriteBatch spriteBatch, int higherLayerMask, int lowerLayerMask, int mapNodeX, int mapNodeY, Vector2 tileOrigin)
     {
-        var occupiedLayers = _world.Map.GetOccupiedLayerMask(mapNodeX, mapNodeY);
+        var occupiedLayers = _mapView.GetOccupiedLayerMask(mapNodeX, mapNodeY);
         if (occupiedLayers == 0)
         {
             return;
@@ -1384,9 +1307,9 @@ public sealed class MapWindow : Window
 
     /// <summary>A player can only loot a corpse they're standing on or next to -- 8-directional (Chebyshev) distance of at most 1 from the corpse's own origin tile, the same adjacency shape TargetShape.Adjacent's ring uses elsewhere, just inclusive of the caster's own tile too (unlike melee's ring, which excludes it -- standing on a corpse to loot it is expected, unlike punching yourself).</summary>
     private bool IsAdjacentToPlayer(int entityId) =>
-        _transformPool.TryGetReadonly(entityId, out var corpseTransform) &&
-        _transformPool.TryGetReadonly(_world.PlayerEntityId, out var playerTransform) &&
-        GridDistance.ChebyshevDistance(corpseTransform.Position, playerTransform.Position) <= 1;
+        _mapView.TryGetOccupant(entityId, out var target) &&
+        TryGetPlayerPosition(out var playerPosition) &&
+        GridDistance.ChebyshevDistance(target.Position, playerPosition) <= 1;
 
     /// <summary>
     /// A right-click-tap first tries to cancel an armed/pending action (see
@@ -1407,8 +1330,8 @@ public sealed class MapWindow : Window
 
     /// <summary>
     /// Opens a stacked context menu for everything on the tile under mousePosition -- every
-    /// occupant (world.GetOccupantEntityIdsAt, Blocking or not) plus the terrain, each its own
-    /// group: a read-only name header (see ContextMenuOption.Header -- also the visual separator
+    /// occupant (Blocking or not), each its own group, with the structure's then the terrain's name
+    /// as last headers when there is at least one occupant group: a read-only name header (see ContextMenuOption.Header -- also the visual separator
     /// from the next group, no blank divider needed), "Loot" first if that entity is a corpse or
     /// a container (a container is lootable even while alive -- see ContainerComponent's own doc
     /// comment; replaces the old click-to-loot, see OnCorpseClicked's own doc comment), then always
@@ -1433,18 +1356,28 @@ public sealed class MapWindow : Window
 
         List<ContextMenuOption> options = [];
 
-        foreach (var entityId in _world.GetOccupantEntityIdsAt(tilePosition))
+        foreach (var entityId in _mapView.GetOccupants(tilePosition))
         {
             AddEntityGroup(options, entityId);
         }
 
-        if (Map.TerrainLayerFor(_mapViewState.CurrentMapLayer) is { } terrainLayer)
+        // Structures and terrain are cells, not entities, so they offer nothing to loot, trade with or
+        // inspect. They still get named headers beneath the occupants' groups so the menu says what
+        // they stand among and on -- but never a menu of their own, which would be a menu with
+        // nothing in it to choose.
+        if (options.Count > 0 && _mapView.TryGetStructure(mapPosition.X, mapPosition.Y, _mapViewState.CurrentMapLayer, out var structure))
         {
-            var terrainEntityId = _world.Map.GetTerrainEntityId(mapPosition.X, mapPosition.Y, terrainLayer);
-            if (terrainEntityId != -1)
-            {
-                AddEntityGroup(options, terrainEntityId);
-            }
+            options.Add(ContextMenuOption.Header(structure.Name));
+        }
+
+        if (options.Count > 0 && _mapView.TryGetTerrain(mapPosition.X, mapPosition.Y, _mapViewState.CurrentMapLayer, out var terrain))
+        {
+            options.Add(ContextMenuOption.Header(terrain.Name));
+        }
+
+        if (GlobalState.IsAdminModeOn && NeighborhoodStreamer is { } streamer)
+        {
+            AddNeighborhoodGroup(options, streamer, Neighborhoods.CellOf(mapPosition.X), Neighborhoods.CellOf(mapPosition.Y));
         }
 
         if (options.Count > 0)
@@ -1453,12 +1386,22 @@ public sealed class MapWindow : Window
         }
     }
 
-    /// <summary>Appends one contributor's own group to the tile's stacked menu -- a read-only name header, then whatever options it offers. Works identically for a creature occupant or the terrain entity itself, since both are just an entityId with a DisplayTextComponent -- terrain simply never has a DeadComponent/ContainerComponent/ShopComponent, so it never picks up "Loot"/"Shop".</summary>
+    /// <summary>Admin Mode's group for the neighborhood under the cursor: a header naming it, then "Regenerate" -- disabled with the reason when the streamer refuses.</summary>
+    private static void AddNeighborhoodGroup(List<ContextMenuOption> options, Game.Floors.NeighborhoodStreamer streamer, int cellX, int cellY)
+    {
+        options.Add(ContextMenuOption.Header($"Neighborhood ({cellX}, {cellY}): x {Neighborhoods.OriginOf(cellX)}..{Neighborhoods.OriginOf(cellX + 1) - 1}, y {Neighborhoods.OriginOf(cellY)}..{Neighborhoods.OriginOf(cellY + 1) - 1}"));
+
+        var canRegenerate = streamer.CanRegenerate(cellX, cellY, out var reason);
+        options.Add(new ContextMenuOption(canRegenerate ? "Regenerate" : $"Regenerate ({reason})", null, canRegenerate, () => streamer.TryRequestRegenerate(cellX, cellY)));
+    }
+
+    /// <summary>Appends one occupant's own group to the tile's stacked menu -- a read-only name header, then whatever options it offers.</summary>
     private void AddEntityGroup(List<ContextMenuOption> options, int entityId)
     {
-        options.Add(ContextMenuOption.Header(ResolveName(entityId)));
+        var interaction = _mapView.GetInteraction(entityId);
+        options.Add(ContextMenuOption.Header(interaction.Name));
 
-        var isShop = _shopPool?.Has(entityId) == true;
+        var isShop = interaction.IsShop;
 
         // A shop that's died goes through the same EntityDiedEvent -> DeadComponent pipeline as any
         // other SimpleHealthComponent entity (DeathSystem doesn't special-case containers/shops out
@@ -1466,14 +1409,14 @@ public sealed class MapWindow : Window
         // for the same event leaves its ShopComponent/ContainerComponent in place (renaming it
         // "Destroyed" and clearing its stock, not removing the components). So isShop alone can't
         // tell a live shop apart from a destroyed one -- isDestroyed does.
-        var isDestroyed = _deadPool?.Has(entityId) == true;
+        var isDestroyed = interaction.IsDestroyed;
 
         // A shop is still a ContainerComponent (see Shop's own doc comment), but gets its own
         // "Shop" verb instead of the generic corpse/chest "Loot" one while it's alive -- excluded
         // here so a live shop never offers both. A destroyed shop is the opposite: "Shop" no longer
         // makes sense (nothing left to trade), so it falls through to the plain "Loot" a dead
         // creature or a destroyed chest already gets.
-        if ((isDestroyed || (_containerPool?.Has(entityId) == true && !isShop)) && OnCorpseClicked is { } onCorpseClicked)
+        if ((isDestroyed || (interaction.IsContainer && !isShop)) && OnCorpseClicked is { } onCorpseClicked)
         {
             options.Add(new ContextMenuOption("Loot", null, IsAdjacentToPlayer(entityId), () => onCorpseClicked.Invoke(entityId)));
         }
@@ -1483,17 +1426,15 @@ public sealed class MapWindow : Window
             options.Add(new ContextMenuOption("Shop", null, IsAdjacentToPlayer(entityId), () => onShopClicked.Invoke(entityId)));
         }
 
-        options.Add(new ContextMenuOption("Inspect", null, !ActionLockGate.IsBlocked(_actionLockPool, _world.PlayerEntityId, _simulationClock.CurrentFrame), () => InspectEntity(entityId)));
+        options.Add(new ContextMenuOption("Inspect", null, !_playerActionGate.IsLocked, () => InspectEntity(entityId)));
     }
-
-    private string ResolveName(int entityId) => _displayTextPool.TryGetReadonly(entityId, out var displayText) ? displayText.Name : "Unknown";
 
     /// <summary>Details/Admin inspection's actual activation -- sets Detail or Admin mode (GlobalState.IsAdminModeOn) on the shared entityId (see MapViewState.InspectedEntityId), starts the global cooldown (the same shared ActionLockComponent lock movement/melee/consumables already use), and un-minimizes InspectionWindow. Only ever reached via the "Inspect" ContextMenuOption above, which already gates on the cooldown being clear -- no redundant re-check here, matching how "Loot" above trusts its own Enabled gate instead of re-checking adjacency.</summary>
     private void InspectEntity(int entityId)
     {
         _mapViewState.InspectionMode = GlobalState.IsAdminModeOn ? InspectionMode.Admin : InspectionMode.Detail;
         _mapViewState.InspectedEntityId = entityId;
-        ActionLockGate.Lock(_actionLockPool, _world.PlayerEntityId, _simulationClock.CurrentFrame);
+        _playerActionGate.Lock();
         OnInspectionOpened?.Invoke();
     }
 
@@ -1510,9 +1451,9 @@ public sealed class MapWindow : Window
         if (WasKeyPressed(keyboardState, previousKeyboardState, Keys.Home))
         {
             _camera.ResumeFollowingPlayer();
-            if (_transformPool.TryGetReadonly(_world.PlayerEntityId, out var playerTransform))
+            if (TryGetPlayerPosition(out var playerPosition))
             {
-                SnapCameraToPlayer(playerTransform.Position);
+                SnapCameraToPlayer(playerPosition);
             }
         }
 

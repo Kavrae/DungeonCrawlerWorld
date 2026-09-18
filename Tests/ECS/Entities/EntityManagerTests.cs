@@ -83,4 +83,24 @@ public sealed class EntityManagerTests
         Assert.IsFalse(entityManager.EntityExists(0));
         Assert.AreEqual(0, entityManager.LivingEntityCount);
     }
+
+    [TestMethod]
+    public void ReserveCapacity_KeepsLivingEntitiesAndTheirKeys()
+    {
+        var componentManager = new ComponentManager(4, 4);
+        var entityManager = new EntityManager(componentManager, 4);
+        var first = entityManager.CreateEntity();
+        var second = entityManager.CreateEntity();
+        var firstKey = entityManager.Keys.GetKey(first);
+        var secondKey = entityManager.Keys.GetKey(second);
+
+        entityManager.ReserveCapacity(1000);
+        var createdIds = Enumerable.Range(0, 998).Select(_ => entityManager.CreateEntity()).ToList();
+
+        Assert.AreEqual(firstKey, entityManager.Keys.GetKey(first));
+        Assert.AreEqual(secondKey, entityManager.Keys.GetKey(second));
+        Assert.IsTrue(entityManager.Keys.TryGetEntityId(secondKey, out var resolved) && resolved == second);
+        CollectionAssert.AreEqual(Enumerable.Range(2, 998).ToList(), createdIds);
+        Assert.AreEqual(1000, entityManager.LivingEntityCount);
+    }
 }

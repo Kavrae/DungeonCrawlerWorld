@@ -17,7 +17,7 @@ public sealed class PotionShopStock(MathUtility mathUtility) : IBlueprint
     /// Every current CoreItemsModule item carrying Tag.Potion, built once via each item's own pure
     /// Build() factory -- mirrors TreasureChest.LootTable's own "no ItemCatalog injection needed"
     /// shape. PreferredStockLevel per item is hand-tuned the same way ItemDefinition.GoldValue is
-    /// (PLAN-shops.md) -- higher for the staple potions a specialist shop leans on, lower for the
+    /// -- higher for the staple potions a specialist shop leans on, lower for the
     /// niche/test items.
     /// </summary>
     private static readonly ShopStockEntry[] Stock =

@@ -1,3 +1,4 @@
+using Engine.ECS.Entities;
 using Engine.ECS.Components;
 using Engine.ECS.Components.Stores;
 using Engine.ECS.Systems;
@@ -40,8 +41,7 @@ namespace Game.Modules.Inventory.Systems;
 /// -- belongs to whoever actually receives the potion's effect (see ApplyPotionToTarget), not
 /// whoever drank/threw it. Drinking your own potion means those are the same entity; throwing one
 /// at a goblin means the goblin's own cooldown ticks, the thrower's does not. This stays this
-/// system's own kind-uniform logic rather than a composable IActionEffectEntry -- see
-/// PLAN-action-effect-activator.md's scoping decision for why: it doesn't vary per potion
+/// system's own kind-uniform logic rather than a composable IActionEffectEntry: it doesn't vary per potion
 /// (Constitution, the only varying input, is caster-side), so every potion already gets it
 /// automatically, and making it an entry every item's Effects list must remember to include
 /// (including mod-defined potions) would turn a currently-impossible-to-forget mechanic into a
@@ -89,6 +89,7 @@ public sealed class ConsumableActivationSystem : ISystem
     private readonly EventBus _eventBus;
     private readonly MathUtility _mathUtility;
     private readonly ComponentManager _componentManager;
+    private readonly EntityKeys _entityKeys;
     private readonly PackedComponentPool<DeadComponent>? _deadEntities;
     private readonly PackedComponentPool<ManaComponent>? _mana;
     private readonly PackedComponentPool<HotkeyExpansionUnlockComponent>? _hotkeyExpansionUnlocks;
@@ -114,6 +115,7 @@ public sealed class ConsumableActivationSystem : ISystem
         EventBus eventBus,
         MathUtility mathUtility,
         ComponentManager componentManager,
+        EntityKeys entityKeys,
         MultiComponentPool<StatModifierComponent>? statModifiers = null,
         PackedComponentPool<DeadComponent>? deadEntities = null,
         PackedComponentPool<ManaComponent>? mana = null,
@@ -135,6 +137,7 @@ public sealed class ConsumableActivationSystem : ISystem
         _eventBus = eventBus;
         _mathUtility = mathUtility;
         _componentManager = componentManager;
+        _entityKeys = entityKeys;
         _statModifiers = statModifiers;
         _deadEntities = deadEntities;
         _mana = mana;
@@ -273,7 +276,7 @@ public sealed class ConsumableActivationSystem : ISystem
 
         if (_potionCooldowns.TryGetReadonly(targetEntityId, out var cooldown) && PotionCooldownEffects.FramesRemaining(cooldown, _now) > 0)
         {
-            PoisonEffects.ApplyStack(_componentManager, targetEntityId, StatusEffectSource.FromEntity(targetEntityId), PotionCooldownEffects.ComputeAbusePoisonDurationTicks(durationFrames), _now, _eventBus, _playerQuery);
+            PoisonEffects.ApplyStack(_componentManager, _entityKeys, targetEntityId, ActionSource.FromEntity(_componentManager, _entityKeys, targetEntityId), PotionCooldownEffects.ComputeAbusePoisonDurationTicks(durationFrames), _now, _eventBus, _playerQuery);
             _eventBus.Publish(new PotionCooldownAbusedEvent(targetEntityId));
         }
 
@@ -391,6 +394,7 @@ public sealed class ConsumableActivationSystem : ISystem
             EventBus: _eventBus,
             MathUtility: _mathUtility,
             ComponentManager: _componentManager,
+            EntityKeys: _entityKeys,
             ActivatorName: item.Name,
             ActivatorTags: item.Tags,
             Now: _now,

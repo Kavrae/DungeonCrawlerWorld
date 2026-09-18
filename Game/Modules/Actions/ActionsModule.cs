@@ -1,3 +1,4 @@
+using Engine.ECS.Entities;
 using Engine.ECS.Components;
 using Engine.ECS.Systems;
 using Engine.Events;
@@ -53,6 +54,8 @@ public sealed class ActionsModule : IGameModule
     private IPlayerQuery? _playerQuery;
     private StatusEffectAuraApplierRegistry _statusEffectAppliers = null!;
     private ProcessingTierEvents _processingTierEvents = null!;
+    private SimulationScope _simulationScope = null!;
+    private EntityKeys _entityKeys = null!;
 
     public void Configure(GameModuleContext context)
     {
@@ -63,6 +66,8 @@ public sealed class ActionsModule : IGameModule
         _playerQuery = context.PlayerQuery;
         _statusEffectAppliers = context.StatusEffectAuraAppliers;
         _processingTierEvents = context.ProcessingTierEvents;
+        _simulationScope = context.SimulationScope;
+        _entityKeys = context.EntityKeys;
     }
 
     public void RegisterComponents(ComponentManager componentManager)
@@ -106,6 +111,10 @@ public sealed class ActionsModule : IGameModule
         var meleeDisabled = componentManager.GetOptionalPackedPool<MeleeDisabledComponent>();
         var dodgingEntities = componentManager.GetPackedPool<DodgingComponent>();
 
+        // Null when ProcessingTierModule is not registered (test contexts): nothing is frozen, so
+        // every target resolves -- see ProcessingTierQuery.
+        var processingTiers = componentManager.GetOptionalDirectPool<ProcessingTierComponent>() is { } tiers ? new ProcessingTierQuery(tiers) : null;
+
         systemManager.Register(new DodgeExpirySystem(dodgingEntities));
 
         systemManager.Register(new DelayedActionSystem(
@@ -119,13 +128,17 @@ public sealed class ActionsModule : IGameModule
             _playerQuery,
             _statusEffectAppliers,
             componentManager,
+            _entityKeys,
             statModifiers,
             deadEntities,
             abilityScores,
             auraSources,
             hotkeyExpansionUnlocks,
             bodyParts,
-            dodgingEntities));
+            dodgingEntities,
+            _simulationScope,
+            processingTiers,
+            _processingTierEvents));
 
         systemManager.Register(new ActionActivationSystem(
             componentManager.GetPackedPool<PendingActionActivationComponent>(),
@@ -140,6 +153,7 @@ public sealed class ActionsModule : IGameModule
             _playerQuery,
             _statusEffectAppliers,
             componentManager,
+            _entityKeys,
             statModifiers,
             deadEntities,
             mana,
@@ -148,6 +162,7 @@ public sealed class ActionsModule : IGameModule
             hotkeyExpansionUnlocks,
             bodyParts,
             meleeDisabled,
-            dodgingEntities));
+            dodgingEntities,
+            processingTiers));
     }
 }

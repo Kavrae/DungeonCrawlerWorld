@@ -1,3 +1,4 @@
+using Engine.ECS.Entities;
 using Engine.ECS.Components;
 using Engine.ECS.Systems;
 using Engine.Events;
@@ -32,6 +33,7 @@ public sealed class InventoryModule : IGameModule
     private MathUtility _mathUtility = null!;
     private StatusEffectAuraApplierRegistry _statusEffectAppliers = null!;
     private IPlayerQuery? _playerQuery;
+    private EntityKeys _entityKeys = null!;
 
     public void Configure(GameModuleContext context)
     {
@@ -42,6 +44,7 @@ public sealed class InventoryModule : IGameModule
         _mathUtility = context.MathUtility;
         _statusEffectAppliers = context.StatusEffectAuraAppliers;
         _playerQuery = context.PlayerQuery;
+        _entityKeys = context.EntityKeys;
     }
 
     public void RegisterComponents(ComponentManager componentManager)
@@ -92,6 +95,7 @@ public sealed class InventoryModule : IGameModule
             _eventBus,
             _mathUtility,
             componentManager,
+            _entityKeys,
             statModifiers,
             deadEntities,
             mana,

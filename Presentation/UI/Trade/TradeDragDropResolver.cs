@@ -15,7 +15,7 @@ namespace Presentation.UI.Trade;
 /// The Trade window's own drag-drop resolution -- claims a drag whenever either endpoint is one of
 /// the two reserved trade-offer entities (MapViewState.ReservedEntityIds.TradeOfferPlayerEntityId/
 /// TradeOfferShopEntityId), so UiInputController never needs to know about trade-offer entities or
-/// PLAN-trade-window.md's own eligibility table itself. Registered before ShopDragDropResolver: a
+/// the trade window's own eligibility rules itself. Registered before ShopDragDropResolver: a
 /// trade-offer entity is never itself shop-registered (ShopComponent lives on the real shop only),
 /// but ShopActions.TryBuyFromShop/TrySellToShop debit/credit whichever entity id they're given
 /// directly, so letting ShopDragDropResolver see a trade-offer entity id at all would try to move
@@ -58,7 +58,7 @@ internal sealed class TradeDragDropResolver : IDragDropResolver
 
         if (context.MergedItemDefinitionId is not null)
         {
-            // PLAN-trade-window.md's eligibility rules are only worked out for single,
+            // The trade window's eligibility rules are only worked out for single,
             // StackInstanceId-tracked stacks -- claim and refuse outright.
             return true;
         }
@@ -73,8 +73,8 @@ internal sealed class TradeDragDropResolver : IDragDropResolver
     }
 
     /// <summary>
-    /// Implements PLAN-trade-window.md's own "Drag-drop eligibility" table -- each branch below is
-    /// one named row/column of it, in the same order.
+    /// Implements the trade window's drag-drop eligibility rules, one branch per origin/destination
+    /// pairing.
     /// </summary>
     private void ResolveItemDrag(ComponentManager componentManager, int originEntityId, int destinationEntityId, Guid stackInstanceId)
     {

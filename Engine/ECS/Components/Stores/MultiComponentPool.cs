@@ -629,6 +629,15 @@ public sealed class MultiComponentPool<T> : IReadOnlyMultiComponentPool<T>, IIns
         }
     }
 
+    /// <inheritdoc/>
+    public void ReserveDenseCapacity(int minimumCount)
+    {
+        if (minimumCount > _denseComponents.Length)
+        {
+            GrowDenseTo(minimumCount);
+        }
+    }
+
     /// <summary> Grows dense storage by <c>_denseGrowthAmount</c> if it's currently full. </summary>
     private void EnsureDenseCapacityForOneMore()
     {
@@ -637,8 +646,11 @@ public sealed class MultiComponentPool<T> : IReadOnlyMultiComponentPool<T>, IIns
             return;
         }
 
-        var newSize = _denseComponents.Length + _denseGrowthAmount;
+        GrowDenseTo(_denseComponents.Length + _denseGrowthAmount);
+    }
 
+    private void GrowDenseTo(int newSize)
+    {
         Array.Resize(ref _denseComponents, newSize);
         Array.Resize(ref _denseIndexToEntityIdMap, newSize);
         Array.Resize(ref _denseVersions, newSize);

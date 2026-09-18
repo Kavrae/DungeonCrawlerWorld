@@ -7,8 +7,8 @@ namespace Game.World;
 /// <cleanupVersion>1</cleanupVersion>
 public interface IMapQuery
 {
-    /// <summary>The current size of the map</summary>
-    Vector3Int MapSize { get; }
+    /// <summary>The tiles the map covers.</summary>
+    MapBounds Bounds { get; }
 
     /// <summary>Checks if a position is on the map.</summary>
     /// <param name="position">The position to check.</param>
@@ -49,10 +49,21 @@ public interface IMapQuery
     /// <returns>True if the entity is blocking, false otherwise.</returns>
     bool IsBlocking(int entityId);
 
-    /// <summary>Gets the ID of the terrain entity at a position.</summary>
-    /// <param name="position">The position to check.</param>
-    /// <returns>The ID of the terrain entity at the position, or -1 if none.</returns>
-    int GetTerrainEntityIdAt(Vector3Int position);
+    /// <summary>The terrain under position's MapLayer -- empty off the map, on a layer with no floor, or where none was set.</summary>
+    /// <remarks>Defaults to empty so a map query that has no terrain (most test doubles) needn't implement it.</remarks>
+    Terrain.TerrainCell GetTerrainAt(Vector3Int position) => default;
+
+    /// <summary>The structure standing on position's MapLayer -- empty off the map or where none was set.</summary>
+    /// <remarks>Defaults to empty for the same reason as GetTerrainAt.</remarks>
+    Terrain.TerrainCell GetStructureAt(Vector3Int position) => default;
+
+    /// <summary>Whether position's structure or floor blocks movement. False off the map -- bounds are IsOnMap's answer.</summary>
+    /// <remarks>Defaults to false for test doubles with no terrain.</remarks>
+    bool IsCellBlocked(Vector3Int position) => false;
+
+    /// <summary>Whether entityId passes through cells that block movement.</summary>
+    /// <remarks>Defaults to false for test doubles with no phasing entities.</remarks>
+    bool IsPhasing(int entityId) => false;
 
     /// <summary>Gets the IDs of all entities within a bounding box.</summary>
     /// <param name="box">The bounding box to query.</param>

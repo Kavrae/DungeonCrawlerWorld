@@ -38,6 +38,16 @@ public static class TemporaryNpcLootGrant
         WandOfFireball.Build(),
     ];
 
+    /// <summary>Each wand in AllCoreItems fully charged to every MaxCharges the grant can roll, indexed [item][maxCharges]; null for an item that isn't a wand.</summary>
+    /// <remarks>Definitions are immutable, so every NPC granted the same roll shares one instance instead of building its own.</remarks>
+    private static readonly ItemDefinition?[][] ChargedWands = AllCoreItems
+        .Select(static item => item.Activator is WandActivator wandActivator
+            ? Enumerable.Range(0, MaxWandMaxCharges + 1)
+                .Select(maxCharges => (ItemDefinition?)(item with { Activator = wandActivator with { Charges = (ushort)maxCharges, MaxCharges = (ushort)maxCharges } }))
+                .ToArray()
+            : null)
+        .ToArray()!;
+
     /// <summary>
     /// Rolls 0-20 stacks of a randomly selected item each, quantity 1-entityId's own effective max
     /// stack size (see InventoryActions.GetEffectiveMaxStackSize). AddItem merges same-item rolls
@@ -53,14 +63,14 @@ public static class TemporaryNpcLootGrant
         var stackCount = mathUtility.Next(0, MaxStackCount + 1);
         for (var i = 0; i < stackCount; i++)
         {
-            var item = AllCoreItems[mathUtility.Next(0, AllCoreItems.Length)];
+            var itemIndex = mathUtility.Next(0, AllCoreItems.Length);
+            var item = AllCoreItems[itemIndex];
             var quantity = (ushort)mathUtility.Next(1, InventoryActions.GetEffectiveMaxStackSize(componentManager, entityId) + 1);
 
-            if (item.Activator is WandActivator wandActivator)
+            if (ChargedWands[itemIndex] is { } chargedWands)
             {
-                var maxCharges = (ushort)mathUtility.Next(MinWandMaxCharges, MaxWandMaxCharges + 1);
-                var grantedDefinition = item with { Activator = wandActivator with { Charges = maxCharges, MaxCharges = maxCharges } };
-                InventoryActions.AddItemWithOverride(componentManager, entityId, grantedDefinition, quantity);
+                var maxCharges = mathUtility.Next(MinWandMaxCharges, MaxWandMaxCharges + 1);
+                InventoryActions.AddItemWithOverride(componentManager, entityId, chargedWands[maxCharges]!, quantity);
             }
             else
             {

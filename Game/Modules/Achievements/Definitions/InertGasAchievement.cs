@@ -24,8 +24,7 @@ public sealed class InertGasAchievement : IAchievementDefinition
     public void RegisterTrigger(AchievementTriggerContext context) =>
         context.SubscribeUntilUnlocked<StatusEffectAppliedEvent>(applied =>
             applied.EffectType == StatusEffectType.Paralysis
-            && applied.Source.Kind == StatusEffectSourceKind.Entity
-            && applied.Source.EntityId == context.PlayerQuery!.PlayerEntityId
+            && applied.Source.IsEntity(context.PlayerQuery!.PlayerEntityKey)
             && applied.EntityId != context.PlayerQuery.PlayerEntityId
             && (NonBlockingQueries.CombinedKind(context.ComponentManager.GetMultiPool<NonBlockingComponent>(), applied.EntityId) & NonBlockingKind.Phasing) != 0);
 }

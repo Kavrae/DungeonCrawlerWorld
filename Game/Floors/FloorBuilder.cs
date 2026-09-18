@@ -26,19 +26,53 @@ namespace Game.Floors;
 /// </summary>
 public static class FloorBuilder
 {
-    private static readonly Vector3Int TestMapSize = new(1000, 1000, 3);
+    /// <summary>Neighborhoods per side of the default map: the fixed 3x3.</summary>
+    private const int DefaultNeighborhoodsPerSide = 3;
 
-    public static Game.World.Map CreateMap(int floorNumber) => new(TestMapSize);
+    private const int LayerCount = 3;
+
+    /// <summary>The map a floor starts on, centred on neighborhood (0, 0), across every MapLayer.</summary>
+    /// <remarks>
+    /// The default is the unbounded sliding window: the 3x3 of
+    /// neighborhoods around (0, 0) loaded, and more loaded and dropped as the player walks. Any other
+    /// size is a fixed, bounded square, for scaling measurements, still centred so the neighborhoods west
+    /// and north of the spawn have negative coordinates.
+    /// </remarks>
+    /// <param name="squareSizeOverride">Width and height in tiles for a fixed map instead of the default window -- the "--map-size=" argument. Null, or the default window's own 3072, for the window.</param>
+    public static Game.World.Map CreateMap(int floorNumber, int? squareSizeOverride = null)
+    {
+        if (squareSizeOverride is null or DefaultNeighborhoodsPerSide * Game.World.Neighborhoods.SizeTiles)
+        {
+            var window = Game.World.Map.Unbounded(LayerCount);
+            for (var cellY = -1; cellY <= 1; cellY++)
+            {
+                for (var cellX = -1; cellX <= 1; cellX++)
+                {
+                    window.LoadNeighborhood(cellX, cellY);
+                }
+            }
+
+            window.CenterLookupOn(0, 0);
+            return window;
+        }
+
+        var tiles = squareSizeOverride.Value;
+        var neighborhoodsPerSide = (tiles + Game.World.Neighborhoods.SizeTiles - 1) >> Game.World.Neighborhoods.SizeShift;
+        var min = -Game.World.Neighborhoods.OriginOf(neighborhoodsPerSide / 2);
+        return new Game.World.Map(new MapBounds(min, min, min + tiles, min + tiles, LayerCount));
+    }
 
     /// <param name="tierResolver">
     /// When supplied -- and its reference position already set to <see cref="PlayerSpawnOrigin"/>
     /// -- every bulk entity is created through it and born with its processing tier as its first
     /// component, so no tiered consumer ever has to migrate it. Optional because omitting it costs
     /// events, not correctness: World.EntityPlaced tiers any placed entity after the fact, via
-    /// ProcessingTierResolver.EnsureTiered. See PLAN-processing-tier-rework.md.
+    /// ProcessingTierResolver.EnsureTiered.
     /// </param>
-    public static void PopulateFloor(Game.World.World world, EcsContext ecsContext, MathUtility mathUtility, UniqueNumberAllocator crawlerNumberAllocator, FrameEventBuffer<EntityMovedEvent> movedEntities, ProcessingTierResolver? tierResolver = null) =>
-        new TestMapBuilder(ecsContext.EntityManager, ecsContext.ComponentManager, mathUtility, crawlerNumberAllocator, movedEntities, tierResolver).Populate(world);
+    /// <param name="terrain">The session's terrain definitions -- population writes cells of them.</param>
+    /// <param name="records">The session's neighborhood records: each neighborhood the map covers is assigned one if it has none, and generated from it.</param>
+    public static void PopulateFloor(Game.World.World world, EcsContext ecsContext, NeighborhoodRecords records, UniqueNumberAllocator crawlerNumberAllocator, FrameEventBuffer<EntityMovedEvent> movedEntities, Terrain.TerrainRegistry terrain, ProcessingTierResolver? tierResolver = null) =>
+        new TestMapBuilder(ecsContext.EntityManager, ecsContext.ComponentManager, crawlerNumberAllocator, movedEntities, terrain, tierResolver).Populate(world, records);
 
     /// <summary>
     /// Where the player is aimed at spawning -- the actual cell is the nearest free Ground cell to
@@ -49,13 +83,14 @@ public static class FloorBuilder
     /// boundary, so the small difference reconciles itself.
     /// </summary>
     /// <remarks>
-    /// TEMPORARY: beside TestMapBuilder's column-16 wall corridor (a fixed column regardless of
-    /// map size) rather than the map centre, so the sprite migration's Wall sprite
-    /// (SpriteManifest.Wall) is immediately visible on spawn without scrolling ~480 tiles to the
-    /// nearest wall. Revert to the map centre once that has been visually confirmed in-game.
+    /// In TestMapBuilder's starting neighborhood, inside the gap its hallway cross leaves in its wall
+    /// corridors.
+    /// TEMPORARY: in the corridor gap rather than at the neighborhood's centre, so the Wall sprite is
+    /// visible on spawn and the walk west to the neighborhood border (17 tiles) is unobstructed, which
+    /// is what makes a tier crossing testable by hand. Revert once neither is needed.
     /// </remarks>
-    public static Vector3Int PlayerSpawnOrigin(Game.World.World world) =>
-        new(17, world.Map.Size.Y / 2, (int)MapLayer.Ground);
+    public static Vector3Int PlayerSpawnOrigin() =>
+        new(Game.World.Neighborhoods.OriginOf(TestMapBuilder.StartingCellX) + TestMapBuilder.SpawnColumn, Game.World.Neighborhoods.OriginOf(TestMapBuilder.StartingCellY) + TestMapBuilder.SpawnRow, (int)MapLayer.Ground);
 
     // TEMPORARY test seeding -- exercises Poison until a real in-game source exists. Remove
     // once one does. 10 applications of a 5-tick duration each: since ApplyStack takes the
@@ -82,21 +117,20 @@ public static class FloorBuilder
     /// <summary>Mints the Player's entity id.</summary>
     /// <remarks>
     /// Called before PopulateFloor, not inside CreatePlayer -- reserving it first, before any of
-    /// PopulateFloor's ~2.6M NPC/terrain entities exist, deterministically lands the Player on
+    /// PopulateFloor's NPC and wall entities exist, deterministically lands the Player on
     /// entity id 0 (see FreeIdPool.Rent: the first Rent() call against a fresh pool always
     /// returns 0) instead of a high id assigned after population. That's what lets the
     /// Player-only component pool capacity overrides (AchievementUnlockedComponent,
     /// ActionHotkeyBindingComponent, ItemHotkeyBindingComponent, HotkeyExpansionUnlockComponent --
     /// see TODO.md's "Per-pool entity capacity for rare component types") actually stay near
-    /// their small seed size instead of growing to cover a ~2M-scale id the moment the Player is
+    /// their small seed size instead of growing to cover a population-scale id the moment the Player is
     /// created. The reserved id carries no components until CreatePlayer runs -- safe, since
     /// every component pool gates access on its own presence-tracking, never a raw id-range scan.
     /// </remarks>
     public static int ReservePlayerEntity(EcsContext ecsContext) => ecsContext.EntityManager.CreateEntity();
 
     /// <summary>
-    /// Mints the two trade-offer entities' ids -- see PLAN-trade-window.md's own "Entity model"
-    /// section. Reserved once, right alongside the player (before PopulateFloor, for the same
+    /// Mints the two trade-offer entities' ids. Reserved once, right alongside the player (before PopulateFloor, for the same
     /// low-id reasoning ReservePlayerEntity's own doc comment gives), and reused for the life of
     /// the game -- a trade never destroys/recreates these, it only ever moves stacks/currency into
     /// and back out of them. Neither entity is ever given a TransformComponent or placed on the
@@ -117,26 +151,26 @@ public static class FloorBuilder
     {
         tierResolver?.PinLocalAndNotify(entityId);
 
-        new PlayerBlueprint(mathUtility, crawlerNumberAllocator).Build(ecsContext.ComponentManager, entityId);
+        new PlayerBlueprint(mathUtility, crawlerNumberAllocator, ecsContext.EntityManager.Keys).Build(ecsContext.ComponentManager, entityId);
 
         for (var i = 0; i < TestPoisonStackCount; i++)
         {
-            PoisonEffects.ApplyStack(ecsContext.ComponentManager, entityId, StatusEffectSource.Admin, TestPoisonDurationTicks, ecsContext.SystemManager.Clock.CurrentFrame, ecsContext.EventBus, world);
+            PoisonEffects.ApplyStack(ecsContext.ComponentManager, ecsContext.EntityManager.Keys, entityId, ActionSource.Admin, TestPoisonDurationTicks, ecsContext.SystemManager.Clock.CurrentFrame, ecsContext.EventBus, world);
         }
 
         foreach (var seed in TestAbilityScoreModifierSeeds)
         {
             AbilityScoreEffects.GrantModifier(ecsContext.ComponentManager, entityId, seed.Type, StatModifierOperation.Additive, StatModifierPolarity.Buff,
-                canModify: true, seed.PositiveFlat, expiresAtFrame: FrameDeadline.Never, StatusEffectSource.Admin);
+                canModify: true, seed.PositiveFlat, expiresAtFrame: FrameDeadline.Never, ActionSource.Admin);
             AbilityScoreEffects.GrantModifier(ecsContext.ComponentManager, entityId, seed.Type, StatModifierOperation.Additive, StatModifierPolarity.Debuff,
-                canModify: true, seed.NegativeFlat, expiresAtFrame: FrameDeadline.Never, StatusEffectSource.AI);
+                canModify: true, seed.NegativeFlat, expiresAtFrame: FrameDeadline.Never, ActionSource.AI);
             AbilityScoreEffects.GrantModifier(ecsContext.ComponentManager, entityId, seed.Type, StatModifierOperation.Multiplicative, StatModifierPolarity.Buff,
-                canModify: true, seed.PositiveMultiplier, expiresAtFrame: FrameDeadline.Never, StatusEffectSource.FromEntity(entityId));
+                canModify: true, seed.PositiveMultiplier, expiresAtFrame: FrameDeadline.Never, ActionSource.FromEntity(ecsContext.ComponentManager, ecsContext.EntityManager.Keys, entityId));
             AbilityScoreEffects.GrantModifier(ecsContext.ComponentManager, entityId, seed.Type, StatModifierOperation.Multiplicative, StatModifierPolarity.Debuff,
-                canModify: true, seed.NegativeMultiplier, expiresAtFrame: FrameDeadline.Never, StatusEffectSource.Admin);
+                canModify: true, seed.NegativeMultiplier, expiresAtFrame: FrameDeadline.Never, ActionSource.Admin);
         }
 
-        var spawnPosition = FindFreeGroundCellNear(world, PlayerSpawnOrigin(world));
+        var spawnPosition = FindFreeGroundCellNear(world, PlayerSpawnOrigin());
         ref var transform = ref ecsContext.ComponentManager.GetDirectPool<TransformComponent>().Get(entityId);
         world.PlaceEntityOnMap(entityId, spawnPosition, ref transform);
 
@@ -168,20 +202,7 @@ public static class FloorBuilder
         movedEntities.Record(new EntityMovedEvent(entityId, spawnPosition, spawnPosition, transform.Size));
     }
 
-    /// <summary>
-    /// Scans outward in expanding square rings from the map's Ground-layer center for the
-    /// first on-map, unoccupied cell -- deliberately not a hardcoded coordinate, since that
-    /// would couple player spawning to TestMapBuilder's own deterministic (and, per its doc
-    /// comment, placeholder) wall/population pattern. Falls back to the exact center if
-    /// somehow nothing else is found within the map's bounds.
-    /// </summary>
-    private static Vector3Int FindFreeGroundCellNearCenter(Game.World.World world)
-    {
-        var mapSize = world.Map.Size;
-        return FindFreeGroundCellNear(world, new Vector3Int(mapSize.X / 2, mapSize.Y / 2, (int)MapLayer.Ground));
-    }
-
-    /// <summary>Same ring-expanding search as FindFreeGroundCellNearCenter, but from an arbitrary origin -- extracted so CreatePlayer's TEMPORARY wall-adjacent override above can reuse the same free-cell-finding robustness without duplicating it.</summary>
+    /// <summary>Scans outward from origin in expanding square rings for the first on-map, unoccupied, unblocked Ground cell, falling back to origin itself if the whole map is full.</summary>
     private static Vector3Int FindFreeGroundCellNear(Game.World.World world, Vector3Int origin)
     {
         if (IsFreeGroundCell(world, origin))
@@ -189,8 +210,8 @@ public static class FloorBuilder
             return origin;
         }
 
-        var mapSize = world.Map.Size;
-        var maxRadius = Math.Max(mapSize.X, mapSize.Y);
+        var bounds = world.Map.Bounds;
+        var maxRadius = Math.Max(bounds.Width, bounds.Height);
         for (var radius = 1; radius <= maxRadius; radius++)
         {
             for (var deltaX = -radius; deltaX <= radius; deltaX++)
@@ -217,5 +238,5 @@ public static class FloorBuilder
     }
 
     private static bool IsFreeGroundCell(Game.World.World world, Vector3Int position) =>
-        world.IsOnMap(position) && world.GetEntityIdAt(position) == -1;
+        world.IsOnMap(position) && world.GetEntityIdAt(position) == -1 && !world.IsCellBlocked(position);
 }

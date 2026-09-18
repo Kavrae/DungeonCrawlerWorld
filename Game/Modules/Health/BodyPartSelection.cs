@@ -83,7 +83,7 @@ public static class BodyPartSelection
     /// permanently unselectable, stuck below the true cap regen should still be closing.
     /// bodyPartBurningTimers is a second, independent exclusion from the lockout timer -- a part
     /// actively on fire must never regen even once its numeric lockout has counted down to 0, since
-    /// "on fire" is its own condition, not just a longer lockout (see PLAN-per-body-part-status-effects.md).
+    /// "on fire" is its own condition, not just a longer lockout.
     /// Returns -1 if entityId owns no BodyPartComponent, or every part is either at its effective
     /// maximum, locked out, or currently burning.
     /// </remarks>

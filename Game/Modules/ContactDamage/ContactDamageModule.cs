@@ -13,8 +13,8 @@ using Game.World;
 namespace Game.Modules.ContactDamage;
 
 /// <summary>
-/// Generic "damage whatever stands on me" hazard support -- Lava is the first user
-/// (DamagePerTick: 10, TickIntervalFrames: 60), but nothing here is lava-specific.
+/// Generic "damage whatever stands on me" hazard support for terrain with a ContactHazard -- Lava
+/// is the first (see BuiltInTerrain), but nothing here is lava-specific.
 /// Parameterless, with runtime dependencies (EventBus, IMapQuery, IPlayerQuery) supplied via
 /// IGameModule.Configure. Depends on MovementModule so ContactDamageSystem's own Update
 /// always runs after MovementSystem's within the same SystemManager.Update() cycle -- required
@@ -32,10 +32,16 @@ public sealed class ContactDamageModule : IGameModule
     private IPlayerQuery? _playerQuery;
     private FrameEventBuffer<EntityMovedEvent> _movedEntities = null!;
     private MathUtility _mathUtility = null!;
+    private SimulationClock _simulationClock = null!;
+    private SimulationScope _simulationScope = null!;
+    private Terrain.TerrainRegistry _terrain = null!;
 
     public void Configure(GameModuleContext context)
     {
         _eventBus = context.EventBus;
+        _terrain = context.Terrain;
+        _simulationClock = context.SimulationClock;
+        _simulationScope = context.SimulationScope;
         _mapQuery = context.MapQuery;
         _playerQuery = context.PlayerQuery;
         _movedEntities = context.MovedEntities;
@@ -44,7 +50,6 @@ public sealed class ContactDamageModule : IGameModule
 
     public void RegisterComponents(ComponentManager componentManager)
     {
-        componentManager.RegisterPackedPool<DamageOnContactComponent>(static (ref existing, incoming) => { });
         componentManager.RegisterPackedPool<ContactDamageExposureComponent>(static (ref existing, incoming) => { });
     }
 
@@ -66,7 +71,7 @@ public sealed class ContactDamageModule : IGameModule
             : null;
 
         systemManager.Register(new ContactDamageSystem(
-            componentManager.GetPackedPool<DamageOnContactComponent>(),
+            _terrain,
             componentManager.GetPackedPool<ContactDamageExposureComponent>(),
             componentManager.GetPackedPool<SimpleHealthComponent>(),
             _eventBus,
@@ -74,8 +79,10 @@ public sealed class ContactDamageModule : IGameModule
             _playerQuery,
             _movedEntities,
             _mathUtility,
+            _simulationClock,
             statModifiers,
             deadEntities,
-            bodyParts));
+            bodyParts,
+            _simulationScope));
     }
 }

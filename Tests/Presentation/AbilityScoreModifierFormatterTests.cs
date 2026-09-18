@@ -1,3 +1,4 @@
+using Engine.ECS.Entities;
 using Engine.ECS.Systems;
 using Engine.ECS.Components;
 using Game.Modules.AbilityScores;
@@ -21,7 +22,7 @@ public sealed class AbilityScoreModifierFormatterTests
         return manager;
     }
 
-    private static void GrantModifier(ComponentManager manager, int entityId, AbilityScoreType type, StatModifierOperation operation, float magnitude, StatusEffectSource source) =>
+    private static void GrantModifier(ComponentManager manager, int entityId, AbilityScoreType type, StatModifierOperation operation, float magnitude, ActionSource source) =>
         AbilityScoreEffects.GrantModifier(manager, entityId, type, operation, StatModifierPolarity.Buff,
             canModify: true, magnitude, expiresAtFrame: FrameDeadline.Never, source);
 
@@ -41,8 +42,8 @@ public sealed class AbilityScoreModifierFormatterTests
     {
         var manager = CreateRegisteredManager();
         AbilityScoreEffects.Grant(manager, 0, AbilityScoreType.Strength, 5);
-        GrantModifier(manager, 0, AbilityScoreType.Strength, StatModifierOperation.Multiplicative, 0.5f, StatusEffectSource.Admin);
-        GrantModifier(manager, 0, AbilityScoreType.Strength, StatModifierOperation.Additive, 2f, StatusEffectSource.AI);
+        GrantModifier(manager, 0, AbilityScoreType.Strength, StatModifierOperation.Multiplicative, 0.5f, ActionSource.Admin);
+        GrantModifier(manager, 0, AbilityScoreType.Strength, StatModifierOperation.Additive, 2f, ActionSource.AI);
 
         var lines = AbilityScoreModifierFormatter.GetOrderedLines(manager, 0, AbilityScoreType.Strength, now: 0);
 
@@ -56,8 +57,8 @@ public sealed class AbilityScoreModifierFormatterTests
     {
         var manager = CreateRegisteredManager();
         AbilityScoreEffects.Grant(manager, 0, AbilityScoreType.Strength, 5);
-        GrantModifier(manager, 0, AbilityScoreType.Strength, StatModifierOperation.Additive, -1f, StatusEffectSource.AI);
-        GrantModifier(manager, 0, AbilityScoreType.Strength, StatModifierOperation.Additive, 3f, StatusEffectSource.Admin);
+        GrantModifier(manager, 0, AbilityScoreType.Strength, StatModifierOperation.Additive, -1f, ActionSource.AI);
+        GrantModifier(manager, 0, AbilityScoreType.Strength, StatModifierOperation.Additive, 3f, ActionSource.Admin);
 
         var lines = AbilityScoreModifierFormatter.GetOrderedLines(manager, 0, AbilityScoreType.Strength, now: 0);
 
@@ -70,10 +71,10 @@ public sealed class AbilityScoreModifierFormatterTests
     {
         var manager = CreateRegisteredManager();
         AbilityScoreEffects.Grant(manager, 0, AbilityScoreType.Strength, 5);
-        GrantModifier(manager, 0, AbilityScoreType.Strength, StatModifierOperation.Multiplicative, -0.1f, StatusEffectSource.Admin);
-        GrantModifier(manager, 0, AbilityScoreType.Strength, StatModifierOperation.Additive, -1f, StatusEffectSource.AI);
-        GrantModifier(manager, 0, AbilityScoreType.Strength, StatModifierOperation.Multiplicative, 0.25f, StatusEffectSource.Admin);
-        GrantModifier(manager, 0, AbilityScoreType.Strength, StatModifierOperation.Additive, 2f, StatusEffectSource.Admin);
+        GrantModifier(manager, 0, AbilityScoreType.Strength, StatModifierOperation.Multiplicative, -0.1f, ActionSource.Admin);
+        GrantModifier(manager, 0, AbilityScoreType.Strength, StatModifierOperation.Additive, -1f, ActionSource.AI);
+        GrantModifier(manager, 0, AbilityScoreType.Strength, StatModifierOperation.Multiplicative, 0.25f, ActionSource.Admin);
+        GrantModifier(manager, 0, AbilityScoreType.Strength, StatModifierOperation.Additive, 2f, ActionSource.Admin);
 
         var lines = AbilityScoreModifierFormatter.GetOrderedLines(manager, 0, AbilityScoreType.Strength, now: 0);
 
@@ -85,7 +86,7 @@ public sealed class AbilityScoreModifierFormatterTests
     {
         var manager = CreateRegisteredManager();
         AbilityScoreEffects.Grant(manager, 0, AbilityScoreType.Strength, 5);
-        GrantModifier(manager, 0, AbilityScoreType.Strength, StatModifierOperation.Additive, 2.6f, StatusEffectSource.Admin);
+        GrantModifier(manager, 0, AbilityScoreType.Strength, StatModifierOperation.Additive, 2.6f, ActionSource.Admin);
 
         var lines = AbilityScoreModifierFormatter.GetOrderedLines(manager, 0, AbilityScoreType.Strength, now: 0);
 
@@ -97,7 +98,7 @@ public sealed class AbilityScoreModifierFormatterTests
     {
         var manager = CreateRegisteredManager();
         AbilityScoreEffects.Grant(manager, 0, AbilityScoreType.Strength, 5);
-        GrantModifier(manager, 0, AbilityScoreType.Strength, StatModifierOperation.Multiplicative, -0.104f, StatusEffectSource.Admin);
+        GrantModifier(manager, 0, AbilityScoreType.Strength, StatModifierOperation.Multiplicative, -0.104f, ActionSource.Admin);
 
         var lines = AbilityScoreModifierFormatter.GetOrderedLines(manager, 0, AbilityScoreType.Strength, now: 0);
 
@@ -110,23 +111,42 @@ public sealed class AbilityScoreModifierFormatterTests
         var manager = CreateRegisteredManager();
         AbilityScoreEffects.Grant(manager, 0, AbilityScoreType.Strength, 5);
         manager.Merge(1, new DisplayTextComponent("Iron Ring", "A plain iron ring."));
-        GrantModifier(manager, 0, AbilityScoreType.Strength, StatModifierOperation.Additive, 1f, StatusEffectSource.FromEntity(1));
+        GrantModifier(manager, 0, AbilityScoreType.Strength, StatModifierOperation.Additive, 1f, ActionSource.FromEntity(manager, new EntityKeys(), 1));
 
         var lines = AbilityScoreModifierFormatter.GetOrderedLines(manager, 0, AbilityScoreType.Strength, now: 0);
 
         Assert.AreEqual("Iron Ring : +1", lines[1].Text);
     }
 
+    /// <summary>The name is recorded when the modifier is granted, so it still shows once the source entity is gone and its id belongs to someone else.</summary>
     [TestMethod]
-    public void GetOrderedLines_EntitySourceWithoutDisplayText_FallsBackToNumericLabel()
+    public void GetOrderedLines_SourceEntityDestroyedAndIdReused_StillShowsTheOriginalNameAndCrawlerNumber()
     {
         var manager = CreateRegisteredManager();
+        manager.RegisterPackedPool<Game.Modules.Crawler.Components.CrawlerComponent>(static (ref existing, incoming) => existing = incoming);
         AbilityScoreEffects.Grant(manager, 0, AbilityScoreType.Strength, 5);
-        GrantModifier(manager, 0, AbilityScoreType.Strength, StatModifierOperation.Additive, 1f, StatusEffectSource.FromEntity(7));
+        manager.Merge(1, new DisplayTextComponent("Iron Ring", "A plain iron ring."));
+        manager.Merge(1, new Game.Modules.Crawler.Components.CrawlerComponent(4242));
+        GrantModifier(manager, 0, AbilityScoreType.Strength, StatModifierOperation.Additive, 1f, ActionSource.FromEntity(manager, new EntityKeys(), 1));
+
+        manager.RemoveAllComponents(1);
+        manager.Merge(1, new DisplayTextComponent("Goblin", "Someone else."));
 
         var lines = AbilityScoreModifierFormatter.GetOrderedLines(manager, 0, AbilityScoreType.Strength, now: 0);
 
-        Assert.AreEqual("Entity#7 : +1", lines[1].Text);
+        Assert.AreEqual("Iron Ring (Crawler #4242) : +1", lines[1].Text);
+    }
+
+    [TestMethod]
+    public void GetOrderedLines_EntitySourceWithoutDisplayText_IsUnknown()
+    {
+        var manager = CreateRegisteredManager();
+        AbilityScoreEffects.Grant(manager, 0, AbilityScoreType.Strength, 5);
+        GrantModifier(manager, 0, AbilityScoreType.Strength, StatModifierOperation.Additive, 1f, TestSources.Entity(7));
+
+        var lines = AbilityScoreModifierFormatter.GetOrderedLines(manager, 0, AbilityScoreType.Strength, now: 0);
+
+        Assert.AreEqual("Unknown : +1", lines[1].Text);
     }
 
     [TestMethod]
@@ -135,7 +155,7 @@ public sealed class AbilityScoreModifierFormatterTests
         var manager = CreateRegisteredManager();
         AbilityScoreEffects.Grant(manager, 0, AbilityScoreType.Strength, 5);
         AbilityScoreEffects.Grant(manager, 0, AbilityScoreType.Dexterity, 4);
-        GrantModifier(manager, 0, AbilityScoreType.Dexterity, StatModifierOperation.Additive, 9f, StatusEffectSource.Admin);
+        GrantModifier(manager, 0, AbilityScoreType.Dexterity, StatModifierOperation.Additive, 9f, ActionSource.Admin);
 
         var lines = AbilityScoreModifierFormatter.GetOrderedLines(manager, 0, AbilityScoreType.Strength, now: 0);
 

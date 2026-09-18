@@ -23,7 +23,7 @@ namespace Game.Modules.Burning.Systems;
 /// <remarks>
 /// Driven by a keyed timer wheel (MultiTimerWheel) -- several concurrently-burning parts per
 /// entity are possible, told apart by PartId (the component's TimerKey). Only parts due this frame
-/// are touched, on their exact frame at every processing tier (PLAN-timer-wheel.md).
+/// are touched, on their exact frame at every processing tier.
 /// </remarks>
 public sealed class BodyPartBurningSystem : ISystem
 {

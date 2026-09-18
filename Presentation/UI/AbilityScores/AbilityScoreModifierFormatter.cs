@@ -62,7 +62,7 @@ public static class AbilityScoreModifierFormatter
 
     private static ModifierDisplayLine FormatModifierLine(ComponentManager componentManager, StatModifierComponent modifier, long now)
     {
-        var sourceName = ModifierDisplayFormatting.DescribeSource(componentManager, modifier.Source);
+        var sourceName = ModifierDisplayFormatting.DescribeSource(modifier.Source);
         var modifierText = modifier.Operation == StatModifierOperation.Additive
             ? FormatSigned((int)MathF.Round(modifier.Magnitude))
             : $"{FormatSigned((int)MathF.Round(modifier.Magnitude * 100))}%";

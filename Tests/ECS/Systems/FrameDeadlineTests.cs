@@ -124,4 +124,52 @@ public sealed class FrameDeadlineTests
 
         public void Update(EngineTime time, byte stripeIndex) => onUpdate(clock.CurrentFrame);
     }
+
+    [TestMethod]
+    [DataRow(100u, 10, 99L, 100u)]
+    [DataRow(100u, 10, 100L, 110u)]
+    [DataRow(100u, 10, 105L, 110u)]
+    [DataRow(100u, 10, 110L, 120u)]
+    [DataRow(100u, 10, 1_000L, 1_010u)]
+    public void SkipOwed_MovesToTheFirstDeadlineOnCadenceAfterNow_FiringNothingInBetween(uint deadline, int period, long now, uint expected) =>
+        Assert.AreEqual(expected, FrameDeadline.SkipOwed(deadline, period, now));
+
+    [TestMethod]
+    public void SkipOwed_ParkedTimer_StaysParked() =>
+        Assert.AreEqual(FrameDeadline.Never, FrameDeadline.SkipOwed(FrameDeadline.Never, 10, 1_000));
+
+    /// <summary>A staggered first deadline lands somewhere in the second half-period after now: never sooner than half a period, never later than a period and a half.</summary>
+    [TestMethod]
+    public void AfterStaggered_StaysWithinHalfToOneAndAHalfIntervals()
+    {
+        for (var entityId = 0; entityId < 10_000; entityId++)
+        {
+            var delay = FrameDeadline.AfterStaggered(1_000, 60, entityId) - 1_000;
+
+            Assert.IsTrue(delay is >= 30 and < 90, $"Entity {entityId} waits {delay} frames.");
+        }
+    }
+
+    [TestMethod]
+    public void AfterStaggered_SameEntity_SameDeadline() =>
+        Assert.AreEqual(FrameDeadline.AfterStaggered(500, 60, 1234), FrameDeadline.AfterStaggered(500, 60, 1234));
+
+    /// <summary>The reason it exists: timers started on the same frame by consecutive entities must not all come due together.</summary>
+    [TestMethod]
+    public void AfterStaggered_ConsecutiveEntitiesStartedTogether_SpreadAcrossTheWholeInterval()
+    {
+        var entitiesPerDeadline = new int[60];
+        for (var entityId = 0; entityId < 6_000; entityId++)
+        {
+            entitiesPerDeadline[FrameDeadline.AfterStaggered(0, 60, entityId) - 30]++;
+        }
+
+        Assert.IsTrue(entitiesPerDeadline.All(static count => count is > 50 and < 150), string.Join(", ", entitiesPerDeadline));
+    }
+
+    [TestMethod]
+    [DataRow(0)]
+    [DataRow(1)]
+    public void AfterStaggered_IntervalTooShortToSpread_IsPlainAfter(int frames) =>
+        Assert.AreEqual(FrameDeadline.After(100, frames), FrameDeadline.AfterStaggered(100, frames, 7));
 }

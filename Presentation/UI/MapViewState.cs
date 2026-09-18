@@ -74,7 +74,7 @@ public sealed class MapViewState
     /// id shows up here for free instead of needing a matching new field plus a new
     /// ShellBootstrapper wiring line every time one's added. Read by UiInputController.
     /// ResolveContentDrag to recognize a drag touching either trade column so it can apply
-    /// PLAN-trade-window.md's own eligibility rules instead of the ordinary shop-pool check, which
+    /// the trade window's own eligibility rules instead of the ordinary shop-pool check, which
     /// would otherwise misfire on a trade-offer entity (it's never itself shop-registered). Null in
     /// test setups that don't wire a trade window at all, in which case no drag ever reads as
     /// touching one.

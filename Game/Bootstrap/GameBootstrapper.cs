@@ -1,5 +1,6 @@
 using Engine.Bootstrap;
 using Engine.Diagnostics;
+using Engine.ECS.Systems;
 using Engine.Events;
 using Engine.Math;
 using Engine.Modules;
@@ -12,9 +13,9 @@ using Game.Modules.BodyPartEffects;
 using Game.Modules.Burning;
 using Game.Modules.Class;
 using Game.Modules.ContactDamage;
+using Game.Modules.Containers;
 using Game.Modules.Core;
 using Game.Modules.Core.Components;
-using Game.Modules.Containers;
 using Game.Modules.Crawler;
 using Game.Modules.Currency;
 using Game.Modules.Death;
@@ -31,6 +32,7 @@ using Game.Modules.Race;
 using Game.Modules.Shops;
 using Game.Modules.StatModifiers;
 using Game.Modules.StatusEffectAura;
+using Game.Modules.StatusEffectAura.Components;
 using Game.Modules.StatusEffects;
 using Game.World;
 
@@ -55,6 +57,7 @@ public static class GameBootstrapper
     {
         IReadOnlyList<IModule> builtInModules =
         [
+            new Terrain.TerrainModule(),
             new CoreModule(),
             new HealthModule(),
             new ManaModule(),
@@ -112,8 +115,9 @@ public static class GameBootstrapper
         var modules = ModuleSet.Combine(builtInModules, survivingMods);
 
         var context = ConfigureGameModules(modules, mapQuery, world, mathUtility, eventBus, entityMoveSync, startupProfiler);
+        world.Terrain = context.Terrain;
 
-        var ecsContext = Bootstrapper.Build(modules, initialEntityCapacity, initialComponentCapacity, eventBus, startupProfiler);
+        var ecsContext = Bootstrapper.Build(modules, initialEntityCapacity, initialComponentCapacity, eventBus, startupProfiler, context.EntityKeys);
 
         // World is constructed before this method runs (its own doc comment on the World
         // parameter explains why -- MovementModule.Configure needs an IMapQuery before
@@ -124,24 +128,83 @@ public static class GameBootstrapper
         world.NonBlockingComponents = ecsContext.ComponentManager.GetMultiPool<NonBlockingComponent>();
         world.ForceBlockingComponents = ecsContext.ComponentManager.GetMultiPool<ForceBlockingComponent>();
         world.EntityManager = ecsContext.EntityManager;
+        world.EntityKeys = ecsContext.EntityManager.Keys;
         world.EventBus = ecsContext.EventBus;
 
         // Every placement through World gets a correct tier without its caller having to ask -- the
         // catch-all behind ProcessingTierResolver.CreateEntityAt. See that class's own remarks.
         world.EntityPlaced += context.ProcessingTierResolver.EnsureTiered;
 
-        // Which processing tiers are simulated at all, for every ITieredSystem. Every tier today.
-        // This is the single point P2 ("only Local and Neighborhood are simulated; Borough and
-        // beyond spawn in and wait") changes -- to 2 -- rather than an edit to each system. Engine
-        // only ever sees a count; what the tiers mean stays here.
-        ecsContext.SystemManager.SimulatedTierCount = ProcessingTierDivisors.ByTierIndex.Length;
+        WireEntityDestruction(context, ecsContext, world);
+
+        // Which processing tiers are simulated at all: every ITieredSystem through SystemManager, and
+        // every timer wheel through SimulationScope. Engine only ever sees a count and a predicate;
+        // what the tiers mean stays here.
+        ecsContext.SystemManager.SimulatedTierCount = ProcessingTierDivisors.SimulatedTierCount;
+        WireSimulationScope(context, ecsContext);
 
         // The clock modules were configured against (and captured) becomes the one SystemManager
         // advances, so every deadline reader sees the same "now". Presentation reaches it as
         // EcsContext.SystemManager.Clock.
         ecsContext.SystemManager.Clock = context.SimulationClock;
 
-        return new GameBootstrapResult(ecsContext, failures, context.Actions, context.MovedEntities, context.Items, context.StatusEffectDisplays, context.LocalTierRoster, context.ProcessingTierResolver);
+        return new GameBootstrapResult(ecsContext, failures, context.Actions, context.MovedEntities, context.Items, context.StatusEffectDisplays, context.LocalTierRoster, context.ProcessingTierResolver, context.Terrain);
+    }
+
+    /// <summary>Whatever destroys an entity, the state Game keeps about it outside the component pools lets go first: its aura sources, its map footprint, and its tier bookkeeping.</summary>
+    /// <remarks>Aura sources go before the footprint: their removal reads where the source last was, and removing the footprint leaves the entity unplaced.</remarks>
+    private static void WireEntityDestruction(GameModuleContext context, Engine.ECS.Context.EcsContext ecsContext, World.World world)
+    {
+        var componentManager = ecsContext.ComponentManager;
+        var auraSources = componentManager.IsRegistered<StatusEffectAuraSourceComponent>() ? componentManager.GetMultiPool<StatusEffectAuraSourceComponent>() : null;
+        var transforms = componentManager.GetDirectPool<TransformComponent>();
+        var processingTierResolver = context.ProcessingTierResolver;
+        var eventBus = ecsContext.EventBus;
+
+        ecsContext.EntityManager.EntityDestroying += entityId =>
+        {
+            if (auraSources?.Has(entityId) == true)
+            {
+                AuraSourceEffects.RemoveAll(auraSources, eventBus, entityId);
+            }
+
+            if (transforms.Has(entityId))
+            {
+                world.RemoveEntityFromMap(entityId, ref transforms.Get(entityId));
+            }
+
+            processingTierResolver.Forget(entityId);
+        };
+    }
+
+    /// <summary>An entity is simulated while its processing tier is below ProcessingTierDivisors.SimulatedTierCount, and resumes -- caught up over the span it spent frozen -- whenever a tier change lands it there.</summary>
+    /// <remarks>
+    /// An entity with no ProcessingTierComponent counts as simulated. That is the opposite of the
+    /// stripe sets' fail-open-to-Beyond, deliberately: a stripe set visiting an untiered entity rarely
+    /// costs only staleness, while a timer wheel skipping one would stop its timers outright, and
+    /// the entities that go untiered (never placed on the map) are exactly the ones nothing would
+    /// ever resume.
+    /// </remarks>
+    private static void WireSimulationScope(GameModuleContext context, Engine.ECS.Context.EcsContext ecsContext)
+    {
+        if (!ecsContext.ComponentManager.IsRegistered<ProcessingTierComponent>())
+        {
+            return;
+        }
+
+        var tiers = ecsContext.ComponentManager.GetDirectPool<ProcessingTierComponent>();
+        var simulationScope = context.SimulationScope;
+
+        simulationScope.SetPolicy(new ProcessingTierQuery(tiers).IsSimulated);
+        context.ProcessingTierEvents.TierChanged += (entityId, tier) =>
+        {
+            if (!ProcessingTierQuery.IsSimulatedTier(tier))
+            {
+                return;
+            }
+
+            simulationScope.RaiseResumed(entityId);
+        };
     }
 
     /// <summary>

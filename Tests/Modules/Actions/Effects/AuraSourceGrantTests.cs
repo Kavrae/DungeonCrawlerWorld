@@ -1,3 +1,4 @@
+using Engine.ECS.Entities;
 using Engine.ECS.Components;
 using Engine.ECS.Components.Stores;
 using Engine.Events;
@@ -24,6 +25,7 @@ public sealed class AuraSourceGrantTests
         EventBus: new EventBus(),
         MathUtility: new MathUtility(),
         ComponentManager: componentManager,
+        EntityKeys: new EntityKeys(),
         ActivatorName: "Test",
         ActivatorTags: [], Now: 0,
         AuraSources: auraSources,

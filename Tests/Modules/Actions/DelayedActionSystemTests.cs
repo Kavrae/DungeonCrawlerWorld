@@ -1,3 +1,4 @@
+using Engine.ECS.Entities;
 using Engine.ECS.Components;
 using Engine.ECS.Components.Stores;
 using Engine.ECS.Systems;
@@ -8,6 +9,8 @@ using Game.Modules.Actions.Activators;
 using Game.Modules.Actions.Components;
 using Game.Modules.Actions.Effects;
 using Game.Modules.Actions.Systems;
+using Game.Modules.ProcessingTier;
+using Game.Modules.ProcessingTier.Components;
 using Game.Modules.Death.Components;
 using Game.Modules.Health.Components;
 using Game.Modules.StatusEffects;
@@ -29,10 +32,9 @@ public sealed class DelayedActionSystemTests
     {
         private readonly Dictionary<(int, int, int), int> _occupantByPosition = [];
 
-        public Vector3Int MapSize { get; } = new(100, 100, 1);
+        public MapBounds Bounds { get; } = new(0, 0, 100, 100, 1);
         public bool IsOnMap(Vector3Int position) => true;
         public bool IsBlocking(int entityId) => true;
-        public int GetTerrainEntityIdAt(Vector3Int position) => -1;
 
         public void SetOccupant(Vector3Int position, int entityId) => _occupantByPosition[(position.X, position.Y, position.Z)] = entityId;
 
@@ -48,10 +50,10 @@ public sealed class DelayedActionSystemTests
     private static EngineTime Frame(long frame) => new(default, default, false, frame);
 
     /// <summary>
-    /// No ProcessingTier pool anywhere in this fixture, deliberately: a windup now resolves on its
-    /// own frame at every tier, so there is no cadence left for a tier to change.
+    /// The fixture has no tier pool driving a cadence -- a windup resolves on its own frame at every
+    /// tier -- but it does wire ProcessingTierEvents, which is how freezing cancels a windup.
     /// </summary>
-    private static (DelayedActionSystem System, ComponentManager ComponentManager, FakeMapQuery MapQuery, ActionCatalog ActionCatalog) Build()
+    private static (DelayedActionSystem System, ComponentManager ComponentManager, FakeMapQuery MapQuery, ActionCatalog ActionCatalog, ProcessingTierEvents TierEvents) Build()
     {
         var componentManager = new ComponentManager(initialEntityCapacity: 20, initialComponentCapacity: 10);
         componentManager.RegisterPackedPool<PendingDelayedActionComponent>(static (ref existing, incoming) => existing = incoming);
@@ -67,6 +69,7 @@ public sealed class DelayedActionSystemTests
             Effects: [new ActionEffect([new DirectDamage(MinFlatDamage: 0, MaxFlatDamage: 0)])],
             Activator: new SpellActivator(new TargetingSpec(TargetShape.SingleTarget, Range: 10), new ActionTiming(ActionTimingCategory.Delayed, ActionLockFrames: 30, CooldownFrames: null))));
 
+        var tierEvents = new ProcessingTierEvents();
         var system = new DelayedActionSystem(
             componentManager.GetPackedPool<PendingDelayedActionComponent>(),
             componentManager.GetMultiPool<ActionInstanceComponent>(),
@@ -78,10 +81,12 @@ public sealed class DelayedActionSystemTests
             playerQuery: null,
             new StatusEffectAuraApplierRegistry(),
             componentManager,
+            new EntityKeys(),
             statModifiers: null,
-            componentManager.GetPackedPool<DeadComponent>());
+            componentManager.GetPackedPool<DeadComponent>(),
+            processingTierEvents: tierEvents);
 
-        return (system, componentManager, mapQuery, actionCatalog);
+        return (system, componentManager, mapQuery, actionCatalog, tierEvents);
     }
 
     private static float HealthOf(ComponentManager componentManager, int entityId) =>
@@ -114,10 +119,57 @@ public sealed class DelayedActionSystemTests
         }
     }
 
+    /// <summary>Tiers the caster through the real resolver, which is what raises TierChanged -- the tier follows from where the caster stands relative to the reference, so the caller names the tier it wants and this places it accordingly.</summary>
+    private static void FreezeCaster(ProcessingTierEvents tierEvents, ProcessingTierLevel tier)
+    {
+        var tiers = new Engine.ECS.Components.Stores.DirectComponentPool<ProcessingTierComponent>(8, static (ref existing, incoming) => existing = incoming);
+        var transforms = new Engine.ECS.Components.Stores.DirectComponentPool<Game.Modules.Core.Components.TransformComponent>(8, static (ref existing, incoming) => existing = incoming);
+        var resolver = new ProcessingTierResolver();
+        resolver.Wire(tiers, transforms, tierEvents);
+        resolver.SetReferencePosition(new Vector3Int(0, 0, 0));
+        tiers.Add(CasterEntityId, new ProcessingTierComponent(ProcessingTierLevel.Local));
+
+        var position = tier switch
+        {
+            ProcessingTierLevel.Neighborhood => new Vector3Int(200, 0, 0),
+            ProcessingTierLevel.Borough => new Vector3Int(1200, 0, 0),
+            _ => new Vector3Int(5000, 0, 0),
+        };
+
+        resolver.EnsureTiered(CasterEntityId, position);
+    }
+
+    /// <summary>A windup is cancelled the moment its owner freezes: its target is either frozen too, and so untargetable across the seam, or simulated and long gone by the time the owner thaws.</summary>
+    [TestMethod]
+    public void OwnerFreezesMidWindup_PendingActionIsCancelled()
+    {
+        var (system, componentManager, mapQuery, actionCatalog, tierEvents) = Build();
+        ArmWindup(componentManager, mapQuery, actionCatalog);
+
+        FreezeCaster(tierEvents, ProcessingTierLevel.Borough);
+        Run(system, 0, ReadyAtFrame);
+
+        Assert.IsFalse(HasPending(componentManager), "Freezing cancels the windup.");
+        Assert.AreEqual(100, HealthOf(componentManager, TargetEntityId));
+    }
+
+    [TestMethod]
+    public void OwnerRetieredToASimulatedTierMidWindup_StillResolves()
+    {
+        var (system, componentManager, mapQuery, actionCatalog, tierEvents) = Build();
+        ArmWindup(componentManager, mapQuery, actionCatalog);
+
+        FreezeCaster(tierEvents, ProcessingTierLevel.Neighborhood);
+        Run(system, 0, ReadyAtFrame);
+
+        Assert.IsFalse(HasPending(componentManager));
+        DamageAssert.HealthAfterDamage(startingHealth: 100, expectedNormalDamage: 15, HealthOf(componentManager, TargetEntityId));
+    }
+
     [TestMethod]
     public void WindupStillRunning_EffectIsNotResolved()
     {
-        var (system, componentManager, mapQuery, actionCatalog) = Build();
+        var (system, componentManager, mapQuery, actionCatalog, _) = Build();
         ArmWindup(componentManager, mapQuery, actionCatalog);
 
         Run(system, 0, ReadyAtFrame - 1);
@@ -129,7 +181,7 @@ public sealed class DelayedActionSystemTests
     [TestMethod]
     public void OnItsReadyFrame_ResolvesEffectAndClearsPending()
     {
-        var (system, componentManager, mapQuery, actionCatalog) = Build();
+        var (system, componentManager, mapQuery, actionCatalog, _) = Build();
         ArmWindup(componentManager, mapQuery, actionCatalog);
 
         Run(system, 0, ReadyAtFrame);
@@ -142,7 +194,7 @@ public sealed class DelayedActionSystemTests
     [TestMethod]
     public void AfterResolving_FurtherFramesDoNotResolveAgain()
     {
-        var (system, componentManager, mapQuery, actionCatalog) = Build();
+        var (system, componentManager, mapQuery, actionCatalog, _) = Build();
         ArmWindup(componentManager, mapQuery, actionCatalog);
 
         Run(system, 0, ReadyAtFrame + 120);
@@ -153,9 +205,9 @@ public sealed class DelayedActionSystemTests
     [TestMethod]
     public void CasterIsDead_DoesNotResolveEffectButStillClearsPending()
     {
-        var (system, componentManager, mapQuery, actionCatalog) = Build();
+        var (system, componentManager, mapQuery, actionCatalog, _) = Build();
         ArmWindup(componentManager, mapQuery, actionCatalog);
-        componentManager.GetPackedPool<DeadComponent>().Add(CasterEntityId, new DeadComponent(KilledByEntityId: null, DiedAtFrame: 0));
+        componentManager.GetPackedPool<DeadComponent>().Add(CasterEntityId, new DeadComponent(KilledBy: ActionSource.Admin, DiedAtFrame: 0));
 
         Run(system, 0, ReadyAtFrame);
 
@@ -167,7 +219,7 @@ public sealed class DelayedActionSystemTests
     [TestMethod]
     public void CancelledBeforeItsReadyFrame_NeverResolves()
     {
-        var (system, componentManager, mapQuery, actionCatalog) = Build();
+        var (system, componentManager, mapQuery, actionCatalog, _) = Build();
         ArmWindup(componentManager, mapQuery, actionCatalog);
 
         Run(system, 0, 10);
@@ -183,7 +235,7 @@ public sealed class DelayedActionSystemTests
     [TestMethod]
     public void ReQueuedWithALaterDeadline_ResolvesOnTheNewFrameOnly()
     {
-        var (system, componentManager, mapQuery, actionCatalog) = Build();
+        var (system, componentManager, mapQuery, actionCatalog, _) = Build();
         ArmWindup(componentManager, mapQuery, actionCatalog);
 
         Run(system, 0, 10);
@@ -199,7 +251,7 @@ public sealed class DelayedActionSystemTests
     [TestMethod]
     public void NoPendingAction_DoesNothing()
     {
-        var (system, componentManager, mapQuery, _) = Build();
+        var (system, componentManager, mapQuery, _, _) = Build();
         mapQuery.SetOccupant(TargetTile, TargetEntityId);
         componentManager.Merge(TargetEntityId, new SimpleHealthComponent(100, 100));
 

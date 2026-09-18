@@ -1,3 +1,4 @@
+using Engine.ECS.Entities;
 using Engine.Bootstrap;
 using Engine.ECS.Context;
 using Engine.Events;
@@ -65,7 +66,7 @@ public sealed class AbilityScoreMilestoneAchievementTests
         module.Configure(context);
 
         IReadOnlyList<IModule> modules = [module, coreModule, movementModule, processingTierModule, statModifiersModule, abilityScoresModule];
-        var ecsContext = Bootstrapper.Build(modules, initialEntityCapacity: 10, initialComponentCapacity: 10, eventBus);
+        var ecsContext = Bootstrapper.Build(modules, initialEntityCapacity: 10, initialComponentCapacity: 10, eventBus, entityKeys: context.EntityKeys);
 
         return (ecsContext, eventBus, world);
     }

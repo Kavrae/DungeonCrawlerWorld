@@ -6,7 +6,7 @@ namespace Game.Modules.Core.Components;
 /// <remarks>
 /// A deadline, not a countdown: nothing ticks this down -- readers compare UnlockedAtFrame against
 /// the current simulation frame through ActionLockGate, so an entity costs nothing at all while
-/// locked, at any processing tier (PLAN-timer-wheel.md). CurrentLockTotalFrames is kept alongside
+/// locked, at any processing tier. CurrentLockTotalFrames is kept alongside
 /// it purely as the denominator of the UI's "how far through the windup" fraction (see
 /// ActionLockContent/HotbarContent/MapWindow's charge fill).
 /// </remarks>

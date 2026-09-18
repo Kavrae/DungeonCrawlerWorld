@@ -1,3 +1,4 @@
+using Engine.ECS.Entities;
 using Engine.ECS.Components;
 using Engine.ECS.Components.Stores;
 using Engine.Events;
@@ -38,6 +39,7 @@ public sealed record ActionEffectContext(
     EventBus EventBus,
     MathUtility MathUtility,
     ComponentManager ComponentManager,
+    EntityKeys EntityKeys,
     string ActivatorName,
     IReadOnlyList<Tag> ActivatorTags,
     long Now,

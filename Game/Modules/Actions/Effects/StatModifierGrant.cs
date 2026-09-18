@@ -41,7 +41,7 @@ public sealed record StatModifierGrant(
         var expiresAtFrame = durationFrames is { } frames ? FrameDeadline.After(context.Now, frames) : FrameDeadline.Never;
 
         StatModifierEffects.Apply(context.ComponentManager, context.TargetEntityId, Target, Operation, Polarity, CanModify, Magnitude,
-            expiresAtFrame, StatusEffectSource.FromEntity(context.SourceEntityId), ConditionTag);
+            expiresAtFrame, ActionSource.FromEntity(context.ComponentManager, context.EntityKeys, context.SourceEntityId), ConditionTag);
     }
 
     /// <summary>Shared by StatModifierGrant and StatusEffectImmunityGrant (granting immunity is unambiguously a Buff) -- context.DurationScaleMultiplier first, then Outgoing/IncomingBuffDuration or Outgoing/IncomingDebuffDuration (picked by polarity), both tag-conditional via context.ActivatorTags. A null or already-permanent (<= 0) durationFrames is returned unscaled, same guard as before.</summary>

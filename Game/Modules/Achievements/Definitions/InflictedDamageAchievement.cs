@@ -20,7 +20,6 @@ public sealed class InflictedDamageAchievement : IAchievementDefinition
 
     public void RegisterTrigger(AchievementTriggerContext context) =>
         context.SubscribeUntilUnlocked<EntityDamagedEvent>(entityDamaged =>
-            entityDamaged.Source.Kind == StatusEffectSourceKind.Entity
-            && entityDamaged.Source.EntityId == context.PlayerQuery!.PlayerEntityId
+            entityDamaged.Source.IsEntity(context.PlayerQuery!.PlayerEntityKey)
             && entityDamaged.EntityId != context.PlayerQuery.PlayerEntityId);
 }

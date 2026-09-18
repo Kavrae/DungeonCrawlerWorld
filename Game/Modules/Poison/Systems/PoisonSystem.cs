@@ -18,7 +18,7 @@ namespace Game.Modules.Poison.Systems;
 /// </summary>
 /// <remarks>
 /// Driven by a timer wheel (PackedTimerWheel), the same shape as BurningSystem: only poisonings due
-/// this frame are touched, on their exact frame at every processing tier (PLAN-timer-wheel.md).
+/// this frame are touched, on their exact frame at every processing tier.
 /// </remarks>
 public sealed class PoisonSystem : ISystem
 {

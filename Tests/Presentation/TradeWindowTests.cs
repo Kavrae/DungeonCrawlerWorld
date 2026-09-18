@@ -22,7 +22,7 @@ namespace Tests.Presentation;
 
 /// <summary>
 /// Covers TradeWindow.ComputeColumnValueText -- the live "Player Value"/"Shop Value" header
-/// computation (PLAN-trade-window.md's own "Header: Player Value / Shop Value" section), the first
+/// computation, the first
 /// TradeWindow test coverage of any kind (its own drag-eligibility/context-menu behavior is covered
 /// indirectly through InventoryGridContent/UiInputController instead, since that's where the actual
 /// logic lives -- this file is specifically about the Value computation TradeWindow itself owns).
@@ -206,8 +206,7 @@ public sealed class TradeWindowTests
     }
 
     /// <summary>
-    /// Regression test for the "merged-stack-cell gotcha" (PLAN-trade-window.md's own Confirmed
-    /// decisions) -- two separate 5-unit stacks of the same item must combine into one 10-unit bulk-
+    /// Regression test for the "merged-stack-cell gotcha" -- two separate 5-unit stacks of the same item must combine into one 10-unit bulk-
     /// price call, not two independent 5-unit calls, since bulk pricing is a non-linear per-band
     /// curve. Real shop stock seeded to 33 (Understocked, edges 25/37/63/75) specifically so the
     /// combined 10-unit sell walk (33-42) crosses into Normal at 37 -- a buggy per-stack-independent
@@ -276,8 +275,7 @@ public sealed class TradeWindowTests
     }
 
     /// <summary>
-    /// Matches PLAN-trade-window.md's own "Worked example" (Player Value 90G, Shop Value 66G, shop
-    /// has >=24G) -- both Values come entirely from priced items (10 potions sold at 9G/unit, 6
+    /// A worked example (Player Value 90G, Shop Value 66G, shop has >=24G) -- both Values come entirely from priced items (10 potions sold at 9G/unit, 6
     /// gadgets bought at 11G/unit, both Normal band off their own separately-anchored 50-unit real
     /// shop stock), not footer Gold, so the "remove all Gold first" wipe has nothing to remove and
     /// this test isolates the top-up mechanism alone.
@@ -369,7 +367,7 @@ public sealed class TradeWindowTests
 
         var stacks = componentManager.GetMultiPool<InventoryItemStackComponent>();
         Assert.IsFalse(InventoryQueries.TryGetStack(stacks, TradePlayerEntityId, PotionItemId, out _), "The player-side item must have left the trade column entirely.");
-        Assert.IsTrue(InventoryQueries.TryGetStack(stacks, ShopEntityId, PotionItemId, out _), "-- landing on the real shop, per PLAN-trade-window.md's own swap direction.");
+        Assert.IsTrue(InventoryQueries.TryGetStack(stacks, ShopEntityId, PotionItemId, out _), "-- landing on the real shop, per the trade window's swap direction.");
         Assert.AreEqual(0, ReadGold(componentManager, TradePlayerEntityId));
         Assert.AreEqual(0, ReadGold(componentManager, TradeShopEntityId));
         Assert.AreEqual(50, ReadGold(componentManager, ShopEntityId), "The left footer's whole Gold balance moved to the real shop.");
@@ -528,7 +526,7 @@ public sealed class TradeWindowTests
     }
 
     /// <summary>
-    /// PLAN-trade-window.md's own last open test-coverage item: confirms an item stack dropped
+    /// Confirms an item stack dropped
     /// directly on the *currency footer* of the player-side column (not that column's own item
     /// grid) still stages into the player-side trade entity, never miscategorized as a currency
     /// transfer. Targets the player-side column specifically -- a direct drag from the player's

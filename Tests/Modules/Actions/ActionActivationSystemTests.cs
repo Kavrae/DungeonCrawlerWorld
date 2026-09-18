@@ -1,3 +1,4 @@
+using Engine.ECS.Entities;
 using Engine.ECS.Components;
 using Engine.ECS.Systems;
 using Engine.Events;
@@ -35,10 +36,9 @@ public sealed class ActionActivationSystemTests
     {
         private readonly Dictionary<(int, int, int), int> _occupantByPosition = [];
 
-        public Vector3Int MapSize { get; } = new(100, 100, 1);
+        public MapBounds Bounds { get; } = new(0, 0, 100, 100, 1);
         public bool IsOnMap(Vector3Int position) => true;
         public bool IsBlocking(int entityId) => true;
-        public int GetTerrainEntityIdAt(Vector3Int position) => -1;
 
         public void SetOccupant(Vector3Int position, int entityId) => _occupantByPosition[(position.X, position.Y, position.Z)] = entityId;
 
@@ -105,6 +105,7 @@ public sealed class ActionActivationSystemTests
             playerQuery: null,
             new StatusEffectAuraApplierRegistry(),
             componentManager,
+            new EntityKeys(),
             statModifiers: null,
             componentManager.GetPackedPool<DeadComponent>(),
             componentManager.GetPackedPool<ManaComponent>());
@@ -189,7 +190,7 @@ public sealed class ActionActivationSystemTests
         componentManager.Merge(CasterEntityId, FixedDamageInstance(actionCatalog, ImmediateActionId, 15, 0));
         componentManager.Merge(CasterEntityId, new ActionLockComponent(standardLockFrames: ActionLockGate.StandardLockFrames, currentLockTotalFrames: 0, unlockedAtFrame: 0));
         componentManager.Merge(CasterEntityId, new PendingActionActivationComponent(ImmediateActionId, [TargetTile]));
-        componentManager.GetPackedPool<DeadComponent>().Add(CasterEntityId, new DeadComponent(KilledByEntityId: null, DiedAtFrame: 0));
+        componentManager.GetPackedPool<DeadComponent>().Add(CasterEntityId, new DeadComponent(KilledBy: ActionSource.Admin, DiedAtFrame: 0));
 
         system.Update(default, 0);
 
@@ -475,6 +476,7 @@ public sealed class ActionActivationSystemTests
             playerQuery: null,
             new StatusEffectAuraApplierRegistry(),
             componentManager,
+            new EntityKeys(),
             meleeDisabled: meleeDisabled);
 
         componentManager.Merge(TargetEntityId, new SimpleHealthComponent(100, 100));

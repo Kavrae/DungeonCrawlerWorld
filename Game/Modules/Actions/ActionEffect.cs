@@ -6,7 +6,7 @@ namespace Game.Modules.Actions;
 /// Owns its own application loop directly; there is deliberately no separate resolver class --
 /// Apply contains no per-kind knowledge at all, every entry applies itself. Entries apply in
 /// strict list order, and later entries observe the live component state earlier ones left
-/// behind -- see PLAN-action-effect-activator.md's "composition order is meaningful" section.
+/// behind, so composition order is meaningful.
 /// </summary>
 public sealed record ActionEffect(IReadOnlyList<IActionEffectEntry> Entries)
 {

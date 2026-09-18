@@ -4,9 +4,7 @@ namespace Tests.Presentation;
 
 /// <summary>
 /// Covers TooltipController's ownership guard -- the mechanism that makes the old "whichever
-/// consumer's Update runs last in a frame wins" stomping race (see TODO.md's "Consolidate all
-/// tooltips" entry and PLAN-trade-window.md's own "Fixes since first landed") structurally
-/// impossible. The actual arbitration behavior (one owner's Show, then a different owner's Hide,
+/// consumer's Update runs last in a frame wins" stomping race structurally impossible. The actual arbitration behavior (one owner's Show, then a different owner's Hide,
 /// leaves the first owner's tooltip still showing) isn't exercised here the same way TooltipTests
 /// doesn't exercise Tooltip.ShowNear directly -- Show ultimately calls Tooltip.ShowNear, whose own
 /// SetRelativePosition call reads ElementPoolService.GraphicsDevice.Viewport.Bounds, never wired

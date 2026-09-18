@@ -149,10 +149,15 @@ public sealed class MapWindowTests
 
         var contextMenuController = TestElementPoolServiceFactory.CreateContextMenuController(windowService, new UiLayerStack());
 
+        var terrain = new Game.Terrain.TerrainRegistry();
+        var mapView = new Game.Views.MapViewQuery(world, componentManager, resolvedActionCatalog, terrain);
+        var playerActionGate = new Game.Views.PlayerActionGate(componentManager.GetPackedPool<ActionLockComponent>(), world, new Engine.ECS.Systems.SimulationClock());
+        var eventBus = new EventBus();
+        var tintGrid = new MapTintGrid(componentManager, world, terrain, eventBus);
+
         windowService.RegisterFactory<MapWindow>(() => new MapWindow(
-            fontService, windowService, world, mapViewState, componentManager, new EventBus(), resolvedActionCatalog, resolvedItemCatalog, new TileRenderer(), new LabelRenderer(),
-            new SpriteSheetService(null, "Spritesheets"), new SpriteRenderer(), camera, actionTargeting, playerMovement, contextMenuController,
-            componentManager.GetPackedPool<ActionLockComponent>(), new Engine.ECS.Systems.SimulationClock()));
+            fontService, windowService, mapView, playerActionGate, mapViewState, tintGrid, eventBus, new TileRenderer(), new LabelRenderer(),
+            new SpriteSheetService(null, "Spritesheets"), new SpriteRenderer(), camera, actionTargeting, playerMovement, contextMenuController));
 
         var mapWindow = windowService.CreateElement<MapWindow>(null, new ElementOptions
         {
@@ -1091,7 +1096,7 @@ public sealed class MapWindowTests
         var transform = new TransformComponent(position, new Vector2Byte(1, 1));
         componentManager.Merge(CorpseEntityId, transform);
         world.PlaceEntityOnMap(CorpseEntityId, position, ref transform);
-        componentManager.Merge(CorpseEntityId, new DeadComponent(KilledByEntityId: null, DiedAtFrame: 0));
+        componentManager.Merge(CorpseEntityId, new DeadComponent(KilledBy: Game.World.ActionSource.Admin, DiedAtFrame: 0));
     }
 
     [TestMethod]
@@ -1216,7 +1221,7 @@ public sealed class MapWindowTests
         mapWindow.OnShopClicked = _ => { };
         var shopPosition = new Vector3Int(101, 100, 0);
         PlaceShop(world, componentManager, shopPosition);
-        componentManager.Merge(ShopEntityId, new DeadComponent(KilledByEntityId: null, DiedAtFrame: 0));
+        componentManager.Merge(ShopEntityId, new DeadComponent(KilledBy: Game.World.ActionSource.Admin, DiedAtFrame: 0));
 
         mapWindow.TryOpenEntityContextMenuAt(ComputeScreenPositionForMapPosition(mapWindow, mapViewState, shopPosition));
 

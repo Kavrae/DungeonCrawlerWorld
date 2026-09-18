@@ -76,6 +76,22 @@ public static class SpriteManifest
         return false;
     }
 
+    /// <summary>How many candidate cells name has -- 0 when the name is absent.</summary>
+    public static int CountCells(string name) => FindCells(name)?.Count ?? 0;
+
+    /// <summary>name's candidate cell at index, for callers that rolled the variant themselves and stored it (terrain cells, see TerrainCell.Variant).</summary>
+    public static bool TryGetCell(string name, int index, out SpriteComponent sprite)
+    {
+        if (FindCells(name) is { } cells && (uint)index < (uint)cells.Count)
+        {
+            sprite = ToSprite(cells[index]);
+            return true;
+        }
+
+        sprite = default;
+        return false;
+    }
+
     /// <summary>Cells for name, or null if the name is absent or its entry holds no cells -- an entry with an empty Cells list is treated as a miss rather than allowed to throw at the indexer.</summary>
     private static List<SpriteManifestCell>? FindCells(string name) =>
         Entries.TryGetValue(name, out var entry) && entry.Cells.Count > 0 ? entry.Cells : null;

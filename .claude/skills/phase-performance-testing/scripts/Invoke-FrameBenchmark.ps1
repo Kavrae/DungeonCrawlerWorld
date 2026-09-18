@@ -38,6 +38,11 @@ param(
     # StartFrame are warm-up (JIT, first fights); 3000 frames is 50 simulated seconds.
     [long]$StartFrame = 600,
     [long]$EndFrame = 3600,
+    # Square map width and height, always passed as --map-size= so every report records the real
+    # size (runs saved as 0 before 2026-09-15 were FloorBuilder's old 1000x1000 default). 3072 is the
+    # 3x3 of neighborhoods, today's default. Part of what makes runs comparable, like the seed and
+    # range: a different size is a different workload.
+    [int]$MapSize = 3072,
     [int]$TimeoutSeconds = 300,
     # Default 20 for a single run against a saved one, 10 for -Compare (medians of interleaved
     # runs are much tighter).
@@ -98,6 +103,7 @@ function Invoke-BenchmarkRun {
     param([string]$Exe, [bool]$RunHeadless)
 
     $gameArguments = @("--seed=$Seed", "--benchmark-frames=$StartFrame-$EndFrame")
+    $gameArguments += "--map-size=$MapSize"
     if ($RunHeadless) {
         $gameArguments = @("--headless") + $gameArguments
     } else {
@@ -250,7 +256,7 @@ if ($Compare) {
     $pairs = if ($Repeat -gt 0) { $Repeat } else { 3 }
     $threshold = if ($RegressionPercent -ge 0) { $RegressionPercent } else { 10 }
 
-    Write-Host "A/B, headless, $Configuration, seed $Seed, frames $StartFrame-$EndFrame, $pairs runs per side, interleaved"
+    Write-Host "A/B, headless, $Configuration, seed $Seed, frames $StartFrame-$EndFrame, map $MapSize, $pairs runs per side, interleaved"
     Write-Host "  A (baseline): $baselineExe  (saved $($baselineInfo.savedUtc), commit $($baselineInfo.gitCommit))"
     Write-Host "  B (current):  $ExePath"
 
@@ -319,6 +325,7 @@ if ($Compare) {
         configuration  = $Configuration
         unit           = "ms/frame"
         randomSeed     = $Seed
+        mapSize        = $MapSize
         startFrame     = $StartFrame
         endFrame       = $EndFrame
         runsPerSide    = $pairs
@@ -349,7 +356,7 @@ $runCount = if ($Repeat -gt 0) { $Repeat } elseif ($Headless) { 5 } else { 1 }
 $threshold = if ($RegressionPercent -ge 0) { $RegressionPercent } else { 20 }
 $sampling = if ($Headless) { "frame-range-headless" } else { "frame-range" }
 
-Write-Host "$(if ($Headless) { 'Headless' } else { 'Windowed' }) benchmark, $Configuration, seed $Seed, frames $StartFrame-$EndFrame, $runCount run(s)"
+Write-Host "$(if ($Headless) { 'Headless' } else { 'Windowed' }) benchmark, $Configuration, seed $Seed, frames $StartFrame-$EndFrame, map $MapSize, $runCount run(s)"
 $runs = @()
 for ($i = 1; $i -le $runCount; $i++) {
     if ($runCount -gt 1) { Write-Host "  run $i/$runCount..." }
@@ -385,6 +392,7 @@ $result = [ordered]@{
     configuration         = $Configuration
     unit                  = "ms/frame"
     randomSeed            = $Seed
+    mapSize               = $MapSize
     startFrame            = $StartFrame
     endFrame              = $EndFrame
     runs                  = $runCount
@@ -421,6 +429,7 @@ foreach ($candidate in (Get-ChildItem -Path $OutputDir -Filter "2*.json" | Where
     if ($candidateReport.sampling -eq $sampling -and
         $candidateConfiguration -eq $Configuration -and
         [int]$candidateReport.randomSeed -eq $Seed -and
+        [int]$candidateReport.mapSize -eq $MapSize -and
         [long]$candidateReport.startFrame -eq $StartFrame -and
         [long]$candidateReport.endFrame -eq $EndFrame) {
         $previousFile = $candidate

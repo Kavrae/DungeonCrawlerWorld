@@ -1,4 +1,5 @@
-﻿using Engine.ECS.Systems;
+﻿using Engine.ECS.Entities;
+using Engine.ECS.Systems;
 using Engine.Events;
 using Engine.Math;
 using Game.Modules.Achievements;
@@ -86,4 +87,18 @@ public sealed record GameModuleContext(IMapQuery MapQuery, MathUtility MathUtili
     /// what advances it.
     /// </summary>
     public SimulationClock SimulationClock { get; init; } = new();
+
+    /// <summary>
+    /// Which entities are simulated, for every timer wheel a module builds -- see SimulationScope.
+    /// Always a real instance; GameBootstrapper supplies the policy (an entity's processing tier
+    /// against SystemManager.SimulatedTierCount) once the pools it reads exist.
+    /// </summary>
+    public SimulationScope SimulationScope { get; init; } = new();
+
+    /// <summary>The stable key table every entity is issued into, created here so modules can hold it before the ECS exists.</summary>
+    /// <remarks>GameBootstrapper hands this same instance to Bootstrapper.Build, which gives it to the EntityManager that issues and releases the keys.</remarks>
+    public EntityKeys EntityKeys { get; init; } = new();
+
+    /// <summary>Every terrain definition, filled during Configure -- same reasoning as StatusEffectAuraAppliers above. A mod registers its own terrain here, or replaces a built-in by registering its key.</summary>
+    public Terrain.TerrainRegistry Terrain { get; init; } = new();
 }

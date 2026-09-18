@@ -39,6 +39,12 @@ public sealed class Ghost(MathUtility mathUtility) : IBlueprint
     /// <summary>ᗣ (U+15A3, Canadian Aboriginal Syllabics). Requires Symbola-Emoji.ttf loaded as a fallback font (see FontService)</summary>
     private const string Glyph = "G";
 
+    /// <summary>One override shared by every creature of this race: an ActionDefinition is never changed in place, only replaced, and building it per creature was most of what a creature allocated.</summary>
+    private static readonly ActionDefinition QuickAttackOverride = ActionOverrideEffects.OverrideFlatDamage(QuickAttackAction.Build(), QuickAttackDamage);
+
+    /// <inheritdoc cref="QuickAttackOverride"/>
+    private static readonly ActionDefinition PowerAttackOverride = ActionOverrideEffects.OverrideFlatDamage(PowerAttackAction.Build(), PowerAttackDamage);
+
     public void Build(ComponentManager componentManager, int entityId)
     {
         componentManager.Merge(entityId, new RaceComponent(RaceId, RaceName, Description));
@@ -48,15 +54,11 @@ public sealed class Ghost(MathUtility mathUtility) : IBlueprint
         componentManager.Merge(entityId, new GlyphComponent(Glyph, Color.Blue));
         componentManager.Merge(entityId, new MovementComponent(MovementMode.Random, null, null));
         componentManager.Merge(entityId, new ActionLockComponent(standardLockFrames: 48, currentLockTotalFrames: 0, unlockedAtFrame: 0));
-        componentManager.Merge(entityId, new TransformComponent(
-    new Vector3Int(0, 0, (int)MapLayer.Ground), new Vector2Byte(1, 1)));
+        componentManager.Merge(entityId, new TransformComponent(TransformComponent.UnplacedOn(MapLayer.Ground), new Vector2Byte(1, 1)));
 
         componentManager.Merge(entityId, new NonBlockingComponent(NonBlockingKind.Phasing));
-        var quickAttackOverride = ActionOverrideEffects.OverrideFlatDamage(QuickAttackAction.Build(), QuickAttackDamage);
-        componentManager.Merge(entityId, new ActionInstanceComponent(QuickAttackAction.Id, quickAttackOverride));
-
-        var powerAttackOverride = ActionOverrideEffects.OverrideFlatDamage(PowerAttackAction.Build(), PowerAttackDamage);
-        componentManager.Merge(entityId, new ActionInstanceComponent(PowerAttackAction.Id, powerAttackOverride));
+        componentManager.Merge(entityId, new ActionInstanceComponent(QuickAttackAction.Id, QuickAttackOverride));
+        componentManager.Merge(entityId, new ActionInstanceComponent(PowerAttackAction.Id, PowerAttackOverride));
 
         componentManager.Merge(entityId, new ActionInstanceComponent(DodgeAction.Id, overrideDefinition: null));
 

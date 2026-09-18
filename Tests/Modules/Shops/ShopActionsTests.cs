@@ -32,6 +32,7 @@ public sealed class ShopActionsTests
     private sealed class FakePlayerQuery(int playerEntityId) : IPlayerQuery
     {
         public int PlayerEntityId { get; } = playerEntityId;
+        public Engine.ECS.Entities.EntityKey PlayerEntityKey { get; init; } = TestSources.KeyOf(playerEntityId);
     }
 
     private static readonly FakePlayerQuery NoEntityIsThePlayer = new(playerEntityId: -1);

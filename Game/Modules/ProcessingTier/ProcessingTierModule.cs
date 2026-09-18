@@ -56,7 +56,7 @@ public sealed class ProcessingTierModule : IGameModule
 
         // The roster stays scoped to movers -- see LocalTierRoster.Wire -- even though tiering now
         // covers every positioned entity. It exists to be the small side of "Local AND pending
-        // something", and terrain within the Local radius would make it roughly fifty times larger.
+        // something", and every stationary entity within the Local radius would make it far larger.
         _localTierRoster.Wire(componentManager.GetPackedPool<MovementComponent>(), tiers, _events);
 
         systemManager.Register(new ProcessingTierSystem(transforms, _mapQuery, _movedEntities, _resolver, _playerQuery));

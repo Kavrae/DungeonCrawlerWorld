@@ -218,12 +218,12 @@ public sealed class SecondaryInventoryWindow(
 
     private string ResolveKillerName()
     {
-        if (!_deadPool.Has(_entityId) || _deadPool.GetReadonly(_entityId).KilledByEntityId is not { } killerEntityId)
+        if (!_deadPool.Has(_entityId) || _deadPool.GetReadonly(_entityId).KilledBy is not { Kind: ActionSourceKind.Entity } killer)
         {
             return "Unknown";
         }
 
-        return ResolveName(killerEntityId);
+        return killer.Identity.DisplayName;
     }
 
     private long ResolveDiedAtFrame() => _deadPool.Has(_entityId) ? _deadPool.GetReadonly(_entityId).DiedAtFrame : 0;

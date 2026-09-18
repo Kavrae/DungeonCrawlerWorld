@@ -55,6 +55,116 @@ Global), each split High/Medium/Low priority. Landed work lives in `IMPLEMENTATI
 
 ## Engine
 
+### High Priority
+
+#### Optimize crawler number selection
+
+`UniqueNumberAllocator` (`Engine/Math/`) picks a crawler number by rejection sampling: draw a random
+number in [1, 13,000,000] and retry until it isn't in a `HashSet<int>` of every number handed out.
+Crawler numbers never recycle or change for an entity, and the sliding window keeps minting them: about 1,470 per newly loaded neighborhood (2% of ~73k creatures), and a
+revisited neighborhood's fresh population mints new ones again.
+
+- **It slows as the range fills.** The expected draws per allocation are 1 / (fraction still free):
+  2 at half full, 100 at 99%.
+- **It never returns once the range is full.** The retry loop has no exit.
+- **The set grows without bound,** a hash entry per number ever issued (hundreds of MB at millions of
+  numbers).
+
+At the base 2 tiles/second a shift loads 3 neighborhoods about every 8.5 minutes, so the range fills
+after roughly 420 hours of straight walking. Realistic play is an order of magnitude shorter, so
+running out isn't the problem; the degrading cost and the unbounded set are.
+
+Fix: a seeded bijection over the range instead of sampling, for example a small Feistel network with
+cycle-walking, applied to a counter. Every allocation is O(1), numbers never repeat, nothing is stored
+beyond the counter (which save/load persists alongside the seed), the sequence stays deterministic
+for a seeded run, and exhaustion is detected exactly and throws.
+
+#### Investigate a flyweight / prefab pattern for NPC entities
+
+Companion to flyweight terrain. Terrain can stop being entities
+entirely; NPCs can't, but most of an NPC's component data is identical across every instance of the
+same race/class combination until something actually changes it.
+
+**This was investigated once already (session "Flyweight pattern for shared entity data",
+2026-08-07), and the conclusion was no.** That investigation measured *value duplication* at
+1000²: `DisplayTextComponent` (16 distinct pairs across 2.1M entities, the only real waste being
+per-Build interpolated names, fixed with `DisplayNameCache`), `BackgroundComponent` (4-byte inline
+`Color`, so deduplicating saves nothing) and `SpriteComponent` (already shared through
+`SpriteManifest`). Its reasoning still holds for what it measured: deduplicating a small inline
+struct buys nothing and costs a lookup plus cache locality on hot paths.
+
+**What the 4000² measurements add is a different cost that study didn't look at:**
+
+- **Capacity, not occupancy.** Direct pools are indexed by entity id, so each costs
+  `capacity x (size + 5)` no matter how few entities hold the component. In the last diagnostics
+  capture, `ClassComponent` (4 instances) and `ShopStockPreferenceComponent` (11) each cost ~40 MB,
+  and `StatusEffectImmunityComponent` (4) ~36 MB. That cost comes from entity *count* (mostly terrain
+  today) and shrinks with flyweight terrain on its own, so **measure again after terrain flyweight
+  lands, before designing anything here.**
+- **Fat per-instance components on every NPC:** `BodyPartComponent` (268k instances, 48.8 MB),
+  `ActionInstanceComponent` (109k, 41.8 MB), `AbilityScoreComponent`, `RaceComponent`,
+  `InventoryItemStackComponent` (872k, 94.6 MB). This is the part of the per-neighborhood cost that
+  survives terrain flyweight and scales with dense population templates (goblins).
+- **Streaming makes creation cost matter**, not just memory. Each window shift integrates
+  3 neighborhoods of NPCs, and every component a blueprint merges is work done on the main thread.
+
+Questions to answer:
+
+1. After terrain flyweight, what does a typical and a dense-template neighborhood of NPCs cost in
+   memory and creation time, per component type?
+2. Which of those components are never written after `Build` for most instances? That is the
+   candidate shared set.
+3. Is the model a **prefab with copy-on-write overrides** (flecs' `IsA` relationship: an instance
+   reads a shared prefab's component until it writes its own copy), **shared/const components**
+   (Unity DOTS shared components and blob assets, Unreal Mass const shared fragments: immutable
+   per-archetype data referenced by index), or **per-type definition tables** read directly by
+   systems (the terrain approach)?
+4. How does it interact with blueprint composition? `CompositeBlueprint` applies parts in order and
+   merge actions blend rather than overwrite (see `GlyphComponent`/`MovementComponent` merge
+   policies), so a "shared race+class prefab" is the *result* of a composition, keyed by the ordered
+   part list, not a single blueprint.
+5. What do hot-path systems pay? Reading through a shared table breaks the contiguous span read
+   that the 2026-08-07 study rightly protected. Measure `MovementSystem`/`TestCombatBehaviorSystem`
+   before and after.
+6. Save/load: a shared prefab plus per-instance overrides is also a natural save format (store the
+   prefab key and the overrides only), which matters once Beyond neighborhoods are written to disk.
+
+#### Investigate chunk-bucketed tiered stripe sets
+
+**How it works today.** Each entity's tier is its own `ProcessingTierComponent`, which
+`ProcessingTierResolver` computes and writes. When a tier changes it raises `TierChanged`, and each of
+the ~10 `TieredEntityStripeSet`s built by `ProcessingTierWiring.CreateAndWire` moves the entity to a
+different bucket. A window shift therefore costs work for every entity: ~363,000 on the 3072² map,
+drained 512 per frame by `ProcessingTierTransitionQueue` over ~12 seconds, with each one sent to every
+tiered set and to `SimulationScope`.
+
+**The alternative.** Each tiered set keeps its entities bucketed by chunk (neighborhood), and a tier
+becomes a property of the chunk. A window shift would then move chunk buckets between tiers, costing
+work for each chunk (≤ 25) rather than for each entity. It could also remove
+`ProcessingTierTransitionQueue` and the ~12 s settling time, and shrink or remove
+`NeighborhoodMembershipIndex`. It is also the Engine-side need that would justify moving the
+`Neighborhoods`/`NeighborhoodCells<T>`/`NeighborhoodMembershipIndex` group into an Engine chunk type.
+
+Measure, don't assume. Use `phase-performance-testing` headless A/B on a fixed seed, across a frame
+range that includes a window shift:
+1. **Crossing cost:** the worst frame and the total, current drain vs. reclassifying chunks.
+2. **Steady-state visit cost:** striping inside each chunk bucket means (chunks × stripes) small lists
+   per tier instead of one per stripe. Check per-frame iteration overhead and cache locality in
+   `TieredSystemRunner`.
+3. **Move cost:** an entity crossing a chunk boundary would migrate buckets in every tiered set even
+   when both chunks are the same tier. Today it only migrates on a real tier change.
+4. **Memory:** lists per chunk × stripe × tiered set, with the 3-neighborhood cache included.
+5. **Local:** Local is per-entity (radius 80, with hysteresis) and can't come from a 1024² chunk.
+   Decide whether it becomes an overlay (a per-entity Local bucket that overrides the chunk's tier;
+   `LocalTierRoster` already keeps a live Local set, but for filtering, not scheduling) or needs
+   smaller chunks, and what each costs.
+6. **Thaw/freeze hooks:** `SimulationScope` (`GameBootstrapper.WireSimulationScope`) resumes each
+   entity's timers when `TierChanged` lands it in a simulated tier. A chunk-level transition still
+   has to reach each entity for that, so check whether this puts back the per-entity cost the change
+   was meant to remove.
+Decide on the numbers. If steady-state or move cost regresses more than the crossing saves, record the
+result in `IMPLEMENTATION-NOTES.md` and drop the idea.
+
 ### Medium Priority
 
 #### FrameEventBuffer double-buffering + event system cleanup
@@ -66,6 +176,39 @@ visibility for 1-frame latency (check this is OK for `MovementSystem`'s `Contact
 `SubscribeOnce`/`DispatchBuffered` (`Engine/Events/`) for consistency -- a different mechanism (deferred
 re-entrant handler vs. high-frequency batching), never compared side by side.
 
+#### Fix module dependencies
+
+`IModule.Dependencies` is a list of `Type`s, but `ModuleSet.Combine` replaces a built-in by `Guid Id`.
+A mod that replaces a module (e.g. `Mods.TestFixtures.ReplacementHealthModule`) makes any hard
+`typeof(...)` dependency on it fail `Bootstrapper`'s topo-sort, even though the replacement provides the
+same components. Because of that, most modules skip real dependencies and use soft `IsRegistered`-guarded
+pools instead, each explained in its own comment (`BodyPartEffectsModule`, `HealthModule`, `DeathModule`,
+`ActionsModule`, `MovementModule`). `Dependencies` also decides system run order as well as what a module
+requires. `ProcessingTierModule` → `MovementModule` exists only so `ProcessingTierSystem` runs after
+`MovementSystem`, and the `MovementModule` ↔ `StatusEffectAuraModule` pair can't declare both directions
+without a cycle. Fix: resolve dependencies by `Id` (or by provided capability/component) so replacements
+satisfy them, and separate "requires" from "runs after" so ordering constraints don't have to be
+expressed as module requirements. Then turn the soft dependencies that are really hard back into
+declared ones.
+
+#### Investigate moving runtime pool checks to hard dependencies
+
+Follows "Fix module dependencies" above. Game code checks for another module's pool at runtime in about
+80 places: `componentManager.IsRegistered<T>()` (~49, across 20 files in `Game/Modules`,
+`Game/Bootstrap/GameBootstrapper.cs` and `Game/World/ActionSource.cs`) and
+`GetOptionalDirectPool/PackedPool/MultiPool` (~32, `ComponentManagerOptionalPoolExtensions`). Every
+optional pool leaves a null path in the code that uses it. Go through each check and sort it:
+- **Actually optional:** the module works correctly without the other one (e.g. `HealthModule`
+  treating missing `StatModifierComponent` as no modifiers). Keep the check.
+- **Only avoiding the replacement or cycle problem:** once dependencies resolve by `Id` or capability,
+  declare it in `Dependencies`, fetch the pool normally, and delete the null handling.
+- **Only there so minimal test module sets build:** decide whether those tests should include the
+  dependency instead. Per the rule that tests don't drive design, a check that exists only for tests
+  should become a hard dependency.
+Write down the result for each check before changing anything. Some soft checks exist on purpose to
+break cycles (`MovementModule`/`DeathModule` → `StatusEffectAuraSourceComponent`) and may have to stay
+soft even after the fix.
+
 ### Low Priority
 
 #### Equipment (Engine)
@@ -76,6 +219,80 @@ primitive. Companion to the Game/Presentation equipment items below.
 ## Game
 
 ### High Priority
+
+#### Let FreeCast actions activate while the action lock is counting down
+
+A FreeCast action should be usable during the shared action lock (the global cooldown), so an entity
+can move and then immediately Dodge to an adjacent tile, moving twice in quick succession. That is
+intended; today it doesn't work, which is a bug.
+
+Likely cause, not yet confirmed: `ActionActivationSystem.TryActivateFreeCast` already ignores the lock,
+but Dodge's relocation is queued in Presentation onto `MovementComponent.NextMapPosition`, and
+`MovementSystem` refuses to move an entity while `ActionLockGate.IsBlocked` (and while a pending action
+or consumable activation exists). So the dodge grant fires but the step waits for the lock to expire.
+Check the input side too (`ActionTargetingController`, hotbar), in case a FreeCast confirm is gated on
+the lock before it is ever queued.
+
+- A FreeCast move must not wait for the lock, and shouldn't restart or extend the lock the earlier
+  move started.
+- Dodge's own cooldown (4 s) still stops it being spammed as movement; only the lock stops mattering.
+- Cover it with a test driving move, then Dodge toward an adjacent tile, on consecutive frames.
+
+#### Real map generation -- neighborhood templates, replacing TestMapBuilder
+
+The sliding window of 1024x1024 neighborhoods is in place: `NeighborhoodStreamer` generates each neighborhood on demand from its own
+`NeighborhoodRecord` seed through `TestMapBuilder.GenerateNeighborhood`, which is still a stand-in --
+random terrain and flat per-tile population rolls, with the hallway cross, shops and spawn only in
+neighborhood (0, 0). Replace it with a generator where each neighborhood is built from a random
+combination of four templates:
+
+- **Layout template:** walls, corridors, terrain palette, landmarks.
+- **MOB population template:** races and classes, placement rules, and a per-neighborhood population
+  budget (replacing the flat 3%/2%/2% rolls that make creature count scale with area).
+- **Neighborhood interaction template:** what joins adjacent neighborhoods (aligned corridors,
+  faction borders, shared features, raids). Decided per pair of neighbors. Runtime behavior is the
+  low-priority "Neighborhood interactions -- Outbound and Inbound" below.
+- **Quest line template:** quest hooks placed into the chosen layout and population, possibly
+  spanning neighborhoods.
+
+Neighborhood placement is **randomized**: a given kind of neighborhood won't always appear at the
+same coordinates, so relationships between neighbors must be generated dynamically rather than read
+from a fixed world layout. Population density is defined per population template (dense goblin
+warrens, sparse ones elsewhere).
+
+Starting points from the plan's research (section 6): keep a rolling plan one ring outside the loaded
+window, and roll each neighborhood's record (template choices plus its own seed) against its
+already-assigned neighbors when the window shifts. By the time a neighborhood's tiles are generated,
+every edge it shares is decided (the rolling equivalent of CDDA's overmap or Qud's world map).
+Interaction templates should be constraints on a single shared edge, since a record is rolled with
+only some of its neighbors known. Generation reads only the record's own seed, never a shared
+sequence, so contents don't depend on generation order or thread timing. Generate layout as data
+first, then spawn creatures born correctly tiered (a phased sequence deferred for this generator). Spelunky's role-based room templates are a model for composing
+authored pieces randomly. The record, per-record seeding and row-at-a-time generation already exist
+(`NeighborhoodRecords`, `TestMapBuilder.GenerateLayout`/`PopulateNeighborhood`); the new generator
+plugs into the same iterator shape so the streamer's per-frame budget keeps working. Subsumes the seed
+plumbing in "Random map generation v1" below. Needs its own plan.
+
+#### Asynchronous neighborhood generation
+
+Today a window shift generates each neighborhood on
+the main thread, a row at a time under `NeighborhoodStreamer`'s unit budget: 8-17 seconds per shift
+in Release, and the Debug build drops to ~3 fps while it runs. Split the work the way the plan's
+threading model describes:
+
+- **Worker thread:** generate layout-as-data (terrain ids, structures, the spawn list with blueprint
+  choices and positions) and, once saves exist, read and parse them. Nothing on the worker touches a
+  pool, the `Map` or the `EventBus`.
+- **Main thread, time-sliced:** integrate the staged result -- load the neighborhood's stores, copy the
+  layout in with `TerrainLoadedEvent` per row, create the spawn list's entities under the budget.
+- **Determinism:** the record seed decides the contents, never how far the worker has gotten, and
+  integration order is fixed, so a seeded headless benchmark still reproduces the same world.
+- **Cancellation:** a shift that reverses before integration starts drops the staged result, the way
+  the streamer already cancels not-started loads.
+
+The one-neighborhood buffer (the player arrives ~1024 tiles from the next load edge) leaves generation
+plenty of time, so the goal is fewer main-thread frames per shift, not faster shifts. Easier after
+"Real map generation" lands, since that generator is written as data from the start.
 
 #### Simplify non-local combat for performance
 
@@ -146,7 +363,158 @@ hundreds per player. Needs a `MultiComponentPool<SkillComponent>`-shaped store (
 not single-instance). See Spell leveling below for the same shape at smaller scale -- share one leveling
 primitive. Consumer: Player selection menu's skill-gated detail (Presentation, below).
 
+#### Complex health for every race, or none -- decide before body parts spread further
+
+Goblin and Human (so the player) grant `BodyPartComponent`; Fairy, Ghost and every non-creature
+holder use `SimpleHealthComponent`. That split is the order the races happened to be converted in,
+not a decision. Both extremes costed against Human's 11 parts (struct sizes from `Unsafe.SizeOf`,
+per-system costs from a headless benchmark -- seed 1, frames 600-3600, `EcsContext.Update` at 1.489
+ms/frame, 2026-09-17):
+
+**Memory is the whole argument.** A part costs 48 B (32 B struct + 16 B of `MultiComponentPool` dense
+side arrays) against `SimpleHealthComponent`'s 16 B (8 B + 8 B packed) -- **528 B vs 16 B per NPC,
+33x** -- and it is paid for the whole loaded window (~660k race NPCs: 9 neighborhoods x ~73k, at 3%
+ground / 2% underground / 2% flying of 1024²), not just the simulated part of it:
+
+- All Simple: 660k instances, ~18 MB including `WorldSessionBootstrapper`'s 1.467x reserve.
+- Today (~21% complex -- goblins are 49% of the ground roll only): 1.53M parts + 522k simple, ~116 MB.
+- All Complex: **7.27M parts, ~520 MB** -- roughly +400 MB over today.
+
+Two multipliers on top of that. Dense growth is linear (`_denseGrowthAmount` = 220k), so filling
+7.27M takes ~33 `Array.Resize` passes -- ~5.7 GB copied, ending on a ~350 MB LOH array -- during
+initial population, before the startup reserve exists to help. And `BodyPartComponent` holds a
+`string Name`, so all ~520 MB is traced by every gen-2 GC, where the reference-free
+`SimpleHealthComponent[]` is skipped outright. See "Component size audit" and "Gen-1 GC frames during
+a window shift" below.
+
+**CPU is the cheap half.** Only Local plus the centre neighborhood simulate
+(`SimulatedTierCount = 2`), so the health systems see ~10.8k entity-visits/sec whatever the world
+size. Measured per visit: `SimpleHealthRegenSystem` ~135 ns; `ComplexHealthRegenSystem` ~550 ns plus
+`BodyPartEffectsSystem` ~400 ns, which has no Simple counterpart -- **~7x per visit**. Extrapolated
+to the whole population: all Simple ~0.024 ms/frame, today 0.060, all Complex ~0.17, so +8% of the
+simulation budget at the top end. What rides along with it is worth more than the regen systems
+themselves: `TestCombatBehaviorSystem.TryDecideSelfHeal` and `MapViewQuery.GetHealthBarFraction` (per
+visible entity, every Draw) turn `HealthQueries.TryGetTotals` into an 11-node chain walk;
+`ComplexHealthRegenSystem.AccrueWhileFrozen` walks every part and sorts lockouts on tier promotion,
+which lands on the window shift, already the spikiest frame; and a neighborhood load becomes 807k
+`MultiComponentPool.Add` calls instead of 73k, inside `NeighborhoodStreamer`'s per-frame budget.
+
+All of it scales linearly in part count -- 11 is Human's number, 6 parts halves everything above.
+
+If every race should have body parts, these come first, then measure again:
+
+1. Replace `BodyPartComponent.Name` with a `byte` id into a shared part-template table: 32 B -> 24 B,
+   and the dense array becomes reference-free so gen-2 stops tracing 10M+ references.
+2. Materialize parts lazily -- Simple until first damage, or on entry to a simulated tier -- so
+   memory tracks the ~73k simulated instead of the 660k loaded.
+3. Cache an entity's summed current/maximum so `HealthQueries.TryGetTotals` stops being a walk.
+
+Not yet verified as an A/B: the figures above extrapolate one mixed-population benchmark rather than
+two runs with every race converted each way. Do that A/B before committing to (2), which is the
+expensive one to build.
+
 ### Medium Priority
+
+#### Gen-1 GC frames during a window shift
+
+While `NeighborhoodStreamer` populates newly loaded neighborhoods, gen-1 collections occasionally
+produce frames of ~17-19 ms (headless Release, seed 12345, 3072², with the 1 ms timer the windowed
+game has). Gen-1 frames during a shift run 12-17 ms, varying run to run; the over-budget ones show up
+mainly in the first shift of a session, while the population grows to its settled size. Measured by
+teleporting the player 70 tiles into the next column of neighborhoods at frames 700 and 1400 of a
+headless run (3 loads, then 3 loads plus 3 evictions); see "World scaling" in `IMPLEMENTATION-NOTES.md`.
+
+What's known:
+- **Pause cost tracks what population keeps.** Before the 7d allocation cuts, each gen-1 pause was
+  8-25 ms and promoted 10-16 MB, nearly everything population had allocated. Sharing wand loot
+  definitions and race attack overrides, caching `AbilityScoreType` values and removing a capturing
+  closure in `InventoryActions.AddItem` took steady-state population to 469 bytes allocated and ~340
+  kept per entity, and shift 2 from 9 frames over budget to 0.
+- **Remaining per-creature allocations** (sampled with a `GCAllocationTick` listener): occupant
+  `List<int>`s in `MapNeighborhood` (one per occupied cell, new for every loaded neighborhood),
+  `EntityStripeSet`/`TieredEntityStripeSet` dictionary growth, `NeighborhoodCells<int>` aura-grid
+  dictionaries rehashing up to ~22 MB per neighborhood, and `TimerWheel` slot lists.
+- **Per-frame gameplay garbage** in the same window, short-lived but part of every gen-0/gen-1:
+  `ActionEffectContext`, `ManhattanCellVisitor` closures, strings, boxed enumerators.
+- **Tried and worse:** Server GC, and a 256 MB gen-0 budget (55-120 ms pauses). Pre-sizing every
+  stripe-set and aura-grid dictionary didn't change the spike frames.
+
+Options to measure:
+- Occupant lists: keep a single occupant inline per cell and spill to a list only for a second one, or
+  recycle an unloaded neighborhood's `MapNeighborhood` (arrays and lists) for the next load.
+- Stripe sets: an entity-indexed location array shared across a tiered set's tiers, instead of five
+  dictionaries per set.
+- Aura grids: pre-size a new neighborhood's dictionary from its loaded neighbors' counts, or a dense
+  per-neighborhood array where a grid is dense.
+- Remove the per-frame allocations above.
+
+Acceptance: no frame over 16.67 ms during either shift of that teleport measurement, other than the
+teleport frame itself.
+
+#### Component size audit
+
+Measured with `Unsafe.SizeOf` (2026-09-16). Every loaded entity pays for these, and a neighborhood
+streams in about 73k creatures at a time, so bytes per instance are memory, cache misses and streaming
+cost at once. The largest, and what makes them large:
+
+- **`InventoryItemStackComponent`, 56 B with references, ~5.3M instances on the 3x3 (~370 MB).** Two
+  `Guid`s (`ItemDefinitionId`, `StackInstanceId`) are 32 B of it; an item catalog index and a counter
+  would do. `FirstAcquiredUtcTicks` (8 B) and the `ItemDefinition? Override` reference are rare per
+  stack and could move to a side table keyed by stack instance.
+- **`MovementComponent`, 40 B, one per creature.** `TargetMapPosition` and `NextMapPosition` are each a
+  `Vector3Int?` (16 B); a sentinel position (as `TransformComponent.UnplacedOn` already is) makes each
+  12 B, or a flag byte beside two positions.
+- **`RaceComponent` and `ClassComponent`, 32 B with references each.** A `Guid` plus `Name` and
+  `Description` strings copied from the definition into every instance; a definition index is enough.
+- **`BodyPartComponent`, 32 B with a reference, several per creature with complex health.** `Name`
+  repeats the part definition's string per instance.
+- **`ActionInstanceComponent` and `PendingDelayedActionComponent`, 32 B with references.** A `Guid`
+  action id where an action catalog index would do; the pending action also holds a target-tile array.
+
+Components holding references are scanned by every gen-2 GC as well as being larger, so moving
+strings and overrides out is worth more than the byte count alone suggests. Measure pool memory
+before and after (the diagnostics memory report lists each pool) and fix the largest total first.
+
+#### Quest NPC simulation tickets
+
+No quest system exists yet beyond the TEMPORARY quest composer demo and the "quest line template"
+in "Real map generation" above. Note this before quests land:
+Borough is frozen, so a quest NPC that walks out of the middle neighborhood freezes mid-quest. A
+courier stops, a fleeing target stands still, a rival party never arrives.
+
+Minecraft's precedent is **chunk tickets**: a ticket holds an area at a chosen load level
+regardless of the player's position (portals, spawn chunks, chunk loaders). A quest variant has to
+satisfy two constraints: it must not reintroduce the cost frozen Borough removed, and **the NPC
+must never walk through a frozen chunk**. An NPC moving through frozen territory can't be
+attacked, can't fight, can't be blocked by anything that would move, and nothing around it reacts,
+so a live NPC in a frozen world is wrong in every direction.
+
+First, most quest NPCs don't need a ticket. An escort or companion stays near the player, so it is
+already Local. Tickets only matter for NPCs acting **independently** of the player.
+
+Three shapes, from cheapest:
+
+1. **Entity-only ticket** (simulate just the NPC): rejected. This is exactly the "walks through a
+   frozen chunk" case.
+2. **Abstract transit** (recommended default): when an independent quest NPC's route enters frozen
+   territory, remove it from the map and move it along the route on the neighborhood-record layer
+   ("arrives at X at frame F"). It reappears when its position is simulated again: at F if the
+   destination is active by then, otherwise frozen at the destination and caught up on its next
+   promotion. It never occupies frozen tiles in transit, and it costs one record timer. Its
+   reappearance goes through the smeared transition queue. If its route leaves the loaded window
+   entirely, abstract transit is the only option.
+3. **Area ticket** (only when the quest needs the NPC to be interceptable live): a small moving
+   bubble of radius r around the NPC runs at Neighborhood speed, reusing Local's machinery: O(boundary)
+   per step, promotion with catch-up on entry, freezing on exit, all smeared. At r = 32 that's
+   ~4,200 tiles, about 0.4% of a neighborhood. Keep r larger than the NPC's own engagement range plus
+   a buffer, so it never tries to act across its bubble edge (the same seam rule as the
+   Neighborhood/Borough border). **Cap concurrent area tickets** (e.g. 2-4) and give each one an
+   expiry. When the cap is hit, extra tickets fall back to abstract transit rather than degrading
+   the frame.
+
+Open: the ticket cap and radius (measure the per-bubble cost), whether an area ticket may extend
+into the dropped ring when the window shifts (probably not: fall back to transit), and how ticket
+cost shows up in the diagnostics engine so it's visible when budgets are tuned.
 
 #### Toggle item activator
 
@@ -199,16 +567,14 @@ preference. V2: preference by combat style/item rarity, once either concept exis
 #### NPCs use shops
 
 Goblins/Fairies/Ghosts buying and selling at a `Shop`/`PotionShop`/`GeneralShop` autonomously via
-`ShopActions.TryBuyFromShop`/`TrySellToShop` -- see `PLAN-shops.md` (the player-only version already
-shipped). Needs actual economic decision-making (what to sell for spare Gold, what to buy when low
+`ShopActions.TryBuyFromShop`/`TrySellToShop` (the player-only version already shipped). Needs actual economic decision-making (what to sell for spare Gold, what to buy when low
 on supplies) -- blocked on the NPC behavior composition item (this file's own Low Priority section),
 which is where that decision would live once it exists.
 
 #### Destroyed items
 
 A "destroyed" item state: displays as "destroyed", modified description, can still be picked up, but
-can't be used. Update `ContainerDestructionSystem` (and any future container types --
-`PLAN-storage-containers.md`) to mark a destroyed container's inventory items destroyed instead of
+can't be used. Update `ContainerDestructionSystem` (and any future container types) to mark a destroyed container's inventory items destroyed instead of
 deleting them outright, once this lands.
 
 #### Add source and target modifier checks for all actions
@@ -220,6 +586,80 @@ effect entry's `Apply`, even with no real `StatModifierTarget` consumer yet, so 
 source can hook in by granting a modifier alone. Calling-convention change, not a new stat.
 
 ### Low Priority
+
+#### Neighborhood interactions -- Outbound and Inbound
+
+Only the middle neighborhood is simulated; the 8 around it (Borough)
+are loaded but frozen, nothing may target across the simulated/frozen boundary, and an entity
+promoted out of Borough catches up its active timers. So an interaction between two neighborhoods
+(the canonical case: goblins raiding fairies) can never be simulated live on both sides at once.
+It runs in one of two modes, named by direction relative to the **active** neighborhood:
+
+**Outbound -- initiated by the active neighborhood, resolved abstractly.** Example: the active
+goblin neighborhood raids the frozen fairy neighborhood.
+
+1. The goblins' interaction template (or later, faction AI) launches a raid party of real goblin
+   entities. They path to a crossing point on the shared edge and walk across it.
+2. Each raider freezes on arrival, per the normal Borough rule. Because nothing targets across the
+   boundary, there's no half-live skirmish at the border first. The party is recorded on the
+   neighborhood-record layer: members, target neighborhood, crossing point, departure frame, and
+   return frame (departure + the template's raid duration).
+3. At the return frame the raid is **resolved abstractly** from the party's strength against the
+   defenders: damage per raider, which raiders died, loot taken. The fairy side takes the matching
+   losses on concrete frozen entities (casualties chosen nearest the crossing point become corpses;
+   loot is removed from their inventories and containers). Writing to frozen entities is fine, and
+   it is smeared across frames like any other bulk change.
+4. Survivors are moved back across the border at the crossing point with their damage and loot
+   applied (a promotion, so catch-up runs). Dead raiders stay on the far side as corpses.
+
+- **Calibrate so an abstract raid is never better than the same raid fought live.** X4: Foundations'
+  out-of-sector combat outperformed in-sector combat, and players learned to look away to win (see
+  the plan, section 2). Use the real damage formulas at a pessimistic hit rate, and tune against
+  headless Inbound battles of the same composition.
+- **The target becomes active mid-raid** (the window shifts): cancel the pending abstract
+  result. Raiders thaw where they stand, with catch-up, and the raid continues live as ordinary
+  combat.
+- **The player's Local bubble reaches the frozen raiders** (standing near the border): same as
+  above for the raiders and defenders inside Local. The raid goes live there.
+- **The origin freezes while raiders are away:** resolve when the origin next becomes active,
+  with the result as of the return frame. It's closed form, so waiting costs nothing.
+- **The target is unloaded (Beyond) mid-raid:** resolve immediately and return the survivors
+  early.
+
+**Inbound -- initiated by a frozen neighborhood, fully simulated.** Example: a frozen goblin
+neighborhood raids the active fairy neighborhood.
+
+1. The frozen neighborhood's record carries its own schedule. That is a timer on the record, not on
+   any entity: a handful of records, so it's cheap to keep ticking while every entity is frozen.
+2. When it fires, real goblins are chosen from the frozen neighborhood, so population stays
+   consistent. They are promoted (catch-up) and placed at crossing points **on the active side of
+   the border**, a few per frame so they arrive in waves rather than in one frame.
+3. They go through full simulation: combat, looting, everything the active neighborhood normally
+   runs.
+4. On a template-defined retreat condition (loot carried, casualties taken, or elapsed time) they path
+   back across the border and freeze on arrival, per the normal Borough rule.
+
+- **Pursuit stops at the border.** Nothing can target across it, so fleeing raiders are safe once
+  they cross. Behavior should not chase into frozen territory, since a pursuer that follows just
+  freezes.
+- **Stranded raiders** that can't get back (blocked, or cut off by the player) stay in the active
+  neighborhood as ordinary hostiles and become its members after a timeout.
+- **The origin becomes active mid-raid:** nothing special, both sides are simply live.
+- **The target freezes mid-raid** (the player leaves): raiders freeze where they stand, like
+  everything else, and resume when it's next active.
+- **The origin is unloaded mid-raid:** raiders re-home to the neighborhood they're standing in.
+  Deletion follows current position, so they are not deleted with their origin.
+
+Shared notes:
+
+- **Crossing points** come from the layout templates' edge constraints (corridors that line up), so
+  the interaction template and layout agree on where a border can be crossed.
+- **Cost:** an Outbound raid costs nothing while away (frozen members plus one record timer). An
+  Inbound raid adds its raiders to the already-budgeted active neighborhood. Only the placement and
+  return steps need smearing.
+- **Raid state lives on the neighborhood record,** so it's serialized with the record when Beyond
+  neighborhoods start being saved.
+- Depends on frozen Borough and catch-up (plan phase 6) and on real map generation above.
 
 #### AdvancedDodge buff
 
@@ -236,7 +676,7 @@ the not-yet-existing Skills system (this file's own Skills entry).
 
 A new per-stack condition/durability concept, distinct from Destroyed items above (a damaged item
 stays usable, just worth less and eventually repairable, rather than a binary destroyed/not state).
-`ItemDefinition.GoldValue`/`ShopActions.ComputeBuyPrice`/`ComputeSellPrice` (`PLAN-shops.md`) would
+`ItemDefinition.GoldValue`/`ShopActions.ComputeBuyPrice`/`ComputeSellPrice` would
 need a per-stack damage modifier applied on top of the flat catalog value -- necessarily per-stack,
 not per-`ItemDefinition`, same split Item weight below already follows for a different field. Repair
 likely wants to be the same Repair skill the entry above already wants, generalized to cover
@@ -244,7 +684,7 @@ likely wants to be the same Repair skill the entry above already wants, generali
 
 #### Trapped containers
 
-Containers (`PLAN-storage-containers.md`) can be trapped. Needs a trap-effect concept triggered on
+Containers can be trapped. Needs a trap-effect concept triggered on
 interaction/loot.
 
 #### Trap detection and disarming skills
@@ -256,9 +696,137 @@ disarming Trapped containers.
 
 Randomly selected; affects UI appearance and biases quest/enemy selection.
 
-#### End of level staircase (Game)
+#### Long-range teleports -- pause and reload the map
 
-Descend/ascend logic. See the matching Presentation item for visuals.
+World streaming relies on the one-neighborhood buffer between the player and Beyond to load
+and save neighborhoods asynchronously, since walking 1024+ tiles takes far longer than a load. A
+late-game teleport can land outside the loaded 3x3 window, where the buffer gives no protection.
+Handle it as a special case: pause the game, unload (later: save) the current window, generate or
+load the 3x3 around the destination, then resume. It reuses the window's load/unload path rather
+than adding a second one.
+
+#### EndOfLevelStairs (Game)
+
+A one-way teleport from one floor to the next -- never back up, and never between MapLayers
+(UnderGround, Ground and Flying are all the same floor). Floors are entirely separate maps: nothing on
+one interacts with another except the entities carried through. When the player takes them, the carried
+entities are unplaced (`TransformComponent.UnplacedOn`), everything else is destroyed through the normal
+`EntityDestroying` cleanup, and the next floor's map is built and the carried entities placed onto it.
+First real consumer of `FloorEnteredEvent`. Open: modules capture `IMapQuery` at `Configure`, so either
+`World` swaps its `Map` in place or modules are reconfigured per floor; and which MapLayer the stairs sit
+on (likely Ground, so flyers land and diggers surface to use them). See the matching Presentation item
+for visuals.
+
+#### NPCs avoid EndOfLevelStairs, and are destroyed entering one
+
+NPCs can never use EndOfLevelStairs. NPC movement avoids a staircase tile, but an NPC that ends up on one
+anyway -- lured, or pushed there by forced movement (see Entity displacement with damage) -- is instantly
+destroyed rather than blocked. Getting a monster onto the stairs is a known crawler tactic from the source
+material, so avoidance is a movement preference that forced movement overrides, never a hard block.
+Check it where movement resolves (every placement or move onto the tile, at any processing tier), not in
+each NPC behavior. Companions and followers are the exception -- see the next item. Open: whether a
+multi-tile footprint overlapping the stairs counts as entering; whether destruction leaves a corpse, loot,
+or kill credit.
+
+#### Companions and followers travel through EndOfLevelStairs
+
+A standalone feature, larger than the stairs themselves. Unlike every other NPC, companions and followers
+can use EndOfLevelStairs. No companion/follower concept exists yet. Needs:
+- Temporary NPC storage: an NPC that takes the stairs before or after the player is held off-map with its
+  exact state and restored on the next floor. See Entity storage -- suspend an entity from processing
+  without per-system checks (Global).
+- Timers: how long a stored NPC waits and what happens when that runs out, as `FrameDeadline`s -- and
+  against which clock while no floor holds it.
+- Unlock conditions: what makes an NPC eligible to follow through the stairs at all.
+
+#### MapLayer interaction (overview)
+
+UnderGround, Ground and Flying are three layers of one floor (floors themselves are separate maps -- see
+EndOfLevelStairs (Game)). Today the layers are sealed from each other: nothing changes an entity's Z, and
+movement, target shapes, auras and the Local tier all stay on one layer. Wanted: flyers and diggers
+(shorthand for UnderGround entities) are privileged -- they reach Ground more easily than Ground reaches
+them -- but for playability they mostly come to Ground to interact, with specific exceptions (dropping
+items from the air, earthquakes). The player changes layer only through rare dedicated abilities (a
+flying race, a burrow spell). How flyers appear to a Ground player is still undecided.
+
+Connected items, in dependency order:
+1. Local processing tier across every MapLayer
+2. MapLayer reach rules for actions
+3. Layer-change actions -- Land, Take Off, Surface, Burrow
+4. Auras and terrain effects per MapLayer
+5. Corpses across MapLayers
+6. Digger detection (Game), then Digger detection (Presentation)
+
+#### Local processing tier across every MapLayer
+
+Part of MapLayer interaction (overview); comes first, since every cross-layer attack depends on it.
+`ProcessingTierResolver.ComputeTier` grants Local only on the player's own MapLayer, so a flyer directly
+overhead or a digger directly below runs at Neighborhood tier while attacking the player. Local should
+cover every layer of the floor. `ProcessingTierSystem.RetierSquare` retiers only the player's Z, and a
+player layer change retiers the old and new layers separately -- both change, and the layer-change retier
+mostly goes away. At current spawn rates (Ground 3%, UnderGround 2%, Flying 2%) the Local population
+roughly doubles, so benchmark before and after (phase-performance-testing skill).
+
+#### MapLayer reach rules for actions
+
+Part of MapLayer interaction (overview). Every action declares the exact MapLayers it can affect from each
+caster layer -- not relative "above/below", which would let a digger's ranged attack reach Ground the same
+way a Ground ranged attack reaches Flying. Starting proposal:
+
+| Caster / Target | Flying | Ground | UnderGround |
+|---|---|---|---|
+| Flying | all | tagged only (drop from air, some ranged) | none |
+| Ground | ranged only | all | tagged only (bombs) |
+| UnderGround | none | tagged only (earthquake) | all |
+
+Touch points: `TargetShapeResolver` (Engine) builds every shape on the origin's Z;
+`ActionTargetingController` builds hovered/clicked tiles on the player's Z; `TestCombatBehaviorSystem`
+must only pick targets it can reach. An action refused for reach gets clear feedback (disabled cursor),
+never a silent no-op. An undetected digger is never a valid target (see Digger detection (Game)).
+Related: Add source and target modifier checks for all actions (Medium).
+
+#### Layer-change actions -- Land, Take Off, Surface, Burrow
+
+Part of MapLayer interaction (overview). Land/Take Off (Flying <-> Ground) and Surface/Burrow
+(UnderGround <-> Ground) as ordinary actions with an action lock, so the transition is a window where
+Ground entities can hit back. Movement never changes Z (`MovementCandidates` keeps it), so these are the
+only path. Refused with feedback when any tile of the destination footprint can't be occupied -- reuse
+`MovementCandidates.CanOccupyCell` against the destination Z (Blocking occupant, structure,
+movement-blocking terrain). `World.MoveEntity` takes a full `Vector3Int`; verify a Z-only move keeps the
+occupant index, the per-column occupied-layer mask and `NeighborhoodMembershipIndex` (keyed by Z) in
+sync. NPCs get them by race (Fairy and Ghost populate Flying and UnderGround today); the player only
+through rare dedicated abilities (a flying race, a burrow spell).
+
+#### Auras and terrain effects per MapLayer
+
+Part of MapLayer interaction (overview). `StatusEffectAuraSystem` spreads every aura on its centre's Z
+only, and terrain auras (`TerrainAuraSources`) skip Flying, which has no floor. Decide per effect which
+layers it reaches, with the same exact-layers rule as MapLayer reach rules for actions: a Ground fire
+aura probably doesn't burn a flyer overhead, while an earthquake is exactly an UnderGround effect reaching
+Ground.
+
+#### Corpses across MapLayers
+
+Part of MapLayer interaction (overview).
+- A flyer's corpse falls to Ground. `DeathSystem` converts a dead entity to NonBlocking where it stands, so
+  the fall is a Z move after that; a NonBlocking corpse can share a tile with a Ground Blocking occupant.
+  Open: a wall or lava below, a multi-tile footprint partly over a wall, and whether the fall damages what
+  it lands on (see Entity displacement with damage).
+- A digger's corpse stays UnderGround, lootable only while the looter is UnderGround. Bug today:
+  `MapWindow.IsAdjacentToPlayer` (Loot and Shop) uses `GridDistance.ChebyshevDistance`, which ignores Z,
+  so a Ground player standing over an UnderGround corpse can loot it. Needs a same-layer check for every
+  corpse and shop, not just diggers.
+
+#### Digger detection (Game)
+
+Part of MapLayer interaction (overview). Diggers are hidden from the player until detected, through
+future skills and actions (none exist yet -- see Skills), at two levels: low (something is there) and
+high (what it is). Hidden means hidden everywhere, not just undrawn: inspection and selection, tooltips,
+targeting (never a valid target), and the per-column occupied-layer mask behind
+`MapWindow.DrawLayerBadges`, which today would give a digger away with a `v` badge. Needs a per-digger
+detection level against the player, and when it lapses (a deadline, per the `FrameDeadline`
+convention). Open: player-only or NPCs too; whether surfacing reveals a digger. See Digger detection
+(Presentation).
 
 #### Random map generation v1
 
@@ -432,14 +1000,13 @@ item below (time-gated interactions).
 #### Restock shops on the day/night swap
 
 Follow-up to In-game day/time tracking above, which this is blocked on -- no real "day/night" concept
-exists yet to swap on. Once one does, reroll a shop's stock (`ShopStock.GrantRandomStock`,
-`PLAN-shops.md`) on the transition, and reset its own Gold back toward its starting amount so a
+exists yet to swap on. Once one does, reroll a shop's stock (`ShopStock.GrantRandomStock`) on the transition, and reset its own Gold back toward its starting amount so a
 shop the player has drained doesn't stay unable to buy anything forever. Today a shop's stock is
 rolled once at spawn and never refreshes.
 
 #### Preferred stock for items added to shops
 
-`ShopStockPreferenceComponent`/`EnsurePreferredStockLevel` (`PLAN-stock-based-shop-pricing.md`) is
+`ShopStockPreferenceComponent`/`EnsurePreferredStockLevel` is
 only ever assigned by `ShopStock.GrantRandomStock` at spawn-time stocking. A player selling a shop an
 item type it has never stocked before -- via ordinary drag-sell today, or the trade window once it
 lands -- silently falls back to `ShopStockPricing.DefaultPreferredStockLevel` (20) regardless of what
@@ -525,6 +1092,23 @@ save-file-level meta-progression store distinct from anything in a single `EcsCo
 ## Presentation
 
 ### High Priority
+
+#### New user input cancels buffered input
+
+Player input that can't take effect yet is buffered until the player's action lock clears, and a
+later, different input doesn't replace it:
+
+- `PlayerMovementController.TryQueuePlayerMove` only writes `MovementComponent.NextMapPosition` while
+  the player is at rest, so a move pressed during the lock is kept, and pressing another direction
+  before it resolves is ignored -- the player steps the way they no longer want to go.
+- `ActionTargetingController.TryRelocateForDodge` writes the same field, so a dodge relocation and a
+  queued step can overwrite each other in whichever order they were issued.
+
+The rule: the newest input wins. A new move replaces a pending move or dodge relocation, and a newly
+confirmed action or item cancels a pending move, so what resolves when the lock clears is always the
+last thing the player asked for. Audit every other place player input is held for later (pending
+action and consumable activations, armed targeting) against the same rule, and keep the cancel in one
+shared place rather than per input type.
 
 #### Global hard minimum/maximum element sizes for user resizing
 
@@ -700,7 +1284,50 @@ is a float -- round it for display. `PlayerManaBarContent` has no `FontService` 
 outlined/contrast draw (`ContrastTextRenderer`, or `LabelRenderer.DrawCentered(..., outline: true)`)
 so white text stays readable over a bright fill.
 
+#### Show "Self" as the source when an entity is its own source
+
+A `ActionSource` created from the entity the effect landed on renders as that entity's own name
+today -- the player's self-granted modifiers read "Player1" in the Ability Score window's line prefix
+and hover title, and in `PlayerActivityLog`'s `source=` field, as though something else did it to them.
+It should read "Self" instead. There are real self-sourced modifiers to see this on right now:
+`Tank`'s MaximumHealth/HealthRegen bonuses and `PlayerBlueprint`'s multiplicative ability-score seeds
+all pass `ActionSource.FromEntity(..., player)`.
+
+The rule is per-viewer, not player-global: the source is "Self" when its entity is the same entity the
+line is describing. That way inspecting an NPC's own self-buff reads "Self" too, rather than only ever
+special-casing the player. Compare with `ActionSource.IsEntity(key)` against an `EntityKey` --
+never an entity id, which is recycled the moment an entity is destroyed (`IPlayerQuery.PlayerEntityKey`
+is the player's). That means the describe call needs the subject entity's key threaded in, which it
+doesn't take today.
+
+Fold the two copies of the logic into one while doing it: `ModifierDisplayFormatting.DescribeSource`
+(`Presentation/UI/ModifierDisplayLine.cs`) and `PlayerActivityLog.DescribeSource` are the same
+Entity-vs-`ToString()` switch written twice, and `SecondaryInventoryWindow.ResolveKillerName` is a
+third partial copy (the corpse "killed by" line -- suicide/self-kill should read "Self" there as well).
+`ActionSource.ToString()` stays as-is: it's diagnostics with no subject to be relative to.
+
 ### Medium Priority
+
+#### Draw neighborhood borders and the Local radius in Admin Mode
+
+The map gives no sign of where one 1024x1024 neighborhood ends and the next begins, or where the
+player's Local bubble ends, so the tier a creature is running at -- and whether a crossing did what it
+should -- can only be inferred from behaviour. Under Admin Mode (F12, `GlobalState.IsAdminModeOn`),
+draw both over the map, **in two different colours**:
+
+- **Neighborhood borders:** a line on each 1024-tile boundary the viewport crosses, ideally with the
+  neighborhood's coordinate (`Neighborhoods.CellOf`) labelled somewhere unobtrusive.
+- **The Local radius:** the square of Chebyshev radius `ProcessingTierResolver.LocalRadiusTiles` (80)
+  around the player, on the player's own layer. Local overrides the neighborhood tier, so where the
+  bubble reaches into another neighborhood *this* line, not the neighborhood border, is the actual
+  simulated/frozen seam -- the place a simulated creature stops attacking a frozen one. Found testing
+  phase 6b: goblins and fairies fighting 75 tiles away in the neighborhood across the border looked
+  wrong until the distance was worked out by hand. Consider a fainter second square at the exit radius
+  (`LocalExitRadiusTiles`, 96), since a creature already Local only leaves past that.
+
+Worth extending to the tier itself once the lines exist -- tinting or outlining the player's own
+neighborhood against the frozen ring would make a crossing, and phase 6's smeared thaw, directly
+visible while testing rather than something to infer.
 
 #### AI-generated sprites with a hovered state
 
@@ -763,13 +1390,43 @@ empty but catching something else in its footprint is a separate case to decide 
 #### Minimap + Fog of War, folded into Neighborhood/Borough zoom
 
 Collapsed minimap (bottom-right); expanding it takes over the zoom-out feature rather than living
-alongside it. Shares work with `MapCamera`'s `Neighborhood` (1000x1000)/`Borough` (2000x2000, same
-region sizes as `ProcessingTierSystem`'s tiers) zoom levels -- static structures + boss/landmark
+alongside it. Shares work with `MapCamera`'s `Neighborhood`/`Borough` zoom levels, which should match
+the processing-tier regions (a 1024x1024 neighborhood, and the 3072x3072 3x3 window as Borough --
+today's 1000x1000/2000x2000 predate them) -- static structures + boss/landmark
 sprites only, no moving entities, snapping to preset regions instead of following the player.
+Fog of war is its own item below.
 
-Fog of War: unexplored areas render blank on minimap/zoom/main viewport, revealed permanently once seen
-(or re-fogged -- undecided). Needs a new per-tile (or per-region, for performance at Neighborhood/Borough
-scale) visibility store, keyed like `AuraGrid`/`MapTintGrid`'s flat-index dictionaries.
+#### Fog of War
+
+Hides what the player can't currently see. Beyond its gameplay value, it's the visual half of
+the frozen Borough. Without it, scrolling the camera into Borough shows frozen
+creatures, which is Minecraft's well-known visual complaint. RTS games (StarCraft, Age of Empires)
+are the standard model.
+
+- **Three states per tile:** *unexplored* (blank), *explored but not visible* (terrain and static
+  structures/landmarks, no creatures), and *visible* (everything). Explored stays explored, and only
+  visibility is recomputed. (This settles the earlier "re-fog, undecided" note from the minimap
+  item, unless play says otherwise.)
+- **Visible is always a subset of Local.** A sight radius or line of sight around the player, never
+  larger than Local's radius, so nothing visible is ever throttled or frozen. Recomputed on player
+  move, and on terrain changes that block sight.
+- **Explored-but-not-visible shows current terrain, not a last-seen snapshot,** to start. Flyweight
+  terrain (plan section 1) makes that a definition lookup. A snapshot (terrain changed in fog still
+  looks unchanged) is the RTS behavior. Revisit if hiding changes matters for gameplay (e.g. a wall
+  destroyed out of sight).
+- **Storage:** explored is a bitset per chunk per MapLayer, 1024x1024 bits = 128 KB per layer and
+  ~384 KB per neighborhood. That's cheap enough to be flat rather than the per-region approximation
+  the old note worried about, and it's saved with the chunk. Visible is small and only exists around
+  the player.
+- **No information leaks through the UI:** hidden creatures can't be hovered, selected, inspected
+  (`SelectionWindowContent`, tooltips) or targeted. Targeting outside Local is already refused under
+  the plan; fog extends the same refusal to "inside Local but not visible".
+- **Rendering:** `MapWindow` skips occupants outside the visible set, and the terrain/background
+  caches (`MapTileLayerCache`) draw unexplored tiles as blank and invalidate on reveal. The minimap
+  and zoom-out levels read explored only.
+- **Admin Mode (F12) bypasses fog.**
+- **Light sources:** Scroll of Torch's Light grant is meant to become a fog-of-war reveal (see "Torch
+  reveal + light-weakness damage" above). Design the visible set so a light source can add to it.
 
 #### Magic Menu
 
@@ -888,7 +1545,7 @@ indicator has nothing real to check until that lands.
 
 #### Context menu amount picker
 
-`CurrencyRowContent`'s Give/Take (and their "All" variants -- see `PLAN-storage-containers.md`)
+`CurrencyRowContent`'s Give/Take (and their "All" variants)
 always move a currency's *entire* balance; a currency element dragged onto another entity's grid/row
 does the same. Add a textbox popup (reusing `TextBox`, same mechanism `TextBox context menu wiring`
 above wants for Cut/Copy/Paste) letting the player specify a partial amount instead, both for the
@@ -901,7 +1558,7 @@ A per-stack "Sell" marking -- the bulk-sale equivalent of other games' "junk" fl
 `InventoryItemStackComponent` field alongside the existing `IsDisabled` one. While a shop is open
 (`MapViewState.OpenShopEntityId`), add a button to the player's own inventory tab (`GridControl`/
 `InventoryTabContent`) that sells every Sell-marked, currently-eligible item in the *active* tab
-through `ShopActions.TrySellToShop` (`PLAN-shops.md`) in one action -- any tab, not only a
+through `ShopActions.TrySellToShop` in one action -- any tab, not only a
 dedicated "Sell" tab; marking curates what a sweep picks up, it isn't itself a tab requirement.
 
 #### Per-entity sprite scale
@@ -915,7 +1572,7 @@ per-`SpriteComponent` scale factor applied in `MapWindow.TryDrawEntityVisual`.
 No entity's sprite spans more than one tile today -- `TransformComponent.Size` already carries a
 footprint (e.g. a corpse/tiny-entity grid already reasons about it), but `MapWindow`'s draw path
 always renders one sprite stretched to exactly one tile's own `CurrentTileSize`, never a single
-sprite spanning the whole footprint. `Shop`'s own `Sprite = "Shop-1x1"` (`PLAN-shops.md`) is a
+sprite spanning the whole footprint. `Shop`'s own `Sprite = "Shop-1x1"` is a
 deliberately-named 1x1 placeholder for this -- a real multi-tile shop sprite (e.g. "Shop-2x2") is
 the concrete first implementation once this lands.
 
@@ -923,9 +1580,18 @@ the concrete first implementation once this lands.
 
 Let the player choose which stats to display. Follow-on to Player stats v1.
 
-#### End of level staircase (Presentation)
+#### EndOfLevelStairs (Presentation)
 
-Rendering/interaction for the staircase. See the matching Game item.
+Rendering/interaction for EndOfLevelStairs. See the matching Game item.
+
+#### Digger detection (Presentation)
+
+Part of MapLayer interaction (overview, Game); needs Digger detection (Game) first. On the Ground view,
+low-level detection draws a "disturbed earth" marker over the digger's footprint, and high-level detection
+draws its sprite partially transparent (`TryDrawEntityVisual`'s `alphaMultiplier`, already used for
+Phasing). Undetected draws nothing, including no `v` layer badge, and viewing the UnderGround layer
+directly (Page Down) must not bypass it outside Admin Mode. Needs a disturbed-earth sprite in
+`Content/SpriteManifest.json`.
 
 #### Equipment menu
 
@@ -1054,13 +1720,50 @@ the same serialize-to-disk mechanism) -- but start narrow; window geometry has n
 references to untangle.
 
 **Modded content must degrade gracefully, not corrupt a save.** Once entity/world state (inventory
-items, granted abilities, `IActionActivator`/`ActionEffect` catalog entries -- see
-`PLAN-action-effect-activator.md`) is serialized, a saved `Guid` reference to mod-defined content can go
+items, granted abilities, `IActionActivator`/`ActionEffect` catalog entries) is serialized, a saved `Guid` reference to mod-defined content can go
 stale if that mod changes before the save reloads (RimWorld/PoE's well-known failure mode). Fail
 hierarchy, decided up front: (1) prefer a mod-supplied replacement/migration, (2) fall back to dropping
 just the affected reference while the rest of the save loads, (3) last resort, drop the whole entity if
 the missing content is load-bearing for it. Consider letting a mod register its own fallback id per
 content id it defines.
+
+#### Save and load Beyond neighborhoods
+
+Today a neighborhood evicted from the window's cache
+is deleted: its `NeighborhoodRecord` survives, so returning regenerates the same layout with a fresh
+population. Instead, write the neighborhood to disk on unload and read it back on return: the record
+plus its contents (entities with their full component sets, and any terrain or structure changes
+since generation), so a revisited neighborhood holds the same creatures, corpses and loot.
+
+- **Depends on** "Data storage" above (the serialize-to-disk mechanism) and "Entity storage" below
+  (snapshot and rehydrate an entity's exact component set).
+- **References:** entities come back with new ids; anything that points at another entity already
+  holds its `EntityKey`, which is saved with it (plan decision 17). Crawler numbers are kept, never
+  re-minted.
+- **Time:** reloading catches up active timers the same way a Borough promotion does; whether more
+  than that advances with elapsed time is the open question in "Unsimulated-tier time".
+- **Format:** "record plus changes" for neighborhoods the player never touched, a full snapshot
+  otherwise. Writing and parsing run on a worker ("Asynchronous neighborhood generation").
+
+#### CI step for the performance-filtered tests
+
+`Tests.csproj` defaults `VSTestTestCaseFilter` to `TestCategory!=Performance`, so an unfiltered `dotnet
+test` no longer runs `AbilityScorePerformanceTests`. Nothing runs them automatically now, and a real
+scaling regression -- per-call cost growing with population, which is the only thing those two tests
+exist to catch -- would land unnoticed. They need their own step: `dotnet test Tests/Tests.csproj
+--filter "TestCategory=Performance"`.
+
+There is no CI anywhere in the repo today (no `.github/workflows`, no pipeline file), so this starts
+with standing one up: build the solution, run the ordinary suite, then the performance filter.
+
+- **Separate step, not parallel with the ordinary suite.** Contention between the two is exactly why
+  the filter default exists -- the ratio assertions flaked when both ran at once on this machine.
+- **If it flakes on a shared runner, raise the ceiling, don't drop the step.**
+  `MaxGrantDefaultsScalingRatio`/`MaxExpiryRecomputeScalingRatio` are 20 against a linear ~10; a noisy
+  neighbour can push a 10x run past that. The assertion's job is failing quadratic cost, not measuring
+  absolute speed, so a looser CI ceiling still does that job.
+- Unrelated to the `phase-performance-testing` skill's whole-game per-system benchmark, which needs a
+  real run and a fixed seed rather than a test filter.
 
 ### Low Priority
 
@@ -1136,52 +1839,20 @@ guard with today's hardcoded value as the non-Windows fallback. Scoped to the mo
 wouldn't read from this. Open question if picked up: does the current +25% buffer on top of the base
 value still make sense once the base is the user's own real OS setting rather than a fixed guess.
 
-### HIGH PRIORITY : Distant simulation fidelity -- research industry approaches
-
-Raising `ProcessingTierDivisors` to `[1, 16, 32, 64]` made coarse-tier entities cheap, and
-`CountdownTicker`/`MultiCountdownTicker` now catch up the full span of a visit rather than firing
-once (so a distant entity's damage-over-time totals are correct again). But correct *totals* are
-not the same as correct *outcomes*, and the current shape has a real gameplay flaw:
-
-**Bulk ticks resolve in isolation, so an entity can die to a lump of DoT that fine-grained
-simulation would never have killed.** A burning entity visited every 960 frames takes 16 ticks of
-burn damage in one go, all resolved before its own regen system next visits it. Interleaved at
-1-frame granularity, the heal-over-time would have offset each damage tick as it landed and the
-entity would have survived. Health-vs-damage races (burning, poison, contact damage, bleeding,
-regen, body-part regen lockouts) all have this property: the *order and granularity* of
-application changes who lives.
-
-This gets worse, not better, with the planned map growth: at Borough map size the bulk of entities
-sit at divisor 32, and at 4x Borough at 64, so bulk resolution becomes the normal case rather than
-an edge one.
-
-Research how other games solve distant/background simulation before picking a design:
-- Dwarf Fortress / RimWorld: off-screen and abstracted-region simulation fidelity.
-- Factorio: what it deliberately does NOT simulate outside active chunks, and why that is safe.
-- Modern MMOs / Kenshi / Mount & Blade: "simulate the summary, not the entity" approaches.
-- Roguelike convention generally: whether distant actors are simulated at all, or frozen until
-  the player approaches.
-
-Candidate directions to weigh against that research:
-- Resolve competing over-time effects together per visit (net damage-vs-heal per elapsed period)
-  instead of each system independently applying its own lump.
-- Do not resolve *lethal* outcomes at coarse tiers at all -- clamp distant entities above zero
-  and settle the result when they are next promoted to a fine tier.
-- Statistical/abstracted resolution for coarse tiers, with exact simulation only near the player.
-- Freeze coarse tiers outright (no DoT progression) and accept that distant time does not pass.
-
-Note the related open question in `PLAN-optimization-priorities.md` (P2): `CountdownTicker` is
-still a full-pool scan-and-decrement per visit, and the countdown family is a large share of
-simulation cost. A deadline/timer-wheel rewrite and this fidelity question touch the same code and
-should probably be designed together.
-
 ### MEDIUM PRIORITY : Unsimulated-tier time -- research alternatives to freezing
 
 Decided 2026-09-11 as a temporary position: when P2 stops simulating Borough and beyond, entities
 there are **frozen** -- their timers stop and resume where they left off when they are next
-simulated (`PLAN-timer-wheel.md`, Decisions 2). That is the cheapest correct option, not
+simulated. That is the cheapest correct option, not
 necessarily the right one: from the player's point of view, time does not pass for anything they
 walked away from.
+
+**Partly superseded 2026-09-15 by the world-scaling work:** Borough is frozen, but when an entity
+is promoted out of it, every effect with an active timer **catches up** to now rather than resuming
+where it left off. Interacting state (combat) doesn't catch up. What remains open here is **saved
+Beyond neighborhoods**: whether reloading one from disk uses the same catch-up, and whether anything
+beyond active timers (regen to full, crop-like growth, population drift) should advance with
+elapsed time.
 
 Research how other games handle time for things outside the simulated area before committing to
 anything else. Starting points to verify, not settled facts:
@@ -1191,13 +1862,14 @@ anything else. Starting points to verify, not settled facts:
 - Dwarf Fortress: off-site world simulated at a coarser, abstracted level ("world activity").
 - RimWorld: world-map caravans and settlements simulated abstractly, maps unloaded otherwise.
 - Catch-up on load: advance a region by the elapsed time in one bulk step when it comes back into
-  range (the approach that runs into the bulk-resolution problem in "Distant simulation
-  fidelity" above).
+  range (the approach that runs into the bulk-resolution problem: bulk ticks resolve in isolation,
+  so an entity can die to a lump of damage that fine-grained simulation would have offset with regen).
 
 Things to decide from that research: whether time passes at all, whether catch-up is exact, bulk,
-or statistical, and whether lethal outcomes may resolve while unobserved. Overlaps with "Distant
-simulation fidelity" and "Third Pause modality" -- all three are "what happens to time where the
-player isn't".
+or statistical, and whether lethal outcomes may resolve while unobserved. Overlaps with
+"Third Pause modality" -- both are "what happens to time where the player isn't". Under the 3x3
+neighborhood window,
+this item governs saved Beyond neighborhoods (frozen, or caught up on reload), not Borough.
 
 ### HIGH PRIORITY : Investigate StatusEffectAuraExposureComponent growth
 
@@ -1241,7 +1913,7 @@ Notes for whoever picks this up:
 - This is a third state, not a boolean. The existing two are "everything runs" and "nothing runs";
   the new one is "this map runs, those maps are frozen", which means pause stops being a property
   of the game loop and becomes a property of a map.
-- It overlaps heavily with the tier rework (`PLAN-processing-tier-rework.md`) and with P2's
+- It overlaps heavily with the tier rework and with P2's
   spawn-in-and-wait direction: a frozen map and a Beyond-tier region are close to the same idea
   expressed at different granularity, and it would be a shame to build two mechanisms for it. The
   tier system already carries "this entity is on a different MapLayer, therefore Beyond".
@@ -1252,7 +1924,6 @@ Notes for whoever picks this up:
 - Decide what "frozen" means precisely: no `ISystem.Update` visits at all (Minecraft's simulation
   distance model), or visits that are skipped per-entity. The former is cheaper and easier to
   reason about.
-- Clocks: `PLAN-timer-wheel.md` starts with one simulation clock, passed explicitly to everything
-  that reads it (timer wheel or direct walk, whichever its prototype picks) so this is a wiring
-  change. A frozen map needs its own clock (or its deadlines parked the
+- Clocks: the timer wheel uses one simulation clock, passed explicitly to everything that reads
+  it, so this is a wiring change. A frozen map needs its own clock (or its deadlines parked the
   same way unsimulated-tier entities are); decide which when the second map exists.

@@ -1,4 +1,5 @@
-﻿using Engine.Bootstrap;
+﻿using Engine.ECS.Entities;
+using Engine.Bootstrap;
 using Engine.ECS.Context;
 using Engine.Events;
 using Engine.Math;
@@ -36,6 +37,7 @@ public sealed class AchievementModuleTests
 
         IReadOnlyList<IModule> modules = [module, new CrawlerModule()];
         var ecsContext = Bootstrapper.Build(modules, initialEntityCapacity: 10, initialComponentCapacity: 10, eventBus);
+        world.EntityKeys = ecsContext.EntityManager.Keys;
 
         return (ecsContext, eventBus, world);
     }
@@ -331,7 +333,7 @@ public sealed class AchievementModuleTests
         NotificationRequestedEvent? published = null;
         eventBus.Subscribe<NotificationRequestedEvent>(requested => published = requested);
 
-        eventBus.Publish(new EntityDamagedEvent(npcEntityId, 5, StatusEffectSource.FromEntity(playerEntityId), 15, 20, "Default Attack"));
+        eventBus.Publish(new EntityDamagedEvent(npcEntityId, 5, ActionSource.FromEntity(ecsContext.ComponentManager, ecsContext.EntityManager.Keys, playerEntityId), 15, 20, "Default Attack"));
         eventBus.DispatchBuffered<NotificationRequestedEvent>();
 
         Assert.IsTrue(AchievementQueries.HasEarned(
@@ -352,7 +354,7 @@ public sealed class AchievementModuleTests
         var npcEntityId = ecsContext.EntityManager.CreateEntity();
         world.PlayerEntityId = playerEntityId;
 
-        eventBus.Publish(new EntityDamagedEvent(playerEntityId, 5, StatusEffectSource.FromEntity(npcEntityId), 15, 20, "Contact"));
+        eventBus.Publish(new EntityDamagedEvent(playerEntityId, 5, ActionSource.FromEntity(ecsContext.ComponentManager, ecsContext.EntityManager.Keys, npcEntityId), 15, 20, "Contact"));
 
         Assert.IsFalse(AchievementQueries.HasEarned(
             ecsContext.ComponentManager.GetMultiPool<AchievementUnlockedComponent>(),

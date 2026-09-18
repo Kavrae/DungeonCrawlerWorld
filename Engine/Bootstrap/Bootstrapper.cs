@@ -1,5 +1,6 @@
 using Engine.Diagnostics;
 using Engine.ECS.Context;
+using Engine.ECS.Entities;
 using Engine.Events;
 using Engine.Modules;
 
@@ -16,13 +17,13 @@ namespace Engine.Bootstrap;
 /// <cleanupVersion>1</cleanupVersion>
 public static class Bootstrapper
 {
-    public static EcsContext Build(IReadOnlyList<IModule> modules, int initialEntityCapacity, int initialComponentCapacity, EventBus? eventBus = null, StartupProfiler? startupProfiler = null)
+    public static EcsContext Build(IReadOnlyList<IModule> modules, int initialEntityCapacity, int initialComponentCapacity, EventBus? eventBus = null, StartupProfiler? startupProfiler = null, EntityKeys? entityKeys = null)
     {
         ArgumentNullException.ThrowIfNull(modules);
 
         var sortedModules = TopologicalSort(modules);
 
-        var builder = new EcsContextBuilder(initialEntityCapacity, initialComponentCapacity, eventBus);
+        var builder = new EcsContextBuilder(initialEntityCapacity, initialComponentCapacity, eventBus, entityKeys);
 
         RegisterAllComponents(sortedModules, builder, startupProfiler);
         RegisterAllSystems(sortedModules, builder, startupProfiler);

@@ -33,6 +33,7 @@ public sealed class MapCamera
     private int _tileColumns;
     private int _tileRows;
     private Point _currentScrollPosition;
+    private Point _minScrollPosition;
     private Point _maxScrollPosition;
     private Vector2 _renderPixelOffset;
     private bool _cameraFollowsPlayer = true;
@@ -56,7 +57,7 @@ public sealed class MapCamera
     public void Initialize(Vector2 contentSize)
     {
         UpdateTileSizes(contentSize);
-        UpdateMaxScrollPosition();
+        UpdateScrollLimits();
     }
 
     public void ResumeFollowingPlayer() => _cameraFollowsPlayer = true;
@@ -82,8 +83,8 @@ public sealed class MapCamera
         var previousScrollPosition = _currentScrollPosition;
         var desiredScroll = new Point(position.X - _tileColumns / 2, position.Y - _tileRows / 2);
         _currentScrollPosition = new Point(
-            MathUtility.ClampInt(desiredScroll.X, 0, _maxScrollPosition.X),
-            MathUtility.ClampInt(desiredScroll.Y, 0, _maxScrollPosition.Y));
+            MathUtility.ClampInt(desiredScroll.X, _minScrollPosition.X, _maxScrollPosition.X),
+            MathUtility.ClampInt(desiredScroll.Y, _minScrollPosition.Y, _maxScrollPosition.Y));
 
         _renderPixelOffset = Vector2.Zero;
 
@@ -99,10 +100,10 @@ public sealed class MapCamera
         // from the visible tile count) is now stale too -- and the current scroll position,
         // valid under the old bound, may now exceed the new one (e.g. zooming out after
         // scrolling far while zoomed in) and needs re-clamping.
-        UpdateMaxScrollPosition();
+        UpdateScrollLimits();
         _currentScrollPosition = new Point(
-            MathUtility.ClampInt(_currentScrollPosition.X, 0, _maxScrollPosition.X),
-            MathUtility.ClampInt(_currentScrollPosition.Y, 0, _maxScrollPosition.Y));
+            MathUtility.ClampInt(_currentScrollPosition.X, _minScrollPosition.X, _maxScrollPosition.X),
+            MathUtility.ClampInt(_currentScrollPosition.Y, _minScrollPosition.Y, _maxScrollPosition.Y));
 
         // A zoom mid-drag would otherwise leave a stale smooth-scroll offset sized for the old
         // tile size shifting the newly-resized grid.
@@ -117,14 +118,23 @@ public sealed class MapCamera
         UpdateZoomLevel(zoomLevels[newIndex], contentSize);
     }
 
+    /// <summary>Recomputes the scroll limits from the map's current bounds and keeps the scroll position inside them.</summary>
+    public void RefreshScrollLimits()
+    {
+        UpdateScrollLimits();
+        _currentScrollPosition = new Point(
+            MathUtility.ClampInt(_currentScrollPosition.X, _minScrollPosition.X, _maxScrollPosition.X),
+            MathUtility.ClampInt(_currentScrollPosition.Y, _minScrollPosition.Y, _maxScrollPosition.Y));
+    }
+
     /// <summary>Applies a clamped scroll delta and returns how much actually changed, so the caller can shift/rebuild whatever per-tile state it caches (e.g. MapWindow's background color cache) by exactly that amount instead of rebuilding it wholesale.</summary>
     public Point UpdateScrollPosition(Point scrollChange)
     {
         var previousScrollPosition = _currentScrollPosition;
 
         _currentScrollPosition = new Point(
-            MathUtility.ClampInt(_currentScrollPosition.X + scrollChange.X, 0, _maxScrollPosition.X),
-            MathUtility.ClampInt(_currentScrollPosition.Y + scrollChange.Y, 0, _maxScrollPosition.Y));
+            MathUtility.ClampInt(_currentScrollPosition.X + scrollChange.X, _minScrollPosition.X, _maxScrollPosition.X),
+            MathUtility.ClampInt(_currentScrollPosition.Y + scrollChange.Y, _minScrollPosition.Y, _maxScrollPosition.Y));
 
         return new Point(_currentScrollPosition.X - previousScrollPosition.X, _currentScrollPosition.Y - previousScrollPosition.Y);
     }
@@ -144,12 +154,12 @@ public sealed class MapCamera
         _cameraFollowsPlayer = false;
 
         var continuousPixelPosition = new Vector2(
-             MathHelper.Clamp(_rightDragStartScrollPosition.X * _currentTileSize.X - totalPixelDeltaSinceStart.X, 0, _maxScrollPosition.X * _currentTileSize.X),
-             MathHelper.Clamp(_rightDragStartScrollPosition.Y * _currentTileSize.Y - totalPixelDeltaSinceStart.Y, 0, _maxScrollPosition.Y * _currentTileSize.Y));
+             MathHelper.Clamp(_rightDragStartScrollPosition.X * _currentTileSize.X - totalPixelDeltaSinceStart.X, _minScrollPosition.X * _currentTileSize.X, _maxScrollPosition.X * _currentTileSize.X),
+             MathHelper.Clamp(_rightDragStartScrollPosition.Y * _currentTileSize.Y - totalPixelDeltaSinceStart.Y, _minScrollPosition.Y * _currentTileSize.Y, _maxScrollPosition.Y * _currentTileSize.Y));
 
         var wholeTileScroll = new Point(
-            (int)(continuousPixelPosition.X / _currentTileSize.X),
-            (int)(continuousPixelPosition.Y / _currentTileSize.Y));
+            (int)System.Math.Floor(continuousPixelPosition.X / _currentTileSize.X),
+            (int)System.Math.Floor(continuousPixelPosition.Y / _currentTileSize.Y));
 
         _renderPixelOffset = new Vector2(
             continuousPixelPosition.X - wholeTileScroll.X * _currentTileSize.X,
@@ -217,12 +227,14 @@ public sealed class MapCamera
         _tileRows = (int)System.Math.Floor(contentSize.Y / _currentTileSize.Y) + 2;
     }
 
-    private void UpdateMaxScrollPosition()
+    private void UpdateScrollLimits()
     {
-        // Never negative: a map smaller than the viewport has nowhere to scroll, not a
-        // negative amount to scroll -- ClampInt(current, 0, max) requires max >= 0.
+        // Never below the minimum: a map smaller than the viewport has nowhere to scroll, not a
+        // negative amount to scroll -- ClampInt(current, min, max) requires max >= min.
+        var bounds = _world.Map.Bounds;
+        _minScrollPosition = new Point(bounds.MinX, bounds.MinY);
         _maxScrollPosition = new Point(
-            System.Math.Max(0, _world.Map.Size.X - _tileColumns),
-            System.Math.Max(0, _world.Map.Size.Y - _tileRows));
+            System.Math.Max(bounds.MinX, bounds.MaxX - _tileColumns),
+            System.Math.Max(bounds.MinY, bounds.MaxY - _tileRows));
     }
 }

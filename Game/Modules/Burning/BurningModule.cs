@@ -36,7 +36,7 @@ public sealed class BurningModule : IGameModule
         _eventBus = context.EventBus;
         _playerQuery = context.PlayerQuery;
         _mathUtility = context.MathUtility;
-        context.StatusEffectAuraAppliers.Register(new BurningAuraApplier(_mathUtility, _eventBus, _playerQuery));
+        context.StatusEffectAuraAppliers.Register(new BurningAuraApplier(_mathUtility, context.Terrain, _eventBus, _playerQuery));
         context.StatusEffectDisplays.Register(new TimerBasedStatusEffectDisplay<BurningTimerComponent>(StatusEffectType.Burning, BurningEffects.Glyph,
             static (burning, now) => RemainingFrames(burning.NextTickFrame, burning.StackCount, now)));
     }

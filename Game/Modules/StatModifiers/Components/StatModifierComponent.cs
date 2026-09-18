@@ -36,7 +36,7 @@ public struct StatModifierComponent(
     bool canModify,
     float magnitude,
     uint expiresAtFrame,
-    StatusEffectSource source,
+    ActionSource source,
     Tag? conditionTag = null)
 {
     public StatModifierTarget Target { get; } = target;
@@ -47,7 +47,7 @@ public struct StatModifierComponent(
 
     /// <summary>FrameDeadline.Never means "never expires" -- StatModifierExpirySystem never schedules a modifier at this value, so an entity holding only permanent modifiers costs nothing.</summary>
     public uint ExpiresAtFrame { get; } = expiresAtFrame;
-    public StatusEffectSource Source { get; } = source;
+    public ActionSource Source { get; } = source;
     public Tag? ConditionTag { get; } = conditionTag;
 
     public override readonly string ToString() => $"Target : {Target}\nSource : {Source}\nOperation : {(Operation == StatModifierOperation.Additive ? Polarity == StatModifierPolarity.Buff ? '+' : '-' : Polarity == StatModifierPolarity.Buff ? 'x' : '÷')}{Magnitude}\nCanModify : {CanModify}\nExpiresAtFrame : {(ExpiresAtFrame == FrameDeadline.Never ? "Permanent" : ExpiresAtFrame.ToString())}\nConditionTag : {(ConditionTag is { } tag ? tag.ToString() : "None")}";

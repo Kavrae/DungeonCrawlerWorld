@@ -37,7 +37,7 @@ namespace Game.Modules.ProcessingTier;
 /// Membership is movers only, by choice. Every positioned entity is now tiered (see
 /// ProcessingTierSystem), so a stationary entity -- a shop, a container, lava -- does have a correct
 /// tier, but it is deliberately kept out of this roster: the roster's whole value is being the small
-/// side, and the terrain alone within the Local radius would make it roughly fifty times larger.
+/// side, and every stationary entity within the Local radius would make it far larger.
 /// Fine for every consumer so far (only movers queue windups). A consumer that needs stationary
 /// Local entities should read their ProcessingTierComponent directly rather than widen this.
 ///
@@ -92,7 +92,7 @@ public sealed class LocalTierRoster
     private IReadOnlyComponentPool<ProcessingTierComponent>? _tiers;
 
     /// <summary>Subscribes this roster to a driving pool's membership and to tier changes -- mirrors ProcessingTierWiring.CreateAndWire's role for TieredEntityStripeSet, kept as a method on the roster itself since (unlike a stripe set) there is exactly one of these per game rather than one per consuming system.</summary>
-    /// <param name="drivingPool">The pool whose members this roster tracks -- MovementComponent. Tiering itself now covers every positioned entity (see ProcessingTierSystem), but this roster deliberately stays scoped to movers: it exists to be the small side of "Local AND pending something", and admitting the terrain within the Local radius would make it roughly fifty times larger and defeat that.</param>
+    /// <param name="drivingPool">The pool whose members this roster tracks -- MovementComponent. Tiering itself now covers every positioned entity (see ProcessingTierSystem), but this roster deliberately stays scoped to movers: it exists to be the small side of "Local AND pending something", and admitting every stationary entity within the Local radius would make it far larger and defeat that.</param>
     /// <param name="tiers">Read when an entity joins the driving pool -- see OnEntityAdded.</param>
     /// <param name="processingTierEvents">The shared tier-change event source.</param>
     public void Wire(IEntityMembershipPool drivingPool, IReadOnlyComponentPool<ProcessingTierComponent> tiers, ProcessingTierEvents processingTierEvents)
@@ -134,7 +134,7 @@ public sealed class LocalTierRoster
         }
     }
 
-    /// <summary>TierChanged now fires for every positioned entity, terrain included, so this filters to driving-pool members -- see Wire's own note on why the roster stays movers-only.</summary>
+    /// <summary>TierChanged now fires for every positioned entity, stationary ones included, so this filters to driving-pool members -- see Wire's own note on why the roster stays movers-only.</summary>
     private void OnTierChanged(int entityId, ProcessingTierLevel tier)
     {
         bool changed;

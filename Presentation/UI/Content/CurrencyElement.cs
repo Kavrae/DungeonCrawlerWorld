@@ -36,10 +36,10 @@ public sealed class CurrencyElement(FontService fontService, ElementPoolService 
     /// <summary>Drives a translucent highlight overlay -- see CurrencyRowContent's own hover polling. Mirrors InventoryItemStackCell.IsHovered exactly.</summary>
     public bool IsHovered { get; set; }
 
-    /// <summary>True (the default) draws "Gold : 10" -- Configure's own showLabel param sets this false for just "10" instead, for CurrencyRowContent's trade-window callers, the column being too narrow to spare the label (PLAN-trade-window.md's own currency footer). Set in Configure, not a bare settable property, so a pooled-and-reused element can't carry a stale value from its previous consumer.</summary>
+    /// <summary>True (the default) draws "Gold : 10" -- Configure's own showLabel param sets this false for just "10" instead, for CurrencyRowContent's trade-window callers, the column being too narrow to spare the label. Set in Configure, not a bare settable property, so a pooled-and-reused element can't carry a stale value from its previous consumer.</summary>
     private bool _showLabel = true;
 
-    /// <summary>Null (the default) draws WindowPalette.BodyTextColor, same as every other consumer -- Configure's own textColor param overrides this for the trade window's own two currency footers (PLAN-trade-window.md), whose trade grid sits on a transparent background too dark for the shared BodyTextColor to read against. Set in Configure, not a bare settable property, for the same pool-reuse-staleness reason _showLabel is.</summary>
+    /// <summary>Null (the default) draws WindowPalette.BodyTextColor, same as every other consumer -- Configure's own textColor param overrides this for the trade window's own two currency footers, whose trade grid sits on a transparent background too dark for the shared BodyTextColor to read against. Set in Configure, not a bare settable property, for the same pool-reuse-staleness reason _showLabel is.</summary>
     private Color? _textColorOverride;
 
     /// <summary>The square icon's own on-screen size -- what UiInputController.TryStartContentDrag reads as the drag ghost's size, not CurrentSize (this element's full "Gold : 10 [sprite]" bounds, much wider than tall): drawing the ghost at the whole element's size stretched the sprite horizontally.</summary>

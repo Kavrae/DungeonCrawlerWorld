@@ -10,7 +10,7 @@ namespace Engine.ECS.Systems;
 /// frame F every reader sees F, and between frames (Presentation's Update/Draw) it still reads the
 /// last simulated frame. It stops while the game is paused, because simulation frames do.
 ///
-/// One clock for now (PLAN-timer-wheel.md, Decisions 3), deliberately passed explicitly to whoever
+/// One clock for now, deliberately passed explicitly to whoever
 /// reads it rather than exposed as a static, so a per-map clock later is a wiring change.
 /// </remarks>
 /// <cleanupVersion>1</cleanupVersion>

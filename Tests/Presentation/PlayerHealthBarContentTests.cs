@@ -198,7 +198,7 @@ public sealed class PlayerHealthBarContentTests
         bodyParts.Add(PlayerEntityId, new BodyPartComponent("Head", BodyPartType.Head, 0, verticalPosition: 0, currentHealth: 10, maximumHealth: 10, isVital: true));
         var statModifiers = new MultiComponentPool<StatModifierComponent>(maximumEntityCount: 10, initialCapacity: 4);
         statModifiers.Add(PlayerEntityId, new StatModifierComponent(StatModifierTarget.MaximumHealth, StatModifierOperation.Multiplicative, StatModifierPolarity.Buff,
-            canModify: true, magnitude: 0.5f, expiresAtFrame: FrameDeadline.Never, StatusEffectSource.Admin));
+            canModify: true, magnitude: 0.5f, expiresAtFrame: FrameDeadline.Never, ActionSource.Admin));
         var world = new Game.World.World(new Game.World.Map(new Vector3Int(5, 5, 1))) { PlayerEntityId = PlayerEntityId };
         var hoverContent = new PlayerHealthHoverContent(world, bodyParts, TestFonts.Shared, statModifiers);
 

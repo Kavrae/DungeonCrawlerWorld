@@ -30,7 +30,7 @@ public sealed class StatModifierEffectsTests
         var manager = CreateRegisteredManager();
 
         StatModifierEffects.Apply(manager, 0, StatModifierTarget.IncomingDamage, StatModifierOperation.Additive, StatModifierPolarity.Buff,
-            canModify: true, magnitude: -1f, expiresAtFrame: FrameDeadline.Never, StatusEffectSource.Admin);
+            canModify: true, magnitude: -1f, expiresAtFrame: FrameDeadline.Never, ActionSource.Admin);
 
         Assert.AreEqual(FrameDeadline.Never, FirstModifier(manager, 0).ExpiresAtFrame);
     }
@@ -41,7 +41,7 @@ public sealed class StatModifierEffectsTests
         var manager = CreateRegisteredManager();
 
         StatModifierEffects.Apply(manager, 0, StatModifierTarget.IncomingDamage, StatModifierOperation.Additive, StatModifierPolarity.Buff,
-            canModify: true, magnitude: -1f, expiresAtFrame: FrameDeadline.After(now: 100, frames: 30), StatusEffectSource.Admin);
+            canModify: true, magnitude: -1f, expiresAtFrame: FrameDeadline.After(now: 100, frames: 30), ActionSource.Admin);
 
         Assert.AreEqual(130u, FirstModifier(manager, 0).ExpiresAtFrame);
     }
@@ -53,9 +53,9 @@ public sealed class StatModifierEffectsTests
         var manager = CreateRegisteredManager();
 
         StatModifierEffects.Apply(manager, 0, StatModifierTarget.IncomingDamage, StatModifierOperation.Additive, StatModifierPolarity.Buff,
-            canModify: true, magnitude: -1f, expiresAtFrame: FrameDeadline.Never, StatusEffectSource.Admin);
+            canModify: true, magnitude: -1f, expiresAtFrame: FrameDeadline.Never, ActionSource.Admin);
         StatModifierEffects.Apply(manager, 0, StatModifierTarget.OutgoingDamage, StatModifierOperation.Additive, StatModifierPolarity.Buff,
-            canModify: true, magnitude: 2f, expiresAtFrame: 10, StatusEffectSource.Admin);
+            canModify: true, magnitude: 2f, expiresAtFrame: 10, ActionSource.Admin);
 
         Assert.AreEqual(2, manager.GetMultiPool<StatModifierComponent>().CountForEntity(0));
     }
@@ -67,7 +67,7 @@ public sealed class StatModifierEffectsTests
         var manager = CreateRegisteredManager();
 
         StatModifierEffects.Apply(manager, 0, StatModifierTarget.IncomingDamage, StatModifierOperation.Additive, StatModifierPolarity.Buff,
-            canModify: true, magnitude: -1f, expiresAtFrame: 30, StatusEffectSource.Admin);
+            canModify: true, magnitude: -1f, expiresAtFrame: 30, ActionSource.Admin);
 
         Assert.IsFalse(manager.GetPackedPool<ExpiringStatModifierComponent>().Has(0));
     }

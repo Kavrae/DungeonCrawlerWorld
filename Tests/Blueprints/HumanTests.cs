@@ -1,3 +1,4 @@
+using Engine.ECS.Entities;
 using Engine.Bootstrap;
 using Engine.ECS.Components;
 using Engine.ECS.Context;
@@ -88,7 +89,7 @@ public sealed class HumanTests
             coreItemsModule,
         ];
 
-        return Bootstrapper.Build(modules, initialEntityCapacity: 100, initialComponentCapacity: 50);
+        return Bootstrapper.Build(modules, initialEntityCapacity: 100, initialComponentCapacity: 50, entityKeys: context.EntityKeys);
     }
 
     [TestMethod]

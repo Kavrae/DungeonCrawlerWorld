@@ -1,3 +1,4 @@
+using Engine.ECS.Entities;
 using Engine.ECS.Components;
 using Engine.ECS.Components.Stores;
 using Engine.ECS.Systems;
@@ -9,6 +10,7 @@ using Game.Modules.Actions.Components;
 using Game.Modules.BodyPartEffects.Components;
 using Game.Modules.Core.Components;
 using Game.Modules.Death.Components;
+using Game.Modules.ProcessingTier;
 using Game.Modules.Health.Components;
 using Game.Modules.Mana;
 using Game.Modules.Mana.Components;
@@ -39,6 +41,7 @@ public sealed class ActionActivationSystem : ISystem
     private readonly IPlayerQuery? _playerQuery;
     private readonly StatusEffectAuraApplierRegistry _statusEffectAppliers;
     private readonly ComponentManager _componentManager;
+    private readonly EntityKeys _entityKeys;
     private readonly PackedComponentPool<DeadComponent>? _deadEntities;
     private readonly PackedComponentPool<ManaComponent>? _mana;
     private readonly MultiComponentPool<AbilityScoreComponent>? _abilityScores;
@@ -48,6 +51,7 @@ public sealed class ActionActivationSystem : ISystem
     private readonly MultiComponentPool<BodyPartComponent>? _bodyParts;
     private readonly PackedComponentPool<MeleeDisabledComponent>? _meleeDisabled;
     private readonly PackedComponentPool<DodgingComponent>? _dodgingEntities;
+    private readonly ProcessingTierQuery? _processingTiers;
     private readonly EntityStripeSet _stripeSet;
 
     public ActionActivationSystem(
@@ -63,6 +67,7 @@ public sealed class ActionActivationSystem : ISystem
         IPlayerQuery? playerQuery,
         StatusEffectAuraApplierRegistry statusEffectAppliers,
         ComponentManager componentManager,
+        EntityKeys entityKeys,
         MultiComponentPool<StatModifierComponent>? statModifiers = null,
         PackedComponentPool<DeadComponent>? deadEntities = null,
         PackedComponentPool<ManaComponent>? mana = null,
@@ -71,7 +76,8 @@ public sealed class ActionActivationSystem : ISystem
         PackedComponentPool<HotkeyExpansionUnlockComponent>? hotkeyExpansionUnlocks = null,
         MultiComponentPool<BodyPartComponent>? bodyParts = null,
         PackedComponentPool<MeleeDisabledComponent>? meleeDisabled = null,
-        PackedComponentPool<DodgingComponent>? dodgingEntities = null)
+        PackedComponentPool<DodgingComponent>? dodgingEntities = null,
+        ProcessingTierQuery? processingTiers = null)
     {
         _pendingActivations = pendingActivations;
         _actionLocks = actionLocks;
@@ -86,6 +92,7 @@ public sealed class ActionActivationSystem : ISystem
         _playerQuery = playerQuery;
         _statusEffectAppliers = statusEffectAppliers;
         _componentManager = componentManager;
+        _entityKeys = entityKeys;
         _deadEntities = deadEntities;
         _mana = mana;
         _abilityScores = abilityScores;
@@ -94,6 +101,7 @@ public sealed class ActionActivationSystem : ISystem
         _bodyParts = bodyParts;
         _meleeDisabled = meleeDisabled;
         _dodgingEntities = dodgingEntities;
+        _processingTiers = processingTiers;
 
         _stripeSet = EntityStripeSet.CreateAndWire(StripeCount, pendingActivations);
     }
@@ -146,7 +154,7 @@ public sealed class ActionActivationSystem : ISystem
             }
 
             // Every Arm/Hand this entity has is simultaneously disabled (BodyPartEffectsSystem's
-            // own hard block, see PLAN-body-part-gameplay-effects.md) -- a Tag.Melee action can't
+            // own hard block) -- a Tag.Melee action can't
             // be swung at all, not just at a heavily-reduced MeleeOutgoingDamage.
             if (action.Tags.Contains(Tag.Melee) && _meleeDisabled?.Has(entityId) == true)
             {
@@ -181,7 +189,7 @@ public sealed class ActionActivationSystem : ISystem
             return false;
         }
 
-        ActionEffectResolver.Apply(action, entityId, targetTiles, _mapQuery, _health, _eventBus, _mathUtility, _playerQuery, _statusEffectAppliers, _componentManager, now, _statModifiers, _deadEntities, _abilityScores, _auraSources, _hotkeyExpansionUnlocks, _bodyParts, _dodgingEntities);
+        ActionEffectResolver.Apply(action, entityId, targetTiles, _mapQuery, _health, _eventBus, _mathUtility, _playerQuery, _statusEffectAppliers, _componentManager, _entityKeys, now, _statModifiers, _deadEntities, _abilityScores, _auraSources, _hotkeyExpansionUnlocks, _bodyParts, _dodgingEntities, _processingTiers);
         ActionLockGate.Lock(_actionLocks, entityId, now, action.Activator.Timing.ActionLockFrames);
         return true;
     }
@@ -208,7 +216,7 @@ public sealed class ActionActivationSystem : ISystem
 
     private bool TryActivateFreeCast(int entityId, ActionDefinition action, Vector3Int[] targetTiles, long now)
     {
-        ActionEffectResolver.Apply(action, entityId, targetTiles, _mapQuery, _health, _eventBus, _mathUtility, _playerQuery, _statusEffectAppliers, _componentManager, now, _statModifiers, _deadEntities, _abilityScores, _auraSources, _hotkeyExpansionUnlocks, _bodyParts, _dodgingEntities);
+        ActionEffectResolver.Apply(action, entityId, targetTiles, _mapQuery, _health, _eventBus, _mathUtility, _playerQuery, _statusEffectAppliers, _componentManager, _entityKeys, now, _statModifiers, _deadEntities, _abilityScores, _auraSources, _hotkeyExpansionUnlocks, _bodyParts, _dodgingEntities, _processingTiers);
         return true;
     }
 

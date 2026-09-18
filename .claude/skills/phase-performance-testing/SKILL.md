@@ -5,7 +5,7 @@ description: Run a live benchmark of DungeonCrawlerWorld's ECS systems using the
 
 # Phase performance testing
 
-The game's `--benchmark-frames=START-END` flag (see `Program.cs`, `Engine/Diagnostics/BenchmarkFrameRange.cs`) makes `FrameRangeBenchmark` total every instrumented cost -- each system in `SystemManager`, each `EventBus` event, each window's Update/Draw -- across simulation frames `[START, END)`, then write one `Log/diagnostics/benchmark-<timestamp>-<pid>.json` the moment frame END begins. This is the only way to see real per-system cost at the game's actual scale (`FloorBuilder.PopulateFloor` populates the same ~2.6M-entity TestMapBuilder map `GameLoop.InitialEntityCapacity` is sized for) -- the checked-in `AbilityScorePerformanceTests` only measures two isolated code paths, not the whole system graph under load.
+The game's `--benchmark-frames=START-END` flag (see `Program.cs`, `Engine/Diagnostics/BenchmarkFrameRange.cs`) makes `FrameRangeBenchmark` total every instrumented cost -- each system in `SystemManager`, each `EventBus` event, each window's Update/Draw -- across simulation frames `[START, END)`, then write one `Log/diagnostics/benchmark-<timestamp>-<pid>.json` the moment frame END begins. This is the only way to see real per-system cost at the game's actual scale (`FloorBuilder.PopulateFloor` populates the same TestMapBuilder map `GameLoop.InitialEntityCapacity` is sized for) -- the checked-in `AbilityScorePerformanceTests` only measures two isolated code paths, not the whole system graph under load.
 
 ## Why frames and a seed, not wall-clock samples
 
@@ -26,12 +26,14 @@ A fixed seed makes the simulation repeat frame for frame; a fixed frame range ma
 
 | | Windowed | Headless |
 |---|---|---|
-| Time per run (population + frames 600-3600) | ~65-75s | **~8s** |
+| Time per run (population + frames 600-3600, 3072x3072) | ~80-90s | **~20s** |
 | Measures Draw / Presentation | yes | no |
 | Run-to-run spread, same session | ~4% total, up to ~12% | **~0.2-2.5% total, ~1-2% per system** |
 | Determinism check | no | **yes** (world fingerprint) |
 
 Headless numbers read **about half** the windowed ones for the same code (`EcsContext.Update` 1.12 vs 2.2-2.5 ms/frame, 2026-09-11) and some systems far more (ActionLock 0.046 vs 0.21). Likely causes: Draw between frames evicts simulation data from cache, and a paced game idles long enough for the CPU to downclock -- the ECS here is memory-latency-bound, so both hit it hard. Neither is proven. So: **headless for comparing simulation code, windowed for what the player actually pays.** Never compare a headless number with a windowed one; the script keeps them apart.
+
+Headless requests the same 1 ms Windows timer resolution SDL3 sets for the windowed game (since 2026-09-16). Without it, runtime waits round up to Windows' default 15.6 ms tick -- a background gen-2 GC finishing showed up as a 17-24 ms frame the player never gets. Averages are unaffected, but a baseline build from before that date still has the old timer, so compare worst frames only against a baseline saved since.
 
 Each headless run prints a fingerprint of the final world (entity count, pool sizes, every position, every health value). Same build + same seed must give the same fingerprint; the script warns if not, because then the runs measured different workloads.
 
@@ -59,7 +61,7 @@ powershell -NoProfile -File .claude/skills/phase-performance-testing/scripts/Inv
 
 **Debug or Release -- `-Configuration`.** Defaults to `Debug`; `-Configuration Release` measures `bin/Release` (build it first with `dotnet build DungeonCrawlerWorld.sln -c Release`). Release reads roughly half of Debug (headless `EcsContext.Update` 0.68 vs 1.23 ms/frame, 2026-09-11) and weights costs differently -- a tight sequential loop gains far more than scattered lookups -- so use Release for any decision about what ships. Results, previous-run lookups and saved baselines (`baseline-build-debug`/`baseline-build-release`) are kept per configuration and never compared across.
 
-Shared defaults: `-Seed 1`, `-StartFrame 600` (frames before it are JIT warm-up and the opening moves), `-EndFrame 3600` (3000 frames = 50 simulated seconds). Change them only deliberately -- a different seed or range starts a new baseline. `-Repeat N` sets runs per side. Units are **ms per simulation frame**; the frame budget at 60fps is 16.67ms.
+Shared defaults: `-Seed 1`, `-StartFrame 600` (frames before it are JIT warm-up and the opening moves), `-EndFrame 3600` (3000 frames = 50 simulated seconds), `-MapSize 3072` (the 3x3 of neighborhoods, FloorBuilder's default map since 2026-09-15; always passed as `--map-size=`, so every report records its real size). Change them only deliberately -- a different seed, range or map size starts a new baseline. Saved runs recorded as map size 0 are the old 1000x1000 default and never match. `-MapSize 1024` measures a single neighborhood (everything Local or Neighborhood); larger sizes need a longer `-TimeoutSeconds`. A baseline build from before `--map-size` existed ignores the flag and runs its own default, so an A/B against one compares different maps. `-Repeat N` sets runs per side. Units are **ms per simulation frame**; the frame budget at 60fps is 16.67ms.
 
 The script refuses to start if a `DungeonCrawlerWorld` is already running (it may be someone's session, and two instances skew each other), matches each report to *its own* process id so a stale file can't be picked up, and checks the report's seed and range match what it asked for. If a windowed run times out with the window open, the game is probably paused or showing a blocking notification -- simulation frames only advance while `GameLoop.Update`'s pause/menu gate is open.
 

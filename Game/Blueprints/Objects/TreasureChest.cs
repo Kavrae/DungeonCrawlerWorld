@@ -14,7 +14,7 @@ namespace Game.Blueprints.Objects;
 
 /// <summary>
 /// A lootable storage container, the concrete implementation of TODO.md's "Shops and storage
-/// containers" item -- see PLAN-storage-containers.md. A stationary prop like Wall/Lava (Transform
+/// containers" item. A stationary prop (Transform
 /// + object-specific components, no creature identity), but marked ContainerComponent so it's
 /// lootable via the map's "Loot" context menu option even while alive, unlike a corpse. 100
 /// starting health -- high enough that a stray AOE hit won't randomly destroy one. Immune to
@@ -64,7 +64,7 @@ public sealed class TreasureChest(MathUtility mathUtility) : IBlueprint
         {
             componentManager.Merge(entityId, sprite);
         }
-        componentManager.Merge(entityId, new TransformComponent(new Vector3Int(0, 0, (int)MapLayer.Ground), new Vector2Byte(1, 1)));
+        componentManager.Merge(entityId, new TransformComponent(TransformComponent.UnplacedOn(MapLayer.Ground), new Vector2Byte(1, 1)));
         componentManager.Merge(entityId, new SimpleHealthComponent(MaximumHealth, MaximumHealth));
         componentManager.Merge(entityId, new ContainerComponent());
         componentManager.Merge(entityId, new CurrencyComponent(

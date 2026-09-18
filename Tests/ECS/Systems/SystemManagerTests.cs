@@ -107,4 +107,25 @@ public sealed class SystemManagerTests
         CollectionAssert.AreEqual(new byte[] { 0, 1, 0, 1 }, fast.StripeIndexesSeen);
         CollectionAssert.AreEqual(new byte[] { 0, 1, 2, 3 }, slow.StripeIndexesSeen);
     }
+
+    private sealed class OrderRecordingSystem(string name, List<string> order) : ISystem
+    {
+        public byte StripeCount => 1;
+
+        public void Update(EngineTime time, byte stripeIndex) => order.Add(name);
+    }
+
+    [TestMethod]
+    public void RegisterFirst_RunsBeforeSystemsRegisteredEarlier()
+    {
+        var order = new List<string>();
+        var systemManager = new SystemManager();
+        systemManager.Register(new OrderRecordingSystem("a", order));
+        systemManager.Register(new OrderRecordingSystem("b", order));
+        systemManager.RegisterFirst(new OrderRecordingSystem("first", order));
+
+        systemManager.Update(default);
+
+        CollectionAssert.AreEqual(new[] { "first", "a", "b" }, order);
+    }
 }

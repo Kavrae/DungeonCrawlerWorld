@@ -291,4 +291,26 @@ public sealed class MultiTimerWheelTests
 
         Assert.ThrowsExactly<InvalidOperationException>(() => new MultiTimerWheel<Exposure>(pool));
     }
+
+    /// <summary>Unsimulated instances rest rather than fire; resuming the entity schedules every one of its instances again.</summary>
+    [TestMethod]
+    public void UnsimulatedEntity_InstancesRestThenAllFireOnResume()
+    {
+        var pool = CreatePool();
+        var scope = new SimulationScope();
+        var simulated = false;
+        scope.SetPolicy(_ => simulated);
+        var wheel = new MultiTimerWheel<Exposure>(pool, scope);
+        pool.Add(2, new Exposure(1, 5));
+        pool.Add(2, new Exposure(7, 9));
+
+        Assert.IsEmpty(Run(wheel, 0, 20));
+        Assert.AreEqual(2, pool.Count);
+
+        simulated = true;
+        scope.RaiseResumed(2);
+
+        CollectionAssert.AreEquivalent(new[] { (21L, 2, 1), (21L, 2, 7) }, Run(wheel, 21, 30));
+        Assert.AreEqual(0, pool.Count);
+    }
 }

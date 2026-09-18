@@ -20,4 +20,4 @@ namespace Game.World;
 /// float (SimpleHealthComponent.CurrentHealth), so this avoids an extra lossy cast for no benefit.
 /// </param>
 /// <param name="MaximumHealth">The modifier-effective max (StatModifierMath), not the raw stored field -- same reasoning as EntityDamagedEvent.MaximumHealth.</param>
-public readonly record struct EntityHealedEvent(int EntityId, float Amount, StatusEffectSource Source, float CurrentHealth, float MaximumHealth, string HealType);
+public readonly record struct EntityHealedEvent(int EntityId, float Amount, int? SourceEntityId, float CurrentHealth, float MaximumHealth, string HealType);

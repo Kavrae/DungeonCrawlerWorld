@@ -8,8 +8,8 @@ namespace Game.Modules.Movement.Components;
 /// WaitUntilFrame is a deadline, not a countdown: nothing advances it, and every reader compares it
 /// against the current simulation frame (FrameDeadline.IsReached). No system visits an entity for
 /// its wait to elapse, so a waiting entity at any processing tier resumes on exactly the frame it
-/// should -- the defect the old per-visit decrement kept reintroducing. See PLAN-timer-wheel.md
-/// step 8. It is deliberately not on a timer wheel: nothing fires when it elapses, it only stops
+/// should -- the defect the old per-visit decrement kept reintroducing. It is deliberately not on a
+/// timer wheel: nothing fires when it elapses, it only stops
 /// gating.
 /// </remarks>
 /// <cleanupVersion>1</cleanupVersion>

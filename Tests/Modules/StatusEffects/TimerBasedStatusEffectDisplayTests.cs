@@ -36,7 +36,7 @@ public sealed class TimerBasedStatusEffectDisplayTests
     public void GetRemainingDurationFrames_TimerPresent_MatchesFormula()
     {
         var componentManager = CreateComponentManagerWithPoisonTimerPool();
-        componentManager.GetPackedPool<PoisonTimerComponent>().Add(EntityId, new PoisonTimerComponent(nextTickFrame: 30, stackCount: 1, remainingDurationTicks: 3, StatusEffectSource.Admin));
+        componentManager.GetPackedPool<PoisonTimerComponent>().Add(EntityId, new PoisonTimerComponent(nextTickFrame: 30, stackCount: 1, remainingDurationTicks: 3, ActionSource.Admin));
         var display = CreatePoisonDisplay();
 
         // FramesUntilNextTick 30 + (RemainingDurationTicks 3 - 1) * TickIntervalFrames 60 = 150.

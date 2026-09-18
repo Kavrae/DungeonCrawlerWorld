@@ -11,6 +11,7 @@ using Game.Modules.Health.Components;
 using Game.Modules.Race.Components;
 using Game.Modules.StatModifiers;
 using Game.Modules.StatModifiers.Components;
+using Game.Views;
 using Game.World;
 using Microsoft.Xna.Framework;
 using Presentation.UI.Chrome;
@@ -23,7 +24,7 @@ namespace Presentation.UI.Content;
 /// InspectionWindow's content, driven entirely by MapViewState.InspectionMode:
 /// <list type="bullet">
 /// <item>Basic -- one padded block per subject on the currently selected map tile
-/// (SelectedMapNodePosition/CurrentMapLayer), terrain last. Rebuilt wholesale whenever the
+/// (SelectedMapNodePosition/CurrentMapLayer), structure then terrain last. Rebuilt wholesale whenever the
 /// tile's own subject-id set actually changes (tile clicked elsewhere, or an entity walked
 /// on/off the still-selected tile) -- cheap, since one tile's occupant count is always small,
 /// unlike SelectionWindowContent's incremental add/remove diffing (built for a very different
@@ -48,6 +49,7 @@ namespace Presentation.UI.Content;
 /// </summary>
 public sealed class InspectionWindowContent(
     World world,
+    IMapViewQuery mapView,
     MapViewState mapViewState,
     ComponentManager componentManager,
     EntityManager entityManager,
@@ -82,6 +84,8 @@ public sealed class InspectionWindowContent(
 
     private readonly List<int> _lastSubjectIds = [];
     private readonly List<int> _scratchSubjectIds = [];
+    private TerrainView? _lastStructure;
+    private TerrainView? _lastTerrain;
     private readonly List<TextWindow> _adminDumpWindows = [];
     private readonly List<InspectedComponentEntry> _reusableInspectionList = [];
 
@@ -129,7 +133,7 @@ public sealed class InspectionWindowContent(
 
         var currentMapLayer = mapViewState.CurrentMapLayer;
 
-        // Terrain always appears last -- every occupant is added before it, regardless of the
+        // The structure, then terrain, always appear last -- every occupant is added before them, regardless of the
         // order World.GetOccupantEntityIdsAt happens to return them in.
         _scratchSubjectIds.Clear();
         foreach (var entityId in world.GetOccupantEntityIdsAt(new Vector3Int(selected.X, selected.Y, currentMapLayer)))
@@ -137,16 +141,10 @@ public sealed class InspectionWindowContent(
             _scratchSubjectIds.Add(entityId);
         }
 
-        if (Map.TerrainLayerFor(currentMapLayer) is { } terrainLayer)
-        {
-            var terrainEntityId = world.Map.GetTerrainEntityId(selected.X, selected.Y, terrainLayer);
-            if (terrainEntityId != -1)
-            {
-                _scratchSubjectIds.Add(terrainEntityId);
-            }
-        }
+        TerrainView? structure = mapView.TryGetStructure(selected.X, selected.Y, currentMapLayer, out var foundStructure) ? foundStructure : null;
+        TerrainView? terrain = mapView.TryGetTerrain(selected.X, selected.Y, currentMapLayer, out var foundTerrain) ? foundTerrain : null;
 
-        if (_hasContent && selected == _lastBasicPosition && currentMapLayer == _lastBasicMapLayer && _scratchSubjectIds.SequenceEqual(_lastSubjectIds))
+        if (_hasContent && selected == _lastBasicPosition && currentMapLayer == _lastBasicMapLayer && _scratchSubjectIds.SequenceEqual(_lastSubjectIds) && structure == _lastStructure && terrain == _lastTerrain)
         {
             return;
         }
@@ -155,18 +153,30 @@ public sealed class InspectionWindowContent(
         _lastBasicMapLayer = currentMapLayer;
         _lastSubjectIds.Clear();
         _lastSubjectIds.AddRange(_scratchSubjectIds);
+        _lastStructure = structure;
+        _lastTerrain = terrain;
         _lastDetailEntityId = -1; // Invalidates Detail's own cache so it rebuilds fresh if Detail mode resumes later.
 
         _hostWindow.TitleText = $"Tile ({selected.X}, {selected.Y})";
 
         elementPoolService.CloseAllChildren(_hostWindow);
         _adminDumpWindows.Clear();
-        _hasContent = _scratchSubjectIds.Count > 0;
+        _hasContent = _scratchSubjectIds.Count > 0 || structure is not null || terrain is not null;
 
         var blockWidth = _hostWindow.ContentSize.X;
         foreach (var entityId in _scratchSubjectIds)
         {
             BuildSubjectBlock(entityId, blockWidth);
+        }
+
+        if (structure is { } structureView)
+        {
+            BuildTerrainBlock(structureView, blockWidth);
+        }
+
+        if (terrain is { } terrainView)
+        {
+            BuildTerrainBlock(terrainView, blockWidth);
         }
     }
 
@@ -186,6 +196,8 @@ public sealed class InspectionWindowContent(
             _lastBasicPosition = null; // Invalidates Basic's own cache so it rebuilds fresh if Basic mode resumes later.
             _lastBasicMapLayer = -1;
             _lastSubjectIds.Clear();
+            _lastStructure = null;
+            _lastTerrain = null;
             _updatesSinceLastAdminRefresh = 0;
 
             _hostWindow.TitleText = ResolveName(entityId);
@@ -219,6 +231,8 @@ public sealed class InspectionWindowContent(
         _lastBasicPosition = null;
         _lastBasicMapLayer = -1;
         _lastSubjectIds.Clear();
+        _lastStructure = null;
+        _lastTerrain = null;
         _lastDetailEntityId = -1;
         _adminDumpWindows.Clear();
         elementPoolService.CloseAllChildren(_hostWindow);
@@ -233,41 +247,29 @@ public sealed class InspectionWindowContent(
         BuildSpacer(blockWidth);
     }
 
+    /// <summary>The tile's structure or terrain, after its occupants: icon and name, then its description -- the same shape as an entity's block, minus what a cell doesn't have (race, class, health).</summary>
+    private void BuildTerrainBlock(TerrainView terrain, float blockWidth)
+    {
+        var header = CreateHeaderWindow(blockWidth, rowCount: 1);
+        var icon = CreateIcon(header);
+        icon.Configure(terrain.Visual, new Vector2(IconSize, IconSize));
+
+        AddTextRow(header, IconSize + RowTextGap, 0, HeaderTextWidth(blockWidth), terrain.Name);
+        AddDescriptionRow(terrain.Description, blockWidth);
+        BuildSpacer(blockWidth);
+    }
+
     private void BuildHeaderRow(int entityId, float blockWidth)
     {
         var hasRace = _racePool.CountForEntity(entityId) > 0;
         var hasClass = _classPool.CountForEntity(entityId) > 0;
         var rowCount = 1 + (hasRace ? 1 : 0) + (hasClass ? 1 : 0);
-        // header's outer height isn't externally constrained (unlike its width, see textWidth
-        // below), so it grows by WindowChrome.Padding on top and bottom -- the icon/text keep
-        // their original sizes exactly, with real breathing room added around them, rather than
-        // being squeezed into a smaller box.
-        var headerHeight = System.Math.Max(IconSize, rowCount * RowHeight) + WindowChrome.Padding * 2;
-
-        var header = elementPoolService.CreateElement<Window>(_hostWindow, new ElementOptions
-        {
-            Hierarchy = new ElementHierarchyOptions { CanContainChildren = true },
-            Layout = new ElementLayoutOptions { Size = new Vector2(blockWidth, headerHeight), MaximumSize = new Vector2(blockWidth, UnboundedChildHeight), DisplayMode = ElementDisplayMode.Fixed },
-            Chrome = new ElementChromeOptions { ShowBorder = false, ShowTitle = false, CanUserFocus = false },
-            Content = new ElementContentOptions { ContentColor = Color.Transparent },
-        });
-        _hostWindow.AddChild(header);
-
-        var icon = elementPoolService.CreateElement<EntityIconElement>(header, new ElementOptions
-        {
-            Hierarchy = new ElementHierarchyOptions { CanContainChildren = false },
-            Layout = new ElementLayoutOptions { RelativePosition = Vector2.Zero, Size = new Vector2(IconSize, IconSize), DisplayMode = ElementDisplayMode.Fixed },
-            Chrome = new ElementChromeOptions { ShowBorder = false, ShowTitle = false, CanUserFocus = false },
-            Content = new ElementContentOptions { ContentColor = Color.Transparent },
-        });
+        var header = CreateHeaderWindow(blockWidth, rowCount);
+        var icon = CreateIcon(header);
         icon.Configure(entityId, new Vector2(IconSize, IconSize));
-        header.AddChild(icon);
 
         var textX = IconSize + RowTextGap;
-        // header's own content width is now blockWidth - 2*Padding (see ChildContentPadding),
-        // not the full blockWidth -- header's width is a hard constraint (must not exceed the
-        // block width), so text shrinks to fit inside the padded content area instead.
-        var textWidth = System.Math.Max(0f, blockWidth - WindowChrome.Padding * 2 - textX);
+        var textWidth = HeaderTextWidth(blockWidth);
         var rowIndex = 0;
 
         AddTextRow(header, textX, rowIndex++, textWidth, ResolveName(entityId));
@@ -281,6 +283,42 @@ public sealed class InspectionWindowContent(
         {
             AddTextRow(header, textX, rowIndex++, textWidth, $"Class: {ResolveClassName(entityId)}");
         }
+    }
+
+    /// <summary>header's own content width is blockWidth - 2*Padding (see ChildContentPadding), not the full blockWidth -- its width is a hard constraint, so text shrinks to fit inside the padded content area instead.</summary>
+    private static float HeaderTextWidth(float blockWidth) =>
+        System.Math.Max(0f, blockWidth - WindowChrome.Padding * 2 - (IconSize + RowTextGap));
+
+    private Window CreateHeaderWindow(float blockWidth, int rowCount)
+    {
+        // header's outer height isn't externally constrained (unlike its width, see
+        // HeaderTextWidth), so it grows by WindowChrome.Padding on top and bottom -- the icon/text
+        // keep their original sizes exactly, with real breathing room added around them, rather
+        // than being squeezed into a smaller box.
+        var headerHeight = System.Math.Max(IconSize, rowCount * RowHeight) + WindowChrome.Padding * 2;
+
+        var header = elementPoolService.CreateElement<Window>(_hostWindow, new ElementOptions
+        {
+            Hierarchy = new ElementHierarchyOptions { CanContainChildren = true },
+            Layout = new ElementLayoutOptions { Size = new Vector2(blockWidth, headerHeight), MaximumSize = new Vector2(blockWidth, UnboundedChildHeight), DisplayMode = ElementDisplayMode.Fixed },
+            Chrome = new ElementChromeOptions { ShowBorder = false, ShowTitle = false, CanUserFocus = false },
+            Content = new ElementContentOptions { ContentColor = Color.Transparent },
+        });
+        _hostWindow.AddChild(header);
+        return header;
+    }
+
+    private EntityIconElement CreateIcon(Window header)
+    {
+        var icon = elementPoolService.CreateElement<EntityIconElement>(header, new ElementOptions
+        {
+            Hierarchy = new ElementHierarchyOptions { CanContainChildren = false },
+            Layout = new ElementLayoutOptions { RelativePosition = Vector2.Zero, Size = new Vector2(IconSize, IconSize), DisplayMode = ElementDisplayMode.Fixed },
+            Chrome = new ElementChromeOptions { ShowBorder = false, ShowTitle = false, CanUserFocus = false },
+            Content = new ElementContentOptions { ContentColor = Color.Transparent },
+        });
+        header.AddChild(icon);
+        return icon;
     }
 
     private void AddTextRow(Window parent, float x, int rowIndex, float width, string text)
@@ -335,9 +373,11 @@ public sealed class InspectionWindowContent(
         row.AddChild(bar);
     }
 
-    private void BuildDescriptionRow(int entityId, float blockWidth)
+    private void BuildDescriptionRow(int entityId, float blockWidth) =>
+        AddDescriptionRow(_displayTextPool.TryGetReadonly(entityId, out var displayText) ? displayText.Description : string.Empty, blockWidth);
+
+    private void AddDescriptionRow(string description, float blockWidth)
     {
-        var description = _displayTextPool.TryGetReadonly(entityId, out var displayText) ? displayText.Description : string.Empty;
         if (string.IsNullOrWhiteSpace(description))
         {
             return;

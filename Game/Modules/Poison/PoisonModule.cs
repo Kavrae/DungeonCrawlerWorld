@@ -1,3 +1,4 @@
+using Engine.ECS.Entities;
 using Engine.ECS.Components;
 using Engine.ECS.Systems;
 using Engine.Events;
@@ -38,16 +39,18 @@ public sealed class PoisonModule : IGameModule
 
     private EventBus _eventBus = null!;
     private IPlayerQuery? _playerQuery;
+    private EntityKeys _entityKeys = null!;
     private MathUtility _mathUtility = null!;
 
     public void Configure(GameModuleContext context)
     {
         _eventBus = context.EventBus;
         _playerQuery = context.PlayerQuery;
+        _entityKeys = context.EntityKeys;
         _mathUtility = context.MathUtility;
         context.StatusEffectAuraAppliers.Register(new TimerBasedAuraApplier<PoisonTimerComponent>(
             StatusEffectType.Poison,
-            (componentManager, entityId, source, now) => PoisonEffects.ApplyStack(componentManager, entityId, source, AuraDurationTicks, now, _eventBus, _playerQuery)));
+            (componentManager, entityId, source, now) => PoisonEffects.ApplyStack(componentManager, _entityKeys, entityId, source, AuraDurationTicks, now, _eventBus, _playerQuery)));
         context.StatusEffectDisplays.Register(new TimerBasedStatusEffectDisplay<PoisonTimerComponent>(StatusEffectType.Poison, PoisonEffects.Glyph,
             static (poison, now) => FrameDeadline.Remaining(poison.NextTickFrame, now) + (poison.RemainingDurationTicks - 1) * PoisonEffects.TickIntervalFrames));
     }

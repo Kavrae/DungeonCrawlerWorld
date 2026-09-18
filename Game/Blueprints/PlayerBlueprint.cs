@@ -1,6 +1,8 @@
-using Engine.ECS.Systems;
 using Engine.ECS.Components;
+using Engine.ECS.Entities;
+using Engine.ECS.Systems;
 using Engine.Math;
+using Game.Blueprints.Classes;
 using Game.Blueprints.Races;
 using Game.Modules.AbilityScores.Components;
 using Game.Modules.Actions;
@@ -10,6 +12,7 @@ using Game.Modules.Actions.Definitions.DirectActions;
 using Game.Modules.Actions.Definitions.Spells;
 using Game.Modules.Core.Components;
 using Game.Modules.Crawler.Components;
+using Game.Modules.Health;
 using Game.Modules.Inventory;
 using Game.Modules.Inventory.Components;
 using Game.Modules.Inventory.Definitions;
@@ -22,12 +25,14 @@ namespace Game.Blueprints;
 
 /// <summary>
 /// The player character: given body parts, ActionLock, and ability scores via the Human race it
-/// composes in (Human's own default shape, unmodified -- see Human's own doc comment), with its
-/// Glyph/Sprite/Movement overridden immediately after to the player's own '@'/Player-sprite/
-/// PlayerControlled shape, the same overrides-after-parts pattern GoblinEngineerBlueprint uses.
-/// Always a Crawler -- see CrawlerComponent's own doc comment.
+/// composes in (Human's own default shape, unmodified -- see Human's own doc comment) and its
+/// max-health/regen bonuses via the Tank class composed on top of it, with its Glyph/Sprite/Movement
+/// overridden immediately after to the player's own '@'/Player-sprite/PlayerControlled shape, the
+/// same overrides-after-parts pattern GoblinEngineerBlueprint uses. Tank runs after Human so it sees
+/// the body parts Human granted and takes its Complex-health path rather than its own standalone
+/// Simple baseline (see Tank's own doc comment). Always a Crawler -- see CrawlerComponent's own doc comment.
 /// </summary>
-public sealed class PlayerBlueprint(MathUtility mathUtility, UniqueNumberAllocator crawlerNumberAllocator) : IBlueprint
+public sealed class PlayerBlueprint(MathUtility mathUtility, UniqueNumberAllocator crawlerNumberAllocator, EntityKeys entityKeys) : IBlueprint
 {
     private const ushort MagicMissileDamage = 5;
 
@@ -43,11 +48,16 @@ public sealed class PlayerBlueprint(MathUtility mathUtility, UniqueNumberAllocat
     private const float PermanentOutgoingDamageBonus = 2f;
     private const float PermanentMaximumHealthMultiplierBonus = 0.5f;
 
+    private const string PlayerName = "Player1";
+    private const string PlayerDescription = "This is you. What else did you expect?";
+
     private readonly Human _human = new(mathUtility);
+    private readonly Tank _tank = new(entityKeys);
 
     public void Build(ComponentManager componentManager, int entityId)
     {
         _human.Build(componentManager, entityId);
+        _tank.Build(componentManager, entityId);
 
         // TryUpdate, not Merge -- GlyphComponent's merge policy only Lerps GlyphColor and never
         // overwrites Glyph itself (see CoreModule's own registration), and MovementComponent's
@@ -99,7 +109,16 @@ public sealed class PlayerBlueprint(MathUtility mathUtility, UniqueNumberAllocat
 
         componentManager.Merge(entityId, new CrawlerComponent(crawlerNumberAllocator.Allocate()));
 
-        componentManager.Merge(entityId, new DisplayTextComponent("Player1", "This is you. What else did you expect?"));
+        // TryUpdate after the Merge, for the same reason Glyph/Movement are overridden above:
+        // DisplayTextComponent's merge policy concatenates Name/Description, so Tank's own
+        // DisplayText would otherwise leave the player named "Tank Player1" everywhere a name is
+        // shown. The class is already surfaced on its own (InspectionWindowContent reads ClassComponent).
+        componentManager.Merge(entityId, new DisplayTextComponent(PlayerName, PlayerDescription));
+        componentManager.TryUpdate(entityId, static (ref DisplayTextComponent displayText) =>
+        {
+            displayText.Name = PlayerName;
+            displayText.Description = PlayerDescription;
+        });
 
         StartingCurrencyGrant.GrantFixedStartingGold(componentManager, entityId);
 
@@ -125,8 +144,8 @@ public sealed class PlayerBlueprint(MathUtility mathUtility, UniqueNumberAllocat
         componentManager.Merge(entityId, new ItemHotkeyBindingComponent(HotkeySlot.Slot6, toxicIdolStackId));
 
         StatModifierEffects.Apply(componentManager, entityId, StatModifierTarget.OutgoingDamage, StatModifierOperation.Additive, StatModifierPolarity.Buff,
-            canModify: true, magnitude: PermanentOutgoingDamageBonus, expiresAtFrame: FrameDeadline.Never, StatusEffectSource.Admin);
-        StatModifierEffects.Apply(componentManager, entityId, StatModifierTarget.MaximumHealth, StatModifierOperation.Multiplicative, StatModifierPolarity.Buff,
-            canModify: true, magnitude: PermanentMaximumHealthMultiplierBonus, expiresAtFrame: FrameDeadline.Never, StatusEffectSource.Admin);
+            canModify: true, magnitude: PermanentOutgoingDamageBonus, expiresAtFrame: FrameDeadline.Never, ActionSource.Admin);
+        MaximumHealthShift.ApplyModifier(componentManager, entityId, StatModifierOperation.Multiplicative, StatModifierPolarity.Buff,
+            canModify: true, magnitude: PermanentMaximumHealthMultiplierBonus, expiresAtFrame: FrameDeadline.Never, ActionSource.Admin);
     }
 }

@@ -1,11 +1,13 @@
 using Engine.ECS.Components;
 using Engine.ECS.Components.Stores;
+using Engine.ECS.Entities;
 using Engine.Events;
 using Engine.Math;
-using Game.Modules.Actions.Components;
 using Game.Modules.AbilityScores.Components;
+using Game.Modules.Actions.Components;
 using Game.Modules.Death.Components;
 using Game.Modules.Health.Components;
+using Game.Modules.ProcessingTier;
 using Game.Modules.StatModifiers.Components;
 using Game.Modules.StatusEffectAura.Components;
 using Game.Modules.StatusEffects;
@@ -42,6 +44,7 @@ public static class ActionEffectResolver
         IPlayerQuery? playerQuery,
         StatusEffectAuraApplierRegistry statusEffectAppliers,
         ComponentManager componentManager,
+        EntityKeys entityKeys,
         long now,
         MultiComponentPool<StatModifierComponent>? statModifiers = null,
         PackedComponentPool<DeadComponent>? deadEntities = null,
@@ -49,7 +52,8 @@ public static class ActionEffectResolver
         MultiComponentPool<StatusEffectAuraSourceComponent>? auraSources = null,
         PackedComponentPool<HotkeyExpansionUnlockComponent>? hotkeyExpansionUnlocks = null,
         MultiComponentPool<BodyPartComponent>? bodyParts = null,
-        PackedComponentPool<DodgingComponent>? dodgingEntities = null)
+        PackedComponentPool<DodgingComponent>? dodgingEntities = null,
+        ProcessingTierQuery? processingTiers = null)
     {
         eventBus.Publish(new ActionActivatedEvent(sourceEntityId, action.Id));
 
@@ -60,6 +64,7 @@ public static class ActionEffectResolver
             EventBus: eventBus,
             MathUtility: mathUtility,
             ComponentManager: componentManager,
+            EntityKeys: entityKeys,
             ActivatorName: action.Name,
             ActivatorTags: action.Tags,
             Now: now,
@@ -78,6 +83,11 @@ public static class ActionEffectResolver
         {
             foreach (var targetEntityId in mapQuery.GetOccupantEntityIdsAt(tile))
             {
+                if (processingTiers?.IsSimulated(targetEntityId) == false)
+                {
+                    continue;
+                }
+
                 if (isDodgeable && dodgingEntities?.Has(targetEntityId) == true)
                 {
                     continue;

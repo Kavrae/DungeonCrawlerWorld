@@ -280,4 +280,38 @@ public sealed class ComponentManagerTests
 
         Assert.ThrowsExactly<InvalidOperationException>(() => manager.TryUpdate(0, (ref DirectTestComponent c) => c.Value += 1));
     }
+
+    [TestMethod]
+    public void ReserveHeadroom_PopulatedPools_FillingToTheReservedCountNeverGrowsThemAgain()
+    {
+        var manager = new ComponentManager(initialEntityCapacity: 64, initialComponentCapacity: 4);
+        manager.RegisterPackedPool<PackedTestComponent>((ref existing, incoming) => existing = incoming);
+        manager.RegisterMultiPool<MultiTestComponent>();
+        var packed = manager.GetPackedPool<PackedTestComponent>();
+        var multi = manager.GetMultiPool<MultiTestComponent>();
+        for (var entityId = 0; entityId < 4; entityId++)
+        {
+            packed.Add(entityId, new PackedTestComponent { Value = entityId });
+            multi.Add(entityId, new MultiTestComponent { Value = entityId });
+        }
+
+        manager.ReserveHeadroom(3);
+        var packedBytes = packed.EstimatedBytes;
+        var multiBytes = multi.EstimatedBytes;
+        for (var entityId = 4; entityId < 12; entityId++)
+        {
+            packed.Add(entityId, new PackedTestComponent { Value = entityId });
+            multi.Add(entityId, new MultiTestComponent { Value = entityId });
+        }
+
+        Assert.AreEqual(packedBytes, packed.EstimatedBytes);
+        Assert.AreEqual(multiBytes, multi.EstimatedBytes);
+        Assert.AreEqual(11, packed.GetReadonly(11).Value);
+        Assert.AreEqual(3, multi.GetReadonlyByDenseIndex(multi.GetFirstDenseIndex(3)).Value);
+
+        packed.Add(12, new PackedTestComponent { Value = 12 });
+        multi.Add(12, new MultiTestComponent { Value = 12 });
+        Assert.IsTrue(packed.EstimatedBytes > packedBytes);
+        Assert.IsTrue(multi.EstimatedBytes > multiBytes);
+    }
 }

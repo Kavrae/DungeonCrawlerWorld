@@ -88,9 +88,9 @@ public sealed class ParalysisSystemTests
         var timers = componentManager.GetPackedPool<ParalysisTimerComponent>();
         var system = new ParalysisSystem(timers);
 
-        ParalysisEffects.Apply(componentManager, 0, StatusEffectSource.Admin, now: 0);
+        ParalysisEffects.Apply(componentManager, 0, ActionSource.Admin, now: 0);
         Run(system, 0, 100);
-        ParalysisEffects.Apply(componentManager, 0, StatusEffectSource.Admin, now: 100);
+        ParalysisEffects.Apply(componentManager, 0, ActionSource.Admin, now: 100);
 
         Run(system, 101, 100 + ParalysisEffects.DurationFrames - 1);
         Assert.IsTrue(timers.Has(0), "Still paralyzed until DurationFrames after the second application, not the first.");

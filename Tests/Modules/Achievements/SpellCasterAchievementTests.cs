@@ -1,3 +1,4 @@
+using Engine.ECS.Entities;
 using Engine.Bootstrap;
 using Engine.ECS.Context;
 using Engine.Events;
@@ -33,7 +34,7 @@ public sealed class SpellCasterAchievementTests
         module.Configure(context);
 
         IReadOnlyList<IModule> modules = [module, coreActionsModule];
-        var ecsContext = Bootstrapper.Build(modules, initialEntityCapacity: 10, initialComponentCapacity: 10, eventBus);
+        var ecsContext = Bootstrapper.Build(modules, initialEntityCapacity: 10, initialComponentCapacity: 10, eventBus, entityKeys: context.EntityKeys);
 
         return (ecsContext, eventBus, world);
     }

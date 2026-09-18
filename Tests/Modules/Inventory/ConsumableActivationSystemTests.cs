@@ -1,3 +1,4 @@
+using Engine.ECS.Entities;
 using Engine.ECS.Systems;
 ﻿using Engine.ECS.Components;
 using Engine.Events;
@@ -54,10 +55,9 @@ public sealed class ConsumableActivationSystemTests
     {
         private readonly Dictionary<(int, int, int), int> _occupantByPosition = [];
 
-        public Vector3Int MapSize { get; } = new(100, 100, 1);
+        public MapBounds Bounds { get; } = new(0, 0, 100, 100, 1);
         public bool IsOnMap(Vector3Int position) => true;
         public bool IsBlocking(int entityId) => true;
-        public int GetTerrainEntityIdAt(Vector3Int position) => -1;
 
         public void SetOccupant(Vector3Int position, int entityId) => _occupantByPosition[(position.X, position.Y, position.Z)] = entityId;
 
@@ -118,6 +118,7 @@ public sealed class ConsumableActivationSystemTests
             eventBus,
             mathUtility,
             componentManager,
+            new EntityKeys(),
             statModifiers: null,
             deadEntities: componentManager.GetPackedPool<DeadComponent>(),
             mana: componentManager.GetPackedPool<ManaComponent>(),
@@ -170,6 +171,7 @@ public sealed class ConsumableActivationSystemTests
             eventBus,
             mathUtility,
             componentManager,
+            new EntityKeys(),
             statModifiers: null,
             componentManager.GetPackedPool<DeadComponent>(),
             componentManager.GetPackedPool<ManaComponent>(),
@@ -211,7 +213,7 @@ public sealed class ConsumableActivationSystemTests
         Assert.AreEqual(70, HealthOf(componentManager, TargetEntityId));
     }
 
-    /// <summary>A Complex target (BodyPartComponents, no SimpleHealthComponent) must not be rejected by ApplyPotionToTarget's presence gate -- proves the ConsumableActivationSystem fix in PLAN-human-race.md actually lands the effect instead of silently no-oping.</summary>
+    /// <summary>A Complex target (BodyPartComponents, no SimpleHealthComponent) must not be rejected by ApplyPotionToTarget's presence gate -- proves ConsumableActivationSystem actually lands the effect instead of silently no-oping.</summary>
     [TestMethod]
     public void Potion_ComplexTargetWithBodyPartsAndNoSimpleHealth_HealsByHealFractionOfItsOwnMaxHealth()
     {
@@ -442,7 +444,7 @@ public sealed class ConsumableActivationSystemTests
         componentManager.Merge(TargetEntityId, new SimpleHealthComponent(currentHealth: 20, maximumHealth: 100));
         var stackInstanceId = InventoryActions.AddItem(componentManager, CasterEntityId, PotionId, quantity: 1);
         componentManager.Merge(CasterEntityId, new PendingConsumableActivationComponent(stackInstanceId, [TargetTile]));
-        componentManager.GetPackedPool<DeadComponent>().Add(CasterEntityId, new DeadComponent(KilledByEntityId: null, DiedAtFrame: 0));
+        componentManager.GetPackedPool<DeadComponent>().Add(CasterEntityId, new DeadComponent(KilledBy: ActionSource.Admin, DiedAtFrame: 0));
 
         system.Update(default, 0);
 
@@ -507,6 +509,31 @@ public sealed class ConsumableActivationSystemTests
         var wandActivator = (WandActivator)peeledStack.Override!.Activator!;
         Assert.AreEqual((ushort)2, wandActivator.Charges);
         Assert.AreEqual((ushort)3, wandActivator.MaxCharges);
+    }
+
+    [TestMethod]
+    public void Wand_OverrideInstanceSharedWithAnotherHolder_OnlyTheFiringHoldersChargesChange()
+    {
+        const int otherHolderEntityId = 3;
+        var (system, componentManager, mapQuery, _) = Build();
+        mapQuery.SetOccupant(TargetTile, TargetEntityId);
+        componentManager.Merge(TargetEntityId, new SimpleHealthComponent(currentHealth: 20, maximumHealth: 100));
+        var sharedDefinition = CreateWandDefinition(charges: 3, maxCharges: 3);
+        InventoryActions.AddItemWithOverride(componentManager, CasterEntityId, sharedDefinition, quantity: 1);
+        InventoryActions.AddItemWithOverride(componentManager, otherHolderEntityId, sharedDefinition, quantity: 1);
+        var stacks = componentManager.GetMultiPool<InventoryItemStackComponent>();
+        Assert.IsTrue(InventoryQueries.TryGetStack(stacks, CasterEntityId, WandId, out var casterStack));
+        componentManager.Merge(CasterEntityId, new PendingConsumableActivationComponent(casterStack.StackInstanceId, [TargetTile]));
+        componentManager.Merge(CasterEntityId, new ActionLockComponent(standardLockFrames: ActionLockGate.StandardLockFrames, currentLockTotalFrames: 0, unlockedAtFrame: 0));
+
+        system.Update(default, 0);
+
+        Assert.IsTrue(InventoryQueries.TryGetStack(stacks, CasterEntityId, WandId, out var firedStack));
+        Assert.AreEqual((ushort)2, ((WandActivator)firedStack.Override!.Activator!).Charges);
+        Assert.IsTrue(InventoryQueries.TryGetStack(stacks, otherHolderEntityId, WandId, out var otherStack));
+        Assert.AreSame(sharedDefinition, otherStack.Override);
+        Assert.AreEqual((ushort)3, ((WandActivator)otherStack.Override!.Activator!).Charges);
+        Assert.AreEqual((ushort)3, ((WandActivator)sharedDefinition.Activator!).Charges);
     }
 
     [TestMethod]

@@ -12,8 +12,8 @@ namespace Game.Modules.StatusEffectAura.Systems;
 /// </summary>
 /// <remarks>
 /// Driven by a timer wheel (PackedTimerWheel), the same one-shot "always remove, no re-arm" shape
-/// as ParalysisSystem: only expiries actually due are touched, at every processing tier
-/// (PLAN-timer-wheel.md). AuraSourceGrant merging the component is all that schedules it.
+/// as ParalysisSystem: only expiries actually due are touched, at every processing tier.
+/// AuraSourceGrant merging the component is all that schedules it.
 /// </remarks>
 public sealed class AuraSourceExpirySystem : ISystem
 {
@@ -25,12 +25,13 @@ public sealed class AuraSourceExpirySystem : ISystem
     public AuraSourceExpirySystem(
         PackedComponentPool<AuraSourceExpiryComponent> expiries,
         MultiComponentPool<StatusEffectAuraSourceComponent> sources,
-        EventBus eventBus)
+        EventBus eventBus,
+        SimulationScope? simulationScope = null)
     {
         _sources = sources;
         _eventBus = eventBus;
         _tick = Tick;
-        _wheel = new PackedTimerWheel<AuraSourceExpiryComponent>(expiries);
+        _wheel = new PackedTimerWheel<AuraSourceExpiryComponent>(expiries, simulationScope);
     }
 
     /// <summary>Every frame; the wheel only touches expiries actually due.</summary>

@@ -68,7 +68,7 @@ public sealed class ActionTargetingController(
     /// <summary>
     /// Backs MapViewState.TargetableTiles -- populated by RefreshTargetableTiles (Clear +
     /// repopulate) rather than replaced with a fresh HashSet every arm/move, since a HashSet
-    /// allocation here runs against a heap already holding this world's ~2.6M-entity component
+    /// allocation here runs against a heap already holding this world's entity-indexed component
     /// arrays (see CLAUDE.md's Scale note); a GC pass triggered at just the wrong moment against
     /// that heap is exactly the kind of one-time stutter a per-call allocation risks causing.
     /// </summary>
@@ -122,8 +122,7 @@ public sealed class ActionTargetingController(
     /// Iterates the SMALL side. "The number of entities ever mid-windup at once is small and
     /// bounded" (this method's own original assumption) turned out false at this game's real
     /// population scale: a live diagnostics capture showed over 10,000 concurrently-pending
-    /// entities map-wide (PLAN-charge-attack-fill-indicator.md's own addenda has the full
-    /// incident). Walking pendingDelayedActions' own dense arrays and rejecting each non-Local
+    /// entities map-wide. Walking pendingDelayedActions' own dense arrays and rejecting each non-Local
     /// entity therefore cost ~10,000 scattered ProcessingTierComponent reads on EVERY Draw call --
     /// paid in full whether or not anything was actually on screen, and by far the largest single
     /// per-frame cost in MapWindow's draw path.
@@ -240,7 +239,7 @@ public sealed class ActionTargetingController(
         var hoveredTile = new Vector3Int(hoveredColumnRow.X, hoveredColumnRow.Y, playerTransform.Position.Z);
         mapViewState.HoveredTile = hoveredTile;
 
-        TargetShapeResolver.Resolve(targeting.Shape, playerTransform.Position, playerTransform.Size, hoveredTile, targeting.Range, targeting.AreaSize, world.Map.Size, _hoveredFootprintBuffer, targeting.Metric);
+        TargetShapeResolver.Resolve(targeting.Shape, playerTransform.Position, playerTransform.Size, hoveredTile, targeting.Range, targeting.AreaSize, world.Map.Bounds, _hoveredFootprintBuffer, targeting.Metric);
         foreach (var tile in _hoveredFootprintBuffer)
         {
             _hoveredFootprintSet.Add(tile);
@@ -305,7 +304,7 @@ public sealed class ActionTargetingController(
             return;
         }
 
-        TargetShapeResolver.Resolve(targeting.Shape, transform.Position, transform.Size, targetTile, targeting.Range, targeting.AreaSize, world.Map.Size, _finalTargetTilesBuffer, targeting.Metric);
+        TargetShapeResolver.Resolve(targeting.Shape, transform.Position, transform.Size, targetTile, targeting.Range, targeting.AreaSize, world.Map.Bounds, _finalTargetTilesBuffer, targeting.Metric);
         QueueArmedActivation(world.PlayerEntityId, _finalTargetTilesBuffer);
         Disarm();
     }
@@ -728,7 +727,7 @@ public sealed class ActionTargetingController(
     {
         if (IsCursorIndependent(targeting.Shape))
         {
-            TargetShapeResolver.Resolve(targeting.Shape, attackerPosition, attackerSize, attackerPosition, range: 0, areaSize: 0, world.Map.Size, buffer);
+            TargetShapeResolver.Resolve(targeting.Shape, attackerPosition, attackerSize, attackerPosition, range: 0, areaSize: 0, world.Map.Bounds, buffer);
             return;
         }
 
@@ -740,11 +739,11 @@ public sealed class ActionTargetingController(
         // besides Dodge needs Range > 1 here.
         if (targeting.Shape == TargetShape.SingleTarget && targeting.Metric == DistanceMetric.Chebyshev && targeting.Range == 1)
         {
-            TargetShapeResolver.Resolve(TargetShape.Adjacent | TargetShape.Self, attackerPosition, attackerSize, attackerPosition, range: 0, areaSize: 0, world.Map.Size, buffer);
+            TargetShapeResolver.Resolve(TargetShape.Adjacent | TargetShape.Self, attackerPosition, attackerSize, attackerPosition, range: 0, areaSize: 0, world.Map.Bounds, buffer);
             return;
         }
 
-        TargetShapeResolver.Resolve(TargetShape.Burst, attackerPosition, attackerSize, attackerPosition, range: 0, targeting.Range, world.Map.Size, buffer);
+        TargetShapeResolver.Resolve(TargetShape.Burst, attackerPosition, attackerSize, attackerPosition, range: 0, targeting.Range, world.Map.Bounds, buffer);
     }
 
     /// <summary>
@@ -779,7 +778,7 @@ public sealed class ActionTargetingController(
 
         var attackerPosition = transform.Position;
         var attackerSize = transform.Size;
-        var mapSize = world.Map.Size;
+        var bounds = world.Map.Bounds;
         var targeting = action.Activator.Targeting;
 
         if (action.Tags.Contains(Tag.Self))
@@ -815,7 +814,7 @@ public sealed class ActionTargetingController(
             return;
         }
 
-        TargetShapeResolver.Resolve(targeting.Shape, attackerPosition, attackerSize, chosenTile, targeting.Range, targeting.AreaSize, mapSize, _finalTargetTilesBuffer, targeting.Metric);
+        TargetShapeResolver.Resolve(targeting.Shape, attackerPosition, attackerSize, chosenTile, targeting.Range, targeting.AreaSize, bounds, _finalTargetTilesBuffer, targeting.Metric);
         QueueActionActivation(entityId, actionId, _finalTargetTilesBuffer);
     }
 

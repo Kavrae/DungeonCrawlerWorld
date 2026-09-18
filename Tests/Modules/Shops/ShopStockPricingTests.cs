@@ -364,8 +364,7 @@ public sealed class ShopStockPricingTests
 
         // Even a razor-thin spread (0.505 vs 0.495 -- the kind of near-parity a maxed-out future
         // Charisma/skill discount might approach) must never flip this into a profit -- the proof
-        // (PLAN-stock-based-shop-pricing.md's "Bulk / bracket pricing" section) never depended on
-        // the curve being continuous, and banding doesn't change that.
+        // never depended on the curve being continuous, and banding doesn't change that.
         var shop = new ShopComponent(allowedTags: null, buyMultiplier: 0.505f, sellMultiplier: 0.495f);
         var item = CreateItem(goldValue: 10);
 
@@ -393,8 +392,7 @@ public sealed class ShopStockPricingTests
 
         // ~1988G under the 5-band model (Buy 6489, Sell 4501) -- higher than the old continuous
         // curve's ~1550G for the same scenario, since Flooded's flat 0.5x now covers most of the
-        // 76-999 range instead of only approaching 0.5x right at the very top (see
-        // PLAN-stock-based-shop-pricing.md's Phase 5 section).
-        Assert.IsTrue(loss > 1800 && loss < 2200, $"Expected a loss around ~1988G (see PLAN-stock-based-shop-pricing.md's Phase 5 worked example), got {loss}.");
+        // 76-999 range instead of only approaching 0.5x right at the very top.
+        Assert.IsTrue(loss > 1800 && loss < 2200, $"Expected a loss around ~1988G, got {loss}.");
     }
 }

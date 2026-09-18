@@ -16,7 +16,7 @@ public sealed class GeneralShopStock(MathUtility mathUtility) : IBlueprint
     /// Every current CoreItemsModule item, built once via each item's own pure Build() factory --
     /// mirrors TreasureChest.LootTable's own "no ItemCatalog injection needed" shape.
     /// PreferredStockLevel per item is hand-tuned the same way ItemDefinition.GoldValue is
-    /// (PLAN-shops.md) -- lower across the board than PotionShopStock's own par levels, since a
+    /// -- lower across the board than PotionShopStock's own par levels, since a
     /// generalist spreads its Gold across every tag instead of leaning on one.
     /// </summary>
     private static readonly ShopStockEntry[] Stock =

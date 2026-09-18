@@ -7,6 +7,7 @@ using Game.Modules.ContactDamage.Systems;
 using Game.Modules.Death.Components;
 using Game.Modules.Health;
 using Game.Modules.Health.Components;
+using Game.Terrain;
 using Game.World;
 
 namespace Tests.Modules.ContactDamage;
@@ -14,29 +15,30 @@ namespace Tests.Modules.ContactDamage;
 [TestClass]
 public sealed class ContactDamageSystemTests
 {
-    private const int TerrainEntityId = 100;
     private const int MoverEntityId = 0;
     private const int TickIntervalFrames = 60;
+    private static readonly int FirstTickDelay = (int)FrameDeadline.AfterStaggered(0, TickIntervalFrames, MoverEntityId);
 
     private sealed class FakePlayerQuery(int playerEntityId) : IPlayerQuery
     {
         public int PlayerEntityId { get; } = playerEntityId;
+        public Engine.ECS.Entities.EntityKey PlayerEntityKey { get; init; } = TestSources.KeyOf(playerEntityId);
     }
 
-    /// <summary>Minimal IMapQuery test double -- only GetTerrainEntityIdAt is exercised by ContactDamageSystem, everything else is a fixed/empty answer.</summary>
+    /// <summary>Minimal IMapQuery test double -- only GetTerrainAt is exercised by ContactDamageSystem, everything else is a fixed/empty answer.</summary>
     private sealed class FakeMapQuery : IMapQuery
     {
-        private readonly Dictionary<(int X, int Y, int Z), int> _terrainByPosition = [];
+        private readonly Dictionary<(int X, int Y, int Z), TerrainCell> _terrainByPosition = [];
 
-        public Vector3Int MapSize { get; } = new(1000, 1000, 3);
+        public MapBounds Bounds { get; } = new(0, 0, 1000, 1000, 3);
         public bool IsOnMap(Vector3Int position) => true;
         public int GetEntityIdAt(Vector3Int position) => -1;
         public bool IsBlocking(int entityId) => true;
 
-        public void SetTerrain(Vector3Int position, int entityId) => _terrainByPosition[(position.X, position.Y, position.Z)] = entityId;
+        public void SetTerrain(Vector3Int position, ushort terrainTypeId) => _terrainByPosition[(position.X, position.Y, position.Z)] = new TerrainCell(terrainTypeId, 0);
 
-        public int GetTerrainEntityIdAt(Vector3Int position) =>
-            _terrainByPosition.TryGetValue((position.X, position.Y, position.Z), out var id) ? id : -1;
+        public TerrainCell GetTerrainAt(Vector3Int position) =>
+            _terrainByPosition.TryGetValue((position.X, position.Y, position.Z), out var cell) ? cell : default;
 
         public void GetEntityIdsInBox(CubeInt box, Span<int> entityIds) => entityIds.Fill(-1);
     }
@@ -75,8 +77,8 @@ public sealed class ContactDamageSystemTests
     private static readonly Vector3Int OffHazard = new(4, 5, 0);
     private static readonly Vector3Int OnHazard = new(5, 5, 0);
 
-    private static PackedComponentPool<DamageOnContactComponent> CreateHazardPool() =>
-        new(maximumEntityCount: 200, initialCapacity: 4, static (ref existing, incoming) => { });
+    private static TerrainDefinition HazardTerrain(string key, BodyPartType? preferredTargetType = null) =>
+        new(key, "Test hazard", "", default, "~", default, ContactHazard: new ContactHazard(DamagePerTick: 10, TickIntervalFrames: TickIntervalFrames, preferredTargetType));
 
     private static PackedComponentPool<ContactDamageExposureComponent> CreateExposurePool() =>
         new(maximumEntityCount: 200, initialCapacity: 4, static (ref existing, incoming) => { });
@@ -90,30 +92,29 @@ public sealed class ContactDamageSystemTests
     /// <summary>Complex-health counterpart to Build -- the mover carries BodyPartComponents (Head/Torso, mirroring a Human-shaped fixture) instead of a SimpleHealthComponent, and the hazard's own PreferredTargetType is caller-supplied so a test can exercise either the type-match or the bottommost-fallback path.</summary>
     private static (Harness Harness, MultiComponentPool<BodyPartComponent> BodyParts) BuildComplex(BodyPartType? preferredTargetType)
     {
-        var hazards = CreateHazardPool();
+        var terrain = new TerrainRegistry();
         var bodyParts = new MultiComponentPool<BodyPartComponent>(maximumEntityCount: 200, initialCapacity: 8);
         var mapQuery = new FakeMapQuery();
         var movedEntities = new FrameEventBuffer<EntityMovedEvent>();
 
         bodyParts.Add(MoverEntityId, new BodyPartComponent("Head", BodyPartType.Head, 0, verticalPosition: 5, currentHealth: 100, maximumHealth: 100, isVital: true));
         bodyParts.Add(MoverEntityId, new BodyPartComponent("Torso", BodyPartType.Torso, 0, verticalPosition: 4, currentHealth: 100, maximumHealth: 100, isVital: true));
-        hazards.Add(TerrainEntityId, new DamageOnContactComponent(damagePerTick: 10, tickIntervalFrames: TickIntervalFrames, preferredTargetType: preferredTargetType));
-        mapQuery.SetTerrain(OnHazard, TerrainEntityId);
+        mapQuery.SetTerrain(OnHazard, terrain.Register(HazardTerrain("test:hazard", preferredTargetType)));
 
-        var system = new ContactDamageSystem(hazards, CreateExposurePool(), CreateHealthPool(), new EventBus(), mapQuery, new FakePlayerQuery(MoverEntityId), movedEntities, new MathUtility(), statModifiers: null, deadEntities: null, bodyParts: bodyParts);
+        var system = new ContactDamageSystem(terrain, CreateExposurePool(), CreateHealthPool(), new EventBus(), mapQuery, new FakePlayerQuery(MoverEntityId), movedEntities, new MathUtility(), new SimulationClock(), statModifiers: null, deadEntities: null, bodyParts: bodyParts);
 
         return (new Harness(system, movedEntities), bodyParts);
     }
 
     private static (
         Harness Harness,
-        PackedComponentPool<DamageOnContactComponent> Hazards,
+        TerrainRegistry Terrain,
         PackedComponentPool<ContactDamageExposureComponent> Exposures,
         PackedComponentPool<SimpleHealthComponent> Health,
         FakeMapQuery MapQuery,
         PackedComponentPool<DeadComponent> DeadEntities) Build()
     {
-        var hazards = CreateHazardPool();
+        var terrain = new TerrainRegistry();
         var exposures = CreateExposurePool();
         var health = CreateHealthPool();
         var mapQuery = new FakeMapQuery();
@@ -121,12 +122,11 @@ public sealed class ContactDamageSystemTests
         var deadEntities = CreateDeadPool();
 
         health.Add(MoverEntityId, new SimpleHealthComponent(currentHealth: 100, maximumHealth: 100));
-        hazards.Add(TerrainEntityId, new DamageOnContactComponent(damagePerTick: 10, tickIntervalFrames: TickIntervalFrames));
-        mapQuery.SetTerrain(OnHazard, TerrainEntityId);
+        mapQuery.SetTerrain(OnHazard, terrain.Register(HazardTerrain("test:hazard")));
 
-        var system = new ContactDamageSystem(hazards, exposures, health, new EventBus(), mapQuery, new FakePlayerQuery(MoverEntityId), movedEntities, new MathUtility(), statModifiers: null, deadEntities: deadEntities);
+        var system = new ContactDamageSystem(terrain, exposures, health, new EventBus(), mapQuery, new FakePlayerQuery(MoverEntityId), movedEntities, new MathUtility(), new SimulationClock(), statModifiers: null, deadEntities: deadEntities);
 
-        return (new Harness(system, movedEntities), hazards, exposures, health, mapQuery, deadEntities);
+        return (new Harness(system, movedEntities), terrain, exposures, health, mapQuery, deadEntities);
     }
 
     [TestMethod]
@@ -140,9 +140,9 @@ public sealed class ContactDamageSystemTests
         Assert.AreEqual(90, health.GetReadonly(MoverEntityId).CurrentHealth);
     }
 
-    /// <summary>The next tick is TickIntervalFrames after the frame the entity stepped on -- an absolute deadline, not a countdown that also ticks once on the entry frame.</summary>
+    /// <summary>The next tick is the mover's staggered first deadline after the frame it stepped on -- an absolute deadline, not a countdown that also ticks once on the entry frame.</summary>
     [TestMethod]
-    public void SteppingOntoHazard_SchedulesNextTickOneIntervalLater()
+    public void SteppingOntoHazard_SchedulesNextTickOnItsStaggeredDeadline()
     {
         var (harness, _, exposures, _, _, _) = Build();
         harness.StepThrough(10);
@@ -151,7 +151,7 @@ public sealed class ContactDamageSystemTests
         harness.Step();
 
         Assert.IsTrue(exposures.Has(MoverEntityId));
-        Assert.AreEqual((uint)(harness.Frame + TickIntervalFrames), exposures.GetReadonly(MoverEntityId).NextTickFrame);
+        Assert.AreEqual((uint)(harness.Frame + FirstTickDelay), exposures.GetReadonly(MoverEntityId).NextTickFrame);
     }
 
     [TestMethod]
@@ -167,15 +167,15 @@ public sealed class ContactDamageSystemTests
     }
 
     [TestMethod]
-    public void RemainingOnHazard_DealsDamageAgainExactlyOneIntervalLater()
+    public void RemainingOnHazard_DealsDamageAgainExactlyOnItsFirstDeadline()
     {
         var (harness, _, _, health, _, _) = Build();
         harness.Move(OffHazard, OnHazard);
         harness.Step();
         var steppedOn = harness.Frame;
 
-        harness.StepThrough(steppedOn + TickIntervalFrames - 1);
-        Assert.AreEqual(90, health.GetReadonly(MoverEntityId).CurrentHealth, "Not yet -- one frame short of the interval.");
+        harness.StepThrough(steppedOn + FirstTickDelay - 1);
+        Assert.AreEqual(90, health.GetReadonly(MoverEntityId).CurrentHealth, "Not yet -- one frame short of the deadline.");
 
         harness.Step();
         Assert.AreEqual(80, health.GetReadonly(MoverEntityId).CurrentHealth);
@@ -199,7 +199,7 @@ public sealed class ContactDamageSystemTests
         var (harness, _, _, health, _, deadEntities) = Build();
         harness.Move(OffHazard, OnHazard);
         harness.Step(); // Onto the hazard: exposure added, immediate 10 damage -> 90.
-        deadEntities.Add(MoverEntityId, new DeadComponent(KilledByEntityId: null, DiedAtFrame: 0));
+        deadEntities.Add(MoverEntityId, new DeadComponent(KilledBy: ActionSource.Admin, DiedAtFrame: 0));
 
         harness.StepThrough(harness.Frame + 3 * TickIntervalFrames);
 
@@ -224,24 +224,22 @@ public sealed class ContactDamageSystemTests
     [TestMethod]
     public void HazardToHazardMove_RetriggersImmediateDamageAndReschedulesFromTheMove()
     {
-        var (harness, hazards, exposures, health, mapQuery, _) = Build();
-        const int secondTerrainEntityId = 101;
+        var (harness, terrain, exposures, health, mapQuery, _) = Build();
         var secondHazard = new Vector3Int(6, 5, 0);
-        hazards.Add(secondTerrainEntityId, new DamageOnContactComponent(damagePerTick: 10, tickIntervalFrames: TickIntervalFrames));
-        mapQuery.SetTerrain(secondHazard, secondTerrainEntityId);
+        mapQuery.SetTerrain(secondHazard, terrain.Register(HazardTerrain("test:second-hazard")));
 
         harness.Move(OffHazard, OnHazard);
         harness.Step();
-        harness.StepThrough(harness.Frame + 30);
+        harness.StepThrough(harness.Frame + FirstTickDelay / 3);
 
         harness.Move(OnHazard, secondHazard);
         harness.Step();
         var movedOn = harness.Frame;
 
         Assert.AreEqual(80, health.GetReadonly(MoverEntityId).CurrentHealth);
-        Assert.AreEqual((uint)(movedOn + TickIntervalFrames), exposures.GetReadonly(MoverEntityId).NextTickFrame);
+        Assert.AreEqual((uint)(movedOn + FirstTickDelay), exposures.GetReadonly(MoverEntityId).NextTickFrame);
 
-        harness.StepThrough(movedOn + TickIntervalFrames - 1);
+        harness.StepThrough(movedOn + FirstTickDelay - 1);
         Assert.AreEqual(80, health.GetReadonly(MoverEntityId).CurrentHealth, "The first hazard's old tick frame passed mid-way -- it must not also fire.");
     }
 
@@ -274,5 +272,27 @@ public sealed class ContactDamageSystemTests
         Assert.AreEqual(90, bodyParts.GetReadonlyByDenseIndex(torsoDenseIndex).CurrentHealth);
         var headDenseIndex = BodyPartSelection.PickByType(bodyParts, MoverEntityId, BodyPartType.Head);
         Assert.AreEqual(100, bodyParts.GetReadonlyByDenseIndex(headDenseIndex).CurrentHealth, "Head must be untouched -- the fallback landed on the bottommost part, Torso.");
+    }
+
+    /// <summary>An exposure doesn't accrue while its entity is frozen: a creature frozen in lava for ten seconds takes none of those ten ticks when it resumes, and its next tick keeps the cadence it had.</summary>
+    [TestMethod]
+    public void EntityResumed_OwedExposureTicks_AreSkippedNotDealt()
+    {
+        var terrain = new TerrainRegistry();
+        var hazardId = terrain.Register(HazardTerrain("test:hazard"));
+        var exposures = CreateExposurePool();
+        var health = CreateHealthPool();
+        health.Add(MoverEntityId, new SimpleHealthComponent(currentHealth: 100, maximumHealth: 100));
+        exposures.Add(MoverEntityId, new ContactDamageExposureComponent(nextTickFrame: 60, hazardId));
+        var clock = new SimulationClock();
+        clock.Advance(630);
+        var scope = new SimulationScope();
+        scope.SetPolicy(static _ => false);
+        _ = new ContactDamageSystem(terrain, exposures, health, new EventBus(), new FakeMapQuery(), new FakePlayerQuery(-1), new FrameEventBuffer<EntityMovedEvent>(), new MathUtility(), clock, simulationScope: scope);
+
+        scope.RaiseResumed(MoverEntityId);
+
+        Assert.AreEqual(100f, health.GetReadonly(MoverEntityId).CurrentHealth);
+        Assert.AreEqual(660u, exposures.GetReadonly(MoverEntityId).NextTickFrame);
     }
 }

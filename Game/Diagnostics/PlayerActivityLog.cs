@@ -71,7 +71,7 @@ public sealed class PlayerActivityLog : IDisposable
     private void OnEntityDamaged(EntityDamagedEvent damaged)
     {
         var playerIsTarget = damaged.EntityId == _world.PlayerEntityId;
-        var playerIsSource = damaged.Source.Kind == StatusEffectSourceKind.Entity && damaged.Source.EntityId == _world.PlayerEntityId;
+        var playerIsSource = damaged.Source.IsEntity(_world.PlayerEntityKey);
 
         if (!playerIsTarget && !playerIsSource)
         {
@@ -85,21 +85,21 @@ public sealed class PlayerActivityLog : IDisposable
     private void OnEntityHealed(EntityHealedEvent healed)
     {
         var playerIsTarget = healed.EntityId == _world.PlayerEntityId;
-        var playerIsSource = healed.Source.Kind == StatusEffectSourceKind.Entity && healed.Source.EntityId == _world.PlayerEntityId;
+        var playerIsSource = healed.SourceEntityId == _world.PlayerEntityId;
 
         if (!playerIsTarget && !playerIsSource)
         {
             return;
         }
 
-        Write($"HEAL amount={healed.Amount:0.##} type={healed.HealType} source={DescribeSource(healed.Source)} target={DescribeEntity(healed.EntityId)} currentHealth={healed.CurrentHealth:0.##} maximumHealth={healed.MaximumHealth:0.##}");
+        Write($"HEAL amount={healed.Amount:0.##} type={healed.HealType} source={(healed.SourceEntityId is { } healerEntityId ? DescribeEntity(healerEntityId) : "Admin")} target={DescribeEntity(healed.EntityId)} currentHealth={healed.CurrentHealth:0.##} maximumHealth={healed.MaximumHealth:0.##}");
     }
 
     /// <summary>Mirrors OnEntityDamaged/OnEntityHealed exactly -- StatusEffectImmunity.IsImmune already gates the publish itself on player-involvement, so this handler's own check is defense in depth, not the only guard.</summary>
     private void OnStatusEffectImmunityBlocked(StatusEffectImmunityBlockedEvent blocked)
     {
         var playerIsTarget = blocked.EntityId == _world.PlayerEntityId;
-        var playerIsSource = blocked.Source.Kind == StatusEffectSourceKind.Entity && blocked.Source.EntityId == _world.PlayerEntityId;
+        var playerIsSource = blocked.Source.IsEntity(_world.PlayerEntityKey);
 
         if (!playerIsTarget && !playerIsSource)
         {
@@ -115,10 +115,10 @@ public sealed class PlayerActivityLog : IDisposable
             ? $"{displayText.Name} (#{entityId})"
             : entityId.ToString();
 
-    /// <summary>Admin/AI sources have no entity to name (StatusEffectSource.ToString() already covers them); an Entity source reuses DescribeEntity for its numeric+name part.</summary>
-    private string DescribeSource(StatusEffectSource source) =>
-        source.Kind == StatusEffectSourceKind.Entity
-            ? DescribeEntity(source.EntityId)
+    /// <summary>An entity source by the name and crawler number it had when the source was created (its runtime id may already belong to someone else); anything else by ActionSource.ToString().</summary>
+    private static string DescribeSource(ActionSource source) =>
+        source.Kind == ActionSourceKind.Entity
+            ? source.Identity.DisplayName
             : source.ToString();
 
     private void Write(string message) =>

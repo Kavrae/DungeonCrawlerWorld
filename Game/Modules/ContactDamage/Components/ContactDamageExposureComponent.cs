@@ -3,24 +3,23 @@ using Engine.ECS.Components;
 namespace Game.Modules.ContactDamage.Components;
 
 /// <summary>
-/// Present on an entity only while it currently stands on a DamageOnContactComponent tile --
-/// added/refreshed on contact, removed when it steps off (see ContactDamageSystem). Only
-/// caches SourceEntityId (the terrain entity that granted exposure) and the next tick's frame --
-/// DamagePerTick/TickIntervalFrames are looked up from the hazard itself (via SourceEntityId)
-/// when needed rather than duplicated here, since terrain never moves and never changes once
-/// placed, so there's nothing to protect against by copying its values out.
+/// Present on an entity only while it stands on terrain with a ContactHazard -- added/refreshed on
+/// contact, removed when it steps off (see ContactDamageSystem). Caches only which terrain granted
+/// the exposure and the next tick's frame; the damage and interval are read from that terrain's
+/// definition when needed, since a definition never changes during a session.
 /// </summary>
 /// <remarks>A timer-wheel timer (IScheduledTimer): writing NextTickFrame is all it takes to schedule it.</remarks>
-public struct ContactDamageExposureComponent(uint nextTickFrame, int sourceEntityId) : IScheduledTimer
+public struct ContactDamageExposureComponent(uint nextTickFrame, ushort hazardTerrainTypeId) : IScheduledTimer
 {
     private uint _timerWheelMark;
 
     /// <summary>The simulation frame of the next contact-damage tick (FrameDeadline).</summary>
     public uint NextTickFrame { get; set; } = nextTickFrame;
 
-    public int SourceEntityId { get; set; } = sourceEntityId;
+    /// <summary>The TerrainRegistry id of the hazard terrain the entity is standing on.</summary>
+    public ushort HazardTerrainTypeId { get; set; } = hazardTerrainTypeId;
 
     uint IScheduledTimer.TimerWheelMark { readonly get => _timerWheelMark; set => _timerWheelMark = value; }
 
-    public override readonly string ToString() => $"NextTickFrame : {NextTickFrame}\nSourceEntityId : {SourceEntityId}";
+    public override readonly string ToString() => $"NextTickFrame : {NextTickFrame}\nHazardTerrainTypeId : {HazardTerrainTypeId}";
 }

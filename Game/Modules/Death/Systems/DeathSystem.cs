@@ -78,10 +78,7 @@ public sealed class DeathSystem : ISystem
             _entityMoveSync.ConvertToNonBlocking(died.EntityId, ref transform);
         }
 
-        var killedBy = died.Source.Kind == StatusEffectSourceKind.Entity
-            ? died.Source.EntityId
-            : (int?)null;
-        _deadEntities.Add(died.EntityId, new DeadComponent(killedBy, _currentFrame));
+        _deadEntities.Add(died.EntityId, new DeadComponent(died.Source, _currentFrame));
 
         if (_auraSources is not null)
         {

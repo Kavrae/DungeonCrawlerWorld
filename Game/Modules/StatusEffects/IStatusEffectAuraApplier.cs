@@ -22,5 +22,5 @@ public interface IStatusEffectAuraApplier
 
     /// <summary>Applies exactly one more stack, attributed to source.</summary>
     /// <param name="now">The simulation frame the stack lands on -- a newly started effect's timer is scheduled from it (FrameDeadline.After(now, ...)).</param>
-    void ApplyStack(ComponentManager componentManager, int entityId, StatusEffectSource source, long now);
+    void ApplyStack(ComponentManager componentManager, int entityId, ActionSource source, long now);
 }

@@ -14,7 +14,7 @@ namespace Game.Modules.Health.Components;
 /// A keyed timer-wheel timer (IKeyedScheduledTimer): PartId names the instance, since an entity can
 /// have several parts burning at once.
 /// </remarks>
-public struct BodyPartBurningTimerComponent(byte partId, byte stackCount, uint nextTickFrame, StatusEffectSource source) : IKeyedScheduledTimer
+public struct BodyPartBurningTimerComponent(byte partId, byte stackCount, uint nextTickFrame, ActionSource source) : IKeyedScheduledTimer
 {
     private uint _timerWheelMark;
 
@@ -27,7 +27,7 @@ public struct BodyPartBurningTimerComponent(byte partId, byte stackCount, uint n
     public uint NextTickFrame { get; set; } = nextTickFrame;
 
     /// <summary>Set once on the 0-to-1 transition (BurningAuraApplier.ApplyBodyPartScopedStack), never overwritten by a later top-off -- mirrors BurningTimerComponent's own Source field.</summary>
-    public StatusEffectSource Source { get; set; } = source;
+    public ActionSource Source { get; set; } = source;
 
     readonly int IKeyedScheduledTimer.TimerKey => PartId;
 

@@ -23,8 +23,7 @@ namespace Game.Modules.Actions.Components;
 /// written once when the action is used (ActionInstanceQueries.TrySetCooldown) and read against
 /// the current frame (ActionInstanceQueries.IsOnCooldown/CooldownFramesRemaining). It replaced a
 /// frames-remaining countdown that ActionCooldownSystem walked down every stripe visit -- 0.1
-/// ms/frame spent almost entirely confirming that no cooldown was running (PLAN-timer-wheel.md,
-/// "ActionLock vs ActionCooldown, measured"). A new grant starts at 0: ready immediately.
+/// ms/frame spent almost entirely confirming that no cooldown was running. A new grant starts at 0: ready immediately.
 /// </remarks>
 public struct ActionInstanceComponent(Guid actionId, ActionDefinition? overrideDefinition)
 {

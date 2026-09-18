@@ -44,7 +44,7 @@ public sealed class HealthWindowTests
     {
         var statModifiers = new MultiComponentPool<StatModifierComponent>(maximumEntityCount: 10, initialCapacity: 4);
         statModifiers.Add(EntityId, new StatModifierComponent(StatModifierTarget.MaximumHealth, StatModifierOperation.Multiplicative, StatModifierPolarity.Buff,
-            canModify: true, magnitude: magnitude, expiresAtFrame: FrameDeadline.Never, StatusEffectSource.Admin));
+            canModify: true, magnitude: magnitude, expiresAtFrame: FrameDeadline.Never, ActionSource.Admin));
         return statModifiers;
     }
 
@@ -144,7 +144,7 @@ public sealed class HealthWindowTests
     {
         var componentManager = CreateComponentManagerWithStatusEffectPools();
         // FramesUntilNextTick 30 + (RemainingDurationTicks 3 - 1) * TickIntervalFrames 60 = 150 frames = 2.5s -> ceil to 3.
-        componentManager.GetPackedPool<PoisonTimerComponent>().Add(EntityId, new PoisonTimerComponent(nextTickFrame: 30, stackCount: 1, remainingDurationTicks: 3, StatusEffectSource.Admin));
+        componentManager.GetPackedPool<PoisonTimerComponent>().Add(EntityId, new PoisonTimerComponent(nextTickFrame: 30, stackCount: 1, remainingDurationTicks: 3, ActionSource.Admin));
 
         List<HealthWindow.StatusEffectRow> rows = [];
         List<StatusEffectType> scratch = [];
@@ -161,7 +161,7 @@ public sealed class HealthWindowTests
     {
         var componentManager = CreateComponentManagerWithStatusEffectPools();
         // FramesUntilNextTick 45 + (StackCount 2 - 1) * TickIntervalFrames 60 = 105 frames = 1.75s -> ceil to 2.
-        componentManager.GetPackedPool<BurningTimerComponent>().Add(EntityId, new BurningTimerComponent(nextTickFrame: 45, stackCount: 2, StatusEffectSource.Admin));
+        componentManager.GetPackedPool<BurningTimerComponent>().Add(EntityId, new BurningTimerComponent(nextTickFrame: 45, stackCount: 2, ActionSource.Admin));
 
         List<HealthWindow.StatusEffectRow> rows = [];
         List<StatusEffectType> scratch = [];
@@ -236,7 +236,7 @@ public sealed class HealthWindowTests
     {
         var bodyPartBurningTimers = new MultiComponentPool<BodyPartBurningTimerComponent>(maximumEntityCount: 10, initialCapacity: 4);
         // FramesUntilNextTick 45 + (StackCount 2 - 1) * TickIntervalFrames 60 = 105 frames = 1.75s -> ceil to 2 -- same formula the entity-scoped BurningTimerComponent display uses.
-        bodyPartBurningTimers.Add(EntityId, new BodyPartBurningTimerComponent(partId: 1, stackCount: 2, nextTickFrame: 45, StatusEffectSource.Admin));
+        bodyPartBurningTimers.Add(EntityId, new BodyPartBurningTimerComponent(partId: 1, stackCount: 2, nextTickFrame: 45, ActionSource.Admin));
 
         var found = HealthWindow.TryGetBodyPartBurningLine(bodyPartBurningTimers, EntityId, partId: 1, now: 0, out var text, out _);
 
@@ -249,7 +249,7 @@ public sealed class HealthWindowTests
     public void TryGetBodyPartBurningLine_DifferentPartOnFire_ThisPartReturnsFalse()
     {
         var bodyPartBurningTimers = new MultiComponentPool<BodyPartBurningTimerComponent>(maximumEntityCount: 10, initialCapacity: 4);
-        bodyPartBurningTimers.Add(EntityId, new BodyPartBurningTimerComponent(partId: 1, stackCount: 2, nextTickFrame: 45, StatusEffectSource.Admin));
+        bodyPartBurningTimers.Add(EntityId, new BodyPartBurningTimerComponent(partId: 1, stackCount: 2, nextTickFrame: 45, ActionSource.Admin));
 
         var found = HealthWindow.TryGetBodyPartBurningLine(bodyPartBurningTimers, EntityId, partId: 0, now: 0, out var text, out _);
 
@@ -361,7 +361,7 @@ public sealed class HealthWindowTests
         var statModifiers = CreateStatModifiersPool();
         // 121 frames = 2.017s -> ceil to 3.
         statModifiers.Add(EntityId, new StatModifierComponent(StatModifierTarget.MaximumHealth, StatModifierOperation.Multiplicative, StatModifierPolarity.Buff,
-            canModify: true, magnitude: 0.5f, expiresAtFrame: 121, StatusEffectSource.Admin));
+            canModify: true, magnitude: 0.5f, expiresAtFrame: 121, ActionSource.Admin));
 
         List<HealthWindow.ModifierRow> rows = [];
         HealthWindow.BuildModifierRows(rows, EntityId, statModifiers, StatModifierPolarity.Buff, now: 0);
@@ -379,7 +379,7 @@ public sealed class HealthWindowTests
     {
         var statModifiers = CreateStatModifiersPool();
         statModifiers.Add(EntityId, new StatModifierComponent(StatModifierTarget.MovementLockFrames, StatModifierOperation.Additive, StatModifierPolarity.Debuff,
-            canModify: true, magnitude: 10f, expiresAtFrame: FrameDeadline.Never, StatusEffectSource.Admin));
+            canModify: true, magnitude: 10f, expiresAtFrame: FrameDeadline.Never, ActionSource.Admin));
 
         List<HealthWindow.ModifierRow> rows = [];
         HealthWindow.BuildModifierRows(rows, EntityId, statModifiers, StatModifierPolarity.Debuff, now: 0);
@@ -394,9 +394,9 @@ public sealed class HealthWindowTests
     {
         var statModifiers = CreateStatModifiersPool();
         statModifiers.Add(EntityId, new StatModifierComponent(StatModifierTarget.OutgoingDamage, StatModifierOperation.Additive, StatModifierPolarity.Buff,
-            canModify: true, magnitude: 5f, expiresAtFrame: FrameDeadline.Never, StatusEffectSource.Admin));
+            canModify: true, magnitude: 5f, expiresAtFrame: FrameDeadline.Never, ActionSource.Admin));
         statModifiers.Add(EntityId, new StatModifierComponent(StatModifierTarget.OutgoingDamage, StatModifierOperation.Additive, StatModifierPolarity.Buff,
-            canModify: true, magnitude: 2f, expiresAtFrame: FrameDeadline.Never, StatusEffectSource.Admin));
+            canModify: true, magnitude: 2f, expiresAtFrame: FrameDeadline.Never, ActionSource.Admin));
 
         List<HealthWindow.ModifierRow> rows = [];
         HealthWindow.BuildModifierRows(rows, EntityId, statModifiers, StatModifierPolarity.Buff, now: 0);
@@ -409,7 +409,7 @@ public sealed class HealthWindowTests
     {
         var statModifiers = CreateStatModifiersPool();
         statModifiers.Add(EntityId, new StatModifierComponent(StatModifierTarget.OutgoingDamage, StatModifierOperation.Additive, StatModifierPolarity.Debuff,
-            canModify: true, magnitude: 2f, expiresAtFrame: FrameDeadline.Never, StatusEffectSource.Admin));
+            canModify: true, magnitude: 2f, expiresAtFrame: FrameDeadline.Never, ActionSource.Admin));
 
         List<HealthWindow.ModifierRow> rows = [];
         HealthWindow.BuildModifierRows(rows, EntityId, statModifiers, StatModifierPolarity.Buff, now: 0);
@@ -424,7 +424,7 @@ public sealed class HealthWindowTests
         // AbilityScoreModifierFormatter) -- HealthWindow must not duplicate them.
         var statModifiers = CreateStatModifiersPool();
         statModifiers.Add(EntityId, new StatModifierComponent(StatModifierTarget.Strength, StatModifierOperation.Additive, StatModifierPolarity.Buff,
-            canModify: true, magnitude: 3f, expiresAtFrame: FrameDeadline.Never, StatusEffectSource.Admin));
+            canModify: true, magnitude: 3f, expiresAtFrame: FrameDeadline.Never, ActionSource.Admin));
 
         List<HealthWindow.ModifierRow> rows = [];
         HealthWindow.BuildModifierRows(rows, EntityId, statModifiers, StatModifierPolarity.Buff, now: 0);
@@ -437,7 +437,7 @@ public sealed class HealthWindowTests
     {
         var statModifiers = CreateStatModifiersPool();
         statModifiers.Add(EntityId, new StatModifierComponent(StatModifierTarget.IncomingDamage, StatModifierOperation.Multiplicative, StatModifierPolarity.Buff,
-            canModify: false, magnitude: -0.5f, expiresAtFrame: FrameDeadline.Never, StatusEffectSource.Admin, conditionTag: Tag.Poison));
+            canModify: false, magnitude: -0.5f, expiresAtFrame: FrameDeadline.Never, ActionSource.Admin, conditionTag: Tag.Poison));
 
         List<HealthWindow.ModifierRow> rows = [];
         HealthWindow.BuildModifierRows(rows, EntityId, statModifiers, StatModifierPolarity.Buff, now: 0);
@@ -601,7 +601,7 @@ public sealed class HealthWindowTests
         Assert.AreEqual("-25% Health", HealthWindow.FormatModifierRow(row));
     }
 
-    /// <summary>Matches BodyPartEffectsSystem's own real grant shape (Multiplicative, Debuff) -- see PLAN-body-part-gameplay-effects.md.</summary>
+    /// <summary>Matches BodyPartEffectsSystem's own real grant shape (Multiplicative, Debuff).</summary>
     [TestMethod]
     public void FormatModifierRow_MultiplicativeMovementLockFrames_ReadsAsMovementPenaltyWithLiteralMultiplier()
     {

@@ -20,7 +20,6 @@ public sealed class KilledAMobAchievement : IAchievementDefinition
 
     public void RegisterTrigger(AchievementTriggerContext context) =>
         context.SubscribeUntilUnlocked<EntityDiedEvent>(died =>
-            died.Source.Kind == StatusEffectSourceKind.Entity
-            && died.EntityId != context.PlayerQuery!.PlayerEntityId
-            && died.Source.EntityId == context.PlayerQuery!.PlayerEntityId);
+            died.EntityId != context.PlayerQuery!.PlayerEntityId
+            && died.Source.IsEntity(context.PlayerQuery!.PlayerEntityKey));
 }

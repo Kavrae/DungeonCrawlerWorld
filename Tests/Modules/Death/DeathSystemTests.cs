@@ -33,10 +33,9 @@ public sealed class DeathSystemTests
     {
         private readonly HashSet<int> _blockingEntityIds = [];
 
-        public Vector3Int MapSize { get; } = new(100, 100, 1);
+        public MapBounds Bounds { get; } = new(0, 0, 100, 100, 1);
         public bool IsOnMap(Vector3Int position) => true;
         public int GetEntityIdAt(Vector3Int position) => -1;
-        public int GetTerrainEntityIdAt(Vector3Int position) => -1;
         public void GetEntityIdsInBox(CubeInt box, Span<int> entityIds) { }
 
         public void SetBlocking(int entityId) => _blockingEntityIds.Add(entityId);
@@ -80,7 +79,7 @@ public sealed class DeathSystemTests
         var (_, _, _, entityMoveSync, mapQuery, eventBus) = Build();
         mapQuery.SetBlocking(0);
 
-        eventBus.Publish(new EntityDiedEvent(0, StatusEffectSource.FromEntity(1)));
+        eventBus.Publish(new EntityDiedEvent(0, TestSources.Entity(1)));
         eventBus.DispatchBuffered<EntityDiedEvent>();
 
         Assert.AreEqual(0, entityMoveSync.LastConvertedEntityId);
@@ -92,7 +91,7 @@ public sealed class DeathSystemTests
         var (_, _, nonBlockingEntities, _, mapQuery, eventBus) = Build();
         mapQuery.SetBlocking(0);
 
-        eventBus.Publish(new EntityDiedEvent(0, StatusEffectSource.FromEntity(1)));
+        eventBus.Publish(new EntityDiedEvent(0, TestSources.Entity(1)));
         eventBus.DispatchBuffered<EntityDiedEvent>();
 
         Assert.IsTrue(nonBlockingEntities.Has(0));
@@ -104,7 +103,7 @@ public sealed class DeathSystemTests
     {
         var (_, _, nonBlockingEntities, entityMoveSync, _, eventBus) = Build(); // FakeMapQuery.IsBlocking defaults to false.
 
-        eventBus.Publish(new EntityDiedEvent(0, StatusEffectSource.FromEntity(1)));
+        eventBus.Publish(new EntityDiedEvent(0, TestSources.Entity(1)));
         eventBus.DispatchBuffered<EntityDiedEvent>();
 
         Assert.AreEqual(0, entityMoveSync.ConvertToNonBlockingCallCount);
@@ -112,29 +111,29 @@ public sealed class DeathSystemTests
     }
 
     [TestMethod]
-    public void EntityDied_AddsDeadComponentWithKilledByEntityId()
+    public void EntityDied_AddsDeadComponentRecordingTheKillersKey()
     {
         var (_, deadEntities, _, _, mapQuery, eventBus) = Build();
         mapQuery.SetBlocking(0);
 
-        eventBus.Publish(new EntityDiedEvent(0, StatusEffectSource.FromEntity(1)));
+        eventBus.Publish(new EntityDiedEvent(0, TestSources.Entity(1)));
         eventBus.DispatchBuffered<EntityDiedEvent>();
 
         Assert.IsTrue(deadEntities.Has(0));
-        Assert.AreEqual(1, deadEntities.GetReadonly(0).KilledByEntityId);
+        Assert.AreEqual(TestSources.KeyOf(1), deadEntities.GetReadonly(0).KilledBy.Key);
     }
 
     [TestMethod]
-    public void EntityDied_AdminSource_AddsDeadComponentWithNullKilledByEntityId()
+    public void EntityDied_AdminSource_AddsDeadComponentKilledByAdmin()
     {
         var (_, deadEntities, _, _, mapQuery, eventBus) = Build();
         mapQuery.SetBlocking(0);
 
-        eventBus.Publish(new EntityDiedEvent(0, StatusEffectSource.Admin));
+        eventBus.Publish(new EntityDiedEvent(0, ActionSource.Admin));
         eventBus.DispatchBuffered<EntityDiedEvent>();
 
         Assert.IsTrue(deadEntities.Has(0));
-        Assert.IsNull(deadEntities.GetReadonly(0).KilledByEntityId);
+        Assert.AreEqual(ActionSource.Admin, deadEntities.GetReadonly(0).KilledBy);
     }
 
     [TestMethod]
@@ -143,9 +142,9 @@ public sealed class DeathSystemTests
         var (_, _, _, entityMoveSync, mapQuery, eventBus) = Build();
         mapQuery.SetBlocking(0);
 
-        eventBus.Publish(new EntityDiedEvent(0, StatusEffectSource.FromEntity(1)));
+        eventBus.Publish(new EntityDiedEvent(0, TestSources.Entity(1)));
         eventBus.DispatchBuffered<EntityDiedEvent>();
-        eventBus.Publish(new EntityDiedEvent(0, StatusEffectSource.FromEntity(2)));
+        eventBus.Publish(new EntityDiedEvent(0, TestSources.Entity(2)));
         eventBus.DispatchBuffered<EntityDiedEvent>();
 
         Assert.AreEqual(1, entityMoveSync.ConvertToNonBlockingCallCount);
@@ -157,7 +156,7 @@ public sealed class DeathSystemTests
         var (system, deadEntities, _, _, mapQuery, eventBus) = Build();
         mapQuery.SetBlocking(0);
 
-        eventBus.Publish(new EntityDiedEvent(0, StatusEffectSource.FromEntity(1)));
+        eventBus.Publish(new EntityDiedEvent(0, TestSources.Entity(1)));
         system.Update(default, 0);
 
         Assert.IsTrue(deadEntities.Has(0));
@@ -169,7 +168,7 @@ public sealed class DeathSystemTests
         var (system, deadEntities, _, _, mapQuery, eventBus) = Build();
         mapQuery.SetBlocking(0);
 
-        eventBus.Publish(new EntityDiedEvent(0, StatusEffectSource.FromEntity(1)));
+        eventBus.Publish(new EntityDiedEvent(0, TestSources.Entity(1)));
         system.Update(new EngineTime(TimeSpan.Zero, TimeSpan.Zero, false, FrameCount: 12345), 0);
 
         Assert.AreEqual(12345, deadEntities.GetReadonly(0).DiedAtFrame);
@@ -194,7 +193,7 @@ public sealed class DeathSystemTests
         AuraSourceRemovedEvent? published = null;
         eventBus.Subscribe<AuraSourceRemovedEvent>(e => published = e);
 
-        eventBus.Publish(new EntityDiedEvent(0, StatusEffectSource.FromEntity(1)));
+        eventBus.Publish(new EntityDiedEvent(0, TestSources.Entity(1)));
         eventBus.DispatchBuffered<EntityDiedEvent>();
 
         Assert.IsFalse(auraSources.Has(0));
@@ -209,7 +208,7 @@ public sealed class DeathSystemTests
         var (_, _, _, _, mapQuery, eventBus) = Build();
         mapQuery.SetBlocking(0);
 
-        eventBus.Publish(new EntityDiedEvent(0, StatusEffectSource.FromEntity(1)));
+        eventBus.Publish(new EntityDiedEvent(0, TestSources.Entity(1)));
         eventBus.DispatchBuffered<EntityDiedEvent>();
     }
 }

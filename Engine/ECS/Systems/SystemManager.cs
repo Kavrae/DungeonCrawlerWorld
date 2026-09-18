@@ -44,6 +44,20 @@ public sealed class SystemManager
         _systems.Add((system, 0));
     }
 
+    /// <summary>Registers a system to be updated each frame before every system registered so far.</summary>
+    /// <remarks>For a system that feeds the frame rather than reacting to it -- one that records into a FrameEventBuffer every other system reads this frame.</remarks>
+    public void RegisterFirst(ISystem system)
+    {
+        ArgumentNullException.ThrowIfNull(system);
+
+        if (system.StripeCount == 0)
+        {
+            throw new ArgumentException("StripeCount must be greater than zero.", nameof(system));
+        }
+
+        _systems.Insert(0, (system, 0));
+    }
+
     /// <summary>See FrameEventBuffer/IFrameScoped's own doc comment for why this is cleared here, once per cycle, rather than by its own producer.</summary>
     public void RegisterFrameScoped(IFrameScoped buffer)
     {

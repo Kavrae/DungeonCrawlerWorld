@@ -119,7 +119,7 @@ public sealed class BodyPartSelectionTests
         pool.Add(0, new BodyPartComponent("Head", BodyPartType.Head, 0, 0, currentHealth: 40, maximumHealth: 40, isVital: true));
         var statModifiers = new MultiComponentPool<StatModifierComponent>(maximumEntityCount: 10, initialCapacity: 4);
         statModifiers.Add(0, new StatModifierComponent(StatModifierTarget.MaximumHealth, StatModifierOperation.Multiplicative, StatModifierPolarity.Buff,
-            canModify: true, magnitude: 0.5f, expiresAtFrame: FrameDeadline.Never, StatusEffectSource.Admin));
+            canModify: true, magnitude: 0.5f, expiresAtFrame: FrameDeadline.Never, ActionSource.Admin));
 
         var denseIndex = BodyPartSelection.PickLowestPercentage(pool, 0, now: 0, statModifiers);
 
@@ -134,7 +134,7 @@ public sealed class BodyPartSelectionTests
         pool.Add(0, new BodyPartComponent("Head", BodyPartType.Head, 0, 0, currentHealth: 60, maximumHealth: 40, isVital: true));
         var statModifiers = new MultiComponentPool<StatModifierComponent>(maximumEntityCount: 10, initialCapacity: 4);
         statModifiers.Add(0, new StatModifierComponent(StatModifierTarget.MaximumHealth, StatModifierOperation.Multiplicative, StatModifierPolarity.Buff,
-            canModify: true, magnitude: 0.5f, expiresAtFrame: FrameDeadline.Never, StatusEffectSource.Admin));
+            canModify: true, magnitude: 0.5f, expiresAtFrame: FrameDeadline.Never, ActionSource.Admin));
 
         var denseIndex = BodyPartSelection.PickLowestPercentage(pool, 0, now: 0, statModifiers);
 
@@ -296,7 +296,7 @@ public sealed class BodyPartSelectionTests
         pool.Add(0, new BodyPartComponent("Left Foot", BodyPartType.Foot, partId: 0, verticalPosition: 0, currentHealth: 1, maximumHealth: 10, isVital: false)); // 10%, but burning.
         pool.Add(0, new BodyPartComponent("Right Foot", BodyPartType.Foot, partId: 1, verticalPosition: 0, currentHealth: 5, maximumHealth: 10, isVital: false)); // 50%, not burning.
         var burningTimers = new MultiComponentPool<BodyPartBurningTimerComponent>(maximumEntityCount: 10, initialCapacity: 4);
-        burningTimers.Add(0, new BodyPartBurningTimerComponent(partId: 0, stackCount: 1, nextTickFrame: 30, StatusEffectSource.Admin));
+        burningTimers.Add(0, new BodyPartBurningTimerComponent(partId: 0, stackCount: 1, nextTickFrame: 30, ActionSource.Admin));
 
         var denseIndex = BodyPartSelection.PickLowestPercentage(pool, 0, now: 0, statModifiers: null, burningTimers);
 

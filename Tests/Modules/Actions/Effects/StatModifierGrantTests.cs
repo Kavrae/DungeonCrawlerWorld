@@ -1,3 +1,4 @@
+using Engine.ECS.Entities;
 using Engine.ECS.Systems;
 using Engine.ECS.Components;
 using Engine.Events;
@@ -24,6 +25,7 @@ public sealed class StatModifierGrantTests
         EventBus: new EventBus(),
         MathUtility: new MathUtility(),
         ComponentManager: componentManager,
+        EntityKeys: new EntityKeys(),
         ActivatorName: "Test",
         ActivatorTags: [], Now: 0,
         StatModifiers: componentManager.GetMultiPool<StatModifierComponent>(),
@@ -83,7 +85,7 @@ public sealed class StatModifierGrantTests
     {
         var componentManager = Build();
         componentManager.GetMultiPool<StatModifierComponent>().Add(SourceEntityId, new StatModifierComponent(
-            StatModifierTarget.OutgoingDebuffDuration, StatModifierOperation.Multiplicative, StatModifierPolarity.Debuff, canModify: false, magnitude: 1.0f, expiresAtFrame: FrameDeadline.Never, StatusEffectSource.FromEntity(SourceEntityId)));
+            StatModifierTarget.OutgoingDebuffDuration, StatModifierOperation.Multiplicative, StatModifierPolarity.Debuff, canModify: false, magnitude: 1.0f, expiresAtFrame: FrameDeadline.Never, TestSources.Entity(SourceEntityId)));
         var entry = new StatModifierGrant(StatModifierTarget.IncomingDamage, StatModifierOperation.Multiplicative, StatModifierPolarity.Debuff, CanModify: false, Magnitude: 0.1f, DurationFrames: 100);
 
         entry.Apply(BuildContext(componentManager, durationScaleMultiplier: 1.0f));
@@ -96,7 +98,7 @@ public sealed class StatModifierGrantTests
     {
         var componentManager = Build();
         componentManager.GetMultiPool<StatModifierComponent>().Add(TargetEntityId, new StatModifierComponent(
-            StatModifierTarget.IncomingDebuffDuration, StatModifierOperation.Multiplicative, StatModifierPolarity.Debuff, canModify: false, magnitude: -0.5f, expiresAtFrame: FrameDeadline.Never, StatusEffectSource.FromEntity(TargetEntityId)));
+            StatModifierTarget.IncomingDebuffDuration, StatModifierOperation.Multiplicative, StatModifierPolarity.Debuff, canModify: false, magnitude: -0.5f, expiresAtFrame: FrameDeadline.Never, TestSources.Entity(TargetEntityId)));
         var entry = new StatModifierGrant(StatModifierTarget.IncomingDamage, StatModifierOperation.Multiplicative, StatModifierPolarity.Debuff, CanModify: false, Magnitude: 0.1f, DurationFrames: 100);
 
         entry.Apply(BuildContext(componentManager, durationScaleMultiplier: 1.0f));
@@ -110,9 +112,9 @@ public sealed class StatModifierGrantTests
         var componentManager = Build();
         // Scoped to Debuff -- must have zero effect on this Buff-polarity grant.
         componentManager.GetMultiPool<StatModifierComponent>().Add(TargetEntityId, new StatModifierComponent(
-            StatModifierTarget.IncomingDebuffDuration, StatModifierOperation.Multiplicative, StatModifierPolarity.Debuff, canModify: false, magnitude: -0.9f, expiresAtFrame: FrameDeadline.Never, StatusEffectSource.FromEntity(TargetEntityId)));
+            StatModifierTarget.IncomingDebuffDuration, StatModifierOperation.Multiplicative, StatModifierPolarity.Debuff, canModify: false, magnitude: -0.9f, expiresAtFrame: FrameDeadline.Never, TestSources.Entity(TargetEntityId)));
         componentManager.GetMultiPool<StatModifierComponent>().Add(TargetEntityId, new StatModifierComponent(
-            StatModifierTarget.IncomingBuffDuration, StatModifierOperation.Multiplicative, StatModifierPolarity.Buff, canModify: false, magnitude: 0.5f, expiresAtFrame: FrameDeadline.Never, StatusEffectSource.FromEntity(TargetEntityId)));
+            StatModifierTarget.IncomingBuffDuration, StatModifierOperation.Multiplicative, StatModifierPolarity.Buff, canModify: false, magnitude: 0.5f, expiresAtFrame: FrameDeadline.Never, TestSources.Entity(TargetEntityId)));
         var entry = new StatModifierGrant(StatModifierTarget.OutgoingDamage, StatModifierOperation.Additive, StatModifierPolarity.Buff, CanModify: true, Magnitude: 1f, DurationFrames: 100);
 
         entry.Apply(BuildContext(componentManager, durationScaleMultiplier: 1.0f));

@@ -36,7 +36,7 @@ public sealed class Shop(MathUtility mathUtility) : IBlueprint
         {
             componentManager.Merge(entityId, sprite);
         }
-        componentManager.Merge(entityId, new TransformComponent(new Vector3Int(0, 0, (int)MapLayer.Ground), new Vector2Byte(1, 1)));
+        componentManager.Merge(entityId, new TransformComponent(TransformComponent.UnplacedOn(MapLayer.Ground), new Vector2Byte(1, 1)));
         componentManager.Merge(entityId, new SimpleHealthComponent(MaximumHealth, MaximumHealth));
         componentManager.Merge(entityId, new ContainerComponent());
         componentManager.Merge(entityId, new CurrencyComponent(StartingGold, credits: 0));

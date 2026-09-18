@@ -39,10 +39,9 @@ public sealed class TestCombatBehaviorSystemTests
         private readonly Dictionary<Vector3Int, List<int>> _occupantsByPosition = [];
         private readonly HashSet<int> _nonBlockingEntities = [];
 
-        public Vector3Int MapSize { get; } = new(20, 20, 1);
+        public MapBounds Bounds { get; } = new(0, 0, 20, 20, 1);
         public bool IsOnMap(Vector3Int position) => true;
         public bool IsBlocking(int entityId) => !_nonBlockingEntities.Contains(entityId);
-        public int GetTerrainEntityIdAt(Vector3Int position) => -1;
         public void GetEntityIdsInBox(CubeInt box, Span<int> entityIds) { }
 
         public void SetBlockingOccupant(Vector3Int position, int entityId)
@@ -87,6 +86,7 @@ public sealed class TestCombatBehaviorSystemTests
         PackedComponentPool<PendingActionActivationComponent> PendingActivations,
         PackedComponentPool<PendingConsumableActivationComponent> PendingConsumableActivations,
         PackedComponentPool<DeadComponent> DeadEntities,
+        DirectComponentPool<ProcessingTierComponent> ProcessingTiers,
         MathUtility MathUtility);
 
     private static Fixture Build(MathUtility? mathUtility = null)
@@ -121,7 +121,7 @@ public sealed class TestCombatBehaviorSystemTests
             movementPool, transformPool, actionLockPool, healthPool, bodyParts, inventoryStacks, actionInstances, raceComponents,
             pendingActivations, pendingConsumableActivations, mapQuery, math, processingTiers, new ProcessingTierEvents(), deadEntities);
 
-        return new Fixture(system, mapQuery, movementPool, transformPool, actionLockPool, healthPool, bodyParts, inventoryStacks, actionInstances, raceComponents, pendingActivations, pendingConsumableActivations, deadEntities, math);
+        return new Fixture(system, mapQuery, movementPool, transformPool, actionLockPool, healthPool, bodyParts, inventoryStacks, actionInstances, raceComponents, pendingActivations, pendingConsumableActivations, deadEntities, processingTiers, math);
     }
 
     /// <summary>Grants both QuickAttack and PowerAttack, matching every real race blueprint's paired grant -- TryDecideMeleeAttack gates on QuickAttack's presence but randomly picks either for the actual attack.</summary>
@@ -194,7 +194,7 @@ public sealed class TestCombatBehaviorSystemTests
         Assert.IsTrue(fixture.PendingActivations.Has(GoblinEntityId));
     }
 
-    /// <summary>Complex-health counterpart to Update_BelowHalfHealthWithPotion_QueuesSelfHeal_NotAttack -- proves TryDecideSelfHeal's HealthQueries.TryGetTotals fix (PLAN-human-race.md) actually reads a Complex entity's summed total instead of always returning false the way the old direct SimpleHealthComponent read did.</summary>
+    /// <summary>Complex-health counterpart to Update_BelowHalfHealthWithPotion_QueuesSelfHeal_NotAttack -- proves TryDecideSelfHeal's HealthQueries.TryGetTotals fix actually reads a Complex entity's summed total instead of always returning false the way the old direct SimpleHealthComponent read did.</summary>
     [TestMethod]
     public void Update_ComplexEntityBelowHalfHealthWithPotion_QueuesSelfHeal_NotAttack()
     {
@@ -283,12 +283,28 @@ public sealed class TestCombatBehaviorSystemTests
         PlaceGoblin(fixture, GoblinEntityId);
         const int deadFairyEntityId = 3;
         fixture.RaceComponents.Add(deadFairyEntityId, new RaceComponent(Fairy.RaceId, "Fairy", "A fairy."));
-        fixture.DeadEntities.Add(deadFairyEntityId, new DeadComponent(KilledByEntityId: null, DiedAtFrame: 0));
+        fixture.DeadEntities.Add(deadFairyEntityId, new DeadComponent(KilledBy: ActionSource.Admin, DiedAtFrame: 0));
         fixture.MapQuery.AddNonBlockingOccupant(AdjacentTile, deadFairyEntityId);
 
         fixture.System.Update(default, 0);
 
         Assert.IsFalse(fixture.PendingActivations.Has(GoblinEntityId), "A dead Fairy's corpse is not a valid melee target.");
+    }
+
+    /// <summary>The seam: a frozen neighbor resolves nothing and cannot fight back, so nothing targets it.</summary>
+    [TestMethod]
+    public void Update_AdjacentToFrozenFairy_DoesNotAttack()
+    {
+        var fixture = Build();
+        PlaceGoblin(fixture, GoblinEntityId);
+        const int frozenFairyEntityId = 3;
+        fixture.RaceComponents.Add(frozenFairyEntityId, new RaceComponent(Fairy.RaceId, "Fairy", "A fairy."));
+        fixture.ProcessingTiers.TrySet(frozenFairyEntityId, new ProcessingTierComponent(ProcessingTierLevel.Borough));
+        fixture.MapQuery.AddNonBlockingOccupant(AdjacentTile, frozenFairyEntityId);
+
+        fixture.System.Update(default, 0);
+
+        Assert.IsFalse(fixture.PendingActivations.Has(GoblinEntityId), "A frozen Fairy is not a valid melee target.");
     }
 
     [TestMethod]

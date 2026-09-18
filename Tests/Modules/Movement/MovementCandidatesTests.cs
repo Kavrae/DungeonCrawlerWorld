@@ -19,16 +19,59 @@ public sealed class MovementCandidatesTests
     {
         private readonly Dictionary<Vector3Int, int> _occupants = [];
 
-        public Vector3Int MapSize { get; } = mapSize;
-        public bool IsOnMap(Vector3Int position) =>
-            position.X >= 0 && position.Y >= 0 && position.Z >= 0
-            && position.X < MapSize.X && position.Y < MapSize.Y && position.Z < MapSize.Z;
+        public MapBounds Bounds { get; } = MapBounds.FromSize(mapSize);
+        public bool IsOnMap(Vector3Int position) => Bounds.Contains(position);
         public int GetEntityIdAt(Vector3Int position) => _occupants.TryGetValue(position, out var id) ? id : -1;
         public bool IsBlocking(int entityId) => true;
-        public int GetTerrainEntityIdAt(Vector3Int position) => -1;
         public void GetEntityIdsInBox(CubeInt box, Span<int> entityIds) => entityIds.Fill(-1);
 
         public void SetOccupant(Vector3Int position, int entityId) => _occupants[position] = entityId;
+
+        public HashSet<Vector3Int> BlockedCells { get; } = [];
+        public HashSet<int> PhasingEntities { get; } = [];
+        public bool IsCellBlocked(Vector3Int position) => BlockedCells.Contains(position);
+        public bool IsPhasing(int entityId) => PhasingEntities.Contains(entityId);
+    }
+
+    [TestMethod]
+    [DataRow(true)]
+    [DataRow(false)]
+    public void CanOccupy_BlockedCell_RefusesBlockingAndTinyMovers(bool isBlocking)
+    {
+        var mapQuery = new FakeMapQuery(new Vector3Int(5, 5, 1));
+        mapQuery.BlockedCells.Add(new Vector3Int(2, 2, 0));
+
+        Assert.IsFalse(MovementCandidates.CanOccupy(mapQuery, new Vector3Int(2, 2, 0), SingleTile, entityId: 0, isBlocking));
+    }
+
+    [TestMethod]
+    public void CanOccupy_BlockedCellInsideMultiTileFootprint_ReturnsFalse()
+    {
+        var mapQuery = new FakeMapQuery(new Vector3Int(5, 5, 1));
+        mapQuery.BlockedCells.Add(new Vector3Int(3, 3, 0));
+
+        Assert.IsFalse(MovementCandidates.CanOccupy(mapQuery, new Vector3Int(2, 2, 0), new Vector2Byte(2, 2), entityId: 0, isBlocking: true));
+    }
+
+    [TestMethod]
+    public void CanOccupy_PhasingMover_PassesThroughBlockedCell()
+    {
+        var mapQuery = new FakeMapQuery(new Vector3Int(5, 5, 1));
+        mapQuery.BlockedCells.Add(new Vector3Int(2, 2, 0));
+        mapQuery.PhasingEntities.Add(7);
+
+        Assert.IsTrue(MovementCandidates.CanOccupy(mapQuery, new Vector3Int(2, 2, 0), SingleTile, entityId: 7, isBlocking: false));
+    }
+
+    /// <summary>Phasing only exempts a non-Blocking mover; a Blocking one reporting Phasing is still stopped, since IsBlocking already decided it is solid.</summary>
+    [TestMethod]
+    public void CanOccupy_BlockingMoverReportingPhasing_IsStillStopped()
+    {
+        var mapQuery = new FakeMapQuery(new Vector3Int(5, 5, 1));
+        mapQuery.BlockedCells.Add(new Vector3Int(2, 2, 0));
+        mapQuery.PhasingEntities.Add(7);
+
+        Assert.IsFalse(MovementCandidates.CanOccupy(mapQuery, new Vector3Int(2, 2, 0), SingleTile, entityId: 7, isBlocking: true));
     }
 
     [TestMethod]

@@ -70,7 +70,7 @@ public sealed class CoreModule : IGameModule
     /// <summary>
     /// No systems of its own any more. ActionLockSystem used to count every entity's lock down
     /// here; the lock is a deadline now (see ActionLockComponent), so nothing has to visit an
-    /// entity for it to become unlocked -- PLAN-timer-wheel.md step 7.
+    /// entity for it to become unlocked.
     /// </summary>
     public void RegisterSystems(SystemManager systemManager, ComponentManager componentManager)
     {

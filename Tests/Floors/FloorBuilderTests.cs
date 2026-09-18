@@ -1,3 +1,4 @@
+using Engine.ECS.Entities;
 using Engine.Bootstrap;
 using Engine.ECS.Context;
 using Engine.ECS.Systems;
@@ -30,6 +31,7 @@ using Game.Modules.Shops;
 using Game.Modules.StatModifiers;
 using Game.Modules.StatusEffectAura;
 using Game.Modules.StatusEffects;
+using Game.Terrain;
 using Game.World;
 
 namespace Tests.Floors;
@@ -43,6 +45,8 @@ public sealed class FloorBuilderTests
     {
         var eventBus = new EventBus();
         context = new GameModuleContext(world, mathUtility, eventBus) { PlayerQuery = world, EntityMoveSync = new WorldEventSync(world) };
+        new TerrainModule().Configure(context);
+        world.Terrain = context.Terrain;
 
         var movementModule = new MovementModule();
         movementModule.Configure(context);
@@ -124,7 +128,7 @@ public sealed class FloorBuilderTests
             npcBehaviorModule,
         ];
 
-        return Bootstrapper.Build(modules, initialEntityCapacity: 5000, initialComponentCapacity: 5000);
+        return Bootstrapper.Build(modules, initialEntityCapacity: 5000, initialComponentCapacity: 5000, entityKeys: context.EntityKeys);
     }
 
     /// <summary>
@@ -143,11 +147,11 @@ public sealed class FloorBuilderTests
     {
         var world = new Game.World.World(new Map(new Vector3Int(20, 20, 3)));
         var mathUtility = new MathUtility(new Random(1));
-        var ecsContext = BuildEcsContext(world, mathUtility);
+        var ecsContext = BuildEcsContext(world, mathUtility, out var context);
 
         var crawlerNumberAllocator = new UniqueNumberAllocator(mathUtility, 1, 13_000_000);
         var playerEntityId = FloorBuilder.ReservePlayerEntity(ecsContext);
-        FloorBuilder.PopulateFloor(world, ecsContext, mathUtility, crawlerNumberAllocator, new FrameEventBuffer<EntityMovedEvent>());
+        FloorBuilder.PopulateFloor(world, ecsContext, new NeighborhoodRecords(mathUtility), crawlerNumberAllocator, new FrameEventBuffer<EntityMovedEvent>(), context.Terrain);
         FloorBuilder.CreatePlayer(world, ecsContext, mathUtility, new FrameEventBuffer<EntityMovedEvent>(), crawlerNumberAllocator, playerEntityId);
         world.PlayerEntityId = playerEntityId;
 
@@ -161,9 +165,77 @@ public sealed class FloorBuilderTests
         Assert.AreEqual(MovementMode.PlayerControlled, movement.MovementMode);
     }
 
+    [TestMethod]
+    [DataRow(null, -1024, 2048)]
+    [DataRow(3072, -1024, 2048)]
+    [DataRow(1024, 0, 1024)]
+    [DataRow(2000, -1024, 976)]
+    public void CreateMap_IsCentredOnNeighborhoodZero(int? sizeOverride, int expectedMin, int expectedMax) =>
+        Assert.AreEqual(new MapBounds(expectedMin, expectedMin, expectedMax, expectedMax, 3), FloorBuilder.CreateMap(floorNumber: 1, sizeOverride).Bounds);
+
+    /// <summary>A creature whose footprint can't be placed (a 3x3 rolled beside another creature) is destroyed, not left existing off the map. Neighborhood -1 only, so no hand-placed fixture is involved.</summary>
+    [TestMethod]
+    public void PopulateFloor_EveryCreatureCreatedIsOnTheMap()
+    {
+        var world = new Game.World.World(new Map(new MapBounds(-1024, 0, 0, 1024, 3)));
+        var mathUtility = new MathUtility(new Random(1));
+        var ecsContext = BuildEcsContext(world, mathUtility, out var context);
+
+        FloorBuilder.PopulateFloor(world, ecsContext, new NeighborhoodRecords(mathUtility), new UniqueNumberAllocator(mathUtility, 1, 13_000_000), new FrameEventBuffer<EntityMovedEvent>(), context.Terrain);
+
+        var transforms = ecsContext.ComponentManager.GetDirectPool<TransformComponent>();
+        var creatures = 0;
+        for (var entityId = 0; entityId < transforms.Capacity; entityId++)
+        {
+            if (transforms.TryGetReadonly(entityId, out var transform))
+            {
+                creatures++;
+                Assert.IsTrue(IsIndexedAt(world, entityId, transform.Position), $"Entity {entityId} exists but isn't on the map.");
+            }
+        }
+
+        Assert.IsGreaterThan(1_000, creatures, "Precondition: a real population.");
+        Assert.AreEqual(creatures, ecsContext.EntityManager.LivingEntityCount);
+    }
+
+    [TestMethod]
+    public void PopulateFloor_WallsAreStructuresAndNoOccupantStandsInOne()
+    {
+        var world = new Game.World.World(new Map(new Vector3Int(40, 40, 3)));
+        var mathUtility = new MathUtility(new Random(1));
+        var ecsContext = BuildEcsContext(world, mathUtility, out var context);
+
+        FloorBuilder.PopulateFloor(world, ecsContext, new NeighborhoodRecords(mathUtility), new UniqueNumberAllocator(mathUtility, 1, 13_000_000), new FrameEventBuffer<EntityMovedEvent>(), context.Terrain);
+
+        var wallId = context.Terrain.GetId(BuiltInTerrain.StoneWallKey);
+        Assert.AreEqual(wallId, world.GetStructureAt(new Vector3Int(10, 2, (int)MapLayer.Ground)).TypeId);
+        Assert.IsTrue(world.GetStructureAt(new Vector3Int(0, 5, (int)MapLayer.Ground)).IsEmpty, "No border walls: the world has no edge.");
+        Assert.IsTrue(world.GetStructureAt(new Vector3Int(0, 5, (int)MapLayer.UnderGround)).IsEmpty);
+
+        for (var z = 0; z < 3; z++)
+        {
+            for (var y = 0; y < 40; y++)
+            {
+                for (var x = 0; x < 40; x++)
+                {
+                    var position = new Vector3Int(x, y, z);
+                    if (!world.IsCellBlocked(position))
+                    {
+                        continue;
+                    }
+
+                    foreach (var occupant in world.GetOccupantEntityIdsAt(position))
+                    {
+                        Assert.IsTrue(world.IsPhasing(occupant), $"Entity {occupant} stands in the wall at {position}.");
+                    }
+                }
+            }
+        }
+    }
+
     /// <summary>
     /// The actual point of ReservePlayerEntity existing as a separate, earlier call: reserving
-    /// before PopulateFloor's ~2.6M NPC/terrain entities exist lands the player on entity id 0
+    /// before PopulateFloor's NPC and wall entities exist lands the player on entity id 0
     /// (FreeIdPool.Rent's first call against a fresh pool always returns 0), not a high id
     /// assigned after population -- see ReservePlayerEntity's own doc comment for why that
     /// matters (Player-only component pool capacity).
@@ -183,7 +255,7 @@ public sealed class FloorBuilderTests
     /// <summary>
     /// End-to-end invariant for the tier rework, through the real population path: with the tier
     /// reference set to the player's spawn origin before population, every entity the map actually
-    /// indexes -- movers, terrain, walls, shops -- is born with the tier its position deserves, and
+    /// indexes -- movers, shops -- is born with the tier its position deserves, and
     /// stationary entities in particular are no longer left at the fail-open Beyond default (the
     /// bug the rework exists to fix: before it, only movers were ever tiered).
     /// </summary>
@@ -205,13 +277,13 @@ public sealed class FloorBuilderTests
 
         var crawlerNumberAllocator = new UniqueNumberAllocator(mathUtility, 1, 13_000_000);
         var playerEntityId = FloorBuilder.ReservePlayerEntity(ecsContext);
-        var origin = FloorBuilder.PlayerSpawnOrigin(world);
+        var origin = FloorBuilder.PlayerSpawnOrigin();
         resolver.SetReferencePosition(origin);
 
         var raisedDuringPopulation = new HashSet<int>();
         context.ProcessingTierEvents.TierChanged += (entityId, _) => raisedDuringPopulation.Add(entityId);
 
-        FloorBuilder.PopulateFloor(world, ecsContext, mathUtility, crawlerNumberAllocator, new FrameEventBuffer<EntityMovedEvent>(), resolver);
+        FloorBuilder.PopulateFloor(world, ecsContext, new NeighborhoodRecords(mathUtility), crawlerNumberAllocator, new FrameEventBuffer<EntityMovedEvent>(), context.Terrain, resolver);
         FloorBuilder.CreatePlayer(world, ecsContext, mathUtility, new FrameEventBuffer<EntityMovedEvent>(), crawlerNumberAllocator, playerEntityId, resolver);
         world.PlayerEntityId = playerEntityId;
 
@@ -245,16 +317,15 @@ public sealed class FloorBuilderTests
         }
 
         Assert.IsTrue(sawNeighborhood, "Precondition: the map should extend past the Local radius.");
-        Assert.IsTrue(sawStationaryLocal, "Precondition: a stationary entity (terrain, wall, shop) near the spawn -- the case that used to be permanently Beyond.");
+        Assert.IsTrue(sawStationaryLocal, "Precondition: a stationary entity (a wall or shop) near the spawn -- the case that used to be permanently Beyond.");
 
-        // Tier-first is what keeps population cheap: terrain -- ~2M of the ~2.6M entities in the
-        // real game -- must be born tiered, never corrected after the fact with an event.
-        for (var x = 0; x < world.Map.Size.X; x++)
+        // Terrain is cells, not entities: every floored cell holds some, and none of it needed a tier.
+        for (var x = world.Map.Bounds.MinX; x < world.Map.Bounds.MaxX; x++)
         {
-            for (var y = 0; y < world.Map.Size.Y; y++)
+            for (var y = world.Map.Bounds.MinY; y < world.Map.Bounds.MaxY; y++)
             {
-                var groundTerrain = world.Map.GetTerrainEntityId(x, y, TerrainLayer.Ground);
-                Assert.IsFalse(groundTerrain >= 0 && raisedDuringPopulation.Contains(groundTerrain), $"Terrain entity {groundTerrain} at ({x},{y}) was tiered by event instead of at creation.");
+                Assert.IsFalse(world.Map.GetTerrain(x, y, TerrainLayer.Ground).IsEmpty, $"Ground at ({x},{y}) has no terrain.");
+                Assert.IsFalse(world.Map.GetTerrain(x, y, TerrainLayer.UnderGround).IsEmpty, $"UnderGround at ({x},{y}) has no terrain.");
             }
         }
 
@@ -269,10 +340,129 @@ public sealed class FloorBuilderTests
         }
     }
 
-    /// <summary>Whether the map's own index holds entityId at position -- as the Blocking occupant, a non-Blocking occupant, or the terrain.</summary>
+    /// <summary>Whether the map's own index holds entityId at position -- as the Blocking occupant or a non-Blocking occupant.</summary>
     private static bool IsIndexedAt(Game.World.World world, int entityId, Vector3Int position) =>
         world.IsOnMap(position) &&
         (world.GetEntityIdAt(position) == entityId ||
-         world.GetOccupantEntityIdsAt(position).Contains(entityId) ||
-         world.GetTerrainEntityIdAt(position) == entityId);
+         world.GetOccupantEntityIdsAt(position).Contains(entityId));
+
+    /// <summary>A map reaching one neighborhood west of the starting one: a 30-row slice of neighborhood -1 beside a 40x30 corner of neighborhood 0.</summary>
+    private static readonly MapBounds TwoNeighborhoodSlice = new(-1024, 0, 40, 30, 3);
+
+    private static (Game.World.World World, EcsContext Ecs, Game.TestMapBuilder Builder) BuildForGeneration(MapBounds bounds)
+    {
+        var world = new Game.World.World(new Map(bounds));
+        var mathUtility = new MathUtility(new Random(1));
+        var ecsContext = BuildEcsContext(world, mathUtility, out var context);
+        var builder = new Game.TestMapBuilder(ecsContext.EntityManager, ecsContext.ComponentManager, new UniqueNumberAllocator(mathUtility, 1, 13_000_000), new FrameEventBuffer<EntityMovedEvent>(), context.Terrain);
+        return (world, ecsContext, builder);
+    }
+
+    private static void Generate(Game.TestMapBuilder builder, Game.World.World world, NeighborhoodRecord record)
+    {
+        foreach (var _ in builder.GenerateNeighborhood(world, record))
+        {
+        }
+    }
+
+    private static List<(TerrainCell Ground, TerrainCell UnderGround, TerrainCell Wall)> LayoutOf(Game.World.World world, int minX, int maxX, int minY, int maxY)
+    {
+        var cells = new List<(TerrainCell, TerrainCell, TerrainCell)>();
+        for (var y = minY; y < maxY; y++)
+        {
+            for (var x = minX; x < maxX; x++)
+            {
+                cells.Add((world.Map.GetTerrain(x, y, TerrainLayer.Ground), world.Map.GetTerrain(x, y, TerrainLayer.UnderGround), world.GetStructureAt(new Vector3Int(x, y, (int)MapLayer.Ground))));
+            }
+        }
+
+        return cells;
+    }
+
+    private static List<bool> OccupancyOf(Game.World.World world, int minX, int maxX, int minY, int maxY)
+    {
+        var occupied = new List<bool>();
+        for (var z = 0; z < 3; z++)
+        {
+            for (var y = minY; y < maxY; y++)
+            {
+                for (var x = minX; x < maxX; x++)
+                {
+                    occupied.Add(world.GetEntityIdAt(new Vector3Int(x, y, z)) != -1);
+                }
+            }
+        }
+
+        return occupied;
+    }
+
+    /// <summary>
+    /// Neighborhood -1 comes out the same whether it is generated alone or after neighborhood 0: its
+    /// layout everywhere, and its population away from the shared edge, where a creature of the
+    /// neighborhood generated first can take a cell a multi-tile creature would otherwise straddle.
+    /// </summary>
+    [TestMethod]
+    public void GenerateNeighborhood_DependsOnlyOnItsRecord_NotOnWhatWasGeneratedFirst()
+    {
+        var alone = BuildForGeneration(TwoNeighborhoodSlice);
+        Generate(alone.Builder, alone.World, new NeighborhoodRecord(-1, 0, seed: 42));
+
+        var afterAnother = BuildForGeneration(TwoNeighborhoodSlice);
+        Generate(afterAnother.Builder, afterAnother.World, new NeighborhoodRecord(0, 0, seed: 7));
+        Generate(afterAnother.Builder, afterAnother.World, new NeighborhoodRecord(-1, 0, seed: 42));
+
+        CollectionAssert.AreEqual(LayoutOf(alone.World, -1024, 0, 0, 30), LayoutOf(afterAnother.World, -1024, 0, 0, 30));
+        CollectionAssert.AreEqual(OccupancyOf(alone.World, -1024, -3, 0, 30), OccupancyOf(afterAnother.World, -1024, -3, 0, 30));
+    }
+
+    [TestMethod]
+    public void GenerateNeighborhood_SameRecordAgain_RepeatsTheLayoutWithAFreshPopulation()
+    {
+        var record = new NeighborhoodRecord(-1, 0, seed: 42);
+        var firstVisit = BuildForGeneration(TwoNeighborhoodSlice);
+        Generate(firstVisit.Builder, firstVisit.World, record);
+        var secondVisit = BuildForGeneration(TwoNeighborhoodSlice);
+        Generate(secondVisit.Builder, secondVisit.World, record);
+
+        Assert.AreEqual(2, record.PopulationCount);
+        CollectionAssert.AreEqual(LayoutOf(firstVisit.World, -1024, 0, 0, 30), LayoutOf(secondVisit.World, -1024, 0, 0, 30));
+        CollectionAssert.AreNotEqual(OccupancyOf(firstVisit.World, -1024, 0, 0, 30), OccupancyOf(secondVisit.World, -1024, 0, 0, 30));
+    }
+
+    [TestMethod]
+    public void PopulateFloor_HallwayCrossAndShopsExistOnlyInTheStartingNeighborhood()
+    {
+        var (world, ecsContext, _) = BuildForGeneration(TwoNeighborhoodSlice);
+        var mathUtility = new MathUtility(new Random(1));
+        var records = new NeighborhoodRecords(mathUtility);
+
+        FloorBuilder.PopulateFloor(world, ecsContext, records, new UniqueNumberAllocator(mathUtility, 1, 13_000_000), new FrameEventBuffer<EntityMovedEvent>(), world.Terrain);
+
+        Assert.AreEqual(2, records.Count);
+        Assert.IsTrue(records.TryGet(-1, 0, out _));
+        Assert.IsFalse(world.GetStructureAt(new Vector3Int(10, 2, (int)MapLayer.Ground)).IsEmpty);
+        Assert.IsTrue(LayoutOf(world, -1024, 0, 0, 30).All(static cell => cell.Wall.IsEmpty), "The hallway cross belongs to the starting neighborhood only.");
+
+        var shops = ecsContext.ComponentManager.GetPackedPool<Game.Modules.Shops.Components.ShopComponent>();
+        var transforms = ecsContext.ComponentManager.GetDirectPool<TransformComponent>();
+        Assert.AreEqual(2, shops.Count);
+        for (var denseIndex = 0; denseIndex < shops.Count; denseIndex++)
+        {
+            Assert.AreEqual(0, Neighborhoods.CellOf(transforms.GetReadonly(shops.GetEntityIdByDenseIndex(denseIndex)).Position.X));
+        }
+    }
+
+    /// <summary>One yield per layout row, one per population row with the entities it created, and one for the starting neighborhood's fixtures -- together accounting for every entity generation created.</summary>
+    [TestMethod]
+    public void GenerateNeighborhood_YieldsARowAtATime()
+    {
+        var (world, ecsContext, builder) = BuildForGeneration(new MapBounds(0, 0, 40, 30, 3));
+        var livingBefore = ecsContext.EntityManager.LivingEntityCount;
+
+        var yields = builder.GenerateNeighborhood(world, new NeighborhoodRecord(0, 0, seed: 42)).ToList();
+
+        Assert.HasCount(30 + 30 + 1, yields);
+        Assert.IsTrue(yields.Take(30).All(static created => created == 0));
+        Assert.AreEqual(ecsContext.EntityManager.LivingEntityCount - livingBefore, yields.Sum());
+    }
 }

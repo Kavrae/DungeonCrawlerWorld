@@ -43,7 +43,7 @@ namespace Game.Modules.NpcBehavior.Systems;
 /// an entity with no RaceComponent at all is never attackable (nothing to compare), and two
 /// entities sharing the same race never attack each other (a Fairy adjacent to another Fairy no
 /// longer does, unlike this system's earlier player-or-Fairy-only check). The player counts as
-/// "a different race" the ordinary way, by actually being Human (PLAN-human-race.md) -- no
+/// "a different race" the ordinary way, by actually being Human -- no
 /// explicit player special-case needed. See TODO.md's entry on composing entity behavior from
 /// smaller, race-configurable pieces (aggressive/cowardly/prefers-melee/prefers-potions/...) for
 /// where finer-grained targeting (e.g. faction alliances that aren't just "same race or not")
@@ -78,6 +78,7 @@ public sealed class TestCombatBehaviorSystem : ITieredSystem
     private readonly IMapQuery _mapQuery;
     private readonly MathUtility _mathUtility;
     private readonly PackedComponentPool<DeadComponent>? _deadEntities;
+    private readonly ProcessingTierQuery _tierQuery;
     private readonly TieredEntityStripeSet _tieredStripeSet;
 
     private readonly List<Vector3Int> _adjacentTilesBuffer = [];
@@ -113,6 +114,7 @@ public sealed class TestCombatBehaviorSystem : ITieredSystem
         _mathUtility = mathUtility;
         _deadEntities = deadEntities;
 
+        _tierQuery = new ProcessingTierQuery(processingTiers);
         _tieredStripeSet = ProcessingTierWiring.CreateAndWire(StripeCount, movementPool, processingTiers, processingTierEvents);
     }
 
@@ -232,7 +234,7 @@ public sealed class TestCombatBehaviorSystem : ITieredSystem
             return false;
         }
 
-        TargetShapeResolver.Resolve(TargetShape.Adjacent, transform.Position, transform.Size, transform.Position, range: 0, areaSize: 0, _mapQuery.MapSize, _adjacentTilesBuffer);
+        TargetShapeResolver.Resolve(TargetShape.Adjacent, transform.Position, transform.Size, transform.Position, range: 0, areaSize: 0, _mapQuery.Bounds, _adjacentTilesBuffer);
 
         if (!HasAttackableNeighbor(_adjacentTilesBuffer, attackerRaceId))
         {
@@ -268,13 +270,15 @@ public sealed class TestCombatBehaviorSystem : ITieredSystem
     /// <summary>
     /// Excludes a dead candidate first -- a corpse stays fully populated and occupying its tile
     /// for future looting (DeathSystem never calls EntityManager.DestroyEntity, see this repo's
-    /// own IMPLEMENTATION-NOTES.md). Then requires the candidate to actually carry a RaceComponent
-    /// of a race different from the attacker's own -- a raceless entity (a shop, a container, any
+    /// own IMPLEMENTATION-NOTES.md). Also excludes anything frozen: nothing may target across the
+    /// simulated/frozen seam (see ProcessingTierQuery). Then requires the candidate to actually
+    /// carry a RaceComponent of a race different from the attacker's own -- a raceless entity (a shop, a container, any
     /// non-creature prop) is never attackable, and two entities of the same race never attack each
     /// other (see this class's own doc comment on why that's now a real comparison, not a
     /// player-or-Fairy allowlist).
     /// </summary>
     private bool IsAttackable(int candidateEntityId, Guid attackerRaceId) =>
+        _tierQuery.IsSimulated(candidateEntityId) &&
         _deadEntities?.Has(candidateEntityId) != true &&
         TryGetRaceId(candidateEntityId, out var candidateRaceId) &&
         candidateRaceId != attackerRaceId;

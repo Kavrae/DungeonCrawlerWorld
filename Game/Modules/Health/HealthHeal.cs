@@ -112,7 +112,6 @@ public static class HealthHeal
             return;
         }
 
-        var source = sourceEntityId is { } s ? StatusEffectSource.FromEntity(s) : StatusEffectSource.Admin;
-        eventBus.Publish(new EntityHealedEvent(entityId, amount, source, currentHealth, maximumHealth, healType));
+        eventBus.Publish(new EntityHealedEvent(entityId, amount, sourceEntityId, currentHealth, maximumHealth, healType));
     }
 }

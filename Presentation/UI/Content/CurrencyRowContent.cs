@@ -34,7 +34,7 @@ public sealed class CurrencyRowContent(
     SpriteRenderer spriteRenderer,
     Func<int?> getSecondaryTargetEntityId,
     EventBus? eventBus = null,
-    // False for the trade window's own two currency footers (PLAN-trade-window.md) -- "10 [sprite]"
+    // False for the trade window's own two currency footers -- "10 [sprite]"
     // instead of "Gold : 10 [sprite]", the column being too narrow to spare the label.
     bool showLabels = true,
     // Null (every non-trade caller) -- CurrencyElement.Configure's own default (WindowPalette.

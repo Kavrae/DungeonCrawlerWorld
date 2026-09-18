@@ -1,6 +1,7 @@
 using Engine.ECS.Components.Stores;
 using FontStashSharp;
 using Game.Modules.Core.Components;
+using Game.Views;
 using Microsoft.Xna.Framework;
 using Presentation.Fonts;
 using Presentation.Rendering;
@@ -25,16 +26,32 @@ public sealed class EntityIconElement(
     : Element(fontService, elementPoolService, labelRenderer)
 {
     private int _entityId;
+    private EntityVisualView? _fixedVisual;
     private SpriteFontBase _glyphFont = null!;
 
     public void Configure(int entityId, Vector2 iconSize)
     {
         _entityId = entityId;
+        _fixedVisual = null;
+        _glyphFont = fontService.GetFont((int)(iconSize.Y * FontChrome.IconGlyphFontFraction));
+    }
+
+    /// <summary>Shows a visual that belongs to no entity -- a terrain cell's.</summary>
+    public void Configure(EntityVisualView visual, Vector2 iconSize)
+    {
+        _entityId = -1;
+        _fixedVisual = visual;
         _glyphFont = fontService.GetFont((int)(iconSize.Y * FontChrome.IconGlyphFontFraction));
     }
 
     public override void DrawContent(GameTime gameTime)
     {
+        if (_fixedVisual is { } visual)
+        {
+            SpriteOrGlyphRenderer.Draw(ElementPoolService.SpriteBatch, spriteSheetService, spriteRenderer, LabelRenderer, visual.Sprite, _glyphFont, visual.Glyph, visual.GlyphColor, ContentAbsolutePosition, ContentSize, Color.White);
+            return;
+        }
+
         SpriteComponent? sprite = spritePool.TryGetReadonly(_entityId, out var spriteComponent) ? spriteComponent : null;
         var hasGlyph = glyphPool.TryGetReadonly(_entityId, out var glyphComponent);
         var glyph = hasGlyph ? glyphComponent.Glyph : string.Empty;

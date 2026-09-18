@@ -7,8 +7,7 @@ namespace Presentation.Rendering;
 /// Bottom-up percentage fill of a single tile rectangle -- the map-tile counterpart to
 /// ResourceBarRenderer's horizontal fill and RadialFillRenderer's radial sweep, both of which
 /// live alongside this in the same "draw N% of a shape" primitive family (distinct from
-/// GlowRenderer's ring-fade family, see PLAN-charge-attack-fill-indicator.md's own naming
-/// investigation).
+/// GlowRenderer's ring-fade family).
 /// </summary>
 public static class TileFillRenderer
 {

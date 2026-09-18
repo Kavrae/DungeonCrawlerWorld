@@ -11,8 +11,7 @@ topics; don't duplicate what a `PLAN-*.md` already records in full (link to it i
 - `Game/Modules/Actions/`: `ActionEffect` (composable `IActionEffectEntry` list -- `DirectDamage`,
   `DirectHeal`, `DirectManaRestore`, `HotkeyExpansionGrant`, `StatusEffectGrant`, `StatModifierGrant`,
   `ChainedEffect`, `AuraSourceGrant`) + `IActionActivator` (`PotionActivator`/`ScrollActivator`/
-  `WandActivator`/`SpellActivator`) replaced the old `AbilityEffect`/`ConsumableEffect` split. Full
-  design: `PLAN-action-effect-activator.md`.
+  `WandActivator`/`SpellActivator`) replaced the old `AbilityEffect`/`ConsumableEffect` split.
 - `TargetShape.Adjacent | TargetShape.Self` = Adjacent's ring + the caster's own tile, used so a
   `Tag.Self` scroll/spell can resolve a manual click on the caster's own tile (plain `Adjacent`
   excludes it). `TargetShape` is a `[Flags]` enum specifically so this composes instead of needing
@@ -161,9 +160,7 @@ games' own dodge timings -- the numbers used are TODO.md's own, not independentl
 
 ### Enemy Attack Indicator + follow-up combat/performance work
 
-Full record: `PLAN-charge-attack-fill-indicator.md` (four addenda -- smoothing, an O(D*A) prune bug,
-Local-tier scoping, and moving that scoping upstream into `ActionTargetingController
-.AllPendingDelayedActionTargets`). The charge-fill indicator itself: TODO.md's own top-priority
+The charge-fill indicator: TODO.md's own top-priority
 "Enemy Attack Indicator" -- a bottom-up per-tile fill (`Presentation/Rendering/TileFillRenderer.cs`)
 showing a Delayed action's windup progress (0% at charge start -> 100% at activation), layered over
 the existing flat telegraph wash from Combat Overhaul: Dodge above. Two further fixes landed
@@ -179,7 +176,7 @@ alongside it, found while chasing the framerate regressions that surfaced during
   nothing excluded "an entity of my own race." Both are gone now as a natural consequence of the
   real comparison, not a special case. `_playerQuery`/`IsFairy` became dead code and were removed
   (from `TestCombatBehaviorSystem` and its owning `NpcBehaviorModule`) -- the player is "a different
-  race" the ordinary way, by being Human (`PLAN-human-race.md`), no special-casing needed.
+  race" the ordinary way, by being Human, no special-casing needed.
 - **`DelayedActionSystem`** (`Game/Modules/Actions/Systems/`) was the single biggest framerate
   contributor found via the `phase-performance-testing` skill: a live diagnostics capture showed
   `PendingDelayedActionComponent.Count` over 10,000 map-wide during ordinary NPC-vs-NPC combat, and
@@ -199,7 +196,7 @@ alongside it, found while chasing the framerate regressions that surfaced during
   depends on for correctness. Sharing one clock, tiered identically, keeps both the resolution timing
   and the UI's own progress reading consistent, at the cost of the same bounded, self-correcting
   staleness every other tiered consumer here already accepts.
-  **Superseded 2026-09-11 (`PLAN-timer-wheel.md` step 7):** both systems are off tiers entirely.
+  **Superseded 2026-09-11:** both systems are off tiers entirely.
   `ActionLockSystem` is deleted (the lock is a deadline, `ActionLockComponent.UnlockedAtFrame`), and
   `DelayedActionSystem` is a plain `ISystem` driven by a timer wheel over
   `PendingDelayedActionComponent.ReadyAtFrame` -- a copy of that same lock deadline, taken when the
@@ -235,15 +232,13 @@ alongside it, found while chasing the framerate regressions that surfaced during
   reaching exactly 1 at `totalFrames` elapsed regardless of the stepped countdown's own granularity
   -- safe only because the Local-tier filtering above already excludes anything whose real
   resolution could meaningfully lag its nominal duration, the exact case the old "never exceed the
-  raw target" clamp existed to guard against. (As of `PLAN-timer-wheel.md` step 7 the stepped source
+  raw target" clamp existed to guard against. (Since the timer-wheel rewrite the stepped source
   itself is gone -- the lock is a deadline and nothing decrements it -- so no tier can lag its
   nominal duration any more; the elapsed-time fraction is kept regardless, since it reads no
-  component per frame.) Full record: `PLAN-charge-attack-fill-indicator.md`'s
-  own Addendum 7.
+  component per frame.)
 
 ### Body parts / Complex health
 
-Full record: `PLAN-body-parts.md`.
 - `SimpleHealthComponent`/`SimpleHealthRegenSystem` (single pool, most races) vs opt-in
   `BodyPartComponent` (`MultiComponentPool`, Complex -- Goblin only today). No marker component --
   decided by which components a blueprint grants.
@@ -260,7 +255,7 @@ Full record: `PLAN-body-parts.md`.
 
 ### Limb-specific gameplay penalties
 
-Full record: `PLAN-body-part-gameplay-effects.md`. `Game/Modules/BodyPartEffects/BodyPartEffectsSystem`:
+`Game/Modules/BodyPartEffects/BodyPartEffectsSystem`:
 Leg/Foot condition -> `StatModifierTarget.MovementLockFrames` (MovementSystem); Arm/Hand condition ->
 `StatModifierTarget.OutgoingDamage` scoped to `ConditionTag: Tag.Melee` (DirectDamage -- see below).
 Each damaged part's own linear-lerp penalty (1x-2x lock, 1x-0x damage by HP%) compounds multiplicatively
@@ -336,7 +331,7 @@ target with a body-part-condition-granted one.
 
 - Right-click "Loot" (disabled if not adjacent) opens `InventoryManagementWindow` +
   `SecondaryInventoryWindow` (`Presentation/UI/Looting/`, renamed from `CorpseInventoryWindow` once
-  containers landed -- see `PLAN-storage-containers.md`), both menu-mode windows.
+  containers landed), both menu-mode windows.
   `SecondaryInventoryWindowController` owns open/close/replace, written generically for chest/shop
   reuse.
 - Items drag both directions via `InventoryActions.TryTransferStack`/`TryTransferAllStacksOfItem` (no
@@ -348,8 +343,6 @@ target with a body-part-condition-granted one.
   (`TemporaryNpcLootGrant`).
 
 ### Storage containers and Currency
-
-Full design/rationale: `PLAN-storage-containers.md`.
 
 - `TreasureChest` (`Game/Blueprints/Objects/`): a `Wall`/`Lava`-style stationary prop (no creature
   identity) marked `ContainerComponent` (`Game/Modules/Containers/`) -- lootable via the map's "Loot"
@@ -381,8 +374,7 @@ Full design/rationale: `PLAN-storage-containers.md`.
 
 ### Loot currency
 
-Full design/rationale: `PLAN-loot-currency.md` -- builds directly on the Currency/container work in
-`PLAN-storage-containers.md`.
+Builds directly on the Currency/container work above.
 
 - `CurrencyActions` (`Game/Modules/Currency/`): `TryTransfer(componentManager, source,
   destination, CurrencyType type)` and `TryTransferAll`, mirroring `InventoryActions.
@@ -416,8 +408,7 @@ Full design/rationale: `PLAN-loot-currency.md` -- builds directly on the Currenc
 
 ### Shops
 
-Full design/rationale: `PLAN-shops.md` -- builds on the Currency/container work in
-`PLAN-storage-containers.md`/`PLAN-loot-currency.md`.
+Builds on the Currency/container and loot currency work above.
 
 - `ItemDefinition.Value` (Gold worth) + `Game/Modules/Shops/` (`ShopComponent`, `ShopActions.
   TryBuyFromShop`/`TrySellToShop`, check-then-commit). `Shop`/`PotionShop`/`GeneralShop`
@@ -487,6 +478,65 @@ found unaffected -- `StatModifierComponent` never referenced `StatusEffectStack`
 and rejected since `BurningAuraApplier.GetCurrentStackCount` is deliberately scoped to whichever
 single mode (entity- vs body-part-burning) is currently hazard-relevant, which would have changed
 `HealthWindow`'s "Status Effects" list to flicker based on hazard exposure.
+
+### World scaling: the 3x3 neighborhood window
+
+Landed 2026-09-15 to 2026-09-16 in seven phases, each checked in-game. Replaced a fixed 4000x4000 map
+that measured 29.6 GB, 47.7 s startup and 12 ms/frame.
+
+- **Shape:** 1024x1024 neighborhoods (`Game.World.Neighborhoods`). Local = Chebyshev radius 80 around
+  the player, every frame. The window centre's neighborhood = Neighborhood tier (divisor 8). The 8
+  around it = Borough, loaded but frozen (`SimulatedTierCount = 2`, `SimulationScope`). Further =
+  Beyond, unloaded. Terrain and walls are flyweight `TerrainCell`s in `Map`, not entities.
+- **Transitions:** `NeighborhoodMembershipIndex`, `ProcessingTierTransitionQueue` (512 entities per
+  frame, thaw first), `ProcessingTierQuery` for the seam. Promotion out of Borough runs
+  `TimerCatchUp` over each module's `ICatchUpTimers`. Periodic first deadlines are staggered by entity
+  id (`FrameDeadline.AfterStaggered`) so timers created together don't fire together.
+- **Streaming:** `Map.Unbounded` + `NeighborhoodStreamer` (first system in the frame, 512 units per
+  frame). `NeighborhoodRecords` keeps a seed per coordinate; `TestMapBuilder.GenerateNeighborhood` is
+  the stand-in generator. Stable `EntityKey`s and `EntityIdentities` let references outlive an unload.
+- **Startup reservation:** dense pools grow linearly, so `WorldSessionBootstrapper` reserves
+  (9 + 3) / 9 of the startup population plus 10% before the first frame (136 ms spikes without it).
+
+Decisions (don't re-litigate):
+1. Borough is the 8 neighborhoods around the middle one, and it is frozen.
+2. Every tier transition is smeared across frames through one budgeted queue.
+3. Promotion out of Borough, by any route including teleport, catches up every effect with an active
+   timer before the entity rejoins the simulation.
+4. No targeting across the simulated/frozen boundary; the player only interacts with Local.
+5. Exact timers at every simulated tier. Neighborhood speed 1/8, settled in-game.
+6. Other MapLayers take the (x, y) neighborhood's tier but are never Local.
+7. Population is defined per MOB population template (dense or sparse); neighborhood placement is
+   randomized, with relationships between neighbors generated dynamically.
+8. Chunk = neighborhood = 1024x1024 tiles; the loaded window is 3072x3072.
+9. Catch-up: aura and contact-damage exposures don't accrue while frozen (only effects already
+   active catch up); deaths are allowed during catch-up; pending windups are cancelled at freeze;
+   regen interleaves between owed ticks, matching live play. No player-only "Local only" targeting
+   rule: Local's radius exceeds every action range, so the seam holds by construction.
+10. Neighborhood records are kept after their contents are deleted, so a return regenerates the
+    same layout with a fresh population, until save/load replaces it.
+11. Window shift hysteresis: 64 tiles past the centre's edge. One centre drives both loading and
+    tiers.
+12. Cache of the 3 most recently dropped neighborhoods, oldest evicted.
+13. Stable 64-bit entity keys, never reused. Long-lived references (status-effect sources, killers,
+    parties, logs) hold keys; runtime ids recycle immediately (no generations, no quarantine).
+    Short-lived references (AI targets, windups, trade, the inspector's selection) stay runtime ids.
+    Names and crawler numbers live in an interned identity table addressed by a handle.
+    `ActionSource` stays 8 bytes (4-bit kind, 24-bit identity handle or terrain type, 36-bit
+    key); a 16-byte source measured ~50% slower `BurningSystem`. Parties are session records of
+    member keys, so a member unloaded by distance stays a member.
+14. Crawler numbers never recycle or change for an entity, including across unload.
+15. Stand-in generation: random terrain and creatures from each neighborhood's own record seed. The
+    hallway cross, fixtures, shops and spawn exist only in neighborhood (0, 0). No border walls.
+16. Debug-build pacing during streaming (~3 fps while a neighborhood regenerates) is accepted: the
+    budget is a fixed, deterministic unit count tuned for Release.
+
+Measured at the end (headless Release, seed 12345, 3072², teleporting 70 tiles into the next column
+of neighborhoods at frames 700 and 1400): first shift worst frame 32-35 ms (the teleport frame itself),
+second shift worst 12-15 ms with none over 16.67 ms; a shift takes 8-17 s. Steady state
+`EcsContext.Update` 1.34 ms/frame. Remaining: occasional ~17-19 ms gen-1 GC frames (`TODO.md`). A
+further 17-24 ms frame near a background gen-2 GC was a runtime wait rounded up to Windows' 15.6 ms
+timer tick; SDL3 sets a 1 ms timer in the windowed game, and the headless benchmark now does too.
 
 ## Presentation
 
@@ -574,7 +624,7 @@ types, so a future Magic Menu gets them free. Frame counts always shown as secon
   trailing tab still open (see TODO.md).
 - `InventoryGridContent.SortOrder`/`NameFilter`/`HideDisabled`, driven by `GridControl` -- a fully
   generic (non-Inventory-specific) row of grid controls (count, sort, `DebouncedTextFilter` search,
-  toggle list) via `InventoryTabContent`. Full design: `PLAN-inventory-item-filtering-and-tab-stats.md`.
+  toggle list) via `InventoryTabContent`.
 - Tab search: debounced (300ms) ghost-text box (`TextBox.GhostText`); shared logic lives in
   `DebouncedTextFilter`.
 - `Toggle` (`Presentation/UI/Toggle.cs`): generic checkbox widget -- bordered square +
@@ -612,7 +662,7 @@ depth still open (blocked on Skills).
 
 ### HealthWindow
 
-Full record: `PLAN-health-window.md`. Red-heart `Button` (`HealthWindowController`) opens
+Red-heart `Button` (`HealthWindowController`) opens
 `HealthWindow`: one row per body part (modifier-effective current/max), one Status Effects section
 above (each effect has its own duration formula -- no shared "remaining" field exists).
 `WindowLifecycle<T>` (renamed from `WindowSlot<T>`) now shared by 3 window-toggle consumers. Not done:

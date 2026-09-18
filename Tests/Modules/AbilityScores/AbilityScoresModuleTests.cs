@@ -1,3 +1,4 @@
+using Engine.ECS.Entities;
 using Engine.Bootstrap;
 using Engine.ECS.Context;
 using Engine.Events;
@@ -46,7 +47,7 @@ public sealed class AbilityScoresModuleTests
 
         IReadOnlyList<IModule> modules = [coreModule, movementModule, processingTierModule, statModifiersModule, abilityScoresModule];
 
-        var ecsContext = Bootstrapper.Build(modules, initialEntityCapacity: 10, initialComponentCapacity: 10);
+        var ecsContext = Bootstrapper.Build(modules, initialEntityCapacity: 10, initialComponentCapacity: 10, entityKeys: context.EntityKeys);
 
         var entityId = ecsContext.EntityManager.CreateEntity();
         AbilityScoreEffects.Grant(ecsContext.ComponentManager, entityId, AbilityScoreType.Strength, baseValue);
@@ -101,7 +102,7 @@ public sealed class AbilityScoresModuleTests
         var (ecsContext, entityId) = BuildAndGrantStrength(baseValue: 5);
 
         AbilityScoreEffects.GrantModifier(ecsContext.ComponentManager, entityId, AbilityScoreType.Strength, StatModifierOperation.Additive, StatModifierPolarity.Buff,
-            canModify: true, magnitude: 3f, expiresAtFrame: 0, StatusEffectSource.Admin);
+            canModify: true, magnitude: 3f, expiresAtFrame: 0, ActionSource.Admin);
         Assert.AreEqual((ushort)8, GetStrength(ecsContext, entityId).Total);
 
         // The modifier's deadline is frame 0, which is the frame this Update runs, so

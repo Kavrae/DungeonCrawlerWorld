@@ -15,7 +15,7 @@ namespace Game.Modules.BodyPartEffects.Systems;
 /// <summary>
 /// Translates Complex-health body-part condition into ordinary StatModifierComponent grants, so
 /// MovementSystem/DirectDamage stay exactly as ignorant of body parts as every other stat
-/// consumer -- see PLAN-body-part-gameplay-effects.md for the full design record.
+/// consumer.
 /// </summary>
 /// <remarks>
 /// Each due entity's own Leg/Foot parts compound multiplicatively (per-part 1x at 100% HP up to
@@ -202,7 +202,7 @@ public sealed class BodyPartEffectsSystem : ITieredSystem
         }
 
         _statModifiers.Add(entityId, new StatModifierComponent(
-            target, StatModifierOperation.Multiplicative, StatModifierPolarity.Debuff, canModify: false, desiredMagnitude, expiresAtFrame: FrameDeadline.Never, StatusEffectSource.Admin, conditionTag));
+            target, StatModifierOperation.Multiplicative, StatModifierPolarity.Debuff, canModify: false, desiredMagnitude, expiresAtFrame: FrameDeadline.Never, ActionSource.Admin, conditionTag));
     }
 
     private void RemoveModifier(int entityId, StatModifierTarget target, Tag? conditionTag = null)
@@ -231,7 +231,7 @@ public sealed class BodyPartEffectsSystem : ITieredSystem
         for (var denseIndex = _statModifiers!.GetFirstDenseIndex(entityId); denseIndex != -1; denseIndex = _statModifiers.GetNextDenseIndex(denseIndex))
         {
             ref readonly var modifier = ref _statModifiers.GetReadonlyByDenseIndex(denseIndex);
-            if (modifier.Target == target && modifier.ConditionTag == conditionTag && modifier.Source.Kind == StatusEffectSourceKind.Admin)
+            if (modifier.Target == target && modifier.ConditionTag == conditionTag && modifier.Source.Kind == ActionSourceKind.Admin)
             {
                 magnitude = modifier.Magnitude;
                 return denseIndex;

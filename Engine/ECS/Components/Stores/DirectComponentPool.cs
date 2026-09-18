@@ -52,6 +52,11 @@ public sealed class DirectComponentPool<T> : IReadOnlyComponentPool<T>, IInspect
         _count = 0;
     }
 
+    /// <inheritdoc/>
+    public void ReserveDenseCapacity(int minimumCount)
+    {
+    }
+
     /// <summary> Resizes the pool to accommodate the new maximum entity count. </summary>
     /// <param name="newMaximumEntityCount">The new maximum entity count.</param>
     public void Resize(int newMaximumEntityCount)

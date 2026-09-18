@@ -13,7 +13,7 @@ namespace Game.Modules.Paralysis.Systems;
 /// </summary>
 /// <remarks>
 /// Driven by a timer wheel (PackedTimerWheel): each paralysis fires once, on its ExpiresAtFrame,
-/// at every processing tier (PLAN-timer-wheel.md).
+/// at every processing tier.
 /// </remarks>
 public sealed class ParalysisSystem(PackedComponentPool<ParalysisTimerComponent> timers) : ISystem
 {

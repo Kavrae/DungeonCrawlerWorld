@@ -46,7 +46,7 @@ public class ShopItemStackCell(FontService fontService, ElementPoolService eleme
     /// </summary>
     protected static readonly float CompactStatFontSizeFraction = FontChrome.InventoryStackQuantityFontFraction * 0.75f;
 
-    /// <summary>Same Better/Worse pair ItemDetailsWindow already uses -- reused here so a favorable price and an unfavorable one read with the same color language elsewhere in the UI. See PLAN-stock-based-shop-pricing.md and PriceIsFavorable/PriceIsUnfavorable's own doc comment for which StockStatus counts as which, per grid. protected, not private -- TradeItemStackCell's own small-square layout reuses this same color pair for its price text.</summary>
+    /// <summary>Same Better/Worse pair ItemDetailsWindow already uses -- reused here so a favorable price and an unfavorable one read with the same color language elsewhere in the UI. See PriceIsFavorable/PriceIsUnfavorable's own doc comment for which StockStatus counts as which, per grid. protected, not private -- TradeItemStackCell's own small-square layout reuses this same color pair for its price text.</summary>
     protected static readonly Color FavorableColor = Color.LightGreen;
 
     /// <summary>LightCoral, not IndianRed -- see ItemDetailsWindow.WorseColor's own doc comment for why (confirmed live too dark/muted here as well, same near-black panel background).</summary>

@@ -11,7 +11,7 @@ namespace Game.Modules.Burning.Components;
 /// reset it.
 /// </summary>
 /// <remarks>A timer-wheel timer (IScheduledTimer): writing NextTickFrame is all it takes to schedule it.</remarks>
-public struct BurningTimerComponent(uint nextTickFrame, byte stackCount, StatusEffectSource source) : IScheduledTimer, IStatusEffectStackCount
+public struct BurningTimerComponent(uint nextTickFrame, byte stackCount, ActionSource source) : IScheduledTimer, IStatusEffectStackCount
 {
     private uint _timerWheelMark;
 
@@ -25,7 +25,7 @@ public struct BurningTimerComponent(uint nextTickFrame, byte stackCount, StatusE
     public byte StackCount { get; set; } = stackCount;
 
     /// <summary>Set once on the 0-to-1 transition (BurningEffects.ApplyStack), never overwritten by a later top-off -- first applier is attributed for the whole burn, mirroring PoisonTimerComponent's own Source field.</summary>
-    public StatusEffectSource Source { get; set; } = source;
+    public ActionSource Source { get; set; } = source;
 
     uint IScheduledTimer.TimerWheelMark { readonly get => _timerWheelMark; set => _timerWheelMark = value; }
 

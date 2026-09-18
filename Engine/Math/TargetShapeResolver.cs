@@ -43,11 +43,11 @@ public static class TargetShapeResolver
     /// Fills a list of Vector3Int maptile positions for a given TargetShape.
     /// </summary>
     /// <remarks>
-    /// based on the caster's origin and footprint size, the cursor tile, the ability's range and area size, and the map size.
+    /// based on the caster's origin and footprint size, the cursor tile, the ability's range and area size, and the map's bounds.
     /// The results list is cleared at the start of the method.
     /// </remarks>
     /// <param name="metric">Only consulted by SingleTarget (see TargetingSpec.Metric's own doc comment) -- every other shape has its own fixed distance semantics. Defaults to Manhattan, matching every SingleTarget caller before this parameter existed.</param>
-    public static void Resolve(TargetShape shape, Vector3Int origin, Vector2Byte originSize, Vector3Int cursorTile, int range, int areaSize, Vector3Int mapSize, List<Vector3Int> results, DistanceMetric metric = DistanceMetric.Manhattan)
+    public static void Resolve(TargetShape shape, Vector3Int origin, Vector2Byte originSize, Vector3Int cursorTile, int range, int areaSize, MapBounds bounds, List<Vector3Int> results, DistanceMetric metric = DistanceMetric.Manhattan)
     {
         results.Clear();
         var resolvedGroupCount = 0;
@@ -58,11 +58,11 @@ public static class TargetShapeResolver
             resolvedGroupCount++;
             if ((cursorDirectedShape & TargetShape.Cone) != 0)
             {
-                ResolveCone(origin, originSize, cursorTile, range, mapSize, results);
+                ResolveCone(origin, originSize, cursorTile, range, bounds, results);
             }
             else if ((cursorDirectedShape & TargetShape.Line) != 0)
             {
-                ResolveLine(origin, originSize, cursorTile, range, mapSize, results);
+                ResolveLine(origin, originSize, cursorTile, range, bounds, results);
             }
             else
             {
@@ -73,19 +73,19 @@ public static class TargetShapeResolver
         if ((shape & TargetShape.Adjacent) != 0)
         {
             resolvedGroupCount++;
-            ResolveAdjacent(origin, originSize, mapSize, results);
+            ResolveAdjacent(origin, originSize, bounds, results);
         }
 
         if ((shape & TargetShape.Self) != 0)
         {
             resolvedGroupCount++;
-            ResolveSelf(origin, originSize, mapSize, results);
+            ResolveSelf(origin, originSize, bounds, results);
         }
 
         if ((shape & TargetShape.Burst) != 0)
         {
             resolvedGroupCount++;
-            ResolveBurst(origin, cursorTile, range, areaSize, mapSize, results);
+            ResolveBurst(origin, cursorTile, range, areaSize, bounds, results);
         }
 
         if (resolvedGroupCount > 1)
@@ -115,14 +115,14 @@ public static class TargetShapeResolver
     /// <summary>
     /// Radius-based diamond scatter.
     /// </summary>
-    private static void ResolveManhattanBurst(Vector3Int anchor, int radius, Vector3Int mapSize, List<Vector3Int> results)
+    private static void ResolveManhattanBurst(Vector3Int anchor, int radius, MapBounds bounds, List<Vector3Int> results)
     {
         if (radius < 0)
         {
             return;
         }
 
-        DistanceFalloff.ScatterManhattan(anchor, radius, strength: 1, FalloffShape.Flat, mapSize, results, static (cellPosition, _, resultsList) => resultsList.Add(cellPosition));
+        DistanceFalloff.ScatterManhattan(anchor, radius, strength: 1, FalloffShape.Flat, bounds, results, static (cellPosition, _, resultsList) => resultsList.Add(cellPosition));
     }
 
     /// <summary>The caster's own WxH footprint size, as a single point
@@ -142,18 +142,18 @@ public static class TargetShapeResolver
     /// SingleTileFootprint is run as a common hotpath while larger entities
     /// are given the more generic calculation.
     /// </remarks>
-    private static void ResolveAdjacent(Vector3Int origin, Vector2Byte originSize, Vector3Int mapSize, List<Vector3Int> results)
+    private static void ResolveAdjacent(Vector3Int origin, Vector2Byte originSize, MapBounds bounds, List<Vector3Int> results)
     {
         if (originSize == SingleTileFootprint)
         {
-            AddIfOnMap(origin.X - 1, origin.Y - 1, origin.Z, mapSize, results);
-            AddIfOnMap(origin.X, origin.Y - 1, origin.Z, mapSize, results);
-            AddIfOnMap(origin.X + 1, origin.Y - 1, origin.Z, mapSize, results);
-            AddIfOnMap(origin.X - 1, origin.Y, origin.Z, mapSize, results);
-            AddIfOnMap(origin.X + 1, origin.Y, origin.Z, mapSize, results);
-            AddIfOnMap(origin.X - 1, origin.Y + 1, origin.Z, mapSize, results);
-            AddIfOnMap(origin.X, origin.Y + 1, origin.Z, mapSize, results);
-            AddIfOnMap(origin.X + 1, origin.Y + 1, origin.Z, mapSize, results);
+            AddIfOnMap(origin.X - 1, origin.Y - 1, origin.Z, bounds, results);
+            AddIfOnMap(origin.X, origin.Y - 1, origin.Z, bounds, results);
+            AddIfOnMap(origin.X + 1, origin.Y - 1, origin.Z, bounds, results);
+            AddIfOnMap(origin.X - 1, origin.Y, origin.Z, bounds, results);
+            AddIfOnMap(origin.X + 1, origin.Y, origin.Z, bounds, results);
+            AddIfOnMap(origin.X - 1, origin.Y + 1, origin.Z, bounds, results);
+            AddIfOnMap(origin.X, origin.Y + 1, origin.Z, bounds, results);
+            AddIfOnMap(origin.X + 1, origin.Y + 1, origin.Z, bounds, results);
             return;
         }
 
@@ -164,14 +164,14 @@ public static class TargetShapeResolver
 
         for (var x = left; x <= right; x++)
         {
-            AddIfOnMap(x, top, origin.Z, mapSize, results);
-            AddIfOnMap(x, bottom, origin.Z, mapSize, results);
+            AddIfOnMap(x, top, origin.Z, bounds, results);
+            AddIfOnMap(x, bottom, origin.Z, bounds, results);
         }
 
         for (var y = origin.Y; y < origin.Y + originSize.Y; y++)
         {
-            AddIfOnMap(left, y, origin.Z, mapSize, results);
-            AddIfOnMap(right, y, origin.Z, mapSize, results);
+            AddIfOnMap(left, y, origin.Z, bounds, results);
+            AddIfOnMap(right, y, origin.Z, bounds, results);
         }
     }
 
@@ -179,21 +179,21 @@ public static class TargetShapeResolver
     /// The caster's own footprint tiles -- combine with Adjacent (Adjacent | Self) for the old
     /// AdjacentWithSelf shape's exact tile set.
     /// </summary>
-    private static void ResolveSelf(Vector3Int origin, Vector2Byte originSize, Vector3Int mapSize, List<Vector3Int> results)
+    private static void ResolveSelf(Vector3Int origin, Vector2Byte originSize, MapBounds bounds, List<Vector3Int> results)
     {
         for (var x = origin.X; x < origin.X + originSize.X; x++)
         {
             for (var y = origin.Y; y < origin.Y + originSize.Y; y++)
             {
-                AddIfOnMap(x, y, origin.Z, mapSize, results);
+                AddIfOnMap(x, y, origin.Z, bounds, results);
             }
         }
     }
 
     /// <summary>Bounds-checked single-cell add.</summary>
-    private static void AddIfOnMap(int x, int y, int z, Vector3Int mapSize, List<Vector3Int> results)
+    private static void AddIfOnMap(int x, int y, int z, MapBounds bounds, List<Vector3Int> results)
     {
-        if (x >= 0 && x < mapSize.X && y >= 0 && y < mapSize.Y)
+        if (bounds.Contains(x, y))
         {
             results.Add(new Vector3Int(x, y, z));
         }
@@ -233,14 +233,14 @@ public static class TargetShapeResolver
     }
 
     /// <summary>Manhattan-distance star shape centered on cursorTile</summary>
-    private static void ResolveBurst(Vector3Int origin, Vector3Int cursorTile, int range, int areaSize, Vector3Int mapSize, List<Vector3Int> results)
+    private static void ResolveBurst(Vector3Int origin, Vector3Int cursorTile, int range, int areaSize, MapBounds bounds, List<Vector3Int> results)
     {
         if (GridDistance.ManhattanDistance(origin, cursorTile) > range)
         {
             return;
         }
 
-        ResolveManhattanBurst(cursorTile, areaSize, mapSize, results);
+        ResolveManhattanBurst(cursorTile, areaSize, bounds, results);
     }
 
     /// <summary>
@@ -254,7 +254,7 @@ public static class TargetShapeResolver
     ///
     /// Aimable at any point in range.
     /// </remarks>
-    private static void ResolveLine(Vector3Int origin, Vector2Byte originSize, Vector3Int cursorTile, int range, Vector3Int mapSize, List<Vector3Int> results)
+    private static void ResolveLine(Vector3Int origin, Vector2Byte originSize, Vector3Int cursorTile, int range, MapBounds bounds, List<Vector3Int> results)
     {
         var effectiveOrigin = ClosestFootprintCellToCursor(origin, originSize, cursorTile);
         var deltaX = cursorTile.X - effectiveOrigin.X;
@@ -288,7 +288,7 @@ public static class TargetShapeResolver
             }
 
             var current = new Vector3Int(x, y, origin.Z);
-            if (current.X < 0 || current.X >= mapSize.X || current.Y < 0 || current.Y >= mapSize.Y)
+            if (!bounds.Contains(current.X, current.Y))
             {
                 break;
             }
@@ -319,7 +319,7 @@ public static class TargetShapeResolver
     /// outside what Cone would return at the identical Range -- see the class doc comment's nesting
     /// note, which this fix is what makes provable.
     /// </remarks>
-    private static void ResolveCone(Vector3Int origin, Vector2Byte originSize, Vector3Int cursorTile, int range, Vector3Int mapSize, List<Vector3Int> results)
+    private static void ResolveCone(Vector3Int origin, Vector2Byte originSize, Vector3Int cursorTile, int range, MapBounds bounds, List<Vector3Int> results)
     {
         var effectiveOrigin = ClosestFootprintCellToCursor(origin, originSize, cursorTile);
         var directionDeltaX = cursorTile.X - effectiveOrigin.X;
@@ -334,7 +334,7 @@ public static class TargetShapeResolver
         for (var offsetY = -range; offsetY <= range; offsetY++)
         {
             var cellY = effectiveOrigin.Y + offsetY;
-            if (cellY < 0 || cellY >= mapSize.Y)
+            if (cellY < bounds.MinY || cellY >= bounds.MaxY)
             {
                 continue;
             }
@@ -342,7 +342,7 @@ public static class TargetShapeResolver
             for (var offsetX = -range; offsetX <= range; offsetX++)
             {
                 var cellX = effectiveOrigin.X + offsetX;
-                if (cellX < 0 || cellX >= mapSize.X)
+                if (cellX < bounds.MinX || cellX >= bounds.MaxX)
                 {
                     continue;
                 }

@@ -17,7 +17,7 @@ namespace Game.Modules.ProcessingTier.Systems;
 /// <b>Event-driven, not a scan.</b> This used to walk its own tiered stripe set every frame,
 /// recomputing distance for each due entity -- and its membership was MovementComponent only, so
 /// any stationary entity in a tiered consumer's pool (lava, shops, treasure chests) was never tiered
-/// at all and sat at the fail-open Beyond default permanently. See PLAN-processing-tier-rework.md.
+/// at all and sat at the fail-open Beyond default permanently.
 /// Membership is now every entity with a TransformComponent, which is only affordable because the
 /// scan is gone: at ~2.08M positioned entities, a periodic scan would cost more than the entire rest
 /// of the simulation.
@@ -33,12 +33,15 @@ namespace Game.Modules.ProcessingTier.Systems;
 /// mid-iteration. This is why ProcessingTierModule declares a dependency on MovementModule: this
 /// system has to run after MovementSystem each frame, or it drains a buffer that has already been
 /// cleared.</item>
-/// <item><b>The player moved.</b> Neighborhood, Borough and Beyond are fixed absolute grid cells,
-/// so they only change when the player crosses a cell boundary or changes MapLayer -- then this does
-/// a full rebuild, which on the current 1000x1000 map never happens. Local is the only
-/// player-relative tier, and a player step changes Local membership only along the edges. Those
-/// edges are walked through the map's own position index (blocking occupant, non-blocking
-/// occupants, terrain) rather than by visiting every entity.</item>
+/// <item><b>The player moved.</b> Neighborhood, Borough and Beyond are properties of whole
+/// neighborhoods (the player's own, the 8 around it, everything else), applying on every MapLayer
+/// alike, so they only change when the player crosses into another neighborhood -- then this retiers
+/// the neighborhoods whose tier changed through ProcessingTierResolver.Membership, never by scanning
+/// every entity slot. Local is the only player-relative tier (and only on the player's own
+/// layer), and a player step changes
+/// Local membership only along the edges. Those edges are walked through the map's own position
+/// index (blocking occupant, non-blocking occupants) rather than by visiting every
+/// entity.</item>
 /// </list>
 /// </para>
 /// <para>
@@ -60,6 +63,10 @@ namespace Game.Modules.ProcessingTier.Systems;
 /// </remarks>
 public sealed class ProcessingTierSystem : ISystem
 {
+    /// <summary>How many queued tier transitions are recomputed per frame.</summary>
+    /// <remarks>Measured on the 3072x3072 map, where one crossing queues ~363,000 entities: the drain costs 0.55ms per frame on average and 2.3ms at worst at this budget, and the whole crossing settles in about twelve seconds, the neighborhood being walked into first. Doubling it puts the worst frame over the 16.7ms budget, since a drain frame can coincide with the once-a-second tick of everything standing in lava.</remarks>
+    public const int DefaultTransitionsPerFrame = 512;
+
     /// <summary>1: this runs every frame, but its per-frame work is proportional to what changed (moves and the player's edge walk), not to population, so there is nothing to stripe.</summary>
     public byte StripeCount => 1;
 
@@ -68,6 +75,10 @@ public sealed class ProcessingTierSystem : ISystem
     private readonly FrameEventBuffer<EntityMovedEvent> _movedEntities;
     private readonly ProcessingTierResolver _resolver;
     private readonly IPlayerQuery? _playerQuery;
+    private readonly int _transitionsPerFrame;
+
+    /// <summary>Neighborhoods whose entities a crossing changed the tier of, drained under the per-frame budget -- see ProcessingTierTransitionQueue.</summary>
+    public ProcessingTierTransitionQueue Transitions { get; } = new();
 
     /// <summary>Set the first time the player is observed on the map. The player is normally already pinned by the spawn sequence (FloorBuilder.CreatePlayer); this is the fallback for any path that did not, and it runs once, never per frame.</summary>
     private bool _playerPinned;
@@ -77,13 +88,17 @@ public sealed class ProcessingTierSystem : ISystem
         IMapQuery mapQuery,
         FrameEventBuffer<EntityMovedEvent> movedEntities,
         ProcessingTierResolver resolver,
-        IPlayerQuery? playerQuery)
+        IPlayerQuery? playerQuery,
+        int transitionsPerFrame = DefaultTransitionsPerFrame)
     {
+        ArgumentOutOfRangeException.ThrowIfNegativeOrZero(transitionsPerFrame);
+
         _transforms = transforms;
         _mapQuery = mapQuery;
         _movedEntities = movedEntities;
         _resolver = resolver;
         _playerQuery = playerQuery;
+        _transitionsPerFrame = transitionsPerFrame;
     }
 
     public void Update(EngineTime time, byte stripeIndex)
@@ -131,20 +146,66 @@ public sealed class ProcessingTierSystem : ISystem
         {
             _resolver.Retier(moved.EntityId);
         }
+
+        DrainTransitions();
+    }
+
+    /// <summary>Recomputes up to the per-frame budget of queued transitions, thaw band first. An entry whose TransformComponent is gone (destroyed, never removed from the index) is dropped from the membership index instead; see NeighborhoodMembershipIndex's remarks for why it tolerates stale entries.</summary>
+    private void DrainTransitions()
+    {
+        for (var drained = 0; drained < _transitionsPerFrame && Transitions.TryDequeue(_resolver.Membership, out var entityId); drained++)
+        {
+            if (_transforms.Has(entityId))
+            {
+                _resolver.Retier(entityId);
+            }
+            else
+            {
+                _resolver.Membership.Remove(entityId);
+            }
+        }
     }
 
     /// <summary>
-    /// The reference moved from oldReference to newReference. A MapLayer change or a Neighborhood/
-    /// Borough cell crossing reclassifies every entity, so it rebuilds; otherwise only the Local
-    /// edges can have changed. See this class's own remarks for why there are two edges.
+    /// The reference moved from oldReference to newReference. When that moves the window centre (or, with
+    /// no window, crosses into another neighborhood) the neighborhoods whose tier changed are retiered, on
+    /// every MapLayer; a MapLayer change rebuilds Local on the
+    /// old and new layers; otherwise the Local edges are walked. See this class's own remarks for why
+    /// there are two edges.
     /// </summary>
+    /// <remarks>
+    /// Why this is complete: a tier changes only if Local membership changes or if a non-Local
+    /// entity's neighborhood tier changes. That tier depends only on the entity's neighborhood
+    /// distance from the reference's, independent of MapLayer, and every neighborhood further than
+    /// one from both references is Beyond before and after -- so only the 3x3 around each reference
+    /// can change, and within those only the neighborhoods whose tier differs are walked. Local
+    /// membership is the edge walk's proof (this class's remarks) on the same layer; across a layer
+    /// change, everything Local on the old layer is within the exit radius of the old reference and
+    /// everything that can become Local on the new one is within the entry radius of the new.
+    /// </remarks>
     private void OnReferenceMoved(Vector3Int oldReference, Vector3Int newReference)
     {
-        if (oldReference.Z != newReference.Z ||
-            !ProcessingTierResolver.SameCell(oldReference, newReference, ProcessingTierResolver.NeighborhoodSizeTiles) ||
-            !ProcessingTierResolver.SameCell(oldReference, newReference, ProcessingTierResolver.BoroughSizeTiles))
+        if (_resolver.WindowCenter is { } center)
         {
-            FullRebuild();
+            var nextCenter = ProcessingTierResolver.NextWindowCenter(center, newReference);
+            if (nextCenter != center)
+            {
+                _resolver.ShiftWindowTo(nextCenter.CellX, nextCenter.CellY);
+                QueueChangedNeighborhoods(center.CellX, center.CellY, nextCenter.CellX, nextCenter.CellY);
+            }
+        }
+        else if (Neighborhoods.Distance(oldReference, newReference) != 0)
+        {
+            QueueChangedNeighborhoods(Neighborhoods.CellOf(oldReference.X), Neighborhoods.CellOf(oldReference.Y), Neighborhoods.CellOf(newReference.X), Neighborhoods.CellOf(newReference.Y));
+        }
+
+        if (oldReference.Z != newReference.Z)
+        {
+            // Local is only ever the reference's own layer, so a layer change demotes everything
+            // within the exit radius on the old layer and promotes everything within the entry radius
+            // on the new one. Nothing else on either layer can change tier from the Z change alone.
+            RetierSquare(oldReference, ProcessingTierResolver.LocalExitRadiusTiles, oldReference.Z);
+            RetierSquare(newReference, ProcessingTierResolver.LocalRadiusTiles, newReference.Z);
             return;
         }
 
@@ -157,7 +218,7 @@ public sealed class ProcessingTierSystem : ISystem
         RetierDifference(SquareAround(oldReference, ProcessingTierResolver.LocalExitRadiusTiles), SquareAround(newReference, ProcessingTierResolver.LocalExitRadiusTiles), z);
     }
 
-    /// <summary>Every positioned entity, recomputed. Rare -- a MapLayer change, a cell crossing, or a missing reference -- and O(capacity) when it happens.</summary>
+    /// <summary>Every positioned entity, recomputed, by scanning every entity slot. Only for the missing-reference case, where nothing was tiered or indexed at creation; each Retier also indexes the entity, so later cell walks can find it.</summary>
     private void FullRebuild()
     {
         for (var entityId = 0; entityId < _transforms.Capacity; entityId++)
@@ -167,6 +228,57 @@ public sealed class ProcessingTierSystem : ISystem
                 _resolver.Retier(entityId);
             }
         }
+    }
+
+    /// <summary>Queues every indexed entity, on every MapLayer, in each neighborhood of the 3x3 around either centre whose tier differs between the two -- drained under the per-frame budget, not retiered here.</summary>
+    /// <remarks>The old 3x3 is walked first; the new 3x3 skips any neighborhood the old one already covered, so none is walked twice.</remarks>
+    private void QueueChangedNeighborhoods(int oldCellX, int oldCellY, int newCellX, int newCellY)
+    {
+
+        for (var cellX = oldCellX - 1; cellX <= oldCellX + 1; cellX++)
+        {
+            for (var cellY = oldCellY - 1; cellY <= oldCellY + 1; cellY++)
+            {
+                QueueIfTierChanged(cellX, cellY, oldCellX, oldCellY, newCellX, newCellY);
+            }
+        }
+
+        for (var cellX = newCellX - 1; cellX <= newCellX + 1; cellX++)
+        {
+            for (var cellY = newCellY - 1; cellY <= newCellY + 1; cellY++)
+            {
+                if (CellDistance(cellX, cellY, oldCellX, oldCellY) > 1)
+                {
+                    QueueIfTierChanged(cellX, cellY, oldCellX, oldCellY, newCellX, newCellY);
+                }
+            }
+        }
+    }
+
+    /// <summary>Queues every entity of neighborhood (cellX, cellY), on every MapLayer, when its tier differs between the old and new reference -- in the thaw band when the neighborhood is becoming simulated.</summary>
+    private void QueueIfTierChanged(int cellX, int cellY, int oldCellX, int oldCellY, int newCellX, int newCellY)
+    {
+        var newTier = ProcessingTierResolver.NeighborhoodTier(CellDistance(cellX, cellY, newCellX, newCellY));
+        if (ProcessingTierResolver.NeighborhoodTier(CellDistance(cellX, cellY, oldCellX, oldCellY)) == newTier)
+        {
+            return;
+        }
+
+        var isThawing = newTier == ProcessingTierLevel.Neighborhood;
+        for (var z = 0; z < _mapQuery.Bounds.Depth; z++)
+        {
+            Transitions.Enqueue(cellX, cellY, z, isThawing);
+        }
+    }
+
+    private static int CellDistance(int cellX, int cellY, int otherCellX, int otherCellY) =>
+        System.Math.Max(System.Math.Abs(cellX - otherCellX), System.Math.Abs(cellY - otherCellY));
+
+    /// <summary>Retiers every entity on tiles within Chebyshev radius of center, on layer z.</summary>
+    private void RetierSquare(Vector3Int center, int radius, int z)
+    {
+        var (minX, minY, maxX, maxY) = SquareAround(center, radius);
+        RetierRectangle(minX, minY, maxX, maxY, z);
     }
 
     /// <summary>Inclusive tile rectangle of Chebyshev radius around center.</summary>
@@ -213,11 +325,11 @@ public sealed class ProcessingTierSystem : ISystem
     /// <summary>Retiers every entity found on tiles in the inclusive rectangle, clamped to the map.</summary>
     private void RetierRectangle(int minX, int minY, int maxX, int maxY, int z)
     {
-        var size = _mapQuery.MapSize;
-        minX = System.Math.Max(minX, 0);
-        minY = System.Math.Max(minY, 0);
-        maxX = System.Math.Min(maxX, size.X - 1);
-        maxY = System.Math.Min(maxY, size.Y - 1);
+        var bounds = _mapQuery.Bounds;
+        minX = Math.Max(minX, bounds.MinX);
+        minY = Math.Max(minY, bounds.MinY);
+        maxX = Math.Min(maxX, bounds.MaxX - 1);
+        maxY = Math.Min(maxY, bounds.MaxY - 1);
 
         for (var x = minX; x <= maxX; x++)
         {
@@ -229,8 +341,8 @@ public sealed class ProcessingTierSystem : ISystem
     }
 
     /// <summary>
-    /// Retiers everything the map indexes at this tile: the Blocking occupant, every non-Blocking
-    /// occupant, and the terrain for this layer. A multi-tile entity is found on every tile it
+    /// Retiers every entity the map indexes at this tile: the Blocking occupant and every
+    /// non-Blocking occupant. Terrain isn't an entity and has no tier. A multi-tile entity is found on every tile it
     /// covers and so may be retiered more than once -- harmless, since Retier is idempotent and
     /// computes from the entity's own origin Position regardless of which tile found it.
     /// </summary>
@@ -245,12 +357,6 @@ public sealed class ProcessingTierSystem : ISystem
         foreach (var occupant in _mapQuery.GetOccupantEntityIdsAt(tile))
         {
             _resolver.Retier(occupant);
-        }
-
-        var terrain = _mapQuery.GetTerrainEntityIdAt(tile);
-        if (terrain >= 0)
-        {
-            _resolver.Retier(terrain);
         }
     }
 }

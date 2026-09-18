@@ -36,6 +36,12 @@ public sealed class Fairy(MathUtility mathUtility) : IBlueprint
     /// <summary>Flat default for every NPC race, adjustable in a later balance pass -- see TODO.md's Stats entry.</summary>
     private const ushort DefaultAbilityScoreBaseValue = 5;
 
+    /// <summary>One override shared by every creature of this race: an ActionDefinition is never changed in place, only replaced, and building it per creature was most of what a creature allocated.</summary>
+    private static readonly ActionDefinition QuickAttackOverride = ActionOverrideEffects.OverrideFlatDamage(QuickAttackAction.Build(), QuickAttackDamage);
+
+    /// <inheritdoc cref="QuickAttackOverride"/>
+    private static readonly ActionDefinition PowerAttackOverride = ActionOverrideEffects.OverrideFlatDamage(PowerAttackAction.Build(), PowerAttackDamage);
+
     public void Build(ComponentManager componentManager, int entityId)
     {
         componentManager.Merge(entityId, new RaceComponent(RaceId, RaceName, Description));
@@ -43,18 +49,14 @@ public sealed class Fairy(MathUtility mathUtility) : IBlueprint
         componentManager.Merge(entityId, new DisplayTextComponent(DisplayNames[mathUtility.Next(0, DisplayNames.Length)], Description));
 
         componentManager.Merge(entityId, new GlyphComponent("f", Color.DeepPink));
-        componentManager.Merge(entityId, new SimpleHealthComponent((ushort)mathUtility.Next(1, MaximumHealth + 1), MaximumHealth));
+        componentManager.Merge(entityId, new SimpleHealthComponent(MaximumHealth, MaximumHealth));
         componentManager.Merge(entityId, new MovementComponent(MovementMode.Random, null, null));
         componentManager.Merge(entityId, new ActionLockComponent(standardLockFrames: 48, currentLockTotalFrames: 0, unlockedAtFrame: 0));
 
-        componentManager.Merge(entityId, new TransformComponent(
-            new Vector3Int(0, 0, (int)MapLayer.Flying), new Vector2Byte(1, 1)));
+        componentManager.Merge(entityId, new TransformComponent(TransformComponent.UnplacedOn(MapLayer.Flying), new Vector2Byte(1, 1)));
 
-        var quickAttackOverride = ActionOverrideEffects.OverrideFlatDamage(QuickAttackAction.Build(), QuickAttackDamage);
-        componentManager.Merge(entityId, new ActionInstanceComponent(QuickAttackAction.Id, quickAttackOverride));
-
-        var powerAttackOverride = ActionOverrideEffects.OverrideFlatDamage(PowerAttackAction.Build(), PowerAttackDamage);
-        componentManager.Merge(entityId, new ActionInstanceComponent(PowerAttackAction.Id, powerAttackOverride));
+        componentManager.Merge(entityId, new ActionInstanceComponent(QuickAttackAction.Id, QuickAttackOverride));
+        componentManager.Merge(entityId, new ActionInstanceComponent(PowerAttackAction.Id, PowerAttackOverride));
 
         componentManager.Merge(entityId, new ActionInstanceComponent(DodgeAction.Id, overrideDefinition: null));
 

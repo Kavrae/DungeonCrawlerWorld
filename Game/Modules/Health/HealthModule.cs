@@ -1,4 +1,5 @@
 using Engine.ECS.Components;
+using Engine.ECS.Components.Stores;
 using Engine.ECS.Systems;
 using Engine.Events;
 using Engine.Math;
@@ -8,6 +9,7 @@ using Game.Modules.Health.Components;
 using Game.Modules.Health.Systems;
 using Game.Modules.ProcessingTier;
 using Game.Modules.ProcessingTier.Components;
+using Game.Modules.StatModifiers;
 using Game.Modules.StatModifiers.Components;
 using Game.World;
 using Microsoft.Xna.Framework;
@@ -24,6 +26,12 @@ public sealed class HealthModule : IGameModule
     private MathUtility _mathUtility = null!;
     private EventBus _eventBus = null!;
     private IPlayerQuery? _playerQuery;
+
+    /// <summary>The entity whose MaximumHealth sums were snapshotted by the most recent StatModifierExpiringEvent, and those sums -- consumed by the matching StatModifierExpiredEvent. See MaximumHealthShift.</summary>
+    /// <remarks>A single slot rather than a map: StatModifierExpirySystem sweeps one entity at a time and publishes both events synchronously within that sweep, so a snapshot never has to outlive the entity it was taken for.</remarks>
+    private int _expiringEntityId = -1;
+    private float _expiringAdditiveSum;
+    private float _expiringMultiplicativeSum;
 
     public void Configure(GameModuleContext context)
     {
@@ -94,5 +102,31 @@ public sealed class HealthModule : IGameModule
             bodyPartBurningTimers,
             _eventBus,
             _playerQuery));
+
+        WireMaximumHealthShift(componentManager);
+    }
+
+    /// <summary>Current health follows the effective maximum when a MaximumHealth modifier wears off, the expiry half of MaximumHealthShift -- the grant half is MaximumHealthShift.ApplyModifier, called by whoever grants one.</summary>
+    /// <remarks>Two events because the amount to give back is the distance the maximum moved, and that is only knowable from both sides of the removal: the sums are snapshotted while the modifiers are still there, and spent once they are gone.</remarks>
+    private void WireMaximumHealthShift(ComponentManager componentManager)
+    {
+        _eventBus.Subscribe<StatModifierExpiringEvent>(expiring =>
+        {
+            _expiringEntityId = expiring.EntityId;
+            MaximumHealthShift.Capture(componentManager, expiring.EntityId, out _expiringAdditiveSum, out _expiringMultiplicativeSum);
+        });
+
+        _eventBus.Subscribe<StatModifierExpiredEvent>(expired =>
+        {
+            if (expired.Target != StatModifierTarget.MaximumHealth || expired.EntityId != _expiringEntityId)
+            {
+                return;
+            }
+
+            // Cleared first: a sweep that expires two MaximumHealth modifiers at once publishes two
+            // of these, and the snapshot already covers both, so only the first may spend it.
+            _expiringEntityId = -1;
+            MaximumHealthShift.Apply(componentManager, expired.EntityId, _expiringAdditiveSum, _expiringMultiplicativeSum);
+        });
     }
 }

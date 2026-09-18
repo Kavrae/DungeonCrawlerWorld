@@ -12,7 +12,7 @@ namespace Game.Modules.StatusEffects.Systems;
 /// so entities carrying only permanent immunities -- the TreasureChest/Shop case -- cost nothing
 /// at all rather than being visited forever. That replaces the tiered decrement-every-visit walk
 /// this system used to be, along with its whole class of "the coarser the tier, the longer the
-/// immunity outlasted its authored duration" defects (PLAN-timer-wheel.md).
+/// immunity outlasted its authored duration" defects.
 /// </summary>
 public sealed class StatusEffectImmunityExpirySystem : ISystem
 {
@@ -24,8 +24,8 @@ public sealed class StatusEffectImmunityExpirySystem : ISystem
 
     private readonly MultiTimerWheel<StatusEffectImmunityComponent> _wheel;
 
-    public StatusEffectImmunityExpirySystem(MultiComponentPool<StatusEffectImmunityComponent> immunities) =>
-        _wheel = new MultiTimerWheel<StatusEffectImmunityComponent>(immunities);
+    public StatusEffectImmunityExpirySystem(MultiComponentPool<StatusEffectImmunityComponent> immunities, SimulationScope? simulationScope = null) =>
+        _wheel = new MultiTimerWheel<StatusEffectImmunityComponent>(immunities, simulationScope);
 
     public void Update(EngineTime time, byte stripeIndex) => _wheel.Tick(time.FrameCount, Expire);
 }

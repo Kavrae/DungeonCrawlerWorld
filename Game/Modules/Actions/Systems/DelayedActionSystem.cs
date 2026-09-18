@@ -1,3 +1,4 @@
+using Engine.ECS.Entities;
 using Engine.ECS.Components;
 using Engine.ECS.Components.Stores;
 using Engine.ECS.Systems;
@@ -6,6 +7,7 @@ using Engine.Math;
 using Game.Modules.AbilityScores.Components;
 using Game.Modules.Actions.Components;
 using Game.Modules.Death.Components;
+using Game.Modules.ProcessingTier;
 using Game.Modules.Health.Components;
 using Game.Modules.StatModifiers.Components;
 using Game.Modules.StatusEffectAura.Components;
@@ -23,8 +25,7 @@ namespace Game.Modules.Actions.Systems;
 /// keyed to it -- so this system touches only the actions actually resolving this frame, at any
 /// processing tier, instead of visiting every pending entity to ask "is the lock 0 yet?"
 /// (PendingDelayedActionComponent.Count was measured over 10,000 map-wide during ordinary
-/// NPC-vs-NPC combat, costing this system ~79ms of a 1000ms/sec budget before it was even tiered
-/// -- see PLAN-charge-attack-fill-indicator.md's Addendum 4).
+/// NPC-vs-NPC combat, costing this system ~79ms of a 1000ms/sec budget before it was even tiered).
 ///
 /// The old "stay on the same tiered cadence as ActionLockSystem so the two can't drift" invariant
 /// this class used to defend is now structural: there is no second clock to drift, because the
@@ -38,6 +39,15 @@ namespace Game.Modules.Actions.Systems;
 /// <cleanupVersion>1</cleanupVersion>
 public sealed class DelayedActionSystem : ISystem
 {
+    /// <summary>Drops a windup whose owner has just frozen: its target is either frozen too (untargetable across the seam) or simulated and long gone by the time the owner thaws, so resolving it later would land an attack nobody could react to.</summary>
+    private void CancelWindupOnFreeze(int entityId, ProcessingTier.Components.ProcessingTierLevel tier)
+    {
+        if (!ProcessingTierQuery.IsSimulatedTier(tier))
+        {
+            _pendingActions.Remove(entityId);
+        }
+    }
+
     /// <summary>Every frame; the wheel only touches windups actually ending.</summary>
     public byte StripeCount => 1;
 
@@ -51,6 +61,7 @@ public sealed class DelayedActionSystem : ISystem
     private readonly IPlayerQuery? _playerQuery;
     private readonly StatusEffectAuraApplierRegistry _statusEffectAppliers;
     private readonly ComponentManager _componentManager;
+    private readonly EntityKeys _entityKeys;
     private readonly PackedComponentPool<DeadComponent>? _deadEntities;
     private readonly MultiComponentPool<AbilityScoreComponent>? _abilityScores;
     private readonly MathUtility _mathUtility;
@@ -58,6 +69,7 @@ public sealed class DelayedActionSystem : ISystem
     private readonly PackedComponentPool<HotkeyExpansionUnlockComponent>? _hotkeyExpansionUnlocks;
     private readonly MultiComponentPool<BodyPartComponent>? _bodyParts;
     private readonly PackedComponentPool<DodgingComponent>? _dodgingEntities;
+    private readonly ProcessingTierQuery? _processingTiers;
     private readonly PackedTimerWheel<PendingDelayedActionComponent> _wheel;
 
     // Cached once instead of passing the method group every Update -- an instance method group
@@ -75,13 +87,17 @@ public sealed class DelayedActionSystem : ISystem
         IPlayerQuery? playerQuery,
         StatusEffectAuraApplierRegistry statusEffectAppliers,
         ComponentManager componentManager,
+        EntityKeys entityKeys,
         MultiComponentPool<StatModifierComponent>? statModifiers = null,
         PackedComponentPool<DeadComponent>? deadEntities = null,
         MultiComponentPool<AbilityScoreComponent>? abilityScores = null,
         MultiComponentPool<StatusEffectAuraSourceComponent>? auraSources = null,
         PackedComponentPool<HotkeyExpansionUnlockComponent>? hotkeyExpansionUnlocks = null,
         MultiComponentPool<BodyPartComponent>? bodyParts = null,
-        PackedComponentPool<DodgingComponent>? dodgingEntities = null)
+        PackedComponentPool<DodgingComponent>? dodgingEntities = null,
+        SimulationScope? simulationScope = null,
+        ProcessingTierQuery? processingTiers = null,
+        ProcessingTierEvents? processingTierEvents = null)
     {
         _pendingActions = pendingActions;
         _actionInstances = actionInstances;
@@ -94,14 +110,21 @@ public sealed class DelayedActionSystem : ISystem
         _playerQuery = playerQuery;
         _statusEffectAppliers = statusEffectAppliers;
         _componentManager = componentManager;
+        _entityKeys = entityKeys;
         _deadEntities = deadEntities;
         _abilityScores = abilityScores;
         _auraSources = auraSources;
         _hotkeyExpansionUnlocks = hotkeyExpansionUnlocks;
         _bodyParts = bodyParts;
         _dodgingEntities = dodgingEntities;
+        _processingTiers = processingTiers;
         _resolve = Resolve;
-        _wheel = new PackedTimerWheel<PendingDelayedActionComponent>(pendingActions);
+        _wheel = new PackedTimerWheel<PendingDelayedActionComponent>(pendingActions, simulationScope);
+
+        if (processingTierEvents is not null)
+        {
+            processingTierEvents.TierChanged += CancelWindupOnFreeze;
+        }
     }
 
     public void Update(EngineTime time, byte stripeIndex) => _wheel.Tick(time.FrameCount, _resolve);
@@ -119,7 +142,7 @@ public sealed class DelayedActionSystem : ISystem
         if (ActionInstanceQueries.TryGet(_actionInstances, entityId, pending.ActionId, out var instance) &&
             ActionInstanceQueries.TryResolveEffectiveAction(_actionCatalog, instance, out var action))
         {
-            ActionEffectResolver.Apply(action, entityId, pending.TargetTiles, _mapQuery, _health, _eventBus, _mathUtility, _playerQuery, _statusEffectAppliers, _componentManager, now, _statModifiers, _deadEntities, _abilityScores, _auraSources, _hotkeyExpansionUnlocks, _bodyParts, _dodgingEntities);
+            ActionEffectResolver.Apply(action, entityId, pending.TargetTiles, _mapQuery, _health, _eventBus, _mathUtility, _playerQuery, _statusEffectAppliers, _componentManager, _entityKeys, now, _statModifiers, _deadEntities, _abilityScores, _auraSources, _hotkeyExpansionUnlocks, _bodyParts, _dodgingEntities, _processingTiers);
         }
 
         return true;

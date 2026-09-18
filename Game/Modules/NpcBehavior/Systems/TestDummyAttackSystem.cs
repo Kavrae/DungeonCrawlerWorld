@@ -59,7 +59,7 @@ public sealed class TestDummyAttackSystem : ISystem
                 continue;
             }
 
-            TargetShapeResolver.Resolve(TargetShape.Adjacent, transform.Position, transform.Size, transform.Position, range: 0, areaSize: 0, _mapQuery.MapSize, _adjacentTilesBuffer);
+            TargetShapeResolver.Resolve(TargetShape.Adjacent, transform.Position, transform.Size, transform.Position, range: 0, areaSize: 0, _mapQuery.Bounds, _adjacentTilesBuffer);
             _pendingActivations.Merge(entityId, new PendingActionActivationComponent(PowerAttackAction.Id, _adjacentTilesBuffer.ToArray()));
         }
     }

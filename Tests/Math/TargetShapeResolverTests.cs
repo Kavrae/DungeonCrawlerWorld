@@ -6,7 +6,7 @@ namespace Tests.Math;
 [TestClass]
 public sealed class TargetShapeResolverTests
 {
-    private static readonly Vector3Int MapSize = new(1000, 1000, 1);
+    private static readonly MapBounds Bounds = new(0, 0, 1000, 1000, 1);
     private static readonly Vector2Byte SingleTile = new(1, 1);
 
     [TestMethod]
@@ -15,7 +15,7 @@ public sealed class TargetShapeResolverTests
         var origin = new Vector3Int(10, 10, 0);
         var tiles = new List<Vector3Int>();
 
-        TargetShapeResolver.Resolve(TargetShape.Adjacent, origin, SingleTile, cursorTile: origin, range: 0, areaSize: 0, MapSize, tiles);
+        TargetShapeResolver.Resolve(TargetShape.Adjacent, origin, SingleTile, cursorTile: origin, range: 0, areaSize: 0, Bounds, tiles);
 
         Assert.HasCount(8, tiles);
         CollectionAssert.DoesNotContain(tiles, origin);
@@ -35,7 +35,7 @@ public sealed class TargetShapeResolverTests
         var origin = new Vector3Int(10, 10, 0);
         var tiles = new List<Vector3Int>();
 
-        TargetShapeResolver.Resolve(TargetShape.Adjacent, origin, SingleTile, cursorTile: origin, range: 99, areaSize: 99, MapSize, tiles);
+        TargetShapeResolver.Resolve(TargetShape.Adjacent, origin, SingleTile, cursorTile: origin, range: 99, areaSize: 99, Bounds, tiles);
 
         Assert.HasCount(8, tiles);
     }
@@ -47,7 +47,7 @@ public sealed class TargetShapeResolverTests
         var size = new Vector2Byte(2, 2);
         var tiles = new List<Vector3Int>();
 
-        TargetShapeResolver.Resolve(TargetShape.Adjacent, origin, size, cursorTile: origin, range: 0, areaSize: 0, MapSize, tiles);
+        TargetShapeResolver.Resolve(TargetShape.Adjacent, origin, size, cursorTile: origin, range: 0, areaSize: 0, Bounds, tiles);
 
         Assert.HasCount(12, tiles);
         // Footprint occupies (10,10)-(11,11) -- none of those four tiles should appear.
@@ -69,7 +69,7 @@ public sealed class TargetShapeResolverTests
         var size = new Vector2Byte(2, 3);
         var tiles = new List<Vector3Int>();
 
-        TargetShapeResolver.Resolve(TargetShape.Adjacent, origin, size, cursorTile: origin, range: 0, areaSize: 0, MapSize, tiles);
+        TargetShapeResolver.Resolve(TargetShape.Adjacent, origin, size, cursorTile: origin, range: 0, areaSize: 0, Bounds, tiles);
 
         Assert.HasCount(14, tiles);
         for (var x = origin.X; x < origin.X + size.X; x++)
@@ -87,7 +87,7 @@ public sealed class TargetShapeResolverTests
         var origin = new Vector3Int(10, 10, 0);
         var tiles = new List<Vector3Int>();
 
-        TargetShapeResolver.Resolve(TargetShape.Adjacent | TargetShape.Self, origin, SingleTile, cursorTile: origin, range: 0, areaSize: 0, MapSize, tiles);
+        TargetShapeResolver.Resolve(TargetShape.Adjacent | TargetShape.Self, origin, SingleTile, cursorTile: origin, range: 0, areaSize: 0, Bounds, tiles);
 
         Assert.HasCount(9, tiles);
         CollectionAssert.Contains(tiles, origin);
@@ -107,7 +107,7 @@ public sealed class TargetShapeResolverTests
         var origin = new Vector3Int(10, 10, 0);
         var tiles = new List<Vector3Int>();
 
-        TargetShapeResolver.Resolve(TargetShape.Adjacent | TargetShape.Self, origin, SingleTile, cursorTile: origin, range: 99, areaSize: 99, MapSize, tiles);
+        TargetShapeResolver.Resolve(TargetShape.Adjacent | TargetShape.Self, origin, SingleTile, cursorTile: origin, range: 99, areaSize: 99, Bounds, tiles);
 
         Assert.HasCount(9, tiles);
     }
@@ -119,7 +119,7 @@ public sealed class TargetShapeResolverTests
         var size = new Vector2Byte(2, 2);
         var tiles = new List<Vector3Int>();
 
-        TargetShapeResolver.Resolve(TargetShape.Adjacent | TargetShape.Self, origin, size, cursorTile: origin, range: 0, areaSize: 0, MapSize, tiles);
+        TargetShapeResolver.Resolve(TargetShape.Adjacent | TargetShape.Self, origin, size, cursorTile: origin, range: 0, areaSize: 0, Bounds, tiles);
 
         // 12-tile perimeter (see the plain-Adjacent equivalent test) plus the 4-tile footprint.
         Assert.HasCount(16, tiles);
@@ -137,7 +137,7 @@ public sealed class TargetShapeResolverTests
         var origin = new Vector3Int(10, 10, 0);
         var tiles = new List<Vector3Int> { new(0, 0, 0), new(1, 1, 0) };
 
-        TargetShapeResolver.Resolve(TargetShape.SingleTarget, origin, SingleTile, cursorTile: new Vector3Int(50, 50, 0), range: 1, areaSize: 0, MapSize, tiles);
+        TargetShapeResolver.Resolve(TargetShape.SingleTarget, origin, SingleTile, cursorTile: new Vector3Int(50, 50, 0), range: 1, areaSize: 0, Bounds, tiles);
 
         Assert.IsEmpty(tiles, "Stale entries from a previous call must not survive into a call that resolves to nothing.");
     }
@@ -149,7 +149,7 @@ public sealed class TargetShapeResolverTests
         var cursorTile = new Vector3Int(10, 0, 0);
         var tiles = new List<Vector3Int>();
 
-        TargetShapeResolver.Resolve(TargetShape.SingleTarget, origin, SingleTile, cursorTile, range: 10, areaSize: 0, MapSize, tiles);
+        TargetShapeResolver.Resolve(TargetShape.SingleTarget, origin, SingleTile, cursorTile, range: 10, areaSize: 0, Bounds, tiles);
 
         Assert.HasCount(1, tiles);
         Assert.AreEqual(cursorTile, tiles[0]);
@@ -162,7 +162,7 @@ public sealed class TargetShapeResolverTests
         var cursorTile = new Vector3Int(11, 0, 0);
         var tiles = new List<Vector3Int>();
 
-        TargetShapeResolver.Resolve(TargetShape.SingleTarget, origin, SingleTile, cursorTile, range: 10, areaSize: 0, MapSize, tiles);
+        TargetShapeResolver.Resolve(TargetShape.SingleTarget, origin, SingleTile, cursorTile, range: 10, areaSize: 0, Bounds, tiles);
 
         Assert.IsEmpty(tiles);
     }
@@ -174,7 +174,7 @@ public sealed class TargetShapeResolverTests
         var cursorTile = new Vector3Int(11, 0, 0);
         var tiles = new List<Vector3Int>();
 
-        TargetShapeResolver.Resolve(TargetShape.Burst, origin, SingleTile, cursorTile, range: 10, areaSize: 2, MapSize, tiles);
+        TargetShapeResolver.Resolve(TargetShape.Burst, origin, SingleTile, cursorTile, range: 10, areaSize: 2, Bounds, tiles);
 
         Assert.IsEmpty(tiles);
     }
@@ -186,7 +186,7 @@ public sealed class TargetShapeResolverTests
         var cursorTile = new Vector3Int(5, 10, 0);
         var tiles = new List<Vector3Int>();
 
-        TargetShapeResolver.Resolve(TargetShape.Burst, origin, SingleTile, cursorTile, range: 10, areaSize: 1, MapSize, tiles);
+        TargetShapeResolver.Resolve(TargetShape.Burst, origin, SingleTile, cursorTile, range: 10, areaSize: 1, Bounds, tiles);
 
         // areaSize 1 -> radius 1 diamond around the cursor tile: itself plus 4 cardinal neighbors.
         Assert.HasCount(5, tiles);
@@ -203,7 +203,7 @@ public sealed class TargetShapeResolverTests
         var size = new Vector2Byte(2, 2);
         var tiles = new List<Vector3Int>();
 
-        TargetShapeResolver.Resolve(TargetShape.Burst, origin, size, cursorTile: origin, range: 0, areaSize: 1, MapSize, tiles);
+        TargetShapeResolver.Resolve(TargetShape.Burst, origin, size, cursorTile: origin, range: 0, areaSize: 1, Bounds, tiles);
 
         CollectionAssert.Contains(tiles, origin, "A blast centered on the caster's own anchor tile must still be able to hit the caster.");
     }
@@ -215,7 +215,7 @@ public sealed class TargetShapeResolverTests
         var cursorTile = new Vector3Int(5, 0, 0);
         var tiles = new List<Vector3Int>();
 
-        TargetShapeResolver.Resolve(TargetShape.Burst, origin, SingleTile, cursorTile, range: 10, areaSize: 0, MapSize, tiles);
+        TargetShapeResolver.Resolve(TargetShape.Burst, origin, SingleTile, cursorTile, range: 10, areaSize: 0, Bounds, tiles);
 
         Assert.HasCount(1, tiles);
         Assert.AreEqual(cursorTile, tiles[0]);
@@ -228,7 +228,7 @@ public sealed class TargetShapeResolverTests
         var cursorTile = new Vector3Int(9, 6, 0); // shallow, but not axis-aligned -- the line must actually rise, not snap flat.
         var tiles = new List<Vector3Int>();
 
-        TargetShapeResolver.Resolve(TargetShape.Line, origin, SingleTile, cursorTile, range: 3, areaSize: 0, MapSize, tiles);
+        TargetShapeResolver.Resolve(TargetShape.Line, origin, SingleTile, cursorTile, range: 3, areaSize: 0, Bounds, tiles);
 
         CollectionAssert.AreEqual(new[]
         {
@@ -254,8 +254,8 @@ public sealed class TargetShapeResolverTests
         var shallowerTiles = new List<Vector3Int>();
         var steeperTiles = new List<Vector3Int>();
 
-        TargetShapeResolver.Resolve(TargetShape.Line, origin, SingleTile, shallowerCursor, range: 6, areaSize: 0, MapSize, shallowerTiles);
-        TargetShapeResolver.Resolve(TargetShape.Line, origin, SingleTile, steeperCursor, range: 6, areaSize: 0, MapSize, steeperTiles);
+        TargetShapeResolver.Resolve(TargetShape.Line, origin, SingleTile, shallowerCursor, range: 6, areaSize: 0, Bounds, shallowerTiles);
+        TargetShapeResolver.Resolve(TargetShape.Line, origin, SingleTile, steeperCursor, range: 6, areaSize: 0, Bounds, steeperTiles);
 
         CollectionAssert.AreNotEqual(shallowerTiles, steeperTiles, "Two meaningfully different shallow angles must not resolve to the same line.");
         CollectionAssert.AreEqual(new[]
@@ -285,7 +285,7 @@ public sealed class TargetShapeResolverTests
         var cursorTile = new Vector3Int(8, 8, 0); // exactly 45 degrees
         var tiles = new List<Vector3Int>();
 
-        TargetShapeResolver.Resolve(TargetShape.Line, origin, SingleTile, cursorTile, range: 3, areaSize: 0, MapSize, tiles);
+        TargetShapeResolver.Resolve(TargetShape.Line, origin, SingleTile, cursorTile, range: 3, areaSize: 0, Bounds, tiles);
 
         CollectionAssert.AreEqual(new[]
         {
@@ -302,7 +302,7 @@ public sealed class TargetShapeResolverTests
         var cursorTile = new Vector3Int(999, 5, 0);
         var tiles = new List<Vector3Int>();
 
-        TargetShapeResolver.Resolve(TargetShape.Line, origin, SingleTile, cursorTile, range: 5, areaSize: 0, MapSize, tiles);
+        TargetShapeResolver.Resolve(TargetShape.Line, origin, SingleTile, cursorTile, range: 5, areaSize: 0, Bounds, tiles);
 
         Assert.HasCount(1, tiles);
         Assert.AreEqual(new Vector3Int(999, 5, 0), tiles[0]);
@@ -314,7 +314,7 @@ public sealed class TargetShapeResolverTests
         var origin = new Vector3Int(5, 5, 0);
         var tiles = new List<Vector3Int>();
 
-        TargetShapeResolver.Resolve(TargetShape.Line, origin, SingleTile, origin, range: 3, areaSize: 0, MapSize, tiles);
+        TargetShapeResolver.Resolve(TargetShape.Line, origin, SingleTile, origin, range: 3, areaSize: 0, Bounds, tiles);
 
         Assert.IsEmpty(tiles);
     }
@@ -330,7 +330,7 @@ public sealed class TargetShapeResolverTests
         var cursorTile = new Vector3Int(20, 10, 0);
         var tiles = new List<Vector3Int>();
 
-        TargetShapeResolver.Resolve(TargetShape.Line, origin, size, cursorTile, range: 3, areaSize: 0, MapSize, tiles);
+        TargetShapeResolver.Resolve(TargetShape.Line, origin, size, cursorTile, range: 3, areaSize: 0, Bounds, tiles);
 
         CollectionAssert.AreEqual(new[]
         {
@@ -354,7 +354,7 @@ public sealed class TargetShapeResolverTests
         var cursorTile = new Vector3Int(15, 10, 0); // due east
         var tiles = new List<Vector3Int>();
 
-        TargetShapeResolver.Resolve(TargetShape.Cone, origin, SingleTile, cursorTile, range: 3, areaSize: 0, MapSize, tiles);
+        TargetShapeResolver.Resolve(TargetShape.Cone, origin, SingleTile, cursorTile, range: 3, areaSize: 0, Bounds, tiles);
 
         CollectionAssert.Contains(tiles, new Vector3Int(12, 10, 0), "Directly toward the cursor must be inside the cone.");
         CollectionAssert.DoesNotContain(tiles, new Vector3Int(8, 10, 0), "Directly opposite the cursor direction must be outside the cone.");
@@ -372,7 +372,7 @@ public sealed class TargetShapeResolverTests
         var cursorTile = new Vector3Int(15, 10, 0);
         var tiles = new List<Vector3Int>();
 
-        TargetShapeResolver.Resolve(TargetShape.Cone, origin, SingleTile, cursorTile, range: 5, areaSize: 0, MapSize, tiles);
+        TargetShapeResolver.Resolve(TargetShape.Cone, origin, SingleTile, cursorTile, range: 5, areaSize: 0, Bounds, tiles);
 
         CollectionAssert.Contains(tiles, new Vector3Int(14, 13, 0), "~37 degrees off-axis is within the 45-degree half-angle.");
         CollectionAssert.DoesNotContain(tiles, new Vector3Int(13, 14, 0), "~53 degrees off-axis is outside the 45-degree half-angle.");
@@ -384,7 +384,7 @@ public sealed class TargetShapeResolverTests
         var origin = new Vector3Int(10, 10, 0);
         var tiles = new List<Vector3Int>();
 
-        TargetShapeResolver.Resolve(TargetShape.Cone, origin, SingleTile, origin, range: 3, areaSize: 0, MapSize, tiles);
+        TargetShapeResolver.Resolve(TargetShape.Cone, origin, SingleTile, origin, range: 3, areaSize: 0, Bounds, tiles);
 
         Assert.IsEmpty(tiles);
     }
@@ -398,7 +398,7 @@ public sealed class TargetShapeResolverTests
 
         var tiles = new List<Vector3Int>();
 
-        TargetShapeResolver.Resolve(TargetShape.Cone, origin, size, cursorTile, range: 5, areaSize: 0, MapSize, tiles);
+        TargetShapeResolver.Resolve(TargetShape.Cone, origin, size, cursorTile, range: 5, areaSize: 0, Bounds, tiles);
 
         for (var x = origin.X; x < origin.X + size.X; x++)
         {
@@ -424,7 +424,7 @@ public sealed class TargetShapeResolverTests
         var cursorTile = new Vector3Int(13, 13, 0);
         var tiles = new List<Vector3Int>();
 
-        TargetShapeResolver.Resolve(TargetShape.Cone, origin, SingleTile, cursorTile, range: 3, areaSize: 0, MapSize, tiles);
+        TargetShapeResolver.Resolve(TargetShape.Cone, origin, SingleTile, cursorTile, range: 3, areaSize: 0, Bounds, tiles);
 
         CollectionAssert.Contains(tiles, cursorTile);
     }
@@ -440,13 +440,13 @@ public sealed class TargetShapeResolverTests
         const int range = 5;
 
         var coneOnly = new List<Vector3Int>();
-        TargetShapeResolver.Resolve(TargetShape.Cone, origin, SingleTile, cursorTile, range, areaSize: 0, MapSize, coneOnly);
+        TargetShapeResolver.Resolve(TargetShape.Cone, origin, SingleTile, cursorTile, range, areaSize: 0, Bounds, coneOnly);
 
         var combinedManhattan = new List<Vector3Int>();
-        TargetShapeResolver.Resolve(TargetShape.Cone | TargetShape.Line | TargetShape.SingleTarget, origin, SingleTile, cursorTile, range, areaSize: 0, MapSize, combinedManhattan, DistanceMetric.Manhattan);
+        TargetShapeResolver.Resolve(TargetShape.Cone | TargetShape.Line | TargetShape.SingleTarget, origin, SingleTile, cursorTile, range, areaSize: 0, Bounds, combinedManhattan, DistanceMetric.Manhattan);
 
         var combinedChebyshev = new List<Vector3Int>();
-        TargetShapeResolver.Resolve(TargetShape.Cone | TargetShape.Line | TargetShape.SingleTarget, origin, SingleTile, cursorTile, range, areaSize: 0, MapSize, combinedChebyshev, DistanceMetric.Chebyshev);
+        TargetShapeResolver.Resolve(TargetShape.Cone | TargetShape.Line | TargetShape.SingleTarget, origin, SingleTile, cursorTile, range, areaSize: 0, Bounds, combinedChebyshev, DistanceMetric.Chebyshev);
 
         CollectionAssert.AreEqual(coneOnly, combinedManhattan);
         CollectionAssert.AreEqual(coneOnly, combinedChebyshev);
@@ -460,8 +460,8 @@ public sealed class TargetShapeResolverTests
         var chebyshevTiles = new List<Vector3Int>();
         var manhattanTiles = new List<Vector3Int>();
 
-        TargetShapeResolver.Resolve(TargetShape.SingleTarget, origin, SingleTile, cursorTile, range: 1, areaSize: 0, MapSize, chebyshevTiles, DistanceMetric.Chebyshev);
-        TargetShapeResolver.Resolve(TargetShape.SingleTarget, origin, SingleTile, cursorTile, range: 1, areaSize: 0, MapSize, manhattanTiles);
+        TargetShapeResolver.Resolve(TargetShape.SingleTarget, origin, SingleTile, cursorTile, range: 1, areaSize: 0, Bounds, chebyshevTiles, DistanceMetric.Chebyshev);
+        TargetShapeResolver.Resolve(TargetShape.SingleTarget, origin, SingleTile, cursorTile, range: 1, areaSize: 0, Bounds, manhattanTiles);
 
         Assert.HasCount(1, chebyshevTiles);
         Assert.AreEqual(cursorTile, chebyshevTiles[0]);
@@ -475,7 +475,7 @@ public sealed class TargetShapeResolverTests
         var cursorTile = new Vector3Int(12, 10, 0); // Chebyshev distance 2 > range 1
         var tiles = new List<Vector3Int>();
 
-        TargetShapeResolver.Resolve(TargetShape.SingleTarget, origin, SingleTile, cursorTile, range: 1, areaSize: 0, MapSize, tiles, DistanceMetric.Chebyshev);
+        TargetShapeResolver.Resolve(TargetShape.SingleTarget, origin, SingleTile, cursorTile, range: 1, areaSize: 0, Bounds, tiles, DistanceMetric.Chebyshev);
 
         Assert.IsEmpty(tiles);
     }
@@ -489,9 +489,36 @@ public sealed class TargetShapeResolverTests
         // SingleTarget contributes {origin} (cursor == origin, distance 0). Burst (areaSize 1)
         // scatters a radius-1 diamond centered on that same cursor tile, which also includes origin
         // itself -- exercising the exact overlap Resolve's own de-dup pass exists for.
-        TargetShapeResolver.Resolve(TargetShape.SingleTarget | TargetShape.Burst, origin, SingleTile, cursorTile: origin, range: 5, areaSize: 1, MapSize, tiles);
+        TargetShapeResolver.Resolve(TargetShape.SingleTarget | TargetShape.Burst, origin, SingleTile, cursorTile: origin, range: 5, areaSize: 1, Bounds, tiles);
 
         Assert.AreEqual(1, tiles.Count(tile => tile == origin), "origin is produced by both SingleTarget and Burst -- must appear exactly once after de-duplication.");
         Assert.HasCount(5, tiles, "SingleTarget contributes nothing new (already inside Burst's own radius-1 diamond); total should just be Burst's own 5-tile diamond.");
+    }
+
+    [TestMethod]
+    public void Adjacent_AcrossZeroOnANegativeMap_KeepsEveryNeighbor()
+    {
+        var origin = new Vector3Int(-1, 0, 0);
+        var tiles = new List<Vector3Int>();
+
+        TargetShapeResolver.Resolve(TargetShape.Adjacent, origin, SingleTile, cursorTile: origin, range: 0, areaSize: 0, new MapBounds(-1024, -1024, 1024, 1024, 1), tiles);
+
+        Assert.HasCount(8, tiles);
+        CollectionAssert.Contains(tiles, new Vector3Int(-2, -1, 0));
+        CollectionAssert.Contains(tiles, new Vector3Int(0, 1, 0));
+    }
+
+    /// <summary>Clipping is to the map's own minimum, not to 0: the burst loses only the tiles west of -1024.</summary>
+    [TestMethod]
+    public void Burst_AtANegativeMapEdge_ClipsAtTheMinimumNotZero()
+    {
+        var cursorTile = new Vector3Int(-1024, -500, 0);
+        var tiles = new List<Vector3Int>();
+
+        TargetShapeResolver.Resolve(TargetShape.Burst, cursorTile, SingleTile, cursorTile, range: 10, areaSize: 1, new MapBounds(-1024, -1024, 1024, 1024, 1), tiles);
+
+        Assert.HasCount(4, tiles);
+        Assert.IsTrue(tiles.All(static tile => tile.X >= -1024));
+        CollectionAssert.Contains(tiles, new Vector3Int(-1023, -500, 0));
     }
 }

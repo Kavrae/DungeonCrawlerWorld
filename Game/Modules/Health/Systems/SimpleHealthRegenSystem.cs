@@ -68,30 +68,35 @@ public sealed class SimpleHealthRegenSystem : ITieredSystem
 
         foreach (var entityId in entityIds)
         {
-            // A corpse shouldn't regenerate back above 0.
-            if (_deadEntities?.Has(entityId) == true)
-            {
-                continue;
-            }
-
-            // No AbilityScoresModule loaded, or this entity never got a Constitution score
-            // (e.g. a non-creature SimpleHealthComponent holder) -- 0 regen, same as today's
-            // effectiveRegen == 0 skip below, just resolved a step earlier.
-            if (_abilityScores is null || !AbilityScoreQueries.TryGetComponent(_abilityScores, entityId, AbilityScoreType.Constitution, out var constitution))
-            {
-                continue;
-            }
-
-            var amountPerSecond = AbilityScoreMath.Lerp(constitution.Total, MinHealthRegenPerSecond, MaxHealthRegenPerSecond);
-            var rawAmount = amountPerSecond * secondsPerVisit;
-            var effectiveRegen = StatModifierMath.GetEffectiveValue(_statModifiers, entityId, StatModifierTarget.HealthRegen, rawAmount);
-
-            if (effectiveRegen == 0f)
-            {
-                continue;
-            }
-
-            HealthHeal.Apply(_healthComponents, entityId, percentOfMaxHealth: 0f, time.FrameCount, _statModifiers, flatAmount: effectiveRegen, sourceEntityId: entityId, eventBus: _eventBus, playerQuery: _playerQuery, healType: "Regeneration");
+            Regenerate(entityId, secondsPerVisit, time.FrameCount);
         }
+    }
+
+    private void Regenerate(int entityId, float seconds, long now)
+    {
+        // A corpse shouldn't regenerate back above 0.
+        if (_deadEntities?.Has(entityId) == true)
+        {
+            return;
+        }
+
+        // No AbilityScoresModule loaded, or this entity never got a Constitution score
+        // (e.g. a non-creature SimpleHealthComponent holder) -- 0 regen, same as today's
+        // effectiveRegen == 0 skip below, just resolved a step earlier.
+        if (_abilityScores is null || !AbilityScoreQueries.TryGetComponent(_abilityScores, entityId, AbilityScoreType.Constitution, out var constitution))
+        {
+            return;
+        }
+
+        var amountPerSecond = AbilityScoreMath.Lerp(constitution.Total, MinHealthRegenPerSecond, MaxHealthRegenPerSecond);
+        var rawAmount = amountPerSecond * seconds;
+        var effectiveRegen = StatModifierMath.GetEffectiveValue(_statModifiers, entityId, StatModifierTarget.HealthRegen, rawAmount);
+
+        if (effectiveRegen == 0f)
+        {
+            return;
+        }
+
+        HealthHeal.Apply(_healthComponents, entityId, percentOfMaxHealth: 0f, now, _statModifiers, flatAmount: effectiveRegen, sourceEntityId: entityId, eventBus: _eventBus, playerQuery: _playerQuery, healType: "Regeneration");
     }
 }

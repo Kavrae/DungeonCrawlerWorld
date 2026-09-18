@@ -24,7 +24,7 @@ public sealed class StatModifierExpirySystemTests
             existing.NextTickFrame = System.Math.Min(existing.NextTickFrame, incoming.NextTickFrame));
 
     private static StatModifierComponent Modifier(uint expiresAtFrame, StatModifierTarget target = StatModifierTarget.HealthRegen) =>
-        new(target, StatModifierOperation.Additive, StatModifierPolarity.Buff, canModify: false, magnitude: 1f, expiresAtFrame, StatusEffectSource.Admin);
+        new(target, StatModifierOperation.Additive, StatModifierPolarity.Buff, canModify: false, magnitude: 1f, expiresAtFrame, ActionSource.Admin);
 
     /// <summary>Runs every frame from..to inclusive -- the way SystemManager drives it.</summary>
     private static void Run(StatModifierExpirySystem system, long from, long to)

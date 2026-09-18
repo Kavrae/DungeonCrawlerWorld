@@ -20,15 +20,14 @@ using Presentation.UI.Content;
 namespace Presentation.UI.Trade;
 
 /// <summary>
-/// The middle window of the three-window shop layout (PLAN-trade-window.md) -- two columns
+/// The middle window of the three-window shop layout -- two columns
 /// (player-offered items on the left, shop-offered items on the right), each a fixed 20-slot,
 /// non-scrolling item grid over its own reserved trade-offer entity plus a currency footer, under
 /// a header showing that column's own running Value. A shared 3-button footer (Balance Offer,
 /// Cancel, Complete) sits beneath both columns.
 ///
 /// Drag-eligibility (Add to trade/Remove from trade/direct sell/direct buy, both items and
-/// currency) and live header Value computation (ComputeColumnValueText) are landed -- see
-/// PLAN-trade-window.md's own "Landed" notes throughout. Still to land, per TODO.md's "Trade
+/// currency) and live header Value computation (ComputeColumnValueText) are landed. Still to land, per TODO.md's "Trade
 /// window" entry: Balance Offer/Complete's own logic (both buttons stay inert placeholders below)
 /// and the whole-window drop-zone widening (drops still require landing exactly on a grid cell or
 /// the currency row, not just anywhere in the column). Every position/size below is explicit, not
@@ -52,7 +51,7 @@ public sealed class TradeWindow(
     Engine.ECS.Systems.SimulationClock? simulationClock = null)
     : Window(fontService, elementPoolService, labelRenderer), IWholeWindowDropTarget
 {
-    /// <summary>2x10 -- the confirmed 20-stacks-per-side cap, arranged so every slot is visible with no scrolling required (see InventoryCapacity.MaxNonPlayerStackCount, which already enforces this same 20 for free -- see PLAN-trade-window.md's own "Trade grid capacity" section).</summary>
+    /// <summary>2x10 -- the confirmed 20-stacks-per-side cap, arranged so every slot is visible with no scrolling required (see InventoryCapacity.MaxNonPlayerStackCount, which already enforces this same 20 for free).</summary>
     private const int GridColumns = 2;
 
     private const int GridRows = 10;
@@ -216,7 +215,7 @@ public sealed class TradeWindow(
         _completeButton.Enabled = !isEmpty && playerValue >= shopValue;
     }
 
-    /// <summary>No item stacks and no Gold/Credits of any kind currently sitting in tradeEntityId's own column -- both Complete and Balance Offer stay disabled while both columns read this (PLAN-trade-window.md's own "nothing offered on either side" rule).</summary>
+    /// <summary>No item stacks and no Gold/Credits of any kind currently sitting in tradeEntityId's own column -- both Complete and Balance Offer stay disabled while both columns read this.</summary>
     private bool IsColumnEmpty(int tradeEntityId)
     {
         if (_stacks.GetFirstDenseIndex(tradeEntityId) != -1)

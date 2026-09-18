@@ -27,7 +27,7 @@ public static class DistanceFalloff
     /// <summary> Visits every cell within radius tiles of sourcePosition, calling visit for each visited cell whose contribution is greater than 0.
     /// </summary>
     /// <remarks>
-    /// Same Z layer as the sourcePosition, clamped to a mapSize.X x mapSize.Y grid.
+    /// Same Z layer as the sourcePosition, clamped to the bounds.
     /// Thin wrapper over the TState overload -- existing callers here already pass a
     /// capturing lambda (all current ones run once at construction/toggle time, or once per
     /// preview-frame into a reused results list, not allocating per cell), so this keeps their
@@ -37,10 +37,10 @@ public static class DistanceFalloff
     /// <param name="radius">The radius within which to scatter.</param>
     /// <param name="strength">The strength of the effect in the scatter.</param>
     /// <param name="shape">The falloff shape as either Flat or Fading at half strength per cell distance.</param>
-    /// <param name="mapSize">The size of the map for bounds checking.</param>
+    /// <param name="bounds">The map's bounds; cells outside them are skipped.</param>
     /// <param name="visit">The visitor delegate to be called on each cell within range.</param>
-    public static void ScatterManhattan(Vector3Int sourcePosition, int radius, int strength, FalloffShape shape, Vector3Int mapSize, ManhattanCellVisitor visit) =>
-        ScatterManhattan(sourcePosition, radius, strength, shape, mapSize, visit, static (cellPosition, contribution, state) => state(cellPosition, contribution));
+    public static void ScatterManhattan(Vector3Int sourcePosition, int radius, int strength, FalloffShape shape, MapBounds bounds, ManhattanCellVisitor visit) =>
+        ScatterManhattan(sourcePosition, radius, strength, shape, bounds, visit, static (cellPosition, contribution, state) => state(cellPosition, contribution));
 
     /// <summary>Visits every cell within radius tiles of sourcePosition, calling visit with the given state for each visited cell whose contribution is greater than 0.</summary>
     /// <typeparam name="TState">The type of the state parameter.</typeparam>
@@ -48,10 +48,10 @@ public static class DistanceFalloff
     /// <param name="radius">The radius within which to scatter.</param>
     /// <param name="strength">The strength of the effect in the scatter.</param>
     /// <param name="shape">The falloff shape as either Flat or Fading at half strength per cell distance.</param>
-    /// <param name="mapSize">The size of the map for bounds checking.</param>
+    /// <param name="bounds">The map's bounds; cells outside them are skipped.</param>
     /// <param name="state">The state to provide to each visit call.</param>
     /// <param name="visit">The visitor delegate to be called on each cell within range.</param>
-    public static void ScatterManhattan<TState>(Vector3Int sourcePosition, int radius, int strength, FalloffShape shape, Vector3Int mapSize, TState state, ManhattanCellVisitor<TState> visit)
+    public static void ScatterManhattan<TState>(Vector3Int sourcePosition, int radius, int strength, FalloffShape shape, MapBounds bounds, TState state, ManhattanCellVisitor<TState> visit)
     {
         if (radius < 0)
         {
@@ -61,7 +61,7 @@ public static class DistanceFalloff
         for (var deltaY = -radius; deltaY <= radius; deltaY++)
         {
             var cellY = sourcePosition.Y + deltaY;
-            if (cellY < 0 || cellY >= mapSize.Y)
+            if (cellY < bounds.MinY || cellY >= bounds.MaxY)
             {
                 continue;
             }
@@ -70,7 +70,7 @@ public static class DistanceFalloff
             for (var deltaX = -remainingRadius; deltaX <= remainingRadius; deltaX++)
             {
                 var cellX = sourcePosition.X + deltaX;
-                if (cellX < 0 || cellX >= mapSize.X)
+                if (cellX < bounds.MinX || cellX >= bounds.MaxX)
                 {
                     continue;
                 }

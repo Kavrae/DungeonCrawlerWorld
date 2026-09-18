@@ -2711,7 +2711,7 @@ public sealed class UiInputControllerTests
     /// Four grid windows -- real player inventory, real shop, and the trade window's own two
     /// reserved trade-offer entities (see MapViewState.ReservedEntityIds.TradeOfferPlayerEntityId/
     /// TradeOfferShopEntityId) -- for exercising UiInputController.ResolveTradeAwareItemDrag's
-    /// own eligibility rules (PLAN-trade-window.md's "Drag-drop eligibility" table). Both trade
+    /// own eligibility rules. Both trade
     /// columns start already holding one unit of potionItemId, as if a prior "add to trade" drag
     /// had already staged it there, so the remove-from-trade/direct-sell/direct-buy tests below
     /// have something to move back out; the real player/shop grids start with none at all, so a

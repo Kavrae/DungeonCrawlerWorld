@@ -60,7 +60,7 @@ public static class BodyPartDamageEffects
         int denseIndex,
         int entityId,
         ushort effectiveAmount,
-        StatusEffectSource source,
+        ActionSource source,
         IPlayerQuery? playerQuery,
         string damageType,
         MultiComponentPool<StatModifierComponent>? statModifiers,
@@ -79,7 +79,7 @@ public static class BodyPartDamageEffects
         }
 
         var playerInvolved = entityId == playerQuery.PlayerEntityId
-            || (source.Kind == StatusEffectSourceKind.Entity && source.EntityId == playerQuery.PlayerEntityId);
+            || source.IsEntity(playerQuery.PlayerEntityKey);
         if (!playerInvolved)
         {
             return;
@@ -103,7 +103,7 @@ public static class BodyPartDamageEffects
         EventBus eventBus,
         int entityId,
         ushort effectiveAmount,
-        StatusEffectSource source,
+        ActionSource source,
         IPlayerQuery? playerQuery,
         string damageType,
         MultiComponentPool<StatModifierComponent>? statModifiers,
@@ -131,7 +131,7 @@ public static class BodyPartDamageEffects
         }
 
         var playerInvolved = entityId == playerQuery.PlayerEntityId
-            || (source.Kind == StatusEffectSourceKind.Entity && source.EntityId == playerQuery.PlayerEntityId);
+            || source.IsEntity(playerQuery.PlayerEntityKey);
         if (!playerInvolved)
         {
             return;

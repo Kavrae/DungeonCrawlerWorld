@@ -604,7 +604,7 @@ public sealed class InventoryGridContentShopModeTests
     }
 
     /// <summary>
-    /// PLAN-trade-window.md's own last open item on this: "Add to trade" was never explicitly
+    /// "Add to trade" was never explicitly
     /// capped, relying entirely on InventoryActions.TryTransferStack's own
     /// InventoryCapacity.HasRoomForNewStack check (the same 20-stack, non-player cap every other
     /// transfer destination already respects) -- this confirms that generic check actually holds

@@ -4,6 +4,7 @@ using Engine.Math;
 var diagnosticsFeatures = DiagnosticsFeaturesParser.Parse(args);
 var randomSeed = RandomSeed.Parse(args);
 var benchmarkFrameRange = BenchmarkFrameRange.Parse(args);
+var mapSizeOverride = DungeonCrawlerWorld.MapSizeArgument.Parse(args);
 
 // Headless is benchmark-only: with no range there is nothing to stop it, and no window to close.
 if (args.Contains("--headless", StringComparer.OrdinalIgnoreCase))
@@ -14,9 +15,9 @@ if (args.Contains("--headless", StringComparer.OrdinalIgnoreCase))
         return 2;
     }
 
-    return DungeonCrawlerWorld.HeadlessBenchmark.Run(randomSeed, headlessRange);
+    return DungeonCrawlerWorld.HeadlessBenchmark.Run(randomSeed, headlessRange, mapSizeOverride);
 }
 
-using var game = new DungeonCrawlerWorld.GameLoop(diagnosticsFeatures, randomSeed, benchmarkFrameRange);
+using var game = new DungeonCrawlerWorld.GameLoop(diagnosticsFeatures, randomSeed, benchmarkFrameRange, mapSizeOverride);
 game.Run();
 return 0;

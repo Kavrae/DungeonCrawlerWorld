@@ -1,3 +1,4 @@
+using Engine.ECS.Entities;
 using Engine.Bootstrap;
 using Engine.ECS.Context;
 using Engine.Events;
@@ -49,7 +50,7 @@ public sealed class DebugWindowContentTests
             processingTierModule,
         ];
 
-        return Bootstrapper.Build(modules, initialEntityCapacity: 100, initialComponentCapacity: 50);
+        return Bootstrapper.Build(modules, initialEntityCapacity: 100, initialComponentCapacity: 50, entityKeys: context.EntityKeys);
     }
 
     [TestMethod]

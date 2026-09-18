@@ -18,4 +18,8 @@ public static class ScheduledTimerExtensions
     /// <remarks>How a periodic timer re-arms itself from inside its own <see cref="TimerFired{T}"/> callback: call it on the <c>ref</c> component a pool updater hands you, and the write schedules the next firing on its own (see <see cref="IScheduledTimer"/>).</remarks>
     public static void RepeatEvery<T>(this ref T timer, int periodFrames) where T : struct, IScheduledTimer =>
         timer.NextTickFrame = FrameDeadline.Repeat(timer.NextTickFrame, periodFrames);
+
+    /// <summary>Moves the timer past every period owed up to <paramref name="now"/> without firing any of them -- see <see cref="FrameDeadline.SkipOwed"/>.</summary>
+    public static void SkipOwedPeriods<T>(this ref T timer, int periodFrames, long now) where T : struct, IScheduledTimer =>
+        timer.NextTickFrame = FrameDeadline.SkipOwed(timer.NextTickFrame, periodFrames, now);
 }

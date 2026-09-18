@@ -9,5 +9,9 @@ public interface IComponentPool
     bool Has(int entityId);
 
     void Resize(int newMaximumEntityCount);
+
+    /// <summary>Grows dense storage, if it is smaller, to hold at least minimumCount components without growing again. A no-op for a pool indexed by entity id, which Resize sizes.</summary>
+    void ReserveDenseCapacity(int minimumCount);
+
     bool Remove(int entityId);
 }

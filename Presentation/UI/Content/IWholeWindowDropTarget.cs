@@ -10,8 +10,7 @@ namespace Presentation.UI.Content;
 /// the narrower IInventoryDropTarget check has already failed for every ancestor below this one --
 /// landing exactly on a grid cell or currency element still resolves through that more specific,
 /// unchanged path, so this interface only ever matters for "the drop point was somewhere in this
-/// window, but not on one of its own known drop-surface children." See PLAN-trade-window.md's own
-/// "Drop target resolution" section.
+/// window, but not on one of its own known drop-surface children."
 /// </summary>
 public interface IWholeWindowDropTarget
 {

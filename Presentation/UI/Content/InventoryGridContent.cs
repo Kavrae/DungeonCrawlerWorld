@@ -57,7 +57,7 @@ public sealed class InventoryGridContent(
     Action<int, Guid> onActivateRequested,
     // Null (every non-trade caller) -- this grid's own pricing direction/cell type derive from
     // mapViewState.OpenShopEntityId/entityId as they always have. Non-null only for the trade
-    // window's own two columns (PLAN-trade-window.md), which need TradeItemStackCell instead of
+    // window's own two columns, which need TradeItemStackCell instead of
     // Shop/InventoryItemStackCell and a pricing direction that entityId == shopEntityId can never
     // express (neither trade-offer entity is ever the real shop) -- true for the shop-side column
     // (buy pricing, same direction the real shop grid uses), false for the player-side column
@@ -539,7 +539,7 @@ public sealed class InventoryGridContent(
     /// The stock-band table (one row per StockStatus, each showing its own stock range alongside
     /// its price) under the description while shop mode is open -- null outside it. Shown
     /// unconditionally, not just when the current band is Overstocked/Understocked -- the whole
-    /// point of a band table (PLAN-stock-based-shop-pricing.md's Phase 5) is showing the player
+    /// point of a band table is showing the player
     /// where "now" sits on the curve, which is exactly as informative for a Normal-band item as any
     /// other. Rows are all one neutral color -- the shop's *current* band is marked with an
     /// inner-fade glow instead (green for Desperate/Understocked, red for Overstocked/Flooded, white
@@ -554,7 +554,7 @@ public sealed class InventoryGridContent(
     /// possible, just pricier.
     ///
     /// If stackQuantity has a value (any real quantity to price, including 1), a per-trade bracket
-    /// receipt (PLAN-stock-based-shop-pricing.md's Phase 5) is always appended below the band table,
+    /// receipt is always appended below the band table,
     /// past a second divider -- one row per band the trade actually crosses plus a Total row when it
     /// crosses more than one band, or just the Total alone when it stays within a single band (that
     /// band's own row in the table above already shows the identical per-unit price, so listing it
@@ -765,8 +765,8 @@ public sealed class InventoryGridContent(
     /// exists), so its cells only ever offer "Take"; for the player's own grid, it queries whatever's
     /// actually open right now (see InventoryWindowController.GetSecondaryTargetEntityId), so "Give"
     /// only appears while a secondary window is open. Trade-grid cells never reach this method at all
-    /// (see this grid's own OnRightClicked wiring in RebuildCells) -- PLAN-trade-window.md's own
-    /// "Context menu changes" section makes right-click there remove the stack immediately instead.
+    /// (see this grid's own OnRightClicked wiring in RebuildCells): right-click there removes the stack
+    /// immediately instead.
     /// </summary>
     private List<ContextMenuOption> BuildItemContextMenu(InventoryItemStackCell cell)
     {
@@ -995,8 +995,8 @@ public sealed class InventoryGridContent(
             }
         }
 
-        // Trade grids are fixed-size (InventoryCapacity.MaxNonPlayerStackCount, never scrolling --
-        // see PLAN-trade-window.md's own "Trade grid capacity" section) and otherwise the only
+        // Trade grids are fixed-size (InventoryCapacity.MaxNonPlayerStackCount, never scrolling) and
+        // otherwise the only
         // grids in the game with visibly empty space below/beside their real items -- every other
         // grid either scrolls (no unused space to speak of) or is the shop's own grid (whose stock
         // is what it is). Filling the remainder with a pure decoration (never a real, interactable

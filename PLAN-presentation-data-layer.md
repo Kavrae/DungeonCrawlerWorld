@@ -531,6 +531,17 @@ makes the next stage's scope visible. ~10 call sites.
 densest coupling (14 pool types in one class) and the hot path, so it validates both the ergonomics
 and the zero-allocation constraint at once. Add the architecture test, scoped to `MapWindow`.
 
+**DONE 2026-09-15**, as part of the world-scaling work (flyweight terrain needs Presentation to
+stop reading terrain as an entity). Differences from the sketch above: no single `TileView` struct
+-- a tile's occupants are a `ReadOnlySpan<int>`, which a record struct can't hold, so the query
+exposes per-tile methods instead -- and the per-entity reads are split by who needs them
+(`EntityVisualView` for every draw, `OccupantView` for placement, `EntityStatusView` and
+`ChargingActionView` only for the primary occupant) so the hot path doesn't resolve health or loot
+state for terrain. The input paths (context menu, adjacency) read through the same query, since it
+is a live pull rather than a cache. Stage 1 was not done first; `MapWindow` still takes
+`ComponentManager`, used only by `MapTintGrid`. `MapWindowArchitectureTests` covers `MapWindow`
+and `MapBackgroundCache`. Draw cost unchanged (0.881 -> 0.891 ms/frame windowed Release).
+
 **Stage 3 -- Viewport caching. CUT.** The open question (was scrolling expensive?) has been
 measured and answered: continuous panning costs ~1 ms/sec against a 468 ms/sec busy frame. The
 scroll-shift idea from Factorio's FFF-333 has nothing left to recover here. Closed permanently.

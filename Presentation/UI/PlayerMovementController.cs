@@ -2,6 +2,7 @@ using Engine.ECS.Components.Stores;
 using Engine.Math;
 using Engine.Utilities;
 using Game.Modules.Core.Components;
+using Game.Modules.Movement;
 using Game.Modules.Movement.Components;
 using Game.World;
 using Microsoft.Xna.Framework.Input;
@@ -84,8 +85,7 @@ public sealed class PlayerMovementController(
         }
 
         var candidate = transformComponent.Position + delta;
-        var occupyingEntityId = world.GetEntityIdAt(candidate);
-        if (!world.IsOnMap(candidate) || (occupyingEntityId != -1 && occupyingEntityId != playerEntityId))
+        if (!MovementCandidates.CanOccupy(world, candidate, transformComponent.Size, playerEntityId, world.IsBlocking(playerEntityId)))
         {
             return;
         }

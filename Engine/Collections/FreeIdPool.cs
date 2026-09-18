@@ -55,6 +55,9 @@ public sealed class FreeIdPool(int initialCapacity = 0)
     /// <returns><c>true</c> if the ID is currently issued; otherwise, <c>false</c>.</returns>
     public bool IsIssued(int id) => id >= 0 && id < _nextId && _issued[id] != 0;
 
+    /// <summary>Grows the issued-id table, if it is smaller, to hold ids up to minimumCapacity - 1 without growing again.</summary>
+    public void Reserve(int minimumCapacity) => EnsureCapacity(minimumCapacity);
+
     private void EnsureCapacity(int minimumCapacity)
     {
         if (_issued.Length >= minimumCapacity)

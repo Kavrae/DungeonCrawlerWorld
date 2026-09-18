@@ -15,7 +15,7 @@ namespace Game.Modules.Actions.Components;
 /// copied from the shared ActionLockComponent's own UnlockedAtFrame when the action is queued, so
 /// the windup and the resolution read the same deadline and cannot drift apart -- the invariant
 /// DelayedActionSystem used to defend by sharing a tier cadence with ActionLockSystem, and the one
-/// MapWindow's charge-fill telegraph depends on (see PLAN-charge-attack-fill-indicator.md).
+/// MapWindow's charge-fill telegraph depends on.
 /// </remarks>
 /// <param name="readyAtFrame">The frame the windup ends and the effect resolves -- the lock's own UnlockedAtFrame.</param>
 public struct PendingDelayedActionComponent(Guid actionId, Vector3Int[] targetTiles, uint readyAtFrame) : IScheduledTimer

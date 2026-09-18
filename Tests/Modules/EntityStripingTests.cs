@@ -1,3 +1,4 @@
+using Engine.ECS.Entities;
 using Engine.Bootstrap;
 using Engine.ECS.Components.Stores;
 using Engine.ECS.Systems;
@@ -209,7 +210,7 @@ public sealed class EntityStripingTests
             processingTierModule,
         ];
 
-        var ecsContext = Bootstrapper.Build(modules, initialEntityCapacity: 500, initialComponentCapacity: 500);
+        var ecsContext = Bootstrapper.Build(modules, initialEntityCapacity: 500, initialComponentCapacity: 500, entityKeys: context.EntityKeys);
         var healthPool = ecsContext.ComponentManager.GetPackedPool<SimpleHealthComponent>();
 
         const int entityCount = 200;

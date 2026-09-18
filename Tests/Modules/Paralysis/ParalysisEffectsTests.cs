@@ -37,7 +37,7 @@ public sealed class ParalysisEffectsTests
         componentManager.RegisterMultiPool<StatusEffectImmunityComponent>();
         componentManager.GetMultiPool<StatusEffectImmunityComponent>().Add(0, new StatusEffectImmunityComponent(StatusEffectType.Paralysis, expiresAtFrame: FrameDeadline.Never));
 
-        ParalysisEffects.Apply(componentManager, 0, StatusEffectSource.Admin, now: 0);
+        ParalysisEffects.Apply(componentManager, 0, ActionSource.Admin, now: 0);
 
         Assert.AreEqual(0, StatusEffectQueries.CountStacks(CreateStatusEffectDisplays(), componentManager, 0, StatusEffectType.Paralysis));
         Assert.IsFalse(componentManager.GetPackedPool<ParalysisTimerComponent>().Has(0));
@@ -51,7 +51,7 @@ public sealed class ParalysisEffectsTests
         componentManager.RegisterMultiPool<StatusEffectImmunityComponent>();
         componentManager.GetMultiPool<StatusEffectImmunityComponent>().Add(0, new StatusEffectImmunityComponent(StatusEffectType.Poison, expiresAtFrame: FrameDeadline.Never));
 
-        ParalysisEffects.Apply(componentManager, 0, StatusEffectSource.Admin, now: 0);
+        ParalysisEffects.Apply(componentManager, 0, ActionSource.Admin, now: 0);
 
         Assert.AreEqual(1, StatusEffectQueries.CountStacks(CreateStatusEffectDisplays(), componentManager, 0, StatusEffectType.Paralysis));
     }
@@ -61,7 +61,7 @@ public sealed class ParalysisEffectsTests
     {
         var componentManager = CreateComponentManager();
 
-        ParalysisEffects.Apply(componentManager, 0, StatusEffectSource.Admin, now: 0);
+        ParalysisEffects.Apply(componentManager, 0, ActionSource.Admin, now: 0);
 
         Assert.AreEqual(1, StatusEffectQueries.CountStacks(CreateStatusEffectDisplays(), componentManager, 0, StatusEffectType.Paralysis));
     }
@@ -71,7 +71,7 @@ public sealed class ParalysisEffectsTests
     {
         var componentManager = CreateComponentManager();
 
-        ParalysisEffects.Apply(componentManager, 0, StatusEffectSource.Admin, now: 0);
+        ParalysisEffects.Apply(componentManager, 0, ActionSource.Admin, now: 0);
 
         var timer = componentManager.GetPackedPool<ParalysisTimerComponent>().GetReadonly(0);
         Assert.AreEqual(ParalysisEffects.DurationFrames, timer.ExpiresAtFrame);
@@ -82,7 +82,7 @@ public sealed class ParalysisEffectsTests
     {
         var componentManager = CreateComponentManager();
 
-        ParalysisEffects.Apply(componentManager, 0, StatusEffectSource.Admin, now: 0);
+        ParalysisEffects.Apply(componentManager, 0, ActionSource.Admin, now: 0);
 
         var actionLock = componentManager.GetPackedPool<ActionLockComponent>().GetReadonly(0);
         Assert.AreEqual(ParalysisEffects.DurationFrames, actionLock.UnlockedAtFrame);
@@ -92,9 +92,9 @@ public sealed class ParalysisEffectsTests
     public void Apply_WhileAlreadyParalyzed_DoesNotAddASecondStack()
     {
         var componentManager = CreateComponentManager();
-        ParalysisEffects.Apply(componentManager, 0, StatusEffectSource.Admin, now: 0);
+        ParalysisEffects.Apply(componentManager, 0, ActionSource.Admin, now: 0);
 
-        ParalysisEffects.Apply(componentManager, 0, StatusEffectSource.Admin, now: 0);
+        ParalysisEffects.Apply(componentManager, 0, ActionSource.Admin, now: 0);
 
         Assert.AreEqual(1, StatusEffectQueries.CountStacks(CreateStatusEffectDisplays(), componentManager, 0, StatusEffectType.Paralysis));
     }
@@ -104,10 +104,10 @@ public sealed class ParalysisEffectsTests
     public void Apply_WhileAlreadyParalyzedWithLessTimeRemaining_RefreshesToDurationFrames()
     {
         var componentManager = CreateComponentManager();
-        ParalysisEffects.Apply(componentManager, 0, StatusEffectSource.Admin, now: 0);
+        ParalysisEffects.Apply(componentManager, 0, ActionSource.Admin, now: 0);
         componentManager.GetPackedPool<ParalysisTimerComponent>().TryUpdate(0, static (ref ParalysisTimerComponent t) => t.ExpiresAtFrame = 5);
 
-        ParalysisEffects.Apply(componentManager, 0, StatusEffectSource.Admin, now: 0);
+        ParalysisEffects.Apply(componentManager, 0, ActionSource.Admin, now: 0);
 
         Assert.AreEqual(ParalysisEffects.DurationFrames, componentManager.GetPackedPool<ParalysisTimerComponent>().GetReadonly(0).ExpiresAtFrame);
     }
@@ -116,10 +116,10 @@ public sealed class ParalysisEffectsTests
     public void Apply_WhileAlreadyParalyzedWithLessTimeRemaining_RefreshesActionLockToDurationFrames()
     {
         var componentManager = CreateComponentManager();
-        ParalysisEffects.Apply(componentManager, 0, StatusEffectSource.Admin, now: 0);
+        ParalysisEffects.Apply(componentManager, 0, ActionSource.Admin, now: 0);
         componentManager.GetPackedPool<ActionLockComponent>().TryUpdate(0, static (ref ActionLockComponent a) => a.UnlockedAtFrame = 5);
 
-        ParalysisEffects.Apply(componentManager, 0, StatusEffectSource.Admin, now: 0);
+        ParalysisEffects.Apply(componentManager, 0, ActionSource.Admin, now: 0);
 
         Assert.AreEqual(ParalysisEffects.DurationFrames, componentManager.GetPackedPool<ActionLockComponent>().GetReadonly(0).UnlockedAtFrame);
     }

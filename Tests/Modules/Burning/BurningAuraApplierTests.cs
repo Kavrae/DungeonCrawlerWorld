@@ -6,13 +6,14 @@ using Game.Modules.Burning.Components;
 using Game.Modules.ContactDamage.Components;
 using Game.Modules.Health;
 using Game.Modules.Health.Components;
+using Game.Terrain;
 using Game.World;
 
 namespace Tests.Modules.Burning;
 
 /// <summary>
 /// Drives BurningAuraApplier.ApplyStack/GetCurrentStackCount the same way
-/// StatusEffectAuraSystem.GrantStacks does (source always StatusEffectSource.Admin -- see
+/// StatusEffectAuraSystem.GrantStacks does (source always ActionSource.Admin -- see
 /// BurningAuraApplier's own doc comment for why "source traces to a hazard" alone can't be the
 /// real signal, and hazard exposure is read from the target's own ContactDamageExposureComponent
 /// instead).
@@ -21,7 +22,15 @@ namespace Tests.Modules.Burning;
 public sealed class BurningAuraApplierTests
 {
     private const int EntityId = 0;
-    private const int HazardEntityId = 99;
+
+    /// <summary>A registry holding one hazard with no preferred part and one that prefers the head, plus their ids.</summary>
+    private static (TerrainRegistry Terrain, ushort Hazard, ushort HeadHazard) CreateTerrain()
+    {
+        var terrain = new TerrainRegistry();
+        var hazard = terrain.Register(new TerrainDefinition("test:hazard", "Hazard", "", default, "~", default, ContactHazard: new ContactHazard(DamagePerTick: 10, TickIntervalFrames: 60)));
+        var headHazard = terrain.Register(new TerrainDefinition("test:head-hazard", "Head hazard", "", default, "^", default, ContactHazard: new ContactHazard(DamagePerTick: 10, TickIntervalFrames: 60, PreferredTargetType: BodyPartType.Head)));
+        return (terrain, hazard, headHazard);
+    }
 
     private static ComponentManager CreateComponentManager()
     {
@@ -30,7 +39,6 @@ public sealed class BurningAuraApplierTests
         componentManager.RegisterMultiPool<BodyPartComponent>();
         componentManager.RegisterMultiPool<BodyPartBurningTimerComponent>();
         componentManager.RegisterPackedPool<ContactDamageExposureComponent>(static (ref existing, incoming) => { });
-        componentManager.RegisterPackedPool<DamageOnContactComponent>(static (ref existing, incoming) => { });
         return componentManager;
     }
 
@@ -46,11 +54,11 @@ public sealed class BurningAuraApplierTests
     {
         var componentManager = CreateComponentManager();
         AddComplexBodyParts(componentManager);
-        componentManager.GetPackedPool<DamageOnContactComponent>().Add(HazardEntityId, new DamageOnContactComponent(damagePerTick: 10, tickIntervalFrames: 60));
-        componentManager.GetPackedPool<ContactDamageExposureComponent>().Add(EntityId, new ContactDamageExposureComponent(nextTickFrame: 60, sourceEntityId: HazardEntityId));
-        var applier = new BurningAuraApplier(new MathUtility());
+        var (terrain, hazard, _) = CreateTerrain();
+        componentManager.GetPackedPool<ContactDamageExposureComponent>().Add(EntityId, new ContactDamageExposureComponent(nextTickFrame: 60, hazardTerrainTypeId: hazard));
+        var applier = new BurningAuraApplier(new MathUtility(), terrain);
 
-        applier.ApplyStack(componentManager, EntityId, StatusEffectSource.Admin, now: 0);
+        applier.ApplyStack(componentManager, EntityId, ActionSource.Admin, now: 0);
 
         var bodyPartTimers = componentManager.GetMultiPool<BodyPartBurningTimerComponent>();
         Assert.IsTrue(bodyPartTimers.Has(EntityId));
@@ -63,9 +71,9 @@ public sealed class BurningAuraApplierTests
     {
         var componentManager = CreateComponentManager();
         AddComplexBodyParts(componentManager);
-        var applier = new BurningAuraApplier(new MathUtility());
+        var applier = new BurningAuraApplier(new MathUtility(), CreateTerrain().Terrain);
 
-        applier.ApplyStack(componentManager, EntityId, StatusEffectSource.Admin, now: 0);
+        applier.ApplyStack(componentManager, EntityId, ActionSource.Admin, now: 0);
 
         Assert.IsTrue(componentManager.GetPackedPool<BurningTimerComponent>().Has(EntityId));
         Assert.IsFalse(componentManager.GetMultiPool<BodyPartBurningTimerComponent>().Has(EntityId));
@@ -76,11 +84,11 @@ public sealed class BurningAuraApplierTests
     {
         var componentManager = CreateComponentManager();
         // No BodyPartComponent at all for EntityId -- Simple, regardless of hazard exposure.
-        componentManager.GetPackedPool<DamageOnContactComponent>().Add(HazardEntityId, new DamageOnContactComponent(damagePerTick: 10, tickIntervalFrames: 60));
-        componentManager.GetPackedPool<ContactDamageExposureComponent>().Add(EntityId, new ContactDamageExposureComponent(nextTickFrame: 60, sourceEntityId: HazardEntityId));
-        var applier = new BurningAuraApplier(new MathUtility());
+        var (terrain, hazard, _) = CreateTerrain();
+        componentManager.GetPackedPool<ContactDamageExposureComponent>().Add(EntityId, new ContactDamageExposureComponent(nextTickFrame: 60, hazardTerrainTypeId: hazard));
+        var applier = new BurningAuraApplier(new MathUtility(), terrain);
 
-        applier.ApplyStack(componentManager, EntityId, StatusEffectSource.Admin, now: 0);
+        applier.ApplyStack(componentManager, EntityId, ActionSource.Admin, now: 0);
 
         Assert.IsTrue(componentManager.GetPackedPool<BurningTimerComponent>().Has(EntityId));
         Assert.IsFalse(componentManager.GetMultiPool<BodyPartBurningTimerComponent>().Has(EntityId));
@@ -91,13 +99,13 @@ public sealed class BurningAuraApplierTests
     {
         var componentManager = CreateComponentManager();
         AddComplexBodyParts(componentManager);
-        componentManager.GetPackedPool<DamageOnContactComponent>().Add(HazardEntityId, new DamageOnContactComponent(damagePerTick: 10, tickIntervalFrames: 60));
-        componentManager.GetPackedPool<ContactDamageExposureComponent>().Add(EntityId, new ContactDamageExposureComponent(nextTickFrame: 60, sourceEntityId: HazardEntityId));
-        var applier = new BurningAuraApplier(new MathUtility());
+        var (terrain, hazard, _) = CreateTerrain();
+        componentManager.GetPackedPool<ContactDamageExposureComponent>().Add(EntityId, new ContactDamageExposureComponent(nextTickFrame: 60, hazardTerrainTypeId: hazard));
+        var applier = new BurningAuraApplier(new MathUtility(), terrain);
 
-        applier.ApplyStack(componentManager, EntityId, StatusEffectSource.Admin, now: 0);
-        applier.ApplyStack(componentManager, EntityId, StatusEffectSource.Admin, now: 0);
-        applier.ApplyStack(componentManager, EntityId, StatusEffectSource.Admin, now: 0);
+        applier.ApplyStack(componentManager, EntityId, ActionSource.Admin, now: 0);
+        applier.ApplyStack(componentManager, EntityId, ActionSource.Admin, now: 0);
+        applier.ApplyStack(componentManager, EntityId, ActionSource.Admin, now: 0);
 
         var bodyPartTimers = componentManager.GetMultiPool<BodyPartBurningTimerComponent>();
         Assert.AreEqual(1, bodyPartTimers.CountForEntity(EntityId), "All three stacks land on the same, single resolved part -- one timer entry, not three.");
@@ -118,11 +126,11 @@ public sealed class BurningAuraApplierTests
         AddComplexBodyParts(componentManager);
         var bodyParts = componentManager.GetMultiPool<BodyPartComponent>();
         bodyParts.Add(EntityId, new BodyPartComponent("Right Foot", BodyPartType.Foot, partId: 2, verticalPosition: 0, currentHealth: 10, maximumHealth: 10, isVital: false));
-        componentManager.GetPackedPool<DamageOnContactComponent>().Add(HazardEntityId, new DamageOnContactComponent(damagePerTick: 10, tickIntervalFrames: 60));
-        componentManager.GetPackedPool<ContactDamageExposureComponent>().Add(EntityId, new ContactDamageExposureComponent(nextTickFrame: 60, sourceEntityId: HazardEntityId));
-        var applier = new BurningAuraApplier(new MathUtility());
+        var (terrain, hazard, _) = CreateTerrain();
+        componentManager.GetPackedPool<ContactDamageExposureComponent>().Add(EntityId, new ContactDamageExposureComponent(nextTickFrame: 60, hazardTerrainTypeId: hazard));
+        var applier = new BurningAuraApplier(new MathUtility(), terrain);
 
-        applier.ApplyStack(componentManager, EntityId, StatusEffectSource.Admin, now: 0);
+        applier.ApplyStack(componentManager, EntityId, ActionSource.Admin, now: 0);
 
         var bodyPartTimers = componentManager.GetMultiPool<BodyPartBurningTimerComponent>();
         var originalPartId = bodyPartTimers.GetReadonlyByDenseIndex(bodyPartTimers.GetFirstDenseIndex(EntityId)).PartId;
@@ -131,7 +139,7 @@ public sealed class BurningAuraApplierTests
         var burningPartDenseIndex = BodyPartSelection.FindByPartId(bodyParts, EntityId, originalPartId);
         bodyParts.UpdateByDenseIndex(burningPartDenseIndex, static (ref BodyPartComponent part) => part.IsDisabled = true);
 
-        applier.ApplyStack(componentManager, EntityId, StatusEffectSource.Admin, now: 0);
+        applier.ApplyStack(componentManager, EntityId, ActionSource.Admin, now: 0);
 
         Assert.AreEqual(1, bodyPartTimers.CountForEntity(EntityId), "Must keep topping off the same, already-burning part, not spread a second burn to the other Foot.");
         Assert.AreEqual(originalPartId, bodyPartTimers.GetReadonlyByDenseIndex(bodyPartTimers.GetFirstDenseIndex(EntityId)).PartId);
@@ -150,24 +158,21 @@ public sealed class BurningAuraApplierTests
     {
         var componentManager = CreateComponentManager();
         AddComplexBodyParts(componentManager);
-        var hazards = componentManager.GetPackedPool<DamageOnContactComponent>();
         var exposures = componentManager.GetPackedPool<ContactDamageExposureComponent>();
-        const int headHazardEntityId = HazardEntityId + 1;
-        hazards.Add(HazardEntityId, new DamageOnContactComponent(damagePerTick: 10, tickIntervalFrames: 60));
-        hazards.Add(headHazardEntityId, new DamageOnContactComponent(damagePerTick: 10, tickIntervalFrames: 60, preferredTargetType: BodyPartType.Head));
-        exposures.Add(EntityId, new ContactDamageExposureComponent(nextTickFrame: 60, sourceEntityId: HazardEntityId));
-        var applier = new BurningAuraApplier(new MathUtility());
+        var (terrain, hazard, headHazard) = CreateTerrain();
+        exposures.Add(EntityId, new ContactDamageExposureComponent(nextTickFrame: 60, hazardTerrainTypeId: hazard));
+        var applier = new BurningAuraApplier(new MathUtility(), terrain);
 
-        applier.ApplyStack(componentManager, EntityId, StatusEffectSource.Admin, now: 0);
+        applier.ApplyStack(componentManager, EntityId, ActionSource.Admin, now: 0);
 
         var bodyPartTimers = componentManager.GetMultiPool<BodyPartBurningTimerComponent>();
         Assert.AreEqual(1, bodyPartTimers.CountForEntity(EntityId));
         Assert.AreEqual((byte)1, bodyPartTimers.GetReadonlyByDenseIndex(bodyPartTimers.GetFirstDenseIndex(EntityId)).PartId, "The generic hazard's Bottommost fallback burns the Foot (PartId 1) first.");
 
         // Entity now steps onto a different hazard tile (its own PreferredTargetType of Head), while the Foot burn hasn't decayed yet.
-        exposures.TryUpdate(EntityId, headHazardEntityId, static (ref ContactDamageExposureComponent exposure, int sourceEntityId) => exposure.SourceEntityId = sourceEntityId);
+        exposures.TryUpdate(EntityId, headHazard, static (ref ContactDamageExposureComponent exposure, ushort hazardTerrainTypeId) => exposure.HazardTerrainTypeId = hazardTerrainTypeId);
 
-        applier.ApplyStack(componentManager, EntityId, StatusEffectSource.Admin, now: 0);
+        applier.ApplyStack(componentManager, EntityId, ActionSource.Admin, now: 0);
 
         Assert.AreEqual(2, bodyPartTimers.CountForEntity(EntityId), "The Head-preferring hazard must ignite its own part, not fold into the already-burning Foot.");
         var footTimerDenseIndex = FindTimerByPartId(bodyPartTimers, EntityId, partId: 1);

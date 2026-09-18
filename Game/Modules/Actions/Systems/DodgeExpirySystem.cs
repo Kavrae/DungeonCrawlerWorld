@@ -8,9 +8,9 @@ namespace Game.Modules.Actions.Systems;
 /// <remarks>
 /// Driven by a timer wheel (PackedTimerWheel): each dodge fires exactly once, on its
 /// ExpiresAtFrame, and the callback removes it. Nothing visits a dodging entity before then, and
-/// nothing had to tell the wheel about the dodge -- DodgeActivation just merges the component
-/// (see PLAN-timer-wheel.md). Exact to the frame at every processing tier, which is what a
-/// timing-precision mechanic like Dodge needs; it used to be the one timed system kept
+/// nothing had to tell the wheel about the dodge -- DodgeActivation just merges the component.
+/// Exact to the frame at every processing tier, which is what a timing-precision mechanic like Dodge
+/// needs; it used to be the one timed system kept
 /// deliberately untiered for exactly that reason, visiting every dodging entity every frame.
 /// </remarks>
 /// <cleanupVersion>1</cleanupVersion>

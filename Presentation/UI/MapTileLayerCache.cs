@@ -14,11 +14,9 @@ namespace Presentation.UI;
 /// the terrain texture -- see MapWindow.DrawGlowOverlay's own note on why the glow has to land on
 /// top of an opaque occupant sprite rather than beneath it).
 ///
-/// Both qualify for the same reason. Terrain is static: Map.SetTerrainEntityId has one caller
-/// (World.PlaceTerrainOnMap, which now raises TerrainChangedEvent), nothing mutates a terrain
-/// entity's SpriteComponent/GlyphComponent at runtime, and BackgroundComponent only ever appears
-/// on terrain blueprints -- so MapBackgroundCache's "the Blocking occupant's background wins"
-/// branch never actually fires and the background wash is a pure function of terrain too. The
+/// Both qualify for the same reason. Terrain only changes through World.SetTerrain, which raises
+/// TerrainChangedEvent, and its visuals and background come from its TerrainDefinition -- so the
+/// background wash is a pure function of terrain too. The
 /// glow grid is incrementally maintained and only changes when MapTintGrid actually splats or
 /// unsplats a source, which at this game's real composition means essentially never: its sources
 /// are overwhelmingly Lava terrain, which never moves.

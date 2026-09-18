@@ -363,4 +363,66 @@ public sealed class PackedTimerWheelTests
 
         Assert.ThrowsExactly<InvalidOperationException>(() => new PackedTimerWheel<Burn>(pool));
     }
+
+    /// <summary>An unsimulated entity's due timer is not fired, and is not removed either -- it rests on its deadline.</summary>
+    [TestMethod]
+    public void UnsimulatedEntity_DueTimerIsNotFiredAndRests()
+    {
+        var pool = CreatePool();
+        var scope = new SimulationScope();
+        scope.SetPolicy(static entityId => entityId != 3);
+        var wheel = new PackedTimerWheel<Burn>(pool, scope);
+        pool.Add(3, new Burn { NextTickFrame = 5, Stacks = 1 });
+        pool.Add(4, new Burn { NextTickFrame = 5, Stacks = 1 });
+
+        CollectionAssert.AreEqual(new[] { (5L, 4) }, Run(wheel, pool, 0, 30));
+        Assert.IsTrue(pool.Has(3));
+        Assert.AreEqual(0, wheel.PendingCount);
+    }
+
+    /// <summary>Resuming an entity whose deadline passed while it was unsimulated fires the timer on the next tick -- late, never lost -- and its cadence continues from there.</summary>
+    [TestMethod]
+    public void ResumedEntity_OverdueTimerFiresOnTheNextTick()
+    {
+        var pool = CreatePool();
+        var scope = new SimulationScope();
+        var simulated = false;
+        scope.SetPolicy(_ => simulated);
+        var wheel = new PackedTimerWheel<Burn>(pool, scope);
+        pool.Add(3, new Burn { NextTickFrame = 5, Stacks = 2 });
+        Assert.IsEmpty(Run(wheel, pool, 0, 20));
+
+        simulated = true;
+        scope.RaiseResumed(3);
+
+        CollectionAssert.AreEqual(new[] { (21L, 3), (31L, 3) }, Run(wheel, pool, 21, 40));
+    }
+
+    /// <summary>EntityResumed may be raised for an entity that was simulated all along; that must not schedule a duplicate.</summary>
+    [TestMethod]
+    public void ResumeRaisedForAnAlreadyScheduledTimer_DoesNotDoubleFire()
+    {
+        var pool = CreatePool();
+        var scope = new SimulationScope();
+        var wheel = new PackedTimerWheel<Burn>(pool, scope);
+        pool.Add(3, new Burn { NextTickFrame = 5, Stacks = 1 });
+
+        scope.RaiseResumed(3);
+        scope.RaiseResumed(3);
+
+        Assert.AreEqual(1, wheel.PendingCount);
+        CollectionAssert.AreEqual(new[] { (5L, 3) }, Run(wheel, pool, 0, 30));
+    }
+
+    [TestMethod]
+    public void ResumeRaisedForAnEntityWithNoTimer_IsANoOp()
+    {
+        var pool = CreatePool();
+        var scope = new SimulationScope();
+        var wheel = new PackedTimerWheel<Burn>(pool, scope);
+
+        scope.RaiseResumed(9);
+
+        Assert.AreEqual(0, wheel.PendingCount);
+    }
 }

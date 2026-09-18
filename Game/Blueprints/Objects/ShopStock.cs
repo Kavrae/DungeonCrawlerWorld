@@ -5,7 +5,7 @@ using Game.Modules.Shops.Components;
 
 namespace Game.Blueprints.Objects;
 
-/// <summary>One item a shop's stock table can grant, paired with the PreferredStockLevel ShopStockPricing measures that shop's actual stock against -- hand-authored per item, the same "hand-tuned per item" convention ItemDefinition.GoldValue already established (PLAN-shops.md).</summary>
+/// <summary>One item a shop's stock table can grant, paired with the PreferredStockLevel ShopStockPricing measures that shop's actual stock against -- hand-authored per item, the same "hand-tuned per item" convention ItemDefinition.GoldValue already established.</summary>
 public readonly record struct ShopStockEntry(ItemDefinition Item, byte PreferredStockLevel);
 
 /// <summary>Shared random-stock fill shared by PotionShopStock/GeneralShopStock -- same shape as TreasureChest's own random-loot loop, factored out since two stock parts need it against two different item pools.</summary>
@@ -29,7 +29,7 @@ public static class ShopStock
         }
     }
 
-    /// <summary>Assigned once, the first time this item is granted to this shop (per PLAN-stock-based-shop-pricing.md's ask) -- ShopStockPreferenceComponent deliberately persists independent of the actual stacks' Quantity fluctuating afterward, so a later duplicate roll of the same item from GrantRandomStock's random pick is a no-op here.</summary>
+    /// <summary>Assigned once, the first time this item is granted to this shop -- ShopStockPreferenceComponent deliberately persists independent of the actual stacks' Quantity fluctuating afterward, so a later duplicate roll of the same item from GrantRandomStock's random pick is a no-op here.</summary>
     private static void EnsurePreferredStockLevel(ComponentManager componentManager, int entityId, Guid itemDefinitionId, byte preferredStockLevel)
     {
         var preferences = componentManager.GetMultiPool<ShopStockPreferenceComponent>();

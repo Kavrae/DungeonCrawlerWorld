@@ -24,21 +24,18 @@ public enum StockStatus
 
 /// <summary>
 /// Supply/demand pricing layered on top of ShopActions.ComputeBuyPrice/ComputeSellPrice's flat
-/// GoldValue * shop-multiplier price -- see PLAN-stock-based-shop-pricing.md for the full design
-/// and worked examples. Everything here reads a shop's *current aggregate* stock of an item (summed
+/// GoldValue * shop-multiplier price. Everything here reads a shop's *current aggregate* stock of an item (summed
 /// across every physical InventoryItemStackComponent stack of that item on the shop entity, not any
 /// one stack) against that item's ShopStockPreferenceComponent par level, entirely off the shop
 /// entity's own components -- so pricing is naturally per-shop with no extra isolation work.
 ///
 /// Stock maps to one of 5 discrete bands (StockStatus), each a *flat* multiplier -- not a
-/// continuously-varying curve (see PLAN-stock-based-shop-pricing.md's "Phase 5" section for why:
-/// legibility for a band-table/per-trade-receipt UI, and an exact, closed-form bulk-price
-/// calculation, not just a simpler one). The same band multiplier applies to both buy and sell,
+/// continuously-varying curve, for legibility in a band-table/per-trade-receipt UI and an exact,
+/// closed-form bulk-price calculation, not just a simpler one. The same band multiplier applies to both buy and sell,
 /// differing only by the shop's own flat BuyMultiplier/SellMultiplier, which is what makes a
 /// same-shop buy-then-sell-back round trip a guaranteed loss as long as BuyMultiplier stays above
-/// SellMultiplier by any nonzero margin (see PLAN-stock-based-shop-pricing.md's "Bulk / bracket
-/// pricing" section for the proof -- it never depended on the curve being continuous, only that the
-/// same multiplier-per-stock-level applies to both directions).
+/// SellMultiplier by any nonzero margin (it never depended on the curve being continuous, only that
+/// the same multiplier-per-stock-level applies to both directions).
 /// </summary>
 public static class ShopStockPricing
 {
@@ -54,7 +51,7 @@ public static class ShopStockPricing
     /// <summary>All 5 bands in the same fixed display order AllBands already uses -- what the band-table UI iterates to build its rows.</summary>
     public static IReadOnlyList<StockStatus> GetAllBands() => AllBands;
 
-    /// <summary>Sums Quantity across every physical stack of itemDefinitionId the shop currently holds -- a shop routinely holds the same item across several separate stacks (see PLAN-shops.md's live-testing section), so this is never just one stack's own Quantity.</summary>
+    /// <summary>Sums Quantity across every physical stack of itemDefinitionId the shop currently holds -- a shop routinely holds the same item across several separate stacks, so this is never just one stack's own Quantity.</summary>
     public static int GetTotalStock(ComponentManager componentManager, int shopEntityId, Guid itemDefinitionId)
     {
         var stacks = componentManager.GetMultiPool<InventoryItemStackComponent>();

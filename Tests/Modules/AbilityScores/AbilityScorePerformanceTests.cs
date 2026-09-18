@@ -1,3 +1,4 @@
+using Engine.ECS.Entities;
 using System.Diagnostics;
 using Engine.Bootstrap;
 using Engine.ECS.Components;
@@ -17,14 +18,12 @@ using Game.World;
 namespace Tests.Modules.AbilityScores;
 
 /// <summary>
-/// Wall-clock performance checks, tagged [TestCategory("Performance")] so they can be isolated
-/// from the rest of the suite in either direction: `dotnet test Tests/Tests.csproj --filter
-/// "TestCategory=Performance"` runs only these, `--filter "TestCategory!=Performance"` skips
-/// them. A plain `dotnet test Tests/Tests.csproj` (no filter) still runs them alongside
-/// everything else, in parallel with other test classes -- which is why both assert how cost
-/// scales with entity count rather than an absolute time (see
-/// GrantDefaults_ScalesLinearlyWithEntityCount's doc comment for the baseline-in-milliseconds
-/// design this replaced, and why it flaked).
+/// Wall-clock performance checks, tagged [TestCategory("Performance")] and left out of a plain
+/// `dotnet test Tests/Tests.csproj` by that project's default VSTestTestCaseFilter: timing ratios
+/// measured while the rest of the suite runs in parallel flake. Run them with `dotnet test
+/// Tests/Tests.csproj --filter "TestCategory=Performance"`. Both still assert how cost scales with
+/// entity count rather than an absolute time (see GrantDefaults_ScalesLinearlyWithEntityCount's doc
+/// comment for the baseline-in-milliseconds design this replaced, and why it flaked).
 ///
 /// Exercises the two things this feature actually changes: NPC-population-time grant cost
 /// (AbilityScoreEffects.GrantDefaults at FloorBuilder.PopulateFloor scale -- every race now
@@ -164,7 +163,7 @@ public sealed class AbilityScorePerformanceTests
         abilityScoresModule.Configure(context);
 
         IReadOnlyList<IModule> modules = [coreModule, movementModule, processingTierModule, statModifiersModule, abilityScoresModule];
-        var ecsContext = Bootstrapper.Build(modules, initialEntityCapacity: entityCount, initialComponentCapacity: entityCount * 8);
+        var ecsContext = Bootstrapper.Build(modules, initialEntityCapacity: entityCount, initialComponentCapacity: entityCount * 8, entityKeys: context.EntityKeys);
         var processingTiers = ecsContext.ComponentManager.GetDirectPool<ProcessingTierComponent>();
 
         var entityIds = new int[entityCount];
@@ -182,7 +181,7 @@ public sealed class AbilityScorePerformanceTests
         foreach (var entityId in entityIds)
         {
             AbilityScoreEffects.GrantModifier(ecsContext.ComponentManager, entityId, AbilityScoreType.Strength, StatModifierOperation.Additive, StatModifierPolarity.Buff,
-                canModify: true, magnitude: 3f, expiresAtFrame: 0, StatusEffectSource.Admin);
+                canModify: true, magnitude: 3f, expiresAtFrame: 0, ActionSource.Admin);
         }
 
         GC.Collect();

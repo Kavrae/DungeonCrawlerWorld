@@ -5,6 +5,14 @@
     <LangVersion>latest</LangVersion>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
+    <!--
+      Wall-clock performance checks are opt-in: they assert timing ratios, so running them
+      alongside the rest of the suite (in parallel, contending for the same cores) makes them
+      flake. Passing a filter sets this same property on the command line, where it replaces this
+      default rather than combining with it, so an explicit filter is what runs them. A
+      runsettings TestCaseFilter would not work: VSTest ANDs that one with the command line's.
+    -->
+    <VSTestTestCaseFilter Condition="'$(VSTestTestCaseFilter)' == ''">TestCategory!=Performance</VSTestTestCaseFilter>
   </PropertyGroup>
 
   <ItemGroup>

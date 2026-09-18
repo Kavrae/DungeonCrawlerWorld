@@ -21,6 +21,8 @@ namespace Game.Modules.AbilityScores;
 /// </summary>
 public static class AbilityScoreEffects
 {
+    private static readonly AbilityScoreType[] AllTypes = Enum.GetValues<AbilityScoreType>();
+
     public static void Grant(ComponentManager componentManager, int entityId, AbilityScoreType type, ushort baseValue)
     {
         var clampedBase = AbilityScoreMath.ClampBaseValue(baseValue);
@@ -34,7 +36,7 @@ public static class AbilityScoreEffects
 
     public static void GrantDefaults(ComponentManager componentManager, int entityId, ushort baseValue)
     {
-        foreach (var type in Enum.GetValues<AbilityScoreType>())
+        foreach (var type in AllTypes)
         {
             Grant(componentManager, entityId, type, baseValue);
         }
@@ -58,7 +60,7 @@ public static class AbilityScoreEffects
         bool canModify,
         float magnitude,
         uint expiresAtFrame,
-        StatusEffectSource source)
+        ActionSource source)
     {
         StatModifierEffects.Apply(componentManager, entityId, AbilityScoreMath.ToStatModifierTarget(type), operation, polarity, canModify, magnitude, expiresAtFrame, source);
         RecomputeAbilityScore(componentManager, entityId, type);

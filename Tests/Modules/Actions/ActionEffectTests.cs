@@ -1,4 +1,5 @@
-﻿using Engine.ECS.Components;
+﻿using Engine.ECS.Entities;
+using Engine.ECS.Components;
 using Engine.ECS.Components.Stores;
 using Engine.Events;
 using Engine.Math;
@@ -47,7 +48,7 @@ public sealed class ActionEffectTests
         EventBus eventBus,
         MathUtility mathUtility,
         MultiComponentPool<StatModifierComponent>? statModifiers = null) =>
-        new(SourceEntityId, TargetEntityId, health, eventBus, mathUtility, componentManager, "Test Action", ActivatorTags: [], Now: 0, StatModifiers: statModifiers);
+        new(SourceEntityId, TargetEntityId, health, eventBus, mathUtility, componentManager, new EntityKeys(), "Test Action", ActivatorTags: [], Now: 0, StatModifiers: statModifiers);
 
     [TestMethod]
     public void DirectDamage_RollsWithinMinMaxRange_WhenNoOverride()

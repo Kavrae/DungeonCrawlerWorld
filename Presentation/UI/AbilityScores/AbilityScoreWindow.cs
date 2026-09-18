@@ -188,7 +188,7 @@ public sealed class AbilityScoreWindow(FontService fontService, ElementPoolServi
         }
         else if (candidate is AbilityScoreModifierRow row)
         {
-            var title = ModifierDisplayFormatting.DescribeSource(componentManager, row.Source!.Value);
+            var title = ModifierDisplayFormatting.DescribeSource(row.Source!.Value);
             var body = $"{row.ModifierText}\n{ModifierDisplayFormatting.FormatDuration(row.RemainingDurationFrames)}";
             _tooltipController.Show(this, row.Rectangle, PopupAnchor.East, PopupChrome.AbilityScorePopupGap, PopupChrome.HoverPopupMaximumSize, body, title);
         }

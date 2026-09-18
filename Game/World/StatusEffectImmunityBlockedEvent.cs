@@ -9,4 +9,4 @@ namespace Game.World;
 /// involved -- either as the entity that was immune or as the source that attempted the grant --
 /// the same player-only scope EntityDamagedEvent/EntityHealedEvent already use.
 /// </summary>
-public readonly record struct StatusEffectImmunityBlockedEvent(int EntityId, StatusEffectType EffectType, StatusEffectSource Source);
+public readonly record struct StatusEffectImmunityBlockedEvent(int EntityId, StatusEffectType EffectType, ActionSource Source);

@@ -31,8 +31,7 @@ public struct BodyPartComponent(string name, BodyPartType type, byte partId, byt
 
     /// <summary>The simulation frame ComplexHealthRegenSystem may select this part again on, after it was disabled or burned. 0 means selectable.</summary>
     /// <remarks>
-    /// The yo-yo-prevention lockout, a deadline rather than a countdown (PLAN-timer-wheel.md step
-    /// 8): nothing advances it, and the one place that cares (BodyPartSelection.PickLowestPercentage)
+    /// The yo-yo-prevention lockout, a deadline rather than a countdown: nothing advances it, and the one place that cares (BodyPartSelection.PickLowestPercentage)
     /// compares it against the current frame. That removed a whole-chain walk of every body part of
     /// every due entity from ComplexHealthRegenSystem's per-visit work, and with it the tier-cadence
     /// class of bug -- a lockout now ends when it should at any tier. Not on a timer wheel: nothing

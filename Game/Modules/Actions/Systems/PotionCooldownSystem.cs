@@ -7,7 +7,7 @@ namespace Game.Modules.Actions.Systems;
 /// <summary>Removes each PotionCooldownComponent on the frame it expires -- it carries no other cleanup.</summary>
 /// <remarks>
 /// Driven by a timer wheel (PackedTimerWheel): only cooldowns actually ending are touched, on their
-/// exact frame at every processing tier (PLAN-timer-wheel.md). This system was once one of the
+/// exact frame at every processing tier. This system was once one of the
 /// largest simulation costs while scanning every live cooldown (9,110 of them) every frame to
 /// decrement integers; tiering cut that, and the wheel removes the scan altogether.
 /// PotionCooldownEffects.Reset merging the component is all that schedules it.

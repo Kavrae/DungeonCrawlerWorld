@@ -1,4 +1,5 @@
-﻿using Engine.Bootstrap;
+﻿using Engine.ECS.Entities;
+using Engine.Bootstrap;
 using Engine.ECS.Context;
 using Engine.Events;
 using Engine.Math;
@@ -27,6 +28,7 @@ public sealed class KilledAMobAchievementTests
 
         IReadOnlyList<IModule> modules = [module];
         var ecsContext = Bootstrapper.Build(modules, initialEntityCapacity: 10, initialComponentCapacity: 10, eventBus);
+        world.EntityKeys = ecsContext.EntityManager.Keys;
 
         return (ecsContext, eventBus, world);
     }
@@ -39,7 +41,7 @@ public sealed class KilledAMobAchievementTests
         var npcEntityId = ecsContext.EntityManager.CreateEntity();
         world.PlayerEntityId = playerEntityId;
 
-        eventBus.Publish(new EntityDiedEvent(npcEntityId, StatusEffectSource.FromEntity(playerEntityId)));
+        eventBus.Publish(new EntityDiedEvent(npcEntityId, ActionSource.FromEntity(ecsContext.ComponentManager, ecsContext.EntityManager.Keys, playerEntityId)));
         eventBus.DispatchBuffered<EntityDiedEvent>();
 
         Assert.IsTrue(AchievementQueries.HasEarned(
@@ -57,7 +59,7 @@ public sealed class KilledAMobAchievementTests
         var otherEntityId = ecsContext.EntityManager.CreateEntity();
         world.PlayerEntityId = playerEntityId;
 
-        eventBus.Publish(new EntityDiedEvent(npcEntityId, StatusEffectSource.FromEntity(otherEntityId)));
+        eventBus.Publish(new EntityDiedEvent(npcEntityId, ActionSource.FromEntity(ecsContext.ComponentManager, ecsContext.EntityManager.Keys, otherEntityId)));
         eventBus.DispatchBuffered<EntityDiedEvent>();
 
         Assert.IsFalse(AchievementQueries.HasEarned(
@@ -74,7 +76,7 @@ public sealed class KilledAMobAchievementTests
         var npcEntityId = ecsContext.EntityManager.CreateEntity();
         world.PlayerEntityId = playerEntityId;
 
-        eventBus.Publish(new EntityDiedEvent(npcEntityId, StatusEffectSource.Admin));
+        eventBus.Publish(new EntityDiedEvent(npcEntityId, ActionSource.Admin));
         eventBus.DispatchBuffered<EntityDiedEvent>();
 
         Assert.IsFalse(AchievementQueries.HasEarned(

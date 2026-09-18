@@ -1,7 +1,4 @@
-using Engine.ECS.Components.Stores;
-using Engine.Math;
-using Game.Modules.Core.Components;
-using Game.World;
+using Game.Views;
 using Microsoft.Xna.Framework;
 
 namespace Presentation.UI;
@@ -14,10 +11,10 @@ namespace Presentation.UI;
 /// re-resolves the newly-exposed columns/rows, so panning doesn't re-resolve the whole visible
 /// grid on every scroll step.
 /// </summary>
+/// <remarks>Which colour a tile gets is IMapViewQuery.GetBackgroundColor's decision; this only caches it per visible cell.</remarks>
 public sealed class MapBackgroundCache(
-    World world,
+    IMapViewQuery mapView,
     MapViewState mapViewState,
-    DirectComponentPool<BackgroundComponent> backgroundPool,
     MapCamera camera)
 {
     private Color[] _colors = [];
@@ -136,36 +133,6 @@ public sealed class MapBackgroundCache(
         }
     }
 
-    /// <summary>
-    /// The current layer's Blocking occupant (if it has its own BackgroundComponent) takes
-    /// priority over the terrain beneath it -- a creature's background should read as that
-    /// creature, not as whatever floor it happens to be standing on. Falls back to terrain
-    /// (see Map.TerrainLayerFor -- Flying has none) when the occupant has no background of
-    /// its own, or there's no occupant at all.
-    /// </summary>
-    private Color ResolveBackgroundColor(int mapNodeX, int mapNodeY)
-    {
-        if (!world.IsOnMap(new Vector3Int(mapNodeX, mapNodeY, 0)))
-        {
-            return Color.Black;
-        }
-
-        var currentMapLayer = mapViewState.CurrentMapLayer;
-
-        var occupantEntityId = world.Map.GetBlockingEntityId(new Vector3Int(mapNodeX, mapNodeY, currentMapLayer));
-        if (occupantEntityId != -1 && backgroundPool.TryGetReadonly(occupantEntityId, out var occupantBackground))
-        {
-            return occupantBackground.BackgroundColor;
-        }
-
-        if (Map.TerrainLayerFor(currentMapLayer) is { } terrainLayer)
-        {
-            var terrainEntityId = world.Map.GetTerrainEntityId(mapNodeX, mapNodeY, terrainLayer);
-            return terrainEntityId != -1 && backgroundPool.TryGetReadonly(terrainEntityId, out var terrainBackground)
-                ? terrainBackground.BackgroundColor
-                : Color.White;
-        }
-
-        return Color.White;
-    }
+    private Color ResolveBackgroundColor(int mapNodeX, int mapNodeY) =>
+        mapView.GetBackgroundColor(mapNodeX, mapNodeY, mapViewState.CurrentMapLayer);
 }

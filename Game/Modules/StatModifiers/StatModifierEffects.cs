@@ -17,7 +17,7 @@ public static class StatModifierEffects
         bool canModify,
         float magnitude,
         uint expiresAtFrame,
-        StatusEffectSource source,
+        ActionSource source,
         Tag? conditionTag = null) =>
         componentManager.GetMultiPool<StatModifierComponent>().Add(entityId, new StatModifierComponent(
             target, operation, polarity, canModify, magnitude, expiresAtFrame, source, conditionTag));

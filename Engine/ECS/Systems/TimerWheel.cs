@@ -8,7 +8,7 @@ public readonly record struct TimerEntry(int EntityId, int Key, uint Deadline);
 /// A ring of slots; slot <c>frame &amp; (SlotCount - 1)</c> holds the entries due on that frame
 /// (Varghese &amp; Lauck, 1987). Draining a frame touches only that slot, so the per-frame cost is
 /// O(entries due), not O(timers alive) -- the reason ticking countdowns moved here from
-/// scan-and-decrement (PLAN-timer-wheel.md, "Step 3 result").
+/// scan-and-decrement.
 ///
 /// Component-agnostic: it never validates an entry. PackedTimerWheel/MultiTimerWheel do that
 /// (lazy cancellation) -- an entry whose timer was removed, re-armed or recycled since it was

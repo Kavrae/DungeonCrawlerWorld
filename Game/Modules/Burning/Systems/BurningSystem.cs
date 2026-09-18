@@ -19,7 +19,7 @@ namespace Game.Modules.Burning.Systems;
 /// </summary>
 /// <remarks>
 /// Driven by a timer wheel (PackedTimerWheel): only burns actually due this frame are touched, on
-/// their exact frame at every processing tier (PLAN-timer-wheel.md). BurningEffects.ApplyStack
+/// their exact frame at every processing tier. BurningEffects.ApplyStack
 /// adding the component is all that schedules a new burn; Tick re-arms by writing NextTickFrame.
 /// </remarks>
 public sealed class BurningSystem : ISystem

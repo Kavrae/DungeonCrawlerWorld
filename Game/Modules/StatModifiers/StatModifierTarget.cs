@@ -25,7 +25,7 @@ public enum StatModifierTarget : byte
     /// <summary>Multiplier DirectDamage applies to a fully-scaled hit once CritChance rolls a crit, consumed via StatModifierMath.GetEffectiveValue against CritMath.BaseCritMultiplier.</summary>
     CritMultiplier,
 
-    /// <summary>ActionLockComponent.StandardLockFrames' modifier seam -- consumed by MovementSystem.TryMoveToNextMapPosition. BodyPartEffectsSystem grants a multiplicative debuff here as an entity's own Leg/Foot body parts take damage (see PLAN-body-part-gameplay-effects.md); nothing else grants it yet, but it's an ordinary target like any other -- a future Dexterity/equipment consumer could layer on top the same way.</summary>
+    /// <summary>ActionLockComponent.StandardLockFrames' modifier seam -- consumed by MovementSystem.TryMoveToNextMapPosition. BodyPartEffectsSystem grants a multiplicative debuff here as an entity's own Leg/Foot body parts take damage; nothing else grants it yet, but it's an ordinary target like any other -- a future Dexterity/equipment consumer could layer on top the same way.</summary>
     MovementLockFrames,
 
     /// <summary>Heal amount a caster/source gives out, consumed at HealthHeal.Apply before IncomingHealing -- the healing counterpart to OutgoingDamage. A melee-only lifesteal-style heal buff would use ConditionTag: Tag.Melee here rather than a dedicated target.</summary>

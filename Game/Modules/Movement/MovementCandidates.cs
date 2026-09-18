@@ -18,7 +18,7 @@ public static class MovementCandidates
     public const ushort FramesToWaitIfNoOptions = 120;
 
     /// <summary> Determines whether an entity of the given size could occupy the given position. </summary>
-    /// <remarks> Blocking entities can always occupy a space. </remarks>
+    /// <remarks>A cell whose structure or floor blocks movement stops every mover except a Phasing one; a Blocking occupant stops only Blocking movers.</remarks>
     /// <param name="mapQuery">The map query.</param>
     /// <param name="position">The position to check.</param>
     /// <param name="size">The size of the entity.</param>
@@ -32,23 +32,21 @@ public static class MovementCandidates
             return false;
         }
 
-        if (!isBlocking)
+        if (!isBlocking && mapQuery.IsPhasing(entityId))
         {
             return true;
         }
 
         if (size == TransformSize1)
         {
-            var occupyingEntityId = mapQuery.GetEntityIdAt(position);
-            return occupyingEntityId == -1 || occupyingEntityId == entityId;
+            return CanOccupyCell(mapQuery, position, entityId, isBlocking);
         }
 
         for (var x = position.X; x < position.X + size.X; x++)
         {
             for (var y = position.Y; y < position.Y + size.Y; y++)
             {
-                var occupyingEntityId = mapQuery.GetEntityIdAt(new Vector3Int(x, y, position.Z));
-                if (occupyingEntityId != -1 && occupyingEntityId != entityId)
+                if (!CanOccupyCell(mapQuery, new Vector3Int(x, y, position.Z), entityId, isBlocking))
                 {
                     return false;
                 }
@@ -56,6 +54,22 @@ public static class MovementCandidates
         }
 
         return true;
+    }
+
+    private static bool CanOccupyCell(IMapQuery mapQuery, Vector3Int cell, int entityId, bool isBlocking)
+    {
+        if (mapQuery.IsCellBlocked(cell))
+        {
+            return false;
+        }
+
+        if (!isBlocking)
+        {
+            return true;
+        }
+
+        var occupyingEntityId = mapQuery.GetEntityIdAt(cell);
+        return occupyingEntityId == -1 || occupyingEntityId == entityId;
     }
 
     /// <summary>Determines whether a diagonal step from oldPosition to newPosition is legal.</summary>
@@ -97,19 +111,19 @@ public static class MovementCandidates
         Span<Direction> remaining = [Direction.North, Direction.South, Direction.East, Direction.West];
         var remainingCount = 4;
 
-        if (position.Y == 0)
+        if (position.Y == mapQuery.Bounds.MinY)
         {
             RemoveDirection(remaining, ref remainingCount, Direction.North);
         }
-        else if (position.Y == mapQuery.MapSize.Y - size.Y)
+        else if (position.Y == mapQuery.Bounds.MaxY - size.Y)
         {
             RemoveDirection(remaining, ref remainingCount, Direction.South);
         }
-        if (position.X == 0)
+        if (position.X == mapQuery.Bounds.MinX)
         {
             RemoveDirection(remaining, ref remainingCount, Direction.East);
         }
-        else if (position.X == mapQuery.MapSize.X - size.X)
+        else if (position.X == mapQuery.Bounds.MaxX - size.X)
         {
             RemoveDirection(remaining, ref remainingCount, Direction.West);
         }

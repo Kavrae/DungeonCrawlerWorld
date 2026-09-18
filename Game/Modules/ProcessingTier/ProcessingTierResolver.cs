@@ -1,14 +1,16 @@
 using Engine.ECS.Components.Stores;
+using Engine.ECS.Systems;
 using Engine.Math;
 using Game.Modules.Core.Components;
 using Game.Modules.ProcessingTier.Components;
+using Game.World;
 
 namespace Game.Modules.ProcessingTier;
 
 /// <summary>
 /// The single place an entity's ProcessingTierComponent is decided and written -- shared by the
 /// spawn sequence (which assigns a tier before an entity joins any tiered pool) and by
-/// ProcessingTierSystem (which moves it afterwards). See PLAN-processing-tier-rework.md.
+/// ProcessingTierSystem (which moves it afterwards).
 /// </summary>
 /// <remarks>
 /// <para>
@@ -53,12 +55,6 @@ public sealed class ProcessingTierResolver
     /// <summary>Chebyshev distance beyond which a Local entity is demoted.</summary>
     public const int LocalExitRadiusTiles = LocalRadiusTiles + LocalExitBufferTiles;
 
-    /// <summary>Neighborhood is the fixed grid cell of this size the reference position occupies -- an absolute cell, not a radius, which is what makes Neighborhood/Borough/Beyond change only on a cell crossing.</summary>
-    public const int NeighborhoodSizeTiles = 1000;
-
-    /// <summary>Borough is the fixed 2x2-neighborhood grid cell the reference position occupies.</summary>
-    public const int BoroughSizeTiles = 2000;
-
     private readonly HashSet<int> _pinnedLocal = [];
 
     private DirectComponentPool<ProcessingTierComponent>? _tiers;
@@ -67,6 +63,10 @@ public sealed class ProcessingTierResolver
 
     /// <summary>The position every non-pinned entity's tier is computed from. Null until the spawn sequence (or the first observation of the player) establishes one -- see this class's own remarks.</summary>
     public Vector3Int? ReferencePosition { get; private set; }
+
+    /// <summary>Every tiered entity by neighborhood and MapLayer, kept current by every path in this class that computes a tier from a position.</summary>
+    /// <remarks>Indexed regardless of pinning or whether a reference exists yet, so an entity created before the reference is still found by the first neighborhood walk that needs it.</remarks>
+    public NeighborhoodMembershipIndex Membership { get; } = new();
 
     /// <summary>Connects the resolver to the pools it reads and writes. Called once from ProcessingTierModule.RegisterSystems, after components are registered -- the same shape as LocalTierRoster.Wire.</summary>
     public void Wire(DirectComponentPool<ProcessingTierComponent> tiers, DirectComponentPool<TransformComponent> transforms, ProcessingTierEvents events)
@@ -80,8 +80,46 @@ public sealed class ProcessingTierResolver
         _events = events;
     }
 
+    /// <summary>Forgets entityId: drops it from the membership index and unpins it, for an entity being destroyed.</summary>
+    public void Forget(int entityId)
+    {
+        Membership.Remove(entityId);
+        _pinnedLocal.Remove(entityId);
+    }
+
     /// <summary>Sets the reference position. The spawn sequence calls this with the player's intended spawn position before population; ProcessingTierSystem keeps it current as the player moves.</summary>
     public void SetReferencePosition(Vector3Int position) => ReferencePosition = position;
+
+    /// <summary>How far past the window centre's edge, in tiles, the player walks before the window moves to the player's neighborhood.</summary>
+    public const int WindowShiftGraceTiles = 64;
+
+    /// <summary>The neighborhood at the centre of the loaded window, which non-Local tiers are measured from; null when there is no window and the reference's own neighborhood is the centre.</summary>
+    public (int CellX, int CellY)? WindowCenter { get; private set; }
+
+    /// <summary>Raised by ShiftWindowTo with the previous and the new centre, after WindowCenter has changed.</summary>
+    public event Action<(int CellX, int CellY), (int CellX, int CellY)>? WindowShifted;
+
+    /// <summary>Starts a window centred on (cellX, cellY) without raising WindowShifted -- the spawn sequence, before population, so everything is born tiered against it.</summary>
+    public void SetWindowCenter(int cellX, int cellY) => WindowCenter = (cellX, cellY);
+
+    /// <summary>Moves the window centre and raises WindowShifted. Retiering what changed is ProcessingTierSystem's job.</summary>
+    public void ShiftWindowTo(int cellX, int cellY)
+    {
+        var previous = WindowCenter ?? throw new InvalidOperationException("No window to shift -- SetWindowCenter starts one.");
+        WindowCenter = (cellX, cellY);
+        WindowShifted?.Invoke(previous, (cellX, cellY));
+    }
+
+    /// <summary>The window centre once the player is at player: unchanged until the player is WindowShiftGraceTiles or more beyond its edge, then the player's own neighborhood.</summary>
+    /// <remarks>Hysteresis: a player pacing along a border never moves the window, and walking back moves it only once they are as far into the old centre.</remarks>
+    public static (int CellX, int CellY) NextWindowCenter((int CellX, int CellY) center, Vector3Int player) =>
+        Neighborhoods.DistanceToArea(player, center.CellX, center.CellY) >= WindowShiftGraceTiles
+            ? (Neighborhoods.CellOf(player.X), Neighborhoods.CellOf(player.Y))
+            : center;
+
+    /// <summary>The neighborhood non-Local tiers are measured from for this reference: the window centre, or with no window the reference's own neighborhood.</summary>
+    private (int CellX, int CellY) CenterFor(Vector3Int reference) =>
+        WindowCenter ?? (Neighborhoods.CellOf(reference.X), Neighborhoods.CellOf(reference.Y));
 
     /// <summary>Whether entityId is pinned Local -- see <see cref="PinLocal"/>.</summary>
     public bool IsPinned(int entityId) => _pinnedLocal.Contains(entityId);
@@ -148,9 +186,12 @@ public sealed class ProcessingTierResolver
         var tiers = RequireWired();
 
         var entityId = entityManager.CreateEntity();
+        Membership.Set(entityId, plannedPosition);
+
         if (ReferencePosition is { } reference)
         {
-            Write(tiers, entityId, ComputeTier(plannedPosition, reference, previousTier: null));
+            var center = CenterFor(reference);
+            Write(tiers, entityId, ComputeTier(plannedPosition, reference, center.CellX, center.CellY, previousTier: null));
         }
 
         return entityId;
@@ -189,13 +230,21 @@ public sealed class ProcessingTierResolver
     /// </remarks>
     private void RetierAt(int entityId, Vector3Int position)
     {
-        if (_tiers is not { } tiers || ReferencePosition is not { } reference || _pinnedLocal.Contains(entityId))
+        if (_tiers is not { } tiers)
+        {
+            return;
+        }
+
+        Membership.Set(entityId, position);
+
+        if (ReferencePosition is not { } reference || _pinnedLocal.Contains(entityId))
         {
             return;
         }
 
         var hasExisting = tiers.TryGetReadonly(entityId, out var existing);
-        var tier = ComputeTier(position, reference, hasExisting ? existing.Tier : (ProcessingTierLevel?)null);
+        var center = CenterFor(reference);
+        var tier = ComputeTier(position, reference, center.CellX, center.CellY, hasExisting ? existing.Tier : (ProcessingTierLevel?)null);
 
         if (hasExisting && existing.Tier == tier)
         {
@@ -212,52 +261,54 @@ public sealed class ProcessingTierResolver
         }
     }
 
+    /// <summary>ComputeTier with no window: the reference's own neighborhood is the centre.</summary>
+    public static ProcessingTierLevel ComputeTier(Vector3Int position, Vector3Int reference, ProcessingTierLevel? previousTier) =>
+        ComputeTier(position, reference, Neighborhoods.CellOf(reference.X), Neighborhoods.CellOf(reference.Y), previousTier);
+
     /// <summary>
-    /// Classifies a position relative to the reference. A different MapLayer (Z) is always Beyond --
-    /// never visible to the player regardless of X/Y. Local uses hysteresis: entering requires
-    /// Chebyshev distance &lt;= LocalRadiusTiles, leaving requires &gt; LocalExitRadiusTiles.
-    /// Neighborhood and Borough are fixed absolute grid cells, not radii.
+    /// Classifies a position relative to the reference and the window centre. Local is the reference's own MapLayer only,
+    /// with hysteresis: entering requires Chebyshev distance &lt;= LocalRadiusTiles, leaving requires
+    /// &gt; LocalExitRadiusTiles. Otherwise the tier is the position's neighborhood's: the centre
+    /// neighborhood is Neighborhood, the 8 around it Borough, anything further Beyond -- on every
+    /// MapLayer alike, since another layer is classified by its X/Y, just never as Local.
     /// </summary>
-    public static ProcessingTierLevel ComputeTier(Vector3Int position, Vector3Int reference, ProcessingTierLevel? previousTier)
+    public static ProcessingTierLevel ComputeTier(Vector3Int position, Vector3Int reference, int centerCellX, int centerCellY, ProcessingTierLevel? previousTier)
     {
-        if (position.Z != reference.Z)
+        if (position.Z == reference.Z)
         {
-            return ProcessingTierLevel.Beyond;
+            var localRadius = previousTier == ProcessingTierLevel.Local ? LocalExitRadiusTiles : LocalRadiusTiles;
+            if (ChebyshevDistance(position, reference) <= localRadius)
+            {
+                return ProcessingTierLevel.Local;
+            }
         }
 
-        var distance = ChebyshevDistance(position, reference);
-        var localRadius = previousTier == ProcessingTierLevel.Local ? LocalExitRadiusTiles : LocalRadiusTiles;
-
-        if (distance <= localRadius)
-        {
-            return ProcessingTierLevel.Local;
-        }
-
-        if (SameCell(position, reference, NeighborhoodSizeTiles))
-        {
-            return ProcessingTierLevel.Neighborhood;
-        }
-
-        return SameCell(position, reference, BoroughSizeTiles) ? ProcessingTierLevel.Borough : ProcessingTierLevel.Beyond;
+        return NeighborhoodTier(System.Math.Max(System.Math.Abs(Neighborhoods.CellOf(position.X) - centerCellX), System.Math.Abs(Neighborhoods.CellOf(position.Y) - centerCellY)));
     }
+
+    /// <summary>The non-Local tier of a neighborhood this many neighborhoods from the reference's.</summary>
+    public static ProcessingTierLevel NeighborhoodTier(int neighborhoodDistance) => neighborhoodDistance switch
+    {
+        0 => ProcessingTierLevel.Neighborhood,
+        1 => ProcessingTierLevel.Borough,
+        _ => ProcessingTierLevel.Beyond,
+    };
 
     /// <summary>Chebyshev (X/Y) distance -- Z is handled separately by ComputeTier.</summary>
     public static int ChebyshevDistance(Vector3Int a, Vector3Int b) =>
         System.Math.Max(System.Math.Abs(a.X - b.X), System.Math.Abs(a.Y - b.Y));
 
-    /// <summary>Map positions are always non-negative, so plain integer division floors correctly.</summary>
-    public static bool SameCell(Vector3Int a, Vector3Int b, int cellSize) =>
-        a.X / cellSize == b.X / cellSize && a.Y / cellSize == b.Y / cellSize;
-
-    private static void Write(DirectComponentPool<ProcessingTierComponent> tiers, int entityId, ProcessingTierLevel tier)
+    /// <summary>Writes entityId's tier.</summary>
+    private void Write(DirectComponentPool<ProcessingTierComponent> tiers, int entityId, ProcessingTierLevel tier)
     {
+        var component = new ProcessingTierComponent(tier);
         if (tiers.Has(entityId))
         {
-            tiers.TrySet(entityId, new ProcessingTierComponent(tier));
+            tiers.TrySet(entityId, component);
         }
         else
         {
-            tiers.Add(entityId, new ProcessingTierComponent(tier));
+            tiers.Add(entityId, component);
         }
     }
 

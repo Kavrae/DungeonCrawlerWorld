@@ -36,7 +36,7 @@ public static class InventoryActions
         var remaining = quantity;
         var lastStackInstanceId = Guid.Empty;
 
-        var matchedDenseIndex = FindMatchingDenseIndex(stacks, entityId, stack => stack.ItemDefinitionId == itemDefinitionId);
+        var matchedDenseIndex = FindMatchingDenseIndex(stacks, entityId, itemDefinitionId, static (stack, id) => stack.ItemDefinitionId == id);
         if (matchedDenseIndex != -1)
         {
             var existingQuantity = stacks.GetReadonlyByDenseIndex(matchedDenseIndex).Quantity;
@@ -123,6 +123,20 @@ public static class InventoryActions
     /// the *dense index itself* -- not just the matched value -- is what a caller needs, to mutate
     /// via UpdateByDenseIndex or read fields (like StackInstanceId) off the match afterward.
     /// </summary>
+    /// <summary>FindMatchingDenseIndex with the predicate's state passed in rather than captured, so a hot caller allocates no closure per call.</summary>
+    private static int FindMatchingDenseIndex<TState>(MultiComponentPool<InventoryItemStackComponent> stacks, int entityId, TState state, Func<InventoryItemStackComponent, TState, bool> predicate)
+    {
+        for (var denseIndex = stacks.GetFirstDenseIndex(entityId); denseIndex != -1; denseIndex = stacks.GetNextDenseIndex(denseIndex))
+        {
+            if (predicate(stacks.GetReadonlyByDenseIndex(denseIndex), state))
+            {
+                return denseIndex;
+            }
+        }
+
+        return -1;
+    }
+
     private static int FindMatchingDenseIndex(MultiComponentPool<InventoryItemStackComponent> stacks, int entityId, Func<InventoryItemStackComponent, bool> predicate)
     {
         for (var denseIndex = stacks.GetFirstDenseIndex(entityId); denseIndex != -1; denseIndex = stacks.GetNextDenseIndex(denseIndex))
@@ -152,8 +166,8 @@ public static class InventoryActions
         var effectiveCap = GetEffectiveMaxStackSize(componentManager, entityId);
         var remaining = quantity;
 
-        var matchedDenseIndex = FindMatchingDenseIndex(stacks, entityId,
-            stack => !stack.IsDivergent && stack.Override is { } existing && AreEquivalentOverrides(existing, effectiveDefinition));
+        var matchedDenseIndex = FindMatchingDenseIndex(stacks, entityId, effectiveDefinition,
+            static (stack, definition) => !stack.IsDivergent && stack.Override is { } existing && AreEquivalentOverrides(existing, definition));
 
         if (matchedDenseIndex != -1)
         {

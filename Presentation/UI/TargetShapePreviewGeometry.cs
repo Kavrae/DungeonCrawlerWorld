@@ -13,10 +13,10 @@ namespace Presentation.UI;
 /// </summary>
 public static class TargetShapePreviewGeometry
 {
-    /// <summary>Comfortably larger than any realistic Range/AreaSize. Origin sits at its center, not a corner -- Resolve clips every candidate tile against [0, mapSize) internally, so a corner-anchored origin would silently clip away any shape extending in a negative direction (e.g. Adjacent's own left/up ring).</summary>
-    private const int SentinelMapExtent = 10000;
-    private static readonly Vector3Int SentinelMapSize = new(SentinelMapExtent, SentinelMapExtent, 10);
-    private static readonly Vector3Int SentinelOrigin = new(SentinelMapExtent / 2, SentinelMapExtent / 2, 0);
+    /// <summary>Comfortably larger than any realistic Range/AreaSize in every direction from the origin, so Resolve's clipping to the map's bounds never trims a preview.</summary>
+    private const int SentinelMapExtent = 5000;
+    private static readonly MapBounds SentinelBounds = new(-SentinelMapExtent, -SentinelMapExtent, SentinelMapExtent, SentinelMapExtent, 10);
+    private static readonly Vector3Int SentinelOrigin = new(0, 0, 0);
     private static readonly Vector2Byte SingleTileFootprint = new(1, 1);
 
     private const float MinCellSize = 4f;
@@ -36,7 +36,7 @@ public static class TargetShapePreviewGeometry
             : SentinelOrigin;
 
         var results = new List<Vector3Int>();
-        TargetShapeResolver.Resolve(spec.Shape, SentinelOrigin, SingleTileFootprint, cursorTile, spec.Range, spec.AreaSize, SentinelMapSize, results, spec.Metric);
+        TargetShapeResolver.Resolve(spec.Shape, SentinelOrigin, SingleTileFootprint, cursorTile, spec.Range, spec.AreaSize, SentinelBounds, results, spec.Metric);
 
         var offsets = new List<Point>(results.Count);
         foreach (var tile in results)

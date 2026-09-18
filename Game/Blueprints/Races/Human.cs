@@ -30,20 +30,20 @@ public sealed class Human(MathUtility mathUtility) : IBlueprint
     private const string RaceName = "Human";
     private const string Description = "Adaptable and unremarkable in any single way -- which is exactly what makes them so widespread.";
 
-    /// <summary>Head/Torso/Internal are Vital; sums to 250, matching the flat SimpleHealthComponent total this replaced so the split doesn't itself rebalance Human's overall toughness. 11 parts (Arm/Leg each split off a Hand/Foot, plus Internal for Poison's own always-hit target) -- not a final balance pass, see PLAN-targeted-body-part-damage.md/PLAN-per-body-part-status-effects.md. VerticalPosition: Head 5, Torso/Internal 4, Arm 3, Hand 2, Leg 1, Foot 0.</summary>
+    /// <summary>Head/Torso/Internal are Vital; sums to 250, matching the flat SimpleHealthComponent total this replaced so the split doesn't itself rebalance Human's overall toughness. 11 parts (Arm/Leg each split off a Hand/Foot, plus Internal for Poison's own always-hit target) -- not a final balance pass. VerticalPosition: Head 5, Torso/Internal 4, Arm 3, Hand 2, Leg 1, Foot 0.</summary>
     private static readonly BodyPartTemplate[] BodyParts =
     [
-        new BodyPartTemplate("Head", BodyPartType.Head, 5, 40, 40, IsVital: true),
-        new BodyPartTemplate("Torso", BodyPartType.Torso, 4, 65, 65, IsVital: true),
-        new BodyPartTemplate("Internal", BodyPartType.Internal, 4, 15, 15, IsVital: true),
-        new BodyPartTemplate("Left Arm", BodyPartType.Arm, 3, 20, 20, IsVital: false),
-        new BodyPartTemplate("Right Arm", BodyPartType.Arm, 3, 20, 20, IsVital: false),
-        new BodyPartTemplate("Left Hand", BodyPartType.Hand, 2, 5, 5, IsVital: false),
-        new BodyPartTemplate("Right Hand", BodyPartType.Hand, 2, 5, 5, IsVital: false),
-        new BodyPartTemplate("Left Leg", BodyPartType.Leg, 1, 30, 30, IsVital: false),
-        new BodyPartTemplate("Right Leg", BodyPartType.Leg, 1, 30, 30, IsVital: false),
-        new BodyPartTemplate("Left Foot", BodyPartType.Foot, 0, 10, 10, IsVital: false),
-        new BodyPartTemplate("Right Foot", BodyPartType.Foot, 0, 10, 10, IsVital: false),
+        new BodyPartTemplate("Head", BodyPartType.Head, 5, 40, IsVital: true),
+        new BodyPartTemplate("Torso", BodyPartType.Torso, 4, 65, IsVital: true),
+        new BodyPartTemplate("Internal", BodyPartType.Internal, 4, 15, IsVital: true),
+        new BodyPartTemplate("Left Arm", BodyPartType.Arm, 3, 20, IsVital: false),
+        new BodyPartTemplate("Right Arm", BodyPartType.Arm, 3, 20, IsVital: false),
+        new BodyPartTemplate("Left Hand", BodyPartType.Hand, 2, 5, IsVital: false),
+        new BodyPartTemplate("Right Hand", BodyPartType.Hand, 2, 5, IsVital: false),
+        new BodyPartTemplate("Left Leg", BodyPartType.Leg, 1, 30, IsVital: false),
+        new BodyPartTemplate("Right Leg", BodyPartType.Leg, 1, 30, IsVital: false),
+        new BodyPartTemplate("Left Foot", BodyPartType.Foot, 0, 10, IsVital: false),
+        new BodyPartTemplate("Right Foot", BodyPartType.Foot, 0, 10, IsVital: false),
     ];
 
     public void Build(ComponentManager componentManager, int entityId)
@@ -52,11 +52,11 @@ public sealed class Human(MathUtility mathUtility) : IBlueprint
 
         componentManager.Merge(entityId, new GlyphComponent("h", Color.Pink));
 
-        ComplexHealthEffects.GrantBodyParts(componentManager, entityId, mathUtility, BodyParts);
+        ComplexHealthEffects.GrantBodyParts(componentManager, entityId, BodyParts);
 
         componentManager.Merge(entityId, new MovementComponent(MovementMode.Random, null, null));
         componentManager.Merge(entityId, new ActionLockComponent(standardLockFrames: 30, currentLockTotalFrames: 0, unlockedAtFrame: 0));
-        componentManager.Merge(entityId, new TransformComponent(new Vector3Int(-1, -1, (int)MapLayer.Ground), new Vector2Byte(1, 1)));
+        componentManager.Merge(entityId, new TransformComponent(TransformComponent.UnplacedOn(MapLayer.Ground), new Vector2Byte(1, 1)));
 
         foreach (var abilityScoreType in Enum.GetValues<AbilityScoreType>())
         {

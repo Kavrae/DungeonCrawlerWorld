@@ -30,7 +30,7 @@ public sealed class AbilityScoreModifierRow(FontService fontService, ElementPool
     private string _text = string.Empty;
     private SpriteFontBase _font = null!;
 
-    public StatusEffectSource? Source { get; private set; }
+    public ActionSource? Source { get; private set; }
 
     public string? ModifierText { get; private set; }
 

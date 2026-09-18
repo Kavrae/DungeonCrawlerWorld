@@ -90,7 +90,7 @@ public sealed class TestDummyBlueprint : IBlueprint
         componentManager.Merge(entityId, new GlyphComponent(Glyph, Color.Purple));
         componentManager.Merge(entityId, new SimpleHealthComponent(MaximumHealth, MaximumHealth));
         componentManager.Merge(entityId, new ActionLockComponent(standardLockFrames: StandardLockFrames, currentLockTotalFrames: 0, unlockedAtFrame: 0));
-        componentManager.Merge(entityId, new TransformComponent(new Vector3Int(-1, -1, (int)MapLayer.Ground), new Vector2Byte(1, 1)));
+        componentManager.Merge(entityId, new TransformComponent(TransformComponent.UnplacedOn(MapLayer.Ground), new Vector2Byte(1, 1)));
         componentManager.Merge(entityId, new TestDummyComponent());
 
         foreach (var abilityScoreType in Enum.GetValues<AbilityScoreType>())

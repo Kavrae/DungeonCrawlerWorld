@@ -105,7 +105,7 @@ public sealed class ProcessingTierResolverTests
     {
         var fixture = new Fixture();
 
-        fixture.Resolver.EnsureTiered(3, new Vector3Int(510, 500, 1));
+        fixture.Resolver.EnsureTiered(3, new Vector3Int(5000, 5000, 1));
 
         Assert.AreEqual(ProcessingTierLevel.Beyond, fixture.Tiers.GetReadonly(3).Tier);
         Assert.IsEmpty(fixture.Raised);
@@ -124,7 +124,7 @@ public sealed class ProcessingTierResolverTests
         Assert.IsEmpty(fixture.Raised);
     }
 
-    /// <summary>A blueprint that sets its own Z can land the entity somewhere other than planned. EnsureTiered corrects it, with the event every consumer needs.</summary>
+    /// <summary>A blueprint that sets its own Z can land the entity somewhere other than planned -- here on another layer, which can't be Local. EnsureTiered corrects it, with the event every consumer needs.</summary>
     [TestMethod]
     public void EnsureTiered_PlacedSomewhereOtherThanPlanned_CorrectsAndRaises()
     {
@@ -133,8 +133,8 @@ public sealed class ProcessingTierResolverTests
 
         fixture.Resolver.EnsureTiered(entityId, new Vector3Int(510, 500, 1));
 
-        Assert.AreEqual(ProcessingTierLevel.Beyond, fixture.Tiers.GetReadonly(entityId).Tier);
-        CollectionAssert.AreEqual(new[] { (entityId, ProcessingTierLevel.Beyond) }, fixture.Raised);
+        Assert.AreEqual(ProcessingTierLevel.Neighborhood, fixture.Tiers.GetReadonly(entityId).Tier);
+        CollectionAssert.AreEqual(new[] { (entityId, ProcessingTierLevel.Neighborhood) }, fixture.Raised);
     }
 
     // --- Pinning. ------------------------------------------------------------------------
@@ -179,7 +179,55 @@ public sealed class ProcessingTierResolverTests
         Assert.AreEqual(ProcessingTierLevel.Neighborhood, ProcessingTierResolver.ComputeTier(new Vector3Int(597, 500, 0), Reference, ProcessingTierLevel.Local));
     }
 
+    /// <summary>Local is the reference's own layer only: another layer directly beneath it is classified by its cell instead, even when it was Local before.</summary>
     [TestMethod]
-    public void ComputeTier_DifferentLayerIsAlwaysBeyond() =>
-        Assert.AreEqual(ProcessingTierLevel.Beyond, ProcessingTierResolver.ComputeTier(new Vector3Int(500, 500, 1), Reference, ProcessingTierLevel.Local));
+    public void ComputeTier_DifferentLayerWithinLocalRadius_IsNeighborhoodNotLocal() =>
+        Assert.AreEqual(ProcessingTierLevel.Neighborhood, ProcessingTierResolver.ComputeTier(new Vector3Int(500, 500, 1), Reference, ProcessingTierLevel.Local));
+
+    [TestMethod]
+    public void ComputeTier_DifferentLayerInAnAdjacentNeighborhood_IsBorough() =>
+        Assert.AreEqual(ProcessingTierLevel.Borough, ProcessingTierResolver.ComputeTier(new Vector3Int(1500, 500, 2), Reference, previousTier: null));
+
+    [TestMethod]
+    public void ComputeTier_DifferentLayerTwoNeighborhoodsAway_IsBeyond() =>
+        Assert.AreEqual(ProcessingTierLevel.Beyond, ProcessingTierResolver.ComputeTier(new Vector3Int(5000, 5000, 1), Reference, previousTier: null));
+
+    /// <summary>Borough is the whole ring of 8 around the reference's neighborhood, diagonals and negative coordinates included -- not a fixed grid cell the reference happens to sit in.</summary>
+    [TestMethod]
+    [DataRow(1500, 1500, ProcessingTierLevel.Borough)]
+    [DataRow(-10, 500, ProcessingTierLevel.Borough)]
+    [DataRow(-10, -10, ProcessingTierLevel.Borough)]
+    [DataRow(1023, 1023, ProcessingTierLevel.Neighborhood)]
+    [DataRow(2048, 500, ProcessingTierLevel.Beyond)]
+    [DataRow(-1025, 500, ProcessingTierLevel.Beyond)]
+    public void ComputeTier_OutsideLocal_IsTheNeighborhoodRingTier(int x, int y, ProcessingTierLevel expected) =>
+        Assert.AreEqual(expected, ProcessingTierResolver.ComputeTier(new Vector3Int(x, y, 1), Reference, previousTier: null));
+
+    /// <summary>With a window, the ring is measured from the window centre, not from the reference's own neighborhood: a player standing just across the border still leaves the old centre Neighborhood.</summary>
+    [TestMethod]
+    [DataRow(500, 500, ProcessingTierLevel.Neighborhood)]
+    [DataRow(1500, 500, ProcessingTierLevel.Borough)]
+    [DataRow(2500, 500, ProcessingTierLevel.Beyond)]
+    public void ComputeTier_WithAWindowCentre_MeasuresTheRingFromIt(int x, int y, ProcessingTierLevel expected) =>
+        Assert.AreEqual(expected, ProcessingTierResolver.ComputeTier(new Vector3Int(x, y, 1), new Vector3Int(1030, 500, 0), centerCellX: 0, centerCellY: 0, previousTier: null));
+
+    [TestMethod]
+    [DataRow(1086, 500, 0, 0)]
+    [DataRow(1087, 500, 1, 0)]
+    [DataRow(-64, 500, -1, 0)]
+    [DataRow(-63, 500, 0, 0)]
+    [DataRow(1087, 1087, 1, 1)]
+    [DataRow(1087, -10, 1, -1)]
+    [DataRow(5000, 500, 4, 0)]
+    public void NextWindowCenter_MovesOnceThePlayerIsSixtyFourTilesPastTheCentresEdge(int x, int y, int expectedCellX, int expectedCellY) =>
+        Assert.AreEqual((expectedCellX, expectedCellY), ProcessingTierResolver.NextWindowCenter((0, 0), new Vector3Int(x, y, 0)));
+
+    /// <summary>Walking back across the border doesn't move the window back until the player is as far into the old centre: pacing along a border never shifts it.</summary>
+    [TestMethod]
+    public void NextWindowCenter_WalkingBack_NeedsTheSameGraceTheOtherWay()
+    {
+        Assert.AreEqual((1, 0), ProcessingTierResolver.NextWindowCenter((1, 0), new Vector3Int(1000, 500, 0)));
+        Assert.AreEqual((1, 0), ProcessingTierResolver.NextWindowCenter((1, 0), new Vector3Int(961, 500, 0)));
+        Assert.AreEqual((0, 0), ProcessingTierResolver.NextWindowCenter((1, 0), new Vector3Int(960, 500, 0)));
+    }
 }

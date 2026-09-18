@@ -38,4 +38,7 @@ public sealed record WorldSessionContext(
     PlayerActivityLog PlayerActivityLog,
     StatusEffectDisplayRegistry StatusEffectDisplays,
     ReservedEntityIds ReservedEntityIds,
-    LocalTierRoster LocalTierRoster);
+    LocalTierRoster LocalTierRoster,
+    Game.Terrain.TerrainRegistry Terrain,
+    NeighborhoodRecords NeighborhoodRecords,
+    NeighborhoodStreamer NeighborhoodStreamer);

@@ -1252,9 +1252,8 @@ public sealed class UiInputController
     /// grid/row space alike; falling back, only once that's failed for every ancestor below it, to
     /// the broader case (an IWholeWindowDropTarget -- InventoryManagementWindow/ShopWindow/
     /// TradeWindow) for a drop landing anywhere else within that window's own bounds (its title
-    /// bar, border padding, the gap between a trade column's grid and footer, etc.) -- see
-    /// PLAN-trade-window.md's own "Drop target resolution" section for why this whole-window
-    /// fallback exists at all: a player shouldn't have to land a drag exactly on a narrow currency
+    /// bar, border padding, the gap between a trade column's grid and footer, etc.). This whole-window
+    /// fallback exists because a player shouldn't have to land a drag exactly on a narrow currency
     /// row or a cramped grid for a drop to count. IInventoryDropTarget is checked via Window.Tag,
     /// not Window.Content -- InventoryGridContent isn't always assigned as its host window's
     /// Content (see InventoryGridContent.Initialize's own doc comment: InventoryTabContent's own

@@ -1,3 +1,4 @@
+using Engine.ECS.Entities;
 using Engine.ECS.Components;
 using Engine.ECS.Components.Stores;
 using Engine.ECS.Systems;
@@ -29,7 +30,7 @@ public static class PoisonEffects
     /// No-ops entirely if entityId is currently immune to Poison (StatusEffectImmunity), or once
     /// MaxStacks is reached. durationInTicks is how many future damage applications this specific
     /// stack should keep Poison alive for -- scaled by the source's own OutgoingDebuffDuration
-    /// (source.EntityId, when source is an entity) then the target's own IncomingDebuffDuration
+    /// (the source entity, while it is still loaded) then the target's own IncomingDebuffDuration
     /// before being stored, unconditionally (no ConditionTag/activator-tags support here -- an
     /// aura-refreshed grant has no real activator to carry tags from; see this feature's own plan
     /// for why that's out of scope). The entity's overall RemainingDurationTicks becomes the
@@ -38,7 +39,7 @@ public static class PoisonEffects
     /// a longer one already landed does nothing to the timer.
     /// </summary>
     /// <param name="now">The simulation frame the stack lands on. A new poisoning's first tick is TickIntervalFrames after it; a re-application leaves the running tick alone.</param>
-    public static void ApplyStack(ComponentManager componentManager, int entityId, StatusEffectSource source, ushort durationInTicks, long now, EventBus? eventBus = null, IPlayerQuery? playerQuery = null)
+    public static void ApplyStack(ComponentManager componentManager, EntityKeys entityKeys, int entityId, ActionSource source, ushort durationInTicks, long now, EventBus? eventBus = null, IPlayerQuery? playerQuery = null)
     {
         if (StatusEffectImmunity.IsImmune(componentManager, entityId, StatusEffectType.Poison, source, eventBus, playerQuery))
         {
@@ -53,7 +54,7 @@ public static class PoisonEffects
         }
 
         var statModifiers = componentManager.IsRegistered<StatModifierComponent>() ? componentManager.GetMultiPool<StatModifierComponent>() : null;
-        var scaledDuration = ScaleDebuffDuration(statModifiers, source, entityId, durationInTicks);
+        var scaledDuration = ScaleDebuffDuration(entityKeys, statModifiers, source, entityId, durationInTicks);
 
         if (timers.Has(entityId))
         {
@@ -65,17 +66,17 @@ public static class PoisonEffects
         }
         else
         {
-            timers.Add(entityId, new PoisonTimerComponent(FrameDeadline.After(now, TickIntervalFrames), stackCount: 1, remainingDurationTicks: scaledDuration, source));
+            timers.Add(entityId, new PoisonTimerComponent(FrameDeadline.AfterStaggered(now, TickIntervalFrames, entityId), stackCount: 1, remainingDurationTicks: scaledDuration, source));
         }
     }
 
-    private static ushort ScaleDebuffDuration(MultiComponentPool<StatModifierComponent>? statModifiers, StatusEffectSource source, int targetEntityId, ushort durationInTicks)
+    private static ushort ScaleDebuffDuration(EntityKeys entityKeys, MultiComponentPool<StatModifierComponent>? statModifiers, ActionSource source, int targetEntityId, ushort durationInTicks)
     {
         var scaled = (float)durationInTicks;
 
-        if (source.Kind == StatusEffectSourceKind.Entity)
+        if (source.Kind == ActionSourceKind.Entity && entityKeys.TryGetEntityId(source.Key, out var sourceEntityId))
         {
-            scaled = StatModifierMath.GetEffectiveValue(statModifiers, source.EntityId, StatModifierTarget.OutgoingDebuffDuration, scaled);
+            scaled = StatModifierMath.GetEffectiveValue(statModifiers, sourceEntityId, StatModifierTarget.OutgoingDebuffDuration, scaled);
         }
 
         scaled = StatModifierMath.GetEffectiveValue(statModifiers, targetEntityId, StatModifierTarget.IncomingDebuffDuration, scaled);

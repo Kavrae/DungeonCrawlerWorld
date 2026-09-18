@@ -32,7 +32,7 @@ public sealed class ContainerDestructionSystemTests
         inventoryStacks.Add(0, new InventoryItemStackComponent(Guid.NewGuid(), quantity: 3));
         displayText.Add(0, new DisplayTextComponent("Treasure Chest", "A sturdy chest."));
 
-        eventBus.Publish(new EntityDiedEvent(0, StatusEffectSource.FromEntity(1)));
+        eventBus.Publish(new EntityDiedEvent(0, TestSources.Entity(1)));
         eventBus.DispatchBuffered<EntityDiedEvent>();
 
         Assert.IsFalse(inventoryStacks.Has(0));
@@ -45,7 +45,7 @@ public sealed class ContainerDestructionSystemTests
         containers.Add(0, new ContainerComponent());
         displayText.Add(0, new DisplayTextComponent("Treasure Chest", "A sturdy chest that might hold treasure."));
 
-        eventBus.Publish(new EntityDiedEvent(0, StatusEffectSource.FromEntity(1)));
+        eventBus.Publish(new EntityDiedEvent(0, TestSources.Entity(1)));
         eventBus.DispatchBuffered<EntityDiedEvent>();
 
         var renamed = displayText.GetReadonly(0);
@@ -60,7 +60,7 @@ public sealed class ContainerDestructionSystemTests
         inventoryStacks.Add(0, new InventoryItemStackComponent(Guid.NewGuid(), quantity: 5));
         displayText.Add(0, new DisplayTextComponent("Goblin", "Small, green and smart."));
 
-        eventBus.Publish(new EntityDiedEvent(0, StatusEffectSource.FromEntity(1)));
+        eventBus.Publish(new EntityDiedEvent(0, TestSources.Entity(1)));
         eventBus.DispatchBuffered<EntityDiedEvent>();
 
         Assert.IsTrue(inventoryStacks.Has(0));

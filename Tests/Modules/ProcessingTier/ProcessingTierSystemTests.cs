@@ -25,32 +25,27 @@ public sealed class ProcessingTierSystemTests
     private sealed class FakePlayerQuery(int playerEntityId) : IPlayerQuery
     {
         public int PlayerEntityId { get; } = playerEntityId;
+        public Engine.ECS.Entities.EntityKey PlayerEntityKey { get; init; } = TestSources.KeyOf(playerEntityId);
     }
 
-    /// <summary>A position index shaped like World's -- one Blocking occupant and one terrain entity per tile -- over a map large enough for Borough/Beyond geometry. Nothing here allocates per tile, so the size is free.</summary>
+    /// <summary>A position index shaped like World's -- one Blocking occupant per tile -- over a map large enough for Borough/Beyond geometry, reaching into negative coordinates. Nothing here allocates per tile, so the size is free.</summary>
     private sealed class FakeMapQuery : IMapQuery
     {
         private readonly Dictionary<Vector3Int, int> _blocking = [];
-        private readonly Dictionary<Vector3Int, int> _terrain = [];
 
-        public Vector3Int MapSize { get; } = new(6000, 6000, 3);
+        public MapBounds Bounds { get; } = new(-3072, -3072, 6000, 6000, 3);
 
-        public bool IsOnMap(Vector3Int position) =>
-            position.X >= 0 && position.Y >= 0 && position.Z >= 0 && position.X < MapSize.X && position.Y < MapSize.Y && position.Z < MapSize.Z;
+        public bool IsOnMap(Vector3Int position) => Bounds.Contains(position);
 
         public int GetEntityIdAt(Vector3Int position) => _blocking.TryGetValue(position, out var id) ? id : -1;
 
         public bool IsBlocking(int entityId) => true;
-
-        public int GetTerrainEntityIdAt(Vector3Int position) => _terrain.TryGetValue(position, out var id) ? id : -1;
 
         public void GetEntityIdsInBox(CubeInt box, Span<int> entityIds) => entityIds.Fill(-1);
 
         public void SetBlocking(Vector3Int position, int entityId) => _blocking[position] = entityId;
 
         public void ClearBlocking(Vector3Int position) => _blocking.Remove(position);
-
-        public void SetTerrain(Vector3Int position, int entityId) => _terrain[position] = entityId;
     }
 
     private sealed class Fixture
@@ -63,10 +58,10 @@ public sealed class ProcessingTierSystemTests
         public FakeMapQuery Map { get; } = new();
         public ProcessingTierSystem System { get; }
 
-        public Fixture(IPlayerQuery? playerQuery = null)
+        public Fixture(IPlayerQuery? playerQuery = null, int transitionsPerFrame = ProcessingTierSystem.DefaultTransitionsPerFrame)
         {
             Resolver.Wire(Tiers, Transforms, Events);
-            System = new ProcessingTierSystem(Transforms, Map, MovedEntities, Resolver, playerQuery ?? new FakePlayerQuery(PlayerEntityId));
+            System = new ProcessingTierSystem(Transforms, Map, MovedEntities, Resolver, playerQuery ?? new FakePlayerQuery(PlayerEntityId), transitionsPerFrame);
         }
 
         /// <summary>Places a Blocking entity in the transform pool and the fake index, with no tier -- as if created before any reference existed. One Blocking entity per tile, as on the real map -- two on one tile would have the second silently evict the first from the index.</summary>
@@ -84,6 +79,17 @@ public sealed class ProcessingTierSystemTests
             Map.SetBlocking(newPosition, entityId);
             Transforms.TrySet(entityId, new TransformComponent(newPosition, new Vector2Byte(1, 1)));
             MovedEntities.Record(new EntityMovedEvent(entityId, old, newPosition, new Vector2Byte(1, 1)));
+        }
+
+        public Engine.ECS.Entities.EntityManager Entities { get; } = new(new Engine.ECS.Components.ComponentManager(initialEntityCapacity: 10, initialComponentCapacity: 10), 10);
+
+        /// <summary>Creates a Blocking entity the way population does against a preset reference: tiered and indexed at creation through the resolver, so no first-frame scan ever sees it.</summary>
+        public int Spawn(Vector3Int position)
+        {
+            var entityId = Resolver.CreateEntityAt(Entities, position);
+            Transforms.Add(entityId, new TransformComponent(position, new Vector2Byte(1, 1)));
+            Map.SetBlocking(position, entityId);
+            return entityId;
         }
 
         /// <summary>One frame: Update, then clear the buffer, as SystemManager does.</summary>
@@ -140,9 +146,9 @@ public sealed class ProcessingTierSystemTests
     }
 
     [TestMethod]
-    public void FirstUpdate_NoPresetReference_OutsideLocalButSameNeighborhoodCell_Neighborhood()
+    public void FirstUpdate_NoPresetReference_OutsideLocalButSameNeighborhood_Neighborhood()
     {
-        // Distance 200, far outside Local, but floor(700/1000) == floor(500/1000): same cell.
+        // Distance 200, far outside Local, but both in neighborhood (0, 0).
         var fixture = new Fixture();
         fixture.Place(PlayerEntityId, new Vector3Int(500, 500, 0));
         fixture.Place(OtherEntityId, new Vector3Int(700, 500, 0));
@@ -153,9 +159,9 @@ public sealed class ProcessingTierSystemTests
     }
 
     [TestMethod]
-    public void FirstUpdate_NoPresetReference_SameBoroughDifferentNeighborhood_Borough()
+    public void FirstUpdate_NoPresetReference_AdjacentNeighborhood_Borough()
     {
-        // Neighborhood (0,0) vs (1,0), both borough floor(x/2000) == 0.
+        // Neighborhood (0,0) vs (1,0): adjacent.
         var fixture = new Fixture();
         fixture.Place(PlayerEntityId, new Vector3Int(900, 500, 0));
         fixture.Place(OtherEntityId, new Vector3Int(1100, 500, 0));
@@ -166,7 +172,7 @@ public sealed class ProcessingTierSystemTests
     }
 
     [TestMethod]
-    public void FirstUpdate_NoPresetReference_DifferentMapLayer_BeyondRegardlessOfXY()
+    public void FirstUpdate_NoPresetReference_DifferentMapLayerWithinLocalRadius_NeighborhoodNotLocal()
     {
         var fixture = new Fixture();
         fixture.Place(PlayerEntityId, new Vector3Int(2, 2, 0));
@@ -174,7 +180,7 @@ public sealed class ProcessingTierSystemTests
 
         fixture.Frame();
 
-        Assert.AreEqual(ProcessingTierLevel.Beyond, fixture.TierOf(OtherEntityId));
+        Assert.AreEqual(ProcessingTierLevel.Neighborhood, fixture.TierOf(OtherEntityId));
     }
 
     [TestMethod]
@@ -375,32 +381,9 @@ public sealed class ProcessingTierSystemTests
         Assert.AreEqual(ProcessingTierLevel.Local, fixture.TierOf(SecondEntityId));
     }
 
-    /// <summary>
-    /// The bug this rework exists to fix: a stationary entity with no MovementComponent -- here
-    /// terrain, as lava is -- used to be permanently Beyond because the old system only tiered
-    /// movers. It is found through the map's terrain index and promoted as the player approaches.
-    /// </summary>
+    /// <summary>A MapLayer change moves Local with the player: what was Local on the old layer drops to its cell's tier, and what is near on the new layer becomes Local.</summary>
     [TestMethod]
-    public void PlayerApproaches_StationaryTerrainEntity_IsPromoted()
-    {
-        var fixture = new Fixture();
-        fixture.Place(PlayerEntityId, new Vector3Int(500, 500, 0));
-
-        var lavaPosition = new Vector3Int(600, 500, 0);
-        fixture.Transforms.Add(OtherEntityId, new TransformComponent(lavaPosition, new Vector2Byte(1, 1)));
-        fixture.Map.SetTerrain(lavaPosition, OtherEntityId);
-        fixture.Frame();
-        Assert.AreEqual(ProcessingTierLevel.Neighborhood, fixture.TierOf(OtherEntityId));
-
-        fixture.Move(PlayerEntityId, new Vector3Int(530, 500, 0));
-        fixture.Frame();
-
-        Assert.AreEqual(ProcessingTierLevel.Local, fixture.TierOf(OtherEntityId));
-    }
-
-    /// <summary>A MapLayer change reclassifies everything: the old layer goes Beyond, the new layer is tiered by distance.</summary>
-    [TestMethod]
-    public void PlayerChangesMapLayer_FullRebuild()
+    public void PlayerChangesMapLayer_LocalMovesToTheNewLayer()
     {
         var fixture = new Fixture();
         fixture.Place(PlayerEntityId, new Vector3Int(500, 500, 0));
@@ -408,29 +391,204 @@ public sealed class ProcessingTierSystemTests
         fixture.Place(SecondEntityId, new Vector3Int(505, 500, 1));
         fixture.Frame();
         Assert.AreEqual(ProcessingTierLevel.Local, fixture.TierOf(OtherEntityId));
-        Assert.AreEqual(ProcessingTierLevel.Beyond, fixture.TierOf(SecondEntityId));
+        Assert.AreEqual(ProcessingTierLevel.Neighborhood, fixture.TierOf(SecondEntityId));
 
         fixture.Move(PlayerEntityId, new Vector3Int(500, 500, 1));
         fixture.Frame();
 
-        Assert.AreEqual(ProcessingTierLevel.Beyond, fixture.TierOf(OtherEntityId));
+        Assert.AreEqual(ProcessingTierLevel.Neighborhood, fixture.TierOf(OtherEntityId));
         Assert.AreEqual(ProcessingTierLevel.Local, fixture.TierOf(SecondEntityId));
     }
 
-    /// <summary>Crossing a Neighborhood cell boundary reclassifies everything too -- Neighborhood is an absolute cell, not a radius.</summary>
+    /// <summary>Crossing into another neighborhood reclassifies the old and new ones -- Neighborhood is a whole neighborhood, not a radius.</summary>
     [TestMethod]
-    public void PlayerCrossesNeighborhoodBoundary_FullRebuild()
+    public void PlayerCrossesNeighborhoodBoundary_RetiersNewCell()
     {
         var fixture = new Fixture();
-        fixture.Place(PlayerEntityId, new Vector3Int(995, 500, 0));
+        fixture.Place(PlayerEntityId, new Vector3Int(1019, 500, 0));
         fixture.Place(OtherEntityId, new Vector3Int(1500, 500, 0));
         fixture.Frame();
-        Assert.AreEqual(ProcessingTierLevel.Borough, fixture.TierOf(OtherEntityId), "Precondition: different neighborhood cell, same borough.");
+        Assert.AreEqual(ProcessingTierLevel.Borough, fixture.TierOf(OtherEntityId), "Precondition: an adjacent neighborhood.");
 
-        fixture.Move(PlayerEntityId, new Vector3Int(1005, 500, 0));
+        fixture.Move(PlayerEntityId, new Vector3Int(1029, 500, 0));
         fixture.Frame();
 
         Assert.AreEqual(ProcessingTierLevel.Neighborhood, fixture.TierOf(OtherEntityId));
+    }
+
+    // --- Cell crossings against a preset reference: found through the membership index. ------
+
+    /// <summary>A fixture whose reference is preset and whose player is the first spawned entity (id 0), so every entity is tiered and indexed at creation and no full scan ever runs.</summary>
+    private static Fixture PresetFixture(Vector3Int playerPosition, out int playerEntityId)
+    {
+        var fixture = new Fixture(new FakePlayerQuery(0));
+        fixture.Resolver.SetReferencePosition(playerPosition);
+        playerEntityId = fixture.Spawn(playerPosition);
+        Assert.AreEqual(0, playerEntityId, "Precondition: the player is the first entity created.");
+        fixture.Frame();
+        return fixture;
+    }
+
+    [TestMethod]
+    public void PresetReference_PlayerCrossesNeighborhoodBoundary_EntityInNewCellIsPromotedToNeighborhood()
+    {
+        var fixture = PresetFixture(new Vector3Int(1019, 500, 0), out var playerEntityId);
+        var otherEntityId = fixture.Spawn(new Vector3Int(1500, 500, 0));
+        Assert.AreEqual(ProcessingTierLevel.Borough, fixture.TierOf(otherEntityId), "Precondition: an adjacent neighborhood.");
+
+        fixture.Move(playerEntityId, new Vector3Int(1029, 500, 0));
+        fixture.Frame();
+
+        Assert.AreEqual(ProcessingTierLevel.Neighborhood, fixture.TierOf(otherEntityId));
+    }
+
+    [TestMethod]
+    public void PresetReference_PlayerCrossesNeighborhoodBoundary_EntityInOldCellIsDemotedToBorough()
+    {
+        var fixture = PresetFixture(new Vector3Int(1029, 500, 0), out var playerEntityId);
+        var otherEntityId = fixture.Spawn(new Vector3Int(1500, 500, 0));
+        Assert.AreEqual(ProcessingTierLevel.Neighborhood, fixture.TierOf(otherEntityId), "Precondition: the same neighborhood.");
+
+        fixture.Move(playerEntityId, new Vector3Int(1019, 500, 0));
+        fixture.Frame();
+
+        Assert.AreEqual(ProcessingTierLevel.Borough, fixture.TierOf(otherEntityId));
+    }
+
+    /// <summary>A crossing shifts the whole ring, not just the two neighborhoods the player stepped between: a neighborhood two away from the old one joins the ring, and one two away from the new one leaves it.</summary>
+    [TestMethod]
+    public void PresetReference_PlayerCrossesNeighborhoodBoundary_NeighborhoodJoiningTheRingIsPromotedToBorough()
+    {
+        var fixture = PresetFixture(new Vector3Int(2043, 500, 0), out var playerEntityId);
+        var otherEntityId = fixture.Spawn(new Vector3Int(3500, 1500, 0));
+        Assert.AreEqual(ProcessingTierLevel.Beyond, fixture.TierOf(otherEntityId), "Precondition: two neighborhoods away.");
+
+        fixture.Move(playerEntityId, new Vector3Int(2053, 500, 0));
+        fixture.Frame();
+
+        Assert.AreEqual(ProcessingTierLevel.Borough, fixture.TierOf(otherEntityId));
+    }
+
+    [TestMethod]
+    public void PresetReference_PlayerCrossesNeighborhoodBoundary_NeighborhoodLeavingTheRingIsDemotedToBeyond()
+    {
+        var fixture = PresetFixture(new Vector3Int(2043, 500, 0), out var playerEntityId);
+        var otherEntityId = fixture.Spawn(new Vector3Int(500, 1500, 0));
+        Assert.AreEqual(ProcessingTierLevel.Borough, fixture.TierOf(otherEntityId), "Precondition: an adjacent neighborhood.");
+
+        fixture.Move(playerEntityId, new Vector3Int(2053, 500, 0));
+        fixture.Frame();
+
+        Assert.AreEqual(ProcessingTierLevel.Beyond, fixture.TierOf(otherEntityId));
+    }
+
+    [TestMethod]
+    public void PresetReference_PlayerCrossesDiagonally_OppositeCornerJoinsTheRing_SharedRingNeighborhoodStaysBorough()
+    {
+        var fixture = PresetFixture(new Vector3Int(1019, 1019, 0), out var playerEntityId);
+        var joining = fixture.Spawn(new Vector3Int(3000, 100, 0));
+        var shared = fixture.Spawn(new Vector3Int(100, 1500, 0));
+        Assert.AreEqual(ProcessingTierLevel.Beyond, fixture.TierOf(joining), "Precondition: two neighborhoods away.");
+        Assert.AreEqual(ProcessingTierLevel.Borough, fixture.TierOf(shared), "Precondition: adjacent.");
+
+        fixture.Move(playerEntityId, new Vector3Int(1029, 1029, 0));
+        fixture.Frame();
+
+        Assert.AreEqual(ProcessingTierLevel.Borough, fixture.TierOf(joining));
+        Assert.AreEqual(ProcessingTierLevel.Borough, fixture.TierOf(shared));
+    }
+
+    /// <summary>A jump to a neighborhood far from the old one retiers both 3x3s, which no longer overlap at all.</summary>
+    [TestMethod]
+    public void PresetReference_PlayerJumpsFarAway_BothWindowsAreRetiered()
+    {
+        var fixture = PresetFixture(new Vector3Int(500, 500, 0), out var playerEntityId);
+        var oldCenter = fixture.Spawn(new Vector3Int(700, 500, 1));
+        var oldRing = fixture.Spawn(new Vector3Int(1500, 500, 0));
+        var newRing = fixture.Spawn(new Vector3Int(4500, 500, 0));
+        var newCenter = fixture.Spawn(new Vector3Int(5700, 500, 2));
+
+        fixture.Move(playerEntityId, new Vector3Int(5500, 500, 0));
+        fixture.Frame();
+
+        Assert.AreEqual(ProcessingTierLevel.Beyond, fixture.TierOf(oldCenter));
+        Assert.AreEqual(ProcessingTierLevel.Beyond, fixture.TierOf(oldRing));
+        Assert.AreEqual(ProcessingTierLevel.Borough, fixture.TierOf(newRing));
+        Assert.AreEqual(ProcessingTierLevel.Neighborhood, fixture.TierOf(newCenter));
+    }
+
+    /// <summary>The index follows entity moves: an entity that walked into the new cell after it was created is found there, not in the cell it was born in.</summary>
+    [TestMethod]
+    public void PresetReference_EntityMovedIntoCellBeforeCrossing_IsFoundInItsNewCell()
+    {
+        var fixture = PresetFixture(new Vector3Int(1019, 500, 0), out var playerEntityId);
+        var otherEntityId = fixture.Spawn(new Vector3Int(2500, 500, 0));
+        fixture.Move(otherEntityId, new Vector3Int(1500, 500, 0));
+        fixture.Frame();
+        Assert.AreEqual(ProcessingTierLevel.Borough, fixture.TierOf(otherEntityId), "Precondition: moved into a neighborhood adjacent to the player's.");
+
+        fixture.Move(playerEntityId, new Vector3Int(1029, 500, 0));
+        fixture.Frame();
+
+        Assert.AreEqual(ProcessingTierLevel.Neighborhood, fixture.TierOf(otherEntityId));
+    }
+
+    [TestMethod]
+    public void PresetReference_PlayerChangesMapLayer_NearbyEntityOnNewLayerIsPromotedToLocal()
+    {
+        var fixture = PresetFixture(new Vector3Int(500, 500, 0), out var playerEntityId);
+        var otherEntityId = fixture.Spawn(new Vector3Int(590, 500, 1));
+        Assert.AreEqual(ProcessingTierLevel.Neighborhood, fixture.TierOf(otherEntityId), "Precondition: a different MapLayer is never Local.");
+
+        fixture.Move(playerEntityId, new Vector3Int(510, 500, 1));
+        fixture.Frame();
+
+        Assert.AreEqual(ProcessingTierLevel.Local, fixture.TierOf(otherEntityId));
+    }
+
+    /// <summary>The demote side of a layer change is found by the exit-radius square around the old reference -- here an entity at distance 90, past the entry radius but still Local through hysteresis.</summary>
+    [TestMethod]
+    public void PresetReference_PlayerChangesMapLayer_LocalEntityOnOldLayerIsDemoted()
+    {
+        var fixture = PresetFixture(new Vector3Int(500, 500, 0), out var playerEntityId);
+        var otherEntityId = fixture.Spawn(new Vector3Int(570, 500, 0));
+        fixture.Move(otherEntityId, new Vector3Int(590, 500, 0));
+        fixture.Frame();
+        Assert.AreEqual(ProcessingTierLevel.Local, fixture.TierOf(otherEntityId), "Precondition: Local through hysteresis at distance 90.");
+
+        fixture.Move(playerEntityId, new Vector3Int(500, 500, 1));
+        fixture.Frame();
+
+        Assert.AreEqual(ProcessingTierLevel.Neighborhood, fixture.TierOf(otherEntityId));
+    }
+
+    /// <summary>Neighborhood and Borough ignore MapLayer, so a neighborhood crossing retiers entities on every layer, not only the player's.</summary>
+    [TestMethod]
+    public void PresetReference_PlayerCrossesNeighborhoodBoundary_EntityOnAnotherLayerIsRetiered()
+    {
+        var fixture = PresetFixture(new Vector3Int(1019, 500, 0), out var playerEntityId);
+        var otherEntityId = fixture.Spawn(new Vector3Int(1500, 500, 2));
+        Assert.AreEqual(ProcessingTierLevel.Borough, fixture.TierOf(otherEntityId), "Precondition: an adjacent neighborhood, another layer.");
+
+        fixture.Move(playerEntityId, new Vector3Int(1029, 500, 0));
+        fixture.Frame();
+
+        Assert.AreEqual(ProcessingTierLevel.Neighborhood, fixture.TierOf(otherEntityId));
+    }
+
+    /// <summary>An entity destroyed without the index hearing about it is dropped when its cell is next walked, rather than retiered or thrown on.</summary>
+    [TestMethod]
+    public void PresetReference_DestroyedEntityInWalkedCell_IsDroppedFromIndex()
+    {
+        var fixture = PresetFixture(new Vector3Int(1019, 500, 0), out var playerEntityId);
+        var otherEntityId = fixture.Spawn(new Vector3Int(1500, 500, 0));
+        Assert.IsTrue(fixture.Transforms.Remove(otherEntityId));
+        var indexedBefore = fixture.Resolver.Membership.Count;
+
+        fixture.Move(playerEntityId, new Vector3Int(1029, 500, 0));
+        fixture.Frame();
+
+        Assert.AreEqual(indexedBefore - 1, fixture.Resolver.Membership.Count);
     }
 
     // --- Spawn reconciliation: reference preset, player lands elsewhere. --------------------
@@ -461,5 +619,190 @@ public sealed class ProcessingTierSystemTests
 
         Assert.AreEqual(ProcessingTierLevel.Local, fixture.TierOf(OtherEntityId));
         Assert.AreEqual(new Vector3Int(510, 500, 0), fixture.Resolver.ReferencePosition);
+    }
+
+    // --- The smeared transition queue. -------------------------------------------------------
+
+    /// <summary>A crossing queues the neighborhoods whose tier changed rather than retiering them in that frame, so the work is spread over as many frames as the budget needs.</summary>
+    [TestMethod]
+    public void PresetReference_Crossing_RetiersOnlyTheBudgetPerFrame()
+    {
+        var fixture = new Fixture(new FakePlayerQuery(0), transitionsPerFrame: 1);
+        fixture.Resolver.SetReferencePosition(new Vector3Int(1019, 500, 0));
+        var playerEntityId = fixture.Spawn(new Vector3Int(1019, 500, 0));
+        var first = fixture.Spawn(new Vector3Int(1500, 500, 0));
+        var second = fixture.Spawn(new Vector3Int(1600, 500, 0));
+        fixture.Frame();
+
+        fixture.Move(playerEntityId, new Vector3Int(1029, 500, 0));
+        fixture.Frame();
+
+        Assert.AreEqual(1, new[] { first, second }.Count(id => fixture.TierOf(id) == ProcessingTierLevel.Neighborhood), "Exactly one of the two was recomputed this frame.");
+        Assert.IsTrue(fixture.System.Transitions.HasPending);
+
+        for (var i = 0; i < 200 && fixture.System.Transitions.HasPending; i++)
+        {
+            fixture.Frame();
+        }
+
+        Assert.IsFalse(fixture.System.Transitions.HasPending);
+        Assert.AreEqual(ProcessingTierLevel.Neighborhood, fixture.TierOf(first));
+        Assert.AreEqual(ProcessingTierLevel.Neighborhood, fixture.TierOf(second));
+    }
+
+    /// <summary>Thawing runs ahead of freezing: the neighborhood the player walked into comes alive before the one behind them is frozen.</summary>
+    [TestMethod]
+    public void PresetReference_Crossing_ThawsBeforeItFreezes()
+    {
+        var fixture = new Fixture(new FakePlayerQuery(0), transitionsPerFrame: 1);
+        fixture.Resolver.SetReferencePosition(new Vector3Int(1019, 500, 0));
+        var playerEntityId = fixture.Spawn(new Vector3Int(1019, 500, 0));
+        var freezing = fixture.Spawn(new Vector3Int(500, 500, 0));
+        var thawing = fixture.Spawn(new Vector3Int(1500, 500, 0));
+        fixture.Frame();
+
+        fixture.Move(playerEntityId, new Vector3Int(1029, 500, 0));
+        fixture.Frame();
+
+        Assert.AreEqual(ProcessingTierLevel.Neighborhood, fixture.TierOf(thawing));
+        Assert.AreEqual(ProcessingTierLevel.Neighborhood, fixture.TierOf(freezing), "Still simulated: its freeze is queued behind the thaw.");
+
+        for (var i = 0; i < 200 && fixture.System.Transitions.HasPending; i++)
+        {
+            fixture.Frame();
+        }
+
+        Assert.AreEqual(ProcessingTierLevel.Borough, fixture.TierOf(freezing));
+    }
+
+    /// <summary>Crossing back before the queue drains cancels the pending work by making it a no-op -- the drain recomputes each tier when it reaches the entity, so nothing is applied from the abandoned crossing.</summary>
+    [TestMethod]
+    public void PresetReference_CrossesBackBeforeDraining_LeavesEveryTierCorrect()
+    {
+        var fixture = new Fixture(new FakePlayerQuery(0), transitionsPerFrame: 1);
+        fixture.Resolver.SetReferencePosition(new Vector3Int(1019, 500, 0));
+        var playerEntityId = fixture.Spawn(new Vector3Int(1019, 500, 0));
+        var home = fixture.Spawn(new Vector3Int(500, 500, 0));
+        var acrossTheBorder = fixture.Spawn(new Vector3Int(1500, 500, 0));
+        fixture.Frame();
+
+        fixture.Move(playerEntityId, new Vector3Int(1029, 500, 0));
+        fixture.Frame();
+        fixture.Move(playerEntityId, new Vector3Int(1019, 500, 0));
+
+        for (var i = 0; i < 200 && fixture.System.Transitions.HasPending; i++)
+        {
+            fixture.Frame();
+        }
+
+        Assert.IsFalse(fixture.System.Transitions.HasPending);
+        Assert.AreEqual(ProcessingTierLevel.Neighborhood, fixture.TierOf(home));
+        Assert.AreEqual(ProcessingTierLevel.Borough, fixture.TierOf(acrossTheBorder));
+    }
+
+    /// <summary>Local is never queued: an entity the player walks up to is promoted the same frame, even while a crossing's transitions are still draining.</summary>
+    [TestMethod]
+    public void PresetReference_CrossingPromotesNearbyEntityToLocalImmediately()
+    {
+        var fixture = new Fixture(new FakePlayerQuery(0), transitionsPerFrame: 1);
+        fixture.Resolver.SetReferencePosition(new Vector3Int(1019, 500, 0));
+        var playerEntityId = fixture.Spawn(new Vector3Int(1019, 500, 0));
+        var nearby = fixture.Spawn(new Vector3Int(1100, 500, 0));
+        fixture.Frame();
+        Assert.AreEqual(ProcessingTierLevel.Borough, fixture.TierOf(nearby), "Precondition: across the border, outside Local.");
+
+        fixture.Move(playerEntityId, new Vector3Int(1029, 500, 0));
+        fixture.Frame();
+
+        Assert.AreEqual(ProcessingTierLevel.Local, fixture.TierOf(nearby));
+        Assert.IsTrue(fixture.System.Transitions.HasPending, "Precondition: the crossing's own transitions are still draining.");
+    }
+
+    /// <summary>The edge walk isn't clamped at 0: stepping toward an entity west of the origin promotes it.</summary>
+    [TestMethod]
+    public void PresetReference_PlayerStepsTowardAnEntityWestOfTheOrigin_IsPromotedToLocal()
+    {
+        var fixture = PresetFixture(new Vector3Int(10, 500, 0), out var playerEntityId);
+        var otherEntityId = fixture.Spawn(new Vector3Int(-75, 500, 0));
+        Assert.AreNotEqual(ProcessingTierLevel.Local, fixture.TierOf(otherEntityId), "Precondition: 85 tiles away.");
+
+        fixture.Move(playerEntityId, new Vector3Int(0, 500, 0));
+        fixture.Frame();
+
+        Assert.AreEqual(ProcessingTierLevel.Local, fixture.TierOf(otherEntityId));
+    }
+
+    [TestMethod]
+    public void PresetReference_PlayerCrossesZeroIntoNeighborhoodMinusOne_RetiersBothSides()
+    {
+        var fixture = PresetFixture(new Vector3Int(5, 500, 0), out var playerEntityId);
+        var westEntityId = fixture.Spawn(new Vector3Int(-500, 500, 0));
+        var eastEntityId = fixture.Spawn(new Vector3Int(500, 500, 0));
+        Assert.AreEqual(ProcessingTierLevel.Borough, fixture.TierOf(westEntityId), "Precondition: neighborhood -1 is in the ring.");
+
+        fixture.Move(playerEntityId, new Vector3Int(-5, 500, 0));
+        fixture.Frame();
+
+        Assert.AreEqual(ProcessingTierLevel.Neighborhood, fixture.TierOf(westEntityId));
+        Assert.AreEqual(ProcessingTierLevel.Borough, fixture.TierOf(eastEntityId));
+    }
+
+    /// <summary>A fixture like PresetFixture with a window centred on neighborhood (0, 0), recording every shift.</summary>
+    private static Fixture WindowFixture(Vector3Int playerPosition, out int playerEntityId, List<((int, int) Previous, (int, int) Center)> shifts)
+    {
+        var fixture = new Fixture(new FakePlayerQuery(0));
+        fixture.Resolver.SetReferencePosition(playerPosition);
+        fixture.Resolver.SetWindowCenter(0, 0);
+        fixture.Resolver.WindowShifted += (previous, center) => shifts.Add((previous, center));
+        playerEntityId = fixture.Spawn(playerPosition);
+        fixture.Frame();
+        return fixture;
+    }
+
+    [TestMethod]
+    public void Window_PlayerJustAcrossTheBorder_NothingShiftsOrRetiers()
+    {
+        var shifts = new List<((int, int) Previous, (int, int) Center)>();
+        var fixture = WindowFixture(new Vector3Int(1019, 500, 0), out var playerEntityId, shifts);
+        var eastEntityId = fixture.Spawn(new Vector3Int(1600, 500, 0));
+        var westEntityId = fixture.Spawn(new Vector3Int(400, 500, 0));
+
+        fixture.Move(playerEntityId, new Vector3Int(1080, 500, 0));
+        fixture.Frame();
+
+        Assert.IsEmpty(shifts);
+        Assert.AreEqual(ProcessingTierLevel.Borough, fixture.TierOf(eastEntityId));
+        Assert.AreEqual(ProcessingTierLevel.Neighborhood, fixture.TierOf(westEntityId));
+    }
+
+    [TestMethod]
+    public void Window_PlayerSixtyFourTilesIn_ShiftsOnceAndRetiersBothNeighborhoods()
+    {
+        var shifts = new List<((int, int) Previous, (int, int) Center)>();
+        var fixture = WindowFixture(new Vector3Int(1080, 500, 0), out var playerEntityId, shifts);
+        var eastEntityId = fixture.Spawn(new Vector3Int(1600, 500, 0));
+        var westEntityId = fixture.Spawn(new Vector3Int(400, 500, 0));
+
+        fixture.Move(playerEntityId, new Vector3Int(1087, 500, 0));
+        fixture.Frame();
+        fixture.Move(playerEntityId, new Vector3Int(1088, 500, 0));
+        fixture.Frame();
+
+        CollectionAssert.AreEqual(new[] { ((0, 0), (1, 0)) }, shifts);
+        Assert.AreEqual((1, 0), fixture.Resolver.WindowCenter);
+        Assert.AreEqual(ProcessingTierLevel.Neighborhood, fixture.TierOf(eastEntityId));
+        Assert.AreEqual(ProcessingTierLevel.Borough, fixture.TierOf(westEntityId));
+    }
+
+    /// <summary>A creature born after the shift is tiered against the window centre too.</summary>
+    [TestMethod]
+    public void Window_EntityCreatedWhileThePlayerIsInsideTheGrace_IsBornAgainstTheCentre()
+    {
+        var shifts = new List<((int, int) Previous, (int, int) Center)>();
+        var fixture = WindowFixture(new Vector3Int(1030, 500, 0), out _, shifts);
+
+        var eastEntityId = fixture.Spawn(new Vector3Int(1900, 500, 0));
+
+        Assert.AreEqual(ProcessingTierLevel.Borough, fixture.TierOf(eastEntityId));
     }
 }

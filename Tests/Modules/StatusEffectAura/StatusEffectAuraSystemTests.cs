@@ -1,3 +1,4 @@
+using Engine.ECS.Entities;
 using Engine.ECS.Components;
 using Engine.ECS.Systems;
 using Engine.Events;
@@ -14,6 +15,7 @@ using Game.Modules.StatusEffectAura;
 using Game.Modules.StatusEffectAura.Components;
 using Game.Modules.StatusEffectAura.Systems;
 using Game.Modules.StatusEffects;
+using Game.Terrain;
 using Game.World;
 using Microsoft.Xna.Framework;
 
@@ -42,8 +44,9 @@ public sealed class StatusEffectAuraSystemTests
     {
         private readonly Dictionary<(int X, int Y, int Z), int> _occupantByPosition = [];
         private readonly Dictionary<(int X, int Y, int Z), List<int>> _nonBlockingOccupantsByPosition = [];
+        private readonly Dictionary<(int X, int Y, int Z), TerrainCell> _terrainByPosition = [];
 
-        public Vector3Int MapSize { get; } = new(1000, 1000, 3);
+        public MapBounds Bounds { get; init; } = new(0, 0, 1000, 1000, 3);
         public bool IsOnMap(Vector3Int position) => true;
         public bool IsBlocking(int entityId) => true;
 
@@ -62,7 +65,9 @@ public sealed class StatusEffectAuraSystemTests
         }
 
         public int GetEntityIdAt(Vector3Int position) => _occupantByPosition.TryGetValue((position.X, position.Y, position.Z), out var id) ? id : -1;
-        public int GetTerrainEntityIdAt(Vector3Int position) => -1;
+        public void SetTerrain(Vector3Int position, ushort terrainTypeId) => _terrainByPosition[(position.X, position.Y, position.Z)] = new TerrainCell(terrainTypeId, 0);
+
+        public TerrainCell GetTerrainAt(Vector3Int position) => _terrainByPosition.TryGetValue((position.X, position.Y, position.Z), out var cell) ? cell : default;
 
         public IReadOnlyList<int> GetOccupantEntityIdsAt(Vector3Int position)
         {
@@ -125,7 +130,7 @@ public sealed class StatusEffectAuraSystemTests
     }
 
     /// <summary>Mirrors real game wiring (both BurningModule.Configure and PoisonModule.Configure registering their own applier into the same shared registry) -- the registry a caller can override via applierRegistry to exercise unsupported-effect-type behavior instead.</summary>
-    private (StatusEffectAuraSystem System, ComponentManager ComponentManager, FakeMapQuery MapQuery, FrameEventBuffer<EntityMovedEvent> MovedEntities, EventBus EventBus) Build(StatusEffectAuraApplierRegistry? applierRegistry = null)
+    private (StatusEffectAuraSystem System, ComponentManager ComponentManager, FakeMapQuery MapQuery, FrameEventBuffer<EntityMovedEvent> MovedEntities, EventBus EventBus) Build(StatusEffectAuraApplierRegistry? applierRegistry = null, TerrainRegistry? terrain = null, FakeMapQuery? mapQuery = null, SimulationScope? simulationScope = null)
     {
         var componentManager = new ComponentManager(initialEntityCapacity: 200, initialComponentCapacity: 50);
         componentManager.RegisterDirectPool<TransformComponent>(static (ref existing, incoming) => existing = incoming);
@@ -136,7 +141,7 @@ public sealed class StatusEffectAuraSystemTests
         componentManager.RegisterPackedPool<DeadComponent>(static (ref existing, incoming) => existing = incoming);
         componentManager.RegisterDirectPool<ProcessingTierComponent>(static (ref existing, incoming) => existing = incoming);
 
-        var mapQuery = new FakeMapQuery();
+        mapQuery ??= new FakeMapQuery();
         var movedEntities = new FrameEventBuffer<EntityMovedEvent>();
         var eventBus = new EventBus();
 
@@ -152,7 +157,9 @@ public sealed class StatusEffectAuraSystemTests
             componentManager.GetDirectPool<ProcessingTierComponent>(),
             new ProcessingTierEvents(),
             _clock,
-            componentManager.GetPackedPool<DeadComponent>());
+            terrain ?? new TerrainRegistry(),
+            componentManager.GetPackedPool<DeadComponent>(),
+            simulationScope: simulationScope);
 
         return (system, componentManager, mapQuery, movedEntities, eventBus);
     }
@@ -161,11 +168,11 @@ public sealed class StatusEffectAuraSystemTests
     {
         var registry = new StatusEffectAuraApplierRegistry();
         registry.Register(new TimerBasedAuraApplier<BurningTimerComponent>(StatusEffectType.Burning, (cm, id, source, now) => BurningEffects.ApplyStack(cm, id, source, now)));
-        registry.Register(new TimerBasedAuraApplier<PoisonTimerComponent>(StatusEffectType.Poison, (cm, id, source, now) => PoisonEffects.ApplyStack(cm, id, source, durationInTicks: 1, now)));
+        registry.Register(new TimerBasedAuraApplier<PoisonTimerComponent>(StatusEffectType.Poison, (cm, id, source, now) => PoisonEffects.ApplyStack(cm, new EntityKeys(), id, source, durationInTicks: 1, now)));
         return registry;
     }
 
-    /// <summary>AuraGrid only finds a source by scanning its TransformComponent (see StatusEffectAuraSystem.EnsureGrid) -- a source needs one set at its real position for any of these tests to see it, exactly as PlaceTerrainOnMap/PlaceEntityOnMap would set it for real in-game.</summary>
+    /// <summary>AuraGrid only finds a source by scanning its TransformComponent (see StatusEffectAuraSystem.EnsureGrid) -- a source needs one set at its real position for any of these tests to see it, exactly as PlaceEntityOnMap would set it for real in-game.</summary>
     private static void AddSource(ComponentManager componentManager, int entityId, Vector3Int position, StatusEffectType effectType, byte strength)
     {
         componentManager.GetMultiPool<StatusEffectAuraSourceComponent>().Add(entityId, new StatusEffectAuraSourceComponent(effectType, strength, Color.Orange));
@@ -259,6 +266,96 @@ public sealed class StatusEffectAuraSystemTests
         MoveObserverTo(system, movedEntities, new Vector3Int(0, 0, 0), SourcePosition);
 
         Assert.AreEqual(9, StackCountOf(componentManager, ObserverEntityId));
+    }
+
+    private static (TerrainRegistry Terrain, ushort GlowingTypeId) CreateGlowingTerrain()
+    {
+        var terrain = new TerrainRegistry();
+        var typeId = terrain.Register(new TerrainDefinition(
+            "test:glowing", "Glowing", "", default, "~", default,
+            Aura: new StatusEffectAuraSourceComponent(StatusEffectType.Burning, auraAndGlowStrength: 8, Color.Orange)));
+        return (terrain, typeId);
+    }
+
+    [TestMethod]
+    public void GlowingTerrainPlacedBeforeFirstUpdate_GrantsStacksFromIt()
+    {
+        var (terrain, glowingTypeId) = CreateGlowingTerrain();
+        var mapQuery = new FakeMapQuery { Bounds = new MapBounds(0, 0, 32, 32, 3) };
+        mapQuery.SetTerrain(SourcePosition, glowingTypeId);
+        var (system, componentManager, _, movedEntities, _) = Build(terrain: terrain, mapQuery: mapQuery);
+
+        MoveObserverTo(system, movedEntities, new Vector3Int(0, 0, 0), new Vector3Int(SourcePosition.X + 1, SourcePosition.Y, SourcePosition.Z));
+
+        Assert.AreEqual(4, StackCountOf(componentManager, ObserverEntityId));
+    }
+
+    [TestMethod]
+    public void TerrainChangedToGlowing_GrantsToOccupantAlreadyInRange()
+    {
+        var (terrain, glowingTypeId) = CreateGlowingTerrain();
+        var mapQuery = new FakeMapQuery { Bounds = new MapBounds(0, 0, 32, 32, 3) };
+        var (system, componentManager, _, movedEntities, eventBus) = Build(terrain: terrain, mapQuery: mapQuery);
+        AddSource(componentManager, SourceEntityId, new Vector3Int(30, 30, 0), StatusEffectType.Burning, strength: 1);
+        var observerPosition = new Vector3Int(SourcePosition.X + 1, SourcePosition.Y, SourcePosition.Z);
+        MoveObserverTo(system, movedEntities, new Vector3Int(0, 0, 0), observerPosition);
+        componentManager.Merge(ObserverEntityId, new TransformComponent(observerPosition, UnitSize));
+        mapQuery.SetOccupant(observerPosition, ObserverEntityId);
+
+        mapQuery.SetTerrain(SourcePosition, glowingTypeId);
+        eventBus.Publish(new TerrainChangedEvent(SourcePosition.X, SourcePosition.Y, TerrainLayer.UnderGround, 0, glowingTypeId));
+
+        Assert.AreEqual(4, StackCountOf(componentManager, ObserverEntityId));
+        Assert.IsTrue(HasExposure(componentManager, ObserverEntityId, StatusEffectType.Burning));
+    }
+
+    [TestMethod]
+    public void TerrainChangedFromGlowing_DropsExposureOfOccupantInRange()
+    {
+        var (terrain, glowingTypeId) = CreateGlowingTerrain();
+        var mapQuery = new FakeMapQuery { Bounds = new MapBounds(0, 0, 32, 32, 3) };
+        mapQuery.SetTerrain(SourcePosition, glowingTypeId);
+        var (system, componentManager, _, movedEntities, eventBus) = Build(terrain: terrain, mapQuery: mapQuery);
+        var observerPosition = new Vector3Int(SourcePosition.X + 1, SourcePosition.Y, SourcePosition.Z);
+        MoveObserverTo(system, movedEntities, new Vector3Int(0, 0, 0), observerPosition);
+        componentManager.Merge(ObserverEntityId, new TransformComponent(observerPosition, UnitSize));
+        mapQuery.SetOccupant(observerPosition, ObserverEntityId);
+
+        mapQuery.SetTerrain(SourcePosition, 0);
+        eventBus.Publish(new TerrainChangedEvent(SourcePosition.X, SourcePosition.Y, TerrainLayer.UnderGround, glowingTypeId, 0));
+
+        Assert.IsFalse(HasExposure(componentManager, ObserverEntityId, StatusEffectType.Burning));
+    }
+
+    [TestMethod]
+    public void TerrainUnloading_ItsGlowingTerrainNoLongerGrants()
+    {
+        var (terrain, glowingTypeId) = CreateGlowingTerrain();
+        var mapQuery = new FakeMapQuery { Bounds = new MapBounds(0, 0, 32, 32, 3) };
+        mapQuery.SetTerrain(SourcePosition, glowingTypeId);
+        var (system, componentManager, _, movedEntities, eventBus) = Build(terrain: terrain, mapQuery: mapQuery);
+        MoveObserverTo(system, movedEntities, new Vector3Int(0, 0, 0), new Vector3Int(30, 30, 0));
+
+        eventBus.Publish(new TerrainUnloadingEvent(Neighborhoods.AreaOf(0, 0, 3)));
+        mapQuery.SetTerrain(SourcePosition, 0);
+        MoveObserverTo(system, movedEntities, new Vector3Int(30, 30, 0), new Vector3Int(SourcePosition.X + 1, SourcePosition.Y, SourcePosition.Z));
+
+        Assert.AreEqual(0, StackCountOf(componentManager, ObserverEntityId));
+    }
+
+    [TestMethod]
+    public void TerrainLoaded_ItsGlowingTerrainGrants()
+    {
+        var (terrain, glowingTypeId) = CreateGlowingTerrain();
+        var mapQuery = new FakeMapQuery { Bounds = new MapBounds(0, 0, 32, 32, 3) };
+        var (system, componentManager, _, movedEntities, eventBus) = Build(terrain: terrain, mapQuery: mapQuery);
+        MoveObserverTo(system, movedEntities, new Vector3Int(0, 0, 0), new Vector3Int(30, 30, 0));
+
+        mapQuery.SetTerrain(SourcePosition, glowingTypeId);
+        eventBus.Publish(new TerrainLoadedEvent(Neighborhoods.AreaOf(0, 0, 3)));
+        MoveObserverTo(system, movedEntities, new Vector3Int(30, 30, 0), new Vector3Int(SourcePosition.X + 1, SourcePosition.Y, SourcePosition.Z));
+
+        Assert.AreEqual(4, StackCountOf(componentManager, ObserverEntityId));
     }
 
     /// <summary>
@@ -359,9 +456,10 @@ public sealed class StatusEffectAuraSystemTests
         MoveObserverTo(system, movedEntities, new Vector3Int(0, 0, 0), SourcePosition);
         Assert.AreEqual(8, StackCountOf(componentManager, ObserverEntityId));
         var firstTickFrame = NextTickFrameOf(componentManager, ObserverEntityId, StatusEffectType.Burning);
-        Assert.AreEqual((uint)(_clock.CurrentFrame + AuraEffects.TickIntervalFrames), firstTickFrame, "The first re-grant is one interval after entry.");
+        Assert.AreEqual(FrameDeadline.AfterStaggered(_clock.CurrentFrame, AuraEffects.TickIntervalFrames, ObserverEntityId), firstTickFrame, "The first re-grant is on the observer's staggered deadline after entry.");
+        var firstTickDelay = (int)(firstTickFrame - _clock.CurrentFrame);
 
-        RunFrames(system, movedEntities, 30);
+        RunFrames(system, movedEntities, firstTickDelay / 2);
 
         // Step out (still in range at distance 1 -- but exposure already exists, so this
         // must not grant) and back in, all before the original timer would naturally tick.
@@ -373,7 +471,7 @@ public sealed class StatusEffectAuraSystemTests
         Assert.AreEqual(8, StackCountOf(componentManager, ObserverEntityId), "Stepping out and back in before the timer ticks must not grant again.");
         Assert.AreEqual(firstTickFrame, NextTickFrameOf(componentManager, ObserverEntityId, StatusEffectType.Burning), "...nor reset the timer.");
 
-        RunFrames(system, movedEntities, 30);
+        RunFrames(system, movedEntities, firstTickDelay - firstTickDelay / 2);
 
         Assert.AreEqual(8, StackCountOf(componentManager, ObserverEntityId), "The original timer reaching 0 re-evaluates based on the entity's current (in-range) position, topping off to the target rather than adding to it again.");
     }
@@ -482,7 +580,7 @@ public sealed class StatusEffectAuraSystemTests
     {
         var (system, componentManager, _, movedEntities, _) = Build();
         AddSource(componentManager, SourceEntityId, SourcePosition, StatusEffectType.Burning, strength: 8);
-        componentManager.GetPackedPool<DeadComponent>().Add(ObserverEntityId, new DeadComponent(KilledByEntityId: null, DiedAtFrame: 0));
+        componentManager.GetPackedPool<DeadComponent>().Add(ObserverEntityId, new DeadComponent(KilledBy: ActionSource.Admin, DiedAtFrame: 0));
 
         MoveObserverTo(system, movedEntities, new Vector3Int(0, 0, 0), SourcePosition);
 
@@ -506,7 +604,7 @@ public sealed class StatusEffectAuraSystemTests
 
     /// <summary>
     /// Exposures are not ProcessingTier-gated any more -- they sit on a timer wheel and re-grant on
-    /// their exact frame at every tier (PLAN-timer-wheel.md). Beyond is the coarsest tier, the one
+    /// their exact frame at every tier. Beyond is the coarsest tier, the one
     /// that used to be visited least often. Sets up an existing exposure directly (bypassing
     /// MoveObserverTo's fresh-entry grant), so the only thing that can grant stacks here is that
     /// exposure's own tick.
@@ -607,7 +705,7 @@ public sealed class StatusEffectAuraSystemTests
         // Establishes the observer's exposure (via the weak anchor Poison source) -- EnsureGrid's
         // bulk scatter, triggered by this same call, also picks up the dual-typed source's own
         // two instances, since both were placed before this very first Update (exactly how
-        // PlaceTerrainOnMap would for real) -- this doesn't exercise the reactive Added path.
+        // population would for real) -- this doesn't exercise the reactive Added path.
         MoveObserverTo(system, movedEntities, new Vector3Int(0, 0, 0), observerPosition);
         // Tick's own periodic pass requires a real Transform to still consider the entity
         // present (see Tick's own doc comment: no Transform reads as "gone," removing the
@@ -854,5 +952,21 @@ public sealed class StatusEffectAuraSystemTests
 
         Assert.AreEqual(8, StackCountOf(componentManager, ObserverEntityId));
         Assert.IsTrue(HasExposure(componentManager, ObserverEntityId, StatusEffectType.Burning));
+    }
+
+    /// <summary>An exposure doesn't accrue while its entity is frozen: owed re-grants are skipped, not granted, and the next one keeps the exposure's cadence.</summary>
+    [TestMethod]
+    public void EntityResumed_OwedExposureRegrants_AreSkippedNotGranted()
+    {
+        var scope = new SimulationScope();
+        scope.SetPolicy(static _ => false);
+        var (_, componentManager, _, _, _) = Build(simulationScope: scope);
+        componentManager.GetMultiPool<StatusEffectAuraExposureComponent>().Add(ObserverEntityId, new StatusEffectAuraExposureComponent(StatusEffectType.Burning, nextTickFrame: 60));
+        _clock.Advance(630);
+
+        scope.RaiseResumed(ObserverEntityId);
+
+        Assert.AreEqual(660u, NextTickFrameOf(componentManager, ObserverEntityId, StatusEffectType.Burning));
+        Assert.AreEqual(0, StackCountOf(componentManager, ObserverEntityId));
     }
 }

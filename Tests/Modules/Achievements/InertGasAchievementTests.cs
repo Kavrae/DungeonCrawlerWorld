@@ -1,4 +1,5 @@
-﻿using Engine.Bootstrap;
+﻿using Engine.ECS.Entities;
+using Engine.Bootstrap;
 using Engine.ECS.Context;
 using Engine.Events;
 using Engine.Math;
@@ -48,7 +49,8 @@ public sealed class InertGasAchievementTests
         movementModule.Configure(context);
 
         IReadOnlyList<IModule> modules = [module, coreModule, movementModule, processingTierModule];
-        var ecsContext = Bootstrapper.Build(modules, initialEntityCapacity: 10, initialComponentCapacity: 10, eventBus);
+        var ecsContext = Bootstrapper.Build(modules, initialEntityCapacity: 10, initialComponentCapacity: 10, eventBus, entityKeys: context.EntityKeys);
+        world.EntityKeys = ecsContext.EntityManager.Keys;
 
         return (ecsContext, eventBus, world);
     }
@@ -62,7 +64,7 @@ public sealed class InertGasAchievementTests
         world.PlayerEntityId = playerEntityId;
         ecsContext.ComponentManager.GetMultiPool<NonBlockingComponent>().Add(ghostEntityId, new NonBlockingComponent(NonBlockingKind.Phasing));
 
-        eventBus.Publish(new StatusEffectAppliedEvent(ghostEntityId, StatusEffectType.Paralysis, StatusEffectSource.FromEntity(playerEntityId)));
+        eventBus.Publish(new StatusEffectAppliedEvent(ghostEntityId, StatusEffectType.Paralysis, ActionSource.FromEntity(ecsContext.ComponentManager, ecsContext.EntityManager.Keys, playerEntityId)));
 
         Assert.IsTrue(AchievementQueries.HasEarned(
             ecsContext.ComponentManager.GetMultiPool<AchievementUnlockedComponent>(),
@@ -78,7 +80,7 @@ public sealed class InertGasAchievementTests
         var goblinEntityId = ecsContext.EntityManager.CreateEntity();
         world.PlayerEntityId = playerEntityId;
 
-        eventBus.Publish(new StatusEffectAppliedEvent(goblinEntityId, StatusEffectType.Paralysis, StatusEffectSource.FromEntity(playerEntityId)));
+        eventBus.Publish(new StatusEffectAppliedEvent(goblinEntityId, StatusEffectType.Paralysis, ActionSource.FromEntity(ecsContext.ComponentManager, ecsContext.EntityManager.Keys, playerEntityId)));
 
         Assert.IsFalse(AchievementQueries.HasEarned(
             ecsContext.ComponentManager.GetMultiPool<AchievementUnlockedComponent>(),
@@ -95,7 +97,7 @@ public sealed class InertGasAchievementTests
         world.PlayerEntityId = playerEntityId;
         ecsContext.ComponentManager.GetMultiPool<NonBlockingComponent>().Add(ghostEntityId, new NonBlockingComponent(NonBlockingKind.Phasing));
 
-        eventBus.Publish(new StatusEffectAppliedEvent(ghostEntityId, StatusEffectType.Poison, StatusEffectSource.FromEntity(playerEntityId)));
+        eventBus.Publish(new StatusEffectAppliedEvent(ghostEntityId, StatusEffectType.Poison, ActionSource.FromEntity(ecsContext.ComponentManager, ecsContext.EntityManager.Keys, playerEntityId)));
 
         Assert.IsFalse(AchievementQueries.HasEarned(
             ecsContext.ComponentManager.GetMultiPool<AchievementUnlockedComponent>(),
@@ -113,7 +115,7 @@ public sealed class InertGasAchievementTests
         world.PlayerEntityId = playerEntityId;
         ecsContext.ComponentManager.GetMultiPool<NonBlockingComponent>().Add(ghostEntityId, new NonBlockingComponent(NonBlockingKind.Phasing));
 
-        eventBus.Publish(new StatusEffectAppliedEvent(ghostEntityId, StatusEffectType.Paralysis, StatusEffectSource.FromEntity(otherEntityId)));
+        eventBus.Publish(new StatusEffectAppliedEvent(ghostEntityId, StatusEffectType.Paralysis, ActionSource.FromEntity(ecsContext.ComponentManager, ecsContext.EntityManager.Keys, otherEntityId)));
 
         Assert.IsFalse(AchievementQueries.HasEarned(
             ecsContext.ComponentManager.GetMultiPool<AchievementUnlockedComponent>(),
@@ -129,7 +131,7 @@ public sealed class InertGasAchievementTests
         world.PlayerEntityId = playerEntityId;
         ecsContext.ComponentManager.GetMultiPool<NonBlockingComponent>().Add(playerEntityId, new NonBlockingComponent(NonBlockingKind.Phasing));
 
-        eventBus.Publish(new StatusEffectAppliedEvent(playerEntityId, StatusEffectType.Paralysis, StatusEffectSource.FromEntity(playerEntityId)));
+        eventBus.Publish(new StatusEffectAppliedEvent(playerEntityId, StatusEffectType.Paralysis, ActionSource.FromEntity(ecsContext.ComponentManager, ecsContext.EntityManager.Keys, playerEntityId)));
 
         Assert.IsFalse(AchievementQueries.HasEarned(
             ecsContext.ComponentManager.GetMultiPool<AchievementUnlockedComponent>(),

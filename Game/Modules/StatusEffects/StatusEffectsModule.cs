@@ -15,9 +15,15 @@ namespace Game.Modules.StatusEffects;
 /// through StatusEffectDisplayRegistry instead -- each effect's own StackCount already lives on
 /// its own timer component, so no shared storage is needed for that.
 /// </summary>
-public sealed class StatusEffectsModule : IModule
+public sealed class StatusEffectsModule : IGameModule
 {
     public Guid Id { get; } = new("d9f6a1c4-8b2e-4f3a-9c1d-000000000007");
+
+    public IReadOnlyList<Type> Dependencies { get; } = [];
+
+    private SimulationScope? _simulationScope;
+
+    public void Configure(GameModuleContext context) => _simulationScope = context.SimulationScope;
 
     public void RegisterComponents(ComponentManager componentManager)
     {
@@ -27,6 +33,7 @@ public sealed class StatusEffectsModule : IModule
     public void RegisterSystems(SystemManager systemManager, ComponentManager componentManager)
     {
         systemManager.Register(new StatusEffectImmunityExpirySystem(
-            componentManager.GetMultiPool<StatusEffectImmunityComponent>()));
+            componentManager.GetMultiPool<StatusEffectImmunityComponent>(),
+            _simulationScope));
     }
 }

@@ -20,24 +20,14 @@ namespace Presentation.UI;
 /// Operation is what lets a caller (e.g. AbilityScoreWindow) detect the Additive/Multiplicative
 /// group boundary to draw a separator at, without re-deriving it from Text.
 /// </summary>
-public readonly record struct ModifierDisplayLine(string Text, StatusEffectSource? Source, int? RemainingDurationFrames, string? ModifierText = null, StatModifierOperation? Operation = null);
+public readonly record struct ModifierDisplayLine(string Text, ActionSource? Source, int? RemainingDurationFrames, string? ModifierText = null, StatModifierOperation? Operation = null);
 
 /// <summary>Shared formatting for ModifierDisplayLine's Source/RemainingDurationFrames -- one place so every consumer (AbilityScoreModifierFormatter today, Skills/Action-leveling formatters later) reads the same source name and duration text for the same underlying StatModifierComponent.</summary>
 public static class ModifierDisplayFormatting
 {
-    /// <summary>Admin/AI have no entity to name (StatusEffectSource.ToString() already covers them); an Entity source resolves DisplayTextComponent.Name if present, else falls back to a numeric label.</summary>
-    public static string DescribeSource(ComponentManager componentManager, StatusEffectSource source)
-    {
-        if (source.Kind != StatusEffectSourceKind.Entity)
-        {
-            return source.ToString();
-        }
-
-        return componentManager.IsRegistered<DisplayTextComponent>()
-            && componentManager.GetDirectPool<DisplayTextComponent>().TryGetReadonly(source.EntityId, out var displayText)
-            ? displayText.Name
-            : $"Entity#{source.EntityId}";
-    }
+    /// <summary>Admin/AI/terrain by ActionSource.ToString(); an Entity source by the name and crawler number it had when the source was created, which outlive the entity's unload.</summary>
+    public static string DescribeSource(ActionSource source) =>
+        source.Kind == ActionSourceKind.Entity ? source.Identity.DisplayName : source.ToString();
 
     /// <summary>"Permanent" when null (a StatModifierComponent whose ExpiresAtFrame is FrameDeadline.Never), else "{n}s remaining" -- n = Ceiling(frames / GameTiming.FramesPerSecond), the same rounding convention PotionCooldownEffects.RemainingSeconds already uses.</summary>
     public static string FormatDuration(int? remainingDurationFrames) =>

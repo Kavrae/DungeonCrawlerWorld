@@ -20,6 +20,9 @@ namespace DungeonCrawlerWorld;
 /// - Fewer confounders. No Draw between frames evicting simulation data from cache, no GPU driver
 ///   threads, no idle time for power management to downclock the CPU in.
 ///
+/// It does hold the same 1 ms Windows timer resolution SDL3 sets for the windowed game (see
+/// WindowsTimerResolution), so short runtime waits cost what they cost the player.
+///
 /// What it does not measure: anything in Presentation (MapWindow alone is ~1.3 ms/frame), and the
 /// in-game cost of a system with Draw running between frames, which is higher. Use it to compare
 /// simulation changes against each other; use the windowed run for what the player actually pays.
@@ -37,8 +40,9 @@ internal static class HeadlessBenchmark
 {
     private const int FramesPerSecond = 60;
 
-    public static int Run(int randomSeed, BenchmarkFrameRange frameRange)
+    public static int Run(int randomSeed, BenchmarkFrameRange frameRange, int? mapSizeOverride = null)
     {
+        using var timerResolution = WindowsTimerResolution.Request(milliseconds: 1);
         var diagnostics = new DiagnosticsEngine(DiagnosticsFeatures.None, randomSeed, frameRange);
         var modsDirectory = Path.Combine(AppContext.BaseDirectory, "Mods");
 
@@ -55,7 +59,8 @@ internal static class HeadlessBenchmark
             GameLoop.MaxCrawlerNumber,
             activityLogPath,
             diagnostics,
-            randomSeed);
+            randomSeed,
+            mapSizeOverride);
 
         try
         {
@@ -85,6 +90,31 @@ internal static class HeadlessBenchmark
             session.PlayerActivityLog.Dispose();
             File.Delete(activityLogPath);
         }
+    }
+
+    /// <summary>Holds the process's Windows timer resolution at a given period until disposed, the way SDL3 does for the windowed game.</summary>
+    /// <remarks>
+    /// Windows wakes a sleeping or timed-waiting thread on its timer tick, 15.6 ms unless the process asks
+    /// for finer. The runtime waits briefly in places the simulation reaches -- measured as the end of a
+    /// background gen-2 collection -- so without this a headless run shows 15 ms frames the player never
+    /// gets. A no-op off Windows.
+    /// </remarks>
+    private sealed class WindowsTimerResolution : IDisposable
+    {
+        private readonly uint _milliseconds;
+
+        private WindowsTimerResolution(uint milliseconds) => _milliseconds = milliseconds;
+
+        public static WindowsTimerResolution? Request(uint milliseconds) =>
+            OperatingSystem.IsWindows() && TimeBeginPeriod(milliseconds) == 0 ? new WindowsTimerResolution(milliseconds) : null;
+
+        public void Dispose() => TimeEndPeriod(_milliseconds);
+
+        [System.Runtime.InteropServices.DllImport("winmm.dll", EntryPoint = "timeBeginPeriod")]
+        private static extern uint TimeBeginPeriod(uint milliseconds);
+
+        [System.Runtime.InteropServices.DllImport("winmm.dll", EntryPoint = "timeEndPeriod")]
+        private static extern uint TimeEndPeriod(uint milliseconds);
     }
 
     /// <summary>

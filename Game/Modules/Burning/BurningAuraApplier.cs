@@ -8,6 +8,7 @@ using Game.Modules.ContactDamage.Components;
 using Game.Modules.Health;
 using Game.Modules.Health.Components;
 using Game.Modules.StatusEffects;
+using Game.Terrain;
 using Game.World;
 
 namespace Game.Modules.Burning;
@@ -21,16 +22,16 @@ namespace Game.Modules.Burning;
 /// <remarks>
 /// Hazard exposure is read from the target's own ContactDamageExposureComponent (if
 /// ContactDamageModule is loaded), not from `source` -- StatusEffectAuraSystem.GrantStacks always
-/// attributes an aura-granted stack to StatusEffectSource.Admin (its own doc comment explains why:
+/// attributes an aura-granted stack to ActionSource.Admin (its own doc comment explains why:
 /// a position-aggregated grid can't cheaply recover which specific source contributed), so `source`
 /// alone can never identify "this grant came from standing on lava," which is today's only real
-/// Burning-granting aura source. `source.EntityId` is also checked, for a future direct (non-aura)
-/// hazard-attributed grant -- harmless today since Lava's own grant never takes that path.
+/// Burning-granting aura source. A Terrain-kind `source` is also checked, for a future direct
+/// (non-aura) hazard-attributed grant -- harmless today since Lava's own grant never takes that path.
 /// The same hazard-resolved BodyPartType/Bottommost rule ContactDamageSystem's own direct-contact
-/// damage already uses is reused here (DamageOnContactComponent.PreferredTargetType), so a burning
-/// part and a contact-damaged part read as the same "where a hazard hits" rule.
+/// damage already uses is reused here (ContactHazard.PreferredTargetType, from the terrain
+/// definition), so a burning part and a contact-damaged part read as the same "where a hazard hits" rule.
 /// </remarks>
-public sealed class BurningAuraApplier(MathUtility mathUtility, EventBus? eventBus = null, IPlayerQuery? playerQuery = null) : IStatusEffectAuraApplier
+public sealed class BurningAuraApplier(MathUtility mathUtility, TerrainRegistry terrain, EventBus? eventBus = null, IPlayerQuery? playerQuery = null) : IStatusEffectAuraApplier
 {
     public StatusEffectType EffectType => StatusEffectType.Burning;
 
@@ -38,14 +39,13 @@ public sealed class BurningAuraApplier(MathUtility mathUtility, EventBus? eventB
     private MultiComponentPool<BodyPartComponent>? _bodyParts;
     private MultiComponentPool<BodyPartBurningTimerComponent>? _bodyPartTimers;
     private PackedComponentPool<ContactDamageExposureComponent>? _contactExposures;
-    private PackedComponentPool<DamageOnContactComponent>? _hazards;
     private bool _poolsResolved;
 
     public int GetCurrentStackCount(ComponentManager componentManager, int entityId)
     {
         EnsurePools(componentManager);
 
-        if (TryResolveHazard(entityId, StatusEffectSource.Admin, out var preferredType) && _bodyParts!.Has(entityId))
+        if (TryResolveHazard(entityId, ActionSource.Admin, out var preferredType) && _bodyParts!.Has(entityId))
         {
             var partId = ResolveTargetPartId(entityId, preferredType);
             if (partId is not { } resolvedPartId)
@@ -60,7 +60,7 @@ public sealed class BurningAuraApplier(MathUtility mathUtility, EventBus? eventB
         return _entityTimers!.TryGetReadonly(entityId, out var timer) ? timer.StackCount : 0;
     }
 
-    public void ApplyStack(ComponentManager componentManager, int entityId, StatusEffectSource source, long now)
+    public void ApplyStack(ComponentManager componentManager, int entityId, ActionSource source, long now)
     {
         EnsurePools(componentManager);
 
@@ -88,20 +88,19 @@ public sealed class BurningAuraApplier(MathUtility mathUtility, EventBus? eventB
         _bodyParts = componentManager.IsRegistered<BodyPartComponent>() ? componentManager.GetMultiPool<BodyPartComponent>() : null;
         _bodyPartTimers = componentManager.GetMultiPool<BodyPartBurningTimerComponent>();
         _contactExposures = componentManager.IsRegistered<ContactDamageExposureComponent>() ? componentManager.GetPackedPool<ContactDamageExposureComponent>() : null;
-        _hazards = componentManager.IsRegistered<DamageOnContactComponent>() ? componentManager.GetPackedPool<DamageOnContactComponent>() : null;
         _poolsResolved = true;
     }
 
     /// <summary>True if entityId's Burning grant should be body-part-scoped, out preferredType being the hazard's own BodyPartTargetRule.PreferredType (null means "no type preference, go straight to Bottommost").</summary>
-    private bool TryResolveHazard(int entityId, StatusEffectSource source, out BodyPartType? preferredType)
+    private bool TryResolveHazard(int entityId, ActionSource source, out BodyPartType? preferredType)
     {
-        if (source.Kind == StatusEffectSourceKind.Entity && _hazards?.TryGetReadonly(source.EntityId, out var sourceHazard) == true)
+        if (source.Kind == ActionSourceKind.Terrain && terrain.TryGetContactHazard(source.TerrainTypeId, out var sourceHazard))
         {
             preferredType = sourceHazard.PreferredTargetType;
             return true;
         }
 
-        if (_contactExposures?.TryGetReadonly(entityId, out var exposure) == true && _hazards?.TryGetReadonly(exposure.SourceEntityId, out var exposureHazard) == true)
+        if (_contactExposures?.TryGetReadonly(entityId, out var exposure) == true && terrain.TryGetContactHazard(exposure.HazardTerrainTypeId, out var exposureHazard))
         {
             preferredType = exposureHazard.PreferredTargetType;
             return true;
@@ -134,7 +133,7 @@ public sealed class BurningAuraApplier(MathUtility mathUtility, EventBus? eventB
     }
 
     /// <summary>Grants (or tops off) one Burning stack on entityId's partId -- mirrors BurningEffects.ApplyStack's own grant-or-top-off-capped-at-MaxStacks (and immunity) shape, scoped to the one part instead of the whole entity.</summary>
-    private void ApplyBodyPartScopedStack(ComponentManager componentManager, int entityId, byte partId, StatusEffectSource source, long now)
+    private void ApplyBodyPartScopedStack(ComponentManager componentManager, int entityId, byte partId, ActionSource source, long now)
     {
         if (StatusEffectImmunity.IsImmune(componentManager, entityId, StatusEffectType.Burning, source, eventBus, playerQuery))
         {
@@ -153,7 +152,7 @@ public sealed class BurningAuraApplier(MathUtility mathUtility, EventBus? eventB
         }
         else
         {
-            _bodyPartTimers!.Add(entityId, new BodyPartBurningTimerComponent(partId, stackCount: 1, FrameDeadline.After(now, BurningEffects.TickIntervalFrames), source));
+            _bodyPartTimers!.Add(entityId, new BodyPartBurningTimerComponent(partId, stackCount: 1, FrameDeadline.AfterStaggered(now, BurningEffects.TickIntervalFrames, entityId), source));
         }
     }
 

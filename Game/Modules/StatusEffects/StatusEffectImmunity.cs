@@ -15,7 +15,7 @@ public static class StatusEffectImmunity
     /// further gated on the player being involved as either entityId or source, mirroring
     /// HealthHeal.PublishHealEvent's identical shape.
     /// </summary>
-    public static bool IsImmune(ComponentManager componentManager, int entityId, StatusEffectType effectType, StatusEffectSource source = default, EventBus? eventBus = null, IPlayerQuery? playerQuery = null)
+    public static bool IsImmune(ComponentManager componentManager, int entityId, StatusEffectType effectType, ActionSource source = default, EventBus? eventBus = null, IPlayerQuery? playerQuery = null)
     {
         if (!componentManager.IsRegistered<StatusEffectImmunityComponent>())
         {
@@ -41,14 +41,14 @@ public static class StatusEffectImmunity
         return immune;
     }
 
-    private static void PublishBlockedEvent(EventBus? eventBus, IPlayerQuery? playerQuery, int entityId, StatusEffectType effectType, StatusEffectSource source)
+    private static void PublishBlockedEvent(EventBus? eventBus, IPlayerQuery? playerQuery, int entityId, StatusEffectType effectType, ActionSource source)
     {
         if (eventBus is null || playerQuery is null)
         {
             return;
         }
 
-        var playerInvolved = entityId == playerQuery.PlayerEntityId || (source.Kind == StatusEffectSourceKind.Entity && source.EntityId == playerQuery.PlayerEntityId);
+        var playerInvolved = entityId == playerQuery.PlayerEntityId || source.IsEntity(playerQuery.PlayerEntityKey);
         if (!playerInvolved)
         {
             return;

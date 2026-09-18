@@ -13,6 +13,7 @@ public sealed class StatusEffectImmunityTests
     private sealed class FakePlayerQuery(int playerEntityId) : IPlayerQuery
     {
         public int PlayerEntityId { get; } = playerEntityId;
+        public Engine.ECS.Entities.EntityKey PlayerEntityKey { get; init; } = TestSources.KeyOf(playerEntityId);
     }
 
     private static ComponentManager CreateComponentManagerWithImmunity(int entityId, StatusEffectType effectType)
@@ -55,7 +56,7 @@ public sealed class StatusEffectImmunityTests
         StatusEffectImmunityBlockedEvent? published = null;
         eventBus.Subscribe<StatusEffectImmunityBlockedEvent>(e => published = e);
 
-        var immune = StatusEffectImmunity.IsImmune(componentManager, 0, StatusEffectType.Burning, StatusEffectSource.Admin, eventBus, new FakePlayerQuery(0));
+        var immune = StatusEffectImmunity.IsImmune(componentManager, 0, StatusEffectType.Burning, ActionSource.Admin, eventBus, new FakePlayerQuery(0));
 
         Assert.IsTrue(immune);
         Assert.IsNotNull(published);
@@ -71,7 +72,7 @@ public sealed class StatusEffectImmunityTests
         var published = false;
         eventBus.Subscribe<StatusEffectImmunityBlockedEvent>(_ => published = true);
 
-        StatusEffectImmunity.IsImmune(componentManager, 1, StatusEffectType.Burning, StatusEffectSource.FromEntity(2), eventBus, new FakePlayerQuery(0));
+        StatusEffectImmunity.IsImmune(componentManager, 1, StatusEffectType.Burning, TestSources.Entity(2), eventBus, new FakePlayerQuery(0));
 
         Assert.IsFalse(published);
     }
@@ -84,7 +85,7 @@ public sealed class StatusEffectImmunityTests
         var published = false;
         eventBus.Subscribe<StatusEffectImmunityBlockedEvent>(_ => published = true);
 
-        StatusEffectImmunity.IsImmune(componentManager, 0, StatusEffectType.Burning, StatusEffectSource.Admin, eventBus, new FakePlayerQuery(0));
+        StatusEffectImmunity.IsImmune(componentManager, 0, StatusEffectType.Burning, ActionSource.Admin, eventBus, new FakePlayerQuery(0));
 
         Assert.IsFalse(published);
     }

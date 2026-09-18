@@ -10,4 +10,4 @@ namespace Game.World;
 /// that need to know an effect was granted without each effect module plumbing its own EventBus
 /// wiring.
 /// </summary>
-public readonly record struct StatusEffectAppliedEvent(int EntityId, StatusEffectType EffectType, StatusEffectSource Source);
+public readonly record struct StatusEffectAppliedEvent(int EntityId, StatusEffectType EffectType, ActionSource Source);

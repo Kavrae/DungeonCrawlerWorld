@@ -12,6 +12,7 @@ public sealed class HealthDamageTests
     private sealed class FakePlayerQuery(int playerEntityId) : IPlayerQuery
     {
         public int PlayerEntityId { get; } = playerEntityId;
+        public Engine.ECS.Entities.EntityKey PlayerEntityKey { get; init; } = TestSources.KeyOf(playerEntityId);
     }
 
     private static PackedComponentPool<SimpleHealthComponent> CreatePool() =>
@@ -23,7 +24,7 @@ public sealed class HealthDamageTests
         var pool = CreatePool();
         pool.Add(0, new SimpleHealthComponent(currentHealth: 50, maximumHealth: 100));
 
-        HealthDamage.Apply(pool, new EventBus(), 0, 10, StatusEffectSource.Admin, new FakePlayerQuery(0), "Status Effect (Burning)", now: 0);
+        HealthDamage.Apply(pool, new EventBus(), 0, 10, ActionSource.Admin, new FakePlayerQuery(0), "Status Effect (Burning)", now: 0);
 
         Assert.AreEqual(40, pool.GetReadonly(0).CurrentHealth);
     }
@@ -34,7 +35,7 @@ public sealed class HealthDamageTests
         var pool = CreatePool();
         pool.Add(0, new SimpleHealthComponent(currentHealth: 5, maximumHealth: 100));
 
-        HealthDamage.Apply(pool, new EventBus(), 0, 10, StatusEffectSource.Admin, new FakePlayerQuery(0), "Status Effect (Burning)", now: 0);
+        HealthDamage.Apply(pool, new EventBus(), 0, 10, ActionSource.Admin, new FakePlayerQuery(0), "Status Effect (Burning)", now: 0);
 
         Assert.AreEqual(0, pool.GetReadonly(0).CurrentHealth);
     }
@@ -44,7 +45,7 @@ public sealed class HealthDamageTests
     {
         var pool = CreatePool();
 
-        HealthDamage.Apply(pool, new EventBus(), 0, 10, StatusEffectSource.Admin, new FakePlayerQuery(0), "Status Effect (Burning)", now: 0);
+        HealthDamage.Apply(pool, new EventBus(), 0, 10, ActionSource.Admin, new FakePlayerQuery(0), "Status Effect (Burning)", now: 0);
     }
 
     [TestMethod]
@@ -56,12 +57,12 @@ public sealed class HealthDamageTests
         EntityDamagedEvent? published = null;
         eventBus.Subscribe<EntityDamagedEvent>(e => published = e);
 
-        HealthDamage.Apply(pool, eventBus, 0, 10, StatusEffectSource.Admin, new FakePlayerQuery(0), "Status Effect (Burning)", now: 0);
+        HealthDamage.Apply(pool, eventBus, 0, 10, ActionSource.Admin, new FakePlayerQuery(0), "Status Effect (Burning)", now: 0);
 
         Assert.IsNotNull(published);
         Assert.AreEqual(10, published!.Value.Amount);
         Assert.AreEqual(40, published.Value.CurrentHealth);
-        Assert.AreEqual(StatusEffectSource.Admin, published.Value.Source);
+        Assert.AreEqual(ActionSource.Admin, published.Value.Source);
         Assert.AreEqual("Status Effect (Burning)", published.Value.DamageType);
     }
 
@@ -74,7 +75,7 @@ public sealed class HealthDamageTests
         var published = false;
         eventBus.Subscribe<EntityDamagedEvent>(_ => published = true);
 
-        HealthDamage.Apply(pool, eventBus, 1, 10, StatusEffectSource.Admin, new FakePlayerQuery(0), "Status Effect (Burning)", now: 0);
+        HealthDamage.Apply(pool, eventBus, 1, 10, ActionSource.Admin, new FakePlayerQuery(0), "Status Effect (Burning)", now: 0);
 
         Assert.IsFalse(published);
     }
@@ -88,12 +89,12 @@ public sealed class HealthDamageTests
         EntityDamagedEvent? published = null;
         eventBus.Subscribe<EntityDamagedEvent>(e => published = e);
 
-        HealthDamage.Apply(pool, eventBus, 1, 10, StatusEffectSource.FromEntity(0), new FakePlayerQuery(0), "Default Attack", now: 0);
+        HealthDamage.Apply(pool, eventBus, 1, 10, TestSources.Entity(0), new FakePlayerQuery(0), "Default Attack", now: 0);
 
         Assert.IsNotNull(published);
         Assert.AreEqual(1, published!.Value.EntityId);
         Assert.AreEqual(40, published.Value.CurrentHealth);
-        Assert.AreEqual(StatusEffectSource.FromEntity(0), published.Value.Source);
+        Assert.AreEqual(TestSources.Entity(0), published.Value.Source);
     }
 
     [TestMethod]
@@ -105,7 +106,7 @@ public sealed class HealthDamageTests
         var published = false;
         eventBus.Subscribe<EntityDamagedEvent>(_ => published = true);
 
-        HealthDamage.Apply(pool, eventBus, 1, 10, StatusEffectSource.FromEntity(2), new FakePlayerQuery(0), "Contact", now: 0);
+        HealthDamage.Apply(pool, eventBus, 1, 10, TestSources.Entity(2), new FakePlayerQuery(0), "Contact", now: 0);
 
         Assert.IsFalse(published);
     }
@@ -119,7 +120,7 @@ public sealed class HealthDamageTests
         var published = false;
         eventBus.Subscribe<EntityDamagedEvent>(_ => published = true);
 
-        HealthDamage.Apply(pool, eventBus, 0, 10, StatusEffectSource.Admin, null, "Status Effect (Burning)", now: 0);
+        HealthDamage.Apply(pool, eventBus, 0, 10, ActionSource.Admin, null, "Status Effect (Burning)", now: 0);
 
         Assert.IsFalse(published);
     }
@@ -133,12 +134,12 @@ public sealed class HealthDamageTests
         EntityDiedEvent? published = null;
         eventBus.Subscribe<EntityDiedEvent>(e => published = e);
 
-        HealthDamage.Apply(pool, eventBus, 1, 10, StatusEffectSource.FromEntity(0), new FakePlayerQuery(0), "Default Attack", now: 0);
+        HealthDamage.Apply(pool, eventBus, 1, 10, TestSources.Entity(0), new FakePlayerQuery(0), "Default Attack", now: 0);
         eventBus.DispatchBuffered<EntityDiedEvent>();
 
         Assert.IsNotNull(published);
         Assert.AreEqual(1, published!.Value.EntityId);
-        Assert.AreEqual(StatusEffectSource.FromEntity(0), published.Value.Source);
+        Assert.AreEqual(TestSources.Entity(0), published.Value.Source);
     }
 
     [TestMethod]
@@ -150,7 +151,7 @@ public sealed class HealthDamageTests
         var published = false;
         eventBus.Subscribe<EntityDiedEvent>(_ => published = true);
 
-        HealthDamage.Apply(pool, eventBus, 1, 10, StatusEffectSource.Admin, new FakePlayerQuery(0), "Contact", now: 0);
+        HealthDamage.Apply(pool, eventBus, 1, 10, ActionSource.Admin, new FakePlayerQuery(0), "Contact", now: 0);
         eventBus.DispatchBuffered<EntityDiedEvent>();
 
         Assert.IsFalse(published);
@@ -165,8 +166,8 @@ public sealed class HealthDamageTests
         var publishCount = 0;
         eventBus.Subscribe<EntityDiedEvent>(_ => publishCount++);
 
-        HealthDamage.Apply(pool, eventBus, 1, 10, StatusEffectSource.Admin, new FakePlayerQuery(0), "Contact", now: 0);
-        HealthDamage.Apply(pool, eventBus, 1, 10, StatusEffectSource.Admin, new FakePlayerQuery(0), "Contact", now: 0);
+        HealthDamage.Apply(pool, eventBus, 1, 10, ActionSource.Admin, new FakePlayerQuery(0), "Contact", now: 0);
+        HealthDamage.Apply(pool, eventBus, 1, 10, ActionSource.Admin, new FakePlayerQuery(0), "Contact", now: 0);
         eventBus.DispatchBuffered<EntityDiedEvent>();
 
         Assert.AreEqual(1, publishCount);
@@ -181,7 +182,7 @@ public sealed class HealthDamageTests
         var published = false;
         eventBus.Subscribe<EntityDiedEvent>(_ => published = true);
 
-        HealthDamage.Apply(pool, eventBus, 0, 10, StatusEffectSource.Admin, new FakePlayerQuery(0), "Contact", now: 0);
+        HealthDamage.Apply(pool, eventBus, 0, 10, ActionSource.Admin, new FakePlayerQuery(0), "Contact", now: 0);
         eventBus.DispatchBuffered<EntityDiedEvent>();
 
         Assert.IsFalse(published);

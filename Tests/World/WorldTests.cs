@@ -1,7 +1,10 @@
 using Engine.ECS.Components.Stores;
+using Engine.Events;
 using Engine.Math;
 using Game.Modules.Core.Components;
+using Game.Terrain;
 using Game.World;
+using Microsoft.Xna.Framework;
 
 namespace Tests.World;
 
@@ -16,6 +19,148 @@ public sealed class WorldTests
 
     private static MultiComponentPool<ForceBlockingComponent> CreateForceBlockingPool(int capacity = 10) =>
         new(capacity, capacity);
+
+    private static (Game.World.World World, ushort WallId, ushort OpenArchId) CreateWorldWithStructures()
+    {
+        var world = CreateWorld();
+        world.Terrain = new TerrainRegistry();
+        var wallId = world.Terrain.Register(new TerrainDefinition("test:wall", "Wall", "", Color.Gray, "#", Color.Gray, BlocksMovement: true));
+        var archId = world.Terrain.Register(new TerrainDefinition("test:arch", "Arch", "", Color.Gray, "n", Color.Gray));
+        return (world, wallId, archId);
+    }
+
+    [TestMethod]
+    public void PlaceEntityOnMap_BlockingEntityIntoBlockingStructure_IsRefused()
+    {
+        var (world, wallId, _) = CreateWorldWithStructures();
+        world.PopulateStructure(new Vector3Int(3, 3, 1), new TerrainCell(wallId, 0));
+        var transform = new TransformComponent(new Vector3Int(), new Vector2Byte(1, 1));
+
+        world.PlaceEntityOnMap(1, new Vector3Int(3, 3, 1), ref transform);
+
+        Assert.AreEqual(new Vector3Int(), transform.Position);
+        Assert.AreEqual(-1, world.Map.GetBlockingEntityId(new Vector3Int(3, 3, 1)));
+    }
+
+    [TestMethod]
+    public void PlaceEntityOnMap_MultiTileFootprintOverlappingBlockingStructure_IsRefused()
+    {
+        var (world, wallId, _) = CreateWorldWithStructures();
+        world.PopulateStructure(new Vector3Int(4, 4, 1), new TerrainCell(wallId, 0));
+        var transform = new TransformComponent(new Vector3Int(), new Vector2Byte(2, 2));
+
+        world.PlaceEntityOnMap(1, new Vector3Int(3, 3, 1), ref transform);
+
+        Assert.AreEqual(new Vector3Int(), transform.Position);
+    }
+
+    [TestMethod]
+    public void PlaceEntityOnMap_TinyEntityIntoBlockingStructure_IsRefused()
+    {
+        var (world, wallId, _) = CreateWorldWithStructures();
+        world.PopulateStructure(new Vector3Int(3, 3, 1), new TerrainCell(wallId, 0));
+        var nonBlockingPool = CreateNonBlockingPool();
+        nonBlockingPool.Add(1, new NonBlockingComponent(NonBlockingKind.Tiny));
+        world.NonBlockingComponents = nonBlockingPool;
+        var transform = new TransformComponent(new Vector3Int(), new Vector2Byte(1, 1));
+
+        world.PlaceEntityOnMap(1, new Vector3Int(3, 3, 1), ref transform);
+
+        Assert.AreEqual(new Vector3Int(), transform.Position);
+        Assert.IsFalse(world.IsPositionOccupied(new Vector3Int(3, 3, 1)));
+    }
+
+    [TestMethod]
+    public void PlaceEntityOnMap_PhasingEntityIntoBlockingStructure_IsPlaced()
+    {
+        var (world, wallId, _) = CreateWorldWithStructures();
+        world.PopulateStructure(new Vector3Int(3, 3, 1), new TerrainCell(wallId, 0));
+        var nonBlockingPool = CreateNonBlockingPool();
+        nonBlockingPool.Add(1, new NonBlockingComponent(NonBlockingKind.Phasing));
+        world.NonBlockingComponents = nonBlockingPool;
+        var transform = new TransformComponent(new Vector3Int(), new Vector2Byte(1, 1));
+
+        world.PlaceEntityOnMap(1, new Vector3Int(3, 3, 1), ref transform);
+
+        Assert.AreEqual(new Vector3Int(3, 3, 1), transform.Position);
+    }
+
+    [TestMethod]
+    public void IsPhasing_ForceBlockingWinsOverPhasing()
+    {
+        var world = CreateWorld();
+        var nonBlockingPool = CreateNonBlockingPool();
+        var forceBlockingPool = CreateForceBlockingPool();
+        world.NonBlockingComponents = nonBlockingPool;
+        world.ForceBlockingComponents = forceBlockingPool;
+        nonBlockingPool.Add(1, new NonBlockingComponent(NonBlockingKind.Tiny));
+        nonBlockingPool.Add(1, new NonBlockingComponent(NonBlockingKind.Phasing));
+        Assert.IsTrue(world.IsPhasing(1));
+
+        forceBlockingPool.Add(1, new ForceBlockingComponent());
+
+        Assert.IsFalse(world.IsPhasing(1));
+    }
+
+    [TestMethod]
+    public void IsCellBlocked_StructureWithoutBlocksMovement_IsFalse()
+    {
+        var (world, _, archId) = CreateWorldWithStructures();
+        world.PopulateStructure(new Vector3Int(3, 3, 1), new TerrainCell(archId, 0));
+
+        Assert.IsFalse(world.IsCellBlocked(new Vector3Int(3, 3, 1)));
+    }
+
+    [TestMethod]
+    public void IsCellBlocked_FloorThatBlocksMovement_IsTrue_AndOnlyOnItsOwnLayer()
+    {
+        var (world, wallId, _) = CreateWorldWithStructures();
+        world.PopulateTerrain(3, 3, TerrainLayer.UnderGround, new TerrainCell(wallId, 0));
+
+        Assert.IsTrue(world.IsCellBlocked(new Vector3Int(3, 3, (int)MapLayer.UnderGround)));
+        Assert.IsFalse(world.IsCellBlocked(new Vector3Int(3, 3, (int)MapLayer.Ground)));
+    }
+
+    [TestMethod]
+    public void IsCellBlocked_OffTheMap_IsFalse()
+    {
+        var (world, _, _) = CreateWorldWithStructures();
+
+        Assert.IsFalse(world.IsCellBlocked(new Vector3Int(-1, 3, 1)));
+    }
+
+    [TestMethod]
+    public void SetStructure_PublishesPreviousAndNewType_AndSkipsAnUnchangedCell()
+    {
+        var (world, wallId, archId) = CreateWorldWithStructures();
+        world.EventBus = new EventBus();
+        var published = new List<StructureChangedEvent>();
+        world.EventBus.Subscribe<StructureChangedEvent>(published.Add);
+        var position = new Vector3Int(3, 3, 1);
+
+        world.SetStructure(position, new TerrainCell(wallId, 0));
+        world.SetStructure(position, new TerrainCell(wallId, 0));
+        world.SetStructure(position, new TerrainCell(archId, 0));
+
+        Assert.HasCount(2, published);
+        Assert.AreEqual(new StructureChangedEvent(position, TerrainRegistry.None, wallId), published[0]);
+        Assert.AreEqual(new StructureChangedEvent(position, wallId, archId), published[1]);
+        Assert.AreEqual(new TerrainCell(archId, 0), world.GetStructureAt(position));
+    }
+
+    [TestMethod]
+    public void PopulateStructure_DoesNotPublish()
+    {
+        var (world, wallId, _) = CreateWorldWithStructures();
+        world.EventBus = new EventBus();
+        var publishedCount = 0;
+        world.EventBus.Subscribe<StructureChangedEvent>(_ => publishedCount++);
+
+        world.PopulateStructure(new Vector3Int(3, 3, 1), new TerrainCell(wallId, 0));
+
+        Assert.AreEqual(0, publishedCount);
+        Assert.AreEqual(wallId, world.GetStructureAt(new Vector3Int(3, 3, 1)).TypeId);
+    }
 
     [TestMethod]
     public void IsOnMap_WithinBounds_ReturnsTrue()
@@ -293,7 +438,7 @@ public sealed class WorldTests
     }
 
     [TestMethod]
-    public void RemoveEntityFromMap_NonBlockingEntity_ResetsPositionWithoutTouchingMap()
+    public void RemoveEntityFromMap_NonBlockingEntity_LeavesItUnplacedOnItsLayer()
     {
         var world = CreateWorld();
         var nonBlockingPool = CreateNonBlockingPool();
@@ -304,7 +449,8 @@ public sealed class WorldTests
 
         world.RemoveEntityFromMap(1, ref transform);
 
-        Assert.AreEqual(new Vector3Int(), transform.Position);
+        Assert.AreEqual(TransformComponent.UnplacedOn(MapLayer.Ground), transform.Position);
+        Assert.IsFalse(world.IsOnMap(transform.Position));
     }
 
     /// <summary>
@@ -516,5 +662,34 @@ public sealed class WorldTests
         world.RemoveEntityFromMap(1, ref transform);
 
         Assert.IsFalse(world.Map.GetOccupantEntityIdsAt(new Vector3Int(3, 3, 1)).Contains(1));
+    }
+
+    /// <summary>A 2x2 footprint at (-1, -1) covers one cell in each of the four neighborhoods meeting at the origin, and moves across zero like any other footprint.</summary>
+    [TestMethod]
+    public void MultiTileFootprint_StraddlingTheOrigin_PlacesAndMovesAcrossFourNeighborhoods()
+    {
+        var world = new Game.World.World(new Map(new MapBounds(-1024, -1024, 1024, 1024, 2)));
+        var transform = new TransformComponent(TransformComponent.UnplacedOn(MapLayer.Ground), new Vector2Byte(2, 2));
+
+        world.PlaceEntityOnMap(3, new Vector3Int(-1, -1, 1), ref transform);
+
+        foreach (var cell in new Vector3Int[] { new(-1, -1, 1), new(0, -1, 1), new(-1, 0, 1), new(0, 0, 1) })
+        {
+            Assert.AreEqual(3, world.GetEntityIdAt(cell));
+        }
+
+        world.MoveEntity(3, new Vector3Int(-2, -1, 1), transform);
+
+        Assert.AreEqual(3, world.GetEntityIdAt(new Vector3Int(-2, 0, 1)));
+        Assert.AreEqual(-1, world.GetEntityIdAt(new Vector3Int(0, 0, 1)));
+    }
+
+    [TestMethod]
+    public void IsOnMap_UnplacedPosition_IsFalseEvenOnAMapCoveringNegativeCoordinates()
+    {
+        var world = new Game.World.World(new Map(new MapBounds(-1024, -1024, 1024, 1024, 2)));
+
+        Assert.IsTrue(world.IsOnMap(new Vector3Int(-1, -1, 1)));
+        Assert.IsFalse(world.IsOnMap(TransformComponent.UnplacedOn(MapLayer.Ground)));
     }
 }

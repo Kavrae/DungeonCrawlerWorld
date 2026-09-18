@@ -17,9 +17,8 @@ namespace Presentation.UI.Content;
 /// with a price string) -- the player already saw the price once, while dragging the item in from
 /// their own inventory, and can still see it again on hover (ShopStockPricing.ComputeHoverRows
 /// applies to every cell in this grid uniformly, price included, regardless of what's drawn inline
-/// here), so it isn't needed a second time just to glance at what's currently offered. See
-/// PLAN-trade-window.md's own case for why the trade grid is a third, distinct level of detail from
-/// the other two: the inventory grid is a glance-and-sort view (sprite + count, no price), the shop
+/// here), so it isn't needed a second time just to glance at what's currently offered. The trade
+/// grid is a third, distinct level of detail from the other two: the inventory grid is a glance-and-sort view (sprite + count, no price), the shop
 /// grid is a methodical browse-and-compare view (sprite + name + price), and the trade grid is a
 /// glance-at-what's-offered view (sprite + count only) -- each cut down to exactly what its own use
 /// case needs, not a single "detailed" cell reused everywhere. Extends ShopItemStackCell, not

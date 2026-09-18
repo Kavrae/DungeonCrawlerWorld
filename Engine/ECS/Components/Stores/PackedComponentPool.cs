@@ -65,7 +65,7 @@ public sealed class PackedComponentPool<T> : IReadOnlyComponentPool<T>, IInspect
     /// <remarks>
     /// Lets a consumer react to *every* change without each writer having to remember to tell it
     /// -- the TimerWheel uses this to schedule a ticking countdown whenever its deadline is written,
-    /// wherever that write happens (PLAN-timer-wheel.md, design 2b). A pool nobody observes pays one
+    /// wherever that write happens. A pool nobody observes pays one
     /// null check per write. The one write this can't see is a raw GetByDenseIndex ref mutation
     /// without the IncrementVersionByDenseIndex that method's contract already requires.
     /// The handler must not add to or remove from this pool.
@@ -404,6 +404,15 @@ public sealed class PackedComponentPool<T> : IReadOnlyComponentPool<T>, IInspect
         return true;
     }
 
+    /// <inheritdoc/>
+    public void ReserveDenseCapacity(int minimumCount)
+    {
+        if (minimumCount > _denseComponents.Length)
+        {
+            GrowDenseTo(minimumCount);
+        }
+    }
+
     /// <summary> Grows dense storage by <c>_denseGrowthAmount</c> if it's currently full. </summary>
     private void EnsureDenseCapacityForOneMore()
     {
@@ -412,7 +421,11 @@ public sealed class PackedComponentPool<T> : IReadOnlyComponentPool<T>, IInspect
             return;
         }
 
-        var newSize = _denseComponents.Length + _denseGrowthAmount;
+        GrowDenseTo(_denseComponents.Length + _denseGrowthAmount);
+    }
+
+    private void GrowDenseTo(int newSize)
+    {
         Array.Resize(ref _denseComponents, newSize);
         Array.Resize(ref _denseIndexToEntityIdMap, newSize);
         Array.Resize(ref _denseVersions, newSize);

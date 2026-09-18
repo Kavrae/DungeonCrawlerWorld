@@ -5,6 +5,7 @@ using Engine.Events;
 using Engine.Math;
 using Game.Modules.Core.Components;
 using Game.Modules.StatusEffectAura.Components;
+using Game.Terrain;
 using Game.World;
 using Microsoft.Xna.Framework;
 
@@ -55,25 +56,59 @@ public sealed class MapTintGrid
     // Raw falloff-weighted RGB sum plus total weight per cell -- (Color, Factor) is derived from
     // this on every TryGetTint call rather than cached separately, since deriving it is a cheap
     // O(1) division/cast (the perf hazard this class exists to avoid was iterating every SOURCE
-    // per query, not the trivial per-cell finalization math) and keeping only one dictionary
+    // per query, not the trivial per-cell finalization math) and keeping only one store
     // means AddSource/RemoveSource never risk drifting out of sync with a second, derived cache.
-    private readonly Dictionary<int, (float R, float G, float B, float Weight)> _weightedSumsByCellIndex = [];
-    private readonly Vector3Int _mapSize;
+    private readonly NeighborhoodCells<(float R, float G, float B, float Weight)> _weightedSums = new();
+    private readonly IMapQuery _map;
     private readonly DirectComponentPool<TransformComponent> _transforms;
     private readonly MultiComponentPool<StatusEffectAuraSourceComponent> _sources;
+    private readonly TerrainRegistry _terrain;
 
-    public MapTintGrid(ComponentManager componentManager, Vector3Int mapSize, EventBus eventBus)
+    /// <param name="map">Scanned once here for terrain that glows (lava), since terrain cells aren't entities in the aura-source pool.</param>
+    public MapTintGrid(ComponentManager componentManager, IMapQuery map, TerrainRegistry terrain, EventBus eventBus)
     {
-        _mapSize = mapSize;
+        ArgumentNullException.ThrowIfNull(map);
+        ArgumentNullException.ThrowIfNull(terrain);
+
+        _map = map;
+        _terrain = terrain;
         _transforms = componentManager.GetDirectPool<TransformComponent>();
         _sources = componentManager.GetMultiPool<StatusEffectAuraSourceComponent>();
 
         SourceSplatting.ScatterAll(_sources, TryGetTransformPosition, (_, source, position) => AddSource(position, source));
+        TerrainAuraSources.ForEach(map, terrain, AddSource);
 
         eventBus.Subscribe<AuraSourceAddedEvent>(OnSourceAdded);
         eventBus.Subscribe<AuraSourceRemovedEvent>(OnSourceRemoved);
         eventBus.Subscribe<EntityMovedEvent>(OnEntityMoved);
+        eventBus.Subscribe<TerrainChangedEvent>(OnTerrainChanged);
+        eventBus.Subscribe<TerrainLoadedEvent>(OnTerrainLoaded);
+        eventBus.Subscribe<TerrainUnloadingEvent>(OnTerrainUnloading);
     }
+
+    /// <summary>Swaps a changed cell's terrain glow: the previous terrain's out, the new terrain's in.</summary>
+    private void OnTerrainChanged(TerrainChangedEvent changed)
+    {
+        var position = new Vector3Int(changed.X, changed.Y, (int)changed.TerrainLayer);
+
+        if (TerrainAuraSources.TryGetAura(_terrain, changed.PreviousTypeId, out var previousAura))
+        {
+            RemoveSource(position, previousAura);
+        }
+
+        if (TerrainAuraSources.TryGetAura(_terrain, changed.TypeId, out var aura))
+        {
+            AddSource(position, aura);
+        }
+    }
+
+    /// <summary>Adds a newly loaded area's terrain glow.</summary>
+    private void OnTerrainLoaded(TerrainLoadedEvent loaded) =>
+        TerrainAuraSources.ForEach(_map, _terrain, loaded.Area, AddSource);
+
+    /// <summary>Removes an unloading area's terrain glow, which reaches into loaded neighbors.</summary>
+    private void OnTerrainUnloading(TerrainUnloadingEvent unloading) =>
+        TerrainAuraSources.ForEach(_map, _terrain, unloading.Area, RemoveSource);
 
     /// <summary>
     /// Bumped on every splat/unsplat, so a consumer that caches a rendering of this grid can tell
@@ -87,7 +122,7 @@ public sealed class MapTintGrid
 
     public bool TryGetTint(int mapNodeX, int mapNodeY, int mapLayer, out (Color Color, float Factor) tint)
     {
-        if (!_weightedSumsByCellIndex.TryGetValue(new Vector3Int(mapNodeX, mapNodeY, mapLayer).FlatIndex(_mapSize), out var accumulated))
+        if (!_weightedSums.TryGetValue(new Vector3Int(mapNodeX, mapNodeY, mapLayer), out var accumulated))
         {
             tint = default;
             return false;
@@ -133,26 +168,25 @@ public sealed class MapTintGrid
     {
         Version++;
 
-        DistanceFalloff.ScatterManhattan(sourcePosition, DistanceFalloff.MaxRadius(source.AuraAndGlowStrength), source.AuraAndGlowStrength, FalloffShape.Fading, _mapSize, (cellPosition, weight) =>
+        DistanceFalloff.ScatterManhattan(sourcePosition, DistanceFalloff.MaxRadius(source.AuraAndGlowStrength), source.AuraAndGlowStrength, FalloffShape.Fading, _map.Bounds, (cellPosition, weight) =>
         {
-            var index = cellPosition.FlatIndex(_mapSize);
-            _weightedSumsByCellIndex.TryGetValue(index, out var accumulated);
+            _weightedSums.TryGetValue(cellPosition, out var accumulated);
             (float R, float G, float B, float Weight) updated = (
                 accumulated.R + sign * source.GlowColor.R * weight,
                 accumulated.G + sign * source.GlowColor.G * weight,
                 accumulated.B + sign * source.GlowColor.B * weight,
                 accumulated.Weight + sign * weight);
 
-            // Remove rather than store a zero -- keeps the dictionary's size proportional to
+            // Remove rather than store a zero -- keeps the store's size proportional to
             // cells actually under some source's influence right now, not to every cell any
             // source has ever touched (mirrors AuraGrid.Splat's identical reasoning).
             if (updated.Weight <= 0f)
             {
-                _weightedSumsByCellIndex.Remove(index);
+                _weightedSums.Remove(cellPosition);
             }
             else
             {
-                _weightedSumsByCellIndex[index] = updated;
+                _weightedSums.Set(cellPosition, updated);
             }
         });
     }

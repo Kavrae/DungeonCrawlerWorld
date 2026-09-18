@@ -1,3 +1,4 @@
+using Engine.ECS.Entities;
 using Engine.ECS.Components;
 using Engine.ECS.Components.Stores;
 using Engine.Events;
@@ -44,6 +45,7 @@ public sealed class DodgeActivationTests
             EventBus: new EventBus(),
             MathUtility: new MathUtility(new Random()),
             ComponentManager: componentManager,
+            EntityKeys: new EntityKeys(),
             ActivatorName: "Dodge",
             ActivatorTags: [], Now: 0,
             AbilityScores: abilityScores);
@@ -83,6 +85,7 @@ public sealed class DodgeActivationTests
             EventBus: new EventBus(),
             MathUtility: new MathUtility(new Random()),
             ComponentManager: componentManager,
+            EntityKeys: new EntityKeys(),
             ActivatorName: "Dodge",
             ActivatorTags: [], Now: 0,
             AbilityScores: abilityScores);

@@ -1,3 +1,4 @@
+using Engine.ECS.Entities;
 using Engine.ECS.Systems;
 using Engine.ECS.Components;
 using Engine.Events;
@@ -26,6 +27,7 @@ public sealed class StatusEffectImmunityGrantTests
         EventBus: new EventBus(),
         MathUtility: new MathUtility(),
         ComponentManager: componentManager,
+        EntityKeys: new EntityKeys(),
         ActivatorName: "Test",
         ActivatorTags: [], Now: 0,
         StatModifiers: componentManager.GetMultiPool<StatModifierComponent>(),
@@ -88,7 +90,7 @@ public sealed class StatusEffectImmunityGrantTests
     {
         var componentManager = Build();
         componentManager.GetMultiPool<StatModifierComponent>().Add(TargetEntityId, new StatModifierComponent(
-            StatModifierTarget.IncomingBuffDuration, StatModifierOperation.Multiplicative, StatModifierPolarity.Buff, canModify: false, magnitude: 0.5f, expiresAtFrame: FrameDeadline.Never, StatusEffectSource.FromEntity(TargetEntityId)));
+            StatModifierTarget.IncomingBuffDuration, StatModifierOperation.Multiplicative, StatModifierPolarity.Buff, canModify: false, magnitude: 0.5f, expiresAtFrame: FrameDeadline.Never, TestSources.Entity(TargetEntityId)));
         var entry = new StatusEffectImmunityGrant(StatusEffectType.Burning, DurationFrames: 100);
 
         entry.Apply(BuildContext(componentManager));

@@ -92,6 +92,13 @@ public sealed class StatModifierExpirySystem : ISystem
             }
         }
 
+        // Announced before the removals and only when there is something to remove, so a
+        // subscriber that needs the pre-removal state gets one chance at it per sweep.
+        if (_pendingExpirations.Count > 0)
+        {
+            _eventBus.Publish(new StatModifierExpiringEvent(entityId));
+        }
+
         while (_statModifiers.RemoveFirst(entityId, now, static (ref readonly StatModifierComponent modifier, long frame) => IsDue(modifier.ExpiresAtFrame, frame)))
         {
         }

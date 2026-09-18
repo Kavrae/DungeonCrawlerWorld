@@ -24,7 +24,7 @@ public sealed class InspectionWindowContentTests
     {
         var statModifiers = new MultiComponentPool<StatModifierComponent>(maximumEntityCount: 10, initialCapacity: 4);
         statModifiers.Add(EntityId, new StatModifierComponent(StatModifierTarget.MaximumHealth, StatModifierOperation.Multiplicative, StatModifierPolarity.Buff,
-            canModify: true, magnitude: magnitude, expiresAtFrame: FrameDeadline.Never, StatusEffectSource.Admin));
+            canModify: true, magnitude: magnitude, expiresAtFrame: FrameDeadline.Never, ActionSource.Admin));
         return statModifiers;
     }
 

@@ -16,7 +16,7 @@ namespace Game.Modules.Shops;
 /// never leave a trade half-applied). TryBuyFromShop/TrySellToShop each move one exact stack (the
 /// same "whole stack, not a partial quantity" semantics InventoryActions.TryTransferStack already
 /// has) for ShopStockPricing.ComputeBulkBuyPrice/ComputeBulkSellPrice's stock-aware total, not a
-/// flat per-unit price times quantity -- see PLAN-stock-based-shop-pricing.md.
+/// flat per-unit price times quantity.
 /// </summary>
 public static class ShopActions
 {
@@ -33,7 +33,7 @@ public static class ShopActions
     /// <summary>
     /// Player buys one exact stack out of the shop's inventory for ShopStockPricing.
     /// ComputeBulkBuyPrice's total Gold (per-unit "bracket" pricing off the shop's own current
-    /// stock of the item, not a flat price times quantity -- see PLAN-stock-based-shop-pricing.md).
+    /// stock of the item, not a flat price times quantity).
     /// Fails with no state changed if the shop entity has no ShopComponent, the stack isn't found
     /// on the shop, the item's tags don't match the shop's AllowedTags, the player has no room for
     /// a new stack, or the player can't afford it. The currency transfer commits before the item
@@ -86,7 +86,7 @@ public static class ShopActions
     /// ComputeBulkSellPrice's total Gold. Fails with no state changed if the shop entity has no
     /// ShopComponent, the stack isn't found on the player, the item's tags don't match the shop's
     /// AllowedTags, the shop is already at its ItemDefinition.MaximumShopStock cap for this item (a
-    /// hard sell-cap, not just a price floor -- see PLAN-stock-based-shop-pricing.md), the shop has
+    /// hard sell-cap, not just a price floor), the shop has
     /// no room for a new stack, or the shop can't afford it. Same commit-then-verify-then-rollback-
     /// on-failure shape as TryBuyFromShop, roles reversed.
     /// </summary>

@@ -97,7 +97,7 @@ public sealed class ComplexHealthRegenSystemTests
         var bodyParts = CreateBodyPartsPool();
         var statModifiers = new MultiComponentPool<StatModifierComponent>(maximumEntityCount: 10, initialCapacity: 4);
         statModifiers.Add(0, new StatModifierComponent(StatModifierTarget.IncomingHealing, StatModifierOperation.Multiplicative, StatModifierPolarity.Buff,
-            canModify: false, magnitude: 0.5f, expiresAtFrame: FrameDeadline.Never, StatusEffectSource.Admin));
+            canModify: false, magnitude: 0.5f, expiresAtFrame: FrameDeadline.Never, ActionSource.Admin));
         var system = new ComplexHealthRegenSystem(bodyParts, CreateHealthPool(), CreateTiersPool(), new ProcessingTierEvents(), statModifiers, abilityScores: CreateAbilityScoresPoolWithMaxConstitution(0));
         bodyParts.Add(0, new BodyPartComponent("Torso", BodyPartType.Torso, 0, 0, currentHealth: 50, maximumHealth: 200, isVital: true));
 
@@ -125,7 +125,7 @@ public sealed class ComplexHealthRegenSystemTests
         var deadEntities = new PackedComponentPool<DeadComponent>(10, 10, static (ref existing, incoming) => existing = incoming);
         var system = new ComplexHealthRegenSystem(bodyParts, CreateHealthPool(), CreateTiersPool(), new ProcessingTierEvents(), statModifiers: null, deadEntities: deadEntities, abilityScores: CreateAbilityScoresPoolWithMaxConstitution(0));
         bodyParts.Add(0, new BodyPartComponent("Torso", BodyPartType.Torso, 0, 0, currentHealth: 0, maximumHealth: 200, isVital: true));
-        deadEntities.Add(0, new DeadComponent(KilledByEntityId: null, DiedAtFrame: 0));
+        deadEntities.Add(0, new DeadComponent(KilledBy: ActionSource.Admin, DiedAtFrame: 0));
 
         system.Update(default, 0);
 

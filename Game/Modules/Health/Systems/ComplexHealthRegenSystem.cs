@@ -85,34 +85,39 @@ public sealed class ComplexHealthRegenSystem : ITieredSystem
 
         foreach (var entityId in entityIds)
         {
-            // A corpse shouldn't regenerate back above 0.
-            if (_deadEntities?.Has(entityId) == true)
-            {
-                continue;
-            }
-
-            // No per-part lockout walk here any more: the lockout is a deadline that
-            // BodyPartSelection.PickLowestPercentage compares against the current frame, so nothing
-            // has to visit a part for its lockout to end (PLAN-timer-wheel.md step 8).
-
-            // No AbilityScoresModule loaded, or this entity never got a Constitution score --
-            // 0 regen, same as SimpleHealthRegenSystem's own effectiveRegen == 0 skip below, just
-            // resolved a step earlier.
-            if (_abilityScores is null || !AbilityScoreQueries.TryGetComponent(_abilityScores, entityId, AbilityScoreType.Constitution, out var constitution))
-            {
-                continue;
-            }
-
-            var amountPerSecond = AbilityScoreMath.Lerp(constitution.Total, MinHealthRegenPerSecond, MaxHealthRegenPerSecond);
-            var rawAmount = amountPerSecond * secondsPerVisit;
-            var effectiveRegen = StatModifierMath.GetEffectiveValue(_statModifiers, entityId, StatModifierTarget.HealthRegen, rawAmount);
-
-            if (effectiveRegen == 0f)
-            {
-                continue;
-            }
-
-            HealthHeal.Apply(_health, entityId, percentOfMaxHealth: 0f, time.FrameCount, _statModifiers, _bodyParts, flatAmount: effectiveRegen, sourceEntityId: entityId, targetMode: BodyPartTargetMode.LowestPercentage, bodyPartBurningTimers: _bodyPartBurningTimers, eventBus: _eventBus, playerQuery: _playerQuery, healType: "Regeneration");
+            Regenerate(entityId, secondsPerVisit, time.FrameCount);
         }
+    }
+
+    private void Regenerate(int entityId, float seconds, long now)
+    {
+        // A corpse shouldn't regenerate back above 0.
+        if (_deadEntities?.Has(entityId) == true)
+        {
+            return;
+        }
+
+        // No per-part lockout walk here any more: the lockout is a deadline that
+        // BodyPartSelection.PickLowestPercentage compares against the current frame, so nothing
+        // has to visit a part for its lockout to end.
+
+        // No AbilityScoresModule loaded, or this entity never got a Constitution score --
+        // 0 regen, same as SimpleHealthRegenSystem's own effectiveRegen == 0 skip below, just
+        // resolved a step earlier.
+        if (_abilityScores is null || !AbilityScoreQueries.TryGetComponent(_abilityScores, entityId, AbilityScoreType.Constitution, out var constitution))
+        {
+            return;
+        }
+
+        var amountPerSecond = AbilityScoreMath.Lerp(constitution.Total, MinHealthRegenPerSecond, MaxHealthRegenPerSecond);
+        var rawAmount = amountPerSecond * seconds;
+        var effectiveRegen = StatModifierMath.GetEffectiveValue(_statModifiers, entityId, StatModifierTarget.HealthRegen, rawAmount);
+
+        if (effectiveRegen == 0f)
+        {
+            return;
+        }
+
+        HealthHeal.Apply(_health, entityId, percentOfMaxHealth: 0f, now, _statModifiers, _bodyParts, flatAmount: effectiveRegen, sourceEntityId: entityId, targetMode: BodyPartTargetMode.LowestPercentage, bodyPartBurningTimers: _bodyPartBurningTimers, eventBus: _eventBus, playerQuery: _playerQuery, healType: "Regeneration");
     }
 }

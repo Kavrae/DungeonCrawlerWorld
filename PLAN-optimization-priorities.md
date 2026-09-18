@@ -232,7 +232,8 @@ catch-up.
 
 The loop fixes *magnitude* but not *interleaving* -- bulk ticks still resolve in isolation, so an
 entity can die to a lump of DoT that fine-grained simulation would have offset with regen. That is
-filed as a HIGH PRIORITY item in `TODO.md` ("Distant simulation fidelity"), and it should be
+filed as a HIGH PRIORITY item in `TODO.md` ("Distant simulation fidelity", since resolved by the
+world-scaling work's frozen Borough and catch-up), and it should be
 designed together with P2, since both touch the same code.
 
 ### Measured result of the full sequence
@@ -372,7 +373,7 @@ A full sweep found three more defects of the same family as A/E and closed them.
   `ActionLockSystem` owns and decrements. Reading a countdown is not owning one.
 - `ProcessingTierSystem` -- pure tier recompute.
 
-> **This inventory is a snapshot from before `PLAN-timer-wheel.md`.** Of the systems listed above,
+> **This inventory is a snapshot from before the timer-wheel rewrite.** Of the systems listed above,
 > `ActionCooldownSystem` and `ActionLockSystem` no longer exist (both are deadlines now), and
 > `AuraSourceExpirySystem`, `BodyPartBurningSystem`, `BurningSystem`, `ContactDamageSystem`,
 > `DelayedActionSystem`, `ParalysisSystem`, `PoisonSystem`, `PotionCooldownSystem`,
@@ -399,7 +400,7 @@ A full sweep found three more defects of the same family as A/E and closed them.
    `UpdateBucket(time, entityIds, framesPerVisit)` and **scale any time-based field by
    `framesPerVisit`**, put per-frame work in `BeginFrame`, and make `Update` exactly
    `=> TieredSystemRunner.Run(this, time)`. `SystemManager` owns the tier loop and the
-   which-tiers-are-simulated policy (see `PLAN-processing-tier-rework.md`). This superseded the
+   which-tiers-are-simulated policy. This superseded the
    earlier form of this rule ("walk `GetTierBucket` per tier yourself, never `GetDueEntities`"):
    hand-written loops are how Defects A, E and the two found in this sweep all happened, so the loop
    no longer lives in systems at all.
@@ -419,7 +420,7 @@ A full sweep found three more defects of the same family as A/E and closed them.
 
 Not a performance item on its own, but it is what makes P2 and P3 hard to reason about.
 
-> **Resolved by `PLAN-timer-wheel.md` (step 9, 2026-09-11).** Both mechanisms named below are
+> **Resolved by the timer-wheel rewrite (2026-09-11).** Both mechanisms named below are
 > deleted. Every timer is a deadline now: one that fires goes on a timer wheel, one that merely
 > stops gating is a plain field comparison. The "two countdown mechanisms, three scheduling
 > mechanisms" problem this section describes no longer exists.
@@ -453,10 +454,10 @@ having it maintained rather than re-derived is most of the value.
   body-part regen lockout) and `CountdownTicker`/`MultiCountdownTicker` (`ITickCountdown`, now
   including Dodge). `StatModifierExpirySystem` and `StatusEffectImmunityExpirySystem` still
   hand-rolled theirs (nullable durations) at the time; both were converted to absolute deadlines on
-  the timer wheel at step 6 of `PLAN-timer-wheel.md`, and neither is tiered any more.
+  the timer wheel, and neither is tiered any more.
 - **P2 item 3 answered:** ActionLock and ActionCooldown visit the *same* ~300 entities/frame; cost
   tracks entities visited plus writes, not instance count, and ActionCooldown's visits find a
-  running cooldown 0.01% of the time. P2 proper continues in `PLAN-timer-wheel.md`.
+  running cooldown 0.01% of the time. P2 proper was completed by the timer-wheel rewrite.
 
 ---
 

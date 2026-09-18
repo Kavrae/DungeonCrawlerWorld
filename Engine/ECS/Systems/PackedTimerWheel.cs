@@ -24,7 +24,7 @@ public delegate bool TimerFired<T>(int entityId, T timer, long now) where T : st
 /// Replaces the visit-every-entity-and-decrement loop timers used to run on. The owning system
 /// calls <see cref="Tick"/> once per frame; nothing else in the game needs to know the wheel exists.
 ///
-/// Scheduling is automatic (PLAN-timer-wheel.md, design 2b): the wheel observes the pool's
+/// Scheduling is automatic: the wheel observes the pool's
 /// ComponentChanged, so any write that changes a timer's NextTickFrame -- creating it, re-arming
 /// it, moving it earlier or later, from any code path -- schedules it. A write that leaves the
 /// deadline alone is ignored (see <see cref="ScheduledTimerMark"/>). Components already in the pool
@@ -43,11 +43,17 @@ public delegate bool TimerFired<T>(int entityId, T timer, long now) where T : st
 ///
 /// Exactly one wheel may drive a pool, since the scheduling mark lives on the component rather
 /// than in the wheel; the pool enforces that (see TimerWheelClaim) instead of trusting callers.
+///
+/// With a <see cref="SimulationScope"/>, a timer that comes due for an unsimulated entity is not
+/// fired: its mark is released and it rests on its unchanged deadline. When the scope raises
+/// EntityResumed for that entity, the wheel schedules it again, and a deadline already behind
+/// <c>now</c> fires on the next Tick -- late, never lost, the same as any late firing.
 /// </remarks>
 /// <cleanupVersion>1</cleanupVersion>
 public sealed class PackedTimerWheel<T> where T : struct, IScheduledTimer
 {
     private readonly PackedComponentPool<T> _pool;
+    private readonly SimulationScope? _scope;
     private readonly TimerWheel _wheel = new();
     private readonly List<TimerEntry> _due = [];
     private readonly List<TimerEntry> _pendingRemovals = [];
@@ -59,12 +65,14 @@ public sealed class PackedTimerWheel<T> where T : struct, IScheduledTimer
     private bool _draining;
 
     /// <param name="pool">The timer pool to drive. The wheel claims it (only one wheel per pool) and subscribes to its ComponentChanged for its own lifetime.</param>
-    public PackedTimerWheel(PackedComponentPool<T> pool)
+    /// <param name="scope">Which entities are simulated; null simulates every entity. See the class remarks.</param>
+    public PackedTimerWheel(PackedComponentPool<T> pool, SimulationScope? scope = null)
     {
         ArgumentNullException.ThrowIfNull(pool);
         pool.ClaimForTimerWheel();
 
         _pool = pool;
+        _scope = scope;
 
         for (var denseIndex = 0; denseIndex < pool.Count; denseIndex++)
         {
@@ -72,6 +80,11 @@ public sealed class PackedTimerWheel<T> where T : struct, IScheduledTimer
         }
 
         pool.ComponentChanged += Observe;
+
+        if (scope is not null)
+        {
+            scope.EntityResumed += OnEntityResumed;
+        }
     }
 
     /// <summary>Entries waiting in the wheel, stale ones included. Diagnostics and tests.</summary>
@@ -106,6 +119,11 @@ public sealed class PackedTimerWheel<T> where T : struct, IScheduledTimer
                 // re-arming from a computed deadline had to dodge that itself.
                 ref var timer = ref _pool.GetByDenseIndex(denseIndex);
                 ScheduledTimerMark.Release(ref timer);
+
+                if (_scope is not null && !_scope.IsSimulated(entry.EntityId))
+                {
+                    continue;
+                }
 
                 if (onFired(entry.EntityId, _pool.GetReadonlyByDenseIndex(denseIndex), now))
                 {
@@ -159,6 +177,16 @@ public sealed class PackedTimerWheel<T> where T : struct, IScheduledTimer
         if (ScheduledTimerMark.TryClaim(ref timer, out var deadline))
         {
             _wheel.Schedule(entityId, 0, deadline);
+        }
+    }
+
+    /// <summary>SimulationScope.EntityResumed handler: schedules the entity's timer if it has one and it isn't already scheduled for its current deadline.</summary>
+    private void OnEntityResumed(int entityId)
+    {
+        var denseIndex = _pool.GetDenseIndex(entityId);
+        if (denseIndex >= 0)
+        {
+            Observe(entityId, denseIndex);
         }
     }
 

@@ -231,6 +231,21 @@ public sealed class ComponentManager
 
     /// <summary>Removes all components in all pools from the entity</summary>
     /// <param name="entityId"></param>
+    /// <summary>Grows every pool's dense storage, where smaller, to hold its current count times factor, so that much growth later never reallocates mid-game.</summary>
+    /// <remarks>For a population known to grow by about that much at runtime: loading ahead of time what would otherwise be a run of reallocate-and-copy passes, each one frame's hitch.</remarks>
+    public void ReserveHeadroom(double factor)
+    {
+        ArgumentOutOfRangeException.ThrowIfLessThan(factor, 1d);
+
+        foreach (var componentPool in _componentPools.Values)
+        {
+            if (componentPool is IMemoryReportingComponentPool { Count: > 0 } counted)
+            {
+                componentPool.ReserveDenseCapacity((int)System.Math.Ceiling(counted.Count * factor));
+            }
+        }
+    }
+
     public void RemoveAllComponents(int entityId)
     {
         foreach (var componentPool in _componentPools.Values)

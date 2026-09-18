@@ -22,8 +22,8 @@ namespace Game.Modules.Actions.Effects;
 /// 3. Scale through the caster's OutgoingDamage stat modifiers -- a modifier scoped to e.g.
 ///    Tag.Melee via StatModifierComponent.ConditionTag only contributes when the activating
 ///    action/item actually carries that tag (context.ActivatorTags, passed through here); this is
-///    also how BodyPartEffectsSystem's own Arm/Hand penalty now works (see
-///    PLAN-body-part-gameplay-effects.md), no longer a dedicated MeleeOutgoingDamage target.
+///    also how BodyPartEffectsSystem's own Arm/Hand penalty now works, no longer a dedicated
+///    MeleeOutgoingDamage target.
 /// 4. Roll a crit; on success, multiply the fully-damageWithTagModifiers result from step 3 by CritMultiplier --
 ///    crit is the last multiplier applied, matching Diablo/PoE's dominant convention (a crit
 ///    amplifies the fully-modified number, not a pre-buff base).
@@ -64,6 +64,6 @@ public sealed record DirectDamage(
         }
 
         BodyPartTargetRule? targetRule = TargetBodyPartType is { } type ? new BodyPartTargetRule(type, BodyPartFallback.Random) : null;
-        HealthDamage.Apply(context.Health, context.EventBus, context.TargetEntityId, (ushort)damageWithTagModifiers, StatusEffectSource.FromEntity(context.SourceEntityId), context.PlayerQuery, context.ActivatorName, context.Now, context.StatModifiers, context.BodyParts, context.MathUtility, context.DeadEntities, targetRule, context.ActivatorTags, BodyPartTargetMode);
+        HealthDamage.Apply(context.Health, context.EventBus, context.TargetEntityId, (ushort)damageWithTagModifiers, ActionSource.FromEntity(context.ComponentManager, context.EntityKeys, context.SourceEntityId), context.PlayerQuery, context.ActivatorName, context.Now, context.StatModifiers, context.BodyParts, context.MathUtility, context.DeadEntities, targetRule, context.ActivatorTags, BodyPartTargetMode);
     }
 }

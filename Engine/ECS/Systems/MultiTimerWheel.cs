@@ -15,6 +15,7 @@ namespace Engine.ECS.Systems;
 public sealed class MultiTimerWheel<T> where T : struct, IKeyedScheduledTimer
 {
     private readonly MultiComponentPool<T> _pool;
+    private readonly SimulationScope? _scope;
     private readonly TimerWheel _wheel = new();
     private readonly List<TimerEntry> _due = [];
     private readonly List<TimerEntry> _pendingRemovals = [];
@@ -25,13 +26,14 @@ public sealed class MultiTimerWheel<T> where T : struct, IKeyedScheduledTimer
     /// <summary>True for the firing pass only -- see PackedTimerWheel's remarks.</summary>
     private bool _draining;
 
-    /// <inheritdoc cref="PackedTimerWheel{T}(PackedComponentPool{T})"/>
-    public MultiTimerWheel(MultiComponentPool<T> pool)
+    /// <inheritdoc cref="PackedTimerWheel{T}(PackedComponentPool{T}, SimulationScope?)"/>
+    public MultiTimerWheel(MultiComponentPool<T> pool, SimulationScope? scope = null)
     {
         ArgumentNullException.ThrowIfNull(pool);
         pool.ClaimForTimerWheel();
 
         _pool = pool;
+        _scope = scope;
 
         for (var denseIndex = 0; denseIndex < pool.Count; denseIndex++)
         {
@@ -39,6 +41,11 @@ public sealed class MultiTimerWheel<T> where T : struct, IKeyedScheduledTimer
         }
 
         pool.ComponentChanged += Observe;
+
+        if (scope is not null)
+        {
+            scope.EntityResumed += OnEntityResumed;
+        }
     }
 
     /// <inheritdoc cref="PackedTimerWheel{T}.PendingCount"/>
@@ -67,6 +74,11 @@ public sealed class MultiTimerWheel<T> where T : struct, IKeyedScheduledTimer
                 // Released before the callback runs, not after -- see PackedTimerWheel.Tick.
                 ref var timer = ref _pool.GetByDenseIndex(denseIndex);
                 ScheduledTimerMark.Release(ref timer);
+
+                if (_scope is not null && !_scope.IsSimulated(entry.EntityId))
+                {
+                    continue;
+                }
 
                 if (onFired(entry.EntityId, _pool.GetReadonlyByDenseIndex(denseIndex), now))
                 {
@@ -132,6 +144,15 @@ public sealed class MultiTimerWheel<T> where T : struct, IKeyedScheduledTimer
         }
 
         return -1;
+    }
+
+    /// <summary>SimulationScope.EntityResumed handler: schedules every one of the entity's timers not already scheduled for its current deadline.</summary>
+    private void OnEntityResumed(int entityId)
+    {
+        for (var denseIndex = _pool.GetFirstDenseIndex(entityId); denseIndex != -1; denseIndex = _pool.GetNextDenseIndex(denseIndex))
+        {
+            Observe(entityId, denseIndex);
+        }
     }
 
     /// <summary>ComponentChanged handler -- see PackedTimerWheel.Observe.</summary>
