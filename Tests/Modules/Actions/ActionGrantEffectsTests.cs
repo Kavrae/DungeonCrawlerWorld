@@ -39,7 +39,7 @@ public sealed class ActionGrantEffectsTests
 
         ActionGrantEffects.Grant(manager, 0, ActionId, manaCost: 0, overrideDefinition);
 
-        Assert.IsTrue(ActionInstanceQueries.TryGet(manager.GetMultiPool<ActionInstanceComponent>(), 0, ActionId, out var instance));
+        Assert.IsTrue(manager.GetMultiPool<ActionInstanceComponent>().TryGetFirst(0, ActionId, static (ref readonly ActionInstanceComponent candidate, Guid id) => candidate.ActionId == id, out var instance));
         Assert.AreEqual(overrideDefinition, instance.Override);
     }
 

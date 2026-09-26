@@ -15,6 +15,6 @@ internal readonly record struct DragDropContext(
     ComponentManager ComponentManager,
     int OriginEntityId,
     int DestinationEntityId,
-    Guid? ItemStackInstanceId,
+    uint? ItemStackInstanceId,
     Guid? MergedItemDefinitionId,
     CurrencyType? CurrencyType);

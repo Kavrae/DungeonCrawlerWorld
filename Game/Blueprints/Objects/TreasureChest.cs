@@ -1,7 +1,4 @@
-using Engine.ECS.Components;
-using Engine.Math;
 using Game.Modules.Containers.Components;
-using Game.Modules.Core.Components;
 using Game.Modules.Currency.Components;
 using Game.Modules.Health.Components;
 using Game.Modules.Inventory;
@@ -25,9 +22,12 @@ namespace Game.Blueprints.Objects;
 /// (StartingCurrencyGrant), since a chest's Gold is found loot, not a personal purse. If destroyed, ContainerDestructionSystem
 /// clears its inventory and renames it "Destroyed" -- see that system's own doc comment.
 /// </summary>
-public sealed class TreasureChest(MathUtility mathUtility) : IBlueprint
+public static class TreasureChest
 {
-    private const string Name = "Treasure Chest";
+    public static readonly Guid Id = new("d9f6a1c4-8b2e-4f3a-9c1d-000000000102");
+
+    public const string Name = "Treasure Chest";
+
     private const string Description = "A sturdy chest that might hold treasure.";
 
     private const float MaximumHealth = 100;
@@ -56,31 +56,33 @@ public sealed class TreasureChest(MathUtility mathUtility) : IBlueprint
         WandOfFireball.Build(),
     ];
 
-    public void Build(ComponentManager componentManager, int entityId)
+    public static readonly BlueprintDefinition Definition = new(Id, Name)
     {
-        componentManager.Merge(entityId, new DisplayTextComponent(Name, Description));
-        componentManager.Merge(entityId, new GlyphComponent("T", Color.Gold));
-        if (SpriteManifest.TryGetRandom("Inventory", mathUtility, out var sprite))
-        {
-            componentManager.Merge(entityId, sprite);
-        }
-        componentManager.Merge(entityId, new TransformComponent(TransformComponent.UnplacedOn(MapLayer.Ground), new Vector2Byte(1, 1)));
+        Build = Build,
+        Appearance = new() { Name = Name, Description = Description, Glyph = "T", GlyphColor = Color.Gold, SpriteName = "Inventory" }
+    };
+
+    private static void Build(BlueprintContext context)
+    {
+        var componentManager = context.ComponentManager;
+        var entityId = context.EntityId;
+
         componentManager.Merge(entityId, new SimpleHealthComponent(MaximumHealth, MaximumHealth));
         componentManager.Merge(entityId, new ContainerComponent());
         componentManager.Merge(entityId, new CurrencyComponent(
-            mathUtility.Next(MinimumStartingGold, MaximumStartingGold + 1),
-            mathUtility.Next(MinimumStartingCredits, MaximumStartingCredits + 1)));
+            context.Rolls.Next(MinimumStartingGold, MaximumStartingGold + 1),
+            context.Rolls.Next(MinimumStartingCredits, MaximumStartingCredits + 1)));
 
         var immunities = componentManager.GetMultiPool<StatusEffectImmunityComponent>();
         StatusEffectImmunityEffects.GrantPermanent(immunities, entityId, StatusEffectType.Poison);
         StatusEffectImmunityEffects.GrantPermanent(immunities, entityId, StatusEffectType.Paralysis);
 
-        var itemCount = mathUtility.Next(MinimumItemCount, MaximumItemCount + 1);
+        var itemCount = context.Rolls.Next(MinimumItemCount, MaximumItemCount + 1);
         for (var i = 0; i < itemCount; i++)
         {
-            var item = LootTable[mathUtility.Next(0, LootTable.Length)];
+            var item = LootTable[context.Rolls.Next(0, LootTable.Length)];
             var maximumQuantity = Math.Min(MaximumStackQuantity, (int)InventoryActions.GetEffectiveMaxStackSize(componentManager, entityId));
-            var quantity = (ushort)mathUtility.Next(MinimumStackQuantity, maximumQuantity + 1);
+            var quantity = (ushort)context.Rolls.Next(MinimumStackQuantity, maximumQuantity + 1);
             InventoryActions.AddItem(componentManager, entityId, item.Id, quantity);
         }
     }

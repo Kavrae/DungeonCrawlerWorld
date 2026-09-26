@@ -1,39 +1,34 @@
-using Engine.ECS.Components;
 using Engine.ECS.Systems;
-using Engine.Math;
 using Game.Blueprints.NPCs;
 using Game.Modules.AbilityScores;
 using Game.Modules.Actions;
-using Game.Modules.Actions.Components;
 using Game.Modules.Actions.Definitions.DirectActions;
 using Game.Modules.Core.Components;
 using Game.Modules.Health;
 using Game.Modules.Health.Components;
 using Game.Modules.Movement.Components;
-using Game.Modules.Race.Components;
 using Game.Modules.StatModifiers;
 using Game.World;
 using Microsoft.Xna.Framework;
 
 namespace Game.Blueprints.Races;
 
-/// <summary>
-/// Small, green and smart. Takes MathUtility by constructor injection rather than creating a
-/// fresh, unseeded Random per Build call, which would be both wasteful and untestable.
-/// </summary>
-public sealed class Goblin(MathUtility mathUtility) : IBlueprint
+/// <summary>Small, green and smart.</summary>
+public static class Goblin
 {
-    public static readonly Guid RaceId = new("1aa7b1c2-0b54-4745-b616-8aaff734a7d6");
-    private const string RaceName = "Goblin";
+    public static readonly Guid Id = new("1aa7b1c2-0b54-4745-b616-8aaff734a7d6");
+    public const string Name = "Goblin";
 
     private static readonly string[] PersonalNameOptions = ["TestName1", "TestName2"];
 
     private const string Description = "Small, green and smart. What Goblins lack in physical strength they make up in pure spunk.";
 
-    private static readonly string[] DisplayNames = DisplayNameCache.BuildDisplayNames(PersonalNameOptions, RaceName);
+    private static readonly string[] DisplayNames = DisplayNameCache.BuildDisplayNames(PersonalNameOptions, Name);
+
+    public static readonly AppearanceFacet Appearance = new() { DisplayNames = DisplayNames, Description = Description, Glyph = "g", GlyphColor = Color.DarkGreen, SpriteName = "Goblin" };
 
     /// <summary>Head/Torso/Internal are Vital; sums to 200, matching the flat SimpleHealthComponent total this replaced so the split doesn't itself rebalance Goblin's overall toughness. 11 parts (Arm/Leg each split off a Hand/Foot, plus Internal for Poison's own always-hit target) -- not a final balance pass. VerticalPosition: Head 5, Torso/Internal 4, Arm 3, Hand 2, Leg 1, Foot 0.</summary>
-    private static readonly BodyPartTemplate[] BodyParts =
+    public static readonly BodyPartTemplate[] BodyParts =
     [
         new BodyPartTemplate("Head", BodyPartType.Head, 5, 30, IsVital: true),
         new BodyPartTemplate("Torso", BodyPartType.Torso, 4, 50, IsVital: true),
@@ -66,30 +61,33 @@ public sealed class Goblin(MathUtility mathUtility) : IBlueprint
     /// <inheritdoc cref="QuickAttackOverride"/>
     private static readonly ActionDefinition PowerAttackOverride = ActionOverrideEffects.OverrideFlatDamage(PowerAttackAction.Build(), PowerAttackDamage);
 
-    public void Build(ComponentManager componentManager, int entityId)
+    /// <summary>What every creature of this race can do -- held on its race definition, not on each creature (see ActionGrant). Dodge has no override: it rolls its catalog definition unchanged.</summary>
+    public static readonly ActionGrant[] ActionGrants =
+    [
+        new(QuickAttackAction.Id, QuickAttackOverride),
+        new(PowerAttackAction.Id, PowerAttackOverride),
+        new(DodgeAction.Id),
+    ];
+
+    public static readonly BlueprintDefinition Definition = new(Id, Name)
     {
-        componentManager.Merge(entityId, new RaceComponent(RaceId, RaceName, Description));
+        Build = Build,
+        Appearance = Appearance,
+        Race = new RaceFacet(BodyParts),
+        Actions = ActionGrants
+    };
 
-        componentManager.Merge(entityId, new DisplayTextComponent(DisplayNames[mathUtility.Next(0, DisplayNames.Length)], Description));
+    private static void Build(BlueprintContext context)
+    {
+        var componentManager = context.ComponentManager;
+        var entityId = context.EntityId;
 
-        componentManager.Merge(entityId, new GlyphComponent("g", Color.DarkGreen));
-        if (SpriteManifest.TryGetRandom("Goblin", mathUtility, out var sprite))
-        {
-            componentManager.Merge(entityId, sprite);
-        }
-        ComplexHealthEffects.GrantBodyParts(componentManager, entityId, BodyParts);
         componentManager.Merge(entityId, new MovementComponent(MovementMode.Random, null, null));
         componentManager.Merge(entityId, new ActionLockComponent(standardLockFrames: 54, currentLockTotalFrames: 0, unlockedAtFrame: 0));
 
-        componentManager.Merge(entityId, new TransformComponent(TransformComponent.UnplacedOn(MapLayer.Ground), new Vector2Byte(1, 1)));
 
-        componentManager.Merge(entityId, new ActionInstanceComponent(QuickAttackAction.Id, QuickAttackOverride));
-        componentManager.Merge(entityId, new ActionInstanceComponent(PowerAttackAction.Id, PowerAttackOverride));
-
-        componentManager.Merge(entityId, new ActionInstanceComponent(DodgeAction.Id, overrideDefinition: null));
-
-        TemporaryNpcLootGrant.GrantRandomStartingLoot(componentManager, entityId, mathUtility);
-        StartingCurrencyGrant.GrantRandomStartingGoldAndCredits(componentManager, entityId, mathUtility);
+        TemporaryNpcLootGrant.GrantRandomStartingLoot(componentManager, entityId, context.Rolls);
+        StartingCurrencyGrant.GrantRandomStartingGoldAndCredits(componentManager, entityId, context.Rolls);
 
         AbilityScoreEffects.GrantDefaults(componentManager, entityId, DefaultAbilityScoreBaseValue);
 

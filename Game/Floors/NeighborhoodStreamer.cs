@@ -2,6 +2,7 @@ using Engine.ECS.Entities;
 using Engine.ECS.Systems;
 using Engine.Events;
 using Engine.Math;
+using Game.Spawning;
 using Game.Modules.ProcessingTier;
 using Game.World;
 
@@ -25,7 +26,8 @@ namespace Game.Floors;
 /// <para>
 /// Every frame spends at most BudgetPerFrame units across the queued work: one per entity destroyed or
 /// created, LayoutRowCost per row of terrain written or announced. Work runs one job at a time, in order,
-/// and a shift queues its evictions before its loads, so no more than 9 + CacheSize neighborhoods are
+/// except that an eviction destroys its built creatures first and ahead of every other job (see
+/// IsEvictingBuiltCreatures), and a shift queues its evictions before its loads, so no more than 9 + CacheSize neighborhoods are
 /// ever loaded at once -- the headroom the session reserves at startup. Register it with SystemManager.RegisterFirst: population
 /// records each new creature's spawn into the moved-entities buffer, which the systems that read it
 /// must not have read yet this frame.
@@ -52,13 +54,22 @@ public sealed class NeighborhoodStreamer : ISystem
         Regenerate,
     }
 
-    private sealed class Job(int cellX, int cellY, JobKind kind, IEnumerator<int> work)
+    private sealed class Job(int cellX, int cellY, JobKind kind, IEnumerator<int> work, UnloadProgress? eviction = null)
     {
         public int CellX { get; } = cellX;
         public int CellY { get; } = cellY;
         public JobKind Kind { get; } = kind;
         public IEnumerator<int> Work { get; } = work;
         public bool Started { get; set; }
+
+        /// <summary>An eviction's progress through its built creatures; null for any other job.</summary>
+        public UnloadProgress? Eviction { get; } = eviction;
+    }
+
+    /// <summary>Whether an unload has destroyed its neighborhood's built creatures yet -- the part of it whose storage a promotion can reuse.</summary>
+    private sealed class UnloadProgress
+    {
+        public bool BuiltCreaturesDestroyed { get; set; }
     }
 
     private readonly World.World _world;
@@ -68,6 +79,7 @@ public sealed class NeighborhoodStreamer : ISystem
     private readonly ProcessingTierResolver _resolver;
     private readonly NeighborhoodRecords _records;
     private readonly TestMapBuilder _builder;
+    private readonly CreatureSkeletons? _skeletons;
 
     private readonly List<Job> _jobs = [];
 
@@ -78,7 +90,8 @@ public sealed class NeighborhoodStreamer : ISystem
 
     private readonly List<(int CellX, int CellY)> _toLoad = [];
 
-    public NeighborhoodStreamer(World.World world, EntityManager entityManager, Engine.ECS.Components.Stores.DirectComponentPool<Modules.Core.Components.TransformComponent> transforms, EventBus eventBus, ProcessingTierResolver resolver, NeighborhoodRecords records, TestMapBuilder builder)
+    /// <param name="skeletons">When supplied, an eviction destroys its neighborhood's built creatures first and ahead of other work (see IsEvictingBuiltCreatures); otherwise every unload destroys in index order.</param>
+    public NeighborhoodStreamer(World.World world, EntityManager entityManager, Engine.ECS.Components.Stores.DirectComponentPool<Modules.Core.Components.TransformComponent> transforms, EventBus eventBus, ProcessingTierResolver resolver, NeighborhoodRecords records, TestMapBuilder builder, CreatureSkeletons? skeletons = null)
     {
         _world = world;
         _entityManager = entityManager;
@@ -87,6 +100,7 @@ public sealed class NeighborhoodStreamer : ISystem
         _resolver = resolver;
         _records = records;
         _builder = builder;
+        _skeletons = skeletons;
         resolver.WindowShifted += OnWindowShifted;
     }
 
@@ -97,6 +111,23 @@ public sealed class NeighborhoodStreamer : ISystem
 
     /// <summary>Whether any work is queued.</summary>
     public bool IsBusy => _jobs.Count > 0;
+
+    /// <summary>Whether a neighborhood evicted from the window's cache still has built creatures (anything not a creature skeleton) waiting to be destroyed.</summary>
+    /// <remarks>What a promotion should wait for: those are the creatures whose storage a promotion's builds reuse. The rest of an eviction -- its skeletons, its terrain -- frees nothing a build needs, so it doesn't hold anything up, and the streamer runs every eviction's built creatures ahead of its other work.</remarks>
+    public bool IsEvictingBuiltCreatures => NextEvictionOfBuiltCreatures() >= 0;
+
+    private int NextEvictionOfBuiltCreatures()
+    {
+        for (var i = 0; i < _jobs.Count; i++)
+        {
+            if (_jobs[i].Eviction is { BuiltCreaturesDestroyed: false })
+            {
+                return i;
+            }
+        }
+
+        return -1;
+    }
 
     /// <summary>The loaded neighborhoods outside the window, oldest first.</summary>
     public IReadOnlyList<(int CellX, int CellY)> Cache => _cache;
@@ -157,10 +188,11 @@ public sealed class NeighborhoodStreamer : ISystem
         var budget = BudgetPerFrame;
         while (budget > 0 && _jobs.Count > 0)
         {
-            var job = _jobs[0];
+            var index = System.Math.Max(0, NextEvictionOfBuiltCreatures());
+            var job = _jobs[index];
             if (!job.Started && job.Kind is JobKind.Regenerate && !IsBeyondLocalReach(job.CellX, job.CellY, out _))
             {
-                _jobs.RemoveAt(0);
+                _jobs.RemoveAt(index);
                 continue;
             }
 
@@ -172,7 +204,7 @@ public sealed class NeighborhoodStreamer : ISystem
             }
 
             job.Work.Dispose();
-            _jobs.RemoveAt(0);
+            _jobs.RemoveAt(index);
         }
     }
 
@@ -231,7 +263,8 @@ public sealed class NeighborhoodStreamer : ISystem
         {
             var evicted = _cache[0];
             _cache.RemoveAt(0);
-            _jobs.Add(new Job(evicted.CellX, evicted.CellY, JobKind.Unload, Unload(evicted.CellX, evicted.CellY).GetEnumerator()));
+            var eviction = new UnloadProgress();
+            _jobs.Add(new Job(evicted.CellX, evicted.CellY, JobKind.Unload, Unload(evicted.CellX, evicted.CellY, eviction).GetEnumerator(), eviction));
         }
 
         foreach (var cell in _toLoad)
@@ -258,8 +291,21 @@ public sealed class NeighborhoodStreamer : ISystem
 
     /// <summary>Destroys every entity indexed in the neighborhood, one unit each, announces its terrain a row at a time, then drops its stores.</summary>
     /// <remarks>Anything that arrives while the terrain is announced is destroyed all at once just before the stores drop, so nothing is left on cells that no longer exist.</remarks>
-    private IEnumerable<int> Unload(int cellX, int cellY)
+    private IEnumerable<int> Unload(int cellX, int cellY, UnloadProgress? eviction = null)
     {
+        if (eviction is not null)
+        {
+            if (_skeletons is not null)
+            {
+                foreach (var cost in DestroyEntitiesIn(cellX, cellY, entityId => !_skeletons.IsSkeleton(entityId)))
+                {
+                    yield return cost;
+                }
+            }
+
+            eviction.BuiltCreaturesDestroyed = true;
+        }
+
         foreach (var cost in DestroyEntitiesIn(cellX, cellY))
         {
             yield return cost;
@@ -280,11 +326,14 @@ public sealed class NeighborhoodStreamer : ISystem
 
     /// <summary>Destroys every entity indexed in the neighborhood, one unit each, until the membership index holds none.</summary>
     /// <remarks>Walks the index again after each pass, in case anything arrived while the walk was spread over frames.</remarks>
-    private IEnumerable<int> DestroyEntitiesIn(int cellX, int cellY)
+    /// <param name="which">Destroys only the entities it accepts; null for every one.</param>
+    private IEnumerable<int> DestroyEntitiesIn(int cellX, int cellY, Func<int, bool>? which = null)
     {
         var entityIds = new List<int>();
+        bool destroyedAny;
         do
         {
+            destroyedAny = false;
             entityIds.Clear();
             for (var z = 0; z < _world.Map.Bounds.Depth; z++)
             {
@@ -293,19 +342,20 @@ public sealed class NeighborhoodStreamer : ISystem
 
             foreach (var entityId in entityIds)
             {
-                if (_entityManager.EntityExists(entityId))
+                if (!_entityManager.EntityExists(entityId))
+                {
+                    _resolver.Forget(entityId);
+                }
+                else if (which is null || which(entityId))
                 {
                     _entityManager.DestroyEntity(entityId);
                     _resolver.Forget(entityId);
+                    destroyedAny = true;
                     yield return 1;
-                }
-                else
-                {
-                    _resolver.Forget(entityId);
                 }
             }
         }
-        while (entityIds.Count > 0);
+        while (destroyedAny);
     }
 
     /// <summary>Allocates the neighborhood's stores and generates it from its record: layout rows at LayoutRowCost each, each announced as it is written, then the population, one unit per entity created.</summary>

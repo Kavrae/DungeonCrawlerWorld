@@ -1,6 +1,6 @@
 using Engine.ECS.Components.Stores;
 using FontStashSharp;
-using Game.Modules.Health.Components;
+using Game.Modules.Health;
 using Game.Modules.StatModifiers;
 using Game.Modules.StatModifiers.Components;
 using Game.World;
@@ -26,7 +26,7 @@ namespace Presentation.UI.Content;
 /// </remarks>
 public sealed class PlayerHealthHoverContent(
     World world,
-    MultiComponentPool<BodyPartComponent> bodyParts,
+    EntityBodyParts bodyParts,
     FontService fontService,
     MultiComponentPool<StatModifierComponent>? statModifiers = null) : IElementContent
 {
@@ -88,9 +88,8 @@ public sealed class PlayerHealthHoverContent(
             return;
         }
 
-        for (var denseIndex = bodyParts.GetFirstDenseIndex(playerEntityId); denseIndex != -1; denseIndex = bodyParts.GetNextDenseIndex(denseIndex))
+        foreach (var part in bodyParts.Parts(playerEntityId))
         {
-            ref readonly var part = ref bodyParts.GetReadonlyByDenseIndex(denseIndex);
             var effectiveMaximumHealth = StatModifierMath.GetEffectiveValue(statModifiers, playerEntityId, StatModifierTarget.MaximumHealth, part.MaximumHealth);
             var partFraction = effectiveMaximumHealth > 0 ? MathHelper.Clamp(part.CurrentHealth / effectiveMaximumHealth, 0f, 1f) : 0f;
             destination.Add(new RowData(part.Name, partFraction, effectiveMaximumHealth > 0));

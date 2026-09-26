@@ -1,8 +1,4 @@
-using Engine.ECS.Components;
-using Engine.ECS.Entities;
 using Engine.ECS.Systems;
-using Game.Modules.Class.Components;
-using Game.Modules.Core.Components;
 using Game.Modules.Health;
 using Game.Modules.Health.Components;
 using Game.Modules.StatModifiers;
@@ -19,33 +15,33 @@ namespace Game.Blueprints.Classes;
 /// actively wrong -- HealthDamage dispatches Simple-first, so it would take the entity's parts out
 /// of play entirely -- which is why it is conditional and the modifiers are not.
 /// </remarks>
-public sealed class Tank(EntityKeys entityKeys) : IBlueprint
+public static class Tank
 {
-    private static readonly Guid ClassId = new("45ddf671-3f76-4e23-9ac3-7a588282ec35");
-    private const string ClassName = "Tank";
-    private const string Description = "Extra hit points";
+    public static readonly Guid Id = new("45ddf671-3f76-4e23-9ac3-7a588282ec35");
+    public const string Name = "Tank";
 
     private const short BaselineMaximumHealth = 100;
     private const float MaximumHealthBonusMultiplier = 0.10f;
     private const float HealthRegenBonusMultiplier = 0.10f;
 
-    public void Build(ComponentManager componentManager, int entityId)
+    public static readonly BlueprintDefinition Definition = new(Id, Name) { Build = Build, Class = new ClassFacet() };
+
+    private static void Build(BlueprintContext context)
     {
-        componentManager.Merge(entityId, new ClassComponent(ClassId, ClassName, Description));
+        var componentManager = context.ComponentManager;
+        var entityId = context.EntityId;
 
-        var source = ActionSource.FromEntity(componentManager, entityKeys, entityId);
+        var source = ActionSource.FromEntity(componentManager, context.EntityKeys, entityId, context.Definitions);
 
-        if (!componentManager.GetPackedPool<SimpleHealthComponent>().Has(entityId) && !componentManager.GetMultiPool<BodyPartComponent>().Has(entityId))
+        if (!componentManager.GetPackedPool<SimpleHealthComponent>().Has(entityId) && !EntityBodyParts.For(componentManager, context.Definitions).Has(entityId))
         {
             componentManager.Merge(entityId, new SimpleHealthComponent(BaselineMaximumHealth, BaselineMaximumHealth));
         }
 
-        MaximumHealthShift.ApplyModifier(componentManager, entityId, StatModifierOperation.Multiplicative, StatModifierPolarity.Buff,
+        MaximumHealthShift.ApplyModifier(componentManager, context.Definitions, entityId, StatModifierOperation.Multiplicative, StatModifierPolarity.Buff,
             canModify: true, magnitude: MaximumHealthBonusMultiplier, expiresAtFrame: FrameDeadline.Never, source);
 
         StatModifierEffects.Apply(componentManager, entityId, StatModifierTarget.HealthRegen, StatModifierOperation.Multiplicative, StatModifierPolarity.Buff,
             canModify: true, magnitude: HealthRegenBonusMultiplier, expiresAtFrame: FrameDeadline.Never, source);
-
-        componentManager.Merge(entityId, new DisplayTextComponent(ClassName, "Tank class"));
     }
 }

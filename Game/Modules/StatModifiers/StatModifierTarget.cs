@@ -49,7 +49,7 @@ public enum StatModifierTarget : byte
     // AbilityScoreType's 7 members, mirrored 1:1 -- lets equipment/class/buffs grant a
     // StatModifierComponent targeting an ability score via the existing StatModifierEffects.Apply,
     // with no new grant API. See AbilityScoreEffects for the write path that keeps
-    // AbilityScoreComponent.Total in sync when one of these is granted or expires.
+    // AbilityScoresComponent total in sync when one of these is granted or expires.
     Strength,
     Intelligence,
     Constitution,

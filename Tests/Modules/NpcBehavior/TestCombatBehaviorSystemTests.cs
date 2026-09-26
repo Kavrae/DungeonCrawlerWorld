@@ -7,6 +7,7 @@ using Game.Modules.Actions.Components;
 using Game.Modules.Actions.Definitions.DirectActions;
 using Game.Modules.Core.Components;
 using Game.Modules.Death.Components;
+using Game.Modules.Health;
 using Game.Modules.Health.Components;
 using Game.Modules.Inventory;
 using Game.Modules.Inventory.Components;
@@ -19,6 +20,7 @@ using Game.Modules.ProcessingTier;
 using Game.Modules.ProcessingTier.Components;
 using Game.Modules.Race.Components;
 using Game.World;
+using Game.Blueprints;
 
 namespace Tests.Modules.NpcBehavior;
 
@@ -28,6 +30,10 @@ public sealed class TestCombatBehaviorSystemTests
     private const int GoblinEntityId = 0;
     private const int PlayerEntityId = 1;
     private const int OtherGoblinEntityId = 2;
+
+    private const ushort GoblinRace = 1;
+    private const ushort HumanRace = 2;
+    private const ushort FairyRace = 3;
     private static readonly Vector3Int GoblinPosition = new(5, 5, 0);
     private static readonly Vector3Int AdjacentTile = new(6, 5, 0); // due east of the goblin -- part of Adjacent's 8-neighbor footprint.
     private static readonly Vector2Byte SingleTile = new(1, 1);
@@ -79,10 +85,11 @@ public sealed class TestCombatBehaviorSystemTests
         DirectComponentPool<TransformComponent> TransformPool,
         PackedComponentPool<ActionLockComponent> ActionLockPool,
         PackedComponentPool<SimpleHealthComponent> HealthPool,
-        MultiComponentPool<BodyPartComponent> BodyParts,
+        EntityBodyParts BodyParts,
+        BodyPartTestWorld BodyPartWorld,
         MultiComponentPool<InventoryItemStackComponent> InventoryStacks,
         MultiComponentPool<ActionInstanceComponent> ActionInstances,
-        MultiComponentPool<RaceComponent> RaceComponents,
+        PackedComponentPool<RaceSlotsComponent> RaceSlots,
         PackedComponentPool<PendingActionActivationComponent> PendingActivations,
         PackedComponentPool<PendingConsumableActivationComponent> PendingConsumableActivations,
         PackedComponentPool<DeadComponent> DeadEntities,
@@ -95,10 +102,16 @@ public sealed class TestCombatBehaviorSystemTests
         var transformPool = new DirectComponentPool<TransformComponent>(10, static (ref existing, incoming) => existing = incoming);
         var actionLockPool = new PackedComponentPool<ActionLockComponent>(10, 10, static (ref existing, incoming) => existing = incoming);
         var healthPool = new PackedComponentPool<SimpleHealthComponent>(10, 10, static (ref existing, incoming) => existing = incoming);
-        var bodyParts = new MultiComponentPool<BodyPartComponent>(10, 10);
+        var bodyPartWorld = new BodyPartTestWorld(new BodyPartTemplate("Head", BodyPartType.Head, 0, ComplexEntityHeadMaximum, IsVital: true));
+        var bodyParts = bodyPartWorld.BodyParts;
         var inventoryStacks = new MultiComponentPool<InventoryItemStackComponent>(10, 10);
         var actionInstances = new MultiComponentPool<ActionInstanceComponent>(10, 10);
-        var raceComponents = new MultiComponentPool<RaceComponent>(10, 10);
+        var actions = new EntityActions(new ActionCatalog(), new BlueprintRegistry(), actionInstances, new MultiComponentPool<ActionCooldownComponent>(10, 10));
+        var raceSlots = new PackedComponentPool<RaceSlotsComponent>(10, 10, static (ref existing, incoming) =>
+        {
+            existing.Add(incoming.Race1);
+            existing.Add(incoming.Race2);
+        });
         var pendingActivations = new PackedComponentPool<PendingActionActivationComponent>(10, 10, static (ref existing, incoming) => existing = incoming);
         var pendingConsumableActivations = new PackedComponentPool<PendingConsumableActivationComponent>(10, 10, static (ref existing, incoming) => existing = incoming);
         var deadEntities = new PackedComponentPool<DeadComponent>(10, 10, static (ref existing, incoming) => existing = incoming);
@@ -118,10 +131,10 @@ public sealed class TestCombatBehaviorSystemTests
         }
 
         var system = new TestCombatBehaviorSystem(
-            movementPool, transformPool, actionLockPool, healthPool, bodyParts, inventoryStacks, actionInstances, raceComponents,
+            movementPool, transformPool, actionLockPool, healthPool, bodyParts, inventoryStacks, actions, raceSlots,
             pendingActivations, pendingConsumableActivations, mapQuery, math, processingTiers, new ProcessingTierEvents(), deadEntities);
 
-        return new Fixture(system, mapQuery, movementPool, transformPool, actionLockPool, healthPool, bodyParts, inventoryStacks, actionInstances, raceComponents, pendingActivations, pendingConsumableActivations, deadEntities, processingTiers, math);
+        return new Fixture(system, mapQuery, movementPool, transformPool, actionLockPool, healthPool, bodyParts, bodyPartWorld, inventoryStacks, actionInstances, raceSlots, pendingActivations, pendingConsumableActivations, deadEntities, processingTiers, math);
     }
 
     /// <summary>Grants both QuickAttack and PowerAttack, matching every real race blueprint's paired grant -- TryDecideMeleeAttack gates on QuickAttack's presence but randomly picks either for the actual attack.</summary>
@@ -137,23 +150,27 @@ public sealed class TestCombatBehaviorSystemTests
         fixture.MovementPool.Add(entityId, new MovementComponent(MovementMode.Random, null, null));
         fixture.ActionLockPool.Add(entityId, new ActionLockComponent(standardLockFrames: 10, currentLockTotalFrames: 0, unlockedAtFrame: 0));
         fixture.HealthPool.Add(entityId, new SimpleHealthComponent(currentHealth, maximumHealth));
-        // IsAttackable now compares real races -- an attacker with no RaceComponent can never
+        // IsAttackable now compares real races -- an attacker with no race slot can never
         // decide anything is "a different race," so TryDecideMeleeAttack bails before even
         // resolving a footprint (see that method's own doc comment).
-        fixture.RaceComponents.Add(entityId, new RaceComponent(Goblin.RaceId, "Goblin", "A goblin."));
+        fixture.RaceSlots.Add(entityId, new RaceSlotsComponent(GoblinRace));
         if (grantMeleeActions)
         {
             GrantMeleeActions(fixture, entityId);
         }
     }
 
-    /// <summary>Complex-health counterpart to PlaceGoblin -- grants BodyPartComponents instead of a SimpleHealthComponent, same shape a Human-race entity would carry.</summary>
-    private static void PlaceComplexEntity(Fixture fixture, int entityId, float headCurrent, float headMaximum, bool grantMeleeActions = true)
+    /// <summary>Complex-health counterpart to PlaceGoblin -- gives the entity a body plan instead of a SimpleHealthComponent, same shape a Human-race entity would carry.</summary>
+    /// <summary>The one body plan the complex-health fixture entity is built on -- a single Head, since these tests only care about its overall health fraction.</summary>
+    private const ushort ComplexEntityHeadMaximum = 200;
+
+    private static void PlaceComplexEntity(Fixture fixture, int entityId, float headCurrent, bool grantMeleeActions = true)
     {
         fixture.TransformPool.Add(entityId, new TransformComponent(GoblinPosition, SingleTile));
         fixture.MovementPool.Add(entityId, new MovementComponent(MovementMode.Random, null, null));
         fixture.ActionLockPool.Add(entityId, new ActionLockComponent(standardLockFrames: 10, currentLockTotalFrames: 0, unlockedAtFrame: 0));
-        fixture.BodyParts.Add(entityId, new BodyPartComponent("Head", BodyPartType.Head, 0, 0, headCurrent, headMaximum, isVital: true));
+        fixture.BodyPartWorld.Give(entityId);
+        fixture.BodyParts.SetCurrentHealth(entityId, 0, headCurrent);
         if (grantMeleeActions)
         {
             GrantMeleeActions(fixture, entityId);
@@ -185,7 +202,7 @@ public sealed class TestCombatBehaviorSystemTests
     {
         var fixture = Build();
         PlaceGoblin(fixture, GoblinEntityId, currentHealth: 50, maximumHealth: 200);
-        fixture.RaceComponents.Add(PlayerEntityId, new RaceComponent(Human.RaceId, "Human", "The player."));
+        fixture.RaceSlots.Add(PlayerEntityId, new RaceSlotsComponent(HumanRace));
         fixture.MapQuery.SetBlockingOccupant(AdjacentTile, PlayerEntityId);
 
         fixture.System.Update(default, 0);
@@ -199,7 +216,7 @@ public sealed class TestCombatBehaviorSystemTests
     public void Update_ComplexEntityBelowHalfHealthWithPotion_QueuesSelfHeal_NotAttack()
     {
         var fixture = Build();
-        PlaceComplexEntity(fixture, GoblinEntityId, headCurrent: 50, headMaximum: 200);
+        PlaceComplexEntity(fixture, GoblinEntityId, headCurrent: 50);
         fixture.InventoryStacks.Add(GoblinEntityId, new InventoryItemStackComponent(HealthPotion.Id, quantity: 1));
         fixture.MapQuery.SetBlockingOccupant(AdjacentTile, PlayerEntityId);
 
@@ -214,7 +231,7 @@ public sealed class TestCombatBehaviorSystemTests
     {
         var fixture = Build();
         PlaceGoblin(fixture, GoblinEntityId);
-        fixture.RaceComponents.Add(PlayerEntityId, new RaceComponent(Human.RaceId, "Human", "The player."));
+        fixture.RaceSlots.Add(PlayerEntityId, new RaceSlotsComponent(HumanRace));
         fixture.MapQuery.SetBlockingOccupant(AdjacentTile, PlayerEntityId);
 
         fixture.System.Update(default, 0);
@@ -232,7 +249,7 @@ public sealed class TestCombatBehaviorSystemTests
     {
         var fixture = Build();
         PlaceGoblin(fixture, GoblinEntityId);
-        fixture.RaceComponents.Add(OtherGoblinEntityId, new RaceComponent(Goblin.RaceId, "Goblin", "Another goblin."));
+        fixture.RaceSlots.Add(OtherGoblinEntityId, new RaceSlotsComponent(GoblinRace));
         fixture.MapQuery.SetBlockingOccupant(AdjacentTile, OtherGoblinEntityId);
         // Same race as the attacker -- IsAttackable's race-mismatch check correctly excludes it.
 
@@ -242,14 +259,14 @@ public sealed class TestCombatBehaviorSystemTests
         Assert.IsFalse(fixture.PendingConsumableActivations.Has(GoblinEntityId));
     }
 
-    /// <summary>A raceless entity (a shop, a container, any non-creature prop) is never attackable -- IsAttackable requires the candidate to actually carry a RaceComponent to compare against, not just "any race but mine."</summary>
+    /// <summary>A raceless entity (a shop, a container, any non-creature prop) is never attackable -- IsAttackable requires the candidate to actually hold a race to compare against, not just "any race but mine."</summary>
     [TestMethod]
     public void Update_AdjacentToRacelessEntity_DoesNotAttack()
     {
         var fixture = Build();
         PlaceGoblin(fixture, GoblinEntityId);
         const int racelessEntityId = 3;
-        // No RaceComponent registered for racelessEntityId at all.
+        // No race slot registered for racelessEntityId at all.
         fixture.MapQuery.SetBlockingOccupant(AdjacentTile, racelessEntityId);
 
         fixture.System.Update(default, 0);
@@ -263,7 +280,7 @@ public sealed class TestCombatBehaviorSystemTests
         var fixture = Build();
         PlaceGoblin(fixture, GoblinEntityId);
         const int fairyEntityId = 3;
-        fixture.RaceComponents.Add(fairyEntityId, new RaceComponent(Fairy.RaceId, "Fairy", "A fairy."));
+        fixture.RaceSlots.Add(fairyEntityId, new RaceSlotsComponent(FairyRace));
         fixture.MapQuery.AddNonBlockingOccupant(AdjacentTile, fairyEntityId);
 
         fixture.System.Update(default, 0);
@@ -282,7 +299,7 @@ public sealed class TestCombatBehaviorSystemTests
         var fixture = Build();
         PlaceGoblin(fixture, GoblinEntityId);
         const int deadFairyEntityId = 3;
-        fixture.RaceComponents.Add(deadFairyEntityId, new RaceComponent(Fairy.RaceId, "Fairy", "A fairy."));
+        fixture.RaceSlots.Add(deadFairyEntityId, new RaceSlotsComponent(FairyRace));
         fixture.DeadEntities.Add(deadFairyEntityId, new DeadComponent(KilledBy: ActionSource.Admin, DiedAtFrame: 0));
         fixture.MapQuery.AddNonBlockingOccupant(AdjacentTile, deadFairyEntityId);
 
@@ -298,7 +315,7 @@ public sealed class TestCombatBehaviorSystemTests
         var fixture = Build();
         PlaceGoblin(fixture, GoblinEntityId);
         const int frozenFairyEntityId = 3;
-        fixture.RaceComponents.Add(frozenFairyEntityId, new RaceComponent(Fairy.RaceId, "Fairy", "A fairy."));
+        fixture.RaceSlots.Add(frozenFairyEntityId, new RaceSlotsComponent(FairyRace));
         fixture.ProcessingTiers.TrySet(frozenFairyEntityId, new ProcessingTierComponent(ProcessingTierLevel.Borough));
         fixture.MapQuery.AddNonBlockingOccupant(AdjacentTile, frozenFairyEntityId);
 
@@ -329,7 +346,7 @@ public sealed class TestCombatBehaviorSystemTests
     {
         var fixture = Build();
         PlaceGoblin(fixture, GoblinEntityId);
-        fixture.RaceComponents.Add(PlayerEntityId, new RaceComponent(Human.RaceId, "Human", "The player."));
+        fixture.RaceSlots.Add(PlayerEntityId, new RaceSlotsComponent(HumanRace));
         fixture.MapQuery.SetBlockingOccupant(AdjacentTile, PlayerEntityId);
 
         fixture.System.Update(default, 0);

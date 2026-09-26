@@ -99,6 +99,10 @@ public sealed class ProcessingTierResolver
     /// <summary>Raised by ShiftWindowTo with the previous and the new centre, after WindowCenter has changed.</summary>
     public event Action<(int CellX, int CellY), (int CellX, int CellY)>? WindowShifted;
 
+    /// <summary>While true, ProcessingTierSystem starts no neighborhood's promotion into a simulated tier (the transition queue's thaw band); everything else keeps draining. Null: never held.</summary>
+    /// <remarks>Set by the composition root to "the neighborhoods leaving the window are still unloading", so the creatures a promotion builds reuse the storage the unloaded ones free instead of growing it.</remarks>
+    public Func<bool>? PromotionsHeld { get; set; }
+
     /// <summary>Starts a window centred on (cellX, cellY) without raising WindowShifted -- the spawn sequence, before population, so everything is born tiered against it.</summary>
     public void SetWindowCenter(int cellX, int cellY) => WindowCenter = (cellX, cellY);
 

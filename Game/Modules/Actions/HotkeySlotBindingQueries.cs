@@ -12,13 +12,13 @@ namespace Game.Modules.Actions;
 /// </summary>
 public static class HotkeySlotBindingQueries
 {
-    public static bool TryGet<T>(MultiComponentPool<T> bindings, int entityId, HotkeySlot slot, out Guid boundId) where T : struct, IHotkeySlotBinding
+    public static bool TryGet<T, TBoundId>(MultiComponentPool<T> bindings, int entityId, HotkeySlot slot, out TBoundId boundId) where T : struct, IHotkeySlotBinding<TBoundId>
     {
         var found = bindings.TryGetFirst(entityId, slot, static (ref readonly T candidate, HotkeySlot s) => candidate.Slot == s, out var binding);
-        boundId = found ? binding.BoundId : default;
+        boundId = found ? binding.BoundId : default!;
         return found;
     }
 
-    public static void Unbind<T>(MultiComponentPool<T> bindings, int entityId, HotkeySlot slot) where T : struct, IHotkeySlotBinding =>
+    public static void Unbind<T, TBoundId>(MultiComponentPool<T> bindings, int entityId, HotkeySlot slot) where T : struct, IHotkeySlotBinding<TBoundId> =>
         bindings.RemoveFirst(entityId, slot, static (ref readonly binding, s) => binding.Slot == s);
 }

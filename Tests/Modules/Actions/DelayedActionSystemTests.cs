@@ -15,6 +15,7 @@ using Game.Modules.Death.Components;
 using Game.Modules.Health.Components;
 using Game.Modules.StatusEffects;
 using Game.World;
+using Game.Blueprints;
 
 namespace Tests.Modules.Actions;
 
@@ -58,6 +59,7 @@ public sealed class DelayedActionSystemTests
         var componentManager = new ComponentManager(initialEntityCapacity: 20, initialComponentCapacity: 10);
         componentManager.RegisterPackedPool<PendingDelayedActionComponent>(static (ref existing, incoming) => existing = incoming);
         componentManager.RegisterMultiPool<ActionInstanceComponent>();
+        componentManager.RegisterMultiPool<ActionCooldownComponent>();
         componentManager.RegisterPackedPool<SimpleHealthComponent>(static (ref existing, incoming) => existing = incoming);
         componentManager.RegisterPackedPool<DeadComponent>(static (ref existing, incoming) => existing = incoming);
 
@@ -72,7 +74,7 @@ public sealed class DelayedActionSystemTests
         var tierEvents = new ProcessingTierEvents();
         var system = new DelayedActionSystem(
             componentManager.GetPackedPool<PendingDelayedActionComponent>(),
-            componentManager.GetMultiPool<ActionInstanceComponent>(),
+            EntityActions.For(componentManager, actionCatalog, new BlueprintRegistry()),
             componentManager.GetPackedPool<SimpleHealthComponent>(),
             actionCatalog,
             mapQuery,

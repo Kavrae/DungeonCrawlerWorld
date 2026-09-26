@@ -39,8 +39,8 @@ public sealed class ManaModule : IGameModule
         var deadEntities = componentManager.IsRegistered<DeadComponent>()
             ? componentManager.GetPackedPool<DeadComponent>()
             : null;
-        var abilityScores = componentManager.IsRegistered<AbilityScoreComponent>()
-            ? componentManager.GetMultiPool<AbilityScoreComponent>()
+        var abilityScores = componentManager.IsRegistered<AbilityScoresComponent>()
+            ? componentManager.GetPackedPool<AbilityScoresComponent>()
             : null;
 
         systemManager.Register(new ManaRegenSystem(

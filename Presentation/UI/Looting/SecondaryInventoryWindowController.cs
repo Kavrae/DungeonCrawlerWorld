@@ -38,10 +38,10 @@ public sealed class SecondaryInventoryWindowController(
     public Rectangle Rectangle => _slot.Rectangle;
 
     /// <summary>Settable late-bound callback for "the player clicked a real single-stack item cell in this corpse/secondary grid" -- see InventoryWindowController.OnItemSelected, wired by ShellBootstrapper to the same ItemDetailsWindowController.Open. Threaded into every corpse window's own Configure call.</summary>
-    public Action<int, Guid>? OnItemSelected { get; set; }
+    public Action<int, uint>? OnItemSelected { get; set; }
 
     /// <summary>Settable late-bound callback for "the player chose Compare from this corpse/secondary grid's own item context menu" -- see InventoryWindowController.OnCompareRequested, wired by ShellBootstrapper to the same ItemComparisonController.Arm.</summary>
-    public Action<int, Guid>? OnCompareRequested { get; set; }
+    public Action<int, uint>? OnCompareRequested { get; set; }
 
     /// <summary>Closes whichever corpse/container window is currently open, if any -- a no-op otherwise. Lets ShellBootstrapper enforce "a corpse/container window and a shop window are never open at once" (both cascade off the same player-inventory-window position, so two open together would overlap) without this controller needing any awareness of ShopWindowController.</summary>
     public void CloseIfOpen() => _slot.CloseIfOpen();

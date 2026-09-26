@@ -8,6 +8,7 @@ using Game.Modules.StatModifiers;
 using Game.Modules.StatModifiers.Components;
 using Game.Modules.StatModifiers.Systems;
 using Game.World;
+using Game.Blueprints;
 
 namespace Tests.Modules.Health;
 
@@ -20,13 +21,12 @@ public sealed class MaximumHealthShiftTests
     {
         var componentManager = new ComponentManager(initialEntityCapacity: 10, initialComponentCapacity: 10);
         componentManager.RegisterPackedPool<SimpleHealthComponent>(static (ref existing, incoming) => existing = incoming);
-        componentManager.RegisterMultiPool<BodyPartComponent>();
         componentManager.RegisterMultiPool<StatModifierComponent>();
         return componentManager;
     }
 
     private static void GrantFiftyPercentBuff(ComponentManager componentManager, uint expiresAtFrame = FrameDeadline.Never) =>
-        MaximumHealthShift.ApplyModifier(componentManager, EntityId, StatModifierOperation.Multiplicative, StatModifierPolarity.Buff,
+        MaximumHealthShift.ApplyModifier(componentManager, Creatures(componentManager), EntityId, StatModifierOperation.Multiplicative, StatModifierPolarity.Buff,
             canModify: true, magnitude: 0.5f, expiresAtFrame, ActionSource.Admin);
 
     [TestMethod]
@@ -56,9 +56,7 @@ public sealed class MaximumHealthShiftTests
     public void ApplyModifier_BodyParts_HealsEachPartByItsOwnIncrease()
     {
         var componentManager = CreateComponentManager();
-        var bodyParts = componentManager.GetMultiPool<BodyPartComponent>();
-        bodyParts.Add(EntityId, new BodyPartComponent("Head", BodyPartType.Head, 0, 5, currentHealth: 40, maximumHealth: 40, isVital: true));
-        bodyParts.Add(EntityId, new BodyPartComponent("Torso", BodyPartType.Torso, 1, 4, currentHealth: 30, maximumHealth: 60, isVital: true));
+        var bodyParts = BodyPartTestWorld.WithParts(componentManager, EntityId, ("Head", BodyPartType.Head, 40, 40, true), ("Torso", BodyPartType.Torso, 30, 60, true)).BodyParts;
 
         GrantFiftyPercentBuff(componentManager);
 
@@ -153,7 +151,7 @@ public sealed class MaximumHealthShiftTests
         var expiry = BuildExpirySystem(componentManager, eventBus);
 
         GrantFiftyPercentBuff(componentManager, expiresAtFrame: 10);
-        MaximumHealthShift.ApplyModifier(componentManager, EntityId, StatModifierOperation.Additive, StatModifierPolarity.Buff,
+        MaximumHealthShift.ApplyModifier(componentManager, Creatures(componentManager), EntityId, StatModifierOperation.Additive, StatModifierPolarity.Buff,
             canModify: true, magnitude: 20f, expiresAtFrame: 10, ActionSource.Admin);
 
         Assert.AreEqual(180f, health.GetReadonly(EntityId).CurrentHealth, 0.001f, "(100 + 20) * 1.5 = 180.");
@@ -198,15 +196,17 @@ public sealed class MaximumHealthShiftTests
             }
 
             expiringEntityId = -1;
-            MaximumHealthShift.Apply(componentManager, expired.EntityId, additiveSum, multiplicativeSum);
+            MaximumHealthShift.Apply(componentManager, Creatures(componentManager), expired.EntityId, additiveSum, multiplicativeSum);
         });
     }
 
-    private static float PartHealth(MultiComponentPool<BodyPartComponent> bodyParts, string name)
+    /// <summary>The definitions the body parts in this fixture were registered in -- see BodyPartTestWorld.</summary>
+    private static BlueprintRegistry Creatures(ComponentManager componentManager) => BodyPartTestWorld.CreaturesOf(componentManager);
+
+    private static float PartHealth(EntityBodyParts bodyParts, string name)
     {
-        for (var denseIndex = bodyParts.GetFirstDenseIndex(EntityId); denseIndex != -1; denseIndex = bodyParts.GetNextDenseIndex(denseIndex))
+        foreach (var part in bodyParts.Parts(EntityId))
         {
-            ref readonly var part = ref bodyParts.GetReadonlyByDenseIndex(denseIndex);
             if (part.Name == name)
             {
                 return part.CurrentHealth;

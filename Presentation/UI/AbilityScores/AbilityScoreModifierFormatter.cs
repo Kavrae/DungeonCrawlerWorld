@@ -13,7 +13,7 @@ namespace Presentation.UI.AbilityScores;
 /// first, then one line per active StatModifierComponent targeting that score, flat (Additive)
 /// before multiplicative and positive before negative within each -- per the window's own spec.
 /// Pure logic, no rendering -- assumes the caller (AbilityScoreWindow) only calls this for an
-/// entity that actually has AbilityScoreComponent/StatModifierComponent pools registered, the
+/// entity that actually has AbilityScoresComponent/StatModifierComponent pools registered, the
 /// same trust-the-caller boundary InventoryGridContent already draws for its own component reads.
 /// </summary>
 public static class AbilityScoreModifierFormatter
@@ -56,9 +56,9 @@ public static class AbilityScoreModifierFormatter
     }
 
     private static ushort GetBaseValue(ComponentManager componentManager, int entityId, AbilityScoreType type) =>
-        AbilityScoreQueries.TryGetComponent(componentManager.GetMultiPool<AbilityScoreComponent>(), entityId, type, out var component)
+        AbilityScoreQueries.TryGetComponent(componentManager.GetPackedPool<AbilityScoresComponent>(), entityId, type, out var component)
             ? component.BaseValue
-            : throw new InvalidOperationException($"No AbilityScoreComponent of type {type} for entity {entityId}.");
+            : throw new InvalidOperationException($"No {type} ability score for entity {entityId}.");
 
     private static ModifierDisplayLine FormatModifierLine(ComponentManager componentManager, StatModifierComponent modifier, long now)
     {

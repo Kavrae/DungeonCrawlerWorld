@@ -11,7 +11,11 @@ public sealed class RaceModule : IModule
 
     public void RegisterComponents(ComponentManager componentManager)
     {
-        componentManager.RegisterMultiPool<RaceComponent>();
+        componentManager.RegisterPackedPool<RaceSlotsComponent>(static (ref existing, incoming) =>
+        {
+            existing.Add(incoming.Race1);
+            existing.Add(incoming.Race2);
+        }, initialCapacity: 80_000);
     }
 
     public void RegisterSystems(SystemManager systemManager, ComponentManager componentManager)

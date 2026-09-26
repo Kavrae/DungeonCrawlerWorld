@@ -45,7 +45,7 @@ public sealed class ContactDamageSystem : ISystem
     private readonly IPlayerQuery? _playerQuery;
     private readonly FrameEventBuffer<EntityMovedEvent> _movedEntities;
     private readonly PackedComponentPool<DeadComponent>? _deadEntities;
-    private readonly MultiComponentPool<BodyPartComponent>? _bodyParts;
+    private readonly EntityBodyParts? _bodyParts;
     private readonly MathUtility _mathUtility;
     private readonly PackedTimerWheel<ContactDamageExposureComponent> _wheel;
 
@@ -68,7 +68,7 @@ public sealed class ContactDamageSystem : ISystem
         SimulationClock simulationClock,
         MultiComponentPool<StatModifierComponent>? statModifiers = null,
         PackedComponentPool<DeadComponent>? deadEntities = null,
-        MultiComponentPool<BodyPartComponent>? bodyParts = null,
+        EntityBodyParts? bodyParts = null,
         SimulationScope? simulationScope = null)
     {
         _terrain = terrain;

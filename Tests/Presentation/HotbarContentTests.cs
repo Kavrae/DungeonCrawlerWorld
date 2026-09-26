@@ -113,7 +113,7 @@ public sealed class HotbarContentTests
     public void BindItem_WritesTheBinding()
     {
         var (hotbar, componentManager) = Build();
-        var itemId = Guid.NewGuid();
+        var itemId = 42u;
 
         hotbar.BindItem(HotkeySlot.Slot3, itemId);
 
@@ -128,7 +128,7 @@ public sealed class HotbarContentTests
         var actionId = Guid.NewGuid();
         componentManager.GetMultiPool<ActionHotkeyBindingComponent>().Add(PlayerEntityId, new ActionHotkeyBindingComponent(HotkeySlot.Slot3, actionId));
 
-        hotbar.BindItem(HotkeySlot.Slot3, Guid.NewGuid());
+        hotbar.BindItem(HotkeySlot.Slot3, 7u);
 
         Assert.IsFalse(ActionHotkeyBindingQueries.TryGet(componentManager.GetMultiPool<ActionHotkeyBindingComponent>(), PlayerEntityId, HotkeySlot.Slot3, out _));
     }
@@ -137,8 +137,8 @@ public sealed class HotbarContentTests
     public void BindItem_CalledTwiceOnTheSameSlot_ReplacesTheEarlierItem()
     {
         var (hotbar, componentManager) = Build();
-        var firstItemId = Guid.NewGuid();
-        var secondItemId = Guid.NewGuid();
+        var firstItemId = 11u;
+        var secondItemId = 12u;
 
         hotbar.BindItem(HotkeySlot.Slot3, firstItemId);
         hotbar.BindItem(HotkeySlot.Slot3, secondItemId);
@@ -152,7 +152,7 @@ public sealed class HotbarContentTests
     public void UnbindItemSlot_RemovesTheBinding()
     {
         var (hotbar, _) = Build();
-        var itemId = Guid.NewGuid();
+        var itemId = 42u;
         hotbar.BindItem(HotkeySlot.Slot3, itemId);
 
         hotbar.UnbindItemSlot(HotkeySlot.Slot3);

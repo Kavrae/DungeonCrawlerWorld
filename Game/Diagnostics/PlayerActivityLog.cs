@@ -1,8 +1,10 @@
 ﻿using Engine.ECS.Components;
 using Engine.ECS.Components.Stores;
 using Engine.Events;
+using Game.Spawning;
 using Game.Modules.Core.Components;
 using Game.World;
+using Game.Blueprints;
 
 namespace Game.Diagnostics;
 
@@ -15,16 +17,16 @@ namespace Game.Diagnostics;
 public sealed class PlayerActivityLog : IDisposable
 {
     private readonly Game.World.World _world;
-    private readonly DirectComponentPool<DisplayTextComponent> _displayTextPool;
+    private readonly EntityNaming _naming;
     private readonly StreamWriter _writer;
 
     private int _currentFrameCount;
     private DateTime _currentTimestamp;
 
-    public PlayerActivityLog(Game.World.World world, ComponentManager componentManager, EventBus eventBus, string logFilePath)
+    public PlayerActivityLog(Game.World.World world, ComponentManager componentManager, EventBus eventBus, string logFilePath, BlueprintRegistry? creatures = null)
     {
         _world = world;
-        _displayTextPool = componentManager.GetDirectPool<DisplayTextComponent>();
+        _naming = EntityNaming.For(componentManager, creatures);
 
         var logDirectory = Path.GetDirectoryName(logFilePath);
         if (!string.IsNullOrEmpty(logDirectory))
@@ -109,10 +111,10 @@ public sealed class PlayerActivityLog : IDisposable
         Write($"BLOCKED type={blocked.EffectType} source={DescribeSource(blocked.Source)} target={DescribeEntity(blocked.EntityId)} (immune)");
     }
 
-    /// <summary>entityId alone, or "Name (#entityId)" if the entity has a DisplayTextComponent -- shared by both the source and target sides of a DAMAGE line.</summary>
+    /// <summary>entityId alone, or "Name (#entityId)" when anything names it (its own DisplayTextComponent, or its race -- see EntityNaming) -- shared by both the source and target sides of a DAMAGE line.</summary>
     private string DescribeEntity(int entityId) =>
-        _displayTextPool.TryGetReadonly(entityId, out var displayText)
-            ? $"{displayText.Name} (#{entityId})"
+        _naming.TryGetName(entityId, out var name)
+            ? $"{name} (#{entityId})"
             : entityId.ToString();
 
     /// <summary>An entity source by the name and crawler number it had when the source was created (its runtime id may already belong to someone else); anything else by ActionSource.ToString().</summary>

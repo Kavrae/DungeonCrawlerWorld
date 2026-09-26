@@ -81,24 +81,26 @@ public sealed class ContactDamageSystemTests
         new(key, "Test hazard", "", default, "~", default, ContactHazard: new ContactHazard(DamagePerTick: 10, TickIntervalFrames: TickIntervalFrames, preferredTargetType));
 
     private static PackedComponentPool<ContactDamageExposureComponent> CreateExposurePool() =>
-        new(maximumEntityCount: 200, initialCapacity: 4, static (ref existing, incoming) => { });
+        new(entityCapacity: 200, initialCapacity: 4, static (ref existing, incoming) => { });
 
     private static PackedComponentPool<SimpleHealthComponent> CreateHealthPool() =>
-        new(maximumEntityCount: 200, initialCapacity: 4, static (ref existing, incoming) => existing = incoming);
+        new(entityCapacity: 200, initialCapacity: 4, static (ref existing, incoming) => existing = incoming);
 
     private static PackedComponentPool<DeadComponent> CreateDeadPool() =>
-        new(maximumEntityCount: 200, initialCapacity: 4, static (ref existing, incoming) => existing = incoming);
+        new(entityCapacity: 200, initialCapacity: 4, static (ref existing, incoming) => existing = incoming);
 
-    /// <summary>Complex-health counterpart to Build -- the mover carries BodyPartComponents (Head/Torso, mirroring a Human-shaped fixture) instead of a SimpleHealthComponent, and the hazard's own PreferredTargetType is caller-supplied so a test can exercise either the type-match or the bottommost-fallback path.</summary>
-    private static (Harness Harness, MultiComponentPool<BodyPartComponent> BodyParts) BuildComplex(BodyPartType? preferredTargetType)
+    /// <summary>Complex-health counterpart to Build -- the mover carries body parts (Head/Torso, mirroring a Human-shaped fixture) instead of a SimpleHealthComponent, and the hazard's own PreferredTargetType is caller-supplied so a test can exercise either the type-match or the bottommost-fallback path.</summary>
+    private static (Harness Harness, EntityBodyParts BodyParts) BuildComplex(BodyPartType? preferredTargetType)
     {
         var terrain = new TerrainRegistry();
-        var bodyParts = new MultiComponentPool<BodyPartComponent>(maximumEntityCount: 200, initialCapacity: 8);
+        var partsWorld = new BodyPartTestWorld(
+            new BodyPartTemplate("Head", BodyPartType.Head, 5, 100, IsVital: true),
+            new BodyPartTemplate("Torso", BodyPartType.Torso, 4, 100, IsVital: true));
+        partsWorld.Give(MoverEntityId);
+        var bodyParts = partsWorld.BodyParts;
         var mapQuery = new FakeMapQuery();
         var movedEntities = new FrameEventBuffer<EntityMovedEvent>();
 
-        bodyParts.Add(MoverEntityId, new BodyPartComponent("Head", BodyPartType.Head, 0, verticalPosition: 5, currentHealth: 100, maximumHealth: 100, isVital: true));
-        bodyParts.Add(MoverEntityId, new BodyPartComponent("Torso", BodyPartType.Torso, 0, verticalPosition: 4, currentHealth: 100, maximumHealth: 100, isVital: true));
         mapQuery.SetTerrain(OnHazard, terrain.Register(HazardTerrain("test:hazard", preferredTargetType)));
 
         var system = new ContactDamageSystem(terrain, CreateExposurePool(), CreateHealthPool(), new EventBus(), mapQuery, new FakePlayerQuery(MoverEntityId), movedEntities, new MathUtility(), new SimulationClock(), statModifiers: null, deadEntities: null, bodyParts: bodyParts);
@@ -251,10 +253,10 @@ public sealed class ContactDamageSystemTests
         harness.Move(OffHazard, OnHazard);
         harness.Step();
 
-        var headDenseIndex = BodyPartSelection.PickByType(bodyParts, MoverEntityId, BodyPartType.Head);
-        Assert.AreEqual(90, bodyParts.GetReadonlyByDenseIndex(headDenseIndex).CurrentHealth);
-        var torsoDenseIndex = BodyPartSelection.PickByType(bodyParts, MoverEntityId, BodyPartType.Torso);
-        Assert.AreEqual(100, bodyParts.GetReadonlyByDenseIndex(torsoDenseIndex).CurrentHealth, "Torso must be untouched -- the hit landed on Head.");
+        bodyParts.TryGet(MoverEntityId, BodyPartSelection.PickByType(bodyParts, MoverEntityId, BodyPartType.Head), out var headPart);
+        Assert.AreEqual(90, headPart.CurrentHealth);
+        bodyParts.TryGet(MoverEntityId, BodyPartSelection.PickByType(bodyParts, MoverEntityId, BodyPartType.Torso), out var torsoPart);
+        Assert.AreEqual(100, torsoPart.CurrentHealth, "Torso must be untouched -- the hit landed on Head.");
     }
 
     [TestMethod]
@@ -268,10 +270,10 @@ public sealed class ContactDamageSystemTests
         harness.Move(OffHazard, OnHazard);
         harness.Step();
 
-        var torsoDenseIndex = BodyPartSelection.PickByType(bodyParts, MoverEntityId, BodyPartType.Torso);
-        Assert.AreEqual(90, bodyParts.GetReadonlyByDenseIndex(torsoDenseIndex).CurrentHealth);
-        var headDenseIndex = BodyPartSelection.PickByType(bodyParts, MoverEntityId, BodyPartType.Head);
-        Assert.AreEqual(100, bodyParts.GetReadonlyByDenseIndex(headDenseIndex).CurrentHealth, "Head must be untouched -- the fallback landed on the bottommost part, Torso.");
+        bodyParts.TryGet(MoverEntityId, BodyPartSelection.PickByType(bodyParts, MoverEntityId, BodyPartType.Torso), out var torsoPart);
+        Assert.AreEqual(90, torsoPart.CurrentHealth);
+        bodyParts.TryGet(MoverEntityId, BodyPartSelection.PickByType(bodyParts, MoverEntityId, BodyPartType.Head), out var headPart);
+        Assert.AreEqual(100, headPart.CurrentHealth, "Head must be untouched -- the fallback landed on the bottommost part, Torso.");
     }
 
     /// <summary>An exposure doesn't accrue while its entity is frozen: a creature frozen in lava for ten seconds takes none of those ten ticks when it resumes, and its next tick keeps the cadence it had.</summary>

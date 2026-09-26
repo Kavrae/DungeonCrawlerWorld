@@ -40,10 +40,11 @@ internal static class HeadlessBenchmark
 {
     private const int FramesPerSecond = 60;
 
-    public static int Run(int randomSeed, BenchmarkFrameRange frameRange, int? mapSizeOverride = null)
+    /// <param name="diagnosticsFeatures">Memory adds a PoolMemoryReport over the same frame range; the other features have nothing to report headless.</param>
+    public static int Run(int randomSeed, BenchmarkFrameRange frameRange, int? mapSizeOverride = null, DiagnosticsFeatures diagnosticsFeatures = DiagnosticsFeatures.None)
     {
         using var timerResolution = WindowsTimerResolution.Request(milliseconds: 1);
-        var diagnostics = new DiagnosticsEngine(DiagnosticsFeatures.None, randomSeed, frameRange);
+        var diagnostics = new DiagnosticsEngine(diagnosticsFeatures & DiagnosticsFeatures.Memory, randomSeed, frameRange);
         var modsDirectory = Path.Combine(AppContext.BaseDirectory, "Mods");
 
         // Its own file, so benchmark runs never append to the real Log/player-activity.log.

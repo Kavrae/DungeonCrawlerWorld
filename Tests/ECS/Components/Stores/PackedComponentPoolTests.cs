@@ -14,25 +14,25 @@ public sealed class PackedComponentPoolTests
         (ref existing, incoming) => existing.Value = (existing.Value + incoming.Value) / 2;
 
     [TestMethod]
-    public void EstimatedBytes_ScalesWithMaximumEntityCountAndDenseCapacity()
+    public void EstimatedBytes_CountsPageTableDenseStorageAndAllocatedPages()
     {
-        var pool = new PackedComponentPool<TestComponent>(maximumEntityCount: 10, initialCapacity: 2, AverageMerge);
+        var pool = new PackedComponentPool<TestComponent>(entityCapacity: 10, initialCapacity: 2, AverageMerge);
 
-        // maximumEntityCount(10) * int(4) + denseCapacity(2) * (sizeof(TestComponent)=4 + entityId int=4 + version uint=4)
-        Assert.AreEqual(64, pool.EstimatedBytes);
+        // One page-table slot (8) + denseCapacity(2) * (sizeof(TestComponent)=4 + entityId int=4 + version uint=4); no page yet.
+        Assert.AreEqual(8 + 2 * (4 + 4 + 4), pool.EstimatedBytes);
 
         pool.Add(0, new TestComponent { Value = 1 });
         pool.Add(1, new TestComponent { Value = 2 });
         pool.Add(2, new TestComponent { Value = 3 });
 
-        // Dense storage grew by initialCapacity(2) once full: denseCapacity is now 4.
-        Assert.AreEqual(10 * 4 + 4 * (4 + 4 + 4), pool.EstimatedBytes);
+        // First page allocated (1024 ints); dense storage grew once, by the 16-slot minimum, to 18.
+        Assert.AreEqual(8 + 1024 * 4 + 18 * (4 + 4 + 4), pool.EstimatedBytes);
     }
 
     [TestMethod]
     public void Add_PacksIntoDenseStorageStartingAtZero()
     {
-        var pool = new PackedComponentPool<TestComponent>(maximumEntityCount: 10, initialCapacity: 2, AverageMerge);
+        var pool = new PackedComponentPool<TestComponent>(entityCapacity: 10, initialCapacity: 2, AverageMerge);
 
         pool.Add(7, new TestComponent { Value = 1 });
         pool.Add(3, new TestComponent { Value = 2 });
@@ -45,7 +45,7 @@ public sealed class PackedComponentPoolTests
     [TestMethod]
     public void Add_BeyondInitialCapacity_GrowsDenseStorage()
     {
-        var pool = new PackedComponentPool<TestComponent>(maximumEntityCount: 10, initialCapacity: 2, AverageMerge);
+        var pool = new PackedComponentPool<TestComponent>(entityCapacity: 10, initialCapacity: 2, AverageMerge);
 
         pool.Add(0, new TestComponent());
         pool.Add(1, new TestComponent());
@@ -58,7 +58,7 @@ public sealed class PackedComponentPoolTests
     [TestMethod]
     public void Remove_MiddleEntry_SwapsLastEntryIntoItsSlot()
     {
-        var pool = new PackedComponentPool<TestComponent>(maximumEntityCount: 10, initialCapacity: 4, AverageMerge);
+        var pool = new PackedComponentPool<TestComponent>(entityCapacity: 10, initialCapacity: 4, AverageMerge);
         pool.Add(0, new TestComponent { Value = 10 });
         pool.Add(1, new TestComponent { Value = 20 });
         pool.Add(2, new TestComponent { Value = 30 });
@@ -77,7 +77,7 @@ public sealed class PackedComponentPoolTests
     [TestMethod]
     public void UpdateByDenseIndex_MutatesAndBumpsVersion()
     {
-        var pool = new PackedComponentPool<TestComponent>(maximumEntityCount: 10, initialCapacity: 4, AverageMerge);
+        var pool = new PackedComponentPool<TestComponent>(entityCapacity: 10, initialCapacity: 4, AverageMerge);
         pool.Add(5, new TestComponent { Value = 1 });
 
         pool.UpdateByDenseIndex(0, static (ref c) => c.Value += 100);
@@ -89,7 +89,7 @@ public sealed class PackedComponentPoolTests
     [TestMethod]
     public void Merge_ExistingComponent_AveragesValue()
     {
-        var pool = new PackedComponentPool<TestComponent>(maximumEntityCount: 10, initialCapacity: 4, AverageMerge);
+        var pool = new PackedComponentPool<TestComponent>(entityCapacity: 10, initialCapacity: 4, AverageMerge);
         pool.Add(0, new TestComponent { Value = 40 });
 
         pool.Merge(0, new TestComponent { Value = 60 });
@@ -100,7 +100,7 @@ public sealed class PackedComponentPoolTests
     [TestMethod]
     public void Resize_OnlyGrowsSparseMap_NotDenseStorage()
     {
-        var pool = new PackedComponentPool<TestComponent>(maximumEntityCount: 4, initialCapacity: 4, AverageMerge);
+        var pool = new PackedComponentPool<TestComponent>(entityCapacity: 4, initialCapacity: 4, AverageMerge);
 
         pool.Resize(100);
         pool.Add(99, new TestComponent { Value = 1 });
@@ -111,7 +111,7 @@ public sealed class PackedComponentPoolTests
     [TestMethod]
     public void Has_EntityIdBeyondCapacity_ReturnsFalseInsteadOfThrowing()
     {
-        var pool = new PackedComponentPool<TestComponent>(maximumEntityCount: 4, initialCapacity: 4, AverageMerge);
+        var pool = new PackedComponentPool<TestComponent>(entityCapacity: 4, initialCapacity: 4, AverageMerge);
 
         Assert.IsFalse(pool.Has(1000));
         Assert.IsFalse(pool.TryGetReadonly(1000, out _));
@@ -121,7 +121,7 @@ public sealed class PackedComponentPoolTests
     [TestMethod]
     public void Add_EntityIdBeyondMaximumEntityCount_GrowsSparseMapOnDemand()
     {
-        var pool = new PackedComponentPool<TestComponent>(maximumEntityCount: 4, initialCapacity: 4, AverageMerge);
+        var pool = new PackedComponentPool<TestComponent>(entityCapacity: 4, initialCapacity: 4, AverageMerge);
 
         pool.Add(1000, new TestComponent { Value = 42 });
 
@@ -132,11 +132,57 @@ public sealed class PackedComponentPoolTests
     [TestMethod]
     public void Merge_EntityIdBeyondMaximumEntityCount_GrowsSparseMapOnDemand()
     {
-        var pool = new PackedComponentPool<TestComponent>(maximumEntityCount: 4, initialCapacity: 4, AverageMerge);
+        var pool = new PackedComponentPool<TestComponent>(entityCapacity: 4, initialCapacity: 4, AverageMerge);
 
         pool.Merge(1000, new TestComponent { Value = 42 });
 
         Assert.IsTrue(pool.Has(1000));
         Assert.AreEqual(42, pool.GetReadonly(1000).Value);
+    }
+
+    [TestMethod]
+    public void Reads_OfEntitiesInPagesNeverWritten_AllocateNothing()
+    {
+        var pool = new PackedComponentPool<TestComponent>(entityCapacity: 10, initialCapacity: 2, AverageMerge);
+        var bytes = pool.EstimatedBytes;
+
+        Assert.IsFalse(pool.Has(5_000_000));
+        Assert.IsFalse(pool.Has(-1));
+        Assert.IsFalse(pool.TryGetReadonly(700_000, out _));
+        Assert.AreEqual(-1, pool.GetDenseIndex(700_000));
+        Assert.IsFalse(pool.Remove(700_000));
+
+        Assert.AreEqual(bytes, pool.EstimatedBytes);
+    }
+
+    [TestMethod]
+    public void Add_WhenDenseStorageIsFull_GrowsItByHalf()
+    {
+        var pool = new PackedComponentPool<TestComponent>(entityCapacity: 1024, initialCapacity: 100, AverageMerge);
+        for (var entityId = 0; entityId < 100; entityId++)
+        {
+            pool.Add(entityId, new TestComponent { Value = entityId });
+        }
+
+        var bytesAtCapacity = pool.EstimatedBytes;
+        pool.Add(100, new TestComponent { Value = 100 });
+
+        // 100 -> 150 dense slots, 12 bytes each (component 4 + entity id 4 + version 4); the page already existed.
+        Assert.AreEqual(50L * (4 + 4 + 4), pool.EstimatedBytes - bytesAtCapacity);
+        Assert.AreEqual(100, pool.GetReadonly(100).Value);
+    }
+
+    [TestMethod]
+    public void Remove_OfTheLastHolderOnAPage_LeavesOtherPagesIntact()
+    {
+        var pool = new PackedComponentPool<TestComponent>(entityCapacity: 10, initialCapacity: 2, AverageMerge);
+        pool.Add(5, new TestComponent { Value = 5 });
+        pool.Add(5_000, new TestComponent { Value = 50 });
+
+        pool.Remove(5);
+
+        Assert.IsFalse(pool.Has(5));
+        Assert.AreEqual(50, pool.GetReadonly(5_000).Value);
+        Assert.AreEqual(0, pool.GetDenseIndex(5_000));
     }
 }

@@ -17,7 +17,7 @@ public sealed class WandGrantEffectsTests
     {
         var manager = new ComponentManager(initialEntityCapacity: 10, initialComponentCapacity: 4);
         new InventoryModule().RegisterComponents(manager);
-        manager.RegisterMultiPool<AbilityScoreComponent>();
+        AbilityScoreTestPools.Register(manager);
         return manager;
     }
 
@@ -30,7 +30,7 @@ public sealed class WandGrantEffectsTests
     {
         var manager = CreateRegisteredManager();
         AbilityScoreEffects.Grant(manager, entityId: 0, AbilityScoreType.Intelligence, baseValue: 300);
-        var abilityScores = manager.GetMultiPool<AbilityScoreComponent>();
+        var abilityScores = manager.GetPackedPool<AbilityScoresComponent>();
         var baseDefinition = CreateBaseWandDefinition();
 
         WandGrantEffects.Grant(manager, abilityScores, entityId: 0, baseDefinition, quantity: 1);

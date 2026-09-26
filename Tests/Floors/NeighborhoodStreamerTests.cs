@@ -2,6 +2,7 @@ using Engine.ECS.Context;
 using Engine.ECS.Systems;
 using Engine.Math;
 using Game;
+using Game.Spawning;
 using Game.Bootstrap;
 using Game.Floors;
 using Game.Modules.Core.Components;
@@ -10,6 +11,7 @@ using Game.Modules.ProcessingTier;
 using Game.Modules.ProcessingTier.Components;
 using Game.Terrain;
 using Game.World;
+using Game.Blueprints;
 
 namespace Tests.Floors;
 
@@ -26,24 +28,25 @@ public sealed class NeighborhoodStreamerTests
     [ClassCleanup]
     public static void DeleteEmptyModsDirectory() => EmptyModsDirectory.Delete(recursive: true);
 
-    private sealed record Session(Game.World.World World, EcsContext Ecs, ProcessingTierResolver Resolver, NeighborhoodStreamer Streamer, FrameEventBuffer<EntityMovedEvent> MovedEntities);
+    private sealed record Session(Game.World.World World, EcsContext Ecs, ProcessingTierResolver Resolver, NeighborhoodStreamer Streamer, FrameEventBuffer<EntityMovedEvent> MovedEntities, BlueprintRegistry Definitions, CreatureSkeletons? Skeletons = null);
 
     private static Session Build(int budgetPerFrame = NeighborhoodStreamer.DefaultBudgetPerFrame)
     {
         var world = new Game.World.World(new Map(new MapBounds(0, 0, 2 * Neighborhoods.SizeTiles, Rows, 3)));
         var mathUtility = new MathUtility(new Random(1));
-        var result = GameBootstrapper.Build(world, mathUtility, EmptyModsDirectory.FullName, initialEntityCapacity: 1_000, initialComponentCapacity: 100);
+        var crawlerNumbers = new UniqueNumberAllocator(mathUtility, 1, 13_000_000);
+        var result = GameBootstrapper.Build(world, mathUtility, EmptyModsDirectory.FullName, initialEntityCapacity: 1_000, initialComponentCapacity: 100, crawlerNumbers: crawlerNumbers);
         var ecs = result.EcsContext;
         result.ProcessingTierResolver.SetReferencePosition(Reference);
 
         var records = new NeighborhoodRecords(mathUtility);
-        var crawlerNumbers = new UniqueNumberAllocator(mathUtility, 1, 13_000_000);
-        FloorBuilder.PopulateFloor(world, ecs, records, crawlerNumbers, result.MovedEntities, result.Terrain, result.ProcessingTierResolver);
+        var factory = new EntityFactory(result.Definitions, world, ecs.EntityManager, ecs.ComponentManager, result.MovedEntities, result.ProcessingTierResolver, ecs.SystemManager.Clock, crawlerNumbers);
+        FloorBuilder.PopulateFloor(world, ecs, records, factory, result.Terrain, result.Definitions);
         result.MovedEntities.ClearFrame();
 
-        var builder = new TestMapBuilder(ecs.EntityManager, ecs.ComponentManager, crawlerNumbers, result.MovedEntities, result.Terrain, result.ProcessingTierResolver, ecs.SystemManager.Clock);
+        var builder = new TestMapBuilder(ecs.EntityManager, factory, result.Terrain, result.Definitions);
         var streamer = new NeighborhoodStreamer(world, ecs.EntityManager, ecs.ComponentManager.GetDirectPool<TransformComponent>(), ecs.EventBus, result.ProcessingTierResolver, records, builder) { BudgetPerFrame = budgetPerFrame };
-        return new Session(world, ecs, result.ProcessingTierResolver, streamer, result.MovedEntities);
+        return new Session(world, ecs, result.ProcessingTierResolver, streamer, result.MovedEntities, result.Definitions);
     }
 
     /// <summary>Pumps the streamer until it has nothing left to do, returning how many entities each frame created or destroyed.</summary>
@@ -224,11 +227,12 @@ public sealed class NeighborhoodStreamerTests
     {
         var session = Build();
         var components = session.Ecs.ComponentManager;
-        var displayText = components.GetDirectPool<DisplayTextComponent>();
-        var corpseEntityId = EntitiesIn(session, 0, 0).First(displayText.Has);
-        var killerEntityId = EntitiesIn(session, 1, 0).First(displayText.Has);
-        var killerName = displayText.GetReadonly(killerEntityId).Name;
-        components.GetPackedPool<DeadComponent>().Add(corpseEntityId, new DeadComponent(ActionSource.FromEntity(components, session.Ecs.EntityManager.Keys, killerEntityId), DiedAtFrame: 0));
+        // A creature is named by its race rather than by a component of its own (see EntityNaming).
+        var naming = EntityNaming.For(components, session.Definitions);
+        var corpseEntityId = EntitiesIn(session, 0, 0).First(entityId => naming.TryGetName(entityId, out _));
+        var killerEntityId = EntitiesIn(session, 1, 0).First(entityId => naming.TryGetName(entityId, out _));
+        var killerName = naming.NameOf(killerEntityId);
+        components.GetPackedPool<DeadComponent>().Add(corpseEntityId, new DeadComponent(ActionSource.FromEntity(components, session.Ecs.EntityManager.Keys, killerEntityId, session.Definitions), DiedAtFrame: 0));
 
         session.Streamer.TryRequestRegenerate(1, 0);
         RunUntilIdle(session);
@@ -255,7 +259,7 @@ public sealed class NeighborhoodStreamerTests
     }
 
     /// <summary>A strip eleven neighborhoods wide (-5 to 5) and a few rows tall, with only the window around neighborhood 0 loaded and populated, and the window centred there.</summary>
-    private static Session BuildWindow()
+    private static Session BuildWindow(bool withSkeletons = false)
     {
         var world = new Game.World.World(new Map(new MapBounds(-5 * Neighborhoods.SizeTiles, 0, 6 * Neighborhoods.SizeTiles, Rows, 3)));
         foreach (var cellX in new[] { -5, -4, -3, -2, 2, 3, 4, 5 })
@@ -264,19 +268,21 @@ public sealed class NeighborhoodStreamerTests
         }
 
         var mathUtility = new MathUtility(new Random(1));
-        var result = GameBootstrapper.Build(world, mathUtility, EmptyModsDirectory.FullName, initialEntityCapacity: 1_000, initialComponentCapacity: 100);
+        var crawlerNumbers = new UniqueNumberAllocator(mathUtility, 1, 13_000_000);
+        var result = GameBootstrapper.Build(world, mathUtility, EmptyModsDirectory.FullName, initialEntityCapacity: 1_000, initialComponentCapacity: 100, crawlerNumbers: crawlerNumbers);
         var ecs = result.EcsContext;
         result.ProcessingTierResolver.SetReferencePosition(Reference);
         result.ProcessingTierResolver.SetWindowCenter(0, 0);
 
         var records = new NeighborhoodRecords(mathUtility);
-        var crawlerNumbers = new UniqueNumberAllocator(mathUtility, 1, 13_000_000);
-        FloorBuilder.PopulateFloor(world, ecs, records, crawlerNumbers, result.MovedEntities, result.Terrain, result.ProcessingTierResolver);
+        var skeletons = withSkeletons ? result.Skeletons : null;
+        var factory = withSkeletons ? result.Factory : new EntityFactory(result.Definitions, world, ecs.EntityManager, ecs.ComponentManager, result.MovedEntities, result.ProcessingTierResolver, ecs.SystemManager.Clock, crawlerNumbers);
+        FloorBuilder.PopulateFloor(world, ecs, records, factory, result.Terrain, result.Definitions);
         result.MovedEntities.ClearFrame();
 
-        var builder = new TestMapBuilder(ecs.EntityManager, ecs.ComponentManager, crawlerNumbers, result.MovedEntities, result.Terrain, result.ProcessingTierResolver, ecs.SystemManager.Clock);
-        var streamer = new NeighborhoodStreamer(world, ecs.EntityManager, ecs.ComponentManager.GetDirectPool<TransformComponent>(), ecs.EventBus, result.ProcessingTierResolver, records, builder);
-        return new Session(world, ecs, result.ProcessingTierResolver, streamer, result.MovedEntities);
+        var builder = new TestMapBuilder(ecs.EntityManager, factory, result.Terrain, result.Definitions);
+        var streamer = new NeighborhoodStreamer(world, ecs.EntityManager, ecs.ComponentManager.GetDirectPool<TransformComponent>(), ecs.EventBus, result.ProcessingTierResolver, records, builder, skeletons);
+        return new Session(world, ecs, result.ProcessingTierResolver, streamer, result.MovedEntities, result.Definitions, skeletons);
     }
 
     /// <summary>Moves the player a neighborhood along and shifts the window there, the way ProcessingTierSystem does.</summary>
@@ -302,6 +308,43 @@ public sealed class NeighborhoodStreamerTests
         var tiers = session.Ecs.ComponentManager.GetDirectPool<ProcessingTierComponent>();
         Assert.IsNotEmpty(EntitiesIn(session, 2, 0));
         Assert.IsTrue(EntitiesIn(session, 2, 0).All(entityId => tiers.GetReadonly(entityId).Tier == ProcessingTierLevel.Borough), "Born against the new centre.");
+    }
+
+    /// <summary>An eviction frees its built creatures before anything else, so promotions (held on IsEvictingBuiltCreatures) can reuse their storage without waiting for the rest of the unload.</summary>
+    [TestMethod]
+    public void Eviction_DestroysBuiltCreaturesFirst_AndStopsHoldingPromotionsBeforeTheRestUnloads()
+    {
+        var session = BuildWindow(withSkeletons: true);
+        var skeletons = session.Skeletons!;
+        var evicted = EntitiesIn(session, -1, 0);
+        Assert.IsTrue(evicted.Any(entityId => !skeletons.IsSkeleton(entityId)), "Creatures born within Local reach of the spawn are built.");
+        Assert.IsTrue(evicted.Any(skeletons.IsSkeleton));
+
+        foreach (var cellX in new[] { 1, 2, 3 })
+        {
+            ShiftTo(session, cellX);
+            RunUntilIdle(session);
+        }
+
+        Assert.IsFalse(session.Streamer.IsEvictingBuiltCreatures);
+
+        ShiftTo(session, 4);
+        Assert.IsTrue(session.Streamer.IsEvictingBuiltCreatures, "Neighborhood -1 is the oldest cached, evicted by this shift.");
+
+        for (var frame = 0; frame < 1_000 && session.Streamer.IsEvictingBuiltCreatures; frame++)
+        {
+            session.Streamer.Update(default, 0);
+            session.MovedEntities.ClearFrame();
+        }
+
+        var remaining = EntitiesIn(session, -1, 0).Where(session.Ecs.EntityManager.EntityExists).ToList();
+        Assert.IsFalse(session.Streamer.IsEvictingBuiltCreatures);
+        Assert.IsNotEmpty(remaining, "Only the built creatures are gone yet.");
+        Assert.IsTrue(remaining.All(skeletons.IsSkeleton));
+        Assert.IsTrue(session.Streamer.IsBusy);
+
+        RunUntilIdle(session);
+        CollectionAssert.DoesNotContain(LoadedCells(session), -1);
     }
 
     [TestMethod]

@@ -76,7 +76,7 @@ internal sealed class TradeDragDropResolver : IDragDropResolver
     /// Implements the trade window's drag-drop eligibility rules, one branch per origin/destination
     /// pairing.
     /// </summary>
-    private void ResolveItemDrag(ComponentManager componentManager, int originEntityId, int destinationEntityId, Guid stackInstanceId)
+    private void ResolveItemDrag(ComponentManager componentManager, int originEntityId, int destinationEntityId, uint stackInstanceId)
     {
         var originIsShop = _shopPool?.Has(originEntityId) == true;
         var destinationIsShop = _shopPool?.Has(destinationEntityId) == true;

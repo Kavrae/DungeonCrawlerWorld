@@ -20,17 +20,13 @@ namespace Tests.Modules.Health;
 public sealed class ComplexHealthHealTests
 {
     private static PackedComponentPool<SimpleHealthComponent> CreateHealthPool() =>
-        new(maximumEntityCount: 10, initialCapacity: 4, static (ref existing, incoming) => existing = incoming);
+        new(entityCapacity: 10, initialCapacity: 4, static (ref existing, incoming) => existing = incoming);
 
-    private static MultiComponentPool<BodyPartComponent> CreateBodyPartsPool() =>
-        new(maximumEntityCount: 10, initialCapacity: 8);
-
-    private static Dictionary<string, BodyPartComponent> PartsByName(MultiComponentPool<BodyPartComponent> bodyParts, int entityId)
+    private static Dictionary<string, BodyPartView> PartsByName(EntityBodyParts bodyParts, int entityId)
     {
-        var result = new Dictionary<string, BodyPartComponent>();
-        for (var denseIndex = bodyParts.GetFirstDenseIndex(entityId); denseIndex != -1; denseIndex = bodyParts.GetNextDenseIndex(denseIndex))
+        var result = new Dictionary<string, BodyPartView>();
+        foreach (var part in bodyParts.Parts(entityId))
         {
-            var part = bodyParts.GetReadonlyByDenseIndex(denseIndex);
             result[part.Name] = part;
         }
 
@@ -40,9 +36,7 @@ public sealed class ComplexHealthHealTests
     [TestMethod]
     public void ApplyToAllParts_SplitsTotalEvenlyAcrossParts_NotByEachPartsOwnMaximum()
     {
-        var bodyParts = CreateBodyPartsPool();
-        bodyParts.Add(0, new BodyPartComponent("Head", BodyPartType.Head, 0, 0, currentHealth: 10, maximumHealth: 30, isVital: true));
-        bodyParts.Add(0, new BodyPartComponent("Leg", BodyPartType.Leg, 0, 0, currentHealth: 20, maximumHealth: 40, isVital: false));
+        var bodyParts = BodyPartTestWorld.WithParts(0, ("Head", BodyPartType.Head, 10, 30, true), ("Leg", BodyPartType.Leg, 20, 40, false)).BodyParts;
 
         ComplexHealthHeal.ApplyToAllParts(bodyParts, CreateHealthPool(), 0, percentOfMaxHealth: 0.5f);
 
@@ -55,29 +49,24 @@ public sealed class ComplexHealthHealTests
     [TestMethod]
     public void ApplyToAllParts_SinglePart_AlreadyFullPart_ClampsWithoutOverflow()
     {
-        var bodyParts = CreateBodyPartsPool();
-        bodyParts.Add(0, new BodyPartComponent("Torso", BodyPartType.Torso, 0, 0, currentHealth: 60, maximumHealth: 60, isVital: true));
+        var bodyParts = BodyPartTestWorld.WithParts(0, ("Torso", BodyPartType.Torso, 60, 60, true)).BodyParts;
 
         ComplexHealthHeal.ApplyToAllParts(bodyParts, CreateHealthPool(), 0, percentOfMaxHealth: 0.5f);
 
-        var part = bodyParts.GetReadonlyByDenseIndex(bodyParts.GetFirstDenseIndex(0));
+        bodyParts.TryGet(0, 0, out var part);
         Assert.AreEqual(60f, part.CurrentHealth);
     }
 
     [TestMethod]
     public void ApplyToAllParts_SinglePart_LockedOutPart_HealsAnyway()
     {
-        var bodyParts = CreateBodyPartsPool();
-        bodyParts.Add(0, new BodyPartComponent("Arm", BodyPartType.Arm, 0, 0, currentHealth: 0, maximumHealth: 20, isVital: false));
-        bodyParts.UpdateByDenseIndex(bodyParts.GetFirstDenseIndex(0), static (ref BodyPartComponent part) =>
-        {
-            part.IsDisabled = true;
-            part.RegenLockedUntilFrame = 600;
-        });
+        var bodyParts = BodyPartTestWorld.WithParts(0, ("Arm", BodyPartType.Arm, 0, 20, false)).BodyParts;
+        // Locked out of passive regen, which an active heal ignores.
+        bodyParts.LockOutOfRegen(0, 0, now: 0, lockoutFrames: 600);
 
         ComplexHealthHeal.ApplyToAllParts(bodyParts, CreateHealthPool(), 0, percentOfMaxHealth: 0.5f);
 
-        var part = bodyParts.GetReadonlyByDenseIndex(bodyParts.GetFirstDenseIndex(0));
+        bodyParts.TryGet(0, 0, out var part);
         Assert.AreEqual(10f, part.CurrentHealth);
         Assert.AreEqual(600u, part.RegenLockedUntilFrame, "The lockout is never consulted or reset by an active heal.");
     }
@@ -85,22 +74,19 @@ public sealed class ComplexHealthHealTests
     [TestMethod]
     public void ApplyToAllParts_SinglePart_PartHealedAboveZero_ClearsIsDisabled()
     {
-        var bodyParts = CreateBodyPartsPool();
-        bodyParts.Add(0, new BodyPartComponent("Arm", BodyPartType.Arm, 0, 0, currentHealth: 0, maximumHealth: 20, isVital: false));
-        bodyParts.UpdateByDenseIndex(bodyParts.GetFirstDenseIndex(0), static (ref BodyPartComponent part) => part.IsDisabled = true);
+        var bodyParts = BodyPartTestWorld.WithParts(0, ("Arm", BodyPartType.Arm, 0, 20, false)).BodyParts;
 
         ComplexHealthHeal.ApplyToAllParts(bodyParts, CreateHealthPool(), 0, percentOfMaxHealth: 0.1f);
 
-        var part = bodyParts.GetReadonlyByDenseIndex(bodyParts.GetFirstDenseIndex(0));
+        bodyParts.TryGet(0, 0, out var part);
         Assert.IsFalse(part.IsDisabled);
     }
 
     [TestMethod]
     public void ApplyToAllParts_SinglePart_MaximumHealthBuffActive_HealsPastRawMaximumToTheEffectiveOne()
     {
-        var bodyParts = CreateBodyPartsPool();
-        bodyParts.Add(0, new BodyPartComponent("Head", BodyPartType.Head, 0, 0, currentHealth: 40, maximumHealth: 40, isVital: true));
-        var statModifiers = new MultiComponentPool<StatModifierComponent>(maximumEntityCount: 10, initialCapacity: 4);
+        var bodyParts = BodyPartTestWorld.WithParts(0, ("Head", BodyPartType.Head, 40, 40, true)).BodyParts;
+        var statModifiers = new MultiComponentPool<StatModifierComponent>(entityCapacity: 10, initialCapacity: 4);
         statModifiers.Add(0, new StatModifierComponent(StatModifierTarget.MaximumHealth, StatModifierOperation.Multiplicative, StatModifierPolarity.Buff,
             canModify: true, magnitude: 0.5f, expiresAtFrame: FrameDeadline.Never, ActionSource.Admin));
 
@@ -110,16 +96,14 @@ public sealed class ComplexHealthHealTests
         // effective-maximum clamp.
         ComplexHealthHeal.ApplyToAllParts(bodyParts, CreateHealthPool(), 0, percentOfMaxHealth: 0.5f, statModifiers: statModifiers);
 
-        var part = bodyParts.GetReadonlyByDenseIndex(bodyParts.GetFirstDenseIndex(0));
+        bodyParts.TryGet(0, 0, out var part);
         Assert.AreEqual(60f, part.CurrentHealth, "50% of the effective max (60) = 30 total; 40 + 30 = 70, clamped to 60.");
     }
 
     [TestMethod]
     public void ApplyToAllParts_MixedDamageEntity_EachPartReceivesAnEqualAbsoluteShare_NotTheSameFraction()
     {
-        var bodyParts = CreateBodyPartsPool();
-        bodyParts.Add(0, new BodyPartComponent("Leg", BodyPartType.Leg, 0, 0, currentHealth: 8, maximumHealth: 40, isVital: false)); // 20%
-        bodyParts.Add(0, new BodyPartComponent("Torso", BodyPartType.Torso, 0, 0, currentHealth: 54, maximumHealth: 60, isVital: true)); // 90%
+        var bodyParts = BodyPartTestWorld.WithParts(0, ("Leg", BodyPartType.Leg, 8, 40, false), ("Torso", BodyPartType.Torso, 54, 60, true)).BodyParts;
 
         ComplexHealthHeal.ApplyToAllParts(bodyParts, CreateHealthPool(), 0, percentOfMaxHealth: 0.25f);
 
@@ -134,10 +118,7 @@ public sealed class ComplexHealthHealTests
     [TestMethod]
     public void ApplyToAllParts_FlatAmount_NotMultipliedByPartCount()
     {
-        var bodyParts = CreateBodyPartsPool();
-        bodyParts.Add(0, new BodyPartComponent("Head", BodyPartType.Head, 0, 0, currentHealth: 0, maximumHealth: 100, isVital: true));
-        bodyParts.Add(0, new BodyPartComponent("Torso", BodyPartType.Torso, 0, 0, currentHealth: 0, maximumHealth: 100, isVital: true));
-        bodyParts.Add(0, new BodyPartComponent("Leg", BodyPartType.Leg, 0, 0, currentHealth: 0, maximumHealth: 100, isVital: false));
+        var bodyParts = BodyPartTestWorld.WithParts(0, ("Head", BodyPartType.Head, 0, 100, true), ("Torso", BodyPartType.Torso, 0, 100, true), ("Leg", BodyPartType.Leg, 0, 100, false)).BodyParts;
 
         ComplexHealthHeal.ApplyToAllParts(bodyParts, CreateHealthPool(), 0, percentOfMaxHealth: 0f, flatAmount: 30f);
 
@@ -152,9 +133,7 @@ public sealed class ComplexHealthHealTests
     [TestMethod]
     public void ApplyToAllParts_LowestPercentageMode_HealsOnlyTheMostDamagedPart()
     {
-        var bodyParts = CreateBodyPartsPool();
-        bodyParts.Add(0, new BodyPartComponent("Head", BodyPartType.Head, 0, 0, currentHealth: 90, maximumHealth: 100, isVital: true)); // 90%
-        bodyParts.Add(0, new BodyPartComponent("Leg", BodyPartType.Leg, 0, 0, currentHealth: 20, maximumHealth: 100, isVital: false)); // 20%, most damaged
+        var bodyParts = BodyPartTestWorld.WithParts(0, ("Head", BodyPartType.Head, 90, 100, true), ("Leg", BodyPartType.Leg, 20, 100, false)).BodyParts;
 
         ComplexHealthHeal.ApplyToSinglePart(bodyParts, CreateHealthPool(), 0, percentOfMaxHealth: 0.1f, flatAmount: 0f, statModifiers: null, sourceEntityId: null, activatorTags: null, targetRule: null, targetMode: BodyPartTargetMode.LowestPercentage, mathUtility: null, now: 0);
 

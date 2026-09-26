@@ -14,7 +14,7 @@ public sealed class PotionCooldownSystemTests
 
     private static (PotionCooldownSystem System, PackedComponentPool<PotionCooldownComponent> Cooldowns) Build()
     {
-        var cooldowns = new PackedComponentPool<PotionCooldownComponent>(maximumEntityCount: 10, initialCapacity: 4, static (ref existing, incoming) => existing = incoming);
+        var cooldowns = new PackedComponentPool<PotionCooldownComponent>(entityCapacity: 10, initialCapacity: 4, static (ref existing, incoming) => existing = incoming);
         return (new PotionCooldownSystem(cooldowns), cooldowns);
     }
 

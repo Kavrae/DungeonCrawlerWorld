@@ -19,7 +19,7 @@ public sealed class ProcessingTierWiringTests
     [TestMethod]
     public void CreateAndWire_EntityWithNoProcessingTierComponent_StartsInBeyondBucket_NotLocal()
     {
-        var drivingPool = new MultiComponentPool<TestMarkerComponent>(maximumEntityCount: 10, initialCapacity: 4);
+        var drivingPool = new MultiComponentPool<TestMarkerComponent>(entityCapacity: 10, initialCapacity: 4);
         drivingPool.Add(0, new TestMarkerComponent());
         var processingTiers = new DirectComponentPool<ProcessingTierComponent>(10, static (ref existing, incoming) => existing = incoming);
 

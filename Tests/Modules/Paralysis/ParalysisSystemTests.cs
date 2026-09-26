@@ -15,7 +15,7 @@ public sealed class ParalysisSystemTests
     private static EngineTime Frame(long frame) => new(default, default, false, frame);
 
     private static PackedComponentPool<ParalysisTimerComponent> CreateTimerPool() =>
-        new(maximumEntityCount: 10, initialCapacity: 4, static (ref existing, incoming) => { });
+        new(entityCapacity: 10, initialCapacity: 4, static (ref existing, incoming) => { });
 
     /// <summary>Runs every frame from..to inclusive -- the way SystemManager drives it.</summary>
     private static void Run(ParalysisSystem system, long from, long to)

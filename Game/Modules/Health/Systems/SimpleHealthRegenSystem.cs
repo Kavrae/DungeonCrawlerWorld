@@ -29,7 +29,7 @@ public sealed class SimpleHealthRegenSystem : ITieredSystem
     private readonly PackedComponentPool<SimpleHealthComponent> _healthComponents;
     private readonly MultiComponentPool<StatModifierComponent>? _statModifiers;
     private readonly PackedComponentPool<DeadComponent>? _deadEntities;
-    private readonly MultiComponentPool<AbilityScoreComponent>? _abilityScores;
+    private readonly PackedComponentPool<AbilityScoresComponent>? _abilityScores;
     private readonly EventBus? _eventBus;
     private readonly IPlayerQuery? _playerQuery;
     private readonly TieredEntityStripeSet _tieredStripeSet;
@@ -40,7 +40,7 @@ public sealed class SimpleHealthRegenSystem : ITieredSystem
         ProcessingTierEvents processingTierEvents,
         MultiComponentPool<StatModifierComponent>? statModifiers = null,
         PackedComponentPool<DeadComponent>? deadEntities = null,
-        MultiComponentPool<AbilityScoreComponent>? abilityScores = null,
+        PackedComponentPool<AbilityScoresComponent>? abilityScores = null,
         EventBus? eventBus = null,
         IPlayerQuery? playerQuery = null)
     {

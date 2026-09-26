@@ -1,26 +1,15 @@
-using Engine.ECS.Components;
-using Engine.Math;
-using Game.Modules.Core.Components;
-
 namespace Game.Blueprints.Objects;
 
-/// <summary>
-/// Shop composed with PotionShopStock -- the same composition-chain shape GoblinEngineerBlueprint
-/// uses for race+class, applied here to shell+stock. The override step renames the shared "Shop"
-/// shell to "Potion Shop" via TryUpdate, not another DisplayTextComponent Merge -- CoreModule's
-/// merge policy concatenates Name/Description across stages (see Shop's own doc comment on why
-/// that's usually desirable), which would otherwise read as "Shop Potion Shop" instead of cleanly
-/// replacing it, the same TryUpdate-not-Merge override GoblinEngineerBlueprint's own ActionLockComponent
-/// step already has to use for the identical reason.
-/// </summary>
-public sealed class PotionShop(MathUtility mathUtility) : IBlueprint
+/// <summary>The Shop shell stocked by PotionShopStock, under its own name.</summary>
+public static class PotionShop
 {
-    private const string DisplayName = "Potion Shop";
+    public static readonly Guid Id = new("d9f6a1c4-8b2e-4f3a-9c1d-000000000104");
 
-    private readonly CompositeBlueprint _composite = new(
-        [new Shop(mathUtility), new PotionShopStock(mathUtility)],
-        static (componentManager, entityId) =>
-            componentManager.TryUpdate(entityId, static (ref DisplayTextComponent displayText) => displayText.Name = DisplayName));
+    public const string Name = "Potion Shop";
 
-    public void Build(ComponentManager componentManager, int entityId) => _composite.Build(componentManager, entityId);
+    public static readonly BlueprintDefinition Definition = new(Id, Name)
+    {
+        Includes = [Shop.Id, PotionShopStock.Id],
+        Appearance = new() { Name = Name }
+    };
 }

@@ -18,7 +18,7 @@ namespace Tests.Modules.Health;
 public sealed class SimpleHealthRegenSystemTests
 {
     private static PackedComponentPool<SimpleHealthComponent> CreatePool() =>
-        new(maximumEntityCount: 10, initialCapacity: 4,
+        new(entityCapacity: 10, initialCapacity: 4,
             static (ref existing, incoming) => existing = incoming);
 
     /// <summary>
@@ -36,10 +36,10 @@ public sealed class SimpleHealthRegenSystemTests
     }
 
     /// <summary>Constitution total 300 -- SimpleHealthRegenSystem's MaxHealthRegenPerSecond, a flat 6 HP/sec -- so any entity regens a clean 6/visit at Local tier (StripeCount is a full second's worth of frames), and proportionally more per visit at a coarser tier (the visit covers StripeCount * divisor frames -- see ProcessingTierDivisors).</summary>
-    private static MultiComponentPool<AbilityScoreComponent> CreateAbilityScoresPoolWithMaxConstitution(int entityId)
+    private static PackedComponentPool<AbilityScoresComponent> CreateAbilityScoresPoolWithMaxConstitution(int entityId)
     {
-        var pool = new MultiComponentPool<AbilityScoreComponent>(maximumEntityCount: 10, initialCapacity: 4);
-        pool.Add(entityId, new AbilityScoreComponent(AbilityScoreType.Constitution, baseValue: 300, total: 300));
+        var pool = AbilityScoreTestPools.CreatePool(entityCapacity: 10, initialCapacity: 4);
+        pool.Add(entityId, AbilityScoreTestPools.Score(AbilityScoreType.Constitution, baseValue: 300, total: 300));
         return pool;
     }
 
@@ -98,7 +98,7 @@ public sealed class SimpleHealthRegenSystemTests
     {
         var pool = CreatePool();
         pool.Add(0, new SimpleHealthComponent(currentHealth: 50, maximumHealth: 200));
-        var abilityScores = new MultiComponentPool<AbilityScoreComponent>(maximumEntityCount: 10, initialCapacity: 4);
+        var abilityScores = AbilityScoreTestPools.CreatePool(entityCapacity: 10, initialCapacity: 4);
         var system = new SimpleHealthRegenSystem(pool, CreateTiersPool(), new ProcessingTierEvents(), abilityScores: abilityScores);
 
         system.Update(default, 0);
@@ -118,9 +118,9 @@ public sealed class SimpleHealthRegenSystemTests
     {
         var pool = CreatePool();
         pool.Add(0, new SimpleHealthComponent(currentHealth: -32000, maximumHealth: 200));
-        var abilityScores = new MultiComponentPool<AbilityScoreComponent>(maximumEntityCount: 10, initialCapacity: 4);
-        abilityScores.Add(0, new AbilityScoreComponent(AbilityScoreType.Constitution, baseValue: 1, total: 1));
-        var statModifiers = new MultiComponentPool<StatModifierComponent>(maximumEntityCount: 10, initialCapacity: 4);
+        var abilityScores = AbilityScoreTestPools.CreatePool(entityCapacity: 10, initialCapacity: 4);
+        abilityScores.Add(0, AbilityScoreTestPools.Score(AbilityScoreType.Constitution, baseValue: 1, total: 1));
+        var statModifiers = new MultiComponentPool<StatModifierComponent>(entityCapacity: 10, initialCapacity: 4);
         statModifiers.Add(0, new StatModifierComponent(StatModifierTarget.HealthRegen, StatModifierOperation.Additive, StatModifierPolarity.Debuff,
             canModify: false, magnitude: -100000f, expiresAtFrame: FrameDeadline.Never, ActionSource.Admin));
         var system = new SimpleHealthRegenSystem(pool, CreateTiersPool(), new ProcessingTierEvents(), statModifiers: statModifiers, abilityScores: abilityScores);
@@ -150,7 +150,7 @@ public sealed class SimpleHealthRegenSystemTests
     {
         var pool = CreatePool();
         pool.Add(0, new SimpleHealthComponent(currentHealth: 50, maximumHealth: 200));
-        var statModifiers = new MultiComponentPool<StatModifierComponent>(maximumEntityCount: 10, initialCapacity: 4);
+        var statModifiers = new MultiComponentPool<StatModifierComponent>(entityCapacity: 10, initialCapacity: 4);
         statModifiers.Add(0, new StatModifierComponent(StatModifierTarget.IncomingHealing, StatModifierOperation.Multiplicative, StatModifierPolarity.Buff,
             canModify: false, magnitude: 0.5f, expiresAtFrame: FrameDeadline.Never, ActionSource.Admin));
         var system = new SimpleHealthRegenSystem(pool, CreateTiersPool(), new ProcessingTierEvents(), statModifiers, abilityScores: CreateAbilityScoresPoolWithMaxConstitution(0));

@@ -44,10 +44,10 @@ public sealed class DeathSystemTests
     }
 
     private static PackedComponentPool<DeadComponent> CreateDeadPool() =>
-        new(maximumEntityCount: 10, initialCapacity: 4, static (ref existing, incoming) => existing = incoming);
+        new(entityCapacity: 10, initialCapacity: 4, static (ref existing, incoming) => existing = incoming);
 
     private static MultiComponentPool<NonBlockingComponent> CreateNonBlockingPool() =>
-        new(maximumEntityCount: 10, initialCapacity: 4);
+        new(entityCapacity: 10, initialCapacity: 4);
 
     private static DirectComponentPool<TransformComponent> CreateTransformPool()
     {
@@ -57,7 +57,7 @@ public sealed class DeathSystemTests
     }
 
     private static MultiComponentPool<StatusEffectAuraSourceComponent> CreateAuraSourcePool() =>
-        new(maximumEntityCount: 10, initialCapacity: 4);
+        new(entityCapacity: 10, initialCapacity: 4);
 
     private static (DeathSystem System, PackedComponentPool<DeadComponent> DeadEntities, MultiComponentPool<NonBlockingComponent> NonBlockingEntities, RecordingEntityMoveSync EntityMoveSync, FakeMapQuery MapQuery, EventBus EventBus) Build()
     {

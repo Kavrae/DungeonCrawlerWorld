@@ -106,6 +106,7 @@ public sealed class StatusEffectAuraSystem : ISystem
     private readonly TieredEntityStripeSet _sourceTieredStripeSet;
     private readonly SimulationClock _clock;
     private readonly TerrainRegistry _terrain;
+    private readonly SimulationScope? _simulationScope;
 
     /// <summary>
     /// Each exposure type's re-grant tick, keyed by EffectType (see
@@ -177,6 +178,7 @@ public sealed class StatusEffectAuraSystem : ISystem
         _sourceTieredStripeSet = ProcessingTierWiring.CreateAndWire(StripeCount, sources, processingTiers, processingTierEvents);
 
         _tick = Tick;
+        _simulationScope = simulationScope;
         _exposureWheel = new MultiTimerWheel<StatusEffectAuraExposureComponent>(exposures, simulationScope);
         if (simulationScope is not null)
         {
@@ -408,6 +410,12 @@ public sealed class StatusEffectAuraSystem : ISystem
 
                 foreach (var occupantId in _mapQuery.GetOccupantEntityIdsAt(position))
                 {
+                    // Frozen occupants gain no new exposure while frozen: a skeleton is granted when it is built (CreatureSkeletons.EnsureBuilt), anything else on its next move.
+                    if (_simulationScope?.IsSimulated(occupantId) == false)
+                    {
+                        continue;
+                    }
+
                     if (!_transforms.TryGetReadonly(occupantId, out var occupantTransform))
                     {
                         continue;

@@ -1,5 +1,4 @@
 using FontStashSharp;
-using Game.Blueprints;
 using Game.Modules.Core.Components;
 using Microsoft.Xna.Framework;
 using Microsoft.Xna.Framework.Graphics;
@@ -7,6 +6,7 @@ using Presentation.Fonts;
 using Presentation.Rendering;
 using Presentation.UI.Chrome;
 using Presentation.UI.ColorPalettes;
+using Game.Sprites;
 
 namespace Presentation.UI;
 

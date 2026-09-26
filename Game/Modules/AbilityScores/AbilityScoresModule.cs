@@ -7,11 +7,11 @@ using Game.Modules.StatModifiers;
 namespace Game.Modules.AbilityScores;
 
 /// <summary>
-/// Registers AbilityScoreComponent and keeps its Total in sync with StatModifiersModule --
+/// Registers AbilityScoresComponent and keeps its Total in sync with StatModifiersModule --
 /// deliberately has no ISystem/StripeCount of its own: Total is precomputed eagerly at the two
 /// moments it can actually change (AbilityScoreEffects.GrantModifier, called inline, and
 /// StatModifierExpiredEvent, subscribed here), not polled every frame across every entity that
-/// has ability scores. See AbilityScoreComponent's own doc comment for why a periodic poll would
+/// has ability scores. See AbilityScoresComponent's own doc comment for why a periodic poll would
 /// be the wrong tradeoff at the entity counts GameLoop.InitialEntityCapacity is sized for.
 /// </summary>
 public sealed class AbilityScoresModule : IGameModule
@@ -25,7 +25,7 @@ public sealed class AbilityScoresModule : IGameModule
     public void Configure(GameModuleContext context) => _eventBus = context.EventBus;
 
     public void RegisterComponents(ComponentManager componentManager) =>
-        componentManager.RegisterMultiPool<AbilityScoreComponent>();
+        componentManager.RegisterPackedPool<AbilityScoresComponent>(static (ref existing, incoming) => existing.MergeFrom(incoming), initialCapacity: 80_000);
 
     public void RegisterSystems(SystemManager systemManager, ComponentManager componentManager) =>
         _eventBus.Subscribe<StatModifierExpiredEvent>(expired =>

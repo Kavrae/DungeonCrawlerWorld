@@ -19,7 +19,7 @@ public static class HealthQueries
 {
     public static bool TryGetTotals(
         PackedComponentPool<SimpleHealthComponent> simpleHealth,
-        MultiComponentPool<BodyPartComponent>? bodyParts,
+        EntityBodyParts? bodyParts,
         int entityId,
         out float current,
         out float maximum)
@@ -31,29 +31,20 @@ public static class HealthQueries
             return true;
         }
 
-        if (bodyParts?.Has(entityId) != true)
+        if (bodyParts is not null && bodyParts.TryGetTotals(entityId, out current, out maximum))
         {
-            current = 0f;
-            maximum = 0f;
-            return false;
+            return true;
         }
 
         current = 0f;
         maximum = 0f;
-        for (var denseIndex = bodyParts.GetFirstDenseIndex(entityId); denseIndex != -1; denseIndex = bodyParts.GetNextDenseIndex(denseIndex))
-        {
-            ref readonly var part = ref bodyParts.GetReadonlyByDenseIndex(denseIndex);
-            current += part.CurrentHealth;
-            maximum += part.MaximumHealth;
-        }
-
-        return true;
+        return false;
     }
 
     /// <summary>TryGetTotals' own maximum, further scaled through StatModifierTarget.MaximumHealth -- the single place "this entity's real, modifier-effective max HP" is computed as one number regardless of Simple/Complex, used by both DirectDamage and DirectHeal's own percent-of-max-health calculations.</summary>
     public static bool TryGetEffectiveMaximum(
         PackedComponentPool<SimpleHealthComponent> simpleHealth,
-        MultiComponentPool<BodyPartComponent>? bodyParts,
+        EntityBodyParts? bodyParts,
         MultiComponentPool<StatModifierComponent>? statModifiers,
         int entityId,
         out float effectiveMaximum)

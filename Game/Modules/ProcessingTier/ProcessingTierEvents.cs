@@ -11,7 +11,14 @@ namespace Game.Modules.ProcessingTier;
 /// </summary>
 public sealed class ProcessingTierEvents
 {
+    /// <summary>Raised for every tier change before TierChanged, with the new tier already written -- for work every TierChanged handler must find done, like building a creature skeleton promoted into a simulated tier.</summary>
+    public event Action<int, ProcessingTierLevel>? TierChanging;
+
     public event Action<int, ProcessingTierLevel>? TierChanged;
 
-    internal void RaiseTierChanged(int entityId, ProcessingTierLevel tier) => TierChanged?.Invoke(entityId, tier);
+    internal void RaiseTierChanged(int entityId, ProcessingTierLevel tier)
+    {
+        TierChanging?.Invoke(entityId, tier);
+        TierChanged?.Invoke(entityId, tier);
+    }
 }

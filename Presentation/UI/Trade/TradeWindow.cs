@@ -81,8 +81,8 @@ public sealed class TradeWindow(
 
     private int _playerSideEntityId;
     private int _shopSideEntityId;
-    private Action<int, Guid> _onItemSelected = static (_, _) => { };
-    private Action<int, Guid> _onCompareRequested = static (_, _) => { };
+    private Action<int, uint> _onItemSelected = static (_, _) => { };
+    private Action<int, uint> _onCompareRequested = static (_, _) => { };
 
     /// <summary>
     /// The *real* shop entity, captured once at Configure time -- not re-read from
@@ -138,7 +138,7 @@ public sealed class TradeWindow(
     /// grid already uses (ShellBootstrapper's own OnItemClicked), so a real item cell in either trade
     /// column can anchor or be added to Item Details Comparison exactly like any other grid's cell.
     /// </summary>
-    public void Configure(int playerSideEntityId, int shopSideEntityId, int shopEntityId, TooltipController tooltipController, Action<int, Guid> onItemSelected, Action<int, Guid> onCompareRequested)
+    public void Configure(int playerSideEntityId, int shopSideEntityId, int shopEntityId, TooltipController tooltipController, Action<int, uint> onItemSelected, Action<int, uint> onCompareRequested)
     {
         _playerSideEntityId = playerSideEntityId;
         _shopSideEntityId = shopSideEntityId;

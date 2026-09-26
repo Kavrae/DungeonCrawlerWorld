@@ -37,24 +37,25 @@ public sealed class ComplexHealthRegenSystem : ITieredSystem
     /// <summary>Flat HP/sec at Constitution total 300.</summary>
     private const float MaxHealthRegenPerSecond = 6f;
 
-    private readonly MultiComponentPool<BodyPartComponent> _bodyParts;
+    private readonly EntityBodyParts _bodyParts;
     private readonly PackedComponentPool<SimpleHealthComponent> _health;
     private readonly MultiComponentPool<StatModifierComponent>? _statModifiers;
     private readonly PackedComponentPool<DeadComponent>? _deadEntities;
-    private readonly MultiComponentPool<AbilityScoreComponent>? _abilityScores;
+    private readonly PackedComponentPool<AbilityScoresComponent>? _abilityScores;
     private readonly MultiComponentPool<BodyPartBurningTimerComponent>? _bodyPartBurningTimers;
     private readonly EventBus? _eventBus;
     private readonly IPlayerQuery? _playerQuery;
     private readonly TieredEntityStripeSet _tieredStripeSet;
 
     public ComplexHealthRegenSystem(
-        MultiComponentPool<BodyPartComponent> bodyParts,
+        EntityBodyParts bodyParts,
+        PackedComponentPool<BodyPartStateComponent> bodyPartStates,
         PackedComponentPool<SimpleHealthComponent> health,
         DirectComponentPool<ProcessingTierComponent> processingTiers,
         ProcessingTierEvents processingTierEvents,
         MultiComponentPool<StatModifierComponent>? statModifiers = null,
         PackedComponentPool<DeadComponent>? deadEntities = null,
-        MultiComponentPool<AbilityScoreComponent>? abilityScores = null,
+        PackedComponentPool<AbilityScoresComponent>? abilityScores = null,
         MultiComponentPool<BodyPartBurningTimerComponent>? bodyPartBurningTimers = null,
         EventBus? eventBus = null,
         IPlayerQuery? playerQuery = null)
@@ -68,7 +69,9 @@ public sealed class ComplexHealthRegenSystem : ITieredSystem
         _eventBus = eventBus;
         _playerQuery = playerQuery;
 
-        _tieredStripeSet = ProcessingTierWiring.CreateAndWire(StripeCount, bodyParts, processingTiers, processingTierEvents);
+        // Driven by the state pool, not by "has a body plan": an entity nothing has happened to
+        // has every part at full health, so there is nothing for a regen tick to do.
+        _tieredStripeSet = ProcessingTierWiring.CreateAndWire(StripeCount, bodyPartStates, processingTiers, processingTierEvents);
     }
 
     /// <summary>Updates the selected body part's current health, and decrements every part's regen lockout, for all entities in the current stripe.</summary>

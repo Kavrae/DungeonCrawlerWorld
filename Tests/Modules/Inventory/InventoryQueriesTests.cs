@@ -47,7 +47,7 @@ public sealed class InventoryQueriesTests
     [TestMethod]
     public void TryFindByStackInstanceId_MatchingStack_ReturnsTrueWithTheStack()
     {
-        var pool = new MultiComponentPool<InventoryItemStackComponent>(maximumEntityCount: 10, initialCapacity: 4);
+        var pool = new MultiComponentPool<InventoryItemStackComponent>(entityCapacity: 10, initialCapacity: 4);
         var target = new InventoryItemStackComponent(Guid.NewGuid(), quantity: 3);
         pool.Add(0, new InventoryItemStackComponent(Guid.NewGuid(), quantity: 1)); // a decoy stack, must not match.
         pool.Add(0, target);
@@ -59,16 +59,16 @@ public sealed class InventoryQueriesTests
     [TestMethod]
     public void TryFindByStackInstanceId_NoMatchingStack_ReturnsFalse()
     {
-        var pool = new MultiComponentPool<InventoryItemStackComponent>(maximumEntityCount: 10, initialCapacity: 4);
+        var pool = new MultiComponentPool<InventoryItemStackComponent>(entityCapacity: 10, initialCapacity: 4);
         pool.Add(0, new InventoryItemStackComponent(Guid.NewGuid(), quantity: 1));
 
-        Assert.IsFalse(InventoryQueries.TryFindByStackInstanceId(pool, 0, Guid.NewGuid(), out _));
+        Assert.IsFalse(InventoryQueries.TryFindByStackInstanceId(pool, 0, stackInstanceId: 9999, out _));
     }
 
     [TestMethod]
     public void CopyStacksForEntity_ReturnsExactlyTheStacksAdded()
     {
-        var pool = new MultiComponentPool<InventoryItemStackComponent>(maximumEntityCount: 10, initialCapacity: 4);
+        var pool = new MultiComponentPool<InventoryItemStackComponent>(entityCapacity: 10, initialCapacity: 4);
         var potionId = Guid.NewGuid();
         var hammerId = Guid.NewGuid();
         pool.Add(0, new InventoryItemStackComponent(potionId, quantity: 5));
@@ -86,7 +86,7 @@ public sealed class InventoryQueriesTests
     [TestMethod]
     public void CopyStacksForEntity_CalledAgainWithFewerStacks_ClearsStaleEntriesFromDestination()
     {
-        var pool = new MultiComponentPool<InventoryItemStackComponent>(maximumEntityCount: 10, initialCapacity: 4);
+        var pool = new MultiComponentPool<InventoryItemStackComponent>(entityCapacity: 10, initialCapacity: 4);
         pool.Add(0, new InventoryItemStackComponent(Guid.NewGuid(), quantity: 1));
 
         var destination = new List<InventoryItemStackComponent> { new(Guid.NewGuid(), quantity: 99) };
@@ -98,7 +98,7 @@ public sealed class InventoryQueriesTests
     [TestMethod]
     public void TryGetStack_MatchingItemDefinitionId_ReturnsTrueWithTheStack()
     {
-        var pool = new MultiComponentPool<InventoryItemStackComponent>(maximumEntityCount: 10, initialCapacity: 4);
+        var pool = new MultiComponentPool<InventoryItemStackComponent>(entityCapacity: 10, initialCapacity: 4);
         var potionId = Guid.NewGuid();
         pool.Add(0, new InventoryItemStackComponent(potionId, quantity: 5));
 
@@ -109,7 +109,7 @@ public sealed class InventoryQueriesTests
     [TestMethod]
     public void TryGetStack_NoMatchingStack_ReturnsFalse()
     {
-        var pool = new MultiComponentPool<InventoryItemStackComponent>(maximumEntityCount: 10, initialCapacity: 4);
+        var pool = new MultiComponentPool<InventoryItemStackComponent>(entityCapacity: 10, initialCapacity: 4);
 
         Assert.IsFalse(InventoryQueries.TryGetStack(pool, 0, Guid.NewGuid(), out _));
     }
@@ -117,7 +117,7 @@ public sealed class InventoryQueriesTests
     [TestMethod]
     public void IsInventoryDisabled_NoComponentPresent_DefaultsToFalse()
     {
-        var pool = new PackedComponentPool<InventoryDisabledComponent>(maximumEntityCount: 10, initialCapacity: 10, static (ref existing, incoming) => existing.IsDisabled = incoming.IsDisabled);
+        var pool = new PackedComponentPool<InventoryDisabledComponent>(entityCapacity: 10, initialCapacity: 10, static (ref existing, incoming) => existing.IsDisabled = incoming.IsDisabled);
 
         Assert.IsFalse(InventoryQueries.IsInventoryDisabled(pool, 0));
     }
@@ -125,7 +125,7 @@ public sealed class InventoryQueriesTests
     [TestMethod]
     public void IsInventoryDisabled_ComponentPresentAndTrue_ReturnsTrue()
     {
-        var pool = new PackedComponentPool<InventoryDisabledComponent>(maximumEntityCount: 10, initialCapacity: 10, static (ref existing, incoming) => existing.IsDisabled = incoming.IsDisabled);
+        var pool = new PackedComponentPool<InventoryDisabledComponent>(entityCapacity: 10, initialCapacity: 10, static (ref existing, incoming) => existing.IsDisabled = incoming.IsDisabled);
         pool.Add(0, new InventoryDisabledComponent(isDisabled: true));
 
         Assert.IsTrue(InventoryQueries.IsInventoryDisabled(pool, 0));

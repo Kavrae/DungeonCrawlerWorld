@@ -1,6 +1,5 @@
 using Engine.ECS.Components;
-using Engine.ECS.Components.Stores;
-using Game.Modules.Core.Components;
+using Game.Spawning;
 using Game.Modules.Inventory;
 using Game.Modules.Inventory.Components;
 using Game.World;
@@ -10,6 +9,7 @@ using Presentation.Rendering;
 using Presentation.UI.ColorPalettes;
 using Presentation.UI.Content;
 using Presentation.UI.Looting;
+using Game.Blueprints;
 
 namespace Presentation.UI.Shops;
 
@@ -36,7 +36,8 @@ public sealed class ShopWindow(
     World world,
     ContextMenuController contextMenuController,
     MapViewState mapViewState,
-    Engine.ECS.Systems.SimulationClock? simulationClock = null)
+    Engine.ECS.Systems.SimulationClock? simulationClock = null,
+    BlueprintRegistry? creatures = null)
     : Window(fontService, elementPoolService, labelRenderer), IWholeWindowDropTarget
 {
     private static readonly Vector2 IconSize = new(48, 48);
@@ -52,16 +53,16 @@ public sealed class ShopWindow(
     /// <summary>Wide enough for exactly GridColumns columns of the shop-mode cell width -- see SecondaryInventoryWindow.GridWidth's own doc comment for why this derives from InventoryGridContent's own constants rather than hand-duplicating them.</summary>
     private static readonly float GridWidth = GridColumns * (InventoryGridContent.CellSize.X * InventoryGridContent.ShopCellWidthMultiplier + InventoryGridContent.CellGap) + 10f;
 
-    private readonly DirectComponentPool<DisplayTextComponent> _displayTextPool = componentManager.GetDirectPool<DisplayTextComponent>();
+    private readonly EntityNaming _naming = EntityNaming.For(componentManager, creatures);
 
     private int _entityId;
     private TooltipController _tooltipController = null!;
-    private Action<int, Guid> _onItemSelected = static (_, _) => { };
-    private Action<int, Guid> _onCompareRequested = static (_, _) => { };
+    private Action<int, uint> _onItemSelected = static (_, _) => { };
+    private Action<int, uint> _onCompareRequested = static (_, _) => { };
     private CurrencyRowContent _currencyRowContent = null!;
 
     /// <summary>Must be called after CreateElement but before Initialize -- same contract SecondaryInventoryWindow.Configure follows.</summary>
-    public void Configure(int entityId, TooltipController tooltipController, Action<int, Guid> onItemSelected, Action<int, Guid> onCompareRequested)
+    public void Configure(int entityId, TooltipController tooltipController, Action<int, uint> onItemSelected, Action<int, uint> onCompareRequested)
     {
         _entityId = entityId;
         _tooltipController = tooltipController;
@@ -178,6 +179,5 @@ public sealed class ShopWindow(
         AddChild(gridWindow);
     }
 
-    private (string Name, string Description) ResolveDisplayText(int entityId) =>
-        _displayTextPool.TryGetReadonly(entityId, out var displayText) ? (displayText.Name, displayText.Description) : ("Unknown", string.Empty);
+    private (string Name, string Description) ResolveDisplayText(int entityId) => (_naming.NameOf(entityId), _naming.DescriptionOf(entityId));
 }

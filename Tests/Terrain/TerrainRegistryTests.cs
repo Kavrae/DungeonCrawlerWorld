@@ -1,7 +1,7 @@
 using Engine.Math;
-using Game.Blueprints;
 using Game.Terrain;
 using Microsoft.Xna.Framework;
+using Game.Sprites;
 
 namespace Tests.Terrain;
 

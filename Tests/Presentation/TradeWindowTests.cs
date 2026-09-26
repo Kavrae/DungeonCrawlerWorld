@@ -45,7 +45,7 @@ public sealed class TradeWindowTests
     private const byte PreferredStockLevel = 50;
 
     private static (TradeWindow Window, ComponentManager ComponentManager, MapViewState MapViewState) Build(
-        EventBus? eventBus = null, Action<int, Guid>? onItemSelected = null, Action<int, Guid>? onCompareRequested = null)
+        EventBus? eventBus = null, Action<int, uint>? onItemSelected = null, Action<int, uint>? onCompareRequested = null)
     {
         var componentManager = new ComponentManager(initialEntityCapacity: 20, initialComponentCapacity: 20);
         componentManager.RegisterMultiPool<InventoryItemStackComponent>();
@@ -92,8 +92,8 @@ public sealed class TradeWindowTests
             Layout = new ElementLayoutOptions { RelativePosition = Vector2.Zero, DisplayMode = ElementDisplayMode.Fixed },
             Chrome = new ElementChromeOptions { ShowTitle = true, TitleText = "Trade", ShowBorder = true, CanUserClose = true, CanUserMove = true, CanUserResize = false, CanUserFocus = true },
         });
-        Action<int, Guid> resolvedOnItemSelected = onItemSelected ?? (static (_, _) => { });
-        Action<int, Guid> resolvedOnCompareRequested = onCompareRequested ?? (static (_, _) => { });
+        Action<int, uint> resolvedOnItemSelected = onItemSelected ?? (static (_, _) => { });
+        Action<int, uint> resolvedOnCompareRequested = onCompareRequested ?? (static (_, _) => { });
         window.Configure(TradePlayerEntityId, TradeShopEntityId, ShopEntityId, tooltipController, resolvedOnItemSelected, resolvedOnCompareRequested);
         window.Initialize();
 
@@ -111,7 +111,7 @@ public sealed class TradeWindowTests
     public void ClickingATradeColumnCell_InvokesOnItemSelected()
     {
         int? selectedEntityId = null;
-        Guid? selectedStackInstanceId = null;
+        uint? selectedStackInstanceId = null;
         var (window, componentManager, _) = Build(onItemSelected: (entityId, stackInstanceId) =>
         {
             selectedEntityId = entityId;

@@ -61,7 +61,7 @@ public sealed class ShopMarginPricingTests
     public void ResolveEffectiveShop_PlayerHasNoCharismaComponent_ReturnsShopUnchanged()
     {
         var manager = new ComponentManager(initialEntityCapacity: 4, initialComponentCapacity: 4);
-        manager.RegisterMultiPool<AbilityScoreComponent>();
+        AbilityScoreTestPools.Register(manager);
 
         var effectiveShop = ShopMarginPricing.ResolveEffectiveShop(manager, GeneralShop, PlayerEntityId);
 
@@ -73,8 +73,8 @@ public sealed class ShopMarginPricingTests
     public void ResolveEffectiveShop_Charisma1_ReturnsShopUnchanged()
     {
         var manager = new ComponentManager(initialEntityCapacity: 4, initialComponentCapacity: 4);
-        manager.RegisterMultiPool<AbilityScoreComponent>();
-        manager.GetMultiPool<AbilityScoreComponent>().Add(PlayerEntityId, new AbilityScoreComponent(AbilityScoreType.Charisma, baseValue: 1, total: 1));
+        AbilityScoreTestPools.Register(manager);
+        manager.GetPackedPool<AbilityScoresComponent>().Add(PlayerEntityId, AbilityScoreTestPools.Score(AbilityScoreType.Charisma, baseValue: 1, total: 1));
 
         var effectiveShop = ShopMarginPricing.ResolveEffectiveShop(manager, GeneralShop, PlayerEntityId);
 
@@ -86,8 +86,8 @@ public sealed class ShopMarginPricingTests
     public void ResolveEffectiveShop_Charisma300_HalvesTheMarginAndPreservesAllowedTags()
     {
         var manager = new ComponentManager(initialEntityCapacity: 4, initialComponentCapacity: 4);
-        manager.RegisterMultiPool<AbilityScoreComponent>();
-        manager.GetMultiPool<AbilityScoreComponent>().Add(PlayerEntityId, new AbilityScoreComponent(AbilityScoreType.Charisma, baseValue: 300, total: 300));
+        AbilityScoreTestPools.Register(manager);
+        manager.GetPackedPool<AbilityScoresComponent>().Add(PlayerEntityId, AbilityScoreTestPools.Score(AbilityScoreType.Charisma, baseValue: 300, total: 300));
 
         var potionShop = new ShopComponent(allowedTags: [Tag.Potion], buyMultiplier: 1.20f, sellMultiplier: 0.80f);
         var effectiveShop = ShopMarginPricing.ResolveEffectiveShop(manager, potionShop, PlayerEntityId);

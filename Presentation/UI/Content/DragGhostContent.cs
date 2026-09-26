@@ -1,5 +1,4 @@
 using Engine.ECS.Components.Stores;
-using Game.Blueprints;
 using Game.Modules.Actions;
 using Game.Modules.Core.Components;
 using Game.Modules.Currency;
@@ -10,6 +9,7 @@ using Microsoft.Xna.Framework;
 using Presentation.Fonts;
 using Presentation.Rendering;
 using Presentation.UI.Chrome;
+using Game.Sprites;
 
 namespace Presentation.UI.Content;
 
@@ -26,7 +26,7 @@ namespace Presentation.UI.Content;
 /// own item/action either way) -- only an InventoryItemStackCell-origin drag sets it, and it may
 /// belong to any entity's own inventory, not just the player's.
 /// </summary>
-public readonly record struct DragGhostState(bool Visible, Guid? ItemStackInstanceId, Guid? MergedItemDefinitionId, Guid? ActionId, CurrencyType? CurrencyType, int? OriginEntityId, Vector2 SourceSize, Point CursorPosition);
+public readonly record struct DragGhostState(bool Visible, uint? ItemStackInstanceId, Guid? MergedItemDefinitionId, Guid? ActionId, CurrencyType? CurrencyType, int? OriginEntityId, Vector2 SourceSize, Point CursorPosition);
 
 /// <summary>
 /// A cursor-following copy of a dragged item's or action's icon while UiInputController's

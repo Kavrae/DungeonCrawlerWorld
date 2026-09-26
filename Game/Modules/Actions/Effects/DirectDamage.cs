@@ -64,6 +64,6 @@ public sealed record DirectDamage(
         }
 
         BodyPartTargetRule? targetRule = TargetBodyPartType is { } type ? new BodyPartTargetRule(type, BodyPartFallback.Random) : null;
-        HealthDamage.Apply(context.Health, context.EventBus, context.TargetEntityId, (ushort)damageWithTagModifiers, ActionSource.FromEntity(context.ComponentManager, context.EntityKeys, context.SourceEntityId), context.PlayerQuery, context.ActivatorName, context.Now, context.StatModifiers, context.BodyParts, context.MathUtility, context.DeadEntities, targetRule, context.ActivatorTags, BodyPartTargetMode);
+        HealthDamage.Apply(context.Health, context.EventBus, context.TargetEntityId, (ushort)damageWithTagModifiers, ActionSource.FromEntity(context.ComponentManager, context.EntityKeys, context.SourceEntityId, context.Definitions), context.PlayerQuery, context.ActivatorName, context.Now, context.StatModifiers, context.BodyParts, context.MathUtility, context.DeadEntities, targetRule, context.ActivatorTags, BodyPartTargetMode);
     }
 }

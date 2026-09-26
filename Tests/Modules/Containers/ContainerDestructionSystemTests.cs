@@ -11,11 +11,11 @@ namespace Tests.Modules.Containers;
 [TestClass]
 public sealed class ContainerDestructionSystemTests
 {
-    private static (ContainerDestructionSystem System, PackedComponentPool<ContainerComponent> Containers, MultiComponentPool<InventoryItemStackComponent> InventoryStacks, DirectComponentPool<DisplayTextComponent> DisplayText, EventBus EventBus) Build()
+    private static (ContainerDestructionSystem System, PackedComponentPool<ContainerComponent> Containers, MultiComponentPool<InventoryItemStackComponent> InventoryStacks, PackedComponentPool<DisplayTextComponent> DisplayText, EventBus EventBus) Build()
     {
-        var containers = new PackedComponentPool<ContainerComponent>(maximumEntityCount: 10, initialCapacity: 4, static (ref existing, incoming) => existing = incoming);
-        var inventoryStacks = new MultiComponentPool<InventoryItemStackComponent>(maximumEntityCount: 10, initialCapacity: 4);
-        var displayText = new DirectComponentPool<DisplayTextComponent>(10, static (ref existing, incoming) => existing = incoming);
+        var containers = new PackedComponentPool<ContainerComponent>(entityCapacity: 10, initialCapacity: 4, static (ref existing, incoming) => existing = incoming);
+        var inventoryStacks = new MultiComponentPool<InventoryItemStackComponent>(entityCapacity: 10, initialCapacity: 4);
+        var displayText = new PackedComponentPool<DisplayTextComponent>(10, 10, static (ref existing, incoming) => existing = incoming);
         var eventBus = new EventBus();
 
         var system = new ContainerDestructionSystem(containers, inventoryStacks, displayText, eventBus);

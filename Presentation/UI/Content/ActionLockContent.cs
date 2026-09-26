@@ -3,6 +3,7 @@ using Engine.ECS.Components.Stores;
 using Engine.ECS.Systems;
 using FontStashSharp;
 using Game.Modules.Core.Components;
+using Game.Views;
 using Game.World;
 using Microsoft.Xna.Framework;
 using Presentation.Fonts;
@@ -11,7 +12,7 @@ using Presentation.UI.Chrome;
 
 namespace Presentation.UI.Content;
 
-public sealed class ActionLockContent(World world, ComponentManager componentManager, FontService fontService, SimulationClock? simulationClock = null) : IElementContent
+public sealed class ActionLockContent(World world, ComponentManager componentManager, IMapViewQuery mapView, FontService fontService, SimulationClock? simulationClock = null) : IElementContent
 {
     /// <summary>"Now" for the lock's remaining frames -- the lock is a deadline (see ActionLockGate). Optional only so a test needn't build one; the shell always passes the simulation's real clock.</summary>
     private readonly SimulationClock _simulationClock = simulationClock ?? new SimulationClock();
@@ -21,7 +22,6 @@ public sealed class ActionLockContent(World world, ComponentManager componentMan
     private const int ContentInset = 2;
 
     private readonly PackedComponentPool<ActionLockComponent> _actionLocks = componentManager.GetPackedPool<ActionLockComponent>();
-    private readonly DirectComponentPool<GlyphComponent> _glyphs = componentManager.GetDirectPool<GlyphComponent>();
     private readonly RadialFillRenderer _radialFill = new(new LabelRenderer());
 
     private Window _hostWindow = null!;
@@ -42,15 +42,15 @@ public sealed class ActionLockContent(World world, ComponentManager componentMan
     public void Update(GameTime gameTime)
     {
         var playerEntityId = world.PlayerEntityId;
-        if (playerEntityId < 0 || !_actionLocks.TryGetReadonly(playerEntityId, out var actionLock) || !_glyphs.TryGetReadonly(playerEntityId, out var glyphComponent))
+        if (playerEntityId < 0 || !_actionLocks.TryGetReadonly(playerEntityId, out var actionLock) || !mapView.TryGetVisual(playerEntityId, out var visual))
         {
             _hasActionLock = false;
             return;
         }
 
         _hasActionLock = true;
-        _glyph = glyphComponent.Glyph;
-        _glyphColor = glyphComponent.GlyphColor;
+        _glyph = visual.Glyph;
+        _glyphColor = visual.GlyphColor;
         _fillPercentage = actionLock.CurrentLockTotalFrames > 0
             ? (float)ActionLockGate.FramesRemaining(actionLock, _simulationClock.CurrentFrame) / actionLock.CurrentLockTotalFrames
             : 0f;

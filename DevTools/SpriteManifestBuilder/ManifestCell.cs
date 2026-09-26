@@ -1,7 +1,7 @@
 namespace SpriteManifestBuilder;
 
 /// <summary>
-/// One candidate spritesheet region for a ManifestEntry. Mirrors Game/Blueprints/
+/// One candidate spritesheet region for a ManifestEntry. Mirrors Game/Sprites/
 /// SpriteManifestCell.cs's field shape/JSON property names exactly, but is a deliberately
 /// separate type -- this tool has no project reference to Game.csproj, so the two must be
 /// kept in sync by hand if the shape ever changes.

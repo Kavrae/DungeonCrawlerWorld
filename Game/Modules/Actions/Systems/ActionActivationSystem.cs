@@ -11,6 +11,7 @@ using Game.Modules.BodyPartEffects.Components;
 using Game.Modules.Core.Components;
 using Game.Modules.Death.Components;
 using Game.Modules.ProcessingTier;
+using Game.Modules.Health;
 using Game.Modules.Health.Components;
 using Game.Modules.Mana;
 using Game.Modules.Mana.Components;
@@ -18,6 +19,7 @@ using Game.Modules.StatModifiers.Components;
 using Game.Modules.StatusEffectAura.Components;
 using Game.Modules.StatusEffects;
 using Game.World;
+using Game.Blueprints;
 
 namespace Game.Modules.Actions.Systems;
 
@@ -31,7 +33,7 @@ public sealed class ActionActivationSystem : ISystem
 
     private readonly PackedComponentPool<PendingActionActivationComponent> _pendingActivations;
     private readonly PackedComponentPool<ActionLockComponent> _actionLocks;
-    private readonly MultiComponentPool<ActionInstanceComponent> _actionInstances;
+    private readonly EntityActions _actions;
     private readonly PackedComponentPool<PendingDelayedActionComponent> _pendingDelayedActions;
     private readonly PackedComponentPool<SimpleHealthComponent> _health;
     private readonly MultiComponentPool<StatModifierComponent>? _statModifiers;
@@ -44,20 +46,21 @@ public sealed class ActionActivationSystem : ISystem
     private readonly EntityKeys _entityKeys;
     private readonly PackedComponentPool<DeadComponent>? _deadEntities;
     private readonly PackedComponentPool<ManaComponent>? _mana;
-    private readonly MultiComponentPool<AbilityScoreComponent>? _abilityScores;
+    private readonly PackedComponentPool<AbilityScoresComponent>? _abilityScores;
     private readonly MathUtility _mathUtility;
     private readonly MultiComponentPool<StatusEffectAuraSourceComponent>? _auraSources;
     private readonly PackedComponentPool<HotkeyExpansionUnlockComponent>? _hotkeyExpansionUnlocks;
-    private readonly MultiComponentPool<BodyPartComponent>? _bodyParts;
+    private readonly EntityBodyParts? _bodyParts;
     private readonly PackedComponentPool<MeleeDisabledComponent>? _meleeDisabled;
     private readonly PackedComponentPool<DodgingComponent>? _dodgingEntities;
     private readonly ProcessingTierQuery? _processingTiers;
+    private readonly BlueprintRegistry? _creatures;
     private readonly EntityStripeSet _stripeSet;
 
     public ActionActivationSystem(
         PackedComponentPool<PendingActionActivationComponent> pendingActivations,
         PackedComponentPool<ActionLockComponent> actionLocks,
-        MultiComponentPool<ActionInstanceComponent> actionInstances,
+        EntityActions actions,
         PackedComponentPool<PendingDelayedActionComponent> pendingDelayedActions,
         PackedComponentPool<SimpleHealthComponent> health,
         ActionCatalog actionCatalog,
@@ -71,17 +74,18 @@ public sealed class ActionActivationSystem : ISystem
         MultiComponentPool<StatModifierComponent>? statModifiers = null,
         PackedComponentPool<DeadComponent>? deadEntities = null,
         PackedComponentPool<ManaComponent>? mana = null,
-        MultiComponentPool<AbilityScoreComponent>? abilityScores = null,
+        PackedComponentPool<AbilityScoresComponent>? abilityScores = null,
         MultiComponentPool<StatusEffectAuraSourceComponent>? auraSources = null,
         PackedComponentPool<HotkeyExpansionUnlockComponent>? hotkeyExpansionUnlocks = null,
-        MultiComponentPool<BodyPartComponent>? bodyParts = null,
+        EntityBodyParts? bodyParts = null,
         PackedComponentPool<MeleeDisabledComponent>? meleeDisabled = null,
         PackedComponentPool<DodgingComponent>? dodgingEntities = null,
-        ProcessingTierQuery? processingTiers = null)
+        ProcessingTierQuery? processingTiers = null,
+        BlueprintRegistry? creatures = null)
     {
         _pendingActivations = pendingActivations;
         _actionLocks = actionLocks;
-        _actionInstances = actionInstances;
+        _actions = actions;
         _pendingDelayedActions = pendingDelayedActions;
         _health = health;
         _statModifiers = statModifiers;
@@ -102,6 +106,7 @@ public sealed class ActionActivationSystem : ISystem
         _meleeDisabled = meleeDisabled;
         _dodgingEntities = dodgingEntities;
         _processingTiers = processingTiers;
+        _creatures = creatures;
 
         _stripeSet = EntityStripeSet.CreateAndWire(StripeCount, pendingActivations);
     }
@@ -136,13 +141,12 @@ public sealed class ActionActivationSystem : ISystem
             // so there's no outcome that should leave this request standing for a future visit.
             _pendingActivations.Remove(entityId);
 
-            if (!ActionInstanceQueries.TryGet(_actionInstances, entityId, request.ActionId, out var instance) ||
-                !ActionInstanceQueries.TryResolveEffectiveAction(_actionCatalog, instance, out var action))
+            if (!_actions.TryGetEffectiveAction(entityId, request.ActionId, out var action))
             {
                 continue;
             }
 
-            if (ActionInstanceQueries.IsOnCooldown(instance, time.FrameCount))
+            if (_actions.IsOnCooldown(entityId, request.ActionId, time.FrameCount))
             {
                 continue;
             }
@@ -189,7 +193,7 @@ public sealed class ActionActivationSystem : ISystem
             return false;
         }
 
-        ActionEffectResolver.Apply(action, entityId, targetTiles, _mapQuery, _health, _eventBus, _mathUtility, _playerQuery, _statusEffectAppliers, _componentManager, _entityKeys, now, _statModifiers, _deadEntities, _abilityScores, _auraSources, _hotkeyExpansionUnlocks, _bodyParts, _dodgingEntities, _processingTiers);
+        ActionEffectResolver.Apply(action, entityId, targetTiles, _mapQuery, _health, _eventBus, _mathUtility, _playerQuery, _statusEffectAppliers, _componentManager, _entityKeys, now, _statModifiers, _deadEntities, _abilityScores, _auraSources, _hotkeyExpansionUnlocks, _bodyParts, _dodgingEntities, _processingTiers, _creatures);
         ActionLockGate.Lock(_actionLocks, entityId, now, action.Activator.Timing.ActionLockFrames);
         return true;
     }
@@ -216,7 +220,7 @@ public sealed class ActionActivationSystem : ISystem
 
     private bool TryActivateFreeCast(int entityId, ActionDefinition action, Vector3Int[] targetTiles, long now)
     {
-        ActionEffectResolver.Apply(action, entityId, targetTiles, _mapQuery, _health, _eventBus, _mathUtility, _playerQuery, _statusEffectAppliers, _componentManager, _entityKeys, now, _statModifiers, _deadEntities, _abilityScores, _auraSources, _hotkeyExpansionUnlocks, _bodyParts, _dodgingEntities, _processingTiers);
+        ActionEffectResolver.Apply(action, entityId, targetTiles, _mapQuery, _health, _eventBus, _mathUtility, _playerQuery, _statusEffectAppliers, _componentManager, _entityKeys, now, _statModifiers, _deadEntities, _abilityScores, _auraSources, _hotkeyExpansionUnlocks, _bodyParts, _dodgingEntities, _processingTiers, _creatures);
         return true;
     }
 
@@ -243,7 +247,7 @@ public sealed class ActionActivationSystem : ISystem
     {
         if (action.Activator.Timing.CooldownFrames is { } cooldownFrames)
         {
-            ActionInstanceQueries.TrySetCooldown(_actionInstances, entityId, action.Id, cooldownFrames, now);
+            _actions.SetCooldown(entityId, action.Id, cooldownFrames, now);
         }
     }
 }

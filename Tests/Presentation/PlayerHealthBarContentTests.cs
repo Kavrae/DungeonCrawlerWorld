@@ -43,28 +43,21 @@ public sealed class PlayerHealthBarContentTests
         var windowService = TestElementPoolServiceFactory.Create(fontService, new LabelRenderer());
 
         var componentManager = new ComponentManager(20, 10);
-        componentManager.RegisterDirectPool<DisplayTextComponent>(static (ref existing, incoming) => existing = incoming);
+        componentManager.RegisterPackedPool<DisplayTextComponent>(static (ref existing, incoming) => existing = incoming);
         componentManager.RegisterPackedPool<SimpleHealthComponent>(static (ref existing, incoming) => existing = incoming);
-        componentManager.RegisterMultiPool<BodyPartComponent>();
 
         componentManager.Merge(PlayerEntityId, new DisplayTextComponent("Player1", "This is you."));
 
         if (complexHealth)
         {
-            var bodyParts = componentManager.GetMultiPool<BodyPartComponent>();
-            bodyParts.Add(PlayerEntityId, new BodyPartComponent("Head", BodyPartType.Head, 0, 0, 10, 10, isVital: true));
-            bodyParts.Add(PlayerEntityId, new BodyPartComponent("Torso", BodyPartType.Torso, 0, 0, 15, 20, isVital: true));
-            bodyParts.Add(PlayerEntityId, new BodyPartComponent("Left Arm", BodyPartType.Arm, 0, 0, 8, 8, isVital: false));
-            bodyParts.Add(PlayerEntityId, new BodyPartComponent("Right Arm", BodyPartType.Arm, 0, 0, 8, 8, isVital: false));
-            bodyParts.Add(PlayerEntityId, new BodyPartComponent("Left Leg", BodyPartType.Leg, 0, 0, 4, 9, isVital: false));
-            bodyParts.Add(PlayerEntityId, new BodyPartComponent("Right Leg", BodyPartType.Leg, 0, 0, 9, 9, isVital: false));
+            BodyPartTestWorld.WithParts(componentManager, PlayerEntityId, ("Head", BodyPartType.Head, 10, 10, true), ("Torso", BodyPartType.Torso, 15, 20, true), ("Left Arm", BodyPartType.Arm, 8, 8, false), ("Right Arm", BodyPartType.Arm, 8, 8, false), ("Left Leg", BodyPartType.Leg, 4, 9, false), ("Right Leg", BodyPartType.Leg, 9, 9, false));
         }
         else
         {
             componentManager.Merge(PlayerEntityId, new SimpleHealthComponent(50, 100));
         }
 
-        var content = new PlayerHealthBarContent(world, componentManager, fontService, layers);
+        var content = new PlayerHealthBarContent(world, componentManager, BodyPartTestWorld.PartsOf(componentManager), fontService, layers);
         var hostWindow = windowService.CreateElement<Window>(null, new ElementOptions
         {
             Layout = new ElementLayoutOptions
@@ -194,9 +187,8 @@ public sealed class PlayerHealthBarContentTests
         // A part sitting at its raw maximum (10/10 -- would read 100% by that measure) must still
         // read below 100% once a +50% MaximumHealth buff makes its true cap 15 -- regression for
         // the same bug ComplexHealthHeal/BodyPartSelection.PickLowestPercentage had.
-        var bodyParts = new MultiComponentPool<BodyPartComponent>(maximumEntityCount: 10, initialCapacity: 4);
-        bodyParts.Add(PlayerEntityId, new BodyPartComponent("Head", BodyPartType.Head, 0, verticalPosition: 0, currentHealth: 10, maximumHealth: 10, isVital: true));
-        var statModifiers = new MultiComponentPool<StatModifierComponent>(maximumEntityCount: 10, initialCapacity: 4);
+        var bodyParts = BodyPartTestWorld.WithParts(PlayerEntityId, ("Head", BodyPartType.Head, 10, 10, true)).BodyParts;
+        var statModifiers = new MultiComponentPool<StatModifierComponent>(entityCapacity: 10, initialCapacity: 4);
         statModifiers.Add(PlayerEntityId, new StatModifierComponent(StatModifierTarget.MaximumHealth, StatModifierOperation.Multiplicative, StatModifierPolarity.Buff,
             canModify: true, magnitude: 0.5f, expiresAtFrame: FrameDeadline.Never, ActionSource.Admin));
         var world = new Game.World.World(new Game.World.Map(new Vector3Int(5, 5, 1))) { PlayerEntityId = PlayerEntityId };

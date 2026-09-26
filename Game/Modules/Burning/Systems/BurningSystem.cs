@@ -36,7 +36,7 @@ public sealed class BurningSystem : ISystem
     private readonly EventBus _eventBus;
     private readonly IPlayerQuery? _playerQuery;
     private readonly MathUtility _mathUtility;
-    private readonly MultiComponentPool<BodyPartComponent>? _bodyParts;
+    private readonly EntityBodyParts? _bodyParts;
     private readonly PackedTimerWheel<BurningTimerComponent> _wheel;
 
     // Cached once instead of passing the Tick method group every Update -- an instance method
@@ -50,7 +50,7 @@ public sealed class BurningSystem : ISystem
         IPlayerQuery? playerQuery,
         MathUtility mathUtility,
         MultiComponentPool<StatModifierComponent>? statModifiers = null,
-        MultiComponentPool<BodyPartComponent>? bodyParts = null)
+        EntityBodyParts? bodyParts = null)
     {
         _timers = timers;
         _health = health;

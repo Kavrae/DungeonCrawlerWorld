@@ -15,7 +15,7 @@ public sealed class MultiTimerWheelTests
         public readonly int TimerKey => Effect;
     }
 
-    private static MultiComponentPool<Exposure> CreatePool() => new(maximumEntityCount: 16, initialCapacity: 4);
+    private static MultiComponentPool<Exposure> CreatePool() => new(entityCapacity: 16, initialCapacity: 4);
 
     private static List<(long Frame, int EntityId, int Effect)> Run(MultiTimerWheel<Exposure> wheel, long from, long to, Func<int, Exposure, bool>? remove = null)
     {

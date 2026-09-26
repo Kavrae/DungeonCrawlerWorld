@@ -41,7 +41,7 @@ public static class ShopActions
     /// given the capacity check above), the currency is rolled back rather than leaving Gold moved
     /// with no item to show for it.
     /// </summary>
-    public static bool TryBuyFromShop(ComponentManager componentManager, ItemCatalog itemCatalog, int playerEntityId, int shopEntityId, Guid stackInstanceId, IPlayerQuery? playerQuery)
+    public static bool TryBuyFromShop(ComponentManager componentManager, ItemCatalog itemCatalog, int playerEntityId, int shopEntityId, uint stackInstanceId, IPlayerQuery? playerQuery)
     {
         if (!componentManager.GetPackedPool<ShopComponent>().TryGetReadonly(shopEntityId, out var shop))
         {
@@ -90,7 +90,7 @@ public static class ShopActions
     /// no room for a new stack, or the shop can't afford it. Same commit-then-verify-then-rollback-
     /// on-failure shape as TryBuyFromShop, roles reversed.
     /// </summary>
-    public static bool TrySellToShop(ComponentManager componentManager, ItemCatalog itemCatalog, int playerEntityId, int shopEntityId, Guid stackInstanceId, IPlayerQuery? playerQuery)
+    public static bool TrySellToShop(ComponentManager componentManager, ItemCatalog itemCatalog, int playerEntityId, int shopEntityId, uint stackInstanceId, IPlayerQuery? playerQuery)
     {
         if (!componentManager.GetPackedPool<ShopComponent>().TryGetReadonly(shopEntityId, out var shop))
         {

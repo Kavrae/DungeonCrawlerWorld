@@ -385,11 +385,11 @@ public sealed class AbilityScoreWindow(FontService fontService, ElementPoolServi
     }
 
     private ushort GetTotal(AbilityScoreType type) =>
-        AbilityScoreQueries.TryGetComponent(componentManager.GetMultiPool<AbilityScoreComponent>(), _entityId, type, out var component)
+        AbilityScoreQueries.TryGetComponent(componentManager.GetPackedPool<AbilityScoresComponent>(), _entityId, type, out var component)
             ? component.Total
-            : throw new InvalidOperationException($"No AbilityScoreComponent of type {type} for entity {_entityId}.");
+            : throw new InvalidOperationException($"No {type} ability score for entity {_entityId}.");
 
-    private uint GetAbilityScoreVersion() => componentManager.GetMultiPool<AbilityScoreComponent>().GetEntityVersion(_entityId);
+    private uint GetAbilityScoreVersion() => componentManager.GetPackedPool<AbilityScoresComponent>().GetVersion(_entityId);
 
     private uint GetStatModifierVersion() =>
         componentManager.IsRegistered<StatModifierComponent>()

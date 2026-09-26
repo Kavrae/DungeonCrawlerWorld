@@ -17,7 +17,7 @@ public sealed class PackedTimerWheelTests
     private const int Period = 10;
 
     private static PackedComponentPool<Burn> CreatePool() =>
-        new(maximumEntityCount: 16, initialCapacity: 4, static (ref existing, incoming) => existing = incoming);
+        new(entityCapacity: 16, initialCapacity: 4, static (ref existing, incoming) => existing = incoming);
 
     /// <summary>Runs frames from..to inclusive, recording (frame, entity) for every fire. The callback re-arms by Period until Stacks runs out, then asks for removal -- BurningSystem's shape.</summary>
     private static List<(long Frame, int EntityId)> Run(PackedTimerWheel<Burn> wheel, PackedComponentPool<Burn> pool, long from, long to)

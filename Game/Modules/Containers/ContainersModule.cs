@@ -29,7 +29,7 @@ public sealed class ContainersModule : IGameModule
         systemManager.Register(new ContainerDestructionSystem(
             componentManager.GetPackedPool<ContainerComponent>(),
             componentManager.GetMultiPool<InventoryItemStackComponent>(),
-            componentManager.GetDirectPool<DisplayTextComponent>(),
+            componentManager.GetPackedPool<DisplayTextComponent>(),
             _eventBus));
     }
 }

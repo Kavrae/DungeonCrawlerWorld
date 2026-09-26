@@ -69,23 +69,31 @@ public sealed class SystemManager
     public void Update(EngineTime time)
     {
         Clock.Advance(time.FrameCount);
+        IsUpdating = true;
 
-        for (var i = 0; i < _systems.Count; i++)
+        try
         {
-            var (system, stripeIndex) = _systems[i];
-
-            if (Profiler is { } profiler)
+            for (var i = 0; i < _systems.Count; i++)
             {
-                var start = Stopwatch.GetTimestamp();
-                Run(system, time, stripeIndex);
-                profiler.Record(FrameCostCategory.Update, "SystemManager", system.GetType().Name, Stopwatch.GetElapsedTime(start));
-            }
-            else
-            {
-                Run(system, time, stripeIndex);
-            }
+                var (system, stripeIndex) = _systems[i];
 
-            _systems[i] = (system, (byte)((stripeIndex + 1) % system.StripeCount));
+                if (Profiler is { } profiler)
+                {
+                    var start = Stopwatch.GetTimestamp();
+                    Run(system, time, stripeIndex);
+                    profiler.Record(FrameCostCategory.Update, "SystemManager", system.GetType().Name, Stopwatch.GetElapsedTime(start));
+                }
+                else
+                {
+                    Run(system, time, stripeIndex);
+                }
+
+                _systems[i] = (system, (byte)((stripeIndex + 1) % system.StripeCount));
+            }
+        }
+        finally
+        {
+            IsUpdating = false;
         }
 
         foreach (var buffer in _frameScopedBuffers)
@@ -93,6 +101,9 @@ public sealed class SystemManager
             buffer.ClearFrame();
         }
     }
+
+    /// <summary>True while Update is running systems -- the simulation's own reads and writes, as opposed to presentation or input between frames.</summary>
+    public bool IsUpdating { get; private set; }
 
     /// <summary>A tiered system runs through TieredSystemRunner with this manager's tier policy -- deliberately not through its own Update, which runs every tier. A plain system gets its rotating stripe index, which a tiered system has no use for since it keys off EngineTime.FrameCount.</summary>
     private void Run(ISystem system, EngineTime time, byte stripeIndex)

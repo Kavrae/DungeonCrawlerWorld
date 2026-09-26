@@ -1,29 +1,27 @@
-using Engine.ECS.Components;
-using Engine.Math;
 using Game.Blueprints.NPCs;
 using Game.Modules.AbilityScores;
 using Game.Modules.Actions;
-using Game.Modules.Actions.Components;
 using Game.Modules.Actions.Definitions.DirectActions;
 using Game.Modules.Core.Components;
 using Game.Modules.Health.Components;
 using Game.Modules.Movement.Components;
-using Game.Modules.Race.Components;
 using Microsoft.Xna.Framework;
 
 namespace Game.Blueprints.Races;
 
 /// <summary>Their magic is stored in their wings.</summary>
-public sealed class Fairy(MathUtility mathUtility) : IBlueprint
+public static class Fairy
 {
-    public static readonly Guid RaceId = new("c22f6339-0a56-4528-b818-10052a831dc5");
-    private const string RaceName = "Fairy";
+    public static readonly Guid Id = new("c22f6339-0a56-4528-b818-10052a831dc5");
+    public const string Name = "Fairy";
 
     private static readonly string[] PersonalNameOptions = ["Fairy1", "Fairy2"];
 
     private const string Description = "TODO fairy description. Their magic is stored in their wings.";
 
-    private static readonly string[] DisplayNames = DisplayNameCache.BuildDisplayNames(PersonalNameOptions, RaceName);
+    private static readonly string[] DisplayNames = DisplayNameCache.BuildDisplayNames(PersonalNameOptions, Name);
+
+    public static readonly AppearanceFacet Appearance = new() { DisplayNames = DisplayNames, Description = Description, Glyph = "f", GlyphColor = Color.DeepPink, SpriteName = AppearanceFacet.NoSprite };
 
     private const ushort MaximumHealth = 100;
 
@@ -42,26 +40,35 @@ public sealed class Fairy(MathUtility mathUtility) : IBlueprint
     /// <inheritdoc cref="QuickAttackOverride"/>
     private static readonly ActionDefinition PowerAttackOverride = ActionOverrideEffects.OverrideFlatDamage(PowerAttackAction.Build(), PowerAttackDamage);
 
-    public void Build(ComponentManager componentManager, int entityId)
+    /// <summary>What every creature of this race can do -- held on its race definition, not on each creature (see ActionGrant). Dodge has no override: it rolls its catalog definition unchanged.</summary>
+    public static readonly ActionGrant[] ActionGrants =
+    [
+        new(QuickAttackAction.Id, QuickAttackOverride),
+        new(PowerAttackAction.Id, PowerAttackOverride),
+        new(DodgeAction.Id),
+    ];
+
+    public static readonly BlueprintDefinition Definition = new(Id, Name)
     {
-        componentManager.Merge(entityId, new RaceComponent(RaceId, RaceName, Description));
+        Build = Build,
+        Appearance = Appearance,
+        Race = new RaceFacet(),
+        Actions = ActionGrants,
+        Layer = MapLayer.Flying
+    };
 
-        componentManager.Merge(entityId, new DisplayTextComponent(DisplayNames[mathUtility.Next(0, DisplayNames.Length)], Description));
+    private static void Build(BlueprintContext context)
+    {
+        var componentManager = context.ComponentManager;
+        var entityId = context.EntityId;
 
-        componentManager.Merge(entityId, new GlyphComponent("f", Color.DeepPink));
         componentManager.Merge(entityId, new SimpleHealthComponent(MaximumHealth, MaximumHealth));
         componentManager.Merge(entityId, new MovementComponent(MovementMode.Random, null, null));
         componentManager.Merge(entityId, new ActionLockComponent(standardLockFrames: 48, currentLockTotalFrames: 0, unlockedAtFrame: 0));
 
-        componentManager.Merge(entityId, new TransformComponent(TransformComponent.UnplacedOn(MapLayer.Flying), new Vector2Byte(1, 1)));
 
-        componentManager.Merge(entityId, new ActionInstanceComponent(QuickAttackAction.Id, QuickAttackOverride));
-        componentManager.Merge(entityId, new ActionInstanceComponent(PowerAttackAction.Id, PowerAttackOverride));
-
-        componentManager.Merge(entityId, new ActionInstanceComponent(DodgeAction.Id, overrideDefinition: null));
-
-        TemporaryNpcLootGrant.GrantRandomStartingLoot(componentManager, entityId, mathUtility);
-        StartingCurrencyGrant.GrantRandomStartingGoldAndCredits(componentManager, entityId, mathUtility);
+        TemporaryNpcLootGrant.GrantRandomStartingLoot(componentManager, entityId, context.Rolls);
+        StartingCurrencyGrant.GrantRandomStartingGoldAndCredits(componentManager, entityId, context.Rolls);
 
         AbilityScoreEffects.GrantDefaults(componentManager, entityId, DefaultAbilityScoreBaseValue);
     }

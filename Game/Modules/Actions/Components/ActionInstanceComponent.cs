@@ -1,37 +1,30 @@
 namespace Game.Modules.Actions.Components;
 
-/// <summary>
-/// One granted action instance</summary>
+/// <summary>One action granted to one entity by itself -- a wand, a learned scroll, an admin grant.</summary>
 /// <remarks>
-/// An entity's full set of actions is "however many of these
-/// it has" (MultiComponentPool, the RaceComponent/StatusEffectStack pattern), not a single
-/// component holding a list.
+/// Sparse: the actions a creature has from its race or class are not here (see ActionGrant, held once
+/// per definition), so an entity holds one of these only for an action granted to it alone.
+/// EntityActions reads both as one set, and one of these wins over a definition's grant of the same
+/// action.
 ///
 /// Override lives here, per instance, rather than on the shared ActionDefinition it points to
-/// via ActionId -- multiple entities (e.g. every race/class's "Default Attack") can share one
-/// catalog ActionDefinition while each hitting for a different amount (Goblin 10, Fairy 3, Ghost
-/// 5 -- see the race blueprints' grants) or diverging in any other way (targeting, ManaCost,
-/// Tags). Mirrors InventoryItemStackComponent.Override's shape exactly: a full, nullable clone
-/// of the catalog definition built via `with`, resolved by ActionInstanceQueries.
-/// TryResolveEffectiveAction (Override if set, else the plain catalog lookup by ActionId) --
-/// null means "no per-instance override," so the granted action's own catalog Effects apply
-/// unmodified (e.g. PlayerBlueprint's Punch grant, which rolls DirectDamage's own
-/// MinFlatDamage..MaxFlatDamage range rather than a fixed number).
+/// via ActionId -- multiple entities can share one catalog ActionDefinition while each hitting for a
+/// different amount or diverging in any other way (targeting, ManaCost, Tags). Mirrors
+/// InventoryItemStackComponent.Override's shape exactly: a full, nullable clone of the catalog
+/// definition built via `with`, resolved by EntityActions.TryGetEffectiveAction (Override if set,
+/// else the plain catalog lookup by ActionId) -- null means "no override," so the granted action's
+/// own catalog Effects apply unmodified (e.g. PlayerKit's Punch grant, which rolls
+/// DirectDamage's own MinFlatDamage..MaxFlatDamage range rather than a fixed number).
 ///
-/// CooldownReadyAtFrame is a deadline (FrameDeadline), meaningful for any action whose
-/// ActionTiming.CooldownFrames is set, regardless of ActionTimingCategory. Nothing ticks it: it is
-/// written once when the action is used (ActionInstanceQueries.TrySetCooldown) and read against
-/// the current frame (ActionInstanceQueries.IsOnCooldown/CooldownFramesRemaining). It replaced a
-/// frames-remaining countdown that ActionCooldownSystem walked down every stripe visit -- 0.1
-/// ms/frame spent almost entirely confirming that no cooldown was running. A new grant starts at 0: ready immediately.
+/// Cooldowns are not here either: they live in ActionCooldownComponent, written only for an action
+/// the entity actually used, since a definition-granted action has no per-entity component to write
+/// a deadline into.
 /// </remarks>
 public struct ActionInstanceComponent(Guid actionId, ActionDefinition? overrideDefinition)
 {
     public Guid ActionId { get; } = actionId;
+
     public ActionDefinition? Override { get; set; } = overrideDefinition;
 
-    /// <summary>The simulation frame from which this action can be used again. 0 (the default) = ready now.</summary>
-    public uint CooldownReadyAtFrame { get; set; }
-
-    public override readonly string ToString() => $"ActionId : {ActionId}\nOverride : {(Override is null ? "none" : Override.Name)}\nCooldownReadyAtFrame : {CooldownReadyAtFrame}";
+    public override readonly string ToString() => $"ActionId : {ActionId}\nOverride : {(Override is null ? "none" : Override.Name)}";
 }

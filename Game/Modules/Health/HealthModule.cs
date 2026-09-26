@@ -13,6 +13,7 @@ using Game.Modules.StatModifiers;
 using Game.Modules.StatModifiers.Components;
 using Game.World;
 using Microsoft.Xna.Framework;
+using Game.Blueprints;
 
 namespace Game.Modules.Health;
 
@@ -22,6 +23,7 @@ public sealed class HealthModule : IGameModule
 
     public IReadOnlyList<Type> Dependencies { get; } = [];
 
+    private BlueprintRegistry _creatures = null!;
     private ProcessingTierEvents _processingTierEvents = null!;
     private MathUtility _mathUtility = null!;
     private EventBus _eventBus = null!;
@@ -35,6 +37,7 @@ public sealed class HealthModule : IGameModule
 
     public void Configure(GameModuleContext context)
     {
+        _creatures = context.Definitions;
         _processingTierEvents = context.ProcessingTierEvents;
         _mathUtility = context.MathUtility;
         _eventBus = context.EventBus;
@@ -52,7 +55,8 @@ public sealed class HealthModule : IGameModule
             existing.CurrentHealth = MathHelper.Clamp((existing.CurrentHealth + incoming.CurrentHealth) / 2f, 0f, existing.MaximumHealth);
         });
 
-        componentManager.RegisterMultiPool<BodyPartComponent>();
+        // Only an entity something has actually happened to holds one -- see BodyPartStateComponent.
+        componentManager.RegisterPackedPool<BodyPartStateComponent>(static (ref existing, incoming) => existing = incoming, initialCapacity: 20_000);
     }
 
     public void RegisterSystems(SystemManager systemManager, ComponentManager componentManager)
@@ -71,8 +75,8 @@ public sealed class HealthModule : IGameModule
         // Optional for the same reason statModifiers/deadEntities are -- a module set built
         // without AbilityScoresModule (e.g. a minimal test) still works, just with 0 regen
         // (no Constitution total found) rather than a hard dependency.
-        var abilityScores = componentManager.IsRegistered<AbilityScoreComponent>()
-            ? componentManager.GetMultiPool<AbilityScoreComponent>()
+        var abilityScores = componentManager.IsRegistered<AbilityScoresComponent>()
+            ? componentManager.GetPackedPool<AbilityScoresComponent>()
             : null;
         // Optional -- BurningModule might not be loaded at all (see BodyPartBurningTimerComponent's
         // own doc comment for why it's registered here, under Health, rather than under Burning).
@@ -92,7 +96,8 @@ public sealed class HealthModule : IGameModule
 
         // Always registered -- RegisterComponents always calls RegisterMultiPool<BodyPartComponent>(), unlike the genuinely-optional pools above.
         systemManager.Register(new ComplexHealthRegenSystem(
-            componentManager.GetMultiPool<BodyPartComponent>(),
+            EntityBodyParts.For(componentManager, _creatures),
+            componentManager.GetPackedPool<BodyPartStateComponent>(),
             componentManager.GetPackedPool<SimpleHealthComponent>(),
             componentManager.GetDirectPool<ProcessingTierComponent>(),
             _processingTierEvents,
@@ -126,7 +131,7 @@ public sealed class HealthModule : IGameModule
             // Cleared first: a sweep that expires two MaximumHealth modifiers at once publishes two
             // of these, and the snapshot already covers both, so only the first may spend it.
             _expiringEntityId = -1;
-            MaximumHealthShift.Apply(componentManager, expired.EntityId, _expiringAdditiveSum, _expiringMultiplicativeSum);
+            MaximumHealthShift.Apply(componentManager, _creatures, expired.EntityId, _expiringAdditiveSum, _expiringMultiplicativeSum);
         });
     }
 }
