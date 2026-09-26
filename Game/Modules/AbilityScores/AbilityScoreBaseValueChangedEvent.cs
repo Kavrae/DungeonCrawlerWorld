@@ -1,7 +1,7 @@
 namespace Game.Modules.AbilityScores;
 
 /// <summary>
-/// Published by AbilityScoreEffects.SetBaseValue whenever an entity's AbilityScoreComponent.BaseValue
+/// Published by AbilityScoreEffects.SetBaseValue whenever an entity's AbilityScoresComponent base value
 /// itself changes (as opposed to GrantModifier, which only ever changes Total) -- generic, like
 /// every other EventBus event (see StatModifierExpiredEvent's own doc comment), so any module
 /// can react to a permanent base-score change without AbilityScores needing to know who's

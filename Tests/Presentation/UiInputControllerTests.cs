@@ -1118,6 +1118,46 @@ public sealed class UiInputControllerTests
         Assert.IsFalse(contextMenuController.IsOpen, "Selecting an option should close the menu.");
     }
 
+    /// <summary>Choosing an option that opens a submenu replaces the menu with it on the next update, rather than running anything or closing -- and the submenu's own options then run as usual.</summary>
+    [TestMethod]
+    public void ClickSubmenuOption_ThenClickItsOption_InvokesTheSubmenuOption()
+    {
+        var fontService = TestFonts.Shared;
+        var labelRenderer = new LabelRenderer();
+        var windowService = TestElementPoolServiceFactory.Create(fontService, labelRenderer);
+        var layers = new UiLayerStack();
+        var contextMenuController = TestElementPoolServiceFactory.CreateContextMenuController(windowService, layers);
+        var controller = new UiInputController(layers, LargeScreenSize, contextMenuController: contextMenuController);
+
+        var picked = 0;
+        List<ContextMenuOption> submenu = [ContextMenuOption.Header("Kinds"), new ContextMenuOption("Pick", null, true, () => picked++)];
+        contextMenuController.Open(new Vector2(100, 100), [new ContextMenuOption("Other", null, true, () => { }), ContextMenuOption.Opening("More", submenu)]);
+
+        void Click(Element element)
+        {
+            var center = element.Rectangle.Center;
+            controller.Update(NoKeys, MouseAt(center.X, center.Y, ButtonState.Released));
+            controller.Update(NoKeys, MouseAt(center.X, center.Y, ButtonState.Pressed));
+            controller.Update(NoKeys, MouseAt(center.X, center.Y, ButtonState.Released));
+        }
+
+        Click(contextMenuController.Menu.ChildElements[1]);
+        Assert.IsTrue(contextMenuController.IsOpen, "Choosing a submenu keeps the menu open.");
+        Assert.AreEqual(2, contextMenuController.Menu.ChildElements.Count, "Not swapped yet -- that waits for the menu's next update.");
+
+        contextMenuController.Menu.Update(new GameTime());
+        Assert.AreEqual(submenu.Count, contextMenuController.Menu.ChildElements.Count);
+        Assert.AreEqual(0, picked);
+
+        Click(contextMenuController.Menu.ChildElements[1]);
+        Assert.AreEqual(1, picked);
+        Assert.IsFalse(contextMenuController.IsOpen, "An ordinary option still closes the menu.");
+    }
+
+    [TestMethod]
+    public void SubmenuOption_WithNothingInIt_IsDisabled() =>
+        Assert.IsFalse(ContextMenuOption.Opening("Empty", []).Enabled);
+
     /// <summary>Same as above, but the TextBox lives inside an open menu window (e.g. the Inventory folder's own search box) -- the exact scenario TODO.md's Context menu entry calls out as the second consumer.</summary>
     [TestMethod]
     public void RightClickTextBoxInsideMenuWindowThenClickContextMenuOption_InvokesTheOption()
@@ -2328,7 +2368,8 @@ public sealed class UiInputControllerTests
     public void Drag_FromABoundHotbarSlotToAwayFromTheHotbar_UnbindsIt()
     {
         var (_, hotbarWindow, hotbar, componentManager, itemId) = BuildDragAndDropHarness();
-        hotbar.BindItem(HotkeySlot.Base1, itemId);
+        InventoryQueries.TryGetStack(componentManager.GetMultiPool<InventoryItemStackComponent>(), 1, itemId, out var boundStack);
+        hotbar.BindItem(HotkeySlot.Base1, boundStack.StackInstanceId);
         var controller = CreateController([], [hotbarWindow], [], [], LargeScreenSize);
 
         // Base is vertically centered against Expansion's current height, not flush at the top --
@@ -2347,7 +2388,8 @@ public sealed class UiInputControllerTests
     public void Drag_FromABoundHotbarSlotToADifferentSlot_MovesTheBinding()
     {
         var (_, hotbarWindow, hotbar, componentManager, itemId) = BuildDragAndDropHarness();
-        hotbar.BindItem(HotkeySlot.Base1, itemId);
+        InventoryQueries.TryGetStack(componentManager.GetMultiPool<InventoryItemStackComponent>(), 1, itemId, out var boundStack);
+        hotbar.BindItem(HotkeySlot.Base1, boundStack.StackInstanceId);
         var controller = CreateController([], [hotbarWindow], [], [], LargeScreenSize);
 
         // Base is vertically centered against Expansion's current height, not flush at the top --
@@ -2370,7 +2412,7 @@ public sealed class UiInputControllerTests
         Assert.IsFalse(ItemHotkeyBindingQueries.TryGet(componentManager.GetMultiPool<ItemHotkeyBindingComponent>(), 1, HotkeySlot.Base1, out _), "The origin slot must no longer be bound once the item has moved elsewhere.");
         Assert.IsTrue(hotbar.TryGetSlotAt(dropPoint, out var dropSlot));
         Assert.IsTrue(ItemHotkeyBindingQueries.TryGet(componentManager.GetMultiPool<ItemHotkeyBindingComponent>(), 1, dropSlot, out var boundItemId));
-        Assert.AreEqual(itemId, boundItemId);
+        Assert.AreEqual(boundStack.StackInstanceId, boundItemId);
     }
 
     /// <summary>A plain click (press and release at the same spot, well under the tap threshold) on an already-bound slot must not unbind it -- only an actual drag should.</summary>
@@ -2378,7 +2420,8 @@ public sealed class UiInputControllerTests
     public void ClickingABoundHotbarSlot_WithoutDragging_LeavesTheBindingUnchanged()
     {
         var (_, hotbarWindow, hotbar, componentManager, itemId) = BuildDragAndDropHarness();
-        hotbar.BindItem(HotkeySlot.Base1, itemId);
+        InventoryQueries.TryGetStack(componentManager.GetMultiPool<InventoryItemStackComponent>(), 1, itemId, out var boundStack);
+        hotbar.BindItem(HotkeySlot.Base1, boundStack.StackInstanceId);
         var controller = CreateController([], [hotbarWindow], [], [], LargeScreenSize);
 
         // Base is vertically centered against Expansion's current height, not flush at the top --
@@ -2389,7 +2432,7 @@ public sealed class UiInputControllerTests
         controller.Update(NoKeys, MouseAt(point.X, point.Y, ButtonState.Released));
 
         Assert.IsTrue(ItemHotkeyBindingQueries.TryGet(componentManager.GetMultiPool<ItemHotkeyBindingComponent>(), 1, HotkeySlot.Base1, out var boundItemId));
-        Assert.AreEqual(itemId, boundItemId);
+        Assert.AreEqual(boundStack.StackInstanceId, boundItemId);
     }
 
     /// <summary>
@@ -2429,7 +2472,7 @@ public sealed class UiInputControllerTests
     /// entities, one item stack granted to SourceEntityId, positioned far enough apart that any
     /// press-then-release pair between them exceeds ContentDragTapThresholdPixels.
     /// </summary>
-    private static (Window SourceGridWindow, Window DestinationGridWindow, InventoryItemStackCell Cell, ComponentManager ComponentManager, Guid ItemId, int SourceEntityId, int DestinationEntityId) BuildInventoryToInventoryDragHarness(Action<int, Guid>? onItemSelected = null)
+    private static (Window SourceGridWindow, Window DestinationGridWindow, InventoryItemStackCell Cell, ComponentManager ComponentManager, Guid ItemId, int SourceEntityId, int DestinationEntityId) BuildInventoryToInventoryDragHarness(Action<int, uint>? onItemSelected = null)
     {
         const int sourceEntityId = 1;
         const int destinationEntityId = 2;
@@ -2456,7 +2499,7 @@ public sealed class UiInputControllerTests
         var world = new Game.World.World(new Game.World.Map(new Vector3Int(10, 10, 1)));
         var contextMenuController = TestElementPoolServiceFactory.CreateContextMenuController(windowService, new UiLayerStack());
         var mapViewState = new MapViewState();
-        Action<int, Guid> resolvedOnItemSelected = onItemSelected ?? (static (_, _) => { });
+        Action<int, uint> resolvedOnItemSelected = onItemSelected ?? (static (_, _) => { });
 
         Window BuildGridWindow(int entityId, Vector2 position)
         {

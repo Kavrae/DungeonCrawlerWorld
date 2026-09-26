@@ -8,7 +8,7 @@ namespace Game.Views;
 public readonly record struct SpriteView(string SheetPath, Rectangle SourceRectangle);
 
 /// <summary>How an entity looks on the map: its sprite if it has one, otherwise its glyph, plus whether it is a corpse.</summary>
-/// <remarks>Glyph is empty and GlyphColor default when Sprite is set -- a sprite always wins, so the glyph is never resolved for a sprite-backed entity.</remarks>
+/// <remarks>A sprite always wins when set. Glyph may still be set beside it -- a blueprint's appearance declares both -- for a reader that only ever draws glyphs; it is empty when the sprite is a per-instance SpriteComponent.</remarks>
 public readonly record struct EntityVisualView(SpriteView? Sprite, string Glyph, Color GlyphColor, bool IsDead);
 
 /// <summary>Where an occupant sits and how the map draws it relative to the tile's other occupants.</summary>

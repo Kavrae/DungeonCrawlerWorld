@@ -27,7 +27,7 @@ namespace Tests.Modules.AbilityScores;
 ///
 /// Exercises the two things this feature actually changes: NPC-population-time grant cost
 /// (AbilityScoreEffects.GrantDefaults at FloorBuilder.PopulateFloor scale -- every race now
-/// defaults to carrying 7 AbilityScoreComponents) and the event-driven expiry recompute path
+/// defaults to granting all seven ability scores) and the event-driven expiry recompute path
 /// (the hot path StatModifierExpiredEvent introduced, replacing the periodic-poll design this
 /// module deliberately avoided -- see AbilityScoresModule's own doc comment for why a poll would
 /// have been the wrong tradeoff at GameLoop.InitialEntityCapacity's ~2.6M-entity scale).

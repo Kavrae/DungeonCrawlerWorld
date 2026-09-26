@@ -221,7 +221,7 @@ public sealed class InventoryManagementWindowTests
     public void SortOrder_RecentlyAcquiredDescending_OrdersCellsNewestFirst()
     {
         // Build() already grants firstItemId; secondItemId and scrollItemId are granted here,
-        // each after a short sleep, so the three stacks have distinctly ordered FirstAcquiredUtcTicks.
+        // each after a short sleep, so the three stacks have distinctly ordered AcquiredSequence.
         var (window, componentManager, firstItemId, secondItemId, scrollItemId) = Build();
         Thread.Sleep(5);
         InventoryActions.AddItem(componentManager, EntityId, secondItemId, quantity: 1);

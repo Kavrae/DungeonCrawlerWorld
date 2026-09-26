@@ -18,4 +18,11 @@ public sealed record ContextMenuOption(string Label, string? HotkeyText, bool En
     /// divider row concept is needed.
     /// </summary>
     public static ContextMenuOption Header(string text) => new(text, null, Enabled: false, OnSelect: static () => { }, IsHeader: true);
+
+    /// <summary>The options choosing this one replaces the menu with, in place of running OnSelect -- a submenu. Null for an ordinary option.</summary>
+    public IReadOnlyList<ContextMenuOption>? Submenu { get; init; }
+
+    /// <summary>An option that opens submenu in the menu's place, marked as leading somewhere (see ContextMenu.SubmenuMarker). Disabled when submenu has nothing to choose.</summary>
+    public static ContextMenuOption Opening(string label, IReadOnlyList<ContextMenuOption> submenu) =>
+        new(label, ContextMenu.SubmenuMarker, Enabled: submenu.Count > 0, OnSelect: static () => { }) { Submenu = submenu };
 }

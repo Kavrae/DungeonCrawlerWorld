@@ -55,13 +55,13 @@ public sealed class InventoryWindowController(
     public Func<int?>? GetSecondaryTargetEntityId { get; set; }
 
     /// <summary>Settable late-bound callback for "the player clicked a real single-stack item cell in their own inventory grid" -- wired by ShellBootstrapper to ItemDetailsWindowController.Open once that controller exists (built after this one, and itself depends on this controller's PlayerInventoryWindow accessor, so the two can't reference each other via constructor injection -- same ordering cycle GetSecondaryTargetEntityId already breaks the same way). Threaded down to the player's own InventoryManagementWindow via CreateInventoryWindow's Configure call, and from there to every tab's own InventoryGridContent.</summary>
-    public Action<int, Guid>? OnItemSelected { get; set; }
+    public Action<int, uint>? OnItemSelected { get; set; }
 
     /// <summary>Settable late-bound callback for "the player chose Compare from an inventory item cell's own context menu" -- wired by ShellBootstrapper to ItemComparisonController.Arm once that controller exists, the same ordering reason OnItemSelected is wired the same way. Threaded the same path.</summary>
-    public Action<int, Guid>? OnCompareRequested { get; set; }
+    public Action<int, uint>? OnCompareRequested { get; set; }
 
     /// <summary>Settable late-bound callback for "the player chose Activate (or double-clicked) an inventory item cell" -- wired by ShellBootstrapper to arm the item via ActionTargetingController.ArmItemFromStack (which closes this window itself as part of arming -- see its own doc comment), the same ordering reason OnItemSelected/OnCompareRequested are wired the same way. Threaded the same path.</summary>
-    public Action<int, Guid>? OnActivateRequested { get; set; }
+    public Action<int, uint>? OnActivateRequested { get; set; }
 
     /// <summary>Opens the player's own Inventory window if it isn't already -- idempotent, same as WindowLifecycle.Open itself. Lets a non-button trigger (e.g. clicking a corpse to loot it) reuse this window instead of the button being the only way to open it.</summary>
     public void OpenInventoryWindow() => _windowLifecycle.Open();

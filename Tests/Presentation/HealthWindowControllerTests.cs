@@ -42,7 +42,6 @@ public sealed class HealthWindowControllerTests
 
         var componentManager = new ComponentManager(20, 10);
         componentManager.RegisterPackedPool<SimpleHealthComponent>(static (ref existing, incoming) => existing = incoming);
-        componentManager.RegisterMultiPool<BodyPartComponent>();
         componentManager.RegisterMultiPool<BodyPartBurningTimerComponent>();
         componentManager.RegisterPackedPool<PoisonTimerComponent>(static (ref existing, incoming) => { });
         componentManager.RegisterPackedPool<BurningTimerComponent>(static (ref existing, incoming) => { });
@@ -60,7 +59,7 @@ public sealed class HealthWindowControllerTests
 
         var itemCatalog = new ItemCatalog();
 
-        pool.RegisterFactory<HealthWindow>(() => new HealthWindow(fontService, pool, labelRenderer, componentManager, statusEffectDisplays, itemCatalog));
+        pool.RegisterFactory<HealthWindow>(() => new HealthWindow(fontService, pool, labelRenderer, componentManager, BodyPartTestWorld.PartsOf(componentManager), statusEffectDisplays, itemCatalog));
         pool.RegisterFactory<TextDivider>(() => new TextDivider(fontService, pool, labelRenderer));
         pool.RegisterFactory<FractionBarElement>(() => new FractionBarElement(fontService, pool, labelRenderer));
 

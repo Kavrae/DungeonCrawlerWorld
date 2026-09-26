@@ -1,4 +1,3 @@
-using Engine.ECS.Components;
 using Engine.Math;
 using Game.Modules.AbilityScores;
 using Game.Modules.Actions;
@@ -7,31 +6,37 @@ using Game.Modules.Core.Components;
 using Game.Modules.Health;
 using Game.Modules.Health.Components;
 using Game.Modules.Movement.Components;
-using Game.Modules.Race.Components;
 using Microsoft.Xna.Framework;
 
 namespace Game.Blueprints.Races;
 
 /// <summary>Adaptable and unremarkable in any single way -- which is exactly what makes them so widespread.</summary>
 /// <remarks>
-/// Takes MathUtility by constructor injection for the same reason Goblin does -- see Goblin's own
-/// doc comment. Defaults to a generic NPC shape, same as every other race (a pink 'h' glyph, no
-/// Sprite, Random movement) -- PlayerBlueprint, the one entity composing this race in today,
-/// overrides Glyph/Sprite/Movement to its own '@'/Player-sprite/PlayerControlled shape immediately
-/// after calling Build, the same overrides-after-parts pattern GoblinEngineerBlueprint uses for
-/// Goblin's own ActionLock. ActionLock itself is not overridden -- Human's 30-frame lock is its
+/// Defaults to a generic NPC shape, same as every other race (a pink 'h' glyph, no sprite, Random
+/// movement). The Player blueprint includes PlayerKit after it: PlayerKit's appearance replaces the
+/// look, and its step switches movement to PlayerControlled. ActionLock is not overridden -- Human's 30-frame lock is its
 /// real default, deliberately looser than Goblin's 54-frame one, used as-is by the player. Ability
-/// scores use the same clustered 2d6 roll PlayerBlueprint always has, rather than every other NPC
+/// scores use the same clustered 2d6 roll PlayerKit always has, rather than every other NPC
 /// race's flat default-5 -- Human is the one race with genuinely varied starting stats.
 /// </remarks>
-public sealed class Human(MathUtility mathUtility) : IBlueprint
+public static class Human
 {
-    public static readonly Guid RaceId = new("43fb5093-962d-4125-bae7-64e81c0b7cdd");
-    private const string RaceName = "Human";
+    public static readonly Guid Id = new("43fb5093-962d-4125-bae7-64e81c0b7cdd");
+    public const string Name = "Human";
     private const string Description = "Adaptable and unremarkable in any single way -- which is exactly what makes them so widespread.";
 
+    public static readonly AppearanceFacet Appearance = new() { Description = Description, Glyph = "h", GlyphColor = Color.Pink, SpriteName = AppearanceFacet.NoSprite };
+
+    /// <summary>What every Human can do -- held on its race definition, not on each creature (see ActionGrant). No overrides: QuickAttack and PowerAttack roll their catalog DirectDamage range rather than a fixed number.</summary>
+    public static readonly ActionGrant[] ActionGrants =
+    [
+        new(QuickAttackAction.Id),
+        new(PowerAttackAction.Id),
+        new(DodgeAction.Id),
+    ];
+
     /// <summary>Head/Torso/Internal are Vital; sums to 250, matching the flat SimpleHealthComponent total this replaced so the split doesn't itself rebalance Human's overall toughness. 11 parts (Arm/Leg each split off a Hand/Foot, plus Internal for Poison's own always-hit target) -- not a final balance pass. VerticalPosition: Head 5, Torso/Internal 4, Arm 3, Hand 2, Leg 1, Foot 0.</summary>
-    private static readonly BodyPartTemplate[] BodyParts =
+    public static readonly BodyPartTemplate[] BodyParts =
     [
         new BodyPartTemplate("Head", BodyPartType.Head, 5, 40, IsVital: true),
         new BodyPartTemplate("Torso", BodyPartType.Torso, 4, 65, IsVital: true),
@@ -46,30 +51,28 @@ public sealed class Human(MathUtility mathUtility) : IBlueprint
         new BodyPartTemplate("Right Foot", BodyPartType.Foot, 0, 10, IsVital: false),
     ];
 
-    public void Build(ComponentManager componentManager, int entityId)
+    public static readonly BlueprintDefinition Definition = new(Id, Name)
     {
-        componentManager.Merge(entityId, new RaceComponent(RaceId, RaceName, Description));
+        Build = Build,
+        Appearance = Appearance,
+        Race = new RaceFacet(BodyParts),
+        Actions = ActionGrants
+    };
 
-        componentManager.Merge(entityId, new GlyphComponent("h", Color.Pink));
-
-        ComplexHealthEffects.GrantBodyParts(componentManager, entityId, BodyParts);
+    private static void Build(BlueprintContext context)
+    {
+        var componentManager = context.ComponentManager;
+        var entityId = context.EntityId;
 
         componentManager.Merge(entityId, new MovementComponent(MovementMode.Random, null, null));
         componentManager.Merge(entityId, new ActionLockComponent(standardLockFrames: 30, currentLockTotalFrames: 0, unlockedAtFrame: 0));
-        componentManager.Merge(entityId, new TransformComponent(TransformComponent.UnplacedOn(MapLayer.Ground), new Vector2Byte(1, 1)));
 
         foreach (var abilityScoreType in Enum.GetValues<AbilityScoreType>())
         {
-            AbilityScoreEffects.Grant(componentManager, entityId, abilityScoreType, RollAbilityScoreBaseValue());
+            AbilityScoreEffects.Grant(componentManager, entityId, abilityScoreType, RollAbilityScoreBaseValue(context.Rolls));
         }
-
-        // overrideDefinition: null -- no per-instance override, so QuickAttack/PowerAttack roll
-        // their catalog DirectDamage's own Min/MaxFlatDamage range instead of a fixed number.
-        ActionGrantEffects.Grant(componentManager, entityId, QuickAttackAction.Id, manaCost: 0, overrideDefinition: null);
-        ActionGrantEffects.Grant(componentManager, entityId, PowerAttackAction.Id, manaCost: 0, overrideDefinition: null);
-        ActionGrantEffects.Grant(componentManager, entityId, DodgeAction.Id, manaCost: 0, overrideDefinition: null);
     }
 
     /// <summary>Two Next(1,6) rolls summed -- range [2,10] per the spec, clustering around the middle rather than uniform across the whole range. Exact shape isn't load-bearing since level-up moves these later.</summary>
-    private ushort RollAbilityScoreBaseValue() => (ushort)(mathUtility.Next(1, 6) + mathUtility.Next(1, 6));
+    private static ushort RollAbilityScoreBaseValue(MathUtility rolls) => (ushort)(rolls.Next(1, 6) + rolls.Next(1, 6));
 }

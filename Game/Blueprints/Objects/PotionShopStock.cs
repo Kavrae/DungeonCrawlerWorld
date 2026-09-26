@@ -1,15 +1,16 @@
-using Engine.ECS.Components;
-using Engine.Math;
 using Game.Modules;
-using Game.Modules.Inventory;
 using Game.Modules.Inventory.Definitions;
 using Game.Modules.Shops.Components;
 
 namespace Game.Blueprints.Objects;
 
 /// <summary>The "class" half of PotionShop's composition (see Shop's own doc comment) -- adds ShopComponent restricted to Tag.Potion at a 10% specialist modifier, plus a random selection of the catalog's own Potion-tagged items.</summary>
-public sealed class PotionShopStock(MathUtility mathUtility) : IBlueprint
+public static class PotionShopStock
 {
+    public static readonly Guid Id = new("d9f6a1c4-8b2e-4f3a-9c1d-000000000113");
+
+    public const string Name = "Potion Shop Stock";
+
     private const float BuyMultiplier = 1.10f;
     private const float SellMultiplier = 0.90f;
 
@@ -32,9 +33,17 @@ public sealed class PotionShopStock(MathUtility mathUtility) : IBlueprint
         new(ResistanceTestPotion.Build(), PreferredStockLevel: 10),
     ];
 
-    public void Build(ComponentManager componentManager, int entityId)
+    public static readonly BlueprintDefinition Definition = new(Id, Name)
     {
+        Build = Build
+    };
+
+    private static void Build(BlueprintContext context)
+    {
+        var componentManager = context.ComponentManager;
+        var entityId = context.EntityId;
+
         componentManager.Merge(entityId, new ShopComponent(allowedTags: [Tag.Potion], BuyMultiplier, SellMultiplier));
-        ShopStock.GrantRandomStock(componentManager, entityId, mathUtility, Stock);
+        ShopStock.GrantRandomStock(componentManager, entityId, context.Rolls, Stock);
     }
 }

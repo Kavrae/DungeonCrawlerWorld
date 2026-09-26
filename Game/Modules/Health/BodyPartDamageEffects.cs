@@ -18,24 +18,22 @@ public static class BodyPartDamageEffects
     /// <summary>How long a part stays out of passive regen once it is disabled, or once a sustained affliction last ticked on it.</summary>
     public const ushort RegenLockoutFrames = 10 * GameTiming.FramesPerSecond;
 
-    /// <summary>Clamps denseIndex's CurrentHealth down by amount against its modifier-effective MaximumHealth, disabling the part (and locking it out of regen for a fresh 10 seconds from now) the instant it lands at 0 -- re-armed on every hit that leaves it at 0, not only the first transition into 0.</summary>
-    /// <param name="now">The simulation frame this hit lands on -- the lockout is a deadline measured from it (see BodyPartComponent.RegenLockedUntilFrame).</param>
-    public static void ApplyToPart(MultiComponentPool<BodyPartComponent> bodyParts, int denseIndex, MultiComponentPool<StatModifierComponent>? statModifiers, int entityId, ushort amount, long now)
+    /// <summary>Clamps the part's current health down by amount against its modifier-effective MaximumHealth, disabling the part (and locking it out of regen for a fresh 10 seconds from now) the instant it lands at 0 -- re-armed on every hit that leaves it at 0, not only the first transition into 0.</summary>
+    /// <param name="now">The simulation frame this hit lands on -- the lockout is a deadline measured from it (see BodyPartStateComponent).</param>
+    public static void ApplyToPart(EntityBodyParts bodyParts, int entityId, int partId, MultiComponentPool<StatModifierComponent>? statModifiers, ushort amount, long now)
     {
-        bodyParts.UpdateByDenseIndex(denseIndex, (statModifiers, entityId, amount, now), static (ref BodyPartComponent part, (MultiComponentPool<StatModifierComponent>? StatModifiers, int EntityId, ushort Amount, long Now) state) =>
-        {
-            var effectiveMaximumHealth = StatModifierMath.GetEffectiveValue(state.StatModifiers, state.EntityId, StatModifierTarget.MaximumHealth, part.MaximumHealth);
-            part.CurrentHealth = MathHelper.Clamp(part.CurrentHealth - state.Amount, 0f, effectiveMaximumHealth);
+        ArgumentNullException.ThrowIfNull(bodyParts);
 
-            if (part.CurrentHealth == 0)
-            {
-                part.IsDisabled = true;
-                part.RegenLockedUntilFrame = FrameDeadline.After(state.Now, RegenLockoutFrames);
-            }
-        });
+        if (!bodyParts.TryGet(entityId, partId, out var part))
+        {
+            return;
+        }
+
+        var effectiveMaximumHealth = StatModifierMath.GetEffectiveValue(statModifiers, entityId, StatModifierTarget.MaximumHealth, part.MaximumHealth);
+        bodyParts.Damage(entityId, partId, amount, effectiveMaximumHealth, now, RegenLockoutFrames);
     }
 
-    /// <summary>Unconditionally pushes denseIndex's regen lockout out to a fresh 10 seconds from now, regardless of whether this hit actually landed the part at 0.</summary>
+    /// <summary>Unconditionally pushes the part's regen lockout out to a fresh 10 seconds from now, regardless of whether this hit actually landed the part at 0.</summary>
     /// <remarks>
     /// For an ongoing per-tick damage source (BodyPartBurningSystem) whose single tick often
     /// doesn't deal enough damage to zero out a small part (e.g. a 10 HP Foot against a
@@ -49,16 +47,16 @@ public static class BodyPartDamageEffects
     /// spells) -- a one-off hit that doesn't finish a part off shouldn't lock it out of regen for
     /// 10 seconds; only a sustained per-tick affliction should.
     /// </remarks>
-    public static void ResetRegenLockout(MultiComponentPool<BodyPartComponent> bodyParts, int denseIndex, long now) =>
-        bodyParts.UpdateByDenseIndex(denseIndex, now, static (ref BodyPartComponent part, long frame) => part.RegenLockedUntilFrame = FrameDeadline.After(frame, RegenLockoutFrames));
+    public static void ResetRegenLockout(EntityBodyParts bodyParts, int entityId, int partId, long now) =>
+        bodyParts.LockOutOfRegen(entityId, partId, now, RegenLockoutFrames);
 
     /// <summary>Publishes EntityDiedEvent (on a Vital part's own wasAlive-to-0 transition) and, for player-involved damage, EntityDamagedEvent with the entity's real summed totals -- the same post-clamp bookkeeping ComplexHealthDamage.Apply always did inline, now shared with BodyPartBurningSystem's own tick.</summary>
     public static void PublishDamageEvents(
         PackedComponentPool<SimpleHealthComponent> health,
-        MultiComponentPool<BodyPartComponent> bodyParts,
+        EntityBodyParts bodyParts,
         EventBus eventBus,
-        int denseIndex,
         int entityId,
+        int partId,
         ushort effectiveAmount,
         ActionSource source,
         IPlayerQuery? playerQuery,
@@ -66,7 +64,7 @@ public static class BodyPartDamageEffects
         MultiComponentPool<StatModifierComponent>? statModifiers,
         PackedComponentPool<DeadComponent>? deadEntities)
     {
-        ref readonly var updatedPart = ref bodyParts.GetReadonlyByDenseIndex(denseIndex);
+        bodyParts.TryGet(entityId, partId, out var updatedPart);
 
         if (updatedPart.IsVital && updatedPart.CurrentHealth == 0 && deadEntities?.Has(entityId) != true && entityId != playerQuery?.PlayerEntityId)
         {
@@ -92,14 +90,14 @@ public static class BodyPartDamageEffects
 
     /// <summary>
     /// BodyPartTargetMode.All counterpart to PublishDamageEvents -- that method is shaped around
-    /// one already-known denseIndex; this one scans every part entityId owns once a whole-entity
+    /// one already-known part; this one scans every part entityId owns once a whole-entity
     /// hit has already been applied to all of them, so a fireball fires at most one
     /// EntityDiedEvent (any Vital part landed at 0) and exactly one aggregate EntityDamagedEvent
     /// for the whole hit, not one of each per part.
     /// </summary>
     public static void PublishAggregateDamageEvents(
         PackedComponentPool<SimpleHealthComponent> health,
-        MultiComponentPool<BodyPartComponent> bodyParts,
+        EntityBodyParts bodyParts,
         EventBus eventBus,
         int entityId,
         ushort effectiveAmount,
@@ -110,9 +108,8 @@ public static class BodyPartDamageEffects
         PackedComponentPool<DeadComponent>? deadEntities)
     {
         var anyVitalPartAtZero = false;
-        for (var denseIndex = bodyParts.GetFirstDenseIndex(entityId); denseIndex != -1; denseIndex = bodyParts.GetNextDenseIndex(denseIndex))
+        foreach (var part in bodyParts.Parts(entityId))
         {
-            ref readonly var part = ref bodyParts.GetReadonlyByDenseIndex(denseIndex);
             if (part.IsVital && part.CurrentHealth == 0)
             {
                 anyVitalPartAtZero = true;

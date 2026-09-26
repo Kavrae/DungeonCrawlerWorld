@@ -44,7 +44,7 @@ public sealed class ItemDetailsWindowController(
 
     public int? CurrentEntityId { get; private set; }
 
-    public Guid? CurrentStackInstanceId { get; private set; }
+    public uint? CurrentStackInstanceId { get; private set; }
 
     /// <summary>Settable late-bound query for the currently-open secondary/corpse-or-shop inventory window's own bounds, if any -- wired by ShellBootstrapper to SecondaryInventoryWindowController.Rectangle/ShopWindowController.Rectangle once those controllers exist (built after this one -- same construction-order reason InventoryWindowController.GetSecondaryTargetEntityId is wired the same way). A single Func is safe here because a corpse/container window and a shop window are never open together (see ShellBootstrapper's own mutual-exclusion comment) -- unlike the trade window below, which IS open at the same time as the shop, so it needs its own independent hook rather than sharing this one. Rectangle.Empty (never "inside"), not null, when nothing is open or this is never wired (e.g. test setups).</summary>
     public Func<Rectangle>? GetSecondaryInventoryWindowRectangle { get; set; }
@@ -68,7 +68,7 @@ public sealed class ItemDetailsWindowController(
     public Action? OnClosed { get; set; }
 
     /// <summary>Settable late-bound callback for the anchor window's own "Compare" title button -- wired by ShellBootstrapper to ItemComparisonController.Arm once that controller exists (built after this one). Threaded into the window itself (see ItemDetailsWindow.OnCompareRequested) via a wrapper lambda, not the property's own current value captured once, so re-assignment ordering can never matter.</summary>
-    public Action<int, Guid>? OnCompareRequested { get; set; }
+    public Action<int, uint>? OnCompareRequested { get; set; }
 
     public void Initialize(UiLayerStack layers) => _layers = layers;
 
@@ -124,7 +124,7 @@ public sealed class ItemDetailsWindowController(
     /// first (both grids only exist inside/alongside it), but this controller has no other way
     /// to anchor a first-time position if that assumption is ever violated.
     /// </summary>
-    public void Open(int entityId, Guid stackInstanceId)
+    public void Open(int entityId, uint stackInstanceId)
     {
         if (!InventoryQueries.TryFindByStackInstanceId(_stacks, entityId, stackInstanceId, out var stack) ||
             !InventoryQueries.TryResolveEffectiveItem(itemCatalog, in stack, out var definition))

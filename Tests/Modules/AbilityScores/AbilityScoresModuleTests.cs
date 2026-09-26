@@ -55,20 +55,10 @@ public sealed class AbilityScoresModuleTests
         return (ecsContext, entityId);
     }
 
-    private static AbilityScoreComponent GetStrength(EcsContext ecsContext, int entityId)
-    {
-        var pool = ecsContext.ComponentManager.GetMultiPool<AbilityScoreComponent>();
-        for (var denseIndex = pool.GetFirstDenseIndex(entityId); denseIndex != -1; denseIndex = pool.GetNextDenseIndex(denseIndex))
-        {
-            var component = pool.GetReadonlyByDenseIndex(denseIndex);
-            if (component.Type == AbilityScoreType.Strength)
-            {
-                return component;
-            }
-        }
-
-        throw new InvalidOperationException("No Strength AbilityScoreComponent found.");
-    }
+    private static AbilityScoreValue GetStrength(EcsContext ecsContext, int entityId) =>
+        AbilityScoreQueries.TryGetComponent(ecsContext.ComponentManager.GetPackedPool<AbilityScoresComponent>(), entityId, AbilityScoreType.Strength, out var score)
+            ? score
+            : throw new InvalidOperationException("No Strength ability score found.");
 
     [TestMethod]
     public void Build_MissingStatModifiersModule_ThrowsInvalidOperationException()
@@ -89,11 +79,11 @@ public sealed class AbilityScoresModuleTests
     }
 
     [TestMethod]
-    public void Build_WithStatModifiersModule_RegistersAbilityScoreComponentPool()
+    public void Build_WithStatModifiersModule_RegistersAbilityScoresComponentPool()
     {
         var (ecsContext, _) = BuildAndGrantStrength(baseValue: 5);
 
-        Assert.IsTrue(ecsContext.ComponentManager.IsRegistered<AbilityScoreComponent>());
+        Assert.IsTrue(ecsContext.ComponentManager.IsRegistered<AbilityScoresComponent>());
     }
 
     [TestMethod]

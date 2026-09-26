@@ -1,9 +1,11 @@
 using Engine.ECS.Components;
 using Engine.ECS.Systems;
 using Engine.Math;
+using Game.Modules.Actions;
 using Game.Modules.Actions.Components;
 using Game.Modules.Core.Components;
 using Game.Modules.Death.Components;
+using Game.Modules.Health;
 using Game.Modules.Health.Components;
 using Game.Modules.Inventory.Components;
 using Game.Modules.Movement.Components;
@@ -13,6 +15,7 @@ using Game.Modules.ProcessingTier;
 using Game.Modules.ProcessingTier.Components;
 using Game.Modules.Race.Components;
 using Game.World;
+using Game.Blueprints;
 
 namespace Game.Modules.NpcBehavior;
 
@@ -33,6 +36,8 @@ public sealed class NpcBehaviorModule : IGameModule
 
     private IMapQuery _mapQuery = null!;
     private MathUtility _mathUtility = null!;
+    private ActionCatalog _actionCatalog = null!;
+    private BlueprintRegistry _creatures = null!;
     private ProcessingTierEvents _processingTierEvents = null!;
 
     public void Configure(GameModuleContext context)
@@ -40,6 +45,8 @@ public sealed class NpcBehaviorModule : IGameModule
         _mapQuery = context.MapQuery;
         _mathUtility = context.MathUtility;
         _processingTierEvents = context.ProcessingTierEvents;
+        _actionCatalog = context.Actions;
+        _creatures = context.Definitions;
     }
 
     public void RegisterComponents(ComponentManager componentManager) =>
@@ -65,10 +72,10 @@ public sealed class NpcBehaviorModule : IGameModule
             componentManager.GetDirectPool<TransformComponent>(),
             componentManager.GetPackedPool<ActionLockComponent>(),
             componentManager.GetPackedPool<SimpleHealthComponent>(),
-            componentManager.GetMultiPool<BodyPartComponent>(),
+            EntityBodyParts.For(componentManager, _creatures),
             componentManager.GetMultiPool<InventoryItemStackComponent>(),
-            componentManager.GetMultiPool<ActionInstanceComponent>(),
-            componentManager.GetMultiPool<RaceComponent>(),
+            EntityActions.For(componentManager, _actionCatalog, _creatures),
+            componentManager.GetPackedPool<RaceSlotsComponent>(),
             componentManager.GetPackedPool<PendingActionActivationComponent>(),
             componentManager.GetPackedPool<PendingConsumableActivationComponent>(),
             _mapQuery,

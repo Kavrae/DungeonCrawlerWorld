@@ -10,6 +10,7 @@ using Game.Modules.AbilityScores.Components;
 using Game.Modules.BodyPartEffects.Components;
 using Game.Modules.Core.Components;
 using Game.Modules.Death.Components;
+using Game.Modules.Health;
 using Game.Modules.Health.Components;
 using Game.Modules.Mana.Components;
 using Game.Modules.ProcessingTier;
@@ -18,6 +19,7 @@ using Game.Modules.StatModifiers.Components;
 using Game.Modules.StatusEffectAura.Components;
 using Game.Modules.StatusEffects;
 using Game.World;
+using Game.Blueprints;
 
 namespace Game.Modules.Actions;
 
@@ -57,6 +59,7 @@ public sealed class ActionsModule : IGameModule
     private SimulationScope _simulationScope = null!;
     private EntityKeys _entityKeys = null!;
     private SimulationClock _simulationClock = null!;
+    private BlueprintRegistry _creatures = null!;
 
     public void Configure(GameModuleContext context)
     {
@@ -70,25 +73,29 @@ public sealed class ActionsModule : IGameModule
         _simulationScope = context.SimulationScope;
         _entityKeys = context.EntityKeys;
         _simulationClock = context.SimulationClock;
+        _creatures = context.Definitions;
     }
 
     public void RegisterComponents(ComponentManager componentManager)
     {
-        componentManager.RegisterMultiPool<ActionInstanceComponent>();
+        componentManager.RegisterMultiPool<ActionInstanceComponent>(initialCapacity: 64);
+
+        // Sparse: written the first time an entity uses an action that has a cooldown at all.
+        componentManager.RegisterMultiPool<ActionCooldownComponent>(initialCapacity: 64);
         componentManager.RegisterPackedPool<PendingDelayedActionComponent>(
             static (ref PendingDelayedActionComponent existing, PendingDelayedActionComponent incoming) => existing = incoming);
         componentManager.RegisterPackedPool<DodgingComponent>(
             static (ref DodgingComponent existing, DodgingComponent incoming) => existing = incoming);
         componentManager.RegisterPackedPool<PendingActionActivationComponent>(
             static (ref PendingActionActivationComponent existing, PendingActionActivationComponent incoming) => existing = incoming);
-        // Player-only, 24 hotkey slots total -- small entity-index seed, dense capacity matches the slot count.
-        componentManager.RegisterMultiPool<ActionHotkeyBindingComponent>(maximumEntityCount: 2, initialCapacity: 24);
+        // Player-only, 24 hotkey slots total -- dense capacity matches the slot count.
+        componentManager.RegisterMultiPool<ActionHotkeyBindingComponent>(initialCapacity: 24);
         // Player-only, only 4 expansions exist.
         componentManager.RegisterPackedPool<HotkeyExpansionUnlockComponent>(
-            static (ref existing, incoming) => existing = incoming, maximumEntityCount: 2, initialCapacity: 4);
+            static (ref existing, incoming) => existing = incoming, initialCapacity: 4);
         componentManager.RegisterPackedPool<PotionCooldownComponent>(static (ref existing, incoming) => existing = incoming);
-        // Player-only, exceedingly rare (hours between masteries) -- small seed, grows organically.
-        componentManager.RegisterMultiPool<ScrollMasteryComponent>(maximumEntityCount: 2, initialCapacity: 8);
+        // Player-only, exceedingly rare (hours between masteries) -- starts small, grows organically.
+        componentManager.RegisterMultiPool<ScrollMasteryComponent>(initialCapacity: 8);
     }
 
     public void RegisterSystems(SystemManager systemManager, ComponentManager componentManager)
@@ -106,10 +113,10 @@ public sealed class ActionsModule : IGameModule
         var statModifiers = componentManager.GetOptionalMultiPool<StatModifierComponent>();
         var deadEntities = componentManager.GetOptionalPackedPool<DeadComponent>();
         var mana = componentManager.GetOptionalPackedPool<ManaComponent>();
-        var abilityScores = componentManager.GetOptionalMultiPool<AbilityScoreComponent>();
+        var abilityScores = componentManager.GetOptionalPackedPool<AbilityScoresComponent>();
         var auraSources = componentManager.GetOptionalMultiPool<StatusEffectAuraSourceComponent>();
         var hotkeyExpansionUnlocks = componentManager.GetPackedPool<HotkeyExpansionUnlockComponent>();
-        var bodyParts = componentManager.GetOptionalMultiPool<BodyPartComponent>();
+        var bodyParts = componentManager.IsRegistered<BodyPartStateComponent>() ? EntityBodyParts.For(componentManager, _creatures) : null;
         var meleeDisabled = componentManager.GetOptionalPackedPool<MeleeDisabledComponent>();
         var dodgingEntities = componentManager.GetPackedPool<DodgingComponent>();
 
@@ -123,7 +130,7 @@ public sealed class ActionsModule : IGameModule
 
         systemManager.Register(new DelayedActionSystem(
             componentManager.GetPackedPool<PendingDelayedActionComponent>(),
-            componentManager.GetMultiPool<ActionInstanceComponent>(),
+            EntityActions.For(componentManager, _actionCatalog, _creatures),
             componentManager.GetPackedPool<SimpleHealthComponent>(),
             _actionCatalog,
             _mapQuery,
@@ -142,12 +149,13 @@ public sealed class ActionsModule : IGameModule
             dodgingEntities,
             _simulationScope,
             processingTiers,
-            _processingTierEvents));
+            _processingTierEvents,
+            _creatures));
 
         systemManager.Register(new ActionActivationSystem(
             componentManager.GetPackedPool<PendingActionActivationComponent>(),
             componentManager.GetPackedPool<ActionLockComponent>(),
-            componentManager.GetMultiPool<ActionInstanceComponent>(),
+            EntityActions.For(componentManager, _actionCatalog, _creatures),
             componentManager.GetPackedPool<PendingDelayedActionComponent>(),
             componentManager.GetPackedPool<SimpleHealthComponent>(),
             _actionCatalog,
@@ -167,7 +175,8 @@ public sealed class ActionsModule : IGameModule
             bodyParts,
             meleeDisabled,
             dodgingEntities,
-            processingTiers));
+            processingTiers,
+            _creatures));
     }
 
     /// <summary>A staggered entity loses its windup, and with it the time the windup already cost: the lock it set is kept.</summary>

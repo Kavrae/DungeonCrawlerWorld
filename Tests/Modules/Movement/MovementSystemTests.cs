@@ -368,7 +368,7 @@ public sealed class MovementSystemTests
         var actionLockPool = CreateActionLockPool();
         var movementPool = CreateMovementPool();
         var mapQuery = new FakeMapQuery(new Vector3Int(5, 5, 1));
-        var statModifiers = new MultiComponentPool<StatModifierComponent>(maximumEntityCount: 10, initialCapacity: 4);
+        var statModifiers = new MultiComponentPool<StatModifierComponent>(entityCapacity: 10, initialCapacity: 4);
         // +100% (doubling) multiplicative debuff -- the same shape BodyPartEffectsSystem grants for a damaged leg.
         statModifiers.Add(0, new StatModifierComponent(StatModifierTarget.MovementLockFrames, StatModifierOperation.Multiplicative, StatModifierPolarity.Debuff, canModify: false, magnitude: 1f, expiresAtFrame: FrameDeadline.Never, ActionSource.Admin));
 
@@ -458,7 +458,7 @@ public sealed class MovementSystemTests
         actionLockPool.Add(0, new ActionLockComponent(standardLockFrames: 10, currentLockTotalFrames: 0, unlockedAtFrame: 0));
         movementPool.Add(0, new MovementComponent(MovementMode.Random, null, new Vector3Int(3, 2, 0)));
 
-        var auraSources = new MultiComponentPool<StatusEffectAuraSourceComponent>(maximumEntityCount: 10, initialCapacity: 4);
+        var auraSources = new MultiComponentPool<StatusEffectAuraSourceComponent>(entityCapacity: 10, initialCapacity: 4);
         auraSources.Add(0, new StatusEffectAuraSourceComponent(StatusEffectType.Poison, auraAndGlowStrength: 8, Color.DarkGreen));
 
         EntityMovedEvent? received = null;

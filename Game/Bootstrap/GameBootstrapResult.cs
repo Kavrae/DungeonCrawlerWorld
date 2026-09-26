@@ -6,7 +6,8 @@ using Game.Modules.Inventory;
 using Game.Modules.ProcessingTier;
 using Game.Modules.StatusEffects;
 using Game.World;
+using Game.Blueprints;
 
 namespace Game.Bootstrap;
 
-public sealed record GameBootstrapResult(EcsContext EcsContext, IReadOnlyList<ModuleFailure> Failures, ActionCatalog ActionCatalog, FrameEventBuffer<EntityMovedEvent> MovedEntities, ItemCatalog ItemCatalog, StatusEffectDisplayRegistry StatusEffectDisplays, LocalTierRoster LocalTierRoster, ProcessingTierResolver ProcessingTierResolver, Terrain.TerrainRegistry Terrain);
+public sealed record GameBootstrapResult(EcsContext EcsContext, IReadOnlyList<ModuleFailure> Failures, ActionCatalog ActionCatalog, FrameEventBuffer<EntityMovedEvent> MovedEntities, ItemCatalog ItemCatalog, StatusEffectDisplayRegistry StatusEffectDisplays, LocalTierRoster LocalTierRoster, ProcessingTierResolver ProcessingTierResolver, Terrain.TerrainRegistry Terrain, Blueprints.BlueprintRegistry Definitions, Spawning.SpawnRecordRebuilder SpawnRecordRebuilder, Spawning.CreatureSkeletons Skeletons, Spawning.EntityFactory Factory);

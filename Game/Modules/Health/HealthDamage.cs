@@ -37,7 +37,7 @@ public static class HealthDamage
         string damageType,
         long now,
         MultiComponentPool<StatModifierComponent>? statModifiers = null,
-        MultiComponentPool<BodyPartComponent>? bodyParts = null,
+        EntityBodyParts? bodyParts = null,
         MathUtility? mathUtility = null,
         PackedComponentPool<DeadComponent>? deadEntities = null,
         BodyPartTargetRule? targetRule = null,

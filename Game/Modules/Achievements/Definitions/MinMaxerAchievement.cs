@@ -27,7 +27,7 @@ public sealed class MinMaxerAchievement : IAchievementDefinition
 
     private static bool AllCoreScoresAtCap(AchievementTriggerContext context)
     {
-        var abilityScores = context.ComponentManager.GetMultiPool<AbilityScoreComponent>();
+        var abilityScores = context.ComponentManager.GetPackedPool<AbilityScoresComponent>();
         var playerEntityId = context.PlayerQuery!.PlayerEntityId;
 
         foreach (var type in Enum.GetValues<AbilityScoreType>())

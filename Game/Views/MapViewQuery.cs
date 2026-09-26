@@ -1,6 +1,7 @@
 using Engine.ECS.Components;
 using Engine.ECS.Components.Stores;
 using Engine.Math;
+using Game.Spawning;
 using Game.Modules.Actions;
 using Game.Modules.Actions.Components;
 using Game.Modules.Containers.Components;
@@ -15,6 +16,7 @@ using Game.Modules.StatModifiers;
 using Game.Modules.StatModifiers.Components;
 using Game.Terrain;
 using Microsoft.Xna.Framework;
+using Game.Blueprints;
 
 namespace Game.Views;
 
@@ -30,13 +32,13 @@ public sealed class MapViewQuery : IMapViewQuery
     private readonly TerrainRegistry _terrain;
     private readonly ActionCatalog _actionCatalog;
     private readonly DirectComponentPool<TransformComponent> _transforms;
-    private readonly DirectComponentPool<GlyphComponent> _glyphs;
-    private readonly DirectComponentPool<SpriteComponent> _sprites;
-    private readonly DirectComponentPool<BackgroundComponent> _backgrounds;
-    private readonly DirectComponentPool<DisplayTextComponent> _displayTexts;
+    private readonly PackedComponentPool<GlyphComponent> _glyphs;
+    private readonly PackedComponentPool<SpriteComponent> _sprites;
+    private readonly PackedComponentPool<BackgroundComponent> _backgrounds;
+    private readonly EntityNaming _naming;
     private readonly MultiComponentPool<NonBlockingComponent> _nonBlocking;
     private readonly PackedComponentPool<SimpleHealthComponent> _health;
-    private readonly MultiComponentPool<BodyPartComponent>? _bodyParts;
+    private readonly EntityBodyParts? _bodyParts;
     private readonly MultiComponentPool<StatModifierComponent>? _statModifiers;
     private readonly PackedComponentPool<DeadComponent>? _dead;
     private readonly MultiComponentPool<InventoryItemStackComponent>? _inventoryStacks;
@@ -46,8 +48,11 @@ public sealed class MapViewQuery : IMapViewQuery
     private readonly PackedComponentPool<ActionLockComponent>? _actionLocks;
     private readonly PackedComponentPool<PendingDelayedActionComponent>? _pendingDelayedActions;
     private readonly PackedComponentPool<DodgingComponent>? _dodging;
+    private readonly BlueprintRegistry? _creatures;
+    private readonly DirectComponentPool<SpawnRecordComponent>? _spawnRecords;
 
-    public MapViewQuery(World.World world, ComponentManager componentManager, ActionCatalog actionCatalog, TerrainRegistry terrain)
+    /// <param name="creatures">The blueprint definitions, for drawing and naming every entity that holds no visual or name of its own -- which is nearly all of them, built or skeleton. Optional: without it, such an entity draws nothing.</param>
+    public MapViewQuery(World.World world, ComponentManager componentManager, ActionCatalog actionCatalog, TerrainRegistry terrain, BlueprintRegistry? creatures = null)
     {
         ArgumentNullException.ThrowIfNull(world);
         ArgumentNullException.ThrowIfNull(componentManager);
@@ -58,13 +63,13 @@ public sealed class MapViewQuery : IMapViewQuery
         _terrain = terrain;
         _actionCatalog = actionCatalog;
         _transforms = componentManager.GetDirectPool<TransformComponent>();
-        _glyphs = componentManager.GetDirectPool<GlyphComponent>();
-        _sprites = componentManager.GetDirectPool<SpriteComponent>();
-        _backgrounds = componentManager.GetDirectPool<BackgroundComponent>();
-        _displayTexts = componentManager.GetDirectPool<DisplayTextComponent>();
+        _glyphs = componentManager.GetPackedPool<GlyphComponent>();
+        _sprites = componentManager.GetPackedPool<SpriteComponent>();
+        _backgrounds = componentManager.GetPackedPool<BackgroundComponent>();
+        _naming = EntityNaming.For(componentManager, creatures);
         _nonBlocking = componentManager.GetMultiPool<NonBlockingComponent>();
         _health = componentManager.GetPackedPool<SimpleHealthComponent>();
-        _bodyParts = componentManager.GetOptionalMultiPool<BodyPartComponent>();
+        _bodyParts = componentManager.IsRegistered<BodyPartStateComponent>() ? EntityBodyParts.For(componentManager, creatures) : null;
         _statModifiers = componentManager.GetOptionalMultiPool<StatModifierComponent>();
         _dead = componentManager.GetOptionalPackedPool<DeadComponent>();
         _inventoryStacks = componentManager.GetOptionalMultiPool<InventoryItemStackComponent>();
@@ -74,6 +79,8 @@ public sealed class MapViewQuery : IMapViewQuery
         _actionLocks = componentManager.GetOptionalPackedPool<ActionLockComponent>();
         _pendingDelayedActions = componentManager.GetOptionalPackedPool<PendingDelayedActionComponent>();
         _dodging = componentManager.GetOptionalPackedPool<DodgingComponent>();
+        _creatures = creatures;
+        _spawnRecords = componentManager.IsRegistered<SpawnRecordComponent>() ? componentManager.GetDirectPool<SpawnRecordComponent>() : null;
     }
 
     public MapBounds Bounds => _world.Map.Bounds;
@@ -163,7 +170,7 @@ public sealed class MapViewQuery : IMapViewQuery
         return TryGetDefinition(_world.GetTerrainAt(position), out var terrain) ? terrain.BackgroundColor : Color.White;
     }
 
-    /// <remarks>The glyph pool is only read when there is no sprite: most drawn entities have one, and every skipped read is a scattered access into an entity-indexed array on the per-tile draw path.</remarks>
+    /// <remarks>An entity's own SpriteComponent or GlyphComponent -- a per-instance override -- wins over its blueprint's appearance. The glyph pool is only read when there is no sprite: every skipped read is a scattered access into an entity-indexed array on the per-tile draw path. The blueprint path carries the glyph beside the sprite (renderers draw the sprite when there is one), so a reader that only shows glyphs still gets one.</remarks>
     public bool TryGetVisual(int entityId, out EntityVisualView visual)
     {
         var isDead = _dead?.Has(entityId) == true;
@@ -178,6 +185,16 @@ public sealed class MapViewQuery : IMapViewQuery
         {
             visual = new EntityVisualView(null, glyph.Glyph, glyph.GlyphColor, isDead);
             return true;
+        }
+
+        if (TryGetBlueprintAppearance(entityId, out var record, out var appearance))
+        {
+            SpriteView? blueprintSprite = appearance.TryGetSprite(record.Seed, out var spriteCell) ? new SpriteView(spriteCell.SheetPath, spriteCell.SourceRectangle) : null;
+            if (blueprintSprite is not null || appearance.Glyph.Length > 0)
+            {
+                visual = new EntityVisualView(blueprintSprite, appearance.Glyph, appearance.GlyphColor, isDead);
+                return true;
+            }
         }
 
         visual = default;
@@ -241,8 +258,23 @@ public sealed class MapViewQuery : IMapViewQuery
         _actionLocks is not null && _actionLocks.TryGetReadonly(entityId, out var actionLock) ? actionLock.CurrentLockTotalFrames : 0;
 
     public EntityInteractionView GetInteraction(int entityId) => new(
-        _displayTexts.TryGetReadonly(entityId, out var displayText) ? displayText.Name : "Unknown",
+        ResolveName(entityId),
         _shops?.Has(entityId) == true,
         _containers?.Has(entityId) == true,
         _dead?.Has(entityId) == true);
+
+    private string ResolveName(int entityId) => _naming.NameOf(entityId);
+
+    /// <summary>An entity with a spawn record and no visual of its own -- which is every entity not given one -- draws as its blueprint's appearance for its seed, built or not.</summary>
+    private bool TryGetBlueprintAppearance(int entityId, out SpawnRecordComponent record, out EntityAppearance appearance)
+    {
+        if (_creatures is not null && _spawnRecords is not null && _spawnRecords.TryGetReadonly(entityId, out record) && _creatures.TryGetAppearance(record.BlueprintId, out appearance))
+        {
+            return true;
+        }
+
+        record = default;
+        appearance = null!;
+        return false;
+    }
 }

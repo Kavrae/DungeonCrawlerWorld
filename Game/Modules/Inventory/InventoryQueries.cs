@@ -51,7 +51,7 @@ public static class InventoryQueries
     /// AbilityScoreEffects.SetBaseValue already uses to find one matching instance among several.
     /// What a hotkey binding or an in-flight activation resolves through.
     /// </summary>
-    public static bool TryFindByStackInstanceId(MultiComponentPool<InventoryItemStackComponent> stacks, int entityId, Guid stackInstanceId, out InventoryItemStackComponent stack)
+    public static bool TryFindByStackInstanceId(MultiComponentPool<InventoryItemStackComponent> stacks, int entityId, uint stackInstanceId, out InventoryItemStackComponent stack)
     {
         for (var denseIndex = stacks.GetFirstDenseIndex(entityId); denseIndex != -1; denseIndex = stacks.GetNextDenseIndex(denseIndex))
         {

@@ -9,7 +9,7 @@ namespace Tests.Modules.StatModifiers;
 [TestClass]
 public sealed class StatModifierMathTests
 {
-    private static MultiComponentPool<StatModifierComponent> CreatePool() => new(maximumEntityCount: 10, initialCapacity: 4);
+    private static MultiComponentPool<StatModifierComponent> CreatePool() => new(entityCapacity: 10, initialCapacity: 4);
 
     private static StatModifierComponent Modifier(StatModifierTarget target, StatModifierOperation operation, float magnitude) =>
         new(target, operation, StatModifierPolarity.Buff, canModify: false, magnitude, FrameDeadline.Never, ActionSource.Admin);

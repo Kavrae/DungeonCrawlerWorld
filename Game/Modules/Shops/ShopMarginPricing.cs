@@ -35,13 +35,13 @@ public static class ShopMarginPricing
     /// The ShopComponent every real trade/display should price against instead of the raw one read
     /// off the shop entity -- same AllowedTags, BuyMultiplier/SellMultiplier narrowed by
     /// buyerOrSellerEntityId's own Charisma. Falls back to Charisma's own minimum (1, no reduction)
-    /// if the entity has none or the AbilityScoreComponent pool isn't registered at all -- the same
+    /// if the entity has none or the AbilityScoresComponent pool isn't registered at all -- the same
     /// optional-pool tolerance ManaRegenSystem/SimpleHealthRegenSystem already extend to a missing
     /// ability-score setup.
     /// </summary>
     public static ShopComponent ResolveEffectiveShop(ComponentManager componentManager, ShopComponent shop, int buyerOrSellerEntityId)
     {
-        var abilityScores = componentManager.GetOptionalMultiPool<AbilityScoreComponent>();
+        var abilityScores = componentManager.GetOptionalPackedPool<AbilityScoresComponent>();
         var charismaTotal = abilityScores is not null && AbilityScoreQueries.TryGetComponent(abilityScores, buyerOrSellerEntityId, AbilityScoreType.Charisma, out var charisma)
             ? charisma.Total
             : AbilityScoreMath.MinimumBaseValue;

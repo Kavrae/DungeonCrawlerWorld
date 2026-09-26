@@ -58,6 +58,19 @@ public sealed class FrameEventBuffer<T> : IFrameScoped
         _items.Add(item);
     }
 
+    /// <summary>Records item for this cycle's consumers, or returns false without recording it when Items has already been read this cycle.</summary>
+    /// <remarks>For a producer that can legitimately run at any point in the frame (a spawn from a system, or from Presentation between frames) and has somewhere else to put a late item -- see Record for why a late item is otherwise an error.</remarks>
+    public bool TryRecord(T item)
+    {
+        if (_hasBeenRead)
+        {
+            return false;
+        }
+
+        _items.Add(item);
+        return true;
+    }
+
     /// <summary>Clears the buffer for the next frame.</summary>
     public void ClearFrame()
     {

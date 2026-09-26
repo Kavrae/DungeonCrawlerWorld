@@ -11,9 +11,9 @@ namespace Game.Modules.Inventory.Components;
 /// References the exact stack being activated by StackInstanceId, not ItemDefinitionId -- the
 /// same per-slot item divergence reasoning ItemHotkeyBindingComponent's own doc comment gives.
 /// </summary>
-public struct PendingConsumableActivationComponent(Guid stackInstanceId, Vector3Int[] targetTiles)
+public struct PendingConsumableActivationComponent(uint stackInstanceId, Vector3Int[] targetTiles)
 {
-    public Guid StackInstanceId { get; set; } = stackInstanceId;
+    public uint StackInstanceId { get; set; } = stackInstanceId;
     public Vector3Int[] TargetTiles { get; set; } = targetTiles;
 
     public override readonly string ToString() => $"StackInstanceId : {StackInstanceId}\nTargetTiles : [{string.Join(", ", TargetTiles)}]";

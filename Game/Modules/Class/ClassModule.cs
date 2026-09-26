@@ -11,7 +11,14 @@ public sealed class ClassModule : IModule
 
     public void RegisterComponents(ComponentManager componentManager)
     {
-        componentManager.RegisterMultiPool<ClassComponent>();
+        componentManager.RegisterPackedPool<ClassSlotsComponent>(static (ref existing, incoming) =>
+        {
+            existing.Add(incoming.Class1);
+            existing.Add(incoming.Class2);
+        });
+
+        // Sparse: only the player ever holds a class its two slots cannot express.
+        componentManager.RegisterMultiPool<ClassMembershipComponent>(initialCapacity: 8);
     }
 
     public void RegisterSystems(SystemManager systemManager, ComponentManager componentManager)

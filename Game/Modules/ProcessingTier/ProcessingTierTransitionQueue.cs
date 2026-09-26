@@ -24,6 +24,11 @@ namespace Game.Modules.ProcessingTier;
 /// first is what the player actually walks into; freezing a neighborhood behind them a few frames
 /// late only costs a few extra visits at Neighborhood speed.
 /// </para>
+/// <para>
+/// The thaw band can be held (TryDequeue's thawingHeld) while the other band keeps draining: thawing
+/// builds every creature skeleton it reaches, and holding it until the neighborhoods leaving the
+/// window are unloaded lets those builds reuse the storage the unloaded creatures free.
+/// </para>
 /// </remarks>
 public sealed class ProcessingTierTransitionQueue
 {
@@ -44,14 +49,16 @@ public sealed class ProcessingTierTransitionQueue
     /// <summary>Queues one neighborhood layer, in the thaw band when it is becoming simulated.</summary>
     public void Enqueue(int cellX, int cellY, int z, bool isThawing) => (isThawing ? _thawing : _other).Enqueue((cellX, cellY, z));
 
-    /// <summary>Takes the next waiting entity id, copying the next queued neighborhood's membership when the current one runs out. Thaw band first.</summary>
-    public bool TryDequeue(NeighborhoodMembershipIndex membership, out int entityId)
+    /// <summary>Takes the next waiting entity id, copying the next queued neighborhood's membership when the current one runs out. Thaw band first, unless thawingHeld.</summary>
+    /// <param name="thawingHeld">Starts no thaw-band neighborhood; one already being drained finishes.</param>
+    public bool TryDequeue(NeighborhoodMembershipIndex membership, out int entityId, bool thawingHeld = false)
     {
         ArgumentNullException.ThrowIfNull(membership);
 
         while (_cursor >= _currentEntityIds.Count)
         {
-            if (!_thawing.TryDequeue(out var cell) && !_other.TryDequeue(out cell))
+            var cell = default((int CellX, int CellY, int Z));
+            if (!(!thawingHeld && _thawing.TryDequeue(out cell)) && !_other.TryDequeue(out cell))
             {
                 entityId = -1;
                 return false;

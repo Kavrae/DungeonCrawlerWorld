@@ -1,13 +1,9 @@
-using Engine.ECS.Components;
-using Engine.Math;
 using Game.Blueprints.NPCs;
 using Game.Modules.AbilityScores;
 using Game.Modules.Actions;
-using Game.Modules.Actions.Components;
 using Game.Modules.Actions.Definitions.DirectActions;
 using Game.Modules.Core.Components;
 using Game.Modules.Movement.Components;
-using Game.Modules.Race.Components;
 using Microsoft.Xna.Framework;
 
 namespace Game.Blueprints.Races;
@@ -16,16 +12,16 @@ namespace Game.Blueprints.Races;
 /// A test fixture race for exercising melee status effects, deliberately with no
 /// SimpleHealthComponent.
 /// </summary>
-public sealed class Ghost(MathUtility mathUtility) : IBlueprint
+public static class Ghost
 {
-    private static readonly Guid RaceId = new("7e6d6a3a-6b8f-4f0a-9f2a-7c9b1e6f2a3d");
-    private const string RaceName = "Ghost";
+    public static readonly Guid Id = new("7e6d6a3a-6b8f-4f0a-9f2a-7c9b1e6f2a3d");
+    public const string Name = "Ghost";
 
     private static readonly string[] PersonalNameOptions = ["Ghost1", "Ghost2"];
 
     private const string Description = "A wandering spirit with no physical form. Used to test melee status effects against a target with no Health to damage.";
 
-    private static readonly string[] DisplayNames = DisplayNameCache.BuildDisplayNames(PersonalNameOptions, RaceName);
+    private static readonly string[] DisplayNames = DisplayNameCache.BuildDisplayNames(PersonalNameOptions, Name);
 
     /// <summary>Hardcoded stopgap until the Additive/Multiplicative bonuses system exists -- see TODO.md.</summary>
     private const ushort QuickAttackDamage = 5;
@@ -39,30 +35,41 @@ public sealed class Ghost(MathUtility mathUtility) : IBlueprint
     /// <summary>ᗣ (U+15A3, Canadian Aboriginal Syllabics). Requires Symbola-Emoji.ttf loaded as a fallback font (see FontService)</summary>
     private const string Glyph = "G";
 
+    public static readonly AppearanceFacet Appearance = new() { DisplayNames = DisplayNames, Description = Description, Glyph = Glyph, GlyphColor = Color.Blue, SpriteName = AppearanceFacet.NoSprite };
+
     /// <summary>One override shared by every creature of this race: an ActionDefinition is never changed in place, only replaced, and building it per creature was most of what a creature allocated.</summary>
     private static readonly ActionDefinition QuickAttackOverride = ActionOverrideEffects.OverrideFlatDamage(QuickAttackAction.Build(), QuickAttackDamage);
 
     /// <inheritdoc cref="QuickAttackOverride"/>
     private static readonly ActionDefinition PowerAttackOverride = ActionOverrideEffects.OverrideFlatDamage(PowerAttackAction.Build(), PowerAttackDamage);
 
-    public void Build(ComponentManager componentManager, int entityId)
+    /// <summary>What every creature of this race can do -- held on its race definition, not on each creature (see ActionGrant). Dodge has no override: it rolls its catalog definition unchanged.</summary>
+    public static readonly ActionGrant[] ActionGrants =
+    [
+        new(QuickAttackAction.Id, QuickAttackOverride),
+        new(PowerAttackAction.Id, PowerAttackOverride),
+        new(DodgeAction.Id),
+    ];
+
+    public static readonly BlueprintDefinition Definition = new(Id, Name)
     {
-        componentManager.Merge(entityId, new RaceComponent(RaceId, RaceName, Description));
+        Build = Build,
+        Appearance = Appearance,
+        Race = new RaceFacet(),
+        NonBlocking = NonBlockingKind.Phasing,
+        Actions = ActionGrants,
+        Layer = MapLayer.UnderGround
+    };
 
-        componentManager.Merge(entityId, new DisplayTextComponent(DisplayNames[mathUtility.Next(0, DisplayNames.Length)], Description));
+    private static void Build(BlueprintContext context)
+    {
+        var componentManager = context.ComponentManager;
+        var entityId = context.EntityId;
 
-        componentManager.Merge(entityId, new GlyphComponent(Glyph, Color.Blue));
         componentManager.Merge(entityId, new MovementComponent(MovementMode.Random, null, null));
         componentManager.Merge(entityId, new ActionLockComponent(standardLockFrames: 48, currentLockTotalFrames: 0, unlockedAtFrame: 0));
-        componentManager.Merge(entityId, new TransformComponent(TransformComponent.UnplacedOn(MapLayer.Ground), new Vector2Byte(1, 1)));
 
-        componentManager.Merge(entityId, new NonBlockingComponent(NonBlockingKind.Phasing));
-        componentManager.Merge(entityId, new ActionInstanceComponent(QuickAttackAction.Id, QuickAttackOverride));
-        componentManager.Merge(entityId, new ActionInstanceComponent(PowerAttackAction.Id, PowerAttackOverride));
-
-        componentManager.Merge(entityId, new ActionInstanceComponent(DodgeAction.Id, overrideDefinition: null));
-
-        TemporaryNpcLootGrant.GrantRandomStartingLoot(componentManager, entityId, mathUtility);
+        TemporaryNpcLootGrant.GrantRandomStartingLoot(componentManager, entityId, context.Rolls);
 
         AbilityScoreEffects.GrantDefaults(componentManager, entityId, DefaultAbilityScoreBaseValue);
     }

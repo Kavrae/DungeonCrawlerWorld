@@ -2,6 +2,7 @@ using Engine.ECS.Components.Stores;
 using Engine.ECS.Systems;
 using Engine.Utilities;
 using Game.Modules.BodyPartEffects.Components;
+using Game.Modules.Health;
 using Game.Modules.Health.Components;
 using Game.Modules.ProcessingTier;
 using Game.Modules.ProcessingTier.Components;
@@ -38,14 +39,15 @@ public sealed class BodyPartEffectsSystem : ITieredSystem
 
     public byte StripeCount => (byte)GameTiming.FramesPerSecond;
 
-    private readonly MultiComponentPool<BodyPartComponent> _bodyParts;
+    private readonly EntityBodyParts _bodyParts;
     private readonly PackedComponentPool<MovementDisabledComponent> _movementDisabled;
     private readonly PackedComponentPool<MeleeDisabledComponent> _meleeDisabled;
     private readonly MultiComponentPool<StatModifierComponent>? _statModifiers;
     private readonly TieredEntityStripeSet _tieredStripeSet;
 
     public BodyPartEffectsSystem(
-        MultiComponentPool<BodyPartComponent> bodyParts,
+        EntityBodyParts bodyParts,
+        PackedComponentPool<BodyPartStateComponent> bodyPartStates,
         PackedComponentPool<MovementDisabledComponent> movementDisabled,
         PackedComponentPool<MeleeDisabledComponent> meleeDisabled,
         DirectComponentPool<ProcessingTierComponent> processingTiers,
@@ -57,7 +59,7 @@ public sealed class BodyPartEffectsSystem : ITieredSystem
         _meleeDisabled = meleeDisabled;
         _statModifiers = statModifiers;
 
-        _tieredStripeSet = ProcessingTierWiring.CreateAndWire(StripeCount, bodyParts, processingTiers, processingTierEvents);
+        _tieredStripeSet = ProcessingTierWiring.CreateAndWire(StripeCount, bodyPartStates, processingTiers, processingTierEvents);
     }
 
     public void Update(EngineTime time, byte stripeIndex) => TieredSystemRunner.Run(this, time);
@@ -81,9 +83,8 @@ public sealed class BodyPartEffectsSystem : ITieredSystem
         var allDisabled = true;
         var combinedMultiplier = 1f;
 
-        for (var denseIndex = _bodyParts.GetFirstDenseIndex(entityId); denseIndex != -1; denseIndex = _bodyParts.GetNextDenseIndex(denseIndex))
+        foreach (var part in _bodyParts.Parts(entityId))
         {
-            ref readonly var part = ref _bodyParts.GetReadonlyByDenseIndex(denseIndex);
 
             if (part.Type == BodyPartType.Wing && !part.IsDisabled)
             {
@@ -131,9 +132,8 @@ public sealed class BodyPartEffectsSystem : ITieredSystem
         var allDisabled = true;
         var combinedMultiplier = 1f;
 
-        for (var denseIndex = _bodyParts.GetFirstDenseIndex(entityId); denseIndex != -1; denseIndex = _bodyParts.GetNextDenseIndex(denseIndex))
+        foreach (var part in _bodyParts.Parts(entityId))
         {
-            ref readonly var part = ref _bodyParts.GetReadonlyByDenseIndex(denseIndex);
 
             if (part.Type is not (BodyPartType.Arm or BodyPartType.Hand))
             {
@@ -167,7 +167,7 @@ public sealed class BodyPartEffectsSystem : ITieredSystem
         SyncModifier(entityId, StatModifierTarget.OutgoingDamage, combinedMultiplier, Tag.Melee);
     }
 
-    private static float HealthFraction(in BodyPartComponent part) =>
+    private static float HealthFraction(in BodyPartView part) =>
         part.MaximumHealth > 0 ? MathHelper.Clamp(part.CurrentHealth / part.MaximumHealth, 0f, 1f) : 0f;
 
     /// <summary>Grants/updates/removes this system's own permanent multiplicative StatModifierComponent for target, so its effective value equals baseValue * combinedMultiplier (see StatModifierMath's own additive-then-multiplicative formula) -- StatModifierComponent's fields are get-only, so an actual change always means remove-then-re-add rather than an in-place magnitude edit.</summary>

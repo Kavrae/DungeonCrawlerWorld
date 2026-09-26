@@ -24,7 +24,7 @@ public sealed class ComponentMemoryTrackerTests
     {
         var componentManager = new ComponentManager(initialEntityCapacity: 10, initialComponentCapacity: 4);
         componentManager.RegisterDirectPool<SmallComponent>(static (ref existing, incoming) => existing = incoming);
-        componentManager.RegisterPackedPool<LargeComponent>(static (ref existing, incoming) => existing = incoming);
+        componentManager.RegisterPackedPool<LargeComponent>(static (ref existing, incoming) => existing = incoming, initialCapacity: 16);
 
         var tracker = new ComponentMemoryTracker(componentManager);
         tracker.Tick();

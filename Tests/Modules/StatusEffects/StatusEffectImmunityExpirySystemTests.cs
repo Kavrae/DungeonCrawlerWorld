@@ -13,7 +13,7 @@ public sealed class StatusEffectImmunityExpirySystemTests
 
     private static EngineTime Frame(long frame) => new(default, default, false, frame);
 
-    private static MultiComponentPool<StatusEffectImmunityComponent> CreatePool() => new(maximumEntityCount: 10, initialCapacity: 4);
+    private static MultiComponentPool<StatusEffectImmunityComponent> CreatePool() => new(entityCapacity: 10, initialCapacity: 4);
 
     private static void Run(StatusEffectImmunityExpirySystem system, long from, long to)
     {

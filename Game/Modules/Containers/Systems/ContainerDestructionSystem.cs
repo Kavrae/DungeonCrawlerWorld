@@ -16,8 +16,8 @@ namespace Game.Modules.Containers.Systems;
 /// do on Update; it only reacts when that shared dispatch fires, the same way
 /// KilledAMobAchievement's own EntityDiedEvent subscription does. Only entities carrying
 /// ContainerComponent are affected: their inventory is wiped (see TODO.md's Destroyed items entry
-/// for the eventual "mark destroyed instead of delete" follow-up) and their DisplayTextComponent
-/// is overwritten to "Destroyed" -- a creature's corpse keeps its name/inventory intact, a
+/// for the eventual "mark destroyed instead of delete" follow-up) and they are given a DisplayTextComponent
+/// naming them "Destroyed" in place of what their blueprint calls them -- a creature's corpse keeps its name/inventory intact, a
 /// destroyed container does not.
 /// </summary>
 /// <remarks>
@@ -34,12 +34,12 @@ public sealed class ContainerDestructionSystem : ISystem
 
     private readonly PackedComponentPool<ContainerComponent> _containers;
     private readonly MultiComponentPool<InventoryItemStackComponent> _inventoryStacks;
-    private readonly DirectComponentPool<DisplayTextComponent> _displayText;
+    private readonly PackedComponentPool<DisplayTextComponent> _displayText;
 
     public ContainerDestructionSystem(
         PackedComponentPool<ContainerComponent> containers,
         MultiComponentPool<InventoryItemStackComponent> inventoryStacks,
-        DirectComponentPool<DisplayTextComponent> displayText,
+        PackedComponentPool<DisplayTextComponent> displayText,
         EventBus eventBus)
     {
         _containers = containers;
@@ -61,10 +61,10 @@ public sealed class ContainerDestructionSystem : ISystem
         }
 
         _inventoryStacks.Remove(died.EntityId);
-        _displayText.TryUpdate(died.EntityId, static (ref DisplayTextComponent displayText) =>
+        var destroyed = new DisplayTextComponent(DestroyedName, DestroyedDescription);
+        if (!_displayText.TrySet(died.EntityId, destroyed))
         {
-            displayText.Name = DestroyedName;
-            displayText.Description = DestroyedDescription;
-        });
+            _displayText.Add(died.EntityId, destroyed);
+        }
     }
 }

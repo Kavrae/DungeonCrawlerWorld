@@ -8,11 +8,13 @@ using Game.Modules.AbilityScores.Components;
 using Game.Modules.Actions.Components;
 using Game.Modules.Death.Components;
 using Game.Modules.ProcessingTier;
+using Game.Modules.Health;
 using Game.Modules.Health.Components;
 using Game.Modules.StatModifiers.Components;
 using Game.Modules.StatusEffectAura.Components;
 using Game.Modules.StatusEffects;
 using Game.World;
+using Game.Blueprints;
 
 namespace Game.Modules.Actions.Systems;
 
@@ -52,7 +54,7 @@ public sealed class DelayedActionSystem : ISystem
     public byte StripeCount => 1;
 
     private readonly PackedComponentPool<PendingDelayedActionComponent> _pendingActions;
-    private readonly MultiComponentPool<ActionInstanceComponent> _actionInstances;
+    private readonly EntityActions _actions;
     private readonly PackedComponentPool<SimpleHealthComponent> _health;
     private readonly MultiComponentPool<StatModifierComponent>? _statModifiers;
     private readonly ActionCatalog _actionCatalog;
@@ -63,13 +65,14 @@ public sealed class DelayedActionSystem : ISystem
     private readonly ComponentManager _componentManager;
     private readonly EntityKeys _entityKeys;
     private readonly PackedComponentPool<DeadComponent>? _deadEntities;
-    private readonly MultiComponentPool<AbilityScoreComponent>? _abilityScores;
+    private readonly PackedComponentPool<AbilityScoresComponent>? _abilityScores;
     private readonly MathUtility _mathUtility;
     private readonly MultiComponentPool<StatusEffectAuraSourceComponent>? _auraSources;
     private readonly PackedComponentPool<HotkeyExpansionUnlockComponent>? _hotkeyExpansionUnlocks;
-    private readonly MultiComponentPool<BodyPartComponent>? _bodyParts;
+    private readonly EntityBodyParts? _bodyParts;
     private readonly PackedComponentPool<DodgingComponent>? _dodgingEntities;
     private readonly ProcessingTierQuery? _processingTiers;
+    private readonly BlueprintRegistry? _creatures;
     private readonly PackedTimerWheel<PendingDelayedActionComponent> _wheel;
 
     // Cached once instead of passing the method group every Update -- an instance method group
@@ -78,7 +81,7 @@ public sealed class DelayedActionSystem : ISystem
 
     public DelayedActionSystem(
         PackedComponentPool<PendingDelayedActionComponent> pendingActions,
-        MultiComponentPool<ActionInstanceComponent> actionInstances,
+        EntityActions actions,
         PackedComponentPool<SimpleHealthComponent> health,
         ActionCatalog actionCatalog,
         IMapQuery mapQuery,
@@ -90,17 +93,18 @@ public sealed class DelayedActionSystem : ISystem
         EntityKeys entityKeys,
         MultiComponentPool<StatModifierComponent>? statModifiers = null,
         PackedComponentPool<DeadComponent>? deadEntities = null,
-        MultiComponentPool<AbilityScoreComponent>? abilityScores = null,
+        PackedComponentPool<AbilityScoresComponent>? abilityScores = null,
         MultiComponentPool<StatusEffectAuraSourceComponent>? auraSources = null,
         PackedComponentPool<HotkeyExpansionUnlockComponent>? hotkeyExpansionUnlocks = null,
-        MultiComponentPool<BodyPartComponent>? bodyParts = null,
+        EntityBodyParts? bodyParts = null,
         PackedComponentPool<DodgingComponent>? dodgingEntities = null,
         SimulationScope? simulationScope = null,
         ProcessingTierQuery? processingTiers = null,
-        ProcessingTierEvents? processingTierEvents = null)
+        ProcessingTierEvents? processingTierEvents = null,
+        BlueprintRegistry? creatures = null)
     {
         _pendingActions = pendingActions;
-        _actionInstances = actionInstances;
+        _actions = actions;
         _health = health;
         _statModifiers = statModifiers;
         _actionCatalog = actionCatalog;
@@ -118,6 +122,7 @@ public sealed class DelayedActionSystem : ISystem
         _bodyParts = bodyParts;
         _dodgingEntities = dodgingEntities;
         _processingTiers = processingTiers;
+        _creatures = creatures;
         _resolve = Resolve;
         _wheel = new PackedTimerWheel<PendingDelayedActionComponent>(pendingActions, simulationScope);
 
@@ -139,10 +144,9 @@ public sealed class DelayedActionSystem : ISystem
             return true;
         }
 
-        if (ActionInstanceQueries.TryGet(_actionInstances, entityId, pending.ActionId, out var instance) &&
-            ActionInstanceQueries.TryResolveEffectiveAction(_actionCatalog, instance, out var action))
+        if (_actions.TryGetEffectiveAction(entityId, pending.ActionId, out var action))
         {
-            ActionEffectResolver.Apply(action, entityId, pending.TargetTiles, _mapQuery, _health, _eventBus, _mathUtility, _playerQuery, _statusEffectAppliers, _componentManager, _entityKeys, now, _statModifiers, _deadEntities, _abilityScores, _auraSources, _hotkeyExpansionUnlocks, _bodyParts, _dodgingEntities, _processingTiers);
+            ActionEffectResolver.Apply(action, entityId, pending.TargetTiles, _mapQuery, _health, _eventBus, _mathUtility, _playerQuery, _statusEffectAppliers, _componentManager, _entityKeys, now, _statModifiers, _deadEntities, _abilityScores, _auraSources, _hotkeyExpansionUnlocks, _bodyParts, _dodgingEntities, _processingTiers, _creatures);
         }
 
         return true;

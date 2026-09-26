@@ -34,7 +34,7 @@ public sealed class BodyPartBurningSystem : ISystem
     public byte StripeCount => 1;
 
     private readonly MultiComponentPool<BodyPartBurningTimerComponent> _timers;
-    private readonly MultiComponentPool<BodyPartComponent> _bodyParts;
+    private readonly EntityBodyParts _bodyParts;
     private readonly PackedComponentPool<SimpleHealthComponent> _health;
     private readonly MultiComponentPool<StatModifierComponent>? _statModifiers;
     private readonly EventBus _eventBus;
@@ -48,7 +48,7 @@ public sealed class BodyPartBurningSystem : ISystem
 
     public BodyPartBurningSystem(
         MultiComponentPool<BodyPartBurningTimerComponent> timers,
-        MultiComponentPool<BodyPartComponent> bodyParts,
+        EntityBodyParts bodyParts,
         PackedComponentPool<SimpleHealthComponent> health,
         EventBus eventBus,
         IPlayerQuery? playerQuery,
@@ -79,22 +79,21 @@ public sealed class BodyPartBurningSystem : ISystem
 
         var source = timer.Source;
 
-        var bodyPartDenseIndex = BodyPartSelection.FindByPartId(_bodyParts, entityId, timer.PartId);
-        if (bodyPartDenseIndex != -1)
+        if (_bodyParts.TryGet(entityId, timer.PartId, out _))
         {
             var effectiveAmount = MathUtility.ClampUShort(
                 StatModifierMath.GetEffectiveValue(_statModifiers, entityId, StatModifierTarget.IncomingDamage, stackCount, BurningDamageTags),
                 0,
                 ushort.MaxValue);
 
-            BodyPartDamageEffects.ApplyToPart(_bodyParts, bodyPartDenseIndex, _statModifiers, entityId, effectiveAmount, now);
+            BodyPartDamageEffects.ApplyToPart(_bodyParts, entityId, timer.PartId, _statModifiers, effectiveAmount, now);
             // Refreshed unconditionally, not only when ApplyToPart's own 0-only lockout fires --
             // a part that gets singed but never fully disabled (a small part like a Foot against
             // a lightly-stacked burn) would otherwise have zero regen protection once the fire's
             // stacks run out, since BodyPartSelection.PickLowestPercentage's separate "is
             // currently burning" exclusion stops applying the instant the last stack ticks off.
-            BodyPartDamageEffects.ResetRegenLockout(_bodyParts, bodyPartDenseIndex, now);
-            BodyPartDamageEffects.PublishDamageEvents(_health, _bodyParts, _eventBus, bodyPartDenseIndex, entityId, effectiveAmount, source, _playerQuery, StatusEffectDamageType.Describe(StatusEffectType.Burning), _statModifiers, _deadEntities);
+            BodyPartDamageEffects.ResetRegenLockout(_bodyParts, entityId, timer.PartId, now);
+            BodyPartDamageEffects.PublishDamageEvents(_health, _bodyParts, _eventBus, entityId, timer.PartId, effectiveAmount, source, _playerQuery, StatusEffectDamageType.Describe(StatusEffectType.Burning), _statModifiers, _deadEntities);
         }
 
         var remainingStacks = (byte)(stackCount - 1);

@@ -19,6 +19,7 @@ using Presentation.Input;
 using Presentation.Rendering;
 using Presentation.UI.Chrome;
 using Presentation.UI.ColorPalettes;
+using Game.Sprites;
 
 namespace Presentation.UI.Content;
 
@@ -53,14 +54,18 @@ public sealed class HotbarContent(
     SpriteSheetService spriteSheetService,
     SpriteRenderer spriteRenderer,
     Vector2 screenSize,
-    SimulationClock? simulationClock = null) : IElementContent
+    SimulationClock? simulationClock = null,
+    EntityActions? actions = null) : IElementContent
 {
     /// <summary>"Now" for reading an action's cooldown deadline (see ActionInstanceQueries.CooldownFramesRemaining). Optional only so tests that never show a cooldown needn't build one; the shell always passes the simulation's real clock.</summary>
     private readonly SimulationClock _simulationClock = simulationClock ?? new SimulationClock();
 
+    /// <summary>Optional for the same reason as the clock: a test that never shows an action cooldown needs no action lookups at all.</summary>
+    private readonly EntityActions? _actions = actions;
+
     public static readonly Vector2 SlotSize = new(HudChrome.EntrySize.Y * 2.25f, HudChrome.EntrySize.Y * 2.25f);
 
-    /// <summary>Fallback only -- every real entity that can open a hotbar gets one from PlayerBlueprint. Matches Expansion's old fixed slot count, so a missing component still shows a sensible bar rather than an empty/degenerate one.</summary>
+    /// <summary>Fallback only -- every real entity that can open a hotbar gets one from PlayerKit. Matches Expansion's old fixed slot count, so a missing component still shows a sensible bar rather than an empty/degenerate one.</summary>
     private const short DefaultUnlockedExpansionSlots = 10;
 
     private Vector2 OverlayPadding = new(4f, 2f);
@@ -311,7 +316,7 @@ public sealed class HotbarContent(
     }
 
     /// <summary>The item stack (if any) currently bound to slot -- UiInputController's content-drag path reads this at press time to capture the payload of a drag starting on an already-bound hotbar slot.</summary>
-    internal bool TryGetBoundItemStackInstanceId(HotkeySlot slot, out Guid stackInstanceId) =>
+    internal bool TryGetBoundItemStackInstanceId(HotkeySlot slot, out uint stackInstanceId) =>
         ItemHotkeyBindingQueries.TryGet(_itemHotkeyBindings, world.PlayerEntityId, slot, out stackInstanceId);
 
     /// <summary>The action (if any) currently bound to slot -- same drag-payload-capture role as TryGetBoundItemId, for a drag starting on an already-bound action slot.</summary>
@@ -372,10 +377,10 @@ public sealed class HotbarContent(
     /// not-yet-unlocked Expansion slot silently refuses the binding -- it isn't a valid drop
     /// target (see this class's own doc comment on the disabled-alpha treatment) -- rather than
     /// UiInputController needing its own separate lock-awareness. Publishes ItemHotkeyBoundEvent
-    /// -- ArchivistAchievement's trigger -- deliberately not raised by PlayerBlueprint's own
+    /// -- ArchivistAchievement's trigger -- deliberately not raised by PlayerKit's own
     /// hardcoded starting binds, which are spawn-time setup, not a player action.
     /// </summary>
-    internal void BindItem(HotkeySlot slot, Guid stackInstanceId)
+    internal void BindItem(HotkeySlot slot, uint stackInstanceId)
     {
         if (IsSlotLocked(slot))
         {
@@ -432,11 +437,12 @@ public sealed class HotbarContent(
     /// source Element entirely (e.g. InventoryItemStackCell); this method only knows the
     /// hotbar-slot half of that, handed to it already resolved.
     /// </summary>
-    internal void ResolveDroppedBinding(HotkeySlot? originSlot, HotkeySlot? destinationSlot, bool isActionDrag, Guid payloadId)
+    /// <remarks>An action is identified by a catalog Guid and an item stack by a session counter, so the payload arrives as whichever one the drag carried rather than as one shared id type.</remarks>
+    internal void ResolveDroppedBinding(HotkeySlot? originSlot, HotkeySlot? destinationSlot, Guid? actionId, uint? stackInstanceId)
     {
         if (originSlot is { } slot)
         {
-            if (isActionDrag)
+            if (actionId is not null)
             {
                 UnbindActionSlot(slot);
             }
@@ -448,13 +454,13 @@ public sealed class HotbarContent(
 
         if (destinationSlot is { } destination)
         {
-            if (isActionDrag)
+            if (actionId is { } boundAction)
             {
-                BindAction(destination, payloadId);
+                BindAction(destination, boundAction);
             }
-            else
+            else if (stackInstanceId is { } boundStack)
             {
-                BindItem(destination, payloadId);
+                BindItem(destination, boundStack);
             }
         }
     }
@@ -564,7 +570,7 @@ public sealed class HotbarContent(
     /// id, which could find the *wrong* stack once more than one diverged stack of the same
     /// ItemDefinitionId can exist side by side.
     /// </summary>
-    private bool TryResolveBoundItem(int playerEntityId, Guid stackInstanceId, out ItemDefinition item, out InventoryItemStackComponent stack)
+    private bool TryResolveBoundItem(int playerEntityId, uint stackInstanceId, out ItemDefinition item, out InventoryItemStackComponent stack)
     {
         if (!InventoryQueries.TryFindByStackInstanceId(_inventoryStacks, playerEntityId, stackInstanceId, out stack))
         {
@@ -695,11 +701,9 @@ public sealed class HotbarContent(
     private float ComputeActionFillPercentage(int playerEntityId, ActionDefinition action)
     {
         var cooldownFraction = 0f;
-        if (action.Activator.Timing.CooldownFrames is { } cooldownFrames &&
-            cooldownFrames > 0 &&
-            ActionInstanceQueries.TryGet(_actionInstances, playerEntityId, action.Id, out var instance))
+        if (_actions is not null && action.Activator.Timing.CooldownFrames is { } cooldownFrames && cooldownFrames > 0)
         {
-            cooldownFraction = (float)ActionInstanceQueries.CooldownFramesRemaining(instance, _simulationClock.CurrentFrame) / cooldownFrames;
+            cooldownFraction = (float)_actions.CooldownFramesRemaining(playerEntityId, action.Id, _simulationClock.CurrentFrame) / cooldownFrames;
         }
 
         if (cooldownFraction > 0f)

@@ -1,6 +1,7 @@
 using Engine.ECS.Systems;
 using Engine.ECS.Components;
 using Engine.ECS.Components.Stores;
+using Game.Modules.Health;
 using Game.Modules.Health.Components;
 using Game.Modules.StatModifiers;
 using Game.Modules.StatModifiers.Components;
@@ -15,14 +16,11 @@ public sealed class InspectionWindowContentTests
     private const int EntityId = 0;
 
     private static PackedComponentPool<SimpleHealthComponent> CreateHealthPool() =>
-        new(maximumEntityCount: 10, initialCapacity: 4, static (ref existing, incoming) => existing = incoming);
-
-    private static MultiComponentPool<BodyPartComponent> CreateBodyPartsPool() =>
-        new(maximumEntityCount: 10, initialCapacity: 8);
+        new(entityCapacity: 10, initialCapacity: 4, static (ref existing, incoming) => existing = incoming);
 
     private static MultiComponentPool<StatModifierComponent> CreateMaximumHealthBuffPool(float magnitude)
     {
-        var statModifiers = new MultiComponentPool<StatModifierComponent>(maximumEntityCount: 10, initialCapacity: 4);
+        var statModifiers = new MultiComponentPool<StatModifierComponent>(entityCapacity: 10, initialCapacity: 4);
         statModifiers.Add(EntityId, new StatModifierComponent(StatModifierTarget.MaximumHealth, StatModifierOperation.Multiplicative, StatModifierPolarity.Buff,
             canModify: true, magnitude: magnitude, expiresAtFrame: FrameDeadline.Never, ActionSource.Admin));
         return statModifiers;
@@ -33,7 +31,7 @@ public sealed class InspectionWindowContentTests
     {
         var healthPool = CreateHealthPool();
         healthPool.Add(EntityId, new SimpleHealthComponent(currentHealth: 120, maximumHealth: 100));
-        var bodyParts = CreateBodyPartsPool();
+        var bodyParts = new BodyPartTestWorld().BodyParts;
         var statModifiers = CreateMaximumHealthBuffPool(0.5f);
         List<InspectedComponentEntry> entries = [new InspectedComponentEntry(typeof(SimpleHealthComponent), "stale raw-formatted text", 0)];
 
@@ -48,16 +46,17 @@ public sealed class InspectionWindowContentTests
     public void ReplaceHealthEntriesWithEffectiveMaximum_BodyPartsWithBuff_EachShowsItsOwnEffectiveMaximum()
     {
         var healthPool = CreateHealthPool();
-        var bodyParts = CreateBodyPartsPool();
-        bodyParts.Add(EntityId, new BodyPartComponent("Head", BodyPartType.Head, 0, verticalPosition: 0, currentHealth: 50, maximumHealth: 40, isVital: true));
-        bodyParts.Add(EntityId, new BodyPartComponent("Torso", BodyPartType.Torso, 0, verticalPosition: 0, currentHealth: 60, maximumHealth: 80, isVital: true));
+        // Head sits above its raw maximum, which only a MaximumHealth buff makes possible.
+        var partsWorld = BodyPartTestWorld.WithParts(EntityId, ("Head", BodyPartType.Head, 40, 40, true), ("Torso", BodyPartType.Torso, 60, 80, true));
+        partsWorld.BodyParts.SetCurrentHealth(EntityId, 0, 50f);
+        var bodyParts = partsWorld.BodyParts;
         var statModifiers = CreateMaximumHealthBuffPool(0.5f);
         List<InspectedComponentEntry> entries = [];
 
         InspectionWindowContent.ReplaceHealthEntriesWithEffectiveMaximum(entries, EntityId, healthPool, bodyParts, statModifiers);
 
         Assert.HasCount(2, entries);
-        Assert.IsTrue(entries.TrueForAll(entry => entry.ComponentType == typeof(BodyPartComponent)));
+        Assert.IsTrue(entries.TrueForAll(entry => entry.ComponentType == typeof(BodyPartStateComponent)));
         Assert.IsTrue(entries.Exists(entry => entry.Value.Contains("50/60")), "Head: raw 40 * 1.5 = 60.");
         Assert.IsTrue(entries.Exists(entry => entry.Value.Contains("60/120")), "Torso: raw 80 * 1.5 = 120.");
     }
@@ -67,7 +66,7 @@ public sealed class InspectionWindowContentTests
     {
         var healthPool = CreateHealthPool();
         healthPool.Add(EntityId, new SimpleHealthComponent(currentHealth: 80, maximumHealth: 100));
-        var bodyParts = CreateBodyPartsPool();
+        var bodyParts = new BodyPartTestWorld().BodyParts;
         List<InspectedComponentEntry> entries = [];
 
         InspectionWindowContent.ReplaceHealthEntriesWithEffectiveMaximum(entries, EntityId, healthPool, bodyParts, statModifiers: null);
@@ -80,11 +79,11 @@ public sealed class InspectionWindowContentTests
     public void ReplaceHealthEntriesWithEffectiveMaximum_RemovesGenericEntriesEvenWithNoReplacement()
     {
         var healthPool = CreateHealthPool();
-        var bodyParts = CreateBodyPartsPool();
+        var bodyParts = new BodyPartTestWorld().BodyParts;
         List<InspectedComponentEntry> entries =
         [
             new InspectedComponentEntry(typeof(SimpleHealthComponent), "stale", 0),
-            new InspectedComponentEntry(typeof(BodyPartComponent), "stale", 0),
+            new InspectedComponentEntry(typeof(BodyPartStateComponent), "stale", 0),
             new InspectedComponentEntry(typeof(RaceComponentPlaceholder), "unrelated, left alone", 0),
         ];
 

@@ -8,7 +8,7 @@ namespace Tests.Modules.Mana;
 public sealed class ManaSpendTests
 {
     private static PackedComponentPool<ManaComponent> CreatePool() =>
-        new(maximumEntityCount: 10, initialCapacity: 4, static (ref existing, incoming) => existing = incoming);
+        new(entityCapacity: 10, initialCapacity: 4, static (ref existing, incoming) => existing = incoming);
 
     [TestMethod]
     public void Apply_ReducesCurrentManaByAmount()

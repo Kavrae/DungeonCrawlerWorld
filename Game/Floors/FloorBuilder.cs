@@ -2,13 +2,15 @@ using Engine.ECS.Context;
 using Engine.ECS.Systems;
 using Engine.Math;
 using Game.Blueprints;
+using Game.Blueprints.Composites;
 using Game.Blueprints.NPCs.Generic;
 using Game.Modules.AbilityScores;
 using Game.Modules.Core.Components;
 using Game.Modules.Poison;
-using Game.Modules.StatModifiers;
-using Game.World;
 using Game.Modules.ProcessingTier;
+using Game.Modules.StatModifiers;
+using Game.Spawning;
+using Game.World;
 
 namespace Game.Floors;
 
@@ -62,17 +64,14 @@ public static class FloorBuilder
         return new Game.World.Map(new MapBounds(min, min, min + tiles, min + tiles, LayerCount));
     }
 
-    /// <param name="tierResolver">
-    /// When supplied -- and its reference position already set to <see cref="PlayerSpawnOrigin"/>
-    /// -- every bulk entity is created through it and born with its processing tier as its first
-    /// component, so no tiered consumer ever has to migrate it. Optional because omitting it costs
-    /// events, not correctness: World.EntityPlaced tiers any placed entity after the fact, via
-    /// ProcessingTierResolver.EnsureTiered.
-    /// </param>
+    /// <summary>Fills the floor's loaded neighborhoods: terrain, walls and everything spawned on them.</summary>
+    /// <remarks>The tier resolver the factory was built with must already have its reference position set to <see cref="PlayerSpawnOrigin"/>, so every entity is born with its processing tier as its first component instead of being tiered and then migrated.</remarks>
     /// <param name="terrain">The session's terrain definitions -- population writes cells of them.</param>
+    /// <param name="definitions">The session's blueprints -- population spawns them.</param>
+    /// <param name="factory">The one spawn path (see EntityFactory), which carries the tier resolver, the skeletons, the move buffer and the crawler numbers population used to take one by one.</param>
     /// <param name="records">The session's neighborhood records: each neighborhood the map covers is assigned one if it has none, and generated from it.</param>
-    public static void PopulateFloor(Game.World.World world, EcsContext ecsContext, NeighborhoodRecords records, UniqueNumberAllocator crawlerNumberAllocator, FrameEventBuffer<EntityMovedEvent> movedEntities, Terrain.TerrainRegistry terrain, ProcessingTierResolver? tierResolver = null) =>
-        new TestMapBuilder(ecsContext.EntityManager, ecsContext.ComponentManager, crawlerNumberAllocator, movedEntities, terrain, tierResolver).Populate(world, records);
+    public static void PopulateFloor(Game.World.World world, EcsContext ecsContext, NeighborhoodRecords records, EntityFactory factory, Terrain.TerrainRegistry terrain, Blueprints.BlueprintRegistry definitions) =>
+        new TestMapBuilder(ecsContext.EntityManager, factory, terrain, definitions).Populate(world, records);
 
     /// <summary>
     /// Where the player is aimed at spawning -- the actual cell is the nearest free Ground cell to
@@ -147,11 +146,16 @@ public static class FloorBuilder
     /// already populated, not just the id already minted.
     /// </remarks>
     /// <param name="tierResolver">When supplied, the player is pinned Local before its blueprint is built, so every tiered pool it joins sees Local from the start and the player is never recomputed afterwards -- including while off the map. Optional for the same reason as PopulateFloor's: ProcessingTierSystem pins the player on its first update if nothing did here.</param>
-    public static void CreatePlayer(Game.World.World world, EcsContext ecsContext, MathUtility mathUtility, FrameEventBuffer<EntityMovedEvent> movedEntities, UniqueNumberAllocator crawlerNumberAllocator, int entityId, ProcessingTierResolver? tierResolver = null)
+    /// <param name="factory">The one spawn path (see EntityFactory) -- the player is a blueprint and a seed like every other entity, so it too carries a spawn record.</param>
+    public static void CreatePlayer(Game.World.World world, EcsContext ecsContext, MathUtility mathUtility, EntityFactory factory, BlueprintRegistry definitions, int entityId, ProcessingTierResolver? tierResolver = null)
     {
+        ArgumentNullException.ThrowIfNull(factory);
+        ArgumentNullException.ThrowIfNull(definitions);
+
         tierResolver?.PinLocalAndNotify(entityId);
 
-        new PlayerBlueprint(mathUtility, crawlerNumberAllocator, ecsContext.EntityManager.Keys).Build(ecsContext.ComponentManager, entityId);
+        var spawnPosition = FindFreeGroundCellNear(world, PlayerSpawnOrigin());
+        factory.Spawn(SpawnRequest.At(definitions.GetId(Player.Id), spawnPosition) with { Seed = mathUtility.NextSeed(), Crawler = true, ReservedEntityId = entityId });
 
         for (var i = 0; i < TestPoisonStackCount; i++)
         {
@@ -165,41 +169,30 @@ public static class FloorBuilder
             AbilityScoreEffects.GrantModifier(ecsContext.ComponentManager, entityId, seed.Type, StatModifierOperation.Additive, StatModifierPolarity.Debuff,
                 canModify: true, seed.NegativeFlat, expiresAtFrame: FrameDeadline.Never, ActionSource.AI);
             AbilityScoreEffects.GrantModifier(ecsContext.ComponentManager, entityId, seed.Type, StatModifierOperation.Multiplicative, StatModifierPolarity.Buff,
-                canModify: true, seed.PositiveMultiplier, expiresAtFrame: FrameDeadline.Never, ActionSource.FromEntity(ecsContext.ComponentManager, ecsContext.EntityManager.Keys, entityId));
+                canModify: true, seed.PositiveMultiplier, expiresAtFrame: FrameDeadline.Never, ActionSource.FromEntity(ecsContext.ComponentManager, ecsContext.EntityManager.Keys, entityId, definitions));
             AbilityScoreEffects.GrantModifier(ecsContext.ComponentManager, entityId, seed.Type, StatModifierOperation.Multiplicative, StatModifierPolarity.Debuff,
                 canModify: true, seed.NegativeMultiplier, expiresAtFrame: FrameDeadline.Never, ActionSource.Admin);
         }
 
-        var spawnPosition = FindFreeGroundCellNear(world, PlayerSpawnOrigin());
-        ref var transform = ref ecsContext.ComponentManager.GetDirectPool<TransformComponent>().Get(entityId);
-        world.PlaceEntityOnMap(entityId, spawnPosition, ref transform);
+        // The spawn move itself is EntityFactory's (see Spawn), so hazard/aura detection
+        // (ContactDamageSystem, StatusEffectAuraSystem) sees the player immediately if spawned
+        // onto/next to one, rather than only on their first real move. Published on the bus here as
+        // well, purely so PlayerActivityLog's existing spawn-time log line is preserved unchanged.
+        var size = ecsContext.ComponentManager.GetDirectPool<TransformComponent>().GetReadonly(entityId).Size;
+        ecsContext.EventBus.Publish(new EntityMovedEvent(entityId, spawnPosition, spawnPosition, size));
 
-        // Spawning counts as a move (see EntityMovedEvent's own doc comment) so hazard/aura
-        // detection (ContactDamageSystem, StatusEffectAuraSystem) sees the player immediately
-        // if spawned onto/next to one, rather than only on their first real move. Recorded into
-        // the shared buffer those systems actually drain now (see FrameEventBuffer's own doc
-        // comment), not published on the bus -- EventBus.Publish is kept alongside it purely so
-        // PlayerActivityLog's existing spawn-time log line is preserved unchanged.
-        movedEntities.Record(new EntityMovedEvent(entityId, spawnPosition, spawnPosition, transform.Size));
-        ecsContext.EventBus.Publish(new EntityMovedEvent(entityId, spawnPosition, spawnPosition, transform.Size));
-
-        SpawnTestDummy(world, ecsContext, spawnPosition, movedEntities);
+        SpawnTestDummy(world, factory, mathUtility, definitions, spawnPosition);
     }
 
     /// <summary>TEMPORARY test seeding, alongside the Poison/ability-score seeding above -- a dedicated Dodge-practice target a few tiles from the player's own spawn. See TestDummyBlueprint/TestDummyAttackSystem.</summary>
     private const int TestDummySpawnOffsetColumns = 3;
 
-    private static void SpawnTestDummy(Game.World.World world, EcsContext ecsContext, Vector3Int playerSpawnPosition, FrameEventBuffer<EntityMovedEvent> movedEntities)
+    private static void SpawnTestDummy(Game.World.World world, EntityFactory factory, MathUtility mathUtility, BlueprintRegistry definitions, Vector3Int playerSpawnPosition)
     {
-        var entityId = ecsContext.EntityManager.CreateEntity();
-        new TestDummyBlueprint().Build(ecsContext.ComponentManager, entityId);
-
         var origin = new Vector3Int(playerSpawnPosition.X + TestDummySpawnOffsetColumns, playerSpawnPosition.Y, playerSpawnPosition.Z);
-        var spawnPosition = FindFreeGroundCellNear(world, origin);
-        ref var transform = ref ecsContext.ComponentManager.GetDirectPool<TransformComponent>().Get(entityId);
-        world.PlaceEntityOnMap(entityId, spawnPosition, ref transform);
+        var blueprintId = definitions.GetId(TestDummyBlueprint.Id);
 
-        movedEntities.Record(new EntityMovedEvent(entityId, spawnPosition, spawnPosition, transform.Size));
+        factory.Spawn(SpawnRequest.At(blueprintId, FindFreeGroundCellNear(world, origin)) with { Seed = mathUtility.NextSeed() });
     }
 
     /// <summary>Scans outward from origin in expanding square rings for the first on-map, unoccupied, unblocked Ground cell, falling back to origin itself if the whole map is full.</summary>

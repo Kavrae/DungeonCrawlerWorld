@@ -21,7 +21,7 @@ using Game.World;
 namespace Game.Modules.NpcBehavior.Systems;
 
 /// <summary>
-/// Temporary, deliberately generic priority-chain decision-maker for MovementMode.Random
+/// TemporaryForFloor, deliberately generic priority-chain decision-maker for MovementMode.Random
 /// entities: below-half-health-with-a-potion -> self-heal; adjacent to an entity of a different
 /// race -> melee (randomly QuickAttack or PowerAttack, see TryDecideMeleeAttack); otherwise ->
 /// wander, the same coin-flip-idle-or-move logic MovementSystem's own Random-mode branch used to
@@ -39,8 +39,8 @@ namespace Game.Modules.NpcBehavior.Systems;
 /// a new system class per NPC race: a future race that wants this exact temporary loadout just
 /// needs the same components granted, not a new system.
 ///
-/// "Different race" (IsAttackable) is a real RaceComponent comparison, not a name/id allowlist --
-/// an entity with no RaceComponent at all is never attackable (nothing to compare), and two
+/// "Different race" (IsAttackable) is a real race comparison, not a name/id allowlist --
+/// an entity with no race at all is never attackable (nothing to compare), and two
 /// entities sharing the same race never attack each other (a Fairy adjacent to another Fairy no
 /// longer does, unlike this system's earlier player-or-Fairy-only check). The player counts as
 /// "a different race" the ordinary way, by actually being Human -- no
@@ -69,10 +69,10 @@ public sealed class TestCombatBehaviorSystem : ITieredSystem
     private readonly DirectComponentPool<TransformComponent> _transformPool;
     private readonly PackedComponentPool<ActionLockComponent> _actionLocks;
     private readonly PackedComponentPool<SimpleHealthComponent> _health;
-    private readonly MultiComponentPool<BodyPartComponent> _bodyParts;
+    private readonly EntityBodyParts _bodyParts;
     private readonly MultiComponentPool<InventoryItemStackComponent> _inventoryStacks;
-    private readonly MultiComponentPool<ActionInstanceComponent> _actionInstances;
-    private readonly MultiComponentPool<RaceComponent> _raceComponents;
+    private readonly EntityActions _actions;
+    private readonly PackedComponentPool<RaceSlotsComponent> _raceSlots;
     private readonly PackedComponentPool<PendingActionActivationComponent> _pendingActivations;
     private readonly PackedComponentPool<PendingConsumableActivationComponent> _pendingConsumableActivations;
     private readonly IMapQuery _mapQuery;
@@ -88,10 +88,10 @@ public sealed class TestCombatBehaviorSystem : ITieredSystem
         DirectComponentPool<TransformComponent> transformPool,
         PackedComponentPool<ActionLockComponent> actionLocks,
         PackedComponentPool<SimpleHealthComponent> health,
-        MultiComponentPool<BodyPartComponent> bodyParts,
+        EntityBodyParts bodyParts,
         MultiComponentPool<InventoryItemStackComponent> inventoryStacks,
-        MultiComponentPool<ActionInstanceComponent> actionInstances,
-        MultiComponentPool<RaceComponent> raceComponents,
+        EntityActions actions,
+        PackedComponentPool<RaceSlotsComponent> raceSlots,
         PackedComponentPool<PendingActionActivationComponent> pendingActivations,
         PackedComponentPool<PendingConsumableActivationComponent> pendingConsumableActivations,
         IMapQuery mapQuery,
@@ -106,8 +106,8 @@ public sealed class TestCombatBehaviorSystem : ITieredSystem
         _health = health;
         _bodyParts = bodyParts;
         _inventoryStacks = inventoryStacks;
-        _actionInstances = actionInstances;
-        _raceComponents = raceComponents;
+        _actions = actions;
+        _raceSlots = raceSlots;
         _pendingActivations = pendingActivations;
         _pendingConsumableActivations = pendingConsumableActivations;
         _mapQuery = mapQuery;
@@ -221,13 +221,13 @@ public sealed class TestCombatBehaviorSystem : ITieredSystem
     /// </summary>
     private bool TryDecideMeleeAttack(int entityId, TransformComponent transform)
     {
-        if (!ActionInstanceQueries.TryGet(_actionInstances, entityId, QuickAttackAction.Id, out _))
+        if (!_actions.Has(entityId, QuickAttackAction.Id))
         {
             return false;
         }
 
         // No race, no notion of "a different race" to attack -- bail before even resolving the
-        // footprint. Every real race blueprint grants a RaceComponent, so this only ever fires
+        // footprint. Every real race blueprint fills a race slot, so this only ever fires
         // defensively (this system explicitly isn't goblin-specific, see its own doc comment).
         if (!TryGetRaceId(entityId, out var attackerRaceId))
         {
@@ -251,7 +251,7 @@ public sealed class TestCombatBehaviorSystem : ITieredSystem
     /// Blocking targets only, so a non-Blocking Fairy/player sharing an adjacent tile still
     /// counts.
     /// </summary>
-    private bool HasAttackableNeighbor(List<Vector3Int> adjacentTiles, Guid attackerRaceId)
+    private bool HasAttackableNeighbor(List<Vector3Int> adjacentTiles, ushort attackerRaceId)
     {
         foreach (var tile in adjacentTiles)
         {
@@ -272,28 +272,22 @@ public sealed class TestCombatBehaviorSystem : ITieredSystem
     /// for future looting (DeathSystem never calls EntityManager.DestroyEntity, see this repo's
     /// own IMPLEMENTATION-NOTES.md). Also excludes anything frozen: nothing may target across the
     /// simulated/frozen seam (see ProcessingTierQuery). Then requires the candidate to actually
-    /// carry a RaceComponent of a race different from the attacker's own -- a raceless entity (a shop, a container, any
+    /// carry a race different from the attacker's own -- a raceless entity (a shop, a container, any
     /// non-creature prop) is never attackable, and two entities of the same race never attack each
     /// other (see this class's own doc comment on why that's now a real comparison, not a
     /// player-or-Fairy allowlist).
     /// </summary>
-    private bool IsAttackable(int candidateEntityId, Guid attackerRaceId) =>
+    private bool IsAttackable(int candidateEntityId, ushort attackerRaceId) =>
         _tierQuery.IsSimulated(candidateEntityId) &&
         _deadEntities?.Has(candidateEntityId) != true &&
         TryGetRaceId(candidateEntityId, out var candidateRaceId) &&
         candidateRaceId != attackerRaceId;
 
-    /// <summary>First RaceComponent found for entityId (a real entity carries exactly one), or false if it has none.</summary>
-    private bool TryGetRaceId(int entityId, out Guid raceId)
+    /// <summary>The race entityId counts as (its first slot -- see RaceSlotsComponent.Primary), or false if it has no races at all.</summary>
+    private bool TryGetRaceId(int entityId, out ushort raceId)
     {
-        for (var denseIndex = _raceComponents.GetFirstDenseIndex(entityId); denseIndex != -1; denseIndex = _raceComponents.GetNextDenseIndex(denseIndex))
-        {
-            raceId = _raceComponents.GetReadonlyByDenseIndex(denseIndex).Id;
-            return true;
-        }
-
-        raceId = default;
-        return false;
+        raceId = _raceSlots.TryGetReadonly(entityId, out var slots) ? slots.Primary : RaceSlotsComponent.Empty;
+        return raceId != RaceSlotsComponent.Empty;
     }
 
     /// <summary>The exact coin-flip-idle-or-move logic MovementSystem's own Random-mode branch used to run directly -- moved here unchanged, now writing NextMapPosition/WaitUntilFrame as this system's own decision rather than MovementSystem deciding and executing in the same call.</summary>

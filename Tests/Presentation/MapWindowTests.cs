@@ -96,14 +96,13 @@ public sealed class MapWindowTests
 
         var componentManager = new ComponentManager(100, 50);
         componentManager.RegisterDirectPool<TransformComponent>(static (ref existing, incoming) => existing = incoming);
-        componentManager.RegisterDirectPool<GlyphComponent>(static (ref existing, incoming) => existing = incoming);
-        componentManager.RegisterDirectPool<SpriteComponent>(static (ref existing, incoming) => existing = incoming);
-        componentManager.RegisterDirectPool<BackgroundComponent>(static (ref existing, incoming) => existing = incoming);
-        componentManager.RegisterDirectPool<DisplayTextComponent>(static (ref existing, incoming) => existing = incoming);
+        componentManager.RegisterPackedPool<GlyphComponent>(static (ref existing, incoming) => existing = incoming);
+        componentManager.RegisterPackedPool<SpriteComponent>(static (ref existing, incoming) => existing = incoming);
+        componentManager.RegisterPackedPool<BackgroundComponent>(static (ref existing, incoming) => existing = incoming);
+        componentManager.RegisterPackedPool<DisplayTextComponent>(static (ref existing, incoming) => existing = incoming);
         componentManager.RegisterMultiPool<NonBlockingComponent>();
         componentManager.RegisterPackedPool<MovementComponent>(static (ref existing, incoming) => existing = incoming);
         componentManager.RegisterPackedPool<SimpleHealthComponent>(static (ref existing, incoming) => existing = incoming);
-        componentManager.RegisterMultiPool<BodyPartComponent>();
         componentManager.RegisterMultiPool<StatusEffectAuraSourceComponent>();
         componentManager.RegisterMultiPool<ActionInstanceComponent>();
         componentManager.RegisterMultiPool<ActionHotkeyBindingComponent>();
@@ -1423,7 +1422,8 @@ public sealed class MapWindowTests
     {
         var (_, mapViewState, mapWindow, componentManager, itemCatalog) = BuildMapWindowWithPlayerAndItems(300, 300, 1, new Vector3Int(100, 100, 0));
         RegisterTestNonConsumableItem(itemCatalog);
-        componentManager.Merge(PlayerEntityId, new ItemHotkeyBindingComponent(HotkeySlot.Slot1, TestNonConsumableItemId));
+        var nonConsumableStackId = InventoryActions.AddItem(componentManager, PlayerEntityId, TestNonConsumableItemId, quantity: 1);
+        componentManager.Merge(PlayerEntityId, new ItemHotkeyBindingComponent(HotkeySlot.Slot1, nonConsumableStackId));
 
         mapWindow.HandleHotkeys(new KeyboardState(Keys.D1), new KeyboardState());
 
@@ -1439,7 +1439,7 @@ public sealed class MapWindowTests
         RegisterTestPotion(itemCatalog);
         // Deliberately no InventoryActions.AddItem -- the entity has never had (or has fully
         // consumed) this item.
-        componentManager.Merge(PlayerEntityId, new ItemHotkeyBindingComponent(HotkeySlot.Slot1, TestPotionId));
+        componentManager.Merge(PlayerEntityId, new ItemHotkeyBindingComponent(HotkeySlot.Slot1, stackInstanceId: 9999));
 
         mapWindow.HandleHotkeys(new KeyboardState(Keys.D1), new KeyboardState());
 

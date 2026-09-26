@@ -52,9 +52,9 @@ public sealed class InventoryGridContent(
     TooltipController tooltipController,
     Func<int?> getSecondaryTargetEntityId,
     MapViewState mapViewState,
-    Action<int, Guid> onItemSelected,
-    Action<int, Guid> onCompareRequested,
-    Action<int, Guid> onActivateRequested,
+    Action<int, uint> onItemSelected,
+    Action<int, uint> onCompareRequested,
+    Action<int, uint> onActivateRequested,
     // Null (every non-trade caller) -- this grid's own pricing direction/cell type derive from
     // mapViewState.OpenShopEntityId/entityId as they always have. Non-null only for the trade
     // window's own two columns, which need TradeItemStackCell instead of
@@ -126,13 +126,13 @@ public sealed class InventoryGridContent(
     /// a wand's remaining/max charges used to replace this cell's own quantity badge outright, but
     /// that's shown in the hover tooltip now (see UpdateHover's own "Charges: {n}/{max}" line), so
     /// the badge just shows the plain Quantity, the same as any other item, charges or not.
-    /// SortFirstAcquiredUtcTicks mirrors SortQuantity's own group-key behavior: one stack's own
-    /// InventoryItemStackComponent.FirstAcquiredUtcTicks normally, but the *newest* value across
+    /// SortAcquiredSequence mirrors SortQuantity's own group-key behavior: one stack's own
+    /// InventoryItemStackComponent.AcquiredSequence normally, but the *newest* value across
     /// every member for a currently-expanded group's own member cells (same contiguity reasoning
     /// as SortQuantity) and for a merged badge cell (the "newest FirstAcquired of the item stacks
     /// in the merged stack" rule InventorySortOrder.RecentlyAcquiredDescending sorts by).
     /// </summary>
-    private readonly record struct CellEntry(ItemDefinition Definition, Guid? StackInstanceId, ushort Quantity, ushort SortQuantity, long SortFirstAcquiredUtcTicks, bool IsDisabled, bool IsDivergent, bool MergedStackBadgeVisible);
+    private readonly record struct CellEntry(ItemDefinition Definition, uint? StackInstanceId, ushort Quantity, ushort SortQuantity, uint SortAcquiredSequence, bool IsDisabled, bool IsDivergent, bool MergedStackBadgeVisible);
 
     /// <summary>Defaults to NameAscending, reproducing this class's original always-alphabetical behavior exactly. Setting to the same value is a no-op -- doesn't force a rebuild.</summary>
     public InventorySortOrder SortOrder
@@ -723,7 +723,7 @@ public sealed class InventoryGridContent(
     }
 
     /// <summary>The actual Activate attempt, shared by "Activate" (BuildItemContextMenu) and a confirmed double-click (OnCellDoubleClicked) -- a no-op, not a fallback to the single-click action, if the item can't be activated or the global cooldown is still up (see CanActivate/IsPlayerActionLocked).</summary>
-    private void TryActivate(int cellEntityId, Guid stackInstanceId)
+    private void TryActivate(int cellEntityId, uint stackInstanceId)
     {
         if (CanActivate(cellEntityId, stackInstanceId) && !IsPlayerActionLocked())
         {
@@ -738,7 +738,7 @@ public sealed class InventoryGridContent(
     /// independently. Deliberately ignores the global cooldown -- see IsPlayerActionLocked, checked
     /// separately so "Activate" stays visible-but-disabled on cooldown rather than disappearing.
     /// </summary>
-    private bool CanActivate(int cellEntityId, Guid stackInstanceId) =>
+    private bool CanActivate(int cellEntityId, uint stackInstanceId) =>
         cellEntityId == world.PlayerEntityId &&
         InventoryQueries.TryFindByStackInstanceId(_stacks, world.PlayerEntityId, stackInstanceId, out var stack) &&
         InventoryQueries.TryResolveEffectiveItem(itemCatalog, in stack, out var item) &&
@@ -1127,7 +1127,7 @@ public sealed class InventoryGridContent(
         {
             foreach (var (stack, definition) in _reusableVisibleEntries)
             {
-                _reusableCellEntries.Add(new CellEntry(definition, stack.StackInstanceId, stack.Quantity, stack.Quantity, stack.FirstAcquiredUtcTicks, stack.IsDisabled, stack.IsDivergent, MergedStackBadgeVisible: false));
+                _reusableCellEntries.Add(new CellEntry(definition, stack.StackInstanceId, stack.Quantity, stack.Quantity, stack.AcquiredSequence, stack.IsDisabled, stack.IsDivergent, MergedStackBadgeVisible: false));
             }
 
             return;
@@ -1151,21 +1151,21 @@ public sealed class InventoryGridContent(
             if (indices.Count == 1)
             {
                 var (stack, definition) = _reusableVisibleEntries[indices[0]];
-                _reusableCellEntries.Add(new CellEntry(definition, stack.StackInstanceId, stack.Quantity, stack.Quantity, stack.FirstAcquiredUtcTicks, stack.IsDisabled, stack.IsDivergent, MergedStackBadgeVisible: false));
+                _reusableCellEntries.Add(new CellEntry(definition, stack.StackInstanceId, stack.Quantity, stack.Quantity, stack.AcquiredSequence, stack.IsDisabled, stack.IsDivergent, MergedStackBadgeVisible: false));
                 continue;
             }
 
             var totalQuantity = 0;
             var anyDivergent = false;
             var allDisabled = true;
-            var newestFirstAcquiredUtcTicks = long.MinValue;
+            var newestAcquiredSequence = uint.MinValue;
             foreach (var index in indices)
             {
                 var memberStack = _reusableVisibleEntries[index].Stack;
                 totalQuantity += memberStack.Quantity;
                 anyDivergent |= memberStack.IsDivergent;
                 allDisabled &= memberStack.IsDisabled;
-                newestFirstAcquiredUtcTicks = System.Math.Max(newestFirstAcquiredUtcTicks, memberStack.FirstAcquiredUtcTicks);
+                newestAcquiredSequence = System.Math.Max(newestAcquiredSequence, memberStack.AcquiredSequence);
             }
 
             var groupTotal = (ushort)totalQuantity;
@@ -1175,7 +1175,7 @@ public sealed class InventoryGridContent(
                 foreach (var index in indices)
                 {
                     var (stack, definition) = _reusableVisibleEntries[index];
-                    _reusableCellEntries.Add(new CellEntry(definition, stack.StackInstanceId, stack.Quantity, groupTotal, newestFirstAcquiredUtcTicks, stack.IsDisabled, stack.IsDivergent, MergedStackBadgeVisible: false));
+                    _reusableCellEntries.Add(new CellEntry(definition, stack.StackInstanceId, stack.Quantity, groupTotal, newestAcquiredSequence, stack.IsDisabled, stack.IsDivergent, MergedStackBadgeVisible: false));
                 }
 
                 continue;
@@ -1185,7 +1185,7 @@ public sealed class InventoryGridContent(
             // a different charge count (now shown per-stack in the hover tooltip, not this badge),
             // but the quantity itself is exactly the sum regardless.
             var first = _reusableVisibleEntries[indices[0]];
-            _reusableCellEntries.Add(new CellEntry(first.Definition, StackInstanceId: null, groupTotal, groupTotal, newestFirstAcquiredUtcTicks, allDisabled, IsDivergent: false, MergedStackBadgeVisible: anyDivergent));
+            _reusableCellEntries.Add(new CellEntry(first.Definition, StackInstanceId: null, groupTotal, groupTotal, newestAcquiredSequence, allDisabled, IsDivergent: false, MergedStackBadgeVisible: anyDivergent));
         }
     }
 
@@ -1204,7 +1204,7 @@ public sealed class InventoryGridContent(
                 _reusableCellEntries.Sort(static (a, b) => CompareWithTieBreak(a.SortQuantity.CompareTo(b.SortQuantity), a, b));
                 break;
             case InventorySortOrder.RecentlyAcquiredDescending:
-                _reusableCellEntries.Sort(static (a, b) => CompareWithTieBreak(b.SortFirstAcquiredUtcTicks.CompareTo(a.SortFirstAcquiredUtcTicks), a, b));
+                _reusableCellEntries.Sort(static (a, b) => CompareWithTieBreak(b.SortAcquiredSequence.CompareTo(a.SortAcquiredSequence), a, b));
                 break;
             default:
                 _reusableCellEntries.Sort(static (a, b) => CompareWithTieBreak(string.CompareOrdinal(a.Definition.Name, b.Definition.Name), a, b));

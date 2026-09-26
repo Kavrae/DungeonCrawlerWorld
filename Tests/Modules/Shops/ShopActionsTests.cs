@@ -168,7 +168,7 @@ public sealed class ShopActionsTests
         manager.Merge(ShopEntityId, new CurrencyComponent(gold: 0, credits: 0));
         manager.Merge(PlayerEntityId, new CurrencyComponent(gold: 100, credits: 0));
 
-        var result = ShopActions.TryBuyFromShop(manager, catalog, PlayerEntityId, ShopEntityId, Guid.NewGuid(), NoEntityIsThePlayer);
+        var result = ShopActions.TryBuyFromShop(manager, catalog, PlayerEntityId, ShopEntityId, stackInstanceId: 9999, NoEntityIsThePlayer);
 
         Assert.IsFalse(result);
     }
@@ -282,8 +282,8 @@ public sealed class ShopActionsTests
     public void TryBuyFromShop_HighCharismaPlayer_ChargesTheMarginReducedPrice()
     {
         var (manager, catalog) = BuildManager();
-        manager.RegisterMultiPool<AbilityScoreComponent>();
-        manager.GetMultiPool<AbilityScoreComponent>().Add(PlayerEntityId, new AbilityScoreComponent(AbilityScoreType.Charisma, baseValue: 300, total: 300));
+        AbilityScoreTestPools.Register(manager);
+        manager.GetPackedPool<AbilityScoresComponent>().Add(PlayerEntityId, AbilityScoreTestPools.Score(AbilityScoreType.Charisma, baseValue: 300, total: 300));
         manager.Merge(ShopEntityId, GeneralShop);
         manager.Merge(ShopEntityId, new CurrencyComponent(gold: 0, credits: 0));
         manager.Merge(PlayerEntityId, new CurrencyComponent(gold: 1000, credits: 0));
@@ -305,8 +305,8 @@ public sealed class ShopActionsTests
     public void TrySellToShop_HighCharismaPlayer_PaysTheMarginReducedPrice()
     {
         var (manager, catalog) = BuildManager();
-        manager.RegisterMultiPool<AbilityScoreComponent>();
-        manager.GetMultiPool<AbilityScoreComponent>().Add(PlayerEntityId, new AbilityScoreComponent(AbilityScoreType.Charisma, baseValue: 300, total: 300));
+        AbilityScoreTestPools.Register(manager);
+        manager.GetPackedPool<AbilityScoresComponent>().Add(PlayerEntityId, AbilityScoreTestPools.Score(AbilityScoreType.Charisma, baseValue: 300, total: 300));
         manager.Merge(ShopEntityId, GeneralShop);
         manager.Merge(ShopEntityId, new CurrencyComponent(gold: 1000, credits: 0));
         manager.Merge(PlayerEntityId, new CurrencyComponent(gold: 0, credits: 0));

@@ -314,7 +314,7 @@ target with a body-part-condition-granted one.
   scale (a stack's own decay -- one removed per tick -- is its only duration signal, and that same
   `StackCount` also drives its damage) -- deliberately not attempted. Two real, catalog-registered
   test potions (`ImmunityTestPotion`/`ResistanceTestPotion`, granted `quantity: 5` in
-  `PlayerBlueprint` like every other starting potion) exercise all three pillars end-to-end.
+  `PlayerKit` like every other starting potion) exercise all three pillars end-to-end.
 - `EntityHealedEvent` mirrors `EntityDamagedEvent` (player-involved-only, consumed by
   `PlayerActivityLog`'s new `HEAL` log line) -- published by `HealthHeal.Apply`/`ComplexHealthHeal` when
   both an `EventBus` and `IPlayerQuery` are supplied (both optional, unlike `HealthDamage.Apply`'s
@@ -413,7 +413,7 @@ Builds on the Currency/container and loot currency work above.
 - `ItemDefinition.Value` (Gold worth) + `Game/Modules/Shops/` (`ShopComponent`, `ShopActions.
   TryBuyFromShop`/`TrySellToShop`, check-then-commit). `Shop`/`PotionShop`/`GeneralShop`
   (`Game/Blueprints/Objects/`) composed via `CompositeBlueprint`, not inheritance -- same
-  shell+stock-part shape `GoblinEngineerBlueprint` established for race+class.
+  shell+stock-part shape `GoblinEngineerPart` established for race+class.
   `ShopWindow`/`ShopWindowController` (`Presentation/UI/Shops/`) mirror `SecondaryInventoryWindow`/
   `SecondaryInventoryWindowController` as a template, not a shared base -- a shop's summary/close
   behavior differs enough (no `LootedComponent`, drives `MapViewState.OpenShopEntityId` instead)
@@ -495,8 +495,8 @@ that measured 29.6 GB, 47.7 s startup and 12 ms/frame.
 - **Streaming:** `Map.Unbounded` + `NeighborhoodStreamer` (first system in the frame, 512 units per
   frame). `NeighborhoodRecords` keeps a seed per coordinate; `TestMapBuilder.GenerateNeighborhood` is
   the stand-in generator. Stable `EntityKey`s and `EntityIdentities` let references outlive an unload.
-- **Startup reservation:** dense pools grow linearly, so `WorldSessionBootstrapper` reserves
-  (9 + 3) / 9 of the startup population plus 10% before the first frame (136 ms spikes without it).
+- **Startup reservation:** `WorldSessionBootstrapper` reserves (9 + 3) / 9 of the startup population
+  plus 10% before the first frame (136 ms spikes without it, when dense pools still grew linearly).
 
 Decisions (don't re-litigate):
 1. Borough is the 8 neighborhoods around the middle one, and it is frozen.
@@ -573,6 +573,408 @@ buffer). Decisions, so they aren't re-asked:
   through a Stagger still steps once the lock clears). `WindupCancel.TryCancel(..., releaseLock)`
   is the one cancel path for Escape (release), Dodge (release) and Stagger (keep). Unrelated to
   `FrameDeadline.AfterStaggered`.
+
+### Pool sizing and the memory report
+
+Landed 2026-09-18 as phases 0-1 of "Deferred-build NPCs and shared definition data" (`TODO.md`).
+
+- **Memory report:** `--diagnostics=memory` with a benchmark range (headless or windowed) writes
+  `Log/diagnostics/memory-<timestamp>-<pid>.json|txt` through `PoolMemoryReport`: per pool its count,
+  estimated MB, distinct values when the range opens, and the share of surviving holders whose values
+  changed by its close; plus allocation and collections before the range, live heap and peak working
+  set. `Invoke-MemoryReport.ps1 [-Compare]` in the phase-performance-testing skill drives it. Values
+  are compared field by field: a bitwise comparison read padding bytes as changes
+  (`AbilityScoreComponent` showed 98.7% changed instead of 0%).
+- **Paged entity index:** Packed and Multi pools index entities through `EntityPages` (1024 ids per
+  page, allocated on first write, never freed so a Multi pool's entity version keeps counting).
+  `maximumEntityCount` registration overrides were removed; `ResizeEntityCapacity` only grows page
+  tables for them. Direct pools stay flat.
+- **Dense growth:** x1.5 (`DenseCapacityGrowth`, minimum 16) from `InitialComponentCapacity` (1024) or
+  a registration's own `initialCapacity`, instead of a fixed 220k initial size and step.
+- `BackgroundComponent` moved from Direct to Packed (no writers today).
+
+Measured (seed 1, 3072², Release, same world both sides): pools 1,498 -> 1,236 MB, live heap 2,424 ->
+2,162 MB, peak working set 5.34 -> 3.69 GB, allocated building the world 9.7 -> 5.0 GB. Frame cost
+headless A/B: `EcsContext.Update` +2.3%, inside the baseline's 3.9% spread; lookup-heavy systems
+(`MovementSystem`, `TestCombatBehaviorSystem`, `BurningSystem`) read 3-5% higher, each inside its own
+noise -- the paged lookup's extra load, worth re-checking as later phases add lookups.
+
+### Creature definitions, spawn records and BlueprintContext
+
+Landed 2026-09-18 as phase 2 of "Deferred-build NPCs and shared definition data" (`TODO.md`).
+
+- `Game.Creatures`: `EntityDefinitions` (race and class tables, `ushort` ids from 1, 0 = empty slot,
+  keyed by Guid, a re-registered Guid replaces in place) filled by `EntityPartsModule`;
+  `SpawnRecipe` (two race and two class slots); `SpawnRecordComponent` (recipe + `uint` seed,
+  12 B, Direct pool).
+- `EntityFactory.Build(recipe, seed)` reseeds one `SeededRandom` (xoshiro256**, reseedable without
+  allocating; `System.Random(seed)` allocates its state per construction) and runs race parts, then
+  class parts, then writes the spawn record. The main population spawns through it with a seed drawn
+  from the neighborhood's population sequence. Every other entity went through this too once the
+  one entity factory landed -- see "One entity factory: every entity is parts plus a seed".
+- `IBlueprint.Build(BlueprintContext)`: component manager, entity id, `Rolls`, `EntityKeys`. Blueprints
+  take nothing a build depends on through their constructors, so definitions hold one shared,
+  stateless instance each. Replaced blueprints that captured a `MathUtility`/`EntityKeys` at
+  construction, which made "roll only from the creature's sequence" a convention instead of a type
+  guarantee.
+- `CreatureDefaults` rebuilds a spawn record in a staging world: every module configured and built a
+  second time before the real configuration (the dry-run pattern), with its own random sequence and
+  key table, systems never run. `CreatureDefaultsTests` proves populated creatures rebuild exactly,
+  apart from what population writes after the build (position, action-lock stagger, tier, crawler
+  number), with a negative control so the comparison can fail.
+
+Decisions: composition archetypes were rejected (dozens of races and classes, 1-2 each, and ability
+scores 1-300 explode any shared race+class key); data is classified by what it varies with -- see the
+`TODO.md` entry. The class-slot model (`ClassSlots`/`ClassMembership`/`ClassQueries`, the class-grant
+`ActionSource` kind, advancement rules) moved to phase 4 because nothing consumes it before then.
+
+Changing how creatures roll changed the world once: seed 1's headless fingerprint went from
+`454135E5C67D1588` to `E2D7F9B469DCAB34`. Pools +13 MB (the spawn-record pool); frame cost unchanged.
+
+### Creature skeletons: building an NPC when it is first simulated
+
+Landed 2026-09-22 as phase 3 of "Deferred-build NPCs and shared definition data" (`TODO.md`). What a
+skeleton holds, when it is built and what may touch one is in `CLAUDE.md`'s Blueprints section.
+
+- **Appearance moved into the race definition** (`CreatureAppearance`): glyph, sprite set, names and
+  description, with the per-creature variant hashed from its seed rather than drawn from its rolls.
+  That is what lets a skeleton draw and name itself exactly as it will once built, and why the race
+  blueprints no longer roll a name or sprite. A race's intrinsic `NonBlockingComponent` (Ghost's
+  phasing) moved there too: occupancy can't wait for a build.
+- **The build hook is `TierChanging`, a new event ahead of `TierChanged`.** Found by the Debug guard on
+  its first run: `LocalTierRoster` handles `TierChanged` and reads the movement pool, so building
+  inside a `TierChanged` handler was already too late for whoever subscribed earlier.
+- **Spawn moves are recorded a frame later.** `CreatureSkeletons` is registered first in the frame and
+  replays each build's spawn move then; recording during the tier drain throws, because that runs
+  after the consumers have read this frame's moves. Each pending move carries its `EntityKey`, so one
+  whose creature was destroyed in between is skipped instead of searched for on every destruction.
+- **Aura exposures:** `StatusEffectAuraSystem`'s occupant scan now skips unsimulated occupants, which
+  is what decision 9 of the world-scaling work already said; a promoted creature is granted when its
+  build records its spawn.
+- **Evictions before promotions** (`PromotionsHeld` / `IsEvictingBuiltCreatures`): without it, a shift
+  built the new centre before the old one was destroyed, peaking at four built neighborhoods instead of
+  three and needing a bigger startup reserve to avoid resizing the largest pools mid-drain (one 30-60
+  ms frame on each of the first three shifts). Holding for the *whole* eviction cost 11 s before the
+  new centre came alive, so an eviction destroys its built creatures first, ahead of its other work,
+  and only that part holds promotions.
+
+Measured (Release, seed 1, 3072², against the pre-phase-1 baseline): pools 1,498 -> 398 MB, live heap
+2.42 -> 1.19 GB, peak working set 5.34 -> 1.72 GB, allocation building the world 9.7 -> 1.9 GB. Six
+teleport-driven window shifts: worst frame after the teleport 14-15 ms (baseline 14-25), p99 9.5-10 ms
+(baseline 9.5-12.7), promotions complete ~5.4 s after a shift (2.4 s without the eviction hold).
+Steady-state `EcsContext.Update` +2.6%, nothing flagged, different worlds either side.
+
+### Compact per-instance layouts (phase 4)
+
+Phase 4 of "Deferred-build NPCs and shared definition data" (`TODO.md`), landing one component group
+at a time. Each step is A/B'd for pool memory and frame cost; the pool kinds themselves turned out to
+cost more than the values in them.
+
+- **Appearance is packed, not direct** (2026-09-22). `SpriteComponent`, `DisplayTextComponent` and
+  `GlyphComponent` were Direct pools, sized by entity capacity (654k) while only the ~73k built
+  entities hold them: 65 -> 15 MB with no change to what is stored or to naming semantics. A Direct
+  pool is only right for a component most entities have, and since skeletons landed almost nothing is
+  in that category.
+- **Ability scores are one struct per entity** (2026-09-22). `AbilityScoreComponent` was a
+  MultiComponentPool entry per `AbilityScoreType`, so an entity's seven scores cost seven chain
+  entries and their per-entity bookkeeping: 36.6 MB for 3 MB of values. `AbilityScoresComponent` holds
+  every score as two `[InlineArray]`s of `ushort` (bases and precomputed totals) plus a `granted`
+  bitmask, in a packed pool -- 9.1 MB. The bitmask is what keeps "never granted" distinct from zero,
+  which readers like `DodgeEffects` and `PotionCooldownEffects` fall back on. Reads still go through
+  `AbilityScoreQueries.TryGetComponent`, now a pool lookup plus an index instead of a chain walk, and
+  hand back an `AbilityScoreValue` so call sites were untouched. `SimpleHealthRegenSystem` and
+  `ComplexHealthRegenSystem`, which read Constitution on every visit, came down 24% and 13%.
+- **Race and class are slots of definition ids** (2026-09-22). `RaceComponent`/`ClassComponent` each
+  repeated a Guid, a name and a description per entity -- 12.1 MB for four distinct races.
+  `RaceSlotsComponent`/`ClassSlotsComponent` hold two `ushort` `EntityDefinitions` ids instead (a
+  creature has one or two of each; a third is dropped rather than growing the component for a case
+  that doesn't exist), and names come from the definition. A blueprint writes its own id, so
+  `BlueprintContext` carries the session's `EntityDefinitions` -- which also means a race blueprint
+  built against definitions that never registered it now throws instead of silently producing a
+  raceless creature. `TestCombatBehaviorSystem` compares slot ids rather than walking a chain for a
+  Guid (-5%), and `InspectionWindowContent` resolves both names through the definitions.
+  The membership pool the player's class exceptions need is not here: nothing grants a class at
+  runtime yet, so two slots hold everything that exists (see `TODO.md`).
+- **Actions come from race and class definitions** (2026-09-22). Every Goblin held three
+  `ActionInstanceComponent`s naming the same three actions with the same shared overrides: 219,619
+  entries, 13 distinct values, 34.3 MB. Those grants moved onto the definition as `ActionGrant`
+  (`RaceDefinition.Actions`/`ClassDefinition.Actions`), so a creature holds nothing for them --
+  `ActionInstanceComponent` survives only for an action granted to one entity alone (a wand, a
+  learned scroll: 4 entries in a full world). `EntityActions` is the single read surface, resolving
+  an entity's own grant first, then its races', then its classes', and falling back to the catalog
+  definition; `ActionInstanceQueries` is gone. Cooldowns left the action entirely: nothing holds a
+  deadline until an entity actually uses an action that has one, and then it is an
+  `ActionCooldownComponent`. `TestCombatBehaviorSystem` -16%, the whole `EcsContext.Update` -9%.
+  Two consequences worth remembering: a definition-granted action is not a component, so it does not
+  appear in the admin component dump (its race does), and `EntityFactory` grants mana for a
+  definition's mana-costing action the way `ActionGrantEffects` does for an explicit one.
+- **Class membership is storage ahead of its consumer** (2026-09-22). `ClassMembershipComponent`
+  (class id, grant kind, acquisition order, expiry floor) sits beside `ClassSlotsComponent` for the
+  player's rules that two slots cannot express, with `ClassQueries` reading slots and memberships as
+  one ordered set and `ClassEffects` routing a grant to a slot when it is permanent and one is free.
+  Nothing grants a class at runtime yet; it is unit-tested rather than exercised, at the user's
+  request, so the floor-end event and class-selection UI have something to build on.
+- **Body parts are a race's templates plus what a fight changed** (2026-09-22). `BodyPartComponent`
+  held a name, type, vertical position, maximum health and vitality per part per creature -- 167,937
+  components, 26.4 MB, for 3,439 distinct values. Those fields are the race's body plan, so they moved
+  to `RaceDefinition.BodyParts` (`BodyPartTemplate`, which the race blueprints already authored), and
+  a creature holds only `BodyPartStateComponent`: current health, a disabled bitmask and a regen
+  lockout per part, in `[InlineArray]`s capped at 16 parts, created the first time anything happens to
+  it. An untouched creature holds nothing and reads as every part at full health.
+  `EntityBodyParts` is the one read and write surface (`Parts` walks templates and state together
+  without allocating), and a part's handle is now its id -- its index in its own body plan, stable for
+  its lifetime and already what `BodyPartBurningTimerComponent` names -- rather than a pool dense
+  index. `BodyPartSelection` returns part ids; `ComplexHealthDamage`/`ComplexHealthHeal`/
+  `BodyPartDamageEffects`/`MaximumHealthShift`/`ComplexHealthRegenSystem`/`BodyPartEffectsSystem`/
+  `BodyPartBurningSystem`/`PoisonSystem` and the health UI all follow.
+  Two consequences: `ComplexHealthRegenSystem` and `BodyPartEffectsSystem` are now driven by the state
+  pool rather than "has a body plan", so their per-frame population is the creatures something has
+  actually happened to, not every Complex creature; and `MaximumHealthShift` takes the session's
+  `EntityDefinitions`, because a shift has to know the body plan to move each part with its own
+  maximum.
+
+  A first cut of this regressed the whole simulation 20%: reading a part went through TryGetReadonly,
+  which copies the 132-byte state component, once per part, and the templates were indexed through
+  IReadOnlyList. Reading state by its dense slot (a ref, no copy), resolved once per enumeration, and
+  holding the templates as an array put it back -- worth remembering for any other flyweight read on a
+  hot path.
+- **A creature is named and drawn by its race** (2026-09-23). Every creature carried a
+  `DisplayTextComponent`, `GlyphComponent` and often a `SpriteComponent` holding what its
+  `CreatureAppearance` already said -- 65 MB of pools for a dozen distinct values. `CreatureAppearance`
+  is now only read, never applied: `CreatureNaming` resolves a name and description (own component,
+  else race appearance plus class names) and `MapViewQuery`'s existing skeleton fallback became the
+  general path for drawing. Holding one of the three now means "called or drawn differently from its
+  race" -- the player, a shop, a chest, a renamed corpse, a test fixture: 73,207 holders became 7.
+  `ActionSource.FromEntity` takes the session's `EntityDefinitions` so a killer is still named, and
+  it resolves through a static, allocation-free path because it runs on every hit.
+- **The memory report had to learn about inline arrays.** Its fieldwise comparer used
+  `EqualityComparer<TField>.Default` per field, and every built-in equality on an `[InlineArray]`
+  struct throws; those fields are compared and hashed over their bytes instead, which is exact for
+  them (contiguous elements, no padding) while ordinary fields stay field-by-field so struct padding
+  still can't read as a change.
+
+Phase 4 complete: pools 397.7 -> 238.7 MB, peak working set 1,717 -> 1,508 MB, allocation building the
+world 1,922 -> 1,602 MB, one collection fewer at every generation, and steady-state `EcsContext.Update`
+down 9-12% across runs, with `TestCombatBehaviorSystem` -15% and no regression above threshold.
+
+The last two steps each cost a round of measurement before they were clean, in the same way: body
+parts made every melee hit and burning tick build a BodyPartView per part to pick one (BurningSystem
++20% once the machine was quiet enough to see it), fixed by selecting over a disabled-bits mask; and
+the first naming cut built a resolver object per damage source, fixed by a static resolve. A flyweight
+read is only free if reading it allocates nothing and copies nothing.
+
+Body parts also changed the order parts are visited in -- a race's template order rather than the
+pool's chain order -- so random and tie-broken part picks land differently and the seed-1 world
+diverges slightly: 0.9% fewer deaths over 50 s, every other pool within a few percent. Beyond that,
+the headless fingerprint covers each pool's name and count, so a change of pool kind or shape changes
+it even when the simulation is identical -- compare the per-pool counts in the two memory reports to
+tell those two cases apart.
+
+### Per-instance shrink (phase 5)
+
+Phase 5 of the same entry: the components that stayed per-entity, made smaller rather than shared.
+
+- **`InventoryItemStackComponent`, 56 -> 24 B** (2026-09-23), the largest pool in the game at 584,429
+  stacks: 133.5 -> 74.6 MB. Its two `Guid`s were 32 of those bytes. The item definition id is interned
+  to a `ushort` handle (`ItemIds`, the same append-only shape as `EntityIdentities`) and exposed as the
+  same `ItemDefinitionId` property, so no caller changed. The stack instance id became a `uint`
+  counter, which did ripple: it is the id a hotkey binding, a pending activation, a drag payload and a
+  shop transfer all carry, and `IHotkeySlotBinding` had to become generic in its id type because an
+  action is still a catalog `Guid` while a stack is now a counter. `FirstAcquiredUtcTicks` became a
+  4-byte `AcquiredSequence` counter -- the "recently acquired" sort only ever needed the order, and
+  building a stack no longer reads the clock.
+- **`MovementComponent`, 40 -> 32 B**: `TargetMapPosition`/`NextMapPosition` are stored as sentinel
+  positions (`TransformComponent.UnplacedCoordinate`) and still read as `Vector3Int?`, so the 4 bytes
+  of padding each `Vector3Int?` spent on its flag are gone and no call site changed.
+
+Pools 397.7 -> 178.0 MB against the pre-phase-4 baseline, peak working set 1,717 -> 1,389 MB,
+allocation building the world 1,922 -> 1,477 MB, `EcsContext.Update` -8.5% with no regression above
+threshold.
+
+What is left in that pool is the `ItemDefinition? Override` reference (8 of the remaining 24 bytes):
+moving it out needs a side table with a real owner, since a stack can be removed by its entity being
+destroyed. See `TODO.md`'s "Component size audit".
+
+### One entity factory: every entity is parts plus a seed
+
+The last phase of the same entry (2026-09-23). Population creatures spawned through `EntityFactory`
+with a spawn record; fixtures, shops, the chest, the test dummy and the player called blueprints
+directly and got none, so they could never be deferred, rebuilt or saved as "definitions + seed".
+Now there is one path for all of them.
+
+- **One id space for every kind of part.** `EntityDefinitions` (was `EntityDefinitions`) still holds
+  a typed `Races`/`Classes` table and gained `Objects`, but all three draw ids from one shared
+  allocator, so a recipe slot can hold any of them without saying which kind it is. Each table keeps
+  its own lookup array over that shared space, holding null where another kind's definition sits, so
+  reading a race by id is still an array index and an id of the wrong kind reads as "not registered
+  here" with no type check. `ICreatureDefinition` became `IEntityPartDefinition`, with `NonBlocking`
+  on the interface (an object part can make an entity phase or share a cell too) and a nullable
+  `Blueprint` for a part that only declares shared data.
+- **`ObjectDefinition`** is anything that is neither a race nor a class: a whole entity with no race
+  (`GeneralShop`, `PotionShop`, `TreasureChest`, `TestDummyBlueprint`), or a modifier layered on top
+  of race and class parts (`PlayerKit`, `StationaryPart`, `LongDescriptionPart`, `GoblinEngineerPart`,
+  and the blueprint-less `OccupancyParts` Tiny/Phasing, which are nothing but a `NonBlockingKind`).
+  An object part grants no definition-level actions: those are reached through the race and class
+  slots an entity holds, and an object part is in neither.
+- **`SpawnRecipe` became `SpawnRecipe`**: the same four `ushort` slots, now generic parts in build
+  order rather than two races and two classes, so `SpawnRecordComponent` stays 12 bytes for every
+  entity in the world. A shop is one part; the player is Human, Tank, `PlayerKit`; a tiny goblin is
+  Goblin plus Tiny. `EntityDefinitions.TryGetAppearance`/`NameFor` scan the slots for the first race
+  (or, for a name, the first object) instead of reading fixed positions.
+- **`EntityFactory` became `EntityFactory`** and grew the spawning half: `Spawn` creates the entity
+  through `ProcessingTierResolver.CreateEntityAt` (so it is born tiered), builds it or defers it to a
+  skeleton, places it, records the spawn move and destroys it again if it landed off the map;
+  `SpawnInto` does the same into an id the caller already reserved (the player). The build half is
+  unchanged in shape and still works with only a `ComponentManager`, which is what lets
+  `CreatureDefaults` rebuild a record in its staging world. `GameBootstrapper` builds the one instance
+  and wires `Skeletons` onto it afterwards, since `CreatureSkeletons` is built around the same factory.
+  Only a recipe with a race can be deferred -- a skeleton draws and names itself from a race's
+  appearance -- so shops and the dummy are always built at spawn.
+- **`TestMapBuilder` and `FloorBuilder` stopped touching blueprints.** Every fixture is a recipe
+  spawned like the bulk population; the ~90 lines that hand-built entities and then removed a
+  component, retyped a description or added a `NonBlockingComponent` are gone, along with
+  `StaggerActionLock`, `PlaceAt`, `CreateEntityAt` and `ContextFor` (the factory owns all of them).
+  A fixture's layer is now named at its call site rather than inherited from whatever its parts
+  merged, because the position has to be known before the entity exists for it to be born tiered.
+- **The player is a recipe too.** `PlayerKit` became `PlayerKit`, the last part of
+  `FloorBuilder.PlayerRecipe`, and no longer allocates the crawler number -- `CreatePlayer` merges
+  `CrawlerComponent` after the spawn, the way `TestMapBuilder` already did for a rolled NPC crawler,
+  since a session's number range is a property of the run rather than of what the player is made of.
+  That also leaves `PlayerKit` stateless like every other blueprint.
+- **`BlueprintVariantSet` is gone** (no production caller since it was written). `CompositeBlueprint`
+  stays, narrowed to composition *within* one definition's blueprint -- a shop's shell plus its stock;
+  composing definitions is the recipe's job now. `GoblinEngineerPart` became `GoblinEngineerPart`,
+  holding only the name and the extra cooldown reduction that the Goblin and Engineer parts don't.
+
+The starting neighborhood's fixtures now draw their rolls from their own per-entity seed rather than
+from the neighborhood's shared population sequence, so a seeded world differs slightly from before in
+that neighborhood. Pools, working set and allocation are unchanged (178.0 MB, 1,391 MB, 1,477 MB) and
+the frame A/B showed no regression (`EcsContext.Update` -3.9%, inside the baseline's own spread).
+
+The spawn record is also the save format for an untouched Beyond neighborhood (part ids + seed), with
+a built entity saving its per-instance deltas on top. See `TODO.md`'s "Save and load Beyond
+neighborhoods".
+
+Decisions from the entry that still govern this area: a frozen entity holds only what it needs to
+exist until it is promoted or interacted with (interaction = any gameplay read or write; presentation
+never builds one); a built entity is never returned to a skeleton; admin inspection shows a frozen
+entity's defaults rather than building it; and data is classified by where its variation comes from --
+definition-level data in the definition tables, seed-derivable instance data regenerated rather than
+stored, and only genuinely mutable instance data in compact per-entity structs.
+
+### Blueprint composition: one definition kind, includes, one-id spawn records
+
+Landed 2026-09-25, replacing the "Blueprints, SpawnRecipe and EntityFactory are too rigid to build on"
+`TODO.md` entry. The four-slot `SpawnRecipe`, the race/class/object tables and `CompositeBlueprint` are
+gone; what replaced them is in `CLAUDE.md`'s Blueprints section. Six phases, each tested in game.
+
+- **One kind of definition.** A race is a `BlueprintDefinition` with a race facet, a class one with a
+  class facet; everything else -- a whole entity, a shop's stock, a trait -- is a plain definition.
+  Composition is `Includes`, to any depth: `GoblinEngineer` = Goblin + Engineer + its own step,
+  `GoblinForeman` = GoblinEngineer + Boss. That also absorbed `CompositeBlueprint` (a shop is its shell
+  plus its stock by include) and ended "first race wins / append every class" as conventions spread over
+  readers: `ResolvedBlueprint` computes them once.
+- **Interned records, not inline slots.** `SpawnRecordComponent` is (blueprint id, seed) = 8 B, down from
+  12, and has no part limit. The alternatives priced in the TODO entry (inline slots plus overflow,
+  composite ids in slots) were dropped once composites existed: one id already stands for any list.
+  Runtime combinations are interned by `BlueprintRegistry.Compose` under a SHA-256-derived v8 Guid of
+  the ordered include Guids, so the same combination is the same blueprint in every session and a save
+  can record its includes.
+- **Decisions confirmed by the user before it started:** "required components" (Transform, DisplayText,
+  Glyph, Sprite, ProcessingTier) means *resolvable*, not stored -- appearance lives on the definition and
+  is checked at spawn (`IsSpawnable`), and the per-entity display components mean per-instance overrides
+  only; applying a blueprint at runtime never rewrites the spawn record (a built entity saves its deltas
+  on top of it anyway); deferral stays "includes a race" (a skeleton shop would have no `ShopComponent`
+  while visible in the frozen Borough).
+- **Appearance rules.** Each field an `AppearanceFacet` sets replaces what came before, except that a
+  second race is ignored, so a hybrid looks, is named, spawns on the layer and at the size of its first
+  race -- chosen over blending glyph colours, which the plan had proposed, for one predictable rule. An
+  explicit `Name` replaces the composed one outright (the player, the shops); otherwise the seeded
+  display name is followed by each class and `NameSuffix`. The player's and the shops' sprite variants
+  moved from `Rolls` to the seed hash, which shifted later rolls: seed 1's headless fingerprint went
+  `DA8D46E71253AA29` -> `C7216D808D8BF25F` (phase 2) and stayed there through phase 5.
+- **Actions from any definition.** `ResolvedBlueprint.Actions` merges every part's grants, later
+  replacing earlier by action id, so a composite can override its race's attack. `EntityActions` reads
+  the entity's own grants, then its blueprint's (through the spawn record, no race slots), then classes
+  gained at runtime that its blueprint didn't build -- a class slot also holds spawned classes, and a
+  composite's override of a class action must not come back un-overridden through the slot.
+- **The call side.** `SpawnRequest` (blueprint + x/y; layer, size and seed default from the blueprint and
+  the factory's own runtime sequence; `Crawler`; a reserved id). The crawler allocator and a runtime seed
+  reach the factory through `GameBootstrapper.Build`; a Crawler request without an allocator is refused,
+  not silently left uncrawlered. Population still passes its own seed, then its crawler roll, in the same
+  draw order as before, so worlds were unchanged by this.
+- **Runtime.** A `FrameEventBuffer` throws on a write after its read, so a spawn from a system mid-frame
+  used to be impossible. `SpawnMoves` (first in the frame, over `FrameEventBuffer.TryRecord`) records a
+  spawn move now if the frame's moves are unread, else first thing next frame; it replaced
+  `CreatureSkeletons`' own replay. `EntityFactory.Apply` layers a blueprint onto a live entity -- see
+  `CLAUDE.md` for what it skips and what takes effect. `GameModuleContext.EntityFactory` is set after
+  every `Configure`. Adding to a stripe set mid-iteration is safe (a system iterates a span over the
+  bucket's current array), so no deferral was needed there.
+- **Admin tools, kept.** Admin Mode's map context menu has "Spawn here >" and "Apply >"
+  (`BlueprintAdminCommands`). `ContextMenu` gained submenus for them (`ContextMenuOption.Opening`),
+  swapped in on the menu's next update rather than inside the click, which would recycle the row being
+  clicked. The user asked to keep these as a standing test tool.
+- **`IBlueprint` is gone.** Every blueprint is a static class holding `Id`, `Name` and its `Definition`;
+  a build step is its own `private static void Build(BlueprintContext)`, referenced as `Build = Build`
+  (`BlueprintDefinition.Build` is an `Action<BlueprintContext>`), and a pure composition leaves it null.
+  Before this, a blueprint with a step was a sealed class implementing `IBlueprint` and one without was a
+  static class, so a file's shape depended on whether it had a step. A static method also makes "a
+  blueprint holds no state" a compiler guarantee rather than a convention.
+- **Moved while here:** the definition types from `Game/Creatures` to `Game/Blueprints`; `SpriteManifest`
+  from `Game/Blueprints` to `Game/Sprites` (a sprite catalog shared by Game and Presentation, not a
+  blueprint); `EntityPartsModule` became `BlueprintsModule` (same module Guid).
+
+Measured (Release, seed 1, 3072², frames 600-3600). Memory against the one-entity-factory figures above:
+pools 178.0 -> 174.3 MB (the spawn-record pool 15.6 -> 11.9 MB), peak working set 1,391 -> 1,372 MB,
+allocation before the range 1,477 -> 1,479 MB; `DisplayTextComponent`/`GlyphComponent`/`SpriteComponent`
+hold nothing in a populated world. Frame A/B, headless, 3 runs per side against the saved 2026-09-22
+baseline (which predates the skeleton and one-factory work too, and simulates a different world):
+`EcsContext.Update` 1.84 -> 1.68 ms/frame (-9%), no system flagged as a regression. The action-lookup
+systems (`TestCombatBehaviorSystem` -16%, `ActionActivationSystem` -16%) got cheaper, not dearer.
+
+### Skeleton data and applied blueprints
+
+Landed 2026-09-26, one phase, following the composition work above.
+
+- **One skeleton list, in the factory** (`EntityFactory.SkeletonComponentTypes`), read by the access
+  guard and startup's pool reservation. A type is on it only if its value is declared on the definition
+  or set by the spawn, and something needs it on unbuilt entities. `BuildSkeleton` writes those from
+  definitions -- now including an unplaced transform on the blueprint's layer and size -- and no build
+  step writes one: the seven blueprints that merged a `TransformComponent` stopped, `EnsureBuilt` no
+  longer puts the skeleton's transform back, and `BlueprintSkeletonTests` fails if a build step ever
+  changes a skeleton component (with a negative control, and an unusual footprint so even a same-sized
+  transform merge shows). `BuildBody` became `BuildComplete`.
+- **Race and class stayed off the skeleton.** Considered and dropped: no reader needs them on an
+  unbuilt entity (drawing and naming go through the spawn record; everything else only sees built
+  entities), and they would have cost ~4-5 MB of race slots.
+- **Applied list.** `AppliedBlueprintComponent` (Multi pool: part id + application order) records every
+  part `Apply` builds; `Apply` skips what the entity spawned with or already had applied, so a part is
+  never built twice -- merge policies that aren't idempotent (averaging, concatenation) would otherwise
+  merge a part into itself. Different parts still merge as before. Applied parts' actions, class names
+  and name suffixes are read through the list, so `Apply` no longer grants per-entity actions and
+  `EntityActions`/`CreatureNaming` (now `EntityNaming`) no longer read class slots or memberships. Action order is now own
+  grant -> applied parts (latest first) -> spawn blueprint: an applied part is later than everything
+  the entity spawned with, so it wins, which reverses the earlier "runtime classes after the blueprint".
+- **Crawler numbers wait for simulation.** `SpawnRecordComponent` became (blueprint id, `SpawnFlags`,
+  seed), still 8 B with the flags byte in former padding; `BuildComplete` assigns the number on first
+  build. The allocator got its own sequence (session seed, salted): assigning at promotion from the
+  session's shared sequence would have made later neighborhoods depend on when the player walked where.
+  Admin inspection of an unbuilt crawler (the staging rebuild) shows no number.
+- **`Game.Creatures` became `Game.Spawning`** afterwards: everything in it (the factory, spawn requests
+  and records, `SpawnMoves`, the applied list, admin commands) serves every entity, not only creatures.
+  `CreatureNaming` became `EntityNaming` and `CreatureDefaults` became `SpawnRecordRebuilder`;
+  `CreatureSkeletons` and `SkeletonAccessGuard` kept their names, since only creatures are deferred.
+  Earlier entries in this file use the old names. The fingerprint hashes each pool's full type name, so
+  the move alone changed it (to `75A930BD5397AB52`) with the world unchanged.
+- **Fingerprints.** Adding the applied pool alone changed the headless fingerprint, because it hashes
+  every pool's type and count; with the pool left unregistered the world reproduced `C7216D808D8BF25F`
+  exactly, so the step changed nothing else. With the pool: `C2C11D769611C48C`. After the crawler
+  change (its own allocator sequence): `67F682054CEECEA2`.
+
+Measured (Release, seed 1, 3072², frames 600-3600) against a baseline saved immediately before: frame A/B
+`EcsContext.Update` 1.448 -> 1.439 ms/frame (-0.6%), nothing flagged; memory: `CrawlerComponent` holders
+13,063 -> 1,451, pools 174.3 -> 171.9 MB, allocation before the range 1,478.8 -> 1,475.3 MB, collections
+30/18/6 -> 28/17/5.
 
 ## Presentation
 
@@ -841,3 +1243,33 @@ Landed alongside two generalizations prompted by this feature recurring elsewher
   item/action activation now share the one implementation (single-tap Escape's
   `CloseTopmostClosableWindow` is unrelated and untouched). A future Magic Menu cast goes through the
   same `ArmAction`/`QueueActionActivation` chokepoints and gets this behavior for free.
+
+### StatusEffectAuraExposureComponent growth: not a leak (leak detector fix)
+
+Investigated 2026-09-26. The leak detector reported `StatusEffectAuraExposureComponent` growing
+0 -> ~20k with a flat entity count.
+
+- **Not a leak.** A 36,000-frame headless run (seed 12345) sampled the pool every 600 frames: it
+  peaks at ~22.2k on frame 600 and settles around ~17k, one exposure per entity (one effect type in
+  use), zero simulated exposures with an overdue deadline (the symptom a missed removal or
+  reschedule would leave), and dead owners only transiently (dropped on their next tick).
+  `EntityManager.DestroyEntity` clears Multi pools through `RemoveAllComponents`.
+- Exposures held by frozen Borough entities rise slowly (45 -> 528 over the run): exposed creatures
+  wandering out of the centre neighborhood freeze with their exposure. Bounded, and
+  `SkipOwedExposureTicks` handles the resume. It does show creatures drifting one way into Borough.
+- **The detector's false positive:** `GameLoop.Update` ticks diagnostics before the first simulated
+  frame, so the first sample has every gameplay pool empty or nearly so, and oldest-to-newest
+  growth flags each one as it fills (a session under a minute flagged a dozen, including this one
+  and `BurningTimerComponent`). `LeakDetector` now also requires growth in the second half of the
+  window (middle sample to newest, `RecentPoolGrowthThreshold`, and any growth for the heap
+  finding). With it, a 150 s session flags only `MovementDisabledComponent` (385 -> 592).
+- **`MovementDisabledComponent` is not a leak either: it's corpses.** Probed over 36,000 headless
+  frames (seed 12345), it grew 24 -> 1,114 alongside `DeadComponent` (3,116 -> 22,736), and every
+  sample had 0-3 living holders -- the rest were dead. `MeleeDisabledComponent` is the same
+  (48 -> 1,333, 0-2 living). A creature killed with every leg disabled keeps the marker: corpses
+  don't regenerate, `BodyPartEffectsSystem` still visits them (its driving pool,
+  `BodyPartStateComponent`, outlives death), and corpses are only destroyed when their neighborhood
+  unloads. So the count is bounded by the corpse population and grows at the death rate, slowing as
+  it does -- the event-marker false-positive shape `LeakDetector`'s remarks already describe. The
+  markers on a corpse are inert (`MovementSystem`/`ActionActivationSystem` already refuse a dead
+  entity).

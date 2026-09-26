@@ -9,7 +9,7 @@ namespace Game.Modules.Actions.Definitions;
 /// Registers the first real, permanent action catalog -- race/class-agnostic actions any entity
 /// can be granted. A flat catalog rather than one module per tag, since tags are multi-valued
 /// (e.g. Punch is Melee+Unarmed+Attack, with no single tag-module it would belong to) -- see
-/// PlayerBlueprint and the race blueprints for where these are granted. Mirrors AchievementModule's
+/// PlayerKit and the race blueprints for where these are granted. Mirrors AchievementModule's
 /// static Definitions list, one file per action under Spells/DirectActions (organized by
 /// ActionActivator kind).
 /// </summary>

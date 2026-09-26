@@ -1,4 +1,4 @@
-using Game.Blueprints;
+using Game.Sprites;
 
 namespace Game.Views;
 

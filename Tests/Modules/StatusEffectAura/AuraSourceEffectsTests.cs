@@ -14,7 +14,7 @@ public sealed class AuraSourceEffectsTests
     private const int EntityId = 1;
 
     private static MultiComponentPool<StatusEffectAuraSourceComponent> CreatePool() =>
-        new(maximumEntityCount: 10, initialCapacity: 4);
+        new(entityCapacity: 10, initialCapacity: 4);
 
     [TestMethod]
     public void Toggle_AbsentType_AddsSourceAndPublishesAdded()

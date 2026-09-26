@@ -6,12 +6,14 @@ using Engine.Math;
 using Game.Modules.AbilityScores.Components;
 using Game.Modules.Actions.Components;
 using Game.Modules.Death.Components;
+using Game.Modules.Health;
 using Game.Modules.Health.Components;
 using Game.Modules.ProcessingTier;
 using Game.Modules.StatModifiers.Components;
 using Game.Modules.StatusEffectAura.Components;
 using Game.Modules.StatusEffects;
 using Game.World;
+using Game.Blueprints;
 
 namespace Game.Modules.Actions;
 
@@ -51,12 +53,13 @@ public static class ActionEffectResolver
         long now,
         MultiComponentPool<StatModifierComponent>? statModifiers = null,
         PackedComponentPool<DeadComponent>? deadEntities = null,
-        MultiComponentPool<AbilityScoreComponent>? abilityScores = null,
+        PackedComponentPool<AbilityScoresComponent>? abilityScores = null,
         MultiComponentPool<StatusEffectAuraSourceComponent>? auraSources = null,
         PackedComponentPool<HotkeyExpansionUnlockComponent>? hotkeyExpansionUnlocks = null,
-        MultiComponentPool<BodyPartComponent>? bodyParts = null,
+        EntityBodyParts? bodyParts = null,
         PackedComponentPool<DodgingComponent>? dodgingEntities = null,
-        ProcessingTierQuery? processingTiers = null)
+        ProcessingTierQuery? processingTiers = null,
+        BlueprintRegistry? creatures = null)
     {
         eventBus.Publish(new ActionActivatedEvent(sourceEntityId, action.Id));
 

@@ -29,7 +29,16 @@ public sealed class ContextMenu(FontService fontService, ElementPoolService elem
     /// <summary>Gap between an option's Label and its HotkeyText column, when present -- e.g. "Copy" and "Ctrl+C" need visible daylight between them, not just whatever's left over once both are right/left-aligned within the same row.</summary>
     private const float HotkeyGap = 24f;
 
+    /// <summary>What an option that opens a submenu shows in its HotkeyText column.</summary>
+    public const string SubmenuMarker = ">";
+
     private readonly SpriteFontBase _font = fontService.GetFont(FontChrome.DefaultFontSize);
+
+    /// <summary>A submenu chosen this frame, shown on the next Update rather than from inside the click that chose it -- showing rebuilds every row, including the one whose click is still being handled.</summary>
+    private IReadOnlyList<ContextMenuOption>? _pendingSubmenu;
+
+    /// <summary>Shows a submenu the way the menu itself was opened (ContextMenuController.Open), so it lands edge-aware at the same cursor. Set by the controller; while unset, a submenu opens at this menu's own top-left.</summary>
+    public Action<IReadOnlyList<ContextMenuOption>>? OpenSubmenu { get; set; }
 
     /// <summary>
     /// Repositions, rebuilds, and shows this menu with the given options next to topLeft --
@@ -114,6 +123,12 @@ public sealed class ContextMenu(FontService fontService, ElementPoolService elem
         button.LeftAlign = true; // A context-menu row always reads left-aligned, even without a HotkeyText column -- not the ink-centered look Button otherwise defaults to.
         button.Clicked += _ =>
         {
+            if (option.Submenu is { } submenu)
+            {
+                _pendingSubmenu = submenu;
+                return;
+            }
+
             option.OnSelect();
             Hide();
         };
@@ -121,7 +136,29 @@ public sealed class ContextMenu(FontService fontService, ElementPoolService elem
         AddChild(button);
     }
 
-    public void Hide() => IsVisible = false;
+    public void Hide()
+    {
+        IsVisible = false;
+        _pendingSubmenu = null;
+    }
+
+    public override void Update(GameTime gameTime)
+    {
+        base.Update(gameTime);
+
+        if (_pendingSubmenu is { } submenu)
+        {
+            _pendingSubmenu = null;
+            if (OpenSubmenu is { } open)
+            {
+                open(submenu);
+            }
+            else
+            {
+                Show(AbsolutePosition, submenu);
+            }
+        }
+    }
 
     /// <summary>The size Show(topLeft, options) will set this menu's own bounds to -- exposed so ContextMenuController can position this menu edge-aware (PopupPositioning.GetPositionWithinBounds) before calling Show, since Show is also what first computes/applies this size.</summary>
     public Vector2 MeasureSize(IReadOnlyList<ContextMenuOption> options)

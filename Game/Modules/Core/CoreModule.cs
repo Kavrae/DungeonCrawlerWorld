@@ -24,29 +24,32 @@ public sealed class CoreModule : IGameModule
     /// <param name="componentManager"></param>
     public void RegisterComponents(ComponentManager componentManager)
     {
-        componentManager.RegisterDirectPool<BackgroundComponent>(static (ref existing, incoming) =>
+        componentManager.RegisterPackedPool<BackgroundComponent>(static (ref existing, incoming) =>
         {
             existing.BackgroundColor = Color.Lerp(existing.BackgroundColor, incoming.BackgroundColor, 0.5f);
         });
 
-        componentManager.RegisterDirectPool<DisplayTextComponent>(static (ref existing, incoming) =>
+        // Rare: an entity is named and drawn by its blueprint's appearance (see EntityNaming and
+        // EntityAppearance), so only one that differs from it -- a destroyed container -- holds any
+        // of the three below.
+        componentManager.RegisterPackedPool<DisplayTextComponent>(static (ref existing, incoming) =>
         {
             existing.Name = existing.Name + " " + incoming.Name;
             existing.Description = existing.Description + Environment.NewLine + incoming.Description;
-        });
+        }, initialCapacity: 64);
 
-        componentManager.RegisterDirectPool<GlyphComponent>(static (ref existing, incoming) =>
+        componentManager.RegisterPackedPool<GlyphComponent>(static (ref existing, incoming) =>
         {
             existing.GlyphColor = Color.Lerp(existing.GlyphColor, incoming.GlyphColor, 0.5f);
-        });
+        }, initialCapacity: 64);
 
-        componentManager.RegisterDirectPool<SpriteComponent>(static (ref existing, incoming) => { });
+        componentManager.RegisterPackedPool<SpriteComponent>(static (ref existing, incoming) => { }, initialCapacity: 64);
 
         // Rough estimate of potential non-blocking entity population.
-        componentManager.RegisterMultiPool<NonBlockingComponent>(maximumEntityCount: 40_000, initialCapacity: 40_000);
+        componentManager.RegisterMultiPool<NonBlockingComponent>(initialCapacity: 40_000);
 
-        // Always very rare (0 live instances in the same measurement) -- start small, grow on demand.
-        componentManager.RegisterMultiPool<ForceBlockingComponent>(maximumEntityCount: 16, initialCapacity: 16);
+        // Always very rare -- start small, grow on demand.
+        componentManager.RegisterMultiPool<ForceBlockingComponent>(initialCapacity: 16);
 
         componentManager.RegisterDirectPool<TransformComponent>(static (ref existing, incoming) =>
         {

@@ -41,7 +41,7 @@ public static class HealthHeal
         float percentOfMaxHealth,
         long now,
         MultiComponentPool<StatModifierComponent>? statModifiers = null,
-        MultiComponentPool<BodyPartComponent>? bodyParts = null,
+        EntityBodyParts? bodyParts = null,
         float flatAmount = 0f,
         int? sourceEntityId = null,
         IReadOnlyList<Tag>? activatorTags = null,

@@ -8,7 +8,7 @@ namespace Tests.Modules.Core.Components;
 public sealed class ActionLockGateTests
 {
     private static PackedComponentPool<ActionLockComponent> CreatePool() =>
-        new(maximumEntityCount: 10, initialCapacity: 4,
+        new(entityCapacity: 10, initialCapacity: 4,
             static (ref existing, incoming) => existing = incoming);
 
     private static PackedComponentPool<ActionLockComponent> PoolLockedUntil(uint unlockedAtFrame, ushort totalFrames = 5)

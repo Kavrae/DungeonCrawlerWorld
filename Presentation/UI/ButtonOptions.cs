@@ -1,3 +1,5 @@
+using Game.Sprites;
+
 namespace Presentation.UI;
 
 /// <summary>Button-specific configuration -- same "independent option group" pattern as TextOptions/FolderOptions. Optional: a plain text-only Button (a title-bar "X", a context-menu row) never sets this.</summary>

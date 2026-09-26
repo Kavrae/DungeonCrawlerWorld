@@ -6,7 +6,7 @@ namespace Game.Modules.Inventory;
 
 /// <summary>
 /// Registers the first real, permanent item catalog -- race/class-agnostic items any entity can
-/// carry. See PlayerBlueprint for where these are granted. Mirrors CoreActionsModule/
+/// carry. See PlayerKit for where these are granted. Mirrors CoreActionsModule/
 /// AchievementModule's static Definitions list, one file per item under Definitions/.
 /// </summary>
 public sealed class CoreItemsModule : IGameModule

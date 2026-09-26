@@ -5,6 +5,7 @@ using Game.Modules;
 using Game.Modules.Actions.Activators;
 using Game.Modules.Burning;
 using Game.Modules.Burning.Components;
+using Game.Modules.Health;
 using Game.Modules.Health.Components;
 using Game.Modules.Inventory;
 using Game.Modules.Inventory.Definitions;
@@ -35,14 +36,11 @@ public sealed class HealthWindowTests
     private const int EntityId = 0;
 
     private static PackedComponentPool<SimpleHealthComponent> CreateHealthPool() =>
-        new(maximumEntityCount: 10, initialCapacity: 4, static (ref existing, incoming) => existing = incoming);
-
-    private static MultiComponentPool<BodyPartComponent> CreateBodyPartsPool() =>
-        new(maximumEntityCount: 10, initialCapacity: 8);
+        new(entityCapacity: 10, initialCapacity: 4, static (ref existing, incoming) => existing = incoming);
 
     private static MultiComponentPool<StatModifierComponent> CreateMaximumHealthBuffPool(float magnitude)
     {
-        var statModifiers = new MultiComponentPool<StatModifierComponent>(maximumEntityCount: 10, initialCapacity: 4);
+        var statModifiers = new MultiComponentPool<StatModifierComponent>(entityCapacity: 10, initialCapacity: 4);
         statModifiers.Add(EntityId, new StatModifierComponent(StatModifierTarget.MaximumHealth, StatModifierOperation.Multiplicative, StatModifierPolarity.Buff,
             canModify: true, magnitude: magnitude, expiresAtFrame: FrameDeadline.Never, ActionSource.Admin));
         return statModifiers;
@@ -52,13 +50,7 @@ public sealed class HealthWindowTests
     public void BuildBodyPartRows_ComplexFixture_OneRowPerBodyPart()
     {
         var healthPool = CreateHealthPool();
-        var bodyParts = CreateBodyPartsPool();
-        bodyParts.Add(EntityId, new BodyPartComponent("Head", BodyPartType.Head, 0, verticalPosition: 0, currentHealth: 10, maximumHealth: 10, isVital: true));
-        bodyParts.Add(EntityId, new BodyPartComponent("Torso", BodyPartType.Torso, 0, verticalPosition: 0, currentHealth: 15, maximumHealth: 20, isVital: true));
-        bodyParts.Add(EntityId, new BodyPartComponent("Left Arm", BodyPartType.Arm, 0, verticalPosition: 0, currentHealth: 8, maximumHealth: 8, isVital: false));
-        bodyParts.Add(EntityId, new BodyPartComponent("Right Arm", BodyPartType.Arm, 0, verticalPosition: 0, currentHealth: 8, maximumHealth: 8, isVital: false));
-        bodyParts.Add(EntityId, new BodyPartComponent("Left Leg", BodyPartType.Leg, 0, verticalPosition: 0, currentHealth: 4, maximumHealth: 9, isVital: false));
-        bodyParts.Add(EntityId, new BodyPartComponent("Right Leg", BodyPartType.Leg, 0, verticalPosition: 0, currentHealth: 9, maximumHealth: 9, isVital: false));
+        var bodyParts = BodyPartTestWorld.WithParts(EntityId, ("Head", BodyPartType.Head, 10, 10, true), ("Torso", BodyPartType.Torso, 15, 20, true), ("Left Arm", BodyPartType.Arm, 8, 8, false), ("Right Arm", BodyPartType.Arm, 8, 8, false), ("Left Leg", BodyPartType.Leg, 4, 9, false), ("Right Leg", BodyPartType.Leg, 9, 9, false)).BodyParts;
 
         List<HealthWindow.BodyPartRow> rows = [];
         HealthWindow.BuildBodyPartRows(rows, EntityId, healthPool, bodyParts, statModifiers: null);
@@ -76,8 +68,7 @@ public sealed class HealthWindowTests
         // MaximumHealth buff makes its true cap 15 -- regression for the same bug
         // ComplexHealthHeal/BodyPartSelection/PlayerHealthHoverContent had.
         var healthPool = CreateHealthPool();
-        var bodyParts = CreateBodyPartsPool();
-        bodyParts.Add(EntityId, new BodyPartComponent("Head", BodyPartType.Head, 0, verticalPosition: 0, currentHealth: 10, maximumHealth: 10, isVital: true));
+        var bodyParts = BodyPartTestWorld.WithParts(EntityId, ("Head", BodyPartType.Head, 10, 10, true)).BodyParts;
         var statModifiers = CreateMaximumHealthBuffPool(0.5f);
 
         List<HealthWindow.BodyPartRow> rows = [];
@@ -93,7 +84,7 @@ public sealed class HealthWindowTests
     {
         var healthPool = CreateHealthPool();
         healthPool.Add(EntityId, new SimpleHealthComponent(currentHealth: 50, maximumHealth: 100));
-        var bodyParts = CreateBodyPartsPool();
+        var bodyParts = new BodyPartTestWorld().BodyParts;
 
         List<HealthWindow.BodyPartRow> rows = [];
         HealthWindow.BuildBodyPartRows(rows, EntityId, healthPool, bodyParts, statModifiers: null);
@@ -234,7 +225,7 @@ public sealed class HealthWindowTests
     [TestMethod]
     public void TryGetBodyPartBurningLine_PartHasActiveBodyPartScopedBurn_ReturnsFormattedLine()
     {
-        var bodyPartBurningTimers = new MultiComponentPool<BodyPartBurningTimerComponent>(maximumEntityCount: 10, initialCapacity: 4);
+        var bodyPartBurningTimers = new MultiComponentPool<BodyPartBurningTimerComponent>(entityCapacity: 10, initialCapacity: 4);
         // FramesUntilNextTick 45 + (StackCount 2 - 1) * TickIntervalFrames 60 = 105 frames = 1.75s -> ceil to 2 -- same formula the entity-scoped BurningTimerComponent display uses.
         bodyPartBurningTimers.Add(EntityId, new BodyPartBurningTimerComponent(partId: 1, stackCount: 2, nextTickFrame: 45, ActionSource.Admin));
 
@@ -248,7 +239,7 @@ public sealed class HealthWindowTests
     [TestMethod]
     public void TryGetBodyPartBurningLine_DifferentPartOnFire_ThisPartReturnsFalse()
     {
-        var bodyPartBurningTimers = new MultiComponentPool<BodyPartBurningTimerComponent>(maximumEntityCount: 10, initialCapacity: 4);
+        var bodyPartBurningTimers = new MultiComponentPool<BodyPartBurningTimerComponent>(entityCapacity: 10, initialCapacity: 4);
         bodyPartBurningTimers.Add(EntityId, new BodyPartBurningTimerComponent(partId: 1, stackCount: 2, nextTickFrame: 45, ActionSource.Admin));
 
         var found = HealthWindow.TryGetBodyPartBurningLine(bodyPartBurningTimers, EntityId, partId: 0, now: 0, out var text, out _);
@@ -266,7 +257,7 @@ public sealed class HealthWindowTests
     }
 
     private static PackedComponentPool<PotionCooldownComponent> CreatePotionCooldownPool() =>
-        new(maximumEntityCount: 10, initialCapacity: 4, static (ref existing, incoming) => existing = incoming);
+        new(entityCapacity: 10, initialCapacity: 4, static (ref existing, incoming) => existing = incoming);
 
     private static ItemCatalog CreateItemCatalogWithHealthPotion()
     {
@@ -332,7 +323,7 @@ public sealed class HealthWindowTests
     }
 
     private static MultiComponentPool<StatModifierComponent> CreateStatModifiersPool() =>
-        new(maximumEntityCount: 10, initialCapacity: 4);
+        new(entityCapacity: 10, initialCapacity: 4);
 
     [TestMethod]
     public void BuildModifierRows_NoPoolSupplied_Empty()
@@ -651,7 +642,7 @@ public sealed class HealthWindowTests
     }
 
     private static MultiComponentPool<StatusEffectImmunityComponent> CreateImmunitiesPool() =>
-        new(maximumEntityCount: 10, initialCapacity: 4);
+        new(entityCapacity: 10, initialCapacity: 4);
 
     [TestMethod]
     public void BuildImmunityRows_NoPoolSupplied_Empty()

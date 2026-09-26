@@ -1,9 +1,9 @@
 using Engine.Bootstrap;
 using Engine.Diagnostics;
-using Engine.ECS.Systems;
 using Engine.Events;
 using Engine.Math;
 using Engine.Modules;
+using Game.Spawning;
 using Game.Modules;
 using Game.Modules.AbilityScores;
 using Game.Modules.Achievements;
@@ -35,6 +35,7 @@ using Game.Modules.StatusEffectAura;
 using Game.Modules.StatusEffectAura.Components;
 using Game.Modules.StatusEffects;
 using Game.World;
+using Game.Blueprints;
 
 namespace Game.Bootstrap;
 
@@ -53,7 +54,9 @@ public static class GameBootstrapper
         string modsDirectory,
         int initialEntityCapacity,
         int initialComponentCapacity,
-        StartupProfiler? startupProfiler = null)
+        StartupProfiler? startupProfiler = null,
+        UniqueNumberAllocator? crawlerNumbers = null,
+        ulong runtimeSpawnSeed = 0)
     {
         IReadOnlyList<IModule> builtInModules =
         [
@@ -73,6 +76,7 @@ public static class GameBootstrapper
             new ProcessingTierModule(),
             new RaceModule(),
             new ClassModule(),
+            new BlueprintsModule(),
             new ActionsModule(),
             new CoreActionsModule(),
             new StatusEffectsModule(),
@@ -114,6 +118,12 @@ public static class GameBootstrapper
 
         var modules = ModuleSet.Combine(builtInModules, survivingMods);
 
+        Engine.ECS.Context.EcsContext rebuilderStaging;
+        using (startupProfiler?.Phase("BuildSpawnRecordRebuilderStaging"))
+        {
+            rebuilderStaging = BuildSpawnRecordRebuilderStaging(modules, mapQuery, world, entityMoveSync);
+        }
+
         var context = ConfigureGameModules(modules, mapQuery, world, mathUtility, eventBus, entityMoveSync, startupProfiler);
         world.Terrain = context.Terrain;
 
@@ -135,20 +145,51 @@ public static class GameBootstrapper
         // catch-all behind ProcessingTierResolver.CreateEntityAt. See that class's own remarks.
         world.EntityPlaced += context.ProcessingTierResolver.EnsureTiered;
 
+        // One factory for every entity this session ever spawns (see EntityFactory). Skeletons are
+        // wired onto it afterwards rather than passed in, since they are built around the same
+        // factory -- one of the two has to know about the other second.
+        var factory = new EntityFactory(context.Definitions, world, ecsContext.EntityManager, ecsContext.ComponentManager, context.MovedEntities, context.ProcessingTierResolver, context.SimulationClock, crawlerNumbers, runtimeSpawnSeed);
+
+        // Forgotten first, so every later destruction handler sees an ordinary entity rather than a
+        // skeleton the access guard would stop it reading.
+        var skeletons = new CreatureSkeletons(factory, ecsContext.ComponentManager, context.SimulationClock);
+        factory.Skeletons = skeletons;
+        ecsContext.EntityManager.EntityDestroying += skeletons.Forget;
+
+        // First in the frame, so a spawn recorded late last frame reaches every reader of the moves.
+        ecsContext.SystemManager.RegisterFirst(factory.SpawnMoves!);
+        context.EntityFactory = factory;
+        SkeletonAccessGuard.Install(ecsContext.ComponentManager, new SkeletonAccessGuard(skeletons, ecsContext.SystemManager));
+
         WireEntityDestruction(context, ecsContext, world);
 
         // Which processing tiers are simulated at all: every ITieredSystem through SystemManager, and
         // every timer wheel through SimulationScope. Engine only ever sees a count and a predicate;
         // what the tiers mean stays here.
         ecsContext.SystemManager.SimulatedTierCount = ProcessingTierDivisors.SimulatedTierCount;
-        WireSimulationScope(context, ecsContext);
+        WireSimulationScope(context, ecsContext, skeletons);
 
         // The clock modules were configured against (and captured) becomes the one SystemManager
         // advances, so every deadline reader sees the same "now". Presentation reaches it as
         // EcsContext.SystemManager.Clock.
         ecsContext.SystemManager.Clock = context.SimulationClock;
 
-        return new GameBootstrapResult(ecsContext, failures, context.Actions, context.MovedEntities, context.Items, context.StatusEffectDisplays, context.LocalTierRoster, context.ProcessingTierResolver, context.Terrain);
+        return new GameBootstrapResult(ecsContext, failures, context.Actions, context.MovedEntities, context.Items, context.StatusEffectDisplays, context.LocalTierRoster, context.ProcessingTierResolver, context.Terrain, context.Definitions, new SpawnRecordRebuilder(rebuilderStaging, context.Definitions), skeletons, factory);
+    }
+
+    /// <summary>A separately configured and built copy of every module, as the staging world SpawnRecordRebuilder rebuilds creatures in.</summary>
+    /// <remarks>
+    /// Runs before the real configuration and build, the same way DryRunValidateMods does: modules that
+    /// keep what Configure/RegisterSystems hand them end up holding the real world's, since that runs
+    /// last. Configured with its own random sequence so staging never draws from the session's. Its
+    /// builds read the session's own BlueprintRegistry, so a spawn record means the same
+    /// blueprint in both worlds, including one registered after this runs.
+    /// </remarks>
+    private static Engine.ECS.Context.EcsContext BuildSpawnRecordRebuilderStaging(IReadOnlyList<IModule> modules, IMapQuery mapQuery, IPlayerQuery playerQuery, IEntityMoveSync entityMoveSync)
+    {
+        var stagingEventBus = new EventBus();
+        var stagingContext = ConfigureGameModules(modules, mapQuery, playerQuery, new MathUtility(new SeededRandom()), stagingEventBus, entityMoveSync);
+        return Bootstrapper.Build(modules, initialEntityCapacity: 16, initialComponentCapacity: 16, stagingEventBus, entityKeys: stagingContext.EntityKeys);
     }
 
     /// <summary>Whatever destroys an entity, the state Game keeps about it outside the component pools lets go first: its aura sources, its map footprint, and its tier bookkeeping.</summary>
@@ -185,7 +226,8 @@ public static class GameBootstrapper
     /// the entities that go untiered (never placed on the map) are exactly the ones nothing would
     /// ever resume.
     /// </remarks>
-    private static void WireSimulationScope(GameModuleContext context, Engine.ECS.Context.EcsContext ecsContext)
+    /// <remarks>A skeleton promoted into a simulated tier is built on TierChanging, before any TierChanged handler (tier stripe sets, the Local roster, resume and timer catch-up) sees the change.</remarks>
+    private static void WireSimulationScope(GameModuleContext context, Engine.ECS.Context.EcsContext ecsContext, CreatureSkeletons skeletons)
     {
         if (!ecsContext.ComponentManager.IsRegistered<ProcessingTierComponent>())
         {
@@ -196,14 +238,19 @@ public static class GameBootstrapper
         var simulationScope = context.SimulationScope;
 
         simulationScope.SetPolicy(new ProcessingTierQuery(tiers).IsSimulated);
+        context.ProcessingTierEvents.TierChanging += (entityId, tier) =>
+        {
+            if (ProcessingTierQuery.IsSimulatedTier(tier))
+            {
+                skeletons.EnsureBuilt(entityId);
+            }
+        };
         context.ProcessingTierEvents.TierChanged += (entityId, tier) =>
         {
-            if (!ProcessingTierQuery.IsSimulatedTier(tier))
+            if (ProcessingTierQuery.IsSimulatedTier(tier))
             {
-                return;
+                simulationScope.RaiseResumed(entityId);
             }
-
-            simulationScope.RaiseResumed(entityId);
         };
     }
 
@@ -261,6 +308,9 @@ public static class GameBootstrapper
                 gameModule.Configure(context);
             }
         }
+
+        // Resolved now, so a broken include fails the load (or a mod's dry run) rather than its first spawn.
+        context.Definitions.ResolveAll();
 
         return context;
     }

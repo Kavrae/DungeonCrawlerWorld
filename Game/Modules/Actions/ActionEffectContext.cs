@@ -6,12 +6,14 @@ using Engine.Math;
 using Game.Modules.AbilityScores.Components;
 using Game.Modules.Actions.Components;
 using Game.Modules.Death.Components;
+using Game.Modules.Health;
 using Game.Modules.Health.Components;
 using Game.Modules.Mana.Components;
 using Game.Modules.StatModifiers.Components;
 using Game.Modules.StatusEffectAura.Components;
 using Game.Modules.StatusEffects;
 using Game.World;
+using Game.Blueprints;
 
 namespace Game.Modules.Actions;
 
@@ -44,13 +46,14 @@ public sealed record ActionEffectContext(
     IReadOnlyList<Tag> ActivatorTags,
     long Now,
     MultiComponentPool<StatModifierComponent>? StatModifiers = null,
-    MultiComponentPool<AbilityScoreComponent>? AbilityScores = null,
+    PackedComponentPool<AbilityScoresComponent>? AbilityScores = null,
     PackedComponentPool<ManaComponent>? Mana = null,
     PackedComponentPool<HotkeyExpansionUnlockComponent>? HotkeyExpansionUnlocks = null,
     StatusEffectAuraApplierRegistry? StatusEffectAppliers = null,
     PackedComponentPool<DeadComponent>? DeadEntities = null,
+    BlueprintRegistry? Definitions = null,
     MultiComponentPool<StatusEffectAuraSourceComponent>? AuraSources = null,
-    MultiComponentPool<BodyPartComponent>? BodyParts = null,
+    EntityBodyParts? BodyParts = null,
     IPlayerQuery? PlayerQuery = null,
     float DurationScaleMultiplier = 1.0f,
     byte ChainDepth = 0);

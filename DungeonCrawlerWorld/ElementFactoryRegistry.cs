@@ -1,6 +1,8 @@
 using Engine.ECS.Context;
+using Game.Blueprints;
 using Game.Modules.Actions;
 using Game.Modules.Core.Components;
+using Game.Modules.Health;
 using Game.Modules.Inventory;
 using Game.Modules.StatusEffects;
 using Game.Terrain;
@@ -28,6 +30,8 @@ public static class ElementFactoryRegistry
         ActionCatalog actionCatalog,
         ItemCatalog itemCatalog,
         StatusEffectDisplayRegistry statusEffectDisplays,
+        EntityBodyParts bodyParts,
+        BlueprintRegistry creatures,
         World world,
         TerrainRegistry terrain,
         IMapViewQuery mapView,
@@ -90,7 +94,7 @@ public static class ElementFactoryRegistry
         elementPool.RegisterFactory<AbilityScoreWindow>(() => new AbilityScoreWindow(
             presentationContext.FontService, elementPool, presentationContext.LabelRenderer, componentManager, ecsContext.SystemManager.Clock));
         elementPool.RegisterFactory<HealthWindow>(() => new HealthWindow(
-            presentationContext.FontService, elementPool, presentationContext.LabelRenderer, componentManager, statusEffectDisplays, itemCatalog, ecsContext.SystemManager.Clock));
+            presentationContext.FontService, elementPool, presentationContext.LabelRenderer, componentManager, bodyParts, statusEffectDisplays, itemCatalog, ecsContext.SystemManager.Clock));
         Register<AbilityScoreColumnHeader>((font, elements, glyph) => new AbilityScoreColumnHeader(font, elements, glyph));
         Register<AbilityScoreModifierRow>((font, elements, glyph) => new AbilityScoreModifierRow(font, elements, glyph));
         Register<SeparatorBar>((font, elements, glyph) => new SeparatorBar(font, elements, glyph));
@@ -100,18 +104,18 @@ public static class ElementFactoryRegistry
         elementPool.RegisterFactory<SecondaryInventoryWindow>(() => new SecondaryInventoryWindow(
             presentationContext.FontService, elementPool, presentationContext.LabelRenderer, componentManager,
             presentationContext.SpriteSheetService, presentationContext.SpriteRenderer, itemCatalog, world, contextMenuController, mapViewState,
-            simulationClock: ecsContext.SystemManager.Clock));
+            simulationClock: ecsContext.SystemManager.Clock, creatures: creatures));
         elementPool.RegisterFactory<ShopWindow>(() => new ShopWindow(
             presentationContext.FontService, elementPool, presentationContext.LabelRenderer, componentManager,
             presentationContext.SpriteSheetService, presentationContext.SpriteRenderer, itemCatalog, world, contextMenuController, mapViewState,
-            simulationClock: ecsContext.SystemManager.Clock));
+            simulationClock: ecsContext.SystemManager.Clock, creatures: creatures));
         elementPool.RegisterFactory<TradeWindow>(() => new TradeWindow(
             presentationContext.FontService, elementPool, presentationContext.LabelRenderer, componentManager,
             itemCatalog, presentationContext.SpriteSheetService, presentationContext.SpriteRenderer, world, contextMenuController, mapViewState,
             ecsContext.EventBus, simulationClock: ecsContext.SystemManager.Clock));
         Register<EntityIconElement>((font, elements, glyph) => new EntityIconElement(
             font, elements, glyph, presentationContext.SpriteSheetService, presentationContext.SpriteRenderer,
-            componentManager.GetDirectPool<SpriteComponent>(), componentManager.GetDirectPool<GlyphComponent>()));
+            mapView));
 
         Register<InspectionWindow>((font, elements, glyph) => new InspectionWindow(font, elements, glyph, mapViewState));
         Register<ItemDetailsWindow>((font, elements, glyph) => new ItemDetailsWindow(font, elements, glyph, presentationContext.SpriteSheetService, presentationContext.SpriteRenderer, actionCatalog));

@@ -35,8 +35,7 @@ public sealed class DeathModule : IGameModule
     {
         componentManager.RegisterPackedPool<DeadComponent>(static (ref existing, incoming) => existing = incoming);
 
-        // Any entity could die and be looted, so maximumEntityCount stays at the world-scale default. Rare in
-        // practice (player-action-only, seconds to minutes between uses), so initialCapacity is reduced.
+        // Rare in practice (player-action-only, seconds to minutes between uses), so initialCapacity is reduced.
         componentManager.RegisterPackedPool<LootedComponent>(static (ref existing, incoming) => existing = incoming, initialCapacity: 32);
     }
 

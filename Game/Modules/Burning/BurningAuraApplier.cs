@@ -10,6 +10,7 @@ using Game.Modules.Health.Components;
 using Game.Modules.StatusEffects;
 using Game.Terrain;
 using Game.World;
+using Game.Blueprints;
 
 namespace Game.Modules.Burning;
 
@@ -31,12 +32,12 @@ namespace Game.Modules.Burning;
 /// damage already uses is reused here (ContactHazard.PreferredTargetType, from the terrain
 /// definition), so a burning part and a contact-damaged part read as the same "where a hazard hits" rule.
 /// </remarks>
-public sealed class BurningAuraApplier(MathUtility mathUtility, TerrainRegistry terrain, EventBus? eventBus = null, IPlayerQuery? playerQuery = null) : IStatusEffectAuraApplier
+public sealed class BurningAuraApplier(MathUtility mathUtility, TerrainRegistry terrain, BlueprintRegistry creatures, EventBus? eventBus = null, IPlayerQuery? playerQuery = null) : IStatusEffectAuraApplier
 {
     public StatusEffectType EffectType => StatusEffectType.Burning;
 
     private PackedComponentPool<BurningTimerComponent>? _entityTimers;
-    private MultiComponentPool<BodyPartComponent>? _bodyParts;
+    private EntityBodyParts? _bodyParts;
     private MultiComponentPool<BodyPartBurningTimerComponent>? _bodyPartTimers;
     private PackedComponentPool<ContactDamageExposureComponent>? _contactExposures;
     private bool _poolsResolved;
@@ -85,7 +86,7 @@ public sealed class BurningAuraApplier(MathUtility mathUtility, TerrainRegistry 
         }
 
         _entityTimers = componentManager.GetPackedPool<BurningTimerComponent>();
-        _bodyParts = componentManager.IsRegistered<BodyPartComponent>() ? componentManager.GetMultiPool<BodyPartComponent>() : null;
+        _bodyParts = componentManager.IsRegistered<BodyPartStateComponent>() ? EntityBodyParts.For(componentManager, creatures) : null;
         _bodyPartTimers = componentManager.GetMultiPool<BodyPartBurningTimerComponent>();
         _contactExposures = componentManager.IsRegistered<ContactDamageExposureComponent>() ? componentManager.GetPackedPool<ContactDamageExposureComponent>() : null;
         _poolsResolved = true;
@@ -128,8 +129,8 @@ public sealed class BurningAuraApplier(MathUtility mathUtility, TerrainRegistry 
     private byte? ResolveTargetPartId(int entityId, BodyPartType? preferredType)
     {
         var rule = new BodyPartTargetRule(preferredType, BodyPartFallback.Bottommost);
-        var denseIndex = BodyPartSelection.PickByTypeWithFallback(_bodyParts!, entityId, rule, mathUtility, preferAlive: false);
-        return denseIndex == -1 ? null : _bodyParts!.GetReadonlyByDenseIndex(denseIndex).PartId;
+        var partId = BodyPartSelection.PickByTypeWithFallback(_bodyParts!, entityId, rule, mathUtility, preferAlive: false);
+        return partId == -1 ? null : (byte)partId;
     }
 
     /// <summary>Grants (or tops off) one Burning stack on entityId's partId -- mirrors BurningEffects.ApplyStack's own grant-or-top-off-capped-at-MaxStacks (and immunity) shape, scoped to the one part instead of the whole entity.</summary>

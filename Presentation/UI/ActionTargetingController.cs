@@ -43,7 +43,7 @@ public sealed class ActionTargetingController(
     PackedComponentPool<ActionLockComponent> actionLocks,
     PlayerInputBuffer inputBuffer,
     PackedComponentPool<ManaComponent>? manaPool = null,
-    MultiComponentPool<AbilityScoreComponent>? abilityScores = null,
+    PackedComponentPool<AbilityScoresComponent>? abilityScores = null,
     LocalTierRoster? localTierRoster = null,
     SimulationClock? simulationClock = null)
 {
@@ -515,7 +515,7 @@ public sealed class ActionTargetingController(
     /// instead (see TryConfirmActivationAtTile) -- same rhythm as HandleActionSlotPress,
     /// cancelling is right-click/Escape's job now.
     /// </summary>
-    private void HandleItemSlotPress(HotkeySlot slot, Guid stackInstanceId, bool isDoubleTap)
+    private void HandleItemSlotPress(HotkeySlot slot, uint stackInstanceId, bool isDoubleTap)
     {
         if (!InventoryQueries.TryFindByStackInstanceId(inventoryStacks, world.PlayerEntityId, stackInstanceId, out var stack) ||
             !InventoryQueries.TryResolveEffectiveItem(itemCatalog, in stack, out var item) ||
@@ -566,7 +566,7 @@ public sealed class ActionTargetingController(
     }
 
     /// <summary>Resolves targeting via TryGetArmedTargeting (not a parameter of its own) -- called after ArmedItemStackInstanceId is already set above, so it reads back the correctly (Scroll-)scaled spec instead of a stale unscaled one, the same single-chokepoint reasoning as ArmAction re-fetching Activator.Targeting itself rather than taking it as a parameter. Also, critically, what makes a diverged stack's own Override targeting (e.g. a wand with non-default Targeting) actually apply -- TryGetArmedTargeting resolves through the bound stack itself, not a bare catalog lookup by item id. slot is null for a menu-driven arm with no originating HotkeySlot (see ArmItemFromStack) -- every ArmedSlot consumer already treats null as "no slot to highlight/reuse for a same-slot re-press confirm," which is exactly correct there: a menu-armed item can only ever be confirmed via a map-tile click.</summary>
-    private void ArmItem(HotkeySlot? slot, Guid stackInstanceId)
+    private void ArmItem(HotkeySlot? slot, uint stackInstanceId)
     {
         uiLayers.CloseAllClosableWindows(); // See ArmAction's own doc comment -- same reasoning, covers ArmItemFromStack (Inventory's Activate/double-click) too, since it delegates here.
 
@@ -592,7 +592,7 @@ public sealed class ActionTargetingController(
     /// of that base behavior, not a replacement for it) -- so arming here matches an ordinary,
     /// non-double-tap hotbar press exactly.
     /// </summary>
-    public void ArmItemFromStack(Guid stackInstanceId)
+    public void ArmItemFromStack(uint stackInstanceId)
     {
         if (!InventoryQueries.TryFindByStackInstanceId(inventoryStacks, world.PlayerEntityId, stackInstanceId, out var stack) ||
             !InventoryQueries.TryResolveEffectiveItem(itemCatalog, in stack, out var item) ||
@@ -815,7 +815,7 @@ public sealed class ActionTargetingController(
     }
 
     /// <summary>The double-tap path for a Potion -- always the caster's own tile, no candidate search at all (contrast TryActivateWithAutoTarget's action equivalent).</summary>
-    private void TryActivateItemOnSelf(int entityId, Guid stackInstanceId)
+    private void TryActivateItemOnSelf(int entityId, uint stackInstanceId)
     {
         if (!transformPool.TryGetReadonly(entityId, out var transform))
         {
@@ -867,7 +867,7 @@ public sealed class ActionTargetingController(
         targetTiles.Count == 1 && targetTiles[0] != casterPosition ? targetTiles[0] : null;
 
     /// <summary>Item counterpart to QueueActionActivation -- ConsumableActivationSystem is the only thing that applies its gameplay effects. See QueueActionActivation's own doc comment for why it also closes every closable window here (catches TryActivateItemOnSelf's double-tap self-cast, which skips arming).</summary>
-    private void QueueConsumableActivation(int entityId, Guid stackInstanceId, List<Vector3Int> targetTiles)
+    private void QueueConsumableActivation(int entityId, uint stackInstanceId, List<Vector3Int> targetTiles)
     {
         if (targetTiles.Count == 0)
         {

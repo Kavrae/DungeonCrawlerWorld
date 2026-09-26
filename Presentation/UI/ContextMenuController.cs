@@ -15,6 +15,7 @@ namespace Presentation.UI;
 public sealed class ContextMenuController(ElementPoolService elementPoolService)
 {
     private ContextMenu _menu = null!;
+    private Vector2 _cursorPosition;
 
     public bool IsOpen => _menu.IsVisible;
 
@@ -40,11 +41,13 @@ public sealed class ContextMenuController(ElementPoolService elementPoolService)
             Chrome = new ElementChromeOptions { ShowBorder = true, ShowTitle = false, CanUserFocus = false },
         });
         _menu.Initialize();
+        _menu.OpenSubmenu = options => Open(_cursorPosition, options);
         layers.Add(UiLayer.ContextMenu, _menu);
     }
 
     public void Open(Vector2 cursorPosition, IReadOnlyList<ContextMenuOption> options)
     {
+        _cursorPosition = cursorPosition;
         var cursorRectangle = new Rectangle((int)cursorPosition.X, (int)cursorPosition.Y, 0, 0);
         var menuSize = _menu.MeasureSize(options); // The exact size Show below will apply -- computed ahead of it so flip/clamp below sees the real footprint, not Vector2.Zero.
         var screenBounds = ScreenBoundsOverrideForTests ?? elementPoolService.GraphicsDevice.Viewport.Bounds;

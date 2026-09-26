@@ -26,7 +26,7 @@ public sealed record StatusEffectGrant(StatusEffectType Type, int StackCount = 1
             return;
         }
 
-        var source = ActionSource.FromEntity(context.ComponentManager, context.EntityKeys, context.SourceEntityId);
+        var source = ActionSource.FromEntity(context.ComponentManager, context.EntityKeys, context.SourceEntityId, context.Definitions);
         for (var i = 0; i < StackCount; i++)
         {
             applier.ApplyStack(context.ComponentManager, context.TargetEntityId, source, context.Now);

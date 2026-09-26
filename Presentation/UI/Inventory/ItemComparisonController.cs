@@ -37,7 +37,7 @@ public sealed class ItemComparisonController(
     private readonly MultiComponentPool<InventoryItemStackComponent> _stacks = componentManager.GetMultiPool<InventoryItemStackComponent>();
 
     /// <summary>The additional compared items, anchor excluded -- index-aligned with _columns.</summary>
-    private readonly List<(int EntityId, Guid StackInstanceId)> _entries = [];
+    private readonly List<(int EntityId, uint StackInstanceId)> _entries = [];
 
     private readonly List<ItemDetailsWindow> _columns = [];
 
@@ -76,7 +76,7 @@ public sealed class ItemComparisonController(
     /// after a right-click paused adding) leaves already-open columns alone, resuming rather than
     /// restarting. A no-op if the target item has no Activator at all -- nothing to compare.
     /// </summary>
-    public void Arm(int entityId, Guid stackId)
+    public void Arm(int entityId, uint stackId)
     {
         var isNewAnchor = itemDetailsWindowController.CurrentEntityId != entityId || itemDetailsWindowController.CurrentStackInstanceId != stackId;
         if (isNewAnchor)
@@ -105,7 +105,7 @@ public sealed class ItemComparisonController(
     /// per-frame grey/highlight sync already makes, re-checked here since a stale click could
     /// still land after the eligibility state moved on).
     /// </summary>
-    public void AddOrToggle(int entityId, Guid stackId)
+    public void AddOrToggle(int entityId, uint stackId)
     {
         if (!IsArmed)
         {
@@ -165,7 +165,7 @@ public sealed class ItemComparisonController(
     }
 
     /// <summary>Called by ShellBootstrapper's own onItemSelected dispatcher before a normal (non-armed) click opens a different item in ItemDetailsWindowController -- clears any active comparison first if the newly-clicked item genuinely differs from whatever's currently the anchor. A no-op both when nothing is active and when the click just re-selects the item already shown.</summary>
-    public void ClearIfAnchorChanging(int entityId, Guid stackId)
+    public void ClearIfAnchorChanging(int entityId, uint stackId)
     {
         if (_entries.Count == 0 && !IsArmed)
         {
@@ -255,7 +255,7 @@ public sealed class ItemComparisonController(
     }
 
     /// <summary>OnCompareRequested is deliberately never set here -- comparison columns get a Close button but no Compare button of their own (see ItemDetailsWindow.OnChildrenInitialized's own doc comment on why attachment is opt-in per instance).</summary>
-    private ItemDetailsWindow? CreateColumn(int entityId, Guid stackInstanceId, ItemDefinition definition, Rectangle anchorRectangle, int siblingIndex, IReadOnlyList<ItemDefinition> comparedAgainst)
+    private ItemDetailsWindow? CreateColumn(int entityId, uint stackInstanceId, ItemDefinition definition, Rectangle anchorRectangle, int siblingIndex, IReadOnlyList<ItemDefinition> comparedAgainst)
     {
         if (inventoryWindowController.PlayerInventoryWindow is not { } playerWindow)
         {

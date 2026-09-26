@@ -84,7 +84,6 @@ public sealed class ConsumableActivationSystemTests
         componentManager.RegisterPackedPool<PoisonTimerComponent>(static (ref existing, incoming) => { });
         componentManager.RegisterPackedPool<HotkeyExpansionUnlockComponent>(static (ref existing, incoming) => existing = incoming);
         componentManager.RegisterMultiPool<ItemHotkeyBindingComponent>();
-        componentManager.RegisterMultiPool<BodyPartComponent>();
 
         var itemCatalog = new ItemCatalog();
         var splashTargeting = new TargetingSpec(TargetShape.Burst, Range: 3, AreaSize: 1);
@@ -128,12 +127,12 @@ public sealed class ConsumableActivationSystemTests
             playerQuery: null,
             auraSources: null,
             itemHotkeyBindings: componentManager.GetMultiPool<ItemHotkeyBindingComponent>(),
-            bodyParts: componentManager.GetMultiPool<BodyPartComponent>());
+            bodyParts: BodyPartTestWorld.PartsOf(componentManager));
 
         return (system, componentManager, mapQuery, eventBus);
     }
 
-    /// <summary>Same wiring as Build, plus an AbilityScoreComponent pool -- for tests exercising Constitution's effect on the potion cooldown duration.</summary>
+    /// <summary>Same wiring as Build, plus an AbilityScoresComponent pool -- for tests exercising Constitution's effect on the potion cooldown duration.</summary>
     private static (ConsumableActivationSystem System, ComponentManager ComponentManager, FakeMapQuery MapQuery, EventBus EventBus) BuildWithAbilityScores()
     {
         var componentManager = new ComponentManager(initialEntityCapacity: 20, initialComponentCapacity: 10);
@@ -147,7 +146,7 @@ public sealed class ConsumableActivationSystemTests
         componentManager.RegisterPackedPool<InventoryComponent>(static (ref existing, incoming) => existing = incoming);
         componentManager.RegisterPackedPool<PoisonTimerComponent>(static (ref existing, incoming) => { });
         componentManager.RegisterPackedPool<HotkeyExpansionUnlockComponent>(static (ref existing, incoming) => existing = incoming);
-        componentManager.RegisterMultiPool<AbilityScoreComponent>();
+        AbilityScoreTestPools.Register(componentManager);
 
         var itemCatalog = new ItemCatalog();
         var splashTargeting = new TargetingSpec(TargetShape.Burst, Range: 3, AreaSize: 1);
@@ -176,7 +175,7 @@ public sealed class ConsumableActivationSystemTests
             componentManager.GetPackedPool<DeadComponent>(),
             componentManager.GetPackedPool<ManaComponent>(),
             componentManager.GetPackedPool<HotkeyExpansionUnlockComponent>(),
-            componentManager.GetMultiPool<AbilityScoreComponent>());
+            componentManager.GetPackedPool<AbilityScoresComponent>());
 
         return (system, componentManager, mapQuery, eventBus);
     }
@@ -191,7 +190,7 @@ public sealed class ConsumableActivationSystemTests
         InventoryQueries.TryGetStack(componentManager.GetMultiPool<InventoryItemStackComponent>(), entityId, itemDefinitionId, out var stack) ? stack.Quantity : -1;
 
     /// <summary>Grants one wand via AddItemWithOverride (void -- unlike AddItem/AddDivergentItem, it doesn't return the stack it landed in) and looks the resulting StackInstanceId back up by item id -- safe here since each of these tests grants exactly one wand to a fresh entity, so there's only ever one to find.</summary>
-    private static Guid GrantWandAndGetStackInstanceId(ComponentManager componentManager, int entityId, ushort charges, ushort maxCharges)
+    private static uint GrantWandAndGetStackInstanceId(ComponentManager componentManager, int entityId, ushort charges, ushort maxCharges)
     {
         InventoryActions.AddItemWithOverride(componentManager, entityId, CreateWandDefinition(charges, maxCharges), quantity: 1);
         Assert.IsTrue(InventoryQueries.TryGetStack(componentManager.GetMultiPool<InventoryItemStackComponent>(), entityId, WandId, out var stack));
@@ -213,14 +212,13 @@ public sealed class ConsumableActivationSystemTests
         Assert.AreEqual(70, HealthOf(componentManager, TargetEntityId));
     }
 
-    /// <summary>A Complex target (BodyPartComponents, no SimpleHealthComponent) must not be rejected by ApplyPotionToTarget's presence gate -- proves ConsumableActivationSystem actually lands the effect instead of silently no-oping.</summary>
+    /// <summary>A Complex target (a body plan, no SimpleHealthComponent) must not be rejected by ApplyPotionToTarget's presence gate -- proves ConsumableActivationSystem actually lands the effect instead of silently no-oping.</summary>
     [TestMethod]
     public void Potion_ComplexTargetWithBodyPartsAndNoSimpleHealth_HealsByHealFractionOfItsOwnMaxHealth()
     {
         var (system, componentManager, mapQuery, _) = Build();
         mapQuery.SetOccupant(TargetTile, TargetEntityId);
-        componentManager.GetMultiPool<BodyPartComponent>().Add(TargetEntityId, new BodyPartComponent("Head", BodyPartType.Head, 0, 0, currentHealth: 40, maximumHealth: 40, isVital: true));
-        componentManager.GetMultiPool<BodyPartComponent>().Add(TargetEntityId, new BodyPartComponent("Torso", BodyPartType.Torso, 0, 0, currentHealth: 40, maximumHealth: 160, isVital: true));
+        var bodyPartWorld = BodyPartTestWorld.WithParts(componentManager, TargetEntityId, ("Head", BodyPartType.Head, 40, 40, true), ("Torso", BodyPartType.Torso, 40, 160, true));
         var stackInstanceId = InventoryActions.AddItem(componentManager, CasterEntityId, PotionId, quantity: 1);
         componentManager.Merge(CasterEntityId, new PendingConsumableActivationComponent(stackInstanceId, [TargetTile]));
         componentManager.Merge(CasterEntityId, new ActionLockComponent(standardLockFrames: ActionLockGate.StandardLockFrames, currentLockTotalFrames: 0, unlockedAtFrame: 0));
@@ -228,11 +226,10 @@ public sealed class ConsumableActivationSystemTests
         system.Update(default, 0);
 
         Assert.IsFalse(componentManager.GetPackedPool<SimpleHealthComponent>().Has(TargetEntityId), "Sanity check: the target is Complex-only, no SimpleHealthComponent at all.");
-        var bodyParts = componentManager.GetMultiPool<BodyPartComponent>();
         var totalCurrent = 0f;
-        for (var denseIndex = bodyParts.GetFirstDenseIndex(TargetEntityId); denseIndex != -1; denseIndex = bodyParts.GetNextDenseIndex(denseIndex))
+        foreach (var part in bodyPartWorld.BodyParts.Parts(TargetEntityId))
         {
-            totalCurrent += bodyParts.GetReadonlyByDenseIndex(denseIndex).CurrentHealth;
+            totalCurrent += part.CurrentHealth;
         }
 
         // DirectHeal(0.5f) computes one total against the entity's overall max (Head 40 + Torso
@@ -339,7 +336,7 @@ public sealed class ConsumableActivationSystemTests
         var (system, componentManager, mapQuery, _) = BuildWithAbilityScores();
         mapQuery.SetOccupant(TargetTile, TargetEntityId);
         componentManager.Merge(TargetEntityId, new SimpleHealthComponent(currentHealth: 20, maximumHealth: 100));
-        componentManager.GetMultiPool<AbilityScoreComponent>().Add(TargetEntityId, new AbilityScoreComponent(AbilityScoreType.Constitution, baseValue: 300, total: 300));
+        componentManager.GetPackedPool<AbilityScoresComponent>().Add(TargetEntityId, AbilityScoreTestPools.Score(AbilityScoreType.Constitution, baseValue: 300, total: 300));
         var stackInstanceId = InventoryActions.AddItem(componentManager, CasterEntityId, PotionId, quantity: 1);
         componentManager.Merge(CasterEntityId, new PendingConsumableActivationComponent(stackInstanceId, [TargetTile]));
         componentManager.Merge(CasterEntityId, new ActionLockComponent(standardLockFrames: ActionLockGate.StandardLockFrames, currentLockTotalFrames: 0, unlockedAtFrame: 0));
@@ -399,7 +396,7 @@ public sealed class ConsumableActivationSystemTests
         var (system, componentManager, mapQuery, _) = Build();
         mapQuery.SetOccupant(TargetTile, TargetEntityId);
         componentManager.Merge(TargetEntityId, new SimpleHealthComponent(currentHealth: 20, maximumHealth: 100));
-        componentManager.Merge(CasterEntityId, new PendingConsumableActivationComponent(PotionId, [TargetTile]));
+        componentManager.Merge(CasterEntityId, new PendingConsumableActivationComponent(stackInstanceId: 1, [TargetTile]));
 
         system.Update(default, 0);
 

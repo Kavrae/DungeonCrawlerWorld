@@ -28,10 +28,10 @@ public sealed class ShopWindowController(
     public Rectangle Rectangle => _slot.Rectangle;
 
     /// <summary>Settable late-bound callback for "the player clicked a real single-stack item cell in this shop's own grid" -- see SecondaryInventoryWindowController.OnItemSelected's own doc comment.</summary>
-    public Action<int, Guid>? OnItemSelected { get; set; }
+    public Action<int, uint>? OnItemSelected { get; set; }
 
     /// <summary>Settable late-bound callback for "the player chose Compare from this shop's own item context menu" -- see SecondaryInventoryWindowController.OnCompareRequested's own doc comment.</summary>
-    public Action<int, Guid>? OnCompareRequested { get; set; }
+    public Action<int, uint>? OnCompareRequested { get; set; }
 
     /// <summary>Settable late-bound callback fired with the target entity id right after a shop genuinely finishes opening a *new* window -- not on the toggle-closed or disabled-inventory early-return paths in OpenShop below. Wired by ShellBootstrapper to TradeWindowController.Open so the trade window opens exactly when, and only when, a real shop window did.</summary>
     public Action<int>? OnOpened { get; set; }

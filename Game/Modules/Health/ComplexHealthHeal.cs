@@ -27,7 +27,7 @@ namespace Game.Modules.Health;
 /// none wired in is a no-op, unlike HealthDamage.Apply's hard throw -- heal's default mode is All,
 /// which never needs it, so mathUtility is optional here rather than a real construction bug.
 /// Both apply-to-part paths clear IsDisabled the instant a part's CurrentHealth ticks back above
-/// 0, and never check RegenLockedUntilFrame -- that lockout only ever gates passive regen,
+/// 0, and never check the regen lockout -- that lockout only ever gates passive regen,
 /// never an active heal. Each publishes one aggregate EntityHealedEvent for the whole heal (via
 /// HealthHeal.PublishHealEvent, reusing HealthQueries.TryGetTotals for the entity's real summed
 /// current/max) rather than one per part.
@@ -35,7 +35,7 @@ namespace Game.Modules.Health;
 public static class ComplexHealthHeal
 {
     public static void ApplyToAllParts(
-        MultiComponentPool<BodyPartComponent> bodyParts,
+        EntityBodyParts bodyParts,
         PackedComponentPool<SimpleHealthComponent> health,
         int entityId,
         float percentOfMaxHealth,
@@ -47,11 +47,7 @@ public static class ComplexHealthHeal
         IPlayerQuery? playerQuery = null,
         string healType = "Heal")
     {
-        var partCount = 0;
-        for (var denseIndex = bodyParts.GetFirstDenseIndex(entityId); denseIndex != -1; denseIndex = bodyParts.GetNextDenseIndex(denseIndex))
-        {
-            partCount++;
-        }
+        var partCount = bodyParts.Count(entityId);
 
         if (partCount == 0 || !HealthQueries.TryGetEffectiveMaximum(health, bodyParts, statModifiers, entityId, out var effectiveMaximumHealth))
         {
@@ -61,16 +57,16 @@ public static class ComplexHealthHeal
         var totalAmount = HealthHeal.ComputeAmount(statModifiers, sourceEntityId, entityId, activatorTags, percentOfMaxHealth, flatAmount, effectiveMaximumHealth);
         var perPartAmount = totalAmount / partCount;
 
-        for (var denseIndex = bodyParts.GetFirstDenseIndex(entityId); denseIndex != -1; denseIndex = bodyParts.GetNextDenseIndex(denseIndex))
+        for (var partId = 0; partId < partCount; partId++)
         {
-            ApplyToPart(bodyParts, denseIndex, statModifiers, entityId, perPartAmount);
+            ApplyToPart(bodyParts, entityId, partId, statModifiers, perPartAmount);
         }
 
         PublishAggregateHealEvent(bodyParts, health, eventBus, playerQuery, entityId, sourceEntityId, totalAmount, healType, statModifiers);
     }
 
     public static void ApplyToSinglePart(
-        MultiComponentPool<BodyPartComponent> bodyParts,
+        EntityBodyParts bodyParts,
         PackedComponentPool<SimpleHealthComponent> health,
         int entityId,
         float percentOfMaxHealth,
@@ -87,19 +83,19 @@ public static class ComplexHealthHeal
         IPlayerQuery? playerQuery = null,
         string healType = "Heal")
     {
-        var denseIndex = ResolveDenseIndex(bodyParts, entityId, statModifiers, targetRule, targetMode, mathUtility, now, bodyPartBurningTimers);
-        if (denseIndex == -1 || !HealthQueries.TryGetEffectiveMaximum(health, bodyParts, statModifiers, entityId, out var effectiveMaximumHealth))
+        var partId = ResolvePartId(bodyParts, entityId, statModifiers, targetRule, targetMode, mathUtility, now, bodyPartBurningTimers);
+        if (partId == -1 || !HealthQueries.TryGetEffectiveMaximum(health, bodyParts, statModifiers, entityId, out var effectiveMaximumHealth))
         {
             return;
         }
 
         var amount = HealthHeal.ComputeAmount(statModifiers, sourceEntityId, entityId, activatorTags, percentOfMaxHealth, flatAmount, effectiveMaximumHealth);
-        ApplyToPart(bodyParts, denseIndex, statModifiers, entityId, amount);
+        ApplyToPart(bodyParts, entityId, partId, statModifiers, amount);
 
         PublishAggregateHealEvent(bodyParts, health, eventBus, playerQuery, entityId, sourceEntityId, amount, healType, statModifiers);
     }
 
-    private static int ResolveDenseIndex(MultiComponentPool<BodyPartComponent> bodyParts, int entityId, MultiComponentPool<StatModifierComponent>? statModifiers, BodyPartTargetRule? targetRule, BodyPartTargetMode targetMode, MathUtility? mathUtility, long now, MultiComponentPool<BodyPartBurningTimerComponent>? bodyPartBurningTimers)
+    private static int ResolvePartId(EntityBodyParts bodyParts, int entityId, MultiComponentPool<StatModifierComponent>? statModifiers, BodyPartTargetRule? targetRule, BodyPartTargetMode targetMode, MathUtility? mathUtility, long now, MultiComponentPool<BodyPartBurningTimerComponent>? bodyPartBurningTimers)
     {
         if (targetMode == BodyPartTargetMode.LowestPercentage)
         {
@@ -116,20 +112,18 @@ public static class ComplexHealthHeal
             : BodyPartSelection.PickRandom(bodyParts, entityId, mathUtility);
     }
 
-    private static void ApplyToPart(MultiComponentPool<BodyPartComponent> bodyParts, int denseIndex, MultiComponentPool<StatModifierComponent>? statModifiers, int entityId, float amount)
+    private static void ApplyToPart(EntityBodyParts bodyParts, int entityId, int partId, MultiComponentPool<StatModifierComponent>? statModifiers, float amount)
     {
-        bodyParts.UpdateByDenseIndex(denseIndex, (amount, statModifiers, entityId), static (ref BodyPartComponent part, (float Amount, MultiComponentPool<StatModifierComponent>? StatModifiers, int EntityId) state) =>
+        if (!bodyParts.TryGet(entityId, partId, out var part))
         {
-            var effectiveMaximumHealth = StatModifierMath.GetEffectiveValue(state.StatModifiers, state.EntityId, StatModifierTarget.MaximumHealth, part.MaximumHealth);
-            part.CurrentHealth = MathHelper.Clamp(part.CurrentHealth + state.Amount, 0f, effectiveMaximumHealth);
-            if (part.CurrentHealth > 0)
-            {
-                part.IsDisabled = false;
-            }
-        });
+            return;
+        }
+
+        var effectiveMaximumHealth = StatModifierMath.GetEffectiveValue(statModifiers, entityId, StatModifierTarget.MaximumHealth, part.MaximumHealth);
+        bodyParts.Heal(entityId, partId, amount, effectiveMaximumHealth);
     }
 
-    private static void PublishAggregateHealEvent(MultiComponentPool<BodyPartComponent> bodyParts, PackedComponentPool<SimpleHealthComponent> health, EventBus? eventBus, IPlayerQuery? playerQuery, int entityId, int? sourceEntityId, float amount, string healType, MultiComponentPool<StatModifierComponent>? statModifiers)
+    private static void PublishAggregateHealEvent(EntityBodyParts bodyParts, PackedComponentPool<SimpleHealthComponent> health, EventBus? eventBus, IPlayerQuery? playerQuery, int entityId, int? sourceEntityId, float amount, string healType, MultiComponentPool<StatModifierComponent>? statModifiers)
     {
         if (eventBus is null || playerQuery is null)
         {

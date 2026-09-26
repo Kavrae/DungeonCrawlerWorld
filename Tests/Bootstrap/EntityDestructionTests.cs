@@ -57,7 +57,7 @@ public sealed class EntityDestructionTests
         var entityId = ecs.EntityManager.CreateEntity();
         ecs.ComponentManager.Merge(entityId, new DisplayTextComponent("Goblin", "A goblin."));
         string? nameSeen = null;
-        ecs.EntityManager.EntityDestroying += destroyed => nameSeen = ecs.ComponentManager.GetDirectPool<DisplayTextComponent>().GetReadonly(destroyed).Name;
+        ecs.EntityManager.EntityDestroying += destroyed => nameSeen = ecs.ComponentManager.GetPackedPool<DisplayTextComponent>().GetReadonly(destroyed).Name;
 
         ecs.EntityManager.DestroyEntity(entityId);
 

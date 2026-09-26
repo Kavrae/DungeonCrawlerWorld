@@ -1,5 +1,5 @@
-using Game.Blueprints;
 using Game.Modules.Core.Components;
+using Game.Sprites;
 
 namespace Game.Terrain;
 

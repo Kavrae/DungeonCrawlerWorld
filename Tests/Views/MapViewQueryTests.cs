@@ -37,10 +37,10 @@ public sealed class MapViewQueryTests
         public Fixture()
         {
             Components.RegisterDirectPool<TransformComponent>(static (ref existing, incoming) => existing = incoming);
-            Components.RegisterDirectPool<GlyphComponent>(static (ref existing, incoming) => existing = incoming);
-            Components.RegisterDirectPool<SpriteComponent>(static (ref existing, incoming) => existing = incoming);
-            Components.RegisterDirectPool<BackgroundComponent>(static (ref existing, incoming) => existing = incoming);
-            Components.RegisterDirectPool<DisplayTextComponent>(static (ref existing, incoming) => existing = incoming);
+            Components.RegisterPackedPool<GlyphComponent>(static (ref existing, incoming) => existing = incoming);
+            Components.RegisterPackedPool<SpriteComponent>(static (ref existing, incoming) => existing = incoming);
+            Components.RegisterPackedPool<BackgroundComponent>(static (ref existing, incoming) => existing = incoming);
+            Components.RegisterPackedPool<DisplayTextComponent>(static (ref existing, incoming) => existing = incoming);
             Components.RegisterMultiPool<NonBlockingComponent>();
             Components.RegisterPackedPool<SimpleHealthComponent>(static (ref existing, incoming) => existing = incoming);
             Components.RegisterPackedPool<DeadComponent>(static (ref existing, incoming) => existing = incoming);

@@ -9,9 +9,9 @@ namespace Game.Modules.Inventory.Components;
 /// InventoryDisabledComponent, which disables an entity's whole inventory. Quantity is the
 /// "identical items grouped with a count" requirement.
 ///
-/// StackInstanceId is a stable per-stack identity assigned once, at construction, via
-/// Guid.NewGuid() -- an addressing key only (like an entity id), not simulation state, so it
-/// carries no determinism requirement. It's what a hotkey binding or an in-flight activation
+/// StackInstanceId is a stable per-stack identity assigned once, at construction, from a session
+/// counter -- an addressing key only (like an entity id), not simulation state, so it carries no
+/// determinism requirement. 0 means no stack. It's what a hotkey binding or an in-flight activation
 /// references, so it survives this stack's own Quantity/Override changing underneath it later
 /// (see InventoryQueries.TryFindByStackInstanceId).
 ///
@@ -26,7 +26,7 @@ namespace Game.Modules.Inventory.Components;
 /// component's own doc comment used to only predict ("a stack that later diverges from its
 /// ItemDefinition ... is expected to become its own Quantity == 1 stack once that system exists").
 ///
-/// FirstAcquiredUtcTicks is stamped once, at construction, the same "assigned inline, not a ctor
+/// AcquiredSequence is stamped once, at construction, the same "assigned inline, not a ctor
 /// param" shape as StackInstanceId above -- every call site that builds a genuinely new stack
 /// (InventoryActions.AddItem/AddItemWithOverride/AddDivergentItem) gets a fresh timestamp for
 /// free, with no explicit code at any of them. Merging into an existing stack (plain or already-
@@ -41,11 +41,27 @@ namespace Game.Modules.Inventory.Components;
 /// </summary>
 public struct InventoryItemStackComponent(Guid itemDefinitionId, ushort quantity, bool isDisabled = false, ItemDefinition? overrideDefinition = null, bool isDivergent = false)
 {
-    public Guid ItemDefinitionId { get; } = itemDefinitionId;
+    /// <summary>Which item this is, as an interned 2-byte handle (see ItemIds).</summary>
+    public ushort ItemId { get; } = ItemIds.IdFor(itemDefinitionId);
 
-    public Guid StackInstanceId { get; } = Guid.NewGuid();
+    /// <summary>The item definition id ItemId stands for -- what every caller still reads and compares.</summary>
+    public readonly Guid ItemDefinitionId => ItemIds.DefinitionIdOf(ItemId);
 
-    public long FirstAcquiredUtcTicks { get; set; } = DateTime.UtcNow.Ticks;
+    /// <summary>Hands out the next stack instance id. A session counter rather than a Guid: this is an addressing key with no determinism requirement (see this component's own doc comment), and 16 bytes per stack bought nothing over 4.</summary>
+    private static uint NextStackInstanceId() => (uint)System.Threading.Interlocked.Increment(ref _lastStackInstanceId);
+
+    /// <summary>Hands out the next acquisition sequence number. Its own counter, because TryTransferStack re-stamps a looted stack without changing its identity.</summary>
+    public static uint NextAcquiredSequence() => (uint)System.Threading.Interlocked.Increment(ref _lastAcquiredSequence);
+
+    private static int _lastAcquiredSequence;
+
+    /// <summary>0 is "no stack", so the first id handed out is 1.</summary>
+    private static int _lastStackInstanceId;
+
+    public uint StackInstanceId { get; } = NextStackInstanceId();
+
+    /// <summary>When this stack was acquired, as a session counter rather than a timestamp: the "recently acquired" sort only needs the order, and a counter is 4 bytes to a timestamp's 8 with no clock read per stack.</summary>
+    public uint AcquiredSequence { get; set; } = NextAcquiredSequence();
 
     public ushort Quantity { get; set; } = quantity;
 
@@ -56,5 +72,5 @@ public struct InventoryItemStackComponent(Guid itemDefinitionId, ushort quantity
     public bool IsDivergent { get; set; } = isDivergent;
 
     public override readonly string ToString() =>
-        $"ItemDefinitionId : {ItemDefinitionId}\nStackInstanceId : {StackInstanceId}\nFirstAcquiredUtcTicks : {FirstAcquiredUtcTicks}\nQuantity : {Quantity}\nIsDisabled : {IsDisabled}\nIsDivergent : {IsDivergent}";
+        $"ItemDefinitionId : {ItemDefinitionId}\nStackInstanceId : {StackInstanceId}\nAcquiredSequence : {AcquiredSequence}\nQuantity : {Quantity}\nIsDisabled : {IsDisabled}\nIsDivergent : {IsDivergent}";
 }

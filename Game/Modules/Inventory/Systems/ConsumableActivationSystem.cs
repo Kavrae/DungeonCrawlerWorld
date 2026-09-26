@@ -11,6 +11,7 @@ using Game.Modules.AbilityScores;
 using Game.Modules.AbilityScores.Components;
 using Game.Modules.Core.Components;
 using Game.Modules.Death.Components;
+using Game.Modules.Health;
 using Game.Modules.Health.Components;
 using Game.Modules.Inventory.Components;
 using Game.Modules.Mana.Components;
@@ -19,6 +20,7 @@ using Game.Modules.StatModifiers.Components;
 using Game.Modules.StatusEffectAura.Components;
 using Game.Modules.StatusEffects;
 using Game.World;
+using Game.Blueprints;
 
 namespace Game.Modules.Inventory.Systems;
 
@@ -93,12 +95,13 @@ public sealed class ConsumableActivationSystem : ISystem
     private readonly PackedComponentPool<DeadComponent>? _deadEntities;
     private readonly PackedComponentPool<ManaComponent>? _mana;
     private readonly PackedComponentPool<HotkeyExpansionUnlockComponent>? _hotkeyExpansionUnlocks;
-    private readonly MultiComponentPool<AbilityScoreComponent>? _abilityScores;
+    private readonly PackedComponentPool<AbilityScoresComponent>? _abilityScores;
     private readonly StatusEffectAuraApplierRegistry? _statusEffectAppliers;
     private readonly IPlayerQuery? _playerQuery;
     private readonly MultiComponentPool<StatusEffectAuraSourceComponent>? _auraSources;
     private readonly MultiComponentPool<ItemHotkeyBindingComponent>? _itemHotkeyBindings;
-    private readonly MultiComponentPool<BodyPartComponent>? _bodyParts;
+    private readonly EntityBodyParts? _bodyParts;
+    private readonly BlueprintRegistry? _creatures;
     private readonly EntityStripeSet _stripeSet;
 
     /// <summary>The simulation frame of the Update in progress -- see Update.</summary>
@@ -120,12 +123,13 @@ public sealed class ConsumableActivationSystem : ISystem
         PackedComponentPool<DeadComponent>? deadEntities = null,
         PackedComponentPool<ManaComponent>? mana = null,
         PackedComponentPool<HotkeyExpansionUnlockComponent>? hotkeyExpansionUnlocks = null,
-        MultiComponentPool<AbilityScoreComponent>? abilityScores = null,
+        PackedComponentPool<AbilityScoresComponent>? abilityScores = null,
         StatusEffectAuraApplierRegistry? statusEffectAppliers = null,
         IPlayerQuery? playerQuery = null,
         MultiComponentPool<StatusEffectAuraSourceComponent>? auraSources = null,
         MultiComponentPool<ItemHotkeyBindingComponent>? itemHotkeyBindings = null,
-        MultiComponentPool<BodyPartComponent>? bodyParts = null)
+        EntityBodyParts? bodyParts = null,
+        BlueprintRegistry? creatures = null)
     {
         _pendingActivations = pendingActivations;
         _actionLocks = actionLocks;
@@ -148,6 +152,7 @@ public sealed class ConsumableActivationSystem : ISystem
         _auraSources = auraSources;
         _itemHotkeyBindings = itemHotkeyBindings;
         _bodyParts = bodyParts;
+        _creatures = creatures;
 
         _stripeSet = EntityStripeSet.CreateAndWire(StripeCount, pendingActivations);
     }
@@ -217,7 +222,7 @@ public sealed class ConsumableActivationSystem : ISystem
     }
 
     /// <summary>Shared pre-checks + stack consumption for Potion/Scroll -- still holds the stack, action lock isn't currently blocking, then consumes one unit (per spec order, before the effect applies). Returns false (nothing consumed) if either check fails.</summary>
-    private bool TryBeginActivation(int entityId, Guid stackInstanceId)
+    private bool TryBeginActivation(int entityId, uint stackInstanceId)
     {
         if (!InventoryQueries.TryFindByStackInstanceId(_componentManager.GetMultiPool<InventoryItemStackComponent>(), entityId, stackInstanceId, out _))
         {
@@ -276,7 +281,7 @@ public sealed class ConsumableActivationSystem : ISystem
 
         if (_potionCooldowns.TryGetReadonly(targetEntityId, out var cooldown) && PotionCooldownEffects.FramesRemaining(cooldown, _now) > 0)
         {
-            PoisonEffects.ApplyStack(_componentManager, _entityKeys, targetEntityId, ActionSource.FromEntity(_componentManager, _entityKeys, targetEntityId), PotionCooldownEffects.ComputeAbusePoisonDurationTicks(durationFrames), _now, _eventBus, _playerQuery);
+            PoisonEffects.ApplyStack(_componentManager, _entityKeys, targetEntityId, ActionSource.FromEntity(_componentManager, _entityKeys, targetEntityId, _creatures), PotionCooldownEffects.ComputeAbusePoisonDurationTicks(durationFrames), _now, _eventBus, _playerQuery);
             _eventBus.Publish(new PotionCooldownAbusedEvent(targetEntityId));
         }
 
@@ -378,12 +383,12 @@ public sealed class ConsumableActivationSystem : ISystem
     /// exercising activation without the full hotbar module) or nothing was actually bound to the
     /// old id.
     /// </summary>
-    private void RepointItemHotkeyBinding(int entityId, Guid oldStackInstanceId, Guid newStackInstanceId) =>
+    private void RepointItemHotkeyBinding(int entityId, uint oldStackInstanceId, uint newStackInstanceId) =>
         _itemHotkeyBindings?.TryUpdateFirst(
             entityId,
             (oldStackInstanceId, newStackInstanceId),
-            static (ref readonly ItemHotkeyBindingComponent binding, (Guid Old, Guid New) state) => binding.StackInstanceId == state.Old,
-            static (ref ItemHotkeyBindingComponent binding, (Guid Old, Guid New) state) => binding.StackInstanceId = state.New);
+            static (ref readonly ItemHotkeyBindingComponent binding, (uint Old, uint New) state) => binding.StackInstanceId == state.Old,
+            static (ref ItemHotkeyBindingComponent binding, (uint Old, uint New) state) => binding.StackInstanceId = state.New);
 
     /// <summary>Shared ActionEffectContext shape for both ApplyPotionToTarget and ApplyScrollToTarget -- identical field-for-field except DurationScaleMultiplier, which only a scroll activation ever sets away from its 1.0 default.</summary>
     private ActionEffectContext BuildContext(ItemDefinition item, int sourceEntityId, int targetEntityId, float durationScaleMultiplier = 1.0f) =>

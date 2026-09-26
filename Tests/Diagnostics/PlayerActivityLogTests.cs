@@ -31,7 +31,7 @@ public sealed class PlayerActivityLogTests
     private static ComponentManager CreateComponentManager()
     {
         var componentManager = new ComponentManager(initialEntityCapacity: 10, initialComponentCapacity: 10);
-        componentManager.RegisterDirectPool<DisplayTextComponent>(static (ref existing, incoming) => existing = incoming);
+        componentManager.RegisterPackedPool<DisplayTextComponent>(static (ref existing, incoming) => existing = incoming);
         return componentManager;
     }
 

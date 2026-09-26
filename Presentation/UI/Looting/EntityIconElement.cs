@@ -1,6 +1,4 @@
-using Engine.ECS.Components.Stores;
 using FontStashSharp;
-using Game.Modules.Core.Components;
 using Game.Views;
 using Microsoft.Xna.Framework;
 using Presentation.Fonts;
@@ -10,7 +8,7 @@ using Presentation.UI.Chrome;
 namespace Presentation.UI.Looting;
 
 /// <summary>
-/// A small, plain identity icon for one entity -- its own sprite if it has one, else its glyph,
+/// A small, plain identity icon for one entity -- how the map draws it (its sprite, else its glyph),
 /// drawn via the same SpriteOrGlyphRenderer primitive InventoryItemStackCell/MapWindow already
 /// use, at full color (no dead-tint -- this is a portrait in a UI window, not the map tile
 /// itself). Distinct from InventoryItemStackCell, which draws an item's icon, not an entity's.
@@ -21,8 +19,7 @@ public sealed class EntityIconElement(
     LabelRenderer labelRenderer,
     SpriteSheetService spriteSheetService,
     SpriteRenderer spriteRenderer,
-    DirectComponentPool<SpriteComponent> spritePool,
-    DirectComponentPool<GlyphComponent> glyphPool)
+    IMapViewQuery mapView)
     : Element(fontService, elementPoolService, labelRenderer)
 {
     private int _entityId;
@@ -52,11 +49,9 @@ public sealed class EntityIconElement(
             return;
         }
 
-        SpriteComponent? sprite = spritePool.TryGetReadonly(_entityId, out var spriteComponent) ? spriteComponent : null;
-        var hasGlyph = glyphPool.TryGetReadonly(_entityId, out var glyphComponent);
-        var glyph = hasGlyph ? glyphComponent.Glyph : string.Empty;
-        var glyphColor = hasGlyph ? glyphComponent.GlyphColor : Color.White;
-
-        SpriteOrGlyphRenderer.Draw(ElementPoolService.SpriteBatch, spriteSheetService, spriteRenderer, LabelRenderer, sprite, _glyphFont, glyph, glyphColor, ContentAbsolutePosition, ContentSize, Color.White);
+        if (mapView.TryGetVisual(_entityId, out var entityVisual))
+        {
+            SpriteOrGlyphRenderer.Draw(ElementPoolService.SpriteBatch, spriteSheetService, spriteRenderer, LabelRenderer, entityVisual.Sprite, _glyphFont, entityVisual.Glyph, entityVisual.GlyphColor, ContentAbsolutePosition, ContentSize, Color.White);
+        }
     }
 }

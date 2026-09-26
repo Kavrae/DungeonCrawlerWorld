@@ -21,7 +21,7 @@ public sealed class ActionSourceTests
     public void FromEntity_RecordsTheKeyAndTheNameAtThatMoment()
     {
         var componentManager = new ComponentManager(initialEntityCapacity: 4, initialComponentCapacity: 4);
-        componentManager.RegisterDirectPool<DisplayTextComponent>(static (ref existing, incoming) => existing = incoming);
+        componentManager.RegisterPackedPool<DisplayTextComponent>(static (ref existing, incoming) => existing = incoming);
         var entityKeys = new EntityKeys();
         var key = entityKeys.Issue(2);
         componentManager.Merge(2, new DisplayTextComponent("Goblin", "A goblin."));
