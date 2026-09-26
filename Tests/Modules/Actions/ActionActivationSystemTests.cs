@@ -30,6 +30,7 @@ public sealed class ActionActivationSystemTests
     private static readonly Guid DelayedWithCooldownActionId = new("55555555-5555-5555-5555-555555555555");
     private static readonly Guid ImmediateWithManaCostActionId = new("66666666-6666-6666-6666-666666666666");
     private static readonly Guid FreeCastWithManaCostActionId = new("77777777-7777-7777-7777-777777777777");
+    private static readonly Guid FreeCastReleasingLockActionId = new("88888888-8888-8888-8888-888888888888");
     private static readonly Vector3Int TargetTile = new(5, 5, 0);
 
     private sealed class FakeMapQuery : IMapQuery
@@ -91,6 +92,9 @@ public sealed class ActionActivationSystemTests
         actionCatalog.Register(new ActionDefinition(
             FreeCastWithManaCostActionId, "Test FreeCast Spell", null, "#", default, [], damageEffects,
             new SpellActivator(targeting, new ActionTiming(ActionTimingCategory.FreeCast, ActionLockFrames: 0, CooldownFrames: null), ManaCost: 5)));
+        actionCatalog.Register(new ActionDefinition(
+            FreeCastReleasingLockActionId, "Test Lock-Releasing FreeCast", null, "#", default, [], [ActionEffect.None],
+            new SpellActivator(targeting, new ActionTiming(ActionTimingCategory.FreeCast, CooldownFrames: 40, ReleasesActionLock: true))));
 
         var system = new ActionActivationSystem(
             componentManager.GetPackedPool<PendingActionActivationComponent>(),
@@ -296,6 +300,54 @@ public sealed class ActionActivationSystemTests
 
         Assert.IsFalse(componentManager.GetPackedPool<PendingDelayedActionComponent>().Has(CasterEntityId), "Gated by its own cooldown before ever setting a windup.");
         Assert.AreEqual(0u, componentManager.GetPackedPool<ActionLockComponent>().GetReadonly(CasterEntityId).UnlockedAtFrame, "Must not set the shared lock for a rejected activation.");
+    }
+
+    private static (ActionActivationSystem System, ComponentManager ComponentManager) BuildLockReleasingCaster(uint lockedUntilFrame, bool inWindup, uint cooldownReadyAtFrame = 0)
+    {
+        var (system, componentManager, _, _) = Build();
+        componentManager.Merge(CasterEntityId, new ActionInstanceComponent(FreeCastReleasingLockActionId, overrideDefinition: null) { CooldownReadyAtFrame = cooldownReadyAtFrame });
+        componentManager.Merge(CasterEntityId, new ActionLockComponent(standardLockFrames: ActionLockGate.StandardLockFrames, currentLockTotalFrames: 30, unlockedAtFrame: lockedUntilFrame));
+        if (inWindup)
+        {
+            componentManager.Merge(CasterEntityId, new PendingDelayedActionComponent(DelayedActionId, [TargetTile], lockedUntilFrame));
+        }
+        componentManager.Merge(CasterEntityId, new PendingActionActivationComponent(FreeCastReleasingLockActionId, [TargetTile]));
+        return (system, componentManager);
+    }
+
+    [TestMethod]
+    public void ReleasesActionLock_DuringAWindup_CancelsTheWindupAndFreesTheCaster()
+    {
+        const long now = 5;
+        var (system, componentManager) = BuildLockReleasingCaster(lockedUntilFrame: 30, inWindup: true);
+
+        system.Update(new EngineTime(default, default, false, now), 0);
+
+        Assert.IsFalse(componentManager.GetPackedPool<PendingDelayedActionComponent>().Has(CasterEntityId));
+        Assert.IsFalse(ActionLockGate.IsBlocked(componentManager.GetPackedPool<ActionLockComponent>(), CasterEntityId, now));
+    }
+
+    [TestMethod]
+    public void ReleasesActionLock_AfterAnOrdinaryStep_FreesTheCaster()
+    {
+        const long now = 5;
+        var (system, componentManager) = BuildLockReleasingCaster(lockedUntilFrame: 30, inWindup: false);
+
+        system.Update(new EngineTime(default, default, false, now), 0);
+
+        Assert.IsFalse(ActionLockGate.IsBlocked(componentManager.GetPackedPool<ActionLockComponent>(), CasterEntityId, now));
+    }
+
+    [TestMethod]
+    public void ReleasesActionLock_OnCooldown_LeavesTheWindupAndTheLockAlone()
+    {
+        const long now = 5;
+        var (system, componentManager) = BuildLockReleasingCaster(lockedUntilFrame: 30, inWindup: true, cooldownReadyAtFrame: 100);
+
+        system.Update(new EngineTime(default, default, false, now), 0);
+
+        Assert.IsTrue(componentManager.GetPackedPool<PendingDelayedActionComponent>().Has(CasterEntityId));
+        Assert.AreEqual(30u, componentManager.GetPackedPool<ActionLockComponent>().GetReadonly(CasterEntityId).UnlockedAtFrame);
     }
 
     [TestMethod]

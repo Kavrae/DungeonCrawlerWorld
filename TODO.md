@@ -1093,23 +1093,6 @@ save-file-level meta-progression store distinct from anything in a single `EcsCo
 
 ### High Priority
 
-#### New user input cancels buffered input
-
-Player input that can't take effect yet is buffered until the player's action lock clears, and a
-later, different input doesn't replace it:
-
-- `PlayerMovementController.TryQueuePlayerMove` only writes `MovementComponent.NextMapPosition` while
-  the player is at rest, so a move pressed during the lock is kept, and pressing another direction
-  before it resolves is ignored -- the player steps the way they no longer want to go.
-- `ActionTargetingController.TryRelocateForDodge` writes the same field, so a dodge relocation and a
-  queued step can overwrite each other in whichever order they were issued.
-
-The rule: the newest input wins. A new move replaces a pending move or dodge relocation, and a newly
-confirmed action or item cancels a pending move, so what resolves when the lock clears is always the
-last thing the player asked for. Audit every other place player input is held for later (pending
-action and consumable activations, armed targeting) against the same rule, and keep the cancel in one
-shared place rather than per input type.
-
 #### Global hard minimum/maximum element sizes for user resizing
 
 `UiInputController.ComputeResize`/`ClampResizeToBounds` clamp a drag-resize to `element.MinimumSize`/

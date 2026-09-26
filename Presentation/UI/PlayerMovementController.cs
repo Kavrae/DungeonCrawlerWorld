@@ -1,98 +1,48 @@
-using Engine.ECS.Components.Stores;
 using Engine.Math;
-using Engine.Utilities;
-using Game.Modules.Core.Components;
-using Game.Modules.Movement;
-using Game.Modules.Movement.Components;
-using Game.World;
 using Microsoft.Xna.Framework.Input;
 
 namespace Presentation.UI;
 
-/// <summary>
-/// Player's WASD movement input -- queues a move into MovementComponent.NextMapPosition for
-/// MovementSystem to actually apply, gated by a fixed per-move cooldown. Split out from
-/// ActionTargetingController (see that class's own doc comment): movement shares nothing with
-/// the ability/item arm-target-confirm state machine beyond both being "what does this frame's
-/// input do to the player entity" -- MapWindow.OnHotkeysAction calls both every frame, movement
-/// first (matches this class's original per-frame hotkey ordering, from before the split).
+/// <summary>Turns the player's WASD input into moves for PlayerInputBuffer.</summary>
+/// <remarks>
+/// A freshly pressed movement key buffers a move in the direction of every movement key held this frame, so a tap
+/// is kept after the key is released. Every frame, the held direction is also handed to the buffer's flush, which
+/// uses it once the lock clears and nothing newer is buffered. Releasing keys cancels nothing.
 ///
-/// claimedKeys (see HandleInput) is MapWindow's small per-frame "an earlier handler already used
-/// this key" set -- today its only claimant is ActionTargetingController.TryClaimDodgeDirectionalKey
-/// (a WASD press while Dodge is armed confirms a directional dodge instead of moving), but the
-/// mechanism is general: any future handler needing to intercept a movement key before this class
-/// sees it can claim it the same way, without this class ever needing to know what claimed it or
-/// why.
-/// </summary>
-public sealed class PlayerMovementController(
-    World world,
-    DirectComponentPool<TransformComponent> transformPool,
-    PackedComponentPool<MovementComponent> movementPool)
+/// claimedKeys is MapWindow's per-frame set of keys an earlier handler already used (today, Dodge's directional
+/// confirm in ActionTargetingController.TryClaimDodgeDirectionalKey). A claimed key is neither a press nor held
+/// for this frame, so any future handler can intercept a movement key without this class knowing why.
+/// </remarks>
+public sealed class PlayerMovementController(PlayerInputBuffer inputBuffer)
 {
-    private static readonly int FramesPerPlayerMove = GameTiming.FramesForSeconds(0.25f);
+    private static readonly (Keys Key, Vector3Int Direction)[] MovementKeys =
+    [
+        (Keys.W, new Vector3Int(0, -1, 0)),
+        (Keys.S, new Vector3Int(0, 1, 0)),
+        (Keys.A, new Vector3Int(-1, 0, 0)),
+        (Keys.D, new Vector3Int(1, 0, 0)),
+    ];
 
-    private int _playerMoveCooldownFrames;
-
-    public void HandleInput(KeyboardState keyboardState, IReadOnlySet<Keys> claimedKeys)
+    public void HandleInput(KeyboardState keyboardState, KeyboardState previousKeyboardState, IReadOnlySet<Keys> claimedKeys)
     {
-        if (_playerMoveCooldownFrames > 0)
+        var heldDirection = new Vector3Int();
+        var isFreshPress = false;
+        foreach (var (key, direction) in MovementKeys)
         {
-            _playerMoveCooldownFrames--;
+            if (!keyboardState.IsKeyDown(key) || claimedKeys.Contains(key))
+            {
+                continue;
+            }
+
+            heldDirection += direction;
+            isFreshPress |= previousKeyboardState.IsKeyUp(key);
         }
 
-        var delta = new Vector3Int();
-        if (keyboardState.IsKeyDown(Keys.W) && !claimedKeys.Contains(Keys.W))
+        if (isFreshPress)
         {
-            delta.Y -= 1;
-        }
-        if (keyboardState.IsKeyDown(Keys.S) && !claimedKeys.Contains(Keys.S))
-        {
-            delta.Y += 1;
-        }
-        if (keyboardState.IsKeyDown(Keys.A) && !claimedKeys.Contains(Keys.A))
-        {
-            delta.X -= 1;
-        }
-        if (keyboardState.IsKeyDown(Keys.D) && !claimedKeys.Contains(Keys.D))
-        {
-            delta.X += 1;
+            inputBuffer.QueueMove(heldDirection);
         }
 
-        if (delta == new Vector3Int() || _playerMoveCooldownFrames > 0)
-        {
-            return;
-        }
-
-        _playerMoveCooldownFrames = FramesPerPlayerMove;
-        TryQueuePlayerMove(delta);
-    }
-
-    private void TryQueuePlayerMove(Vector3Int delta)
-    {
-        var playerEntityId = world.PlayerEntityId;
-        if (!transformPool.TryGetReadonly(playerEntityId, out var transformComponent) ||
-            !movementPool.TryGetReadonly(playerEntityId, out var movementComponent))
-        {
-            return;
-        }
-
-        // Only queue a new move while at rest -- avoids redirecting a move that's already
-        // pending (e.g. still waiting on MovementSystem's action lock).
-        var isAtRest = movementComponent.NextMapPosition is null || movementComponent.NextMapPosition.Value == transformComponent.Position;
-        if (!isAtRest)
-        {
-            return;
-        }
-
-        var candidate = transformComponent.Position + delta;
-        if (!MovementCandidates.CanOccupy(world, candidate, transformComponent.Size, playerEntityId, world.IsBlocking(playerEntityId)))
-        {
-            return;
-        }
-
-        movementPool.TryUpdate(playerEntityId, candidate, static (ref MovementComponent movement, Vector3Int target) =>
-        {
-            movement.NextMapPosition = target;
-        });
+        inputBuffer.Flush(heldDirection);
     }
 }

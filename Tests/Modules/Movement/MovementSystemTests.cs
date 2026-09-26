@@ -274,6 +274,32 @@ public sealed class MovementSystemTests
     /// entity 0 is only due when FrameCount % 15 == 0, and frame 6 is not a visit at all.
     /// </summary>
     [TestMethod]
+    public void Update_Player_MovesOnAFrameTheirStripeIsNotDue_WhileOthersWaitForTheirs()
+    {
+        const int playerEntityId = 1;
+        const int otherEntityId = 2;
+        var transformPool = CreateTransformPool();
+        var actionLockPool = CreateActionLockPool();
+        var movementPool = CreateMovementPool();
+        var world = new Game.World.World(new Map(new Vector3Int(5, 5, 1)));
+
+        foreach (var (entityId, row) in new[] { (playerEntityId, 1), (otherEntityId, 3) })
+        {
+            var transform = new TransformComponent(new Vector3Int(1, row, 0), new Vector2Byte(1, 1));
+            transformPool.Add(entityId, transform);
+            world.PlaceEntityOnMap(entityId, transform.Position, ref transform);
+            actionLockPool.Add(entityId, new ActionLockComponent(standardLockFrames: 10, currentLockTotalFrames: 0, unlockedAtFrame: 0));
+            movementPool.Add(entityId, new MovementComponent(MovementMode.PlayerControlled, null, new Vector3Int(2, row, 0)));
+        }
+
+        var system = new MovementSystem(transformPool, actionLockPool, movementPool, world, new EventBus(), new WorldEventSync(world), new FrameEventBuffer<EntityMovedEvent>(), new FakePlayerQuery(playerEntityId), CreateProcessingTierPool(), new ProcessingTierEvents());
+        system.Update(new EngineTime(default, default, false, FrameCount: 0), 0);
+
+        Assert.AreEqual(new Vector3Int(2, 1, 0), transformPool.GetReadonly(playerEntityId).Position);
+        Assert.AreEqual(new Vector3Int(1, 3, 0), transformPool.GetReadonly(otherEntityId).Position, "Entity 2 is only due on frames where FrameCount % 15 == 2.");
+    }
+
+    [TestMethod]
     public void Update_PastItsWaitFrame_IsFreeToMoveAgain()
     {
         var transformPool = CreateTransformPool();
@@ -447,7 +473,7 @@ public sealed class MovementSystemTests
     }
 
     /// <summary>
-    /// Mirrors MapWindow.TryQueuePlayerMove's validate-then-queue pattern (on-map + free-space
+    /// Mirrors PlayerInputBuffer.Flush's validate-then-queue pattern (on-map + free-space
     /// check before ever setting NextMapPosition -- MovementSystem itself never decides a
     /// destination for any mode) applied to two independent entities, proving
     /// MovementMode.PlayerControlled isn't tied to any single global "the player":
@@ -711,7 +737,7 @@ public sealed class MovementSystemTests
         Assert.AreNotEqual(startPosition, transformPool.GetReadonly(0).Position);
     }
 
-    /// <summary>Standalone stand-in for MapWindow.TryQueuePlayerMove's validate-then-queue logic, so this test can drive independent PlayerControlled entities without any MapWindow/input machinery.</summary>
+    /// <summary>Standalone stand-in for PlayerInputBuffer.Flush's validate-then-queue logic, so this test can drive independent PlayerControlled entities without any MapWindow/input machinery.</summary>
     private static void QueuePlayerControlledMove(IMapQuery mapQuery, DirectComponentPool<TransformComponent> transformPool, PackedComponentPool<MovementComponent> movementPool, int entityId, Vector3Int delta)
     {
         if (!transformPool.TryGetReadonly(entityId, out var transformComponent) || !movementPool.TryGetReadonly(entityId, out var movementComponent))

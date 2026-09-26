@@ -1,4 +1,6 @@
 using Engine.ECS.Components;
+using Engine.ECS.Systems;
+using Engine.Events;
 using Engine.Math;
 using Game.Modules.AbilityScores.Components;
 using Game.Modules.Actions;
@@ -15,14 +17,10 @@ using Presentation.UI;
 namespace Tests.Presentation;
 
 /// <summary>
-/// Regression coverage for a real, confirmed bug: Dodge's directional relocation used to call
-/// World.MoveEntity directly, bypassing MovementComponent.NextMapPosition entirely -- which both
-/// desynced TransformComponent.Position from Map's own occupancy index (making the player's sprite
-/// vanish -- see MapWindow.DrawPrimaryOccupant) and left ordinary movement's own queued destination
-/// stale, causing MovementSystem to later "catch up" and silently revert the dodge. Routing through
-/// the same NextMapPosition queue ordinary WASD movement uses (ActionTargetingController.
-/// TryRelocateForDodge) fixes both -- these tests assert that queuing, not a real test of
-/// MovementSystem itself (see MovementSystemTests for that).
+/// A directional Dodge steps through MovementComponent.NextMapPosition, the path ordinary movement uses, and never
+/// moves the entity directly. PlayerInputBuffer writes the step only once the Dodge's ActionActivatedEvent arrives,
+/// which ActivateDodge stands in for here -- these tests cover the Presentation side, not MovementSystem itself (see
+/// MovementSystemTests for that).
 /// </summary>
 [TestClass]
 public sealed class ActionTargetingControllerDodgeTests
@@ -30,7 +28,7 @@ public sealed class ActionTargetingControllerDodgeTests
     private const int PlayerEntityId = 1;
     private static readonly Vector3Int PlayerPosition = new(5, 5, 0);
 
-    private static (ActionTargetingController ActionTargeting, MapViewState MapViewState, ComponentManager ComponentManager) Build()
+    private static (ActionTargetingController ActionTargeting, MapViewState MapViewState, ComponentManager ComponentManager, PlayerMovementController PlayerMovement, SimulationClock Clock, EventBus EventBus) Build()
     {
         var world = new Game.World.World(new Game.World.Map(new Vector3Int(20, 20, 1))) { PlayerEntityId = PlayerEntityId };
         var mapViewState = new MapViewState();
@@ -62,6 +60,17 @@ public sealed class ActionTargetingControllerDodgeTests
         var itemCatalog = new ItemCatalog();
 
         var camera = new MapCamera(world);
+        var clock = new SimulationClock();
+        var eventBus = new EventBus();
+        var inputBuffer = new PlayerInputBuffer(
+            world,
+            componentManager.GetDirectPool<TransformComponent>(),
+            componentManager.GetPackedPool<MovementComponent>(),
+            componentManager.GetPackedPool<ActionLockComponent>(),
+            componentManager.GetPackedPool<PendingActionActivationComponent>(),
+            componentManager.GetPackedPool<PendingConsumableActivationComponent>(),
+            clock,
+            eventBus);
         var actionTargeting = new ActionTargetingController(
             world,
             mapViewState,
@@ -74,21 +83,26 @@ public sealed class ActionTargetingControllerDodgeTests
             componentManager.GetMultiPool<ItemHotkeyBindingComponent>(),
             componentManager.GetMultiPool<InventoryItemStackComponent>(),
             componentManager.GetPackedPool<HotkeyExpansionUnlockComponent>(),
-            componentManager.GetPackedPool<PendingActionActivationComponent>(),
-            componentManager.GetPackedPool<PendingConsumableActivationComponent>(),
             componentManager.GetPackedPool<PendingDelayedActionComponent>(),
             componentManager.GetPackedPool<ActionLockComponent>(),
-            componentManager.GetPackedPool<MovementComponent>(),
+            inputBuffer,
             componentManager.GetPackedPool<ManaComponent>(),
             componentManager.GetMultiPool<AbilityScoreComponent>());
 
-        return (actionTargeting, mapViewState, componentManager);
+        return (actionTargeting, mapViewState, componentManager, new PlayerMovementController(inputBuffer), clock, eventBus);
+    }
+
+    /// <summary>What ActionActivationSystem does with a Dodge request that succeeds: consumes it and publishes the activation.</summary>
+    private static void ActivateDodge(ComponentManager componentManager, EventBus eventBus)
+    {
+        componentManager.GetPackedPool<PendingActionActivationComponent>().Remove(PlayerEntityId);
+        eventBus.Publish(new Game.World.ActionActivatedEvent(PlayerEntityId, DodgeAction.Id));
     }
 
     [TestMethod]
-    public void TryClaimDodgeDirectionalKey_DodgeArmed_QueuesNextMapPosition_DoesNotMoveImmediately()
+    public void TryClaimDodgeDirectionalKey_DodgeArmed_StepsOnlyOnceTheDodgeActivates()
     {
-        var (actionTargeting, mapViewState, componentManager) = Build();
+        var (actionTargeting, mapViewState, componentManager, _, _, eventBus) = Build();
         actionTargeting.HandleHotkeySlotPress(HotkeySlot.DefaultAttack);
         Assert.AreEqual(DodgeAction.Id, mapViewState.ArmedActionId, "Sanity check: Dodge must actually be armed before exercising the directional confirm.");
         var claimedKeys = new HashSet<Keys>();
@@ -96,34 +110,51 @@ public sealed class ActionTargetingControllerDodgeTests
         actionTargeting.TryClaimDodgeDirectionalKey(new KeyboardState(Keys.D), new KeyboardState(), claimedKeys);
 
         var movementPool = componentManager.GetPackedPool<MovementComponent>();
-        Assert.AreEqual(new Vector3Int(6, 5, 0), movementPool.GetReadonly(PlayerEntityId).NextMapPosition,
-            "The directional dodge must queue the same NextMapPosition ordinary movement uses, not move the entity directly.");
-        Assert.AreEqual(PlayerPosition, componentManager.GetDirectPool<TransformComponent>().GetReadonly(PlayerEntityId).Position,
-            "TransformComponent.Position must be untouched until MovementSystem actually applies the queued move -- a direct change here is exactly the bug this guards against.");
+        Assert.IsNull(movementPool.GetReadonly(PlayerEntityId).NextMapPosition, "No step until the Dodge has actually activated.");
         Assert.IsTrue(claimedKeys.Contains(Keys.D), "The key must be claimed so PlayerMovementController doesn't also treat it as an ordinary move this frame.");
+
+        ActivateDodge(componentManager, eventBus);
+
+        Assert.AreEqual(new Vector3Int(6, 5, 0), movementPool.GetReadonly(PlayerEntityId).NextMapPosition);
+        Assert.AreEqual(PlayerPosition, componentManager.GetDirectPool<TransformComponent>().GetReadonly(PlayerEntityId).Position,
+            "TransformComponent.Position must be untouched until MovementSystem actually takes the step.");
     }
 
     [TestMethod]
-    public void TryClaimDodgeDirectionalKey_OverwritesAnyStalePreviouslyQueuedMove()
+    public void TryClaimDodgeDirectionalKey_WithdrawsAnyStalePreviouslyQueuedMove()
     {
-        var (actionTargeting, _, componentManager) = Build();
+        var (actionTargeting, _, componentManager, _, _, eventBus) = Build();
         var movementPool = componentManager.GetPackedPool<MovementComponent>();
-
-        // Simulate the player already mid-stride from ordinary WASD movement -- a stale queued
-        // destination unrelated to where the dodge is about to send them.
         movementPool.TryUpdate(PlayerEntityId, static (ref MovementComponent m) => m.NextMapPosition = new Vector3Int(9, 9, 0));
 
         actionTargeting.HandleHotkeySlotPress(HotkeySlot.DefaultAttack);
         actionTargeting.TryClaimDodgeDirectionalKey(new KeyboardState(Keys.A), new KeyboardState(), []);
+        Assert.IsNull(movementPool.GetReadonly(PlayerEntityId).NextMapPosition, "The stale step must be withdrawn the moment the Dodge is confirmed.");
 
-        Assert.AreEqual(new Vector3Int(4, 5, 0), movementPool.GetReadonly(PlayerEntityId).NextMapPosition,
-            "The dodge's own destination must replace any stale queued move, not sit alongside it -- a leftover stale destination is exactly what caused MovementSystem to revert the dodge.");
+        ActivateDodge(componentManager, eventBus);
+
+        Assert.AreEqual(new Vector3Int(4, 5, 0), movementPool.GetReadonly(PlayerEntityId).NextMapPosition);
+    }
+
+    [TestMethod]
+    public void DodgeConsumedWithoutActivating_NeverSteps()
+    {
+        var (actionTargeting, _, componentManager, playerMovement, clock, eventBus) = Build();
+
+        actionTargeting.HandleHotkeySlotPress(HotkeySlot.DefaultAttack);
+        actionTargeting.TryClaimDodgeDirectionalKey(new KeyboardState(Keys.D), new KeyboardState(), []);
+        componentManager.GetPackedPool<PendingActionActivationComponent>().Remove(PlayerEntityId);
+        clock.Advance(1);
+        playerMovement.HandleInput(new KeyboardState(), new KeyboardState(), new HashSet<Keys>());
+        eventBus.Publish(new Game.World.ActionActivatedEvent(PlayerEntityId, DodgeAction.Id));
+
+        Assert.IsNull(componentManager.GetPackedPool<MovementComponent>().GetReadonly(PlayerEntityId).NextMapPosition);
     }
 
     [TestMethod]
     public void TryClaimDodgeDirectionalKey_DodgeNotArmed_DoesNothing()
     {
-        var (actionTargeting, _, componentManager) = Build();
+        var (actionTargeting, _, componentManager, _, _, _) = Build();
         var claimedKeys = new HashSet<Keys>();
 
         actionTargeting.TryClaimDodgeDirectionalKey(new KeyboardState(Keys.D), new KeyboardState(), claimedKeys);
@@ -144,7 +175,7 @@ public sealed class ActionTargetingControllerDodgeTests
     [TestMethod]
     public void TryClaimDodgeDirectionalKey_QueuesEffectAgainstCastersCurrentTile_NotTheDestination()
     {
-        var (actionTargeting, _, componentManager) = Build();
+        var (actionTargeting, _, componentManager, _, _, _) = Build();
         actionTargeting.HandleHotkeySlotPress(HotkeySlot.DefaultAttack);
 
         actionTargeting.TryClaimDodgeDirectionalKey(new KeyboardState(Keys.D), new KeyboardState(), []);
@@ -168,7 +199,7 @@ public sealed class ActionTargetingControllerDodgeTests
     [TestMethod]
     public void DoubleTappingDodgeHotkey_ActivatesOnSelf_InsteadOfSilentlyDoingNothing()
     {
-        var (actionTargeting, mapViewState, componentManager) = Build();
+        var (actionTargeting, mapViewState, componentManager, _, _, _) = Build();
 
         actionTargeting.HandleHotkeySlotPress(HotkeySlot.DefaultAttack);
         actionTargeting.HandleHotkeySlotPress(HotkeySlot.DefaultAttack);
@@ -179,5 +210,29 @@ public sealed class ActionTargetingControllerDodgeTests
             "A double-tapped Dodge must activate on the caster's own tile, not silently fail to queue anything at all.");
         Assert.IsNull(mapViewState.ArmedActionId,
             "The pair's first press armed the slot; now that the second press has fired it, it should disarm -- but only after actually activating, not instead of activating.");
+    }
+
+    [TestMethod]
+    public void DirectionalDodge_ReplacesMoveBufferedDuringTheLock()
+    {
+        var (actionTargeting, _, componentManager, playerMovement, clock, eventBus) = Build();
+        var actionLocks = componentManager.GetPackedPool<ActionLockComponent>();
+        ActionLockGate.Lock(actionLocks, PlayerEntityId, now: 0, framesToWait: 60);
+
+        clock.Advance(50);
+        playerMovement.HandleInput(new KeyboardState(Keys.W), new KeyboardState(), new HashSet<Keys>());
+        actionTargeting.HandleHotkeySlotPress(HotkeySlot.DefaultAttack);
+        actionTargeting.TryClaimDodgeDirectionalKey(new KeyboardState(Keys.D), new KeyboardState(), []);
+
+        clock.Advance(51);
+        ActivateDodge(componentManager, eventBus);
+        ActionLockGate.Release(actionLocks, PlayerEntityId, now: 51);
+        playerMovement.HandleInput(new KeyboardState(), new KeyboardState(), new HashSet<Keys>());
+        Assert.AreEqual(new Vector3Int(6, 5, 0), componentManager.GetPackedPool<MovementComponent>().GetReadonly(PlayerEntityId).NextMapPosition);
+
+        clock.Advance(60);
+        playerMovement.HandleInput(new KeyboardState(), new KeyboardState(), new HashSet<Keys>());
+
+        Assert.AreEqual(new Vector3Int(6, 5, 0), componentManager.GetPackedPool<MovementComponent>().GetReadonly(PlayerEntityId).NextMapPosition);
     }
 }

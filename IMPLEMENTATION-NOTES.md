@@ -79,14 +79,15 @@ games' own dodge timings -- the numbers used are TODO.md's own, not independentl
   status cue (confirmed live). A third, deeper bug briefly made the glow not appear *at all* even
   after the opacity->glow switch, for directional dodges specifically: `ActionEffectResolver.Apply`
   only ever invokes an action's effects against entities `IMapQuery.GetOccupantEntityIdsAt` finds
-  occupying the *resolved target tile* -- but `TryRelocateForDodge` only queues the caster's move via
+  occupying the *resolved target tile* -- but the caster's step only goes through
   `MovementComponent.NextMapPosition` (see below), so at the moment `ActionActivationSystem` processes
   the FreeCast activation, that destination tile is still empty; the occupant loop found nobody there
   and `DodgeActivation` never ran, so `DodgingComponent` was never granted (self-dodge in place was
   unaffected, since its target tile is always the caster's own current, occupied tile). Fixed with two
   changes: `ActionTargetingController.QueueActionActivation` now stores the caster's own *current*
   tile as `PendingActionActivationComponent.TargetTiles` for Dodge specifically (guaranteed occupied),
-  while `TryRelocateForDodge` still separately decides the actual movement destination; and
+  while the step's destination travels separately (`PlayerInputBuffer`, see "Input buffering, instant
+  Dodge, and Stagger"); and
   `DodgeActivation.Apply` now reads/writes `context.SourceEntityId` instead of `context.TargetEntityId`
   so the grant always lands on the actual caster even if another entity happens to share that tile
   (e.g. a co-located Tiny/Phasing occupant).
@@ -94,9 +95,9 @@ games' own dodge timings -- the numbers used are TODO.md's own, not independentl
   Actions section above) and `TargetingSpec` gained `Metric: DistanceMetric` (Manhattan/Chebyshev,
   `SingleTarget`-only). `DodgeAction`'s own targeting -- `SingleTarget` + `Metric.Chebyshev` + `Range: 1`
   -- is "pick exactly one tile out of the caster's own 3x3 block," resolved at confirm time by
-  `ActionTargetingController.TryRelocateForDodge`, which *queues* the move via `MovementComponent.
-  NextMapPosition` -- the exact same path `PlayerMovementController` uses for ordinary WASD movement --
-  rather than applying it directly. Two confirmed bugs both came from an earlier version that called
+  `ActionTargetingController`, whose step goes through `MovementComponent.NextMapPosition` -- the exact
+  same path ordinary WASD movement uses, written by `PlayerInputBuffer` -- rather than being applied
+  directly. Two confirmed bugs both came from an earlier version that called
   `World.MoveEntity` directly instead: (1) `World.MoveEntity`/`MoveEntityUnchecked` only ever update
   `Map`'s own occupancy index, never the mover's `TransformComponent.Position` (that's the caller's own
   job; `MovementSystem.TryMoveToNextMapPosition` does this itself, separately) -- skipping it desynced
@@ -108,9 +109,8 @@ games' own dodge timings -- the numbers used are TODO.md's own, not independentl
   silently reverting. Routing through the one shared `NextMapPosition` queue instead of a second,
   uncoordinated move path fixes both: there is only ever one pending destination, whichever was set most
   recently, and `MovementSystem`'s own occupancy/wall/diagonal-corner validation covers "dodge in place
-  if occupied" for free. Trade-off: the actual relocation, like any other queued move, waits for the
-  shared `ActionLock` to clear if the entity is already locked -- `DodgeActivation`'s own immunity grant
-  still applies instantly regardless, since `FreeCast` never gates on the lock. `TargetShapeResolver
+  if occupied" for free. The step does not wait for the shared `ActionLock`: a successful Dodge releases
+  it (`ActionTiming.ReleasesActionLock`, see "Input buffering, instant Dodge, and Stagger"). `TargetShapeResolver
   .Resolve` also gained a verified redundant-resolve shortcut (`SingleTarget <= Line <= Cone` for the
   same origin/cursorTile/Range, once `ResolveCone`'s extent check moved from Euclidean to Chebyshev) and
   de-duplicates combined-flag results.
@@ -537,6 +537,42 @@ second shift worst 12-15 ms with none over 16.67 ms; a shift takes 8-17 s. Stead
 `EcsContext.Update` 1.34 ms/frame. Remaining: occasional ~17-19 ms gen-1 GC frames (`TODO.md`). A
 further 17-24 ms frame near a background gen-2 GC was a runtime wait rounded up to Windows' 15.6 ms
 timer tick; SDL3 sets a 1 ms timer in the windowed game, and the headless benchmark now does too.
+
+### Input buffering, instant Dodge, and Stagger
+
+Replaced the "New user input cancels buffered input" TODO. Model follows action-game convention (single-slot
+buffer with a short expiry; held movement sampled, taps buffered; dodge cancels windups; hitstun clears the
+buffer). Decisions, so they aren't re-asked:
+
+- `Presentation/UI/PlayerInputBuffer` is the only writer of the player's `NextMapPosition`,
+  `PendingActionActivationComponent` and `PendingConsumableActivationComponent`. One slot (move / action /
+  consumable), newest wins, `ExpiryFrames` = 0.25s on the simulation clock (pausing doesn't age it; tune after
+  more play). Written only once `ActionLockGate` reads the player as free; a command queued while free is
+  written the same frame. The Game-side requests stay one-shot -- buffering lives entirely in Presentation.
+- Writing any command withdraws what the game hasn't taken yet: an action/consumable clears an untaken step, a
+  move removes an unconsumed activation request. A move is buffered as a direction, resolved at write time; a
+  blocked newest direction clears the step rather than falling back to an older one.
+- Held movement is not a command: with the slot empty, the held direction is written only while the player is at
+  rest and has no activation request pending. Releasing keys cancels nothing. The old 0.25s repeat cooldown and
+  the "only while at rest" queue gate in `PlayerMovementController` are gone; the action lock alone paces
+  steps. Opposing keys still sum to neutral, and a fresh neutral press clears a buffered step.
+- FreeCast actions (only Dodge today) skip the slot and are written at once, still emptying it.
+  Escape/right-click cancel order: disarm -> clear the buffer -> cancel the windup; each reports "cancelled" so
+  a no-op still falls through to the corpse context menu.
+- `ActionTiming.ReleasesActionLock` (Dodge only): a successful activation cancels the caster's windup and
+  releases its lock, whatever set it, for NPCs too. No penalty beyond Dodge's own cooldown. The Dodge's step is
+  written by the buffer only on the player's `ActionActivatedEvent` for that Dodge, so a failed Dodge (on
+  cooldown) no longer gives a free step.
+- `MovementSystem` moves the player every frame (`BeginFrame`) and skips them in its tiered buckets --
+  otherwise the player was only visited every 15 frames and a step (Dodge's included) landed up to 0.25s late.
+- Stagger = cancelling a buffered action. `Tag.Staggering` (PowerAttack only; keep it rare) makes
+  `ActionEffectResolver.Apply` publish `EntityStaggeredEvent` per target hit, after the dodge skip and never
+  for the source. `ActionsModule` cancels the target's windup and **keeps** its lock (the windup's time is
+  lost -- that cost is what justifies windup attacks' power); `PlayerInputBuffer` clears its slot. A pending
+  Dodge step survives a Stagger, and held movement isn't staggered (a deliberate choice for now: a key held
+  through a Stagger still steps once the lock clears). `WindupCancel.TryCancel(..., releaseLock)`
+  is the one cancel path for Escape (release), Dodge (release) and Stagger (keep). Unrelated to
+  `FrameDeadline.AfterStaggered`.
 
 ## Presentation
 

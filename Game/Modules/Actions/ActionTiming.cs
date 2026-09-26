@@ -12,5 +12,9 @@ namespace Game.Modules.Actions;
 /// StandardLockFrames" -- omit it entirely unless this action/item genuinely needs a different
 /// lock duration regardless of who casts it (see HotkeyExpansionPotion for the one current
 /// override).
+///
+/// ReleasesActionLock makes a successful activation cancel the acting entity's windup, if any, and
+/// release its shared ActionLock, whatever set it -- see ActionActivationSystem. Dodge uses it so its
+/// step is taken at once rather than after the current lock.
 /// </summary>
-public sealed record ActionTiming(ActionTimingCategory Category, ushort? ActionLockFrames = null, ushort? CooldownFrames = null);
+public sealed record ActionTiming(ActionTimingCategory Category, ushort? ActionLockFrames = null, ushort? CooldownFrames = null, bool ReleasesActionLock = false);

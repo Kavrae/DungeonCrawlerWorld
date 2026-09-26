@@ -56,6 +56,7 @@ public sealed class ActionsModule : IGameModule
     private ProcessingTierEvents _processingTierEvents = null!;
     private SimulationScope _simulationScope = null!;
     private EntityKeys _entityKeys = null!;
+    private SimulationClock _simulationClock = null!;
 
     public void Configure(GameModuleContext context)
     {
@@ -68,6 +69,7 @@ public sealed class ActionsModule : IGameModule
         _processingTierEvents = context.ProcessingTierEvents;
         _simulationScope = context.SimulationScope;
         _entityKeys = context.EntityKeys;
+        _simulationClock = context.SimulationClock;
     }
 
     public void RegisterComponents(ComponentManager componentManager)
@@ -117,6 +119,8 @@ public sealed class ActionsModule : IGameModule
 
         systemManager.Register(new DodgeExpirySystem(dodgingEntities));
 
+        WireStagger(componentManager);
+
         systemManager.Register(new DelayedActionSystem(
             componentManager.GetPackedPool<PendingDelayedActionComponent>(),
             componentManager.GetMultiPool<ActionInstanceComponent>(),
@@ -164,5 +168,15 @@ public sealed class ActionsModule : IGameModule
             meleeDisabled,
             dodgingEntities,
             processingTiers));
+    }
+
+    /// <summary>A staggered entity loses its windup, and with it the time the windup already cost: the lock it set is kept.</summary>
+    private void WireStagger(ComponentManager componentManager)
+    {
+        var pendingDelayedActions = componentManager.GetPackedPool<PendingDelayedActionComponent>();
+        var actionLocks = componentManager.GetPackedPool<ActionLockComponent>();
+
+        _eventBus.Subscribe<EntityStaggeredEvent>(staggered =>
+            WindupCancel.TryCancel(pendingDelayedActions, actionLocks, staggered.EntityId, _simulationClock.CurrentFrame, releaseLock: false));
     }
 }

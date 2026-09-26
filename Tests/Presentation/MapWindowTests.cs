@@ -65,11 +65,16 @@ public sealed class MapWindowTests
     private static (Game.World.World World, MapViewState MapViewState, MapWindow MapWindow, ComponentManager ComponentManager) BuildMapWindowWithPlayer(int mapSizeX, int mapSizeY, int mapSizeZ, Vector3Int playerPosition) =>
         BuildMapWindowCore(mapSizeX, mapSizeY, mapSizeZ, playerPosition);
 
+    /// <summary>Gives the player an ActionLockComponent that has already cleared -- PlayerInputBuffer only writes a command once ActionLockGate reads the player as free, and a missing component reads as locked.</summary>
+    private static void UnlockPlayer(ComponentManager componentManager) =>
+        componentManager.Merge(PlayerEntityId, new ActionLockComponent(standardLockFrames: ActionLockGate.StandardLockFrames, currentLockTotalFrames: 0, unlockedAtFrame: 0));
+
     /// <summary>Same as BuildMapWindowWithPlayer, but also hands back the ActionCatalog MapWindow was built with -- for hotkey/action tests that need to register a test ActionDefinition before pressing anything.</summary>
     private static (Game.World.World World, MapViewState MapViewState, MapWindow MapWindow, ComponentManager ComponentManager, ActionCatalog ActionCatalog) BuildMapWindowWithPlayerAndActions(int mapSizeX, int mapSizeY, int mapSizeZ, Vector3Int playerPosition)
     {
         var actionCatalog = new ActionCatalog();
         var (world, mapViewState, mapWindow, componentManager) = BuildMapWindowCore(mapSizeX, mapSizeY, mapSizeZ, playerPosition, actionCatalog);
+        UnlockPlayer(componentManager);
         return (world, mapViewState, mapWindow, componentManager, actionCatalog);
     }
 
@@ -78,6 +83,7 @@ public sealed class MapWindowTests
     {
         var itemCatalog = new ItemCatalog();
         var (world, mapViewState, mapWindow, componentManager) = BuildMapWindowCore(mapSizeX, mapSizeY, mapSizeZ, playerPosition, itemCatalog: itemCatalog);
+        UnlockPlayer(componentManager);
         return (world, mapViewState, mapWindow, componentManager, itemCatalog);
     }
 
@@ -125,6 +131,16 @@ public sealed class MapWindowTests
         var resolvedActionCatalog = actionCatalog ?? new ActionCatalog();
         var resolvedItemCatalog = itemCatalog ?? new ItemCatalog();
         var camera = new MapCamera(world);
+        var eventBus = new EventBus();
+        var inputBuffer = new PlayerInputBuffer(
+            world,
+            componentManager.GetDirectPool<TransformComponent>(),
+            componentManager.GetPackedPool<MovementComponent>(),
+            componentManager.GetPackedPool<ActionLockComponent>(),
+            componentManager.GetPackedPool<PendingActionActivationComponent>(),
+            componentManager.GetPackedPool<PendingConsumableActivationComponent>(),
+            new Engine.ECS.Systems.SimulationClock(),
+            eventBus);
         var actionTargeting = new ActionTargetingController(
             world,
             mapViewState,
@@ -137,22 +153,16 @@ public sealed class MapWindowTests
             componentManager.GetMultiPool<ItemHotkeyBindingComponent>(),
             componentManager.GetMultiPool<InventoryItemStackComponent>(),
             componentManager.GetPackedPool<HotkeyExpansionUnlockComponent>(),
-            componentManager.GetPackedPool<PendingActionActivationComponent>(),
-            componentManager.GetPackedPool<PendingConsumableActivationComponent>(),
             componentManager.GetPackedPool<PendingDelayedActionComponent>(),
             componentManager.GetPackedPool<ActionLockComponent>(),
-            componentManager.GetPackedPool<MovementComponent>());
-        var playerMovement = new PlayerMovementController(
-            world,
-            componentManager.GetDirectPool<TransformComponent>(),
-            componentManager.GetPackedPool<MovementComponent>());
+            inputBuffer);
+        var playerMovement = new PlayerMovementController(inputBuffer);
 
         var contextMenuController = TestElementPoolServiceFactory.CreateContextMenuController(windowService, new UiLayerStack());
 
         var terrain = new Game.Terrain.TerrainRegistry();
         var mapView = new Game.Views.MapViewQuery(world, componentManager, resolvedActionCatalog, terrain);
         var playerActionGate = new Game.Views.PlayerActionGate(componentManager.GetPackedPool<ActionLockComponent>(), world, new Engine.ECS.Systems.SimulationClock());
-        var eventBus = new EventBus();
         var tintGrid = new MapTintGrid(componentManager, world, terrain, eventBus);
 
         windowService.RegisterFactory<MapWindow>(() => new MapWindow(
@@ -277,7 +287,7 @@ public sealed class MapWindowTests
 
     /// <summary>
     /// WASD moves the player character (through MovementComponent.NextMapPosition, like any
-    /// other entity -- see MapWindow.TryQueuePlayerMove), not the camera. A fresh press moves
+    /// other entity -- see PlayerInputBuffer.Flush), not the camera. A fresh press moves
     /// immediately (no initial delay), but the camera must not recenter until the queued move
     /// actually lands -- MovementSystem applies it later (possibly much later, if the player's
     /// action lock is still counting down from a previous move), and snapping the camera ahead
@@ -287,6 +297,7 @@ public sealed class MapWindowTests
     public void HandleHotkeys_PressingD_MovesPlayerImmediatelyButCameraWaitsForTheActualMove()
     {
         var (_, mapViewState, mapWindow, componentManager) = BuildMapWindowWithPlayer(300, 300, 1, new Vector3Int(100, 100, 0));
+        UnlockPlayer(componentManager);
         var movementPool = componentManager.GetPackedPool<MovementComponent>();
         var transformPool = componentManager.GetDirectPool<TransformComponent>();
 
@@ -298,7 +309,7 @@ public sealed class MapWindowTests
         Assert.AreEqual(new Point(100, 100), mapViewState.SelectedMapNodePosition, "Camera should start centered on the player.");
 
         mapWindow.HandleHotkeys(new KeyboardState(Keys.D), new KeyboardState());
-        Assert.AreEqual(new Vector3Int(101, 100, 0), movementPool.GetReadonly(PlayerEntityId).NextMapPosition, "A fresh press must move immediately, not wait out an initial cooldown.");
+        Assert.AreEqual(new Vector3Int(101, 100, 0), movementPool.GetReadonly(PlayerEntityId).NextMapPosition, "A fresh press while unlocked must be written immediately.");
 
         mapWindow.SelectMapNodes(new Point(ScreenCenterColumn * TileSizePixels + 1, ScreenCenterRow * TileSizePixels + 1));
         Assert.AreEqual(new Point(100, 100), mapViewState.SelectedMapNodePosition, "Camera must not follow a merely-queued target -- MovementSystem hasn't moved the entity yet.");
@@ -311,64 +322,47 @@ public sealed class MapWindowTests
         Assert.AreEqual(new Point(101, 100), mapViewState.SelectedMapNodePosition, "Camera should follow once the entity's own position actually changes.");
     }
 
-    /// <summary>
-    /// The cooldown between repeats is a single counter shared across all four directions and
-    /// ticks down regardless of what's held or released -- so it can't be reset early by
-    /// releasing, switching direction, or rapidly alternating keys, which would otherwise let
-    /// a player move every frame by just tapping a different key each time.
-    /// </summary>
+    /// <summary>Each fresh press replaces a step MovementSystem hasn't taken yet -- the action lock MovementSystem sets on the step itself is what paces movement.</summary>
     [TestMethod]
-    public void HandlePlayerMovementInput_AlternatingDirectionsDuringCooldown_DoesNotBypassCooldown()
+    public void HandleHotkeys_AlternatingDirectionsBeforeTheStepLands_NewestPressWins()
     {
         var (_, _, mapWindow, componentManager) = BuildMapWindowWithPlayer(300, 300, 1, new Vector3Int(100, 100, 0));
+        UnlockPlayer(componentManager);
         var movementPool = componentManager.GetPackedPool<MovementComponent>();
 
         mapWindow.HandleHotkeys(new KeyboardState(Keys.D), new KeyboardState());
-        Assert.AreEqual(new Vector3Int(101, 100, 0), movementPool.GetReadonly(PlayerEntityId).NextMapPosition);
-
-        // None of these should queue a new move -- the shared cooldown is still active.
         mapWindow.HandleHotkeys(new KeyboardState(Keys.W), new KeyboardState());
         mapWindow.HandleHotkeys(new KeyboardState(Keys.A), new KeyboardState(Keys.W));
         mapWindow.HandleHotkeys(new KeyboardState(Keys.S), new KeyboardState(Keys.A));
-        mapWindow.HandleHotkeys(new KeyboardState(Keys.D), new KeyboardState(Keys.S));
 
-        Assert.AreEqual(new Vector3Int(101, 100, 0), movementPool.GetReadonly(PlayerEntityId).NextMapPosition, "Alternating directions must not bypass the shared cooldown.");
+        Assert.AreEqual(new Vector3Int(100, 101, 0), movementPool.GetReadonly(PlayerEntityId).NextMapPosition);
     }
 
-    /// <summary>
-    /// Once the cooldown elapses (and the player is at rest again -- simulated here since no
-    /// MovementSystem runs in this MapWindow-level test), holding the same direction repeats
-    /// exactly every FramesPerPlayerMove (15) frames, not sooner.
-    /// </summary>
+    /// <summary>A held direction steps again as soon as the player is at rest and unlocked, with no repeat delay of its own.</summary>
     [TestMethod]
-    public void HandleHotkeys_HoldingD_RepeatsEveryFramesPerPlayerMoveFrames()
+    public void HandleHotkeys_HoldingD_StepsAgainOnceTheFirstStepHasLanded()
     {
         var (_, _, mapWindow, componentManager) = BuildMapWindowWithPlayer(300, 300, 1, new Vector3Int(100, 100, 0));
+        UnlockPlayer(componentManager);
         var movementPool = componentManager.GetPackedPool<MovementComponent>();
         var transformPool = componentManager.GetDirectPool<TransformComponent>();
 
         mapWindow.HandleHotkeys(new KeyboardState(Keys.D), new KeyboardState());
-        Assert.AreEqual(new Vector3Int(101, 100, 0), movementPool.GetReadonly(PlayerEntityId).NextMapPosition);
-
-        // Simulate MovementSystem having applied the first move, so the player reads as "at
-        // rest" again and a repeat can be considered.
-        transformPool.Get(PlayerEntityId).Position = new Vector3Int(101, 100, 0);
-
-        for (var frame = 0; frame < 14; frame++)
-        {
-            mapWindow.HandleHotkeys(new KeyboardState(Keys.D), new KeyboardState(Keys.D));
-        }
-        Assert.AreEqual(new Vector3Int(101, 100, 0), movementPool.GetReadonly(PlayerEntityId).NextMapPosition, "Must not repeat before FramesPerPlayerMove has elapsed.");
-
         mapWindow.HandleHotkeys(new KeyboardState(Keys.D), new KeyboardState(Keys.D));
-        Assert.AreEqual(new Vector3Int(102, 100, 0), movementPool.GetReadonly(PlayerEntityId).NextMapPosition, "Must repeat once FramesPerPlayerMove has elapsed since the last move.");
+        Assert.AreEqual(new Vector3Int(101, 100, 0), movementPool.GetReadonly(PlayerEntityId).NextMapPosition, "A held key must not replace a step that hasn't landed yet.");
+
+        transformPool.Get(PlayerEntityId).Position = new Vector3Int(101, 100, 0);
+        mapWindow.HandleHotkeys(new KeyboardState(Keys.D), new KeyboardState(Keys.D));
+
+        Assert.AreEqual(new Vector3Int(102, 100, 0), movementPool.GetReadonly(PlayerEntityId).NextMapPosition);
     }
 
-    /// <summary>MovementSystem's TryMoveToNextMapPosition never re-validates bounds/occupancy for MovementMode.PlayerControlled -- TryQueuePlayerMove must reject an off-map candidate itself before ever writing NextMapPosition.</summary>
+    /// <summary>MovementSystem's TryMoveToNextMapPosition never re-validates bounds/occupancy for MovementMode.PlayerControlled -- PlayerInputBuffer must reject an off-map candidate itself before ever writing NextMapPosition.</summary>
     [TestMethod]
     public void HandleHotkeys_PressingA_AtMapEdge_DoesNotQueueAnOffMapMove()
     {
         var (_, _, mapWindow, componentManager) = BuildMapWindowWithPlayer(300, 300, 1, new Vector3Int(0, 100, 0));
+        UnlockPlayer(componentManager);
         var movementPool = componentManager.GetPackedPool<MovementComponent>();
 
         mapWindow.HandleHotkeys(new KeyboardState(Keys.A), new KeyboardState());

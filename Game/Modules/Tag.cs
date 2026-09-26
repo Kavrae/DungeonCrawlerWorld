@@ -39,4 +39,7 @@ public enum Tag : byte
     Charisma,
     Luck,
     Wisdom,
+
+    /// <summary>Marks an action whose hit staggers its target: publishes EntityStaggeredEvent (see ActionEffectResolver.Apply), which cancels the target's windup without giving back its lock and drops the player's buffered command. Deliberately rare -- only PowerAttack carries it.</summary>
+    Staggering,
 }

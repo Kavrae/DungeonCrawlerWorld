@@ -57,6 +57,15 @@ public static class ShellBootstrapper
         var componentManager = ecsContext.ComponentManager;
         var mapViewState = new MapViewState { ReservedEntityIds = worldSession.ReservedEntityIds };
         var camera = new MapCamera(world);
+        var playerInputBuffer = new PlayerInputBuffer(
+            world,
+            componentManager.GetDirectPool<TransformComponent>(),
+            componentManager.GetPackedPool<MovementComponent>(),
+            componentManager.GetPackedPool<ActionLockComponent>(),
+            componentManager.GetPackedPool<PendingActionActivationComponent>(),
+            componentManager.GetPackedPool<PendingConsumableActivationComponent>(),
+            ecsContext.SystemManager.Clock,
+            ecsContext.EventBus);
         var actionTargetingController = new ActionTargetingController(
             world,
             mapViewState,
@@ -69,19 +78,14 @@ public static class ShellBootstrapper
             componentManager.GetMultiPool<ItemHotkeyBindingComponent>(),
             componentManager.GetMultiPool<InventoryItemStackComponent>(),
             componentManager.GetPackedPool<HotkeyExpansionUnlockComponent>(),
-            componentManager.GetPackedPool<PendingActionActivationComponent>(),
-            componentManager.GetPackedPool<PendingConsumableActivationComponent>(),
             componentManager.GetPackedPool<PendingDelayedActionComponent>(),
             componentManager.GetPackedPool<ActionLockComponent>(),
-            componentManager.GetPackedPool<MovementComponent>(),
+            playerInputBuffer,
             componentManager.GetPackedPool<ManaComponent>(),
             componentManager.GetMultiPool<AbilityScoreComponent>(),
             worldSession.LocalTierRoster,
             ecsContext.SystemManager.Clock);
-        var playerMovementController = new PlayerMovementController(
-            world,
-            componentManager.GetDirectPool<TransformComponent>(),
-            componentManager.GetPackedPool<MovementComponent>());
+        var playerMovementController = new PlayerMovementController(playerInputBuffer);
 
         //TODO look at pulling these contents into a new context if it continues to grow.
         var cursorTextContent = new CursorTextContent(presentation.FontService, presentation.LabelRenderer);

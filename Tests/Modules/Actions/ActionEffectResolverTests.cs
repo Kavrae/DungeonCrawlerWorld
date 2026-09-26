@@ -403,4 +403,56 @@ public sealed class ActionEffectResolverTests
 
         Assert.IsLessThan(100f, health.GetReadonly(BlockingTargetEntityId).CurrentHealth);
     }
+
+    private static readonly ActionDefinition StaggeringAction = Action with { Id = Guid.NewGuid(), Tags = [Tag.Staggering, Tag.Dodgeable] };
+
+    private static List<int> RecordStaggers(EventBus eventBus)
+    {
+        var staggered = new List<int>();
+        eventBus.Subscribe<EntityStaggeredEvent>(e => staggered.Add(e.EntityId));
+        return staggered;
+    }
+
+    [TestMethod]
+    public void Apply_StaggeringAction_StaggersEachTargetItHits_ButNotItsSource()
+    {
+        var (mapQuery, health, eventBus, mathUtility, statusEffectAppliers, componentManager) = Build();
+        mapQuery.SetBlockingOccupant(TargetTile, BlockingTargetEntityId);
+        mapQuery.AddNonBlockingOccupant(TargetTile, SourceEntityId);
+        health.Add(BlockingTargetEntityId, new SimpleHealthComponent(100, 100));
+        health.Add(SourceEntityId, new SimpleHealthComponent(100, 100));
+        var staggered = RecordStaggers(eventBus);
+
+        ActionEffectResolver.Apply(StaggeringAction, SourceEntityId, [TargetTile], mapQuery, health, eventBus, mathUtility, playerQuery: null, statusEffectAppliers, componentManager, Keys, now: 0);
+
+        CollectionAssert.AreEqual(new[] { BlockingTargetEntityId }, staggered);
+    }
+
+    [TestMethod]
+    public void Apply_StaggeringAction_AgainstADodgingTarget_DoesNotStagger()
+    {
+        var (mapQuery, health, eventBus, mathUtility, statusEffectAppliers, componentManager) = Build();
+        mapQuery.SetBlockingOccupant(TargetTile, BlockingTargetEntityId);
+        health.Add(BlockingTargetEntityId, new SimpleHealthComponent(100, 100));
+        var dodgingEntities = new PackedComponentPool<DodgingComponent>(maximumEntityCount: 10, initialCapacity: 10, static (ref existing, incoming) => existing = incoming);
+        dodgingEntities.Add(BlockingTargetEntityId, new DodgingComponent(expiresAtFrame: 30));
+        var staggered = RecordStaggers(eventBus);
+
+        ActionEffectResolver.Apply(StaggeringAction, SourceEntityId, [TargetTile], mapQuery, health, eventBus, mathUtility, playerQuery: null, statusEffectAppliers, componentManager, Keys, now: 0, dodgingEntities: dodgingEntities);
+
+        Assert.IsEmpty(staggered);
+    }
+
+    [TestMethod]
+    public void Apply_ActionWithoutTheStaggeringTag_DoesNotStagger()
+    {
+        var (mapQuery, health, eventBus, mathUtility, statusEffectAppliers, componentManager) = Build();
+        mapQuery.SetBlockingOccupant(TargetTile, BlockingTargetEntityId);
+        health.Add(BlockingTargetEntityId, new SimpleHealthComponent(100, 100));
+        var staggered = RecordStaggers(eventBus);
+
+        ActionEffectResolver.Apply(Action, SourceEntityId, [TargetTile], mapQuery, health, eventBus, mathUtility, playerQuery: null, statusEffectAppliers, componentManager, Keys, now: 0);
+
+        Assert.IsEmpty(staggered);
+    }
 }

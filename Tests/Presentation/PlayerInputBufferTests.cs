@@ -1,0 +1,353 @@
+using Engine.ECS.Components;
+using Engine.ECS.Systems;
+using Engine.Events;
+using Engine.Math;
+using Game.Modules;
+using Game.Modules.AbilityScores.Components;
+using Game.Modules.Actions;
+using Game.Modules.Actions.Activators;
+using Game.Modules.Actions.Components;
+using Game.Modules.Actions.Definitions.DirectActions;
+using Game.Modules.Core.Components;
+using Game.Modules.Inventory;
+using Game.Modules.Inventory.Components;
+using Game.Modules.Mana.Components;
+using Game.Modules.Movement.Components;
+using Game.World;
+using Microsoft.Xna.Framework;
+using Microsoft.Xna.Framework.Input;
+using Presentation.UI;
+
+namespace Tests.Presentation;
+
+[TestClass]
+public sealed class PlayerInputBufferTests
+{
+    private const int PlayerEntityId = 1;
+    private const int LockEndsAtFrame = 60;
+    private static readonly Vector3Int PlayerPosition = new(5, 5, 0);
+    private static readonly Vector3Int North = new(5, 4, 0);
+    private static readonly Guid SelfActionId = Guid.Parse("7d1b6b8e-3f0a-4a57-9a55-1c2f3e4d5a61");
+    private static readonly Guid StackInstanceId = Guid.Parse("2c9e0f4a-6b1d-4e8a-8f3c-5a7b9d1e2f30");
+
+    private sealed class Harness
+    {
+        public required ActionTargetingController ActionTargeting { get; init; }
+        public required PlayerMovementController Movement { get; init; }
+        public required PlayerInputBuffer Buffer { get; init; }
+        public required SimulationClock Clock { get; init; }
+        public required ComponentManager ComponentManager { get; init; }
+        public required EventBus EventBus { get; init; }
+
+        private KeyboardState _previous;
+
+        public Vector3Int? NextMapPosition => ComponentManager.GetPackedPool<MovementComponent>().GetReadonly(PlayerEntityId).NextMapPosition;
+        public bool HasPendingAction => ComponentManager.GetPackedPool<PendingActionActivationComponent>().Has(PlayerEntityId);
+        public bool HasPendingConsumable => ComponentManager.GetPackedPool<PendingConsumableActivationComponent>().Has(PlayerEntityId);
+        public Guid PendingActionId => ComponentManager.GetPackedPool<PendingActionActivationComponent>().GetReadonly(PlayerEntityId).ActionId;
+
+        public void Frame(long frame, params Keys[] held)
+        {
+            Clock.Advance(frame);
+            var current = new KeyboardState(held);
+            Movement.HandleInput(current, _previous, new HashSet<Keys>());
+            _previous = current;
+        }
+
+        public void ConfirmSelfAction(long frame)
+        {
+            Clock.Advance(frame);
+            ActionTargeting.HandleHotkeySlotPress(HotkeySlot.Slot1);
+            ActionTargeting.HandleHotkeySlotPress(HotkeySlot.Slot1);
+        }
+
+        public void ConfirmDodgeInPlace(long frame)
+        {
+            Clock.Advance(frame);
+            ActionTargeting.HandleHotkeySlotPress(HotkeySlot.DefaultAttack);
+            ActionTargeting.HandleHotkeySlotPress(HotkeySlot.DefaultAttack);
+        }
+    }
+
+    private static Harness Build(bool locked = true)
+    {
+        var world = new Game.World.World(new Game.World.Map(new Vector3Int(20, 20, 1))) { PlayerEntityId = PlayerEntityId };
+        var mapViewState = new MapViewState();
+
+        var componentManager = new ComponentManager(20, 10);
+        componentManager.RegisterDirectPool<TransformComponent>(static (ref existing, incoming) => existing = incoming);
+        componentManager.RegisterPackedPool<MovementComponent>(static (ref existing, incoming) => existing = incoming);
+        componentManager.RegisterMultiPool<ActionInstanceComponent>();
+        componentManager.RegisterMultiPool<ActionHotkeyBindingComponent>();
+        componentManager.RegisterMultiPool<ItemHotkeyBindingComponent>();
+        componentManager.RegisterMultiPool<InventoryItemStackComponent>();
+        componentManager.RegisterPackedPool<PendingActionActivationComponent>(static (ref existing, incoming) => existing = incoming);
+        componentManager.RegisterPackedPool<PendingConsumableActivationComponent>(static (ref existing, incoming) => existing = incoming);
+        componentManager.RegisterPackedPool<PendingDelayedActionComponent>(static (ref existing, incoming) => existing = incoming);
+        componentManager.RegisterPackedPool<ActionLockComponent>(static (ref existing, incoming) => existing = incoming);
+        componentManager.RegisterPackedPool<ManaComponent>(static (ref existing, incoming) => existing = incoming);
+        componentManager.RegisterPackedPool<HotkeyExpansionUnlockComponent>(static (ref existing, incoming) => existing = incoming);
+        componentManager.RegisterMultiPool<AbilityScoreComponent>();
+
+        componentManager.Merge(PlayerEntityId, new TransformComponent(PlayerPosition, new Vector2Byte(1, 1)));
+        componentManager.Merge(PlayerEntityId, new MovementComponent(MovementMode.PlayerControlled, null, null));
+        componentManager.Merge(PlayerEntityId, new ActionLockComponent(standardLockFrames: ActionLockGate.StandardLockFrames, currentLockTotalFrames: 0, unlockedAtFrame: locked ? LockEndsAtFrame : 0u));
+        componentManager.Merge(PlayerEntityId, new HotkeyExpansionUnlockComponent(unlockedSlotCount: 5));
+        componentManager.Merge(PlayerEntityId, new ActionInstanceComponent(SelfActionId, overrideDefinition: null));
+        componentManager.Merge(PlayerEntityId, new ActionInstanceComponent(DodgeAction.Id, overrideDefinition: null));
+        componentManager.GetMultiPool<ActionHotkeyBindingComponent>().Add(PlayerEntityId, new ActionHotkeyBindingComponent(HotkeySlot.Slot1, SelfActionId));
+        componentManager.GetMultiPool<ActionHotkeyBindingComponent>().Add(PlayerEntityId, new ActionHotkeyBindingComponent(HotkeySlot.DefaultAttack, DodgeAction.Id));
+
+        var actionCatalog = new ActionCatalog();
+        actionCatalog.Register(new ActionDefinition(
+            SelfActionId, "Test Self Action", null, "*", Color.White, [Tag.Self],
+            Effects: [ActionEffect.None],
+            Activator: new SpellActivator(
+                new TargetingSpec(TargetShape.Self, Range: 0),
+                new ActionTiming(ActionTimingCategory.Immediate, ActionLockFrames: 30, CooldownFrames: null))));
+        actionCatalog.Register(DodgeAction.Build());
+
+        var clock = new SimulationClock();
+        var eventBus = new EventBus();
+        var inputBuffer = new PlayerInputBuffer(
+            world,
+            componentManager.GetDirectPool<TransformComponent>(),
+            componentManager.GetPackedPool<MovementComponent>(),
+            componentManager.GetPackedPool<ActionLockComponent>(),
+            componentManager.GetPackedPool<PendingActionActivationComponent>(),
+            componentManager.GetPackedPool<PendingConsumableActivationComponent>(),
+            clock,
+            eventBus);
+
+        var actionTargeting = new ActionTargetingController(
+            world,
+            mapViewState,
+            new MapCamera(world),
+            new UiLayerStack(),
+            actionCatalog,
+            new ItemCatalog(),
+            componentManager.GetDirectPool<TransformComponent>(),
+            componentManager.GetMultiPool<ActionHotkeyBindingComponent>(),
+            componentManager.GetMultiPool<ItemHotkeyBindingComponent>(),
+            componentManager.GetMultiPool<InventoryItemStackComponent>(),
+            componentManager.GetPackedPool<HotkeyExpansionUnlockComponent>(),
+            componentManager.GetPackedPool<PendingDelayedActionComponent>(),
+            componentManager.GetPackedPool<ActionLockComponent>(),
+            inputBuffer,
+            componentManager.GetPackedPool<ManaComponent>(),
+            componentManager.GetMultiPool<AbilityScoreComponent>(),
+            simulationClock: clock);
+
+        return new Harness
+        {
+            ActionTargeting = actionTargeting,
+            Movement = new PlayerMovementController(inputBuffer),
+            Buffer = inputBuffer,
+            Clock = clock,
+            ComponentManager = componentManager,
+            EventBus = eventBus,
+        };
+    }
+
+    [TestMethod]
+    public void ActionConfirmedDuringTheLock_WaitsAndIsWrittenWhenTheLockClears()
+    {
+        var harness = Build();
+
+        harness.ConfirmSelfAction(50);
+        harness.Frame(59);
+        Assert.IsFalse(harness.HasPendingAction);
+
+        harness.Frame(LockEndsAtFrame);
+        Assert.AreEqual(SelfActionId, harness.PendingActionId);
+    }
+
+    [TestMethod]
+    public void ActionConfirmedWhileFree_IsWrittenTheSameFrame()
+    {
+        var harness = Build(locked: false);
+
+        harness.ConfirmSelfAction(10);
+
+        Assert.AreEqual(SelfActionId, harness.PendingActionId);
+    }
+
+    [TestMethod]
+    public void ActionOlderThanTheBufferWindow_IsDropped()
+    {
+        var harness = Build();
+
+        harness.ConfirmSelfAction(LockEndsAtFrame - PlayerInputBuffer.ExpiryFrames);
+        harness.Frame(LockEndsAtFrame);
+
+        Assert.IsFalse(harness.HasPendingAction);
+    }
+
+    [TestMethod]
+    public void ConfirmedAction_ReplacesAMoveBufferedBeforeIt()
+    {
+        var harness = Build();
+
+        harness.Frame(50, Keys.W);
+        harness.Frame(51);
+        harness.ConfirmSelfAction(55);
+        harness.Frame(LockEndsAtFrame);
+
+        Assert.AreEqual(SelfActionId, harness.PendingActionId);
+        Assert.IsNull(harness.NextMapPosition);
+    }
+
+    [TestMethod]
+    public void ConfirmedAction_WithdrawsAStepMovementSystemHasNotTakenYet()
+    {
+        var harness = Build(locked: false);
+
+        harness.Frame(10, Keys.W);
+        Assert.AreEqual(North, harness.NextMapPosition);
+
+        harness.ConfirmSelfAction(11);
+
+        Assert.AreEqual(SelfActionId, harness.PendingActionId);
+        Assert.IsNull(harness.NextMapPosition);
+    }
+
+    [TestMethod]
+    public void MoveTappedAfterABufferedAction_ReplacesIt()
+    {
+        var harness = Build();
+
+        harness.ConfirmSelfAction(50);
+        harness.Frame(55, Keys.W);
+        harness.Frame(56);
+        harness.Frame(LockEndsAtFrame);
+
+        Assert.IsFalse(harness.HasPendingAction);
+        Assert.AreEqual(North, harness.NextMapPosition);
+    }
+
+    [TestMethod]
+    public void HeldKey_DoesNotReplaceAnActionPressedAfterIt()
+    {
+        var harness = Build();
+
+        harness.Frame(50, Keys.W);
+        harness.ConfirmSelfAction(55);
+        harness.Frame(56, Keys.W);
+        harness.Frame(LockEndsAtFrame, Keys.W);
+        harness.Frame(LockEndsAtFrame + 1, Keys.W);
+
+        Assert.AreEqual(SelfActionId, harness.PendingActionId);
+        Assert.IsNull(harness.NextMapPosition);
+    }
+
+    [TestMethod]
+    public void Consumable_FollowsTheSameRules_AndReplacesABufferedAction()
+    {
+        var harness = Build();
+
+        harness.ConfirmSelfAction(50);
+        harness.Clock.Advance(55);
+        harness.Buffer.QueueConsumable(StackInstanceId, [PlayerPosition]);
+        harness.Frame(59);
+        Assert.IsFalse(harness.HasPendingConsumable);
+
+        harness.Frame(LockEndsAtFrame);
+
+        Assert.IsTrue(harness.HasPendingConsumable);
+        Assert.IsFalse(harness.HasPendingAction);
+    }
+
+    [TestMethod]
+    public void FreeCastAction_IsWrittenAtOnceDuringTheLock_AndDropsTheBufferedMove()
+    {
+        var harness = Build();
+
+        harness.Frame(50, Keys.W);
+        harness.Frame(51);
+        harness.ConfirmDodgeInPlace(52);
+        Assert.AreEqual(DodgeAction.Id, harness.PendingActionId);
+
+        harness.Frame(LockEndsAtFrame);
+
+        Assert.IsNull(harness.NextMapPosition);
+    }
+
+    [TestMethod]
+    public void Cancel_DropsTheBufferedCommand_AndReportsNothingLeftOnceItIsGone()
+    {
+        var harness = Build();
+
+        harness.ConfirmSelfAction(50);
+
+        Assert.IsTrue(harness.ActionTargeting.CancelArmedOrPendingAction());
+        Assert.IsFalse(harness.ActionTargeting.CancelArmedOrPendingAction());
+
+        harness.Frame(LockEndsAtFrame);
+        Assert.IsFalse(harness.HasPendingAction);
+    }
+
+    [TestMethod]
+    public void Stagger_DropsTheBufferedAction()
+    {
+        var harness = Build();
+
+        harness.ConfirmSelfAction(50);
+        harness.EventBus.Publish(new EntityStaggeredEvent(PlayerEntityId, ActionSource.AI));
+        harness.Frame(LockEndsAtFrame);
+
+        Assert.IsFalse(harness.HasPendingAction);
+    }
+
+    [TestMethod]
+    public void Stagger_DropsTheBufferedMove()
+    {
+        var harness = Build();
+
+        harness.Frame(50, Keys.W);
+        harness.Frame(51);
+        harness.EventBus.Publish(new EntityStaggeredEvent(PlayerEntityId, ActionSource.AI));
+        harness.Frame(LockEndsAtFrame);
+
+        Assert.IsNull(harness.NextMapPosition);
+    }
+
+    [TestMethod]
+    public void Stagger_DoesNotCancelHeldMovement()
+    {
+        var harness = Build();
+
+        harness.Frame(50, Keys.W);
+        harness.EventBus.Publish(new EntityStaggeredEvent(PlayerEntityId, ActionSource.AI));
+        harness.Frame(55, Keys.W);
+        harness.Frame(LockEndsAtFrame, Keys.W);
+
+        Assert.AreEqual(North, harness.NextMapPosition);
+    }
+
+    [TestMethod]
+    public void StaggerOfAnotherEntity_LeavesThePlayersBufferAlone()
+    {
+        var harness = Build();
+
+        harness.ConfirmSelfAction(50);
+        harness.EventBus.Publish(new EntityStaggeredEvent(PlayerEntityId + 1, ActionSource.AI));
+        harness.Frame(LockEndsAtFrame);
+
+        Assert.AreEqual(SelfActionId, harness.PendingActionId);
+    }
+
+    [TestMethod]
+    public void Stagger_KeepsAStepWaitingOnADodgeAlreadyConfirmed()
+    {
+        var harness = Build();
+        harness.Clock.Advance(50);
+        harness.ActionTargeting.HandleHotkeySlotPress(HotkeySlot.DefaultAttack);
+        harness.ActionTargeting.TryClaimDodgeDirectionalKey(new KeyboardState(Keys.D), new KeyboardState(), []);
+
+        harness.EventBus.Publish(new EntityStaggeredEvent(PlayerEntityId, ActionSource.AI));
+        harness.ComponentManager.GetPackedPool<PendingActionActivationComponent>().Remove(PlayerEntityId);
+        harness.EventBus.Publish(new ActionActivatedEvent(PlayerEntityId, DodgeAction.Id));
+
+        Assert.AreEqual(new Vector3Int(6, 5, 0), harness.NextMapPosition);
+    }
+}

@@ -39,11 +39,9 @@ public sealed class ActionTargetingController(
     MultiComponentPool<ItemHotkeyBindingComponent> itemHotkeyBindings,
     MultiComponentPool<InventoryItemStackComponent> inventoryStacks,
     PackedComponentPool<HotkeyExpansionUnlockComponent> hotkeyExpansionUnlocks,
-    PackedComponentPool<PendingActionActivationComponent> pendingActivations,
-    PackedComponentPool<PendingConsumableActivationComponent> pendingConsumableActivations,
     PackedComponentPool<PendingDelayedActionComponent> pendingDelayedActions,
     PackedComponentPool<ActionLockComponent> actionLocks,
-    PackedComponentPool<MovementComponent> movementPool,
+    PlayerInputBuffer inputBuffer,
     PackedComponentPool<ManaComponent>? manaPool = null,
     MultiComponentPool<AbilityScoreComponent>? abilityScores = null,
     LocalTierRoster? localTierRoster = null,
@@ -310,9 +308,9 @@ public sealed class ActionTargetingController(
     }
 
     /// <summary>
-    /// Cancels an armed action/item (right-click tap or Escape), or, if nothing is armed,
-    /// cancels a Delayed action's in-progress windup instead: clears PendingDelayedActionComponent
-    /// and zeroes the shared ActionLock directly (via ActionLockGate.Lock(..., 0)) so cancelling
+    /// Cancels an armed action/item (right-click tap or Escape), or, if nothing is armed, drops
+    /// the command PlayerInputBuffer is holding, or, if there is none, cancels a Delayed action's
+    /// in-progress windup instead (WindupCancel, releasing the shared ActionLock) so cancelling
     /// frees the entity immediately rather than still waiting out the full wind-up with no
     /// effect at the end -- see PendingDelayedActionComponent's own doc comment. Returns whether
     /// there was actually anything to cancel -- MapWindow's own right-click-tap handler uses this
@@ -327,14 +325,12 @@ public sealed class ActionTargetingController(
             return true;
         }
 
-        var playerEntityId = world.PlayerEntityId;
-        if (pendingDelayedActions.Remove(playerEntityId))
+        if (inputBuffer.Clear())
         {
-            ActionLockGate.Lock(actionLocks, playerEntityId, _simulationClock.CurrentFrame, framesToWait: 0);
             return true;
         }
 
-        return false;
+        return WindupCancel.TryCancel(pendingDelayedActions, actionLocks, world.PlayerEntityId, _simulationClock.CurrentFrame, releaseLock: true);
     }
 
     /// <summary>
@@ -829,7 +825,7 @@ public sealed class ActionTargetingController(
         QueueConsumableActivation(entityId, stackInstanceId, [transform.Position]);
     }
 
-    /// <summary>Presentation only ever queues an activation request -- ActionActivationSystem is the only thing that applies gameplay effects. Mirrors TryQueuePlayerMove's own queue-and-let-a-system-consume pattern for movement. Closes every closable window here too (not just in ArmAction) -- this is also reachable straight from a double-tap auto-target (TryActivateWithAutoTarget), which skips arming entirely, so it's the only chokepoint that catches that path. Placed after the early-return above so a no-op (no valid target) never spuriously closes anything.</summary>
+    /// <summary>Presentation only ever queues an activation request -- ActionActivationSystem is the only thing that applies gameplay effects. Mirrors PlayerInputBuffer's own queue-and-let-a-system-consume pattern for movement. Closes every closable window here too (not just in ArmAction) -- this is also reachable straight from a double-tap auto-target (TryActivateWithAutoTarget), which skips arming entirely, so it's the only chokepoint that catches that path. Placed after the early-return above so a no-op (no valid target) never spuriously closes anything.</summary>
     private void QueueActionActivation(int entityId, Guid actionId, List<Vector3Int> targetTiles)
     {
         if (targetTiles.Count == 0)
@@ -838,68 +834,37 @@ public sealed class ActionTargetingController(
         }
 
         var effectTargetTiles = targetTiles.ToArray();
+        Vector3Int? stepOnActivation = null;
 
-        if (actionId == DodgeAction.Id)
+        if (actionId == DodgeAction.Id && transformPool.TryGetReadonly(entityId, out var casterTransform))
         {
-            TryRelocateForDodge(entityId, targetTiles);
-
             // DodgeActivation's own effect (DodgingComponent) always applies to the caster, not to
             // "whoever occupies the resolved target tile" -- for a directional dodge that tile is the
-            // *destination*, which TryRelocateForDodge only just queued a move toward (MovementSystem
-            // hasn't actually placed the caster there yet, possibly for several more frames if the
-            // shared lock is still counting down) -- so ActionEffectResolver.Apply's own
-            // GetOccupantEntityIdsAt(destination) would find nobody there at all, and the effect would
-            // silently never run (confirmed live: no DodgingComponent ever granted for a directional
-            // dodge). Resolving the effect against the caster's own *current* tile instead guarantees
-            // an occupant is actually found there -- see DodgeActivation's own doc comment for why it
-            // also reads SourceEntityId rather than TargetEntityId, in case something else shares that
-            // tile.
-            if (transformPool.TryGetReadonly(entityId, out var casterTransform))
-            {
-                effectTargetTiles = [casterTransform.Position];
-            }
+            // destination, where nobody stands yet when ActionEffectResolver.Apply looks for
+            // occupants, so the effect would never run. Resolving the effect against the caster's own
+            // current tile guarantees an occupant is found there -- see DodgeActivation's own doc
+            // comment for why it also reads SourceEntityId rather than TargetEntityId, in case
+            // something else shares that tile.
+            effectTargetTiles = [casterTransform.Position];
+            stepOnActivation = DodgeStep(targetTiles, casterTransform.Position);
         }
 
         uiLayers.CloseAllClosableWindows();
-        pendingActivations.Merge(entityId, new PendingActionActivationComponent(actionId, effectTargetTiles));
+
+        var waitsForLock = !actionCatalog.TryGet(actionId, out var action) || action.Activator.Timing.Category != ActionTimingCategory.FreeCast;
+        inputBuffer.QueueAction(actionId, effectTargetTiles, waitsForLock, stepOnActivation);
     }
 
-    /// <summary>
-    /// Dodge's own targeting (SingleTarget + Metric.Chebyshev, Range 1) resolves to exactly one
-    /// destination tile -- self, or one adjacent tile -- see DodgeAction's own doc comment for why
-    /// the actual relocation happens here in Presentation rather than inside the Game-layer effect
-    /// (which only ever sees the mod-safe, read-only IMapQuery, never a mutating move primitive).
-    ///
-    /// Queues MovementComponent.NextMapPosition -- the exact same mechanism PlayerMovementController
-    /// uses for ordinary WASD movement -- rather than calling World.MoveEntity directly. Two earlier,
-    /// confirmed bugs both came from that direct call bypassing this shared queue entirely: (1)
-    /// World.MoveEntity only ever updates Map's own occupancy index, never the mover's own
-    /// TransformComponent.Position (MovementSystem's own TryMoveToNextMapPosition updates that
-    /// separately, itself) -- skipping it desynced the two, and MapWindow.DrawPrimaryOccupant (which
-    /// only draws an entity from the tile its TransformComponent.Position still names) stopped
-    /// finding a match at either tile, so the player's sprite vanished entirely after a directional
-    /// Dodge. (2) Bypassing NextMapPosition entirely left whatever the *ordinary* movement queue
-    /// already held (e.g. mid-stride from rapid WASD movement just before dodging) stale and
-    /// unresolved -- MovementSystem would later "catch up" on that stale queued destination and move
-    /// the player again, right back toward it, reading as the dodge silently reverting. Routing
-    /// through the one shared queue instead of a second, uncoordinated move path fixes both at once:
-    /// there is only ever one pending destination for the entity, whichever was set most recently,
-    /// and MovementSystem's own occupancy/wall/diagonal-corner validation covers the "dodge in place
-    /// if occupied" fallback for free -- no separate check needed here. The trade-off is that the
-    /// actual relocation, like any other queued move, waits for the shared ActionLock to clear if the
-    /// entity happens to already be locked (e.g. just finished an ordinary move) -- DodgeActivation's
-    /// own immunity grant still applies instantly regardless, since FreeCast itself never gates on
-    /// the lock.
-    /// </summary>
-    private void TryRelocateForDodge(int entityId, List<Vector3Int> targetTiles)
-    {
-        if (targetTiles.Count != 1 || !transformPool.TryGetReadonly(entityId, out var transform) || targetTiles[0] == transform.Position)
-        {
-            return;
-        }
-
-        movementPool.TryUpdate(entityId, targetTiles[0], static (ref MovementComponent movement, Vector3Int destination) => movement.NextMapPosition = destination);
-    }
+    /// <summary>The tile a Dodge resolved to <paramref name="targetTiles"/> steps to, or null for a Dodge in place.</summary>
+    /// <remarks>
+    /// Dodge's own targeting (SingleTarget + Metric.Chebyshev, Range 1) resolves to exactly one tile -- self, or one
+    /// adjacent tile. The step goes through PlayerInputBuffer to MovementComponent.NextMapPosition, the same path
+    /// ordinary movement uses, never World.MoveEntity: that only updates Map's occupancy index, not
+    /// TransformComponent.Position, and would leave the two out of step. MovementSystem's own occupancy/wall/diagonal
+    /// validation keeps the caster in place if the tile turns out occupied.
+    /// </remarks>
+    private static Vector3Int? DodgeStep(List<Vector3Int> targetTiles, Vector3Int casterPosition) =>
+        targetTiles.Count == 1 && targetTiles[0] != casterPosition ? targetTiles[0] : null;
 
     /// <summary>Item counterpart to QueueActionActivation -- ConsumableActivationSystem is the only thing that applies its gameplay effects. See QueueActionActivation's own doc comment for why it also closes every closable window here (catches TryActivateItemOnSelf's double-tap self-cast, which skips arming).</summary>
     private void QueueConsumableActivation(int entityId, Guid stackInstanceId, List<Vector3Int> targetTiles)
@@ -911,7 +876,7 @@ public sealed class ActionTargetingController(
 
         uiLayers.CloseAllClosableWindows();
 
-        pendingConsumableActivations.Merge(entityId, new PendingConsumableActivationComponent(stackInstanceId, targetTiles.ToArray()));
+        inputBuffer.QueueConsumable(stackInstanceId, targetTiles.ToArray());
     }
 
     /// <summary>Dispatches a confirmed click activation to whichever of {action, item} MapViewState currently has armed -- see TryConfirmActivation, the only caller.</summary>

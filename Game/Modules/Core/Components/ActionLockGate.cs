@@ -25,6 +25,10 @@ public static class ActionLockGate
             actionLock.UnlockedAtFrame = FrameDeadline.After(state.Now, resolved);
         });
 
+    /// <summary>Frees entityId from its current lock as of now.</summary>
+    public static void Release(PackedComponentPool<ActionLockComponent> actionLocks, int entityId, long now) =>
+        Lock(actionLocks, entityId, now, framesToWait: 0);
+
     /// <summary>Frames left on the current lock, 0 once it has passed -- what the HUD fills divide by CurrentLockTotalFrames.</summary>
     public static int FramesRemaining(in ActionLockComponent actionLock, long now) => FrameDeadline.Remaining(actionLock.UnlockedAtFrame, now);
 }

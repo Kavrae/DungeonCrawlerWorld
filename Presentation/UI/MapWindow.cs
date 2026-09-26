@@ -1479,7 +1479,7 @@ public sealed class MapWindow : Window
         {
             _claimedKeysThisFrame.Clear();
             _actionTargeting.TryClaimDodgeDirectionalKey(keyboardState, previousKeyboardState, _claimedKeysThisFrame);
-            _playerMovement.HandleInput(keyboardState, _claimedKeysThisFrame);
+            _playerMovement.HandleInput(keyboardState, previousKeyboardState, _claimedKeysThisFrame);
             _actionTargeting.HandleHotbarHotkeys(keyboardState, previousKeyboardState);
         }
     }

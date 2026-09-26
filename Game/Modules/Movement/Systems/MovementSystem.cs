@@ -101,11 +101,25 @@ public sealed class MovementSystem : ITieredSystem
 
     public TieredEntityStripeSet Tiers => _tieredStripeSet;
 
+    /// <summary>Moves the player every frame, so a step the player asked for is taken on the frame it can be rather than on their stripe's next visit.</summary>
+    /// <remarks>UpdateBucket skips the player, so the player is still handled exactly once per frame.</remarks>
+    public void BeginFrame(EngineTime time)
+    {
+        if (_playerQuery?.PlayerEntityId is { } playerEntityId && _movementComponents.Has(playerEntityId))
+        {
+            UpdateEntity(playerEntityId, framesPerVisit: 1, time.FrameCount);
+        }
+    }
+
     public void UpdateBucket(EngineTime time, ReadOnlySpan<int> entityIds, ushort framesPerVisit)
     {
+        var playerEntityId = _playerQuery?.PlayerEntityId ?? -1;
         foreach (var entityId in entityIds)
         {
-            UpdateEntity(entityId, framesPerVisit, time.FrameCount);
+            if (entityId != playerEntityId)
+            {
+                UpdateEntity(entityId, framesPerVisit, time.FrameCount);
+            }
         }
     }
 

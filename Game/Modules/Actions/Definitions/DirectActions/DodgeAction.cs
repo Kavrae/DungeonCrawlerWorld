@@ -13,12 +13,14 @@ namespace Game.Modules.Actions.Definitions.DirectActions;
 /// SingleTarget + Metric.Chebyshev at Range 1 -- "pick exactly one tile out of the caster's own 3x3
 /// block" (self, or one of the 8 neighbors), resolved at confirm time by Presentation
 /// (ActionTargetingController): same key/click-on-self dodges in place, a directional key or click
-/// on a neighbor tile queues a move there through the same MovementComponent.NextMapPosition path
-/// ordinary movement uses (or in place if that tile turns out occupied by the time MovementSystem
-/// gets to it -- see DodgeActivation's own doc comment for why the actual relocation is queued in
-/// Presentation, not applied here). The only effect here is DodgeActivation's own DodgingComponent
-/// grant, which fires the instant this FreeCast action resolves regardless of whether the queued
-/// move has actually completed yet.
+/// on a neighbor tile steps there through the same MovementComponent.NextMapPosition path ordinary
+/// movement uses (or stays in place if that tile turns out occupied -- see DodgeActivation's own doc
+/// comment for why the step is written by Presentation, not applied here). The only effect here is
+/// DodgeActivation's own DodgingComponent grant.
+///
+/// ReleasesActionLock: a successful Dodge cancels the caster's windup, if any, and releases its
+/// shared ActionLock, whether a windup or an ordinary step set it, so the step is taken at once. No
+/// penalty beyond Dodge's own cooldown.
 /// </summary>
 public static class DodgeAction
 {
@@ -32,7 +34,7 @@ public static class DodgeAction
         Effects: [new ActionEffect([new DodgeActivation()])],
         Activator: new DirectAction(
             new TargetingSpec(TargetShape.SingleTarget, Range: 1, Metric: DistanceMetric.Chebyshev),
-            new ActionTiming(ActionTimingCategory.FreeCast, CooldownFrames: CooldownFrames)),
+            new ActionTiming(ActionTimingCategory.FreeCast, CooldownFrames: CooldownFrames, ReleasesActionLock: true)),
         Description: "Briefly become immune to dodgeable attacks, optionally moving to an adjacent tile in the process. Has its own 4 second cooldown, so it can't be used as a safer form of movement.",
         Summary: "Briefly dodge dodgeable attacks");
 }

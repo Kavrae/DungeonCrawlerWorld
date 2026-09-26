@@ -178,6 +178,12 @@ public sealed class ActionActivationSystem : ISystem
             {
                 SpendManaIfAny(entityId, manaCost);
                 StartCooldownIfAny(entityId, action, time.FrameCount);
+
+                if (action.Activator.Timing.ReleasesActionLock)
+                {
+                    WindupCancel.TryCancel(_pendingDelayedActions, _actionLocks, entityId, time.FrameCount, releaseLock: false);
+                    ActionLockGate.Release(_actionLocks, entityId, time.FrameCount);
+                }
             }
         }
     }

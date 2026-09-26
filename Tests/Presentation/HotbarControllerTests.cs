@@ -83,11 +83,17 @@ public sealed class HotbarControllerTests
             componentManager.GetMultiPool<ItemHotkeyBindingComponent>(),
             componentManager.GetMultiPool<InventoryItemStackComponent>(),
             componentManager.GetPackedPool<HotkeyExpansionUnlockComponent>(),
-            componentManager.GetPackedPool<PendingActionActivationComponent>(),
-            componentManager.GetPackedPool<PendingConsumableActivationComponent>(),
             componentManager.GetPackedPool<PendingDelayedActionComponent>(),
             componentManager.GetPackedPool<ActionLockComponent>(),
-            componentManager.GetPackedPool<MovementComponent>(),
+            new PlayerInputBuffer(
+                world,
+                componentManager.GetDirectPool<TransformComponent>(),
+                componentManager.GetPackedPool<MovementComponent>(),
+                componentManager.GetPackedPool<ActionLockComponent>(),
+                componentManager.GetPackedPool<PendingActionActivationComponent>(),
+                componentManager.GetPackedPool<PendingConsumableActivationComponent>(),
+                new Engine.ECS.Systems.SimulationClock(),
+                new EventBus()),
             componentManager.GetPackedPool<ManaComponent>());
 
         var fontService = TestFonts.Shared;
