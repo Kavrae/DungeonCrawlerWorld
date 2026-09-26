@@ -147,7 +147,7 @@ public sealed class EntityFactory
         var position = new Vector3Int(request.X, request.Y, (int)(request.Layer ?? resolved.Layer));
         var size = request.Size ?? resolved.Size;
         var seed = request.Seed ?? _runtimeSeeds!.NextSeed();
-        var flags = request.Crawler ? SpawnFlags.Crawler : SpawnFlags.None;
+        var flags = request.Crawler && !_crawlerNumbers!.IsExhausted ? SpawnFlags.Crawler : SpawnFlags.None;
         var entityId = request.ReservedEntityId ?? _tierResolver?.CreateEntityAt(entityManager, position) ?? entityManager.CreateEntity();
         var deferred = CanDefer(entityId, resolved);
 
@@ -324,17 +324,28 @@ public sealed class EntityFactory
     /// <remarks>
     /// On first build, not at spawn: a crawler number is only ever read on an entity that acts or is
     /// inspected built, so an unbuilt crawler never draws a number it may never use. A build-only factory
-    /// (SpawnRecordRebuilder' staging world) has no crawler numbers and assigns none.
+    /// (SpawnRecordRebuilder' staging world) has no crawler numbers and assigns none. A crawler built after
+    /// the numbers ran out has its Crawler flag cleared and stays a plain NPC.
     /// </remarks>
     private void AssignCrawlerNumber(ComponentManager componentManager, int entityId)
     {
-        if (_crawlerNumbers is not null
-            && componentManager.GetDirectPool<SpawnRecordComponent>().TryGetReadonly(entityId, out var record)
-            && record.Flags.HasFlag(SpawnFlags.Crawler)
-            && componentManager.IsRegistered<CrawlerComponent>()
-            && !componentManager.GetPackedPool<CrawlerComponent>().Has(entityId))
+        var spawnRecords = componentManager.GetDirectPool<SpawnRecordComponent>();
+        if (_crawlerNumbers is null
+            || !spawnRecords.TryGetReadonly(entityId, out var record)
+            || !record.Flags.HasFlag(SpawnFlags.Crawler)
+            || !componentManager.IsRegistered<CrawlerComponent>()
+            || componentManager.GetPackedPool<CrawlerComponent>().Has(entityId))
         {
-            componentManager.Merge(entityId, new CrawlerComponent(_crawlerNumbers.Allocate()));
+            return;
+        }
+
+        if (_crawlerNumbers.TryAllocate(out var crawlerNumber))
+        {
+            componentManager.Merge(entityId, new CrawlerComponent(crawlerNumber));
+        }
+        else
+        {
+            spawnRecords.TrySet(entityId, record with { Flags = record.Flags & ~SpawnFlags.Crawler });
         }
     }
 

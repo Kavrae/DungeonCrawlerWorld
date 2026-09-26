@@ -29,11 +29,11 @@ public sealed class CreatureSkeletonsTests
     }
 
     /// <summary>Three neighborhoods side by side (-1, 0, 1), the window centred on 0 with the player in it: neighborhood 0 is simulated, -1 and 1 are Borough.</summary>
-    private static Session BuildSession()
+    private static Session BuildSession(UniqueNumberAllocator? crawlerNumbers = null)
     {
         var world = new Game.World.World(new Map(new MapBounds(-Neighborhoods.SizeTiles, 0, 2 * Neighborhoods.SizeTiles, Rows, 3)));
         var mathUtility = new MathUtility(new Random(1));
-        var result = GameBootstrapper.Build(world, mathUtility, EmptyModsDirectory.FullName, initialEntityCapacity: 1_000, initialComponentCapacity: 100, crawlerNumbers: new UniqueNumberAllocator(mathUtility, 1, 13_000_000));
+        var result = GameBootstrapper.Build(world, mathUtility, EmptyModsDirectory.FullName, initialEntityCapacity: 1_000, initialComponentCapacity: 100, crawlerNumbers: crawlerNumbers ?? new UniqueNumberAllocator(1, 1, 24));
         var ecs = result.EcsContext;
         var resolver = result.ProcessingTierResolver;
         resolver.SetReferencePosition(FloorBuilder.PlayerSpawnOrigin());
@@ -212,6 +212,29 @@ public sealed class CreatureSkeletonsTests
         session.Result.Factory.Apply(crawlerId, session.Result.Definitions.GetId(Game.Blueprints.Classes.Engineer.Id));
 
         Assert.AreEqual(number, crawlers.GetReadonly(crawlerId).CrawlerNumber);
+    }
+
+    [TestMethod]
+    public void Crawler_BuiltAfterTheCrawlerNumbersRunOut_BecomesAPlainNpc_AndNumberedCrawlersKeepTheirs()
+    {
+        var crawlerNumbers = new UniqueNumberAllocator(1, 1, 24);
+        var session = BuildSession(crawlerNumbers);
+        var crawlers = session.Ecs.ComponentManager.GetPackedPool<Game.Modules.Crawler.Components.CrawlerComponent>();
+        var spawnRecords = session.Ecs.ComponentManager.GetDirectPool<SpawnRecordComponent>();
+        var skeletonId = UnbuiltCrawlers(session).First();
+        var numberedId = CreaturesIn(session, 0).First(crawlers.Has);
+        var number = crawlers.GetReadonly(numberedId).CrawlerNumber;
+
+        while (crawlerNumbers.TryAllocate(out _))
+        {
+        }
+
+        session.Skeletons.EnsureBuilt(skeletonId);
+
+        Assert.IsFalse(session.Skeletons.IsSkeleton(skeletonId));
+        Assert.IsFalse(crawlers.Has(skeletonId));
+        Assert.IsFalse(spawnRecords.GetReadonly(skeletonId).Flags.HasFlag(SpawnFlags.Crawler));
+        Assert.AreEqual(number, crawlers.GetReadonly(numberedId).CrawlerNumber);
     }
 
     /// <summary>Admin inspection rebuilds an unbuilt crawler in the staging world, which has no crawler numbers to give.</summary>

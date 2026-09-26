@@ -140,7 +140,7 @@ public sealed class FloorBuilderTests
 
     /// <summary>The one spawn path, for a context these tests assembled themselves -- GameBootstrapper builds the real session's (see GameBootstrapResult.Factory).</summary>
     private static EntityFactory FactoryFor(Game.World.World world, EcsContext ecsContext, GameModuleContext context, MathUtility mathUtility, ProcessingTierResolver? tierResolver = null) =>
-        new(context.Definitions, world, ecsContext.EntityManager, ecsContext.ComponentManager, context.MovedEntities, tierResolver, ecsContext.SystemManager.Clock, new UniqueNumberAllocator(mathUtility, 1, 13_000_000));
+        new(context.Definitions, world, ecsContext.EntityManager, ecsContext.ComponentManager, context.MovedEntities, tierResolver, ecsContext.SystemManager.Clock, new UniqueNumberAllocator(1, 1, 24));
 
     /// <summary>
     /// The player must not be placed before/during TestMapBuilder.Populate (PlaceEntityOnMap

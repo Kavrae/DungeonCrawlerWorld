@@ -34,7 +34,7 @@ public sealed class NeighborhoodStreamerTests
     {
         var world = new Game.World.World(new Map(new MapBounds(0, 0, 2 * Neighborhoods.SizeTiles, Rows, 3)));
         var mathUtility = new MathUtility(new Random(1));
-        var crawlerNumbers = new UniqueNumberAllocator(mathUtility, 1, 13_000_000);
+        var crawlerNumbers = new UniqueNumberAllocator(1, 1, 24);
         var result = GameBootstrapper.Build(world, mathUtility, EmptyModsDirectory.FullName, initialEntityCapacity: 1_000, initialComponentCapacity: 100, crawlerNumbers: crawlerNumbers);
         var ecs = result.EcsContext;
         result.ProcessingTierResolver.SetReferencePosition(Reference);
@@ -268,7 +268,7 @@ public sealed class NeighborhoodStreamerTests
         }
 
         var mathUtility = new MathUtility(new Random(1));
-        var crawlerNumbers = new UniqueNumberAllocator(mathUtility, 1, 13_000_000);
+        var crawlerNumbers = new UniqueNumberAllocator(1, 1, 24);
         var result = GameBootstrapper.Build(world, mathUtility, EmptyModsDirectory.FullName, initialEntityCapacity: 1_000, initialComponentCapacity: 100, crawlerNumbers: crawlerNumbers);
         var ecs = result.EcsContext;
         result.ProcessingTierResolver.SetReferencePosition(Reference);

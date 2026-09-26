@@ -25,11 +25,11 @@ public sealed class EntityFactoryTests
     [ClassCleanup]
     public static void DeleteEmptyModsDirectory() => EmptyModsDirectory.Delete(recursive: true);
 
-    private static (GameBootstrapResult Result, Game.World.World World) Bootstrap(bool withCrawlerNumbers = true)
+    private static (GameBootstrapResult Result, Game.World.World World) Bootstrap(bool withCrawlerNumbers = true, int crawlerNumberBits = 24)
     {
         var world = new Game.World.World(new Map(new Vector3Int(20, 20, 3)));
         var mathUtility = new MathUtility(new Random(1));
-        var crawlerNumbers = withCrawlerNumbers ? new UniqueNumberAllocator(mathUtility, 1, 13_000_000) : null;
+        var crawlerNumbers = withCrawlerNumbers ? new UniqueNumberAllocator(1, 1, crawlerNumberBits) : null;
         return (GameBootstrapper.Build(world, mathUtility, EmptyModsDirectory.FullName, initialEntityCapacity: 1_000, initialComponentCapacity: 100, crawlerNumbers: crawlerNumbers, runtimeSpawnSeed: 7), world);
     }
 
@@ -129,6 +129,22 @@ public sealed class EntityFactoryTests
 
         Assert.IsTrue(crawlers.Has(crawler));
         Assert.IsFalse(crawlers.Has(ordinary));
+    }
+
+    [TestMethod]
+    public void Spawn_AsACrawler_OnceTheCrawlerNumbersRunOut_IsAPlainNpc()
+    {
+        var (result, _) = Bootstrap(crawlerNumberBits: 2);
+        var crawlers = result.EcsContext.ComponentManager.GetPackedPool<CrawlerComponent>();
+        var spawnRecords = result.EcsContext.ComponentManager.GetDirectPool<SpawnRecordComponent>();
+        var goblinId = result.Definitions.GetId(Goblin.Id);
+
+        var numbered = Enumerable.Range(0, 4).Select(index => result.Factory.Spawn(new SpawnRequest(goblinId, 2 + (3 * index), 2) { Crawler = true })).ToList();
+        var late = result.Factory.Spawn(new SpawnRequest(goblinId, 2, 8) { Crawler = true });
+
+        CollectionAssert.AreEquivalent(new[] { 1, 2, 3, 4 }, numbered.Select(entityId => crawlers.GetReadonly(entityId).CrawlerNumber).ToList());
+        Assert.IsFalse(crawlers.Has(late));
+        Assert.IsFalse(spawnRecords.GetReadonly(late).Flags.HasFlag(SpawnFlags.Crawler));
     }
 
     [TestMethod]

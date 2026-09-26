@@ -197,7 +197,7 @@ public sealed class SpawnRecordRebuilderTests
     {
         var world = new Game.World.World(new Map(new Vector3Int(60, 60, 3)));
         var mathUtility = new MathUtility(new Random(3));
-        var result = Bootstrap(world, new UniqueNumberAllocator(mathUtility, 1, 13_000_000));
+        var result = Bootstrap(world, new UniqueNumberAllocator(1, 1, 24));
         var ecs = result.EcsContext;
         FloorBuilder.PopulateFloor(world, ecs, new NeighborhoodRecords(mathUtility), result.Factory, result.Terrain, result.Definitions);
 

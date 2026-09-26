@@ -57,7 +57,7 @@ internal static class HeadlessBenchmark
             GameLoop.InitialEntityCapacity,
             GameLoop.InitialComponentCapacity,
             GameLoop.MinCrawlerNumber,
-            GameLoop.MaxCrawlerNumber,
+            GameLoop.CrawlerNumberBits,
             activityLogPath,
             diagnostics,
             randomSeed,

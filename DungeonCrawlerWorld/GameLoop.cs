@@ -26,9 +26,10 @@ public sealed class GameLoop : Microsoft.Xna.Framework.Game
     // actually needs to change it.
     internal const int FloorNumber = 1;
 
-    // Range for CrawlerComponent.CrawlerNumber based on source material.
+    // Range for CrawlerComponent.CrawlerNumber: 1 to 2^24 (16,777,216), rounded up from the source
+    // material's 13,000,000 so the allocator's permutation covers the range exactly.
     internal const int MinCrawlerNumber = 1;
-    internal const int MaxCrawlerNumber = 13_000_000;
+    internal const int CrawlerNumberBits = 24;
 
     private readonly GraphicsDeviceManager _graphics;
 
@@ -82,7 +83,7 @@ public sealed class GameLoop : Microsoft.Xna.Framework.Game
         var playerActivityLogFilePath = Path.Combine(FindProjectRoot(), "Log", "player-activity.log");
         using (_diagnostics.StartupProfiler?.Phase("World Session Setup"))
         {
-            _worldSession = WorldSessionBootstrapper.Build(FloorNumber, modsDirectory, InitialEntityCapacity, InitialComponentCapacity, MinCrawlerNumber, MaxCrawlerNumber, playerActivityLogFilePath, _diagnostics, _randomSeed, _mapSizeOverride);
+            _worldSession = WorldSessionBootstrapper.Build(FloorNumber, modsDirectory, InitialEntityCapacity, InitialComponentCapacity, MinCrawlerNumber, CrawlerNumberBits, playerActivityLogFilePath, _diagnostics, _randomSeed, _mapSizeOverride);
         }
 
         using (_diagnostics.StartupProfiler?.Phase("Presentation Bootstrap"))

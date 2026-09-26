@@ -19,7 +19,7 @@ namespace DungeonCrawlerWorld;
 /// </summary>
 public static class WorldSessionBootstrapper
 {
-    /// <summary>Mixed into the session seed for the crawler-number sequence, so it never coincides with another sequence seeded from the same session seed.</summary>
+    /// <summary>Mixed into the session seed for the crawler-number permutation, so it never coincides with another sequence seeded from the same session seed.</summary>
     private const uint CrawlerNumberSalt = 0xC4A71E55;
 
     /// <param name="randomSeed">Seed for the shared MathUtility this session's entire simulation draws from -- see RandomSeed and the body's own note on what it does and does not cover.</param>
@@ -30,7 +30,7 @@ public static class WorldSessionBootstrapper
         int initialEntityCapacity,
         int initialComponentCapacity,
         int minCrawlerNumber,
-        int maxCrawlerNumber,
+        int crawlerNumberBits,
         string playerActivityLogFilePath,
         DiagnosticsEngine diagnostics,
         int randomSeed,
@@ -39,10 +39,10 @@ public static class WorldSessionBootstrapper
         ArgumentNullException.ThrowIfNull(diagnostics);
 
         var mathUtility = new MathUtility(new Random(randomSeed));
-        // Its own sequence, not the session's: numbers are drawn whenever a crawler is first simulated,
-        // and drawing from the shared sequence would shift everything else that uses it (per-visit
-        // neighborhood seeds among them) by when the player happened to walk where.
-        var crawlerNumberAllocator = new UniqueNumberAllocator(new MathUtility(new SeededRandom(((ulong)(uint)randomSeed << 32) | CrawlerNumberSalt)), minCrawlerNumber, maxCrawlerNumber);
+        // Its own permutation, not the session's sequence: numbers are drawn whenever a crawler is first
+        // simulated, and drawing from the shared sequence would shift everything else that uses it
+        // (per-visit neighborhood seeds among them) by when the player happened to walk where.
+        var crawlerNumberAllocator = new UniqueNumberAllocator(((ulong)(uint)randomSeed << 32) | CrawlerNumberSalt, minCrawlerNumber, crawlerNumberBits);
         var neighborhoodRecords = new NeighborhoodRecords(mathUtility);
 
         World world;

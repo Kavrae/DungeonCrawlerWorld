@@ -23,7 +23,7 @@ public readonly record struct SpawnRequest(ushort BlueprintId, int X, int Y)
     /// <summary>The seed every random choice its build makes is drawn from, or null for the next from the factory's runtime sequence.</summary>
     public uint? Seed { get; init; }
 
-    /// <summary>Whether it is also a Crawler: flagged in its spawn record, and given the session's next crawler number when it is first built.</summary>
+    /// <summary>Whether it is also a Crawler: flagged in its spawn record, and given the session's next crawler number when it is first built. Ignored once the session's crawler numbers are exhausted.</summary>
     public bool Crawler { get; init; }
 
     /// <summary>An id the caller already minted to spawn into (the player's reserved one), or null for a new entity.</summary>
