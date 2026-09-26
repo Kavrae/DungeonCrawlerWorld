@@ -4,6 +4,7 @@ using Game.Modules.Health.Components;
 using Game.Modules.StatModifiers;
 using Game.Modules.StatModifiers.Components;
 using Game.World;
+using Game.Blueprints;
 
 namespace Game.Modules.Health;
 
@@ -39,7 +40,7 @@ public static class MaximumHealthShift
         StatModifierMath.GetSums(StatModifiers(componentManager), entityId, StatModifierTarget.MaximumHealth, out additiveSum, out multiplicativeSum);
 
     /// <summary>Moves current health by the distance the effective maximum travelled since <see cref="Capture"/>.</summary>
-    public static void Apply(ComponentManager componentManager, int entityId, float additiveBefore, float multiplicativeBefore)
+    public static void Apply(ComponentManager componentManager, BlueprintRegistry creatures, int entityId, float additiveBefore, float multiplicativeBefore)
     {
         var statModifiers = StatModifiers(componentManager);
         StatModifierMath.GetSums(statModifiers, entityId, StatModifierTarget.MaximumHealth, out var additiveAfter, out var multiplicativeAfter);
@@ -61,15 +62,18 @@ public static class MaximumHealthShift
             return;
         }
 
-        var bodyParts = componentManager.GetMultiPool<BodyPartComponent>();
-        for (var denseIndex = bodyParts.GetFirstDenseIndex(entityId); denseIndex != -1; denseIndex = bodyParts.GetNextDenseIndex(denseIndex))
+        var bodyParts = BodyPartsOf(componentManager, creatures);
+        if (bodyParts is null)
         {
-            var storedMaximum = bodyParts.GetReadonlyByDenseIndex(denseIndex).MaximumHealth;
-            var shift = StatModifierMath.CalculateTotal(storedMaximum, additiveAfter, multiplicativeAfter)
-                - StatModifierMath.CalculateTotal(storedMaximum, additiveBefore, multiplicativeBefore);
+            return;
+        }
 
-            bodyParts.UpdateByDenseIndex(denseIndex, shift, static (ref BodyPartComponent part, float amount) =>
-                part.CurrentHealth = Shifted(part.CurrentHealth, amount));
+        foreach (var part in bodyParts.Parts(entityId))
+        {
+            var shift = StatModifierMath.CalculateTotal(part.MaximumHealth, additiveAfter, multiplicativeAfter)
+                - StatModifierMath.CalculateTotal(part.MaximumHealth, additiveBefore, multiplicativeBefore);
+
+            bodyParts.SetCurrentHealth(entityId, part.PartId, Shifted(part.CurrentHealth, shift));
         }
     }
 
@@ -77,6 +81,7 @@ public static class MaximumHealthShift
     /// <remarks>StatModifierEffects.Apply on its own raises the cap and leaves current health where it was, which is what this exists to prevent. Every MaximumHealth grant, at blueprint build time or mid-game, goes through here.</remarks>
     public static void ApplyModifier(
         ComponentManager componentManager,
+        BlueprintRegistry creatures,
         int entityId,
         StatModifierOperation operation,
         StatModifierPolarity polarity,
@@ -87,12 +92,16 @@ public static class MaximumHealthShift
     {
         Capture(componentManager, entityId, out var additiveBefore, out var multiplicativeBefore);
         StatModifierEffects.Apply(componentManager, entityId, StatModifierTarget.MaximumHealth, operation, polarity, canModify, magnitude, expiresAtFrame, source);
-        Apply(componentManager, entityId, additiveBefore, multiplicativeBefore);
+        Apply(componentManager, creatures, entityId, additiveBefore, multiplicativeBefore);
     }
 
     /// <summary>A decrease stops at 1 rather than disabling a part or killing outright -- see this class's own remarks.</summary>
     private static float Shifted(float current, float shift) =>
         shift >= 0f ? current + shift : System.Math.Max(1f, current + shift);
+
+    /// <summary>Null when this entity set has no body parts at all (a Simple-health-only module set).</summary>
+    private static EntityBodyParts? BodyPartsOf(ComponentManager componentManager, BlueprintRegistry creatures) =>
+        componentManager.IsRegistered<BodyPartStateComponent>() ? EntityBodyParts.For(componentManager, creatures) : null;
 
     private static MultiComponentPool<StatModifierComponent>? StatModifiers(ComponentManager componentManager) =>
         componentManager.IsRegistered<StatModifierComponent>() ? componentManager.GetMultiPool<StatModifierComponent>() : null;

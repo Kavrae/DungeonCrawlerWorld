@@ -151,6 +151,9 @@ public sealed class MapWindow : Window
     /// <summary>What Admin Mode's "Regenerate" context-menu option drives -- wired by ShellBootstrapper; null offers no such option.</summary>
     public Game.Floors.NeighborhoodStreamer? NeighborhoodStreamer { get; set; }
 
+    /// <summary>What Admin Mode's "Spawn here" and "Apply" context-menu options drive -- wired by ShellBootstrapper; null offers neither.</summary>
+    public Game.Spawning.BlueprintAdminCommands? BlueprintAdmin { get; set; }
+
     /// <summary>
     /// Invoked whenever a map-tile click sets Basic inspection (see SelectMapNodes) or the
     /// right-click "Inspect" option sets Detail inspection (see TryOpenEntityContextMenuAt) --
@@ -1380,6 +1383,11 @@ public sealed class MapWindow : Window
             AddNeighborhoodGroup(options, streamer, Neighborhoods.CellOf(mapPosition.X), Neighborhoods.CellOf(mapPosition.Y));
         }
 
+        if (GlobalState.IsAdminModeOn && BlueprintAdmin is { } admin)
+        {
+            options.Add(ContextMenuOption.Opening("Spawn here", SpawnChoices(admin, tilePosition)));
+        }
+
         if (options.Count > 0)
         {
             _contextMenuController.Open(new Vector2(mousePosition.X, mousePosition.Y), options);
@@ -1427,7 +1435,20 @@ public sealed class MapWindow : Window
         }
 
         options.Add(new ContextMenuOption("Inspect", null, !_playerActionGate.IsLocked, () => InspectEntity(entityId)));
+
+        if (GlobalState.IsAdminModeOn && BlueprintAdmin is { } admin)
+        {
+            options.Add(ContextMenuOption.Opening("Apply", ApplyChoices(admin, entityId)));
+        }
     }
+
+    /// <summary>Admin Mode's "Spawn here" submenu: every spawnable blueprint, spawned on the tile and layer the menu was opened on.</summary>
+    private static List<ContextMenuOption> SpawnChoices(Game.Spawning.BlueprintAdminCommands admin, Vector3Int tilePosition) =>
+        [.. admin.Spawnable().Select(choice => new ContextMenuOption(choice.Name, null, true, () => admin.Spawn(choice.BlueprintId, tilePosition)))];
+
+    /// <summary>Admin Mode's "Apply" submenu: every blueprint that can be built onto an existing entity, applied to entityId.</summary>
+    private static List<ContextMenuOption> ApplyChoices(Game.Spawning.BlueprintAdminCommands admin, int entityId) =>
+        [.. admin.Applicable().Select(choice => new ContextMenuOption(choice.Name, null, true, () => admin.Apply(entityId, choice.BlueprintId)))];
 
     /// <summary>Details/Admin inspection's actual activation -- sets Detail or Admin mode (GlobalState.IsAdminModeOn) on the shared entityId (see MapViewState.InspectedEntityId), starts the global cooldown (the same shared ActionLockComponent lock movement/melee/consumables already use), and un-minimizes InspectionWindow. Only ever reached via the "Inspect" ContextMenuOption above, which already gates on the cooldown being clear -- no redundant re-check here, matching how "Loot" above trusts its own Enabled gate instead of re-checking adjacency.</summary>
     private void InspectEntity(int entityId)

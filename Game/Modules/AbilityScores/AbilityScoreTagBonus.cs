@@ -14,7 +14,7 @@ namespace Game.Modules.AbilityScores;
 /// </summary>
 public static class AbilityScoreTagBonus
 {
-    public static ushort Compute(int sourceEntityId, IReadOnlyList<Tag> tags, MultiComponentPool<AbilityScoreComponent>? abilityScores)
+    public static ushort Compute(int sourceEntityId, IReadOnlyList<Tag> tags, PackedComponentPool<AbilityScoresComponent>? abilityScores)
     {
         if (abilityScores is null)
         {

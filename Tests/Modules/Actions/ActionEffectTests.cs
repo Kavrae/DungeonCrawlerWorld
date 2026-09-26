@@ -10,6 +10,8 @@ using Game.Modules.Health.Components;
 using Game.Modules.StatModifiers;
 using Game.Modules.StatModifiers.Components;
 
+using Tests.Blueprints;
+
 namespace Tests.Modules.Actions;
 
 /// <summary>
@@ -91,15 +93,13 @@ public sealed class ActionEffectTests
     public void DirectDamage_ComplexTarget_LandsOnExactlyOneBodyPart()
     {
         var (componentManager, health, eventBus) = Build();
-        componentManager.RegisterMultiPool<BodyPartComponent>();
-        var bodyParts = componentManager.GetMultiPool<BodyPartComponent>();
-        bodyParts.Add(TargetEntityId, new BodyPartComponent("Torso", BodyPartType.Torso, 0, 0, currentHealth: 100, maximumHealth: 100, isVital: true));
+        var bodyParts = BodyPartTestWorld.WithParts(componentManager, TargetEntityId, ("Torso", BodyPartType.Torso, 100, 100, true)).BodyParts;
         var mathUtility = new MathUtility(new NeverCritRandom());
         var context = Context(componentManager, health, eventBus, mathUtility) with { BodyParts = bodyParts };
 
         new DirectDamage(MinFlatDamage: 10, MaxFlatDamage: 10).Apply(context);
 
-        var part = bodyParts.GetReadonlyByDenseIndex(bodyParts.GetFirstDenseIndex(TargetEntityId));
+        bodyParts.TryGet(TargetEntityId, 0, out var part);
         Assert.AreEqual("Torso", part.Name);
         Assert.AreEqual(90, part.CurrentHealth);
     }
@@ -109,29 +109,23 @@ public sealed class ActionEffectTests
     public void DirectDamage_TargetBodyPartTypeSet_LandsOnThatTypeAgainstComplexTarget()
     {
         var (componentManager, health, eventBus) = Build();
-        componentManager.RegisterMultiPool<BodyPartComponent>();
-        var bodyParts = componentManager.GetMultiPool<BodyPartComponent>();
-        bodyParts.Add(TargetEntityId, new BodyPartComponent("Head", BodyPartType.Head, 0, 5, currentHealth: 30, maximumHealth: 30, isVital: true));
-        bodyParts.Add(TargetEntityId, new BodyPartComponent("Torso", BodyPartType.Torso, 0, 4, currentHealth: 100, maximumHealth: 100, isVital: true));
+        var bodyParts = BodyPartTestWorld.WithParts(componentManager, TargetEntityId, ("Head", BodyPartType.Head, 30, 30, true), ("Torso", BodyPartType.Torso, 100, 100, true)).BodyParts;
         var mathUtility = new MathUtility(new NeverCritRandom());
         var context = Context(componentManager, health, eventBus, mathUtility) with { BodyParts = bodyParts };
 
         new DirectDamage(MinFlatDamage: 10, MaxFlatDamage: 10, TargetBodyPartType: BodyPartType.Head).Apply(context);
 
-        var headDenseIndex = BodyPartSelection.PickByType(bodyParts, TargetEntityId, BodyPartType.Head);
-        Assert.AreEqual(20, bodyParts.GetReadonlyByDenseIndex(headDenseIndex).CurrentHealth);
-        var torsoDenseIndex = BodyPartSelection.PickByType(bodyParts, TargetEntityId, BodyPartType.Torso);
-        Assert.AreEqual(100, bodyParts.GetReadonlyByDenseIndex(torsoDenseIndex).CurrentHealth, "Torso must be untouched -- the hit landed on Head.");
+        bodyParts.TryGet(TargetEntityId, BodyPartSelection.PickByType(bodyParts, TargetEntityId, BodyPartType.Head), out var head);
+        Assert.AreEqual(20, head.CurrentHealth);
+        bodyParts.TryGet(TargetEntityId, BodyPartSelection.PickByType(bodyParts, TargetEntityId, BodyPartType.Torso), out var torso);
+        Assert.AreEqual(100, torso.CurrentHealth, "Torso must be untouched -- the hit landed on Head.");
     }
 
     [TestMethod]
     public void DirectHeal_ComplexTarget_SplitsOneTotalEvenlyAcrossParts_InsteadOfPerPartFraction()
     {
         var (componentManager, health, eventBus) = Build();
-        componentManager.RegisterMultiPool<BodyPartComponent>();
-        var bodyParts = componentManager.GetMultiPool<BodyPartComponent>();
-        bodyParts.Add(TargetEntityId, new BodyPartComponent("Head", BodyPartType.Head, 0, 0, currentHealth: 10, maximumHealth: 20, isVital: true));
-        bodyParts.Add(TargetEntityId, new BodyPartComponent("Torso", BodyPartType.Torso, 0, 0, currentHealth: 30, maximumHealth: 60, isVital: true));
+        var bodyParts = BodyPartTestWorld.WithParts(componentManager, TargetEntityId, ("Head", BodyPartType.Head, 10, 20, true), ("Torso", BodyPartType.Torso, 30, 60, true)).BodyParts;
         var mathUtility = new MathUtility();
         var context = Context(componentManager, health, eventBus, mathUtility) with { BodyParts = bodyParts };
 
@@ -139,9 +133,8 @@ public sealed class ActionEffectTests
 
         // Total = 50% of the entity's overall max (20+60=80) = 40, split evenly across 2 parts =
         // 20 each -- Head: 10+20=30, clamped to its own max of 20. Torso: 30+20=50 (under its max of 60).
-        for (var denseIndex = bodyParts.GetFirstDenseIndex(TargetEntityId); denseIndex != -1; denseIndex = bodyParts.GetNextDenseIndex(denseIndex))
+        foreach (var part in bodyParts.Parts(TargetEntityId))
         {
-            var part = bodyParts.GetReadonlyByDenseIndex(denseIndex);
             var expected = part.Name == "Head" ? 20f : 50f;
             Assert.AreEqual(expected, part.CurrentHealth, $"Part {part.Name} should have received an equal absolute share of the total heal, clamped at its own max.");
         }

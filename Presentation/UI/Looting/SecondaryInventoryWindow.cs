@@ -1,6 +1,6 @@
 using Engine.ECS.Components;
 using Engine.ECS.Components.Stores;
-using Game.Modules.Core.Components;
+using Game.Spawning;
 using Game.Modules.Death.Components;
 using Game.Modules.Inventory;
 using Game.Modules.Inventory.Components;
@@ -10,6 +10,7 @@ using Presentation.Fonts;
 using Presentation.Rendering;
 using Presentation.UI.ColorPalettes;
 using Presentation.UI.Content;
+using Game.Blueprints;
 
 namespace Presentation.UI.Looting;
 
@@ -49,7 +50,8 @@ public sealed class SecondaryInventoryWindow(
     World world,
     ContextMenuController contextMenuController,
     MapViewState mapViewState,
-    Engine.ECS.Systems.SimulationClock? simulationClock = null)
+    Engine.ECS.Systems.SimulationClock? simulationClock = null,
+    BlueprintRegistry? creatures = null)
     : Window(fontService, elementPoolService, labelRenderer)
 {
     private static readonly Vector2 IconSize = new(48, 48);
@@ -65,17 +67,17 @@ public sealed class SecondaryInventoryWindow(
     /// <summary>Wide enough for exactly GridColumns columns of InventoryGridContent.CellSize -- derived from CellSize/CellGap directly (rather than hand-duplicating those numbers, the landmine the 50%-cell-size bump exposed the first version of this constant to) -- comfortably mid-range of the width band that computes to exactly GridColumns, not right at its edge.</summary>
     private static readonly float GridWidth = GridColumns * (InventoryGridContent.CellSize.X + InventoryGridContent.CellGap) + 10f;
 
-    private readonly DirectComponentPool<DisplayTextComponent> _displayTextPool = componentManager.GetDirectPool<DisplayTextComponent>();
+    private readonly EntityNaming _naming = EntityNaming.For(componentManager, creatures);
     private readonly PackedComponentPool<DeadComponent> _deadPool = componentManager.GetPackedPool<DeadComponent>();
 
     private int _entityId;
     private TooltipController _tooltipController = null!;
-    private Action<int, Guid> _onItemSelected = static (_, _) => { };
-    private Action<int, Guid> _onCompareRequested = static (_, _) => { };
+    private Action<int, uint> _onItemSelected = static (_, _) => { };
+    private Action<int, uint> _onCompareRequested = static (_, _) => { };
     private CurrencyRowContent _currencyRowContent = null!;
 
     /// <summary>Must be called after CreateElement but before Initialize -- same contract InventoryManagementWindow/AbilityScoreWindow's own Configure follow. Constructs and registers the currency row here too (not OnChildrenInitialized) -- SetFooterContent only needs to record FooterHeight, which must already be set before this window's own first MeasureAndArrange for ContentSize to come out correctly shrunk (see Window.SetFooterContent's own doc comment).</summary>
-    public void Configure(int entityId, TooltipController tooltipController, Action<int, Guid> onItemSelected, Action<int, Guid> onCompareRequested)
+    public void Configure(int entityId, TooltipController tooltipController, Action<int, uint> onItemSelected, Action<int, uint> onCompareRequested)
     {
         _entityId = entityId;
         _tooltipController = tooltipController;
@@ -213,8 +215,7 @@ public sealed class SecondaryInventoryWindow(
         AddChild(gridWindow); // Initializes gridWindow, which in turn Initializes (and builds the cells of) its InventoryGridContent -- see Window.OnChildrenInitialized/AddChild's own doc comment on why Initialize is never called explicitly here.
     }
 
-    private string ResolveName(int entityId) =>
-        _displayTextPool.TryGetReadonly(entityId, out var displayText) ? displayText.Name : "Unknown";
+    private string ResolveName(int entityId) => _naming.NameOf(entityId);
 
     private string ResolveKillerName()
     {

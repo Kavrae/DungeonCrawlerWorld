@@ -6,7 +6,7 @@ namespace Engine.ECS.Components;
 /// "Give me this pool if the component is registered, else null" -- the pattern every
 /// IGameModule.RegisterSystems uses to accept an optional dependency on another module's
 /// component (e.g. Game.Modules.Actions.ActionsModule/Game.Modules.Inventory.InventoryModule both
-/// gating on StatModifierComponent/DeadComponent/ManaComponent/AbilityScoreComponent/
+/// gating on StatModifierComponent/DeadComponent/ManaComponent/AbilityScoresComponent/
 /// StatusEffectAuraSourceComponent this way) instead of a hard Dependencies entry. One
 /// IsRegistered-then-Get call in one place rather than every RegisterSystems re-writing the same
 /// ternary per pool -- generic over T with no game-specific knowledge, so it belongs on

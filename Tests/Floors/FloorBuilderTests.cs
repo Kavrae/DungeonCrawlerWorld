@@ -5,6 +5,7 @@ using Engine.ECS.Systems;
 using Engine.Events;
 using Engine.Math;
 using Engine.Modules;
+using Game.Spawning;
 using Game.Floors;
 using Game.Modules;
 using Game.Modules.AbilityScores;
@@ -17,6 +18,7 @@ using Game.Modules.ContactDamage;
 using Game.Modules.Core;
 using Game.Modules.Core.Components;
 using Game.Modules.Crawler;
+using Game.Modules.Crawler.Components;
 using Game.Modules.Currency;
 using Game.Modules.Health;
 using Game.Modules.Inventory;
@@ -33,6 +35,7 @@ using Game.Modules.StatusEffectAura;
 using Game.Modules.StatusEffects;
 using Game.Terrain;
 using Game.World;
+using Game.Blueprints;
 
 namespace Tests.Floors;
 
@@ -101,6 +104,9 @@ public sealed class FloorBuilderTests
         var npcBehaviorModule = new NpcBehaviorModule();
         npcBehaviorModule.Configure(context);
 
+        var creatureModule = new BlueprintsModule();
+        creatureModule.Configure(context);
+
         IReadOnlyList<IModule> modules =
         [
             coreModule,
@@ -111,6 +117,7 @@ public sealed class FloorBuilderTests
             movementModule,
             new RaceModule(),
             new ClassModule(),
+            creatureModule,
             actionsModule,
             coreActionsModule,
             statusEffectsModule,
@@ -131,6 +138,10 @@ public sealed class FloorBuilderTests
         return Bootstrapper.Build(modules, initialEntityCapacity: 5000, initialComponentCapacity: 5000, entityKeys: context.EntityKeys);
     }
 
+    /// <summary>The one spawn path, for a context these tests assembled themselves -- GameBootstrapper builds the real session's (see GameBootstrapResult.Factory).</summary>
+    private static EntityFactory FactoryFor(Game.World.World world, EcsContext ecsContext, GameModuleContext context, MathUtility mathUtility, ProcessingTierResolver? tierResolver = null) =>
+        new(context.Definitions, world, ecsContext.EntityManager, ecsContext.ComponentManager, context.MovedEntities, tierResolver, ecsContext.SystemManager.Clock, new UniqueNumberAllocator(mathUtility, 1, 13_000_000));
+
     /// <summary>
     /// The player must not be placed before/during TestMapBuilder.Populate (PlaceEntityOnMap
     /// has no free-space check, so an earlier player placement could be silently overwritten
@@ -149,10 +160,10 @@ public sealed class FloorBuilderTests
         var mathUtility = new MathUtility(new Random(1));
         var ecsContext = BuildEcsContext(world, mathUtility, out var context);
 
-        var crawlerNumberAllocator = new UniqueNumberAllocator(mathUtility, 1, 13_000_000);
         var playerEntityId = FloorBuilder.ReservePlayerEntity(ecsContext);
-        FloorBuilder.PopulateFloor(world, ecsContext, new NeighborhoodRecords(mathUtility), crawlerNumberAllocator, new FrameEventBuffer<EntityMovedEvent>(), context.Terrain);
-        FloorBuilder.CreatePlayer(world, ecsContext, mathUtility, new FrameEventBuffer<EntityMovedEvent>(), crawlerNumberAllocator, playerEntityId);
+        var factory = FactoryFor(world, ecsContext, context, mathUtility);
+        FloorBuilder.PopulateFloor(world, ecsContext, new NeighborhoodRecords(mathUtility), factory, context.Terrain, context.Definitions);
+        FloorBuilder.CreatePlayer(world, ecsContext, mathUtility, factory, context.Definitions, playerEntityId);
         world.PlayerEntityId = playerEntityId;
 
         Assert.IsTrue(ecsContext.EntityManager.EntityExists(world.PlayerEntityId));
@@ -163,6 +174,9 @@ public sealed class FloorBuilderTests
 
         var movement = ecsContext.ComponentManager.GetPackedPool<MovementComponent>().GetReadonly(world.PlayerEntityId);
         Assert.AreEqual(MovementMode.PlayerControlled, movement.MovementMode);
+
+        // The player is always a Crawler, numbered by the session rather than by what it is built from.
+        Assert.IsTrue(ecsContext.ComponentManager.GetPackedPool<CrawlerComponent>().Has(world.PlayerEntityId));
     }
 
     [TestMethod]
@@ -181,7 +195,7 @@ public sealed class FloorBuilderTests
         var mathUtility = new MathUtility(new Random(1));
         var ecsContext = BuildEcsContext(world, mathUtility, out var context);
 
-        FloorBuilder.PopulateFloor(world, ecsContext, new NeighborhoodRecords(mathUtility), new UniqueNumberAllocator(mathUtility, 1, 13_000_000), new FrameEventBuffer<EntityMovedEvent>(), context.Terrain);
+        FloorBuilder.PopulateFloor(world, ecsContext, new NeighborhoodRecords(mathUtility), FactoryFor(world, ecsContext, context, mathUtility), context.Terrain, context.Definitions);
 
         var transforms = ecsContext.ComponentManager.GetDirectPool<TransformComponent>();
         var creatures = 0;
@@ -205,7 +219,7 @@ public sealed class FloorBuilderTests
         var mathUtility = new MathUtility(new Random(1));
         var ecsContext = BuildEcsContext(world, mathUtility, out var context);
 
-        FloorBuilder.PopulateFloor(world, ecsContext, new NeighborhoodRecords(mathUtility), new UniqueNumberAllocator(mathUtility, 1, 13_000_000), new FrameEventBuffer<EntityMovedEvent>(), context.Terrain);
+        FloorBuilder.PopulateFloor(world, ecsContext, new NeighborhoodRecords(mathUtility), FactoryFor(world, ecsContext, context, mathUtility), context.Terrain, context.Definitions);
 
         var wallId = context.Terrain.GetId(BuiltInTerrain.StoneWallKey);
         Assert.AreEqual(wallId, world.GetStructureAt(new Vector3Int(10, 2, (int)MapLayer.Ground)).TypeId);
@@ -275,7 +289,6 @@ public sealed class FloorBuilderTests
         var resolver = context.ProcessingTierResolver;
         world.EntityPlaced += resolver.EnsureTiered; // As GameBootstrapper wires it.
 
-        var crawlerNumberAllocator = new UniqueNumberAllocator(mathUtility, 1, 13_000_000);
         var playerEntityId = FloorBuilder.ReservePlayerEntity(ecsContext);
         var origin = FloorBuilder.PlayerSpawnOrigin();
         resolver.SetReferencePosition(origin);
@@ -283,8 +296,9 @@ public sealed class FloorBuilderTests
         var raisedDuringPopulation = new HashSet<int>();
         context.ProcessingTierEvents.TierChanged += (entityId, _) => raisedDuringPopulation.Add(entityId);
 
-        FloorBuilder.PopulateFloor(world, ecsContext, new NeighborhoodRecords(mathUtility), crawlerNumberAllocator, new FrameEventBuffer<EntityMovedEvent>(), context.Terrain, resolver);
-        FloorBuilder.CreatePlayer(world, ecsContext, mathUtility, new FrameEventBuffer<EntityMovedEvent>(), crawlerNumberAllocator, playerEntityId, resolver);
+        var factory = FactoryFor(world, ecsContext, context, mathUtility, resolver);
+        FloorBuilder.PopulateFloor(world, ecsContext, new NeighborhoodRecords(mathUtility), factory, context.Terrain, context.Definitions);
+        FloorBuilder.CreatePlayer(world, ecsContext, mathUtility, factory, context.Definitions, playerEntityId, resolver);
         world.PlayerEntityId = playerEntityId;
 
         var transforms = ecsContext.ComponentManager.GetDirectPool<TransformComponent>();
@@ -349,13 +363,14 @@ public sealed class FloorBuilderTests
     /// <summary>A map reaching one neighborhood west of the starting one: a 30-row slice of neighborhood -1 beside a 40x30 corner of neighborhood 0.</summary>
     private static readonly MapBounds TwoNeighborhoodSlice = new(-1024, 0, 40, 30, 3);
 
-    private static (Game.World.World World, EcsContext Ecs, Game.TestMapBuilder Builder) BuildForGeneration(MapBounds bounds)
+    private static (Game.World.World World, EcsContext Ecs, Game.TestMapBuilder Builder, BlueprintRegistry Creatures, EntityFactory Factory) BuildForGeneration(MapBounds bounds)
     {
         var world = new Game.World.World(new Map(bounds));
         var mathUtility = new MathUtility(new Random(1));
         var ecsContext = BuildEcsContext(world, mathUtility, out var context);
-        var builder = new Game.TestMapBuilder(ecsContext.EntityManager, ecsContext.ComponentManager, new UniqueNumberAllocator(mathUtility, 1, 13_000_000), new FrameEventBuffer<EntityMovedEvent>(), context.Terrain);
-        return (world, ecsContext, builder);
+        var factory = FactoryFor(world, ecsContext, context, mathUtility);
+        var builder = new Game.TestMapBuilder(ecsContext.EntityManager, factory, context.Terrain, context.Definitions);
+        return (world, ecsContext, builder, context.Definitions, factory);
     }
 
     private static void Generate(Game.TestMapBuilder builder, Game.World.World world, NeighborhoodRecord record)
@@ -432,11 +447,11 @@ public sealed class FloorBuilderTests
     [TestMethod]
     public void PopulateFloor_HallwayCrossAndShopsExistOnlyInTheStartingNeighborhood()
     {
-        var (world, ecsContext, _) = BuildForGeneration(TwoNeighborhoodSlice);
+        var (world, ecsContext, _, creatures, factory) = BuildForGeneration(TwoNeighborhoodSlice);
         var mathUtility = new MathUtility(new Random(1));
         var records = new NeighborhoodRecords(mathUtility);
 
-        FloorBuilder.PopulateFloor(world, ecsContext, records, new UniqueNumberAllocator(mathUtility, 1, 13_000_000), new FrameEventBuffer<EntityMovedEvent>(), world.Terrain);
+        FloorBuilder.PopulateFloor(world, ecsContext, records, factory, world.Terrain, creatures);
 
         Assert.AreEqual(2, records.Count);
         Assert.IsTrue(records.TryGet(-1, 0, out _));
@@ -456,7 +471,7 @@ public sealed class FloorBuilderTests
     [TestMethod]
     public void GenerateNeighborhood_YieldsARowAtATime()
     {
-        var (world, ecsContext, builder) = BuildForGeneration(new MapBounds(0, 0, 40, 30, 3));
+        var (world, ecsContext, builder, _, _) = BuildForGeneration(new MapBounds(0, 0, 40, 30, 3));
         var livingBefore = ecsContext.EntityManager.LivingEntityCount;
 
         var yields = builder.GenerateNeighborhood(world, new NeighborhoodRecord(0, 0, seed: 42)).ToList();

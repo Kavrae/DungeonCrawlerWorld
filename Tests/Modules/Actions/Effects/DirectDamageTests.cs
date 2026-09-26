@@ -53,18 +53,13 @@ public sealed class DirectDamageTests
     }
 
     /// <summary>Complex-health counterpart to Build -- a body-parts pool instead of SimpleHealthComponent, for BodyPartTargetMode.All/LowestPercentage coverage.</summary>
-    private static (ComponentManager ComponentManager, ActionEffectContext Context) BuildComplex(IReadOnlyList<Tag> activatorTags, params BodyPartComponent[] parts)
+    private static (ComponentManager ComponentManager, ActionEffectContext Context) BuildComplex(IReadOnlyList<Tag> activatorTags, params (string Name, BodyPartType Type, float Current, ushort Max, bool Vital)[] parts)
     {
         var componentManager = new ComponentManager(initialEntityCapacity: 10, initialComponentCapacity: 10);
         componentManager.RegisterPackedPool<SimpleHealthComponent>(static (ref existing, incoming) => existing = incoming);
         componentManager.RegisterMultiPool<StatModifierComponent>();
-        componentManager.RegisterMultiPool<BodyPartComponent>();
 
-        var bodyParts = componentManager.GetMultiPool<BodyPartComponent>();
-        foreach (var part in parts)
-        {
-            bodyParts.Add(TargetEntityId, part);
-        }
+        var bodyParts = BodyPartTestWorld.WithParts(componentManager, TargetEntityId, parts).BodyParts;
 
         var context = new ActionEffectContext(
             SourceEntityId: SourceEntityId,
@@ -145,12 +140,12 @@ public sealed class DirectDamageTests
     {
         var (componentManager, context) = BuildComplex(
             [Tag.Attack],
-            new BodyPartComponent("Head", BodyPartType.Head, partId: 0, verticalPosition: 5, currentHealth: 40, maximumHealth: 40, isVital: true),
-            new BodyPartComponent("Torso", BodyPartType.Torso, partId: 1, verticalPosition: 4, currentHealth: 60, maximumHealth: 60, isVital: true));
+            ("Head", BodyPartType.Head, 40, 40, true),
+            ("Torso", BodyPartType.Torso, 60, 60, true));
 
         new DirectDamage(MinFlatDamage: 20, MaxFlatDamage: 20, BodyPartTargetMode: BodyPartTargetMode.All).Apply(context);
 
-        var bodyParts = componentManager.GetMultiPool<BodyPartComponent>();
+        var bodyParts = context.BodyParts!;
         HealthQueries.TryGetTotals(componentManager.GetPackedPool<SimpleHealthComponent>(), bodyParts, TargetEntityId, out var current, out _);
         Assert.AreEqual(80f, current, "20 total damage / 2 parts = 10 each, regardless of each part's own max health -- Head 40-10=30, Torso 60-10=50, total 80.");
     }

@@ -26,6 +26,7 @@ public sealed class DiagnosticsEngine
     private readonly StartupProfiler? _startupProfiler;
     private readonly FrameRangeBenchmark? _benchmark;
     private ComponentMemoryTracker? _componentMemoryTracker;
+    private PoolMemoryReport? _poolMemoryReport;
     private LeakDetector? _leakDetector;
 
     private DateTime _lastReportUtc = DateTime.MinValue;
@@ -83,6 +84,7 @@ public sealed class DiagnosticsEngine
     /// number it is about to run. Drives FrameRangeBenchmark's window and writes its one-shot
     /// report the moment the window closes. No-op without a benchmark range.
     /// </summary>
+    /// <remarks>With Memory on, also drives PoolMemoryReport over the same range: its baseline copy is taken before the benchmark's clock starts, and its report written after the benchmark's.</remarks>
     public void BeginSimulationFrame(long frameCount)
     {
         if (_benchmark is not { IsComplete: false } benchmark)
@@ -90,11 +92,22 @@ public sealed class DiagnosticsEngine
             return;
         }
 
+        if (_poolMemoryReport is { HasBaseline: false } poolMemoryReport && !benchmark.IsRecording && frameCount >= benchmark.Range.StartFrame && frameCount < benchmark.Range.EndFrame)
+        {
+            poolMemoryReport.CaptureBaseline();
+        }
+
         benchmark.BeginSimulationFrame(frameCount);
         if (benchmark.IsComplete)
         {
             var path = benchmark.WriteReport(_outputDirectory, RandomSeed);
             Console.WriteLine($"[Benchmark] Frames {benchmark.Range.StartFrame}-{benchmark.Range.EndFrame} written to {path}");
+
+            if (_poolMemoryReport is { HasBaseline: true } completedMemoryReport)
+            {
+                var memoryPath = completedMemoryReport.WriteReport(_outputDirectory, RandomSeed, benchmark.Range);
+                Console.WriteLine($"[Memory] Frames {benchmark.Range.StartFrame}-{benchmark.Range.EndFrame} written to {memoryPath}");
+            }
         }
     }
 
@@ -119,6 +132,11 @@ public sealed class DiagnosticsEngine
         if (Features.HasFlag(DiagnosticsFeatures.Memory) && _componentMemoryTracker is null)
         {
             _componentMemoryTracker = new ComponentMemoryTracker(componentManager);
+        }
+
+        if (Features.HasFlag(DiagnosticsFeatures.Memory) && _benchmark is not null && _poolMemoryReport is null)
+        {
+            _poolMemoryReport = new PoolMemoryReport(componentManager, entityManager);
         }
 
         if (Features.HasFlag(DiagnosticsFeatures.LeakDetection) && _leakDetector is null)

@@ -650,6 +650,38 @@ public sealed class ProcessingTierSystemTests
         Assert.AreEqual(ProcessingTierLevel.Neighborhood, fixture.TierOf(second));
     }
 
+    /// <summary>While the resolver holds promotions, a crossing's thawing waits and nothing else does; releasing the hold thaws it.</summary>
+    [TestMethod]
+    public void PresetReference_Crossing_WhilePromotionsHeld_ThawsNothingUntilReleased()
+    {
+        var held = true;
+        var fixture = new Fixture(new FakePlayerQuery(0), transitionsPerFrame: 1);
+        fixture.Resolver.PromotionsHeld = () => held;
+        fixture.Resolver.SetReferencePosition(new Vector3Int(1019, 500, 0));
+        var playerEntityId = fixture.Spawn(new Vector3Int(1019, 500, 0));
+        var freezing = fixture.Spawn(new Vector3Int(500, 500, 0));
+        var thawing = fixture.Spawn(new Vector3Int(1500, 500, 0));
+        fixture.Frame();
+
+        fixture.Move(playerEntityId, new Vector3Int(1029, 500, 0));
+        for (var i = 0; i < 20; i++)
+        {
+            fixture.Frame();
+        }
+
+        Assert.AreEqual(ProcessingTierLevel.Borough, fixture.TierOf(freezing));
+        Assert.AreNotEqual(ProcessingTierLevel.Neighborhood, fixture.TierOf(thawing));
+        Assert.IsTrue(fixture.System.Transitions.HasPending);
+
+        held = false;
+        for (var i = 0; i < 200 && fixture.System.Transitions.HasPending; i++)
+        {
+            fixture.Frame();
+        }
+
+        Assert.AreEqual(ProcessingTierLevel.Neighborhood, fixture.TierOf(thawing));
+    }
+
     /// <summary>Thawing runs ahead of freezing: the neighborhood the player walked into comes alive before the one behind them is frozen.</summary>
     [TestMethod]
     public void PresetReference_Crossing_ThawsBeforeItFreezes()

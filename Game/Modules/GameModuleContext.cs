@@ -8,6 +8,7 @@ using Game.Modules.Inventory;
 using Game.Modules.ProcessingTier;
 using Game.Modules.StatusEffects;
 using Game.World;
+using Game.Blueprints;
 
 namespace Game.Modules;
 
@@ -101,4 +102,10 @@ public sealed record GameModuleContext(IMapQuery MapQuery, MathUtility MathUtili
 
     /// <summary>Every terrain definition, filled during Configure -- same reasoning as StatusEffectAuraAppliers above. A mod registers its own terrain here, or replaces a built-in by registering its key.</summary>
     public Terrain.TerrainRegistry Terrain { get; init; } = new();
+
+    public Blueprints.BlueprintRegistry Definitions { get; init; } = new();
+
+    /// <summary>The session's one spawn path -- for a system or action that spawns an entity or applies a blueprint to one at runtime.</summary>
+    /// <remarks>Set by GameBootstrapper once the ECS is built, which is after every module's Configure: keep the context and read this when a system runs, never during Configure. Null in a dry run or a staging world, which never spawn.</remarks>
+    public Spawning.EntityFactory? EntityFactory { get; set; }
 }

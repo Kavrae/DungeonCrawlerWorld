@@ -5,10 +5,12 @@ using Engine.Math;
 using Game.Modules.ContactDamage.Components;
 using Game.Modules.ContactDamage.Systems;
 using Game.Modules.Death.Components;
+using Game.Modules.Health;
 using Game.Modules.Health.Components;
 using Game.Modules.Movement;
 using Game.Modules.StatModifiers.Components;
 using Game.World;
+using Game.Blueprints;
 
 namespace Game.Modules.ContactDamage;
 
@@ -23,6 +25,8 @@ namespace Game.Modules.ContactDamage;
 /// </summary>
 public sealed class ContactDamageModule : IGameModule
 {
+    private BlueprintRegistry _creatures = null!;
+
     public Guid Id { get; } = new("d9f6a1c4-8b2e-4f3a-9c1d-00000000000a");
 
     public IReadOnlyList<Type> Dependencies { get; } = [typeof(MovementModule)];
@@ -38,6 +42,7 @@ public sealed class ContactDamageModule : IGameModule
 
     public void Configure(GameModuleContext context)
     {
+        _creatures = context.Definitions;
         _eventBus = context.EventBus;
         _terrain = context.Terrain;
         _simulationClock = context.SimulationClock;
@@ -66,8 +71,8 @@ public sealed class ContactDamageModule : IGameModule
         var deadEntities = componentManager.IsRegistered<DeadComponent>()
             ? componentManager.GetPackedPool<DeadComponent>()
             : null;
-        var bodyParts = componentManager.IsRegistered<BodyPartComponent>()
-            ? componentManager.GetMultiPool<BodyPartComponent>()
+        var bodyParts = componentManager.IsRegistered<BodyPartStateComponent>()
+            ? EntityBodyParts.For(componentManager, _creatures)
             : null;
 
         systemManager.Register(new ContactDamageSystem(

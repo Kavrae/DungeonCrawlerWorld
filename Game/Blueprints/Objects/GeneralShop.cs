@@ -1,22 +1,15 @@
-using Engine.ECS.Components;
-using Engine.Math;
-using Game.Modules.Core.Components;
-
 namespace Game.Blueprints.Objects;
 
-/// <summary>
-/// Shop composed with GeneralShopStock -- the same composition-chain shape GoblinEngineerBlueprint
-/// uses for race+class, applied here to shell+stock. See PotionShop's own doc comment for why the
-/// rename to "General Shop" uses TryUpdate rather than another DisplayTextComponent Merge.
-/// </summary>
-public sealed class GeneralShop(MathUtility mathUtility) : IBlueprint
+/// <summary>The Shop shell stocked by GeneralShopStock, under its own name.</summary>
+public static class GeneralShop
 {
-    private const string DisplayName = "General Shop";
+    public static readonly Guid Id = new("d9f6a1c4-8b2e-4f3a-9c1d-000000000103");
 
-    private readonly CompositeBlueprint _composite = new(
-        [new Shop(mathUtility), new GeneralShopStock(mathUtility)],
-        static (componentManager, entityId) =>
-            componentManager.TryUpdate(entityId, static (ref DisplayTextComponent displayText) => displayText.Name = DisplayName));
+    public const string Name = "General Shop";
 
-    public void Build(ComponentManager componentManager, int entityId) => _composite.Build(componentManager, entityId);
+    public static readonly BlueprintDefinition Definition = new(Id, Name)
+    {
+        Includes = [Shop.Id, GeneralShopStock.Id],
+        Appearance = new() { Name = Name }
+    };
 }

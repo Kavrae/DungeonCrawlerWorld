@@ -36,27 +36,26 @@ public sealed class BurningAuraApplierTests
     {
         var componentManager = new ComponentManager(initialEntityCapacity: 10, initialComponentCapacity: 8);
         componentManager.RegisterPackedPool<BurningTimerComponent>(static (ref existing, incoming) => { });
-        componentManager.RegisterMultiPool<BodyPartComponent>();
         componentManager.RegisterMultiPool<BodyPartBurningTimerComponent>();
         componentManager.RegisterPackedPool<ContactDamageExposureComponent>(static (ref existing, incoming) => { });
         return componentManager;
     }
 
-    private static void AddComplexBodyParts(ComponentManager componentManager)
-    {
-        var bodyParts = componentManager.GetMultiPool<BodyPartComponent>();
-        bodyParts.Add(EntityId, new BodyPartComponent("Head", BodyPartType.Head, partId: 0, verticalPosition: 5, currentHealth: 30, maximumHealth: 30, isVital: true));
-        bodyParts.Add(EntityId, new BodyPartComponent("Left Foot", BodyPartType.Foot, partId: 1, verticalPosition: 0, currentHealth: 10, maximumHealth: 10, isVital: false));
-    }
+    private static BodyPartTestWorld AddComplexBodyParts(ComponentManager componentManager) =>
+        BodyPartTestWorld.WithParts(componentManager, EntityId, ("Head", BodyPartType.Head, 30, 30, true), ("Left Foot", BodyPartType.Foot, 10, 10, false));
+
+    /// <summary>A Head and two Feet, so the bottommost fallback has a tie between paired parts to settle the way a real race does.</summary>
+    private static BodyPartTestWorld AddComplexBodyPartsWithPairedFeet(ComponentManager componentManager) =>
+        BodyPartTestWorld.WithParts(componentManager, EntityId, ("Head", BodyPartType.Head, 30, 30, true), ("Left Foot", BodyPartType.Foot, 10, 10, false), ("Right Foot", BodyPartType.Foot, 10, 10, false));
 
     [TestMethod]
     public void ApplyStack_HazardExposedComplexTarget_GrantsBodyPartScopedBurnOnBottommostPart()
     {
         var componentManager = CreateComponentManager();
-        AddComplexBodyParts(componentManager);
+        var world = AddComplexBodyParts(componentManager);
         var (terrain, hazard, _) = CreateTerrain();
         componentManager.GetPackedPool<ContactDamageExposureComponent>().Add(EntityId, new ContactDamageExposureComponent(nextTickFrame: 60, hazardTerrainTypeId: hazard));
-        var applier = new BurningAuraApplier(new MathUtility(), terrain);
+        var applier = new BurningAuraApplier(new MathUtility(), terrain, world.Definitions);
 
         applier.ApplyStack(componentManager, EntityId, ActionSource.Admin, now: 0);
 
@@ -70,8 +69,8 @@ public sealed class BurningAuraApplierTests
     public void ApplyStack_NoHazardExposure_GrantsEntityScopedBurnUnchanged()
     {
         var componentManager = CreateComponentManager();
-        AddComplexBodyParts(componentManager);
-        var applier = new BurningAuraApplier(new MathUtility(), CreateTerrain().Terrain);
+        var world = AddComplexBodyParts(componentManager);
+        var applier = new BurningAuraApplier(new MathUtility(), CreateTerrain().Terrain, world.Definitions);
 
         applier.ApplyStack(componentManager, EntityId, ActionSource.Admin, now: 0);
 
@@ -83,10 +82,11 @@ public sealed class BurningAuraApplierTests
     public void ApplyStack_HazardExposedSimpleTarget_GrantsEntityScopedBurn()
     {
         var componentManager = CreateComponentManager();
-        // No BodyPartComponent at all for EntityId -- Simple, regardless of hazard exposure.
+        // No body plan at all for EntityId -- Simple, regardless of hazard exposure.
+        var world = new BodyPartTestWorld(componentManager);
         var (terrain, hazard, _) = CreateTerrain();
         componentManager.GetPackedPool<ContactDamageExposureComponent>().Add(EntityId, new ContactDamageExposureComponent(nextTickFrame: 60, hazardTerrainTypeId: hazard));
-        var applier = new BurningAuraApplier(new MathUtility(), terrain);
+        var applier = new BurningAuraApplier(new MathUtility(), terrain, world.Definitions);
 
         applier.ApplyStack(componentManager, EntityId, ActionSource.Admin, now: 0);
 
@@ -98,10 +98,10 @@ public sealed class BurningAuraApplierTests
     public void ApplyStack_HazardExposedTarget_RepeatedCalls_TopsOffSameParts_StackCountMatchesGetCurrentStackCount()
     {
         var componentManager = CreateComponentManager();
-        AddComplexBodyParts(componentManager);
+        var world = AddComplexBodyParts(componentManager);
         var (terrain, hazard, _) = CreateTerrain();
         componentManager.GetPackedPool<ContactDamageExposureComponent>().Add(EntityId, new ContactDamageExposureComponent(nextTickFrame: 60, hazardTerrainTypeId: hazard));
-        var applier = new BurningAuraApplier(new MathUtility(), terrain);
+        var applier = new BurningAuraApplier(new MathUtility(), terrain, world.Definitions);
 
         applier.ApplyStack(componentManager, EntityId, ActionSource.Admin, now: 0);
         applier.ApplyStack(componentManager, EntityId, ActionSource.Admin, now: 0);
@@ -123,12 +123,11 @@ public sealed class BurningAuraApplierTests
     public void ApplyStack_OriginalTargetPartDisabledMidBurn_KeepsToppingOffSamePart()
     {
         var componentManager = CreateComponentManager();
-        AddComplexBodyParts(componentManager);
-        var bodyParts = componentManager.GetMultiPool<BodyPartComponent>();
-        bodyParts.Add(EntityId, new BodyPartComponent("Right Foot", BodyPartType.Foot, partId: 2, verticalPosition: 0, currentHealth: 10, maximumHealth: 10, isVital: false));
+        var world = AddComplexBodyPartsWithPairedFeet(componentManager);
+        var bodyParts = world.BodyParts;
         var (terrain, hazard, _) = CreateTerrain();
         componentManager.GetPackedPool<ContactDamageExposureComponent>().Add(EntityId, new ContactDamageExposureComponent(nextTickFrame: 60, hazardTerrainTypeId: hazard));
-        var applier = new BurningAuraApplier(new MathUtility(), terrain);
+        var applier = new BurningAuraApplier(new MathUtility(), terrain, world.Definitions);
 
         applier.ApplyStack(componentManager, EntityId, ActionSource.Admin, now: 0);
 
@@ -136,8 +135,8 @@ public sealed class BurningAuraApplierTests
         var originalPartId = bodyPartTimers.GetReadonlyByDenseIndex(bodyPartTimers.GetFirstDenseIndex(EntityId)).PartId;
         Assert.IsTrue(originalPartId is 1 or 2, "Bottommost fallback with a tie between two Feet resolves to whichever Foot iterates first (PartId 1 or 2).");
 
-        var burningPartDenseIndex = BodyPartSelection.FindByPartId(bodyParts, EntityId, originalPartId);
-        bodyParts.UpdateByDenseIndex(burningPartDenseIndex, static (ref BodyPartComponent part) => part.IsDisabled = true);
+        bodyParts.SetCurrentHealth(EntityId, originalPartId, 0f);
+        bodyParts.Damage(EntityId, originalPartId, amount: 1f, effectiveMaximumHealth: 10f, now: 0, lockoutFrames: 0);
 
         applier.ApplyStack(componentManager, EntityId, ActionSource.Admin, now: 0);
 
@@ -157,11 +156,11 @@ public sealed class BurningAuraApplierTests
     public void ApplyStack_DifferentHazardPreferredType_WhileAnotherPartAlreadyBurning_TargetsItsOwnPart()
     {
         var componentManager = CreateComponentManager();
-        AddComplexBodyParts(componentManager);
+        var world = AddComplexBodyParts(componentManager);
         var exposures = componentManager.GetPackedPool<ContactDamageExposureComponent>();
         var (terrain, hazard, headHazard) = CreateTerrain();
         exposures.Add(EntityId, new ContactDamageExposureComponent(nextTickFrame: 60, hazardTerrainTypeId: hazard));
-        var applier = new BurningAuraApplier(new MathUtility(), terrain);
+        var applier = new BurningAuraApplier(new MathUtility(), terrain, world.Definitions);
 
         applier.ApplyStack(componentManager, EntityId, ActionSource.Admin, now: 0);
 

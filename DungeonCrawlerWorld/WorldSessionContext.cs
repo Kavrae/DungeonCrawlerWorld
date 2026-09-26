@@ -41,4 +41,8 @@ public sealed record WorldSessionContext(
     LocalTierRoster LocalTierRoster,
     Game.Terrain.TerrainRegistry Terrain,
     NeighborhoodRecords NeighborhoodRecords,
-    NeighborhoodStreamer NeighborhoodStreamer);
+    NeighborhoodStreamer NeighborhoodStreamer,
+    Game.Blueprints.BlueprintRegistry Definitions,
+    Game.Spawning.SpawnRecordRebuilder SpawnRecordRebuilder,
+    Game.Spawning.CreatureSkeletons Skeletons,
+    Game.Spawning.EntityFactory Factory);

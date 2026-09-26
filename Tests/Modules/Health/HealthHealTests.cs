@@ -16,7 +16,7 @@ public sealed class HealthHealTests
     }
 
     private static PackedComponentPool<SimpleHealthComponent> CreatePool() =>
-        new(maximumEntityCount: 10, initialCapacity: 4, static (ref existing, incoming) => existing = incoming);
+        new(entityCapacity: 10, initialCapacity: 4, static (ref existing, incoming) => existing = incoming);
 
     [TestMethod]
     public void Apply_RaisesCurrentHealthByFractionOfMaximum()
@@ -52,19 +52,19 @@ public sealed class HealthHealTests
     public void Apply_ComplexTarget_RoutesThroughComplexHealthHeal()
     {
         var pool = CreatePool();
-        var bodyParts = new MultiComponentPool<BodyPartComponent>(maximumEntityCount: 10, initialCapacity: 4);
-        bodyParts.Add(0, new BodyPartComponent("Torso", BodyPartType.Torso, 0, 0, currentHealth: 50, maximumHealth: 100, isVital: true));
+        var bodyParts = BodyPartTestWorld.WithParts(0, ("Torso", BodyPartType.Torso, 50, 100, true)).BodyParts;
 
         HealthHeal.Apply(pool, 0, 0.25f, bodyParts: bodyParts, now: 0);
 
-        Assert.AreEqual(75, bodyParts.GetReadonlyByDenseIndex(bodyParts.GetFirstDenseIndex(0)).CurrentHealth);
+        bodyParts.TryGet(0, 0, out var torso);
+        Assert.AreEqual(75, torso.CurrentHealth);
     }
 
     [TestMethod]
     public void Apply_NoHealthComponentOrBodyParts_DoesNotThrow()
     {
         var pool = CreatePool();
-        var bodyParts = new MultiComponentPool<BodyPartComponent>(maximumEntityCount: 10, initialCapacity: 4);
+        var bodyParts = new BodyPartTestWorld().BodyParts;
 
         HealthHeal.Apply(pool, 0, 0.1f, bodyParts: bodyParts, now: 0);
     }

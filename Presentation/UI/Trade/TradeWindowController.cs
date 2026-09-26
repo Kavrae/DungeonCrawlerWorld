@@ -76,10 +76,10 @@ public sealed class TradeWindowController(
     public Rectangle Rectangle => _window?.Rectangle ?? Rectangle.Empty;
 
     /// <summary>Settable late-bound callback for "the player clicked a real single-stack item cell in either trade column" -- see ShopWindowController.OnItemSelected's own doc comment.</summary>
-    public Action<int, Guid>? OnItemSelected { get; set; }
+    public Action<int, uint>? OnItemSelected { get; set; }
 
     /// <summary>Settable late-bound callback for "the player chose Compare from a trade column's own item context menu" -- see ShopWindowController.OnCompareRequested's own doc comment. Currently unreachable in practice (see TradeWindow.Configure's own doc comment on why a trade cell's right-click never offers Compare), wired anyway for parity with every other grid's controller.</summary>
-    public Action<int, Guid>? OnCompareRequested { get; set; }
+    public Action<int, uint>? OnCompareRequested { get; set; }
 
     public void Initialize(UiLayerStack layers)
     {

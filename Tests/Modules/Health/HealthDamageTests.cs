@@ -16,7 +16,7 @@ public sealed class HealthDamageTests
     }
 
     private static PackedComponentPool<SimpleHealthComponent> CreatePool() =>
-        new(maximumEntityCount: 10, initialCapacity: 4, static (ref existing, incoming) => existing = incoming);
+        new(entityCapacity: 10, initialCapacity: 4, static (ref existing, incoming) => existing = incoming);
 
     [TestMethod]
     public void Apply_ReducesCurrentHealthByAmount()

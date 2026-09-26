@@ -65,6 +65,14 @@ Shared defaults: `-Seed 1`, `-StartFrame 600` (frames before it are JIT warm-up 
 
 The script refuses to start if a `DungeonCrawlerWorld` is already running (it may be someone's session, and two instances skew each other), matches each report to *its own* process id so a stale file can't be picked up, and checks the report's seed and range match what it asked for. If a windowed run times out with the window open, the game is probably paused or showing a blocking notification -- simulation frames only advance while `GameLoop.Update`'s pause/menu gate is open.
 
+**Memory -- `Invoke-MemoryReport.ps1`.** When the question is memory rather than frame cost (pool sizes, what an entity holds, allocation during world build), run the memory report instead:
+
+```powershell
+powershell -NoProfile -File .claude/skills/phase-performance-testing/scripts/Invoke-MemoryReport.ps1 [-Compare]
+```
+
+It runs one headless game with `--diagnostics=memory` (`PoolMemoryReport`, driven by `DiagnosticsEngine` over the same benchmark range) and prints `Log/diagnostics/memory-<timestamp>-<pid>.txt`: per pool its count, estimated MB, distinct values when the range opened, and the share of holders whose values changed by its close. Also: bytes allocated and collections before the range (the world build plus warm-up), live heap after a full collection at the end, and peak working set. `-Compare` runs the saved baseline build (the same one `-SaveBaseline` copies) and the current build once each and prints the per-pool MB difference; memory is deterministic for a seed, so one run per side is enough. It defaults to `-Configuration Release`. The report copies every pool at the range start, so a memory run is never a timing run -- don't read frame costs from it. A baseline build from before `PoolMemoryReport` existed writes no report.
+
 ## Step 3 — confirm the game is gone
 
 The script closes the game in a `finally`, including on failure. Check anyway:

@@ -26,7 +26,7 @@ public sealed class ManaRegenSystem : ITieredSystem
     private readonly PackedComponentPool<ManaComponent> _manaComponents;
     private readonly MultiComponentPool<StatModifierComponent>? _statModifiers;
     private readonly PackedComponentPool<DeadComponent>? _deadEntities;
-    private readonly MultiComponentPool<AbilityScoreComponent>? _abilityScores;
+    private readonly PackedComponentPool<AbilityScoresComponent>? _abilityScores;
     private readonly TieredEntityStripeSet _tieredStripeSet;
 
     public ManaRegenSystem(
@@ -35,7 +35,7 @@ public sealed class ManaRegenSystem : ITieredSystem
         ProcessingTierEvents processingTierEvents,
         MultiComponentPool<StatModifierComponent>? statModifiers = null,
         PackedComponentPool<DeadComponent>? deadEntities = null,
-        MultiComponentPool<AbilityScoreComponent>? abilityScores = null)
+        PackedComponentPool<AbilityScoresComponent>? abilityScores = null)
     {
         _manaComponents = manaComponents;
         _statModifiers = statModifiers;

@@ -5,10 +5,12 @@ using Engine.Math;
 using Game.Modules.Burning.Components;
 using Game.Modules.Burning.Systems;
 using Game.Modules.Death.Components;
+using Game.Modules.Health;
 using Game.Modules.Health.Components;
 using Game.Modules.StatModifiers.Components;
 using Game.Modules.StatusEffects;
 using Game.World;
+using Game.Blueprints;
 
 namespace Game.Modules.Burning;
 
@@ -23,6 +25,8 @@ namespace Game.Modules.Burning;
 /// </summary>
 public sealed class BurningModule : IGameModule
 {
+    private BlueprintRegistry _creatures = null!;
+
     public Guid Id { get; } = new("d9f6a1c4-8b2e-4f3a-9c1d-000000000008");
 
     public IReadOnlyList<Type> Dependencies { get; } = [typeof(StatusEffectsModule)];
@@ -33,10 +37,11 @@ public sealed class BurningModule : IGameModule
 
     public void Configure(GameModuleContext context)
     {
+        _creatures = context.Definitions;
         _eventBus = context.EventBus;
         _playerQuery = context.PlayerQuery;
         _mathUtility = context.MathUtility;
-        context.StatusEffectAuraAppliers.Register(new BurningAuraApplier(_mathUtility, context.Terrain, _eventBus, _playerQuery));
+        context.StatusEffectAuraAppliers.Register(new BurningAuraApplier(_mathUtility, context.Terrain, context.Definitions, _eventBus, _playerQuery));
         context.StatusEffectDisplays.Register(new TimerBasedStatusEffectDisplay<BurningTimerComponent>(StatusEffectType.Burning, BurningEffects.Glyph,
             static (burning, now) => RemainingFrames(burning.NextTickFrame, burning.StackCount, now)));
     }
@@ -61,8 +66,8 @@ public sealed class BurningModule : IGameModule
         var statModifiers = componentManager.IsRegistered<StatModifierComponent>()
             ? componentManager.GetMultiPool<StatModifierComponent>()
             : null;
-        var bodyParts = componentManager.IsRegistered<BodyPartComponent>()
-            ? componentManager.GetMultiPool<BodyPartComponent>()
+        var bodyParts = componentManager.IsRegistered<BodyPartStateComponent>()
+            ? EntityBodyParts.For(componentManager, _creatures)
             : null;
         var deadEntities = componentManager.IsRegistered<DeadComponent>()
             ? componentManager.GetPackedPool<DeadComponent>()
@@ -84,7 +89,7 @@ public sealed class BurningModule : IGameModule
         // call, so it's always safely fetchable here too).
         systemManager.Register(new BodyPartBurningSystem(
             componentManager.GetMultiPool<BodyPartBurningTimerComponent>(),
-            componentManager.GetMultiPool<BodyPartComponent>(),
+            EntityBodyParts.For(componentManager, _creatures),
             componentManager.GetPackedPool<SimpleHealthComponent>(),
             _eventBus,
             _playerQuery,

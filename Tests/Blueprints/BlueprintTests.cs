@@ -7,6 +7,7 @@ using Engine.Math;
 using Engine.Modules;
 using Game.Blueprints;
 using Game.Blueprints.Classes;
+using Game.Spawning;
 using Game.Blueprints.NPCs.Generic;
 using Game.Blueprints.Objects;
 using Game.Blueprints.Races;
@@ -53,8 +54,8 @@ namespace Tests.Blueprints;
 public sealed class BlueprintTests
 {
     /// <summary>Reads the flat damage a grant's Override pins its DirectDamage entry to (Min == Max, same convention ActionOverrideEffects.OverrideFlatDamage produces) -- null when the instance carries no Override at all.</summary>
-    private static short? GetOverrideFlatDamage(in ActionInstanceComponent instance) =>
-        instance.Override?.Effects.SelectMany(effect => effect.Entries).OfType<Game.Modules.Actions.Effects.DirectDamage>().First().MinFlatDamage;
+    private static short? FlatDamageOf(ActionDefinition action) =>
+        action.Effects.SelectMany(effect => effect.Entries).OfType<Game.Modules.Actions.Effects.DirectDamage>().First().MinFlatDamage;
 
     private static EcsContext BuildEcsContext()
     {
@@ -100,6 +101,10 @@ public sealed class BlueprintTests
         var shopModule = new ShopModule();
         shopModule.Configure(context);
 
+        // Registers SpawnRecordComponent, which every build through EntityFactory writes.
+        var entityPartsModule = new BlueprintsModule();
+        entityPartsModule.Configure(context);
+
         IReadOnlyList<IModule> modules =
         [
             coreModule,
@@ -120,25 +125,27 @@ public sealed class BlueprintTests
             statusEffectsModule,
             containersModule,
             shopModule,
+            entityPartsModule,
         ];
 
         return Bootstrapper.Build(modules, initialEntityCapacity: 100, initialComponentCapacity: 50, entityKeys: context.EntityKeys);
     }
 
     [TestMethod]
-    public void TreasureChest_Build_SetsDisplayTextGlyphTransformHealthContainerAndImmunities()
+    public void TreasureChest_Build_IsNamedAndDrawnByItsDefinition_AndSetsTransformHealthContainerAndImmunities()
     {
         var ecsContext = BuildEcsContext();
         var entityId = ecsContext.EntityManager.CreateEntity();
 
-        new TreasureChest(new MathUtility(new Random(1))).Build(ecsContext.ComponentManager, entityId);
+        ecsContext.BuildDefinition(entityId, TreasureChest.Id);
 
-        var displayText = ecsContext.ComponentManager.GetDirectPool<DisplayTextComponent>().GetReadonly(entityId);
-        Assert.AreEqual("Treasure Chest", displayText.Name);
+        Assert.AreEqual("Treasure Chest", ecsContext.NameOf(entityId));
+        Assert.IsFalse(ecsContext.ComponentManager.GetPackedPool<DisplayTextComponent>().Has(entityId), "The name is the definition's, not a component written per chest.");
 
-        var glyph = ecsContext.ComponentManager.GetDirectPool<GlyphComponent>().GetReadonly(entityId);
-        Assert.AreEqual("T", glyph.Glyph);
-        Assert.AreEqual(Microsoft.Xna.Framework.Color.Gold, glyph.GlyphColor);
+        var appearance = BlueprintTestContext.AppearanceOf(TreasureChest.Id);
+        Assert.AreEqual("T", appearance.Glyph);
+        Assert.AreEqual(Microsoft.Xna.Framework.Color.Gold, appearance.GlyphColor);
+        Assert.IsFalse(ecsContext.ComponentManager.GetPackedPool<GlyphComponent>().Has(entityId));
 
         Assert.IsTrue(ecsContext.ComponentManager.GetDirectPool<TransformComponent>().Has(entityId));
 
@@ -168,19 +175,19 @@ public sealed class BlueprintTests
     }
 
     [TestMethod]
-    public void Shop_Build_SetsDisplayTextGlyphTransformHealthContainerCurrencyAndImmunities()
+    public void Shop_Build_IsNamedAndDrawnByItsDefinition_AndSetsTransformHealthContainerCurrencyAndImmunities()
     {
         var ecsContext = BuildEcsContext();
         var entityId = ecsContext.EntityManager.CreateEntity();
 
-        new Shop(new MathUtility(new Random(1))).Build(ecsContext.ComponentManager, entityId);
+        ecsContext.BuildDefinition(entityId, Shop.Id);
 
-        var displayText = ecsContext.ComponentManager.GetDirectPool<DisplayTextComponent>().GetReadonly(entityId);
-        Assert.AreEqual("Shop", displayText.Name);
+        Assert.AreEqual("Shop", ecsContext.NameOf(entityId));
 
-        var glyph = ecsContext.ComponentManager.GetDirectPool<GlyphComponent>().GetReadonly(entityId);
-        Assert.AreEqual("S", glyph.Glyph);
-        Assert.AreEqual(Microsoft.Xna.Framework.Color.DarkBlue, glyph.GlyphColor);
+        var appearance = BlueprintTestContext.AppearanceOf(Shop.Id);
+        Assert.AreEqual("S", appearance.Glyph);
+        Assert.AreEqual(Microsoft.Xna.Framework.Color.DarkBlue, appearance.GlyphColor);
+        Assert.AreEqual("Shop-1x1", appearance.SpriteName);
 
         Assert.IsTrue(ecsContext.ComponentManager.GetDirectPool<TransformComponent>().Has(entityId));
 
@@ -214,9 +221,9 @@ public sealed class BlueprintTests
         var ecsContext = BuildEcsContext();
         var entityId = ecsContext.EntityManager.CreateEntity();
 
-        new PotionShop(new MathUtility(new Random(1))).Build(ecsContext.ComponentManager, entityId);
+        ecsContext.BuildDefinition(entityId, PotionShop.Id);
 
-        Assert.AreEqual("Potion Shop", ecsContext.ComponentManager.GetDirectPool<DisplayTextComponent>().GetReadonly(entityId).Name, "The composite's own override step must rename the shared \"Shop\" shell, not just concatenate onto it.");
+        Assert.AreEqual("Potion Shop", ecsContext.NameOf(entityId), "The composite's own name must replace the shared \"Shop\" shell's, not join onto it.");
         Assert.IsTrue(ecsContext.ComponentManager.GetPackedPool<ContainerComponent>().Has(entityId), "PotionShop must still compose in the Shop shell.");
 
         var shop = ecsContext.ComponentManager.GetPackedPool<ShopComponent>().GetReadonly(entityId);
@@ -247,9 +254,9 @@ public sealed class BlueprintTests
         var ecsContext = BuildEcsContext();
         var entityId = ecsContext.EntityManager.CreateEntity();
 
-        new GeneralShop(new MathUtility(new Random(1))).Build(ecsContext.ComponentManager, entityId);
+        ecsContext.BuildDefinition(entityId, GeneralShop.Id);
 
-        Assert.AreEqual("General Shop", ecsContext.ComponentManager.GetDirectPool<DisplayTextComponent>().GetReadonly(entityId).Name, "The composite's own override step must rename the shared \"Shop\" shell, not just concatenate onto it.");
+        Assert.AreEqual("General Shop", ecsContext.NameOf(entityId), "The composite's own name must replace the shared \"Shop\" shell's, not join onto it.");
         Assert.IsTrue(ecsContext.ComponentManager.GetPackedPool<ContainerComponent>().Has(entityId), "GeneralShop must still compose in the Shop shell.");
 
         var shop = ecsContext.ComponentManager.GetPackedPool<ShopComponent>().GetReadonly(entityId);
@@ -270,11 +277,11 @@ public sealed class BlueprintTests
         var ecsContext = BuildEcsContext();
         var entityId = ecsContext.EntityManager.CreateEntity();
 
-        new Goblin(new MathUtility(new Random(1))).Build(ecsContext.ComponentManager, entityId);
+        ecsContext.BuildDefinition(entityId, Goblin.Id);
 
-        var racePool = ecsContext.ComponentManager.GetMultiPool<RaceComponent>();
+        var racePool = ecsContext.ComponentManager.GetPackedPool<RaceSlotsComponent>();
         Assert.IsTrue(racePool.Has(entityId));
-        Assert.AreEqual("Goblin", racePool.GetReadonlyByDenseIndex(racePool.GetFirstDenseIndex(entityId)).Name);
+        Assert.AreEqual(BlueprintTestContext.Definitions.Races.GetId(Goblin.Id), racePool.GetReadonly(entityId).Primary);
 
         Assert.IsFalse(ecsContext.ComponentManager.GetPackedPool<SimpleHealthComponent>().Has(entityId));
 
@@ -293,12 +300,11 @@ public sealed class BlueprintTests
             ["Right Foot"] = (BodyPartType.Foot, 10, 10, false),
         };
 
-        var bodyParts = ecsContext.ComponentManager.GetMultiPool<BodyPartComponent>();
+        var bodyParts = EntityBodyParts.For(ecsContext.ComponentManager, BlueprintTestContext.Definitions);
         var actualCount = 0;
         var actualMaximumSum = 0f;
-        for (var denseIndex = bodyParts.GetFirstDenseIndex(entityId); denseIndex != -1; denseIndex = bodyParts.GetNextDenseIndex(denseIndex))
+        foreach (var part in bodyParts.Parts(entityId))
         {
-            ref readonly var part = ref bodyParts.GetReadonlyByDenseIndex(denseIndex);
             Assert.IsTrue(expectedPartsByName.TryGetValue(part.Name, out var expected), $"Unexpected body part name: {part.Name}");
             Assert.AreEqual(expected.Type, part.Type);
             Assert.AreEqual(expected.IsVital, part.IsVital);
@@ -315,22 +321,24 @@ public sealed class BlueprintTests
         Assert.IsTrue(ecsContext.ComponentManager.GetPackedPool<ActionLockComponent>().Has(entityId));
         Assert.IsTrue(ecsContext.ComponentManager.GetDirectPool<TransformComponent>().Has(entityId));
 
-        Assert.IsTrue(ActionInstanceQueries.TryGet(ecsContext.ComponentManager.GetMultiPool<ActionInstanceComponent>(), entityId, QuickAttackAction.Id, out var punch));
-        Assert.AreEqual((short)10, GetOverrideFlatDamage(punch));
+        Assert.IsTrue(ecsContext.ActionsOf().TryGetEffectiveAction(entityId, QuickAttackAction.Id, out var punch));
+        Assert.AreEqual((short)10, FlatDamageOf(punch));
 
         AssertHasRandomStartingGoldAndCredits(ecsContext.ComponentManager, entityId);
     }
 
     [TestMethod]
-    public void PlayerBlueprint_Build_SetsGlyphBodyPartsPlayerControlledMovementActionLockAndTransform()
+    public void PlayerBlueprint_Build_IsNamedAndDrawnAsThePlayer_AndSetsBodyPartsPlayerControlledMovementActionLockAndTransform()
     {
         var ecsContext = BuildEcsContext();
         var entityId = ecsContext.EntityManager.CreateEntity();
 
-        new PlayerBlueprint(new MathUtility(new Random(1)), new UniqueNumberAllocator(new MathUtility(new Random(1)), 1, 13_000_000), ecsContext.EntityManager.Keys).Build(ecsContext.ComponentManager, entityId);
+        ecsContext.BuildBlueprint(entityId, BlueprintTestContext.PlayerBlueprint);
 
-        var glyph = ecsContext.ComponentManager.GetDirectPool<GlyphComponent>().GetReadonly(entityId);
-        Assert.AreEqual("@", glyph.Glyph);
+        Assert.AreEqual("Player1", ecsContext.NameOf(entityId), "PlayerKit's explicit name replaces the one Human and Tank would compose.");
+        var appearance = BlueprintTestContext.Definitions.Resolve(BlueprintTestContext.PlayerBlueprint).Appearance;
+        Assert.AreEqual("@", appearance.Glyph);
+        Assert.AreEqual("Player", appearance.SpriteName);
 
         // The player is Complex health via the Human race it composes in -- no SimpleHealthComponent at all.
         Assert.IsFalse(ecsContext.ComponentManager.GetPackedPool<SimpleHealthComponent>().Has(entityId));
@@ -350,19 +358,18 @@ public sealed class BlueprintTests
             ["Right Foot"] = (BodyPartType.Foot, 10, 10, false),
         };
 
-        var bodyParts = ecsContext.ComponentManager.GetMultiPool<BodyPartComponent>();
+        var bodyParts = EntityBodyParts.For(ecsContext.ComponentManager, BlueprintTestContext.Definitions);
         var actualCount = 0;
         var actualMaximumSum = 0f;
-        for (var denseIndex = bodyParts.GetFirstDenseIndex(entityId); denseIndex != -1; denseIndex = bodyParts.GetNextDenseIndex(denseIndex))
+        foreach (var part in bodyParts.Parts(entityId))
         {
-            ref readonly var part = ref bodyParts.GetReadonlyByDenseIndex(denseIndex);
             Assert.IsTrue(expectedPartsByName.TryGetValue(part.Name, out var expected), $"Unexpected body part name: {part.Name}");
             Assert.AreEqual(expected.Type, part.Type);
             Assert.AreEqual(expected.IsVital, part.IsVital);
             Assert.AreEqual((float)expected.MaximumHealth, part.MaximumHealth);
             // At or above the stored maximum: the player's MaximumHealth modifiers raise the cap above
             // it, and the entity is built full against that raised cap. The exact value is
-            // PlayerBlueprint_Build_StartsEveryBodyPartAtItsEffectiveMaximum's business.
+            // PlayerRecipe_Build_StartsEveryBodyPartAtItsEffectiveMaximum's business.
             Assert.IsTrue(part.CurrentHealth >= expected.MaximumHealth);
             actualMaximumSum += part.MaximumHealth;
             actualCount++;
@@ -378,36 +385,25 @@ public sealed class BlueprintTests
         Assert.IsTrue(ecsContext.ComponentManager.GetPackedPool<ActionLockComponent>().Has(entityId));
         Assert.IsTrue(ecsContext.ComponentManager.GetDirectPool<TransformComponent>().Has(entityId));
 
-        // Race: Human, class: Tank -- both composed in, both surfaced as their own component.
-        var racePool = ecsContext.ComponentManager.GetMultiPool<RaceComponent>();
-        Assert.IsTrue(racePool.Has(entityId));
-        Assert.AreEqual(Human.RaceId, racePool.GetReadonlyByDenseIndex(racePool.GetFirstDenseIndex(entityId)).Id);
-
-        var classPool = ecsContext.ComponentManager.GetMultiPool<ClassComponent>();
-        Assert.IsTrue(classPool.Has(entityId));
-        Assert.AreEqual("Tank", classPool.GetReadonlyByDenseIndex(classPool.GetFirstDenseIndex(entityId)).Name);
+        // Race: Human, class: Tank -- both composed in, each filling its own slot.
+        Assert.AreEqual(BlueprintTestContext.Definitions.Races.GetId(Human.Id), ecsContext.ComponentManager.GetPackedPool<RaceSlotsComponent>().GetReadonly(entityId).Primary);
+        Assert.AreEqual(BlueprintTestContext.Definitions.Classes.GetId(Tank.Id), ecsContext.ComponentManager.GetPackedPool<ClassSlotsComponent>().GetReadonly(entityId).Primary);
         AssertHasHealthRegenBonusModifier(ecsContext.ComponentManager, entityId);
 
         // Tank took its Complex-health path: a +10% MaximumHealth modifier on top of Human's body
         // parts, rather than a SimpleHealthComponent that would have taken those parts out of play.
         Assert.IsTrue(HasMaximumHealthBonusModifier(ecsContext.ComponentManager, entityId, 0.10f));
 
-        // The player's own DisplayText overrides Tank's rather than concatenating with it.
-        Assert.AreEqual("Player1", ecsContext.ComponentManager.GetDirectPool<DisplayTextComponent>().GetReadonly(entityId).Name);
-
-        // The player is always a Crawler.
-        Assert.IsTrue(ecsContext.ComponentManager.GetPackedPool<CrawlerComponent>().Has(entityId));
-
-        var abilityInstances = ecsContext.ComponentManager.GetMultiPool<ActionInstanceComponent>();
         // No per-instance Override -- unlike every other race's QuickAttack grant -- so the
         // player's QuickAttack rolls its catalog DirectDamage's own MinFlatDamage..MaxFlatDamage
         // range instead of a fixed number (see ActionInstanceComponent.Override's own doc comment).
-        Assert.IsTrue(ActionInstanceQueries.TryGet(abilityInstances, entityId, QuickAttackAction.Id, out var punch));
-        Assert.IsNull(punch.Override);
-        Assert.IsTrue(ActionInstanceQueries.TryGet(abilityInstances, entityId, MagicMissileAction.Id, out var magicMissile));
-        Assert.AreEqual((short)5, GetOverrideFlatDamage(magicMissile));
-        Assert.IsTrue(ActionInstanceQueries.TryGet(abilityInstances, entityId, HealAction.Id, out _));
-        Assert.IsTrue(ActionInstanceQueries.TryGet(abilityInstances, entityId, ToxicStrikeAction.Id, out _));
+        Assert.IsTrue(ecsContext.ActionsOf().TryGetEffectiveAction(entityId, QuickAttackAction.Id, out var punch));
+        BlueprintTestContext.Actions.TryGet(QuickAttackAction.Id, out var catalogQuickAttack);
+        Assert.AreEqual(FlatDamageOf(catalogQuickAttack!), FlatDamageOf(punch), "No override: the player's QuickAttack is the catalog definition, rolling its own damage range.");
+        Assert.IsTrue(ecsContext.ActionsOf().TryGetEffectiveAction(entityId, MagicMissileAction.Id, out var magicMissile));
+        Assert.AreEqual((short)5, FlatDamageOf(magicMissile));
+        Assert.IsTrue(ecsContext.ActionsOf().Has(entityId, HealAction.Id));
+        Assert.IsTrue(ecsContext.ActionsOf().Has(entityId, ToxicStrikeAction.Id));
 
         // Starting items: 5 Health Potions, 5 Mana Potions, 3 Hotkey Expansion Potions, 5 Volatile
         // Concoctions (damage), 5 Toxic Flasks (Poison+Burning), 5 Toxic Idols (Poison aura toggle),
@@ -487,17 +483,17 @@ public sealed class BlueprintTests
         var ecsContext = BuildEcsContext();
         var entityId = ecsContext.EntityManager.CreateEntity();
 
-        new Fairy(new MathUtility(new Random(1))).Build(ecsContext.ComponentManager, entityId);
+        ecsContext.BuildDefinition(entityId, Fairy.Id);
 
-        Assert.IsTrue(ecsContext.ComponentManager.GetMultiPool<RaceComponent>().Has(entityId));
+        Assert.IsTrue(ecsContext.ComponentManager.GetPackedPool<RaceSlotsComponent>().Has(entityId));
         var health = ecsContext.ComponentManager.GetPackedPool<SimpleHealthComponent>().GetReadonly(entityId);
         Assert.AreEqual(health.MaximumHealth, health.CurrentHealth);
         Assert.IsTrue(ecsContext.ComponentManager.GetPackedPool<MovementComponent>().Has(entityId));
         Assert.IsTrue(ecsContext.ComponentManager.GetPackedPool<ActionLockComponent>().Has(entityId));
         Assert.IsTrue(ecsContext.ComponentManager.GetDirectPool<TransformComponent>().Has(entityId));
 
-        Assert.IsTrue(ActionInstanceQueries.TryGet(ecsContext.ComponentManager.GetMultiPool<ActionInstanceComponent>(), entityId, QuickAttackAction.Id, out var punch));
-        Assert.AreEqual((short)3, GetOverrideFlatDamage(punch));
+        Assert.IsTrue(ecsContext.ActionsOf().TryGetEffectiveAction(entityId, QuickAttackAction.Id, out var punch));
+        Assert.AreEqual((short)3, FlatDamageOf(punch));
 
         AssertHasRandomStartingGoldAndCredits(ecsContext.ComponentManager, entityId);
     }
@@ -526,11 +522,11 @@ public sealed class BlueprintTests
         ecsContext.ComponentManager.GetPackedPool<MovementComponent>().Add(entityId, new MovementComponent(MovementMode.Random, null, null));
         ecsContext.ComponentManager.GetPackedPool<ActionLockComponent>().Add(entityId, new ActionLockComponent(standardLockFrames: 15, currentLockTotalFrames: 0, unlockedAtFrame: 0));
 
-        new Engineer().Build(ecsContext.ComponentManager, entityId);
+        ecsContext.BuildDefinition(entityId, Engineer.Id);
 
         var actionLock = ecsContext.ComponentManager.GetPackedPool<ActionLockComponent>().GetReadonly(entityId);
         Assert.AreEqual((ushort)13, actionLock.StandardLockFrames); // 15 * 0.9m rounds down to 13.
-        Assert.IsTrue(ecsContext.ComponentManager.GetMultiPool<ClassComponent>().Has(entityId));
+        Assert.IsTrue(ecsContext.ComponentManager.GetPackedPool<ClassSlotsComponent>().Has(entityId));
     }
 
     [TestMethod]
@@ -539,14 +535,13 @@ public sealed class BlueprintTests
         var ecsContext = BuildEcsContext();
         var entityId = ecsContext.EntityManager.CreateEntity();
 
-        new Engineer().Build(ecsContext.ComponentManager, entityId);
+        ecsContext.BuildDefinition(entityId, Engineer.Id);
 
         // No race ran first, so Engineer merges its own baseline instead of silently doing
         // nothing -- the class still functions when composed (or used) without a race.
         var actionLock = ecsContext.ComponentManager.GetPackedPool<ActionLockComponent>().GetReadonly(entityId);
         Assert.AreEqual((ushort)60, actionLock.StandardLockFrames);
-        Assert.AreEqual(0u, actionLock.UnlockedAtFrame);
-        Assert.IsTrue(ecsContext.ComponentManager.GetMultiPool<ClassComponent>().Has(entityId));
+        Assert.IsTrue(ecsContext.ComponentManager.GetPackedPool<ClassSlotsComponent>().Has(entityId));
     }
 
     [TestMethod]
@@ -555,7 +550,7 @@ public sealed class BlueprintTests
         var ecsContext = BuildEcsContext();
         var entityId = ecsContext.EntityManager.CreateEntity();
 
-        new Tank(ecsContext.EntityManager.Keys).Build(ecsContext.ComponentManager, entityId);
+        ecsContext.BuildDefinition(entityId, Tank.Id);
 
         // No race ran first, so Tank merges its own baseline instead of silently doing
         // nothing -- the class still functions when composed (or used) without a race.
@@ -563,7 +558,7 @@ public sealed class BlueprintTests
         Assert.AreEqual(100f, health.MaximumHealth, "The stored baseline, which the bonus modifier scales rather than rewrites.");
         Assert.AreEqual(110f, health.CurrentHealth, 0.001f, "Built full against the bonus-effective maximum.");
         Assert.IsTrue(HasMaximumHealthBonusModifier(ecsContext.ComponentManager, entityId, 0.10f));
-        Assert.IsTrue(ecsContext.ComponentManager.GetMultiPool<ClassComponent>().Has(entityId));
+        Assert.IsTrue(ecsContext.ComponentManager.GetPackedPool<ClassSlotsComponent>().Has(entityId));
         AssertHasHealthRegenBonusModifier(ecsContext.ComponentManager, entityId);
     }
 
@@ -582,13 +577,13 @@ public sealed class BlueprintTests
         var entityId = ecsContext.EntityManager.CreateEntity();
         var mathUtility = new MathUtility(new Random(1));
 
-        new Engineer().Build(ecsContext.ComponentManager, entityId);
-        new Goblin(mathUtility).Build(ecsContext.ComponentManager, entityId);
+        ecsContext.BuildDefinition(entityId, Engineer.Id);
+        ecsContext.BuildDefinition(entityId, Goblin.Id);
 
         Assert.IsTrue(ecsContext.ComponentManager.GetPackedPool<MovementComponent>().Has(entityId));
         Assert.IsTrue(ecsContext.ComponentManager.GetPackedPool<ActionLockComponent>().Has(entityId));
-        Assert.IsTrue(ecsContext.ComponentManager.GetMultiPool<ClassComponent>().Has(entityId));
-        Assert.IsTrue(ecsContext.ComponentManager.GetMultiPool<RaceComponent>().Has(entityId));
+        Assert.IsTrue(ecsContext.ComponentManager.GetPackedPool<ClassSlotsComponent>().Has(entityId));
+        Assert.IsTrue(ecsContext.ComponentManager.GetPackedPool<RaceSlotsComponent>().Has(entityId));
     }
 
     [TestMethod]
@@ -598,7 +593,7 @@ public sealed class BlueprintTests
         var entityId = ecsContext.EntityManager.CreateEntity();
         ecsContext.ComponentManager.GetPackedPool<SimpleHealthComponent>().Add(entityId, new SimpleHealthComponent(50, 100));
 
-        new Tank(ecsContext.EntityManager.Keys).Build(ecsContext.ComponentManager, entityId);
+        ecsContext.BuildDefinition(entityId, Tank.Id);
 
         // The bonus is a modifier, not a rewrite: the race's own stored maximum is untouched and
         // every reader scales it through the modifier instead (see StatModifierComponent).
@@ -607,7 +602,7 @@ public sealed class BlueprintTests
         Assert.IsTrue(HasMaximumHealthBonusModifier(ecsContext.ComponentManager, entityId, 0.10f));
         Assert.IsTrue(HealthQueries.TryGetEffectiveMaximum(
             ecsContext.ComponentManager.GetPackedPool<SimpleHealthComponent>(),
-            ecsContext.ComponentManager.GetMultiPool<BodyPartComponent>(),
+            EntityBodyParts.For(ecsContext.ComponentManager, BlueprintTestContext.Definitions),
             ecsContext.ComponentManager.GetMultiPool<StatModifierComponent>(),
             entityId,
             out var effectiveMaximum));
@@ -622,18 +617,18 @@ public sealed class BlueprintTests
     {
         var ecsContext = BuildEcsContext();
         var entityId = ecsContext.EntityManager.CreateEntity();
-        new Human(new MathUtility(new Random(1))).Build(ecsContext.ComponentManager, entityId);
+        ecsContext.BuildDefinition(entityId, Human.Id);
 
-        new Tank(ecsContext.EntityManager.Keys).Build(ecsContext.ComponentManager, entityId);
+        ecsContext.BuildDefinition(entityId, Tank.Id);
 
         Assert.IsFalse(ecsContext.ComponentManager.GetPackedPool<SimpleHealthComponent>().Has(entityId));
-        Assert.IsTrue(ecsContext.ComponentManager.GetMultiPool<BodyPartComponent>().Has(entityId));
+        Assert.IsTrue(EntityBodyParts.For(ecsContext.ComponentManager, BlueprintTestContext.Definitions).Has(entityId));
         Assert.IsTrue(HasMaximumHealthBonusModifier(ecsContext.ComponentManager, entityId, 0.10f));
         AssertHasHealthRegenBonusModifier(ecsContext.ComponentManager, entityId);
 
         Assert.IsTrue(HealthQueries.TryGetEffectiveMaximum(
             ecsContext.ComponentManager.GetPackedPool<SimpleHealthComponent>(),
-            ecsContext.ComponentManager.GetMultiPool<BodyPartComponent>(),
+            EntityBodyParts.For(ecsContext.ComponentManager, BlueprintTestContext.Definitions),
             ecsContext.ComponentManager.GetMultiPool<StatModifierComponent>(),
             entityId,
             out var effectiveMaximum));
@@ -672,53 +667,46 @@ public sealed class BlueprintTests
     }
 
     /// <summary>
-    /// Regression test for decision #7: Old's GoblinEngineerBlueprint.Build threw, because
+    /// Regression test for decision #7: Old's GoblinEngineerPart.Build threw, because
     /// Goblin.Build and Engineer.Build both called Add on DisplayTextComponent for the same
     /// entity and DirectComponentPool.Add throws on a second Add. Every blueprint here uses
     /// Merge instead, so this composition must succeed without throwing.
     /// </summary>
     [TestMethod]
-    public void GoblinEngineerBlueprint_Build_DoesNotThrow()
+    public void GoblinEngineerRecipe_Build_DoesNotThrow()
     {
         var ecsContext = BuildEcsContext();
         var entityId = ecsContext.EntityManager.CreateEntity();
         var mathUtility = new MathUtility(new Random(1));
 
-        var blueprint = new GoblinEngineerBlueprint(new Goblin(mathUtility), new Engineer());
-
-        blueprint.Build(ecsContext.ComponentManager, entityId);
+        ecsContext.BuildBlueprint(entityId, BlueprintTestContext.GoblinEngineerBlueprint);
     }
 
     [TestMethod]
-    public void GoblinEngineerBlueprint_Build_MergesDisplayTextAcrossTheWholeChain()
+    public void GoblinEngineer_IsNamedByGoblinAndEngineer_AndDescribedByItself()
     {
         var ecsContext = BuildEcsContext();
         var entityId = ecsContext.EntityManager.CreateEntity();
-        var mathUtility = new MathUtility(new Random(1));
 
-        new GoblinEngineerBlueprint(new Goblin(mathUtility), new Engineer()).Build(ecsContext.ComponentManager, entityId);
+        ecsContext.BuildBlueprint(entityId, BlueprintTestContext.GoblinEngineerBlueprint);
 
-        var displayText = ecsContext.ComponentManager.GetDirectPool<DisplayTextComponent>().GetReadonly(entityId);
-        // CoreModule's DisplayTextComponent merge lambda concatenates Name with a space and
-        // Description with a newline for each stage of the chain (Goblin, then Engineer,
-        // then the blueprint's own final merge) -- so all three names/descriptions survive.
-        Assert.Contains("Goblin", displayText.Name);
-        Assert.Contains("Engineer", displayText.Name);
-        Assert.Contains("Goblin Engineer", displayText.Name);
+        StringAssert.EndsWith(ecsContext.NameOf(entityId), " Goblin Engineer", "A goblin's seeded name followed by the Engineer class's.");
+        StringAssert.StartsWith(BlueprintTestContext.AppearanceOf(Game.Blueprints.Composites.GoblinEngineer.Id).Description, "Engineers. The incels of the goblin world.");
+        Assert.IsFalse(ecsContext.ComponentManager.GetPackedPool<DisplayTextComponent>().Has(entityId));
     }
 
     [TestMethod]
-    public void GoblinEngineerBlueprint_Build_AppliesCompoundCooldownReductionOnTopOfEngineersOwn()
+    public void GoblinEngineerRecipe_Build_AppliesCompoundCooldownReductionOnTopOfEngineersOwn()
     {
         var ecsContext = BuildEcsContext();
         var entityId = ecsContext.EntityManager.CreateEntity();
         var mathUtility = new MathUtility(new Random(1));
 
-        new GoblinEngineerBlueprint(new Goblin(mathUtility), new Engineer()).Build(ecsContext.ComponentManager, entityId);
+        ecsContext.BuildBlueprint(entityId, BlueprintTestContext.GoblinEngineerBlueprint);
 
         var actionLock = ecsContext.ComponentManager.GetPackedPool<ActionLockComponent>().GetReadonly(entityId);
         // Goblin sets a fixed StandardLockFrames of 54; Engineer applies *0.9 and casts to
-        // short (54 * 0.9m = 48.6 -> 48), then GoblinEngineerBlueprint applies its own *0.9 to
+        // short (54 * 0.9m = 48.6 -> 48), then GoblinEngineerPart applies its own *0.9 to
         // that already-truncated value and casts again (48 * 0.9m = 43.2 -> 43) -- each stage
         // rounds down independently, not one combined multiplication.
         Assert.AreEqual((ushort)43, actionLock.StandardLockFrames);
@@ -731,10 +719,10 @@ public sealed class BlueprintTests
 
         // GetMultiPool<T> itself throws unless the registered pool is actually a
         // MultiComponentPool<T> -- reaching the assertions below is the proof.
-        Assert.IsTrue(ecsContext.ComponentManager.IsRegistered<RaceComponent>());
-        Assert.IsNotNull(ecsContext.ComponentManager.GetMultiPool<RaceComponent>());
-        Assert.IsTrue(ecsContext.ComponentManager.IsRegistered<ClassComponent>());
-        Assert.IsNotNull(ecsContext.ComponentManager.GetMultiPool<ClassComponent>());
+        Assert.IsTrue(ecsContext.ComponentManager.IsRegistered<RaceSlotsComponent>());
+        Assert.IsNotNull(ecsContext.ComponentManager.GetPackedPool<RaceSlotsComponent>());
+        Assert.IsTrue(ecsContext.ComponentManager.IsRegistered<ClassSlotsComponent>());
+        Assert.IsNotNull(ecsContext.ComponentManager.GetPackedPool<ClassSlotsComponent>());
     }
 
     /// <summary>
@@ -744,19 +732,18 @@ public sealed class BlueprintTests
     /// above it, so without the top-up the player spawns at 62.5%.
     /// </summary>
     [TestMethod]
-    public void PlayerBlueprint_Build_StartsEveryBodyPartAtItsEffectiveMaximum()
+    public void PlayerRecipe_Build_StartsEveryBodyPartAtItsEffectiveMaximum()
     {
         var ecsContext = BuildEcsContext();
         var entityId = ecsContext.EntityManager.CreateEntity();
 
-        new PlayerBlueprint(new MathUtility(new Random(1)), new UniqueNumberAllocator(new MathUtility(new Random(1)), 1, 13_000_000), ecsContext.EntityManager.Keys).Build(ecsContext.ComponentManager, entityId);
+        ecsContext.BuildBlueprint(entityId, BlueprintTestContext.PlayerBlueprint);
 
-        var bodyParts = ecsContext.ComponentManager.GetMultiPool<BodyPartComponent>();
+        var bodyParts = EntityBodyParts.For(ecsContext.ComponentManager, BlueprintTestContext.Definitions);
         var statModifiers = ecsContext.ComponentManager.GetMultiPool<StatModifierComponent>();
         var partCount = 0;
-        for (var denseIndex = bodyParts.GetFirstDenseIndex(entityId); denseIndex != -1; denseIndex = bodyParts.GetNextDenseIndex(denseIndex))
+        foreach (var part in bodyParts.Parts(entityId))
         {
-            ref readonly var part = ref bodyParts.GetReadonlyByDenseIndex(denseIndex);
             var effectiveMaximum = StatModifierMath.GetEffectiveValue(statModifiers, entityId, StatModifierTarget.MaximumHealth, part.MaximumHealth);
 
             Assert.AreEqual(effectiveMaximum, part.CurrentHealth, 0.001f, $"{part.Name} did not start at its effective maximum.");
@@ -774,14 +761,13 @@ public sealed class BlueprintTests
         var ecsContext = BuildEcsContext();
         var entityId = ecsContext.EntityManager.CreateEntity();
 
-        new Human(new MathUtility(new Random(1))).Build(ecsContext.ComponentManager, entityId);
-        new Tank(ecsContext.EntityManager.Keys).Build(ecsContext.ComponentManager, entityId);
+        ecsContext.BuildDefinition(entityId, Human.Id);
+        ecsContext.BuildDefinition(entityId, Tank.Id);
 
-        var bodyParts = ecsContext.ComponentManager.GetMultiPool<BodyPartComponent>();
+        var bodyParts = EntityBodyParts.For(ecsContext.ComponentManager, BlueprintTestContext.Definitions);
         var statModifiers = ecsContext.ComponentManager.GetMultiPool<StatModifierComponent>();
-        for (var denseIndex = bodyParts.GetFirstDenseIndex(entityId); denseIndex != -1; denseIndex = bodyParts.GetNextDenseIndex(denseIndex))
+        foreach (var part in bodyParts.Parts(entityId))
         {
-            ref readonly var part = ref bodyParts.GetReadonlyByDenseIndex(denseIndex);
             var effectiveMaximum = StatModifierMath.GetEffectiveValue(statModifiers, entityId, StatModifierTarget.MaximumHealth, part.MaximumHealth);
 
             Assert.AreEqual(effectiveMaximum, part.CurrentHealth, 0.001f, $"{part.Name} did not start at its effective maximum.");
@@ -795,8 +781,8 @@ public sealed class BlueprintTests
         var ecsContext = BuildEcsContext();
         var entityId = ecsContext.EntityManager.CreateEntity();
 
-        new Fairy(new MathUtility(new Random(1))).Build(ecsContext.ComponentManager, entityId);
-        new Tank(ecsContext.EntityManager.Keys).Build(ecsContext.ComponentManager, entityId);
+        ecsContext.BuildDefinition(entityId, Fairy.Id);
+        ecsContext.BuildDefinition(entityId, Tank.Id);
 
         var health = ecsContext.ComponentManager.GetPackedPool<SimpleHealthComponent>().GetReadonly(entityId);
 

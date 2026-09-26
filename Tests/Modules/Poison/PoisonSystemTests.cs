@@ -3,6 +3,7 @@ using Engine.ECS.Systems;
 using Engine.Events;
 using Engine.Math;
 using Game.Modules;
+using Game.Modules.Health;
 using Game.Modules.Health.Components;
 using Game.Modules.Poison;
 using Game.Modules.Poison.Components;
@@ -23,10 +24,10 @@ public sealed class PoisonSystemTests
     }
 
     private static PackedComponentPool<PoisonTimerComponent> CreateTimerPool() =>
-        new(maximumEntityCount: 10, initialCapacity: 4, static (ref existing, incoming) => { });
+        new(entityCapacity: 10, initialCapacity: 4, static (ref existing, incoming) => { });
 
     private static PackedComponentPool<SimpleHealthComponent> CreateHealthPool() =>
-        new(maximumEntityCount: 10, initialCapacity: 4, static (ref existing, incoming) => existing = incoming);
+        new(entityCapacity: 10, initialCapacity: 4, static (ref existing, incoming) => existing = incoming);
 
     private static EngineTime Frame(long frame) => new(default, default, false, frame);
 
@@ -208,7 +209,7 @@ public sealed class PoisonSystemTests
         var health = CreateHealthPool();
         health.Add(0, new SimpleHealthComponent(currentHealth: 100, maximumHealth: 100));
         timers.Add(0, new PoisonTimerComponent(1, stackCount: 10, remainingDurationTicks: 5, ActionSource.Admin));
-        var statModifiers = new MultiComponentPool<StatModifierComponent>(maximumEntityCount: 10, initialCapacity: 4);
+        var statModifiers = new MultiComponentPool<StatModifierComponent>(entityCapacity: 10, initialCapacity: 4);
         statModifiers.Add(0, new StatModifierComponent(StatModifierTarget.IncomingDamage, StatModifierOperation.Multiplicative, StatModifierPolarity.Buff,
             canModify: false, magnitude: -0.5f, expiresAtFrame: FrameDeadline.Never, ActionSource.Admin, Tag.Poison));
         var system = new PoisonSystem(timers, health, new EventBus(), new FakePlayerQuery(0), new MathUtility(), statModifiers);
@@ -225,7 +226,7 @@ public sealed class PoisonSystemTests
         var health = CreateHealthPool();
         health.Add(0, new SimpleHealthComponent(currentHealth: 100, maximumHealth: 100));
         timers.Add(0, new PoisonTimerComponent(1, stackCount: 10, remainingDurationTicks: 5, ActionSource.Admin));
-        var statModifiers = new MultiComponentPool<StatModifierComponent>(maximumEntityCount: 10, initialCapacity: 4);
+        var statModifiers = new MultiComponentPool<StatModifierComponent>(entityCapacity: 10, initialCapacity: 4);
         statModifiers.Add(0, new StatModifierComponent(StatModifierTarget.IncomingDamage, StatModifierOperation.Multiplicative, StatModifierPolarity.Buff,
             canModify: false, magnitude: -0.5f, expiresAtFrame: FrameDeadline.Never, ActionSource.Admin));
         var system = new PoisonSystem(timers, health, new EventBus(), new FakePlayerQuery(0), new MathUtility(), statModifiers);
@@ -243,10 +244,7 @@ public sealed class PoisonSystemTests
         {
             var timers = CreateTimerPool();
             var health = CreateHealthPool();
-            var bodyParts = new MultiComponentPool<BodyPartComponent>(maximumEntityCount: 10, initialCapacity: 8);
-            bodyParts.Add(0, new BodyPartComponent("Head", BodyPartType.Head, partId: 0, verticalPosition: 5, currentHealth: 40, maximumHealth: 40, isVital: true));
-            bodyParts.Add(0, new BodyPartComponent("Torso", BodyPartType.Torso, partId: 1, verticalPosition: 4, currentHealth: 65, maximumHealth: 65, isVital: true));
-            bodyParts.Add(0, new BodyPartComponent("Internal", BodyPartType.Internal, partId: 2, verticalPosition: 4, currentHealth: 15, maximumHealth: 15, isVital: true));
+            var bodyParts = BodyPartTestWorld.WithParts(0, ("Head", BodyPartType.Head, 40, 40, true), ("Torso", BodyPartType.Torso, 65, 65, true), ("Internal", BodyPartType.Internal, 15, 15, true)).BodyParts;
             timers.Add(0, new PoisonTimerComponent(1, stackCount: 3, remainingDurationTicks: 5, ActionSource.Admin));
             var system = new PoisonSystem(timers, health, new EventBus(), new FakePlayerQuery(0), new MathUtility(new Random(seed)), statModifiers: null, bodyParts: bodyParts);
 
@@ -258,17 +256,16 @@ public sealed class PoisonSystemTests
         }
     }
 
-    private static float GetPartHealth(MultiComponentPool<BodyPartComponent> bodyParts, int entityId, string name)
+    private static float GetPartHealth(EntityBodyParts bodyParts, int entityId, string name)
     {
-        for (var denseIndex = bodyParts.GetFirstDenseIndex(entityId); denseIndex != -1; denseIndex = bodyParts.GetNextDenseIndex(denseIndex))
+        foreach (var part in bodyParts.Parts(entityId))
         {
-            var part = bodyParts.GetReadonlyByDenseIndex(denseIndex);
             if (part.Name == name)
             {
                 return part.CurrentHealth;
             }
         }
 
-        return float.NaN;
+        throw new InvalidOperationException("No part named " + name + ".");
     }
 }

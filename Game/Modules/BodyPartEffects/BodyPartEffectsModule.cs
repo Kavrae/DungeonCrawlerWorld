@@ -1,4 +1,5 @@
 using Engine.ECS.Components;
+using Game.Modules.Health;
 using Engine.ECS.Systems;
 using Game.Modules.BodyPartEffects.Components;
 using Game.Modules.BodyPartEffects.Systems;
@@ -6,6 +7,7 @@ using Game.Modules.Health.Components;
 using Game.Modules.ProcessingTier;
 using Game.Modules.ProcessingTier.Components;
 using Game.Modules.StatModifiers.Components;
+using Game.Blueprints;
 
 namespace Game.Modules.BodyPartEffects;
 
@@ -20,6 +22,8 @@ namespace Game.Modules.BodyPartEffects;
 /// </summary>
 public sealed class BodyPartEffectsModule : IGameModule
 {
+    private BlueprintRegistry _creatures = null!;
+
     public Guid Id { get; } = new("d9f6a1c4-8b2e-4f3a-9c1d-000000000012");
 
     // No hard Dependencies on HealthModule/StatModifiersModule -- neither type is a safe
@@ -34,6 +38,7 @@ public sealed class BodyPartEffectsModule : IGameModule
 
     public void Configure(GameModuleContext context)
     {
+        _creatures = context.Definitions;
         _processingTierEvents = context.ProcessingTierEvents;
     }
 
@@ -45,7 +50,7 @@ public sealed class BodyPartEffectsModule : IGameModule
 
     public void RegisterSystems(SystemManager systemManager, ComponentManager componentManager)
     {
-        if (!componentManager.IsRegistered<BodyPartComponent>())
+        if (!componentManager.IsRegistered<BodyPartStateComponent>())
         {
             return;
         }
@@ -53,7 +58,8 @@ public sealed class BodyPartEffectsModule : IGameModule
         var statModifiers = componentManager.GetOptionalMultiPool<StatModifierComponent>();
 
         systemManager.Register(new BodyPartEffectsSystem(
-            componentManager.GetMultiPool<BodyPartComponent>(),
+            EntityBodyParts.For(componentManager, _creatures),
+            componentManager.GetPackedPool<BodyPartStateComponent>(),
             componentManager.GetPackedPool<MovementDisabledComponent>(),
             componentManager.GetPackedPool<MeleeDisabledComponent>(),
             componentManager.GetDirectPool<ProcessingTierComponent>(),

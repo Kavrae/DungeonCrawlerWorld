@@ -32,7 +32,7 @@ namespace Presentation.UI.Content;
 /// Initialize, added to UiLayer.Tooltip), mirroring HotbarController's own _summaryWindow
 /// pattern.
 /// </remarks>
-public sealed class PlayerHealthBarContent(World world, ComponentManager componentManager, FontService fontService, UiLayerStack layers) : IElementContent
+public sealed class PlayerHealthBarContent(World world, ComponentManager componentManager, EntityBodyParts bodyParts, FontService fontService, UiLayerStack layers) : IElementContent
 {
     public static readonly Vector2 Size = new(HudChrome.EntrySize.X * 4.5f, HudChrome.EntrySize.Y * 0.75f);
 
@@ -43,7 +43,7 @@ public sealed class PlayerHealthBarContent(World world, ComponentManager compone
     private static readonly Vector2 PopupGap = new(0, 2);
 
     private readonly PackedComponentPool<SimpleHealthComponent> _healthPool = componentManager.GetPackedPool<SimpleHealthComponent>();
-    private readonly MultiComponentPool<BodyPartComponent> _bodyParts = componentManager.GetMultiPool<BodyPartComponent>();
+    private readonly EntityBodyParts _bodyParts = bodyParts;
 
     // Optional -- see StatModifierMath.GetEffectiveValue's own doc comment for why a null pool
     // (StatModifiersModule not registered) is treated the same as "no active modifiers."

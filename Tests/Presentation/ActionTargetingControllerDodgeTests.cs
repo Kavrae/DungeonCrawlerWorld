@@ -48,7 +48,7 @@ public sealed class ActionTargetingControllerDodgeTests
         componentManager.RegisterPackedPool<ActionLockComponent>(static (ref existing, incoming) => existing = incoming);
         componentManager.RegisterPackedPool<ManaComponent>(static (ref existing, incoming) => existing = incoming);
         componentManager.RegisterPackedPool<HotkeyExpansionUnlockComponent>(static (ref existing, incoming) => existing = incoming);
-        componentManager.RegisterMultiPool<AbilityScoreComponent>();
+        AbilityScoreTestPools.Register(componentManager);
 
         componentManager.Merge(PlayerEntityId, new TransformComponent(PlayerPosition, new Vector2Byte(1, 1)));
         componentManager.Merge(PlayerEntityId, new MovementComponent(MovementMode.PlayerControlled, null, null));
@@ -80,7 +80,7 @@ public sealed class ActionTargetingControllerDodgeTests
             componentManager.GetPackedPool<ActionLockComponent>(),
             componentManager.GetPackedPool<MovementComponent>(),
             componentManager.GetPackedPool<ManaComponent>(),
-            componentManager.GetMultiPool<AbilityScoreComponent>());
+            componentManager.GetPackedPool<AbilityScoresComponent>());
 
         return (actionTargeting, mapViewState, componentManager);
     }

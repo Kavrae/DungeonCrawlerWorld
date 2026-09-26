@@ -18,8 +18,8 @@ public sealed class AuraSourceExpirySystemTests
 
     private static (AuraSourceExpirySystem System, PackedComponentPool<AuraSourceExpiryComponent> Expiries, MultiComponentPool<StatusEffectAuraSourceComponent> Sources, EventBus EventBus) Build()
     {
-        var expiries = new PackedComponentPool<AuraSourceExpiryComponent>(maximumEntityCount: 10, initialCapacity: 4, static (ref existing, incoming) => existing = incoming);
-        var sources = new MultiComponentPool<StatusEffectAuraSourceComponent>(maximumEntityCount: 10, initialCapacity: 4);
+        var expiries = new PackedComponentPool<AuraSourceExpiryComponent>(entityCapacity: 10, initialCapacity: 4, static (ref existing, incoming) => existing = incoming);
+        var sources = new MultiComponentPool<StatusEffectAuraSourceComponent>(entityCapacity: 10, initialCapacity: 4);
         var eventBus = new EventBus();
 
         return (new AuraSourceExpirySystem(expiries, sources, eventBus), expiries, sources, eventBus);

@@ -9,6 +9,7 @@ using Game.Modules.Actions.Components;
 using Game.Modules.AbilityScores.Components;
 using Game.Modules.Core.Components;
 using Game.Modules.Death.Components;
+using Game.Modules.Health;
 using Game.Modules.Health.Components;
 using Game.Modules.Inventory.Components;
 using Game.Modules.Inventory.Systems;
@@ -17,11 +18,14 @@ using Game.Modules.StatModifiers.Components;
 using Game.Modules.StatusEffectAura.Components;
 using Game.Modules.StatusEffects;
 using Game.World;
+using Game.Blueprints;
 
 namespace Game.Modules.Inventory;
 
 public sealed class InventoryModule : IGameModule
 {
+    private BlueprintRegistry _creatures = null!;
+
     public Guid Id { get; } = new("d9f6a1c4-8b2e-4f3a-9c1d-000000000010");
 
     public IReadOnlyList<Type> Dependencies { get; } = [typeof(ActionsModule)];
@@ -37,6 +41,7 @@ public sealed class InventoryModule : IGameModule
 
     public void Configure(GameModuleContext context)
     {
+        _creatures = context.Definitions;
         _itemCatalog = context.Items;
         _actionCatalog = context.Actions;
         _mapQuery = context.MapQuery;
@@ -53,17 +58,17 @@ public sealed class InventoryModule : IGameModule
 
         // Rare -- generally only once at a time on the player, but could be more via a lock-down status effect.
         // Registered as Packed rather than Direct: Direct pool is reserved for genuinely near-universal components
-        // (Transform/Sprite/etc.), and only Packed offers a dense-side capacity reduction alongside the entity-index one.
+        // (Transform/Sprite/etc.).
         componentManager.RegisterPackedPool<InventoryDisabledComponent>(
-            static (ref existing, incoming) => existing.IsDisabled = incoming.IsDisabled, maximumEntityCount: 16, initialCapacity: 16);
+            static (ref existing, incoming) => existing.IsDisabled = incoming.IsDisabled, initialCapacity: 16);
 
         componentManager.RegisterPackedPool<PendingConsumableActivationComponent>(static (ref existing, incoming) => existing = incoming);
 
         // Player-only in practice (see MaxStackSizeComponent's own doc comment) -- Packed for the same reason InventoryDisabledComponent above is.
-        componentManager.RegisterPackedPool<MaxStackSizeComponent>(static (ref existing, incoming) => existing = incoming, maximumEntityCount: 2, initialCapacity: 2);
+        componentManager.RegisterPackedPool<MaxStackSizeComponent>(static (ref existing, incoming) => existing = incoming, initialCapacity: 2);
 
-        // Player-only, 24 hotkey slots total -- small entity-index seed, dense capacity matches the slot count.
-        componentManager.RegisterMultiPool<ItemHotkeyBindingComponent>(maximumEntityCount: 2, initialCapacity: 24);
+        // Player-only, 24 hotkey slots total -- dense capacity matches the slot count.
+        componentManager.RegisterMultiPool<ItemHotkeyBindingComponent>(initialCapacity: 24);
 
         componentManager.RegisterPackedPool<InventoryComponent>(static (ref existing, incoming) => existing = incoming);
     }
@@ -79,10 +84,10 @@ public sealed class InventoryModule : IGameModule
         var deadEntities = componentManager.GetOptionalPackedPool<DeadComponent>();
         var mana = componentManager.GetOptionalPackedPool<ManaComponent>();
         var hotkeyExpansionUnlocks = componentManager.GetOptionalPackedPool<HotkeyExpansionUnlockComponent>();
-        var abilityScores = componentManager.GetOptionalMultiPool<AbilityScoreComponent>();
+        var abilityScores = componentManager.GetOptionalPackedPool<AbilityScoresComponent>();
         var auraSources = componentManager.GetOptionalMultiPool<StatusEffectAuraSourceComponent>();
         var itemHotkeyBindings = componentManager.GetOptionalMultiPool<ItemHotkeyBindingComponent>();
-        var bodyParts = componentManager.GetOptionalMultiPool<BodyPartComponent>();
+        var bodyParts = componentManager.IsRegistered<BodyPartStateComponent>() ? EntityBodyParts.For(componentManager, _creatures) : null;
 
         systemManager.Register(new ConsumableActivationSystem(
             componentManager.GetPackedPool<PendingConsumableActivationComponent>(),
@@ -105,6 +110,7 @@ public sealed class InventoryModule : IGameModule
             _playerQuery,
             auraSources,
             itemHotkeyBindings,
-            bodyParts));
+            bodyParts,
+            _creatures));
     }
 }

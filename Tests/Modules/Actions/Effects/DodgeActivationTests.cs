@@ -32,7 +32,7 @@ public sealed class DodgeActivationTests
     private const int SourceEntityId = 1;
     private const int TargetEntityId = 2;
 
-    private static (ComponentManager ComponentManager, ActionEffectContext Context) Build(MultiComponentPool<AbilityScoreComponent>? abilityScores = null)
+    private static (ComponentManager ComponentManager, ActionEffectContext Context) Build(PackedComponentPool<AbilityScoresComponent>? abilityScores = null)
     {
         var componentManager = new ComponentManager(initialEntityCapacity: 10, initialComponentCapacity: 10);
         componentManager.RegisterPackedPool<DodgingComponent>(static (ref existing, incoming) => existing = incoming);
@@ -71,10 +71,10 @@ public sealed class DodgeActivationTests
         var componentManager = new ComponentManager(initialEntityCapacity: 10, initialComponentCapacity: 10);
         componentManager.RegisterPackedPool<DodgingComponent>(static (ref existing, incoming) => existing = incoming);
         componentManager.RegisterPackedPool<SimpleHealthComponent>(static (ref existing, incoming) => existing = incoming);
-        componentManager.RegisterMultiPool<AbilityScoreComponent>();
+        AbilityScoreTestPools.Register(componentManager);
 
-        var abilityScores = componentManager.GetMultiPool<AbilityScoreComponent>();
-        abilityScores.Add(SourceEntityId, new AbilityScoreComponent(AbilityScoreType.Dexterity, baseValue: 300, total: 300));
+        var abilityScores = componentManager.GetPackedPool<AbilityScoresComponent>();
+        abilityScores.Add(SourceEntityId, AbilityScoreTestPools.Score(AbilityScoreType.Dexterity, baseValue: 300, total: 300));
         // TargetEntityId deliberately has no Dexterity at all -- if Apply read the wrong entity it
         // would silently fall back to WindowFrames (Dexterity 1's own value) instead of the boosted one.
 
@@ -94,7 +94,7 @@ public sealed class DodgeActivationTests
 
         var dodgingEntities = componentManager.GetPackedPool<DodgingComponent>();
         Assert.AreEqual(DodgeEffects.MaxWindowFrames, dodgingEntities.GetReadonly(SourceEntityId).ExpiresAtFrame,
-            "Dexterity total 300 must yield the maxed-out window -- proves the lookup used SourceEntityId, not TargetEntityId (which has no AbilityScoreComponent at all).");
+            "Dexterity total 300 must yield the maxed-out window -- proves the lookup used SourceEntityId, not TargetEntityId (which has no ability scores at all).");
     }
 
     [TestMethod]

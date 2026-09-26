@@ -4,13 +4,14 @@ using Engine.ECS.Components.Stores;
 using Engine.ECS.Entities;
 using Engine.Math;
 using Engine.Utilities;
+using Game.Blueprints;
 using Game.Modules.Class.Components;
-using Game.Modules.Core.Components;
 using Game.Modules.Health;
 using Game.Modules.Health.Components;
 using Game.Modules.Race.Components;
 using Game.Modules.StatModifiers;
 using Game.Modules.StatModifiers.Components;
+using Game.Spawning;
 using Game.Views;
 using Game.World;
 using Microsoft.Xna.Framework;
@@ -47,14 +48,25 @@ namespace Presentation.UI.Content;
 /// (with a centered 1px SeparatorBar) after each subject's block supplies the padding between
 /// one subject's section and the next.
 /// </summary>
+/// <remarks>
+/// A creature skeleton (see CreatureSkeletons) holds none of what a subject block shows, and
+/// inspecting it must never build it. Its block and dump show what its spawn record rebuilds to
+/// instead (SpawnRecordRebuilder, in a staging world), labelled as unsimulated defaults, until it is
+/// built -- which rebuilds the view.
+/// </remarks>
 public sealed class InspectionWindowContent(
     World world,
     IMapViewQuery mapView,
     MapViewState mapViewState,
     ComponentManager componentManager,
     EntityManager entityManager,
-    ElementPoolService elementPoolService) : IElementContent
+    ElementPoolService elementPoolService,
+    SpawnRecordRebuilder? spawnRecordRebuilder = null,
+    CreatureSkeletons? skeletons = null,
+    BlueprintRegistry? creatures = null) : IElementContent
 {
+    private const string UnsimulatedLabel = "Unsimulated -- spawn defaults";
+
     private const float IconSize = 40f;
     private const float RowHeight = 16f;
     private const float RowTextGap = 6f;
@@ -69,20 +81,14 @@ public sealed class InspectionWindowContent(
     /// <summary>A generous, effectively-unlimited per-row height cap -- see SelectionWindowContent.UnboundedChildHeight's own doc comment for why this is needed: without it, a row tiled past the host window's own one-screen-tall content size gets silently clamped to nothing.</summary>
     private const float UnboundedChildHeight = 10000f;
 
-    private readonly DirectComponentPool<DisplayTextComponent> _displayTextPool = componentManager.GetDirectPool<DisplayTextComponent>();
-    private readonly MultiComponentPool<RaceComponent> _racePool = componentManager.GetMultiPool<RaceComponent>();
-    private readonly MultiComponentPool<ClassComponent> _classPool = componentManager.GetMultiPool<ClassComponent>();
-    private readonly PackedComponentPool<SimpleHealthComponent> _healthPool = componentManager.GetPackedPool<SimpleHealthComponent>();
-    private readonly MultiComponentPool<BodyPartComponent> _bodyParts = componentManager.GetMultiPool<BodyPartComponent>();
-    private readonly ComponentInspector _componentInspector = new(componentManager);
-
-    // Optional -- see StatModifierMath.GetEffectiveValue's own doc comment for why a null pool
-    // (StatModifiersModule not registered) is treated the same as "no active modifiers."
-    private readonly MultiComponentPool<StatModifierComponent>? _statModifiers = componentManager.IsRegistered<StatModifierComponent>()
-        ? componentManager.GetMultiPool<StatModifierComponent>()
+    private readonly DirectComponentPool<SpawnRecordComponent>? _spawnRecords = componentManager.IsRegistered<SpawnRecordComponent>()
+        ? componentManager.GetDirectPool<SpawnRecordComponent>()
         : null;
 
     private readonly List<int> _lastSubjectIds = [];
+    private int _lastSkeletonCount;
+    private bool _lastDetailWasSkeleton;
+    private int _liveDumpCount;
     private readonly List<int> _scratchSubjectIds = [];
     private TerrainView? _lastStructure;
     private TerrainView? _lastTerrain;
@@ -144,11 +150,13 @@ public sealed class InspectionWindowContent(
         TerrainView? structure = mapView.TryGetStructure(selected.X, selected.Y, currentMapLayer, out var foundStructure) ? foundStructure : null;
         TerrainView? terrain = mapView.TryGetTerrain(selected.X, selected.Y, currentMapLayer, out var foundTerrain) ? foundTerrain : null;
 
-        if (_hasContent && selected == _lastBasicPosition && currentMapLayer == _lastBasicMapLayer && _scratchSubjectIds.SequenceEqual(_lastSubjectIds) && structure == _lastStructure && terrain == _lastTerrain)
+        var skeletonCount = _scratchSubjectIds.Count(IsSkeleton);
+        if (_hasContent && selected == _lastBasicPosition && currentMapLayer == _lastBasicMapLayer && _scratchSubjectIds.SequenceEqual(_lastSubjectIds) && skeletonCount == _lastSkeletonCount && structure == _lastStructure && terrain == _lastTerrain)
         {
             return;
         }
 
+        _lastSkeletonCount = skeletonCount;
         _lastBasicPosition = selected;
         _lastBasicMapLayer = currentMapLayer;
         _lastSubjectIds.Clear();
@@ -190,9 +198,10 @@ public sealed class InspectionWindowContent(
             return;
         }
 
-        if (entityId != _lastDetailEntityId)
+        if (entityId != _lastDetailEntityId || IsSkeleton(entityId) != _lastDetailWasSkeleton)
         {
             _lastDetailEntityId = entityId;
+            _lastDetailWasSkeleton = IsSkeleton(entityId);
             _lastBasicPosition = null; // Invalidates Basic's own cache so it rebuilds fresh if Basic mode resumes later.
             _lastBasicMapLayer = -1;
             _lastSubjectIds.Clear();
@@ -200,14 +209,15 @@ public sealed class InspectionWindowContent(
             _lastTerrain = null;
             _updatesSinceLastAdminRefresh = 0;
 
-            _hostWindow.TitleText = ResolveName(entityId);
+            var subject = ReadSubject(entityId);
+            _hostWindow.TitleText = subject.Name;
 
             elementPoolService.CloseAllChildren(_hostWindow);
             _adminDumpWindows.Clear();
             _hasContent = true;
 
             var blockWidth = _hostWindow.ContentSize.X;
-            BuildSubjectBlock(entityId, blockWidth);
+            BuildSubjectBlock(entityId, subject, blockWidth);
             BuildAdminDump(entityId, blockWidth);
             return;
         }
@@ -239,13 +249,79 @@ public sealed class InspectionWindowContent(
     }
 
     /// <summary>One subject's block -- icon+name/race/class rows, HP bar (entities with a SimpleHealthComponent or BodyPartComponent only), description, then a padded separator -- shared by Basic's per-occupant loop and Detail's single followed entity.</summary>
-    private void BuildSubjectBlock(int entityId, float blockWidth)
+    private void BuildSubjectBlock(int entityId, float blockWidth) => BuildSubjectBlock(entityId, ReadSubject(entityId), blockWidth);
+
+    private void BuildSubjectBlock(int entityId, SubjectView subject, float blockWidth)
     {
-        BuildHeaderRow(entityId, blockWidth);
-        BuildHealthRowIfPresent(entityId, blockWidth);
-        BuildDescriptionRow(entityId, blockWidth);
+        BuildHeaderRow(entityId, subject, blockWidth);
+        BuildHealthRowIfPresent(subject.HealthFraction, blockWidth);
+        AddDescriptionRow(subject.Description, blockWidth);
         BuildSpacer(blockWidth);
     }
+
+    /// <summary>What a subject block shows for an entity: the entity itself, or for a skeleton, what its spawn record rebuilds to.</summary>
+    private readonly record struct SubjectView(string Name, string? RaceName, string? ClassName, float? HealthFraction, string Description, bool IsUnsimulatedDefaults);
+
+    private bool IsSkeleton(int entityId) => skeletons?.IsSkeleton(entityId) == true && spawnRecordRebuilder is not null && _spawnRecords is not null;
+
+    private SubjectView ReadSubject(int entityId)
+    {
+        if (!IsSkeleton(entityId))
+        {
+            return ReadSubject(componentManager, entityId, isUnsimulatedDefaults: false);
+        }
+
+        var subject = default(SubjectView);
+        spawnRecordRebuilder!.Rebuild(_spawnRecords!.GetReadonly(entityId), (stagingComponents, stagingEntityId) => subject = ReadSubject(stagingComponents, stagingEntityId, isUnsimulatedDefaults: true));
+        return subject;
+    }
+
+    /// <summary>The name of the entity's first race, or null when it has none or the definitions aren't available (a test shell).</summary>
+    private string? RaceNameOf(ComponentManager source, int entityId) =>
+        creatures is not null
+            && source.GetPackedPool<RaceSlotsComponent>().TryGetReadonly(entityId, out var slots)
+            && creatures.Races.TryGet(slots.Primary, out var race)
+                ? race.Name
+                : null;
+
+    /// <inheritdoc cref="RaceNameOf"/>
+    private string? ClassNameOf(ComponentManager source, int entityId) =>
+        creatures is not null
+            && source.GetPackedPool<ClassSlotsComponent>().TryGetReadonly(entityId, out var slots)
+            && creatures.Classes.TryGet(slots.Primary, out var definition)
+                ? definition.Name
+                : null;
+
+    private SubjectView ReadSubject(ComponentManager source, int entityId, bool isUnsimulatedDefaults)
+    {
+        var naming = EntityNaming.For(source, creatures);
+
+        return new SubjectView(
+            naming.NameOf(entityId),
+            RaceNameOf(source, entityId),
+            ClassNameOf(source, entityId),
+            ReadHealthFraction(source, entityId),
+            naming.DescriptionOf(entityId),
+            isUnsimulatedDefaults);
+    }
+
+    private float? ReadHealthFraction(ComponentManager source, int entityId)
+    {
+        if (!HealthQueries.TryGetTotals(source.GetPackedPool<SimpleHealthComponent>(), BodyPartsOf(source), entityId, out var currentHealth, out var maximumHealth) || maximumHealth <= 0)
+        {
+            return null;
+        }
+
+        var effectiveMaximumHealth = StatModifierMath.GetEffectiveValue(StatModifiersOf(source), entityId, StatModifierTarget.MaximumHealth, maximumHealth);
+        return effectiveMaximumHealth > 0 ? MathHelper.Clamp(currentHealth / effectiveMaximumHealth, 0f, 1f) : 1f;
+    }
+
+    /// <summary>The body parts of whatever world source belongs to -- the live one, or SpawnRecordRebuilder' staging world for an unsimulated creature's defaults.</summary>
+    private EntityBodyParts BodyPartsOf(ComponentManager source) => EntityBodyParts.For(source, creatures ?? new BlueprintRegistry());
+
+    /// <remarks>Optional -- see StatModifierMath.GetEffectiveValue's own doc comment for why a null pool (StatModifiersModule not registered) is treated the same as "no active modifiers."</remarks>
+    private static MultiComponentPool<StatModifierComponent>? StatModifiersOf(ComponentManager source) =>
+        source.IsRegistered<StatModifierComponent>() ? source.GetMultiPool<StatModifierComponent>() : null;
 
     /// <summary>The tile's structure or terrain, after its occupants: icon and name, then its description -- the same shape as an entity's block, minus what a cell doesn't have (race, class, health).</summary>
     private void BuildTerrainBlock(TerrainView terrain, float blockWidth)
@@ -259,11 +335,9 @@ public sealed class InspectionWindowContent(
         BuildSpacer(blockWidth);
     }
 
-    private void BuildHeaderRow(int entityId, float blockWidth)
+    private void BuildHeaderRow(int entityId, SubjectView subject, float blockWidth)
     {
-        var hasRace = _racePool.CountForEntity(entityId) > 0;
-        var hasClass = _classPool.CountForEntity(entityId) > 0;
-        var rowCount = 1 + (hasRace ? 1 : 0) + (hasClass ? 1 : 0);
+        var rowCount = 1 + (subject.RaceName is null ? 0 : 1) + (subject.ClassName is null ? 0 : 1) + (subject.IsUnsimulatedDefaults ? 1 : 0);
         var header = CreateHeaderWindow(blockWidth, rowCount);
         var icon = CreateIcon(header);
         icon.Configure(entityId, new Vector2(IconSize, IconSize));
@@ -272,16 +346,21 @@ public sealed class InspectionWindowContent(
         var textWidth = HeaderTextWidth(blockWidth);
         var rowIndex = 0;
 
-        AddTextRow(header, textX, rowIndex++, textWidth, ResolveName(entityId));
+        AddTextRow(header, textX, rowIndex++, textWidth, subject.Name);
 
-        if (hasRace)
+        if (subject.RaceName is { } raceName)
         {
-            AddTextRow(header, textX, rowIndex++, textWidth, $"Race: {ResolveRaceName(entityId)}");
+            AddTextRow(header, textX, rowIndex++, textWidth, $"Race: {raceName}");
         }
 
-        if (hasClass)
+        if (subject.ClassName is { } className)
         {
-            AddTextRow(header, textX, rowIndex++, textWidth, $"Class: {ResolveClassName(entityId)}");
+            AddTextRow(header, textX, rowIndex++, textWidth, $"Class: {className}");
+        }
+
+        if (subject.IsUnsimulatedDefaults)
+        {
+            AddTextRow(header, textX, rowIndex, textWidth, UnsimulatedLabel);
         }
     }
 
@@ -334,15 +413,12 @@ public sealed class InspectionWindowContent(
         parent.AddChild(row);
     }
 
-    private void BuildHealthRowIfPresent(int entityId, float blockWidth)
+    private void BuildHealthRowIfPresent(float? fraction, float blockWidth)
     {
-        if (!HealthQueries.TryGetTotals(_healthPool, _bodyParts, entityId, out var currentHealth, out var maximumHealth) || maximumHealth <= 0)
+        if (fraction is not { } healthFraction)
         {
             return;
         }
-
-        var effectiveMaximumHealth = StatModifierMath.GetEffectiveValue(_statModifiers, entityId, StatModifierTarget.MaximumHealth, maximumHealth);
-        var healthFraction = effectiveMaximumHealth > 0 ? MathHelper.Clamp(currentHealth / effectiveMaximumHealth, 0f, 1f) : 1f;
 
         var rowHeight = BarHeight + WindowChrome.Padding * 2;
         var row = elementPoolService.CreateElement<Window>(_hostWindow, new ElementOptions
@@ -372,9 +448,6 @@ public sealed class InspectionWindowContent(
         bar.Configure(healthFraction, hasResource: true, HealthBarPalette.OutlineColor, HealthBarPalette.FractionColor);
         row.AddChild(bar);
     }
-
-    private void BuildDescriptionRow(int entityId, float blockWidth) =>
-        AddDescriptionRow(_displayTextPool.TryGetReadonly(entityId, out var displayText) ? displayText.Description : string.Empty, blockWidth);
 
     private void AddDescriptionRow(string description, float blockWidth)
     {
@@ -426,13 +499,23 @@ public sealed class InspectionWindowContent(
     }
 
     /// <summary>Detail/Admin's full component breakdown, alphabetically sorted by component type name -- one bordered TextWindow per component, mirroring the retired SelectionWindowContent's own per-component tiling (see this class's own doc comment). Unlike Basic's subject blocks, ComponentInspector's output isn't sorted on its own (neither it nor MultiComponentPool.CopyInspectionDataForEntity does), so the sort here is new, not reused.</summary>
+    /// <remarks>A skeleton's dump is what it holds, then -- under the unsimulated label -- what its spawn record rebuilds to; only the first part refreshes, the defaults never change.</remarks>
     private void BuildAdminDump(int entityId, float blockWidth)
     {
-        _reusableInspectionList.Clear();
-        _componentInspector.CopyInspectionDataForEntity(entityId, _reusableInspectionList);
-        ReplaceHealthEntriesWithEffectiveMaximum(_reusableInspectionList, entityId, _healthPool, _bodyParts, _statModifiers);
-        _reusableInspectionList.Sort(static (a, b) => string.CompareOrdinal(a.ComponentType.Name, b.ComponentType.Name));
+        CopySortedEntries(componentManager, entityId, _reusableInspectionList);
+        AddDumpWindows(blockWidth);
+        _liveDumpCount = _adminDumpWindows.Count;
 
+        if (IsSkeleton(entityId))
+        {
+            AddDescriptionRow(UnsimulatedLabel, blockWidth);
+            spawnRecordRebuilder!.Rebuild(_spawnRecords!.GetReadonly(entityId), (stagingComponents, stagingEntityId) => CopySortedEntries(stagingComponents, stagingEntityId, _reusableInspectionList));
+            AddDumpWindows(blockWidth);
+        }
+    }
+
+    private void AddDumpWindows(float blockWidth)
+    {
         foreach (var entry in _reusableInspectionList)
         {
             var componentWindow = elementPoolService.CreateElement<TextWindow>(_hostWindow, new ElementOptions
@@ -447,15 +530,20 @@ public sealed class InspectionWindowContent(
         }
     }
 
+    private void CopySortedEntries(ComponentManager source, int entityId, List<InspectedComponentEntry> destination)
+    {
+        destination.Clear();
+        new ComponentInspector(source).CopyInspectionDataForEntity(entityId, destination);
+        ReplaceHealthEntriesWithEffectiveMaximum(destination, entityId, source.GetPackedPool<SimpleHealthComponent>(), BodyPartsOf(source), StatModifiersOf(source));
+        destination.Sort(static (a, b) => string.CompareOrdinal(a.ComponentType.Name, b.ComponentType.Name));
+    }
+
     /// <summary>Text-only refresh of the already-built admin dump windows, by sorted index position -- mirrors SelectionWindowContent.RefreshDebugWindowsForEntity's own "refresh in place, don't rebuild" approach and its same limitation: if a component is added/removed between refreshes (shifting alphabetical positions), this can briefly show a stale pairing until the next full rebuild (a mode/target change). Accepted rather than solved here, matching the precedent this replaces.</summary>
     private void RefreshAdminDump(int entityId)
     {
-        _reusableInspectionList.Clear();
-        _componentInspector.CopyInspectionDataForEntity(entityId, _reusableInspectionList);
-        ReplaceHealthEntriesWithEffectiveMaximum(_reusableInspectionList, entityId, _healthPool, _bodyParts, _statModifiers);
-        _reusableInspectionList.Sort(static (a, b) => string.CompareOrdinal(a.ComponentType.Name, b.ComponentType.Name));
+        CopySortedEntries(componentManager, entityId, _reusableInspectionList);
 
-        var count = System.Math.Min(_reusableInspectionList.Count, _adminDumpWindows.Count);
+        var count = System.Math.Min(_reusableInspectionList.Count, _liveDumpCount);
         for (var i = 0; i < count; i++)
         {
             _adminDumpWindows[i].UpdateText(_reusableInspectionList[i].Value);
@@ -478,10 +566,10 @@ public sealed class InspectionWindowContent(
         List<InspectedComponentEntry> destination,
         int entityId,
         PackedComponentPool<SimpleHealthComponent> healthPool,
-        MultiComponentPool<BodyPartComponent> bodyParts,
+        EntityBodyParts bodyParts,
         MultiComponentPool<StatModifierComponent>? statModifiers)
     {
-        destination.RemoveAll(static entry => entry.ComponentType == typeof(SimpleHealthComponent) || entry.ComponentType == typeof(BodyPartComponent));
+        destination.RemoveAll(static entry => entry.ComponentType == typeof(SimpleHealthComponent) || entry.ComponentType == typeof(BodyPartStateComponent));
 
         if (healthPool.TryGetReadonly(entityId, out var health))
         {
@@ -489,11 +577,10 @@ public sealed class InspectionWindowContent(
             destination.Add(new InspectedComponentEntry(typeof(SimpleHealthComponent), FormatHealthBar("HP", health.CurrentHealth, effectiveMaximumHealth), 0));
         }
 
-        for (var denseIndex = bodyParts.GetFirstDenseIndex(entityId); denseIndex != -1; denseIndex = bodyParts.GetNextDenseIndex(denseIndex))
+        foreach (var part in bodyParts.Parts(entityId))
         {
-            ref readonly var part = ref bodyParts.GetReadonlyByDenseIndex(denseIndex);
             var effectiveMaximumHealth = StatModifierMath.GetEffectiveValue(statModifiers, entityId, StatModifierTarget.MaximumHealth, part.MaximumHealth);
-            destination.Add(new InspectedComponentEntry(typeof(BodyPartComponent), FormatHealthBar(part.Name, part.CurrentHealth, effectiveMaximumHealth), 0));
+            destination.Add(new InspectedComponentEntry(typeof(BodyPartStateComponent), FormatHealthBar(part.Name, part.CurrentHealth, effectiveMaximumHealth), 0));
         }
     }
 
@@ -503,12 +590,4 @@ public sealed class InspectionWindowContent(
             ? $"{StringUtility.BuildPercentageBar(prefix, (int)currentHealth, (int)effectiveMaximumHealth, 20)} {(int)currentHealth}/{(int)effectiveMaximumHealth}"
             : $"Invalid MaximumHealth: {effectiveMaximumHealth}";
 
-    private string ResolveName(int entityId) =>
-        _displayTextPool.TryGetReadonly(entityId, out var displayText) ? displayText.Name : "Unknown";
-
-    private string ResolveRaceName(int entityId) =>
-        _racePool.GetReadonlyByDenseIndex(_racePool.GetFirstDenseIndex(entityId)).Name;
-
-    private string ResolveClassName(int entityId) =>
-        _classPool.GetReadonlyByDenseIndex(_classPool.GetFirstDenseIndex(entityId)).Name;
 }

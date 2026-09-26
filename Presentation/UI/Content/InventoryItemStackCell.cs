@@ -1,11 +1,11 @@
 using FontStashSharp;
-using Game.Blueprints;
 using Game.Modules.Core.Components;
 using Microsoft.Xna.Framework;
 using Microsoft.Xna.Framework.Graphics;
 using Presentation.Fonts;
 using Presentation.Rendering;
 using Presentation.UI.Chrome;
+using Game.Sprites;
 
 namespace Presentation.UI.Content;
 
@@ -76,7 +76,7 @@ public class InventoryItemStackCell(FontService fontService, ElementPoolService 
     public int EntityId { get; private set; }
 
     /// <summary>The exact stack this cell represents -- what UiInputController's content-drag path reads to bind a hotbar slot to one specific physical stack, not just "some stack of this item id" (see ItemHotkeyBindingComponent's own doc comment). Null for a merged group cell (see this class's own doc comment) -- there is no single stack to bind.</summary>
-    public Guid? StackInstanceId { get; private set; }
+    public uint? StackInstanceId { get; private set; }
 
     /// <summary>True when this cell shows one single divergent stack on its own (not merged into a group) -- see this class's own doc comment.</summary>
     public bool IsDivergent { get; private set; }
@@ -146,7 +146,7 @@ public class InventoryItemStackCell(FontService fontService, ElementPoolService 
     /// this way). SetGroupBorderEdges, called separately afterward, is the only thing that turns
     /// any of them back on for this Configure's cell.
     /// </summary>
-    public void Configure(int entityId, Guid itemDefinitionId, Guid? stackInstanceId, string? spriteName, string glyph, Color glyphColor, int quantity, bool isDisabled, bool isDivergent, bool mergedStackBadgeVisible, Vector2 cellSize)
+    public void Configure(int entityId, Guid itemDefinitionId, uint? stackInstanceId, string? spriteName, string glyph, Color glyphColor, int quantity, bool isDisabled, bool isDivergent, bool mergedStackBadgeVisible, Vector2 cellSize)
     {
         EntityId = entityId;
         ItemDefinitionId = itemDefinitionId;

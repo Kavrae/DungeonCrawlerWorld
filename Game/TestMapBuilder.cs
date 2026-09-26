@@ -1,20 +1,17 @@
 using Engine.ECS.Components;
-using Engine.ECS.Components.Stores;
 using Engine.ECS.Entities;
 using Engine.ECS.Systems;
 using Engine.Math;
 using Engine.Utilities;
-using Game.Blueprints;
-using Game.Blueprints.Classes;
-using Game.Blueprints.NPCs.Generic;
+using Game.Blueprints.Composites;
 using Game.Blueprints.Objects;
 using Game.Blueprints.Races;
+using Game.Spawning;
 using Game.Modules.Core.Components;
 using Game.Modules.Crawler.Components;
-using Game.Modules.Movement.Components;
-using Game.Modules.ProcessingTier;
 using Game.Terrain;
 using Game.World;
+using Game.Blueprints;
 
 namespace Game;
 
@@ -32,7 +29,7 @@ namespace Game;
 /// generated from its own NeighborhoodRecord, never from shared random state, and the world has no
 /// border walls: it has no edge.
 /// </remarks>
-public sealed class TestMapBuilder(EntityManager entityManager, ComponentManager componentManager, UniqueNumberAllocator crawlerNumberAllocator, FrameEventBuffer<EntityMovedEvent> movedEntities, TerrainRegistry terrain, ProcessingTierResolver? tierResolver = null, SimulationClock? clock = null)
+public sealed class TestMapBuilder(EntityManager entityManager, EntityFactory factory, TerrainRegistry terrain, BlueprintRegistry definitions)
 {
     // TEMPORARY: halved once already from the original values (10/5/5) to reduce the creature
     // population -- Movement/HealthRegen/ContactDamage/StatusEffectAura all iterate this
@@ -50,16 +47,44 @@ public sealed class TestMapBuilder(EntityManager entityManager, ComponentManager
     /// <summary>Chance any given rolled NPC (see BuildRaceEntity) is also a Crawler -- deliberately small; most NPCs are not.</summary>
     private const int CrawlerPercent = 2;
 
-    private const string LongWordWrapDescription =
-        "ThisIsAReallyLongDescriptionToTestTheWordWrapCapabilitiesAroundHyphenatingLongWordsMultipleTimes";
-
     private readonly ushort _stoneFloor = terrain.GetId(BuiltInTerrain.StoneFloorKey);
     private readonly ushort _stoneWall = terrain.GetId(BuiltInTerrain.StoneWallKey);
     private readonly ushort _dirt = terrain.GetId(BuiltInTerrain.DirtKey);
     private readonly ushort _lava = terrain.GetId(BuiltInTerrain.LavaKey);
     private readonly ushort _grass = terrain.GetId(BuiltInTerrain.GrassKey);
-    private readonly PackedComponentPool<MovementComponent> _movementComponents = componentManager.GetPackedPool<MovementComponent>();
-    private readonly PackedComponentPool<ActionLockComponent> _actionLocks = componentManager.GetPackedPool<ActionLockComponent>();
+    private readonly ushort _goblin = definitions.GetId(Goblin.Id);
+    private readonly ushort _fairy = definitions.GetId(Fairy.Id);
+    private readonly ushort _ghost = definitions.GetId(Ghost.Id);
+
+    /// <summary>The starting neighborhood's fixtures, each as the parts it is made of -- see BuildFixtureEntities.</summary>
+    private readonly ushort _longDescriptionGoblin = definitions.GetId(LongDescriptionGoblin.Id);
+
+    /// <inheritdoc cref="_longDescriptionGoblin"/>
+    private readonly ushort _goblinEngineer = definitions.GetId(GoblinEngineer.Id);
+
+    /// <inheritdoc cref="_longDescriptionGoblin"/>
+    private readonly ushort _goblinForeman = definitions.GetId(GoblinForeman.Id);
+
+    /// <inheritdoc cref="_longDescriptionGoblin"/>
+    private readonly ushort _stationaryFairyEngineer = definitions.GetId(StationaryFairyEngineer.Id);
+
+    /// <inheritdoc cref="_longDescriptionGoblin"/>
+    private readonly ushort _multiRace = definitions.GetId(GoblinFairy.Id);
+
+    /// <inheritdoc cref="_longDescriptionGoblin"/>
+    private readonly ushort _multiClass = definitions.GetId(GoblinEngineerTank.Id);
+
+    /// <inheritdoc cref="_longDescriptionGoblin"/>
+    private readonly ushort _tinyGoblin = definitions.GetId(TinyGoblin.Id);
+
+    /// <inheritdoc cref="_longDescriptionGoblin"/>
+    private readonly ushort _phasingFairy = definitions.GetId(PhasingFairy.Id);
+
+    /// <inheritdoc cref="_longDescriptionGoblin"/>
+    private readonly ushort _generalShop = definitions.GetId(GeneralShop.Id);
+
+    /// <inheritdoc cref="_longDescriptionGoblin"/>
+    private readonly ushort _potionShop = definitions.GetId(PotionShop.Id);
 
     /// <summary>The neighborhood holding the hallway cross, the fixtures, the shops and the player's spawn.</summary>
     public const int StartingCellX = 0;
@@ -155,7 +180,7 @@ public sealed class TestMapBuilder(EntityManager entityManager, ComponentManager
             yield break;
         }
 
-        var population = new Population(new MathUtility(new Random(record.NextPopulationSeed())), entityManager.Keys);
+        var population = new Population(new MathUtility(new Random(record.NextPopulationSeed())));
         for (var row = minY; row < maxY; row++)
         {
             var livingBefore = entityManager.LivingEntityCount;
@@ -170,7 +195,7 @@ public sealed class TestMapBuilder(EntityManager entityManager, ComponentManager
         if (record.CellX == StartingCellX && record.CellY == StartingCellY)
         {
             var livingBefore = entityManager.LivingEntityCount;
-            BuildFixtureEntities(world, population);
+            BuildFixtureEntities(population);
             yield return entityManager.LivingEntityCount - livingBefore;
         }
     }
@@ -186,18 +211,10 @@ public sealed class TestMapBuilder(EntityManager entityManager, ComponentManager
         return minX < maxX && minY < maxY;
     }
 
-    /// <summary>The blueprints and the random sequence one neighborhood's population is rolled from.</summary>
-    private sealed class Population(MathUtility rolls, EntityKeys entityKeys)
+    /// <summary>The random sequence one neighborhood's population is rolled from.</summary>
+    private sealed class Population(MathUtility rolls)
     {
         public MathUtility Rolls { get; } = rolls;
-        public Goblin Goblin { get; } = new(rolls);
-        public Fairy Fairy { get; } = new(rolls);
-        public Ghost Ghost { get; } = new(rolls);
-        public Engineer Engineer { get; } = new();
-        public Tank Tank { get; } = new(entityKeys);
-        public GoblinEngineerBlueprint GoblinEngineer { get; } = new(new Goblin(rolls), new Engineer());
-        public GeneralShop GeneralShop { get; } = new(rolls);
-        public PotionShop PotionShop { get; } = new(rolls);
     }
 
     /// <summary>
@@ -224,18 +241,18 @@ public sealed class TestMapBuilder(EntityManager entityManager, ComponentManager
     {
         if (!IsHallwayWall(column, row) && population.Rolls.Next(0, 100) < GroundPopulationPercent)
         {
-            PopulateGroundEntity(world, population, column, row);
+            PopulateGroundEntity(population, column, row);
         }
 
         if (population.Rolls.Next(0, 100) < UnderGroundGhostPercent)
         {
-            PopulateUnderGroundGhost(world, population, column, row);
+            PopulateUnderGroundGhost(population, column, row);
         }
 
         // Flying layer: no walls of its own, so every cell is eligible.
         if (population.Rolls.Next(0, 100) < FlyingFairyPercent)
         {
-            PopulateFlyingFairy(world, population, column, row);
+            PopulateFlyingFairy(population, column, row);
         }
     }
 
@@ -260,37 +277,37 @@ public sealed class TestMapBuilder(EntityManager entityManager, ComponentManager
     /// races land on the Ground layer here, including Fairy/Ghost -- distinct from, and in
     /// addition to, the dedicated Ghost-on-UnderGround and Fairy-on-Flying populations below.
     /// </summary>
-    private void PopulateGroundEntity(World.World world, Population population, int column, int row)
+    private void PopulateGroundEntity(Population population, int column, int row)
     {
         var roll = population.Rolls.Next(0, 100);
         switch (roll)
         {
             case < 40:
-                BuildRaceEntity(world, population, population.Goblin, column, row, new Vector2Byte(1, 1), MapLayer.Ground);
+                BuildRaceEntity(population, _goblin, column, row, new Vector2Byte(1, 1), MapLayer.Ground);
                 break;
             case < 48:
-                BuildRaceEntity(world, population, population.Goblin, column, row, new Vector2Byte(2, 2), MapLayer.Ground);
+                BuildRaceEntity(population, _goblin, column, row, new Vector2Byte(2, 2), MapLayer.Ground);
                 break;
             case < 49:
-                BuildRaceEntity(world, population, population.Goblin, column, row, new Vector2Byte(3, 3), MapLayer.Ground);
+                BuildRaceEntity(population, _goblin, column, row, new Vector2Byte(3, 3), MapLayer.Ground);
                 break;
             case < 89:
-                BuildRaceEntity(world, population, population.Fairy, column, row, new Vector2Byte(1, 1), MapLayer.Ground);
+                BuildRaceEntity(population, _fairy, column, row, new Vector2Byte(1, 1), MapLayer.Ground);
                 break;
             case < 97:
-                BuildRaceEntity(world, population, population.Fairy, column, row, new Vector2Byte(2, 2), MapLayer.Ground);
+                BuildRaceEntity(population, _fairy, column, row, new Vector2Byte(2, 2), MapLayer.Ground);
                 break;
             case < 98:
-                BuildRaceEntity(world, population, population.Fairy, column, row, new Vector2Byte(3, 3), MapLayer.Ground);
+                BuildRaceEntity(population, _fairy, column, row, new Vector2Byte(3, 3), MapLayer.Ground);
                 break;
             default:
-                BuildRaceEntity(world, population, population.Ghost, column, row, new Vector2Byte(1, 2), MapLayer.Ground);
+                BuildRaceEntity(population, _ghost, column, row, new Vector2Byte(1, 2), MapLayer.Ground);
                 break;
         }
     }
 
     /// <summary>UnderGround layer's dedicated Ghost population (see UnderGroundGhostPercent for the gate): 90% 1x1, 9% 2x2, 1% 3x3.</summary>
-    private void PopulateUnderGroundGhost(World.World world, Population population, int column, int row)
+    private void PopulateUnderGroundGhost(Population population, int column, int row)
     {
         var size = population.Rolls.Next(0, 100) switch
         {
@@ -299,11 +316,11 @@ public sealed class TestMapBuilder(EntityManager entityManager, ComponentManager
             _ => new Vector2Byte(3, 3),
         };
 
-        BuildRaceEntity(world, population, population.Ghost, column, row, size, MapLayer.UnderGround);
+        BuildRaceEntity(population, _ghost, column, row, size, MapLayer.UnderGround);
     }
 
     /// <summary>Flying layer's dedicated Fairy population (see FlyingFairyPercent for the gate): 90% 1x1, 9% 2x2, 1% 3x3.</summary>
-    private void PopulateFlyingFairy(World.World world, Population population, int column, int row)
+    private void PopulateFlyingFairy(Population population, int column, int row)
     {
         var size = population.Rolls.Next(0, 100) switch
         {
@@ -312,54 +329,17 @@ public sealed class TestMapBuilder(EntityManager entityManager, ComponentManager
             _ => new Vector2Byte(3, 3),
         };
 
-        BuildRaceEntity(world, population, population.Fairy, column, row, size, MapLayer.Flying);
+        BuildRaceEntity(population, _fairy, column, row, size, MapLayer.Flying);
     }
 
-    /// <summary>Builds a race blueprint entity at the given size/layer with a staggered action lock -- the shared path for every PopulateEntity roll outcome. A small percentage also become Crawlers (see CrawlerPercent).</summary>
-    private void BuildRaceEntity(World.World world, Population population, IBlueprint blueprint, int column, int row, Vector2Byte size, MapLayer mapLayer)
+    /// <summary>Spawns one rolled creature at the given size/layer -- the shared path for every PopulateEntity roll outcome. A small percentage also become Crawlers (see CrawlerPercent).</summary>
+    /// <remarks>Everything the spawn itself involves -- the tier-first entity id, the build or the skeleton, the placement, the spawn move and the crawler number -- is EntityFactory's; what is left here is what this map's own population rules decide: the blueprint, the layer, the footprint, the seed and the crawler roll. The crawler roll is drawn whether or not the entity survives placement, so one that lands off the map doesn't shift every later roll in this neighborhood.</remarks>
+    private void BuildRaceEntity(Population population, ushort blueprintId, int column, int row, Vector2Byte size, MapLayer mapLayer)
     {
-        var position = new Vector3Int(column, row, (int)mapLayer);
-        var entityId = CreateEntityAt(position);
-        blueprint.Build(componentManager, entityId);
-
-        ref var transform = ref componentManager.GetDirectPool<TransformComponent>().Get(entityId);
-        transform.Size = size;
-
+        var seed = population.Rolls.NextSeed();
         var isCrawler = population.Rolls.Next(0, 100) < CrawlerPercent;
-        StaggerActionLock(population, entityId);
-        world.PlaceEntityOnMap(entityId, position, ref transform);
 
-        if (!world.IsOnMap(transform.Position))
-        {
-            entityManager.DestroyEntity(entityId);
-            return;
-        }
-
-        if (isCrawler)
-        {
-            componentManager.Merge(entityId, new CrawlerComponent(crawlerNumberAllocator.Allocate()));
-        }
-
-        // Spawning counts as a move (see FloorBuilder.CreatePlayer's identical reasoning) so a
-        // creature placed directly into a static aura source's range (e.g. spawned beside Lava)
-        // is granted immediately, the same as one that later steps into range under its own
-        // power -- World.PlaceEntityOnMap itself never raises an EntityMovedEvent, and
-        // StatusEffectAuraSystem's own one-time startup scatter (EnsureGrid) only registers
-        // SOURCES into the grid, it never grants to occupants already standing in one's radius.
-        // Recorded into the shared buffer StatusEffectAuraSystem/ContactDamageSystem actually
-        // drain, not published on the bus -- this is bulk population-time placement (tens of
-        // thousands of entities per floor), not the rare player-move frequency PlayerActivityLog
-        // is built around.
-        movedEntities.Record(new EntityMovedEvent(entityId, position, position, transform.Size));
-    }
-
-    private void BuildFromBlueprint(World.World world, Population population, IBlueprint blueprint, int column, int row)
-    {
-        var entityId = entityManager.CreateEntity();
-        blueprint.Build(componentManager, entityId);
-        StaggerActionLock(population, entityId);
-
-        PlaceAt(world, entityId, column, row);
+        factory.Spawn(new SpawnRequest(blueprintId, column, row) { Layer = mapLayer, Size = size, Seed = seed, Crawler = isCrawler });
     }
 
     /// <summary>
@@ -392,154 +372,70 @@ public sealed class TestMapBuilder(EntityManager entityManager, ComponentManager
     /// (MultiComponentPool's whole reason for existing), removing a component after blueprint
     /// construction, and text long enough to actually word-wrap/hyphenate when selected.
     /// </summary>
-    private void BuildFixtureEntities(World.World world, Population population)
+    /// <remarks>
+    /// Each one is a blueprint, spawned the same way the bulk population is (see BuildRaceEntity):
+    /// what used to be a hand-built entity with components tweaked afterwards is now a race, a class and
+    /// a modifier part, so a fixture is reproducible from its spawn record like everything else.
+    /// </remarks>
+    private void BuildFixtureEntities(Population population)
     {
-        // Long description: visually exercises SelectionWindowContent's word-wrap/
-        // hyphenation when selected -- the algorithm itself is unit tested, but nothing
-        // else on the map has a description long enough to actually wrap or hyphenate.
-        var longDescriptionId = entityManager.CreateEntity();
-        population.Goblin.Build(componentManager, longDescriptionId);
+        // Long description: visually exercises SelectionWindowContent's word-wrap/hyphenation when
+        // selected -- the algorithm itself is unit tested, but nothing else on the map has a
+        // description long enough to actually wrap or hyphenate.
+        SpawnFixture(population, _longDescriptionGoblin, column: 2, row: 2, new Vector2Byte(2, 2));
 
-        ref var longDescriptionText = ref componentManager.GetDirectPool<DisplayTextComponent>().Get(longDescriptionId);
-        longDescriptionText.Description = LongWordWrapDescription;
+        // Huge (3x3) goblin engineer, placed standalone rather than through the population rotation.
+        SpawnFixture(population, _goblinEngineer, column: 5, row: 5, new Vector2Byte(3, 3));
 
-        ref var longDescriptionTransform = ref componentManager.GetDirectPool<TransformComponent>().Get(longDescriptionId);
-        longDescriptionTransform.Size = new Vector2Byte(2, 2);
-
-        StaggerActionLock(population, longDescriptionId);
-        PlaceAt(world, longDescriptionId, 2, 2);
-
-        // Huge (3x3) goblin engineer, placed standalone rather than through BuildGoblin's rotation.
-        var hugeId = entityManager.CreateEntity();
-        population.GoblinEngineer.Build(componentManager, hugeId);
-
-        ref var hugeTransform = ref componentManager.GetDirectPool<TransformComponent>().Get(hugeId);
-        hugeTransform.Size = new Vector2Byte(3, 3);
-
-        StaggerActionLock(population, hugeId);
-        PlaceAt(world, hugeId, 5, 5);
-
-        // Stationary Fairy engineer: race+class composed, then MovementComponent removed so
-        // it doesn't wander despite Fairy's own baseline movement mode.
-        var stationaryFairyId = entityManager.CreateEntity();
-        population.Fairy.Build(componentManager, stationaryFairyId);
-        population.Engineer.Build(componentManager, stationaryFairyId);
-        _movementComponents.Remove(stationaryFairyId);
-
-        PlaceAt(world, stationaryFairyId, 1, 1);
+        // Stationary Fairy engineer: race+class composed, then movement taken away so it doesn't
+        // wander despite Fairy's own baseline movement mode.
+        SpawnFixture(population, _stationaryFairyEngineer, column: 1, row: 1);
 
         // Ordinary moving Fairy, for contrast against the stationary one above.
-        BuildFromBlueprint(world, population, population.Fairy, 17, 16);
+        SpawnFixture(population, _fairy, column: 17, row: 16);
 
-        // Two RaceComponents on one entity (Goblin base with Fairy layered on top). Movement
-        // removed since a grounded-goblin/flying-fairy hybrid has no single coherent
-        // movement mode.
-        var multiRaceId = entityManager.CreateEntity();
-        population.Goblin.Build(componentManager, multiRaceId);
-        population.Fairy.Build(componentManager, multiRaceId);
-        _movementComponents.Remove(multiRaceId);
+        // Two races in one entity's race slots (Goblin base with Fairy layered on top), stationary
+        // since a grounded-goblin/flying-fairy hybrid has no single coherent movement mode.
+        SpawnFixture(population, _multiRace, column: 17, row: 9);
 
-        PlaceAt(world, multiRaceId, 17, 9);
-
-        // Two ClassComponents on one entity (Engineer and Tank both applied to the same Goblin).
-        var multiClassId = entityManager.CreateEntity();
-        population.Goblin.Build(componentManager, multiClassId);
-        population.Engineer.Build(componentManager, multiClassId);
-        population.Tank.Build(componentManager, multiClassId);
-
-        StaggerActionLock(population, multiClassId);
-        PlaceAt(world, multiClassId, 11, 2);
+        // Two classes in one entity's class slots (Engineer and Tank both applied to the same Goblin).
+        SpawnFixture(population, _multiClass, column: 11, row: 2);
 
         // Tiny-entity occupancy fixtures: 4 partially fill MapWindow's 3x3 tiny grid, 11
         // exercise its 9-entity cap (the extra 2 are built but never drawn).
-        BuildTinyGoblins(world, population, count: 4, column: 3, row: 5);
-        BuildTinyGoblins(world, population, count: 11, column: 7, row: 5);
+        SpawnTinyGoblins(population, count: 4, column: 3, row: 5);
+        SpawnTinyGoblins(population, count: 11, column: 7, row: 5);
 
         // Phasing fairy, deliberately co-located with the ordinary moving Fairy above (17,16)
         // -- both are Flying layer, so the Phasing entity overlaps a Blocking one at the same
         // layer, the scenario Occupancy exists to support, rather than relying on a
         // coincidental overlap elsewhere.
-        var phasingFairyId = entityManager.CreateEntity();
-        population.Fairy.Build(componentManager, phasingFairyId); // Fairy's own blueprint already includes MovementComponent.
-        componentManager.GetMultiPool<NonBlockingComponent>().Add(phasingFairyId, new NonBlockingComponent(NonBlockingKind.Phasing));
-
-        StaggerActionLock(population, phasingFairyId);
-        PlaceAt(world, phasingFairyId, 17, 16);
+        SpawnFixture(population, _phasingFairy, column: 17, row: 16);
 
         // One of each shop near the player's own TEMPORARY spawn point (SpawnColumn, SpawnRow --
         // see FloorBuilder.PlayerSpawnOrigin); column offsets keep both clear of the column-16 wall
         // corridor and of each other.
-        BuildShop(world, population.GeneralShop, column: 21, row: SpawnRow);
-        BuildShop(world, population.PotionShop, column: 24, row: SpawnRow);
+        SpawnFixture(population, _generalShop, column: 21, row: SpawnRow);
+        SpawnFixture(population, _potionShop, column: 24, row: SpawnRow);
+
+        // A composite of a composite: GoblinEngineer plus Boss. Last, so adding it didn't shift the seeds the fixtures above draw.
+        SpawnFixture(population, _goblinForeman, column: 13, row: 5);
     }
 
-    private void BuildShop(World.World world, IBlueprint shop, int column, int row)
-    {
-        var entityId = entityManager.CreateEntity();
-        shop.Build(componentManager, entityId);
-        PlaceAt(world, entityId, column, row);
-    }
-
-    /// <summary>Builds count plain-Goblin-glyph entities, all Tiny, all at the same cell -- for exercising MapWindow's tiny-entity grid/cap.</summary>
-    private void BuildTinyGoblins(World.World world, Population population, int count, int column, int row)
+    /// <inheritdoc cref="BuildFixtureEntities"/>
+    private void SpawnTinyGoblins(Population population, int count, int column, int row)
     {
         for (var i = 0; i < count; i++)
         {
-            var entityId = entityManager.CreateEntity();
-            population.Goblin.Build(componentManager, entityId);
-            componentManager.GetMultiPool<NonBlockingComponent>().Add(entityId, new NonBlockingComponent(NonBlockingKind.Tiny));
-
-            StaggerActionLock(population, entityId);
-            PlaceAt(world, entityId, column, row);
+            SpawnFixture(population, _tinyGoblin, column, row);
         }
     }
 
-    private static readonly ushort MaximumStaggerFrames = GameTiming.FramesForSeconds(1f);
-
-    /// <summary>
-    /// Randomizes a freshly-built goblin/fairy's starting action lock to a value between 0 and
-    /// MaximumStaggerFrames, instead of the 0 every race blueprint merges by default -- without
-    /// this, an entire periodic population spawns ready to act on the same handful of frames
-    /// and visibly moves in lockstep bursts rather than spreading out over time. The exact
-    /// upper bound doesn't need to track any entity's real StandardLockFrames -- this only
-    /// matters for the initial stagger, and gets fully overwritten the first time the entity
-    /// actually moves (ActionLockGate.Lock sets both fields together at that point).
-    /// </summary>
-    private void StaggerActionLock(Population population, int entityId)
-    {
-        var framesToWait = (ushort)population.Rolls.Next(0, MaximumStaggerFrames + 1);
-
-        ActionLockGate.Lock(_actionLocks, entityId, now: clock?.CurrentFrame ?? 0, framesToWait);
-    }
-
-    /// <summary>
-    /// Creates an entity born with its processing tier as its first component, for the position it
-    /// is about to be placed at -- see ProcessingTierResolver.CreateEntityAt. Used by the bulk path
-    /// whose final position is known before the blueprint is built (race entities), which is nearly
-    /// every entity and so where silent tier-first assignment pays for itself.
-    /// </summary>
-    /// <remarks>
-    /// The PlaceAt paths below (fixtures, shops, tiny goblins) deliberately still use
-    /// a plain CreateEntity: their Z comes from the blueprint (PlaceAt keeps whatever
-    /// transform.Position.Z the blueprint set), so the final position is not known until after
-    /// Build. They are tiered by World.EntityPlaced -> ProcessingTierResolver.EnsureTiered instead,
-    /// which raises a TierChanged per entity -- a few thousand events at population, against the
-    /// hundred thousand or so tier-first avoids. Without a resolver (unit tests), this is a plain CreateEntity.
-    /// </remarks>
-    private int CreateEntityAt(Vector3Int plannedPosition) =>
-        tierResolver?.CreateEntityAt(entityManager, plannedPosition) ?? entityManager.CreateEntity();
-
-    /// <summary>Places an already-built fixture at column/row counted from the starting neighborhood's origin, preserving the Z height (map layer) its blueprint already set -- a blueprint's own X/Y is just a placeholder. A fixture that can't be placed is destroyed, like a creature.</summary>
-    private void PlaceAt(World.World world, int entityId, int column, int row)
-    {
-        ref var transform = ref componentManager.GetDirectPool<TransformComponent>().Get(entityId);
-        var position = new Vector3Int(Neighborhoods.OriginOf(StartingCellX) + column, Neighborhoods.OriginOf(StartingCellY) + row, transform.Position.Z);
-
-        world.PlaceEntityOnMap(entityId, position, ref transform);
-
-        if (!world.IsOnMap(transform.Position))
+    /// <summary>Spawns one fixture at column/row counted from the starting neighborhood's origin, on its blueprint's own layer, at size or its blueprint's own footprint.</summary>
+    private void SpawnFixture(Population population, ushort blueprintId, int column, int row, Vector2Byte? size = null) =>
+        factory.Spawn(new SpawnRequest(blueprintId, Neighborhoods.OriginOf(StartingCellX) + column, Neighborhoods.OriginOf(StartingCellY) + row)
         {
-            entityManager.DestroyEntity(entityId);
-        }
-    }
+            Size = size,
+            Seed = population.Rolls.NextSeed(),
+        });
 }

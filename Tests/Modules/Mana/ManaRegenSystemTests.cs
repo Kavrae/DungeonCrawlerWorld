@@ -19,7 +19,7 @@ namespace Tests.Modules.Mana;
 public sealed class ManaRegenSystemTests
 {
     private static PackedComponentPool<ManaComponent> CreatePool() =>
-        new(maximumEntityCount: 10, initialCapacity: 4,
+        new(entityCapacity: 10, initialCapacity: 4,
             static (ref existing, incoming) => existing = incoming);
 
     /// <summary>Seeds entity 0's tier explicitly -- see SimpleHealthRegenSystemTests.CreateTiersPool's own note on why leaving it absent silently tested the Beyond cadence.</summary>
@@ -32,10 +32,10 @@ public sealed class ManaRegenSystemTests
     }
 
     /// <summary>Intelligence total 300 -- ManaRegenSystem's MaxManaRegenPerSecond, a flat 0.3 MP/sec -- so any entity regens a clean 0.3/visit at Local tier (StripeCount is a full second's worth of frames), and proportionally more per visit at a coarser tier (the visit covers StripeCount * divisor frames -- see ProcessingTierDivisors).</summary>
-    private static MultiComponentPool<AbilityScoreComponent> CreateAbilityScoresPoolWithMaxIntelligence(int entityId)
+    private static PackedComponentPool<AbilityScoresComponent> CreateAbilityScoresPoolWithMaxIntelligence(int entityId)
     {
-        var pool = new MultiComponentPool<AbilityScoreComponent>(maximumEntityCount: 10, initialCapacity: 4);
-        pool.Add(entityId, new AbilityScoreComponent(AbilityScoreType.Intelligence, baseValue: 300, total: 300));
+        var pool = AbilityScoreTestPools.CreatePool(entityCapacity: 10, initialCapacity: 4);
+        pool.Add(entityId, AbilityScoreTestPools.Score(AbilityScoreType.Intelligence, baseValue: 300, total: 300));
         return pool;
     }
 
@@ -95,7 +95,7 @@ public sealed class ManaRegenSystemTests
     {
         var pool = CreatePool();
         pool.Add(0, new ManaComponent(currentMana: 50, maximumMana: 200));
-        var abilityScores = new MultiComponentPool<AbilityScoreComponent>(maximumEntityCount: 10, initialCapacity: 4);
+        var abilityScores = AbilityScoreTestPools.CreatePool(entityCapacity: 10, initialCapacity: 4);
         var system = new ManaRegenSystem(pool, CreateTiersPool(), new ProcessingTierEvents(), abilityScores: abilityScores);
 
         system.Update(default, 0);
@@ -108,9 +108,9 @@ public sealed class ManaRegenSystemTests
     {
         var pool = CreatePool();
         pool.Add(0, new ManaComponent(currentMana: -32000, maximumMana: 200));
-        var abilityScores = new MultiComponentPool<AbilityScoreComponent>(maximumEntityCount: 10, initialCapacity: 4);
-        abilityScores.Add(0, new AbilityScoreComponent(AbilityScoreType.Intelligence, baseValue: 1, total: 1));
-        var statModifiers = new MultiComponentPool<StatModifierComponent>(maximumEntityCount: 10, initialCapacity: 4);
+        var abilityScores = AbilityScoreTestPools.CreatePool(entityCapacity: 10, initialCapacity: 4);
+        abilityScores.Add(0, AbilityScoreTestPools.Score(AbilityScoreType.Intelligence, baseValue: 1, total: 1));
+        var statModifiers = new MultiComponentPool<StatModifierComponent>(entityCapacity: 10, initialCapacity: 4);
         statModifiers.Add(0, new StatModifierComponent(StatModifierTarget.ManaRegen, StatModifierOperation.Additive, StatModifierPolarity.Debuff,
             canModify: false, magnitude: -100000f, expiresAtFrame: FrameDeadline.Never, ActionSource.Admin));
         var system = new ManaRegenSystem(pool, CreateTiersPool(), new ProcessingTierEvents(), statModifiers: statModifiers, abilityScores: abilityScores);
@@ -136,8 +136,8 @@ public sealed class ManaRegenSystemTests
     {
         var pool = CreatePool();
         pool.Add(0, new ManaComponent(currentMana: 0, maximumMana: 6));
-        var abilityScores = new MultiComponentPool<AbilityScoreComponent>(maximumEntityCount: 10, initialCapacity: 4);
-        abilityScores.Add(0, new AbilityScoreComponent(AbilityScoreType.Intelligence, baseValue: 6, total: 6));
+        var abilityScores = AbilityScoreTestPools.CreatePool(entityCapacity: 10, initialCapacity: 4);
+        abilityScores.Add(0, AbilityScoreTestPools.Score(AbilityScoreType.Intelligence, baseValue: 6, total: 6));
         var system = new ManaRegenSystem(pool, CreateTiersPool(), new ProcessingTierEvents(), abilityScores: abilityScores);
 
         system.Update(default, 0);

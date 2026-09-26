@@ -32,7 +32,7 @@ public sealed class MapViewState
     public Guid? ArmedActionId;
 
     /// <summary>The consumable item stack currently armed, if any -- see ArmedActionId, which this mirrors exactly for the item-hotkey path (Game.Modules.Inventory.Components.ItemHotkeyBindingComponent) instead of the action one. By StackInstanceId, not ItemDefinitionId -- see that component's own doc comment for why.</summary>
-    public Guid? ArmedItemStackInstanceId;
+    public uint? ArmedItemStackInstanceId;
 
     /// <summary>See ArmedActionId/ArmedItemStackInstanceId -- shared regardless of which of the two is actually armed.</summary>
     public HotkeySlot? ArmedSlot;
@@ -56,7 +56,7 @@ public sealed class MapViewState
     public int InspectedEntityId = -1;
 
     /// <summary>The inventory item stack currently shown in the Item Details window, if any -- drives the selection glow on both InventoryGridContent's matching cell and HotbarContent's matching bound slot (see GlowRenderer.Draw, the same primitive ArmedSlot's own glow already uses). By StackInstanceId, not ItemDefinitionId -- same reasoning as ArmedItemStackInstanceId above. Set/cleared by ItemDetailsWindowController.Open/Close.</summary>
-    public Guid? SelectedItemStackInstanceId;
+    public uint? SelectedItemStackInstanceId;
 
     /// <summary>Non-null while Item Details Comparison is armed (see ItemComparisonController.Arm/Disarm/ClearComparison) -- the anchor item's own Activator concrete type, the eligibility gate every other item must match to be added. InventoryGridContent reads this every frame to grey out ineligible cells and highlight eligible ones (see InventoryItemStackCell.CompareState).</summary>
     public Type? CompareRequiredActivatorType;

@@ -16,11 +16,11 @@ public sealed class StatModifierExpirySystemTests
 
     private static EngineTime Frame(long frame) => new(default, default, false, frame);
 
-    private static MultiComponentPool<StatModifierComponent> CreatePool() => new(maximumEntityCount: 10, initialCapacity: 4);
+    private static MultiComponentPool<StatModifierComponent> CreatePool() => new(entityCapacity: 10, initialCapacity: 4);
 
     /// <summary>Mirrors StatModifiersModule's own registration -- merging keeps the earlier deadline, which is what makes a newly granted modifier pull the entity's pending expiry forward.</summary>
     private static PackedComponentPool<ExpiringStatModifierComponent> CreateExpiriesPool() =>
-        new(maximumEntityCount: 10, initialCapacity: 4, static (ref existing, incoming) =>
+        new(entityCapacity: 10, initialCapacity: 4, static (ref existing, incoming) =>
             existing.NextTickFrame = System.Math.Min(existing.NextTickFrame, incoming.NextTickFrame));
 
     private static StatModifierComponent Modifier(uint expiresAtFrame, StatModifierTarget target = StatModifierTarget.HealthRegen) =>

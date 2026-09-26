@@ -3,6 +3,7 @@ using Engine.ECS.Systems;
 using Engine.Events;
 using Game.Modules.Burning;
 using Game.Modules.Burning.Systems;
+using Game.Modules.Health;
 using Game.Modules.Health.Components;
 using Game.World;
 
@@ -17,12 +18,10 @@ public sealed class BodyPartBurningSystemTests
         public Engine.ECS.Entities.EntityKey PlayerEntityKey { get; init; } = TestSources.KeyOf(playerEntityId);
     }
 
-    private static MultiComponentPool<BodyPartBurningTimerComponent> CreateTimerPool() => new(maximumEntityCount: 10, initialCapacity: 8);
-
-    private static MultiComponentPool<BodyPartComponent> CreateBodyPartsPool() => new(maximumEntityCount: 10, initialCapacity: 8);
+    private static MultiComponentPool<BodyPartBurningTimerComponent> CreateTimerPool() => new(entityCapacity: 10, initialCapacity: 8);
 
     private static PackedComponentPool<SimpleHealthComponent> CreateHealthPool() =>
-        new(maximumEntityCount: 10, initialCapacity: 4, static (ref existing, incoming) => existing = incoming);
+        new(entityCapacity: 10, initialCapacity: 4, static (ref existing, incoming) => existing = incoming);
 
     private static EngineTime Frame(long frame) => new(default, default, false, frame);
 
@@ -30,18 +29,14 @@ public sealed class BodyPartBurningSystemTests
     public void Update_AtTickFrame_DamagesOnlyItsOwnNamedPart()
     {
         var timers = CreateTimerPool();
-        var bodyParts = CreateBodyPartsPool();
-        bodyParts.Add(0, new BodyPartComponent("Head", BodyPartType.Head, partId: 0, verticalPosition: 5, currentHealth: 30, maximumHealth: 30, isVital: true));
-        bodyParts.Add(0, new BodyPartComponent("Torso", BodyPartType.Torso, partId: 1, verticalPosition: 4, currentHealth: 60, maximumHealth: 60, isVital: true));
+        var bodyParts = BodyPartTestWorld.WithParts(0, ("Head", BodyPartType.Head, 30, 30, true), ("Torso", BodyPartType.Torso, 60, 60, true)).BodyParts;
         timers.Add(0, new BodyPartBurningTimerComponent(partId: 1, stackCount: 4, nextTickFrame: 1, ActionSource.Admin));
         var system = new BodyPartBurningSystem(timers, bodyParts, CreateHealthPool(), new EventBus(), new FakePlayerQuery(0));
 
         system.Update(Frame(1), 0);
 
-        var headDenseIndex = BodyPartSelectionFindByName(bodyParts, 0, "Head");
-        var torsoDenseIndex = BodyPartSelectionFindByName(bodyParts, 0, "Torso");
-        Assert.AreEqual(30f, bodyParts.GetReadonlyByDenseIndex(headDenseIndex).CurrentHealth, "Head must be untouched -- the burn is scoped to Torso's own PartId.");
-        Assert.AreEqual(56f, bodyParts.GetReadonlyByDenseIndex(torsoDenseIndex).CurrentHealth);
+        Assert.AreEqual(30f, PartHealth(bodyParts, 0, "Head"), "Head must be untouched -- the burn is scoped to Torso's own PartId.");
+        Assert.AreEqual(56f, PartHealth(bodyParts, 0, "Torso"));
         Assert.AreEqual(3, FindPartStackCount(timers, 0, 1), "One stack removed by this tick, leaving 3 of the original 4.");
     }
 
@@ -49,8 +44,7 @@ public sealed class BodyPartBurningSystemTests
     public void Update_LastStackConsumed_RemovesTimerAndStacks()
     {
         var timers = CreateTimerPool();
-        var bodyParts = CreateBodyPartsPool();
-        bodyParts.Add(0, new BodyPartComponent("Torso", BodyPartType.Torso, partId: 0, verticalPosition: 4, currentHealth: 60, maximumHealth: 60, isVital: true));
+        var bodyParts = BodyPartTestWorld.WithParts(0, ("Torso", BodyPartType.Torso, 60, 60, true)).BodyParts;
         timers.Add(0, new BodyPartBurningTimerComponent(partId: 0, stackCount: 1, nextTickFrame: 1, ActionSource.Admin));
         var system = new BodyPartBurningSystem(timers, bodyParts, CreateHealthPool(), new EventBus(), new FakePlayerQuery(0));
 
@@ -64,9 +58,7 @@ public sealed class BodyPartBurningSystemTests
     public void Update_TwoPartsBurningConcurrently_EachDamagesOnlyItsOwnPart()
     {
         var timers = CreateTimerPool();
-        var bodyParts = CreateBodyPartsPool();
-        bodyParts.Add(0, new BodyPartComponent("Left Foot", BodyPartType.Foot, partId: 0, verticalPosition: 0, currentHealth: 10, maximumHealth: 10, isVital: false));
-        bodyParts.Add(0, new BodyPartComponent("Right Foot", BodyPartType.Foot, partId: 1, verticalPosition: 0, currentHealth: 10, maximumHealth: 10, isVital: false));
+        var bodyParts = BodyPartTestWorld.WithParts(0, ("Left Foot", BodyPartType.Foot, 10, 10, false), ("Right Foot", BodyPartType.Foot, 10, 10, false)).BodyParts;
 
         // Constructed before either Add below -- both instances reach the wheel through the pool's
         // own change notification, each keyed by its PartId, not by a scan at construction.
@@ -78,8 +70,8 @@ public sealed class BodyPartBurningSystemTests
 
         var leftFootDenseIndex = BodyPartSelectionFindByName(bodyParts, 0, "Left Foot");
         var rightFootDenseIndex = BodyPartSelectionFindByName(bodyParts, 0, "Right Foot");
-        Assert.AreEqual(8f, bodyParts.GetReadonlyByDenseIndex(leftFootDenseIndex).CurrentHealth, "Left Foot had 2 stacks -- 2 damage.");
-        Assert.AreEqual(9f, bodyParts.GetReadonlyByDenseIndex(rightFootDenseIndex).CurrentHealth, "Right Foot had 1 stack -- 1 damage, independently.");
+        Assert.AreEqual(8f, PartHealth(bodyParts, 0, "Left Foot"), "Left Foot had 2 stacks -- 2 damage.");
+        Assert.AreEqual(9f, PartHealth(bodyParts, 0, "Right Foot"), "Right Foot had 1 stack -- 1 damage, independently.");
 
         // Left Foot had 2 stacks (1 remains after this tick, timer entry kept); Right Foot had
         // only 1 stack (fully consumed, timer entry removed) -- Left Foot's own entry keeps the pool non-empty for entity 0.
@@ -91,14 +83,13 @@ public sealed class BodyPartBurningSystemTests
     public void Update_TickDoesNotReduceCurrentHealthToZero_StillRefreshesRegenLockout()
     {
         var timers = CreateTimerPool();
-        var bodyParts = CreateBodyPartsPool();
-        bodyParts.Add(0, new BodyPartComponent("Left Foot", BodyPartType.Foot, partId: 0, verticalPosition: 0, currentHealth: 10, maximumHealth: 10, isVital: false));
+        var bodyParts = BodyPartTestWorld.WithParts(0, ("Left Foot", BodyPartType.Foot, 10, 10, false)).BodyParts;
         timers.Add(0, new BodyPartBurningTimerComponent(partId: 0, stackCount: 1, nextTickFrame: 1, ActionSource.Admin));
         var system = new BodyPartBurningSystem(timers, bodyParts, CreateHealthPool(), new EventBus(), new FakePlayerQuery(0));
 
         system.Update(Frame(1), 0);
 
-        var part = bodyParts.GetReadonlyByDenseIndex(BodyPartSelectionFindByName(bodyParts, 0, "Left Foot"));
+        bodyParts.TryGet(0, BodyPartSelectionFindByName(bodyParts, 0, "Left Foot"), out var part);
         Assert.AreEqual(9f, part.CurrentHealth, "Sanity check: this tick's 1 damage doesn't reach 0.");
         Assert.IsFalse(part.IsDisabled);
         Assert.IsGreaterThan(0u, part.RegenLockedUntilFrame, "Even a non-lethal burn tick must refresh the lockout, or the part regens instantly once the fire's stacks run out.");
@@ -108,14 +99,13 @@ public sealed class BodyPartBurningSystemTests
     public void Update_PartDropsToZero_DisablesPartAndDoesNotThrow()
     {
         var timers = CreateTimerPool();
-        var bodyParts = CreateBodyPartsPool();
-        bodyParts.Add(0, new BodyPartComponent("Left Foot", BodyPartType.Foot, partId: 0, verticalPosition: 0, currentHealth: 2, maximumHealth: 10, isVital: false));
+        var bodyParts = BodyPartTestWorld.WithParts(0, ("Left Foot", BodyPartType.Foot, 2, 10, false)).BodyParts;
         timers.Add(0, new BodyPartBurningTimerComponent(partId: 0, stackCount: 2, nextTickFrame: 1, ActionSource.Admin));
         var system = new BodyPartBurningSystem(timers, bodyParts, CreateHealthPool(), new EventBus(), new FakePlayerQuery(0));
 
         system.Update(Frame(1), 0);
 
-        var part = bodyParts.GetReadonlyByDenseIndex(BodyPartSelectionFindByName(bodyParts, 0, "Left Foot"));
+        bodyParts.TryGet(0, BodyPartSelectionFindByName(bodyParts, 0, "Left Foot"), out var part);
         Assert.AreEqual(0f, part.CurrentHealth);
         Assert.IsTrue(part.IsDisabled);
     }
@@ -125,9 +115,7 @@ public sealed class BodyPartBurningSystemTests
     public void Update_TwoPartsOnDifferentFrames_EachTicksOnItsOwnFrame()
     {
         var timers = CreateTimerPool();
-        var bodyParts = CreateBodyPartsPool();
-        bodyParts.Add(0, new BodyPartComponent("Left Foot", BodyPartType.Foot, partId: 0, verticalPosition: 0, currentHealth: 10, maximumHealth: 10, isVital: false));
-        bodyParts.Add(0, new BodyPartComponent("Right Foot", BodyPartType.Foot, partId: 1, verticalPosition: 0, currentHealth: 10, maximumHealth: 10, isVital: false));
+        var bodyParts = BodyPartTestWorld.WithParts(0, ("Left Foot", BodyPartType.Foot, 10, 10, false), ("Right Foot", BodyPartType.Foot, 10, 10, false)).BodyParts;
         timers.Add(0, new BodyPartBurningTimerComponent(partId: 0, stackCount: 3, nextTickFrame: 5, ActionSource.Admin));
         timers.Add(0, new BodyPartBurningTimerComponent(partId: 1, stackCount: 3, nextTickFrame: 20, ActionSource.Admin));
         var system = new BodyPartBurningSystem(timers, bodyParts, CreateHealthPool(), new EventBus(), new FakePlayerQuery(0));
@@ -137,8 +125,8 @@ public sealed class BodyPartBurningSystemTests
             system.Update(Frame(frame), 0);
         }
 
-        Assert.AreEqual(7f, bodyParts.GetReadonlyByDenseIndex(BodyPartSelectionFindByName(bodyParts, 0, "Left Foot")).CurrentHealth);
-        Assert.AreEqual(10f, bodyParts.GetReadonlyByDenseIndex(BodyPartSelectionFindByName(bodyParts, 0, "Right Foot")).CurrentHealth);
+        Assert.AreEqual(7f, PartHealth(bodyParts, 0, "Left Foot"));
+        Assert.AreEqual(10f, PartHealth(bodyParts, 0, "Right Foot"));
         Assert.AreEqual(5u + BurningEffects.TickIntervalFrames, FindPartNextTickFrame(timers, 0, 0), "Re-armed one interval after its own tick.");
         Assert.AreEqual(20u, FindPartNextTickFrame(timers, 0, 1), "The other part's deadline is untouched.");
 
@@ -147,7 +135,7 @@ public sealed class BodyPartBurningSystemTests
             system.Update(Frame(frame), 0);
         }
 
-        Assert.AreEqual(7f, bodyParts.GetReadonlyByDenseIndex(BodyPartSelectionFindByName(bodyParts, 0, "Right Foot")).CurrentHealth);
+        Assert.AreEqual(7f, PartHealth(bodyParts, 0, "Right Foot"));
     }
 
     private static uint FindPartNextTickFrame(MultiComponentPool<BodyPartBurningTimerComponent> timers, int entityId, byte partId)
@@ -164,13 +152,19 @@ public sealed class BodyPartBurningSystemTests
         return 0;
     }
 
-    private static int BodyPartSelectionFindByName(MultiComponentPool<BodyPartComponent> bodyParts, int entityId, string name)
+    private static float PartHealth(EntityBodyParts bodyParts, int entityId, string name)
     {
-        for (var denseIndex = bodyParts.GetFirstDenseIndex(entityId); denseIndex != -1; denseIndex = bodyParts.GetNextDenseIndex(denseIndex))
+        bodyParts.TryGet(entityId, BodyPartSelectionFindByName(bodyParts, entityId, name), out var part);
+        return part.CurrentHealth;
+    }
+
+    private static int BodyPartSelectionFindByName(EntityBodyParts bodyParts, int entityId, string name)
+    {
+        foreach (var part in bodyParts.Parts(entityId))
         {
-            if (bodyParts.GetReadonlyByDenseIndex(denseIndex).Name == name)
+            if (part.Name == name)
             {
-                return denseIndex;
+                return part.PartId;
             }
         }
 

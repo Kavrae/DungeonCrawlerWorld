@@ -27,14 +27,14 @@ public static class InventoryActions
     /// past it -- splitting a stack that already exceeds the cap is a separate, not-yet-built TODO
     /// item, so this only ever affects freshly-granted quantity.
     /// </summary>
-    public static Guid AddItem(ComponentManager componentManager, int entityId, Guid itemDefinitionId, ushort quantity)
+    public static uint AddItem(ComponentManager componentManager, int entityId, Guid itemDefinitionId, ushort quantity)
     {
         InventoryGrant.EnsureInventoryComponentExists(componentManager, entityId);
 
         var stacks = componentManager.GetMultiPool<InventoryItemStackComponent>();
         var effectiveCap = GetEffectiveMaxStackSize(componentManager, entityId);
         var remaining = quantity;
-        var lastStackInstanceId = Guid.Empty;
+        var lastStackInstanceId = 0u;
 
         var matchedDenseIndex = FindMatchingDenseIndex(stacks, entityId, itemDefinitionId, static (stack, id) => stack.ItemDefinitionId == id);
         if (matchedDenseIndex != -1)
@@ -199,7 +199,7 @@ public static class InventoryActions
     /// ended up in (new or merged-into-existing) -- callers (e.g. a wand repointing its hotkey
     /// binding after firing) need this to know exactly which physical stack now holds it.
     /// </summary>
-    public static Guid AddDivergentItem(ComponentManager componentManager, int entityId, ItemDefinition overrideDefinition)
+    public static uint AddDivergentItem(ComponentManager componentManager, int entityId, ItemDefinition overrideDefinition)
     {
         InventoryGrant.EnsureInventoryComponentExists(componentManager, entityId);
         var stacks = componentManager.GetMultiPool<InventoryItemStackComponent>();
@@ -228,7 +228,7 @@ public static class InventoryActions
     /// wand's every single shot calls, uniformly, whether it's the first shot off a fresh batch or
     /// the Nth shot depleting an already-divergent instance -- see ConsumableActivationSystem.
     /// </summary>
-    public static Guid PeelOneIntoDivergentStack(ComponentManager componentManager, int entityId, Guid sourceStackInstanceId, ItemDefinition newOverrideDefinition)
+    public static uint PeelOneIntoDivergentStack(ComponentManager componentManager, int entityId, uint sourceStackInstanceId, ItemDefinition newOverrideDefinition)
     {
         var stacks = componentManager.GetMultiPool<InventoryItemStackComponent>();
 
@@ -256,7 +256,7 @@ public static class InventoryActions
     /// item id. A no-op if stackInstanceId no longer resolves to anything (defense-in-depth; the
     /// caller is expected to have already checked).
     /// </summary>
-    public static void ConsumeItemByStackInstanceId(ComponentManager componentManager, int entityId, Guid stackInstanceId)
+    public static void ConsumeItemByStackInstanceId(ComponentManager componentManager, int entityId, uint stackInstanceId)
     {
         var stacks = componentManager.GetMultiPool<InventoryItemStackComponent>();
 
@@ -299,14 +299,14 @@ public static class InventoryActions
     /// remove-then-re-add a stack it's already looking at -- or if the stack isn't found, or if the
     /// destination is a non-player entity already at its stack cap (see InventoryCapacity).
     ///
-    /// FirstAcquiredUtcTicks is the one field NOT preserved verbatim: when destinationEntityId is
+    /// AcquiredSequence is the one field NOT preserved verbatim: when destinationEntityId is
     /// the player (e.g. "Take" from a corpse/loot window), it's re-stamped to now -- since this
     /// method never merges, every transfer onto the player is by definition a new stack there, and
     /// looting something should read as freshly acquired regardless of how long it sat wherever it
     /// came from. A transfer to any other entity (e.g. "Give" from the player, or between two
     /// non-player entities) leaves it untouched.
     /// </summary>
-    public static bool TryTransferStack(ComponentManager componentManager, int sourceEntityId, int destinationEntityId, Guid stackInstanceId, IPlayerQuery? playerQuery)
+    public static bool TryTransferStack(ComponentManager componentManager, int sourceEntityId, int destinationEntityId, uint stackInstanceId, IPlayerQuery? playerQuery)
     {
         if (sourceEntityId == destinationEntityId)
         {
@@ -326,7 +326,7 @@ public static class InventoryActions
 
         if (destinationEntityId == playerQuery?.PlayerEntityId)
         {
-            snapshot.FirstAcquiredUtcTicks = DateTime.UtcNow.Ticks;
+            snapshot.AcquiredSequence = InventoryItemStackComponent.NextAcquiredSequence();
         }
 
         InventoryGrant.EnsureInventoryComponentExists(componentManager, destinationEntityId);

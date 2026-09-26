@@ -3,6 +3,7 @@ using Game.Modules.Core.Components;
 using Game.Views;
 using Microsoft.Xna.Framework;
 using Microsoft.Xna.Framework.Graphics;
+using Game.Sprites;
 
 namespace Presentation.Rendering;
 

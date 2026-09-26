@@ -46,7 +46,7 @@ public sealed class EntityStripingTests
         var pool = new PackedComponentPool<SimpleHealthComponent>(entityCount, entityCount,
             static (ref existing, incoming) => existing = incoming);
 
-        var abilityScores = new MultiComponentPool<AbilityScoreComponent>(entityCount, entityCount);
+        var abilityScores = AbilityScoreTestPools.CreatePool(entityCount, entityCount);
         var processingTiers = new DirectComponentPool<ProcessingTierComponent>(initialCapacity: entityCount, static (ref existing, incoming) => existing = incoming);
         for (var entityId = 0; entityId < entityCount; entityId++)
         {
@@ -54,7 +54,7 @@ public sealed class EntityStripingTests
             // Constitution total 300 -- SimpleHealthRegenSystem's MaxHealthRegenPerSecond -- so every
             // visit actually changes CurrentHealth (a nonzero, easily-detected "touch"), same
             // role the old flat healthRegen:1 constructor argument used to play.
-            abilityScores.Add(entityId, new AbilityScoreComponent(AbilityScoreType.Constitution, baseValue: 300, total: 300));
+            abilityScores.Add(entityId, AbilityScoreTestPools.Score(AbilityScoreType.Constitution, baseValue: 300, total: 300));
             // Pinned to Local -- this test is about striping/cycle-coverage correctness
             // (StripeCount frames == one full cycle), not tier throttling, so it shouldn't
             // depend on whatever the untiered fail-open default happens to be.
@@ -108,17 +108,17 @@ public sealed class EntityStripingTests
         var pool = new PackedComponentPool<SimpleHealthComponent>(100, 100,
             static (ref existing, incoming) => existing = incoming);
 
-        var abilityScores = new MultiComponentPool<AbilityScoreComponent>(100, 100);
+        var abilityScores = AbilityScoreTestPools.CreatePool(100, 100);
         // Pinned to Local for every entity below -- see the previous test's own comment on why.
         var processingTiers = new DirectComponentPool<ProcessingTierComponent>(initialCapacity: 100, static (ref existing, incoming) => existing = incoming);
         for (var entityId = 0; entityId < 10; entityId++)
         {
             pool.Add(entityId, new SimpleHealthComponent(currentHealth: 0, maximumHealth: 1000));
-            abilityScores.Add(entityId, new AbilityScoreComponent(AbilityScoreType.Constitution, baseValue: 300, total: 300));
+            abilityScores.Add(entityId, AbilityScoreTestPools.Score(AbilityScoreType.Constitution, baseValue: 300, total: 300));
             processingTiers.Add(entityId, new ProcessingTierComponent(ProcessingTierLevel.Local));
         }
         pool.Add(69, new SimpleHealthComponent(currentHealth: 0, maximumHealth: 1000)); // Stripe 9 (69 % 60), alongside entity 9.
-        abilityScores.Add(69, new AbilityScoreComponent(AbilityScoreType.Constitution, baseValue: 300, total: 300));
+        abilityScores.Add(69, AbilityScoreTestPools.Score(AbilityScoreType.Constitution, baseValue: 300, total: 300));
         processingTiers.Add(69, new ProcessingTierComponent(ProcessingTierLevel.Local));
 
         var system = new SimpleHealthRegenSystem(pool, processingTiers, new ProcessingTierEvents(), abilityScores: abilityScores);

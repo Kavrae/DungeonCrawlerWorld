@@ -2,7 +2,7 @@ using System.Text.Json;
 
 namespace SpriteManifestBuilder;
 
-/// <summary>Reads/writes Content/SpriteManifest.json -- the same file Game/Blueprints/SpriteManifest.cs reads at runtime, via an independent copy of the (de)serialization logic (see ManifestCell's doc comment for why).</summary>
+/// <summary>Reads/writes Content/SpriteManifest.json -- the same file Game/Sprites/SpriteManifest.cs reads at runtime, via an independent copy of the (de)serialization logic (see ManifestCell's doc comment for why).</summary>
 public static class ManifestFile
 {
     private static readonly JsonSerializerOptions SaveOptions = new() { WriteIndented = true };

@@ -89,10 +89,10 @@ public sealed class ItemDetailsWindow(
     private readonly List<IReadOnlyList<ItemComparisonStat>> _otherItemsStats = [];
     private bool _childrenReady;
     private int _currentEntityId;
-    private Guid _currentStackInstanceId;
+    private uint _currentStackInstanceId;
 
     /// <summary>Settable late-bound callback for this window's own "Compare" title button, if it has one -- see this class's own Initialize override for why only some instances do. Wired by whichever controller creates this instance (ItemDetailsWindowController for the anchor pane; ItemComparisonController deliberately never sets this for its own comparison columns) *before* calling Initialize.</summary>
-    public Action<int, Guid>? OnCompareRequested { get; set; }
+    public Action<int, uint>? OnCompareRequested { get; set; }
 
     /// <summary>
     /// Safe to call both before the first Initialize (a brand-new window -- the real build is
@@ -107,7 +107,7 @@ public sealed class ItemDetailsWindow(
     /// can invoke OnCompareRequested with the item currently shown, not a stale one captured at
     /// construction time.
     /// </summary>
-    public void Configure(int entityId, Guid stackInstanceId, ItemDefinition definition, float contentWidth, IReadOnlyList<ItemDefinition> comparedAgainst = null!)
+    public void Configure(int entityId, uint stackInstanceId, ItemDefinition definition, float contentWidth, IReadOnlyList<ItemDefinition> comparedAgainst = null!)
     {
         _currentEntityId = entityId;
         _currentStackInstanceId = stackInstanceId;

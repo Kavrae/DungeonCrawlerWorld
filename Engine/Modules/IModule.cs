@@ -20,7 +20,7 @@ public interface IModule
     /// replaces it instead of being added alongside it. Defaults to Guid.Empty (no identity,
     /// never matches anything) so existing test doubles don't need updating unless they
     /// actually care about replacement. Built-in modules should override this with a real,
-    /// literal Guid, the same pattern RaceComponent/ClassComponent already use for identity.
+    /// literal Guid, the same pattern a race or class definition already uses for identity.
     /// </remarks>
     Guid Id => Guid.Empty;
 

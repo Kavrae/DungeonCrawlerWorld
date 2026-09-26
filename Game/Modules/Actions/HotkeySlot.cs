@@ -47,13 +47,14 @@ public enum HotkeySlot : byte
 /// rule rules out a real base type -- an interface is the actual available equivalent. A slot
 /// binds to at most one of {action, item} at a time; whatever writes a new binding for a slot is
 /// responsible for clearing the other kind's entry for that same slot first. BoundId is the
-/// bound ActionId/ItemDefinitionId under one shared name -- explicit interface implementation on
+/// bound ActionId/StackInstanceId under one shared name, generic because the two are not the same
+/// type (an action is a catalog Guid; a stack is a session counter -- see InventoryItemStackComponent) -- explicit interface implementation on
 /// each struct, so the concrete, better-named property (ActionId, ItemDefinitionId) stays the
 /// public-facing one and BoundId only surfaces to the generic HotkeySlotBindingQueries helpers.
 /// </summary>
-public interface IHotkeySlotBinding
+public interface IHotkeySlotBinding<out TBoundId>
 {
     HotkeySlot Slot { get; }
 
-    Guid BoundId { get; }
+    TBoundId BoundId { get; }
 }

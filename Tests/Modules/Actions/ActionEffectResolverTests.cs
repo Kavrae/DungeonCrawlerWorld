@@ -85,7 +85,7 @@ public sealed class ActionEffectResolverTests
     private static (FakeMapQuery MapQuery, PackedComponentPool<SimpleHealthComponent> Health, EventBus EventBus, MathUtility MathUtility, StatusEffectAuraApplierRegistry StatusEffectAppliers, ComponentManager ComponentManager) Build()
     {
         var mapQuery = new FakeMapQuery();
-        var health = new PackedComponentPool<SimpleHealthComponent>(maximumEntityCount: 10, initialCapacity: 10, static (ref existing, incoming) => existing = incoming);
+        var health = new PackedComponentPool<SimpleHealthComponent>(entityCapacity: 10, initialCapacity: 10, static (ref existing, incoming) => existing = incoming);
         var eventBus = new EventBus();
         var mathUtility = new MathUtility();
         var statusEffectAppliers = new StatusEffectAuraApplierRegistry();
@@ -172,9 +172,9 @@ public sealed class ActionEffectResolverTests
         var (mapQuery, health, eventBus, mathUtility, statusEffectAppliers, componentManager) = Build();
         mapQuery.SetBlockingOccupant(TargetTile, BlockingTargetEntityId);
         health.Add(BlockingTargetEntityId, new SimpleHealthComponent(100, 100));
-        componentManager.RegisterMultiPool<AbilityScoreComponent>();
-        var abilityScores = componentManager.GetMultiPool<AbilityScoreComponent>();
-        abilityScores.Add(SourceEntityId, new AbilityScoreComponent(AbilityScoreType.Strength, baseValue: 8, total: 8));
+        AbilityScoreTestPools.Register(componentManager);
+        var abilityScores = componentManager.GetPackedPool<AbilityScoresComponent>();
+        abilityScores.Add(SourceEntityId, AbilityScoreTestPools.Score(AbilityScoreType.Strength, baseValue: 8, total: 8));
 
         ActionEffectResolver.Apply(StrengthTaggedAction, SourceEntityId, [TargetTile], mapQuery, health, eventBus, mathUtility, playerQuery: null, statusEffectAppliers, componentManager, Keys, now: 0, statModifiers: null, deadEntities: null, abilityScores: abilityScores);
 
@@ -200,9 +200,9 @@ public sealed class ActionEffectResolverTests
         var (mapQuery, health, eventBus, mathUtility, statusEffectAppliers, componentManager) = Build();
         mapQuery.SetBlockingOccupant(TargetTile, BlockingTargetEntityId);
         health.Add(BlockingTargetEntityId, new SimpleHealthComponent(100, 100));
-        componentManager.RegisterMultiPool<AbilityScoreComponent>();
-        var abilityScores = componentManager.GetMultiPool<AbilityScoreComponent>();
-        // SourceEntityId has no AbilityScoreComponent entries at all.
+        AbilityScoreTestPools.Register(componentManager);
+        var abilityScores = componentManager.GetPackedPool<AbilityScoresComponent>();
+        // SourceEntityId has no ability scores at all.
 
         ActionEffectResolver.Apply(StrengthTaggedAction, SourceEntityId, [TargetTile], mapQuery, health, eventBus, mathUtility, playerQuery: null, statusEffectAppliers, componentManager, Keys, now: 0, statModifiers: null, deadEntities: null, abilityScores: abilityScores);
 
@@ -324,7 +324,7 @@ public sealed class ActionEffectResolverTests
         var (mapQuery, health, eventBus, mathUtility, statusEffectAppliers, componentManager) = Build();
         mapQuery.SetBlockingOccupant(TargetTile, BlockingTargetEntityId);
         health.Add(BlockingTargetEntityId, new SimpleHealthComponent(100, 100));
-        var dodgingEntities = new PackedComponentPool<DodgingComponent>(maximumEntityCount: 10, initialCapacity: 10, static (ref existing, incoming) => existing = incoming);
+        var dodgingEntities = new PackedComponentPool<DodgingComponent>(entityCapacity: 10, initialCapacity: 10, static (ref existing, incoming) => existing = incoming);
         dodgingEntities.Add(BlockingTargetEntityId, new DodgingComponent(expiresAtFrame: 30));
 
         ActionEffectResolver.Apply(DodgeableAction, SourceEntityId, [TargetTile], mapQuery, health, eventBus, mathUtility, playerQuery: null, statusEffectAppliers, componentManager, Keys, now: 0, dodgingEntities: dodgingEntities);
@@ -338,7 +338,7 @@ public sealed class ActionEffectResolverTests
         var (mapQuery, health, eventBus, mathUtility, statusEffectAppliers, componentManager) = Build();
         mapQuery.SetBlockingOccupant(TargetTile, BlockingTargetEntityId);
         health.Add(BlockingTargetEntityId, new SimpleHealthComponent(100, 100));
-        var dodgingEntities = new PackedComponentPool<DodgingComponent>(maximumEntityCount: 10, initialCapacity: 10, static (ref existing, incoming) => existing = incoming);
+        var dodgingEntities = new PackedComponentPool<DodgingComponent>(entityCapacity: 10, initialCapacity: 10, static (ref existing, incoming) => existing = incoming);
         dodgingEntities.Add(BlockingTargetEntityId, new DodgingComponent(expiresAtFrame: 30));
 
         ActionEffectResolver.Apply(Action, SourceEntityId, [TargetTile], mapQuery, health, eventBus, mathUtility, playerQuery: null, statusEffectAppliers, componentManager, Keys, now: 0, dodgingEntities: dodgingEntities);
@@ -352,7 +352,7 @@ public sealed class ActionEffectResolverTests
         var (mapQuery, health, eventBus, mathUtility, statusEffectAppliers, componentManager) = Build();
         mapQuery.SetBlockingOccupant(TargetTile, BlockingTargetEntityId);
         health.Add(BlockingTargetEntityId, new SimpleHealthComponent(100, 100));
-        var dodgingEntities = new PackedComponentPool<DodgingComponent>(maximumEntityCount: 10, initialCapacity: 10, static (ref existing, incoming) => existing = incoming);
+        var dodgingEntities = new PackedComponentPool<DodgingComponent>(entityCapacity: 10, initialCapacity: 10, static (ref existing, incoming) => existing = incoming);
 
         ActionEffectResolver.Apply(DodgeableAction, SourceEntityId, [TargetTile], mapQuery, health, eventBus, mathUtility, playerQuery: null, statusEffectAppliers, componentManager, Keys, now: 0, dodgingEntities: dodgingEntities);
 

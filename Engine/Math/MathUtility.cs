@@ -132,4 +132,7 @@ public sealed class MathUtility(Random? randomizer = null)
     /// <summary>A random double in [0.0, 1.0)</summary>
     /// <remarks>Passthrough for deterministic randomization.</remarks>
     public double NextDouble() => _randomizer.NextDouble();
+
+    /// <summary>A uniform 32-bit value, for seeding a sequence of its own (see SeededRandom).</summary>
+    public uint NextSeed() => (uint)_randomizer.NextInt64(0, 1L << 32);
 }

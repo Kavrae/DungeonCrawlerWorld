@@ -16,6 +16,12 @@ public sealed class DirectComponentPool<T> : IReadOnlyComponentPool<T>, IInspect
     /// <summary> The type of component stored in this pool. </summary>
     public Type ComponentType => typeof(T);
 
+    /// <inheritdoc/>
+    public IEntityAccessGuard? AccessGuard { get; set; }
+
+    [System.Diagnostics.Conditional("DEBUG")]
+    private void Guard(int entityId) => AccessGuard?.OnAccess(typeof(T), entityId);
+
     /// <summary> The number of components in the pool. </summary>
     public int Count => _count;
 
@@ -73,6 +79,7 @@ public sealed class DirectComponentPool<T> : IReadOnlyComponentPool<T>, IInspect
     /// <param name="newComponent">The component to add.</param>
     public void Add(int entityId, T newComponent)
     {
+        Guard(entityId);
         if (_present[entityId] != 0)
         {
             throw new InvalidOperationException($"Entity {entityId} already has a component of type {typeof(T).Name}.");
@@ -91,6 +98,7 @@ public sealed class DirectComponentPool<T> : IReadOnlyComponentPool<T>, IInspect
     /// <param name="newComponent">The component to merge.</param>
     public void Merge(int entityId, T newComponent)
     {
+        Guard(entityId);
         if (_present[entityId] != 0)
         {
             _mergeImplementation(ref _components[entityId], newComponent);
@@ -107,13 +115,18 @@ public sealed class DirectComponentPool<T> : IReadOnlyComponentPool<T>, IInspect
 
     /// <summary>True if the specified entity has a component of this type</summary>
     /// <param name="entityId">The ID of the entity to check.</param>
-    public bool Has(int entityId) => IsInBounds(entityId) && _present[entityId] != 0;
+    public bool Has(int entityId)
+    {
+        Guard(entityId);
+        return IsInBounds(entityId) && _present[entityId] != 0;
+    }
 
     /// <summary>Attempts to get a readonly reference to the component for the specified entity.</summary>
     /// <param name="entityId">The ID of the entity to check.</param>
     /// <param name="component">Stores a readonly reference to the component if the entity has one, or the default value if not.</param>
     public bool TryGetReadonly(int entityId, out T component)
     {
+        Guard(entityId);
         if (!IsInBounds(entityId) || _present[entityId] == 0)
         {
             component = default;
@@ -128,6 +141,7 @@ public sealed class DirectComponentPool<T> : IReadOnlyComponentPool<T>, IInspect
     /// <param name="entityId">The ID of the entity to check.</param>
     public ref readonly T GetReadonly(int entityId)
     {
+        Guard(entityId);
         if (_present[entityId] == 0)
         {
             throw new InvalidOperationException($"Entity {entityId} does not have component {typeof(T).Name}.");
@@ -140,6 +154,7 @@ public sealed class DirectComponentPool<T> : IReadOnlyComponentPool<T>, IInspect
     /// <remarks> WARNING : Caller must manually increment version after mutation. Prefer TryUpdate/TrySet unless you are in a tight loop. </remarks>
     public ref T Get(int entityId)
     {
+        Guard(entityId);
         if (_present[entityId] == 0)
         {
             throw new InvalidOperationException($"Entity {entityId} does not have component {typeof(T).Name}.");
@@ -172,6 +187,7 @@ public sealed class DirectComponentPool<T> : IReadOnlyComponentPool<T>, IInspect
     /// <returns>The version of the component.</returns>
     public uint GetVersion(int entityId)
     {
+        Guard(entityId);
         if (_present[entityId] == 0)
         {
             throw new InvalidOperationException($"Entity {entityId} does not have component {typeof(T).Name}.");
@@ -186,6 +202,7 @@ public sealed class DirectComponentPool<T> : IReadOnlyComponentPool<T>, IInspect
     /// <returns>True if the component was set, false otherwise.</returns>
     public bool TrySet(int entityId, T value)
     {
+        Guard(entityId);
         if (!IsInBounds(entityId) || _present[entityId] == 0)
         {
             return false;
@@ -202,6 +219,7 @@ public sealed class DirectComponentPool<T> : IReadOnlyComponentPool<T>, IInspect
     /// <returns>True if the component was updated, false otherwise.</returns>
     public bool TryUpdate(int entityId, Engine.ECS.Components.ComponentUpdater<T> updater)
     {
+        Guard(entityId);
         ArgumentNullException.ThrowIfNull(updater);
 
         if (!IsInBounds(entityId) || _present[entityId] == 0)
@@ -222,6 +240,7 @@ public sealed class DirectComponentPool<T> : IReadOnlyComponentPool<T>, IInspect
     /// <returns>True if the component was updated, false otherwise.</returns>
     public bool TryUpdate<TState>(int entityId, TState state, ComponentUpdater<TState> updater)
     {
+        Guard(entityId);
         ArgumentNullException.ThrowIfNull(updater);
 
         if (!IsInBounds(entityId) || _present[entityId] == 0)
@@ -238,6 +257,7 @@ public sealed class DirectComponentPool<T> : IReadOnlyComponentPool<T>, IInspect
     /// <param name="entityId">The ID of the entity to check.</param>
     public void IncrementVersion(int entityId)
     {
+        Guard(entityId);
         if (_present[entityId] == 0)
         {
             throw new InvalidOperationException($"Entity {entityId} does not have component {typeof(T).Name}.");

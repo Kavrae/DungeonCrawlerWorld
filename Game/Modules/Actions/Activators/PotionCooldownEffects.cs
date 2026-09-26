@@ -10,7 +10,7 @@ namespace Game.Modules.Actions.Activators;
 /// <cleanupVersion>1</cleanupVersion>
 public static class PotionCooldownEffects
 {
-    /// <summary>20s @ GameTiming.FramesPerSecond -- the cooldown at Constitution total 1, and ComputeDurationFrames' fallback when no AbilityScoreComponent is available.</summary>
+    /// <summary>20s @ GameTiming.FramesPerSecond -- the cooldown at Constitution total 1, and ComputeDurationFrames' fallback when no ability score is available.</summary>
     public const ushort DurationFrames = GameTiming.FramesPerSecond * 20;
 
     /// <summary>5s @ GameTiming.FramesPerSecond -- the cooldown at Constitution total 300 (AbilityScoreMath's own clamp range).</summary>

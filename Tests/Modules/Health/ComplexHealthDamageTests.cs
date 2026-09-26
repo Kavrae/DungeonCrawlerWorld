@@ -28,46 +28,38 @@ public sealed class ComplexHealthDamageTests
     }
 
     private static PackedComponentPool<SimpleHealthComponent> CreateHealthPool() =>
-        new(maximumEntityCount: 10, initialCapacity: 4, static (ref existing, incoming) => existing = incoming);
-
-    private static MultiComponentPool<BodyPartComponent> CreateBodyPartsPool() =>
-        new(maximumEntityCount: 10, initialCapacity: 8);
+        new(entityCapacity: 10, initialCapacity: 4, static (ref existing, incoming) => existing = incoming);
 
     private static PackedComponentPool<DeadComponent> CreateDeadPool() =>
-        new(maximumEntityCount: 10, initialCapacity: 4, static (ref existing, incoming) => existing = incoming);
+        new(entityCapacity: 10, initialCapacity: 4, static (ref existing, incoming) => existing = incoming);
 
     [TestMethod]
     public void Apply_DamageLandsOnExactlyOnePart()
     {
-        var bodyParts = CreateBodyPartsPool();
-        bodyParts.Add(0, new BodyPartComponent("Head", BodyPartType.Head, 0, 0, currentHealth: 30, maximumHealth: 30, isVital: true));
-        bodyParts.Add(0, new BodyPartComponent("Torso", BodyPartType.Torso, 0, 0, currentHealth: 60, maximumHealth: 60, isVital: true));
+        var bodyParts = BodyPartTestWorld.WithParts(0, ("Head", BodyPartType.Head, 30, 30, true), ("Torso", BodyPartType.Torso, 60, 60, true)).BodyParts;
         var mathUtility = new MathUtility(new FirstPartRandom());
 
         ComplexHealthDamage.Apply(CreateHealthPool(), bodyParts, new EventBus(), 0, 10, ActionSource.Admin, playerQuery: null, "Test", statModifiers: null, mathUtility, deadEntities: null, now: 0);
 
-        // FirstPartRandom always selects ordinal 0 -- the head of the chain, i.e. Torso (added last).
-        var headDenseIndex = bodyParts.GetFirstDenseIndex(0);
-        var torsoPart = bodyParts.GetReadonlyByDenseIndex(headDenseIndex);
-        Assert.AreEqual("Torso", torsoPart.Name);
-        Assert.AreEqual(50, torsoPart.CurrentHealth);
+        // FirstPartRandom always selects ordinal 0 -- the first part of the body plan, i.e. Head.
+        bodyParts.TryGet(0, 0, out var hitPart);
+        Assert.AreEqual("Head", hitPart.Name);
+        Assert.AreEqual(20, hitPart.CurrentHealth);
 
-        var otherDenseIndex = bodyParts.GetNextDenseIndex(headDenseIndex);
-        var otherPart = bodyParts.GetReadonlyByDenseIndex(otherDenseIndex);
-        Assert.AreEqual("Head", otherPart.Name);
-        Assert.AreEqual(30, otherPart.CurrentHealth);
+        bodyParts.TryGet(0, 1, out var otherPart);
+        Assert.AreEqual("Torso", otherPart.Name);
+        Assert.AreEqual(60, otherPart.CurrentHealth);
     }
 
     [TestMethod]
     public void Apply_HitDropsNonVitalPartToZero_SetsDisabledAndLockout()
     {
-        var bodyParts = CreateBodyPartsPool();
-        bodyParts.Add(0, new BodyPartComponent("Arm", BodyPartType.Arm, 0, 0, currentHealth: 5, maximumHealth: 20, isVital: false));
+        var bodyParts = BodyPartTestWorld.WithParts(0, ("Arm", BodyPartType.Arm, 5, 20, false)).BodyParts;
         var mathUtility = new MathUtility(new FirstPartRandom());
 
         ComplexHealthDamage.Apply(CreateHealthPool(), bodyParts, new EventBus(), 0, 10, ActionSource.Admin, playerQuery: null, "Test", statModifiers: null, mathUtility, deadEntities: null, now: 0);
 
-        var part = bodyParts.GetReadonlyByDenseIndex(bodyParts.GetFirstDenseIndex(0));
+        bodyParts.TryGet(0, 0, out var part);
         Assert.AreEqual(0, part.CurrentHealth);
         Assert.IsTrue(part.IsDisabled);
         Assert.AreEqual((uint)(10 * GameTiming.FramesPerSecond), part.RegenLockedUntilFrame);
@@ -76,8 +68,7 @@ public sealed class ComplexHealthDamageTests
     [TestMethod]
     public void Apply_HitDropsVitalPartToZero_PublishesEntityDiedExactlyOnce()
     {
-        var bodyParts = CreateBodyPartsPool();
-        bodyParts.Add(1, new BodyPartComponent("Head", BodyPartType.Head, 0, 0, currentHealth: 5, maximumHealth: 30, isVital: true));
+        var bodyParts = BodyPartTestWorld.WithParts(1, ("Head", BodyPartType.Head, 5, 30, true)).BodyParts;
         var mathUtility = new MathUtility(new FirstPartRandom());
         var eventBus = new EventBus();
         var deadEntities = CreateDeadPool();
@@ -101,7 +92,7 @@ public sealed class ComplexHealthDamageTests
     [TestMethod]
     public void Apply_NoBodyPartComponent_ReturnsWithoutThrowing()
     {
-        var bodyParts = CreateBodyPartsPool();
+        var bodyParts = new BodyPartTestWorld().BodyParts;
         var mathUtility = new MathUtility(new FirstPartRandom());
 
         ComplexHealthDamage.Apply(CreateHealthPool(), bodyParts, new EventBus(), 0, 10, ActionSource.Admin, playerQuery: null, "Test", statModifiers: null, mathUtility, deadEntities: null, now: 0);
@@ -110,41 +101,37 @@ public sealed class ComplexHealthDamageTests
     [TestMethod]
     public void Apply_IncomingDamageModifierReducesAmount()
     {
-        var bodyParts = CreateBodyPartsPool();
-        bodyParts.Add(0, new BodyPartComponent("Torso", BodyPartType.Torso, 0, 0, currentHealth: 60, maximumHealth: 60, isVital: true));
+        var bodyParts = BodyPartTestWorld.WithParts(0, ("Torso", BodyPartType.Torso, 60, 60, true)).BodyParts;
         var mathUtility = new MathUtility(new FirstPartRandom());
-        var statModifiers = new MultiComponentPool<StatModifierComponent>(maximumEntityCount: 10, initialCapacity: 4);
+        var statModifiers = new MultiComponentPool<StatModifierComponent>(entityCapacity: 10, initialCapacity: 4);
         statModifiers.Add(0, new StatModifierComponent(StatModifierTarget.IncomingDamage, StatModifierOperation.Additive, StatModifierPolarity.Buff,
             canModify: false, magnitude: -5f, expiresAtFrame: FrameDeadline.Never, ActionSource.Admin));
 
         ComplexHealthDamage.Apply(CreateHealthPool(), bodyParts, new EventBus(), 0, 10, ActionSource.Admin, playerQuery: null, "Test", statModifiers, mathUtility, deadEntities: null, now: 0);
 
-        var part = bodyParts.GetReadonlyByDenseIndex(bodyParts.GetFirstDenseIndex(0));
+        bodyParts.TryGet(0, 0, out var part);
         Assert.AreEqual(55, part.CurrentHealth);
     }
 
     [TestMethod]
     public void Apply_ClampsAgainstEffectiveMaximumHealth()
     {
-        var bodyParts = CreateBodyPartsPool();
-        bodyParts.Add(0, new BodyPartComponent("Torso", BodyPartType.Torso, 0, 0, currentHealth: 30, maximumHealth: 60, isVital: true));
+        var bodyParts = BodyPartTestWorld.WithParts(0, ("Torso", BodyPartType.Torso, 30, 60, true)).BodyParts;
         var mathUtility = new MathUtility(new FirstPartRandom());
-        var statModifiers = new MultiComponentPool<StatModifierComponent>(maximumEntityCount: 10, initialCapacity: 4);
+        var statModifiers = new MultiComponentPool<StatModifierComponent>(entityCapacity: 10, initialCapacity: 4);
         statModifiers.Add(0, new StatModifierComponent(StatModifierTarget.MaximumHealth, StatModifierOperation.Additive, StatModifierPolarity.Debuff,
             canModify: false, magnitude: -55f, expiresAtFrame: FrameDeadline.Never, ActionSource.Admin));
 
         ComplexHealthDamage.Apply(CreateHealthPool(), bodyParts, new EventBus(), 0, 0, ActionSource.Admin, playerQuery: null, "Test", statModifiers, mathUtility, deadEntities: null, now: 0);
 
-        var part = bodyParts.GetReadonlyByDenseIndex(bodyParts.GetFirstDenseIndex(0));
+        bodyParts.TryGet(0, 0, out var part);
         Assert.AreEqual(5, part.CurrentHealth);
     }
 
     [TestMethod]
     public void Apply_PlayerInvolved_PublishesEntityDamagedWithSummedTotalNotSinglePart()
     {
-        var bodyParts = CreateBodyPartsPool();
-        bodyParts.Add(0, new BodyPartComponent("Head", BodyPartType.Head, 0, 0, currentHealth: 30, maximumHealth: 30, isVital: true));
-        bodyParts.Add(0, new BodyPartComponent("Torso", BodyPartType.Torso, 0, 0, currentHealth: 60, maximumHealth: 60, isVital: true));
+        var bodyParts = BodyPartTestWorld.WithParts(0, ("Head", BodyPartType.Head, 30, 30, true), ("Torso", BodyPartType.Torso, 60, 60, true)).BodyParts;
         var mathUtility = new MathUtility(new FirstPartRandom());
         var eventBus = new EventBus();
         EntityDamagedEvent? published = null;
@@ -161,8 +148,7 @@ public sealed class ComplexHealthDamageTests
     [TestMethod]
     public void Apply_NoPlayerInvolvement_DoesNotPublishEntityDamaged()
     {
-        var bodyParts = CreateBodyPartsPool();
-        bodyParts.Add(1, new BodyPartComponent("Torso", BodyPartType.Torso, 0, 0, currentHealth: 60, maximumHealth: 60, isVital: true));
+        var bodyParts = BodyPartTestWorld.WithParts(1, ("Torso", BodyPartType.Torso, 60, 60, true)).BodyParts;
         var mathUtility = new MathUtility(new FirstPartRandom());
         var eventBus = new EventBus();
         var published = false;
@@ -176,35 +162,31 @@ public sealed class ComplexHealthDamageTests
     [TestMethod]
     public void Apply_TargetRuleWithMatchingTypePresent_LandsOnThatType()
     {
-        var bodyParts = CreateBodyPartsPool();
-        bodyParts.Add(0, new BodyPartComponent("Head", BodyPartType.Head, 0, 5, currentHealth: 30, maximumHealth: 30, isVital: true));
-        bodyParts.Add(0, new BodyPartComponent("Torso", BodyPartType.Torso, 0, 4, currentHealth: 60, maximumHealth: 60, isVital: true));
+        var bodyParts = BodyPartTestWorld.WithParts(0, ("Head", BodyPartType.Head, 30, 30, true), ("Torso", BodyPartType.Torso, 60, 60, true)).BodyParts;
         var mathUtility = new MathUtility(new FirstPartRandom());
         var targetRule = new BodyPartTargetRule(BodyPartType.Head, BodyPartFallback.Random);
 
         ComplexHealthDamage.Apply(CreateHealthPool(), bodyParts, new EventBus(), 0, 10, ActionSource.Admin, playerQuery: null, "Test", statModifiers: null, mathUtility, deadEntities: null, now: 0, targetRule: targetRule);
 
-        var headDenseIndex = BodyPartSelection.PickByType(bodyParts, 0, BodyPartType.Head);
-        Assert.AreEqual(20, bodyParts.GetReadonlyByDenseIndex(headDenseIndex).CurrentHealth);
-        var torsoDenseIndex = BodyPartSelection.PickByType(bodyParts, 0, BodyPartType.Torso);
-        Assert.AreEqual(60, bodyParts.GetReadonlyByDenseIndex(torsoDenseIndex).CurrentHealth, "Torso must be untouched -- the hit landed on Head.");
+        bodyParts.TryGet(0, BodyPartSelection.PickByType(bodyParts, 0, BodyPartType.Head), out var headPart);
+        Assert.AreEqual(20, headPart.CurrentHealth);
+        bodyParts.TryGet(0, BodyPartSelection.PickByType(bodyParts, 0, BodyPartType.Torso), out var torsoPart);
+        Assert.AreEqual(60, torsoPart.CurrentHealth, "Torso must be untouched -- the hit landed on Head.");
     }
 
     [TestMethod]
     public void Apply_TargetRuleWithNoMatchingType_FallsBackPerRule()
     {
-        var bodyParts = CreateBodyPartsPool();
-        bodyParts.Add(0, new BodyPartComponent("Head", BodyPartType.Head, 0, 5, currentHealth: 30, maximumHealth: 30, isVital: true));
-        bodyParts.Add(0, new BodyPartComponent("Torso", BodyPartType.Torso, 0, 4, currentHealth: 60, maximumHealth: 60, isVital: true));
+        var bodyParts = BodyPartTestWorld.WithParts(0, ("Head", BodyPartType.Head, 30, 30, true), ("Torso", BodyPartType.Torso, 60, 60, true)).BodyParts;
         var mathUtility = new MathUtility(new FirstPartRandom());
         // No Foot part exists -- Bottommost fallback must select Torso, the lower-VerticalPosition of the two.
         var targetRule = new BodyPartTargetRule(BodyPartType.Foot, BodyPartFallback.Bottommost);
 
         ComplexHealthDamage.Apply(CreateHealthPool(), bodyParts, new EventBus(), 0, 10, ActionSource.Admin, playerQuery: null, "Test", statModifiers: null, mathUtility, deadEntities: null, now: 0, targetRule: targetRule);
 
-        var torsoDenseIndex = BodyPartSelection.PickByType(bodyParts, 0, BodyPartType.Torso);
-        Assert.AreEqual(50, bodyParts.GetReadonlyByDenseIndex(torsoDenseIndex).CurrentHealth);
-        var headDenseIndex = BodyPartSelection.PickByType(bodyParts, 0, BodyPartType.Head);
-        Assert.AreEqual(30, bodyParts.GetReadonlyByDenseIndex(headDenseIndex).CurrentHealth, "Head must be untouched -- the fallback landed on the bottommost part, Torso.");
+        bodyParts.TryGet(0, BodyPartSelection.PickByType(bodyParts, 0, BodyPartType.Torso), out var torsoPart);
+        Assert.AreEqual(50, torsoPart.CurrentHealth);
+        bodyParts.TryGet(0, BodyPartSelection.PickByType(bodyParts, 0, BodyPartType.Head), out var headPart);
+        Assert.AreEqual(30, headPart.CurrentHealth, "Head must be untouched -- the fallback landed on the bottommost part, Torso.");
     }
 }

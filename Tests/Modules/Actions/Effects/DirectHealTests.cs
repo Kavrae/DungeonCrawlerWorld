@@ -24,7 +24,7 @@ public sealed class DirectHealTests
     private const int SourceEntityId = 1;
     private const int TargetEntityId = 2;
 
-    private static (ComponentManager ComponentManager, ActionEffectContext Context) Build(IReadOnlyList<Tag> activatorTags, ushort currentHealth = 50, ushort maximumHealth = 100, MultiComponentPool<AbilityScoreComponent>? abilityScores = null)
+    private static (ComponentManager ComponentManager, ActionEffectContext Context) Build(IReadOnlyList<Tag> activatorTags, ushort currentHealth = 50, ushort maximumHealth = 100, PackedComponentPool<AbilityScoresComponent>? abilityScores = null)
     {
         var componentManager = new ComponentManager(initialEntityCapacity: 10, initialComponentCapacity: 10);
         componentManager.RegisterPackedPool<SimpleHealthComponent>(static (ref existing, incoming) => existing = incoming);
@@ -49,18 +49,13 @@ public sealed class DirectHealTests
         return (componentManager, context);
     }
 
-    private static (ComponentManager ComponentManager, ActionEffectContext Context) BuildComplex(IReadOnlyList<Tag> activatorTags, params BodyPartComponent[] parts)
+    private static (ComponentManager ComponentManager, ActionEffectContext Context) BuildComplex(IReadOnlyList<Tag> activatorTags, params (string Name, BodyPartType Type, float Current, ushort Max, bool Vital)[] parts)
     {
         var componentManager = new ComponentManager(initialEntityCapacity: 10, initialComponentCapacity: 10);
         componentManager.RegisterPackedPool<SimpleHealthComponent>(static (ref existing, incoming) => existing = incoming);
         componentManager.RegisterMultiPool<StatModifierComponent>();
-        componentManager.RegisterMultiPool<BodyPartComponent>();
 
-        var bodyParts = componentManager.GetMultiPool<BodyPartComponent>();
-        foreach (var part in parts)
-        {
-            bodyParts.Add(TargetEntityId, part);
-        }
+        var bodyParts = BodyPartTestWorld.WithParts(componentManager, TargetEntityId, parts).BodyParts;
 
         var context = new ActionEffectContext(
             SourceEntityId: SourceEntityId,
@@ -115,8 +110,8 @@ public sealed class DirectHealTests
     [TestMethod]
     public void Apply_AbilityScoreTaggedHeal_AddsCastersMatchingAbilityScoreTotal()
     {
-        var abilityScores = new MultiComponentPool<AbilityScoreComponent>(maximumEntityCount: 10, initialCapacity: 4);
-        abilityScores.Add(SourceEntityId, new AbilityScoreComponent(AbilityScoreType.Wisdom, baseValue: 15, total: 15));
+        var abilityScores = AbilityScoreTestPools.CreatePool(entityCapacity: 10, initialCapacity: 4);
+        abilityScores.Add(SourceEntityId, AbilityScoreTestPools.Score(AbilityScoreType.Wisdom, baseValue: 15, total: 15));
         var (componentManager, context) = Build([Tag.Healing, Tag.Wisdom], abilityScores: abilityScores);
 
         new DirectHeal(PercentOfMaxHealth: 0f, FlatAmount: 10f).Apply(context);
@@ -129,15 +124,15 @@ public sealed class DirectHealTests
     {
         var (componentManager, context) = BuildComplex(
             [Tag.Healing],
-            new BodyPartComponent("Head", BodyPartType.Head, partId: 0, verticalPosition: 5, currentHealth: 90, maximumHealth: 100, isVital: true),
-            new BodyPartComponent("Leg", BodyPartType.Leg, partId: 1, verticalPosition: 1, currentHealth: 20, maximumHealth: 100, isVital: false));
+            ("Head", BodyPartType.Head, 90, 100, true),
+            ("Leg", BodyPartType.Leg, 20, 100, false));
 
         new DirectHeal(PercentOfMaxHealth: 0.1f, BodyPartTargetMode: BodyPartTargetMode.LowestPercentage).Apply(context);
 
-        var bodyParts = componentManager.GetMultiPool<BodyPartComponent>();
-        var headDenseIndex = BodyPartSelection.PickByType(bodyParts, TargetEntityId, BodyPartType.Head);
-        var legDenseIndex = BodyPartSelection.PickByType(bodyParts, TargetEntityId, BodyPartType.Leg);
-        Assert.AreEqual(90f, bodyParts.GetReadonlyByDenseIndex(headDenseIndex).CurrentHealth, "Untouched -- only the most-damaged part is healed.");
-        Assert.AreEqual(40f, bodyParts.GetReadonlyByDenseIndex(legDenseIndex).CurrentHealth, "10% of the overall max (100+100=200) = 20, applied entirely to the Leg: 20 + 20 = 40.");
+        var bodyParts = context.BodyParts!;
+        bodyParts.TryGet(TargetEntityId, BodyPartSelection.PickByType(bodyParts, TargetEntityId, BodyPartType.Head), out var head);
+        bodyParts.TryGet(TargetEntityId, BodyPartSelection.PickByType(bodyParts, TargetEntityId, BodyPartType.Leg), out var leg);
+        Assert.AreEqual(90f, head.CurrentHealth, "Untouched -- only the most-damaged part is healed.");
+        Assert.AreEqual(40f, leg.CurrentHealth, "10% of the overall max (100+100=200) = 20, applied entirely to the Leg: 20 + 20 = 40.");
     }
 }

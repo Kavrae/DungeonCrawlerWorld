@@ -11,19 +11,24 @@ public sealed class MultiComponentPoolTests
     }
 
     [TestMethod]
-    public void EstimatedBytes_ScalesWithMaximumEntityCountAndDenseCapacity()
+    public void EstimatedBytes_CountsPageTableDenseStorageAndAllocatedPages()
     {
-        var pool = new MultiComponentPool<TestComponent>(maximumEntityCount: 10, initialCapacity: 4);
+        var pool = new MultiComponentPool<TestComponent>(entityCapacity: 10, initialCapacity: 4);
 
         // denseCapacity(4) * (sizeof(TestComponent)=4 + entityId int=4 + version uint=4 + next int=4 + previous int=4)
-        // + maximumEntityCount(10) * (firstDenseIndex int=4 + count int=4 + version uint=4)
-        Assert.AreEqual(4 * (4 + 4 + 4 + 4 + 4) + 10 * (4 + 4 + 4), pool.EstimatedBytes);
+        // + one page-table slot (8); no page yet.
+        Assert.AreEqual(4 * (4 + 4 + 4 + 4 + 4) + 8, pool.EstimatedBytes);
+
+        pool.Add(0, new TestComponent { Value = 1 });
+
+        // + the first page: 1024 * (firstDenseIndex int=4 + count int=4 + version uint=4)
+        Assert.AreEqual(4 * (4 + 4 + 4 + 4 + 4) + 8 + 1024 * (4 + 4 + 4), pool.EstimatedBytes);
     }
 
     [TestMethod]
     public void Add_MultipleForSameEntity_AllCountedUnderThatEntity()
     {
-        var pool = new MultiComponentPool<TestComponent>(maximumEntityCount: 10, initialCapacity: 4);
+        var pool = new MultiComponentPool<TestComponent>(entityCapacity: 10, initialCapacity: 4);
 
         pool.Add(3, new TestComponent { Value = 1 });
         pool.Add(3, new TestComponent { Value = 2 });
@@ -37,7 +42,7 @@ public sealed class MultiComponentPoolTests
     [TestMethod]
     public void GetFirstDenseIndex_WalkChain_VisitsAllComponentsForEntity()
     {
-        var pool = new MultiComponentPool<TestComponent>(maximumEntityCount: 10, initialCapacity: 4);
+        var pool = new MultiComponentPool<TestComponent>(entityCapacity: 10, initialCapacity: 4);
         pool.Add(0, new TestComponent { Value = 1 });
         pool.Add(0, new TestComponent { Value = 2 });
 
@@ -54,7 +59,7 @@ public sealed class MultiComponentPoolTests
     [TestMethod]
     public void Remove_RemovesAllComponentsForEntity()
     {
-        var pool = new MultiComponentPool<TestComponent>(maximumEntityCount: 10, initialCapacity: 4);
+        var pool = new MultiComponentPool<TestComponent>(entityCapacity: 10, initialCapacity: 4);
         pool.Add(0, new TestComponent { Value = 1 });
         pool.Add(0, new TestComponent { Value = 2 });
         pool.Add(1, new TestComponent { Value = 3 });
@@ -71,7 +76,7 @@ public sealed class MultiComponentPoolTests
     [TestMethod]
     public void RemoveFirst_MatchingPredicate_RemovesOnlyThatEntry()
     {
-        var pool = new MultiComponentPool<TestComponent>(maximumEntityCount: 10, initialCapacity: 4);
+        var pool = new MultiComponentPool<TestComponent>(entityCapacity: 10, initialCapacity: 4);
         pool.Add(0, new TestComponent { Value = 1 });
         pool.Add(0, new TestComponent { Value = 2 });
 
@@ -84,7 +89,7 @@ public sealed class MultiComponentPoolTests
     [TestMethod]
     public void SwapRemove_RepairsLinkedChainForMovedEntry()
     {
-        var pool = new MultiComponentPool<TestComponent>(maximumEntityCount: 10, initialCapacity: 8);
+        var pool = new MultiComponentPool<TestComponent>(entityCapacity: 10, initialCapacity: 8);
         // Entity 0 gets three components; entity 1 gets one, deliberately interleaved so a
         // swap-remove has to repair a chain belonging to whichever entity owned the moved slot.
         pool.Add(0, new TestComponent { Value = 1 });
@@ -111,7 +116,7 @@ public sealed class MultiComponentPoolTests
     [TestMethod]
     public void EntityAdded_FiresOnlyOnZeroToOneTransition_NotOnEverySubsequentAdd()
     {
-        var pool = new MultiComponentPool<TestComponent>(maximumEntityCount: 10, initialCapacity: 4);
+        var pool = new MultiComponentPool<TestComponent>(entityCapacity: 10, initialCapacity: 4);
         var addedFiredCount = 0;
         pool.EntityAdded += _ => addedFiredCount++;
 
@@ -125,7 +130,7 @@ public sealed class MultiComponentPoolTests
     [TestMethod]
     public void EntityRemoved_FiresOnlyOnOneToZeroTransition_NotOnEveryIntermediateRemove()
     {
-        var pool = new MultiComponentPool<TestComponent>(maximumEntityCount: 10, initialCapacity: 4);
+        var pool = new MultiComponentPool<TestComponent>(entityCapacity: 10, initialCapacity: 4);
         pool.Add(0, new TestComponent { Value = 1 });
         pool.Add(0, new TestComponent { Value = 2 });
         var removedFiredCount = 0;
@@ -141,7 +146,7 @@ public sealed class MultiComponentPoolTests
     [TestMethod]
     public void EntityVersion_IncrementsOnAddAndRemove()
     {
-        var pool = new MultiComponentPool<TestComponent>(maximumEntityCount: 10, initialCapacity: 4);
+        var pool = new MultiComponentPool<TestComponent>(entityCapacity: 10, initialCapacity: 4);
 
         pool.Add(0, new TestComponent { Value = 1 });
         var versionAfterAdd = pool.GetEntityVersion(0);
@@ -155,7 +160,7 @@ public sealed class MultiComponentPoolTests
     [TestMethod]
     public void CopyInspectionDataForEntity_SingleInstance_OneRowWithNoCountSuffix()
     {
-        var pool = new MultiComponentPool<TestComponent>(maximumEntityCount: 10, initialCapacity: 4);
+        var pool = new MultiComponentPool<TestComponent>(entityCapacity: 10, initialCapacity: 4);
         pool.Add(0, new TestComponent { Value = 1 });
         var destination = new List<Engine.ECS.Components.InspectedComponentEntry>();
 
@@ -170,7 +175,7 @@ public sealed class MultiComponentPoolTests
     [TestMethod]
     public void CopyInspectionDataForEntity_MultipleIdenticalInstances_GroupsIntoOneRowWithCount()
     {
-        var pool = new MultiComponentPool<TestComponent>(maximumEntityCount: 10, initialCapacity: 4);
+        var pool = new MultiComponentPool<TestComponent>(entityCapacity: 10, initialCapacity: 4);
         pool.Add(0, new TestComponent { Value = 7 });
         pool.Add(0, new TestComponent { Value = 7 });
         pool.Add(0, new TestComponent { Value = 7 });
@@ -186,7 +191,7 @@ public sealed class MultiComponentPoolTests
     [TestMethod]
     public void CopyInspectionDataForEntity_MixOfDistinctAndDuplicateInstances_EachDistinctValueGetsItsOwnRow()
     {
-        var pool = new MultiComponentPool<TestComponent>(maximumEntityCount: 10, initialCapacity: 8);
+        var pool = new MultiComponentPool<TestComponent>(entityCapacity: 10, initialCapacity: 8);
         pool.Add(0, new TestComponent { Value = 1 });
         pool.Add(0, new TestComponent { Value = 2 });
         pool.Add(0, new TestComponent { Value = 1 });
@@ -205,7 +210,7 @@ public sealed class MultiComponentPoolTests
     [TestMethod]
     public void CopyInspectionDataForEntity_GroupedRow_UsesTheHighestVersionInTheGroup()
     {
-        var pool = new MultiComponentPool<TestComponent>(maximumEntityCount: 10, initialCapacity: 4);
+        var pool = new MultiComponentPool<TestComponent>(entityCapacity: 10, initialCapacity: 4);
         pool.Add(0, new TestComponent { Value = 5 }); // dense index 0, version 1
         pool.Add(0, new TestComponent { Value = 5 }); // dense index 1, version 1
         pool.UpdateByDenseIndex(pool.GetFirstDenseIndex(0), static (ref TestComponent c) => { }); // bumps whichever instance is first in the chain to version 2
@@ -219,7 +224,7 @@ public sealed class MultiComponentPoolTests
     [TestMethod]
     public void Has_EntityIdBeyondCapacity_ReturnsFalseInsteadOfThrowing()
     {
-        var pool = new MultiComponentPool<TestComponent>(maximumEntityCount: 4, initialCapacity: 4);
+        var pool = new MultiComponentPool<TestComponent>(entityCapacity: 4, initialCapacity: 4);
 
         Assert.IsFalse(pool.Has(1000));
         Assert.AreEqual(0, pool.CountForEntity(1000));
@@ -231,11 +236,55 @@ public sealed class MultiComponentPoolTests
     [TestMethod]
     public void Add_EntityIdBeyondMaximumEntityCount_GrowsEntityIndexOnDemand()
     {
-        var pool = new MultiComponentPool<TestComponent>(maximumEntityCount: 4, initialCapacity: 4);
+        var pool = new MultiComponentPool<TestComponent>(entityCapacity: 4, initialCapacity: 4);
 
         pool.Add(1000, new TestComponent { Value = 42 });
 
         Assert.IsTrue(pool.Has(1000));
         Assert.AreEqual(1, pool.CountForEntity(1000));
+    }
+
+    /// <summary>A consumer caching an entity version must never see it repeat, including across the entity holding nothing in between.</summary>
+    [TestMethod]
+    public void EntityVersion_KeepsCountingUpAfterTheLastInstanceIsRemovedAndAnotherAdded()
+    {
+        var pool = new MultiComponentPool<TestComponent>(entityCapacity: 10, initialCapacity: 4);
+        pool.Add(3, new TestComponent { Value = 1 });
+        pool.Remove(3);
+        var versionWhileEmpty = pool.GetEntityVersion(3);
+
+        pool.Add(3, new TestComponent { Value = 1 });
+
+        Assert.IsGreaterThan(versionWhileEmpty, pool.GetEntityVersion(3));
+        Assert.IsGreaterThan(0u, versionWhileEmpty);
+    }
+
+    [TestMethod]
+    public void Reads_OfEntitiesInPagesNeverWritten_AllocateNothing()
+    {
+        var pool = new MultiComponentPool<TestComponent>(entityCapacity: 10, initialCapacity: 4);
+        var bytes = pool.EstimatedBytes;
+
+        Assert.IsFalse(pool.Has(5_000_000));
+        Assert.AreEqual(0, pool.CountForEntity(-1));
+        Assert.AreEqual(-1, pool.GetFirstDenseIndex(700_000));
+        Assert.AreEqual(0u, pool.GetEntityVersion(700_000));
+
+        Assert.AreEqual(bytes, pool.EstimatedBytes);
+    }
+
+    [TestMethod]
+    public void Clear_ReleasesEveryEntityPage()
+    {
+        var pool = new MultiComponentPool<TestComponent>(entityCapacity: 10, initialCapacity: 4);
+        var emptyBytes = pool.EstimatedBytes;
+        pool.Add(3, new TestComponent { Value = 1 });
+        pool.Add(3_000, new TestComponent { Value = 1 });
+
+        pool.Clear();
+
+        Assert.IsFalse(pool.Has(3));
+        Assert.AreEqual(0u, pool.GetEntityVersion(3_000));
+        Assert.IsLessThan(emptyBytes + 1_000, pool.EstimatedBytes);
     }
 }

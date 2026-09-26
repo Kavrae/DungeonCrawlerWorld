@@ -1,19 +1,16 @@
 using System.Runtime.CompilerServices;
-using static Engine.ECS.Components.EntityCapacityGrowth;
 
 namespace Engine.ECS.Components.Stores;
 
 /// <summary> Sparse-set component storage for rare components, where a direct pool would waste index space. </summary>
-/// <remarks> Dense storage grows linearly to bound peak memory for components most entities never have. </remarks>
+/// <remarks> The entity index is paged (see EntityPages), so a pool costs the id ranges its holders fall in rather than the world's entity capacity; dense storage grows geometrically (see DenseCapacityGrowth). </remarks>
 /// <cleanupVersion>1</cleanupVersion>
 public sealed class PackedComponentPool<T> : IReadOnlyComponentPool<T>, IInspectableComponentPool, IEntityMembershipPool, IMemoryReportingComponentPool where T : struct
 {
-    private int _maxEntities;
-    private int[] _entityIdToDenseIndexMap;
+    private readonly EntityPages<int> _denseIndexByEntity;
     private int[] _denseIndexToEntityIdMap;
     private T[] _denseComponents;
     private uint[] _denseVersions;
-    private readonly int _denseGrowthAmount;
     private readonly MergeAction<T> _mergeImplementation;
 
     private int _count;
@@ -24,13 +21,25 @@ public sealed class PackedComponentPool<T> : IReadOnlyComponentPool<T>, IInspect
     /// <summary> The type of component stored in this pool. </summary>
     public Type ComponentType => typeof(T);
 
+    /// <inheritdoc/>
+    public IEntityAccessGuard? AccessGuard { get; set; }
+
+    [System.Diagnostics.Conditional("DEBUG")]
+    private void Guard(int entityId) => AccessGuard?.OnAccess(typeof(T), entityId);
+
+    private int DenseIndexOf(int entityId)
+    {
+        Guard(entityId);
+        return _denseIndexByEntity.Get(entityId);
+    }
+
 
     /// <summary> The number of components in the pool. </summary>
     public int Count => _count;
 
-    /// <summary> Estimated bytes across the entity-indexed _entityIdToDenseIndexMap plus the dense _denseComponents/_denseIndexToEntityIdMap/_denseVersions arrays. </summary>
+    /// <summary> Estimated bytes across the entity index's allocated pages plus the dense _denseComponents/_denseIndexToEntityIdMap/_denseVersions arrays. </summary>
     public long EstimatedBytes =>
-        (long)_entityIdToDenseIndexMap.Length * sizeof(int) +
+        _denseIndexByEntity.EstimatedBytes +
         (long)_denseComponents.Length * (Unsafe.SizeOf<T>() + sizeof(int) + sizeof(uint));
 
     /// <summary> A read-only span of the components in the pool, packed contiguously by dense index. </summary>
@@ -73,18 +82,16 @@ public sealed class PackedComponentPool<T> : IReadOnlyComponentPool<T>, IInspect
     public event Action<int, int>? ComponentChanged;
 
     /// <summary> Initializes a new instance of the <see cref="PackedComponentPool{T}"/> class with the specified capacities and merge implementation. </summary>
-    /// <param name="maximumEntityCount">The maximum EntityId this pool can be indexed by.</param>
-    /// <param name="initialCapacity">The initial dense storage size, and the amount it grows by each time it fills.</param>
+    /// <param name="entityCapacity">The entity id space the entity index's page table starts out covering; ids beyond it grow it on demand.</param>
+    /// <param name="initialCapacity">The initial dense storage size.</param>
     /// <param name="mergeImplementation">Determines how two instances of a component should be merged together.</param>
-    public PackedComponentPool(int maximumEntityCount, int initialCapacity, MergeAction<T> mergeImplementation)
+    public PackedComponentPool(int entityCapacity, int initialCapacity, MergeAction<T> mergeImplementation)
     {
-        ArgumentOutOfRangeException.ThrowIfNegativeOrZero(maximumEntityCount);
+        ArgumentOutOfRangeException.ThrowIfNegativeOrZero(entityCapacity);
         ArgumentOutOfRangeException.ThrowIfNegativeOrZero(initialCapacity);
         ArgumentNullException.ThrowIfNull(mergeImplementation);
 
-        _maxEntities = maximumEntityCount;
-        _entityIdToDenseIndexMap = new int[_maxEntities];
-        Array.Fill(_entityIdToDenseIndexMap, -1);
+        _denseIndexByEntity = new EntityPages<int>(entityCapacity, empty: -1);
 
         _denseComponents = new T[initialCapacity];
         _denseVersions = new uint[initialCapacity];
@@ -92,44 +99,24 @@ public sealed class PackedComponentPool<T> : IReadOnlyComponentPool<T>, IInspect
         Array.Fill(_denseIndexToEntityIdMap, -1);
 
         _mergeImplementation = mergeImplementation;
-        _denseGrowthAmount = initialCapacity;
         _count = 0;
     }
 
-    /// <summary> Resizes the pool to accommodate the new maximum entity count. </summary>
-    /// <param name="newMaximumEntityCount">The new maximum entity count.</param>
-    public void Resize(int newMaximumEntityCount)
-    {
-        ArgumentOutOfRangeException.ThrowIfLessThan(newMaximumEntityCount, _maxEntities);
-
-        Array.Resize(ref _entityIdToDenseIndexMap, newMaximumEntityCount);
-        for (var i = _maxEntities; i < newMaximumEntityCount; i++)
-        {
-            _entityIdToDenseIndexMap[i] = -1;
-        }
-
-        _maxEntities = newMaximumEntityCount;
-    }
+    /// <summary> Grows the entity index's page table to cover the new entity capacity. Allocates no pages. </summary>
+    /// <param name="newMaximumEntityCount">The new entity capacity.</param>
+    public void Resize(int newMaximumEntityCount) => _denseIndexByEntity.EnsureCapacity(newMaximumEntityCount);
 
     /// <summary>Claims this pool as the source for one PackedTimerWheel, throwing if a wheel already drives it.</summary>
     /// <remarks>Called by the wheel's constructor. See TimerWheelClaim.</remarks>
     internal void ClaimForTimerWheel() => _timerWheelClaim.Claim(typeof(T));
-
-    /// <summary>True if entityId is within the pool's current entity-indexed capacity.</summary>
-    /// <remarks>A rare/independently-sized pool (see ComponentManager.RegisterPackedPool's maximumEntityCount override) may be smaller than the world's full entity id space -- an out-of-bounds entityId simply has never had this component, not a bug. Add grows the pool on demand instead of assuming bounds.</remarks>
-    private bool IsInBounds(int entityId) => (uint)entityId < (uint)_maxEntities;
 
     /// <summary> Adds a component to the pool for the specified entity. </summary>
     /// <param name="entityId">The ID of the entity to add the component to.</param>
     /// <param name="newComponent">The component to add.</param>
     public void Add(int entityId, T newComponent)
     {
-        if (!IsInBounds(entityId))
-        {
-            Resize(NextCapacityFor(_maxEntities, entityId));
-        }
-
-        var denseIndex = _entityIdToDenseIndexMap[entityId];
+        Guard(entityId);
+        ref var denseIndex = ref _denseIndexByEntity.GetWritable(entityId);
         if (denseIndex >= 0)
         {
             throw new InvalidOperationException($"Entity {entityId} already has a component of type {typeof(T).Name}.");
@@ -139,7 +126,7 @@ public sealed class PackedComponentPool<T> : IReadOnlyComponentPool<T>, IInspect
 
         _denseComponents[_count] = newComponent;
         _denseIndexToEntityIdMap[_count] = entityId;
-        _entityIdToDenseIndexMap[entityId] = _count;
+        denseIndex = _count;
         _denseVersions[_count] = 1;
         _count++;
 
@@ -154,15 +141,12 @@ public sealed class PackedComponentPool<T> : IReadOnlyComponentPool<T>, IInspect
     /// <param name="newComponent">The component to merge.</param>
     public void Merge(int entityId, T newComponent)
     {
-        if (IsInBounds(entityId))
+        var denseIndex = DenseIndexOf(entityId);
+        if (denseIndex >= 0)
         {
-            var denseIndex = _entityIdToDenseIndexMap[entityId];
-            if (denseIndex >= 0)
-            {
-                _mergeImplementation(ref _denseComponents[denseIndex], newComponent);
-                MarkChanged(denseIndex);
-                return;
-            }
+            _mergeImplementation(ref _denseComponents[denseIndex], newComponent);
+            MarkChanged(denseIndex);
+            return;
         }
 
         Add(entityId, newComponent);
@@ -170,14 +154,14 @@ public sealed class PackedComponentPool<T> : IReadOnlyComponentPool<T>, IInspect
 
     /// <summary>True if the specified entity has a component of this type</summary>
     /// <param name="entityId">The ID of the entity to check.</param>
-    public bool Has(int entityId) => IsInBounds(entityId) && _entityIdToDenseIndexMap[entityId] >= 0;
+    public bool Has(int entityId) => DenseIndexOf(entityId) >= 0;
 
     /// <summary>Attempts to get a readonly reference to the component for the specified entity.</summary>
     /// <param name="entityId">The ID of the entity to check.</param>
     /// <param name="component">Stores a readonly reference to the component if the entity has one, or the default value if not.</param>
     public bool TryGetReadonly(int entityId, out T component)
     {
-        var denseIndex = IsInBounds(entityId) ? _entityIdToDenseIndexMap[entityId] : -1;
+        var denseIndex = DenseIndexOf(entityId);
         if (denseIndex < 0)
         {
             component = default;
@@ -190,13 +174,13 @@ public sealed class PackedComponentPool<T> : IReadOnlyComponentPool<T>, IInspect
 
     /// <summary>The entity's current dense index, or -1 if it has no component here.</summary>
     /// <remarks>Valid only until the next Remove from this pool (swap-with-last reshuffles dense indices) -- look it up, use it, drop it.</remarks>
-    public int GetDenseIndex(int entityId) => IsInBounds(entityId) ? _entityIdToDenseIndexMap[entityId] : -1;
+    public int GetDenseIndex(int entityId) => DenseIndexOf(entityId);
 
     /// <summary>Gets a readonly reference to the component for the specified entity.</summary>
     /// <param name="entityId">The ID of the entity to check.</param>
     public ref readonly T GetReadonly(int entityId)
     {
-        var denseIndex = IsInBounds(entityId) ? _entityIdToDenseIndexMap[entityId] : -1;
+        var denseIndex = DenseIndexOf(entityId);
         if (denseIndex < 0)
         {
             throw new InvalidOperationException($"Entity {entityId} does not have component {typeof(T).Name}.");
@@ -211,7 +195,7 @@ public sealed class PackedComponentPool<T> : IReadOnlyComponentPool<T>, IInspect
     /// <returns>The number of inspection entries added.</returns>
     public int CopyInspectionDataForEntity(int entityId, List<InspectedComponentEntry> destination)
     {
-        var denseIndex = IsInBounds(entityId) ? _entityIdToDenseIndexMap[entityId] : -1;
+        var denseIndex = DenseIndexOf(entityId);
         if (denseIndex < 0)
         {
             return 0;
@@ -230,7 +214,7 @@ public sealed class PackedComponentPool<T> : IReadOnlyComponentPool<T>, IInspect
     /// <returns>The version of the component.</returns>
     public uint GetVersion(int entityId)
     {
-        var denseIndex = IsInBounds(entityId) ? _entityIdToDenseIndexMap[entityId] : -1;
+        var denseIndex = DenseIndexOf(entityId);
         if (denseIndex < 0)
         {
             throw new InvalidOperationException($"Entity {entityId} does not have component {typeof(T).Name}.");
@@ -245,7 +229,7 @@ public sealed class PackedComponentPool<T> : IReadOnlyComponentPool<T>, IInspect
     /// <returns>True if the component was set, false otherwise.</returns>
     public bool TrySet(int entityId, T value)
     {
-        var denseIndex = IsInBounds(entityId) ? _entityIdToDenseIndexMap[entityId] : -1;
+        var denseIndex = DenseIndexOf(entityId);
         if (denseIndex < 0)
         {
             return false;
@@ -264,7 +248,7 @@ public sealed class PackedComponentPool<T> : IReadOnlyComponentPool<T>, IInspect
     {
         ArgumentNullException.ThrowIfNull(updater);
 
-        var denseIndex = IsInBounds(entityId) ? _entityIdToDenseIndexMap[entityId] : -1;
+        var denseIndex = DenseIndexOf(entityId);
         if (denseIndex < 0)
         {
             return false;
@@ -285,7 +269,7 @@ public sealed class PackedComponentPool<T> : IReadOnlyComponentPool<T>, IInspect
     {
         ArgumentNullException.ThrowIfNull(updater);
 
-        var denseIndex = IsInBounds(entityId) ? _entityIdToDenseIndexMap[entityId] : -1;
+        var denseIndex = DenseIndexOf(entityId);
         if (denseIndex < 0)
         {
             return false;
@@ -369,7 +353,7 @@ public sealed class PackedComponentPool<T> : IReadOnlyComponentPool<T>, IInspect
     /// <returns>True if the component was removed, false otherwise.</returns>
     public bool Remove(int entityId)
     {
-        var denseIndex = IsInBounds(entityId) ? _entityIdToDenseIndexMap[entityId] : -1;
+        var denseIndex = _denseIndexByEntity.Get(entityId);
         if (denseIndex < 0)
         {
             return false;
@@ -385,10 +369,10 @@ public sealed class PackedComponentPool<T> : IReadOnlyComponentPool<T>, IInspect
             _denseIndexToEntityIdMap[denseIndex] = movedEntityId;
             _denseVersions[denseIndex] = _denseVersions[lastDenseIndex];
 
-            _entityIdToDenseIndexMap[movedEntityId] = denseIndex;
+            _denseIndexByEntity.GetWritable(movedEntityId) = denseIndex;
         }
 
-        _entityIdToDenseIndexMap[entityId] = -1;
+        _denseIndexByEntity.GetWritable(entityId) = -1;
 
         if (RuntimeHelpers.IsReferenceOrContainsReferences<T>())
         {
@@ -413,7 +397,7 @@ public sealed class PackedComponentPool<T> : IReadOnlyComponentPool<T>, IInspect
         }
     }
 
-    /// <summary> Grows dense storage by <c>_denseGrowthAmount</c> if it's currently full. </summary>
+    /// <summary> Grows dense storage (see DenseCapacityGrowth) if it's currently full. </summary>
     private void EnsureDenseCapacityForOneMore()
     {
         if (_count < _denseComponents.Length)
@@ -421,7 +405,7 @@ public sealed class PackedComponentPool<T> : IReadOnlyComponentPool<T>, IInspect
             return;
         }
 
-        GrowDenseTo(_denseComponents.Length + _denseGrowthAmount);
+        GrowDenseTo(DenseCapacityGrowth.Next(_denseComponents.Length));
     }
 
     private void GrowDenseTo(int newSize)

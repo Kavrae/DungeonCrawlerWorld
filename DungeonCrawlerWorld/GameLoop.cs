@@ -14,10 +14,11 @@ namespace DungeonCrawlerWorld;
 /// TODO : Many of these hard coded values should live in a configuration file.
 public sealed class GameLoop : Microsoft.Xna.Framework.Game
 {
-    // Sized for the default 3x3-neighborhood (3072x3072) test map across all three MapLayers --
-    // ~660k NPC entities from TestMapBuilder.
+    // Entity capacity is sized for the default 3x3-neighborhood (3072x3072) test map across all three
+    // MapLayers -- ~660k NPC entities from TestMapBuilder. Component capacity is only where a pool's
+    // dense storage starts; pools grow geometrically, so most start small.
     internal const int InitialEntityCapacity = 720_000;
-    internal const int InitialComponentCapacity = 220_000;
+    internal const int InitialComponentCapacity = 1_024;
 
     // Floor 1 of (eventually) 18 -- floors are strictly sequential, no skipping or
     // backtracking. There's no advance trigger yet (that needs a win-condition system that

@@ -331,7 +331,7 @@ public sealed class InventoryActionsTests
     {
         var manager = CreateRegisteredManager();
 
-        InventoryActions.ConsumeItemByStackInstanceId(manager, entityId: 0, Guid.NewGuid());
+        InventoryActions.ConsumeItemByStackInstanceId(manager, entityId: 0, stackInstanceId: 9999);
     }
 
     [TestMethod]
@@ -364,7 +364,7 @@ public sealed class InventoryActionsTests
     {
         var manager = CreateRegisteredManager();
 
-        var result = InventoryActions.TryTransferStack(manager, sourceEntityId: 0, destinationEntityId: 1, Guid.NewGuid(), NoEntityIsThePlayer);
+        var result = InventoryActions.TryTransferStack(manager, sourceEntityId: 0, destinationEntityId: 1, stackInstanceId: 9999, NoEntityIsThePlayer);
 
         Assert.IsFalse(result);
     }
@@ -487,17 +487,18 @@ public sealed class InventoryActionsTests
     }
 
     [TestMethod]
-    public void AddItem_NewStack_StampsFirstAcquiredWithinCallWindow()
+    public void AddItem_NewStack_StampsAFreshAcquiredSequence()
     {
         var manager = CreateRegisteredManager();
-        var beforeTicks = DateTime.UtcNow.Ticks;
+        var before = InventoryItemStackComponent.NextAcquiredSequence();
 
         InventoryActions.AddItem(manager, entityId: 0, Guid.NewGuid(), quantity: 1);
 
-        var afterTicks = DateTime.UtcNow.Ticks;
+        var after = InventoryItemStackComponent.NextAcquiredSequence();
         var pool = manager.GetMultiPool<InventoryItemStackComponent>();
-        var stamped = pool.GetReadonlyByDenseIndex(pool.GetFirstDenseIndex(0)).FirstAcquiredUtcTicks;
-        Assert.IsTrue(stamped >= beforeTicks && stamped <= afterTicks);
+        var stamped = pool.GetReadonlyByDenseIndex(pool.GetFirstDenseIndex(0)).AcquiredSequence;
+        Assert.IsGreaterThan(before, stamped);
+        Assert.IsLessThan(after, stamped);
     }
 
     [TestMethod]
@@ -507,12 +508,11 @@ public sealed class InventoryActionsTests
         var itemId = Guid.NewGuid();
         InventoryActions.AddItem(manager, entityId: 0, itemId, quantity: 5);
         var pool = manager.GetMultiPool<InventoryItemStackComponent>();
-        var originalFirstAcquired = pool.GetReadonlyByDenseIndex(pool.GetFirstDenseIndex(0)).FirstAcquiredUtcTicks;
-        Thread.Sleep(5);
+        var originalFirstAcquired = pool.GetReadonlyByDenseIndex(pool.GetFirstDenseIndex(0)).AcquiredSequence;
 
         InventoryActions.AddItem(manager, entityId: 0, itemId, quantity: 3);
 
-        Assert.AreEqual(originalFirstAcquired, pool.GetReadonlyByDenseIndex(pool.GetFirstDenseIndex(0)).FirstAcquiredUtcTicks);
+        Assert.AreEqual(originalFirstAcquired, pool.GetReadonlyByDenseIndex(pool.GetFirstDenseIndex(0)).AcquiredSequence);
     }
 
     [TestMethod]
@@ -522,13 +522,12 @@ public sealed class InventoryActionsTests
         var itemId = Guid.NewGuid();
 
         var firstId = InventoryActions.AddDivergentItem(manager, entityId: 0, CreateDefinition(itemId, charges: 5));
-        Thread.Sleep(5);
         var secondId = InventoryActions.AddDivergentItem(manager, entityId: 0, CreateDefinition(itemId, charges: 4));
 
         var pool = manager.GetMultiPool<InventoryItemStackComponent>();
         Assert.IsTrue(InventoryQueries.TryFindByStackInstanceId(pool, 0, firstId, out var firstStack));
         Assert.IsTrue(InventoryQueries.TryFindByStackInstanceId(pool, 0, secondId, out var secondStack));
-        Assert.IsGreaterThan(firstStack.FirstAcquiredUtcTicks, secondStack.FirstAcquiredUtcTicks);
+        Assert.IsGreaterThan(firstStack.AcquiredSequence, secondStack.AcquiredSequence);
     }
 
     [TestMethod]
@@ -539,12 +538,11 @@ public sealed class InventoryActionsTests
         var stackInstanceId = InventoryActions.AddDivergentItem(manager, entityId: 0, CreateDefinition(itemId, charges: 5));
         var pool = manager.GetMultiPool<InventoryItemStackComponent>();
         Assert.IsTrue(InventoryQueries.TryFindByStackInstanceId(pool, 0, stackInstanceId, out var originalStack));
-        Thread.Sleep(5);
 
         InventoryActions.AddDivergentItem(manager, entityId: 0, CreateDefinition(itemId, charges: 5));
 
         Assert.IsTrue(InventoryQueries.TryFindByStackInstanceId(pool, 0, stackInstanceId, out var mergedStack));
-        Assert.AreEqual(originalStack.FirstAcquiredUtcTicks, mergedStack.FirstAcquiredUtcTicks);
+        Assert.AreEqual(originalStack.AcquiredSequence, mergedStack.AcquiredSequence);
     }
 
     [TestMethod]
@@ -553,12 +551,12 @@ public sealed class InventoryActionsTests
         var manager = CreateRegisteredManager();
         var stackInstanceId = InventoryActions.AddItem(manager, entityId: 0, Guid.NewGuid(), quantity: 1);
         var pool = manager.GetMultiPool<InventoryItemStackComponent>();
-        var originalFirstAcquired = pool.GetReadonlyByDenseIndex(pool.GetFirstDenseIndex(0)).FirstAcquiredUtcTicks;
+        var originalFirstAcquired = pool.GetReadonlyByDenseIndex(pool.GetFirstDenseIndex(0)).AcquiredSequence;
 
         InventoryActions.TryTransferStack(manager, sourceEntityId: 0, destinationEntityId: 1, stackInstanceId, NoEntityIsThePlayer);
 
         Assert.IsTrue(InventoryQueries.TryFindByStackInstanceId(pool, 1, stackInstanceId, out var movedStack));
-        Assert.AreEqual(originalFirstAcquired, movedStack.FirstAcquiredUtcTicks);
+        Assert.AreEqual(originalFirstAcquired, movedStack.AcquiredSequence);
     }
 
     [TestMethod]
@@ -571,16 +569,16 @@ public sealed class InventoryActionsTests
         var playerQuery = new FakePlayerQuery(playerEntityId: 1);
         var stackInstanceId = InventoryActions.AddItem(manager, entityId: 0, Guid.NewGuid(), quantity: 1);
         var pool = manager.GetMultiPool<InventoryItemStackComponent>();
-        var originalFirstAcquired = pool.GetReadonlyByDenseIndex(pool.GetFirstDenseIndex(0)).FirstAcquiredUtcTicks;
-        Thread.Sleep(5);
+        var originalFirstAcquired = pool.GetReadonlyByDenseIndex(pool.GetFirstDenseIndex(0)).AcquiredSequence;
 
-        var beforeTransferTicks = DateTime.UtcNow.Ticks;
+        var beforeTransfer = InventoryItemStackComponent.NextAcquiredSequence();
         InventoryActions.TryTransferStack(manager, sourceEntityId: 0, destinationEntityId: playerQuery.PlayerEntityId, stackInstanceId, playerQuery);
-        var afterTransferTicks = DateTime.UtcNow.Ticks;
+        var afterTransfer = InventoryItemStackComponent.NextAcquiredSequence();
 
         Assert.IsTrue(InventoryQueries.TryFindByStackInstanceId(pool, playerQuery.PlayerEntityId, stackInstanceId, out var movedStack));
-        Assert.IsGreaterThan(originalFirstAcquired, movedStack.FirstAcquiredUtcTicks);
-        Assert.IsTrue(movedStack.FirstAcquiredUtcTicks >= beforeTransferTicks && movedStack.FirstAcquiredUtcTicks <= afterTransferTicks);
+        Assert.IsGreaterThan(originalFirstAcquired, movedStack.AcquiredSequence);
+        Assert.IsGreaterThan(beforeTransfer, movedStack.AcquiredSequence);
+        Assert.IsLessThan(afterTransfer, movedStack.AcquiredSequence);
     }
 
     [TestMethod]
@@ -594,11 +592,10 @@ public sealed class InventoryActionsTests
         var pool = manager.GetMultiPool<InventoryItemStackComponent>();
         var originalStacks = new List<InventoryItemStackComponent>();
         InventoryQueries.CopyStacksForEntity(pool, 0, originalStacks);
-        Thread.Sleep(5);
 
-        var beforeTransferTicks = DateTime.UtcNow.Ticks;
+        var beforeTransfer = InventoryItemStackComponent.NextAcquiredSequence();
         InventoryActions.TryTransferAllStacksOfItem(manager, sourceEntityId: 0, destinationEntityId: playerQuery.PlayerEntityId, itemId, playerQuery);
-        var afterTransferTicks = DateTime.UtcNow.Ticks;
+        var afterTransfer = InventoryItemStackComponent.NextAcquiredSequence();
 
         var movedStacks = new List<InventoryItemStackComponent>();
         InventoryQueries.CopyStacksForEntity(pool, playerQuery.PlayerEntityId, movedStacks);
@@ -606,8 +603,9 @@ public sealed class InventoryActionsTests
         foreach (var movedStack in movedStacks)
         {
             var original = originalStacks.Single(stack => stack.StackInstanceId == movedStack.StackInstanceId);
-            Assert.IsGreaterThan(original.FirstAcquiredUtcTicks, movedStack.FirstAcquiredUtcTicks);
-            Assert.IsTrue(movedStack.FirstAcquiredUtcTicks >= beforeTransferTicks && movedStack.FirstAcquiredUtcTicks <= afterTransferTicks);
+            Assert.IsGreaterThan(original.AcquiredSequence, movedStack.AcquiredSequence);
+            Assert.IsGreaterThan(beforeTransfer, movedStack.AcquiredSequence);
+            Assert.IsLessThan(afterTransfer, movedStack.AcquiredSequence);
         }
     }
 }

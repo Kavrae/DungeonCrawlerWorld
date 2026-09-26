@@ -7,6 +7,7 @@ using Game.Modules;
 using Game.Modules.Actions.Activators;
 using Game.Modules.AbilityScores;
 using Game.Modules.Burning;
+using Game.Modules.Health;
 using Game.Modules.Health.Components;
 using Game.Modules.Inventory;
 using Game.Modules.Inventory.Definitions;
@@ -49,6 +50,7 @@ public sealed class HealthWindow(
     ElementPoolService elementPoolService,
     LabelRenderer labelRenderer,
     ComponentManager componentManager,
+    EntityBodyParts bodyParts,
     StatusEffectDisplayRegistry statusEffectDisplays,
     ItemCatalog itemCatalog,
     SimulationClock? simulationClock = null)
@@ -93,7 +95,7 @@ public sealed class HealthWindow(
     private readonly SpriteFontBase _bodyFont = fontService.GetFont(FontChrome.DefaultFontSize);
 
     private readonly PackedComponentPool<SimpleHealthComponent> _healthPool = componentManager.GetPackedPool<SimpleHealthComponent>();
-    private readonly MultiComponentPool<BodyPartComponent> _bodyParts = componentManager.GetMultiPool<BodyPartComponent>();
+    private readonly EntityBodyParts _bodyParts = bodyParts;
 
     // Optional -- see StatModifierMath.GetEffectiveValue's own doc comment for why a null pool
     // (StatModifiersModule not registered) is treated the same as "no active modifiers."
@@ -314,7 +316,7 @@ public sealed class HealthWindow(
     }
 
     /// <summary>Fills destination with the PartId of every body part currently showing an active body-part-scoped Burning line -- the per-part-section counterpart to StatusEffectQueries.GetActiveEffectTypes, in the same stable (dense body-part-chain) order every call, so Update's own frame-to-frame comparison only reports a change on a genuine appear/disappear, not on an ordinary tick's stack-count decrement.</summary>
-    private static void BuildBurningPartIds(List<byte> destination, MultiComponentPool<BodyPartComponent> bodyParts, MultiComponentPool<BodyPartBurningTimerComponent>? bodyPartBurningTimers, int entityId, long now)
+    private static void BuildBurningPartIds(List<byte> destination, EntityBodyParts bodyParts, MultiComponentPool<BodyPartBurningTimerComponent>? bodyPartBurningTimers, int entityId, long now)
     {
         destination.Clear();
 
@@ -323,9 +325,9 @@ public sealed class HealthWindow(
             return;
         }
 
-        for (var denseIndex = bodyParts.GetFirstDenseIndex(entityId); denseIndex != -1; denseIndex = bodyParts.GetNextDenseIndex(denseIndex))
+        foreach (var part in bodyParts.Parts(entityId))
         {
-            var partId = bodyParts.GetReadonlyByDenseIndex(denseIndex).PartId;
+            var partId = (byte)part.PartId;
             if (TryGetBodyPartBurningLine(bodyPartBurningTimers, entityId, partId, now, out _, out _))
             {
                 destination.Add(partId);
@@ -612,7 +614,7 @@ public sealed class HealthWindow(
     /// percentage-based Resistance/Vulnerability (e.g. ResistanceTestPotion's own
     /// ConditionTag: Tag.Poison grant -- "50% Poison Resistance" instead of "x-0.5 IncomingDamage");
     /// OutgoingDamage (either operation) as "Damage" -- Additive flat ("+2 Damage"/"-1 Damage",
-    /// e.g. PlayerBlueprint's own buff), Multiplicative as a percentage ("-50% Damage", e.g.
+    /// e.g. PlayerKit's own buff), Multiplicative as a percentage ("-50% Damage", e.g.
     /// BodyPartEffectsSystem's own Arm/Hand-damage melee debuff); Multiplicative MaximumHealth the
     /// same percentage way as a "+50% Health"; MovementLockFrames (either operation) as a
     /// "Movement Penalty" --
@@ -631,7 +633,7 @@ public sealed class HealthWindow(
 
         if (row.Target == StatModifierTarget.OutgoingDamage)
         {
-            // Additive (e.g. PlayerBlueprint's own flat OutgoingDamage buff) reads as a flat
+            // Additive (e.g. PlayerKit's own flat OutgoingDamage buff) reads as a flat
             // "+2 Damage"; Multiplicative (e.g. BodyPartEffectsSystem's own Melee-tagged Arm/Hand-
             // damage debuff, ConditionTag: Tag.Melee -- "-100% Melee Damage") reads as a percentage
             // instead, same "Damage" wording either way -- same dual-mode split MaximumHealth/Health
@@ -761,7 +763,7 @@ public sealed class HealthWindow(
         List<BodyPartRow> destination,
         int entityId,
         PackedComponentPool<SimpleHealthComponent> healthPool,
-        MultiComponentPool<BodyPartComponent> bodyParts,
+        EntityBodyParts bodyParts,
         MultiComponentPool<StatModifierComponent>? statModifiers)
     {
         destination.Clear();
@@ -773,11 +775,10 @@ public sealed class HealthWindow(
             return;
         }
 
-        for (var denseIndex = bodyParts.GetFirstDenseIndex(entityId); denseIndex != -1; denseIndex = bodyParts.GetNextDenseIndex(denseIndex))
+        foreach (var part in bodyParts.Parts(entityId))
         {
-            ref readonly var part = ref bodyParts.GetReadonlyByDenseIndex(denseIndex);
             var effectiveMaximum = StatModifierMath.GetEffectiveValue(statModifiers, entityId, StatModifierTarget.MaximumHealth, part.MaximumHealth);
-            destination.Add(new BodyPartRow(part.Name, part.CurrentHealth, effectiveMaximum, part.PartId));
+            destination.Add(new BodyPartRow(part.Name, part.CurrentHealth, effectiveMaximum, (byte)part.PartId));
         }
     }
 

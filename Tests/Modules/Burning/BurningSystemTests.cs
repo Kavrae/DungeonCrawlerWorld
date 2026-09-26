@@ -26,10 +26,10 @@ public sealed class BurningSystemTests
     private static EngineTime Frame(long frame) => new(default, default, false, frame);
 
     private static PackedComponentPool<BurningTimerComponent> CreateTimerPool() =>
-        new(maximumEntityCount: 10, initialCapacity: 4, static (ref existing, incoming) => { });
+        new(entityCapacity: 10, initialCapacity: 4, static (ref existing, incoming) => { });
 
     private static PackedComponentPool<SimpleHealthComponent> CreateHealthPool() =>
-        new(maximumEntityCount: 10, initialCapacity: 4, static (ref existing, incoming) => existing = incoming);
+        new(entityCapacity: 10, initialCapacity: 4, static (ref existing, incoming) => existing = incoming);
 
     private static BurningSystem CreateSystem(PackedComponentPool<BurningTimerComponent> timers, PackedComponentPool<SimpleHealthComponent> health, EventBus? eventBus = null, MultiComponentPool<StatModifierComponent>? statModifiers = null, int playerEntityId = 0) =>
         new(timers, health, eventBus ?? new EventBus(), new FakePlayerQuery(playerEntityId), new MathUtility(), statModifiers);
@@ -119,7 +119,7 @@ public sealed class BurningSystemTests
         var health = CreateHealthPool();
         health.Add(0, new SimpleHealthComponent(currentHealth: 100, maximumHealth: 100));
         timers.Add(0, new BurningTimerComponent(nextTickFrame: 1, stackCount: 10, ActionSource.Admin));
-        var statModifiers = new MultiComponentPool<StatModifierComponent>(maximumEntityCount: 10, initialCapacity: 4);
+        var statModifiers = new MultiComponentPool<StatModifierComponent>(entityCapacity: 10, initialCapacity: 4);
         statModifiers.Add(0, new StatModifierComponent(StatModifierTarget.IncomingDamage, StatModifierOperation.Multiplicative, StatModifierPolarity.Buff,
             canModify: false, magnitude: -0.5f, expiresAtFrame: FrameDeadline.Never, ActionSource.Admin, Tag.Fire));
         var system = CreateSystem(timers, health, statModifiers: statModifiers);
@@ -136,7 +136,7 @@ public sealed class BurningSystemTests
         var health = CreateHealthPool();
         health.Add(0, new SimpleHealthComponent(currentHealth: 100, maximumHealth: 100));
         timers.Add(0, new BurningTimerComponent(nextTickFrame: 1, stackCount: 10, ActionSource.Admin));
-        var statModifiers = new MultiComponentPool<StatModifierComponent>(maximumEntityCount: 10, initialCapacity: 4);
+        var statModifiers = new MultiComponentPool<StatModifierComponent>(entityCapacity: 10, initialCapacity: 4);
         statModifiers.Add(0, new StatModifierComponent(StatModifierTarget.IncomingDamage, StatModifierOperation.Multiplicative, StatModifierPolarity.Buff,
             canModify: false, magnitude: -0.5f, expiresAtFrame: FrameDeadline.Never, ActionSource.Admin));
         var system = CreateSystem(timers, health, statModifiers: statModifiers);

@@ -1,10 +1,10 @@
 using Game.Modules.Core.Components;
 using Microsoft.Xna.Framework;
 using FontStashSharp;
-using Game.Blueprints;
 using Presentation.Fonts;
 using Presentation.Rendering;
 using Presentation.UI.Chrome;
+using Game.Sprites;
 
 namespace Presentation.UI.Content;
 

@@ -29,6 +29,7 @@ using Game.Modules.Race.Components;
 using Game.Modules.StatModifiers;
 using Game.World;
 using Microsoft.Xna.Framework;
+using Game.Blueprints;
 
 namespace Tests.Blueprints;
 
@@ -80,6 +81,7 @@ public sealed class HumanTests
             abilityScoresModule,
             movementModule,
             new RaceModule(),
+            new Game.Blueprints.BlueprintsModule(),
             new ClassModule(),
             actionsModule,
             coreActionsModule,
@@ -98,18 +100,18 @@ public sealed class HumanTests
         var ecsContext = BuildEcsContext();
         var entityId = ecsContext.EntityManager.CreateEntity();
 
-        new Human(new MathUtility(new Random(1))).Build(ecsContext.ComponentManager, entityId);
+        ecsContext.BuildDefinition(entityId, Human.Id);
 
-        var racePool = ecsContext.ComponentManager.GetMultiPool<RaceComponent>();
+        var racePool = ecsContext.ComponentManager.GetPackedPool<RaceSlotsComponent>();
         Assert.IsTrue(racePool.Has(entityId));
-        Assert.AreEqual(Human.RaceId, racePool.GetReadonlyByDenseIndex(racePool.GetFirstDenseIndex(entityId)).Id);
-        Assert.AreEqual("Human", racePool.GetReadonlyByDenseIndex(racePool.GetFirstDenseIndex(entityId)).Name);
+        Assert.AreEqual(BlueprintTestContext.Definitions.Races.GetId(Human.Id), racePool.GetReadonly(entityId).Primary);
 
         Assert.IsFalse(ecsContext.ComponentManager.GetPackedPool<SimpleHealthComponent>().Has(entityId));
 
-        var glyph = ecsContext.ComponentManager.GetDirectPool<GlyphComponent>().GetReadonly(entityId);
-        Assert.AreEqual("h", glyph.Glyph);
-        Assert.AreEqual(Color.Pink, glyph.GlyphColor);
+        // A creature draws as its blueprint rather than holding a glyph of its own -- see EntityAppearance.
+        Assert.IsFalse(ecsContext.ComponentManager.GetPackedPool<GlyphComponent>().Has(entityId));
+        Assert.AreEqual("h", Human.Appearance.Glyph);
+        Assert.AreEqual(Color.Pink, Human.Appearance.GlyphColor);
 
         var movement = ecsContext.ComponentManager.GetPackedPool<MovementComponent>().GetReadonly(entityId);
         Assert.AreEqual(MovementMode.Random, movement.MovementMode);
@@ -119,10 +121,10 @@ public sealed class HumanTests
 
         foreach (var abilityScoreType in Enum.GetValues<AbilityScoreType>())
         {
-            Assert.IsTrue(AbilityScoreQueries.TryGetComponent(ecsContext.ComponentManager.GetMultiPool<AbilityScoreComponent>(), entityId, abilityScoreType, out _), $"Missing ability score: {abilityScoreType}");
+            Assert.IsTrue(AbilityScoreQueries.TryGetComponent(ecsContext.ComponentManager.GetPackedPool<AbilityScoresComponent>(), entityId, abilityScoreType, out _), $"Missing ability score: {abilityScoreType}");
         }
 
-        Assert.IsTrue(ActionInstanceQueries.TryGet(ecsContext.ComponentManager.GetMultiPool<ActionInstanceComponent>(), entityId, QuickAttackAction.Id, out _));
+        Assert.IsTrue(ecsContext.ActionsOf().Has(entityId, QuickAttackAction.Id));
 
         var expectedPartsByName = new Dictionary<string, (BodyPartType Type, ushort MinimumHealth, ushort MaximumHealth, bool IsVital)>
         {
@@ -139,12 +141,11 @@ public sealed class HumanTests
             ["Right Foot"] = (BodyPartType.Foot, 10, 10, false),
         };
 
-        var bodyParts = ecsContext.ComponentManager.GetMultiPool<BodyPartComponent>();
+        var bodyParts = EntityBodyParts.For(ecsContext.ComponentManager, BlueprintTestContext.Definitions);
         var actualCount = 0;
         var actualMaximumSum = 0f;
-        for (var denseIndex = bodyParts.GetFirstDenseIndex(entityId); denseIndex != -1; denseIndex = bodyParts.GetNextDenseIndex(denseIndex))
+        foreach (var part in bodyParts.Parts(entityId))
         {
-            ref readonly var part = ref bodyParts.GetReadonlyByDenseIndex(denseIndex);
             Assert.IsTrue(expectedPartsByName.TryGetValue(part.Name, out var expected), $"Unexpected body part name: {part.Name}");
             Assert.AreEqual(expected.Type, part.Type);
             Assert.AreEqual(expected.IsVital, part.IsVital);

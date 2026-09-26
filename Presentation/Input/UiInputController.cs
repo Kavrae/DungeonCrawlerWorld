@@ -118,7 +118,7 @@ public sealed class UiInputController
     /// Independent of _activeInteraction.Kind (which stays None for a plain content click on
     /// either source) -- this is tracked entirely by its own fields instead.
     /// </summary>
-    private Guid? _contentDragItemStackInstanceId;
+    private uint? _contentDragItemStackInstanceId;
 
     /// <summary>
     /// Set specifically while dragging a Merged Stack cell -- one with no single StackInstanceId
@@ -395,7 +395,7 @@ public sealed class UiInputController
     internal MouseCursor CurrentCursor { get; private set; } = MouseCursor.Arrow;
 
     /// <summary>The item currently being content-dragged, if any -- see _contentDragItemStackInstanceId's own doc comment. Public (unlike most of this class's internals) so ShellBootstrapper -- a different assembly -- can wire it into DragGhostContent.GetState, the same reasoning IsTextBoxFocused's own doc comment gives.</summary>
-    public Guid? ContentDragItemStackInstanceId => _contentDragItemStackInstanceId;
+    public uint? ContentDragItemStackInstanceId => _contentDragItemStackInstanceId;
 
     /// <summary>The Merged Stack cell's own ItemDefinitionId currently being content-dragged, if any -- see _contentDragMergedItemDefinitionId's own doc comment. Public for the same reason as ContentDragItemStackInstanceId above.</summary>
     public Guid? ContentDragMergedItemDefinitionId => _contentDragMergedItemDefinitionId;
@@ -1210,8 +1210,6 @@ public sealed class UiInputController
                 return;
             }
 
-            var isActionDrag = _contentDragActionId is not null;
-            var payloadId = isActionDrag ? _contentDragActionId!.Value : _contentDragItemStackInstanceId!.Value;
 
             var receivingHotbar = _contentDragOriginHotbar;
             HotkeySlot? destinationSlot = null;
@@ -1228,7 +1226,7 @@ public sealed class UiInputController
                 destinationSlot = dropSlot;
             }
 
-            receivingHotbar?.ResolveDroppedBinding(_contentDragOriginSlot, destinationSlot, isActionDrag, payloadId);
+            receivingHotbar?.ResolveDroppedBinding(_contentDragOriginSlot, destinationSlot, _contentDragActionId, _contentDragItemStackInstanceId);
         }
         finally
         {

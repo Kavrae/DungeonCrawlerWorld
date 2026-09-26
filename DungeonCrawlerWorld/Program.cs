@@ -15,7 +15,7 @@ if (args.Contains("--headless", StringComparer.OrdinalIgnoreCase))
         return 2;
     }
 
-    return DungeonCrawlerWorld.HeadlessBenchmark.Run(randomSeed, headlessRange, mapSizeOverride);
+    return DungeonCrawlerWorld.HeadlessBenchmark.Run(randomSeed, headlessRange, mapSizeOverride, diagnosticsFeatures);
 }
 
 using var game = new DungeonCrawlerWorld.GameLoop(diagnosticsFeatures, randomSeed, benchmarkFrameRange, mapSizeOverride);

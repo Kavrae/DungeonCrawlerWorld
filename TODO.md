@@ -61,8 +61,10 @@ Global), each split High/Medium/Low priority. Landed work lives in `IMPLEMENTATI
 
 `UniqueNumberAllocator` (`Engine/Math/`) picks a crawler number by rejection sampling: draw a random
 number in [1, 13,000,000] and retry until it isn't in a `HashSet<int>` of every number handed out.
-Crawler numbers never recycle or change for an entity, and the sliding window keeps minting them: about 1,470 per newly loaded neighborhood (2% of ~73k creatures), and a
-revisited neighborhood's fresh population mints new ones again.
+Crawler numbers never recycle or change for an entity. Since 2026-09-26 a number is assigned when a
+crawler is first built (simulated), not when it spawns, so the window mints one per crawler that ever
+reaches the simulated tiers rather than ~1,470 per loaded neighborhood; a revisited neighborhood's
+fresh population still mints new ones once simulated. The allocator draws from its own seeded sequence.
 
 - **It slows as the range fills.** The expected draws per allocation are 1 / (fraction still free):
   2 at half full, 100 at 99%.
@@ -79,55 +81,36 @@ cycle-walking, applied to a counter. Every allocation is O(1), numbers never rep
 beyond the counter (which save/load persists alongside the seed), the sequence stays deterministic
 for a seeded run, and exhaustion is detected exactly and throws.
 
-#### Investigate a flyweight / prefab pattern for NPC entities
+#### Class exceptions: runtime class grants
 
-Companion to flyweight terrain. Terrain can stop being entities
-entirely; NPCs can't, but most of an NPC's component data is identical across every instance of the
-same race/class combination until something actually changes it.
+NPC classes come from spawn rules and fit two fixed class slots. The player's don't: a first class on
+floor 3 and a derivative subclass on floor 6, with exceptions --
+- *Four Seasons* (Ice/Fire/Earth/Wind Mage): the floor-6 choice may be another element instead of a
+  derivative, a third element on floor 9, the fourth automatically on floor 12. Combination spells
+  depend on the **set** of classes held at the time, not the order.
+- *Former Child Actress*: no permanent subclass on floor 6; a temporary subclass every floor. At the
+  end of the floor a seeded roll keeps some of its effects permanently and removes the rest.
+- *Oak Fell* (and similar): granted by an achievement, alongside or instead of a lootbox, in addition
+  to existing classes.
 
-**This was investigated once already (session "Flyweight pattern for shared entity data",
-2026-08-07), and the conclusion was no.** That investigation measured *value duplication* at
-1000²: `DisplayTextComponent` (16 distinct pairs across 2.1M entities, the only real waste being
-per-Build interpolated names, fixed with `DisplayNameCache`), `BackgroundComponent` (4-byte inline
-`Color`, so deduplicating saves nothing) and `SpriteComponent` (already shared through
-`SpriteManifest`). Its reasoning still holds for what it measured: deduplicating a small inline
-struct buys nothing and costs a lookup plus cache locality on hot paths.
+`ClassSlotsComponent` (2 x `ushort`, permanent) and the sparse `ClassMembershipComponent` Multi pool
+(class id, lifetime -- permanent or expires at the end of floor N -- source kind, acquisition order),
+read only through `ClassQueries`, are in place and unit-tested. `EntityFactory.Apply(entity, classBlueprint,
+grantedBy)` is the runtime grant path: it builds the class blueprint onto a live entity, fills a
+slot or adds a membership (`ClassEffects.Grant`) and skips a class already held; the class's actions
+then resolve through `EntityActions` and its name follows the entity's (`EntityNaming`). Admin Mode's
+"Apply >" menu drives it for testing. Nothing in gameplay calls it yet. Class
+content is either **derived** from current membership (shared, never stored per entity; removing a
+membership removes it) or an **explicit** per-instance grant carrying a class-grant `ActionSource` and
+a lifetime.
 
-**What the 4000² measurements add is a different cost that study didn't look at:**
-
-- **Capacity, not occupancy.** Direct pools are indexed by entity id, so each costs
-  `capacity x (size + 5)` no matter how few entities hold the component. In the last diagnostics
-  capture, `ClassComponent` (4 instances) and `ShopStockPreferenceComponent` (11) each cost ~40 MB,
-  and `StatusEffectImmunityComponent` (4) ~36 MB. That cost comes from entity *count* (mostly terrain
-  today) and shrinks with flyweight terrain on its own, so **measure again after terrain flyweight
-  lands, before designing anything here.**
-- **Fat per-instance components on every NPC:** `BodyPartComponent` (268k instances, 48.8 MB),
-  `ActionInstanceComponent` (109k, 41.8 MB), `AbilityScoreComponent`, `RaceComponent`,
-  `InventoryItemStackComponent` (872k, 94.6 MB). This is the part of the per-neighborhood cost that
-  survives terrain flyweight and scales with dense population templates (goblins).
-- **Streaming makes creation cost matter**, not just memory. Each window shift integrates
-  3 neighborhoods of NPCs, and every component a blueprint merges is work done on the main thread.
-
-Questions to answer:
-
-1. After terrain flyweight, what does a typical and a dense-template neighborhood of NPCs cost in
-   memory and creation time, per component type?
-2. Which of those components are never written after `Build` for most instances? That is the
-   candidate shared set.
-3. Is the model a **prefab with copy-on-write overrides** (flecs' `IsA` relationship: an instance
-   reads a shared prefab's component until it writes its own copy), **shared/const components**
-   (Unity DOTS shared components and blob assets, Unreal Mass const shared fragments: immutable
-   per-archetype data referenced by index), or **per-type definition tables** read directly by
-   systems (the terrain approach)?
-4. How does it interact with blueprint composition? `CompositeBlueprint` applies parts in order and
-   merge actions blend rather than overwrite (see `GlyphComponent`/`MovementComponent` merge
-   policies), so a "shared race+class prefab" is the *result* of a composition, keyed by the ordered
-   part list, not a single blueprint.
-5. What do hot-path systems pay? Reading through a shared table breaks the contiguous span read
-   that the 2026-08-07 study rightly protected. Measure `MovementSystem`/`TestCombatBehaviorSystem`
-   before and after.
-6. Save/load: a shared prefab plus per-instance overrides is also a natural save format (store the
-   prefab key and the overrides only), which matters once Beyond neighborhoods are written to disk.
+What is left, once something grants a class at runtime: the class-grant `ActionSource` kind, the
+advancement-rule hook on class definitions, and a combination-rule registry mapping a required class
+**set** to derived grants, evaluated on membership change. Former Child Actress's floor end: roll each
+effect, turn survivors into explicit permanent grants whose source names the residue, remove the
+membership. Dependencies, out of scope here: a floor-end event (see EndOfLevelStairs),
+class-selection UI, the advancement rules themselves, the residue roll. Ends with an in-game test and
+a `phase-performance-testing` A/B.
 
 #### Investigate chunk-bucketed tiered stripe sets
 
@@ -453,23 +436,21 @@ teleport frame itself.
 
 #### Component size audit
 
-Measured with `Unsafe.SizeOf` (2026-09-16). Every loaded entity pays for these, and a neighborhood
-streams in about 73k creatures at a time, so bytes per instance are memory, cache misses and streaming
-cost at once. The largest, and what makes them large:
+Measured with `Unsafe.SizeOf`. Every loaded entity pays for these, and a neighborhood streams in about
+73k creatures at a time, so bytes per instance are memory, cache misses and streaming cost at once.
+Most of the original list landed with the deferred-build work (2026-09-23): `RaceComponent`/
+`ClassComponent` became two-`ushort` slot components, `BodyPartComponent` became race templates plus a
+per-entity state component, `ActionInstanceComponent` became per-definition grants, and
+`InventoryItemStackComponent` went 56 -> 24 B (interned item id, counter stack id, counter acquisition
+sequence) with `MovementComponent` 40 -> 32 B. What is left:
 
-- **`InventoryItemStackComponent`, 56 B with references, ~5.3M instances on the 3x3 (~370 MB).** Two
-  `Guid`s (`ItemDefinitionId`, `StackInstanceId`) are 32 B of it; an item catalog index and a counter
-  would do. `FirstAcquiredUtcTicks` (8 B) and the `ItemDefinition? Override` reference are rare per
-  stack and could move to a side table keyed by stack instance.
-- **`MovementComponent`, 40 B, one per creature.** `TargetMapPosition` and `NextMapPosition` are each a
-  `Vector3Int?` (16 B); a sentinel position (as `TransformComponent.UnplacedOn` already is) makes each
-  12 B, or a flag byte beside two positions.
-- **`RaceComponent` and `ClassComponent`, 32 B with references each.** A `Guid` plus `Name` and
-  `Description` strings copied from the definition into every instance; a definition index is enough.
-- **`BodyPartComponent`, 32 B with a reference, several per creature with complex health.** `Name`
-  repeats the part definition's string per instance.
-- **`ActionInstanceComponent` and `PendingDelayedActionComponent`, 32 B with references.** A `Guid`
-  action id where an action catalog index would do; the pending action also holds a target-tile array.
+- **`InventoryItemStackComponent`, 24 B, still the largest pool at ~75 MB.** 8 of those bytes are the
+  `ItemDefinition? Override` reference, set on a small minority of stacks and scanned by every gen-2
+  GC. Moving it to a side table keyed by stack instance id would take the struct to 16 B and drop the
+  reference, but that table has to be cleaned up when a stack is removed -- including when an entity
+  is destroyed with its stacks still in it -- so it needs a real owner, not a static dictionary.
+- **`PendingDelayedActionComponent`, 32 B with references.** A `Guid` action id where a catalog index
+  would do, plus a target-tile array per pending action.
 
 Components holding references are scanned by every gen-2 GC as well as being larger, so moving
 strings and overrides out is worth more than the byte count alone suggests. Measure pool memory
@@ -536,7 +517,7 @@ compose with, not replace, the racial baseline -- exact composition (multiply vs
 
 Two tuning changes:
 - **Player slightly faster**: the player's step lock is Human's `StandardLockFrames` (30, via
-  `Human.cs` -- `PlayerBlueprint` doesn't override it; the Dexterity entry above still says "Player
+  `Human.cs` -- `PlayerKit` doesn't override it; the Dexterity entry above still says "Player
   20", which is out of date). That same field is also the post-attack global lock, so lowering it
   speeds up attacks too. Use `StatModifierTarget.MovementLockFrames` instead (already applied in
   `MovementSystem` on top of the base) for a movement-only change.
@@ -586,6 +567,42 @@ effect entry's `Apply`, even with no real `StatModifierTarget` consumer yet, so 
 source can hook in by granting a modifier alone. Calling-convention change, not a new stat.
 
 ### Low Priority
+
+#### Organize blueprints, and replace testing composites with long-term ones
+
+`Game/Blueprints` grew by feature rather than by design, and several of its blueprints exist only to
+exercise a mechanic on the test map.
+
+**Organization.**
+- The infrastructure (`BlueprintDefinition`, `BlueprintRegistry`, `ResolvedBlueprint`, the appearance
+  types, `BlueprintContext`, `BlueprintsModule`) sits in the folder root beside content (`PlayerKit`)
+  and build helpers (`DisplayNameCache`, `StartingCurrencyGrant`). Separate infrastructure from content.
+- Content folders mix kinds. `Composites/` holds real blueprints (`Player`, `GoblinEngineer`) next to
+  test-map fixtures. `Parts/` holds a real trait (`Boss`), occupancy parts (`Tiny`, `Phasing`) and a
+  temporary one (`LongDescriptionPart`). `NPCs/Generic/` holds only the test dummy, and
+  `NPCs/TemporaryNpcLootGrant` is a helper, not a blueprint. `Objects/` mixes whole entities (shops,
+  chest) with pieces never spawned alone (`Shop`, the stock parts, `ShopStock`).
+- `TestDummyBlueprint` is the only blueprint named with a `Blueprint` suffix.
+- Decide the layout once -- for example by what a definition is (race, class, creature, object,
+  trait, piece) or by content area -- and apply it everywhere, `BlueprintsModule.BuiltIns` included.
+
+**Testing composites to replace.** Each exists to show a mechanic on the test map, not as content:
+- `TinyGoblin`, `PhasingFairy`, `StationaryFairyEngineer`, `GoblinFairy`, `GoblinEngineerTank`: the
+  occupancy, stationary, multi-race and multi-class fixtures `TestMapBuilder.BuildFixtureEntities`
+  places in the starting neighborhood.
+- `LongDescriptionGoblin` / `LongDescriptionPart` (marked TEMPORARY): a description long enough to test
+  word wrap.
+- `GoblinForeman` and `Boss`: added to prove composites of composites.
+- The test dummy (TEMPORARY in `FloorBuilder`), `TemporaryNpcLootGrant`, and the temporary grants in
+  `PlayerKit` (test wand, test potions, permanent test modifiers).
+
+For each, either design the long-term version it stands in for (real hybrid races, real bosses and
+elites, real small creatures, real starting kits), or delete it once nothing needs it. Keep a fixture
+only where a unit test needs it, and move that one into the test project rather than shipping it in
+`BlueprintsModule`. Coordinate with "Real map generation -- neighborhood templates, replacing
+TestMapBuilder", which removes the fixtures' placement, and with the Admin Mode "Spawn here >" /
+"Apply >" menus, which list every registered blueprint and replace most of the fixtures' reason to be
+on the map.
 
 #### Neighborhood interactions -- Outbound and Inbound
 
@@ -1290,7 +1307,7 @@ A `ActionSource` created from the entity the effect landed on renders as that en
 today -- the player's self-granted modifiers read "Player1" in the Ability Score window's line prefix
 and hover title, and in `PlayerActivityLog`'s `source=` field, as though something else did it to them.
 It should read "Self" instead. There are real self-sourced modifiers to see this on right now:
-`Tank`'s MaximumHealth/HealthRegen bonuses and `PlayerBlueprint`'s multiplicative ability-score seeds
+`Tank`'s MaximumHealth/HealthRegen bonuses and `PlayerKit`'s multiplicative ability-score seeds
 all pass `ActionSource.FromEntity(..., player)`.
 
 The rule is per-viewer, not player-global: the source is "Self" when its entity is the same entity the
@@ -1744,6 +1761,12 @@ since generation), so a revisited neighborhood holds the same creatures, corpses
   than that advances with elapsed time is the open question in "Unsimulated-tier time".
 - **Format:** "record plus changes" for neighborhoods the player never touched, a full snapshot
   otherwise. Writing and parsing run on a worker ("Asynchronous neighborhood generation").
+- **Spawn records** hold a session-local blueprint id: persist the blueprint's Guid instead, and for
+  a composite interned at runtime (`BlueprintRegistry.Compose`) its ordered include Guids, so loading can
+  re-intern it.
+- **Applied blueprints** (`AppliedBlueprintComponent`): persist each entry's blueprint Guid and order
+  beside the spawn record -- together they are everything the entity was built from. A crawler's number
+  is persisted once assigned; an unbuilt crawler has only its `SpawnFlags.Crawler` flag.
 
 #### CI step for the performance-filtered tests
 

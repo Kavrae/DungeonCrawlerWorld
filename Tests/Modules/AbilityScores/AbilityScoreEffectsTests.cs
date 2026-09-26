@@ -20,20 +20,10 @@ public sealed class AbilityScoreEffectsTests
         return manager;
     }
 
-    private static AbilityScoreComponent GetAbilityScore(ComponentManager manager, int entityId, AbilityScoreType type)
-    {
-        var pool = manager.GetMultiPool<AbilityScoreComponent>();
-        for (var denseIndex = pool.GetFirstDenseIndex(entityId); denseIndex != -1; denseIndex = pool.GetNextDenseIndex(denseIndex))
-        {
-            var component = pool.GetReadonlyByDenseIndex(denseIndex);
-            if (component.Type == type)
-            {
-                return component;
-            }
-        }
-
-        throw new InvalidOperationException($"No AbilityScoreComponent of type {type} for entity {entityId}.");
-    }
+    private static AbilityScoreValue GetAbilityScore(ComponentManager manager, int entityId, AbilityScoreType type) =>
+        AbilityScoreQueries.TryGetComponent(manager.GetPackedPool<AbilityScoresComponent>(), entityId, type, out var score)
+            ? score
+            : throw new InvalidOperationException($"Entity {entityId} has no {type} ability score.");
 
     [TestMethod]
     public void Grant_NoModifiers_TotalEqualsBaseValue()

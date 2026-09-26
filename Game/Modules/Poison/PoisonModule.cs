@@ -3,12 +3,14 @@ using Engine.ECS.Components;
 using Engine.ECS.Systems;
 using Engine.Events;
 using Engine.Math;
+using Game.Modules.Health;
 using Game.Modules.Health.Components;
 using Game.Modules.Poison.Components;
 using Game.Modules.Poison.Systems;
 using Game.Modules.StatModifiers.Components;
 using Game.Modules.StatusEffects;
 using Game.World;
+using Game.Blueprints;
 
 namespace Game.Modules.Poison;
 
@@ -22,6 +24,8 @@ namespace Game.Modules.Poison;
 /// </summary>
 public sealed class PoisonModule : IGameModule
 {
+    private BlueprintRegistry _creatures = null!;
+
     public Guid Id { get; } = new("d9f6a1c4-8b2e-4f3a-9c1d-000000000009");
 
     public IReadOnlyList<Type> Dependencies { get; } = [typeof(StatusEffectsModule)];
@@ -44,6 +48,7 @@ public sealed class PoisonModule : IGameModule
 
     public void Configure(GameModuleContext context)
     {
+        _creatures = context.Definitions;
         _eventBus = context.EventBus;
         _playerQuery = context.PlayerQuery;
         _entityKeys = context.EntityKeys;
@@ -68,8 +73,8 @@ public sealed class PoisonModule : IGameModule
         var statModifiers = componentManager.IsRegistered<StatModifierComponent>()
             ? componentManager.GetMultiPool<StatModifierComponent>()
             : null;
-        var bodyParts = componentManager.IsRegistered<BodyPartComponent>()
-            ? componentManager.GetMultiPool<BodyPartComponent>()
+        var bodyParts = componentManager.IsRegistered<BodyPartStateComponent>()
+            ? EntityBodyParts.For(componentManager, _creatures)
             : null;
 
         systemManager.Register(new PoisonSystem(

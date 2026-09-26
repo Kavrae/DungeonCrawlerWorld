@@ -2,7 +2,7 @@ namespace Game.Modules.AbilityScores;
 
 /// <summary>
 /// Core-vs-Hidden is a display/level-up-eligibility distinction only -- both categories share
-/// the exact same AbilityScoreComponent storage. IsHidden checks against the Core set rather
+/// the exact same AbilityScoresComponent storage. IsHidden checks against the Core set rather
 /// than listing Hidden members directly: Core is fixed (5 scores, unlikely to grow), while
 /// Hidden is expected to grow over time (see TODO.md's "split hidden ability scores into
 /// composites" item) -- defining Hidden as "not Core" means a newly added hidden score is

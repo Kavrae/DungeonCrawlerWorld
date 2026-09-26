@@ -12,419 +12,348 @@ namespace Tests.Modules.Health;
 [TestClass]
 public sealed class BodyPartSelectionTests
 {
-    private static MultiComponentPool<BodyPartComponent> CreatePool() =>
-        new(maximumEntityCount: 10, initialCapacity: 8);
+    private const int EntityId = 0;
+
+    private static BodyPartTestWorld CreateWorld(params BodyPartTemplate[] templates)
+    {
+        var world = new BodyPartTestWorld(templates);
+        world.Give(EntityId);
+        return world;
+    }
+
+    private static string NameOf(BodyPartTestWorld world, int partId)
+    {
+        Assert.IsTrue(world.BodyParts.TryGet(EntityId, partId, out var part), $"No part {partId}.");
+        return part.Name;
+    }
+
+    private static BodyPartTemplate Part(string name, BodyPartType type, byte verticalPosition = 0, ushort maximumHealth = 10, bool isVital = false) =>
+        new(name, type, verticalPosition, maximumHealth, isVital);
 
     [TestMethod]
-    public void PickRandom_RepeatedSeededRolls_AlwaysLandsOnEntityOwnDenseIndex()
+    public void PickRandom_RepeatedSeededRolls_AlwaysLandsOnOneOfTheEntitysParts()
     {
-        var pool = CreatePool();
-        pool.Add(0, new BodyPartComponent("Head", BodyPartType.Head, 0, 0, 10, 10, isVital: true));
-        pool.Add(0, new BodyPartComponent("Torso", BodyPartType.Torso, 0, 0, 20, 20, isVital: true));
-        pool.Add(0, new BodyPartComponent("Arm", BodyPartType.Arm, 0, 0, 15, 15, isVital: false));
+        var world = CreateWorld(
+            Part("Head", BodyPartType.Head, maximumHealth: 10, isVital: true),
+            Part("Torso", BodyPartType.Torso, maximumHealth: 20, isVital: true),
+            Part("Arm", BodyPartType.Arm, maximumHealth: 15));
         var mathUtility = new MathUtility(new Random(1));
 
         for (var i = 0; i < 50; i++)
         {
-            var denseIndex = BodyPartSelection.PickRandom(pool, 0, mathUtility);
+            var partId = BodyPartSelection.PickRandom(world.BodyParts, EntityId, mathUtility);
 
-            Assert.IsGreaterThanOrEqualTo(0, denseIndex);
-            Assert.AreEqual(0, pool.GetEntityIdByDenseIndex(denseIndex));
+            Assert.IsGreaterThanOrEqualTo(0, partId);
+            Assert.IsLessThan(3, partId);
         }
     }
 
     [TestMethod]
     public void PickRandom_EntityWithNoBodyParts_ReturnsNegativeOne()
     {
-        var pool = CreatePool();
+        var world = new BodyPartTestWorld();
         var mathUtility = new MathUtility(new Random(1));
 
-        var denseIndex = BodyPartSelection.PickRandom(pool, 0, mathUtility);
-
-        Assert.AreEqual(-1, denseIndex);
+        Assert.AreEqual(-1, BodyPartSelection.PickRandom(world.BodyParts, EntityId, mathUtility));
     }
 
     [TestMethod]
     public void PickLowestPercentage_MixedFractions_PicksLowestFractionPart()
     {
-        var pool = CreatePool();
-        pool.Add(0, new BodyPartComponent("Head", BodyPartType.Head, 0, 0, currentHealth: 9, maximumHealth: 10, isVital: true)); // 90%
-        pool.Add(0, new BodyPartComponent("Torso", BodyPartType.Torso, 0, 0, currentHealth: 5, maximumHealth: 20, isVital: true)); // 25%
-        pool.Add(0, new BodyPartComponent("Arm", BodyPartType.Arm, 0, 0, currentHealth: 10, maximumHealth: 15, isVital: false)); // ~67%
+        var world = CreateWorld(
+            Part("Head", BodyPartType.Head, maximumHealth: 10, isVital: true),
+            Part("Torso", BodyPartType.Torso, maximumHealth: 20, isVital: true),
+            Part("Arm", BodyPartType.Arm, maximumHealth: 15));
+        world.SetHealth(EntityId, 0, 9); // 90%
+        world.SetHealth(EntityId, 1, 5); // 25%
+        world.SetHealth(EntityId, 2, 10); // ~67%
 
-        var denseIndex = BodyPartSelection.PickLowestPercentage(pool, 0, now: 0);
+        var partId = BodyPartSelection.PickLowestPercentage(world.BodyParts, EntityId, now: 0);
 
-        Assert.AreEqual("Torso", pool.GetReadonlyByDenseIndex(denseIndex).Name);
+        Assert.AreEqual("Torso", NameOf(world, partId));
     }
 
     [TestMethod]
     public void PickLowestPercentage_LowestPartLockedOut_SkipsItForNextLowest()
     {
-        var pool = CreatePool();
-        pool.Add(0, new BodyPartComponent("Head", BodyPartType.Head, 0, 0, currentHealth: 9, maximumHealth: 10, isVital: true)); // 90%
-        pool.Add(0, new BodyPartComponent("Arm", BodyPartType.Arm, 0, 0, currentHealth: 10, maximumHealth: 15, isVital: false)); // ~67%
-        pool.Add(0, new BodyPartComponent("Torso", BodyPartType.Torso, 0, 0, currentHealth: 5, maximumHealth: 20, isVital: true)); // 25%, locked out below.
+        var world = CreateWorld(
+            Part("Head", BodyPartType.Head, maximumHealth: 10, isVital: true),
+            Part("Arm", BodyPartType.Arm, maximumHealth: 15),
+            Part("Torso", BodyPartType.Torso, maximumHealth: 20, isVital: true));
+        world.SetHealth(EntityId, 0, 9); // 90%
+        world.SetHealth(EntityId, 1, 10); // ~67%
+        world.SetHealth(EntityId, 2, 5); // 25%, locked out below.
+        world.BodyParts.LockOutOfRegen(EntityId, 2, now: 0, lockoutFrames: 100);
 
-        var torsoDenseIndex = FindDenseIndexByName(pool, 0, "Torso");
-        pool.UpdateByDenseIndex(torsoDenseIndex, static (ref BodyPartComponent part) => part.RegenLockedUntilFrame = 100);
+        var partId = BodyPartSelection.PickLowestPercentage(world.BodyParts, EntityId, now: 0);
 
-        var denseIndex = BodyPartSelection.PickLowestPercentage(pool, 0, now: 0);
-
-        Assert.AreEqual("Arm", pool.GetReadonlyByDenseIndex(denseIndex).Name);
-    }
-
-    private static int FindDenseIndexByName(MultiComponentPool<BodyPartComponent> pool, int entityId, string name)
-    {
-        for (var denseIndex = pool.GetFirstDenseIndex(entityId); denseIndex != -1; denseIndex = pool.GetNextDenseIndex(denseIndex))
-        {
-            if (pool.GetReadonlyByDenseIndex(denseIndex).Name == name)
-            {
-                return denseIndex;
-            }
-        }
-
-        return -1;
+        Assert.AreEqual("Arm", NameOf(world, partId));
     }
 
     [TestMethod]
     public void PickLowestPercentage_EveryPartFullOrLockedOut_ReturnsNegativeOne()
     {
-        var pool = CreatePool();
-        pool.Add(0, new BodyPartComponent("Head", BodyPartType.Head, 0, 0, currentHealth: 10, maximumHealth: 10, isVital: true)); // Full.
-        pool.Add(0, new BodyPartComponent("Torso", BodyPartType.Torso, 0, 0, currentHealth: 5, maximumHealth: 20, isVital: true)); // Damaged but locked out.
-        var lockedDenseIndex = pool.GetFirstDenseIndex(0);
-        pool.UpdateByDenseIndex(lockedDenseIndex, static (ref BodyPartComponent part) => part.RegenLockedUntilFrame = 50);
+        var world = CreateWorld(
+            Part("Head", BodyPartType.Head, maximumHealth: 10, isVital: true), // Full.
+            Part("Torso", BodyPartType.Torso, maximumHealth: 20, isVital: true)); // Damaged but locked out.
+        world.SetHealth(EntityId, 1, 5);
+        world.BodyParts.LockOutOfRegen(EntityId, 1, now: 0, lockoutFrames: 50);
 
-        var denseIndex = BodyPartSelection.PickLowestPercentage(pool, 0, now: 0);
-
-        Assert.AreEqual(-1, denseIndex);
+        Assert.AreEqual(-1, BodyPartSelection.PickLowestPercentage(world.BodyParts, EntityId, now: 0));
     }
 
     [TestMethod]
     public void PickLowestPercentage_EntityWithNoBodyParts_ReturnsNegativeOne()
     {
-        var pool = CreatePool();
+        var world = new BodyPartTestWorld();
 
-        var denseIndex = BodyPartSelection.PickLowestPercentage(pool, 0, now: 0);
-
-        Assert.AreEqual(-1, denseIndex);
+        Assert.AreEqual(-1, BodyPartSelection.PickLowestPercentage(world.BodyParts, EntityId, now: 0));
     }
 
     [TestMethod]
     public void PickLowestPercentage_PartAtRawMaximumWithActiveBuff_StillSelectableUpToTheEffectiveMaximum()
     {
-        var pool = CreatePool();
         // At its raw maximum (100% by that measure), but a +50% MaximumHealth buff means its real
         // cap is 60 -- this part still has headroom and must not be treated as "already full."
-        pool.Add(0, new BodyPartComponent("Head", BodyPartType.Head, 0, 0, currentHealth: 40, maximumHealth: 40, isVital: true));
-        var statModifiers = new MultiComponentPool<StatModifierComponent>(maximumEntityCount: 10, initialCapacity: 4);
-        statModifiers.Add(0, new StatModifierComponent(StatModifierTarget.MaximumHealth, StatModifierOperation.Multiplicative, StatModifierPolarity.Buff,
-            canModify: true, magnitude: 0.5f, expiresAtFrame: FrameDeadline.Never, ActionSource.Admin));
+        var world = CreateWorld(Part("Head", BodyPartType.Head, maximumHealth: 40, isVital: true));
+        var statModifiers = BuffedMaximumHealth();
 
-        var denseIndex = BodyPartSelection.PickLowestPercentage(pool, 0, now: 0, statModifiers);
+        var partId = BodyPartSelection.PickLowestPercentage(world.BodyParts, EntityId, now: 0, statModifiers);
 
-        Assert.AreEqual("Head", pool.GetReadonlyByDenseIndex(denseIndex).Name);
+        Assert.AreEqual("Head", NameOf(world, partId));
     }
 
     [TestMethod]
     public void PickLowestPercentage_PartAtItsEffectiveMaximumWithActiveBuff_NotSelected()
     {
-        var pool = CreatePool();
         // 60/60 with the same +50% buff active (effective maximum is 60) -- genuinely full, unlike the case above.
-        pool.Add(0, new BodyPartComponent("Head", BodyPartType.Head, 0, 0, currentHealth: 60, maximumHealth: 40, isVital: true));
-        var statModifiers = new MultiComponentPool<StatModifierComponent>(maximumEntityCount: 10, initialCapacity: 4);
-        statModifiers.Add(0, new StatModifierComponent(StatModifierTarget.MaximumHealth, StatModifierOperation.Multiplicative, StatModifierPolarity.Buff,
+        var world = CreateWorld(Part("Head", BodyPartType.Head, maximumHealth: 40, isVital: true));
+        world.BodyParts.SetCurrentHealth(EntityId, 0, 60);
+        var statModifiers = BuffedMaximumHealth();
+
+        Assert.AreEqual(-1, BodyPartSelection.PickLowestPercentage(world.BodyParts, EntityId, now: 0, statModifiers));
+    }
+
+    private static MultiComponentPool<StatModifierComponent> BuffedMaximumHealth()
+    {
+        var statModifiers = new MultiComponentPool<StatModifierComponent>(entityCapacity: 10, initialCapacity: 4);
+        statModifiers.Add(EntityId, new StatModifierComponent(StatModifierTarget.MaximumHealth, StatModifierOperation.Multiplicative, StatModifierPolarity.Buff,
             canModify: true, magnitude: 0.5f, expiresAtFrame: FrameDeadline.Never, ActionSource.Admin));
-
-        var denseIndex = BodyPartSelection.PickLowestPercentage(pool, 0, now: 0, statModifiers);
-
-        Assert.AreEqual(-1, denseIndex);
+        return statModifiers;
     }
 
     [TestMethod]
     public void PickTopmost_MixedVerticalPositions_PicksHighestPosition()
     {
-        var pool = CreatePool();
-        pool.Add(0, new BodyPartComponent("Foot", BodyPartType.Foot, 0, verticalPosition: 0, 10, 10, isVital: false));
-        pool.Add(0, new BodyPartComponent("Torso", BodyPartType.Torso, 0, verticalPosition: 4, 60, 60, isVital: true));
-        pool.Add(0, new BodyPartComponent("Head", BodyPartType.Head, 0, verticalPosition: 5, 30, 30, isVital: true));
+        var world = CreateWorld(
+            Part("Foot", BodyPartType.Foot, verticalPosition: 0),
+            Part("Torso", BodyPartType.Torso, verticalPosition: 4, maximumHealth: 60, isVital: true),
+            Part("Head", BodyPartType.Head, verticalPosition: 5, maximumHealth: 30, isVital: true));
 
-        var denseIndex = BodyPartSelection.PickTopmost(pool, 0);
-
-        Assert.AreEqual("Head", pool.GetReadonlyByDenseIndex(denseIndex).Name);
+        Assert.AreEqual("Head", NameOf(world, BodyPartSelection.PickTopmost(world.BodyParts, EntityId)));
     }
 
     [TestMethod]
     public void PickTopmost_EntityWithNoBodyParts_ReturnsNegativeOne()
     {
-        var pool = CreatePool();
+        var world = new BodyPartTestWorld();
 
-        var denseIndex = BodyPartSelection.PickTopmost(pool, 0);
-
-        Assert.AreEqual(-1, denseIndex);
+        Assert.AreEqual(-1, BodyPartSelection.PickTopmost(world.BodyParts, EntityId));
     }
 
     [TestMethod]
     public void PickBottommost_MixedVerticalPositions_PicksLowestPosition()
     {
-        var pool = CreatePool();
-        pool.Add(0, new BodyPartComponent("Head", BodyPartType.Head, 0, verticalPosition: 5, 30, 30, isVital: true));
-        pool.Add(0, new BodyPartComponent("Torso", BodyPartType.Torso, 0, verticalPosition: 4, 60, 60, isVital: true));
-        pool.Add(0, new BodyPartComponent("Foot", BodyPartType.Foot, 0, verticalPosition: 0, 10, 10, isVital: false));
+        var world = CreateWorld(
+            Part("Head", BodyPartType.Head, verticalPosition: 5, maximumHealth: 30, isVital: true),
+            Part("Torso", BodyPartType.Torso, verticalPosition: 4, maximumHealth: 60, isVital: true),
+            Part("Foot", BodyPartType.Foot, verticalPosition: 0));
 
-        var denseIndex = BodyPartSelection.PickBottommost(pool, 0);
-
-        Assert.AreEqual("Foot", pool.GetReadonlyByDenseIndex(denseIndex).Name);
+        Assert.AreEqual("Foot", NameOf(world, BodyPartSelection.PickBottommost(world.BodyParts, EntityId)));
     }
 
     [TestMethod]
     public void PickBottommost_EntityWithNoBodyParts_ReturnsNegativeOne()
     {
-        var pool = CreatePool();
+        var world = new BodyPartTestWorld();
 
-        var denseIndex = BodyPartSelection.PickBottommost(pool, 0);
-
-        Assert.AreEqual(-1, denseIndex);
+        Assert.AreEqual(-1, BodyPartSelection.PickBottommost(world.BodyParts, EntityId));
     }
 
     [TestMethod]
-    public void PickByType_MatchingTypePresent_ReturnsItsDenseIndex()
+    public void PickByType_MatchingTypePresent_ReturnsItsPartId()
     {
-        var pool = CreatePool();
-        pool.Add(0, new BodyPartComponent("Head", BodyPartType.Head, 0, 0, 30, 30, isVital: true));
-        pool.Add(0, new BodyPartComponent("Left Foot", BodyPartType.Foot, 0, 0, 10, 10, isVital: false));
+        var world = CreateWorld(
+            Part("Head", BodyPartType.Head, maximumHealth: 30, isVital: true),
+            Part("Left Foot", BodyPartType.Foot));
 
-        var denseIndex = BodyPartSelection.PickByType(pool, 0, BodyPartType.Foot);
-
-        Assert.AreEqual("Left Foot", pool.GetReadonlyByDenseIndex(denseIndex).Name);
+        Assert.AreEqual("Left Foot", NameOf(world, BodyPartSelection.PickByType(world.BodyParts, EntityId, BodyPartType.Foot)));
     }
 
     [TestMethod]
     public void PickByType_NoMatchingType_ReturnsNegativeOne()
     {
-        var pool = CreatePool();
-        pool.Add(0, new BodyPartComponent("Head", BodyPartType.Head, 0, 0, 30, 30, isVital: true));
+        var world = CreateWorld(Part("Head", BodyPartType.Head, maximumHealth: 30, isVital: true));
 
-        var denseIndex = BodyPartSelection.PickByType(pool, 0, BodyPartType.Foot);
-
-        Assert.AreEqual(-1, denseIndex);
+        Assert.AreEqual(-1, BodyPartSelection.PickByType(world.BodyParts, EntityId, BodyPartType.Foot));
     }
 
     [TestMethod]
     public void PickByTypeWithFallback_PreferredTypePresent_IgnoresFallback()
     {
-        var pool = CreatePool();
-        pool.Add(0, new BodyPartComponent("Head", BodyPartType.Head, 0, 5, 30, 30, isVital: true));
-        pool.Add(0, new BodyPartComponent("Left Foot", BodyPartType.Foot, 0, 0, 10, 10, isVital: false));
+        var world = CreateWorld(
+            Part("Head", BodyPartType.Head, verticalPosition: 5, maximumHealth: 30, isVital: true),
+            Part("Left Foot", BodyPartType.Foot));
         var mathUtility = new MathUtility(new Random(1));
 
-        var denseIndex = BodyPartSelection.PickByTypeWithFallback(pool, 0, new BodyPartTargetRule(BodyPartType.Foot, BodyPartFallback.Topmost), mathUtility);
+        var partId = BodyPartSelection.PickByTypeWithFallback(world.BodyParts, EntityId, new BodyPartTargetRule(BodyPartType.Foot, BodyPartFallback.Topmost), mathUtility);
 
-        Assert.AreEqual("Left Foot", pool.GetReadonlyByDenseIndex(denseIndex).Name);
+        Assert.AreEqual("Left Foot", NameOf(world, partId));
     }
 
     [TestMethod]
     public void PickByTypeWithFallback_PreferredTypeAbsent_FallsBackToTopmost()
     {
-        var pool = CreatePool();
-        pool.Add(0, new BodyPartComponent("Head", BodyPartType.Head, 0, 5, 30, 30, isVital: true));
-        pool.Add(0, new BodyPartComponent("Torso", BodyPartType.Torso, 0, 4, 60, 60, isVital: true));
+        var world = CreateWorld(
+            Part("Head", BodyPartType.Head, verticalPosition: 5, maximumHealth: 30, isVital: true),
+            Part("Torso", BodyPartType.Torso, verticalPosition: 4, maximumHealth: 60, isVital: true));
         var mathUtility = new MathUtility(new Random(1));
 
-        var denseIndex = BodyPartSelection.PickByTypeWithFallback(pool, 0, new BodyPartTargetRule(BodyPartType.Foot, BodyPartFallback.Topmost), mathUtility);
+        var partId = BodyPartSelection.PickByTypeWithFallback(world.BodyParts, EntityId, new BodyPartTargetRule(BodyPartType.Foot, BodyPartFallback.Topmost), mathUtility);
 
-        Assert.AreEqual("Head", pool.GetReadonlyByDenseIndex(denseIndex).Name);
+        Assert.AreEqual("Head", NameOf(world, partId));
     }
 
     [TestMethod]
     public void PickByTypeWithFallback_PreferredTypeAbsent_FallsBackToBottommost()
     {
-        var pool = CreatePool();
-        pool.Add(0, new BodyPartComponent("Head", BodyPartType.Head, 0, 5, 30, 30, isVital: true));
-        pool.Add(0, new BodyPartComponent("Torso", BodyPartType.Torso, 0, 4, 60, 60, isVital: true));
+        var world = CreateWorld(
+            Part("Head", BodyPartType.Head, verticalPosition: 5, maximumHealth: 30, isVital: true),
+            Part("Torso", BodyPartType.Torso, verticalPosition: 4, maximumHealth: 60, isVital: true));
         var mathUtility = new MathUtility(new Random(1));
 
-        var denseIndex = BodyPartSelection.PickByTypeWithFallback(pool, 0, new BodyPartTargetRule(BodyPartType.Foot, BodyPartFallback.Bottommost), mathUtility);
+        var partId = BodyPartSelection.PickByTypeWithFallback(world.BodyParts, EntityId, new BodyPartTargetRule(BodyPartType.Foot, BodyPartFallback.Bottommost), mathUtility);
 
-        Assert.AreEqual("Torso", pool.GetReadonlyByDenseIndex(denseIndex).Name);
+        Assert.AreEqual("Torso", NameOf(world, partId));
     }
 
     [TestMethod]
-    public void PickByTypeWithFallback_PreferredTypeAbsent_RandomFallback_AlwaysReturnsAValidIndexAcrossSeededRolls()
+    public void PickByTypeWithFallback_PreferredTypeAbsent_RandomFallback_AlwaysReturnsAValidPartAcrossSeededRolls()
     {
-        var pool = CreatePool();
-        pool.Add(0, new BodyPartComponent("Head", BodyPartType.Head, 0, 5, 30, 30, isVital: true));
-        pool.Add(0, new BodyPartComponent("Torso", BodyPartType.Torso, 0, 4, 60, 60, isVital: true));
+        var world = CreateWorld(
+            Part("Head", BodyPartType.Head, verticalPosition: 5, maximumHealth: 30, isVital: true),
+            Part("Torso", BodyPartType.Torso, verticalPosition: 4, maximumHealth: 60, isVital: true));
         var mathUtility = new MathUtility(new Random(1));
 
         for (var i = 0; i < 50; i++)
         {
-            var denseIndex = BodyPartSelection.PickByTypeWithFallback(pool, 0, new BodyPartTargetRule(BodyPartType.Foot, BodyPartFallback.Random), mathUtility);
+            var partId = BodyPartSelection.PickByTypeWithFallback(world.BodyParts, EntityId, new BodyPartTargetRule(BodyPartType.Foot, BodyPartFallback.Random), mathUtility);
 
-            Assert.IsGreaterThanOrEqualTo(0, denseIndex);
-            Assert.AreEqual(0, pool.GetEntityIdByDenseIndex(denseIndex));
+            Assert.IsGreaterThanOrEqualTo(0, partId);
+            Assert.IsLessThan(2, partId);
         }
     }
 
     [TestMethod]
-    public void FindByPartId_MatchingPartId_ReturnsItsDenseIndex()
+    public void TryGet_MatchingPartId_ReturnsThatPart_AndFalseBeyondTheBodyPlan()
     {
-        var pool = CreatePool();
-        pool.Add(0, new BodyPartComponent("Head", BodyPartType.Head, partId: 0, verticalPosition: 5, 30, 30, isVital: true));
-        pool.Add(0, new BodyPartComponent("Torso", BodyPartType.Torso, partId: 1, verticalPosition: 4, 60, 60, isVital: true));
+        var world = CreateWorld(
+            Part("Head", BodyPartType.Head, verticalPosition: 5, maximumHealth: 30, isVital: true),
+            Part("Torso", BodyPartType.Torso, verticalPosition: 4, maximumHealth: 60, isVital: true));
 
-        var denseIndex = BodyPartSelection.FindByPartId(pool, 0, partId: 1);
-
-        Assert.AreEqual("Torso", pool.GetReadonlyByDenseIndex(denseIndex).Name);
-    }
-
-    [TestMethod]
-    public void FindByPartId_NoMatchingPartId_ReturnsNegativeOne()
-    {
-        var pool = CreatePool();
-        pool.Add(0, new BodyPartComponent("Head", BodyPartType.Head, partId: 0, verticalPosition: 5, 30, 30, isVital: true));
-
-        var denseIndex = BodyPartSelection.FindByPartId(pool, 0, partId: 5);
-
-        Assert.AreEqual(-1, denseIndex);
+        Assert.IsTrue(world.BodyParts.TryGet(EntityId, 1, out var torso));
+        Assert.AreEqual("Torso", torso.Name);
+        Assert.IsFalse(world.BodyParts.TryGet(EntityId, 5, out _));
     }
 
     [TestMethod]
     public void PickLowestPercentage_PartCurrentlyBurning_SkippedEvenWithZeroLockout()
     {
-        var pool = CreatePool();
-        pool.Add(0, new BodyPartComponent("Left Foot", BodyPartType.Foot, partId: 0, verticalPosition: 0, currentHealth: 1, maximumHealth: 10, isVital: false)); // 10%, but burning.
-        pool.Add(0, new BodyPartComponent("Right Foot", BodyPartType.Foot, partId: 1, verticalPosition: 0, currentHealth: 5, maximumHealth: 10, isVital: false)); // 50%, not burning.
-        var burningTimers = new MultiComponentPool<BodyPartBurningTimerComponent>(maximumEntityCount: 10, initialCapacity: 4);
-        burningTimers.Add(0, new BodyPartBurningTimerComponent(partId: 0, stackCount: 1, nextTickFrame: 30, ActionSource.Admin));
+        var world = CreateWorld(
+            Part("Left Foot", BodyPartType.Foot),
+            Part("Right Foot", BodyPartType.Foot));
+        world.SetHealth(EntityId, 0, 1); // 10%, but burning.
+        world.SetHealth(EntityId, 1, 5); // 50%, not burning.
+        var burningTimers = new MultiComponentPool<BodyPartBurningTimerComponent>(entityCapacity: 10, initialCapacity: 4);
+        burningTimers.Add(EntityId, new BodyPartBurningTimerComponent(partId: 0, stackCount: 1, nextTickFrame: 30, ActionSource.Admin));
 
-        var denseIndex = BodyPartSelection.PickLowestPercentage(pool, 0, now: 0, statModifiers: null, burningTimers);
+        var partId = BodyPartSelection.PickLowestPercentage(world.BodyParts, EntityId, now: 0, statModifiers: null, burningTimers);
 
-        Assert.AreEqual("Right Foot", pool.GetReadonlyByDenseIndex(denseIndex).Name, "Left Foot has the lowest fraction but is on fire -- it must be skipped even though its own RegenLockedUntilFrame is 0.");
+        Assert.AreEqual("Right Foot", NameOf(world, partId), "Left Foot has the lowest fraction but is on fire -- it must be skipped even though its own lockout has expired.");
     }
 
     [TestMethod]
     public void PickLowestPercentage_NoBurningTimersPoolSupplied_BehavesAsBefore()
     {
-        var pool = CreatePool();
-        pool.Add(0, new BodyPartComponent("Torso", BodyPartType.Torso, partId: 0, verticalPosition: 0, currentHealth: 5, maximumHealth: 20, isVital: true));
+        var world = CreateWorld(Part("Torso", BodyPartType.Torso, maximumHealth: 20, isVital: true));
+        world.SetHealth(EntityId, 0, 5);
 
-        var denseIndex = BodyPartSelection.PickLowestPercentage(pool, 0, now: 0);
-
-        Assert.AreEqual("Torso", pool.GetReadonlyByDenseIndex(denseIndex).Name);
+        Assert.AreEqual("Torso", NameOf(world, BodyPartSelection.PickLowestPercentage(world.BodyParts, EntityId, now: 0)));
     }
 
     [TestMethod]
     public void PickRandom_OneDisabledOneAlive_AlwaysReturnsTheAliveOne()
     {
-        var pool = CreatePool();
-        pool.Add(0, new BodyPartComponent("Head", BodyPartType.Head, partId: 0, verticalPosition: 5, 30, 30, isVital: true));
-        pool.Add(0, new BodyPartComponent("Torso", BodyPartType.Torso, partId: 1, verticalPosition: 4, 60, 60, isVital: true));
-        var torsoDenseIndex = FindDenseIndexByName(pool, 0, "Torso");
-        pool.UpdateByDenseIndex(torsoDenseIndex, static (ref BodyPartComponent part) => part.IsDisabled = true);
+        var world = CreateWorld(
+            Part("Head", BodyPartType.Head, verticalPosition: 5, maximumHealth: 30, isVital: true),
+            Part("Torso", BodyPartType.Torso, verticalPosition: 4, maximumHealth: 60, isVital: true));
+        world.SetHealth(EntityId, 1, 0);
         var mathUtility = new MathUtility(new Random(1));
 
         for (var i = 0; i < 50; i++)
         {
-            var denseIndex = BodyPartSelection.PickRandom(pool, 0, mathUtility);
-            Assert.AreEqual("Head", pool.GetReadonlyByDenseIndex(denseIndex).Name);
+            Assert.AreEqual("Head", NameOf(world, BodyPartSelection.PickRandom(world.BodyParts, EntityId, mathUtility)));
         }
     }
 
     [TestMethod]
     public void PickRandom_EveryPartDisabled_FallsBackToAnyPart()
     {
-        var pool = CreatePool();
-        pool.Add(0, new BodyPartComponent("Head", BodyPartType.Head, partId: 0, verticalPosition: 5, 30, 30, isVital: true));
-        var headDenseIndex = pool.GetFirstDenseIndex(0);
-        pool.UpdateByDenseIndex(headDenseIndex, static (ref BodyPartComponent part) => part.IsDisabled = true);
+        var world = CreateWorld(Part("Head", BodyPartType.Head, verticalPosition: 5, maximumHealth: 30, isVital: true));
+        world.SetHealth(EntityId, 0, 0);
         var mathUtility = new MathUtility(new Random(1));
 
-        var denseIndex = BodyPartSelection.PickRandom(pool, 0, mathUtility);
-
-        Assert.AreEqual("Head", pool.GetReadonlyByDenseIndex(denseIndex).Name);
+        Assert.AreEqual("Head", NameOf(world, BodyPartSelection.PickRandom(world.BodyParts, EntityId, mathUtility)));
     }
 
     [TestMethod]
     public void PickByType_MatchingTypeDisabled_AnotherOfSameTypeAlive_ReturnsTheAliveOne()
     {
-        var pool = CreatePool();
-        pool.Add(0, new BodyPartComponent("Left Foot", BodyPartType.Foot, partId: 0, verticalPosition: 0, 0, 10, isVital: false));
-        pool.Add(0, new BodyPartComponent("Right Foot", BodyPartType.Foot, partId: 1, verticalPosition: 0, 10, 10, isVital: false));
-        var leftFootDenseIndex = FindDenseIndexByName(pool, 0, "Left Foot");
-        pool.UpdateByDenseIndex(leftFootDenseIndex, static (ref BodyPartComponent part) => part.IsDisabled = true);
+        var world = CreateWorld(
+            Part("Left Foot", BodyPartType.Foot),
+            Part("Right Foot", BodyPartType.Foot));
+        world.SetHealth(EntityId, 0, 0);
 
-        var denseIndex = BodyPartSelection.PickByType(pool, 0, BodyPartType.Foot);
-
-        Assert.AreEqual("Right Foot", pool.GetReadonlyByDenseIndex(denseIndex).Name);
+        Assert.AreEqual("Right Foot", NameOf(world, BodyPartSelection.PickByType(world.BodyParts, EntityId, BodyPartType.Foot)));
     }
 
     [TestMethod]
     public void PickByType_OnlyMatchIsDisabled_StillReturnsIt()
     {
-        var pool = CreatePool();
-        pool.Add(0, new BodyPartComponent("Left Foot", BodyPartType.Foot, partId: 0, verticalPosition: 0, 0, 10, isVital: false));
-        var footDenseIndex = pool.GetFirstDenseIndex(0);
-        pool.UpdateByDenseIndex(footDenseIndex, static (ref BodyPartComponent part) => part.IsDisabled = true);
+        var world = CreateWorld(Part("Left Foot", BodyPartType.Foot));
+        world.SetHealth(EntityId, 0, 0);
 
-        var denseIndex = BodyPartSelection.PickByType(pool, 0, BodyPartType.Foot);
-
-        Assert.AreEqual("Left Foot", pool.GetReadonlyByDenseIndex(denseIndex).Name, "A disabled-but-only match is still a valid answer -- not -1.");
+        Assert.AreEqual("Left Foot", NameOf(world, BodyPartSelection.PickByType(world.BodyParts, EntityId, BodyPartType.Foot)), "A disabled-but-only match is still a valid answer -- not -1.");
     }
 
     [TestMethod]
     public void PickTopmost_HighestPositionDisabled_ReturnsNextHighestAlive()
     {
-        var pool = CreatePool();
-        pool.Add(0, new BodyPartComponent("Foot", BodyPartType.Foot, partId: 0, verticalPosition: 0, 10, 10, isVital: false));
-        pool.Add(0, new BodyPartComponent("Torso", BodyPartType.Torso, partId: 1, verticalPosition: 4, 60, 60, isVital: true));
-        pool.Add(0, new BodyPartComponent("Head", BodyPartType.Head, partId: 2, verticalPosition: 5, 0, 30, isVital: true));
-        var headDenseIndex = FindDenseIndexByName(pool, 0, "Head");
-        pool.UpdateByDenseIndex(headDenseIndex, static (ref BodyPartComponent part) => part.IsDisabled = true);
+        var world = CreateWorld(
+            Part("Foot", BodyPartType.Foot, verticalPosition: 0),
+            Part("Torso", BodyPartType.Torso, verticalPosition: 4, maximumHealth: 60, isVital: true),
+            Part("Head", BodyPartType.Head, verticalPosition: 5, maximumHealth: 30, isVital: true));
+        world.SetHealth(EntityId, 2, 0);
 
-        var denseIndex = BodyPartSelection.PickTopmost(pool, 0);
-
-        Assert.AreEqual("Torso", pool.GetReadonlyByDenseIndex(denseIndex).Name);
+        Assert.AreEqual("Torso", NameOf(world, BodyPartSelection.PickTopmost(world.BodyParts, EntityId)));
     }
 
     [TestMethod]
     public void PickTopmost_EveryPartDisabled_FallsBackToHighestOverall()
     {
-        var pool = CreatePool();
-        pool.Add(0, new BodyPartComponent("Head", BodyPartType.Head, partId: 0, verticalPosition: 5, 0, 30, isVital: true));
-        var headDenseIndex = pool.GetFirstDenseIndex(0);
-        pool.UpdateByDenseIndex(headDenseIndex, static (ref BodyPartComponent part) => part.IsDisabled = true);
+        var world = CreateWorld(Part("Head", BodyPartType.Head, verticalPosition: 5, maximumHealth: 30, isVital: true));
+        world.SetHealth(EntityId, 0, 0);
 
-        var denseIndex = BodyPartSelection.PickTopmost(pool, 0);
-
-        Assert.AreEqual("Head", pool.GetReadonlyByDenseIndex(denseIndex).Name);
-    }
-
-    [TestMethod]
-    public void PickBottommost_LowestPositionDisabled_ReturnsNextLowestAlive()
-    {
-        var pool = CreatePool();
-        pool.Add(0, new BodyPartComponent("Head", BodyPartType.Head, partId: 0, verticalPosition: 5, 30, 30, isVital: true));
-        pool.Add(0, new BodyPartComponent("Torso", BodyPartType.Torso, partId: 1, verticalPosition: 4, 60, 60, isVital: true));
-        pool.Add(0, new BodyPartComponent("Foot", BodyPartType.Foot, partId: 2, verticalPosition: 0, 0, 10, isVital: false));
-        var footDenseIndex = FindDenseIndexByName(pool, 0, "Foot");
-        pool.UpdateByDenseIndex(footDenseIndex, static (ref BodyPartComponent part) => part.IsDisabled = true);
-
-        var denseIndex = BodyPartSelection.PickBottommost(pool, 0);
-
-        Assert.AreEqual("Torso", pool.GetReadonlyByDenseIndex(denseIndex).Name);
-    }
-
-    [TestMethod]
-    public void PickBottommost_EveryPartDisabled_FallsBackToLowestOverall()
-    {
-        var pool = CreatePool();
-        pool.Add(0, new BodyPartComponent("Foot", BodyPartType.Foot, partId: 0, verticalPosition: 0, 0, 10, isVital: false));
-        var footDenseIndex = pool.GetFirstDenseIndex(0);
-        pool.UpdateByDenseIndex(footDenseIndex, static (ref BodyPartComponent part) => part.IsDisabled = true);
-
-        var denseIndex = BodyPartSelection.PickBottommost(pool, 0);
-
-        Assert.AreEqual("Foot", pool.GetReadonlyByDenseIndex(denseIndex).Name);
+        Assert.AreEqual("Head", NameOf(world, BodyPartSelection.PickTopmost(world.BodyParts, EntityId)));
     }
 }

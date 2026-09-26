@@ -5,11 +5,11 @@ using Game.Modules.AbilityScores.Components;
 using Game.Modules.Actions;
 using Game.Modules.Actions.Components;
 using Game.Modules.Core.Components;
+using Game.Modules.Health;
 using Game.Modules.Inventory;
 using Game.Modules.Inventory.Components;
 using Game.Modules.Mana.Components;
 using Game.Modules.Movement.Components;
-using Game.Modules.ProcessingTier.Components;
 using Game.Modules.StatusEffects;
 using Game.Notifications;
 using Game.World;
@@ -75,7 +75,7 @@ public static class ShellBootstrapper
             componentManager.GetPackedPool<ActionLockComponent>(),
             componentManager.GetPackedPool<MovementComponent>(),
             componentManager.GetPackedPool<ManaComponent>(),
-            componentManager.GetMultiPool<AbilityScoreComponent>(),
+            componentManager.GetPackedPool<AbilityScoresComponent>(),
             worldSession.LocalTierRoster,
             ecsContext.SystemManager.Clock);
         var playerMovementController = new PlayerMovementController(
@@ -87,9 +87,10 @@ public static class ShellBootstrapper
         var cursorTextContent = new CursorTextContent(presentation.FontService, presentation.LabelRenderer);
         var dragGhostContent = new DragGhostContent(world, actionCatalog, itemCatalog, componentManager.GetMultiPool<InventoryItemStackComponent>(), presentation.FontService, presentation.SpriteSheetService, presentation.SpriteRenderer, presentation.LabelRenderer);
         var contextMenuController = new ContextMenuController(presentation.ElementPoolService);
-        var mapView = new Game.Views.MapViewQuery(world, componentManager, actionCatalog, worldSession.Terrain);
+        var mapView = new Game.Views.MapViewQuery(world, componentManager, actionCatalog, worldSession.Terrain, worldSession.Definitions);
+        var bodyParts = EntityBodyParts.For(componentManager, worldSession.Definitions);
 
-        ElementFactoryRegistry.RegisterAll(presentation, ecsContext, actionCatalog, itemCatalog, statusEffectDisplays, world, worldSession.Terrain, mapView, mapViewState, camera, actionTargetingController, playerMovementController, cursorTextContent, contextMenuController);
+        ElementFactoryRegistry.RegisterAll(presentation, ecsContext, actionCatalog, itemCatalog, statusEffectDisplays, bodyParts, worldSession.Definitions, world, worldSession.Terrain, mapView, mapViewState, camera, actionTargetingController, playerMovementController, cursorTextContent, contextMenuController);
 
         contextMenuController.Initialize(uiLayers);
 
@@ -97,7 +98,7 @@ public static class ShellBootstrapper
         tooltipController.Initialize(presentation.ElementPoolService, uiLayers);
 
         var mapWindow = BuildBaseWindows(presentation, ecsContext, screenSize, diagnostics, mapViewState, uiLayers);
-        var (questTriggerWindow, hotbarContent, inspectionWindow) = BuildStaticHudWindows(presentation, world, mapView, ecsContext, actionCatalog, itemCatalog, statusEffectDisplays, screenSize, mapViewState, uiLayers);
+        var (questTriggerWindow, hotbarContent, inspectionWindow) = BuildStaticHudWindows(presentation, world, mapView, ecsContext, actionCatalog, itemCatalog, statusEffectDisplays, screenSize, mapViewState, uiLayers, worldSession);
         var (notificationCenter, healthController, inventoryController) = BuildDynamicHudWindows(presentation, world, ecsContext, itemCatalog, mapWindow, contextMenuController, uiLayers, tooltipController);
         var hotbarController = BuildHotbarController(mapViewState, hotbarContent, actionTargetingController, tooltipController);
         BuildUserWindows(presentation, cursorTextContent, dragGhostContent, uiLayers);
@@ -140,6 +141,7 @@ public static class ShellBootstrapper
         itemDetailsController.GetTradeWindowRectangle = () => tradeWindowController.Rectangle;
 
         mapWindow.NeighborhoodStreamer = worldSession.NeighborhoodStreamer;
+        mapWindow.BlueprintAdmin = new Game.Spawning.BlueprintAdminCommands(worldSession.Factory, worldSession.Definitions);
 
         // A destroyed entity's id is reused straight away, so nothing on screen may keep pointing at
         // it: whatever it was selected in, or open for, lets go before the id means someone else.
@@ -187,7 +189,7 @@ public static class ShellBootstrapper
         // Every grid's own "a real single-stack item cell was clicked" callback now branches
         // on whether Item Details Comparison is currently armed, instead of always opening the
         // Item Details pane directly -- see ItemComparisonController.IsArmed/AddOrToggle.
-        void OnItemClicked(int entityId, Guid stackInstanceId)
+        void OnItemClicked(int entityId, uint stackInstanceId)
         {
             if (itemComparisonController.IsArmed)
             {
@@ -288,7 +290,7 @@ public static class ShellBootstrapper
 
     /// <summary>StaticHUD tier: the player health bar, action lock, status effects, InspectionWindow, the hotbar, and the quest trigger -- see UiInputController's own doc comment for what each of the four tiers means. questTriggerWindow is returned for Build, which wires its Clicked event once the DynamicHUD tier (needed by OpenQuestComposer) also exists. hotbarContent and inspectionWindow are returned too, for BuildHotbarController and Build's own OnInspectionOpened wiring respectively.</summary>
     private static (TextWindow QuestTriggerWindow, HotbarContent HotbarContent, InspectionWindow InspectionWindow) BuildStaticHudWindows(
-        PresentationContext presentation, World world, Game.Views.IMapViewQuery mapView, EcsContext ecsContext, ActionCatalog actionCatalog, ItemCatalog itemCatalog, StatusEffectDisplayRegistry statusEffectDisplays, Vector2 screenSize, MapViewState mapViewState, UiLayerStack layers)
+        PresentationContext presentation, World world, Game.Views.IMapViewQuery mapView, EcsContext ecsContext, ActionCatalog actionCatalog, ItemCatalog itemCatalog, StatusEffectDisplayRegistry statusEffectDisplays, Vector2 screenSize, MapViewState mapViewState, UiLayerStack layers, WorldSessionContext worldSession)
     {
         var playerHealthBarWindow = presentation.ElementPoolService.CreateElement<Window>(null, new ElementOptions
         {
@@ -302,7 +304,7 @@ public static class ShellBootstrapper
             // BorderSize left at the default (1,1) -- a thinner outset reads as a subtle bevel rather than a heavy frame.
             Chrome = new ElementChromeOptions { ShowTitle = false, ShowBorder = true, BorderStyle = BorderStyle.Outset, CanUserFocus = false },
         });
-        playerHealthBarWindow.SetContent(new PlayerHealthBarContent(world, ecsContext.ComponentManager, presentation.FontService, layers));
+        playerHealthBarWindow.SetContent(new PlayerHealthBarContent(world, ecsContext.ComponentManager, EntityBodyParts.For(ecsContext.ComponentManager, worldSession.Definitions), presentation.FontService, layers));
         playerHealthBarWindow.Initialize();
         layers.Add(UiLayer.StaticHud, playerHealthBarWindow);
 
@@ -332,7 +334,7 @@ public static class ShellBootstrapper
             },
             Chrome = new ElementChromeOptions { ShowTitle = false, ShowBorder = true, BorderStyle = BorderStyle.Outset, CanUserFocus = false },
         });
-        actionLockWindow.SetContent(new ActionLockContent(world, ecsContext.ComponentManager, presentation.FontService, ecsContext.SystemManager.Clock));
+        actionLockWindow.SetContent(new ActionLockContent(world, ecsContext.ComponentManager, mapView, presentation.FontService, ecsContext.SystemManager.Clock));
         actionLockWindow.Initialize();
         layers.Add(UiLayer.StaticHud, actionLockWindow);
 
@@ -373,7 +375,7 @@ public static class ShellBootstrapper
                 CanUserScrollVertical = true,
             },
         });
-        inspectionWindow.SetContent(new InspectionWindowContent(world, mapView, mapViewState, ecsContext.ComponentManager, ecsContext.EntityManager, presentation.ElementPoolService));
+        inspectionWindow.SetContent(new InspectionWindowContent(world, mapView, mapViewState, ecsContext.ComponentManager, ecsContext.EntityManager, presentation.ElementPoolService, worldSession.SpawnRecordRebuilder, worldSession.Skeletons, worldSession.Definitions));
         inspectionWindow.Initialize();
         layers.Add(UiLayer.StaticHud, inspectionWindow);
 
@@ -382,7 +384,7 @@ public static class ShellBootstrapper
         // player's currently-unlocked Expansion slot count, so it's constructed first and its own
         // Size read to size/position this window -- see HotbarContent.RefreshLayoutIfChanged for
         // how it keeps itself bottom-anchored/horizontally-centered as that Size changes later.
-        var hotbarContent = new HotbarContent(world, mapViewState, ecsContext.ComponentManager, ecsContext.EventBus, actionCatalog, itemCatalog, presentation.FontService, presentation.SpriteSheetService, presentation.SpriteRenderer, screenSize, ecsContext.SystemManager.Clock);
+        var hotbarContent = new HotbarContent(world, mapViewState, ecsContext.ComponentManager, ecsContext.EventBus, actionCatalog, itemCatalog, presentation.FontService, presentation.SpriteSheetService, presentation.SpriteRenderer, screenSize, ecsContext.SystemManager.Clock, EntityActions.For(ecsContext.ComponentManager, actionCatalog, worldSession.Definitions));
         var hotbarSize = hotbarContent.Size;
         var hotbarWindow = presentation.ElementPoolService.CreateElement<Window>(null, new ElementOptions
         {

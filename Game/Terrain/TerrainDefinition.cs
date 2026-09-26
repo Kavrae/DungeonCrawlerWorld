@@ -1,6 +1,7 @@
 using Game.Modules.Health.Components;
 using Game.Modules.StatusEffectAura.Components;
 using Microsoft.Xna.Framework;
+using Game.Sprites;
 
 namespace Game.Terrain;
 
