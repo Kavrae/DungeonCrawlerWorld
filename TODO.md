@@ -243,24 +243,6 @@ in that list). Plan the merge before fixing it:
 Cover it with a test: damage a Goblin, apply Human, then check every part's health, the part count,
 the topmost/bottommost picks, and that a burning part keeps its id.
 
-#### Let FreeCast actions activate while the action lock is counting down
-
-A FreeCast action should be usable during the shared action lock (the global cooldown), so an entity
-can move and then immediately Dodge to an adjacent tile, moving twice in quick succession. That is
-intended; today it doesn't work, which is a bug.
-
-Likely cause, not yet confirmed: `ActionActivationSystem.TryActivateFreeCast` already ignores the lock,
-but Dodge's relocation is queued in Presentation onto `MovementComponent.NextMapPosition`, and
-`MovementSystem` refuses to move an entity while `ActionLockGate.IsBlocked` (and while a pending action
-or consumable activation exists). So the dodge grant fires but the step waits for the lock to expire.
-Check the input side too (`ActionTargetingController`, hotbar), in case a FreeCast confirm is gated on
-the lock before it is ever queued.
-
-- A FreeCast move must not wait for the lock, and shouldn't restart or extend the lock the earlier
-  move started.
-- Dodge's own cooldown (4 s) still stops it being spammed as movement; only the lock stops mattering.
-- Cover it with a test driving move, then Dodge toward an adjacent tile, on consecutive frames.
-
 #### Real map generation -- neighborhood templates, replacing TestMapBuilder
 
 The sliding window of 1024x1024 neighborhoods is in place: `NeighborhoodStreamer` generates each neighborhood on demand from its own

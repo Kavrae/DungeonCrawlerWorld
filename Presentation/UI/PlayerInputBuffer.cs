@@ -58,7 +58,8 @@ public sealed class PlayerInputBuffer
 
     private CommandKind _kind;
     private Vector3Int _moveDirection;
-    private Guid _activationId;
+    private Guid _actionId;
+    private uint _stackInstanceId;
     private Vector3Int[] _targetTiles = [];
     private Vector3Int? _stepOnActivation;
     private uint _expiresAtFrame;
@@ -108,17 +109,17 @@ public sealed class PlayerInputBuffer
         }
 
         Buffer(CommandKind.Action);
-        _activationId = actionId;
+        _actionId = actionId;
         _targetTiles = targetTiles;
         _stepOnActivation = stepOnActivation;
         TryWriteBuffered();
     }
 
     /// <summary>Buffers an activation of the stack <paramref name="stackInstanceId"/> against <paramref name="targetTiles"/>, replacing any buffered command.</summary>
-    public void QueueConsumable(Guid stackInstanceId, Vector3Int[] targetTiles)
+    public void QueueConsumable(uint stackInstanceId, Vector3Int[] targetTiles)
     {
         Buffer(CommandKind.Consumable);
-        _activationId = stackInstanceId;
+        _stackInstanceId = stackInstanceId;
         _targetTiles = targetTiles;
         TryWriteBuffered();
     }
@@ -223,10 +224,10 @@ public sealed class PlayerInputBuffer
                 WriteMove(playerEntityId, _moveDirection);
                 break;
             case CommandKind.Action:
-                WriteAction(playerEntityId, _activationId, targetTiles, stepOnActivation);
+                WriteAction(playerEntityId, _actionId, targetTiles, stepOnActivation);
                 break;
             case CommandKind.Consumable:
-                WriteConsumable(playerEntityId, _activationId, targetTiles);
+                WriteConsumable(playerEntityId, _stackInstanceId, targetTiles);
                 break;
         }
 
@@ -260,7 +261,7 @@ public sealed class PlayerInputBuffer
         _pendingActivationStep = stepOnActivation is { } destination ? (actionId, destination) : null;
     }
 
-    private void WriteConsumable(int playerEntityId, Guid stackInstanceId, Vector3Int[] targetTiles)
+    private void WriteConsumable(int playerEntityId, uint stackInstanceId, Vector3Int[] targetTiles)
     {
         SetNextMapPosition(playerEntityId, null);
         WithdrawActivationRequests(playerEntityId);

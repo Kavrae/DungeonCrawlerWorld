@@ -297,10 +297,14 @@ public sealed class ActionActivationSystemTests
         Assert.AreEqual(0u, componentManager.GetPackedPool<ActionLockComponent>().GetReadonly(CasterEntityId).UnlockedAtFrame, "Must not set the shared lock for a rejected activation.");
     }
 
-    private static (ActionActivationSystem System, ComponentManager ComponentManager) BuildLockReleasingCaster(uint lockedUntilFrame, bool inWindup, uint cooldownReadyAtFrame = 0)
+    private static (ActionActivationSystem System, ComponentManager ComponentManager) BuildLockReleasingCaster(uint lockedUntilFrame, bool inWindup, ushort cooldownReadyAtFrame = 0)
     {
-        var (system, componentManager, _, _) = Build();
-        componentManager.Merge(CasterEntityId, new ActionInstanceComponent(FreeCastReleasingLockActionId, overrideDefinition: null) { CooldownReadyAtFrame = cooldownReadyAtFrame });
+        var (system, componentManager, actionCatalog, _) = Build();
+        componentManager.Merge(CasterEntityId, new ActionInstanceComponent(FreeCastReleasingLockActionId, overrideDefinition: null));
+        if (cooldownReadyAtFrame > 0)
+        {
+            ActionsOf(componentManager, actionCatalog).SetCooldown(CasterEntityId, FreeCastReleasingLockActionId, cooldownReadyAtFrame, now: 0);
+        }
         componentManager.Merge(CasterEntityId, new ActionLockComponent(standardLockFrames: ActionLockGate.StandardLockFrames, currentLockTotalFrames: 30, unlockedAtFrame: lockedUntilFrame));
         if (inWindup)
         {

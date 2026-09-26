@@ -28,7 +28,7 @@ public sealed class PlayerInputBufferTests
     private static readonly Vector3Int PlayerPosition = new(5, 5, 0);
     private static readonly Vector3Int North = new(5, 4, 0);
     private static readonly Guid SelfActionId = Guid.Parse("7d1b6b8e-3f0a-4a57-9a55-1c2f3e4d5a61");
-    private static readonly Guid StackInstanceId = Guid.Parse("2c9e0f4a-6b1d-4e8a-8f3c-5a7b9d1e2f30");
+    private const uint StackInstanceId = 1;
 
     private sealed class Harness
     {
@@ -87,7 +87,7 @@ public sealed class PlayerInputBufferTests
         componentManager.RegisterPackedPool<ActionLockComponent>(static (ref existing, incoming) => existing = incoming);
         componentManager.RegisterPackedPool<ManaComponent>(static (ref existing, incoming) => existing = incoming);
         componentManager.RegisterPackedPool<HotkeyExpansionUnlockComponent>(static (ref existing, incoming) => existing = incoming);
-        componentManager.RegisterMultiPool<AbilityScoreComponent>();
+        AbilityScoreTestPools.Register(componentManager);
 
         componentManager.Merge(PlayerEntityId, new TransformComponent(PlayerPosition, new Vector2Byte(1, 1)));
         componentManager.Merge(PlayerEntityId, new MovementComponent(MovementMode.PlayerControlled, null, null));
@@ -135,7 +135,7 @@ public sealed class PlayerInputBufferTests
             componentManager.GetPackedPool<ActionLockComponent>(),
             inputBuffer,
             componentManager.GetPackedPool<ManaComponent>(),
-            componentManager.GetMultiPool<AbilityScoreComponent>(),
+            componentManager.GetPackedPool<AbilityScoresComponent>(),
             simulationClock: clock);
 
         return new Harness
