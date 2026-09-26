@@ -13,6 +13,12 @@ namespace Engine.Diagnostics;
 /// symptoms real leaks tend to produce -- but so can legitimate warmup/caching behavior, so
 /// findings should be read as "look here," not "here's the bug."
 ///
+/// A finding also needs the growth to continue into the second half of the window (middle sample
+/// to newest). Oldest-to-newest alone can't tell a leak from a pool filling up to its steady
+/// state: sampling starts before the first simulated frame, when every gameplay pool (timers,
+/// exposures, corpses) is empty or nearly so, and each fills over the first seconds of play. A
+/// pool that has reached its steady state stops growing; a leak keeps going.
+///
 /// One false-positive shape is structural, not just a threshold-tuning problem: event-marker
 /// components added once to an entity that already existed (e.g. DeadComponent on a kill,
 /// AchievementUnlockedComponent on an unlock) grow with *event* rate, not entity-count growth --
@@ -37,6 +43,7 @@ public sealed class LeakDetector(EntityManager entityManager, ComponentManager c
     private const double HeapGrowthThreshold = 0.10;
     private const double EntityCountFlatThreshold = 0.02;
     private const double PoolOutpacesEntityGrowthThreshold = 0.50;
+    private const double RecentPoolGrowthThreshold = 0.10;
     private const int MinimumInstanceCountForPoolFinding = 100;
 
     private static readonly TimeSpan SampleInterval = TimeSpan.FromSeconds(5);
@@ -103,12 +110,15 @@ public sealed class LeakDetector(EntityManager entityManager, ComponentManager c
         }
 
         var oldest = _history[0];
+        var middle = _history[_history.Count / 2];
         var newest = _history[^1];
 
         var entityGrowthRatio = GrowthRatio(oldest.LiveEntityCount, newest.LiveEntityCount);
+        var recentEntityGrowthRatio = GrowthRatio(middle.LiveEntityCount, newest.LiveEntityCount);
 
         var heapGrowthRatio = GrowthRatio(oldest.TotalManagedBytes, newest.TotalManagedBytes);
-        if (heapGrowthRatio > HeapGrowthThreshold && entityGrowthRatio < EntityCountFlatThreshold)
+        var recentHeapGrowthRatio = GrowthRatio(middle.TotalManagedBytes, newest.TotalManagedBytes);
+        if (heapGrowthRatio > HeapGrowthThreshold && recentHeapGrowthRatio > 0 && entityGrowthRatio < EntityCountFlatThreshold)
         {
             _findings.Add(new LeakFinding(
                 "Managed Heap",
@@ -129,7 +139,11 @@ public sealed class LeakDetector(EntityManager entityManager, ComponentManager c
             }
 
             var poolGrowthRatio = GrowthRatio(oldestCount, newestCount);
-            if (poolGrowthRatio - entityGrowthRatio > PoolOutpacesEntityGrowthThreshold)
+            var recentPoolGrowthRatio = middle.ComponentCounts.TryGetValue(componentTypeName, out var middleCount)
+                ? GrowthRatio(middleCount, newestCount)
+                : poolGrowthRatio;
+            if (poolGrowthRatio - entityGrowthRatio > PoolOutpacesEntityGrowthThreshold
+                && recentPoolGrowthRatio - recentEntityGrowthRatio > RecentPoolGrowthThreshold)
             {
                 _findings.Add(new LeakFinding(
                     componentTypeName,

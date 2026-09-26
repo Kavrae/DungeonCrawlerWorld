@@ -1207,3 +1207,33 @@ Landed alongside two generalizations prompted by this feature recurring elsewher
   item/action activation now share the one implementation (single-tap Escape's
   `CloseTopmostClosableWindow` is unrelated and untouched). A future Magic Menu cast goes through the
   same `ArmAction`/`QueueActionActivation` chokepoints and gets this behavior for free.
+
+### StatusEffectAuraExposureComponent growth: not a leak (leak detector fix)
+
+Investigated 2026-09-26. The leak detector reported `StatusEffectAuraExposureComponent` growing
+0 -> ~20k with a flat entity count.
+
+- **Not a leak.** A 36,000-frame headless run (seed 12345) sampled the pool every 600 frames: it
+  peaks at ~22.2k on frame 600 and settles around ~17k, one exposure per entity (one effect type in
+  use), zero simulated exposures with an overdue deadline (the symptom a missed removal or
+  reschedule would leave), and dead owners only transiently (dropped on their next tick).
+  `EntityManager.DestroyEntity` clears Multi pools through `RemoveAllComponents`.
+- Exposures held by frozen Borough entities rise slowly (45 -> 528 over the run): exposed creatures
+  wandering out of the centre neighborhood freeze with their exposure. Bounded, and
+  `SkipOwedExposureTicks` handles the resume. It does show creatures drifting one way into Borough.
+- **The detector's false positive:** `GameLoop.Update` ticks diagnostics before the first simulated
+  frame, so the first sample has every gameplay pool empty or nearly so, and oldest-to-newest
+  growth flags each one as it fills (a session under a minute flagged a dozen, including this one
+  and `BurningTimerComponent`). `LeakDetector` now also requires growth in the second half of the
+  window (middle sample to newest, `RecentPoolGrowthThreshold`, and any growth for the heap
+  finding). With it, a 150 s session flags only `MovementDisabledComponent` (385 -> 592).
+- **`MovementDisabledComponent` is not a leak either: it's corpses.** Probed over 36,000 headless
+  frames (seed 12345), it grew 24 -> 1,114 alongside `DeadComponent` (3,116 -> 22,736), and every
+  sample had 0-3 living holders -- the rest were dead. `MeleeDisabledComponent` is the same
+  (48 -> 1,333, 0-2 living). A creature killed with every leg disabled keeps the marker: corpses
+  don't regenerate, `BodyPartEffectsSystem` still visits them (its driving pool,
+  `BodyPartStateComponent`, outlives death), and corpses are only destroyed when their neighborhood
+  unloads. So the count is bounded by the corpse population and grows at the death rate, slowing as
+  it does -- the event-marker false-positive shape `LeakDetector`'s remarks already describe. The
+  markers on a corpse are inert (`MovementSystem`/`ActionActivationSystem` already refuse a dead
+  entity).
