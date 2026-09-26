@@ -94,7 +94,7 @@ public sealed class HealthModule : IGameModule
             _eventBus,
             _playerQuery));
 
-        // Always registered -- RegisterComponents always calls RegisterMultiPool<BodyPartComponent>(), unlike the genuinely-optional pools above.
+        // Always registered -- RegisterComponents always calls RegisterPackedPool<BodyPartStateComponent>(), unlike the genuinely-optional pools above.
         systemManager.Register(new ComplexHealthRegenSystem(
             EntityBodyParts.For(componentManager, _creatures),
             componentManager.GetPackedPool<BodyPartStateComponent>(),

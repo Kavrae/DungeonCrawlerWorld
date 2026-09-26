@@ -203,6 +203,46 @@ primitive. Companion to the Game/Presentation equipment items below.
 
 ### High Priority
 
+#### Merging body plans when an entity gains a second race
+
+Bug: `EntityBodyParts.Update` seeds a body plan (`CreateState`) only when the entity has no
+`BodyPartStateComponent` yet. Once one exists it bounds-checks `partId` against the fixed
+`BodyPartStateComponent.MaximumParts` (16), not the entity's current `Count`. If a damaged entity
+then gains a race (`EntityFactory.Apply`, e.g. Admin Mode "Apply > Human"; `RaceSlotsComponent`
+merges it into the next empty slot), the new race's parts are never seeded: they read as 0 health,
+and Damage/Heal writes to them go through without any error. Two 11-part races also give 22 parts,
+more than `MaximumParts` allows, so `CreateState` throws for an undamaged hybrid and any damaged
+entity's parts past index 16 can't be written at all.
+
+A bounds-check fix alone isn't enough. The real gap is that a second race's body plan is just
+concatenated onto the first (`TemplatesOf` returns first then second, and a part's id is its index
+in that list). Plan the merge before fixing it:
+
+- **Overlapping plans.** Human + Goblin both have a Head, Torso, Arms, Legs and so on. Decide whether
+  a hybrid gets one of each overlapping part (whose template wins -- the first race, like appearance?
+  the larger maximum health?) or both. A second Head or a third and fourth Arm has to mean something
+  to `BodyPartEffectsSystem`'s movement/melee penalties and to whether an entity dies from a vital
+  part.
+- **Different plans.** Parts only one race has (wings, a tail) get added. Whatever the final count
+  is, it must fit `MaximumParts`, or `MaximumParts` needs revisiting against the component size
+  (see "Component size audit").
+- **Position.** `VerticalPosition` only means something relative to the same race's other parts.
+  Concatenating two races mixes two scales, so `BodyPartSelection.PickTopmost/PickBottommost` (and
+  anything else using `BodyPartTargetRule`) can pick the wrong part. The merge has to produce one
+  consistent ordering, e.g. positions normalized per race, or merged parts placed relative to the
+  part they attach to.
+- **Part ids.** Ids are indices stored in `BodyPartBurningTimerComponent` and anything else that
+  names a part. Gaining a race on a live entity must not shift an existing part's id, or must remap
+  every holder.
+- **Live state.** Gaining a race while the entity has a state component must seed the added parts at
+  full health and keep existing parts' damage, disabled flags and regen lockouts. Losing a race (if
+  that ever becomes possible) needs the reverse.
+- The merged plan belongs in `BlueprintRegistry.Resolve` / `ResolvedBlueprint` (cached, spawn record +
+  applied list), not re-derived per read in `EntityBodyParts.TemplatesOf`.
+
+Cover it with a test: damage a Goblin, apply Human, then check every part's health, the part count,
+the topmost/bottommost picks, and that a burning part keeps its id.
+
 #### Let FreeCast actions activate while the action lock is counting down
 
 A FreeCast action should be usable during the shared action lock (the global cooldown), so an entity
@@ -1893,34 +1933,6 @@ or statistical, and whether lethal outcomes may resolve while unobserved. Overla
 "Third Pause modality" -- both are "what happens to time where the player isn't". Under the 3x3
 neighborhood window,
 this item governs saved Beyond neighborhoods (frozen, or caught up on reload), not Borough.
-
-### HIGH PRIORITY : Investigate StatusEffectAuraExposureComponent growth
-
-The diagnostics leak detector flags this pool: `StatusEffectAuraExposureComponent pool grew 100%
-(0 -> 19,799) while live entity count grew 0% -- components may not be getting removed when their
-owning entity is.`
-
-~19,800 live exposures against ~59,000 lava tiles and ~70,000 movers is plausible on its face --
-an exposure is granted per (entity, effect type) in range of an aura source, and lava is dense --
-so this may be legitimate steady-state population rather than a leak. What makes it worth
-checking:
-
-- The detector's heuristic compares pool growth against *live entity count* growth, which is 0
-  after population finishes. That produces a false positive for any pool that legitimately fills
-  during play. `ProcessingTierComponent` trips the same heuristic for exactly that reason and is
-  almost certainly fine. So the first question is whether the detector is even measuring the right
-  thing here.
-- The real test is whether exposures are *removed* when an entity leaves an aura's radius or dies.
-  `StatusEffectAuraSystem` maintains exposures incrementally (see its own doc comment on
-  ReEvaluateExposuresNear); a missed removal path would accumulate silently, and the symptom would
-  be steady growth over a long session rather than a plateau.
-- Cheap way to settle it: run a long session and sample the count repeatedly. A plateau means
-  steady state, continued growth means a real leak. If it grows, the suspect paths are entity
-  death (does anything drop exposures for a dead entity?) and a source being removed/moved rather
-  than the observer moving out of range.
-
-Note the same detector output flags `ProcessingTierComponent` growing 1 -> 70,267; that one is the
-startup tiering sweep filling a pool that starts empty, not a leak.
 
 ### MEDIUM PRIORITY : Third Pause modality -- per-map pause
 
