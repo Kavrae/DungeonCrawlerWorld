@@ -68,6 +68,10 @@ public sealed class ProcessingTierResolver
     /// <remarks>Indexed regardless of pinning or whether a reference exists yet, so an entity created before the reference is still found by the first neighborhood walk that needs it.</remarks>
     public NeighborhoodMembershipIndex Membership { get; } = new();
 
+    /// <summary>Neighborhoods whose entities a window shift changed the tier of, drained by ProcessingTierSystem under its per-frame budget -- see ProcessingTierTransitionQueue.</summary>
+    /// <remarks>Kept here with the window rather than on the system, so anything waiting for a shift to settle can ask HasPending.</remarks>
+    public ProcessingTierTransitionQueue Transitions { get; } = new();
+
     /// <summary>Connects the resolver to the pools it reads and writes. Called once from ProcessingTierModule.RegisterSystems, after components are registered -- the same shape as LocalTierRoster.Wire.</summary>
     public void Wire(DirectComponentPool<ProcessingTierComponent> tiers, DirectComponentPool<TransformComponent> transforms, ProcessingTierEvents events)
     {

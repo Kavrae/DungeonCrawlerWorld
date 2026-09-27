@@ -12,6 +12,8 @@ using Game.Modules.Death.Components;
 using Game.Modules.Health;
 using Game.Modules.Health.Components;
 using Game.Modules.Inventory.Components;
+using Game.Modules.ProcessingTier;
+using Game.Modules.ProcessingTier.Components;
 using Game.Modules.Inventory.Systems;
 using Game.Modules.Mana.Components;
 using Game.Modules.StatModifiers.Components;
@@ -111,6 +113,7 @@ public sealed class InventoryModule : IGameModule
             auraSources,
             itemHotkeyBindings,
             bodyParts,
-            _creatures));
+            _creatures,
+            componentManager.GetOptionalDirectPool<ProcessingTierComponent>() is { } tiers ? new ProcessingTierQuery(tiers) : null));
     }
 }

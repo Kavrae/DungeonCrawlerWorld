@@ -488,11 +488,11 @@ that measured 29.6 GB, 47.7 s startup and 12 ms/frame.
   the player, every frame. The window centre's neighborhood = Neighborhood tier (divisor 8). The 8
   around it = Borough, loaded but frozen (`SimulatedTierCount = 2`, `SimulationScope`). Further =
   Beyond, unloaded. Terrain and walls are flyweight `TerrainCell`s in `Map`, not entities.
-- **Transitions:** `NeighborhoodMembershipIndex`, `ProcessingTierTransitionQueue` (512 entities per
+- **Transitions:** `NeighborhoodMembershipIndex`, `ProcessingTierTransitionQueue` (256 entities per
   frame, thaw first), `ProcessingTierQuery` for the seam. Promotion out of Borough runs
   `TimerCatchUp` over each module's `ICatchUpTimers`. Periodic first deadlines are staggered by entity
   id (`FrameDeadline.AfterStaggered`) so timers created together don't fire together.
-- **Streaming:** `Map.Unbounded` + `NeighborhoodStreamer` (first system in the frame, 512 units per
+- **Streaming:** `Map.Unbounded` + `NeighborhoodStreamer` (first system in the frame, 256 units per
   frame). `NeighborhoodRecords` keeps a seed per coordinate; `TestMapBuilder.GenerateNeighborhood` is
   the stand-in generator. Stable `EntityKey`s and `EntityIdentities` let references outlive an unload.
 - **Startup reservation:** `WorldSessionBootstrapper` reserves (9 + 3) / 9 of the startup population
@@ -503,7 +503,10 @@ Decisions (don't re-litigate):
 2. Every tier transition is smeared across frames through one budgeted queue.
 3. Promotion out of Borough, by any route including teleport, catches up every effect with an active
    timer before the entity rejoins the simulation.
-4. No targeting across the simulated/frozen boundary; the player only interacts with Local.
+4. No targeting across the simulated/frozen boundary; the player only interacts with Local. NPCs
+   can reach the seam, so every tile-targeted effect skips frozen occupants: actions
+   (`ActionEffectResolver`), NPC target choice (`TestCombatBehaviorSystem`), and potions, scrolls and
+   wands (`ConsumableActivationSystem`, added 2026-09-26 after a potion reached an unbuilt skeleton).
 5. Exact timers at every simulated tier. Neighborhood speed 1/8, settled in-game.
 6. Other MapLayers take the (x, y) neighborhood's tier but are never Local.
 7. Population is defined per MOB population template (dense or sparse); neighborhood placement is
@@ -630,6 +633,141 @@ scores 1-300 explode any shared race+class key); data is classified by what it v
 
 Changing how creatures roll changed the world once: seed 1's headless fingerprint went from
 `454135E5C67D1588` to `E2D7F9B469DCAB34`. Pools +13 MB (the spawn-record pool); frame cost unchanged.
+
+### Window-shift tier drain: chunk-bucketed stripe sets rejected
+
+Investigated 2026-09-26: should each `TieredEntityStripeSet` bucket its entities by neighborhood,
+making a tier a property of the neighborhood so a window shift costs work per neighborhood rather
+than per entity? No.
+
+Measured (Release, seed 1, 3072², a temporary headless probe that teleports the player across a
+border, counters on every tier change):
+
+| | Diagonal shift | Straight shift |
+|---|---|---|
+| Entities dequeued | 815k | 508k |
+| Tier changes | 439k | 364k |
+| Drain settles after | ~1,590 frames (26 s) | ~990 frames (16.5 s) |
+| Drain total | 930 ms | 711 ms |
+| Skeleton builds (to Neighborhood) | 271 ms | 211 ms |
+| Stripe-set `TierChanged` calls / real migrations | 3.07M / 0.2M | 2.55M / 0.2M |
+
+- **~40% of dequeues are wasted:** neighborhoods queued while unloaded are walked after the streamer
+  has loaded them, and their entities were born with the right tier.
+- **60-67% of tier changes are Borough <-> Beyond,** unsimulated on both sides.
+- **The changes that matter** are ~72k entering Neighborhood (builds, per entity by nature) and ~73k
+  leaving it.
+- **93% of stripe-set `TierChanged` calls are no-ops,** mostly skeletons, which no tiered set holds.
+- **The drain isn't the worst frame.** It is budgeted at ~0.6 ms/frame; the spikes were the teleport
+  frame itself and streamer/GC frames.
+
+Why the idea was dropped: bucketing would remove only the stripe-set share of the drain. Thawing
+still reaches every entity (builds, `SimulationScope` resume), Local still needs a per-entity
+overlay, and the two queue fixes below remove most of the drain without restructuring anything.
+Steady-state and move costs were not a concern (only one neighborhood is ever at Neighborhood tier;
+movers only live in simulated tiers).
+
+Decisions (don't re-litigate):
+1. **Four tiers, each with its own job:** Local fully simulated, Neighborhood simulated slowly,
+   Borough updated by end-of-day estimates (TODO "Borough end-of-day summaries"), Beyond frozen.
+   Borough and Beyond are therefore not merged, even though nothing tells them apart yet.
+2. **All four values stay exact on every entity.** Borough/Beyond is not moved to a
+   neighborhood-level property: one rule for every tier is worth more than the saved work.
+3. **Borough <-> Beyond transitions drain last,** after thawing and freezing. End-of-day summaries
+   allow a time buffer so the labels have settled before they run.
+4. **Neighborhoods not loaded at the shift are not queued;** whatever loads them tiers them at birth.
+
+Landed 2026-09-26: `ProcessingTierTransitionBand` (Thawing, Freezing, Unsimulated) and the
+`IMapQuery.IsNeighborhoodLoaded` check in `ProcessingTierSystem.QueueIfTierChanged`. The queue moved
+onto `ProcessingTierResolver.Transitions` so anything waiting on a shift can ask
+`HasPendingSimulatedChanges` (thaw and freeze bands done). Measured with scripted headless teleports
+(a benchmark flag since removed; Release, seed 1, 3072², frames settled after the teleport):
+
+| Teleport | All tiers, before -> after | Simulation settled |
+|---|---|---|
+| East into (1, 0) | 1,137 -> 710 | 284 |
+| Diagonal into (1, -1) | 1,417 -> 708 | 283 |
+| Back to (0, 0) | 1,137 -> 1,136 | 283 |
+
+A teleport back only reorders the work: nothing it touches is unloaded. Frame cost across the run
+unchanged (-4.4%, inside the noise), and the world differs because freezing now lands earlier.
+
+### Teleports
+
+`Game.World.EntityTeleporter` is the one teleport path (gameplay, Admin Mode's "Teleport here"). It
+refuses anything but a free cell of the loaded map, builds a skeleton first, drops the movement destination, cancels a windup, and records the move
+through `SpawnMoves` so it is safe between frames, mid-frame or from Presentation.
+
+Cost of the teleport frame, measured with a probe (Release, straight shift): ~10 ms of Local square
+walks (the promote walk 4.3-4.7 ms, 1.2-1.4 ms of it skeleton builds; the demote walk 5.2-6.4 ms),
+since a teleport walks both full squares where a step walks only their edges. The first window shift
+of a session adds ~20 ms of JIT compilation in the streamer's shift handler; later ones cost
+0.3-0.5 ms. Hiding the ~9.5 s thaw of a Borough destination is the "Teleport countdown with a window
+anchor" TODO.
+
+### Asynchronous neighborhood generation
+
+Landed 2026-09-26 in three phases. A window shift in the Debug build dropped the game below 60 fps
+for ~6 s (90 ms frames), most of it the streamer; a probe showed ~55% of its work was decidable
+without touching the world.
+
+- **Plan on a worker, apply on the main thread.** `TestMapBuilder.Plan` decides a neighborhood as
+  a `NeighborhoodPlan` -- its layout written into detached stores (`Map.CreateLayout` ->
+  `NeighborhoodLayout`, which reads only the map's fixed depth and bounds), each row's aura cells
+  (`TerrainAuraSources.ByRow`), and the ordered spawn list -- from the record alone. The streamer then
+  loads the stores whole (`Map.LoadNeighborhood(layout)`; an already loaded neighborhood copies the
+  terrain in and keeps its occupants, for startup), announces each row with `TerrainLoadedEvent`
+  carrying its aura cells (both aura grids splat from the list, nobody scans), and spawns the list
+  under the same unit budget. `TerrainRegistry`'s sprite-variant cache is filled at builder
+  construction so the worker only reads it.
+- **Fixed start.** A load is planned from the moment it is queued and may start `StartDelayFrames` (30)
+  streamer updates later; if the worker isn't done then, the main thread waits. So streaming depends on
+  frames only: a seeded run is identical every time, and Debug and Release now simulate the same world.
+  Readiness counts the streamer's own updates, not `EngineTime.FrameCount`, which is the same in the game
+  and lets tests pump the streamer directly.
+- **Workers start at the next streamer update**, not in the shift handler: starting them mid-frame put
+  them alongside the teleport frame's ~10 ms Local walk and cost it ~7 ms (Release).
+- **Cancellation.** A load dropped before it starts cancels its worker; the plan uses the record's
+  `PendingPopulationSeed` and counts it (`NextPopulationSeed`) only when the load starts, so turning back
+  leaves the neighborhood's next population unchanged, as before async.
+
+Decisions (don't re-litigate):
+1. The budget stays in deterministic units, not wall-clock time (a time budget makes shifts
+   non-reproducible).
+2. The delay is 30 updates, ~500 ms at 60 fps (~483 ms of it for the worker, which starts an update
+   late). Slowest plans measured: 317-325 ms windowed Debug, up to 390 ms headless Debug, 110-131 ms
+   Release; 20 updates (317 ms) would stall windowed Debug. A longer delay only makes the frozen ring
+   appear later, so err long. It counts frames, and a headless run goes faster than real time, so a
+   headless Debug run can occasionally wait (once in three runs, 14 ms); the paced game doesn't.
+3. Unloading still scans rows for aura terrain on the main thread (only evictions pay it).
+4. The aura splats stay on the main thread. Precomputing each neighborhood's aura-grid contribution on
+   the worker and merging it was considered (~2.2 ms/frame in Debug after a shift) and rejected.
+5. Both per-frame caps are halved, `NeighborhoodStreamer.DefaultBudgetPerFrame` and
+   `ProcessingTierSystem.DefaultTransitionsPerFrame` 512 -> 256: what remained after async was main-thread
+   work only (spawns, builds, splats), so the lever left was spreading it thinner. The same work over
+   twice the frames: the simulation settles ~568 frames after a shift instead of ~284, loads finish at
+   ~980 instead of ~520. Hiding the longer settle is the countdown TODO, which waits on a teleport visual
+   effect.
+
+Windowed Debug, after a teleport, simulation ms/frame average / worst per 2 s, caps 512 -> 256:
+
+| Seconds after | 512 | 256 |
+|---|---|---|
+| 0-2 (includes the teleport frame) | 14.9 / 40.0 | 11.3 / 38.2 |
+| 2-4 | 11.2 / 30.9 | 9.3 / 13.4 |
+| 4-6 | 6.4 / 13.3 | 9.6 / 15.0 |
+| 6-8 | 9.0 / 23.2 | 9.0 / 20.8 |
+| 8-10 | 5.5 / 11.5 | 6.3 / 15.5 |
+| 10-12 | 4.9 / 7.9 | 8.2 / 21.6 |
+| 12-14 | 5.0 / 8.4 | 6.8 / 11.4 |
+
+Frame cost across a whole range is unchanged (headless A/B, Release, nothing flagged).
+
+Measured (headless, seed 1, 3072², teleports east and back, A/B against the pre-async build): streamer
+-58% Release / -62% Debug, `TerrainLoadedEvent` -41% / -51%, other systems flat, worst frame unchanged
+(the teleport frame). Windowed Debug: worst frame 90 -> 40 ms, and the run keeps real time. Streaming
+settles 31 frames later (the delay); the tier drain is unchanged. The world differs from before (loads
+start later), identically every run.
 
 ### Creature skeletons: building an NPC when it is first simulated
 
@@ -975,6 +1113,22 @@ Measured (Release, seed 1, 3072², frames 600-3600) against a baseline saved imm
 `EcsContext.Update` 1.448 -> 1.439 ms/frame (-0.6%), nothing flagged; memory: `CrawlerComponent` holders
 13,063 -> 1,451, pools 174.3 -> 171.9 MB, allocation before the range 1,478.8 -> 1,475.3 MB, collections
 30/18/6 -> 28/17/5.
+
+### Crawler number selection
+
+- **A seeded permutation, not rejection sampling.** `UniqueNumberAllocator` runs a counter through a
+  balanced 4-round Feistel network keyed from the seed (SplitMix64). Each allocation is O(1), nothing is
+  stored beyond the counter, and no number repeats. The old version drew random numbers against a
+  `HashSet` of every number issued: slower as the range filled, unbounded memory, and no exit once full.
+- **The range is 1 to 2^24 (16,777,216),** rounded up from the source material's 13,000,000 so the
+  permutation covers it exactly and needs no cycle-walking. `valueBits` must be even (balanced halves).
+- **Running out.** `TryAllocate` returns false once every number is issued. From then on the factory
+  spawns a Crawler request without `SpawnFlags.Crawler`, and a skeleton flagged as a crawler before that
+  has the flag cleared when it is built (`AssignCrawlerNumber`) and becomes a plain NPC. Crawlers already
+  numbered keep theirs. The flag is cleared lazily at build rather than by a sweep at exhaustion: nothing
+  else reads it on an unbuilt entity.
+- **Save/load** will need to persist the counter alongside the seed; nothing restores it yet.
+- The same session seed now gives different crawler numbers than before this change.
 
 ## Presentation
 

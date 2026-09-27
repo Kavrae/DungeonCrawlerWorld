@@ -208,7 +208,8 @@ public sealed class MapTintGridTests
 
         world.Map.LoadNeighborhood(1, 0);
         world.PopulateTerrain(1024, 5, TerrainLayer.UnderGround, glowing);
-        eventBus.Publish(new TerrainLoadedEvent(Neighborhoods.AreaOf(1, 0, 1)));
+        Assert.IsTrue(TerrainAuraSources.TryGetAura(terrain, glowing.TypeId, out var aura));
+        eventBus.Publish(new TerrainLoadedEvent(Neighborhoods.AreaOf(1, 0, 1), [new TerrainAuraCell(new Vector3Int(1024, 5, (int)MapLayer.UnderGround), aura)]));
 
         Assert.IsTrue(tintGrid.TryGetTint(1022, 5, 0, out var after));
         Assert.AreEqual(before, after);

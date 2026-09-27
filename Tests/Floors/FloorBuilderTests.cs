@@ -467,7 +467,7 @@ public sealed class FloorBuilderTests
         }
     }
 
-    /// <summary>One yield per layout row, one per population row with the entities it created, and one for the starting neighborhood's fixtures -- together accounting for every entity generation created.</summary>
+    /// <summary>One yield once the whole layout is loaded, one per population row with the entities it created, and one for the starting neighborhood's fixtures -- together accounting for every entity generation created.</summary>
     [TestMethod]
     public void GenerateNeighborhood_YieldsARowAtATime()
     {
@@ -476,8 +476,80 @@ public sealed class FloorBuilderTests
 
         var yields = builder.GenerateNeighborhood(world, new NeighborhoodRecord(0, 0, seed: 42)).ToList();
 
-        Assert.HasCount(30 + 30 + 1, yields);
-        Assert.IsTrue(yields.Take(30).All(static created => created == 0));
+        Assert.HasCount(1 + 30 + 1, yields);
+        Assert.AreEqual(0, yields[0]);
         Assert.AreEqual(ecsContext.EntityManager.LivingEntityCount - livingBefore, yields.Sum());
+    }
+
+    /// <summary>A plan decides the neighborhood alone: the same record and population seed give the same layout and the same spawns, however many times, on whichever thread.</summary>
+    [TestMethod]
+    public void Plan_SameRecordAndSeed_GivesTheSamePlanOnAnyThread()
+    {
+        var (world, _, builder, _, _) = BuildForGeneration(TwoNeighborhoodSlice);
+        var record = new NeighborhoodRecord(-1, 0, seed: 42);
+
+        var here = builder.Plan(world.Map, record, populationSeed: 7);
+        var onWorkers = Enumerable.Range(0, 4).AsParallel().Select(_ => builder.Plan(world.Map, record, populationSeed: 7)).ToList();
+
+        foreach (var plan in onWorkers)
+        {
+            CollectionAssert.AreEqual(here.Spawns.ToList(), plan.Spawns.ToList());
+            CollectionAssert.AreEqual(here.SpawnRowEnds.ToList(), plan.SpawnRowEnds.ToList());
+            for (var x = here.Layout.MinX; x < here.Layout.MaxX; x += 97)
+            {
+                for (var y = here.Layout.MinY; y < here.Layout.MaxY; y++)
+                {
+                    Assert.AreEqual(here.Layout.GetTerrain(x, y, TerrainLayer.Ground), plan.Layout.GetTerrain(x, y, TerrainLayer.Ground));
+                    Assert.AreEqual(here.Layout.GetTerrain(x, y, TerrainLayer.UnderGround), plan.Layout.GetTerrain(x, y, TerrainLayer.UnderGround));
+                }
+            }
+        }
+
+        Assert.AreEqual(0, record.PopulationCount, "Planning draws no population seed of its own.");
+    }
+
+    [TestMethod]
+    public void Plan_Cancelled_StopsWithOperationCanceled()
+    {
+        var (world, _, builder, _, _) = BuildForGeneration(TwoNeighborhoodSlice);
+
+        Assert.ThrowsExactly<OperationCanceledException>(() => builder.Plan(world.Map, new NeighborhoodRecord(-1, 0, seed: 42), populationSeed: 7, new CancellationToken(canceled: true)));
+    }
+
+    /// <summary>The aura cells a plan lists for each row are exactly what scanning that row of the loaded neighborhood finds, in the same order -- so announcing them is the same as the handlers scanning.</summary>
+    [TestMethod]
+    public void Plan_AuraCellsByRow_MatchScanningTheLoadedRows()
+    {
+        var (world, _, builder, _, _) = BuildForGeneration(TwoNeighborhoodSlice);
+        var plan = builder.Plan(world.Map, new NeighborhoodRecord(-1, 0, seed: 42), populationSeed: 7);
+        world.Map.LoadNeighborhood(plan.Layout);
+
+        var listed = 0;
+        for (var y = plan.Layout.MinY; y < plan.Layout.MaxY; y++)
+        {
+            var scanned = new List<TerrainAuraCell>();
+            TerrainAuraSources.ForEach(world, world.Terrain, new MapBounds(plan.Layout.MinX, y, plan.Layout.MaxX, y + 1, 3), (position, aura) => scanned.Add(new TerrainAuraCell(position, aura)));
+
+            CollectionAssert.AreEqual(scanned, plan.AuraCellsByRow[y - plan.Layout.MinY].ToList(), $"Row {y}.");
+            listed += scanned.Count;
+        }
+
+        Assert.IsGreaterThan(0, listed, "Precondition: the slice has lava.");
+    }
+
+    /// <summary>Loading a layout into a neighborhood that is already loaded writes its terrain and keeps whoever already stands there -- a neighbor's creature reaching across the border, at startup.</summary>
+    [TestMethod]
+    public void LoadNeighborhood_AlreadyLoaded_TakesTheLayoutAndKeepsItsOccupants()
+    {
+        var (world, _, builder, _, _) = BuildForGeneration(TwoNeighborhoodSlice);
+        var occupied = new Vector3Int(-2, 5, (int)MapLayer.Ground);
+        world.Map.SetBlockingEntityId(occupied, 99);
+        world.Map.AddOccupantEntityId(occupied, 99);
+        var plan = builder.Plan(world.Map, new NeighborhoodRecord(-1, 0, seed: 42), populationSeed: 7);
+
+        world.Map.LoadNeighborhood(plan.Layout);
+
+        Assert.AreEqual(99, world.GetEntityIdAt(occupied));
+        Assert.IsFalse(world.Map.GetTerrain(-2, 5, TerrainLayer.Ground).IsEmpty);
     }
 }

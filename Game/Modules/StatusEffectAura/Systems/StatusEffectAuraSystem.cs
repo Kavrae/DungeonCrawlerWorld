@@ -263,7 +263,10 @@ public sealed class StatusEffectAuraSystem : ISystem
     {
         if (_gridBuilt)
         {
-            TerrainAuraSources.ForEach(_mapQuery, _terrain, loaded.Area, AddToGrid);
+            foreach (var auraCell in loaded.AuraCells)
+            {
+                AddToGrid(auraCell.Position, auraCell.Aura);
+            }
         }
     }
 

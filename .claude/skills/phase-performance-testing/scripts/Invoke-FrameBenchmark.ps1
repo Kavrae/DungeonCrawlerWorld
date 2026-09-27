@@ -88,6 +88,27 @@ function Get-PerFrameMap {
     return $perFrame
 }
 
+# The slowest single EcsContext.Update frame in the range; null for a build whose report predates
+# WorstMilliseconds.
+function Get-WorstUpdateFrame {
+    param($Report)
+
+    $item = @($Report.Update.GameLoop) | Where-Object { $_.Name -eq "EcsContext.Update (all systems)" } | Select-Object -First 1
+    if ($null -eq $item -or $null -eq $item.WorstMilliseconds) { return $null }
+    return [double]$item.WorstMilliseconds
+}
+
+# One line per run: its worst frame.
+function Write-RunDetails {
+    param($Runs, [string]$Label)
+
+    for ($i = 0; $i -lt $Runs.Count; $i++) {
+        $run = $Runs[$i]
+        $worst = if ($null -ne $run.WorstFrameMs) { "{0:N2} ms" -f $run.WorstFrameMs } else { "n/a" }
+        Write-Host "  $Label run $($i + 1): worst frame $worst"
+    }
+}
+
 function Get-Median {
     param([double[]]$Values)
 
@@ -164,9 +185,10 @@ function Invoke-BenchmarkRun {
     }
 
     return [pscustomobject]@{
-        Report      = $report
-        PerFrame    = $perFrame
-        Fingerprint = $fingerprint
+        Report          = $report
+        PerFrame        = $perFrame
+        Fingerprint     = $fingerprint
+        WorstFrameMs    = Get-WorstUpdateFrame -Report $report
     }
 }
 
@@ -286,6 +308,10 @@ if ($Compare) {
     }
     Write-Host ""
 
+    Write-RunDetails -Runs $runsA -Label "A"
+    Write-RunDetails -Runs $runsB -Label "B"
+    Write-Host ""
+
     $summaryA = Get-Summary -Runs $runsA
     $summaryB = Get-Summary -Runs $runsB
     $keys = @($summaryA.Keys) + @($summaryB.Keys) | Select-Object -Unique |
@@ -335,6 +361,8 @@ if ($Compare) {
         fingerprintA   = @($runsA | ForEach-Object { $_.Fingerprint })
         fingerprintB   = @($runsB | ForEach-Object { $_.Fingerprint })
         sameWorld      = $sameWorld
+        worstFrameMsA  = @($runsA | ForEach-Object { $_.WorstFrameMs })
+        worstFrameMsB  = @($runsB | ForEach-Object { $_.WorstFrameMs })
         systems        = $rows
     }
     New-Item -ItemType Directory -Force -Path $OutputDir | Out-Null
@@ -368,6 +396,7 @@ if ($Headless) {
         Write-Host "All $runCount runs ended in the same world (fingerprint $($runs[0].Fingerprint))."
     }
 }
+Write-RunDetails -Runs $runs -Label $(if ($Headless) { "Headless" } else { "Windowed" })
 
 $summary = Get-Summary -Runs $runs
 $medians = [ordered]@{}
@@ -397,6 +426,7 @@ $result = [ordered]@{
     endFrame              = $EndFrame
     runs                  = $runCount
     fingerprint           = $runs[0].Fingerprint
+    worstFrameMs          = @($runs | ForEach-Object { $_.WorstFrameMs })
     wallClockMilliseconds = @($runs | ForEach-Object { [math]::Round([double]$_.Report.WallClockMilliseconds, 1) })
     fellBehind            = $fellBehind
     systems               = $medians

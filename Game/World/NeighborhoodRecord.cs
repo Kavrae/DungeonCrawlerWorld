@@ -19,6 +19,9 @@ public sealed class NeighborhoodRecord(int cellX, int cellY, int seed)
     /// <summary>How many times this neighborhood has been populated.</summary>
     public int PopulationCount { get; private set; }
 
+    /// <summary>The seed the next population will draw, without counting it -- for planning a population that may yet be cancelled.</summary>
+    public int PendingPopulationSeed => Mix(Seed, PopulationCount + 1);
+
     /// <summary>The seed for the next population, counting it as done.</summary>
     public int NextPopulationSeed() => Mix(Seed, ++PopulationCount);
 

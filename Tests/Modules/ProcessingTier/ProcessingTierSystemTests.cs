@@ -46,6 +46,10 @@ public sealed class ProcessingTierSystemTests
         public void SetBlocking(Vector3Int position, int entityId) => _blocking[position] = entityId;
 
         public void ClearBlocking(Vector3Int position) => _blocking.Remove(position);
+
+        public HashSet<(int CellX, int CellY)> UnloadedNeighborhoods { get; } = [];
+
+        public bool IsNeighborhoodLoaded(int cellX, int cellY) => !UnloadedNeighborhoods.Contains((cellX, cellY));
     }
 
     private sealed class Fixture
@@ -638,14 +642,14 @@ public sealed class ProcessingTierSystemTests
         fixture.Frame();
 
         Assert.AreEqual(1, new[] { first, second }.Count(id => fixture.TierOf(id) == ProcessingTierLevel.Neighborhood), "Exactly one of the two was recomputed this frame.");
-        Assert.IsTrue(fixture.System.Transitions.HasPending);
+        Assert.IsTrue(fixture.Resolver.Transitions.HasPending);
 
-        for (var i = 0; i < 200 && fixture.System.Transitions.HasPending; i++)
+        for (var i = 0; i < 200 && fixture.Resolver.Transitions.HasPending; i++)
         {
             fixture.Frame();
         }
 
-        Assert.IsFalse(fixture.System.Transitions.HasPending);
+        Assert.IsFalse(fixture.Resolver.Transitions.HasPending);
         Assert.AreEqual(ProcessingTierLevel.Neighborhood, fixture.TierOf(first));
         Assert.AreEqual(ProcessingTierLevel.Neighborhood, fixture.TierOf(second));
     }
@@ -671,10 +675,10 @@ public sealed class ProcessingTierSystemTests
 
         Assert.AreEqual(ProcessingTierLevel.Borough, fixture.TierOf(freezing));
         Assert.AreNotEqual(ProcessingTierLevel.Neighborhood, fixture.TierOf(thawing));
-        Assert.IsTrue(fixture.System.Transitions.HasPending);
+        Assert.IsTrue(fixture.Resolver.Transitions.HasPending);
 
         held = false;
-        for (var i = 0; i < 200 && fixture.System.Transitions.HasPending; i++)
+        for (var i = 0; i < 200 && fixture.Resolver.Transitions.HasPending; i++)
         {
             fixture.Frame();
         }
@@ -699,12 +703,64 @@ public sealed class ProcessingTierSystemTests
         Assert.AreEqual(ProcessingTierLevel.Neighborhood, fixture.TierOf(thawing));
         Assert.AreEqual(ProcessingTierLevel.Neighborhood, fixture.TierOf(freezing), "Still simulated: its freeze is queued behind the thaw.");
 
-        for (var i = 0; i < 200 && fixture.System.Transitions.HasPending; i++)
+        for (var i = 0; i < 200 && fixture.Resolver.Transitions.HasPending; i++)
         {
             fixture.Frame();
         }
 
         Assert.AreEqual(ProcessingTierLevel.Borough, fixture.TierOf(freezing));
+    }
+
+    /// <summary>A change between two unsimulated tiers drains last: the neighborhood behind the player freezes before the one past it drops from Borough to Beyond.</summary>
+    [TestMethod]
+    public void PresetReference_Crossing_FreezesBeforeItMovesBetweenUnsimulatedTiers()
+    {
+        var fixture = new Fixture(new FakePlayerQuery(0), transitionsPerFrame: 1);
+        fixture.Resolver.SetReferencePosition(new Vector3Int(1019, 500, 0));
+        var playerEntityId = fixture.Spawn(new Vector3Int(1019, 500, 0));
+        var falling = fixture.Spawn(new Vector3Int(-500, 500, 0));
+        var freezing = fixture.Spawn(new Vector3Int(500, 500, 0));
+        fixture.Frame();
+        Assert.AreEqual(ProcessingTierLevel.Borough, fixture.TierOf(falling), "Precondition: neighborhood -1 is in the ring.");
+
+        fixture.Move(playerEntityId, new Vector3Int(1029, 500, 0));
+        for (var i = 0; i < 200 && fixture.TierOf(freezing) != ProcessingTierLevel.Borough; i++)
+        {
+            fixture.Frame();
+        }
+
+        Assert.AreEqual(ProcessingTierLevel.Borough, fixture.TierOf(freezing));
+        Assert.AreEqual(ProcessingTierLevel.Borough, fixture.TierOf(falling), "Still Borough: its drop to Beyond is queued behind the freeze.");
+
+        for (var i = 0; i < 200 && fixture.Resolver.Transitions.HasPending; i++)
+        {
+            fixture.Frame();
+        }
+
+        Assert.AreEqual(ProcessingTierLevel.Beyond, fixture.TierOf(falling));
+    }
+
+    /// <summary>A neighborhood that isn't loaded when the window moves is never queued: whatever loads it creates its entities with the new window's tier.</summary>
+    [TestMethod]
+    public void PresetReference_Crossing_SkipsNeighborhoodsThatAreNotLoaded()
+    {
+        var fixture = new Fixture(new FakePlayerQuery(0), transitionsPerFrame: 1);
+        fixture.Resolver.SetReferencePosition(new Vector3Int(1019, 500, 0));
+        var playerEntityId = fixture.Spawn(new Vector3Int(1019, 500, 0));
+        var inUnloadedNeighborhood = fixture.Spawn(new Vector3Int(-500, 500, 0));
+        var inLoadedNeighborhood = fixture.Spawn(new Vector3Int(1500, 500, 0));
+        fixture.Frame();
+        fixture.Map.UnloadedNeighborhoods.Add((-1, 0));
+
+        fixture.Move(playerEntityId, new Vector3Int(1029, 500, 0));
+        fixture.Frame();
+        for (var i = 0; i < 200 && fixture.Resolver.Transitions.HasPending; i++)
+        {
+            fixture.Frame();
+        }
+
+        Assert.AreEqual(ProcessingTierLevel.Neighborhood, fixture.TierOf(inLoadedNeighborhood));
+        Assert.AreEqual(ProcessingTierLevel.Borough, fixture.TierOf(inUnloadedNeighborhood), "Never walked, so never recomputed.");
     }
 
     /// <summary>Crossing back before the queue drains cancels the pending work by making it a no-op -- the drain recomputes each tier when it reaches the entity, so nothing is applied from the abandoned crossing.</summary>
@@ -722,12 +778,12 @@ public sealed class ProcessingTierSystemTests
         fixture.Frame();
         fixture.Move(playerEntityId, new Vector3Int(1019, 500, 0));
 
-        for (var i = 0; i < 200 && fixture.System.Transitions.HasPending; i++)
+        for (var i = 0; i < 200 && fixture.Resolver.Transitions.HasPending; i++)
         {
             fixture.Frame();
         }
 
-        Assert.IsFalse(fixture.System.Transitions.HasPending);
+        Assert.IsFalse(fixture.Resolver.Transitions.HasPending);
         Assert.AreEqual(ProcessingTierLevel.Neighborhood, fixture.TierOf(home));
         Assert.AreEqual(ProcessingTierLevel.Borough, fixture.TierOf(acrossTheBorder));
     }
@@ -747,7 +803,7 @@ public sealed class ProcessingTierSystemTests
         fixture.Frame();
 
         Assert.AreEqual(ProcessingTierLevel.Local, fixture.TierOf(nearby));
-        Assert.IsTrue(fixture.System.Transitions.HasPending, "Precondition: the crossing's own transitions are still draining.");
+        Assert.IsTrue(fixture.Resolver.Transitions.HasPending, "Precondition: the crossing's own transitions are still draining.");
     }
 
     /// <summary>The edge walk isn't clamped at 0: stepping toward an entity west of the origin promotes it.</summary>

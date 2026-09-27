@@ -64,8 +64,8 @@ namespace Game.Modules.ProcessingTier.Systems;
 public sealed class ProcessingTierSystem : ISystem
 {
     /// <summary>How many queued tier transitions are recomputed per frame.</summary>
-    /// <remarks>Measured on the 3072x3072 map, where one crossing queues ~363,000 entities: the drain costs 0.55ms per frame on average and 2.3ms at worst at this budget, and the whole crossing settles in about twelve seconds, the neighborhood being walked into first. Doubling it puts the worst frame over the 16.7ms budget, since a drain frame can coincide with the once-a-second tick of everything standing in lava.</remarks>
-    public const int DefaultTransitionsPerFrame = 512;
+    /// <remarks>Sized for the Debug build's frame rate rather than the settling time: thawing builds each creature it reaches. The simulation settles ~568 frames (9.5 s) after a straight shift on the 3072x3072 map, and everything, including the moves between unsimulated tiers, in ~1,400.</remarks>
+    public const int DefaultTransitionsPerFrame = 256;
 
     /// <summary>1: this runs every frame, but its per-frame work is proportional to what changed (moves and the player's edge walk), not to population, so there is nothing to stripe.</summary>
     public byte StripeCount => 1;
@@ -76,9 +76,6 @@ public sealed class ProcessingTierSystem : ISystem
     private readonly ProcessingTierResolver _resolver;
     private readonly IPlayerQuery? _playerQuery;
     private readonly int _transitionsPerFrame;
-
-    /// <summary>Neighborhoods whose entities a crossing changed the tier of, drained under the per-frame budget -- see ProcessingTierTransitionQueue.</summary>
-    public ProcessingTierTransitionQueue Transitions { get; } = new();
 
     /// <summary>Set the first time the player is observed on the map. The player is normally already pinned by the spawn sequence (FloorBuilder.CreatePlayer); this is the fallback for any path that did not, and it runs once, never per frame.</summary>
     private bool _playerPinned;
@@ -154,7 +151,7 @@ public sealed class ProcessingTierSystem : ISystem
     private void DrainTransitions()
     {
         var promotionsHeld = _resolver.PromotionsHeld?.Invoke() == true;
-        for (var drained = 0; drained < _transitionsPerFrame && Transitions.TryDequeue(_resolver.Membership, out var entityId, promotionsHeld); drained++)
+        for (var drained = 0; drained < _transitionsPerFrame && _resolver.Transitions.TryDequeue(_resolver.Membership, out var entityId, promotionsHeld); drained++)
         {
             if (_transforms.Has(entityId))
             {
@@ -256,19 +253,23 @@ public sealed class ProcessingTierSystem : ISystem
         }
     }
 
-    /// <summary>Queues every entity of neighborhood (cellX, cellY), on every MapLayer, when its tier differs between the old and new reference -- in the thaw band when the neighborhood is becoming simulated.</summary>
+    /// <summary>Queues every entity of neighborhood (cellX, cellY), on every MapLayer, when its tier differs between the old and new reference, in the band its change belongs to (see ProcessingTierTransitionQueue).</summary>
+    /// <remarks>A neighborhood that isn't loaded is skipped: it has no entities yet, and whatever loads it creates them with the tier the new window gives them.</remarks>
     private void QueueIfTierChanged(int cellX, int cellY, int oldCellX, int oldCellY, int newCellX, int newCellY)
     {
+        var oldTier = ProcessingTierResolver.NeighborhoodTier(CellDistance(cellX, cellY, oldCellX, oldCellY));
         var newTier = ProcessingTierResolver.NeighborhoodTier(CellDistance(cellX, cellY, newCellX, newCellY));
-        if (ProcessingTierResolver.NeighborhoodTier(CellDistance(cellX, cellY, oldCellX, oldCellY)) == newTier)
+        if (oldTier == newTier || !_mapQuery.IsNeighborhoodLoaded(cellX, cellY))
         {
             return;
         }
 
-        var isThawing = newTier == ProcessingTierLevel.Neighborhood;
+        var transitionBand = newTier == ProcessingTierLevel.Neighborhood ? ProcessingTierTransitionBand.Thawing
+            : ProcessingTierQuery.IsSimulatedTier(oldTier) || ProcessingTierQuery.IsSimulatedTier(newTier) ? ProcessingTierTransitionBand.Freezing
+            : ProcessingTierTransitionBand.Unsimulated;
         for (var z = 0; z < _mapQuery.Bounds.Depth; z++)
         {
-            Transitions.Enqueue(cellX, cellY, z, isThawing);
+            _resolver.Transitions.Enqueue(cellX, cellY, z, transitionBand);
         }
     }
 

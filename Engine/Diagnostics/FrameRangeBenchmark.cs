@@ -28,6 +28,7 @@ public sealed class FrameRangeBenchmark : IFrameCostRecorder
     private static readonly JsonSerializerOptions JsonOptions = new() { WriteIndented = true };
 
     private readonly Dictionary<(FrameCostCategory Category, string GroupName, string ItemName), double> _totalMilliseconds = [];
+    private readonly Dictionary<(FrameCostCategory Category, string GroupName, string ItemName), double> _worstMilliseconds = [];
     private long _recordingStartTimestamp;
     private TimeSpan _wallClockElapsed;
 
@@ -74,6 +75,7 @@ public sealed class FrameRangeBenchmark : IFrameCostRecorder
 
         var key = (category, groupName, itemName);
         _totalMilliseconds[key] = _totalMilliseconds.GetValueOrDefault(key) + elapsed.TotalMilliseconds;
+        _worstMilliseconds[key] = System.Math.Max(_worstMilliseconds.GetValueOrDefault(key), elapsed.TotalMilliseconds);
     }
 
     /// <summary>Total milliseconds recorded for one entry so far; 0 if it never recorded inside the range.</summary>
@@ -106,8 +108,9 @@ public sealed class FrameRangeBenchmark : IFrameCostRecorder
     private Dictionary<string, List<BenchmarkItem>> GroupByCategory(FrameCostCategory category)
     {
         var groups = new Dictionary<string, List<BenchmarkItem>>();
-        foreach (var ((entryCategory, groupName, itemName), totalMilliseconds) in _totalMilliseconds)
+        foreach (var (key, totalMilliseconds) in _totalMilliseconds)
         {
+            var (entryCategory, groupName, itemName) = key;
             if (entryCategory != category)
             {
                 continue;
@@ -119,7 +122,7 @@ public sealed class FrameRangeBenchmark : IFrameCostRecorder
                 groups[groupName] = items;
             }
 
-            items.Add(new BenchmarkItem(itemName, totalMilliseconds, totalMilliseconds / Range.FrameCount));
+            items.Add(new BenchmarkItem(itemName, totalMilliseconds, totalMilliseconds / Range.FrameCount, _worstMilliseconds[key]));
         }
 
         foreach (var items in groups.Values)
@@ -141,5 +144,6 @@ public sealed class FrameRangeBenchmark : IFrameCostRecorder
         Dictionary<string, List<BenchmarkItem>> Update,
         Dictionary<string, List<BenchmarkItem>> Draw);
 
-    private sealed record BenchmarkItem(string Name, double TotalMilliseconds, double MillisecondsPerFrame);
+    /// <param name="WorstMilliseconds">The largest single recording -- one frame's cost for a system or EcsContext.Update, one dispatch for an event.</param>
+    private sealed record BenchmarkItem(string Name, double TotalMilliseconds, double MillisecondsPerFrame, double WorstMilliseconds);
 }

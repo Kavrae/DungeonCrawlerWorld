@@ -45,4 +45,6 @@ public sealed record WorldSessionContext(
     Game.Blueprints.BlueprintRegistry Definitions,
     Game.Spawning.SpawnRecordRebuilder SpawnRecordRebuilder,
     Game.Spawning.CreatureSkeletons Skeletons,
-    Game.Spawning.EntityFactory Factory);
+    Game.Spawning.EntityFactory Factory,
+    EntityTeleporter Teleporter,
+    ProcessingTierResolver TierResolver);

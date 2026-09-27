@@ -174,7 +174,20 @@ public static class GameBootstrapper
         // EcsContext.SystemManager.Clock.
         ecsContext.SystemManager.Clock = context.SimulationClock;
 
-        return new GameBootstrapResult(ecsContext, failures, context.Actions, context.MovedEntities, context.Items, context.StatusEffectDisplays, context.LocalTierRoster, context.ProcessingTierResolver, context.Terrain, context.Definitions, new SpawnRecordRebuilder(rebuilderStaging, context.Definitions), skeletons, factory);
+        return new GameBootstrapResult(ecsContext, failures, context.Actions, context.MovedEntities, context.Items, context.StatusEffectDisplays, context.LocalTierRoster, context.ProcessingTierResolver, context.Terrain, context.Definitions, new SpawnRecordRebuilder(rebuilderStaging, context.Definitions), skeletons, factory, CreateTeleporter(world, ecsContext, factory, skeletons));
+    }
+
+    private static EntityTeleporter CreateTeleporter(World.World world, Engine.ECS.Context.EcsContext ecsContext, EntityFactory factory, CreatureSkeletons skeletons)
+    {
+        var componentManager = ecsContext.ComponentManager;
+        return new EntityTeleporter(
+            world,
+            componentManager.GetDirectPool<TransformComponent>(),
+            factory.SpawnMoves!,
+            ecsContext.EventBus,
+            skeletons,
+            componentManager.IsRegistered<Modules.Movement.Components.MovementComponent>() ? componentManager.GetPackedPool<Modules.Movement.Components.MovementComponent>() : null,
+            componentManager.IsRegistered<Modules.Actions.Components.PendingDelayedActionComponent>() ? componentManager.GetPackedPool<Modules.Actions.Components.PendingDelayedActionComponent>() : null);
     }
 
     /// <summary>A separately configured and built copy of every module, as the staging world SpawnRecordRebuilder rebuilds creatures in.</summary>

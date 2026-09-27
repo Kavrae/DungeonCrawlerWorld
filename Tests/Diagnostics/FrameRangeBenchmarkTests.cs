@@ -85,6 +85,30 @@ public sealed class FrameRangeBenchmarkTests
     }
 
     [TestMethod]
+    public void WriteReport_WritesTheWorstSingleRecordingInsideTheRange()
+    {
+        var benchmark = new FrameRangeBenchmark(new BenchmarkFrameRange(10, 14));
+        for (var frame = 1L; frame <= 20; frame++)
+        {
+            benchmark.BeginSimulationFrame(frame);
+            var elapsed = frame switch { 5 => 9.0, 12 => 5.0, _ => 1.0 };
+            benchmark.Record(FrameCostCategory.Update, "SystemManager", "TestSystem", TimeSpan.FromMilliseconds(elapsed));
+        }
+
+        var directory = Path.Combine(Path.GetTempPath(), $"{nameof(FrameRangeBenchmarkTests)}-{Guid.NewGuid():N}");
+        try
+        {
+            using var document = JsonDocument.Parse(File.ReadAllText(benchmark.WriteReport(directory, randomSeed: 7)));
+            var item = document.RootElement.GetProperty("Update").GetProperty("SystemManager")[0];
+            Assert.AreEqual(5, item.GetProperty("WorstMilliseconds").GetDouble(), 1e-9);
+        }
+        finally
+        {
+            Directory.Delete(directory, recursive: true);
+        }
+    }
+
+    [TestMethod]
     public void WriteReport_WritesSeedRangeAndPerFrameCost()
     {
         var benchmark = new FrameRangeBenchmark(new BenchmarkFrameRange(10, 14));

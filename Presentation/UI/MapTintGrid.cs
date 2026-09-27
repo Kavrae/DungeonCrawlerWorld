@@ -103,8 +103,13 @@ public sealed class MapTintGrid
     }
 
     /// <summary>Adds a newly loaded area's terrain glow.</summary>
-    private void OnTerrainLoaded(TerrainLoadedEvent loaded) =>
-        TerrainAuraSources.ForEach(_map, _terrain, loaded.Area, AddSource);
+    private void OnTerrainLoaded(TerrainLoadedEvent loaded)
+    {
+        foreach (var auraCell in loaded.AuraCells)
+        {
+            AddSource(auraCell.Position, auraCell.Aura);
+        }
+    }
 
     /// <summary>Removes an unloading area's terrain glow, which reaches into loaded neighbors.</summary>
     private void OnTerrainUnloading(TerrainUnloadingEvent unloading) =>

@@ -13,9 +13,18 @@ namespace Game.Floors;
 /// <para>
 /// Unloading destroys each entity through EntityManager.DestroyEntity, whose EntityDestroying
 /// handlers remove its aura sources, map footprint and tier bookkeeping, then publishes a
-/// TerrainUnloadingEvent per row and drops the neighborhood's map stores. Loading allocates the
-/// stores, writes the layout with a TerrainLoadedEvent per row, then creates the population, born
-/// with the tier its position deserves.
+/// TerrainUnloadingEvent per row and drops the neighborhood's map stores. Loading loads the stores
+/// with the whole layout, announces it with a TerrainLoadedEvent per row, then creates the
+/// population, born with the tier its position deserves.
+/// </para>
+/// <para>
+/// A load is decided on a worker thread (TestMapBuilder.Plan) from the moment it is queued, and applied
+/// here no earlier than StartDelayFrames of this system's updates later. If the worker isn't done by
+/// the time the load comes up, this waits for it rather than moving on. So when a load starts is a
+/// matter of frames alone, never of how fast the worker ran, and a seeded session streams the same
+/// world every time. A load dropped before it starts (the window turned back, a regeneration the
+/// player walked up to) cancels its worker, and its population is counted on the neighborhood's record
+/// only once it starts.
 /// </para>
 /// <para>
 /// With a window (ProcessingTierResolver.WindowCenter), it follows WindowShifted: the neighborhoods
@@ -36,13 +45,17 @@ namespace Game.Floors;
 public sealed class NeighborhoodStreamer : ISystem
 {
     /// <summary>Units of work spent per frame.</summary>
-    public const int DefaultBudgetPerFrame = 512;
+    /// <remarks>Sized for the Debug build's frame rate rather than for how soon loads finish: every unit is main-thread work (spawning, announcing a row). A shift's loads finish ~980 frames after it.</remarks>
+    public const int DefaultBudgetPerFrame = 256;
 
     /// <summary>What writing one layout row costs against the budget: ~1024 cells of terrain on two layers.</summary>
     public const int LayoutRowCost = 16;
 
     /// <summary>How many neighborhoods dropped from the window stay loaded before the oldest is unloaded.</summary>
     public const int CacheSize = 3;
+
+    /// <summary>How many of this system's updates after a load is queued it may start, giving its worker time to plan it.</summary>
+    public const int DefaultStartDelayFrames = 30;
 
     /// <summary>How far past a loaded neighborhood's edge a multi-tile footprint can reach: the largest footprint is 3x3.</summary>
     private const int FootprintReachTiles = 2;
@@ -64,6 +77,12 @@ public sealed class NeighborhoodStreamer : ISystem
 
         /// <summary>An eviction's progress through its built creatures; null for any other job.</summary>
         public UnloadProgress? Eviction { get; } = eviction;
+
+        /// <summary>The update (see _updateCount) this job may start on at the earliest.</summary>
+        public long EarliestStartUpdateCount { get; init; }
+
+        /// <summary>The worker planning what this job loads; null for a job that loads nothing.</summary>
+        public PendingNeighborhoodGeneration? PendingGeneration { get; init; }
     }
 
     /// <summary>Whether an unload has destroyed its neighborhood's built creatures yet -- the part of it whose storage a promotion can reuse.</summary>
@@ -90,6 +109,12 @@ public sealed class NeighborhoodStreamer : ISystem
 
     private readonly List<(int CellX, int CellY)> _toLoad = [];
 
+    /// <summary>Workers queued since the last update, started by StartAwaitingGenerations.</summary>
+    private readonly List<PendingNeighborhoodGeneration> _generationsAwaitingStart = [];
+
+    /// <summary>How many times Update has run: the clock EarliestStartUpdateCount is measured on.</summary>
+    private long _updateCount;
+
     /// <param name="skeletons">When supplied, an eviction destroys its neighborhood's built creatures first and ahead of other work (see IsEvictingBuiltCreatures); otherwise every unload destroys in index order.</param>
     public NeighborhoodStreamer(World.World world, EntityManager entityManager, Engine.ECS.Components.Stores.DirectComponentPool<Modules.Core.Components.TransformComponent> transforms, EventBus eventBus, ProcessingTierResolver resolver, NeighborhoodRecords records, TestMapBuilder builder, CreatureSkeletons? skeletons = null)
     {
@@ -108,6 +133,9 @@ public sealed class NeighborhoodStreamer : ISystem
 
     /// <summary>Units of work spent per frame.</summary>
     public int BudgetPerFrame { get; init; } = DefaultBudgetPerFrame;
+
+    /// <summary>How many of this system's updates after a load is queued it may start -- see this class's remarks.</summary>
+    public int StartDelayFrames { get; init; } = DefaultStartDelayFrames;
 
     /// <summary>Whether any work is queued.</summary>
     public bool IsBusy => _jobs.Count > 0;
@@ -179,20 +207,28 @@ public sealed class NeighborhoodStreamer : ISystem
             return false;
         }
 
-        _jobs.Add(new Job(cellX, cellY, JobKind.Regenerate, Unload(cellX, cellY).Concat(Load(cellX, cellY)).GetEnumerator()));
+        var pendingGeneration = QueueNeighborhoodGeneration(cellX, cellY);
+        _jobs.Add(new Job(cellX, cellY, JobKind.Regenerate, Unload(cellX, cellY).Concat(Load(cellX, cellY, pendingGeneration)).GetEnumerator()) { PendingGeneration = pendingGeneration });
         return true;
     }
 
     public void Update(EngineTime time, byte stripeIndex)
     {
+        _updateCount++;
+        StartAwaitingGenerations();
         var budget = BudgetPerFrame;
         while (budget > 0 && _jobs.Count > 0)
         {
             var index = System.Math.Max(0, NextEvictionOfBuiltCreatures());
             var job = _jobs[index];
+            if (!job.Started && _updateCount < job.EarliestStartUpdateCount)
+            {
+                break;
+            }
+
             if (!job.Started && job.Kind is JobKind.Regenerate && !IsBeyondLocalReach(job.CellX, job.CellY, out _))
             {
-                _jobs.RemoveAt(index);
+                DropUnstartedJob(index);
                 continue;
             }
 
@@ -226,7 +262,7 @@ public sealed class NeighborhoodStreamer : ISystem
             var loadIndex = _jobs.FindIndex(job => job.Kind is JobKind.Load && job.CellX == cell.CellX && job.CellY == cell.CellY);
             if (loadIndex >= 0 && !_jobs[loadIndex].Started)
             {
-                _jobs.RemoveAt(loadIndex);
+                DropUnstartedJob(loadIndex);
                 continue;
             }
 
@@ -269,7 +305,8 @@ public sealed class NeighborhoodStreamer : ISystem
 
         foreach (var cell in _toLoad)
         {
-            _jobs.Add(new Job(cell.CellX, cell.CellY, JobKind.Load, Load(cell.CellX, cell.CellY).GetEnumerator()));
+            var pendingGeneration = QueueNeighborhoodGeneration(cell.CellX, cell.CellY);
+            _jobs.Add(new Job(cell.CellX, cell.CellY, JobKind.Load, Load(cell.CellX, cell.CellY, pendingGeneration).GetEnumerator()) { PendingGeneration = pendingGeneration, EarliestStartUpdateCount = _updateCount + StartDelayFrames });
         }
 
         _toLoad.Clear();
@@ -358,26 +395,87 @@ public sealed class NeighborhoodStreamer : ISystem
         while (destroyedAny);
     }
 
-    /// <summary>Allocates the neighborhood's stores and generates it from its record: layout rows at LayoutRowCost each, each announced as it is written, then the population, one unit per entity created.</summary>
-    private IEnumerable<int> Load(int cellX, int cellY)
+    /// <summary>A neighborhood being planned on a worker: its task, how to stop it, and the population seed it plans with.</summary>
+    /// <remarks>The seed is the record's pending one, not yet counted: a load dropped before it starts leaves the record as if it had never been queued, so the next visit still gets the population this one would have had.</remarks>
+    private sealed class PendingNeighborhoodGeneration(NeighborhoodRecord neighborhoodRecord, int populationSeed, Task<NeighborhoodPlan> planningTask, CancellationTokenSource planningCancellation)
     {
-        _world.Map.LoadNeighborhood(cellX, cellY);
-        var record = _records.GetOrCreate(cellX, cellY);
+        public NeighborhoodRecord NeighborhoodRecord { get; } = neighborhoodRecord;
+        public int PopulationSeed { get; } = populationSeed;
+        public Task<NeighborhoodPlan> PlanningTask { get; } = planningTask;
+        public CancellationTokenSource PlanningCancellation { get; } = planningCancellation;
+    }
 
-        using var rows = RowsOf(cellX, cellY).GetEnumerator();
-        foreach (var _ in _builder.GenerateLayout(_world, record))
+    /// <summary>Starts every worker queued since the last update, unless its load was dropped in the meantime.</summary>
+    /// <remarks>A shift queues its loads from inside another system's update, in the frame the player crossed -- already the heaviest frame of a shift. Starting the workers first thing in the next frame keeps them from competing with it for the CPU and memory.</remarks>
+    private void StartAwaitingGenerations()
+    {
+        foreach (var awaitingGeneration in _generationsAwaitingStart)
         {
-            rows.MoveNext();
-            _eventBus.Publish(new TerrainLoadedEvent(rows.Current));
+            if (!awaitingGeneration.PlanningCancellation.IsCancellationRequested && awaitingGeneration.PlanningTask.Status == TaskStatus.Created)
+            {
+                awaitingGeneration.PlanningTask.Start();
+            }
+        }
+
+        _generationsAwaitingStart.Clear();
+    }
+
+    /// <summary>Queues planning neighborhood (cellX, cellY) on a worker, with its record's pending population seed; StartAwaitingGenerations starts it.</summary>
+    private PendingNeighborhoodGeneration QueueNeighborhoodGeneration(int cellX, int cellY)
+    {
+        var neighborhoodRecord = _records.GetOrCreate(cellX, cellY);
+        var populationSeed = neighborhoodRecord.PendingPopulationSeed;
+        var map = _world.Map;
+        var builder = _builder;
+        var planningCancellation = new CancellationTokenSource();
+        var planningCancellationToken = planningCancellation.Token;
+        var planningTask = new Task<NeighborhoodPlan>(() => builder.Plan(map, neighborhoodRecord, populationSeed, planningCancellationToken), planningCancellationToken);
+
+        var pendingGeneration = new PendingNeighborhoodGeneration(neighborhoodRecord, populationSeed, planningTask, planningCancellation);
+        _generationsAwaitingStart.Add(pendingGeneration);
+        return pendingGeneration;
+    }
+
+    /// <summary>Removes the job at index before it started, stopping its worker if it has one.</summary>
+    private void DropUnstartedJob(int index)
+    {
+        _jobs[index].PendingGeneration?.PlanningCancellation.Cancel();
+        _jobs.RemoveAt(index);
+    }
+
+    /// <summary>The worker's plan, waiting for it if it isn't finished, and the population it plans counted on its record.</summary>
+    private NeighborhoodPlan FinishPendingGeneration(PendingNeighborhoodGeneration pendingGeneration)
+    {
+        StartAwaitingGenerations();
+        var neighborhoodPlan = pendingGeneration.PlanningTask.GetAwaiter().GetResult();
+        if (pendingGeneration.NeighborhoodRecord.NextPopulationSeed() != pendingGeneration.PopulationSeed)
+        {
+            throw new InvalidOperationException($"Neighborhood ({pendingGeneration.NeighborhoodRecord.CellX}, {pendingGeneration.NeighborhoodRecord.CellY}) was populated while its load was being planned.");
+        }
+
+        return neighborhoodPlan;
+    }
+
+    /// <summary>Loads the neighborhood's planned layout, announces it a row at a time with the row's planned aura cells, at LayoutRowCost each, then spawns its population, one unit per entity created.</summary>
+    private IEnumerable<int> Load(int cellX, int cellY, PendingNeighborhoodGeneration pendingGeneration)
+    {
+        var neighborhoodPlan = FinishPendingGeneration(pendingGeneration);
+        var neighborhoodLayout = neighborhoodPlan.Layout;
+        _world.Map.LoadNeighborhood(neighborhoodLayout);
+
+        for (var row = neighborhoodLayout.MinY; row < neighborhoodLayout.MaxY; row++)
+        {
+            var rowArea = new MapBounds(neighborhoodLayout.MinX, row, neighborhoodLayout.MaxX, row + 1, neighborhoodLayout.Depth);
+            _eventBus.Publish(new TerrainLoadedEvent(rowArea, neighborhoodPlan.AuraCellsByRow[row - neighborhoodLayout.MinY]));
             yield return LayoutRowCost;
         }
 
         RestoreStraddlingFootprints(cellX, cellY);
         yield return LayoutRowCost;
 
-        foreach (var created in _builder.PopulateNeighborhood(_world, record))
+        foreach (var createdEntityCount in _builder.Spawn(neighborhoodPlan))
         {
-            yield return System.Math.Max(1, created);
+            yield return System.Math.Max(1, createdEntityCount);
         }
     }
 

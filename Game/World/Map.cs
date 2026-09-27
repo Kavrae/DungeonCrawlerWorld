@@ -150,21 +150,57 @@ public sealed class Map
             throw new InvalidOperationException($"Neighborhood ({cellX}, {cellY}) is already loaded.");
         }
 
-        var width = Neighborhoods.SizeTiles;
-        var height = Neighborhoods.SizeTiles;
-        if (_declaredBounds is { } declared)
+        LoadNeighborhood(CreateLayout(cellX, cellY));
+    }
+
+    /// <summary>New, empty stores for neighborhood (cellX, cellY), not yet part of the map -- to be filled, on any thread, and handed to LoadNeighborhood.</summary>
+    /// <remarks>Reads only what never changes about the map (its depth and declared rectangle), so it is safe off the main thread.</remarks>
+    public NeighborhoodLayout CreateLayout(int cellX, int cellY)
+    {
+        var neighborhoodWidth = Neighborhoods.SizeTiles;
+        var neighborhoodHeight = Neighborhoods.SizeTiles;
+        if (_declaredBounds is { } declaredBounds)
         {
-            width = System.Math.Min(width, declared.MaxX - Neighborhoods.OriginOf(cellX));
-            height = System.Math.Min(height, declared.MaxY - Neighborhoods.OriginOf(cellY));
+            neighborhoodWidth = System.Math.Min(neighborhoodWidth, declaredBounds.MaxX - Neighborhoods.OriginOf(cellX));
+            neighborhoodHeight = System.Math.Min(neighborhoodHeight, declaredBounds.MaxY - Neighborhoods.OriginOf(cellY));
             if (!CanHold(cellX, cellY))
             {
                 throw new ArgumentOutOfRangeException(nameof(cellX), $"Neighborhood ({cellX}, {cellY}) is outside the map's bounds.");
             }
         }
 
-        var neighborhood = new MapNeighborhood(width, height, _depth);
-        _loadedNeighborhoods.Add((cellX, cellY), neighborhood);
-        SetLookupSlot(cellX, cellY, neighborhood);
+        return new NeighborhoodLayout(cellX, cellY, new MapNeighborhood(neighborhoodWidth, neighborhoodHeight, _depth));
+    }
+
+    /// <summary>Loads layout's neighborhood with layout's terrain and structures.</summary>
+    /// <remarks>
+    /// An unloaded neighborhood takes layout's stores as they are. An already loaded one -- every
+    /// neighborhood of a bounded map, and the startup window -- copies layout's terrain and structures in
+    /// and keeps its occupants, which may include a neighbor's multi-tile creature reaching across the
+    /// border. Either way layout must not be used afterwards.
+    /// </remarks>
+    public void LoadNeighborhood(NeighborhoodLayout layout)
+    {
+        ArgumentNullException.ThrowIfNull(layout);
+
+        var neighborhoodCoordinate = (layout.CellX, layout.CellY);
+        var layoutCellStores = layout.NeighborhoodCellStores;
+        if (_loadedNeighborhoods.TryGetValue(neighborhoodCoordinate, out var loadedCellStores))
+        {
+            if (layoutCellStores.Width != loadedCellStores.Width || layoutCellStores.Height != loadedCellStores.Height || layoutCellStores.StructureTypeIds.Length != loadedCellStores.StructureTypeIds.Length)
+            {
+                throw new ArgumentException($"The layout for neighborhood {neighborhoodCoordinate} doesn't match its stores.", nameof(layout));
+            }
+
+            layoutCellStores.TerrainTypeIds.CopyTo(loadedCellStores.TerrainTypeIds, 0);
+            layoutCellStores.TerrainVariants.CopyTo(loadedCellStores.TerrainVariants, 0);
+            layoutCellStores.StructureTypeIds.CopyTo(loadedCellStores.StructureTypeIds, 0);
+            layoutCellStores.StructureVariants.CopyTo(loadedCellStores.StructureVariants, 0);
+            return;
+        }
+
+        _loadedNeighborhoods.Add(neighborhoodCoordinate, layoutCellStores);
+        SetLookupSlot(layout.CellX, layout.CellY, layoutCellStores);
         RecomputeBounds();
     }
 
@@ -246,10 +282,10 @@ public sealed class Map
         NeighborhoodAt(x, y) ?? throw new InvalidOperationException($"({x}, {y}) is in an unloaded neighborhood.");
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    private static int ColumnIndex(MapNeighborhood neighborhood, int x, int y) => (x & CellMask) + (y & CellMask) * neighborhood.Width;
+    internal static int ColumnIndex(MapNeighborhood neighborhood, int x, int y) => (x & CellMask) + (y & CellMask) * neighborhood.Width;
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    private static int CellIndex(MapNeighborhood neighborhood, Vector3Int position) =>
+    internal static int CellIndex(MapNeighborhood neighborhood, Vector3Int position) =>
         ColumnIndex(neighborhood, position.X, position.Y) + position.Z * neighborhood.PlaneSize;
 
     /// <summary>The Blocking occupant at coordinates, or -1, including where its neighborhood is unloaded..</summary>
@@ -504,6 +540,6 @@ public sealed class Map
     };
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    private static int TerrainIndex(MapNeighborhood neighborhood, int x, int y, TerrainLayer terrainLayer) =>
+    internal static int TerrainIndex(MapNeighborhood neighborhood, int x, int y, TerrainLayer terrainLayer) =>
         ColumnIndex(neighborhood, x, y) + (int)terrainLayer * neighborhood.PlaneSize;
 }

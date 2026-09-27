@@ -18,6 +18,8 @@ using Game.Modules.Inventory.Systems;
 using Game.Modules.Mana.Components;
 using Game.Modules.Poison;
 using Game.Modules.Poison.Components;
+using Game.Modules.ProcessingTier;
+using Game.Modules.ProcessingTier.Components;
 using Game.Modules.StatusEffects;
 using Game.World;
 using Microsoft.Xna.Framework;
@@ -70,9 +72,15 @@ public sealed class ConsumableActivationSystemTests
         public void GetEntityIdsInBox(CubeInt box, Span<int> entityIds) { }
     }
 
-    private static (ConsumableActivationSystem System, ComponentManager ComponentManager, FakeMapQuery MapQuery, EventBus EventBus) Build()
+    /// <param name="withProcessingTiers">Also registers ProcessingTierComponent and gives the system its ProcessingTierQuery, as InventoryModule does.</param>
+    private static (ConsumableActivationSystem System, ComponentManager ComponentManager, FakeMapQuery MapQuery, EventBus EventBus) Build(bool withProcessingTiers = false)
     {
         var componentManager = new ComponentManager(initialEntityCapacity: 20, initialComponentCapacity: 10);
+        if (withProcessingTiers)
+        {
+            componentManager.RegisterDirectPool<ProcessingTierComponent>(static (ref existing, incoming) => existing = incoming);
+        }
+
         componentManager.RegisterPackedPool<PendingConsumableActivationComponent>(static (ref existing, incoming) => existing = incoming);
         componentManager.RegisterPackedPool<ActionLockComponent>(static (ref existing, incoming) => existing = incoming);
         componentManager.RegisterPackedPool<PotionCooldownComponent>(static (ref existing, incoming) => existing = incoming);
@@ -127,7 +135,8 @@ public sealed class ConsumableActivationSystemTests
             playerQuery: null,
             auraSources: null,
             itemHotkeyBindings: componentManager.GetMultiPool<ItemHotkeyBindingComponent>(),
-            bodyParts: BodyPartTestWorld.PartsOf(componentManager));
+            bodyParts: BodyPartTestWorld.PartsOf(componentManager),
+            processingTiers: withProcessingTiers ? new ProcessingTierQuery(componentManager.GetDirectPool<ProcessingTierComponent>()) : null);
 
         return (system, componentManager, mapQuery, eventBus);
     }
@@ -239,6 +248,24 @@ public sealed class ConsumableActivationSystemTests
         Assert.AreEqual(130f, totalCurrent);
         var cooldown = componentManager.GetPackedPool<PotionCooldownComponent>().GetReadonly(TargetEntityId);
         Assert.AreEqual(PotionCooldownEffects.DurationFrames, PotionCooldownEffects.FramesRemaining(cooldown, now: 0), "The potion must still land -- cooldown resets the same as a Simple target's would.");
+    }
+
+    /// <summary>Nothing targets across the simulated/frozen seam: a potion landing on a frozen creature's tile leaves it untouched -- no heal, no cooldown -- and never reads its pools, which an unbuilt skeleton doesn't hold.</summary>
+    [TestMethod]
+    public void Potion_FrozenOccupantAtTargetTile_IsNotTargeted()
+    {
+        var (system, componentManager, mapQuery, _) = Build(withProcessingTiers: true);
+        mapQuery.SetOccupant(TargetTile, TargetEntityId);
+        componentManager.Merge(TargetEntityId, new ProcessingTierComponent(ProcessingTierLevel.Borough));
+        componentManager.Merge(TargetEntityId, new SimpleHealthComponent(currentHealth: 20, maximumHealth: 100));
+        var stackInstanceId = InventoryActions.AddItem(componentManager, CasterEntityId, PotionId, quantity: 1);
+        componentManager.Merge(CasterEntityId, new PendingConsumableActivationComponent(stackInstanceId, [TargetTile]));
+        componentManager.Merge(CasterEntityId, new ActionLockComponent(standardLockFrames: ActionLockGate.StandardLockFrames, currentLockTotalFrames: 0, unlockedAtFrame: 0));
+
+        system.Update(default, 0);
+
+        Assert.AreEqual(20, HealthOf(componentManager, TargetEntityId));
+        Assert.IsFalse(componentManager.GetPackedPool<PotionCooldownComponent>().Has(TargetEntityId));
     }
 
     [TestMethod]

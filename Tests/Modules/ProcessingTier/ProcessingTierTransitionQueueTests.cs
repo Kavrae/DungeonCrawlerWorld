@@ -17,8 +17,8 @@ public sealed class ProcessingTierTransitionQueueTests
         membership.Set(FreezingEntityId, new Vector3Int(Neighborhoods.SizeTiles + 10, 10, 0));
 
         var queue = new ProcessingTierTransitionQueue();
-        queue.Enqueue(0, 0, 0, isThawing: true);
-        queue.Enqueue(1, 0, 0, isThawing: false);
+        queue.Enqueue(0, 0, 0, ProcessingTierTransitionBand.Thawing);
+        queue.Enqueue(1, 0, 0, ProcessingTierTransitionBand.Freezing);
         return (queue, membership);
     }
 
@@ -39,6 +39,43 @@ public sealed class ProcessingTierTransitionQueueTests
         var (queue, membership) = Build();
 
         CollectionAssert.AreEqual(new[] { ThawingEntityId, FreezingEntityId }, DrainAll(queue, membership, thawingHeld: false));
+    }
+
+    [TestMethod]
+    public void TryDequeue_DrainsBandsInOrder_WhateverOrderTheyWereQueuedIn()
+    {
+        const int UnsimulatedEntityId = 3;
+        var membership = new NeighborhoodMembershipIndex();
+        membership.Set(ThawingEntityId, new Vector3Int(10, 10, 0));
+        membership.Set(FreezingEntityId, new Vector3Int(Neighborhoods.SizeTiles + 10, 10, 0));
+        membership.Set(UnsimulatedEntityId, new Vector3Int(2 * Neighborhoods.SizeTiles + 10, 10, 0));
+
+        var queue = new ProcessingTierTransitionQueue();
+        queue.Enqueue(2, 0, 0, ProcessingTierTransitionBand.Unsimulated);
+        queue.Enqueue(1, 0, 0, ProcessingTierTransitionBand.Freezing);
+        queue.Enqueue(0, 0, 0, ProcessingTierTransitionBand.Thawing);
+
+        CollectionAssert.AreEqual(new[] { ThawingEntityId, FreezingEntityId, UnsimulatedEntityId }, DrainAll(queue, membership, thawingHeld: false));
+    }
+
+    [TestMethod]
+    public void HasPendingSimulatedChanges_TurnsFalseOnceOnlyTheUnsimulatedBandIsLeft()
+    {
+        var membership = new NeighborhoodMembershipIndex();
+        membership.Set(FreezingEntityId, new Vector3Int(10, 10, 0));
+        membership.Set(3, new Vector3Int(Neighborhoods.SizeTiles + 10, 10, 0));
+        membership.Set(4, new Vector3Int(Neighborhoods.SizeTiles + 20, 10, 0));
+        var queue = new ProcessingTierTransitionQueue();
+        queue.Enqueue(0, 0, 0, ProcessingTierTransitionBand.Freezing);
+        queue.Enqueue(1, 0, 0, ProcessingTierTransitionBand.Unsimulated);
+
+        Assert.IsTrue(queue.HasPendingSimulatedChanges);
+        Assert.IsTrue(queue.TryDequeue(membership, out _));
+        Assert.IsFalse(queue.HasPendingSimulatedChanges, "The freeze band's only entity is taken.");
+
+        Assert.IsTrue(queue.TryDequeue(membership, out _));
+        Assert.IsFalse(queue.HasPendingSimulatedChanges);
+        Assert.IsTrue(queue.HasPending, "One unsimulated entity is still waiting.");
     }
 
     [TestMethod]

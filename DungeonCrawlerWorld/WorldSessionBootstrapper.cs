@@ -148,6 +148,6 @@ public static class WorldSessionBootstrapper
             GC.Collect(GC.MaxGeneration, GCCollectionMode.Aggressive, blocking: true, compacting: true);
         }
 
-        return new WorldSessionContext(world, ecsContext, mathUtility, bootstrapResult.MovedEntities, crawlerNumberAllocator, bootstrapResult.ActionCatalog, bootstrapResult.ItemCatalog, playerActivityLog, bootstrapResult.StatusEffectDisplays, reservedEntityIds, bootstrapResult.LocalTierRoster, bootstrapResult.Terrain, neighborhoodRecords, neighborhoodStreamer, bootstrapResult.Definitions, bootstrapResult.SpawnRecordRebuilder, bootstrapResult.Skeletons, bootstrapResult.Factory);
+        return new WorldSessionContext(world, ecsContext, mathUtility, bootstrapResult.MovedEntities, crawlerNumberAllocator, bootstrapResult.ActionCatalog, bootstrapResult.ItemCatalog, playerActivityLog, bootstrapResult.StatusEffectDisplays, reservedEntityIds, bootstrapResult.LocalTierRoster, bootstrapResult.Terrain, neighborhoodRecords, neighborhoodStreamer, bootstrapResult.Definitions, bootstrapResult.SpawnRecordRebuilder, bootstrapResult.Skeletons, bootstrapResult.Factory, bootstrapResult.Teleporter, bootstrapResult.ProcessingTierResolver);
     }
 }

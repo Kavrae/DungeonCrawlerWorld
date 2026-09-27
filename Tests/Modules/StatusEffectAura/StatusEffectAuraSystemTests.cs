@@ -352,7 +352,8 @@ public sealed class StatusEffectAuraSystemTests
         MoveObserverTo(system, movedEntities, new Vector3Int(0, 0, 0), new Vector3Int(30, 30, 0));
 
         mapQuery.SetTerrain(SourcePosition, glowingTypeId);
-        eventBus.Publish(new TerrainLoadedEvent(Neighborhoods.AreaOf(0, 0, 3)));
+        Assert.IsTrue(TerrainAuraSources.TryGetAura(terrain, glowingTypeId, out var aura));
+        eventBus.Publish(new TerrainLoadedEvent(Neighborhoods.AreaOf(0, 0, 3), [new TerrainAuraCell(SourcePosition, aura)]));
         MoveObserverTo(system, movedEntities, new Vector3Int(30, 30, 0), new Vector3Int(SourcePosition.X + 1, SourcePosition.Y, SourcePosition.Z));
 
         Assert.AreEqual(4, StackCountOf(componentManager, ObserverEntityId));

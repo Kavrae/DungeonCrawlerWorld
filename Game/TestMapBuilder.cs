@@ -6,6 +6,7 @@ using Engine.Utilities;
 using Game.Blueprints.Composites;
 using Game.Blueprints.Objects;
 using Game.Blueprints.Races;
+using Game.Floors;
 using Game.Spawning;
 using Game.Modules.Core.Components;
 using Game.Modules.Crawler.Components;
@@ -46,6 +47,9 @@ public sealed class TestMapBuilder(EntityManager entityManager, EntityFactory fa
 
     /// <summary>Chance any given rolled NPC (see BuildRaceEntity) is also a Crawler -- deliberately small; most NPCs are not.</summary>
     private const int CrawlerPercent = 2;
+
+    /// <summary>The terrain registry, with the sprite variants of every terrain this builder writes already resolved -- on the main thread, at construction -- so Plan's TerrainRegistry.CreateCell only reads the registry's cache from a worker.</summary>
+    private readonly TerrainRegistry _terrain = WithVariantsResolved(terrain, BuiltInTerrain.StoneFloorKey, BuiltInTerrain.StoneWallKey, BuiltInTerrain.DirtKey, BuiltInTerrain.LavaKey, BuiltInTerrain.GrassKey);
 
     private readonly ushort _stoneFloor = terrain.GetId(BuiltInTerrain.StoneFloorKey);
     private readonly ushort _stoneWall = terrain.GetId(BuiltInTerrain.StoneWallKey);
@@ -104,117 +108,141 @@ public sealed class TestMapBuilder(EntityManager entityManager, EntityFactory fa
     /// dependency of Bootstrapper.Build, which is what produces the EntityManager/ComponentManager
     /// this builder needs -- so World can't wait until after that call to be created.
     /// </summary>
-    /// <remarks>Every record is assigned before any neighborhood is generated, so the seeds a session's first window gets never depend on how much generation consumed.</remarks>
+    /// <remarks>
+    /// Every record is assigned, and every population seed drawn, before any neighborhood is generated,
+    /// so the seeds a session's first window gets never depend on how much generation consumed. The
+    /// plans are made in parallel and applied in order, which gives the same world as making them one by
+    /// one.
+    /// </remarks>
     public void Populate(World.World world, NeighborhoodRecords records)
     {
         ArgumentNullException.ThrowIfNull(world);
         ArgumentNullException.ThrowIfNull(records);
 
-        var bounds = world.Map.Bounds;
-        var neighborhoods = new List<NeighborhoodRecord>();
-        for (var cellY = Neighborhoods.CellOf(bounds.MinY); cellY <= Neighborhoods.CellOf(bounds.MaxY - 1); cellY++)
+        var mapBounds = world.Map.Bounds;
+        var neighborhoodsToGenerate = new List<(NeighborhoodRecord Record, int PopulationSeed)>();
+        for (var cellY = Neighborhoods.CellOf(mapBounds.MinY); cellY <= Neighborhoods.CellOf(mapBounds.MaxY - 1); cellY++)
         {
-            for (var cellX = Neighborhoods.CellOf(bounds.MinX); cellX <= Neighborhoods.CellOf(bounds.MaxX - 1); cellX++)
+            for (var cellX = Neighborhoods.CellOf(mapBounds.MinX); cellX <= Neighborhoods.CellOf(mapBounds.MaxX - 1); cellX++)
             {
                 if (world.Map.IsNeighborhoodLoaded(cellX, cellY))
                 {
-                    neighborhoods.Add(records.GetOrCreate(cellX, cellY));
+                    var neighborhoodRecord = records.GetOrCreate(cellX, cellY);
+                    neighborhoodsToGenerate.Add((neighborhoodRecord, neighborhoodRecord.NextPopulationSeed()));
                 }
             }
         }
 
-        foreach (var record in neighborhoods)
+        var neighborhoodPlans = new NeighborhoodPlan[neighborhoodsToGenerate.Count];
+        Parallel.For(0, neighborhoodsToGenerate.Count, neighborhoodIndex => neighborhoodPlans[neighborhoodIndex] = Plan(world.Map, neighborhoodsToGenerate[neighborhoodIndex].Record, neighborhoodsToGenerate[neighborhoodIndex].PopulationSeed));
+
+        foreach (var neighborhoodPlan in neighborhoodPlans)
         {
-            foreach (var _ in GenerateNeighborhood(world, record))
+            world.Map.LoadNeighborhood(neighborhoodPlan.Layout);
+            foreach (var _ in Spawn(neighborhoodPlan))
             {
             }
         }
     }
 
-    /// <summary>Generates one neighborhood -- every cell's terrain and walls, then its population -- a row at a time.</summary>
-    /// <remarks>
-    /// GenerateLayout then PopulateNeighborhood, one after the other. Two passes because walls block
-    /// placement: a multi-tile creature rolled beside a wall that isn't written yet would otherwise be
-    /// placed straddling it.
-    /// </remarks>
-    public IEnumerable<int> GenerateNeighborhood(World.World world, NeighborhoodRecord record) =>
-        GenerateLayout(world, record).Concat(PopulateNeighborhood(world, record));
-
-    /// <summary>Writes one neighborhood's terrain and walls from record.Seed alone, a row at a time.</summary>
-    /// <remarks>Yields 0 after each row, so a caller can spread it over frames. Only the part inside the map's bounds is generated.</remarks>
-    public IEnumerable<int> GenerateLayout(World.World world, NeighborhoodRecord record)
+    /// <summary>Generates one neighborhood on this thread -- its layout, loaded whole, then its population a row at a time -- drawing the record's next population seed.</summary>
+    /// <remarks>Yields 0 once the layout is loaded, then what Spawn yields.</remarks>
+    public IEnumerable<int> GenerateNeighborhood(World.World world, NeighborhoodRecord record)
     {
         ArgumentNullException.ThrowIfNull(world);
         ArgumentNullException.ThrowIfNull(record);
 
-        if (!TryGetArea(world, record, out var minX, out var minY, out var maxX, out var maxY))
-        {
-            yield break;
-        }
+        var neighborhoodPlan = Plan(world.Map, record, record.NextPopulationSeed());
+        world.Map.LoadNeighborhood(neighborhoodPlan.Layout);
+        yield return 0;
 
-        var layout = new MathUtility(new Random(record.Seed));
-        for (var row = minY; row < maxY; row++)
+        foreach (var createdEntityCount in Spawn(neighborhoodPlan))
         {
-            for (var column = minX; column < maxX; column++)
-            {
-                GenerateLayoutCell(world, layout, column, row);
-            }
-
-            yield return 0;
+            yield return createdEntityCount;
         }
     }
 
-    /// <summary>Creates one neighborhood's creatures, and in the starting neighborhood its fixtures and shops, a row at a time.</summary>
+    /// <summary>Decides one neighborhood -- its terrain and walls from record.Seed, its creatures from populationSeed -- without touching the world: safe on a worker thread.</summary>
     /// <remarks>
-    /// Yields after each row with the number of entities it created, so a caller can spread it over
-    /// frames. Reads only record.NextPopulationSeed, so the result doesn't depend on what else was
-    /// generated first. A creature that can't be placed is destroyed rather than left off the map.
+    /// Reads only the record's seed, the map's fixed shape (Map.CreateLayout) and what this builder
+    /// resolved at construction, so the plan doesn't depend on what else was generated first, or on
+    /// which thread made it. The layout is decided whole before the population, so a creature is
+    /// always placed against the walls it will actually stand beside.
     /// </remarks>
-    public IEnumerable<int> PopulateNeighborhood(World.World world, NeighborhoodRecord record)
+    /// <param name="planningCancellation">Checked once a row: a plan no longer wanted stops early and throws OperationCanceledException.</param>
+    public NeighborhoodPlan Plan(Map map, NeighborhoodRecord record, int populationSeed, CancellationToken planningCancellation = default)
     {
-        ArgumentNullException.ThrowIfNull(world);
+        ArgumentNullException.ThrowIfNull(map);
         ArgumentNullException.ThrowIfNull(record);
 
-        if (!TryGetArea(world, record, out var minX, out var minY, out var maxX, out var maxY))
+        var neighborhoodLayout = map.CreateLayout(record.CellX, record.CellY);
+        var layoutRolls = new MathUtility(new Random(record.Seed));
+        for (var row = neighborhoodLayout.MinY; row < neighborhoodLayout.MaxY; row++)
         {
-            yield break;
+            planningCancellation.ThrowIfCancellationRequested();
+            for (var column = neighborhoodLayout.MinX; column < neighborhoodLayout.MaxX; column++)
+            {
+                GenerateLayoutCell(neighborhoodLayout, layoutRolls, column, row);
+            }
         }
 
-        var population = new Population(new MathUtility(new Random(record.NextPopulationSeed())));
-        for (var row = minY; row < maxY; row++)
+        var population = new Population(new MathUtility(new Random(populationSeed)));
+        var spawnRowEnds = new List<int>(neighborhoodLayout.MaxY - neighborhoodLayout.MinY + 1);
+        for (var row = neighborhoodLayout.MinY; row < neighborhoodLayout.MaxY; row++)
         {
-            var livingBefore = entityManager.LivingEntityCount;
-            for (var column = minX; column < maxX; column++)
+            planningCancellation.ThrowIfCancellationRequested();
+            for (var column = neighborhoodLayout.MinX; column < neighborhoodLayout.MaxX; column++)
             {
-                PopulateCell(world, population, column, row);
+                PopulateCell(population, column, row);
             }
 
-            yield return entityManager.LivingEntityCount - livingBefore;
+            spawnRowEnds.Add(population.Spawns.Count);
         }
 
         if (record.CellX == StartingCellX && record.CellY == StartingCellY)
         {
-            var livingBefore = entityManager.LivingEntityCount;
             BuildFixtureEntities(population);
+            spawnRowEnds.Add(population.Spawns.Count);
+        }
+
+        return new NeighborhoodPlan(neighborhoodLayout, TerrainAuraSources.ByRow(neighborhoodLayout, _terrain), population.Spawns, spawnRowEnds);
+    }
+
+    /// <summary>Spawns neighborhoodPlan's creatures in order, a row at a time, once its layout is loaded. Main thread only.</summary>
+    /// <remarks>Yields after each row with the number of entities it created, so a caller can spread it over frames. A creature that can't be placed is destroyed rather than left off the map.</remarks>
+    public IEnumerable<int> Spawn(NeighborhoodPlan neighborhoodPlan)
+    {
+        ArgumentNullException.ThrowIfNull(neighborhoodPlan);
+
+        var nextSpawnIndex = 0;
+        foreach (var spawnRowEnd in neighborhoodPlan.SpawnRowEnds)
+        {
+            var livingBefore = entityManager.LivingEntityCount;
+            for (; nextSpawnIndex < spawnRowEnd; nextSpawnIndex++)
+            {
+                factory.Spawn(neighborhoodPlan.Spawns[nextSpawnIndex]);
+            }
+
             yield return entityManager.LivingEntityCount - livingBefore;
         }
     }
 
-    /// <summary>The part of record's neighborhood inside the map's bounds, as inclusive minimums and exclusive maximums; false when there is none.</summary>
-    private static bool TryGetArea(World.World world, NeighborhoodRecord record, out int minX, out int minY, out int maxX, out int maxY)
-    {
-        var bounds = world.Map.Bounds;
-        minX = System.Math.Max(Neighborhoods.OriginOf(record.CellX), bounds.MinX);
-        minY = System.Math.Max(Neighborhoods.OriginOf(record.CellY), bounds.MinY);
-        maxX = System.Math.Min(Neighborhoods.OriginOf(record.CellX + 1), bounds.MaxX);
-        maxY = System.Math.Min(Neighborhoods.OriginOf(record.CellY + 1), bounds.MaxY);
-        return minX < maxX && minY < maxY;
-    }
-
-    /// <summary>The random sequence one neighborhood's population is rolled from.</summary>
+    /// <summary>The random sequence one neighborhood's population is rolled from, and the spawns it has rolled so far.</summary>
     private sealed class Population(MathUtility rolls)
     {
         public MathUtility Rolls { get; } = rolls;
+
+        public List<SpawnRequest> Spawns { get; } = [];
+    }
+
+    private static TerrainRegistry WithVariantsResolved(TerrainRegistry terrainRegistry, params string[] terrainKeys)
+    {
+        foreach (var terrainKey in terrainKeys)
+        {
+            terrainRegistry.GetVariantCount(terrainRegistry.GetId(terrainKey));
+        }
+
+        return terrainRegistry;
     }
 
     /// <summary>
@@ -222,22 +250,22 @@ public sealed class TestMapBuilder(EntityManager entityManager, EntityFactory fa
     /// terrain everywhere else (see PickGroundTerrain). UnderGround: a randomized dirt/lava mixture --
     /// its own independent roll from Ground's mix, so the two layers don't mirror each other.
     /// </summary>
-    private void GenerateLayoutCell(World.World world, MathUtility layout, int column, int row)
+    private void GenerateLayoutCell(NeighborhoodLayout neighborhoodLayout, MathUtility layoutRolls, int column, int row)
     {
         if (IsHallwayWall(column, row))
         {
-            BuildTerrain(world, layout, _stoneFloor, column, row, TerrainLayer.Ground);
-            BuildWall(world, layout, column, row, MapLayer.Ground);
+            BuildTerrain(neighborhoodLayout, layoutRolls, _stoneFloor, column, row, TerrainLayer.Ground);
+            BuildWall(neighborhoodLayout, layoutRolls, column, row, MapLayer.Ground);
         }
         else
         {
-            BuildTerrain(world, layout, PickGroundTerrain(layout), column, row, TerrainLayer.Ground);
+            BuildTerrain(neighborhoodLayout, layoutRolls, PickGroundTerrain(layoutRolls), column, row, TerrainLayer.Ground);
         }
 
-        BuildTerrain(world, layout, layout.Next(0, 20) == 0 ? _lava : _dirt, column, row, TerrainLayer.UnderGround);
+        BuildTerrain(neighborhoodLayout, layoutRolls, layoutRolls.Next(0, 20) == 0 ? _lava : _dirt, column, row, TerrainLayer.UnderGround);
     }
 
-    private void PopulateCell(World.World world, Population population, int column, int row)
+    private void PopulateCell(Population population, int column, int row)
     {
         if (!IsHallwayWall(column, row) && population.Rolls.Next(0, 100) < GroundPopulationPercent)
         {
@@ -332,31 +360,31 @@ public sealed class TestMapBuilder(EntityManager entityManager, EntityFactory fa
         BuildRaceEntity(population, _fairy, column, row, size, MapLayer.Flying);
     }
 
-    /// <summary>Spawns one rolled creature at the given size/layer -- the shared path for every PopulateEntity roll outcome. A small percentage also become Crawlers (see CrawlerPercent).</summary>
-    /// <remarks>Everything the spawn itself involves -- the tier-first entity id, the build or the skeleton, the placement, the spawn move and the crawler number -- is EntityFactory's; what is left here is what this map's own population rules decide: the blueprint, the layer, the footprint, the seed and the crawler roll. The crawler roll is drawn whether or not the entity survives placement, so one that lands off the map doesn't shift every later roll in this neighborhood.</remarks>
+    /// <summary>Rolls one creature at the given size/layer -- the shared path for every PopulateEntity roll outcome. A small percentage also become Crawlers (see CrawlerPercent).</summary>
+    /// <remarks>Everything the spawn itself involves -- the tier-first entity id, the build or the skeleton, the placement, the spawn move and the crawler number -- is EntityFactory's, when Spawn applies the plan; what is decided here is what this map's own population rules decide: the blueprint, the layer, the footprint, the seed and the crawler roll. A creature that won't fit where it was rolled still used its rolls, so it doesn't shift every later roll in this neighborhood.</remarks>
     private void BuildRaceEntity(Population population, ushort blueprintId, int column, int row, Vector2Byte size, MapLayer mapLayer)
     {
         var seed = population.Rolls.NextSeed();
         var isCrawler = population.Rolls.Next(0, 100) < CrawlerPercent;
 
-        factory.Spawn(new SpawnRequest(blueprintId, column, row) { Layer = mapLayer, Size = size, Seed = seed, Crawler = isCrawler });
+        population.Spawns.Add(new SpawnRequest(blueprintId, column, row) { Layer = mapLayer, Size = size, Seed = seed, Crawler = isCrawler });
     }
 
     /// <summary>
     /// Terrain (the floor an entity stands on) is a cell, not an entity -- see TerrainDefinition.
     /// The sprite variant is rolled here, once, the way a blueprint used to roll its sprite.
     /// </summary>
-    private void BuildTerrain(World.World world, MathUtility layout, ushort terrainTypeId, int column, int row, TerrainLayer terrainLayer) =>
-        world.PopulateTerrain(column, row, terrainLayer, terrain.CreateCell(terrainTypeId, layout));
+    private void BuildTerrain(NeighborhoodLayout neighborhoodLayout, MathUtility layoutRolls, ushort terrainTypeId, int column, int row, TerrainLayer terrainLayer) =>
+        neighborhoodLayout.SetTerrain(column, row, terrainLayer, _terrain.CreateCell(terrainTypeId, layoutRolls));
 
     /// <summary>A wall is a structure cell, not an entity -- the same flyweight as terrain, on its own MapLayer store.</summary>
-    private void BuildWall(World.World world, MathUtility layout, int column, int row, MapLayer mapLayer) =>
-        world.PopulateStructure(new Vector3Int(column, row, (int)mapLayer), terrain.CreateCell(_stoneWall, layout));
+    private void BuildWall(NeighborhoodLayout neighborhoodLayout, MathUtility layoutRolls, int column, int row, MapLayer mapLayer) =>
+        neighborhoodLayout.SetStructure(new Vector3Int(column, row, (int)mapLayer), _terrain.CreateCell(_stoneWall, layoutRolls));
 
     /// <summary>Lava 1%, dirt 39%, grass 60% -- a 0-99 roll.</summary>
-    private ushort PickGroundTerrain(MathUtility layout)
+    private ushort PickGroundTerrain(MathUtility layoutRolls)
     {
-        var roll = layout.Next(0, 100);
+        var roll = layoutRolls.Next(0, 100);
         return roll switch
         {
             < 1 => _lava,
@@ -431,9 +459,9 @@ public sealed class TestMapBuilder(EntityManager entityManager, EntityFactory fa
         }
     }
 
-    /// <summary>Spawns one fixture at column/row counted from the starting neighborhood's origin, on its blueprint's own layer, at size or its blueprint's own footprint.</summary>
+    /// <summary>Plans one fixture at column/row counted from the starting neighborhood's origin, on its blueprint's own layer, at size or its blueprint's own footprint.</summary>
     private void SpawnFixture(Population population, ushort blueprintId, int column, int row, Vector2Byte? size = null) =>
-        factory.Spawn(new SpawnRequest(blueprintId, Neighborhoods.OriginOf(StartingCellX) + column, Neighborhoods.OriginOf(StartingCellY) + row)
+        population.Spawns.Add(new SpawnRequest(blueprintId, Neighborhoods.OriginOf(StartingCellX) + column, Neighborhoods.OriginOf(StartingCellY) + row)
         {
             Size = size,
             Seed = population.Rolls.NextSeed(),

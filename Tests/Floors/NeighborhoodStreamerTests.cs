@@ -310,6 +310,51 @@ public sealed class NeighborhoodStreamerTests
         Assert.IsTrue(EntitiesIn(session, 2, 0).All(entityId => tiers.GetReadonly(entityId).Tier == ProcessingTierLevel.Borough), "Born against the new centre.");
     }
 
+    /// <summary>A queued load starts exactly StartDelayFrames updates after it was queued -- not earlier, however fast its worker was, and not later, however slow: the main thread waits for the plan instead.</summary>
+    [TestMethod]
+    public void WindowShift_StartsTheLoadAfterExactlyTheStartDelay()
+    {
+        var session = BuildWindow();
+        session.Streamer.Update(default, 0);
+
+        ShiftTo(session, 1);
+        for (var update = 1; update < session.Streamer.StartDelayFrames; update++)
+        {
+            session.Streamer.Update(default, 0);
+            Assert.IsFalse(session.World.Map.IsNeighborhoodLoaded(2, 0), $"Loaded early, on update {update}.");
+        }
+
+        session.Streamer.Update(default, 0);
+        Assert.IsTrue(session.World.Map.IsNeighborhoodLoaded(2, 0));
+    }
+
+    /// <summary>Turning back before a load starts drops it and its worker, and counts no population: when the player does arrive, the neighborhood gets the population it would have had the first time.</summary>
+    [TestMethod]
+    public void WindowShift_BackBeforeTheLoadStarts_DropsIt_AndTheNextVisitGetsTheSamePopulation()
+    {
+        var direct = BuildWindow();
+        ShiftTo(direct, 1);
+        RunUntilIdle(direct);
+
+        var turnedBack = BuildWindow();
+        ShiftTo(turnedBack, 1);
+        turnedBack.Streamer.Update(default, 0);
+        ShiftTo(turnedBack, 0);
+        RunUntilIdle(turnedBack);
+        Assert.IsFalse(turnedBack.World.Map.IsNeighborhoodLoaded(2, 0), "Precondition: the load was dropped.");
+
+        ShiftTo(turnedBack, 1);
+        RunUntilIdle(turnedBack);
+
+        CollectionAssert.AreEqual(PositionsIn(direct, 2), PositionsIn(turnedBack, 2));
+    }
+
+    private static List<Vector3Int> PositionsIn(Session session, int cellX)
+    {
+        var transforms = session.Ecs.ComponentManager.GetDirectPool<TransformComponent>();
+        return [.. EntitiesIn(session, cellX, 0).Select(entityId => transforms.GetReadonly(entityId).Position).OrderBy(static p => p.Z).ThenBy(static p => p.Y).ThenBy(static p => p.X)];
+    }
+
     /// <summary>An eviction frees its built creatures before anything else, so promotions (held on IsEvictingBuiltCreatures) can reuse their storage without waiting for the rest of the unload.</summary>
     [TestMethod]
     public void Eviction_DestroysBuiltCreaturesFirst_AndStopsHoldingPromotionsBeforeTheRestUnloads()

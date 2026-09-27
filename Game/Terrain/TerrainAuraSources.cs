@@ -70,6 +70,41 @@ public static class TerrainAuraSources
         return false;
     }
 
+    /// <summary>Every aura-radiating terrain cell of neighborhoodLayout, one list per row top to bottom -- in each row every MapLayer that has a floor, lowest first, then by column: the order ForEach visits the same cells in once the layout is loaded.</summary>
+    /// <remarks>Reads only neighborhoodLayout and terrainRegistry, so a worker can list them while it plans a neighborhood, and loading doesn't have to scan for them.</remarks>
+    public static IReadOnlyList<TerrainAuraCell>[] ByRow(NeighborhoodLayout neighborhoodLayout, TerrainRegistry terrainRegistry)
+    {
+        ArgumentNullException.ThrowIfNull(neighborhoodLayout);
+        ArgumentNullException.ThrowIfNull(terrainRegistry);
+
+        var auraCellsByRow = new IReadOnlyList<TerrainAuraCell>[neighborhoodLayout.MaxY - neighborhoodLayout.MinY];
+        var aurasByTypeId = AurasByTypeId(terrainRegistry);
+        for (var row = neighborhoodLayout.MinY; row < neighborhoodLayout.MaxY; row++)
+        {
+            var rowAuraCells = new List<TerrainAuraCell>();
+            for (var mapLayer = 0; aurasByTypeId is not null && mapLayer < neighborhoodLayout.Depth; mapLayer++)
+            {
+                if (Map.TerrainLayerFor(mapLayer) is not { } terrainLayer)
+                {
+                    continue;
+                }
+
+                for (var column = neighborhoodLayout.MinX; column < neighborhoodLayout.MaxX; column++)
+                {
+                    var terrainTypeId = neighborhoodLayout.GetTerrain(column, row, terrainLayer).TypeId;
+                    if (terrainTypeId < aurasByTypeId.Length && aurasByTypeId[terrainTypeId] is { } aura)
+                    {
+                        rowAuraCells.Add(new TerrainAuraCell(new Vector3Int(column, row, mapLayer), aura));
+                    }
+                }
+            }
+
+            auraCellsByRow[row - neighborhoodLayout.MinY] = rowAuraCells;
+        }
+
+        return auraCellsByRow;
+    }
+
     /// <summary>Each registered id's aura, indexed by id, or null when no terrain has one -- resolved once per scan so the per-cell check is an array read.</summary>
     private static StatusEffectAuraSourceComponent?[]? AurasByTypeId(TerrainRegistry registry)
     {

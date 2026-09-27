@@ -65,6 +65,10 @@ public interface IMapQuery
     /// <remarks>Defaults to false for test doubles with no phasing entities.</remarks>
     bool IsPhasing(int entityId) => false;
 
+    /// <summary>Whether neighborhood (cellX, cellY) is loaded -- its cells are on the map and its entities exist.</summary>
+    /// <remarks>Defaults to true for test doubles, which have no streaming.</remarks>
+    bool IsNeighborhoodLoaded(int cellX, int cellY) => true;
+
     /// <summary>Gets the IDs of all entities within a bounding box.</summary>
     /// <param name="box">The bounding box to query.</param>
     /// <param name="entityIds">A span to fill with the entity IDs.</param>

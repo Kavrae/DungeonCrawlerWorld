@@ -57,30 +57,6 @@ Global), each split High/Medium/Low priority. Landed work lives in `IMPLEMENTATI
 
 ### High Priority
 
-#### Optimize crawler number selection
-
-`UniqueNumberAllocator` (`Engine/Math/`) picks a crawler number by rejection sampling: draw a random
-number in [1, 13,000,000] and retry until it isn't in a `HashSet<int>` of every number handed out.
-Crawler numbers never recycle or change for an entity. Since 2026-09-26 a number is assigned when a
-crawler is first built (simulated), not when it spawns, so the window mints one per crawler that ever
-reaches the simulated tiers rather than ~1,470 per loaded neighborhood; a revisited neighborhood's
-fresh population still mints new ones once simulated. The allocator draws from its own seeded sequence.
-
-- **It slows as the range fills.** The expected draws per allocation are 1 / (fraction still free):
-  2 at half full, 100 at 99%.
-- **It never returns once the range is full.** The retry loop has no exit.
-- **The set grows without bound,** a hash entry per number ever issued (hundreds of MB at millions of
-  numbers).
-
-At the base 2 tiles/second a shift loads 3 neighborhoods about every 8.5 minutes, so the range fills
-after roughly 420 hours of straight walking. Realistic play is an order of magnitude shorter, so
-running out isn't the problem; the degrading cost and the unbounded set are.
-
-Fix: a seeded bijection over the range instead of sampling, for example a small Feistel network with
-cycle-walking, applied to a counter. Every allocation is O(1), numbers never repeat, nothing is stored
-beyond the counter (which save/load persists alongside the seed), the sequence stays deterministic
-for a seeded run, and exhaustion is detected exactly and throws.
-
 #### Class exceptions: runtime class grants
 
 NPC classes come from spawn rules and fit two fixed class slots. The player's don't: a first class on
@@ -111,42 +87,6 @@ effect, turn survivors into explicit permanent grants whose source names the res
 membership. Dependencies, out of scope here: a floor-end event (see EndOfLevelStairs),
 class-selection UI, the advancement rules themselves, the residue roll. Ends with an in-game test and
 a `phase-performance-testing` A/B.
-
-#### Investigate chunk-bucketed tiered stripe sets
-
-**How it works today.** Each entity's tier is its own `ProcessingTierComponent`, which
-`ProcessingTierResolver` computes and writes. When a tier changes it raises `TierChanged`, and each of
-the ~10 `TieredEntityStripeSet`s built by `ProcessingTierWiring.CreateAndWire` moves the entity to a
-different bucket. A window shift therefore costs work for every entity: ~363,000 on the 3072² map,
-drained 512 per frame by `ProcessingTierTransitionQueue` over ~12 seconds, with each one sent to every
-tiered set and to `SimulationScope`.
-
-**The alternative.** Each tiered set keeps its entities bucketed by chunk (neighborhood), and a tier
-becomes a property of the chunk. A window shift would then move chunk buckets between tiers, costing
-work for each chunk (≤ 25) rather than for each entity. It could also remove
-`ProcessingTierTransitionQueue` and the ~12 s settling time, and shrink or remove
-`NeighborhoodMembershipIndex`. It is also the Engine-side need that would justify moving the
-`Neighborhoods`/`NeighborhoodCells<T>`/`NeighborhoodMembershipIndex` group into an Engine chunk type.
-
-Measure, don't assume. Use `phase-performance-testing` headless A/B on a fixed seed, across a frame
-range that includes a window shift:
-1. **Crossing cost:** the worst frame and the total, current drain vs. reclassifying chunks.
-2. **Steady-state visit cost:** striping inside each chunk bucket means (chunks × stripes) small lists
-   per tier instead of one per stripe. Check per-frame iteration overhead and cache locality in
-   `TieredSystemRunner`.
-3. **Move cost:** an entity crossing a chunk boundary would migrate buckets in every tiered set even
-   when both chunks are the same tier. Today it only migrates on a real tier change.
-4. **Memory:** lists per chunk × stripe × tiered set, with the 3-neighborhood cache included.
-5. **Local:** Local is per-entity (radius 80, with hysteresis) and can't come from a 1024² chunk.
-   Decide whether it becomes an overlay (a per-entity Local bucket that overrides the chunk's tier;
-   `LocalTierRoster` already keeps a live Local set, but for filtering, not scheduling) or needs
-   smaller chunks, and what each costs.
-6. **Thaw/freeze hooks:** `SimulationScope` (`GameBootstrapper.WireSimulationScope`) resumes each
-   entity's timers when `TierChanged` lands it in a simulated tier. A chunk-level transition still
-   has to reach each entity for that, so check whether this puts back the per-entity cost the change
-   was meant to remove.
-Decide on the numbers. If steady-state or move cost regresses more than the crossing saves, record the
-result in `IMPLEMENTATION-NOTES.md` and drop the idea.
 
 ### Medium Priority
 
@@ -271,33 +211,12 @@ already-assigned neighbors when the window shifts. By the time a neighborhood's 
 every edge it shares is decided (the rolling equivalent of CDDA's overmap or Qud's world map).
 Interaction templates should be constraints on a single shared edge, since a record is rolled with
 only some of its neighbors known. Generation reads only the record's own seed, never a shared
-sequence, so contents don't depend on generation order or thread timing. Generate layout as data
-first, then spawn creatures born correctly tiered (a phased sequence deferred for this generator). Spelunky's role-based room templates are a model for composing
-authored pieces randomly. The record, per-record seeding and row-at-a-time generation already exist
-(`NeighborhoodRecords`, `TestMapBuilder.GenerateLayout`/`PopulateNeighborhood`); the new generator
-plugs into the same iterator shape so the streamer's per-frame budget keeps working. Subsumes the seed
+sequence, so contents don't depend on generation order or thread timing. Spelunky's role-based room
+templates are a model for composing authored pieces randomly. The record, per-record seeding and
+planning a neighborhood as data on a worker already exist (`NeighborhoodRecords`,
+`TestMapBuilder.Plan` producing a `NeighborhoodPlan`, which the streamer applies under its per-frame
+budget); the new generator produces the same plan. Subsumes the seed
 plumbing in "Random map generation v1" below. Needs its own plan.
-
-#### Asynchronous neighborhood generation
-
-Today a window shift generates each neighborhood on
-the main thread, a row at a time under `NeighborhoodStreamer`'s unit budget: 8-17 seconds per shift
-in Release, and the Debug build drops to ~3 fps while it runs. Split the work the way the plan's
-threading model describes:
-
-- **Worker thread:** generate layout-as-data (terrain ids, structures, the spawn list with blueprint
-  choices and positions) and, once saves exist, read and parse them. Nothing on the worker touches a
-  pool, the `Map` or the `EventBus`.
-- **Main thread, time-sliced:** integrate the staged result -- load the neighborhood's stores, copy the
-  layout in with `TerrainLoadedEvent` per row, create the spawn list's entities under the budget.
-- **Determinism:** the record seed decides the contents, never how far the worker has gotten, and
-  integration order is fixed, so a seeded headless benchmark still reproduces the same world.
-- **Cancellation:** a shift that reverses before integration starts drops the staged result, the way
-  the streamer already cancels not-started loads.
-
-The one-neighborhood buffer (the player arrives ~1024 tiles from the next load edge) leaves generation
-plenty of time, so the goal is fewer main-thread frames per shift, not faster shifts. Easier after
-"Real map generation" lands, since that generator is written as data from the start.
 
 #### Simplify non-local combat for performance
 
@@ -700,6 +619,29 @@ Shared notes:
   neighborhoods start being saved.
 - Depends on frozen Borough and catch-up (plan phase 6) and on real map generation above.
 
+#### Borough end-of-day summaries
+
+The four processing tiers each get a distinct job: Local is fully simulated, Neighborhood is
+simulated slowly, Borough is **updated by periodic mathematical results**, and Beyond is frozen.
+Borough entities are never visited by systems. Instead, at the end of each in-game day, every
+Borough neighborhood gets an estimated outcome for what happened there, applied to its frozen
+entities and records. Examples: the result of a raid between two Borough neighborhoods, or how many
+crawlers died during a boss fight.
+
+- **Estimate from the neighborhood, not by replaying entities:** aggregate strength, population and
+  scheduled events on the neighborhood record, resolved in closed form. Apply the results to
+  concrete entities (casualties become corpses, loot moves) through `NeighborhoodMembershipIndex`,
+  smeared across frames like any other bulk change.
+- **Run after a time buffer.** Borough <-> Beyond tier changes drain last after a window shift, so
+  each summary waits long enough for every entity's tier to have settled before it reads them.
+- **Share the calibration rule of the Outbound raid above:** an estimate is never better than the
+  same event fought live.
+- **Neighborhoods that change tier mid-day:** decide whether a neighborhood promoted to Neighborhood
+  before the day ends gets a partial-day estimate, and whether one demoted to Beyond keeps its
+  pending one.
+- Depends on "In-game day/time tracking". The Outbound raid's abstract resolution above is one case
+  of this; the "Unsimulated-tier time" item decides what Beyond does.
+
 #### AdvancedDodge buff
 
 A buff/upgrade that increases Dodge's movement distance beyond one adjacent tile and extends the
@@ -734,6 +676,33 @@ disarming Trapped containers.
 #### Show runner race
 
 Randomly selected; affects UI appearance and biases quest/enemy selection.
+
+#### Teleport countdown with a window anchor
+
+**Depends on a teleport visual effect** (a charge-up or dissolve the countdown plays over), which
+doesn't exist yet; no countdown without something to watch during it.
+
+A teleport into a Borough neighborhood lands the player in a frozen neighborhood that takes ~9.5 s to
+thaw (skeleton builds at `ProcessingTierSystem.DefaultTransitionsPerFrame`, 256 per frame, held until
+the evicted neighborhoods' built creatures are destroyed), while loading the new ring and the thaw cost
+frame rate. Hide both with a countdown before the move, during which the window already sits on the
+destination:
+
+1. **Countdown start:** anchor the window on the destination neighborhood
+   (`ProcessingTierResolver.ShiftWindowTo`). The streamer evicts and loads, and the destination
+   thaws, while the player is still at the origin. The origin's Local circle stays live because Local
+   follows the player, not the window.
+2. **Window anchor:** while anchored, `ProcessingTierSystem` must not recompute the centre from the
+   player's position (`NextWindowCenter`), or the player's next step during the countdown shifts it
+   straight back. Released when the teleport completes or is cancelled; a cancel shifts the window
+   back to the player's neighborhood.
+3. **Countdown end:** teleport through the shared teleport path. Only the Local square walks remain
+   (~10 ms measured in Release).
+
+Open: countdown length (the simulation settles ~568 frames, 9.5 s, after a shift; the
+countdown could instead end on `ProcessingTierResolver.Transitions.HasPendingSimulatedChanges` going
+false, with a minimum), whether the player can act or move during it, what cancels it (damage, stagger, moving), and whether
+it scales with distance. Teleports outside the loaded window are "Long-range teleports" below.
 
 #### Long-range teleports -- pause and reload the map
 
@@ -1020,10 +989,16 @@ store keyed by (entityId, bodyPartId) for the part-scoped case. Feeds the Health
 #### Lootbox delivery, and moving Lootbox out of Achievements
 
 `AchievementModule`'s unlock path describes a `Lootbox` reward in the notification but never calls
-`InventoryActions.AddItem` to actually deliver it (now available, unblocked). Lootboxes can only be
-*opened* in Safe Rooms once opening exists. Separately: `Lootbox`/`LootboxRarity` currently live in and
+`InventoryActions.AddItem` to actually deliver it (now available, unblocked). Separately: `Lootbox`/`LootboxRarity` currently live in and
 are named for Achievements, but quests/loot-drops/level-up should be able to award one too -- move into
-their own module once a second real awarder exists.
+their own module once a second real awarder exists. Planned in `PLAN-loot-boxes.md`; delete this entry
+when its Phase 2 lands.
+
+#### Loot boxes can only be opened in safe rooms
+
+Refuse loot box opening (Activate/double-click, see `PLAN-loot-boxes.md`) unless the player is standing
+in a Safe Room, with clear feedback (disabled "Activate" with a reason) rather than a silent no-op.
+Blocked on first creating Safe Rooms and zones -- no zone concept exists yet.
 
 #### NPC component
 
@@ -1329,6 +1304,23 @@ third partial copy (the corpse "killed by" line -- suicide/self-kill should read
 `ActionSource.ToString()` stays as-is: it's diagnostics with no subject to be relative to.
 
 ### Medium Priority
+
+#### Consolidate Admin Mode features out of the bootstrappers
+
+Admin Mode's pieces are wired one at a time, wherever each happened to need them:
+`ShellBootstrapper` hands `MapWindow` three separate admin dependencies (`NeighborhoodStreamer` for
+"Regenerate", a `BlueprintAdminCommands` it constructs itself for "Spawn here >"/"Apply >", and
+`EntityTeleporter` for "Teleport here"), and `GameLoop` keeps its own title-bar sync
+(`SyncAdminModeWindowTitle`). Each new admin tool adds another settable property and another
+bootstrapper line.
+
+Collect them into one admin collection (an `AdminTools`/`AdminCommands` object built once from the
+world session, holding the commands and anything they need) that the bootstrapper passes as a single
+dependency, with the context-menu groups built from it instead of from `MapWindow`'s own checks.
+Consider moving the title sync and the F12 toggle (`UiInputController`) alongside it. Out of scope:
+the scattered `GlobalState.IsAdminModeOn` reads that change what windows show (the hidden ability
+scores, admin inspection); those are display rules, not tools. The admin blueprint menus and
+"Teleport here" stay -- this only changes how they're wired.
 
 #### Draw neighborhood borders and the Local radius in Admin Mode
 
@@ -1765,7 +1757,8 @@ since generation), so a revisited neighborhood holds the same creatures, corpses
 - **Time:** reloading catches up active timers the same way a Borough promotion does; whether more
   than that advances with elapsed time is the open question in "Unsimulated-tier time".
 - **Format:** "record plus changes" for neighborhoods the player never touched, a full snapshot
-  otherwise. Writing and parsing run on a worker ("Asynchronous neighborhood generation").
+  otherwise. Parsing runs on the streamer's worker, the way generation does (`TestMapBuilder.Plan`; see
+  "Asynchronous neighborhood generation" in `IMPLEMENTATION-NOTES.md`).
 - **Spawn records** hold a session-local blueprint id: persist the blueprint's Guid instead, and for
   a composite interned at runtime (`BlueprintRegistry.Compose`) its ordered include Guids, so loading can
   re-intern it.

@@ -81,12 +81,8 @@ public sealed class CreatureSkeletonsTests
         return CreaturesIn(session, 1).First(entityId => session.Skeletons.IsSkeleton(entityId) && spawnRecords.GetReadonly(entityId).BlueprintId == raceSlot);
     }
 
-    private static void MovePlayerTo(Session session, Vector3Int position)
-    {
-        ref var transform = ref session.Ecs.ComponentManager.GetDirectPool<TransformComponent>().Get(session.PlayerEntityId);
-        session.World.MoveEntity(session.PlayerEntityId, position, transform);
-        transform.Position = position;
-    }
+    private static void MovePlayerTo(Session session, Vector3Int position) =>
+        Assert.IsTrue(session.Result.Teleporter.TryTeleport(session.PlayerEntityId, FloorBuilder.FindFreeGroundCellNear(session.World, position)));
 
     private static void RunFrames(Session session, int count)
     {

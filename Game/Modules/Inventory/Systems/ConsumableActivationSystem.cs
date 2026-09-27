@@ -1,14 +1,15 @@
-using Engine.ECS.Entities;
 using Engine.ECS.Components;
 using Engine.ECS.Components.Stores;
+using Engine.ECS.Entities;
 using Engine.ECS.Systems;
 using Engine.Events;
 using Engine.Math;
+using Game.Blueprints;
+using Game.Modules.AbilityScores;
+using Game.Modules.AbilityScores.Components;
 using Game.Modules.Actions;
 using Game.Modules.Actions.Activators;
 using Game.Modules.Actions.Components;
-using Game.Modules.AbilityScores;
-using Game.Modules.AbilityScores.Components;
 using Game.Modules.Core.Components;
 using Game.Modules.Death.Components;
 using Game.Modules.Health;
@@ -16,11 +17,11 @@ using Game.Modules.Health.Components;
 using Game.Modules.Inventory.Components;
 using Game.Modules.Mana.Components;
 using Game.Modules.Poison;
+using Game.Modules.ProcessingTier;
 using Game.Modules.StatModifiers.Components;
 using Game.Modules.StatusEffectAura.Components;
 using Game.Modules.StatusEffects;
 using Game.World;
-using Game.Blueprints;
 
 namespace Game.Modules.Inventory.Systems;
 
@@ -102,6 +103,7 @@ public sealed class ConsumableActivationSystem : ISystem
     private readonly MultiComponentPool<ItemHotkeyBindingComponent>? _itemHotkeyBindings;
     private readonly EntityBodyParts? _bodyParts;
     private readonly BlueprintRegistry? _creatures;
+    private readonly ProcessingTierQuery? _processingTiers;
     private readonly EntityStripeSet _stripeSet;
 
     /// <summary>The simulation frame of the Update in progress -- see Update.</summary>
@@ -129,7 +131,8 @@ public sealed class ConsumableActivationSystem : ISystem
         MultiComponentPool<StatusEffectAuraSourceComponent>? auraSources = null,
         MultiComponentPool<ItemHotkeyBindingComponent>? itemHotkeyBindings = null,
         EntityBodyParts? bodyParts = null,
-        BlueprintRegistry? creatures = null)
+        BlueprintRegistry? creatures = null,
+        ProcessingTierQuery? processingTiers = null)
     {
         _pendingActivations = pendingActivations;
         _actionLocks = actionLocks;
@@ -153,6 +156,7 @@ public sealed class ConsumableActivationSystem : ISystem
         _itemHotkeyBindings = itemHotkeyBindings;
         _bodyParts = bodyParts;
         _creatures = creatures;
+        _processingTiers = processingTiers;
 
         _stripeSet = EntityStripeSet.CreateAndWire(StripeCount, pendingActivations);
     }
@@ -242,12 +246,20 @@ public sealed class ConsumableActivationSystem : ISystem
     private bool TryBeginWandActivation(int entityId, ushort charges) =>
         charges > 0 && !ActionLockGate.IsBlocked(_actionLocks, entityId, _now);
 
+    /// <summary>Whether a consumable landing on targetEntityId's tile reaches it: not while it is frozen, the same seam ActionEffectResolver keeps -- nothing targets across the simulated/frozen boundary.</summary>
+    private bool IsTargetable(int targetEntityId) => _processingTiers?.IsSimulated(targetEntityId) != false;
+
     private void ActivatePotion(ItemDefinition item, PotionActivator potionActivator, int sourceEntityId, Vector3Int[] targetTiles)
     {
         foreach (var tile in targetTiles)
         {
             foreach (var targetEntityId in _mapQuery.GetOccupantEntityIdsAt(tile))
             {
+                if (!IsTargetable(targetEntityId))
+                {
+                    continue;
+                }
+
                 ApplyPotionToTarget(item, sourceEntityId, targetEntityId);
             }
         }
@@ -298,6 +310,11 @@ public sealed class ConsumableActivationSystem : ISystem
         {
             foreach (var targetEntityId in _mapQuery.GetOccupantEntityIdsAt(tile))
             {
+                if (!IsTargetable(targetEntityId))
+                {
+                    continue;
+                }
+
                 ApplyScrollToTarget(item, sourceEntityId, targetEntityId, durationScaleMultiplier);
             }
         }
@@ -332,6 +349,11 @@ public sealed class ConsumableActivationSystem : ISystem
         {
             foreach (var targetEntityId in _mapQuery.GetOccupantEntityIdsAt(tile))
             {
+                if (!IsTargetable(targetEntityId))
+                {
+                    continue;
+                }
+
                 ApplyWandToTarget(item, sourceEntityId, targetEntityId);
             }
         }

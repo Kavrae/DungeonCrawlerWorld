@@ -146,6 +146,7 @@ public static class ShellBootstrapper
 
         mapWindow.NeighborhoodStreamer = worldSession.NeighborhoodStreamer;
         mapWindow.BlueprintAdmin = new Game.Spawning.BlueprintAdminCommands(worldSession.Factory, worldSession.Definitions);
+        mapWindow.Teleporter = worldSession.Teleporter;
 
         // A destroyed entity's id is reused straight away, so nothing on screen may keep pointing at
         // it: whatever it was selected in, or open for, lets go before the id means someone else.

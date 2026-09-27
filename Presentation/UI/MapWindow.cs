@@ -154,6 +154,9 @@ public sealed class MapWindow : Window
     /// <summary>What Admin Mode's "Spawn here" and "Apply" context-menu options drive -- wired by ShellBootstrapper; null offers neither.</summary>
     public Game.Spawning.BlueprintAdminCommands? BlueprintAdmin { get; set; }
 
+    /// <summary>What Admin Mode's "Teleport here" context-menu option drives -- wired by ShellBootstrapper; null offers no such option.</summary>
+    public Game.World.EntityTeleporter? Teleporter { get; set; }
+
     /// <summary>
     /// Invoked whenever a map-tile click sets Basic inspection (see SelectMapNodes) or the
     /// right-click "Inspect" option sets Detail inspection (see TryOpenEntityContextMenuAt) --
@@ -1386,6 +1389,12 @@ public sealed class MapWindow : Window
         if (GlobalState.IsAdminModeOn && BlueprintAdmin is { } admin)
         {
             options.Add(ContextMenuOption.Opening("Spawn here", SpawnChoices(admin, tilePosition)));
+        }
+
+        if (GlobalState.IsAdminModeOn && Teleporter is { } teleporter)
+        {
+            var playerEntityId = _mapView.PlayerEntityId;
+            options.Add(new ContextMenuOption("Teleport here", null, teleporter.CanTeleport(playerEntityId, tilePosition), () => teleporter.TryTeleport(playerEntityId, tilePosition)));
         }
 
         if (options.Count > 0)

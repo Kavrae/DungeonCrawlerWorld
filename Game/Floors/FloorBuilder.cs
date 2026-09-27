@@ -196,7 +196,7 @@ public static class FloorBuilder
     }
 
     /// <summary>Scans outward from origin in expanding square rings for the first on-map, unoccupied, unblocked Ground cell, falling back to origin itself if the whole map is full.</summary>
-    private static Vector3Int FindFreeGroundCellNear(Game.World.World world, Vector3Int origin)
+    public static Vector3Int FindFreeGroundCellNear(Game.World.World world, Vector3Int origin)
     {
         if (IsFreeGroundCell(world, origin))
         {

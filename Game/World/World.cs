@@ -437,6 +437,9 @@ public sealed class World(Map map) : IMapQuery, IPlayerQuery
 
     public bool IsOnMap(Vector3Int coordinates) => Map.Contains(coordinates);
 
+    /// <inheritdoc cref="IMapQuery"/>
+    public bool IsNeighborhoodLoaded(int cellX, int cellY) => Map.IsNeighborhoodLoaded(cellX, cellY);
+
     /// <summary>
     /// True only if the whole cube is on the map, so multi-tile entities never move
     /// partially off it. Size is an extent, not an inclusive far corner -- a cube occupies
