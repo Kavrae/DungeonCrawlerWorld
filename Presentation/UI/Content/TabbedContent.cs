@@ -100,7 +100,7 @@ public sealed class TabbedContent(IReadOnlyList<TabbedContent.TabDefinition> tab
         {
             Hierarchy = new ElementHierarchyOptions { CanContainChildren = true },
             Layout = new ElementLayoutOptions { RelativePosition = Vector2.Zero, Size = new Vector2(HeaderStripWidth(hostWindow.ContentSize.X), TabHeaderHeight), DisplayMode = ElementDisplayMode.Fixed, IsTransparent = true },
-            Chrome = new ElementChromeOptions { ShowBorder = false, ShowTitle = false, CanUserScrollHorizontal = true, CanUserFocus = false },
+            Chrome = new ElementChromeOptions { ShowBorder = false, ShowTitle = false, CanUserScrollHorizontal = true, ScrollbarVisibility = ScrollbarVisibility.Hidden, CanUserFocus = false },
         });
         // A tab strip's own tiles must flush-tile edge to edge (like any real tab bar) and stay
         // aligned with the sibling search box beside it -- the generic ContentPadding this Window

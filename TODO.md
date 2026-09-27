@@ -134,6 +134,16 @@ soft even after the fix.
 
 ### Low Priority
 
+#### Partial module replacement
+
+A mod that replaces a built-in module by `Id` currently replaces all of it and must register every
+component the built-in did (the replacement contract, see `PLAN-module-dependencies.md`). Let a mod
+replace only the systems, only the components, or both. Whatever it doesn't replace comes from the
+original module. For example, a mod could swap `SimpleHealthRegenSystem` for its own regen rule and
+keep `HealthModule`'s pools and every other system. Open questions: how finely systems can be
+replaced (per system or the whole set), how a replaced system keeps its place in the run order, and
+how a component replacement with a different merge action is checked against what depends on it.
+
 #### Equipment (Engine)
 
 Slot/equip-unequip mechanics -- move an `InventoryItemStackComponent` stack into a slot, no new storage
@@ -453,21 +463,6 @@ Flat per-entity today (Goblin 54, Fairy/Ghost 48, Player 20, +Engineer 10%). Ler
 `ActionLockGate.StandardLockFrames` (1s) at Dex 1 down to 0.25s at Dex 300, off
 `AbilityScoreComponent.Total` (same shape as `PotionCooldownEffects.ComputeDurationFrames`). Must
 compose with, not replace, the racial baseline -- exact composition (multiply vs. replace) undecided.
-
-#### Faster player movement, much more frequent enemy movement
-
-Two tuning changes:
-- **Player slightly faster**: the player's step lock is Human's `StandardLockFrames` (30, via
-  `Human.cs` -- `PlayerKit` doesn't override it; the Dexterity entry above still says "Player
-  20", which is out of date). That same field is also the post-attack global lock, so lowering it
-  speeds up attacks too. Use `StatModifierTarget.MovementLockFrames` instead (already applied in
-  `MovementSystem` on top of the base) for a movement-only change.
-- **Enemies move far more often**: `TestCombatBehaviorSystem.DecideWander` flips a coin every
-  decision, and the "don't move" side sets `FramesToWait = MovementCandidates.FramesToWaitIfNoOptions`
-  (120 frames). That constant was meant for "every direction blocked", not idling. Give idle its own
-  shorter wait and/or weight the roll toward moving. Performance check: more enemy moves means more
-  `EntityMovedEvent`s and more `ProcessingTierSystem`/aura exposure re-evaluation -- benchmark
-  before/after with the `phase-performance-testing` skill.
 
 #### Spell leveling
 
@@ -895,11 +890,6 @@ No item has weight; storage is unlimited. Add a carry-capacity limit off `Abilit
 (Strength), gate pickup on it. Depends on the Item weight (Presentation, below) item for the weight
 field itself.
 
-#### Mana
-
-Current/max pool + regen, `SimpleHealthComponent` as the template. Heal should cost 2 MP, Magic Missile
-5 MP once this lands (both free today). Starting `MaximumMana` = Intelligence `Total`.
-
 #### Scroll and spell durations scaling with Intelligence
 
 Duration-based effects (buffs, DoTs) should scale with caster Intelligence, same shape as
@@ -999,6 +989,25 @@ when its Phase 2 lands.
 Refuse loot box opening (Activate/double-click, see `PLAN-loot-boxes.md`) unless the player is standing
 in a Safe Room, with clear feedback (disabled "Activate" with a reason) rather than a silent no-op.
 Blocked on first creating Safe Rooms and zones -- no zone concept exists yet.
+
+#### Lootbox drop tables
+
+Every loot box currently drops a single stack of 1-10 of one item picked uniformly from the whole item
+catalog, regardless of type or rarity (the placeholder `RandomSingleStackContents` in `PLAN-loot-boxes.md`).
+Replace it with real drop tables: type decides which items can appear (Alchemist -> potions, Weapon ->
+weapons, ...), rarity decides their value (e.g. a Gold value budget per rarity), and a box can be either
+set contents (specific rewards) or a random pull from its table. Needs higher-value items to exist
+before rarities above Gold mean anything -- today every item is worth 1-20 Gold.
+
+#### Advanced boss loot box awards
+
+A boss currently grants at most one box, and only when the player lands the killing blow
+(`BossLootboxAwarder`, see `PLAN-loot-boxes.md`). Award boxes per contribution instead -- different
+boxes for landing the killing blow, dealing the most damage, starting the fight, etc. -- so one fight
+can grant the player several. Needs per-fight damage/participation tracking; shares that need with
+"Corpse looting rights based on damage dealt". Also decide how an active quest's own award for killing a
+specific boss (a `LootboxReward` with a content override, e.g. an item thematic to that boss and quest)
+combines with the boss's own box -- replaces it or adds to it.
 
 #### NPC component
 
@@ -1651,9 +1660,13 @@ extending the same idea to `Window.TitleText`: no -- title text is a separate, s
 mechanism not built on `TextWindow` at all; rebuilding it on shared infra to support copying mostly-short
 static labels is a much bigger change for low value.
 
-#### Scrollbars
+#### Scroll buttons for narrow content
 
-Scrolling itself works (mouse wheel), but no visual affordance -- no thumb, no track, no click-drag.
+For narrow scrollable content with no room for a scrollbar (see IMPLEMENTATION-NOTES.md "Scrollbars"), e.g.
+TabbedContent's tab strip, which is only `TabHeaderHeight` tall: give up a little content space at each
+end for a pair of scroll buttons (◀ ▶ / ▲ ▼) instead. Such an element would use
+`ScrollbarVisibility.Hidden` today. Show the buttons only while that axis overflows, disable each one at
+its end of the range, and scroll a step per click, repeating while held.
 
 #### Review MapWindow for properties that belong on MapViewState instead
 

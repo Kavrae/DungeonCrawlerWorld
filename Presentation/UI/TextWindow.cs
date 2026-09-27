@@ -92,12 +92,13 @@ public class TextWindow(FontService fontService, ElementPoolService elementPoolS
         // sibling on top of this one instead of below it. Confirmed by reproduction: a
         // goblin-engineer-plus-dirt tile's dirt component windows overlapping each other, but
         // only once the goblin engineer's own (longer) text pushed dirt's block far enough down.
-        var maximumContentWidth = System.Math.Max(0, ParentElement is not null
+        var scrollbarGutterSize = ScrollbarGutterSize;
+        var maximumContentWidth = System.Math.Max(0, (ParentElement is not null
             ? _geometry.MaximumSize.X - _geometry.RelativePosition.X - BorderInsetDoubled.X
-            : _geometry.MaximumSize.X - BorderInsetDoubled.X);
+            : _geometry.MaximumSize.X - BorderInsetDoubled.X) - scrollbarGutterSize.X);
         var maximumContentHeight = System.Math.Max(0, (ParentElement is not null
             ? _geometry.MaximumSize.Y - _geometry.RelativePosition.Y
-            : _geometry.MaximumSize.Y) - BorderInsetDoubled.Y - HeaderInsetHeight);
+            : _geometry.MaximumSize.Y) - BorderInsetDoubled.Y - HeaderInsetHeight - scrollbarGutterSize.Y);
 
         // Wrap against the maximum first (this is the width word-wrap decisions need), then
         // shrink the window itself to the widest line that wrapping actually produced --
@@ -129,16 +130,16 @@ public class TextWindow(FontService fontService, ElementPoolService elementPoolS
         // nothing else sets it for this element. Without this, every WrapContent TextWindow/
         // TextBox/Tooltip (every hover popup and notification in the game) draws its own
         // background at a stale, zero-initialized size -- fully invisible.
-        _contentState.BackgroundSize = _contentState.Size;
+        _contentState.BackgroundSize = _contentState.Size + scrollbarGutterSize;
 
-        _geometry.CurrentSize = _contentState.Size;
+        _geometry.CurrentSize = _contentState.BackgroundSize;
         if (_headerState.ShowHeader)
         {
             // Resize horizontally to fit the new content size, but keep the vertical size --
             // OriginalSize.Y as-is, not shrunk by BorderInset.Y (a stray subtraction that used to
             // sit here undersized every WrapContent TextWindow/Tooltip's own title bar relative to
             // what Window.Build actually measured it at, most visible once WindowTitleFontSize grew).
-            _headerState.Size = new Vector2(_contentState.Size.X, _headerState.OriginalSize.Y);
+            _headerState.Size = new Vector2(_contentState.BackgroundSize.X, _headerState.OriginalSize.Y);
             _geometry.CurrentSize.Y += _headerState.Size.Y;
         }
         _geometry.CurrentSize += BorderInsetDoubled;
@@ -208,6 +209,8 @@ public class TextWindow(FontService fontService, ElementPoolService elementPoolS
         // positions/title button positions stale (still reflecting the size before the
         // text change) even though CurrentSize/ContentSize above were already correct.
         Arrange();
+
+        SettleScrollbarsOutsideMeasure();
     }
 
     protected override void OnContentClickAction(Point mousePosition)

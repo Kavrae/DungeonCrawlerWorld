@@ -73,6 +73,7 @@ public sealed class Tooltip(FontService fontService, ElementPoolService elementP
         // never actually needs to scroll, so this shouldn't introduce a visible scrollbar -- it's
         // only here for whatever rendering-path difference RequiresContentViewport itself causes.
         CanUserScrollVertical = true;
+        ScrollbarVisibility = ScrollbarVisibility.Hidden;
     }
 
     /// <summary>

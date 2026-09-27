@@ -15,4 +15,10 @@ internal static class WindowChrome
 
     /// <summary>Generic thickness of a thin divider/separator line.</summary>
     public static float SeparatorHeight = 1f;
+
+    /// <summary>Width of a vertical scrollbar, height of a horizontal one, and the gutter either reserves.</summary>
+    public static float ScrollbarThickness = 8f;
+
+    /// <summary>Shortest a scrollbar thumb gets, however long the content is.</summary>
+    public static float ScrollbarMinimumThumbLength = 16f;
 }

@@ -58,6 +58,18 @@ internal static class WindowPalette
     /// <summary>Generic dark control background -- hotbar slots, GridControl's own tiles/buttons, TabbedContent's tab tiles. Collapses what used to be three independently-drifted near-duplicates (45/48-ish dark grays).</summary>
     public static Color ControlBackground = new(45, 45, 45);
 
+    /// <summary>Scrollbar track, and the corner square where two tracks meet.</summary>
+    public static Color ScrollbarTrackColor = new(25, 25, 25);
+
+    /// <summary>Scrollbar thumb.</summary>
+    public static Color ScrollbarThumbColor = new(120, 120, 120);
+
+    /// <summary>Scrollbar thumb under the cursor.</summary>
+    public static Color ScrollbarThumbHoverColor = new(160, 160, 160);
+
+    /// <summary>Scrollbar thumb being dragged.</summary>
+    public static Color ScrollbarThumbPressedColor = new(200, 200, 200);
+
     /// <summary>Ability score column background color.</summary>
     public static Color AbilityScoreColumnBackground = new(45, 45, 45);
 

@@ -271,6 +271,7 @@ public static class ShellBootstrapper
                 ShowTitle = false,
                 CanUserScrollHorizontal = true,
                 CanUserScrollVertical = true,
+                ScrollbarVisibility = ScrollbarVisibility.Hidden,
             },
         });
         mapWindow.Initialize();

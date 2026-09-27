@@ -8,6 +8,8 @@ internal enum ElementDragInteractionKind : byte
     None,
     Move,
     Resize,
+    ScrollThumb,
+    ScrollTrack,
 }
 
 /// <summary>
@@ -18,15 +20,18 @@ internal enum ElementDragInteractionKind : byte
 /// only when nothing was hit at all; it's still set (with Kind None) for a plain button/title/
 /// content click, since that still needs to raise the window to front.
 /// </summary>
-internal readonly record struct ElementInteraction(ElementDragInteractionKind Kind, Element? Element, ResizeEdges Edges, Button? Button)
+internal readonly record struct ElementInteraction(ElementDragInteractionKind Kind, Element? Element, ResizeEdges Edges, Button? Button, ScrollbarPart ScrollbarPart)
 {
-    public static readonly ElementInteraction NotHit = new(ElementDragInteractionKind.None, null, ResizeEdges.None, null);
+    public static readonly ElementInteraction NotHit = new(ElementDragInteractionKind.None, null, ResizeEdges.None, null, ScrollbarPart.None);
 
-    public static ElementInteraction ButtonClick(Element element, Button button) => new(ElementDragInteractionKind.None, element, ResizeEdges.None, button);
+    public static ElementInteraction ButtonClick(Element element, Button button) => new(ElementDragInteractionKind.None, element, ResizeEdges.None, button, ScrollbarPart.None);
 
-    public static ElementInteraction Click(Element element) => new(ElementDragInteractionKind.None, element, ResizeEdges.None, null);
+    public static ElementInteraction Click(Element element) => new(ElementDragInteractionKind.None, element, ResizeEdges.None, null, ScrollbarPart.None);
 
-    public static ElementInteraction Move(Element element) => new(ElementDragInteractionKind.Move, element, ResizeEdges.None, null);
+    public static ElementInteraction Move(Element element) => new(ElementDragInteractionKind.Move, element, ResizeEdges.None, null, ScrollbarPart.None);
 
-    public static ElementInteraction Resize(Element element, ResizeEdges edges) => new(ElementDragInteractionKind.Resize, element, edges, null);
+    public static ElementInteraction Resize(Element element, ResizeEdges edges) => new(ElementDragInteractionKind.Resize, element, edges, null, ScrollbarPart.None);
+
+    public static ElementInteraction Scrollbar(Element element, ScrollbarPart part) =>
+        new(part.IsThumb() ? ElementDragInteractionKind.ScrollThumb : ElementDragInteractionKind.ScrollTrack, element, ResizeEdges.None, null, part);
 }

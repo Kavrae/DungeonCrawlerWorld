@@ -1293,6 +1293,43 @@ regardless of overflow, flushing the whole frame's batch early. Fixed: (1) `Elem
 child-scissor pass only runs when `_children.Count > 0`; (2) `NotificationCenter.ShowActive` turns
 scrolling back off post-`Initialize()` if `MaxScrollOffset` is 0.
 
+### Scrollbars
+
+- **Visibility**: `ScrollbarVisibility` on `ElementChromeOptions`, `Auto` by default. A bar shows on an
+  axis only while that axis is scrollable and overflowing (`MaxScrollOffset` > 0.5 px). `Hidden` still
+  scrolls with the wheel but never draws or reserves anything: MapWindow (its camera is its own
+  scroll), Tooltip (forces `CanUserScrollVertical` as a render-path workaround) and TabbedContent's
+  tab strip (too short for a bar; see TODO.md "Scroll buttons for narrow content").
+- **Gutter, only while shown**: a shown bar takes `WindowChrome.ScrollbarThickness` (8 px) out of
+  `ContentSize` along the right/bottom of the content background, so content reflows instead of
+  being covered. Rejected: overlay (covers the rightmost grid cells/text) and an always-reserved
+  gutter (wastes space on windows that fit, doubles up on the nested Inventory body/grid pair).
+- **Settle loop** in `Element.Measure`: size, measure children, recompute scroll bounds, and
+  re-measure if `Auto` now wants a different bar state -- at most once more per axis (Debug.Fail
+  past that). It converges because content only grows as its width shrinks.
+  - Changes found outside `Measure` (`AddChild`/`RemoveChild`, child `Resized`,
+    `TextWindow.UpdateText`) go through `SettleScrollbarsOutsideMeasure`. It does nothing inside the
+    element's own `Measure` (`_measureDepth`), and defers to the end of an open `BeginLayoutBatch`.
+  - WrapContent: only `TextWindow`'s capped WrapContent scrolls. It adds the gutter within its own
+    `MaximumSize`.
+- **`ContentResized`**: raised at the end of `Measure` whenever `ContentSize` changed. A gutter
+  changes `ContentSize` without `CurrentSize`, so `Resized` misses it. Anything laying children out
+  from `ContentSize` should listen to it: `InventoryGridContent` does. Its `RebuildCells` runs in a
+  layout batch and loops, rather than re-entering, when a rebuild is requested during one.
+- **Input**:
+  - `ElementDragInteractionKind.ScrollThumb`/`ScrollTrack` carry an `ElementInteraction.ScrollbarPart`.
+  - Thumb drag is measured from the offset at press (`Element.DragScrollbarThumb`).
+  - Track press pages one visible length toward the cursor. Held, it repeats after 0.4 s every
+    0.05 s, only in the press's own direction, so rounding can't make it page back and forth.
+  - Precedence: an element's own bars before its children. A bar inside a resizable ancestor's
+    10 px resize band wins over resize (`TryHitTestScrollbar`), except in the corners.
+  - A bar press raises the window but never changes focus or fires a click.
+  - Hover and pressed thumb colours are in `WindowPalette`. The cursor over a bar is Arrow, TextBox
+    included.
+- **Wheel**: vertical by default. Horizontal when the element only scrolls horizontally, when Shift
+  is held, or over its horizontal bar -- each only if horizontal scrolling is allowed at all.
+- **Not planned**: keyboard scrolling (PageUp/PageDown/Home/End), arrow buttons on bars.
+
 ## Pause modality
 
 `UiLayerStack`'s "menu mode" already implements the generalized modal concept TODO.md's old "Pause

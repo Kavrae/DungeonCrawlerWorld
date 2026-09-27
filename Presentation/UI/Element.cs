@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using Microsoft.Xna.Framework;
 using Microsoft.Xna.Framework.Graphics;
 using Microsoft.Xna.Framework.Input;
@@ -51,6 +52,10 @@ public class Element
     /// the way they were before the two-pass split.
     /// </summary>
     public event Action<Element>? Resized;
+
+    /// <summary>Raised when ContentSize actually changes, including when a scrollbar gutter appears or disappears without the element itself resizing.</summary>
+    /// <remarks>Fires at the end of Measure, after Resized. A consumer that lays children out from ContentSize (e.g. a grid choosing its column count) should listen to this rather than Resized.</remarks>
+    public event Action<Element>? ContentResized;
 
     /// <summary>Raised when the element's absolute screen position actually changes.</summary>
     public event Action<Element>? Moved;
@@ -369,6 +374,31 @@ public class Element
     protected Vector2 _maxScrollOffset;
     public Vector2 MaxScrollOffset => _maxScrollOffset;
 
+    /*========Scrollbars========*/
+    private protected readonly ElementScrollbarState _scrollbars = new();
+
+    public ScrollbarVisibility ScrollbarVisibility { get => _scrollbars.Visibility; set => _scrollbars.Visibility = value; }
+    public bool ShowVerticalScrollbar => _scrollbars.ShowVertical;
+    public bool ShowHorizontalScrollbar => _scrollbars.ShowHorizontal;
+    public Rectangle VerticalScrollbarTrackRectangle => _scrollbars.VerticalTrackRectangle;
+    public Rectangle VerticalScrollbarThumbRectangle => _scrollbars.VerticalThumbRectangle;
+    public Rectangle HorizontalScrollbarTrackRectangle => _scrollbars.HorizontalTrackRectangle;
+    public Rectangle HorizontalScrollbarThumbRectangle => _scrollbars.HorizontalThumbRectangle;
+
+    /// <summary>Space the shown scrollbars take out of the content area: X for a vertical bar, Y for a horizontal one.</summary>
+    protected Vector2 ScrollbarGutterSize => new(
+        _scrollbars.ShowVertical ? WindowChrome.ScrollbarThickness : 0f,
+        _scrollbars.ShowHorizontal ? WindowChrome.ScrollbarThickness : 0f);
+
+    /// <summary>Overflow below this many pixels doesn't earn a scrollbar.</summary>
+    private const float ScrollbarOverflowThreshold = 0.5f;
+
+    /// <summary>Re-measures Measure may run after the first to settle which bars show -- one per axis.</summary>
+    private const int MaximumScrollbarSettlePasses = 2;
+
+    /// <summary>How many of this element's own Measure calls are in progress; a scrollbar change found by a child event while measuring is left to Measure's own settle loop.</summary>
+    private int _measureDepth;
+
     public Element(FontService fontService, ElementPoolService elementPoolService, LabelRenderer labelRenderer)
     {
         ArgumentNullException.ThrowIfNull(fontService);
@@ -457,6 +487,13 @@ public class Element
         /*========Scroll========*/
         _scrollOffset = Vector2.Zero;
         _maxScrollOffset = Vector2.Zero;
+
+        /*========Scrollbars========*/
+        _scrollbars.Visibility = chrome?.ScrollbarVisibility ?? ScrollbarVisibility.Auto;
+        _scrollbars.ShowVertical = false;
+        _scrollbars.ShowHorizontal = false;
+        _scrollbars.HoveredPart = ScrollbarPart.None;
+        _scrollbars.PressedPart = ScrollbarPart.None;
     }
 
     public virtual void Initialize()
@@ -691,7 +728,156 @@ public class Element
             {
                 GlowRenderer.Draw(spriteBatch, unitRectangle, _contentState.Rectangle, _overlayGlowColor, _overlayGlowMode);
             }
+
+            if (_scrollbars.ShowVertical || _scrollbars.ShowHorizontal)
+            {
+                DrawScrollbars(spriteBatch, unitRectangle);
+            }
         }
+    }
+
+    private void DrawScrollbars(SpriteBatch spriteBatch, Texture2D unitRectangle)
+    {
+        if (_scrollbars.ShowVertical)
+        {
+            spriteBatch.Draw(unitRectangle, _scrollbars.VerticalTrackRectangle, WindowPalette.ScrollbarTrackColor);
+            spriteBatch.Draw(unitRectangle, _scrollbars.VerticalThumbRectangle, GetScrollbarThumbColor(ScrollbarPart.VerticalThumb));
+        }
+
+        if (_scrollbars.ShowHorizontal)
+        {
+            spriteBatch.Draw(unitRectangle, _scrollbars.HorizontalTrackRectangle, WindowPalette.ScrollbarTrackColor);
+            spriteBatch.Draw(unitRectangle, _scrollbars.HorizontalThumbRectangle, GetScrollbarThumbColor(ScrollbarPart.HorizontalThumb));
+        }
+
+        if (_scrollbars.ShowVertical && _scrollbars.ShowHorizontal)
+        {
+            spriteBatch.Draw(unitRectangle, _scrollbars.CornerRectangle, WindowPalette.ScrollbarTrackColor);
+        }
+    }
+
+    private Color GetScrollbarThumbColor(ScrollbarPart thumb) =>
+        _scrollbars.PressedPart == thumb
+            ? WindowPalette.ScrollbarThumbPressedColor
+            : _scrollbars.HoveredPart == thumb
+                ? WindowPalette.ScrollbarThumbHoverColor
+                : WindowPalette.ScrollbarThumbColor;
+
+    internal void SetScrollbarHoveredPart(ScrollbarPart part) => _scrollbars.HoveredPart = part;
+
+    internal void SetScrollbarPressedPart(ScrollbarPart part) => _scrollbars.PressedPart = part;
+
+    internal ScrollbarPart ScrollbarHoveredPart => _scrollbars.HoveredPart;
+
+    internal ScrollbarPart ScrollbarPressedPart => _scrollbars.PressedPart;
+
+    /// <summary>Which of this element's own shown scrollbars (not its children's) is under position.</summary>
+    internal ScrollbarPart GetScrollbarPartAt(Point position)
+    {
+        if (_geometry.DisplayMode == ElementDisplayMode.Minimized)
+        {
+            return ScrollbarPart.None;
+        }
+
+        if (_scrollbars.ShowVertical)
+        {
+            if (_scrollbars.VerticalThumbRectangle.Contains(position))
+            {
+                return ScrollbarPart.VerticalThumb;
+            }
+            if (_scrollbars.VerticalTrackRectangle.Contains(position))
+            {
+                return ScrollbarPart.VerticalTrack;
+            }
+        }
+
+        if (_scrollbars.ShowHorizontal)
+        {
+            if (_scrollbars.HorizontalThumbRectangle.Contains(position))
+            {
+                return ScrollbarPart.HorizontalThumb;
+            }
+            if (_scrollbars.HorizontalTrackRectangle.Contains(position))
+            {
+                return ScrollbarPart.HorizontalTrack;
+            }
+        }
+
+        return ScrollbarPart.None;
+    }
+
+    /// <summary>The topmost scrollbar anywhere in this element's subtree under position, or NotHit.</summary>
+    /// <remarks>An element's own bars are checked before its children's, the same order TryHitTestInteraction uses: they sit in its gutter, outside the content area its children are clipped to.</remarks>
+    internal ElementInteraction TryHitTestScrollbar(Point position)
+    {
+        if (!IsHitTestable || !_geometry.Rectangle.Contains(position))
+        {
+            return ElementInteraction.NotHit;
+        }
+
+        var ownPart = GetScrollbarPartAt(position);
+        if (ownPart != ScrollbarPart.None)
+        {
+            return ElementInteraction.Scrollbar(this, ownPart);
+        }
+
+        for (var index = _children.Count - 1; index >= 0; index--)
+        {
+            var childInteraction = _children[index].TryHitTestScrollbar(position);
+            if (childInteraction.Element is not null)
+            {
+                return childInteraction;
+            }
+        }
+
+        return ElementInteraction.NotHit;
+    }
+
+    /// <summary>Scrolls to an absolute offset, clamped the same way ScrollBy clamps.</summary>
+    public void ScrollTo(Vector2 scrollOffset) => ScrollBy(scrollOffset - _scrollOffset);
+
+    /// <summary>Scrolls so the thumb sits where it started a drag, moved by the mouse's total movement along its axis since then.</summary>
+    /// <remarks>Measured from the offset at the start of the drag rather than accumulated per frame, the same anchor MapWindow's right-drag pan uses, so clamping at either end never loses ground.</remarks>
+    internal void DragScrollbarThumb(ScrollbarPart thumb, Vector2 dragStartScrollOffset, Vector2 totalMouseDelta)
+    {
+        if (thumb.IsVertical())
+        {
+            var thumbTravel = _scrollbars.VerticalTrackRectangle.Height - _scrollbars.VerticalThumbRectangle.Height;
+            if (thumbTravel > 0)
+            {
+                ScrollTo(new Vector2(_scrollOffset.X, dragStartScrollOffset.Y + totalMouseDelta.Y * _maxScrollOffset.Y / thumbTravel));
+            }
+        }
+        else
+        {
+            var thumbTravel = _scrollbars.HorizontalTrackRectangle.Width - _scrollbars.HorizontalThumbRectangle.Width;
+            if (thumbTravel > 0)
+            {
+                ScrollTo(new Vector2(dragStartScrollOffset.X + totalMouseDelta.X * _maxScrollOffset.X / thumbTravel, _scrollOffset.Y));
+            }
+        }
+    }
+
+    /// <summary>-1 if position is before the track's thumb along its axis, 1 if after, 0 if level with it.</summary>
+    internal int GetScrollbarPageDirectionToward(ScrollbarPart track, Point position)
+    {
+        if (track.IsVertical())
+        {
+            var thumb = _scrollbars.VerticalThumbRectangle;
+            return position.Y < thumb.Top ? -1 : position.Y >= thumb.Bottom ? 1 : 0;
+        }
+
+        var horizontalThumb = _scrollbars.HorizontalThumbRectangle;
+        return position.X < horizontalThumb.Left ? -1 : position.X >= horizontalThumb.Right ? 1 : 0;
+    }
+
+    /// <summary>Scrolls one visible length along the track's axis, backward for a negative direction and forward for a positive one.</summary>
+    internal void PageScrollbar(ScrollbarPart track, int direction)
+    {
+        var pageDelta = track.IsVertical()
+            ? new Vector2(0, _contentState.Size.Y)
+            : new Vector2(_contentState.Size.X, 0);
+        ScrollBy(pageDelta * System.Math.Sign(direction));
     }
 
     /// <summary>Shared by every scrollable element's own children-clip pass in Draw -- ScissorTestEnable is off by default on every other RasterizerState this codebase uses, so this needs to be its own instance rather than a tweaked copy of an existing one.</summary>
@@ -965,6 +1151,9 @@ public class Element
     /// </summary>
     private bool HasFreePosition => _parent is null || _parent.ChildElementTileMode == ChildElementTileMode.Floating;
 
+    private static bool IsResizeCorner(ResizeEdges edges) =>
+        (edges & (ResizeEdges.Top | ResizeEdges.Bottom)) != 0 && (edges & (ResizeEdges.Left | ResizeEdges.Right)) != 0;
+
     internal ElementInteraction TryHitTestInteraction(Point position)
     {
         // An invisible element (and, since this recurses, its whole subtree) is never a valid
@@ -998,8 +1187,22 @@ public class Element
             var edges = GetResizeEdgesAt(position);
             if (edges != ResizeEdges.None)
             {
+                // A scrollbar near this element's edge (its own, or a child column's) sits inside
+                // the resize grab band and would be ungrabbable if resize always won -- the bar is
+                // the thing actually drawn there. Corners stay resize: two-axis resize lives there.
+                if (!IsResizeCorner(edges) && TryHitTestScrollbar(position) is { Element: not null } scrollbarInteraction)
+                {
+                    return scrollbarInteraction;
+                }
+
                 return ElementInteraction.Resize(this, edges);
             }
+        }
+
+        var ownScrollbarPart = GetScrollbarPartAt(position);
+        if (ownScrollbarPart != ScrollbarPart.None)
+        {
+            return ElementInteraction.Scrollbar(this, ownScrollbarPart);
         }
 
         for (var index = _children.Count - 1; index >= 0; index--)
@@ -1099,7 +1302,7 @@ public class Element
         // single AddChild in a loop that's about to add several more.
         if (_geometry.DisplayMode == ElementDisplayMode.WrapContent)
         {
-            RefitWrapContentSizeNowOrDeferToLayoutBatch();
+            MeasureAndArrangeNowOrDeferToLayoutBatch();
         }
 
         // A scrollable parent's own MaxScrollOffset depends on its children's total extent the
@@ -1111,6 +1314,7 @@ public class Element
         {
             newChild.Resized += OnChildElementResizedForScrollBounds;
             RecalculateScrollBoundsFromChildren();
+            SettleScrollbarsOutsideMeasure();
         }
     }
 
@@ -1135,23 +1339,24 @@ public class Element
         // around the removed child; other modes don't depend on children for sizing.
         if (_geometry.DisplayMode == ElementDisplayMode.WrapContent)
         {
-            RefitWrapContentSizeNowOrDeferToLayoutBatch();
+            MeasureAndArrangeNowOrDeferToLayoutBatch();
         }
 
         if (CanUserScrollVertical || CanUserScrollHorizontal)
         {
             removedChild.Resized -= OnChildElementResizedForScrollBounds;
             RecalculateScrollBoundsFromChildren();
+            SettleScrollbarsOutsideMeasure();
         }
     }
 
     /// <summary>Depth of nested BeginLayoutBatch scopes currently open on this element -- 0 means none.</summary>
     private int _layoutBatchDepth;
 
-    /// <summary>Set by AddChild/RemoveChild when a WrapContent re-fit was suppressed because a layout batch was open -- tells the outermost scope's Dispose to actually perform the deferred MeasureAndArrange once, rather than unconditionally running one even when nothing was actually added/removed inside the batch.</summary>
+    /// <summary>Set by AddChild/RemoveChild when a WrapContent re-fit or a scrollbar change was suppressed because a layout batch was open -- tells the outermost scope's Dispose to actually perform the deferred MeasureAndArrange once, rather than unconditionally running one even when nothing was actually added/removed inside the batch.</summary>
     private bool _layoutBatchNeedsMeasureAndArrange;
 
-    private void RefitWrapContentSizeNowOrDeferToLayoutBatch()
+    private void MeasureAndArrangeNowOrDeferToLayoutBatch()
     {
         if (_layoutBatchDepth > 0)
         {
@@ -1209,7 +1414,31 @@ public class Element
         }
     }
 
-    private void OnChildElementResizedForScrollBounds(Element _) => RecalculateScrollBoundsFromChildren();
+    private void OnChildElementResizedForScrollBounds(Element _)
+    {
+        RecalculateScrollBoundsFromChildren();
+        SettleScrollbarsOutsideMeasure();
+    }
+
+    /// <summary>Re-measures this element if its MaxScrollOffset changed which scrollbars Auto calls for, outside of its own Measure.</summary>
+    /// <remarks>Inside Measure the settle loop handles it instead; inside a layout batch it's deferred to the batch's end, so clearing and refilling a grid re-measures once rather than flipping the bar on every child.</remarks>
+    private protected void SettleScrollbarsOutsideMeasure()
+    {
+        if (_measureDepth > 0 || _geometry.DisplayMode == ElementDisplayMode.Minimized || !AutoScrollbarVisibilityDiffers(out _, out _))
+        {
+            return;
+        }
+
+        MeasureAndArrangeNowOrDeferToLayoutBatch();
+    }
+
+    private bool AutoScrollbarVisibilityDiffers(out bool showVertical, out bool showHorizontal)
+    {
+        var isAuto = _scrollbars.Visibility == ScrollbarVisibility.Auto;
+        showVertical = isAuto && CanUserScrollVertical && _maxScrollOffset.Y > ScrollbarOverflowThreshold;
+        showHorizontal = isAuto && CanUserScrollHorizontal && _maxScrollOffset.X > ScrollbarOverflowThreshold;
+        return showVertical != _scrollbars.ShowVertical || showHorizontal != _scrollbars.ShowHorizontal;
+    }
 
     /// <summary>
     /// A scrollable parent's MaxScrollOffset is how far its children's total extent exceeds
@@ -1324,12 +1553,7 @@ public class Element
         var previousContentSize = _contentState.Size;
         _geometry.MaximumSize = availableSize;
 
-        if (_geometry.DisplayMode == ElementDisplayMode.WrapContent)
-        {
-            MeasureChildren(availableSize);
-            RecalculateWrapContentSize();
-        }
-        else if (_geometry.DisplayMode == ElementDisplayMode.Minimized)
+        if (_geometry.DisplayMode == ElementDisplayMode.Minimized)
         {
             // No MeasureChildren here -- a collapsed element has no real content area to
             // measure children against (RecalculateMinimizedSize deliberately zeroes
@@ -1345,47 +1569,88 @@ public class Element
         }
         else
         {
-            switch (_geometry.DisplayMode)
+            _measureDepth++;
+            try
             {
-                case ElementDisplayMode.Fixed:
-                    RecalculateFixedSize();
-                    break;
-                case ElementDisplayMode.Fill:
-                    RecalculateFillSize();
-                    break;
-                default:
-                    throw new NotImplementedException("No default display mode.");
+                for (var settlePass = 0; ; settlePass++)
+                {
+                    MeasureOwnSizeAndChildren(availableSize, previousContentSize, isSettlePass: settlePass > 0);
+
+                    if (!AutoScrollbarVisibilityDiffers(out var showVertical, out var showHorizontal))
+                    {
+                        break;
+                    }
+
+                    if (settlePass == MaximumScrollbarSettlePasses)
+                    {
+                        Debug.Fail("Scrollbar visibility did not settle -- content grew as the content area widened.");
+                        break;
+                    }
+
+                    _scrollbars.ShowVertical = showVertical;
+                    _scrollbars.ShowHorizontal = showHorizontal;
+                }
             }
-
-            // FooterHeight relaxation lives in ComputeChildAvailableSize itself (see its own doc
-            // comment), not here -- both this cascade and MeasureAndArrange's own first-measure
-            // call site route through it, so it only needs applying once.
-            MeasureChildren(_contentState.Size);
-
-            // AddChild/RemoveChild and a child's own Resized (OnChildElementResizedForScrollBounds)
-            // already keep a scrollable element's MaxScrollOffset in sync when a CHILD changes.
-            // Neither one fires when THIS element's own ContentSize changes with no child involved
-            // -- e.g. a Fixed-size scrollable window resized via SetBounds/drag-resize, whose
-            // children keep their own already-configured sizes on the scrollable axis (see
-            // MeasureAndArrange's own scrollable-axis exemption above). Left unhandled, shrinking
-            // such a window left MaxScrollOffset stale at its old (possibly zero) value, making the
-            // newly-hidden content unreachable by scrolling -- confirmed via HealthWindow's own
-            // resizable, independently-scrolling columns. Gated on having actual children: a
-            // childless scrollable element (TextWindow/TextBox, scrolling wrapped text rather than
-            // child Elements) already computes its own correct MaxScrollOffset from text metrics in
-            // its own RecalculateFixedSize/RecalculateFillSize/RecalculateWrapContentSize override
-            // (see TextWindow.UpdateScrollBounds) -- recalculating "from children" here as well
-            // would just zero it back out, clobbering that already-correct value with the fact that
-            // there's nothing to sum over.
-            if ((CanUserScrollVertical || CanUserScrollHorizontal) && _children.Count > 0 && _contentState.Size != previousContentSize)
+            finally
             {
-                RecalculateScrollBoundsFromChildren();
+                _measureDepth--;
             }
         }
 
         if (_geometry.CurrentSize != previousSize)
         {
             Resized?.Invoke(this);
+        }
+
+        if (_contentState.Size != previousContentSize)
+        {
+            ContentResized?.Invoke(this);
+        }
+    }
+
+    /// <summary>One pass of Measure for a non-Minimized element: its own size, its children, and (when its content size moved) its scroll bounds, all under the current scrollbar visibility.</summary>
+    private void MeasureOwnSizeAndChildren(Vector2 availableSize, Vector2 previousContentSize, bool isSettlePass)
+    {
+        switch (_geometry.DisplayMode)
+        {
+            case ElementDisplayMode.WrapContent:
+                MeasureChildren(availableSize);
+                RecalculateWrapContentSize();
+                break;
+            case ElementDisplayMode.Fixed:
+                RecalculateFixedSize();
+                MeasureChildren(_contentState.Size);
+                break;
+            case ElementDisplayMode.Fill:
+                RecalculateFillSize();
+                MeasureChildren(_contentState.Size);
+                break;
+            default:
+                throw new NotImplementedException("No default display mode.");
+        }
+
+        // FooterHeight relaxation lives in ComputeChildAvailableSize itself (see its own doc
+        // comment), not here -- both this cascade and MeasureAndArrange's own first-measure
+        // call site route through it, so it only needs applying once.
+
+        // AddChild/RemoveChild and a child's own Resized (OnChildElementResizedForScrollBounds)
+        // already keep a scrollable element's MaxScrollOffset in sync when a CHILD changes.
+        // Neither one fires when THIS element's own ContentSize changes with no child involved
+        // -- e.g. a Fixed-size scrollable window resized via SetBounds/drag-resize, whose
+        // children keep their own already-configured sizes on the scrollable axis (see
+        // MeasureAndArrange's own scrollable-axis exemption above). Left unhandled, shrinking
+        // such a window left MaxScrollOffset stale at its old (possibly zero) value, making the
+        // newly-hidden content unreachable by scrolling -- confirmed via HealthWindow's own
+        // resizable, independently-scrolling columns. Gated on having actual children: a
+        // childless scrollable element (TextWindow/TextBox, scrolling wrapped text rather than
+        // child Elements) already computes its own correct MaxScrollOffset from text metrics in
+        // its own RecalculateFixedSize/RecalculateFillSize/RecalculateWrapContentSize override
+        // (see TextWindow.UpdateScrollBounds) -- recalculating "from children" here as well
+        // would just zero it back out, clobbering that already-correct value with the fact that
+        // there's nothing to sum over.
+        if ((CanUserScrollVertical || CanUserScrollHorizontal) && _children.Count > 0 && (isSettlePass || _contentState.Size != previousContentSize))
+        {
+            RecalculateScrollBoundsFromChildren();
         }
     }
 
@@ -1554,7 +1819,7 @@ public class Element
         _contentState.BackgroundSize = new Vector2(
             _geometry.CurrentSize.X - BorderInsetDoubled.X,
             _geometry.CurrentSize.Y - BorderInsetDoubled.Y - HeaderInsetHeight);
-        _contentState.Size = _contentState.BackgroundSize - ChildContentPaddingDoubled - new Vector2(0, FooterHeight);
+        _contentState.Size = _contentState.BackgroundSize - ChildContentPaddingDoubled - new Vector2(0, FooterHeight) - ScrollbarGutterSize;
     }
 
     protected virtual void RecalculateFillSize()
@@ -1570,7 +1835,7 @@ public class Element
                 ? _headerState.Size
                 : Vector2.Zero)
             - BorderInsetDoubled;
-        _contentState.Size = _contentState.BackgroundSize - ChildContentPaddingDoubled - new Vector2(0, FooterHeight);
+        _contentState.Size = _contentState.BackgroundSize - ChildContentPaddingDoubled - new Vector2(0, FooterHeight) - ScrollbarGutterSize;
     }
 
     protected virtual void RecalculateWrapContentSize()
@@ -1654,6 +1919,70 @@ public class Element
         _viewport = new Viewport(_contentState.Rectangle);
 
         RecalculateBorderRectangles();
+        RecalculateScrollbarRectangles();
+    }
+
+    /// <summary>Tracks run along the right and bottom of the content background, above any footer; thumbs follow ScrollOffset, so this runs on every Arrange, including the one ScrollBy triggers.</summary>
+    private void RecalculateScrollbarRectangles()
+    {
+        var thickness = (int)WindowChrome.ScrollbarThickness;
+        var background = _contentState.BackgroundRectangle;
+        var trackBottom = background.Bottom - (int)FooterHeight;
+
+        if (_scrollbars.ShowVertical)
+        {
+            var trackHeight = trackBottom - background.Y - (_scrollbars.ShowHorizontal ? thickness : 0);
+            var track = new Rectangle(background.Right - thickness, background.Y, thickness, System.Math.Max(0, trackHeight));
+            var (thumbStart, thumbLength) = ComputeScrollbarThumbSpan(track.Y, track.Height, _contentState.Size.Y, _maxScrollOffset.Y, _scrollOffset.Y);
+            _scrollbars.VerticalTrackRectangle = track;
+            _scrollbars.VerticalThumbRectangle = new Rectangle(track.X, thumbStart, thickness, thumbLength);
+        }
+        else
+        {
+            _scrollbars.VerticalTrackRectangle = Rectangle.Empty;
+            _scrollbars.VerticalThumbRectangle = Rectangle.Empty;
+        }
+
+        if (_scrollbars.ShowHorizontal)
+        {
+            var trackWidth = background.Width - (_scrollbars.ShowVertical ? thickness : 0);
+            var track = new Rectangle(background.X, trackBottom - thickness, System.Math.Max(0, trackWidth), thickness);
+            var (thumbStart, thumbLength) = ComputeScrollbarThumbSpan(track.X, track.Width, _contentState.Size.X, _maxScrollOffset.X, _scrollOffset.X);
+            _scrollbars.HorizontalTrackRectangle = track;
+            _scrollbars.HorizontalThumbRectangle = new Rectangle(thumbStart, track.Y, thumbLength, thickness);
+        }
+        else
+        {
+            _scrollbars.HorizontalTrackRectangle = Rectangle.Empty;
+            _scrollbars.HorizontalThumbRectangle = Rectangle.Empty;
+        }
+
+        _scrollbars.CornerRectangle = _scrollbars.ShowVertical && _scrollbars.ShowHorizontal
+            ? new Rectangle(background.Right - thickness, trackBottom - thickness, thickness, thickness)
+            : Rectangle.Empty;
+    }
+
+    /// <summary>Start and length of a scrollbar thumb along its track: length proportional to how much of the content is visible (never below ScrollbarMinimumThumbLength), position proportional to how far it's scrolled.</summary>
+    internal static (int Start, int Length) ComputeScrollbarThumbSpan(int trackStart, int trackLength, float visibleLength, float maxScrollOffset, float scrollOffset)
+    {
+        if (trackLength <= 0)
+        {
+            return (trackStart, 0);
+        }
+
+        if (maxScrollOffset <= 0f)
+        {
+            return (trackStart, trackLength);
+        }
+
+        var clampedVisibleLength = System.Math.Max(0f, visibleLength);
+        var proportionalLength = trackLength * clampedVisibleLength / (clampedVisibleLength + maxScrollOffset);
+        var minimumLength = System.Math.Min(WindowChrome.ScrollbarMinimumThumbLength, trackLength);
+        var thumbLength = (int)MathF.Round(System.Math.Clamp(proportionalLength, minimumLength, trackLength));
+        var scrolledFraction = System.Math.Clamp(scrollOffset / maxScrollOffset, 0f, 1f);
+        var thumbStart = trackStart + (int)MathF.Round((trackLength - thumbLength) * scrolledFraction);
+
+        return (thumbStart, thumbLength);
     }
 
     private void RecalculateBorderRectangles()

@@ -106,6 +106,8 @@ public sealed class InventoryGridContent(
     private InventoryItemStackCell? _hoveredCell;
     private int _hoveredFrames;
     private bool _closeHookupSubscribed;
+    private bool _isRebuildingCells;
+    private bool _isRebuildCellsRequestedDuringRebuild;
 
     private InventorySortOrder _sortOrder = InventorySortOrder.NameAscending;
     private string _nameFilter = string.Empty;
@@ -234,7 +236,7 @@ public sealed class InventoryGridContent(
     public void Initialize(Window hostWindow)
     {
         _hostWindow = hostWindow;
-        hostWindow.Resized += OnHostWindowResized;
+        hostWindow.ContentResized += OnHostWindowContentResized;
 
         // Never assigned via hostWindow.SetContent (see this class's other consumer,
         // InventoryTabContent, whose own doc comment explains why: this instance's own Update is
@@ -662,7 +664,7 @@ public sealed class InventoryGridContent(
         tooltipController.Hide(this);
     }
 
-    private void OnHostWindowResized(Element _) => RebuildCells();
+    private void OnHostWindowContentResized(Element _) => RebuildCells();
 
     /// <summary>
     /// Clicking a badged (merged) cell expands its item id. A real single-stack cell click
@@ -879,7 +881,42 @@ public sealed class InventoryGridContent(
         }
     }
 
+    /// <summary>Rebuilds every cell, again if the host's content width changed while doing so.</summary>
+    /// <remarks>
+    /// Filling the grid can make it overflow, which shows the host's scrollbar, which narrows its
+    /// content and changes the column count -- raising ContentResized back into this method. That
+    /// nested request is recorded and served by another pass once the current one finishes, rather
+    /// than rebuilding the cells out from under the pass still adding them. The layout batch makes
+    /// the host settle its scrollbar once per pass instead of on every cell closed or added.
+    /// </remarks>
     private void RebuildCells()
+    {
+        if (_isRebuildingCells)
+        {
+            _isRebuildCellsRequestedDuringRebuild = true;
+            return;
+        }
+
+        _isRebuildingCells = true;
+        try
+        {
+            do
+            {
+                _isRebuildCellsRequestedDuringRebuild = false;
+                using (_hostWindow.BeginLayoutBatch())
+                {
+                    RebuildCellsForCurrentContentSize();
+                }
+            }
+            while (_isRebuildCellsRequestedDuringRebuild);
+        }
+        finally
+        {
+            _isRebuildingCells = false;
+        }
+    }
+
+    private void RebuildCellsForCurrentContentSize()
     {
         elementPoolService.CloseAllChildren(_hostWindow);
         _cells.Clear();

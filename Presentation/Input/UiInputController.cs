@@ -76,6 +76,23 @@ public sealed class UiInputController
     private Vector2 _dragStartRelativePosition;
     private Vector2 _dragStartSize;
 
+    /// <summary>Element.ScrollOffset captured at the start of a scrollbar thumb drag -- see Element.DragScrollbarThumb.</summary>
+    private Vector2 _dragStartScrollOffset;
+
+    /// <summary>Frames the mouse has been held on a scrollbar track since the press that paged it once.</summary>
+    private int _scrollTrackHeldFrames;
+
+    /// <summary>Which way the current scrollbar track press pages: -1 backward, 1 forward, 0 not at all (it landed level with the thumb).</summary>
+    private int _scrollTrackPageDirection;
+
+    /// <summary>Held this long on a scrollbar track, paging starts repeating -- the same timing as TextBox's key repeat.</summary>
+    private static readonly int ScrollTrackRepeatInitialDelayFrames = GameTiming.FramesForSeconds(0.4f);
+
+    private static readonly int ScrollTrackRepeatIntervalFrames = GameTiming.FramesForSeconds(0.05f);
+
+    /// <summary>The element whose scrollbar is currently under the cursor, if any -- see SetHoveredScrollbar.</summary>
+    private Element? _hoveredScrollbarElement;
+
     /// <summary>The element a right-mouse-button drag started over (hit-tested on press), or null while no right-drag is in progress -- see HandleRightDragStart/HandleRightDrag.</summary>
     private Element? _rightDragElement;
 
@@ -362,6 +379,18 @@ public sealed class UiInputController
         }
     }
 
+    /// <summary>Moves the scrollbar hover highlight to part of element, clearing it from whichever element had it -- see _hoveredButton for the same per-frame hover source.</summary>
+    private void SetHoveredScrollbar(Element? element, ScrollbarPart part)
+    {
+        if (!ReferenceEquals(element, _hoveredScrollbarElement))
+        {
+            _hoveredScrollbarElement?.SetScrollbarHoveredPart(ScrollbarPart.None);
+            _hoveredScrollbarElement = element;
+        }
+
+        _hoveredScrollbarElement?.SetScrollbarHoveredPart(part);
+    }
+
     /// <summary>The drag/resize interaction currently in progress (or ElementInteraction.NotHit if none). Move is wired to SetRelativePosition and Resize to SetBounds, both each held frame -- see ComputeResize for the resize math.</summary>
     internal ElementInteraction ActiveInteraction => _activeInteraction;
 
@@ -471,7 +500,7 @@ public sealed class UiInputController
             HandleRightDrag(mouseState);
         }
 
-        UpdateMouseWheelScroll(mouseState);
+        UpdateMouseWheelScroll(keyboardState, mouseState);
         UpdateCursor(mouseState);
         HandleHotbarHover(mouseState);
 
@@ -804,6 +833,19 @@ public sealed class UiInputController
                 _dragStartMousePosition = new Vector2(mouseState.X, mouseState.Y);
                 _dragStartRelativePosition = _activeInteraction.Element.RelativePosition;
                 _dragStartSize = _activeInteraction.Element.CurrentSize;
+                _dragStartScrollOffset = _activeInteraction.Element.ScrollOffset;
+
+                if (_activeInteraction.ScrollbarPart != ScrollbarPart.None)
+                {
+                    _activeInteraction.Element.SetScrollbarPressedPart(_activeInteraction.ScrollbarPart);
+                }
+
+                if (_activeInteraction.Kind == ElementDragInteractionKind.ScrollTrack)
+                {
+                    _scrollTrackHeldFrames = 0;
+                    _scrollTrackPageDirection = _activeInteraction.Element.GetScrollbarPageDirectionToward(_activeInteraction.ScrollbarPart, clickPosition);
+                    _activeInteraction.Element.PageScrollbar(_activeInteraction.ScrollbarPart, _scrollTrackPageDirection);
+                }
             }
         }
         else
@@ -1015,9 +1057,16 @@ public sealed class UiInputController
         // window. ResolveContentDrag below makes this exact same tap-vs-drag distinction
         // independently for its own purposes; this just applies it one step earlier, before the
         // click fires at all, rather than after the fact.
-        if (!_textSelectionDragExceededTapThreshold && !ExceededContentDragTapThreshold(new Point(mouseState.X, mouseState.Y)))
+        // A scrollbar press is chrome, not content -- releasing it never clicks the scrolled element.
+        var isScrollbarInteraction = _activeInteraction.ScrollbarPart != ScrollbarPart.None;
+        if (!isScrollbarInteraction && !_textSelectionDragExceededTapThreshold && !ExceededContentDragTapThreshold(new Point(mouseState.X, mouseState.Y)))
         {
             DispatchClick(_activeInteraction.Element, new Point(mouseState.X, mouseState.Y));
+        }
+
+        if (isScrollbarInteraction)
+        {
+            _activeInteraction.Element?.SetScrollbarPressedPart(ScrollbarPart.None);
         }
 
         ResolveContentDrag(new Point(mouseState.X, mouseState.Y));
@@ -1330,7 +1379,29 @@ public sealed class UiInputController
             (relativePosition, size) = ClampResizeToBounds(relativePosition, size, GetPositionBounds(element), element.MinimumSize);
             element.SetBounds(relativePosition, size);
         }
+        else if (_activeInteraction.Kind == ElementDragInteractionKind.ScrollThumb && _activeInteraction.Element is not null)
+        {
+            _activeInteraction.Element.DragScrollbarThumb(_activeInteraction.ScrollbarPart, _dragStartScrollOffset, DragDelta);
+        }
+        else if (_activeInteraction.Kind == ElementDragInteractionKind.ScrollTrack && _activeInteraction.Element is not null)
+        {
+            // Only ever in the press's own direction: a page that rounds the thumb a pixel past the
+            // cursor must stop there, not page back the other way.
+            _scrollTrackHeldFrames++;
+            var element = _activeInteraction.Element;
+            var part = _activeInteraction.ScrollbarPart;
+            if (IsScrollTrackRepeatFrame(_scrollTrackHeldFrames) &&
+                _scrollTrackPageDirection != 0 &&
+                element.GetScrollbarPageDirectionToward(part, new Point(mouseState.X, mouseState.Y)) == _scrollTrackPageDirection)
+            {
+                element.PageScrollbar(part, _scrollTrackPageDirection);
+            }
+        }
     }
+
+    private static bool IsScrollTrackRepeatFrame(int heldFrames) =>
+        heldFrames >= ScrollTrackRepeatInitialDelayFrames &&
+        (heldFrames - ScrollTrackRepeatInitialDelayFrames) % ScrollTrackRepeatIntervalFrames == 0;
 
     /// <summary>
     /// Extends a TextBox's selection while a left-button press on it is held and dragged --
@@ -1432,7 +1503,12 @@ public sealed class UiInputController
     /// per-frame delta here (see the mouse-button handling above): diffed against last frame's
     /// value.
     /// </summary>
-    private void UpdateMouseWheelScroll(MouseState mouseState)
+    /// <remarks>
+    /// Scrolls horizontally instead when the element can only scroll horizontally, when Shift is
+    /// held, or when the cursor is on its horizontal scrollbar -- each only if the element allows
+    /// horizontal scrolling at all; otherwise the wheel stays vertical.
+    /// </remarks>
+    private void UpdateMouseWheelScroll(KeyboardState keyboardState, MouseState mouseState)
     {
         var wheelDelta = mouseState.ScrollWheelValue - _previousMouseState.ScrollWheelValue;
         if (wheelDelta == 0)
@@ -1448,8 +1524,12 @@ public sealed class UiInputController
         }
 
         var scrollDelta = -wheelDelta / WheelNotchValue * ScrollPixelsPerNotch;
-        var isHorizontalOnly = scrollableElement.CanUserScrollHorizontal && !scrollableElement.CanUserScrollVertical;
-        scrollableElement.ScrollBy(isHorizontalOnly ? new Vector2(scrollDelta, 0) : new Vector2(0, scrollDelta));
+        var isShiftDown = keyboardState.IsKeyDown(Keys.LeftShift) || keyboardState.IsKeyDown(Keys.RightShift);
+        var isOverHorizontalScrollbar = ReferenceEquals(hoveredInteraction.Element, scrollableElement) &&
+            hoveredInteraction.ScrollbarPart is ScrollbarPart.HorizontalTrack or ScrollbarPart.HorizontalThumb;
+        var scrollsHorizontally = scrollableElement.CanUserScrollHorizontal &&
+            (!scrollableElement.CanUserScrollVertical || isShiftDown || isOverHorizontalScrollbar);
+        scrollableElement.ScrollBy(scrollsHorizontally ? new Vector2(scrollDelta, 0) : new Vector2(0, scrollDelta));
     }
 
     /// <summary>Starts at element itself (so an already-scrollable hit is unchanged) and walks ParentElement upward, returning the first element that opts into CanUserScrollVertical/Horizontal, or null if nothing in the chain does.</summary>
@@ -1995,10 +2075,17 @@ public sealed class UiInputController
         {
             cursor = GetResizeCursor(_activeInteraction.Edges);
             SetHoveredButton(null); // No hover feedback while a drag is actually in progress.
+            SetHoveredScrollbar(null, ScrollbarPart.None);
         }
         else if (_activeInteraction.Kind == ElementDragInteractionKind.Move)
         {
             cursor = MouseCursor.SizeAll;
+            SetHoveredButton(null);
+            SetHoveredScrollbar(null, ScrollbarPart.None);
+        }
+        else if (_activeInteraction.Kind is ElementDragInteractionKind.ScrollThumb or ElementDragInteractionKind.ScrollTrack)
+        {
+            cursor = MouseCursor.Arrow;
             SetHoveredButton(null);
         }
         else if (IsContentDragBlockedAt(position))
@@ -2017,6 +2104,7 @@ public sealed class UiInputController
             var interaction = TryHitTestInteraction(position);
             cursor = GetHoverCursor(interaction);
             SetHoveredButton(interaction.Button);
+            SetHoveredScrollbar(interaction.ScrollbarPart != ScrollbarPart.None ? interaction.Element : null, interaction.ScrollbarPart);
         }
 
         if (cursor != CurrentCursor)

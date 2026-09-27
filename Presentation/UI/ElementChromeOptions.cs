@@ -43,11 +43,12 @@ public sealed class ElementChromeOptions
     /// <summary>Not yet implemented -- reserved for drag-to-resize.</summary>
     public bool? CanUserResize { get; set; }
 
-    /// <summary>Not yet implemented.</summary>
     public bool? CanUserScrollHorizontal { get; set; }
 
-    /// <summary>Not yet implemented.</summary>
     public bool? CanUserScrollVertical { get; set; }
+
+    /// <summary>Defaults to Auto -- see ScrollbarVisibility.</summary>
+    public ScrollbarVisibility? ScrollbarVisibility { get; set; }
 
     /// <summary>Defaults to true (opt-out, unlike every other CanUserXxx flag here) -- see Window.CanUserFocus.</summary>
     public bool? CanUserFocus { get; set; }
